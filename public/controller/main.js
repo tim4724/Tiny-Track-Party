@@ -3,13 +3,20 @@
 // (LOBBY_UPDATE / set_state). Tilt steering + brake stream as CONTROL to the
 // display; ITEM lights the USE button (place/lap + the race HUD live on the big
 // screen). Car images load by id from the web host.
+//
+// What is LEFT here is the session: this phone's view of the room (identity,
+// roster, pick, which screen we belong on) and the routing that keeps it in step
+// with the snapshot. The self-contained parts moved out to their own files —
+// the launcher contract, the two popups, the results board, the drive surface,
+// the link overlay, the stored preferences — because they were nineteen
+// unrelated concerns sharing one module scope, not because the file was long.
 import { ControllerNet } from './Net.js';
 import { TiltInput } from './TiltInput.js';
 import { Haptics } from './Haptics.js';
 import { buildCarPicker } from '../shared/carPicker.js';
 import { buildModePicker } from '../shared/trackPicker.js';
 import { unpackSchematic } from '../shared/schematicCodec.js';
-import { applyLatencyChip, renderWaitNote, renderReadyFoot, motionHelpCopy } from './ui.js';
+import { applyLatencyChip, renderReadyFoot } from './ui.js';
 import { createWakeLock } from '../shared/wakeLock.js';
 // Sanitize a display name to the wire limit (trim + ≤16 chars). The cap is
 // shared with the display's own re-clamp of an incoming HELLO, so it lives in
@@ -18,42 +25,15 @@ import { createWakeLock } from '../shared/wakeLock.js';
 // seatable name apply their own `|| 'Racer'` default (the shell keeps '' so a
 // missing cpName falls back to the name screen).
 import { cleanName } from '../shared/names.js';
+import { inShell, shellName, endSession, terminalReason, setAccentColor, installRenameHook } from './launcher.js';
+import { storedName, saveName, storedMode, saveMode, storedCarIndex, saveCarIndex } from './prefs.js';
+import { showConn, hideConn, linkCopy, initLinkStatus } from './linkStatus.js';
+import { initModals, onEnterLobby, closeAnyModal, refreshHelpName } from './modals.js';
+import { renderResultsBoard } from './resultsBoard.js';
+import { initDriveSurface, startDriving, stopDriving, setHeldItem, resetHeldItem } from './driveSurface.js';
 
 const { MSG, ROOM_STATE } = window;
 const el = (id) => document.getElementById(id);
-
-// ---- CouchPad launcher shell (CONTRACT.md) ----
-// The launcher (the native Android app hosting this page in a WebView, or the iOS
-// app in a WKWebView — they behave identically here) appends
-// ?cpv=<version>&cpName=<name> to the join URL. Its presence means "running
-// inside the CouchPad shell"; ALL shell behaviour is gated on it, so the same
-// deployed controller keeps working untouched in a plain browser. We accept any
-// cpv value (forward-compat: an unknown higher version is still "shell present").
-const _cpParams = new URLSearchParams(location.search);
-const inShell = _cpParams.has('cpv');
-// The launcher's name gate guarantees non-blank ≤16 chars; we still sanitize
-// defensively (trim/truncate) exactly as the standalone name form does.
-const shellName = inShell ? cleanName(_cpParams.get('cpName')) : '';
-// Flag the shell on <html> so CSS can drop our own name labels: the launcher
-// already shows the player's name in its native top-bar chip, so the in-game
-// copies (lobby identity, in-race HUD, how-to-drive demo) are redundant there.
-// Gated on cpv like every other shell behaviour, so the plain browser is unchanged.
-document.documentElement.classList.toggle('cp-shell', inShell);
-
-// Report a TERMINAL session end to the launcher (§3), feature-detected + fire-once.
-// Terminal = the session cannot continue (room gone/closed, join rejected, seat
-// taken over). The launcher tears down the web view and returns home with a message,
-// so we must NOT also navigate. Returns true once it has signalled (caller stops);
-// false when there's no host to signal (plain browser / shell without the interface)
-// so the caller falls back to its normal in-game handling.
-let _sessionEnded = false;
-function endSession(reason) {
-  if (!(window.CouchPadHost && window.CouchPadHost.gameEnded)) return false;
-  if (_sessionEnded) return true;  // fire-once on our side too; extra calls are ignored anyway
-  _sessionEnded = true;
-  window.CouchPadHost.gameEnded(reason);
-  return true;
-}
 
 const screens = { name: el('name'), lobby: el('lobby'), game: el('game'), results: el('results') };
 // Screen "depth": name is the entry point (0); every in-room screen sits one
@@ -82,8 +62,6 @@ function show(name) {
 // until the next renewal. See Haptics.js.
 const haptics = new Haptics();
 const buzz = (p) => haptics.tick(p);
-const startBrakeRumble = () => haptics.startLoop();   // defaults ARE the brake rumble
-const stopBrakeRumble = () => haptics.stopLoop();
 
 let myColorIndex = null;
 let myCarIndex = 0;
@@ -111,28 +89,16 @@ let inResults = false;     // showing the results overlay (my car finished / rac
 let waitingForNextRace = false;
 let lastStandings = null;  // latest STANDINGS payload — re-renders the results footer when the host changes
 
-const NAME_KEY = 'tinytrack_name';
-const MODE_KEY = 'tinytrack_mode';     // host's last pick, JSON {mode, trackId?, cupId?, randomRaces?}
-const TRACK_KEY = 'tinytrack_track';   // legacy pre-mode key (bare track id) — read-only fallback
-const CAR_KEY = 'tinytrack_car';       // last-picked car model index
-const storedName = () => { try { return localStorage.getItem(NAME_KEY) || ''; } catch (_) { return ''; } };
-const saveName = (n) => { try { localStorage.setItem(NAME_KEY, n); } catch (_) {} };
-const storedMode = () => {
-  try { const v = JSON.parse(localStorage.getItem(MODE_KEY) || 'null'); if (v && v.mode) return v; } catch (_) {}
-  // Upgrade path: a phone that last picked before modes existed keeps its favourite track.
-  try { const id = localStorage.getItem(TRACK_KEY); if (id) return { mode: 'track', trackId: id }; } catch (_) {}
-  return null;
-};
-const saveMode = (m) => { try { localStorage.setItem(MODE_KEY, JSON.stringify(m)); } catch (_) {} };
-const storedCarIndex = () => { try { const v = parseInt(localStorage.getItem(CAR_KEY), 10); return Number.isInteger(v) ? v : null; } catch (_) { return null; } };
-const saveCarIndex = (i) => { try { localStorage.setItem(CAR_KEY, String(i)); } catch (_) {} };
-
 // Keep the phone's screen on while seated in a room: tilt steering means whole
 // races go by without a touch, so the screen would otherwise dim and lock
 // mid-race. Held from join (lobby included — waiting on the host shouldn't dim
 // either) until the player backs out; re-acquired on tab return (the browser
 // drops the lock whenever the phone is pocketed / the tab hidden).
 const wakeLock = createWakeLock();
+
+// Latency chip (bottom-right). Stays hidden until the first reading lands so it
+// never flashes on the pre-join name screen. See applyLatencyChip in ui.js.
+const latencyEl = el('latency');
 
 const net = new ControllerNet({
   onJoined: () => { setStatus(''); hideConn(); wakeLock.enable(); },
@@ -143,78 +109,36 @@ const net = new ControllerNet({
     // stuck on a disabled button — display gone, kicked, or reconnect exhausted.
     setJoining(false);
     // Shell: a TERMINAL link state ends the session — hand it to the launcher (§3)
-    // and stop; it tears down the WebView. Recoverable states (reconnecting, a
-    // display that may come back) are NOT terminal and stay in-game below as our
-    // own overlay. If the host interface is somehow absent, endSession returns
-    // false and we fall through to the normal in-game handling.
+    // and stop; it tears down the WebView. If the host interface is somehow
+    // absent, endSession returns false and we fall through to the normal in-game
+    // handling below.
     if (inShell) {
-      const reason = state === 'error'
-        ? (info === 'Room not found' ? 'room_not_found'
-          : info === 'Room is full' ? 'game_full' : 'game_ended')
-        : state === 'replaced' ? 'replaced'
-          : state === 'lost' ? 'game_ended'
-            : state === 'room_closed' ? 'game_ended'
-              : null;
+      const reason = terminalReason(state, info);
       if (reason && endSession(reason)) return;
     }
     // In-room (lobby/game/results) the name-screen status line is off-screen, so a
     // dropped link needs the full-screen #conn overlay; on the name screen the
     // status text under the form is enough.
     const inRoom = currentScreen && currentScreen !== 'name';
-    if (state === 'reconnecting') {
-      const txt = `Reconnecting… (${Math.min(info.attempt, info.max)}/${info.max})`;
-      setStatus(txt);
-      if (inRoom) showConn('Reconnecting…', txt, false, false);
-    } else if (state === 'lost') {
-      setStatus('Connection lost.');
-      if (inRoom) showConn('Connection lost', 'Scan the QR on the big screen to take your seat back — or try again here.', true, true);
-    } else if (state === 'room_closed') {
-      // The room is gone for good (host ended the party, or the big screen never
-      // came back) — no retry button: reconnecting would only bounce off
-      // "Room not found". Exiting to the start screen is the only move left.
-      setStatus('That race has ended — scan a fresh QR code on the big screen.');
-      if (inRoom) showConn('Race over', 'The party on the big screen has ended. Scan a fresh QR code to join the next one!', false, true);
-    } else if (state === 'error') {
-      setStatus(friendlyRelayError(info));
-    } else if (state === 'display_gone') {
-      setStatus('Waiting for the big screen…');
-      if (inRoom) showConn('Waiting for the big screen…', 'The host’s screen dropped — hang tight, it’ll reconnect you.', false, true);
-    } else if (state === 'replaced') {
-      setStatus('Opened on another tab.');
-      if (inRoom) showConn('Opened on another tab', 'This seat is now controlled from another tab or device.', false, true);
-    }
+    const { status, conn } = linkCopy(state, info);
+    if (status != null) setStatus(status);
+    if (inRoom && conn) showConn(conn);
   },
   onMessage: handleMessage,
-  onRtt: updateLatency
+  onRtt: (halfMs, viaFastlane) => applyLatencyChip(latencyEl, halfMs, viaFastlane)
 });
 
-// ---- connection overlay (screen-agnostic relay-link feedback) ----
-// `leave` shows the "Exit to start" escape hatch — on for every terminal state
-// (lost / room_closed / display_gone / replaced), off while a reconnect is
-// still in flight.
-function showConn(title, msg, retry, leave) {
-  el('conn-title').textContent = title;
-  el('conn-msg').textContent = msg || '';
-  el('conn-retry').classList.toggle('hidden', !retry);
-  // In the shell the launcher owns leaving (its LEAVE bar) — never show our own
-  // "Exit to start" escape hatch, which would fight it (§1).
-  el('conn-leave').classList.toggle('hidden', !leave || inShell);
-  el('conn').classList.remove('hidden');
-}
-function hideConn() { el('conn').classList.add('hidden'); }
-el('conn-retry').addEventListener('click', () => {
-  buzz(15);
-  showConn('Reconnecting…', '', false, false);
-  net.connect(myName);
+initLinkStatus({
+  inShell,
+  onRetry: () => {
+    buzz(15);
+    showConn({ title: 'Reconnecting…', msg: '', retry: false, leave: false });
+    net.connect(myName);
+  },
+  // Pop the room's history entry — the popstate handler runs the real leave
+  // (leaveToName), exactly as the back gesture would, keeping the stack clean.
+  onLeave: () => { buzz(15); history.back(); }
 });
-// Pop the room's history entry — the popstate handler runs the real leave
-// (leaveToName), exactly as the back gesture would, keeping the stack clean.
-el('conn-leave').addEventListener('click', () => { buzz(15); history.back(); });
-
-// Latency chip (bottom-right). Stays hidden until the first reading lands so it
-// never flashes on the pre-join name screen. See applyLatencyChip in ui.js.
-const latencyEl = el('latency');
-function updateLatency(halfMs, viaFastlane) { applyLatencyChip(latencyEl, halfMs, viaFastlane); }
 
 const tilt = new TiltInput({
   surface: el('game'),
@@ -223,13 +147,10 @@ const tilt = new TiltInput({
   onControl: (c) => net.sendControl(c)
 });
 
+initModals({ screens, tilt, buzz, playerName: () => myName || 'Racer' });
+initDriveSurface({ tilt, buzz, haptics });
+
 function setStatus(t) { el('name-status').textContent = t; }
-// Relay error strings (Party-Server) → copy a party guest can act on.
-function friendlyRelayError(msg) {
-  if (msg === 'Room not found') return 'That race has ended — scan a fresh QR code on the big screen.';
-  if (msg === 'Room is full') return 'This race is full — wait for a free seat, then try again.';
-  return 'Error: ' + msg;
-}
 // Lock the join form while a connection is in flight so a double-tap can't fire
 // two joins; unlocked again only if the attempt errors out (success navigates
 // away to the lobby).
@@ -333,8 +254,8 @@ function syncRoom(data) {
     el('pause-btn').classList.remove('hidden');
     el('help-btn-game').classList.remove('hidden');
     setPauseOverlay(!!data.paused);  // re-raise a pause missed while away
-    if (data.paused) stopBrakeRumble();
-    startDriving();                  // resume/continue streaming tilt to our car
+    if (data.paused) haptics.stopLoop();
+    startDriving(myName || 'Racer'); // resume/continue streaming tilt to our car
   } else if (waitingForNextRace && board && board.over) {
     // Late joiner and the FINAL board is up — it lists us as "Next race", so join
     // everyone on the results screen.
@@ -354,7 +275,7 @@ function syncRoom(data) {
   }
 }
 
-// --- results overlay ---
+// --- results ---
 // Switch the phone to the results board. Stops driving (the car is on autopilot
 // now) and clears the pause UI so a still-racing player's pause can't surface
 // over the board.
@@ -366,96 +287,16 @@ function showResultsScreen() {
   show('results');
 }
 
-// Render the standings rows + the footer (host's "New game" vs a waiting note).
-// Cup boards (data.series) trade the lap clock for points — "+9 · 15 pts" — and
-// arrive from the display already in cup order; the title tracks the series
-// ("Race 2 of 4", then "Beach Cup — Final" on the podium board).
 function renderResults(data) {
-  const s = data.series;
-  el('results-title').textContent = !s ? 'Results'
-    : s.final ? `${s.cupName} — Final`
-      : s.endless ? `Race ${s.raceIndex + 1}`                  // endless random: no "of N"
-        : `Race ${s.raceIndex + 1} of ${s.raceCount}`;
-  const cupBoard = !!(s && data.over);
-  const list = el('result-list');
-  list.innerHTML = '';
-  (data.order || []).forEach((o) => {
-    const li = document.createElement('li');
-    const isMe = o.playerId === net.peerIndex;
-    if (isMe) li.classList.add('is-me');
-    if (o.joining) li.classList.add('is-joining');      // late joiner — no car this race
-    else if (!o.finished) li.classList.add('is-racing');
-    const dot = document.createElement('span');
-    dot.className = 'res-dot';
-    dot.style.background = liveryOf(o.colorIndex);
-    const name = document.createElement('span');
-    name.className = 'res-name';
-    name.textContent = o.name + (o.ai ? ' (CPU)' : isMe ? ' (You)' : '');
-    li.append(dot, name);
-    if (cupBoard && !o.joining) {
-      const gain = document.createElement('span');
-      gain.className = 'res-gain' + (o.gained ? '' : ' is-zero');
-      gain.textContent = `+${o.gained || 0}`;
-      const pts = document.createElement('span');
-      pts.className = 'res-pts';
-      pts.textContent = `${o.points || 0} pts`;
-      li.append(gain, pts);
-    } else {
-      const time = document.createElement('span');
-      time.className = 'res-time';
-      time.textContent = o.joining ? 'Next race'
-        : o.finished ? `${o.time.toFixed(1)}s` : (data.over ? 'DNF' : 'Racing…');
-      li.appendChild(time);
-    }
-    list.appendChild(li);
-  });
-  renderResultFoot(data);
-}
-
-// Footer: while cars are still out, a waiting note for everyone. Once the race is
-// over, the host gets the button — "Next race" during a cup intermission (plus the
-// ghost "End cup early", the only way to abandon a cup from here) or "New game"
-// otherwise; everyone else gets a note. Intermissions auto-advance, so non-hosts
-// see "starting soon" rather than a who-to-wait-on name.
-function renderResultFoot(data) {
-  const btn = el('newgame-btn');
-  const wait = el('result-wait');
-  const s = data.series;
-  const intermission = !!(s && !s.final && data.over);
-  const quit = el('quitcup-btn');
-  quit.classList.toggle('hidden', !(intermission && amHost));
-  if (intermission) quit.textContent = s.endless ? 'Back to lobby' : 'End cup early';
-  if (!data.over) {
-    btn.classList.add('hidden');
-    wait.classList.remove('hidden');
-    wait.textContent = 'Waiting for the other racers to finish…';
-  } else if (amHost) {
-    btn.textContent = intermission ? 'Next race ▸' : 'New game';
-    btn.classList.remove('hidden');
-    wait.classList.add('hidden');
-  } else {
-    btn.classList.add('hidden');
-    wait.classList.remove('hidden');
-    if (intermission) {
-      wait.textContent = `Next race starting soon: ${s.nextTrackName || '…'}`;
-    } else {
-      const host = (data.order || []).find((o) => o.playerId === hostPeerIndex);
-      renderWaitNote(wait, { name: host && host.name, color: host && liveryOf(host.colorIndex) }, ' to start a new game…');
-    }
-  }
+  renderResultsBoard(data, { meId: net.peerIndex, hostPeerIndex, amHost, liveryOf });
 }
 
 function applyLivery() {
   const c = liveryOf(myColorIndex);
   document.documentElement.style.setProperty('--car', c);
-  // Retint the launcher's accent chrome (name chip, spinner, rename sheet) to
-  // match this player's livery — a live §4 hint. Mutating the meta's content is
-  // what the launcher's observer watches; a plain browser ignores it. Guarded on
-  // a real colour so we don't advertise the grey placeholder before livery lands.
-  if (myColorIndex != null) {
-    const meta = document.querySelector('meta[name="cp-accent-color"]');
-    if (meta) meta.setAttribute('content', c);
-  }
+  // Guarded on a real colour so we don't advertise the grey placeholder before
+  // livery lands. See launcher.js for what the launcher does with it.
+  if (myColorIndex != null) setAccentColor(c);
 }
 
 // Car picker — the controller's lobby is just "pick your car" (the shared display
@@ -589,28 +430,6 @@ function maybeRestoreCar() {
   net.send(MSG.SET_CAR, { carIndex: stored });
 }
 
-// --- driving ---
-let steerRaf = null;
-function startDriving() {
-  el('hud-name').textContent = myName || 'Racer'; // who you are, top-left (mirrors the display cell)
-  if (steerRaf) return; // already driving (may have begun during the countdown)
-  tilt.start();
-  const fill = el('steer-fill');
-  const tip = el('motion-tip');
-  tip.classList.toggle('hidden', tilt.motionState === 'granted');
-  const loop = () => {
-    fill.style.transform = `translateX(${tilt.state.steer * 50}%)`;
-    steerRaf = requestAnimationFrame(loop);
-  };
-  loop();
-}
-function stopDriving() {
-  tilt.stop();
-  stopBrakeRumble(); // never leave the motor humming if BRAKE was held at race end
-  if (steerRaf) cancelAnimationFrame(steerRaf);
-  steerRaf = null;
-}
-
 // --- name screen ---
 el('name-input').value = storedName();
 
@@ -623,7 +442,7 @@ function leaveToName() {
   net.disconnect();
   stopDriving();
   wakeLock.disable();  // off the room — let the phone sleep normally again
-  _heldItem = undefined; setHeldItem(null); // reset USE state for the next race
+  resetHeldItem();     // USE goes dark again for the next race
   inResults = false;
   waitingForNextRace = false;
   lastStandings = null;
@@ -633,8 +452,7 @@ function leaveToName() {
   setPauseOverlay(false);
   el('pause-btn').classList.add('hidden');
   el('help-btn-game').classList.add('hidden');
-  if (helpOpen()) closeHelp();         // don't strand either popup over the name screen
-  if (motionOpen()) closeMotionPopup();
+  closeAnyModal();     // don't strand either popup over the name screen
   setJoining(false);
   setStatus('');
   hideConn();
@@ -708,9 +526,9 @@ el('ready-btn').addEventListener('click', () => {
 // requests a change and reacts to the GAME_PAUSED / GAME_RESUMED broadcast.
 // While paused the overlay covers the screen, so the pause button is disabled.
 function setPauseOverlay(on) {
-  // Pause is authoritative and must win the screen: if a popup is open when a pause
-  // lands (both sit above the pause overlay), close it so the pause shows.
-  if (on) { if (helpOpen()) closeHelp(); if (motionOpen()) closeMotionPopup(); }
+  // Pause is authoritative and must win the screen: if a popup is open when a
+  // pause lands (both sit above the pause overlay), close it so the pause shows.
+  if (on) closeAnyModal();
   el('pause-overlay').classList.toggle('hidden', !on);
   el('pause-btn').disabled = on;
 }
@@ -729,216 +547,15 @@ el('newgame-btn').addEventListener('click', () => {
 });
 el('quitcup-btn').addEventListener('click', () => { if (amHost) { buzz(15); net.send(MSG.RETURN_TO_LOBBY); } });
 
-// --- How-to-Drive popup ---
-// Purely INSTRUCTIONAL: teaches the controls (tilt/brake/item) + the keep-upright
-// note. Auto-shows ONCE per device on first lobby entry; the "?" buttons (lobby +
-// game) reopen it. The motion-permission recovery is a SEPARATE popup (below).
-const HELP_SEEN_KEY = 'tinytrack_seen_help';
-const helpSeen = () => { try { return localStorage.getItem(HELP_SEEN_KEY) === '1'; } catch (_) { return false; } };
-const markHelpSeen = () => { try { localStorage.setItem(HELP_SEEN_KEY, '1'); } catch (_) {} };
-
-// True in gallery/scenario mode — auto-popups stay shut there (the harness opens the
-// one it's previewing; a real WELCOME never fires anyway).
-const inScenario = () => !!new URLSearchParams(location.search).get('scenario');
-
-// Auto-show the help popup once per device on the first lobby entry, then never
-// again (the flag is sticky). See onEnterLobby for how it yields to the motion popup.
-function maybeAutoShowHelp() {
-  if (inScenario() || helpSeen() || helpOpen()) return;
-  openHelp();        // show first, THEN stamp — a throw before it shows can't burn the once
-  markHelpSeen();
-}
-
-// On reaching the lobby: if tilt is blocked, the actionable motion popup wins the
-// beat (so the two never stack); otherwise teach the controls once. A blocked player
-// still gets the controls intro later — once motion is sorted, this runs again with
-// the help flag still unseen.
-function onEnterLobby() {
-  if (inScenario()) return;
-  if (motionBlocked()) maybeShowMotionAlert();
-  else maybeAutoShowHelp();
-}
-
-// --- shared modal plumbing (help + motion popups) ---
-// While a modal is up, mark the screens behind it inert so a screen reader's virtual
-// cursor (and any stray Tab) can't reach the lobby/HUD underneath — aria-modal + the
-// keyboard trap only cover sighted keyboard users. inert is ignored where unsupported,
-// so this degrades to the trap alone.
-function setBackgroundInert(on) {
-  for (const k of Object.keys(screens)) screens[k].toggleAttribute('inert', on);
-}
-// Minimal focus trap: keep Tab/Shift+Tab cycling within the open card's VISIBLE
-// focusables (a hidden button is in the DOM but offsetParent null — exclude it, or
-// Tab lands on something invisible).
-function trapTab(overlay, e) {
-  if (e.key !== 'Tab') return;
-  const f = [...overlay.querySelectorAll('button:not([disabled])')].filter((b) => b.offsetParent !== null);
-  if (!f.length) return;
-  const first = f[0], last = f[f.length - 1];
-  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-}
-const restoreFocus = (node) => { if (node && node.focus) node.focus(); };
-
-// How-to-Drive popup open/close. _helpReturnFocus is the element focused before
-// opening, so closing returns focus to it (the "?" that opened it).
-let _helpReturnFocus = null;
-function openHelp() {
-  _helpReturnFocus = document.activeElement;
-  el('phone-name').textContent = myName || 'Racer';   // demo phone reads as "your phone" (livery via --car)
-  el('help-overlay').classList.remove('hidden');
-  setBackgroundInert(true);
-  el('help-done').focus();   // keyboard-operable + announced; the trap keeps Tab inside
-}
-function closeHelp() {
-  el('help-overlay').classList.add('hidden');
-  if (!motionOpen()) setBackgroundInert(false);   // un-inert BEFORE restoring focus
-  restoreFocus(_helpReturnFocus); _helpReturnFocus = null;
-}
-const helpOpen = () => !el('help-overlay').classList.contains('hidden');
-
-el('help-btn').addEventListener('click', () => { buzz(15); openHelp(); });
-el('help-btn-game').addEventListener('click', () => { buzz(15); openHelp(); });
-el('help-done').addEventListener('click', () => { buzz(15); closeHelp(); });
-el('help-overlay').addEventListener('keydown', (e) => trapTab(el('help-overlay'), e));
-
-// --- Motion-blocked popup ---
-// A SEPARATE alert from the instructions: surfaces when the tilt sensor is blocked
-// (iOS denied) or absent (unsupported), with the live recovery path. Auto-shows once
-// per page load on lobby entry while blocked (no nagging on every lobby return). The
-// recovery action depends on the state: iOS won't re-prompt once denied, so the button
-// RELOADS (the next Join re-raises the prompt) rather than uselessly re-requesting.
-// Copy + action live in ui.js (motionHelpCopy) so they can't drift from the gallery.
-const motionBlocked = () => { const s = tilt.motionState; return s === 'denied' || s === 'unsupported'; };
-let _motionAlertShown = false;
-let _motionReturnFocus = null;
-
-function maybeShowMotionAlert() {
-  if (inScenario() || _motionAlertShown || motionOpen() || !motionBlocked()) return;
-  _motionAlertShown = true;
-  openMotionPopup();
-}
-
-// Populate the popup's title/status/Allow/fix from the resolved state.
-function refreshMotionPopup() {
-  const copy = motionHelpCopy(tilt.motionState);
-  if (!copy.show) return;          // granted — popup shouldn't be up; guard anyway
-  el('motion-title').textContent = copy.title;
-  el('motion-status').textContent = copy.status;
-  const allow = el('motion-allow');
-  allow.classList.toggle('hidden', !copy.allow);
-  allow.disabled = false; allow.textContent = copy.allowText;
-  const fix = el('motion-fix');
-  if (copy.fix) { fix.classList.remove('hidden'); fix.innerHTML = copy.fix; }
-  else fix.classList.add('hidden');
-}
-
-function openMotionPopup() {
-  _motionReturnFocus = document.activeElement;
-  refreshMotionPopup();
-  el('motion-overlay').classList.remove('hidden');
-  setBackgroundInert(true);
-  el('motion-done').focus();
-}
-function closeMotionPopup() {
-  el('motion-overlay').classList.add('hidden');
-  if (!helpOpen()) setBackgroundInert(false);
-  restoreFocus(_motionReturnFocus); _motionReturnFocus = null;
-}
-const motionOpen = () => !el('motion-overlay').classList.contains('hidden');
-
-el('motion-done').addEventListener('click', () => { buzz(15); closeMotionPopup(); });
-el('motion-overlay').addEventListener('keydown', (e) => trapTab(el('motion-overlay'), e));
-// The in-race "tilt is off" chip reopens the recovery popup (its only fix path,
-// since players have no keyboard fallback).
-el('motion-tip').addEventListener('click', () => { buzz(15); openMotionPopup(); });
-
-// Primary recovery button — what it DOES depends on the resolved state (see
-// motionHelpCopy's `action`). Once iOS has denied, re-calling requestPermission()
-// resolves 'denied' silently (no prompt), so 'denied' RELOADS instead: the next Join
-// re-raises the prompt (name is restored from localStorage). 'unknown' (gallery /
-// pre-prompt) is the only state where a fresh request can still prompt — there we
-// (re-)call enableMotion() within this gesture and confirm a grant in place.
-el('motion-allow').addEventListener('click', async () => {
-  buzz(15);
-  if (motionHelpCopy(tilt.motionState).action === 'reload') { location.reload(); return; }
-  const btn = el('motion-allow');
-  btn.disabled = true; btn.textContent = 'Asking…';
-  await tilt.enableMotion();
-  if (tilt.motionState === 'granted') {
-    el('motion-title').textContent = 'Motion access on';
-    el('motion-status').textContent = 'Tilt to steer is ready.';
-    btn.classList.add('hidden');
-    el('motion-fix').classList.add('hidden');
-  } else {
-    refreshMotionPopup();   // now 'denied' → button flips to "Reload & ask again"
-  }
+// Applies the launcher's rename locally (the labels that carry the name) AND
+// broadcasts it to the display via a re-HELLO, exactly like a join.
+installRenameHook((n) => {
+  myName = n;
+  el('me-name').textContent = n;    // lobby identity
+  el('hud-name').textContent = n;   // in-race HUD
+  refreshHelpName(n);               // how-to-drive demo phone
+  net.rename(n);                    // → display roster + LOBBY_UPDATE echo
 });
-
-// Escape closes whichever modal is up (motion sits above help — close it first).
-window.addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape') return;
-  if (motionOpen()) { e.preventDefault(); e.stopPropagation(); closeMotionPopup(); }
-  else if (helpOpen()) { e.preventDefault(); e.stopPropagation(); closeHelp(); }
-});
-
-// BRAKE button — held = brake at the fixed rate, released = release. A continuous
-// rumble runs while it's held: the player's eyes-free confirmation they're braking
-// (they're watching the car on the main display, not the phone).
-const brakeBtn = el('brake-btn');
-const pressBrake = (on) => { on ? startBrakeRumble() : stopBrakeRumble(); tilt.pressBrake(on); brakeBtn.classList.toggle('held', on); };
-brakeBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); pressBrake(true); });
-brakeBtn.addEventListener('pointerup', () => pressBrake(false));
-brakeBtn.addEventListener('pointercancel', () => pressBrake(false));
-brakeBtn.addEventListener('pointerleave', () => pressBrake(false));
-
-// ACTION (use item) — one tap = one use. Bumps the wrapping use-counter the next
-// CONTROL frame carries; disabled (and ignored) while the slot is empty.
-const actionBtn = el('action-btn');
-actionBtn.addEventListener('pointerdown', (e) => {
-  e.preventDefault();
-  if (actionBtn.disabled) return;
-  tilt.pressAction(); buzz(20); actionBtn.classList.add('held');
-});
-const releaseAction = () => actionBtn.classList.remove('held');
-actionBtn.addEventListener('pointerup', releaseAction);
-actionBtn.addEventListener('pointercancel', releaseAction);
-actionBtn.addEventListener('pointerleave', releaseAction);
-
-// Held-item badge: dims + disables ACTION when empty, lights up with the item name
-// otherwise. Names map to .is-<id> livery classes in controller.css.
-// The item's IDENTITY is shown on the main display (flashy roulette there); the
-// phone stays a clean driving surface. The only controller-side cue is the USE
-// button lighting up when you're holding something + a light buzz on pickup.
-const ITEM_LABEL = { boost: 'BOOST', banana: 'BANANA', rocket: 'ROCKET', monster: 'MONSTER' };
-let _heldItem = undefined;
-function setHeldItem(item) {
-  if (item === _heldItem) return;            // only react on a change
-  _heldItem = item;
-  actionBtn.disabled = !item;
-  tilt.setActionEnabled(!!item);             // gate BOTH the button and the keyboard ACTION
-  actionBtn.setAttribute('aria-label', item ? `Use ${ITEM_LABEL[item] || item}` : 'Use item');
-  if (item) buzz(20);                        // eyes-free "you picked something up" (look at the TV for what)
-}
-
-// Live rename from the launcher (§2). The game implements, the launcher calls it
-// when the player edits their name in the in-game bar (and re-asserts it on every
-// load, belt-and-suspenders with the cpName param). Only meaningful in the shell —
-// a plain browser renames via the name screen. Applies locally (the labels that
-// carry the name) AND broadcasts to the display via a re-HELLO, exactly like a
-// join. We do NOT persist it (§1): the injected identity must not leak into the
-// game's own name storage.
-window.CouchPad = {
-  setName(name) {
-    if (!inShell) return;
-    const n = cleanName(name) || 'Racer';
-    myName = n;
-    el('me-name').textContent = n;                     // lobby identity
-    el('hud-name').textContent = n;                    // in-race HUD
-    if (helpOpen()) el('phone-name').textContent = n;  // how-to-drive demo phone
-    net.rename(n);                                     // → display roster + LOBBY_UPDATE echo
-  }
-};
 
 // Boot. In the shell the launcher owns identity: skip the name screen entirely
 // and join straight away with the injected name (never persisted). Otherwise land

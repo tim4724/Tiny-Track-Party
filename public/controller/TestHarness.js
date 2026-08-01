@@ -10,6 +10,7 @@ import { TRACK_LIST } from '../shared/tracks.js';
 import { TRACK_SCHEMATICS } from '../shared/trackSchematics.js';
 import { packSchematic, unpackSchematic } from '../shared/schematicCodec.js';
 import { applyLatencyChip, renderReadyFoot, motionHelpCopy } from './ui.js';
+import { renderResultsBoard } from './resultsBoard.js';
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
 
@@ -85,62 +86,25 @@ export function runControllerScenario(opts) {
     }
   }
 
-  // Results board — mirrors main.js renderResults + renderResultFoot. `over=false`
-  // is the "you just finished, others still out" state (some rows "Racing…", a
-  // waiting footer); `over=true` is the final board (host gets "New game").
-  function renderResultsBoard(order, over) {
+  // Results board — the LIVE renderer (resultsBoard.js), fed a synthesized
+  // STANDINGS payload. The harness used to hand-roll its own twin of this markup,
+  // and had already drifted from it: the race board never set #results-title, and
+  // the cup board hardcoded "Race 2 of 4" instead of deriving it from the series.
+  // A preview renders through the live renderer, never a copy of it.
+  //
+  // Every board is viewed as the HOST, so the host-only footers (the "New game" /
+  // "Next race ▸" button and the "End cup early" ghost) are what the gallery shows.
+  // A row is FINISHED unless the scenario says otherwise: the renderer marks any
+  // unfinished row `is-racing` (still out on track), which a completed board must
+  // not show. Only the "you crossed the line first" scenario opts rows out.
+  const ME = 1;   // this phone's peerIndex in the synthesized board; also the host
+  const showBoard = (order, { over, series }) => {
     show('results');
-    const list = el('result-list'); list.innerHTML = '';
-    order.forEach((o) => {
-      const li = document.createElement('li');
-      if (o.me) li.classList.add('is-me');
-      if (o.joining) li.classList.add('is-joining');     // late joiner — no car this race
-      else if (!o.finished) li.classList.add('is-racing');
-      const dot = document.createElement('span'); dot.className = 'res-dot';
-      dot.style.background = COLORS[o.colorIndex] || '#888';
-      const name = document.createElement('span'); name.className = 'res-name';
-      name.textContent = o.name + (o.ai ? ' (CPU)' : o.me ? ' (You)' : '');
-      const time = document.createElement('span'); time.className = 'res-time';
-      time.textContent = o.joining ? 'Next race'
-        : o.finished ? `${o.time.toFixed(1)}s` : (over ? 'DNF' : 'Racing…');
-      li.append(dot, name, time);
-      list.appendChild(li);
-    });
-    el('newgame-btn').classList.toggle('hidden', !over);   // gallery: shown to all when over (real game gates on host)
-    const wait = el('result-wait');
-    wait.classList.toggle('hidden', !!over);
-    if (!over) wait.textContent = 'Waiting for the other racers to finish…';
-  }
-
-  // Cup board — mirrors renderResults' series branch (points instead of times,
-  // cup order) + the intermission/podium footers ("Next race ▸" with the quit
-  // ghost, or "New game" after the final race).
-  function renderCupBoard(order, final) {
-    show('results');
-    const cupName = PREVIEW_TRACKS[0].cupName;
-    el('results-title').textContent = final ? `${cupName} — Final` : 'Race 2 of 4';
-    const list = el('result-list'); list.innerHTML = '';
-    order.forEach((o) => {
-      const li = document.createElement('li');
-      if (o.me) li.classList.add('is-me');
-      const dot = document.createElement('span'); dot.className = 'res-dot';
-      dot.style.background = COLORS[o.colorIndex] || '#888';
-      const name = document.createElement('span'); name.className = 'res-name';
-      name.textContent = o.name + (o.ai ? ' (CPU)' : o.me ? ' (You)' : '');
-      const gain = document.createElement('span');
-      gain.className = 'res-gain' + (o.gained ? '' : ' is-zero');
-      gain.textContent = `+${o.gained || 0}`;
-      const pts = document.createElement('span'); pts.className = 'res-pts';
-      pts.textContent = `${o.points || 0} pts`;
-      li.append(dot, name, gain, pts);
-      list.appendChild(li);
-    });
-    const btn = el('newgame-btn');
-    btn.textContent = final ? 'New game' : 'Next race ▸';
-    btn.classList.remove('hidden');                        // gallery: viewed as the host
-    el('quitcup-btn').classList.toggle('hidden', final);
-    el('result-wait').classList.add('hidden');
-  }
+    renderResultsBoard(
+      { over, series, order: order.map((o, i) => ({ finished: true, ...o, playerId: o.me ? ME : 100 + i })) },
+      { meId: ME, hostPeerIndex: ME, amHost: true, liveryOf: (i) => COLORS[i] || '#888' }
+    );
+  };
 
   // Latency chip preview — no relay here, so feed it a static reading.
   const setLatency = (halfMs, fastlane) => applyLatencyChip(el('latency'), halfMs, fastlane);
@@ -280,12 +244,12 @@ export function runControllerScenario(opts) {
       // Your car crossed the line — the phone flips to the results board with your
       // finished row while the rest are still out (not the drive HUD).
       setLatency(19, true);
-      renderResultsBoard([
+      showBoard([
         { name: FAKE_NAMES[color], colorIndex: color, time: 31.2, me: true, finished: true },
         { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, finished: false },
         { name: 'Bolt', colorIndex: (color + 2) % COLORS.length, ai: true, finished: false },
         { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, finished: false }
-      ], false);
+      ], { over: false });
       break;
 
     case 'paused':
@@ -302,13 +266,13 @@ export function runControllerScenario(opts) {
       // Final board (race over), viewed as the host so the "New game" button
       // shows. The last row is a late joiner waiting on the next race.
       setLatency(20, true);
-      renderResultsBoard([
+      showBoard([
         { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, time: 28.4, finished: true },
         { name: FAKE_NAMES[color],                           colorIndex: color,                       time: 31.2, me: true, finished: true },
         { name: 'Bolt',                                      colorIndex: (color + 2) % COLORS.length, time: 33.9, ai: true, finished: true },
         { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, time: 36.5, finished: true },
         { name: FAKE_NAMES[(color + 4) % FAKE_NAMES.length], colorIndex: (color + 4) % COLORS.length, joining: true }
-      ], true);
+      ], { over: true });
       break;
 
     case 'intermission':
@@ -316,23 +280,23 @@ export function runControllerScenario(opts) {
       // board in cup order (the +6 row leads on total despite this race's +9),
       // "Next race ▸" + the "End cup early" ghost.
       setLatency(20, true);
-      renderCupBoard([
+      showBoard([
         { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, gained: 6, points: 21 },
         { name: FAKE_NAMES[color],                           colorIndex: color,                       gained: 9, points: 19, me: true },
         { name: 'Bolt',                                      colorIndex: (color + 2) % COLORS.length, gained: 3, points: 9, ai: true },
         { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, gained: 0, points: 3 }
-      ], false);
+      ], { over: true, series: { final: false, raceIndex: 1, raceCount: 4, cupName: PREVIEW_TRACKS[0].cupName } });
       break;
 
     case 'cup-podium':
       // The cup's final board, viewed as the host ("New game" back to the lobby).
       setLatency(20, true);
-      renderCupBoard([
+      showBoard([
         { name: FAKE_NAMES[color],                           colorIndex: color,                       gained: 9, points: 36, me: true },
         { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, gained: 6, points: 24 },
         { name: 'Bolt',                                      colorIndex: (color + 2) % COLORS.length, gained: 3, points: 12, ai: true },
         { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, gained: 1, points: 4 }
-      ], true);
+      ], { over: true, series: { final: true, raceIndex: 3, raceCount: 4, cupName: PREVIEW_TRACKS[0].cupName } });
       break;
 
     case 'conn-lost':

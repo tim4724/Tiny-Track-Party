@@ -135,6 +135,7 @@ Fonts are self-hosted variable woff2 (SIL OFL) so the CSP keeps `font-src 'self'
 | `native/libttp-party/CLAUDE.md` | session policy, the retained room snapshot, liveness and teardown |
 | `tests/CLAUDE.md` | conformance: the two fixture classes, frozen corpora, trace blind spots, wire-compat, the suite audits |
 | `public/display/CLAUDE.md` | the browser shell: adapters, boot and back-stack, the audio device half, measuring frame cost |
+| `public/controller/CLAUDE.md` | the phone: why none of it becomes C++, what lives in which module, previews through the live renderer |
 | `public/shared/CLAUDE.md` | the protocol manifest, design tokens as data, the schematic codec |
 | `public/assets/audio/CLAUDE.md` | cues are generated, music is acquired; the MP3 and re-encode traps |
 | `docs/native-port/shells.md` | the audited ledger of what a new TV platform still owes |
