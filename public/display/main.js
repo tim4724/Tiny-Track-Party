@@ -358,6 +358,10 @@ function backdropShow3D() {
   return !!selectedTrackId || (net && net.roomState !== ROOM_STATE.LOBBY);
 }
 function updateBackdrop() {
+  // Test surfaces own the backdrop (see runDisplayScenario's DIORAMA_ONLY): the
+  // harness un-dims #scene for its 3D scenarios before the scene has booted, and
+  // scenePromise's deferred call here would re-dim it back to a blank page.
+  if (_isTestMode) return;
   const sc = el('scene');
   sc.classList.remove('hidden');           // visibility is by opacity now, not display
   sc.classList.toggle('is-dim', !backdropShow3D());

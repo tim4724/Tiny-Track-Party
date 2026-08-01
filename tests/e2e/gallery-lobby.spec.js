@@ -25,6 +25,11 @@ async function expectAttractLobby(page) {
     null, { timeout: 30000 }
   );
   expect(await page.evaluate(() => window.__lobbyDemo.engine.carIds().length)).toBeGreaterThan(0);
+  // Settled, not just transiently revealed: main.js schedules updateBackdrop two
+  // frames after the scene boots, and a re-dim there once blanked every 3D
+  // scenario while the transient check above stayed green by winning the race.
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  expect(await page.evaluate(() => document.getElementById('scene').className)).not.toContain('is-dim');
 }
 
 test('live lobby attracts in 3D from its first frame', async ({ page }) => {
