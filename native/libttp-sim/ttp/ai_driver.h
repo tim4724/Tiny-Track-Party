@@ -1,4 +1,4 @@
-// AiDriver — the C++ twin of public/display/AiDriver.js: pure-pursuit autopilot,
+// AiDriver — pure-pursuit autopilot,
 // the precomputed racing line, corner-anticipation braking, and the AiController
 // (seeded wander + held-item firing). Bit-exact under strict FP; transcendentals
 // via ttp/dmath.h. Shared by Game (finished cars victory-lap through pursue/

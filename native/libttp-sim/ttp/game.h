@@ -1,4 +1,4 @@
-// Game — the C++ twin of public/display/engine/Game.js. Authoritative ribbon-
+// Game — the authoritative ribbon-
 // follow car simulation; a bit-exact transliteration under strict FP
 // (docs/native-port/fp-profile.md). Reuses libttp-track (Vec3/Centerline/util/
 // jsmath) wholesale; transcendentals route through ttp/dmath.h (fdlibm).
@@ -114,9 +114,8 @@ class RacingLine;    // ai_driver.h
 // getSnapshot's "steer", which is what libttp-runtime's frame builder mirrors).
 inline constexpr double STEER_SIGN = -1;
 
-// Live-tunable steering-response exponent — the C++ twin of Game.js
-// setSteerExpo/getSteerExpo. Module-global (shared by every Game like the JS
-// _steerExpo) and read fresh each physics step. setSteerExpo clamps to [0.5, 3]
+// Live-tunable steering-response exponent. Module-global — shared by every
+// Game, not per-instance — and read fresh each physics step. setSteerExpo clamps to [0.5, 3]
 // and ignores non-finite input, matching the JS `Number.isFinite` guard.
 void setSteerExpo(double v);
 double getSteerExpo();

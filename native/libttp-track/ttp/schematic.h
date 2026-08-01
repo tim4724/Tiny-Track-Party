@@ -1,7 +1,6 @@
 // schematic — the top-down track MAP and its snapshot codec, in C++.
 //
-// This is public/display/trackSchematic.js, ported: geometry -> bytes, with no
-// platform anywhere in it. Three things, and they are three different jobs:
+// Geometry -> bytes, with no platform anywhere in it. Three things, and they are three different jobs:
 //
 //   schematic(track)  project a built track's centreline to the X/Z plane and
 //                     fit it into a padded 256-unit square as one closed SVG

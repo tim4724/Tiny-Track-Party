@@ -1,11 +1,14 @@
-// audio.cc — see audio.h. A line-for-line transliteration of
-// public/display/audio/decide.js; the JS stays in the tree as the oracle
-// tests/fixtures/audio-corpus.jsonl was recorded from.
+// audio.cc — see audio.h. Transliterated line for line from the JS decision
+// layer that tests/fixtures/audio-corpus.jsonl was recorded off. That oracle was
+// deleted with the engine, so the corpus is now the only surviving statement of
+// what these rules were — it can never be re-recorded (root rule 4).
 //
-// Read the JS beside this file when changing anything: the comments there carry
-// the TUNING rationale (why AUD_PEAK is 0.7, why a CPU car is never voiced, why
-// the roulette's reveal pop is the "item ready" beat) and are not repeated here.
-// What IS repeated here is anything a port can get wrong.
+// The TUNING rationale did not come with it. Why AUD_PEAK is 0.7, why a CPU car
+// is never voiced, why the roulette's reveal pop is the "item ready" beat — all
+// of that lived in the JS comments, so it is now reachable only through
+// `git log --diff-filter=D -- public/display/audio/decide.js` (or
+// `npm run revive:js-oracle`). Read it there before retuning anything; what IS
+// repeated here is only what a port can get wrong.
 
 #include "ttp/audio.h"
 

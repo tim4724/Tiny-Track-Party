@@ -1,4 +1,4 @@
-// dmath — the C++ twin of public/display/engine/math.js: the SIX transcendentals
+// dmath — the SIX transcendentals
 // the sim routes through the vendored fdlibm instead of the platform libm, so
 // results are bit-identical to the WASM build the JS engine ships (fp-profile §2).
 // The entry points are the renamed ttp_fd_* symbols (native/CMakeLists.txt). sqrt

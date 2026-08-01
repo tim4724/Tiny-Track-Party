@@ -1,4 +1,4 @@
-// Golden-trace REPLAY CLI — the C++ twin of scripts/verify-trace.mjs, linking
+// Golden-trace REPLAY CLI, linking
 // libttp-sim. Reads a JSONL trace, rebuilds the race (buildRaceTrack twin +
 // contract-version/mathlib-stamp checks), and replays the recorded inputs
 // (input-replay, ai-live re-run, session driver, dt jitter, schedule ops),
@@ -78,7 +78,7 @@ static Stats statsFrom(const Value& v) {
 // (every field survives, including any this CLI doesn't model) with only `frames`
 // restamped.
 
-// The C++ twin of record-trace.mjs's scriptedHuman. A trace header stores a
+// The scripted human the recorder drove. A trace header stores a
 // human's id but NOT its script, so the script is recovered BY CONVENTION from
 // the id: `human-<N>` -> index N-1 -> phase (N-1)*17, matching
 // scriptedHuman(index) which names itself `human-${index+1}`. An id that doesn't
@@ -571,9 +571,9 @@ int main(int argc, char** argv) {
   //                                                  stdout. Re-recording a
   //                                                  committed fixture must be
   //                                                  byte-identical to it — that
-  //                                                  equality is what makes this
-  //                                                  a drop-in replacement for
-  //                                                  scripts/record-trace.mjs.
+  //                                                  equality is what lets
+  //                                                  --record re-emit a
+  //                                                  JS-recorded trace exactly.
   //
   // Several traces in one process is not a convenience: it is the CROSS-RACE
   // ISOLATION gate. Each replay is byte-exact on its own, so any state that

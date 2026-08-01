@@ -1,5 +1,5 @@
-// Canonical JSON + FNV-1a — the C++ twin of record-trace.mjs's canonicalStringify
-// and fnv1a (docs/native-port/fp-profile.md §4). A small tagged Value union stands
+// Canonical JSON + FNV-1a — the digest format every corpus and trace is written
+// in (docs/native-port/fp-profile.md §4). A small tagged Value union stands
 // in for the plain-data snapshot/event trees; canonical_stringify walks it with a
 // recursive key sort and shortest-form numbers (ttp/jsonnum.h), byte-identical to
 // JSON.stringify-with-sorted-keys. fnv1a hashes the UTF-8 bytes of that string.

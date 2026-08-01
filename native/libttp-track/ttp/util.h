@@ -1,5 +1,5 @@
-// Shared sim utilities — the C++ twin of public/display/engine/util.js.
-// Dependency-free (mirrors the JS module's "no THREE, no DOM" contract).
+// Shared sim utilities. Dependency-free by contract: no renderer type, no
+// platform, no DOM — the sim path has to compile and run anywhere.
 #pragma once
 
 #include <cstdint>

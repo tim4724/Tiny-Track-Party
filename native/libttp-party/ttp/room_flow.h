@@ -1,4 +1,4 @@
-// RoomFlow — the C++ twin of partyplug/RoomFlow.js. Owns room state, roster
+// RoomFlow — owns room state, roster
 // identity/join order, presence, and host election for libttp-party (the sans-IO
 // room-semantics layer: sockets/RTC/framing are injected elsewhere). It does not
 // own DOM, transport, timers, or game fields (color/name/score); those ride as

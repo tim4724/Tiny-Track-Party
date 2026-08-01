@@ -92,8 +92,8 @@ function(ttp_emscripten_cli target)
 endfunction()
 
 # ---- Vendored fdlibm, native build ------------------------------------------
-# Same sources the JS engine ships as WASM (public/display/engine/math.js —
-# see vendor/fdlibm/VENDOR.md). Entry points are renamed ttp_fd_* via -D so
+# The same sources the JS engine shipped as WASM, which is what the corpus was
+# recorded against (see vendor/fdlibm/VENDOR.md). Entry points are renamed ttp_fd_* via -D so
 # the static lib never collides with system libm symbols; internal cross-calls
 # (atan2→atan, pow/hypot→sqrt, k_rem_pio2→floor/scalbn) rename consistently
 # because the -D rewrites every occurrence in every TU.
@@ -150,8 +150,8 @@ target_include_directories(ttp_testsupport INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}
 target_link_libraries(ttp_testsupport INTERFACE libttp_json)
 
 # ---- libttp-track: the sampler math (util, Vec3, Centerline) -----------------
-# The C++ twin of public/display/engine/{util,Vec3}.js + public/display/
-# Centerline.js — a bit-exact transliteration (fp-profile.md). Links the
+# Vec3, Centerline and the shared sim utilities — bit-exact under strict FP
+# (fp-profile.md). Links the
 # vendored fdlibm because Vec3::applyAxisAngle routes sin/cos through it, exactly
 # as the JS side routes through math.js.
 add_library(libttp_track STATIC
@@ -235,8 +235,7 @@ add_test(NAME schematic
 )
 
 # ---- libttp-sim: the sim-core port ------------------------------------------
-# The C++ twin of public/display/engine/Game.js + AiDriver.js + RaceSession.js +
-# GrandPrix.js. Reuses libttp-track (Vec3/Centerline/util/jsmath) and libttp-json
+# The car sim, AI, race session and cup scoring. Reuses libttp-track (Vec3/Centerline/util/jsmath) and libttp-json
 # (the snapshot/trace serializer) wholesale; all under strict FP (fp-profile.md).
 add_library(libttp_sim STATIC
   libttp-sim/ttp/ai_driver.cc
@@ -331,14 +330,14 @@ ttp_emscripten_cli(hazard_check)
 add_test(NAME hazards COMMAND hazard_check)
 
 # ---- Conformance: the golden-trace replay CLI -------------------------------
-# Reproduces scripts/verify-trace.mjs against libttp-sim: rebuilds the race,
+# Replays a committed trace against libttp-sim: rebuilds the race,
 # replays recorded inputs (+ ai-live re-run, session driver, dt jitter, schedule
 # ops), and demands exact per-frame event/snapshot/hash agreement.
 add_executable(replay_cli replay/replay_cli.cc)
 target_link_libraries(replay_cli PRIVATE libttp_sim ttp_testsupport ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(replay_cli)
-# --record is a DROP-IN for scripts/record-trace.mjs: re-recording a committed
-# fixture from C++ must reproduce it BYTE FOR BYTE. That equality is the gate
+# --record RE-EMITS a committed fixture from C++, and must reproduce it BYTE FOR
+# BYTE. That equality is the gate
 # that lets fixture recording move off JS (and therefore lets the JS engine be
 # frozen), so it runs per fixture on every platform leg.
 foreach(fx
@@ -372,8 +371,7 @@ endforeach()
 add_test(NAME replay_sequence COMMAND replay_cli ${TTP_ALL_TRACES})
 
 # ---- Balance probes: the car/track tuning instruments -----------------------
-# The C++ twin of scripts/probe-{laptime,car-matrix,packed-races}.js. Tuning
-# tools, not conformance gates (no ctest entry — they PRINT numbers a human
+# The balance instruments. Tuning tools, not conformance gates (no ctest entry — they PRINT numbers a human
 # reads), and the last load-bearing reason the JS engine had to stay runnable in
 # Node. Links libttp_party only for ttp::protocol's CAR_STATS/CAR_NAMES.
 add_executable(probe_cli probe/probe_cli.cc)
@@ -400,7 +398,7 @@ add_test(NAME probe_smoke
     -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/probe_smoke.cmake)
 
 # ---- libttp-party: the room-semantics + wire-framing port -------------------
-# The C++ twin of the partyplug transport layer: RoomFlow.js (sans-IO room state
+# The party layer: the sans-IO room state
 # machine — roster identity/join order, presence, host election, liveness
 # predicates; ORDER and IDENTITY semantics load-bearing) plus the pure surface of
 # PartyConnection.js (relay_framing: outbound encoders, inbound routing, close-

@@ -1,7 +1,6 @@
 // hud — the per-player race HUD, read off the live Game into a packed block.
 //
-// This is public/display/uiModel.js's `hudRows`, ported. That function is four
-// copies and one decision, and the decision is the item gate: a finished car is
+// Four copies and one decision, and the decision is the item gate: a finished car is
 // on a victory lap with no usable slot, so its item reads empty however full the
 // engine says it is. Everything else here is the SNAPSHOT's own derivation
 // (Game::displayLap, Car::rank, the empty-string-is-null item), taken from the

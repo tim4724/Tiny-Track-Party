@@ -1,4 +1,4 @@
-// Centerline — the C++ twin of public/display/Centerline.js. A closed polyline
+// Centerline — a closed polyline
 // of oriented frames (pos, tangent, up, lateral) with cumulative arclength,
 // interpolated with a non-uniform Catmull-Rom spline. Every method mirrors the
 // JS operation order exactly; the scratch-buffer reuse is an allocation

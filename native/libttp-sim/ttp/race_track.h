@@ -1,5 +1,4 @@
-// race_track — the C++ twin of record-trace.mjs's buildRaceTrack: take a shipped
-// track definition (generated/track_defs.h), run the native TrackBuilder, and
+// race_track — take a shipped track definition (generated/track_defs.h), run the native TrackBuilder, and
 // assemble the Centerline + GameTrack the sim actually races on.
 //
 // Every host needs this exact assembly (the runtime ABI, the replay/record CLI,

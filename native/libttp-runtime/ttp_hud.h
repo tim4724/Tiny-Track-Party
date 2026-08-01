@@ -77,8 +77,7 @@ typedef struct TtpHudSlot {
     /* The held item as a TTP_ITEM_* code. TTP_ITEM_NONE while the slot is empty
      * AND once the car has finished: a finished car is on a victory lap with no
      * usable slot, so its item reads empty however full the engine says it is.
-     * That gate is the ONE decision in this block, and it is the one
-     * public/display/uiModel.js hudRows makes. */
+     * That gate is the ONE decision in this block. */
     int32_t item;
     uint32_t flags;     /* TTP_HUD_SLOT_* */
     uint32_t reserved;  /* 0 — keeps finishTime 8-aligned on every ABI */

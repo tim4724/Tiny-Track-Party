@@ -1,13 +1,13 @@
-// RaceSession — the C++ twin of public/display/RaceSession.js: countdown beats,
+// RaceSession — countdown beats,
 // the racing flip, and the race-timeout failsafe wrapped around a Game. Owns no
-// clock; time is injected through update(dtMs). Clock-free / RNG-injected exactly
-// like the JS module.
+// clock; time is injected through update(dtMs). Clock-free and RNG-injected,
+// which is what lets a race replay frame for frame.
 //
 // The golden-trace session driver only exercises startCountdown / update /
 // processInput / racing / results; the rest of the surface (pause / resume /
 // fastForwardToEnd / forceRemoveCar / rekeyCar / getResults / getSnapshot /
 // dispose) is the live-play lifecycle the native runtime ABI wraps for the
-// browser adapter — a faithful port of the same-named RaceSession.js methods.
+// browser adapter.
 #pragma once
 
 #include <functional>
@@ -32,7 +32,7 @@ class RaceSession {
   void update(double dtMs);
   void processInput(const Id& id, const Input& msg) { engine_->processInput(id, msg); }
 
-  // Live-play lifecycle (RaceSession.js). pause()/resume() freeze injected time;
+  // Live-play lifecycle. pause()/resume() freeze injected time;
   // resume replays the held countdown banner. fastForwardToEnd steps the sim to
   // the flag in one burst, feeding the bots each step via `stepBots`.
   void pause();

@@ -1,7 +1,6 @@
 // probe_cli — the car/track BALANCE INSTRUMENTS, on the native engine.
 //
-// The C++ twin of scripts/probe-laptime.js, probe-car-matrix.js and
-// probe-packed-races.js. These are tuning tools, not conformance tests: they
+// These are tuning tools, not conformance tests: they
 // answer "is this car dominant?", "how long is a lap here?", "does weight pay off
 // in traffic?". They were the last load-bearing reason the JS engine had to stay
 // runnable in Node — the numbers a stat edit is judged by came out of it.

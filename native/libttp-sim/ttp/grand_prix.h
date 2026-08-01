@@ -1,6 +1,6 @@
-// GrandPrix — the C++ twin of public/display/GrandPrix.js: the pure scoring core
-// behind the Cup / Random picks. Clock-free and RNG-injected exactly like the JS
-// module (all identity/meta enters through apply_race; randomness through the
+// GrandPrix — the pure scoring core
+// behind the Cup / Random picks. Clock-free and RNG-injected (all identity/meta
+// enters through apply_race; randomness through the
 // injected rng in ShuffleBag). Off the golden-trace conformance path (no fixture
 // exercises it), but ported for parity; a faithful transliteration.
 #pragma once

@@ -234,8 +234,8 @@ TTP_ABI const char* ttp_track_sweep_json(const char* trackIdOrDescriptor, double
 TTP_ABI const char* ttp_track_frames_json(const char* trackIdOrDescriptor, const char* sListJson);
 
 // ---- the top-down schematic + its snapshot codec ----------------------------
-// libttp-track/ttp/schematic.h — public/display/trackSchematic.js ported. Three
-// separate jobs, and only the middle one is on a shipping path today.
+// libttp-track/ttp/schematic.h. Three separate jobs, and only the middle one is
+// on a shipping path today.
 //
 // ttp_track_schematic_json builds the track and projects its centreline into a
 // padded 256-unit square as one closed SVG path:

@@ -1,7 +1,7 @@
 // Replays tests/fixtures/math-corpus.jsonl against the NATIVE fdlibm build
-// and demands identical IEEE-754 bit patterns — the C++ twin of
-// tests/mathlib.test.js. Together they prove the emscripten/WASM build (what
-// the JS engine ships) and this platform-clang build (what libttp-sim links)
+// and demands identical IEEE-754 bit patterns. The corpus was recorded off the
+// emscripten/WASM build the JS engine shipped, so replaying it here proves that
+// build and this platform-clang build (what libttp-sim links)
 // compute identical transcendentals, which is the foundation of the whole
 // golden-trace conformance scheme.
 //

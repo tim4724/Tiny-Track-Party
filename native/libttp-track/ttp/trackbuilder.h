@@ -1,4 +1,4 @@
-// TrackBuilder — the C++ twin of public/display/TrackBuilder.js. Integrates a
+// TrackBuilder — integrates a
 // track DEFINITION (a segment DSL walk OR a waypoint Catmull-Rom spline) into a
 // drivable centreline of oriented frames, then runs the shared furniture resolve
 // (oils/pads/boxes/poles/bananas + auto loop-launch strips + ghost collision

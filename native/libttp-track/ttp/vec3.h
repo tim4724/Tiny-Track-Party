@@ -1,10 +1,10 @@
-// Vec3 — the C++ twin of public/display/engine/Vec3.js, itself a bit-identical
-// copy of THREE.Vector3 (r184). Every method body below is a LITERAL
-// transliteration preserving the exact operation order the JS pins (float
-// rounding differs if you reassociate). double only, no float temporaries
-// (fp-profile §1). Transcendentals route through the vendored fdlibm
-// (ttp_fd_sin/cos) exactly as Vec3.js routes through dmath (fp-profile §2);
-// sqrt stays std::sqrt (correctly rounded everywhere).
+// Vec3 — a literal transliteration of THREE.Vector3 (r184), method body for
+// method body. The operation ORDER is the contract, not the arithmetic: float
+// rounding changes if you reassociate, so `normalize()` multiplies by a
+// reciprocal rather than dividing componentwise, and no expression here may be
+// "simplified". double only, no float temporaries (fp-profile §1).
+// Transcendentals route through the vendored fdlibm (ttp_fd_sin/cos,
+// fp-profile §2); sqrt stays std::sqrt (correctly rounded everywhere).
 #pragma once
 
 #include <cmath>
