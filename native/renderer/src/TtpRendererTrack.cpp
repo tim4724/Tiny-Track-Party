@@ -1805,51 +1805,24 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     // it out to the 405 unfogged band ALONG ITS CURRENT DIRECTION per frame
     // (a build-time push broke as soon as a cloud drifted over the middle —
     // the pre-scaled puff hung huge and fogged right over the track).
-    if (mBlendMaterial) {
+    if (mCloudMaterial) {
+        // The puff's SHAPE is vcloud.mat's, evaluated per fragment from uv0 —
+        // so a sprite is one quad and the silhouette stays smooth however large
+        // the push-out draws it. Everything below is just where and how big.
+        const auto puffQuad = [&](Mesh& m, float sw, float sh, uint32_t colour) {
+            for (int j = 0; j < 2; j++) {
+                for (int k = 0; k < 2; k++) {
+                    m.verts.push_back({ (k - 0.5f) * sw, (0.5f - j) * sh, 0, colour });
+                    m.uvs.push_back({ (float) k, (float) j }); // v runs DOWN the field
+                }
+            }
+            m.idx = { 0, 2, 1, 1, 2, 3 };
+        };
         // theme.clouds dresses the same 8 sprites: `count` hides the tail,
         // scale/aspect restretch the authored width, opacity + tint repaint.
         const int nClouds = (int) std::min<uint32_t>(8, tb.cloudCount);
         mClouds.resize(nClouds);
         mCloudPos.resize(nClouds);
-        // makeCloudTexture: five discs at 0.95 alpha, EACH blurred by 5px and
-        // composited source-over into ONE 128×64 texture, then drawn at the
-        // sprite's 0.8 opacity. That compositing order matters — five separate
-        // translucent fans stack to a different (much harder) alpha in the
-        // overlaps, which is why the puffs read as flat white blobs. Bake the
-        // composited coverage into a grid instead: one soft, genuinely blurry
-        // quad per cloud. The alpha field is shape-only, so it's computed once
-        // and shared by all eight.
-        static const float LOBES[5][3] = {
-            { 36, 36, 14 }, { 58, 30, 17 }, { 84, 36, 14 },
-            { 68, 42, 11 }, { 46, 42, 10 },
-        };
-        // Grid step is bounded by the 5px blur: the softened edge spans ~10px
-        // of the 128×64 field, so 8px cells (16×8) still put a sample inside
-        // every gradient. 32×16 was 1024 tris per sprite — with 8 clouds plus
-        // the haze banks reusing the grid, a quarter of the lobby's triangles
-        // were cloud quads.
-        constexpr int NX = 16, NY = 8;
-        std::vector<uint8_t> alpha((NX + 1) * (NY + 1));
-        {
-            const BlurKernel blur(5.0f);
-            for (int j = 0; j <= NY; j++) {
-                for (int i = 0; i <= NX; i++) {
-                    const float cx = (float) i / NX * 128.0f, cy = (float) j / NY * 64.0f;
-                    float clear = 1.0f; // ∏(1 − aᵢ): source-over compositing
-                    for (const auto& lb : LOBES) {
-                        const float lx = lb[0], ly = lb[1], lr = lb[2];
-                        const float cov = blur.coverage(cx, cy,
-                                [&](float x, float y) {
-                                    const float dx = x - lx, dy = y - ly;
-                                    return dx * dx + dy * dy <= lr * lr;
-                                });
-                        clear *= (1.0f - 0.95f * cov);
-                    }
-                    alpha[j * (NX + 1) + i] = (uint8_t) std::lround(
-                            255.0f * (1.0f - clear)); // shape only; opacity per sprite
-                }
-            }
-        }
         const float3 cloudTint = srgbToLinear(tb.cloudTint);
         for (int i = 0; i < nClouds; i++) {
             const float a = (float) i / 8 * 2.0f * (float) M_PI + (i % 3) * 0.45f;
@@ -1857,29 +1830,16 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
             const float w = 50 + (i % 3) * 20;
             mCloudPos[i] = { std::cos(a) * r, 42.0f + (i % 3) * 16,
                              std::sin(a) * r };
-            Mesh& m = mClouds[i];
             // Sprite quad, billboarded per view in render(). Geometry at
             // AUTHORED size — the per-frame push-out scales the transform
             // (softened, k^0.55: cameras sit far from the origin, so full-k
             // clouds loom oversized). DEF_CLOUDS aspect is 0.42.
-            const float sw = w * tb.cloudScale, sh = sw * tb.cloudAspect;
-            for (int j = 0; j <= NY; j++) {
-                for (int k = 0; k <= NX; k++) {
-                    const float x = ((float) k / NX - 0.5f) * sw;
-                    const float y = (0.5f - (float) j / NY) * sh;
-                    m.verts.push_back({ x, y, 0,
-                            packLinear(cloudTint, 1.0f,
-                                    alpha[j * (NX + 1) + k] / 255.0f * tb.cloudOpacity) });
-                }
+            const float sw = w * tb.cloudScale;
+            puffQuad(mClouds[i], sw, sw * tb.cloudAspect,
+                    packLinear(cloudTint, 1.0f, tb.cloudOpacity));
+            if (!buildMesh(mClouds[i], true, mCloudMaterial->getDefaultInstance())) {
+                return false;
             }
-            for (int j = 0; j < NY; j++) {
-                for (int k = 0; k < NX; k++) {
-                    const uint32_t b = (uint32_t) (j * (NX + 1) + k);
-                    const uint32_t n = b + (uint32_t) (NX + 1);
-                    m.idx.insert(m.idx.end(), { b, n, b + 1, b + 1, n, n + 1 });
-                }
-            }
-            if (!buildMesh(m, true, mBlendMaterial->getDefaultInstance())) return false;
         }
         // Dust banks (theme.haze): the SAME soft puff, but low (hill height),
         // huge and bank-flat — distance fog gives uniform haze, these give it
@@ -1894,26 +1854,15 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
             const float a = (float) i / 5 * 2.0f * (float) M_PI + (i % 2) * 0.7f;
             const float r = 132 + (i % 3) * 34;
             mHazePos[i] = { std::cos(a) * r, 9.0f + (i % 3) * 7, std::sin(a) * r };
-            Mesh& m = mHaze[i];
             const float sw = (95.0f + (i % 3) * 28) * tb.hazeScale;
-            const float sh = sw * 0.14f; // HAZE_ASPECT — banks, not puffs
-            for (int j = 0; j <= NY; j++) {
-                for (int k = 0; k <= NX; k++) {
-                    const float x = ((float) k / NX - 0.5f) * sw;
-                    const float y = (0.5f - (float) j / NY) * sh;
-                    m.verts.push_back({ x, y, 0,
-                            packLinear(hazeTint, 1.0f,
-                                    alpha[j * (NX + 1) + k] / 255.0f * tb.hazeOpacity) });
-                }
+            puffQuad(mHaze[i], sw, sw * 0.14f, // HAZE_ASPECT — banks, not puffs
+                    packLinear(hazeTint, 1.0f, tb.hazeOpacity));
+            // Priority 5 draws a bank AFTER the clouds (default 4). Both write
+            // no depth, so the blend pass's order is the whole of what decides
+            // which composites over which, and a bank is the nearer sheet.
+            if (!buildMesh(mHaze[i], true, mCloudMaterial->getDefaultInstance(), 5)) {
+                return false;
             }
-            for (int j = 0; j < NY; j++) {
-                for (int k = 0; k < NX; k++) {
-                    const uint32_t b = (uint32_t) (j * (NX + 1) + k);
-                    const uint32_t n = b + (uint32_t) (NX + 1);
-                    m.idx.insert(m.idx.end(), { b, n, b + 1, b + 1, n, n + 1 });
-                }
-            }
-            if (!buildMesh(m, true, mBlendMaterial->getDefaultInstance(), 5)) return false;
         }
     }
 
@@ -2008,6 +1957,12 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
     if (!mPointMaterial && vpoint != mAssets.end()) {
         mPointMaterial = Material::Builder()
                 .package(vpoint->second.data(), vpoint->second.size())
+                .build(*mEngine);
+    }
+    const auto vcloud = mAssets.find("vcloud.filamat");
+    if (!mCloudMaterial && vcloud != mAssets.end()) {
+        mCloudMaterial = Material::Builder()
+                .package(vcloud->second.data(), vcloud->second.size())
                 .build(*mEngine);
     }
     const auto vburst = mAssets.find("vburst.filamat");

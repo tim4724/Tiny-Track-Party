@@ -836,6 +836,7 @@ TtpRenderer::~TtpRenderer() {
     releaseScene();
     if (mBlendMaterial) mEngine->destroy(mBlendMaterial);
     if (mPointMaterial) mEngine->destroy(mPointMaterial);
+    if (mCloudMaterial) mEngine->destroy(mCloudMaterial);
     if (mBurstMaterial) mEngine->destroy(mBurstMaterial);
     if (mGroundMaterial) mEngine->destroy(mGroundMaterial);
     if (mEsmMaterial) mEngine->destroy(mEsmMaterial);

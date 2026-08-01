@@ -1,0 +1,58 @@
+// Soft puff — the drifting sky clouds and the low dust banks.
+//
+// The shape is five overlapping discs composited source-over, each softened by
+// a 5px gaussian, in the 128x64 field the JS `makeCloudTexture` painted. That
+// coverage used to be BAKED into a 16x8 vertex grid and Gouraud-interpolated
+// across the quad; a cloud covers a third of the screen once it is pushed out
+// to the sky band, so each grid cell spanned tens of pixels and the silhouette
+// came out as a visible staircase. Denser grids only make the steps smaller —
+// linear interpolation of a curve is faceted at every resolution.
+//
+// So the field is evaluated PER FRAGMENT from uv0 instead, the way vpoint
+// rebuilds its radial sprite: smooth at any size, and two triangles per puff
+// rather than two hundred and fifty-six.
+material {
+    name : TtpVcloud,
+    requires : [
+        color,
+        uv0
+    ],
+    shadingModel : unlit,
+    culling : none,
+    blending : transparent,
+    depthWrite : false,
+    flipUV : false
+}
+
+fragment {
+    #include "ttp_grade.inc"
+
+    // Coverage of one blurred disc. A gaussian blur of a hard edge is an erf:
+    // half coverage at the rim, flat by about 1.7 sigma either side. smoothstep
+    // over that span tracks it to well under a quantisation level, and costs a
+    // builtin instead of a series.
+    float ttpDisc(vec2 p, vec2 c, float r) {
+        const float SOFT = 8.5; // 1.7 * the 5px blur sigma, in field pixels
+        return 1.0 - smoothstep(r - SOFT, r + SOFT, length(p - c));
+    }
+
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = getColor();
+        // uv0 spans the quad; the lobes are authored in the 128x64 field.
+        vec2 p = getUV0() * vec2(128.0, 64.0);
+        // Source-over of five discs at 0.95 alpha: track what stays CLEAR and
+        // invert. Stacking the coverages instead gives a much harder alpha in
+        // the overlaps, which is what made the puffs read as flat white blobs.
+        float clear = 1.0;
+        clear *= 1.0 - 0.95 * ttpDisc(p, vec2(36.0, 36.0), 14.0);
+        clear *= 1.0 - 0.95 * ttpDisc(p, vec2(58.0, 30.0), 17.0);
+        clear *= 1.0 - 0.95 * ttpDisc(p, vec2(84.0, 36.0), 14.0);
+        clear *= 1.0 - 0.95 * ttpDisc(p, vec2(68.0, 42.0), 11.0);
+        clear *= 1.0 - 0.95 * ttpDisc(p, vec2(46.0, 42.0), 10.0);
+        // The vertex alpha is the sprite's own opacity (theme.clouds/haze).
+        material.baseColor.a *= 1.0 - clear;
+        // Grade, then premultiply, same as vblend (see ttp_grade.inc).
+        material.baseColor.rgb = ttpGrade(material.baseColor.rgb) * material.baseColor.a;
+    }
+}

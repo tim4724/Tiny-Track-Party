@@ -240,9 +240,11 @@ private:
         // qtangents in a second buffer slot). Empty = unlit vcolor.
         std::vector<filament::math::float3> normals;
         std::vector<filament::math::quatf> quats; // derived; alive for upload
-        // Optional UV0, in its own buffer slot. Only the sprite cloud carries
-        // one (the corner offset its material billboards by) — every other mesh
-        // is position + colour, so UVs stay out of the shared vertex.
+        // Optional UV0, in its own buffer slot: the road (track space, which
+        // vroad shades its decals from), the ambient-particle sprites (the
+        // corner offset vpoint billboards by) and the cloud/haze puffs (the
+        // field vcloud shapes them from). Most meshes are position + colour, so
+        // UVs stay out of the shared vertex.
         std::vector<filament::math::float2> uvs;
         // Flat-decal template in car-local (x, z) with its rest alpha: the
         // conform rewrites `verts` into world space from this every frame.
@@ -595,6 +597,9 @@ private:
     // billboard + the radial falloff both live in the shader — see vpoint.mat.
     filament::Material* mPointMaterial = nullptr;
     filament::MaterialInstance* mPollenMat = nullptr; // owns the sprite's halfSize
+    // Soft puffs (vcloud): the sky clouds and the dust banks. Their five-lobe
+    // silhouette is shader-side too — see vcloud.mat for why it is not baked.
+    filament::Material* mCloudMaterial = nullptr;
     // Additive rocket blast (vburst): the flash ball and the camera-facing
     // shockwave ring, whose radius/width/fade are material parameters.
     filament::Material* mBurstMaterial = nullptr;
@@ -716,7 +721,7 @@ private:
     std::vector<Mesh> mBirds;
     std::vector<Mesh> mKites;
     Mesh mPlane;
-    // Drifting cloud puffs (soft ellipsoid stand-ins for the JS sprites).
+    // Drifting cloud puffs: one billboarded quad each, shaped by vcloud.mat.
     std::vector<Mesh> mClouds;
     std::vector<filament::math::float3> mCloudPos; // current position (x drifts)
     // Low dust banks (theme.haze) — same puff, bank-flat, drifting faster.

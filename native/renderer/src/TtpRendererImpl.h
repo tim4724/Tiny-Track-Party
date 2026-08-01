@@ -130,10 +130,12 @@ inline float3 gradeSrgb(const float3& linear) {
     return { gradeChannel(linear.x), gradeChannel(linear.y), gradeChannel(linear.z) };
 }
 // Canvas `filter: blur(Npx)` is a Gaussian of stddev N. Both soft sprites the
-// JS bakes into textures (the cloud puff's five discs, the wind streak's
-// ellipse) are only a couple of sigma across, so the r ≫ sigma closed form is
-// no good — convolve numerically instead. `inside` is the unblurred shape mask
-// in canvas pixels; the result is its coverage at (px, py).
+// JS bakes into textures (the wind streak's ellipse, the chimney smoke's disc)
+// are only a couple of sigma across, so the r ≫ sigma closed form is no good —
+// convolve numerically instead. `inside` is the unblurred shape mask in canvas
+// pixels; the result is its coverage at (px, py). The cloud puff was baked here
+// too until its shape moved into vcloud.mat, which is where a NEW soft sprite
+// should go: a shader evaluates the field per pixel and cannot facet.
 struct BlurKernel {
     std::vector<float2> off;
     std::vector<float> w;
