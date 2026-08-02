@@ -717,6 +717,220 @@ export function runDisplayScenario(opts, ctx) {
   //
   // Clocks run off the frame's dt, so the gallery card's pause freezes the demo
   // mid-transition instead of letting it march on behind a still.
+  // ---- warp: the deck-under-the-car bench (?scenario=warp) -------------------
+  //
+  // WHY THIS EXISTS. "It goes wrong on bendy tracks" is not one question, it is
+  // three, and a shipped circuit asks all of them at once: the road bends in
+  // PLAN, the deck TWISTS, and the deck rises and falls. Those are different
+  // conditions with different causes, and on `powder` or `sidewinder` you
+  // cannot tell which one you are looking at.
+  //
+  // So this drives ONE car, slowly, at a held lateral offset, along a track
+  // whose legs are one warp each (devTracks.js `warp`), and puts the number
+  // that separates them on screen: GAP, the deck's departure from the plane the
+  // car is seated on, measured at its four wheel corners. It reads 0 down every
+  // flat leg AND through the plain corner, and only the rungs move it — so a
+  // defect that tracks GAP is the deck's, and one that does not is not.
+  //
+  // It is what found the ground conform's real bug: the body was posed from the
+  // centreline while standing on a surface, and the height correction switched
+  // ITSELF off past ~29 degrees of roll.
+  //
+  // Everything here is a dev instrument: no gallery card, no fixture, nothing
+  // else imports it. Keep it that way — it is allowed to be blunt.
+  if (scenario === 'warp') {
+    show('race');
+    el('results').classList.add('hidden');
+    ready().then(() => runWarpBench()).catch((e) =>
+      console.warn('[TestHarness] warp bench failed to start', e));
+    return;
+  }
+
+  function runWarpBench() {
+    const { scene, track } = ctx;
+    const CAR = 0;
+    const engine = bareSession([{ peerIndex: CAR, stats: statsFor(CAR) }], track, { bots: [] });
+    window.__engine = engine;
+    for (const id of [...scene.cars.keys()]) scene.removeCar(id);
+    scene.addCar(CAR, CAR, 'BENCH', { carIndex: CAR });
+    scene.bindSession(engine.h);
+    // No cell owns a car, so the bench drives the camera itself (Stage only runs
+    // the user camera when the cell list is empty) and no split-screen HUD lands
+    // on top of the thing being looked at.
+    scene.soloCam = true;
+    const cam = scene.enableUserCamera({ eye: { x: 0, y: 0, z: 0 }, yaw: 0, pitch: -0.7 });
+    document.querySelectorAll('.cam-hint').forEach((n) => n.remove());
+
+    // The bench's state. `step` is what makes a per-frame pop findable: freeze,
+    // then advance ONE sim frame at a time and watch the outline between two
+    // stills rather than trying to catch it at 60 Hz.
+    const st = {
+      lat: 0,            // held lateral offset — the line the car is pinned to
+      speed: 3.5,        // world u/s; slow enough to read, fast enough to move
+      paused: false,
+      step: 0,           // frames owed while paused
+      cam: 'orbit',      // orbit | deck | chase | free
+      dist: 3.2,         // orbit/deck framing distance
+      elev: 0.95,        // orbit elevation off the deck plane, radians
+      // Lap length, SELF-CALIBRATED from the stamp's own arclength. The display
+      // holds no track geometry — that is the point of the native builder — so
+      // there is nothing on this page to read it off; the high-water mark of a
+      // wrapping value is, and one lap of the bench settles it.
+      lapL: 0,
+      lock: false,     // camera frozen in world space (see place())
+      // ISOLATION: hide the bodies and wipe the laid rubber, so the deck
+      // stamp is the only dark thing on the road. Without this a contact
+      // shadow, a tyre trail and the car's own underside are three dark
+      // patches in the same place and no screenshot can separate them.
+      solo: false,
+      forceLayer: -1   // -1 auto · 9 the generic superellipse · 8 the monster rig
+    };
+    const DT = 1 / 60;   // fixed: a bench that varies its own timestep is useless
+
+    const hud = document.createElement('div');
+    hud.id = 'warp-hud';
+    hud.style.cssText = 'position:absolute;left:16px;top:16px;z-index:40;padding:10px 12px;'
+      + 'background:rgba(18,20,26,.82);color:#e9edf5;border-radius:10px;pointer-events:none;'
+      + 'font:12px/1.55 ui-monospace,Menlo,monospace;white-space:pre;min-width:290px';
+    el('race').appendChild(hud);
+
+    // Which rung the car is on, named. Derived from the descriptor's own leg
+    // structure rather than hand-typed arclengths, so it cannot rot when a rung
+    // is retuned — the four legs are equal by construction (see devTracks.js).
+    const legName = (u) => (u < 0.25 ? 'N · FLAT CONTROL / plain corner'
+      : u < 0.5 ? 'E · TWIST rungs → banked corner'
+        : u < 0.75 ? 'S · CREST / DIP rungs'
+          : 'W · flat run-back');
+
+    // Hold the line: steer proportionally back to the target lat, brake above
+    // the target speed. Deliberately a governor and not a driver — the bench
+    // wants the SAME pass over a rung every time, not a racing line.
+    //
+    // BOTH TERMS ARE DELIBERATELY LAZY, and it matters. A bang-bang brake and a
+    // twitchy steer both SCRUB, and scrub lays rubber — which is a dark band in
+    // track space, right under the car, in the one place you are trying to read
+    // a dark blob in world space. The first pass of this bench printed tyre
+    // trails through the very stamp it exists to show. So: hysteresis on the
+    // brake, and damping on the steer, to keep the deck clean under the car.
+    let braking = false;
+    function drive(car) {
+      const err = st.lat - car.lat;
+      const s = Math.max(-1, Math.min(1, err * 1.1 - car.steer * 0.45));
+      if (braking && car.spd < st.speed * 0.92) braking = false;
+      else if (!braking && car.spd > st.speed * 1.08) braking = true;
+      engine.processInput(CAR, { s, b: braking ? 1 : 0, u: 0 });
+    }
+
+    function place(car) {
+      const p = car.pose.pos, f = car.pose.forward, up = car.pose.up;
+      if (st.cam === 'free') return;                 // hands off: the drag owns it
+      // LOCK: stop tracking and leave the camera where it is, so stepping the
+      // car forward changes ONLY the car and what is painted under it. Without
+      // this the camera moves with the car and every pixel in the frame changes
+      // every step, which buries a shape pop in global motion — the trap that
+      // made a whole burst of chase-camera captures unreadable.
+      if (st.lock) return;
+      let eye, dir;
+      if (st.cam === 'deck') {
+        // FACE-ON DOWN THE DECK NORMAL. The stamp is a prism along this axis, so
+        // seen from here its painted footprint is the baked silhouette EXACTLY —
+        // any departure is real and cannot be blamed on perspective. The car
+        // hides most of it, which is the point of the orbit view below; use this
+        // one to check the deck itself and the stamp's reach past the body.
+        eye = { x: p.x + up.x * st.dist, y: p.y + up.y * st.dist, z: p.z + up.z * st.dist };
+        dir = { x: -up.x, y: -up.y, z: -up.z };
+      } else if (st.cam === 'chase') {
+        eye = { x: p.x - f.x * 3.4 + up.x * 1.1, y: p.y - f.y * 3.4 + up.y * 1.1,
+                z: p.z - f.z * 3.4 + up.z * 1.1 };
+        dir = { x: f.x, y: f.y, z: f.z };
+      } else {
+        // ORBIT: high and off to one side, so the stamp spills clear of the body
+        // on the far side. This is the view that shows the SHAPE.
+        const r = { x: f.z * -1, y: 0, z: f.x };     // the car's right, in plan
+        const c = Math.cos(st.elev), sE = Math.sin(st.elev);
+        eye = { x: p.x + (r.x * 0.75 - f.x * 0.66) * st.dist * c + up.x * st.dist * sE,
+                y: p.y + (r.y * 0.75 - f.y * 0.66) * st.dist * c + up.y * st.dist * sE,
+                z: p.z + (r.z * 0.75 - f.z * 0.66) * st.dist * c + up.z * st.dist * sE };
+        dir = { x: p.x - eye.x, y: p.y - eye.y, z: p.z - eye.z };
+      }
+      const len = Math.hypot(dir.x, dir.y, dir.z) || 1;
+      cam.eye = eye;
+      cam.yaw = Math.atan2(dir.x, dir.z);
+      // Short of vertical: the look basis degenerates exactly at ±π/2, which is
+      // why Stage clamps its own drag to 1.55 (the deck view sits right on it).
+      cam.pitch = Math.max(-1.54, Math.min(1.54, Math.asin(dir.y / len)));
+    }
+
+    function paint(car) {
+      const d = scene.display.debugDecals().filter((x) => x.masked > 0.5)[0];
+      if (d) st.lapL = Math.max(st.lapL, d.s);
+      const u = (d && st.lapL > 1) ? d.s / st.lapL : 0;
+      hud.textContent = [
+        `${st.lapL > 1 ? legName(u) : 'calibrating lap…'}`,
+        `s ${(d ? d.s : car.totalS).toFixed(2).padStart(8)}`
+          + `   lat ${car.lat.toFixed(2).padStart(6)}   spd ${car.spd.toFixed(2)}`,
+        // GAP is the deck's departure from the plane the car is seated on,
+        // measured at the four wheel corners — 0 on a flat leg AND on a plain
+        // corner, so it separates "the road bends" from "the deck warps".
+        d
+          ? `GAP  ${d.wheelGap.toFixed(4).padStart(7)}   `
+            + `${'█'.repeat(Math.min(24, Math.round(d.wheelGap * 120))) || '·'}`
+          : 'GAP     —      (no car stamp this frame)',
+        d ? `jitter ${d.jitter.toFixed(5)} seated · ${d.rawJitter.toFixed(5)} contract`
+          + `   lean ${d.upJitter.toFixed(5)}` : '',
+        '',
+        `cam ${st.cam}${st.lock ? ' LOCKED' : ''}${st.solo ? ' · CARS HIDDEN' : ''}`
+          + `   ${st.paused ? 'PAUSED' : 'running'}`
+          + (st.forceLayer >= 0 ? `   MASK ${st.forceLayer}` : '')
+          + `   lat target ${st.lat.toFixed(1)}`,
+        'space pause · , . step · [ ] speed · k l lat · c cam · f lock'
+          + ' · h hide cars · w wipe rubber · m mask · - = zoom'
+      ].join('\n');
+    }
+
+    scene.onFrame = () => {
+      let advance = !st.paused;
+      if (st.paused && st.step > 0) { st.step--; advance = true; }
+      const pre = engine.getSnapshot().cars[0];
+      if (pre) drive(pre);
+      if (advance) engine.update(DT * 1000);
+      const car = engine.getSnapshot().cars[0];
+      if (!car) return;
+      scene.setCarHud(car.id, car);
+      place(car);
+      paint(car);
+    };
+
+    window.addEventListener('keydown', (e) => {
+      const k = e.key;
+      if (k === ' ') { st.paused = !st.paused; e.preventDefault(); }
+      else if (k === '.') { st.step++; st.paused = true; }
+      else if (k === ',') { st.step += 10; st.paused = true; }   // a beat, not a frame
+      else if (k === '[') st.speed = Math.max(0.5, st.speed - 0.5);
+      else if (k === ']') st.speed = Math.min(20, st.speed + 0.5);
+      else if (k === 'k') st.lat = Math.max(-2.0, st.lat - 0.4);
+      else if (k === 'l') st.lat = Math.min(2.0, st.lat + 0.4);
+      else if (k === '-') st.dist = Math.min(14, st.dist + 0.4);
+      else if (k === '=') st.dist = Math.max(1.2, st.dist - 0.4);
+      else if (k === 'f') st.lock = !st.lock;
+      else if (k === 'h') { st.solo = !st.solo; scene.display.debugHideCars(st.solo); }
+      else if (k === 'w') scene.display.debugWipeSkids();
+      else if (k === 'm') {
+        // auto -> generic -> monster -> auto. The generic layer is a shape
+        // correct by construction, so it separates a bad BAKE from a bad
+        // everything-downstream-of-the-bake.
+        st.forceLayer = st.forceLayer === -1 ? 9 : st.forceLayer === 9 ? 8 : -1;
+        scene.display.debugForceMaskLayer(st.forceLayer);
+      }
+      else if (k === 'c') {
+        const order = ['orbit', 'deck', 'chase', 'free'];
+        st.cam = order[(order.indexOf(st.cam) + 1) % order.length];
+      }
+    });
+    // WASD belong to Stage's free cam; the bench must not fight it in 'free'.
+    holdFrame(false);
+  }
+
   const CHAIN_RACE_MS = 8000;    // long enough to leave the grid and read as a race
   if (scenario === 'chain') {
     show('race');

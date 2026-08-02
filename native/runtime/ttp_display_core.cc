@@ -382,6 +382,18 @@ const char* ttp_display_profile_names(void) {
     return joined.c_str();
 }
 
+void ttp_display_debug_hide_cars(int on) {
+    if (g_disp && g_disp->renderer) g_disp->renderer->debugHideCars(on != 0);
+}
+
+void ttp_display_debug_wipe_skids(void) {
+    if (g_disp && g_disp->renderer) g_disp->renderer->debugWipeSkids();
+}
+
+void ttp_display_debug_force_mask_layer(int layer) {
+    if (g_disp && g_disp->renderer) g_disp->renderer->debugForceMaskLayer(layer);
+}
+
 const char* ttp_display_debug_decals(void) {
     static std::string json;
     json = "[";
@@ -394,11 +406,24 @@ const char* ttp_display_debug_decals(void) {
                     "{\"s\":%.4f,\"lat\":%.4f,\"halfS\":%.4f,\"halfLat\":%.4f,"
                     "\"r\":%.4f,\"g\":%.4f,\"b\":%.4f,\"a\":%.4f,"
                     "\"inner\":%.3f,\"ellipse\":%.1f,\"knee\":%.3f,"
-                    "\"sin\":%.4f,\"cos\":%.4f,\"layer\":%.0f,\"masked\":%.0f}",
+                    "\"sin\":%.4f,\"cos\":%.4f,\"layer\":%.0f,\"masked\":%.0f,"
+                    // The GROUND-CONFORM's numbers, not the shadow's: the worst
+                    // wheel-to-deck gap and the rendered pose's jitter beside
+                    // the contract pose's. The sim's own snapshot cannot show
+                    // any of it, because the conform runs after it.
+                    //
+                    // MEANINGFUL ON MASKED ENTRIES ONLY. They ride `shape`,
+                    // which is spare on a car stamp but on a PROFILE decal is
+                    // genuinely inner/ellipse/knee/chevrons — so these four keys
+                    // on a pad or an oil slick are that profile wearing the
+                    // wrong labels. Filter on `masked` before reading them.
+                    "\"wheelGap\":%.4f,\"jitter\":%.5f,"
+                    "\"rawJitter\":%.5f,\"upJitter\":%.5f}",
                     v[i].rect.x, v[i].rect.y, v[i].rect.z, v[i].rect.w,
                     v[i].color.x, v[i].color.y, v[i].color.z, v[i].color.w,
                     v[i].shape.x, v[i].shape.y, v[i].shape.z,
-                    v[i].texrot.x, v[i].texrot.y, v[i].texrot.z, v[i].texrot.w);
+                    v[i].texrot.x, v[i].texrot.y, v[i].texrot.z, v[i].texrot.w,
+                    v[i].shape.x, v[i].shape.y, v[i].shape.z, v[i].shape.w);
             json += buf;
         }
     }

@@ -547,61 +547,134 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
     auto& tcm = mEngine->getTransformManager();
     for (uint32_t i = 0; i < nCars; i++) {
         const TtpCarInput& c = cars[i];
-        const float3 fwd = { c.forward.x, c.forward.y, c.forward.z };
-        const float3 up = { c.up.x, c.up.y, c.up.z };
-        const float3 right = normalize(cross(up, fwd));
-        // ── Ground-conform (SceneRenderer setCarPose) ───────────────────────
-        // The contract pose rides the CENTRELINE; the rendered ribbon sits a
-        // little off it (arclength faceting, the profile's crown, the bank at
-        // the car's lateral offset), so following it directly sinks the body
-        // in. Probe the ribbon under both axles and ride the axle MEAN — the
-        // body is pitched to the axle chord, so the mean is where both axles
-        // touch. The centre probe survives as a crest guard (ride the peak
-        // where the deck bulges above the chord). Damp the OFFSET from the
-        // smooth centreline, not the absolute height: the probes jump at deck
-        // seams, and the climb itself already lives in pos.y. `stunt` fades the
-        // straight-down probe out once the deck rolls past ~14° (meaningless on
-        // a loop wall) and lifts along the frame's up instead.
+        float3 fwd = { c.forward.x, c.forward.y, c.forward.z };
+        float3 up = { c.up.x, c.up.y, c.up.z };
+        float3 right = normalize(cross(up, fwd));
+        // ── Ground-conform: SIT THE CAR ON THE DECK ─────────────────────────
+        // The contract pose rides the smooth CENTRELINE and its up is the
+        // track frame's, which is not the surface the car is standing on: the
+        // rendered ribbon is a faceted sweep with a crown and a bank, and where
+        // the deck TWISTS its normal turns across the car's own footprint. A
+        // rigid body posed from the centreline therefore floats one corner and
+        // buries another, worst exactly where the road is most warped.
+        //
+        // So probe the deck under the four wheel corners and FIT the body to
+        // what is found: normal from the corner heights, heading re-squared
+        // into that plane, height so the wheels touch. Roll and pitch were
+        // never corrected before — only height was — which is why no amount of
+        // height fixing could make all four wheels land.
+        //
+        // THE PROBE IS THE DECK'S OWN PARAMETERISATION, not a raycast. The old
+        // one cast a ray straight DOWN, which is meaningless once the deck
+        // rolls, so it had to be faded out past ~29 degrees by a `stunt` gate —
+        // withdrawing the correction exactly where it was needed most, and on
+        // 44% of the frames that had a big gap. project() + frameAt answers at
+        // ANY roll, including a loop wall, so the gate is gone rather than
+        // retuned. It also lands ON the analytic surface instead of on a
+        // triangle, so it does not jump at deck seams, which is what the heavy
+        // damping was for.
         float3 carPos = { c.pos.x, c.pos.y, c.pos.z };
         if (mHasTrack && i < mCarWheels.size()) {
-            constexpr float RIDE_HEIGHT = -0.004f, RIDE_DAMP = 18.0f;
+            constexpr float RIDE_HEIGHT = -0.004f, RIDE_DAMP = 45.0f;
             CarWheels& rw = mCarWheels[i];
-            const float stunt = std::min(1.0f, std::max(0.0f, (0.97f - up.y) / 0.10f));
-            if (stunt < 1) {
-                float3 flat = { fwd.x, 0, fwd.z };
-                const float fl = length(flat);
-                if (fl > 1e-3f) {
-                    flat /= fl;
-                    const float half = rw.wheelbase * 0.5f;
-                    bool okC = false, okF = false, okB = false;
-                    const float yC = roadHitY(carPos.x, carPos.z, carPos.y, &okC);
-                    const float yF = roadHitY(carPos.x + flat.x * half,
-                            carPos.z + flat.z * half, carPos.y, &okF);
-                    const float yB = roadHitY(carPos.x - flat.x * half,
-                            carPos.z - flat.z * half, carPos.y, &okB);
-                    bool onRoad = false;
-                    float roadY = 0;
-                    if (okF && okB) {
-                        const float mid = (yF + yB) * 0.5f;
-                        roadY = okC ? std::max(mid, yC) : mid;
-                        onRoad = true;
-                    } else if (okC) {
-                        roadY = yC; // off the edge / gate seam: centre probe only
-                        onRoad = true;
+            // footW is the asset AABB's width (its own comment calls it the
+            // blob/boost-disk footprint), used here as the wheel TRACK. The two
+            // are close on these models and no truer number is measured, but it
+            // is a reuse and not a measurement — the four `wheel-*` nodes are
+            // loaded and would give the real track if this ever looks off.
+            const float hw = rw.footW * 0.5f, hl = rw.wheelbase * 0.5f;
+            if (mDecalProjHint.size() <= i) mDecalProjHint.resize(i + 1, -1);
+            // The deck point under a body-local corner, along the deck's own
+            // normal. One hint copy per probe so the car keeps its own.
+            float3 deck[4];
+            bool okAll = true;
+            for (int k = 0; k < 4 && okAll; k++) {
+                const float3 w = carPos + fwd * ((k & 1) ? hl : -hl)
+                        + right * ((k & 2) ? hw : -hw);
+                float ws = 0, wl = 0;
+                int hint = mDecalProjHint[i];
+                // SMOOTH field, not the rasterizer-exact one: uv0 kinks per
+                // triangle by design, and a contact point that steps as the car
+                // crosses a diagonal arrives as the whole body jittering.
+                mTrack->project(w, up, ws, wl, &hint, /*exact=*/false);
+                const TrackBin::Sample f = mTrack->frameAt(ws);
+                deck[k] = f.pos + f.lat * wl;
+                if (!std::isfinite(deck[k].x) || !std::isfinite(deck[k].y)
+                        || !std::isfinite(deck[k].z)) okAll = false;
+            }
+            if (okAll) {
+                // Corners are indexed (k&1)=front, (k&2)=right, so these two
+                // spans are the body's own axes measured ON the deck.
+                const float3 spanF = (deck[1] + deck[3]) - (deck[0] + deck[2]);
+                const float3 spanR = (deck[2] + deck[3]) - (deck[0] + deck[1]);
+                float3 n = cross(spanR, spanF);
+                const float nl = length(n);
+                // Degenerate only if the four probes collapse; keep the frame's
+                // up rather than inventing one.
+                if (nl > 1e-5f) {
+                    n /= nl;
+                    if (dot(n, up) < 0) n = -n;
+                    // DAMPED IN THE POSE, not per axis: slewing the normal is
+                    // what keeps a wheel dropping off a kerb edge from snapping
+                    // the whole body. The deck itself is smooth, so this is a
+                    // small correction and the damping is light — heavy damping
+                    // here reintroduces the lag that made the car float.
+                    const float a = rw.hasRide
+                            ? 1.0f - std::exp(-RIDE_DAMP * input.dt)
+                            : 1.0f;   // first frame / back on the ribbon: snap
+                    rw.fitUp = normalize(rw.fitUp + (n - rw.fitUp) * a);
+                    up = rw.fitUp;
+                    // Re-square the heading into the fitted plane. The car's
+                    // travel direction is authoritative; only its lean is not.
+                    const float3 f2 = fwd - up * dot(fwd, up);
+                    if (length(f2) > 1e-4f) fwd = normalize(f2);
+                    right = normalize(cross(up, fwd));
+                    // Sit on the mean of the four contacts — where a rigid body
+                    // rests on a surface it cannot match exactly — and let
+                    // RIDE_HEIGHT sink it the last hair so it never hovers.
+                    // DAMP THE OFFSET FROM THE CONTRACT POSE, never the
+                    // absolute seat. The climb already lives in c.pos, so
+                    // damping the absolute height would drag the car behind
+                    // every hill; damping the correction leaves the ride
+                    // smooth and the trajectory exact. Taking the seat raw was
+                    // a regression that put every probe wobble straight into
+                    // the body.
+                    const float3 mid = (deck[0] + deck[1] + deck[2] + deck[3]) * 0.25f;
+                    const float3 seat = mid + up * RIDE_HEIGHT;
+                    const float3 target = seat - float3{ c.pos.x, c.pos.y, c.pos.z };
+                    rw.rideOff += (target - rw.rideOff) * a;
+                    rw.hasRide = true;
+                    carPos = float3{ c.pos.x, c.pos.y, c.pos.z } + rw.rideOff;
+                    // THE RESIDUAL, free: how far each probed contact still
+                    // sits off the fitted plane. A rigid body on a surface that
+                    // twists inside its own wheelbase cannot land all four
+                    // however it is posed, so this is the honest measure of the
+                    // compromise — and it needs no second set of probes, which
+                    // is why it is taken here rather than re-derived after.
+                    float worst = 0;
+                    for (int k = 0; k < 4; k++) {
+                        worst = std::max(worst, std::fabs(dot(deck[k] - mid, up)));
                     }
-                    if (onRoad) {
-                        const float offTarget = roadY - carPos.y;
-                        const float a = 1.0f - std::exp(-RIDE_DAMP * input.dt);
-                        rw.rideOff = rw.hasRide ? rw.rideOff + (offTarget - rw.rideOff) * a
-                                                : offTarget;
-                        rw.hasRide = true;
-                        carPos.y = c.pos.y + (rw.rideOff + RIDE_HEIGHT) * (1 - stunt);
-                    }
+                    rw.wheelGap = worst;
                 }
             } else {
-                rw.hasRide = false; // re-seed the damped offset coming off a stunt
+                rw.hasRide = false;   // off the ribbon: re-seed on the way back
             }
-            if (stunt > 0) carPos += up * (RIDE_HEIGHT * stunt);
+        }
+        if (mHasTrack && i < mCarWheels.size()) {
+            CarWheels& rw = mCarWheels[i];
+            const float3 raw{ c.pos.x, c.pos.y, c.pos.z };
+            const float3 step = carPos - rw.prevPos, rawStep = raw - rw.prevRaw;
+            if (rw.hasPrev) {
+                rw.jitter = length(step - rw.prevStep);
+                rw.rawJitter = length(rawStep - rw.prevRawStep);
+            }
+            const float3 upStep = up - rw.prevUp;
+            if (rw.hasPrev) rw.upJitter = length(upStep - rw.prevUpStep);
+            rw.prevUpStep = upStep; rw.prevUp = up;
+            rw.prevStep = step;   rw.prevPos = carPos;
+            rw.prevRawStep = rawStep; rw.prevRaw = raw;
+            rw.hasPrev = true;
         }
         carPosW[i] = carPos;
         float carS = 0, carLat = 0;   // this car's spot on the ribbon, projected once
@@ -738,10 +811,18 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                 setAssetInScene(mCarGhostAssets.size() > i ? mCarGhostAssets[i] : nullptr,
                         mCarGhostIn[i], wantGhosts);
             }
+            // DECAL ISOLATION (debug): collapse the body to a point so the
+            // deck stamp is the only thing left on the road. Applied to the
+            // TRANSFORM, not the scene membership, so nothing about the stamp
+            // changes — it is built from the contract pose above and never
+            // reads these matrices.
+            const mat4f hide = mat4f::scaling(float3{ 0, 0, 0 });
             if (isMonster && mMonsterInstances.size() > i && mMonsterInstances[i]) {
-                tcm.setTransform(tcm.getInstance(mMonsterInstances[i]->getRoot()), rigPose);
+                tcm.setTransform(tcm.getInstance(mMonsterInstances[i]->getRoot()),
+                        mHideCars ? rigPose * hide : rigPose);
             }
-            tcm.setTransform(tcm.getInstance(mCarAssets[i]->getRoot()), pose);
+            tcm.setTransform(tcm.getInstance(mCarAssets[i]->getRoot()),
+                    mHideCars ? pose * hide : pose);
             if (mMonsterViews.size() > i) {
                 MonsterView& mv = mMonsterViews[i];
                 mv.on = isMonster;
@@ -887,12 +968,29 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                 float cs = dot(f0.tangent(), fwdW), sn = dot(f0.lat, fwdW);
                 const float nl = std::sqrt(cs * cs + sn * sn);
                 if (nl > 1e-5f) { cs /= nl; sn /= nl; } else { cs = 1; sn = 0; }
-                const int layer = monsterBlob
+                const int autoLayer = monsterBlob
                         ? (((mMaskLayerBakedBits >> kMaskLayerMonster) & 1u)
                                 ? kMaskLayerMonster : kMaskLayerGeneric)
                         : ((i < (uint32_t) kMaskLayerMonster
                                 && ((mMaskLayerBakedBits >> i) & 1u))
                                 ? (int) i : kMaskLayerGeneric);
+                const int layer = mForceMaskLayer >= 0 ? mForceMaskLayer : autoLayer;
+                // NOTE FOR ANYONE TEMPTED TO MOVE THIS. Three frames have
+                // been tried for the stamp and all three are recorded so a
+                // fourth is not attempted blind: the car's own axes, the deck
+                // plane (equivalent while the sim posed the body from the
+                // contract frame), and track space. Track space looks like the
+                // safe answer — the stamp is on the road by construction and
+                // cannot detach — but (s, lat) IS NOT ORTHONORMAL: arclength is
+                // measured on the CENTRELINE, so off-centre its metric scale is
+                // (1 - curvature * lat) while lat stays unit, and rotating a
+                // rigid rectangle in an anisotropically scaled frame is a
+                // SHEAR. It was tried, it skewed, it was reverted.
+                //
+                // A reported skew on non-flat road survived every one of them
+                // AND a lifted-quad rewrite, so the cause is NOT known to be
+                // here. Do not spend another pass on this projection without
+                // new evidence; git history has the full ladder.
                 // The world anchor the mask projects onto: the DECK's frame at
                 // (carS, carLat), spun to the car's in-plane heading (cs/sn
                 // above carry the spin-out whirl too). It was bm's own columns
@@ -911,7 +1009,12 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                         float4{ carS, carLat, halfF, halfR },
                         float4{ kCarBlobInk.x, kCarBlobInk.y, kCarBlobInk.z,
                                 kCarBlobAO * (1.0f + (0.08f / 0.55f) * load) },
-                        float4{ 0, 0, 0, 0 },
+                        // shape is unused on the masked path, so x carries the
+                        // worst wheel-to-ribbon gap out to the debug readback.
+                        float4{ mCarWheels.size() > i ? mCarWheels[i].wheelGap : 0.0f,
+                                mCarWheels.size() > i ? mCarWheels[i].jitter : 0.0f,
+                                mCarWheels.size() > i ? mCarWheels[i].rawJitter : 0.0f,
+                                mCarWheels.size() > i ? mCarWheels[i].upJitter : 0.0f },
                         float4{ sn, cs, (float) layer, 1.0f },
                         float4{ wp.x, wp.y, wp.z, 0 },
                         float4{ wF.x, wF.y, wF.z, 0 },
