@@ -112,6 +112,14 @@ readback.
    per triangle and kinks at every diagonal. Every cheaper approximation was
    tried and each one still saw-toothed the shadow a few cm at ring-crossing
    rate under a cornering car; `project()`'s comment has the measured ladder.
+5. A texture sample inside the decal loop must be `textureLod`, never
+   `texture()`: the loop's per-fragment `continue` rejects make the flow
+   NON-UNIFORM, where an implicit-derivative sample is undefined behaviour.
+   On ANGLE's Metal backend the shipped `texture()` read as the car shadow
+   intermittently rendering nothing for a few frames — a flicker that
+   vanished under every instrumented variant of the shader, because any
+   reshape moved the UB. Every CPU-side input was verified sane at the
+   failing moment before the sample was suspected; start there next time.
 
 **Chevrons are SDFs**, which let the pads move without a texture atlas. The apex
 must LEAD or every chevron reads as a brake marking. A pad is **flat paint** —
@@ -135,8 +143,12 @@ uses that as PRIORITY, built pads first and repairs after, so decoration falls
 off a dense chunk rather than a marker the player drives at; nothing is lost by
 that order, because a repair and a pad can never overlap anyway (the planner
 keeps a patch 4u of arclength clear of a pad). The decal list's order is
-COMPOSITING order instead — statics first so an aura lands over the slick it
-crosses — so a full chunk there drops the dynamics.
+COMPOSITING order instead — statics, then auras, then shadows and blobs over
+both, so an aura lands over the slick it crosses and a shadow stays visible
+through an aura. A decal mix REPLACES what is under it, so **an aura may not
+composite over a contact shadow**: that was the mesh era's order and its
+premise was ADDITIVE blending. Note the coupling — because the order is also
+the cap priority, a full chunk drops the shadows before the auras.
 
 Their grid is **a margin plus a packed run**, never one chevron per grid cell:
 cells put more air between the marks than around them, so the outermost of them
@@ -151,12 +163,16 @@ narrower strip clips its outer columns.
 The car's contact shadow is a **masked** decal: its shape is the baked
 silhouette, sampled from a small texture array (one layer per car slot, one for
 the monster, one generic). The mask samples a **rigid planar projection of the
-fragment's world position onto the car's own axes** — track space only BOUNDS
-the stamp (that reject is what keeps a loop's other deck out). Painting the
-silhouette in curvilinear (s, lat) instead bends it around every corner, and
-the per-triangle kinks of the interpolated uv0 field ripple through its sharp
-edge as the car crosses rings — shadow-edge shimmer on bends, flat on
-straights. A layer whose bake hasn't landed falls back to the generic
+fragment's world position onto the DECK's frame at the car's track spot**
+(spun to the car's in-plane heading) — track space only BOUNDS the stamp (that
+reject is what keeps a loop's other deck out). Painting the silhouette in
+curvilinear (s, lat) instead bends it around every corner, and the per-triangle
+kinks of the interpolated uv0 field ripple through its sharp edge as the car
+crosses rings — shadow-edge shimmer on bends, flat on straights. It read the
+CAR's axes until 2026-08-02, which is EQUIVALENT (the sim pins the contract
+pose's up to the track frame, so the car never leaves the deck plane) — the
+change was for clarity, and **an airborne-anchor theory is a dead end already
+walked**. A layer whose bake hasn't landed falls back to the generic
 superellipse — never to an unbaked layer.
 
 **The shader path is the ONLY path — do not bring back overlay meshes.** A
@@ -202,8 +218,13 @@ segment. Ink is permanent until the race-restart wipe — a clear on that same
 pass — because a decay pass was the layer's whole recurring GPU cost
 (megatexels of read-modify-write) and permanence is also how a real toy
 track behaves; the racing line rubbers in over a race. Do not reintroduce a
-per-frame fullscreen pass here without measuring on the weakest shell. There is no pool, no budget and no
-lift; unbounded marks cost fixed memory. The tap reads through
+per-frame fullscreen pass here without measuring on the weakest shell — the
+**mip refresh is throttled to ~7 Hz** for exactly that reason. The layer needs
+that chain: the tap is trilinear because the deck ahead minifies a 16k-wide
+texture, and a no-mip LINEAR tap scintillated every mark across the whole deck.
+Its throttle rides `mTime`, which restarts per scene, so its timestamp is
+per-scene state and is cleared with the texture. There is no pool, no budget and
+no lift; unbounded marks cost fixed memory. The tap reads through
 `uvToRenderTargetUV` (the layer is a render target — the suite audit
 enforces this), and the stamper keeps the texture's outer lat rows empty,
 which is what parks the kerbs' and underside's out-of-band v on zero ink.

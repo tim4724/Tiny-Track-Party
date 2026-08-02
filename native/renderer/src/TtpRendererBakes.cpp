@@ -105,7 +105,23 @@ void TtpRenderer::bakeSilhouette(const utils::Entity* entities, size_t count,
         bmi->setParameter("src", tex, ssmp);
         bmi->setParameter("texel",
                 math::float2{ 1.0f / (float) TW, 1.0f / (float) TH });
-        bmi->setParameter("radius", 0.9f); // kernel spacing in source texels
+        // PENUMBRA WIDTH, and it is a look decision as much as a filtering one.
+        // At 0.9 the kernel spans about a source texel, and the mask is
+        // stretched across ~250 screen pixels on a close chase cam — so the
+        // silhouette arrived with a one-pixel edge, effectively a hard cutout.
+        // A razor edge has no slack: the stamp is a rigid plane projected onto
+        // the deck, so wherever the deck bends or twists that projection
+        // reshapes, and a hard edge renders every bit of that reshaping
+        // crisply. A contact shadow has a penumbra; giving it one both looks
+        // right and absorbs the projection's own movement instead of drawing
+        // it. vblur's kernel is scale-invariant (its sigma is in tap units, so
+        // taps stay 0.5 sigma apart at any radius) — widening costs no taps,
+        // and it is bake-time work either way, so this number is free to tune.
+        // Both ends have been walked: 0.9 read as a hard cutout, 4.0 read as
+        // too soft for a contact shadow. 2.0 is the landing — still a bit over
+        // twice the original penumbra, enough to absorb the projection's own
+        // movement, without the blob losing the car's shape.
+        bmi->setParameter("radius", 2.0f); // kernel spacing in source texels
         utils::Entity bq = utils::EntityManager::get().create();
         RenderableManager::Builder(1)
                 .boundingBox({ { 0, 0, 0 }, { 1, 1, 1 } })

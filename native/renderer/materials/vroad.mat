@@ -97,13 +97,16 @@ material {
         //   z = decalMask layer holding this car's silhouette
         //   w = 1 marks the decal masked; 0 is every profile decal above
         { type : float4[32], name : decalTexRot },
-        // The masked decal's WORLD anchor: the car's origin and unit axes.
-        // The mask samples a RIGID PLANAR projection of the fragment's world
-        // position onto these; track space only bounds the stamp. Painted in
-        // curvilinear (s, lat) instead, the silhouette bends around every
-        // corner and the per-triangle kinks of the interpolated field ripple
-        // through its sharp edge as the car crosses rings — edge shimmer on
-        // bends, gone flat. Zero on profile decals.
+        // The masked decal's WORLD anchor: the DECK point under the car and
+        // the deck-plane axes at the car's in-plane heading. The mask samples
+        // a RIGID PLANAR projection of the fragment's world position onto
+        // these; track space only bounds the stamp. Painted in curvilinear
+        // (s, lat) instead, the silhouette bends around every corner and the
+        // per-triangle kinks of the interpolated field ripple through its
+        // sharp edge as the car crosses rings — edge shimmer on bends, gone
+        // flat. It read the CAR's own axes until 2026-08-02 — equivalent, the
+        // sim never lets the car leave the deck plane — and the deck spelling
+        // is the clearer one, not a fix. Zero on profile decals.
         { type : float4[32], name : decalWPos, precision : high },
         { type : float4[32], name : decalWFwd, precision : high },
         { type : float4[32], name : decalWRight, precision : high },
@@ -270,9 +273,10 @@ fragment {
     }
 
     // Everything a deck decal contributes at this fragment, composited in the
-    // order the array is given — which is the order the shell packs them, so the
-    // aura sits over a contact shadow exactly as it did when the two were
-    // separate meshes at different render priorities.
+    // order the array is given — which is the order the shell packs them:
+    // statics, then boost auras, then the contact shadows and blobs over both.
+    // A mix REPLACES what is under it, so that order is the shell's business
+    // and this loop just honours it (TtpRendererFrame's auraDecals has the why).
     //
     // The loop is bounded by decalCount, a uniform, so it is uniform-coherent,
     // and the first thing each iteration does is reject on |ds| — most decals on
@@ -286,8 +290,14 @@ fragment {
             bool masked = trot.w > 0.5;
             // A masked decal is ROTATED in track space (rect.zw are the halves
             // in the CAR's frame), so its axis-aligned reach is the
-            // half-diagonal, not r.z.
-            float bound = masked ? length(r.zw) : r.z;
+            // half-diagonal, not r.z — PLUS SLACK. This window is evaluated
+            // against the interpolated uv0 field, which kinks per triangle on
+            // bends; with zero slack the kinked boundary cut into the stamp's
+            // feathered tail and wobbled at ring-crossing rate. With the slack
+            // the visible edge is the smooth world-plane feather alone, and
+            // this test is only the coarse cull it was meant to be.
+            // foldToChunk mirrors this reach — keep the two in step.
+            float bound = masked ? length(r.zw) + 0.25 : r.z;
             highp float ds = sLocal - r.x;
             if (abs(ds) >= bound) continue;             // cheap reject
             float dl = lat - r.y;
@@ -307,7 +317,25 @@ fragment {
                 // u runs ACROSS the car (+right), v ALONG it (+forward) —
                 // the handedness bakeSilhouette's up-looking camera bakes.
                 vec2 uv = q.yx * 0.5 + 0.5;
-                float m = texture(materialParams_decalMask, vec3(uv, trot.z)).a;
+                // textureLod, NOT texture: this sample sits in NON-UNIFORM
+                // control flow (the rejects above `continue` per fragment), so
+                // an implicit-derivative sample is undefined behaviour — and on
+                // ANGLE's Metal backend it came out as the stamp intermittently
+                // rendering nothing for a few frames at a time, which read as
+                // the car's shadow flickering. It vanished under every debug
+                // variant of this shader, because any reshape of the code moved
+                // the UB. The mask has one mip level, so LOD 0 is the same
+                // texels.
+                float m = textureLod(materialParams_decalMask,
+                        vec3(uv, trot.z), 0.0).a;
+                // FEATHER THE WINDOW. The bake's penumbra is not zero at the
+                // quad edge, so the |q| >= 1 cutoff above prints as a HARD
+                // line wherever the tail crosses bright paint — invisible on
+                // bare asphalt, a visible bite on a dash or an edge line, and
+                // it slides and kinks with the car. The silhouette proper ends
+                // at |q| = 1/1.45 (the bake overscan), so a ramp from 0.72
+                // touches only the tail.
+                m *= 1.0 - smoothstep(0.72, 0.98, max(abs(q.x), abs(q.y)));
                 vec4 mcol = materialParams.decalColor[i];
                 base = mix(base, mcol.rgb, clamp(mcol.a * m, 0.0, 1.0));
                 continue;

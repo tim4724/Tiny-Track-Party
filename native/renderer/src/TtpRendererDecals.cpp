@@ -132,8 +132,26 @@ void TtpRenderer::bindSkidLayer(MaterialInstance* mi) {
     }
     Texture* t = mSkidTex ? mSkidTex : mSkidNullTex;
     if (!t) return;
-    TextureSampler smp(TextureSampler::MinFilter::LINEAR,
+    // Trilinear + anisotropic: the deck ahead minifies this layer hard, and a
+    // no-mip LINEAR tap made every mark scintillate in motion (deck-wide
+    // temporal aliasing). Aniso keeps the marks readable at the road's grazing
+    // angles instead of trilinear mush. Until the first generateMipmaps lands
+    // Filament clamps sampling to level 0 on its own (RenderTarget attachment
+    // sets the texture's LOD range), so there is no window on ungenerated mips.
+    TextureSampler smp(t == mSkidTex
+                    ? TextureSampler::MinFilter::LINEAR_MIPMAP_LINEAR
+                    : TextureSampler::MinFilter::LINEAR,
             TextureSampler::MagFilter::LINEAR);
+    // 4, the same as the ground textures. MEASURED (M1 Max, ANGLE-Metal,
+    // EXT_disjoint_timer_query, countdown/skyline, 4 cells, 6400x3600 — 12x a
+    // 1080p frame, interleaved 9 reps): the whole mip+trilinear+aniso change is
+    // INSIDE the noise against the un-mipped LINEAR tap it replaced, at aniso 8
+    // as well as 4. Fill is not what this frame is made of (it is submission
+    // bound, with a large resolution-independent intercept), so there was no
+    // per-fragment cost to trade away. 4 rather than 8 only because it is the
+    // house value and leaves margin on weak GPUs, which this bench cannot speak
+    // for. Do not "optimise" this tap without re-measuring — it does not show.
+    smp.setAnisotropy(4);
     // REPEAT along s carries the lap wrap; CLAMP across lat parks the kerbs'
     // and underside's out-of-band v on an edge row the stamper never writes.
     smp.setWrapModeS(TextureSampler::WrapMode::REPEAT);
@@ -249,7 +267,17 @@ int TtpRenderer::foldToChunk(const std::vector<DeckDecal>& src, float mid,
         if (n >= cap) break;
         float ds = d.rect.x - mid;
         if (L > 0.0f) ds -= L * std::floor(ds / L + 0.5f);
-        if (std::fabs(ds) > halfSpan + d.rect.z) continue;
+        // A MASKED stamp is rotated in track space (rect.zw are its halves in
+        // the CAR's frame), so its axis-aligned reach is the half-diagonal plus
+        // the shader's cull slack — rect.z alone dropped a rotated stamp's
+        // corner from the neighbouring chunk while its fragments still wanted
+        // it, which pops the shape at chunk seams. Mirrors vroad.mat's masked
+        // `bound` exactly. Unmasked entries — pads, repairs, auras — keep the
+        // plain half-extent they always had.
+        const float reach = d.texrot.w > 0.5f
+                ? std::sqrt(d.rect.z * d.rect.z + d.rect.w * d.rect.w) + 0.25f
+                : d.rect.z;
+        if (std::fabs(ds) > halfSpan + reach) continue;
         out[n] = d;
         out[n].rect.x = ds;
         n++;

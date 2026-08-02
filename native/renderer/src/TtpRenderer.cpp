@@ -718,6 +718,9 @@ void TtpRenderer::releaseScene() {
     mSkidLatHalf = 0;
     mSkidWipe = false;
     mSkidQuadCount = 0;
+    mSkidMipsDirty = false;
+    mSkidMipsAt = 0; // mTime restarts at 0 per scene; a stale stamp here would
+                     // hold the refresh gate shut for the whole next race
     for (auto& m : mBurstMeshes) destroyMesh(m);
     for (auto& m : mBurstBalls) destroyMesh(m);
     destroyMesh(mPollen);

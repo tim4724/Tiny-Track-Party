@@ -893,17 +893,27 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                         : ((i < (uint32_t) kMaskLayerMonster
                                 && ((mMaskLayerBakedBits >> i) & 1u))
                                 ? (int) i : kMaskLayerGeneric);
-                // The world anchor the mask projects onto — bm's own columns,
-                // normalized (spin included, so the silhouette still whirls).
-                const float3 wR = normalize(bm[0].xyz);
-                const float3 wF = normalize(bm[2].xyz);
+                // The world anchor the mask projects onto: the DECK's frame at
+                // (carS, carLat), spun to the car's in-plane heading (cs/sn
+                // above carry the spin-out whirl too). It was bm's own columns
+                // — the car's axes — which is EQUIVALENT here, because the sim
+                // pins the contract pose's up to the track frame and the
+                // ground-conform above only slides the car along that same up,
+                // so the anchor's offset along the deck normal cancels in both
+                // projections. This spelling just does not depend on that: a
+                // drop shadow is deck paint, so it reads the deck. Do not go
+                // looking for a flicker here — the barrel-roll one was the
+                // mask sample's UB (see vroad.mat), not this.
+                const float3 wF = normalize(f0.tangent() * cs + f0.lat * sn);
+                const float3 wR = normalize(cross(f0.up, wF));
+                const float3 wp = f0.pos + f0.lat * carLat;
                 mDeckDecals.push_back({
                         float4{ carS, carLat, halfF, halfR },
                         float4{ kCarBlobInk.x, kCarBlobInk.y, kCarBlobInk.z,
                                 kCarBlobAO * (1.0f + (0.08f / 0.55f) * load) },
                         float4{ 0, 0, 0, 0 },
                         float4{ sn, cs, (float) layer, 1.0f },
-                        float4{ bm[3].x, bm[3].y, bm[3].z, 0 },
+                        float4{ wp.x, wp.y, wp.z, 0 },
                         float4{ wF.x, wF.y, wF.z, 0 },
                         float4{ wR.x, wR.y, wR.z, 0 } });
             }
@@ -978,7 +988,7 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
         // SHADED INTO THE ROAD: the aura's fragment IS a road fragment, at the
         // road's own depth, so there is no lift, no chord sag to clear and no
         // render order to get wrong. Into the held-back aura list (see
-        // auraDecals above), so every aura composites over every car shadow.
+        // auraDecals in render(), which has the compositing order and why).
         if (c.boostMul > 1.001f) {
             const float k = c.boostMul - 1.0f;
             const float pulse = 0.9f + 0.1f * std::sin(mTime * 11.0f);
@@ -986,7 +996,16 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
             const float fw = mCarWheels.size() > i ? mCarWheels[i].footW : 0.95f;
             const float fl = mCarWheels.size() > i ? mCarWheels[i].footL : 2.0f;
             const float outerR = (fw + fl) * 0.5f * sc * 0.5f;
-            const float alpha = std::min(0.85f, 0.7f + k * 0.3f) * pulse;
+            float alpha = std::min(0.85f, 0.7f + k * 0.3f) * pulse;
+            // The JS alpha holds a 0.7 floor right down to the gate above, and
+            // as a decal that reads worse than the mesh it mirrors: the mix
+            // REPLACES what is under it, so when the sim's linear fade crossed
+            // 1.001 a ~0.7-alpha disc vanished in ONE frame — a hard blink at
+            // every boost's end, most visible where launch-pad boosts die in a
+            // pack. Ramp the last stretch of the fade (k 0.12 -> 0 = the final
+            // quarter second at BOOST_FADE 0.5) to zero instead; above that the
+            // look is untouched.
+            alpha *= std::min(1.0f, k * (1.0f / 0.12f));
             addDeckDecal(carS, carLat, outerR, outerR, mBoostDiskLin, alpha,
                     0.72f, 0.94f, true, &auraDecals);
         }
@@ -1511,13 +1530,18 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
         }
     }
 
-    // Auras LAST (over every shadow and blob — the layering the meshes used to
-    // get from their render priorities), then the frame's one decal upload.
-    // This sits after the world block so a banana's or rocket's stamp lands on
-    // the frame its prop appears, not one frame late.
-    for (const DeckDecal& d : auraDecals) {
-        if ((int) mDeckDecals.size() >= kMaxDeckDecals) break;
-        mDeckDecals.push_back(d);
+    // Auras FIRST among the dynamics (under every shadow and blob — see the
+    // auraDecals note in render() for why the mesh era's aura-over-shadow order
+    // inverts under a mix composite), then the frame's one decal upload. This
+    // sits after the world block so a banana's or rocket's stamp lands on the
+    // frame its prop appears, not one frame late. uploadDeckDecals still puts
+    // the statics ahead of all of it, so an aura keeps landing over the pad or
+    // slick it crosses.
+    if (!auraDecals.empty()) {
+        const size_t room = (size_t) std::max(0,
+                kMaxDeckDecals - (int) mDeckDecals.size());
+        mDeckDecals.insert(mDeckDecals.begin(), auraDecals.begin(),
+                auraDecals.begin() + std::min(room, auraDecals.size()));
     }
     uploadDeckDecals();
 }
@@ -1532,9 +1556,9 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
     // there — the stamp's rear edge is the previous stamp's front edge — and
     // commits a segment once it spans SKID_SEG_MIN. Ink is PERMANENT until
     // the race-restart wipe — there is no decay pass, by decision: the layer's
-    // steady-state GPU cost is then just this pass's tiny quads plus vroad's
-    // one tap, and a racing line rubbers in over the laps like a real toy
-    // track.
+    // steady-state GPU cost is then just this pass's tiny quads, the throttled
+    // mip refresh below, and vroad's one tap, and a racing line rubbers in over
+    // the laps like a real toy track.
     //
     // What the mesh pool had that this deliberately does not: the live stamp
     // that stretched to the tyre every frame. Additive accumulation cannot
@@ -1778,6 +1802,20 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
             }
             mSkidWipe = false;
             mRenderer->setClearOptions(prev);
+            mSkidMipsDirty = true;
+        }
+        // Refresh the rubber layer's mip chain, throttled. The tap filters
+        // trilinear (bindSkidLayer): without mips, the deck ahead minifies a
+        // 16k-wide layer through single-texel lookups and every mark
+        // SCINTILLATES in motion, which the eye reads as the track itself
+        // flickering. Regenerating on every stamp frame would be a per-frame
+        // pass over megatexels — the exact recurring cost this layer's design
+        // refuses — so it runs at most ~7 Hz; a fresh mark is under the car at
+        // mip 0 for those 150 ms, where no one can see the difference.
+        if (mSkidMipsDirty && mSkidTex && mTime - mSkidMipsAt > 0.15f) {
+            mSkidTex->generateMipmaps(*mEngine);
+            mSkidMipsDirty = false;
+            mSkidMipsAt = mTime;
         }
     }
 
@@ -2023,9 +2061,15 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
     // Conformed car positions, kept for the props that test against the car's
     // RENDERED spot (cone kicks) rather than the raw contract pose.
     std::vector<float3> carPosW(nCars);
-    // Boost auras, held back until after the loop so every aura composites over
-    // every shadow — the layering the meshes had from their render priorities,
-    // which per-car interleaving would break for two overlapping cars.
+    // Boost auras, held back until after the loop (per-car interleaving would
+    // break the order for two overlapping cars) and composited UNDER every
+    // contact shadow. The mesh era layered the aura OVER the shadow, but that
+    // premise was ADDITIVE blending: glow added over ink left the ink visible
+    // through it. A decal mix REPLACES what is under it, so the same order
+    // ERASED the shadow for a boost's whole life and handed it back at the
+    // gate — the shadow blinking in and out with every boost. Ink over glow is
+    // the mix-composite spelling of the same look: the disc still glows around
+    // the car, and the shadow stays put through it.
     std::vector<DeckDecal> auraDecals;
     renderCars(input, cars, nCars, carPosW, auraDecals);
     mProfile[kProfCars] = ttpNowMs() - tMark; tMark += mProfile[kProfCars];

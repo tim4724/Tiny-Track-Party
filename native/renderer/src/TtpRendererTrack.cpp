@@ -1342,9 +1342,11 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         mSkidTexelS = tb.length / (float) W;
         mSkidTexelLat = (2.0f * mSkidLatHalf) / (float) H;
         mSkidTex = Texture::Builder()
-                .width(W).height(H).levels(1)
+                .width(W).height(H).levels(0xff) // full chain — see the mip
+                                                 // refresh in the stamp block
                 .format(Texture::InternalFormat::R8)
-                .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
+                .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE
+                        | Texture::Usage::GEN_MIPMAPPABLE)
                 .build(*mEngine);
         if (mSkidTex) {
             mSkidRT = RenderTarget::Builder()
