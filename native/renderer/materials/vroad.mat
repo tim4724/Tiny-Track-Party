@@ -289,19 +289,23 @@ fragment {
             vec4 trot = materialParams.decalTexRot[i];
             bool masked = trot.w > 0.5;
             // A masked decal is ROTATED in track space (rect.zw are the halves
-            // in the CAR's frame), so its axis-aligned reach is the
-            // half-diagonal, not r.z — PLUS SLACK. This window is evaluated
-            // against the interpolated uv0 field, which kinks per triangle on
-            // bends; with zero slack the kinked boundary cut into the stamp's
-            // feathered tail and wobbled at ring-crossing rate. With the slack
-            // the visible edge is the smooth world-plane feather alone, and
-            // this test is only the coarse cull it was meant to be.
-            // foldToChunk mirrors this reach — keep the two in step.
-            float bound = masked ? length(r.zw) + 0.25 : r.z;
+            // in the CAR's frame), so its axis-aligned reach here is neither
+            // r.z nor its half-diagonal: this test is in TRACK SPACE, where the
+            // s axis is an ARCLENGTH and the stamp's halves are WORLD lengths.
+            // The deck's iso-arclength lines fan on a bend, so the same world
+            // reach spans R/(R−lat) more arclength off the centreline — a
+            // constant cannot express it at all, and the one that used to stand
+            // here closed inside the stamp and sheared its nose off through
+            // every corner. The shell MEASURES the reach per frame instead (see
+            // TtpRendererFrame's shadow block) and rides it in the w slots of
+            // the two axis vectors. foldToChunk reads the same slot — keep the
+            // two in step.
+            float boundS = masked ? materialParams.decalWFwd[i].w : r.z;
+            float boundL = masked ? materialParams.decalWRight[i].w : r.w;
             highp float ds = sLocal - r.x;
-            if (abs(ds) >= bound) continue;             // cheap reject
+            if (abs(ds) >= boundS) continue;            // cheap reject
             float dl = lat - r.y;
-            if (abs(dl) >= (masked ? bound : r.w)) continue;
+            if (abs(dl) >= boundL) continue;
             if (masked) {
                 // Into the car's frame via the WORLD plane, not track space:
                 // (s, lat) here only ran the bounds reject above. The user

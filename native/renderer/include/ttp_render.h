@@ -88,6 +88,21 @@ typedef struct TtpCarInput {
      * tests the marker against this oriented rectangle, so the punt happens on
      * body contact rather than at a fixed radius from the car's centre. */
     float halfLen, halfWid;
+    /* WHERE THE CAR IS IN TRACK SPACE — the sim's own (totalS, lat), not a
+     * re-derivation of it. The renderer has to seat the body on the deck, and
+     * the deck is a surface parameterised by exactly these two numbers, so the
+     * seat is an evaluation rather than a search the moment they cross.
+     *
+     * It replaced a per-frame project() of the car's world position against the
+     * ribbon's ring polyline. That answered the same question, but through a
+     * DISCRETE nearest-segment pick, and every discrete decision on a per-frame
+     * geometry path is a place the answer can hop between two almost-equal
+     * candidates and put a step into the pose. Handing the number over costs
+     * eight bytes and deletes the whole class.
+     *
+     * trackS is the ACCUMULATED arclength (laps included, as the sim keeps it);
+     * every reader wraps it itself. */
+    float trackS, trackLat;
 } TtpCarInput;
 
 typedef struct TtpViewInput {

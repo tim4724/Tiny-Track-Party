@@ -146,6 +146,12 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
             const double fpMul = eng->footprintMul(*c);
             o.halfLen = (float) (c->halfLen * fpMul);
             o.halfWid = (float) (c->halfWid * fpMul);
+            // The car's spot on the deck, straight off the sim (ttp_render.h).
+            // NOT wrapped here: the renderer's frameAt wraps, and a wrap applied
+            // twice at different moduli is how a car at the start line lands a
+            // lap away from its own shadow.
+            o.trackS = (float) c->totalS;
+            o.trackLat = (float) c->lat;
         }
         // A hold that OUTLIVED the field it was taken on lands here, because the
         // memcpy above only fires while the sizes still match: a seat expiring

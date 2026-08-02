@@ -50,6 +50,85 @@ export const DEV_TRACKS = {
       { u: 0.75, lat: -0.7 }                                             // landing-beat banana
     ]
   },
+  // THE WARP LADDER — the contact shadow's test bench (?scenario=warp).
+  //
+  // The shadow is a rigid stamp projected along the DECK NORMAL AT THE CAR, so
+  // it is exact wherever the deck under the car is flat — however hard the road
+  // bends in PLAN. What breaks it is the deck leaving that plane inside the
+  // stamp's own footprint: a twist, a crest, a dip. That is the difference this
+  // track is built to isolate, because a shipped circuit mixes all of them and
+  // you cannot tell which one you are looking at.
+  //
+  // So: a rounded rectangle whose four legs are one warp each, GRADED, with a
+  // flat beat before and after every rung so the eye has a control to return to.
+  // Read GAP in the harness readout (the deck's departure from the plane the
+  // car is seated on, at its four wheel corners) — ~0 on every flat beat and on
+  // the plain corner, and only the rungs move it.
+  //
+  // THE RUNGS BRACKET WHAT SHIPS, deliberately, and that is worth knowing before
+  // reading anything off them. Measured over real four-car races: a shipped deck
+  // departs the car's plane by ~0.002 half the time and reaches 0.02–0.06 at its
+  // 99th percentile, with the barrel-rolling Skyline worst at ~0.10. This
+  // ladder's gentle rungs land in that band; its hard rungs and the banked
+  // corner reach ~0.25, two to three times anything a player drives. So a defect
+  // visible ONLY on the hard rungs is not yet an explanation of one seen in a
+  // race — find it on a gentle rung, or on the track it was reported from.
+  //
+  // CLOSURE: four -90 arcs of one radius with equal 28-unit legs between them —
+  // a plain rounded rectangle, so the plan closes whatever the rungs do. Every
+  // rise and every roll comes in a CANCELLING PAIR and `bank` eases back to
+  // zero on its own, so elevation and the frame close by construction. A new
+  // rung must keep all three of those true; check it with the gap the builder
+  // reports rather than by eye.
+  warp: {
+    name: 'Warp Ladder', difficulty: 'Dev',
+    segments: [
+      // ── N leg: FLAT CONTROL. The shadow must be perfect for all of it, and
+      // this is the leg you come back to when a rung looks wrong.
+      { kind: 'straight', length: 28 },
+      // The PLAIN corner: hard plan curvature, deck dead flat. The control for
+      // "bendy" — if the shadow is clean here and dirty on the banked corner,
+      // the cause is the twist and not the bend.
+      { kind: 'arc', radius: 4.185, angle: -90 },
+      // ── E leg: TWIST, gentle then hard. Pure heartline roll on a STRAIGHT —
+      // no plan curvature, no elevation — so a shape change here is the twist
+      // and nothing else. Each rung returns to flat before the next.
+      { kind: 'straight', length: 2 },
+      { kind: 'straight', length: 6, roll: 18 },
+      { kind: 'straight', length: 6, roll: -18 },
+      { kind: 'straight', length: 4 },
+      { kind: 'straight', length: 4, roll: 55 },   // hard: same angle, short run
+      { kind: 'straight', length: 4, roll: -55 },
+      { kind: 'straight', length: 2 },
+      // THE CASE THAT MATTERS MOST: a bank transition ON a bend — twist and
+      // plan curvature at once, which is what a shipped circuit actually puts
+      // under a car and where the report came from. Same radius as the plain
+      // corner above, so the two differ by the bank and nothing else.
+      { kind: 'arc', radius: 4.185, angle: -90, bank: 22 },
+      // ── S leg: ELEVATION. A long soft crest, then a short sharp one, then a
+      // dip — longitudinal curvature with the deck laterally flat throughout,
+      // which separates "the deck curves along travel" from "the deck twists".
+      { kind: 'straight', length: 4 },
+      { kind: 'straight', length: 6, rise: 1.2 },
+      { kind: 'straight', length: 6, rise: -1.2 },
+      { kind: 'straight', length: 3, rise: 1.4 },  // sharp crest
+      { kind: 'straight', length: 3, rise: -1.4 },
+      { kind: 'straight', length: 3, rise: -1.4 }, // sharp dip
+      { kind: 'straight', length: 3, rise: 1.4 },
+      { kind: 'arc', radius: 4.185, angle: -90 },
+      // ── W leg: flat run-back to the line, a second control.
+      { kind: 'straight', length: 28 },
+      { kind: 'arc', radius: 4.185, angle: -90 }
+    ],
+    // One row on the flat control leg: the shadow's edge against bright paint is
+    // the most legible read there is, and it belongs where nothing warps.
+    boxes: [
+      { u: 0.03, lat: -1.05 }, { u: 0.03, lat: 0 }, { u: 0.03, lat: 1.05 }
+    ],
+    pads: [
+      { u: 0.06, lat: 0 }                          // a pad to cross on the flat
+    ]
+  },
   gym: {
     name: 'Gym', difficulty: 'Easy',
     waypoints: [

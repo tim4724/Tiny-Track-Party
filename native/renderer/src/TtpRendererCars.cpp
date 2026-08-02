@@ -248,17 +248,35 @@ bool TtpRenderer::loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb) 
         w.rollSign = axis.x >= 0 ? 1.0f : -1.0f;
     }
     w.pitchSign = w.rollSign; // same posed frame (the body carries no extra yaw)
-    // Wheelbase = front-axle mid → rear-axle mid, the span the ground-conform
-    // probes straddle (addCar measures the same distance off the posed model).
+    // Each wheel's own seat in the POSED body frame — the four points the
+    // ground conform probes the deck under, and where the suspension travel is
+    // applied. The conform used to straddle a wheel TRACK taken off the asset
+    // AABB, which is the body's full width and so stands wider than the wheels
+    // do; these are the wheels themselves.
     if (!w.fl.isNull() && !w.fr.isNull() && !w.bl.isNull() && !w.br.isNull()) {
         // WORLD transforms: the wheel nodes' local translations sit inside the
         // asset's own scaled hierarchy, so the local delta isn't in world units.
+        // The asset root is identity at load, so world here IS asset-root space.
         const auto wp = [&](utils::Entity e) {
             return tcm.getWorldTransform(tcm.getInstance(e))[3].xyz;
         };
         const float3 fm = (wp(w.fl) + wp(w.fr)) * 0.5f, bm = (wp(w.bl) + wp(w.br)) * 0.5f;
-        const float wb = length(fm - bm);
-        if (wb > 0.2f) w.wheelbase = wb;
+        const float wb = length(fm - bm);   // wheelbase, world units
+        if (wb > 0.2f) {
+            // Into the POSED frame: the kit models face −Z and the pose applies
+            // a half-turn about Y (FLIP), so x and z negate, y is untouched.
+            const utils::Entity order[4] = { w.fl, w.fr, w.bl, w.br };
+            for (int k = 0; k < 4; k++) {
+                const float3 p = wp(order[k]);
+                w.wheelOff[k] = { -p.x, p.y, -p.z };
+            }
+            // World units per node-local unit, so a travel computed in world
+            // units can be written back into a local translation. Measured on
+            // the wheelbase, the span least likely to be degenerate.
+            const float localWb = length((w.flT + w.frT) * 0.5f - (w.blT + w.brT) * 0.5f);
+            if (localWb > 1e-4f) w.assetScale = wb / localWb;
+            w.hasWheelOff = true;
+        }
     }
     // MonsterRig graft seat: bbox of the body with the WHEELS (and axle) taken
     // off, centred on the kit's cab slot in x/z and bottom-aligned to the slot

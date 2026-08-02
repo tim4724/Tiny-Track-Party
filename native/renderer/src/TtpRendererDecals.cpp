@@ -268,15 +268,13 @@ int TtpRenderer::foldToChunk(const std::vector<DeckDecal>& src, float mid,
         float ds = d.rect.x - mid;
         if (L > 0.0f) ds -= L * std::floor(ds / L + 0.5f);
         // A MASKED stamp is rotated in track space (rect.zw are its halves in
-        // the CAR's frame), so its axis-aligned reach is the half-diagonal plus
-        // the shader's cull slack — rect.z alone dropped a rotated stamp's
-        // corner from the neighbouring chunk while its fragments still wanted
-        // it, which pops the shape at chunk seams. Mirrors vroad.mat's masked
-        // `bound` exactly. Unmasked entries — pads, repairs, auras — keep the
-        // plain half-extent they always had.
-        const float reach = d.texrot.w > 0.5f
-                ? std::sqrt(d.rect.z * d.rect.z + d.rect.w * d.rect.w) + 0.25f
-                : d.rect.z;
+        // the CAR's frame), so its arclength reach is measured per frame and
+        // ridden in wfwd.w — vroad.mat's masked `boundS`, and it must be THE
+        // SAME NUMBER: a chunk that folds on a shorter reach than the shader
+        // culls on drops a corner the fragments still want, which pops the
+        // shape at chunk seams. Unmasked entries — pads, repairs, auras — keep
+        // the plain half-extent they always had.
+        const float reach = d.texrot.w > 0.5f ? d.wfwd.w : d.rect.z;
         if (std::fabs(ds) > halfSpan + reach) continue;
         out[n] = d;
         out[n].rect.x = ds;

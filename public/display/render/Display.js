@@ -90,6 +90,9 @@ export class Display {
       build: mod.cwrap('ttp_display_build', 'number', ['string', 'string']),
       reroster: mod.cwrap('ttp_display_reroster', 'number', ['string']),
       debugDecals: mod.cwrap('ttp_display_debug_decals', 'string', []),
+      debugHideCars: mod.cwrap('ttp_display_debug_hide_cars', null, ['number']),
+      debugWipeSkids: mod.cwrap('ttp_display_debug_wipe_skids', null, []),
+      debugForceMaskLayer: mod.cwrap('ttp_display_debug_force_mask_layer', null, ['number']),
       biome: mod.cwrap('ttp_display_biome', null, ['string']),
       showcase: mod.cwrap('ttp_display_showcase', null, ['number']),
       modelVariant: mod.cwrap('ttp_display_model_variant', null, ['string', 'number']),
@@ -494,6 +497,12 @@ export class Display {
 
   // Last frame's per-section wall clock, as { section: ms }.
   debugDecals() { return JSON.parse(this._fn.debugDecals() || '[]'); }
+  // Decal isolation — see ttp_display.h. Hiding the bodies and wiping the laid
+  // rubber is what makes a contact shadow readable at all; without it every
+  // dark pixel near a car is one of three things.
+  debugHideCars(on) { this._fn.debugHideCars(on ? 1 : 0); }
+  debugWipeSkids() { this._fn.debugWipeSkids(); }
+  debugForceMaskLayer(layer) { this._fn.debugForceMaskLayer(layer | 0); }
 
   profile() {
     const ptr = this.m._ttp_display_profile();

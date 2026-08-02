@@ -79,6 +79,54 @@ pair is stacked on 16:9 and side by side on an ultrawide, so the same two player
 got different cameras depending on the window. All three agree at one player on
 16:9, which is why no fixture and no TV would ever have shown it.
 
+## The deck is a ruled surface, and the car sits on it
+
+Every DECK point of the road's cross-section is at `y == 0` in the frame, so at
+each arclength the drivable deck is a straight LINE across and the whole surface
+is that line swept: `P(s, lat) = frameAt(s).pos + frameAt(s).lat * lat`. Two
+consequences run through everything that puts a car on it:
+
+- **Across the car there is nothing to fit.** Two wheels at the same arclength
+  are exactly coplanar with the deck, at any bank.
+- **Along it there is.** Where the deck twists, consecutive rulings are SKEW
+  lines, so a rigid body's four wheel corners are genuinely not coplanar and NO
+  pose lands all four. That residual is the WHEELS' travel to absorb. A body fit
+  that tries to absorb it is the mistake — it is what the old crest guard
+  (`max(axleMean, centreProbe)`) was patching around.
+
+So: the body takes the best-fit plane through the four contacts and each wheel
+takes its own residual as a local-Y offset. Measured over the catalogue, the fit
+turns the body by up to ~3.4° from the contract pose's own up, and the residual
+the travel absorbs reaches ~0.04u.
+
+**The probe is an EVALUATION, not a search.** The sim hands its `(totalS, lat)`
+across in `TtpCarInput`, and `deckFoot` walks that seed to each wheel's foot by
+Gauss-Newton on the surface above. Nothing in the path picks a nearest triangle
+or a nearest ring, so nothing in it can HOP. That is the whole lesson of the
+attempt that was reverted on 2026-08-02: it fitted the same plane to four
+`project()` probes, whose discrete segment pick put ~0.4° of lean noise per frame
+into the body.
+
+**Nothing in the conform is damped, deliberately.** A filter was what the old
+straight-down raycast needed, because it read TRIANGLES and stepped at every deck
+seam; it bought smoothness with lag, and lag on a hill drags the car behind its
+own contract position. The analytic surface is smooth to begin with. **If a
+filter ever looks necessary here again, the probe is what is wrong.**
+
+**`deckFoot`'s step clamp is not a tuning constant.** Where the deck curves
+tightly, a lateral offset approaching the corner's own radius makes the offset
+curve nearly stall, `|dP/ds|` collapses, and an unclamped Gauss-Newton step
+explodes — measured on cloverleaf as a 21u jump that "converged" onto another
+part of the circuit and arrived as one frame of 58° of lean.
+
+**The check that can fail on lean** is the fitted normal's second difference
+against the CONTRACT normal's, on the same frames. The contract normal is NOT
+smooth by construction — it lerps the knot ups — so it is a real baseline and
+not a formality; the reverted attempt had no reference for this half of the pose
+at all, which is exactly how it shipped with the lean wobbling. Read both off
+`ttp_display_debug_decals` (`upJitter` beside `jitter`/`rawJitter`), and see
+`?scenario=warp` for the bench that isolates one warp per leg.
+
 ## Decals are shaded into the road, not laid over it
 
 Flat on-deck decals are handed to `vroad.mat` as track-space rectangles and
@@ -163,17 +211,39 @@ narrower strip clips its outer columns.
 The car's contact shadow is a **masked** decal: its shape is the baked
 silhouette, sampled from a small texture array (one layer per car slot, one for
 the monster, one generic). The mask samples a **rigid planar projection of the
-fragment's world position onto the DECK's frame at the car's track spot**
-(spun to the car's in-plane heading) — track space only BOUNDS the stamp (that
-reject is what keeps a loop's other deck out). Painting the silhouette in
-curvilinear (s, lat) instead bends it around every corner, and the per-triangle
-kinks of the interpolated uv0 field ripple through its sharp edge as the car
-crosses rings — shadow-edge shimmer on bends, flat on straights. It read the
-CAR's axes until 2026-08-02, which is EQUIVALENT (the sim pins the contract
-pose's up to the track frame, so the car never leaves the deck plane) — the
-change was for clarity, and **an airborne-anchor theory is a dead end already
-walked**. A layer whose bake hasn't landed falls back to the generic
-superellipse — never to an unbaked layer.
+fragment's world position onto the plane the CAR IS SEATED ON** — the best fit
+through its four wheel contacts, spun to the in-plane heading. Track space only
+BOUNDS the stamp (that reject is what keeps a loop's other deck out). Painting
+the silhouette in curvilinear (s, lat) instead bends it around every corner, and
+the per-triangle kinks of the interpolated uv0 field ripple through its sharp
+edge as the car crosses rings — shadow-edge shimmer on bends, flat on straights.
+**An airborne-anchor theory is a dead end already walked.** A layer whose bake
+hasn't landed falls back to the generic superellipse — never to an unbaked layer.
+
+> The anchor was the track frame's tangent plane at the car's spot until
+> 2026-08-02. On a flat or purely banked deck the two planes are identical; where
+> the deck crests or twists they are not, and a rigid stamp projected from the
+> wrong one foreshortens across its own footprint — stretching on a crest,
+> shearing on a twist. The seating above has already paid for the probes, so the
+> better plane is free.
+
+**The stamp's track-space cull window is MEASURED per frame, never a constant.**
+The shader rejects in track space before it projects, and the reach it needs
+there is an ARCLENGTH — which the stamp's world half-diagonal is not. The deck's
+iso-arclength lines FAN on a bend, so off the centreline a world step spans
+`R/(R−lat)` more arclength; the constant that stood here closed INSIDE the stamp
+and cut its nose or tail along a ring plane, with the cut sliding as the car
+swept the corner. Measured over real races: it cut on 2.2% of car-frames on
+cloverleaf and 1.7% on sidewinder, worst shortfall 2.4×, and **0% on skyline** —
+which is the tell, because skyline rolls rather than bends. The halves ride in
+the w slots of `decalWFwd`/`decalWRight`, read by the shader AND by
+`foldToChunk`; **keep those two in step**, or a chunk drops a corner its own
+fragments still want. Most of the deck it is TIGHTER than the old constant, so
+the per-fragment reject also got cheaper.
+
+**Reasoning shortcut worth keeping:** through a FLAT bend the deck is a plane and
+the stamp's world projection is rigid, so the cull is the only thing that can
+reshape it. That alone points at the window without any pixel work.
 
 **The shader path is the ONLY path — do not bring back overlay meshes.** A
 separate mesh over the deck cannot be flat: road and decal are two chord

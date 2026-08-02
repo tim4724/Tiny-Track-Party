@@ -388,6 +388,103 @@ struct TtpRenderer::TrackBin {
         return r;
     }
 
+    // ── THE DECK AS A SURFACE ────────────────────────────────────────────
+    // Every DECK point of the road's cross-section sits at y == 0 in the frame
+    // (buildRoadMesh's profile table — the kerbs and skirts are the only ones
+    // that leave it), so at each arclength the drivable deck is a straight LINE
+    // across, and the whole surface is that line swept along s:
+    //
+    //     P(s, l) = frameAt(s).pos + frameAt(s).lat * l
+    //
+    // A RULED surface, and two consequences run through everything that seats a
+    // car on it:
+    //
+    //  - ACROSS the car there is nothing to fit. Two wheels at the same
+    //    arclength are exactly coplanar with the deck, at any bank, always.
+    //  - ALONG it there is. Where the deck twists, consecutive rulings are SKEW
+    //    lines, so the four wheel corners of a rigid body are genuinely not
+    //    coplanar and NO pose lands all four. That residual is the wheels' own
+    //    travel to absorb, not a pose to solve harder for.
+    //
+    // This is the SMOOTH surface; the mesh is chords between rings and sags
+    // below it (buildRoadMesh's RING STEP note has the measured budget).
+    // Seating on the smooth one is deliberate — the faceted one kinks at every
+    // ring, and a body posed off it steps once per ring crossing.
+    float3 deckPoint(float s, float l) const {
+        const Sample f = frameAt(s);
+        return f.pos + f.lat * l;
+    }
+
+    // dP/ds at (s, l) — the deck's along-track direction AT THAT LATERAL
+    // OFFSET, which is not the centreline's tangent once the deck twists or the
+    // width tapers. A CENTRAL DIFFERENCE rather than an analytic derivative,
+    // and that is the point: `lat(s)` is built from an up that frameAt LERPS
+    // between knots, so it kinks at every one and has no derivative there. A
+    // difference of a continuous function is continuous, kinks included.
+    static constexpr float kDeckH = 0.05f;
+    float3 deckTangent(float s, float l) const {
+        return (deckPoint(s + kDeckH, l) - deckPoint(s - kDeckH, l)) * (0.5f / kDeckH);
+    }
+
+    // Foot of a world point on that surface, as (s, l), refined in place from a
+    // seed the caller already has — for a wheel that is its car's own track
+    // spot, which is never more than a body length away.
+    //
+    // GAUSS-NEWTON, AND THAT IS THE POINT. project() below answers the same
+    // question by picking the nearest ring segment, and a pick can FLIP between
+    // two almost-equal candidates from one frame to the next. That is tolerable
+    // for a decal (it re-packs every frame anyway) and not for geometry: the
+    // previous attempt at seating the car fitted its body plane to four
+    // project() probes, and the flips arrived as the whole car's lean wobbling
+    // — about 0.4 degrees a frame on Skyline, which is what got it reverted.
+    // This has no branch to flip: it is a smooth function of p.
+    //
+    // dP/dl is `lat` and is UNIT, so the lateral half is exact in one step and
+    // only s iterates. `s` stays in the caller's UNWRAPPED frame (frameAt wraps
+    // internally), so a car near the start line does not need seam handling.
+    //
+    // THE PER-STEP CLAMP IS NOT A TUNING CONSTANT. Where the deck curves
+    // tightly, a lateral offset approaching the corner's own radius makes the
+    // offset curve nearly stall — |dP/ds| collapses, and a Gauss-Newton step
+    // that divides by it explodes. Measured on cloverleaf: one iteration jumped
+    // 21u of arclength, and the next two "converged" onto a different part of
+    // the circuit, which arrived as a single frame of 58 degrees of lean on an
+    // otherwise smooth hairpin. It bounds ONE step, not the total excursion —
+    // the iterations that follow can still walk further, which they need to,
+    // because a foot's arclength offset exceeds its world offset by the same
+    // fanning factor (measured up to ~2.2x on the catalogue). So a legitimate
+    // solve is unaffected and a diverging one cannot leave the neighbourhood.
+    // With it, the worst lean over the catalogue is 3.4 degrees.
+    void deckFoot(const float3& p, float& s, float& l) const {
+        constexpr float kMaxStep = 1.0f;   // world-ish units of arclength
+        for (int it = 0; it < 6; it++) {
+            const Sample f = frameAt(s);
+            l += dot(p - (f.pos + f.lat * l), f.lat);
+            const float3 ds = deckTangent(s, l);
+            const float d2 = dot(ds, ds);
+            if (d2 < 1e-9f) break;
+            const float raw = dot(p - (f.pos + f.lat * l), ds) / d2;
+            const float step = std::min(kMaxStep, std::max(-kMaxStep, raw));
+            s += step;
+            // Converged. The iteration is a contraction, so stopping here costs
+            // less than the tolerance — and it is what keeps the ordinary case
+            // (a smooth deck, two steps) off the six-iteration worst case.
+            if (std::fabs(step) < 1e-4f) break;
+        }
+    }
+
+    // Ring index nearest an arclength — project()'s hint currency, for a caller
+    // that knows its own s but has never projected (the skid trails seed from
+    // the car, which no longer projects for its seat).
+    int ringHint(float s) const {
+        const int n = (int) rings.size();
+        if (n < 1 || !(length > 0)) return -1;
+        float w = std::fmod(s, length);
+        if (w < 0) w += length;
+        const int k = (int) (w / length * (float) n);
+        return k < 0 ? 0 : (k >= n ? n - 1 : k);
+    }
+
     // Foot of `p` on the RENDERED road: used to re-express a car-local point
     // as (arclength, lateral) so flat decals can be CONFORMED to the deck —
     // the JS raycasts the rendered road for the same result.
