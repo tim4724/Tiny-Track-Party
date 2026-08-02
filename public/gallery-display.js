@@ -16,6 +16,10 @@ var DISPLAY_CARDS = [
   { key: 'lobby',       title: 'Lobby (random picked)', hostVariant: true, animated: true, params: { picked: 'random', track: 'powder' } },
   { key: 'countdown', title: 'Countdown', replayable: true },
   { key: 'racing',    title: 'Race',      animated: true },
+  // Deck-decal check: hairpins force scrub skids and the pads sit on the racing
+  // line, so one card shows every road-shader decal (contact shadows, boost
+  // aura, rubber) accumulating under driving cars on a bendy road.
+  { key: 'racing',    title: 'Deck decals', animated: true, params: { track: 'sidewinder' } },
   { key: 'rocket',    title: 'Rocket strike', animated: true },
   { key: 'monster',   title: 'Monster truck', animated: true },
   { key: 'paused',    title: 'Paused' },
