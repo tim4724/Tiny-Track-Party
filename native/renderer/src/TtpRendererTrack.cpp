@@ -554,6 +554,70 @@ Texture* TtpRenderer::buildGroundTexture(uint32_t kind) {
     return tex;
 }
 
+// ── Ground-conform probe ─────────────────────────────────────────────────────
+// SceneRenderer keeps per-tile collision clones OUT of the scene graph and
+// raycasts them straight down under each axle (_roadHitY). Our ribbon is one
+// unindexed soup, so bucket its triangles by XZ cell instead and do the same
+// cast analytically. Cells are small (kRoadCell) because the sweep lays ~0.24u
+// rings: a 6u cell like the JS grid's would hold thousands of triangles.
+static inline uint64_t roadCellKey(int cx, int cz) {
+    return ((uint64_t) (uint32_t) cx << 32) | (uint32_t) cz;
+}
+
+void TtpRenderer::buildRoadGrid() {
+    mRoadGrid.clear();
+    const size_t triCount = mRoad.verts.size() / 3;
+    for (size_t t = 0; t < triCount; t++) {
+        const Vertex& a = mRoad.verts[t * 3];
+        const Vertex& b = mRoad.verts[t * 3 + 1];
+        const Vertex& c = mRoad.verts[t * 3 + 2];
+        const float x0 = std::min(a.px, std::min(b.px, c.px));
+        const float x1 = std::max(a.px, std::max(b.px, c.px));
+        const float z0 = std::min(a.pz, std::min(b.pz, c.pz));
+        const float z1 = std::max(a.pz, std::max(b.pz, c.pz));
+        const int cx0 = (int) std::floor(x0 / kRoadCell), cx1 = (int) std::floor(x1 / kRoadCell);
+        const int cz0 = (int) std::floor(z0 / kRoadCell), cz1 = (int) std::floor(z1 / kRoadCell);
+        for (int cx = cx0; cx <= cx1; cx++) {
+            for (int cz = cz0; cz <= cz1; cz++) {
+                mRoadGrid[roadCellKey(cx, cz)].push_back((uint32_t) (t * 3));
+            }
+        }
+    }
+}
+
+float TtpRenderer::roadHitY(float x, float z, float refY, bool* hit) const {
+    *hit = false;
+    const auto it = mRoadGrid.find(roadCellKey((int) std::floor(x / kRoadCell),
+            (int) std::floor(z / kRoadCell)));
+    if (it == mRoadGrid.end()) return refY; // off-track: caller keeps the centreline
+    float best = refY, bestErr = 1e30f;
+    for (const uint32_t t : it->second) {
+        const Vertex& a = mRoad.verts[t];
+        const Vertex& b = mRoad.verts[t + 1];
+        const Vertex& c = mRoad.verts[t + 2];
+        // Barycentric in the XZ plane — a vertical ray hits iff (x, z) is inside
+        // the triangle's projection.
+        const float d = (b.pz - c.pz) * (a.px - c.px) + (c.px - b.px) * (a.pz - c.pz);
+        if (std::fabs(d) < 1e-9f) continue;
+        const float l1 = ((b.pz - c.pz) * (x - c.px) + (c.px - b.px) * (z - c.pz)) / d;
+        const float l2 = ((c.pz - a.pz) * (x - c.px) + (a.px - c.px) * (z - c.pz)) / d;
+        const float l3 = 1.0f - l1 - l2;
+        if (l1 < -1e-4f || l2 < -1e-4f || l3 < -1e-4f) continue;
+        const float y = l1 * a.py + l2 * b.py + l3 * c.py;
+        if (y > refY + 6.0f) continue; // the JS ray starts 6u above the car
+        // Near-horizontal faces only (|n.y| > 0.1 normalized): drops the kerbs'
+        // inner/outer walls and the skirt, keeps banked decks and ramps.
+        const float3 e1{ b.px - a.px, b.py - a.py, b.pz - a.pz };
+        const float3 e2{ c.px - a.px, c.py - a.py, c.pz - a.pz };
+        const float3 n = cross(e1, e2);
+        const float nl = length(n);
+        if (nl < 1e-12f || std::fabs(n.y) <= 0.1f * nl) continue;
+        const float err = std::fabs(y - refY);
+        if (err < bestErr) { bestErr = err; best = y; *hit = true; }
+    }
+    return best;
+}
+
 // Procedural start/finish gantry — FinishGate.js's numbers, vertex-coloured
 // (the chequer is per-check geometry instead of a canvas texture): two chunky
 // pylons on flag-stand feet carrying a 2-row chequered banner across s=0.
@@ -719,6 +783,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         buildStaticDeckDecals(tb);
         buildDeckPaint(tb, wear);
     }
+    buildRoadGrid(); // ground-conform probe accelerator (see roadHitY)
 
     // Ground sheet at groundY with the lawn's mowing stripes as vertex-colour
     // bands (makeLawnTexture: 8 stripes per 33.3u tile, ×1.04 / ×0.965 on the

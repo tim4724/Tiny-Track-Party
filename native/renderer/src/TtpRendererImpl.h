@@ -421,15 +421,8 @@ struct TtpRenderer::TrackBin {
     // (It used to also hand back the 3D deck point and the facet ridge
     // height, for callers placing GEOMETRY against the road — every decal is
     // road-shader paint now, so (outS, outLat) is the whole answer.)
-    // `exact` picks WHICH FIELD the answer belongs to, and it is not a
-    // performance knob. True reproduces the rasterizer's uv0 exactly, kinks
-    // and all, which is what a DECAL needs — its stamp has to agree with the
-    // interpolated field or its edge saws. False stops at the smooth
-    // ring-plane blend, which is what GEOMETRY needs: a car placed on the
-    // kinked field inherits a per-triangle step in its contact points, and
-    // that arrives as the whole body jittering at triangle-crossing rate.
     void project(float3 p, const float3& up, float& outS, float& outLat,
-            int* hint = nullptr, bool exact = true) const {
+            int* hint = nullptr) const {
         const std::vector<Sample>& knots = rings.empty() ? samples : rings;
         const size_t n = knots.size();
         if (n < 2) { outS = 0; outLat = 0; return; }
@@ -507,7 +500,7 @@ struct TtpRenderer::TrackBin {
         const float3 q = a.pos + (b.pos - a.pos) * t;
         const float3 latS = normalize(mix(a.lat, b.lat, t));
         outLat = dot(p - q, latS);
-        if (!exact || &knots != &rings || deckGap <= 0) return;
+        if (&knots != &rings || deckGap <= 0) return;
 
         // EXACT FIELD EVALUATION. The rasterizer interpolates uv0 linearly
         // PER TRIANGLE, and on a bend the wide road strips make skewed

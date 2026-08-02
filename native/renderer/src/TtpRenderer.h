@@ -439,6 +439,8 @@ private:
     // Ground-conform probe accelerator: XZ hash of mRoad's triangles (the JS
     // keeps per-tile collision clones out of the scene graph and raycasts them;
     // our ribbon is one soup, so the grid buckets triangles instead).
+    static constexpr float kRoadCell = 2.0f;
+    std::unordered_map<uint64_t, std::vector<uint32_t>> mRoadGrid; // cell → first vertex of each tri
     Mesh mGround;
     // The heightfield's stand-in in the shadow bake's depth pass: a flat quad
     // at groundY, drawn by no main view (layer bit 0 cleared). The relief
@@ -550,38 +552,8 @@ private:
         float lastDs = 0;                          // this frame's travel — streaks read it
         float rollSign = -1, pitchSign = -1;       // posed-frame X axis sign (addCar's measurement)
         float wheelbase = 1.6f;                    // front↔rear axle span (ground-conform probes)
-        // Damped fitted deck normal — the body's lean, slewed so a wheel
-        // leaving the ribbon cannot snap the whole car (see renderCars).
-        filament::math::float3 fitUp{ 0, 1, 0 };
-        // Damped correction from the contract pose to the fitted seat. The
-        // OFFSET is damped, never the absolute height — c.pos already carries
-        // the climb, so damping that would drag the car behind every hill.
-        filament::math::float3 rideOff{ 0, 0, 0 };
-        // Rendered-pose jitter: the SECOND difference of the seated position.
-        // Driving smoothly over a smooth deck the first difference is nearly
-        // constant, so what survives differencing twice is frame-to-frame
-        // wobble and nothing else. Diagnostic; the sim's own pose cannot show
-        // it, because the conform happens after the snapshot.
-        filament::math::float3 prevPos{}, prevStep{};
-        filament::math::float3 prevRaw{}, prevRawStep{};
-        bool hasPrev = false;
-        // jitter = the seated pose's; rawJitter = the CONTRACT pose's, same
-        // measure. The conform is only to blame for the difference between
-        // them, which is the comparison to make before tuning it.
-        float jitter = 0, rawJitter = 0;
-        // …and the same measure on the fitted NORMAL, which is the half of
-        // the pose the conform newly took over from the contract frame. A car
-        // that rocks without moving shows up here and nowhere else.
-        filament::math::float3 prevUp{}, prevUpStep{};
-        float upJitter = 0;
-        // Worst of the four wheels' gaps to the rendered ribbon. Diagnostic
-        // only (debugDeckDecals): a rigid body on a twisted deck cannot land
-        // all four, and nothing corrects roll or pitch for it.
-        float wheelGap = 0;
-        // Do we have a previous frame to damp FROM? Gates the damping factor
-        // for fitUp AND rideOff together, and re-seeds when the probes leave
-        // the ribbon — not a flag about fitUp alone.
-        bool hasRide = false;
+        float rideOff = 0;                         // damped road-minus-centreline offset
+        bool hasRide = false;                      // rideOff seeded (re-seeds after a stunt)
         float skidWidth = 0.12f;                   // tyre-contact width (wheel AABB, clamped)
         float skidHold = 0;                        // scuff strength, released over SKID_RELEASE
         float skidAllHold = 0;                     // same, for the four-wheel (scrub/spin) channel
@@ -745,20 +717,6 @@ private:
     // diagonal mark resolves exactly like a straight one.
     uint32_t mMaxTextureDim = 8192;
     bool mSkidWipe = false;    // clear the layer on the next stamp pass (race restart)
-    // ── Decal isolation (debug) ────────────────────────────────────────────
-    // A contact shadow is a dark patch on asphalt, under an opaque car, on a
-    // deck that also carries laid rubber — so on a normal frame you cannot say
-    // which dark pixel is which, and four rounds of this were argued from
-    // ambiguous screenshots. These two make the stamp the ONLY thing on the
-    // road: hide the bodies, wipe the ink. Nothing on the shipping path reads
-    // them; the warp bench binds them to keys.
-    bool mHideCars = false;
-    // Force every masked stamp onto ONE mask layer, or -1 to leave each car on
-    // its own. Answers "is the baked silhouette the problem" without reading
-    // the texture back at all: layer 9 is the generic superellipse, a shape
-    // known good by construction, so if the stamp looks right on 9 and wrong
-    // on the bake, the bake is what is wrong.
-    int mForceMaskLayer = -1;
     // The layer's mip refresh (see the stamp block): stamps land in mip 0; the
     // chain regenerates at most ~7 Hz so minified marks stop scintillating
     // without a per-frame megatexel pass. PER-SCENE, like mSkidWipe — mSkidMipsAt
@@ -951,6 +909,12 @@ private:
     // the launch-strip blanking zones and the scenery/landmark/clutter seeds.
     static void fillGeometry(TrackBin& out, const ttp::RaceTrack& geo);
     bool buildRoadMesh(TrackBin& tb); // also retains the ring polyline on the bin
+    void buildRoadGrid();
+    // Height of the road ribbon straight below (x, z), picking the deck nearest
+    // `refY` (stacked strands) and keeping only near-horizontal faces — the
+    // SceneRenderer _roadHitY probe the ground-conform rides on. `hit` reports
+    // whether anything was under the point at all.
+    float roadHitY(float x, float z, float refY, bool* hit) const;
     void accumulateNormals(Mesh& m);
     void appendSphere(Mesh& mesh, int wseg, int hseg,
             const std::function<filament::math::float3(const filament::math::float3&)>& transform,
@@ -1038,9 +1002,6 @@ public:
     // instead of inferred from pixels — which is how a wrong lateral coordinate
     // survived several rounds of colour-coded shader probes.
     const std::vector<DeckDecal>& debugDeckDecals() const { return mDeckDecalsLast; }
-    void debugHideCars(bool on) { mHideCars = on; }
-    void debugWipeSkids() { if (mSkidTex) mSkidWipe = true; }
-    void debugForceMaskLayer(int layer) { mForceMaskLayer = layer; }
 private:
     // Frustum culling, off by default (buildMesh): a mesh whose vertices are
     // rewritten in WORLD space every frame — the billboards, the burst pools —

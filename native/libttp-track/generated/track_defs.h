@@ -1593,37 +1593,6 @@ constexpr BananaDef kBananas_gate0[] = {
   { 0x1.8p-1, -0x1.6666666666666p-1 },
 };
 
-constexpr SegDef kS_warp[] = {
-  { SegKind::Straight, 0x1.cp+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
-  { SegKind::Arc, 0x0p+0, 0x1.0bd70a3d70a3dp+2, -0x1.68p+6, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
-  { SegKind::Straight, 0x1p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
-  { SegKind::Straight, 0x1.8p+2, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.2p+4, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
-  { SegKind::Straight, 0x1.8p+2, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, -0x1.2p+4, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
-  { SegKind::Straight, 0x1p+2, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
-  { SegKind::Straight, 0x1p+2, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x1.b8p+5, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
-  { SegKind::Straight, 0x1p+2, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, -0x1.b8p+5, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
-  { SegKind::Straight, 0x1p+1, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
-  { SegKind::Arc, 0x0p+0, 0x1.0bd70a3d70a3dp+2, -0x1.68p+6, 0x0p+0, 0x1.6p+4, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
-  { SegKind::Straight, 0x1p+2, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
-  { SegKind::Straight, 0x1.8p+2, 0x0p+0, 0x0p+0, 0x1.3333333333333p+0, 0x0p+0, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
-  { SegKind::Straight, 0x1.8p+2, 0x0p+0, 0x0p+0, -0x1.3333333333333p+0, 0x0p+0, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
-  { SegKind::Straight, 0x1.8p+1, 0x0p+0, 0x0p+0, 0x1.6666666666666p+0, 0x0p+0, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
-  { SegKind::Straight, 0x1.8p+1, 0x0p+0, 0x0p+0, -0x1.6666666666666p+0, 0x0p+0, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
-  { SegKind::Straight, 0x1.8p+1, 0x0p+0, 0x0p+0, -0x1.6666666666666p+0, 0x0p+0, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
-  { SegKind::Straight, 0x1.8p+1, 0x0p+0, 0x0p+0, 0x1.6666666666666p+0, 0x0p+0, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
-  { SegKind::Arc, 0x0p+0, 0x1.0bd70a3d70a3dp+2, -0x1.68p+6, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
-  { SegKind::Straight, 0x1.cp+4, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
-  { SegKind::Arc, 0x0p+0, 0x1.0bd70a3d70a3dp+2, -0x1.68p+6, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, true, 0, 0x0p+0, 0x0p+0, false },
-};
-constexpr FurnDef kPads_warp[] = {
-  { 0x1.eb851eb851eb8p-5, 0x0p+0, false, 0x0p+0 },
-};
-constexpr FurnDef kBoxes_warp[] = {
-  { 0x1.eb851eb851eb8p-6, -0x1.0cccccccccccdp+0, false, 0x0p+0 },
-  { 0x1.eb851eb851eb8p-6, 0x0p+0, false, 0x0p+0 },
-  { 0x1.eb851eb851eb8p-6, 0x1.0cccccccccccdp+0, false, 0x0p+0 },
-};
-
 constexpr WptDef kW_gym[] = {
   { 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, false },
   { 0x1p+3, 0x0p+0, 0x0p+0, 0x0p+0, 0x0p+0, false },
@@ -1736,14 +1705,13 @@ constexpr TrackDef TTP_TRACKS[] = {
   { "helix", "Helix", "rooftop", 4, false, kS_helix, 12, nullptr, 0, 0x1.4p+1, 0x1.47ae147ae147bp-6, kOils_helix, 2, kPads_helix, 2, kBoxes_helix, 8, nullptr, 0, nullptr, 0 },
   { "skyline", "Skyline", "rooftop", 4, false, kS_skyline, 15, nullptr, 0, 0x1.4p+1, 0x1.89374bc6a7efap-6, kOils_skyline, 2, kPads_skyline, 2, kBoxes_skyline, 8, nullptr, 0, nullptr, 0 },
   { "gate0", "Gate 0", nullptr, 2, false, kS_gate0, 13, nullptr, 0, 0x1.4p+1, 0x0p+0, kOils_gate0, 1, kPads_gate0, 1, kBoxes_gate0, 4, kPoles_gate0, 2, kBananas_gate0, 1 },
-  { "warp", "Warp Ladder", nullptr, 2, false, kS_warp, 20, nullptr, 0, 0x1.4p+1, 0x0p+0, nullptr, 0, kPads_warp, 1, kBoxes_warp, 3, nullptr, 0, nullptr, 0 },
   { "gym", "Gym", nullptr, 1, true, nullptr, 0, kW_gym, 16, 0x1.4p+1, 0x0p+0, kOils_gym, 2, kPads_gym, 1, kBoxes_gym, 5, kPoles_gym, 3, kBananas_gym, 3 },
   { "showroom", "Showroom", nullptr, 2, true, nullptr, 0, kW_showroom, 19, 0x1.4p+1, 0x0p+0, kOils_showroom, 2, kPads_showroom, 2, kBoxes_showroom, 5, kPoles_showroom, 3, kBananas_showroom, 3 },
 };
 // The shipped catalogue: TTP_TRACKS[0 .. TTP_TRACK_COUNT).
 constexpr int TTP_TRACK_COUNT = 20;
 // Catalogue + the dev-only ranges. Id lookup only — never a sweep bound.
-constexpr int TTP_TRACK_TOTAL = 24;
+constexpr int TTP_TRACK_TOTAL = 23;
 
 // The shipped CUPS, in the catalogue's own order — which IS the difficulty
 // ladder and the order every picker draws. `difficulty` is the AUTHORED

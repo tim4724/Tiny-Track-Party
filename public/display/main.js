@@ -96,11 +96,8 @@ const _trackParams = new URLSearchParams(location.search);
 // arbitrary catalogue track with none of the exhibition frontage on it. An
 // explicit ?track= still wins — flying the showcase vocabulary around a real
 // circuit is a fair thing to want.
-// The WARP BENCH likewise has one surface: the ladder is the scenario (see
-// devTracks.js), so ?scenario=warp needs no second parameter to be useful.
 const _qTrack = _trackParams.get('track')
-  || (_trackParams.get('scenario') === 'assets' ? 'showroom' : null)
-  || (_trackParams.get('scenario') === 'warp' ? 'warp' : null);
+  || (_trackParams.get('scenario') === 'assets' ? 'showroom' : null);
 
 // Gallery / test surfaces drive the scene themselves (their own onFrame + cars), so
 // the live lobby attract demo must stay out of their way — guard every demo entry on it.

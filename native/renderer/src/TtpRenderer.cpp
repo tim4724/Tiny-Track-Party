@@ -817,6 +817,7 @@ void TtpRenderer::releaseScene() {
     mAmbBase.clear();
     mAmbSpeed.clear();
     mWheelTrails.clear();
+    mRoadGrid.clear();
     mGroundBands.clear();
     mHillAnchors.clear();
     mShoreFn = nullptr;

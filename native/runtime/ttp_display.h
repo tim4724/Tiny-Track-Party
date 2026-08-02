@@ -341,18 +341,6 @@ TTP_ABI const char* ttp_display_profile_names(void);
  * is one arithmetic check instead of a guess. */
 TTP_ABI const char* ttp_display_debug_decals(void);
 
-// Decal isolation, for looking at a deck stamp on its own: hide every car body,
-// and wipe the laid rubber. A contact shadow is otherwise a dark patch under an
-// opaque car on a deck carrying dark tyre trails, which is unreadable — see the
-// warp bench (?scenario=warp), which binds these to keys.
-TTP_ABI void ttp_display_debug_hide_cars(int on);
-TTP_ABI void ttp_display_debug_wipe_skids(void);
-
-// Force every car's shadow onto ONE decalMask layer (-1 = each car on its own).
-// 9 is the generic superellipse — a shape correct by construction, so it
-// separates "the bake is wrong" from "everything downstream of it is wrong".
-TTP_ABI void ttp_display_debug_force_mask_layer(int layer);
-
 #ifdef __cplusplus
 }
 #endif
