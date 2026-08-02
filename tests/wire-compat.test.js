@@ -190,20 +190,23 @@ test('wire: every C++ outbound encoder produces bytes the relay accepts', async 
   // --- create ---------------------------------------------------------------
   // The url branch has NEVER been on a live wire: E2E runs over http, so
   // DisplayNet._controllerUrlTemplate() returns undefined and the key is omitted.
-  // Prod validates the template and rejects the WHOLE create on a bad one.
+  // Prod validates the template and rejects the WHOLE create on a bad one. The
+  // template carries the `cpp=web` display declaration prod now registers, so the
+  // relay's substitution is exercised on the string it will actually be handed —
+  // placeholders on either side of a query arg.
   assert.equal(f.create('cid-1', 4, null), '{"clientId":"cid-1","maxClients":4,"type":"create"}');
   assert.equal(
-    f.create('cid-1', 4, 'https://tinytrack.example/{room}#{instance}'),
-    '{"clientId":"cid-1","maxClients":4,"type":"create","url":"https://tinytrack.example/{room}#{instance}"}');
+    f.create('cid-1', 4, 'https://tinytrack.example/{room}?cpp=web#{instance}'),
+    '{"clientId":"cid-1","maxClients":4,"type":"create","url":"https://tinytrack.example/{room}?cpp=web#{instance}"}');
 
   const { relay, host, seen } = await bringUpDisplay(
     { instanceId: 'm-1', region: 'ams' },
-    { url: 'https://tinytrack.example/{room}#{instance}' });
+    { url: 'https://tinytrack.example/{room}?cpp=web#{instance}' });
   const created = seen.protocol.find((p) => p.type === 'created');
   assert.ok(created, 'the url-carrying create was ACCEPTED by prod validation');
   assert.equal(created.msg.instance, 'm-1');
   assert.equal(created.msg.region, 'ams');
-  assert.equal(created.msg.url, `https://tinytrack.example/${created.msg.room}#m-1`);
+  assert.equal(created.msg.url, `https://tinytrack.example/${created.msg.room}?cpp=web#m-1`);
 
   // And the reject branch, which no live test has ever taken: a plain-http
   // template (a dev origin) kills the create outright. The display's error

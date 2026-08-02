@@ -126,14 +126,26 @@ Three properties of that surface matter more than the list:
    and only the module bitmap is per-platform. `CIQRCodeGenerator` on tvOS,
    ZXing on Android. The web shell gets its matrix from the server's `/api/qr`;
    a TV app should encode locally.
-8. **A base URL.** `session.h`'s `join_url` needs an origin serving the phone
-   controller, and a native app has none of its own. The web deployment is
-   therefore a runtime dependency of every TV app. `baseUrlOverride` is the
-   existing seam.
-9. **Back navigation.** The TABLE crossed (`ttp_ui_back_effect`); the walk did
+8. **A base URL, and this shell's `cpp` value.** `session.h`'s `join_url` needs
+   an origin serving the phone controller, and a native app has none of its own.
+   The web deployment is therefore a runtime dependency of every TV app.
+   `baseUrlOverride` is the existing seam. Pass your platform — `"tvos"` or
+   `"androidtv"`, the fixed vocabulary `session.h` documents — to both `join_url`
+   and `controller_url_template`: the join URL is the only place a display
+   declares which box it is to the CouchPad launcher, and the two must agree
+   because a player may arrive by either.
+9. **A room advertisement, if you are native** (CouchPad CONTRACT §8). Publish
+   `_couchpad._tcp` in `.local` at room create, withdraw it at close, with the
+   TV's human label as the DNS-SD instance name and the room code as TXT `c` —
+   nothing else, and never TXT `cpr`, which is a launcher-to-launcher marker. The
+   launcher resolves the code through the relay, so this only accelerates a join
+   it could already make: keep showing the QR and the code regardless. The web
+   display cannot do this at all (browsers cannot advertise mDNS), which is why
+   it has no counterpart here.
+10. **Back navigation.** The TABLE crossed (`ttp_ui_back_effect`); the walk did
    not. popstate, the tvOS Menu button and Android's back stack are three
    different animals and the shell owns the traversal.
-10. **Asset bytes for the renderer.** The renderer asks for names; the shell
+11. **Asset bytes for the renderer.** The renderer asks for names; the shell
     fetches bytes and hands them over before the build (the web reference is
     `render/Display.js`). Cars and item props go over by their own file names;
     the biome's scenery goes over as `scenery<i>.glb` in the slot order
@@ -149,7 +161,7 @@ Three properties of that surface matter more than the list:
     livery, which only ever paints the name plate). A shell that cannot
     evaluate CSS vars substitutes those two tokens and rasterizes; the baked
     fallback colours are the pre-theme look.
-11. **WHEN the scene is built.** A build blocks the thread long enough to be
+12. **WHEN the scene is built.** A build blocks the thread long enough to be
     seen, and a cup's chained start (`advance`) performs `place-track` with the
     countdown already running — so a shell that meshes there shows the OUTGOING
     circuit under the count and then hitches. Mesh the next circuit when the

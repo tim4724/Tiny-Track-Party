@@ -251,8 +251,10 @@ Value lobby_snapshot(const Value& input, const Value& chooser) {
 // ---- URLs -------------------------------------------------------------------
 
 std::string join_url(const std::string& base, const std::string& room,
-                     const std::string& instance) {
+                     const std::string& instance, const std::string& platform) {
   std::string url = base + "/" + room;
+  // The platform vocabulary is fixed lowercase ASCII, so it needs no escaping.
+  if (!platform.empty()) url += "?cpp=" + platform;
   if (!instance.empty()) url += "#" + framing::encode_uri_component(instance);
   return url;
 }
@@ -266,12 +268,17 @@ std::string claim_url(const std::string& url, double peerIndex) {
          framing::encode_uri_component(js_number_to_string(peerIndex)) + frag;
 }
 
-bool controller_url_template(const std::string& base, std::string* out) {
+bool controller_url_template(const std::string& base, const std::string& platform,
+                             std::string* out) {
   size_t end = base.size();
   while (end > 0 && base[end - 1] == '/') end--;   // /\/+$/ -> ''
   const std::string trimmed = base.substr(0, end);
   if (trimmed.rfind("https://", 0) != 0) return false;
-  *out = trimmed + "/{room}#{instance}";
+  // Not join_url(): the placeholders must survive verbatim for the relay to
+  // substitute, and join_url percent-encodes the instance.
+  *out = trimmed + "/{room}";
+  if (!platform.empty()) *out += "?cpp=" + platform;
+  *out += "#{instance}";
   return true;
 }
 

@@ -115,8 +115,13 @@ TTP_ABI const char* ttp_net_lobby_frame(int roomHandle, int sessionHandle,
 /* base + '/' + room, with the INSTANCE in the FRAGMENT so the relay-shard pin
  * never reaches a request log. The room code is not encoded (the relay's
  * alphabet needs no escaping and the phones already parse these bytes). NULL or
- * "" for no instance. */
-TTP_ABI const char* ttp_net_join_url(const char* base, const char* room, const char* instance);
+ * "" for no instance.
+ *
+ * `platform` is this shell's CouchPad `cpp` value ("web", "tvos", "androidtv");
+ * the URL is the only place a display declares which box it is, so every shell
+ * passes its own and none invents a value. NULL or "" declares nothing. */
+TTP_ABI const char* ttp_net_join_url(const char* base, const char* room, const char* instance,
+                                     const char* platform);
 
 /* That URL with ?claim=<peerIndex> spliced in BEFORE the fragment, so the shard
  * pin survives — scanning it lands a fresh device on the room with the token
@@ -125,12 +130,13 @@ TTP_ABI const char* ttp_net_claim_url(const char* url, double peerIndex);
 
 /* The controller-URL template to register with the relay on room create; the
  * relay fills {room}/{instance} for anyone holding only the room code (native TV
- * shells via GET /room/:code, controllers in `joined`).
+ * shells via GET /room/:code, controllers in `joined`). Same `platform` the QR
+ * carries — the contract requires the two to match.
  * Returns "" for REGISTER NONE — the relay accepts only absolute https
  * templates and rejects the whole create on an invalid one, so a plain-http
  * origin must send no template at all, which is a different thing from sending
  * an empty one. */
-TTP_ABI const char* ttp_net_controller_url_template(const char* base);
+TTP_ABI const char* ttp_net_controller_url_template(const char* base, const char* platform);
 
 
 /* ---- seats ----------------------------------------------------------------- */

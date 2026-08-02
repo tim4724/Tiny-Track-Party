@@ -560,7 +560,7 @@ installRenameHook((n) => {
 // Boot. In the shell the launcher owns identity: skip the name screen entirely
 // and join straight away with the injected name (never persisted). Otherwise land
 // on the name screen and wait for the player to pick a name. (Scenario/gallery
-// mode below never connects and always carries no cpv, so it's unaffected.)
+// mode below never connects and always carries no cpName, so it's unaffected.)
 if (inShell && shellName) {
   // Never flash the name screen (it's the default-visible section): hide it up
   // front and go straight to joining. The launcher's own joining spinner floats

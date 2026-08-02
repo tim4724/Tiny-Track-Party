@@ -1,7 +1,7 @@
 // @ts-check
 // CouchPad launcher contract (CONTRACT.md): the controller, when hosted in the
 // launcher's web view (Android WebView / iOS WKWebView — identical here), is
-// handed its identity via ?cpv=1&cpName=… and talks back over
+// handed its identity via ?cpName=… and talks back over
 // window.CouchPad.setName (§2) / window.CouchPadHost.gameEnded (§3). These specs
 // drive a shell-mode phone against the same display + hermetic relay stub the rest
 // of the suite uses, asserting the shell touchpoints end to end.
@@ -9,8 +9,9 @@ const { test, expect, openDisplay, startRace, waitForRacing, visible } = require
 
 // A phone launched by the shell: a fresh context (own localStorage) with the
 // launcher's JS interface stubbed in BEFORE any page script runs, joined via the
-// cpv/cpName URL params (no name form). `__cpEnded` records the last gameEnded
-// reason the game reported. Returns the controller page.
+// cpName URL param — its presence is the whole shell gate, so there is no name
+// form. `__cpEnded` records the last gameEnded reason the game reported. Returns
+// the controller page.
 async function shellJoin(browser, roomCode, name, { room = roomCode } = {}) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   await context.addInitScript(() => {
@@ -20,9 +21,53 @@ async function shellJoin(browser, roomCode, name, { room = roomCode } = {}) {
     window.CouchPadHost = { gameEnded: (reason) => { window.__cpEnded = reason; } };
   });
   const page = await context.newPage();
-  await page.goto(`/${room}?cpv=1&cpName=${encodeURIComponent(name)}`);
+  await page.goto(`/${room}?cpName=${encodeURIComponent(name)}`);
   return page;
 }
+
+test('the display names itself `cpp=web` on the join URL and the registered template (§6)', async ({ page }) => {
+  await openDisplay(page);
+
+  // The URL is the ONLY place a display declares which box it is, so the value
+  // has to ride the string every arrival route reads: the scanned QR here, and
+  // the template below for a typed code, a nearby tap or a rejoin card.
+  const joinUrl = await page.evaluate(() => window.__net._joinUrl());
+  expect(joinUrl).toContain('?cpp=web');
+  // Before the fragment: the instance pins the relay shard and a query arg after
+  // '#' is fragment text, not a param.
+  expect(joinUrl.indexOf('?cpp=web')).toBeLessThan((joinUrl + '#').indexOf('#'));
+
+  // The template must match what the QR produces, placeholders intact for the
+  // relay to substitute. E2E serves plain http, where the relay would reject the
+  // whole create, so the display registers none — override the base to reach the
+  // shape prod actually sends.
+  const template = await page.evaluate(() => {
+    window.__net.baseUrlOverride = 'https://tinytrack.couchpad.games';
+    return window.__net._controllerUrlTemplate();
+  });
+  expect(template).toBe('https://tinytrack.couchpad.games/{room}?cpp=web#{instance}');
+
+  // The ticket the player reads is untouched: host + path only, no query noise.
+  await expect(page.locator('#joinurl')).not.toContainText('cpp');
+});
+
+test('a `cp*` param the launcher did not send is not mistaken for the shell', async ({ page, browser }) => {
+  // Every scanned QR now carries ?cpp=web — the display naming itself to the
+  // launcher, addressed past us. `cp*` is the launcher's reserved namespace, and
+  // the shell gate is cpName ALONE: read the prefix instead and every plain-browser
+  // player loses the name screen and gets seated as an empty name.
+  const roomCode = await openDisplay(page);
+
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await context.addInitScript(() => {
+    try { localStorage.setItem('tinytrack_seen_help', '1'); } catch (_) {}
+  });
+  const phone = await context.newPage();
+  await phone.goto(`/${roomCode}?cpp=web`);
+
+  await phone.waitForSelector(visible('#name'));
+  expect(await phone.evaluate(() => document.documentElement.classList.contains('cp-shell'))).toBe(false);
+});
 
 test('shell join skips the name screen, seats the injected name, never persists it', async ({ page, browser }) => {
   const roomCode = await openDisplay(page);

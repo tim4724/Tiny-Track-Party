@@ -185,17 +185,19 @@ const char* ttp_net_lobby_frame(int roomHandle, int sessionHandle, const char* f
 
 // ---- URLs ---------------------------------------------------------------------
 
-const char* ttp_net_join_url(const char* base, const char* room, const char* instance) {
-  return putStr(g_bufJoin, ns::join_url(strOr(base), strOr(room), strOr(instance)));
+const char* ttp_net_join_url(const char* base, const char* room, const char* instance,
+                             const char* platform) {
+  return putStr(g_bufJoin,
+                ns::join_url(strOr(base), strOr(room), strOr(instance), strOr(platform)));
 }
 
 const char* ttp_net_claim_url(const char* url, double peerIndex) {
   return putStr(g_bufClaimUrl, ns::claim_url(strOr(url), peerIndex));
 }
 
-const char* ttp_net_controller_url_template(const char* base) {
+const char* ttp_net_controller_url_template(const char* base, const char* platform) {
   std::string out;
-  if (!ns::controller_url_template(strOr(base), &out)) out.clear();
+  if (!ns::controller_url_template(strOr(base), strOr(platform), &out)) out.clear();
   return putStr(g_bufTemplate, std::move(out));
 }
 

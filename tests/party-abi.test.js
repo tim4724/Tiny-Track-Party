@@ -465,3 +465,37 @@ test('party ABI: the session choreography walks run against the shipped wasm', a
 // the artifact proof that the party ABI still reaches ACROSS the two halves of the
 // runtime — the deadline it fires is armed by "a seat with no car in the live
 // Game", which is that definition and nothing else.
+
+// The join URL's shape, through the artifact — the CouchPad launcher reads this
+// string and nothing else to learn which box a room is on (CONTRACT §6), so the
+// pieces have to compose in one order: the `cpp` declaration is a QUERY arg and
+// the relay-shard instance is the FRAGMENT, and a per-seat claim splices in
+// between them. Get that wrong and the claim lands on a shard that has never
+// heard of the room, or `cpp` becomes fragment text the launcher cannot read.
+// The web display's own value ('web') lives in its adapter and is pinned by
+// tests/e2e/couchpad-shell.spec.js; what is pinned here is the composition every
+// shell shares.
+test('party ABI: cpp rides the query, the instance rides the fragment, claim splices between', async () => {
+  const factory = (await import(pathToFileURL(MJS).href)).default;
+  const M = await factory();
+  const joinUrl = M.cwrap('ttp_net_join_url', 'string', ['string', 'string', 'string', 'string']);
+  const claimUrl = M.cwrap('ttp_net_claim_url', 'string', ['string', 'number']);
+  const template = M.cwrap('ttp_net_controller_url_template', 'string', ['string', 'string']);
+
+  const base = 'https://tinytrack.couchpad.games';
+  assert.equal(joinUrl(base, 'BZK4', 'eu-1', 'web'), `${base}/BZK4?cpp=web#eu-1`);
+  assert.equal(joinUrl(base, 'BZK4', '', 'web'), `${base}/BZK4?cpp=web`);
+  // A shell that declares nothing keeps the pre-contract URL byte for byte.
+  assert.equal(joinUrl(base, 'BZK4', 'eu-1', ''), `${base}/BZK4#eu-1`);
+
+  assert.equal(claimUrl(joinUrl(base, 'BZK4', 'eu-1', 'web'), 2), `${base}/BZK4?cpp=web&claim=2#eu-1`);
+  assert.equal(claimUrl(joinUrl(base, 'BZK4', 'eu-1', ''), 2), `${base}/BZK4?claim=2#eu-1`);
+
+  // The template must match what the QR produces, placeholders intact for the
+  // relay to substitute — including through a trailing slash on the base.
+  assert.equal(template(base + '/', 'web'), `${base}/{room}?cpp=web#{instance}`);
+  assert.equal(template(base, ''), `${base}/{room}#{instance}`);
+  // "" is REGISTER NONE: a plain-http origin must send no template at all,
+  // whatever it would have declared.
+  assert.equal(template('http://localhost:3000', 'web'), '');
+});

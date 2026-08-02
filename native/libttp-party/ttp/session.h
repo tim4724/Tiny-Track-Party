@@ -117,8 +117,17 @@ std::string clean_name_json(const std::string& valueJson);
 // The room code is NOT encoded — the relay mints it from an alphabet that needs
 // no escaping, and encoding it would change bytes the phones already parse.
 // An empty instance is the JS falsy case: no fragment at all.
+//
+// `platform` spells which box this display is into the URL as `?cpp=` (CouchPad
+// CONTRACT §6), and the URL is the ONLY place a display declares itself — so the
+// QR, the registered template and the launcher's rejoin card all read it from the
+// same string. The vocabulary is FIXED at "web", "tvos" and "androidtv" and the
+// launcher owns the wording, so a shell passes its own and never invents one; an
+// unknown value degrades to a card with no device name, and empty declares
+// nothing. It arrives as a string rather than an enum because every shell reaches
+// this through the C ABI, where a C++ constant is out of reach anyway.
 std::string join_url(const std::string& base, const std::string& room,
-                     const std::string& instance);
+                     const std::string& instance, const std::string& platform);
 
 // The per-seat reconnect QR: the join URL with ?claim=<peerIndex> spliced in
 // BEFORE the fragment, so the shard pin survives. Get this order wrong and the
@@ -128,13 +137,16 @@ std::string claim_url(const std::string& url, double peerIndex);
 // The controller-URL template registered with the relay on room create. The
 // relay fills {room}/{instance} and hands the result to anyone holding only the
 // room code — native TV shells via GET /room/:code, controllers in `joined` — so
-// a code-only join can resolve which page to load.
+// a code-only join can resolve which page to load. Same shape as join_url,
+// `platform` included: the contract requires the template to match what a scanned
+// QR produces, and it is what carries `cpp` to a typed-code or nearby join.
 //
 // Returns false for "register NO template". The relay accepts only absolute
 // https templates and REJECTS THE WHOLE CREATE on an invalid one, so a plain-http
 // origin (local dev, E2E) must send none; that is a different thing from sending
 // an empty string, which is why this is not a std::string return.
-bool controller_url_template(const std::string& base, std::string* out);
+bool controller_url_template(const std::string& base, const std::string& platform,
+                             std::string* out);
 
 // ---- the rejoinToken normalizer ---------------------------------------------
 // FROZEN QUIRK, DO NOT TIDY. This is JS `Number(value)`, so norm_index of a JSON

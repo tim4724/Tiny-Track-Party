@@ -3,16 +3,23 @@
 // the rest of the controller can read as a plain web page.
 //
 // The launcher (the Android app hosting this page in a WebView, or the iOS app in
-// a WKWebView — they behave identically here) appends ?cpv=<version>&cpName=<name>
-// to the join URL. Its presence means "running inside the shell", and ALL shell
-// behaviour is gated on it, so the same deployed controller keeps working
-// untouched in a plain browser. Any cpv value is accepted (forward-compat: an
-// unknown higher version is still "shell present").
+// a WKWebView — they behave identically here) appends ?cpName=<name> to the join
+// URL, and is the only thing that does. Its PRESENCE is the shell gate, and ALL
+// shell behaviour hangs off it, so the same deployed controller keeps working
+// untouched in a plain browser.
+//
+// There is no version on the wire and no handshake param: every touchpoint is
+// feature-detected (a param that is there or isn't, a bridge object that exists
+// or doesn't), which is what lets the launcher add capabilities without a
+// coordinated release. `cp*` is the launcher's RESERVED namespace — this game
+// mints no query param starting with `cp`, and ignores any it doesn't know,
+// since they may be addressed to the launcher rather than to us (`cpp`, which
+// the display puts on the join URL to name itself, is exactly that).
 import { cleanName } from '../shared/names.js';
 
 const params = new URLSearchParams(location.search);
 
-export const inShell = params.has('cpv');
+export const inShell = params.has('cpName');
 // The launcher's name gate guarantees non-blank <=16 chars; sanitize defensively
 // anyway, exactly as the standalone name form does.
 export const shellName = inShell ? cleanName(params.get('cpName')) : '';

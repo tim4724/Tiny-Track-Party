@@ -33,9 +33,9 @@ export async function init() {
     configure: c('ttp_net_configure', 'number', ['string']),
     effectOps: c('ttp_net_effect_ops_json', 'string', []),
     lobbyFrame: c('ttp_net_lobby_frame', 'string', ['number', 'number', 'string']),
-    joinUrl: c('ttp_net_join_url', 'string', ['string', 'string', 'string']),
+    joinUrl: c('ttp_net_join_url', 'string', ['string', 'string', 'string', 'string']),
     claimUrl: c('ttp_net_claim_url', 'string', ['string', 'number']),
-    controllerUrlTemplate: c('ttp_net_controller_url_template', 'string', ['string']),
+    controllerUrlTemplate: c('ttp_net_controller_url_template', 'string', ['string', 'string']),
     reconnectCard: c('ttp_net_reconnect_card_json', 'string', ['string', 'string']),
     // The choreography walks: room-handle-taking, mutate inside the wasm,
     // answer {"effects":[...]} (+ needDraw on a mode pick).
@@ -95,8 +95,16 @@ export function lobbyFrame(roomHandle, sessionHandle, fields) {
 }
 
 // ---- URLs -------------------------------------------------------------------
+// This shell's `cpp` value (CouchPad CONTRACT §6): a browser-based display. It
+// is what tells the launcher which box a room is on, and the URL is the only
+// place it can say so — so it goes on the QR and on the registered template
+// alike, and reaches a typed-code, nearby or rejoin arrival through the relay.
+// tvOS and Android TV are sibling shells with their own value; this one is the
+// web display's, which is why it lives here and not in the wasm.
+const CP_PLATFORM = 'web';
+
 export function joinUrl(base, room, instance) {
-  return fn.joinUrl(base, room, instance == null ? '' : instance);
+  return fn.joinUrl(base, room, instance == null ? '' : instance, CP_PLATFORM);
 }
 export function claimUrl(url, peerIndex) {
   return fn.claimUrl(url, peerIndex);
@@ -104,7 +112,7 @@ export function claimUrl(url, peerIndex) {
 // null means REGISTER NONE — the relay rejects the whole create on an invalid
 // template, so a plain-http origin must send no key at all.
 export function controllerUrlTemplate(base) {
-  const t = fn.controllerUrlTemplate(base);
+  const t = fn.controllerUrlTemplate(base, CP_PLATFORM);
   return t === '' ? null : t;
 }
 
