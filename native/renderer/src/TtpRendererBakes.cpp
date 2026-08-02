@@ -364,9 +364,25 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
         const float sigmaTexels = std::min(kPenumbraSigmaWorld
                         / std::max(1e-4f, mShadowTexel), 40.0f / 3.0f);
 
+        // HALF float, not full. The runtime lookup is a single BILINEAR tap, and
+        // filtering a 32-bit float texture is not universal: on the web it needs
+        // OES_texture_float_linear, and on Metal it needs an Apple GPU family
+        // above 3 — the Apple TV 4K (1st gen) is an A10X, which reports exactly
+        // MTLGPUFamilyApple3. There is no error when it is missing; the sampler
+        // silently point-samples, so the ESM's own 1024² texels show through as
+        // a blocky shadow edge while the same build looks smooth on desktop GL.
+        // Half-float filtering is core in WebGL2 and available on every Apple
+        // family, so this is the portable choice rather than a concession.
+        //
+        // The range is safe: the stored value is exp(-k·d) with kShadowEsmK 8,
+        // so it spans [e^-8, 1] = [3.4e-4, 1] — comfortably inside half's
+        // normals, at ~0.1% RELATIVE error, which is nothing against a penumbra
+        // that ramps over several texels. Only the STORED field is half; the
+        // per-tap exponential and the 81-tap sum are computed at full precision
+        // in the shader either way. Halves the resident cost again, 4 MB -> 2 MB.
         Texture* esm = Texture::Builder()
                 .width(ESM_SM).height(ESM_SM).levels(1)
-                .format(Texture::InternalFormat::R32F)
+                .format(Texture::InternalFormat::R16F)
                 .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
                 .build(*mEngine);
         // Ping target for the horizontal pass. Its own filtering matters: pass
@@ -374,7 +390,7 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
         // LINEAR costs nothing and forgives the half-texel rounding.
         Texture* tmp = esm ? Texture::Builder()
                 .width(ESM_SM).height(ESM_SM).levels(1)
-                .format(Texture::InternalFormat::R32F)
+                .format(Texture::InternalFormat::R16F)
                 .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
                 .build(*mEngine) : nullptr;
         if (esm && tmp) {
@@ -454,7 +470,7 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
             mEngine->destroyCameraComponent(qcamEnt);
             utils::EntityManager::get().destroy(qcamEnt);
             mEngine->destroy(tmp);
-            mEngine->destroy(mShadowMap); // 2048² DEPTH24 -> 2048² R32F
+            mEngine->destroy(mShadowMap); // 2048² DEPTH24 -> ESM_SM² R16F
             mShadowMap = esm;
             esmOk = true;
         } else if (esm) {
@@ -462,7 +478,7 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
         }
     }
     if (!esmOk) {
-        // R32F needs EXT_color_buffer_float, and vpresent has to be present for
+        // R16F needs EXT_color_buffer_float, and vpresent has to be present for
         // the fullscreen triangle. Without both, the raw depth map is still
         // sitting in mShadowMap — but the samplers now do an ESM lookup, which
         // is meaningless on depth. Drop it: bindShadowMap then binds the 1x1
