@@ -303,6 +303,47 @@ html, body {
   fill: #ffc83d; stroke: var(--ink); stroke-width: 1.7;
   stroke-linejoin: round; paint-order: stroke fill;
 }
+/* pad badge — the host star's mirror on the card's top-LEFT corner: a livery
+   pill carrying a controller silhouette and the pad's number. It is the only
+   thing on screen that answers "which of these is mine" for a player holding a
+   controller instead of a phone, so it wears the seat's colour rather than ink
+   and sits proud of the card like the other corner markers. */
+.seat__pad {
+  position: absolute; top: -0.6rem; left: -0.55rem;
+  display: flex; align-items: center; gap: 0.18em;
+  padding: 0.12rem 0.4rem 0.12rem 0.3rem;
+  color: #fff; background: var(--c, var(--ink));
+  border: 2.5px solid var(--ink); border-radius: 999px;
+  font-family: var(--font-display); font-weight: 700;
+  font-size: clamp(0.72rem, 0.92vw, 0.92rem); line-height: 1;
+}
+/* Generous against the number: the silhouette is the half that has to survive
+   being read across a room, and at badge size it has no detail to spare. */
+.seat__pad svg { width: 1.5em; height: 1.5em; fill: currentColor; }
+
+/* "that one is you" — a one-shot livery ring that pops off the card and fades.
+   Fired on join (with the pad's rumble) and on any press, so a player who has
+   lost track can always ask. EVENT-DRIVEN and one-shot on purpose: a card that
+   moved continuously would read as a bug, the same reason the cars carry no
+   idle micro-motion. */
+/* Holds most of its opacity through the first half so the ring is READ before
+   it goes, then leaves quickly. A straight fade over the same 600ms is gone
+   before an eye that wasn't already on the dock finds it. */
+@keyframes seat-ping {
+  0%   { opacity: 0.95; transform: scale(1); }
+  55%  { opacity: 0.8; }
+  100% { opacity: 0; transform: scale(1.3); }
+}
+.seat--ping::after {
+  content: ''; position: absolute; inset: -5px;
+  border: 4px solid var(--c, var(--ink)); border-radius: var(--r);
+  animation: seat-ping 600ms ease-out forwards;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .seat--ping::after { animation-duration: 1ms; }
+}
+
 /* open seat — a dashed placeholder card of the SAME footprint: the empty
    .seat__open square stands in for the kart render, "Open" sits where the
    name goes */

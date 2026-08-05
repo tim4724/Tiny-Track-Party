@@ -66,8 +66,21 @@ peer-message walk, so every gate stays C++'s) and `session.processInput`. Local
 seats are string-keyed so they cannot collide with a relay peer index, and
 `DisplayNet.sendTo` drops the per-seat sends that would be addressed to nobody.
 
-A pad only exists once its first button is pressed — every engine hides an
-untouched one — so the lobby has to advertise it rather than react to it.
+**A seat is taken by a PRESS, never by a pad appearing.** Being enumerated is no
+evidence anyone is holding it: a pad paired to the machine and lying on a desk is
+reported like any other, and the first look at one may already show a button
+down. Seating on sight put a phantom player — sometimes the HOST, whose seat
+gates everyone's start — into every party on that machine, and into the E2E
+suite, where it read as a day of unreproducible flake. `openDisplay` now hands
+every spec an empty gamepad list for the same reason.
+
+Because nothing can react to a pad before that press, the lobby has to
+**advertise** it rather than wait for it.
+
+A pad player has no second screen, so what a phone shows privately has to be on
+the TV: their seat card carries a badge naming which pad holds it, and the pad's
+own join buzzes it while the card rings. Rumble is Chrome/Edge only, so the ring
+is the half that may never be optional.
 
 The map itself is in that file's header. Two parts of it are not pure device
 policy, and both exist because a pad-only party would otherwise be stuck: the

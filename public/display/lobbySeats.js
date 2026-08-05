@@ -23,11 +23,21 @@ const { CAR_COLORS, CAR_MODELS } = window;
 // markup only. MAX_PLAYERS and the car-roster size are not passed: they were
 // handed to the model once at boot (NativeUiModel.configure), so this file no
 // longer holds a second copy of either.
-export function renderSeats(listEl, seats) {
+//
+// `padOrdinals` marks the seats held by a GAMEPAD on this TV, as "Pad 1"'s 1 (a
+// phone's entry is null). It is a PARALLEL ARRAY rather than a field on the
+// seat, for two reasons: which seats are local is knowable only to the shell
+// (the room has no notion of one), and Seat/SeatCell carry no peerIndex to key
+// it by. The zip is sound because the model's rows are the room's roster IN JOIN
+// ORDER and seatGrid only APPENDS its open placeholders — so taken cell i is
+// roster i. That contract is asserted below rather than assumed.
+export function renderSeats(listEl, seats, padOrdinals = []) {
   listEl.innerHTML = '';
+  let taken = -1;
   for (const p of seatGrid(seats)) {
     const seat = document.createElement('div');
     if (!p.open) {
+      taken++;
       seat.className = 'seat' + (p.off ? ' seat--off' : '') + (p.ready ? ' seat--ready' : '');
       seat.style.setProperty('--c', CAR_COLORS[p.colorIndex] || '#888');
       // the name itself carries the livery colour (via the seat's --c) — no dot
@@ -45,6 +55,27 @@ export function renderSeats(listEl, seats) {
         hs.setAttribute('aria-label', 'Host');
         hs.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l2.9 5.9 6.5.95-4.7 4.58 1.1 6.47L12 17.9l-5.8 3.05 1.1-6.47-4.7-4.58 6.5-.95z"/></svg>';
         seat.appendChild(hs);
+      }
+      // Pad badge — the mirror of the host star, in the seat's own top-LEFT
+      // corner: it says both "this seat is a controller on this TV" and WHICH
+      // controller, which is the one thing a pad player cannot work out from
+      // the screen (a phone player is holding the answer). The number is the
+      // pad's, matching its default name.
+      const ord = padOrdinals[taken];
+      if (ord != null) {
+        seat.dataset.pad = ord;   // the ping below finds a card by this
+        const pd = document.createElement('span');
+        pd.className = 'seat__pad';
+        pd.setAttribute('aria-label', `Controller ${ord}`);
+        // The SILHOUETTE only: at badge size a d-pad and face buttons drawn
+        // inside it turn to mud, and the shape alone is what carries "pad".
+        pd.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">'
+          + '<path d="M8 7h8c3.6 0 6.5 2.9 6.5 6.5 0 2.2-1.8 4-4 4-1.3 0-2.5-.65-3.25-1.75L14.2 14.5H9.8l-1.05 1.25C8 16.85 6.8 17.5 5.5 17.5c-2.2 0-4-1.8-4-4C1.5 9.9 4.4 7 8 7z"/>'
+          + '</svg>';
+        const n = document.createElement('b');
+        n.textContent = ord;
+        pd.appendChild(n);
+        seat.appendChild(pd);
       }
       // each joined car rotates in spin mode, in lockstep via the shared clock
       seat.appendChild(carThumbNode(CAR_MODELS[p.modelIndex], { spin: true }));
@@ -65,6 +96,12 @@ export function renderSeats(listEl, seats) {
       seat.appendChild(ph); seat.appendChild(lab);
     }
     listEl.appendChild(seat);
+  }
+  // The zip's contract, made loud. If the model ever re-sorts the roster or
+  // interleaves its placeholders, the badges would silently land on the wrong
+  // cards — which is exactly the bug a pad player could not diagnose.
+  if (padOrdinals.length && taken + 1 !== seats.length) {
+    throw new Error(`seat grid drifted from the roster: ${taken + 1} taken cells, ${seats.length} seats`);
   }
 }
 

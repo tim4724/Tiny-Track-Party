@@ -9,11 +9,14 @@
 // path tries to address it over the relay.
 const { test, expect, openDisplay, joinController, waitForRacing } = require('./helpers');
 
-// Install a fake Gamepad API BEFORE the page scripts run. The browser has no
-// pad and its own getGamepads always answers empty, so the rig replaces it
-// wholesale; `window.__pads` is the handle the spec pokes.
+// A fake Gamepad API, installed OVER the empty one every display page gets (see
+// openDisplay — the suite must not depend on what is paired to the machine
+// running it). Applied after the page is up rather than as an init script,
+// because Gamepads.js reads navigator per frame and the pads only matter once
+// this spec adds them. `window.__pads` is the handle the cases poke.
 const riggedDisplay = async (page) => {
-  await page.addInitScript(() => {
+  const roomCode = await openDisplay(page);
+  await page.evaluate(() => {
     const mk = (index) => ({
       index, connected: true, mapping: 'standard',
       buttons: Array.from({ length: 17 }, () => ({ pressed: false, value: 0 })),
@@ -25,8 +28,8 @@ const riggedDisplay = async (page) => {
       add: (i) => { pads[i] = mk(i); },
       remove: (i) => { pads[i] = null; },
       axis: (i, a, v) => { pads[i].axes[a] = v; },
-      // Held for a few frames so the poll sees the edge, then released: the
-      // press has to be visible across two polls to read as one press.
+      // Held for a few frames so the poll sees the edge, then released: a press
+      // has to be visible across two polls to read as one.
       tap: async (i, b) => {
         pads[i].buttons[b] = { pressed: true, value: 1 };
         await sleep(120);
@@ -36,7 +39,7 @@ const riggedDisplay = async (page) => {
     };
     navigator.getGamepads = () => pads;
   });
-  return openDisplay(page);
+  return roomCode;
 };
 
 const A = 0, B = 1, START = 9, DPAD_D = 13, DPAD_R = 15;
@@ -52,10 +55,16 @@ const roster = (page) => page.evaluate(() => window.__net.flow.list()
 test('a pad-only party joins, picks, starts and drives', async ({ page }) => {
   await riggedDisplay(page);
 
-  // Two pads appear. The browser only reveals a pad once it is used, so "it
-  // showed up" already means someone pressed something — the module joins on
-  // sight rather than waiting for a second press.
+  // Two pads appear and are IGNORED until someone presses something. A pad
+  // paired to the machine and lying on the table is enumerated like any other,
+  // and seating one would hand a seat (and possibly the host slot, which gates
+  // everyone's start) to nobody at all.
   await page.evaluate(() => { window.__pads.add(0); window.__pads.add(1); });
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => window.__net.flow.size)).toBe(0);
+  await expect(page.locator('#tagline')).not.toHaveClass(/has-pad/);
+
+  await Promise.all([tap(page, 0, A), tap(page, 1, A)]);
   await page.waitForFunction(() => window.__net.flow.size === 2, null, { timeout: 5000 });
   expect((await roster(page)).map(({ id, name, ready }) => ({ id, name, ready }))).toEqual([
     { id: 'pad-0', name: 'Pad 1', ready: false },
@@ -67,6 +76,16 @@ test('a pad-only party joins, picks, starts and drives', async ({ page }) => {
   expect(await page.evaluate(() => window.__net.flow.host)).toBe('pad-0');
   // The lobby stops advertising pads once one has taken a seat.
   await expect(page.locator('#tagline')).toHaveClass(/has-pad/);
+
+  // WHICH card is mine. The badge is the shell's own decoration (the room has
+  // no notion of a local seat), zipped onto the model's rows by position — so
+  // this is the case that catches the badges landing on the wrong cards.
+  const seats = page.locator('#players .seat');
+  await expect(seats.nth(0).locator('.seat__pad')).toHaveText('1');
+  await expect(seats.nth(1).locator('.seat__pad')).toHaveText('2');
+  await expect(seats.nth(0)).toHaveAttribute('data-pad', '1');
+  // ...and the badge is on the card whose NAME is that pad's.
+  await expect(seats.nth(1).locator('.seat__label')).toHaveText('Pad 2');
 
   // Pad 2 changes car (off whatever its seat default was) and readies up.
   const carWas = (await roster(page))[1].car;
@@ -132,11 +151,15 @@ test('a pad and a phone share the same four seats', async ({ page, browser }) =>
   const roomCode = await riggedDisplay(page);
   const alice = await joinController(browser, roomCode, 'Alice'); // first in → host
   await page.evaluate(() => window.__pads.add(0));
+  await tap(page, 0, A);
   await page.waitForFunction(() => window.__net.flow.size === 2, null, { timeout: 5000 });
 
   // The pad sits beside the phone: distinct ids, distinct liveries, one roster.
   expect(await page.evaluate(() => window.__net.flow.list().map((p) => [p.peerIndex, p.colorIndex])))
     .toEqual([[1, 0], ['pad-0', 1]]);
+  // Only the pad's seat is badged — the phone player is holding their own answer.
+  await expect(page.locator('#players .seat').nth(0).locator('.seat__pad')).toHaveCount(0);
+  await expect(page.locator('#players .seat').nth(1).locator('.seat__pad')).toHaveText('1');
   expect(await page.evaluate(() => window.__net.flow.host)).toBe(1); // the phone got there first
 
   // A guest pad cannot move the room's pick — the same host gate a guest phone hits.

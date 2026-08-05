@@ -33,6 +33,15 @@ async function openDisplay(page) {
   // RaceSession._stepCountdown: racing flips on the n=0 beat, which only fires
   // from update(dtMs), not on startCountdown's opening tick).
   await page.addInitScript(() => { window.__countdownSeconds = 1; });
+  // NO PADS unless a spec asks for them. A gamepad paired to the machine running
+  // the suite is enumerated by the browser even while it lies untouched on the
+  // desk, and the display seats pads — so without this the suite's lobbies grow
+  // an extra player on some developers' machines and not others, which is
+  // exactly the shape of "flake" nobody can reproduce. (It cost a day: the
+  // phantom took the HOST slot, which disables the real host's Start.) The
+  // gamepad spec replaces this after openDisplay returns; Gamepads.js reads
+  // navigator per frame, so a later swap is picked up.
+  await page.addInitScript(() => { navigator.getGamepads = () => []; });
   // Optional display query flags for the whole suite, e.g.
   //   TTP_DISPLAY_FLAGS=party=native npm run test:e2e
   // runs every spec with the room state machine on the C++ party layer (add

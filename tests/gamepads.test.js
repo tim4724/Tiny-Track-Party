@@ -37,6 +37,9 @@ function pad(index, down = [], axes = []) {
   return { index, connected: true, mapping: 'standard', buttons, axes };
 }
 
+// Y is bound to nothing in any context, so a case can press it purely to take
+// a seat without also tripping the action under test.
+const NEUTRAL = 3;
 const BTN = { A: 0, B: 1, X: 2, LB: 4, RB: 5, LT: 6, RT: 7, BACK: 8, START: 9, DL: 14, DR: 15 };
 
 // ---- steering ---------------------------------------------------------------
@@ -109,27 +112,73 @@ function withPads(list, fn) {
   }
 }
 
-test('a pad the browser reveals takes a seat on its first poll', () => {
-  const net = fakeNet();
-  const g = new Gamepads({ net });
-  // The room seats whoever HELLOs, as the walk would.
+// The room seats whoever HELLOs, as the walk would.
+function seatOnHello(net) {
   net.localMessage = (id, msg) => {
     net.sent.push({ id, ...msg });
     if (msg.type === MSG.HELLO) net.seats.push({ peerIndex: id, name: msg.name, carIndex: 0, ready: false });
   };
+}
+
+// Taking a seat is always TWO polls: the first look at a pad only baselines its
+// buttons (a press has to be seen happening), the second carries the press. Y is
+// bound to nothing, so this cannot also trip the action a case is testing.
+function seat(g, session = null, indices = [0]) {
+  withPads(indices.map((i) => pad(i)), () => g.poll(session));
+  withPads(indices.map((i) => pad(i, [NEUTRAL])), () => g.poll(session));
+}
+
+test('a pad takes its seat on a PRESS, never on merely appearing', () => {
+  // A pad paired to the machine and lying untouched on the table is enumerated
+  // like any other. Seating it would hand a seat — and possibly the host slot,
+  // which gates everyone's start — to nobody at all.
+  const net = fakeNet();
+  const g = new Gamepads({ net });
+  seatOnHello(net);
   withPads([pad(0)], () => g.poll(null));
+  withPads([pad(0)], () => g.poll(null));
+  assert.deepEqual(net.sent, []);
+  assert.equal(g.seated, 0);
+  withPads([pad(0, [BTN.A])], () => g.poll(null));   // ...a press does
   assert.deepEqual(net.sent, [{ id: 'pad-0', type: MSG.HELLO, name: 'Pad 1' }]);
   assert.equal(g.seated, 1);
+});
+
+test('a button already down when the pad appears is not a press', () => {
+  // Some pads rest with one reading down (a home key, a sticky shoulder, a
+  // driver quirk). The first look only baselines; a seat needs a transition
+  // seen by this page.
+  const net = fakeNet();
+  const g = new Gamepads({ net });
+  seatOnHello(net);
+  const stuck = [pad(0, [BTN.A])];
+  withPads(stuck, () => g.poll(null));
+  withPads(stuck, () => g.poll(null));
+  assert.equal(g.seated, 0);
+  // Release, then a real press.
+  withPads([pad(0)], () => g.poll(null));
+  withPads([pad(0, [BTN.A])], () => g.poll(null));
+  assert.equal(g.seated, 1);
+});
+
+test('a resting stick is not a press, however far it has drifted', () => {
+  const net = fakeNet();
+  const g = new Gamepads({ net });
+  seatOnHello(net);
+  withPads([pad(0, [], [1, 1])], () => g.poll(null));
+  assert.equal(g.seated, 0);
 });
 
 test('a full room refuses the seat, and the pad retries on a later press', () => {
   const net = fakeNet();              // flow.has stays false: nobody was seated
   const g = new Gamepads({ net });
-  const list = [pad(0)];
-  withPads(list, () => g.poll(null));
+  withPads([pad(0)], () => g.poll(null));           // baseline
+  withPads([pad(0, [BTN.A])], () => g.poll(null));
   assert.equal(g.seated, 0);
-  // Same frame state again inside the retry window: no second HELLO.
-  withPads(list, () => g.poll(null));
+  assert.equal(net.sent.length, 1);
+  // A second press inside the retry window does not re-ask.
+  withPads([pad(0)], () => g.poll(null));
+  withPads([pad(0, [BTN.A])], () => g.poll(null));
   assert.equal(net.sent.length, 1);
 });
 
@@ -139,7 +188,7 @@ test('ITEM is one bump per press, not one per frame', () => {
   const g = new Gamepads({ net });
   const inputs = [];
   const session = { hasCar: () => true, processInput: (id, m) => inputs.push(m.u) };
-  withPads([pad(0)], () => g.poll(session));        // seats it (no drive this frame)
+  seat(g, session);
   withPads([pad(0, [BTN.A])], () => g.poll(session)); // press
   withPads([pad(0, [BTN.A])], () => g.poll(session)); // still held
   withPads([pad(0)], () => g.poll(session));          // released
@@ -153,7 +202,7 @@ test('driving input carries steer, brake and the item counter', () => {
   const g = new Gamepads({ net });
   let last = null;
   const session = { hasCar: () => true, processInput: (id, m) => { last = { id, ...m }; } };
-  withPads([pad(0)], () => g.poll(session));
+  seat(g, session);
   withPads([pad(0, [[BTN.LT, 0.5]], [1, 0])], () => g.poll(session));
   assert.deepEqual(last, { id: 'pad-0', s: 1, b: 0.5, u: 0 });
 });
@@ -164,7 +213,7 @@ test('a frozen field still routes buttons but moves no car', () => {
   const g = new Gamepads({ net, canDrive: () => false });
   let drove = false;
   const session = { hasCar: () => true, processInput: () => { drove = true; } };
-  withPads([pad(0)], () => g.poll(session));
+  seat(g, session);
   withPads([pad(0, [BTN.START])], () => g.poll(session));
   assert.equal(drove, false);
   assert.deepEqual(net.sent.at(-1), { id: 'pad-0', type: MSG.PAUSE_GAME });
@@ -174,7 +223,7 @@ test('lobby: confirm sends both the ready toggle and the start, gates decide', (
   const net = fakeNet();
   net.seats.push({ peerIndex: 'pad-0', carIndex: 0, ready: false });
   const g = new Gamepads({ net });
-  withPads([pad(0)], () => g.poll(null));
+  seat(g);
   withPads([pad(0, [BTN.A])], () => g.poll(null));
   assert.deepEqual(net.sent.slice(-2), [
     { id: 'pad-0', type: MSG.SET_READY, ready: true },
@@ -186,7 +235,7 @@ test('lobby: the ready toggle reads the seat, so a second press un-readies', () 
   const net = fakeNet();
   net.seats.push({ peerIndex: 'pad-0', carIndex: 0, ready: true });
   const g = new Gamepads({ net });
-  withPads([pad(0)], () => g.poll(null));
+  seat(g);
   withPads([pad(0, [BTN.START])], () => g.poll(null));
   assert.deepEqual(net.sent.at(-2), { id: 'pad-0', type: MSG.SET_READY, ready: false });
 });
@@ -195,7 +244,7 @@ test('lobby: the d-pad cycles the car, wrapping both ways', () => {
   const net = fakeNet();
   net.seats.push({ peerIndex: 'pad-0', carIndex: 0, ready: false });
   const g = new Gamepads({ net });
-  withPads([pad(0)], () => g.poll(null));
+  seat(g);
   withPads([pad(0, [BTN.DL])], () => g.poll(null));
   assert.deepEqual(net.sent.at(-1), { id: 'pad-0', type: MSG.SET_CAR, carIndex: CAR_MODELS.length - 1 });
   withPads([pad(0)], () => g.poll(null));
@@ -207,7 +256,7 @@ test('lobby: a held stick is one car step, not a scroll', () => {
   const net = fakeNet();
   net.seats.push({ peerIndex: 'pad-0', carIndex: 0, ready: false });
   const g = new Gamepads({ net });
-  withPads([pad(0)], () => g.poll(null));
+  seat(g);
   const held = [pad(0, [], [1, 0])];
   withPads(held, () => g.poll(null));
   withPads(held, () => g.poll(null));
@@ -225,7 +274,7 @@ test('lobby: up/down cycles the pick, and starts from the top when there is none
   net.seats.push({ peerIndex: 'pad-0', carIndex: 0, ready: false });
   net.pick = { mode: null, cupId: null };
   const g = new Gamepads({ net, picks: PICKS });
-  withPads([pad(0)], () => g.poll(null));
+  seat(g);
   withPads([pad(0, [13])], () => g.poll(null));  // d-pad down
   assert.deepEqual(net.sent.at(-1), { id: 'pad-0', type: MSG.SELECT_MODE, mode: 'cup', cupId: 'beach' });
 });
@@ -235,7 +284,7 @@ test('lobby: the cycle resumes from the ROOM\'s pick and wraps', () => {
   net.seats.push({ peerIndex: 'pad-0', carIndex: 0, ready: false });
   net.pick = { mode: 'tour' };                  // the last entry
   const g = new Gamepads({ net, picks: PICKS });
-  withPads([pad(0)], () => g.poll(null));
+  seat(g);
   withPads([pad(0, [13])], () => g.poll(null));
   assert.deepEqual(net.sent.at(-1), { id: 'pad-0', type: MSG.SELECT_MODE, mode: 'cup', cupId: 'beach' });
   withPads([pad(0)], () => g.poll(null));
@@ -248,12 +297,74 @@ test('lobby: the two axes keep their own memory — a car step is not a pick ste
   net.seats.push({ peerIndex: 'pad-0', carIndex: 0, ready: false });
   net.pick = { mode: 'tour' };
   const g = new Gamepads({ net, picks: PICKS });
-  withPads([pad(0)], () => g.poll(null));
+  seat(g);
   withPads([pad(0, [], [1, 0])], () => g.poll(null));   // stick right, held
   withPads([pad(0, [], [1, 1])], () => g.poll(null));   // ...now also pushed down
   const types = net.sent.map((m) => m.type);
   assert.equal(types.filter((t) => t === MSG.SET_CAR).length, 1);
   assert.equal(types.filter((t) => t === MSG.SELECT_MODE).length, 1);
+});
+
+// ---- "which seat is mine" ----------------------------------------------------
+// The one question a pad player cannot answer from the screen, where a phone
+// player is holding the answer. Two halves: a badge that names the pad, and a
+// ring + buzz that bind the two at the moment of joining.
+
+test('a seat is claimed by the pad whose id it carries', () => {
+  const net = fakeNet();
+  const g = new Gamepads({ net });
+  net.localMessage = (id, msg) => {
+    net.sent.push({ id, ...msg });
+    if (msg.type === MSG.HELLO) net.seats.push({ peerIndex: id, name: msg.name });
+  };
+  seat(g, null, [0, 2]);
+  assert.equal(g.ordinalOf('pad-0'), 1);
+  assert.equal(g.ordinalOf('pad-2'), 3);   // the badge follows the PAD, not the seat order
+  assert.equal(g.ordinalOf(1), null);      // a phone's seat wears none
+  assert.equal(g.ordinalOf('pad-9'), null);
+});
+
+test('joining buzzes that pad and rings that seat', () => {
+  const net = fakeNet();
+  const rings = [];
+  const buzzed = [];
+  const g = new Gamepads({ net, onPadSignal: (o) => rings.push(o) });
+  net.localMessage = (id, msg) => {
+    net.sent.push({ id, ...msg });
+    if (msg.type === MSG.HELLO) net.seats.push({ peerIndex: id, name: msg.name });
+  };
+  const rumble = { playEffect: (kind) => { buzzed.push(kind); return Promise.resolve(); } };
+  const idle = pad(0); idle.vibrationActuator = rumble;
+  const press = pad(0, [NEUTRAL]); press.vibrationActuator = rumble;
+  withPads([idle], () => g.poll(null));    // baseline
+  withPads([press], () => g.poll(null));   // the press that takes the seat
+  assert.deepEqual(rings, [1]);
+  assert.deepEqual(buzzed, ['dual-rumble']);
+});
+
+test('a pad with no rumble motor still rings its seat', () => {
+  // Safari exposes no vibrationActuator at all, so the ring is the half that
+  // may never be optional.
+  const net = fakeNet();
+  const rings = [];
+  const g = new Gamepads({ net, onPadSignal: (o) => rings.push(o) });
+  net.localMessage = (id, msg) => {
+    net.sent.push({ id, ...msg });
+    if (msg.type === MSG.HELLO) net.seats.push({ peerIndex: id, name: msg.name });
+  };
+  seat(g);   // the fake pad has no actuator
+  assert.deepEqual(rings, [1]);
+});
+
+test('the ring is throttled, so a held stick does not restart it every frame', () => {
+  const net = fakeNet();
+  net.seats.push({ peerIndex: 'pad-0', carIndex: 0, ready: false });
+  const rings = [];
+  const g = new Gamepads({ net, onPadSignal: (o) => rings.push(o) });
+  seat(g);                                           // join
+  const held = [pad(0, [], [1, 0])];
+  for (let i = 0; i < 5; i++) withPads(held, () => g.poll(null));
+  assert.deepEqual(rings, [1]);                      // the join's, and no more
 });
 
 // ---- the pause menu ----------------------------------------------------------
@@ -268,7 +379,7 @@ function pausedRig() {
     isPaused: () => true,
     pauseMenu: { items: [MSG.RESUME_GAME, MSG.RETURN_TO_LOBBY], onFocus: (i) => focus.push(i) }
   });
-  withPads([pad(0)], () => g.poll(null));   // seats it
+  seat(g);                                  // seats it
   withPads([pad(0)], () => g.poll(null));   // ...and the overlay's cursor appears
   return { net, g, focus };
 }
@@ -287,7 +398,7 @@ test('pause menu: the cursor moves on either axis, and wraps', () => {
   assert.equal(g.cursor, 1);
   withPads([pad(0, [BTN.A])], () => g.poll(null));
   assert.deepEqual(net.sent.at(-1), { id: 'pad-0', type: MSG.RETURN_TO_LOBBY });
-  withPads([pad(0)], () => g.poll(null));
+  seat(g);
   withPads([pad(0, [13])], () => g.poll(null));         // d-pad down works too
   assert.equal(g.cursor, 0);                            // ...wrapping back round
   assert.deepEqual(focus, [0, 1, 0]);
@@ -323,7 +434,7 @@ test('pause menu: the cursor is cleared when the overlay goes away', () => {
     isPaused: () => paused,
     pauseMenu: { items: [MSG.RESUME_GAME, MSG.RETURN_TO_LOBBY], onFocus: (i) => focus.push(i) }
   });
-  withPads([pad(0)], () => g.poll(null));
+  seat(g);
   withPads([pad(0)], () => g.poll(null));
   paused = false;
   withPads([pad(0)], () => g.poll({ hasCar: () => false })) ;
@@ -348,7 +459,7 @@ test('results: confirm advances a cup and starts a new game otherwise', () => {
     const net = fakeNet(ROOM_STATE.RESULTS);
     net.seats.push({ peerIndex: 'pad-0', carIndex: 0, ready: false });
     const g = new Gamepads({ net, resultsAction: () => action });
-    withPads([pad(0)], () => g.poll(null));
+    seat(g);
     withPads([pad(0, [BTN.START])], () => g.poll(null));
     assert.deepEqual(net.sent.at(-1), { id: 'pad-0', type });
   }
@@ -358,7 +469,7 @@ test('an unplugged pad hands its seat back', () => {
   const net = fakeNet();
   net.seats.push({ peerIndex: 'pad-0', carIndex: 0, ready: false });
   const g = new Gamepads({ net });
-  withPads([pad(0)], () => g.poll(null));
+  seat(g);
   assert.equal(g.seated, 1);
   withPads([], () => g.poll(null));
   assert.deepEqual(net.sent.at(-1), { id: 'pad-0', type: MSG.LEAVE });
@@ -371,7 +482,7 @@ test('two pads are two seats with their own ids and counters', () => {
   const g = new Gamepads({ net });
   const seen = [];
   const session = { hasCar: () => true, processInput: (id, m) => seen.push([id, m.u]) };
-  withPads([pad(0), pad(1)], () => g.poll(session));
+  seat(g, session, [0, 1]);  // a press each
   withPads([pad(0, [BTN.A]), pad(1)], () => g.poll(session));
   assert.deepEqual(seen.slice(-2), [['pad-0', 1], ['pad-1', 0]]);
 });

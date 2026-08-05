@@ -21,9 +21,10 @@
 // that goes flat mid-race drops its seat and offers the usual rejoin QR, which a
 // phone can claim; if the pad comes back first, noteSeen lifts the seat again).
 //
-// BROWSERS ONLY REVEAL A PAD ONCE IT IS USED. navigator.getGamepads() hides a
-// connected-but-untouched pad (a fingerprinting guard, in every engine), so
-// "automatically" means "on the first button press", and the lobby says so.
+// A SEAT IS TAKEN BY A PRESS, not by a pad appearing — being enumerated is not
+// evidence that anybody is holding it (see the join below for what that cost).
+// So "every pad gets a slot automatically" means "press a button and you are
+// in, with nothing else to do", and the lobby says exactly that.
 //
 // THE MAP, by context (the contexts are what let one button carry two meanings):
 //
@@ -86,6 +87,9 @@ const STICK_DEADZONE = 0.18;
 const STICK_STEP = 0.6;
 // A pad the room refused (four seats already taken) retries no faster than this.
 const JOIN_RETRY_MS = 1000;
+// The seat ring's own length (display.css @keyframes seat-ping): re-firing it
+// sooner would restart the draw instead of showing one.
+const PING_MS = 600;
 // Liveness stamps. The race-phase sweep drops a seat that has been silent for
 // LIVENESS.TIMEOUT_MS; a pad held perfectly still sends nothing, so stamp on a
 // slow cadence of its own rather than on every frame.
@@ -141,17 +145,33 @@ class Pad {
     // Room ids are already scalar-typed — the AI fillers are 'ai-N' — so a
     // seated pad is just another key.
     this.id = 'pad-' + index;
-    this.name = 'Pad ' + (index + 1);
+    // What the player is called, what their badge reads, and the key the seat
+    // card is found by — one number, so the three can never disagree.
+    this.ordinal = index + 1;
+    this.name = 'Pad ' + this.ordinal;
     this.seated = false;
     this.held = new Set();   // button indices down at the last poll
+    this.primed = false;     // has `held` been baselined? (see edges)
     this.stepX = 0;          // last stick direction per menu axis (the edge source
     this.stepY = 0;          // that makes a held stick one step, not a scroll)
     this.useSeq = 0;         // wrapping ITEM counter, one bump per press
-    this.joinAt = 0;         // last join attempt (throttle)
+    // Both throttles start at NEVER, not at 0. On a page whose clock is still
+    // younger than the window, 0 reads as "just did that" and swallows the
+    // first one of each — which are the two that matter most: the join itself,
+    // and the ring that tells the player which seat they just took.
+    this.joinAt = -Infinity;
+    this.pingAt = -Infinity;
     this.seenAt = 0;         // last liveness stamp
   }
 
   // Refresh `held` from this frame's raw pad and answer the newly-pressed set.
+  //
+  // The FIRST look reports nothing: it only records the baseline. A button that
+  // was already down when we first saw the pad is not a press — nobody pressed
+  // it in front of us — and some pads rest with one reading down (a home key, a
+  // sticky shoulder, a driver quirk). Counting those as presses seated an idle
+  // pad the instant the page noticed it, which is the join bug one layer down
+  // from the one the join itself guards.
   edges(gp) {
     const now = new Set();
     const fresh = new Set();
@@ -159,9 +179,10 @@ class Pad {
     for (let i = 0; i < n; i++) {
       if (!isDown(gp, i)) continue;
       now.add(i);
-      if (!this.held.has(i)) fresh.add(i);
+      if (this.primed && !this.held.has(i)) fresh.add(i);
     }
     this.held = now;
+    this.primed = true;
     return fresh;
   }
 }
@@ -191,6 +212,10 @@ export class Gamepads {
     this.pauseMenu = opts.pauseMenu || { items: [], onFocus: () => {} };
     this.cursor = 0;         // the shared pause-menu cursor (one overlay, one TV)
     this._menuUp = false;    // is that cursor currently on screen?
+    // "That seat is you": the shell pings the pad's own seat card. Fired on the
+    // join and on any press afterwards, so a player who has lost track of which
+    // card is theirs can always ask by pressing something.
+    this.onPadSignal = opts.onPadSignal || (() => {});
 
     this.pads = new Map(); // gamepad index -> Pad
 
@@ -210,6 +235,19 @@ export class Gamepads {
     let n = 0;
     for (const pad of this.pads.values()) if (pad.seated) n++;
     return n;
+  }
+
+  // Which pad holds this seat, as its badge number — null for a phone. The
+  // lobby asks this per roster row when it draws the seat dock.
+  //
+  // Deliberately NOT gated on `seated`: a row keyed 'pad-0' IS pad 0's, and the
+  // roster is the truth about that — `seated` is only this module's own record
+  // of it. The two disagree for exactly one render, because the seating walk
+  // redraws the dock from inside localMessage() before _join can set the flag,
+  // and a badge that missed its own join would be a poor first impression.
+  ordinalOf(peerIndex) {
+    for (const pad of this.pads.values()) if (pad.id === peerIndex) return pad.ordinal;
+    return null;
   }
 
   // Called once per frame from the render loop, BEFORE its pause/frozen guards
@@ -258,16 +296,22 @@ export class Gamepads {
     const fresh = pad.edges(gp);
 
     if (!pad.seated) {
-      // First sight is itself a join: the browser only reveals a pad once it has
-      // been used, so being here already means someone pressed something. Later
-      // attempts wait for a fresh press — the usual reason the first one failed
-      // is a full room, and the press is how a player asks again once a seat
-      // frees. (joinAt 0 = never tried, which is why this is not one condition.)
-      if (pad.joinAt) {
-        if (!fresh.size || now - pad.joinAt < JOIN_RETRY_MS) return;
-      }
-      pad.joinAt = now;
-      this._join(pad);
+      // A PRESS TAKES THE SEAT, never the pad merely appearing.
+      //
+      // The tempting version of this reads "the browser only reveals a pad once
+      // it has been used, so being here means someone pressed something". That
+      // is what the spec implies and it is NOT what happens: a pad paired to the
+      // machine and sitting untouched on the table is enumerated anyway. Joining
+      // on sight let one silently take a seat in every party on that machine —
+      // and take the HOST slot, which disables the real host's start. It cost
+      // the E2E suite a day of "flake" before a failure screenshot showed two
+      // phantom players in the lobby.
+      //
+      // Buttons only, deliberately: a worn stick rests off-centre and drifts,
+      // which is the same false input in a different shape.
+      if (!fresh.size || now - pad.joinAt < JOIN_RETRY_MS) return;
+      pad.joinAt = now;   // a refusal (the room was full) retries no faster
+      this._join(pad, gp);
       return;
     }
 
@@ -275,12 +319,22 @@ export class Gamepads {
     // stamps with, so a pad sitting still is not swept by the liveness tick.
     if (now - pad.seenAt > SEEN_MS) { pad.seenAt = now; this.net.noteSeen(pad.id); }
 
-    if (state === ROOM_STATE.LOBBY) this._lobby(pad, gp, fresh);
-    else if (state === ROOM_STATE.RESULTS) this._results(pad, fresh);
+    if (state === ROOM_STATE.LOBBY) {
+      this._lobby(pad, gp, fresh);
+      // Anything the player does in the LOBBY re-answers "which card is mine",
+      // that being the screen where they are picking a car and looking for
+      // themselves. Not during a race: their own car is the answer there.
+      //
+      // AFTER the press is handled, never before: a car pick or a ready toggle
+      // republishes the roster, and the redraw that follows would wipe a ring
+      // fired ahead of it. (The join's own ring is fine — _join fires it once
+      // the seating walk, redraw and all, has returned.)
+      if (fresh.size || this._menuStepHeld(gp)) this._ping(pad);
+    } else if (state === ROOM_STATE.RESULTS) this._results(pad, fresh);
     else this._race(pad, gp, fresh, session);
   }
 
-  _join(pad) {
+  _join(pad, gp) {
     // A plain HELLO, exactly as a phone's first frame — the walk claims a seat
     // (lowest free livery, default car, MAX_PLAYERS cap) and names it. A room
     // with no seat left simply doesn't seat us; `has` is the answer.
@@ -292,6 +346,38 @@ export class Gamepads {
     // from there rather than firing a redundant stamp on its next frame.
     pad.seenAt = this._now();
     this.onSeatChange(this.seated);
+    // BIND THE PAD TO THE CARD, at the one moment it is guaranteed to matter:
+    // the buzz is in their hands and the ring is on their seat, at the same
+    // instant. No amount of on-screen text does that job. The roster's
+    // re-render has already run inside the walk above, so the card is there to
+    // be pinged. Rumble is Chrome/Edge only today and degrades to the ring
+    // alone, which is why the ring is not the optional half.
+    this._ping(pad);
+    this._rumble(gp, 260, 0.7);
+  }
+
+  // A short buzz. Absent on Safari (no vibrationActuator) and on pads that
+  // report no actuator, so every failure path is a silent no-op — this confirms
+  // an action the player already took, it never carries information of its own.
+  _rumble(gp, duration, magnitude) {
+    const act = gp && gp.vibrationActuator;
+    if (!act || !act.playEffect) return;
+    try {
+      const r = act.playEffect('dual-rumble', {
+        duration, strongMagnitude: magnitude, weakMagnitude: magnitude
+      });
+      if (r && r.catch) r.catch(() => {});
+    } catch (_) { /* an actuator that refuses its own effect type */ }
+  }
+
+  // Ping this pad's seat card, at most once per animation length: holding a
+  // stick would otherwise re-fire it every frame and the ring would never
+  // finish drawing.
+  _ping(pad) {
+    const now = this._now();
+    if (now - pad.pingAt < PING_MS) return;
+    pad.pingAt = now;
+    this.onPadSignal(pad.ordinal);
   }
 
   // ---- the three contexts ----------------------------------------------------
@@ -374,6 +460,15 @@ export class Gamepads {
   // ---- helpers ---------------------------------------------------------------
 
   _now() { return typeof performance !== 'undefined' ? performance.now() : Date.now(); }
+
+  // Is a stick pushed far enough to be a menu move? Read for the seat ping
+  // alone — a stick carries no press EDGE, so without this a player who only
+  // ever thumbs the car strip would never light their own card.
+  _menuStepHeld(gp) {
+    const ax = gp.axes || [];
+    for (const i of [0, 1, 2, 3]) if (Math.abs(ax[i] || 0) >= STICK_STEP) return true;
+    return false;
+  }
 
   // One discrete menu step along an axis: a d-pad press, or a stick pushed past
   // STICK_STEP (edge-detected against the last direction, so holding it over is

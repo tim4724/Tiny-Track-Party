@@ -636,7 +636,8 @@ const gamepads = _isTestMode ? null : new Gamepads({
   },
   resultsAction: () => ui.resultsAction(net.flow.handle),
   // The lobby's "press a button" hint has done its job once a pad is seated.
-  onSeatChange: (n) => el('tagline').classList.toggle('has-pad', n > 0)
+  onSeatChange: (n) => el('tagline').classList.toggle('has-pad', n > 0),
+  onPadSignal: pingSeat
 });
 
 // The TV tab going away IS the party ending: tear the room down so every phone
@@ -734,9 +735,27 @@ function renderRoster(rosterSize, hostPeerIndex) {
   // A bigger roster means someone joined (renames/car picks keep the count) —
   // greet them with the join plink. Lobby only; mid-race arrivals are reconnects.
   sfx(audioDecide.roster(rosterSize, net.roomState === ROOM_STATE.LOBBY));
-  renderSeats(el('players'), ui.rosterSeatsFromRoom(net.flow.handle, hostPeerIndex));
+  // Which seats are held by a pad ON THIS TV is the one thing the model cannot
+  // answer — the room has no notion of a local seat — so it rides alongside, in
+  // the roster's own order (see renderSeats for why that zip is sound).
+  renderSeats(el('players'), ui.rosterSeatsFromRoom(net.flow.handle, hostPeerIndex),
+    gamepads ? net.flow.list().map((p) => gamepads.ordinalOf(p.peerIndex)) : []);
   renderPick();   // the pre-pick cup slot names the host — track joins/renames
   scheduleLobbyDemo(); // reflect joins/leaves/car-picks in the attract demo (debounced)
+}
+
+// "That card is you" — a one-shot livery ring on the pad's own seat, fired on
+// its join (alongside the pad's buzz) and on anything it presses in the lobby.
+// A phone player is holding the answer to which seat is theirs; a pad player
+// has only the TV, and with two pads down there the names alone don't settle it.
+// The class is removed on animationend so the next press can re-fire it.
+function pingSeat(ordinal) {
+  const seat = el('players').querySelector(`[data-pad="${ordinal}"]`);
+  if (!seat) return; // the dock is mid-redraw, or this pad holds no seat
+  seat.classList.remove('seat--ping');
+  void seat.offsetWidth;               // restart the animation on a re-fire
+  seat.classList.add('seat--ping');
+  seat.addEventListener('animationend', () => seat.classList.remove('seat--ping'), { once: true });
 }
 
 // Lobby right-rail cup slot, driven by the same state as the phones' track-pick
