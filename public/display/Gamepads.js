@@ -35,7 +35,10 @@
 //             B, LB, LT                  brake (analog off a trigger)
 //             A, X, RB, RT               use item
 //             Start                      pause
-//   paused    A, Start                   continue        B, Back   new game
+//   paused    stick / d-pad              move the cursor over the overlay's
+//                                        buttons
+//             A                          take the highlighted one
+//             Start, B, Back             back out (continue)
 //   results   A, Start                   next race / new game
 //                                        B, Back   new game
 
@@ -181,6 +184,13 @@ export class Gamepads {
     // Fired when the seated-pad count changes, so the lobby can drop its
     // "press a button" hint once someone has.
     this.onSeatChange = opts.onSeatChange || (() => {});
+    // The pause overlay as a walkable menu: `items` are the MESSAGES its buttons
+    // send, in the order they sit on screen, and `onFocus(i)` paints the cursor
+    // (-1 clears it). Unconfigured, a pad can still leave the overlay — it just
+    // has nothing to point at.
+    this.pauseMenu = opts.pauseMenu || { items: [], onFocus: () => {} };
+    this.cursor = 0;         // the shared pause-menu cursor (one overlay, one TV)
+    this._menuUp = false;    // is that cursor currently on screen?
 
     this.pads = new Map(); // gamepad index -> Pad
 
@@ -207,6 +217,17 @@ export class Gamepads {
   poll(session) {
     const list = (navigator.getGamepads && navigator.getGamepads()) || [];
     const now = this._now();
+    // BEFORE the pads are stepped, so no press can ever land on a stale cursor.
+    // The highlight exists only while the overlay is up AND a pad is here to
+    // move it — a mouse-only TV must not grow one it cannot use, and the overlay
+    // is raised from the on-screen button as often as from a pad. Every open
+    // starts on the first item, which is the safe one (Continue).
+    const menuUp = this.pads.size > 0 && this.isPaused();
+    if (menuUp !== this._menuUp) {
+      this._menuUp = menuUp;
+      this.cursor = 0;
+      this.pauseMenu.onFocus(menuUp ? 0 : -1);
+    }
     const seen = new Set();
     // The room phase crosses the ABI, so it is read on the first pad rather than
     // on every frame: a party with no pad in it (every party today) pays for the
@@ -293,6 +314,40 @@ export class Gamepads {
     this.net.localMessage(pad.id, { type: MSG.START_GAME });
   }
 
+  // The pause overlay, walked like a menu: a cursor over its buttons, moved on
+  // either axis (a d-pad and a stick both land somewhere sensible for a row),
+  // A to take the highlighted one.
+  //
+  // The cursor is SHARED — one overlay on one TV, so four pads point at the same
+  // thing rather than fighting over four highlights. Its lifetime is poll()'s,
+  // which owns the open/close latch.
+  //
+  // What a button DOES is not decided here: each entry is the message its
+  // on-screen twin sends, so a pad's choice and a click land on the same verdict.
+  _pauseMenu(pad, gp, fresh) {
+    const items = this.pauseMenu.items;
+    if (hasAny(fresh, MENU)) { this.net.localMessage(pad.id, { type: MSG.RESUME_GAME }); return; }
+    // B backs OUT of the menu (it resumes) rather than taking the second item —
+    // "cancel" must never be the destructive one when there is a cursor to make
+    // the destructive choice deliberately.
+    if (hasAny(fresh, CANCEL)) { this.net.localMessage(pad.id, { type: MSG.RESUME_GAME }); return; }
+    // Both axes are read every frame even though only one can win, so a stick
+    // let go of diagonally leaves neither axis remembering a direction it never
+    // reported.
+    const across = this._menuStep(pad, gp, fresh, 'stepX', [0, 2], NUDGE_L, NUDGE_R);
+    const down = this._menuStep(pad, gp, fresh, 'stepY', [1, 3], NUDGE_U, NUDGE_D);
+    if (!items.length) return;
+    const step = across || down;
+    if (step) this._moveCursor(step);
+    if (hasAny(fresh, CONFIRM)) this.net.localMessage(pad.id, { type: items[this.cursor] });
+  }
+
+  _moveCursor(step) {
+    const n = this.pauseMenu.items.length;
+    this.cursor = ((this.cursor + step) % n + n) % n;
+    this.pauseMenu.onFocus(this.cursor);
+  }
+
   // Results board: the same two actions its on-screen button offers.
   _results(pad, fresh) {
     if (hasAny(fresh, CANCEL)) {
@@ -307,11 +362,7 @@ export class Gamepads {
   // Countdown / racing / paused. Driving input is fed straight into the sim; the
   // pause overlay turns the pad back into a menu.
   _race(pad, gp, fresh, session) {
-    if (this.isPaused()) {
-      if (hasAny(fresh, CONFIRM) || hasAny(fresh, MENU)) this.net.localMessage(pad.id, { type: MSG.RESUME_GAME });
-      else if (hasAny(fresh, CANCEL)) this.net.localMessage(pad.id, { type: MSG.RETURN_TO_LOBBY });
-      return;
-    }
+    if (this.isPaused()) { this._pauseMenu(pad, gp, fresh); return; }
     if (hasAny(fresh, MENU)) { this.net.localMessage(pad.id, { type: MSG.PAUSE_GAME }); return; }
     if (hasAny(fresh, ITEM)) pad.useSeq = (pad.useSeq + 1) & 255;
     // The frozen frames (results overlay up, silent auto-pause) still route the

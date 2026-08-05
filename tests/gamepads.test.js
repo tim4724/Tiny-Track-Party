@@ -256,16 +256,91 @@ test('lobby: the two axes keep their own memory — a car step is not a pick ste
   assert.equal(types.filter((t) => t === MSG.SELECT_MODE).length, 1);
 });
 
-test('pause overlay: confirm resumes, cancel quits to the lobby', () => {
+// ---- the pause menu ----------------------------------------------------------
+
+// A paused race with one seated pad, plus a record of where the cursor was drawn.
+function pausedRig() {
   const net = fakeNet(ROOM_STATE.PLAYING);
   net.seats.push({ peerIndex: 'pad-0', carIndex: 0, ready: false });
-  const g = new Gamepads({ net, isPaused: () => true });
-  withPads([pad(0)], () => g.poll(null));
+  const focus = [];
+  const g = new Gamepads({
+    net,
+    isPaused: () => true,
+    pauseMenu: { items: [MSG.RESUME_GAME, MSG.RETURN_TO_LOBBY], onFocus: (i) => focus.push(i) }
+  });
+  withPads([pad(0)], () => g.poll(null));   // seats it
+  withPads([pad(0)], () => g.poll(null));   // ...and the overlay's cursor appears
+  return { net, g, focus };
+}
+
+test('pause menu: the cursor appears on the safe item and confirm takes it', () => {
+  const { net, g, focus } = pausedRig();
+  assert.deepEqual(focus, [0]);
+  assert.equal(g.cursor, 0);
   withPads([pad(0, [BTN.A])], () => g.poll(null));
   assert.deepEqual(net.sent.at(-1), { id: 'pad-0', type: MSG.RESUME_GAME });
-  withPads([pad(0)], () => g.poll(null));
-  withPads([pad(0, [BTN.B])], () => g.poll(null));
+});
+
+test('pause menu: the cursor moves on either axis, and wraps', () => {
+  const { net, g, focus } = pausedRig();
+  withPads([pad(0, [BTN.DR])], () => g.poll(null));     // right
+  assert.equal(g.cursor, 1);
+  withPads([pad(0, [BTN.A])], () => g.poll(null));
   assert.deepEqual(net.sent.at(-1), { id: 'pad-0', type: MSG.RETURN_TO_LOBBY });
+  withPads([pad(0)], () => g.poll(null));
+  withPads([pad(0, [13])], () => g.poll(null));         // d-pad down works too
+  assert.equal(g.cursor, 0);                            // ...wrapping back round
+  assert.deepEqual(focus, [0, 1, 0]);
+});
+
+test('pause menu: a held stick is one move, not a run down the row', () => {
+  const { g } = pausedRig();
+  const held = [pad(0, [], [1, 0])];
+  withPads(held, () => g.poll(null));
+  withPads(held, () => g.poll(null));
+  withPads(held, () => g.poll(null));
+  assert.equal(g.cursor, 1);
+});
+
+test('pause menu: cancel backs OUT, it never takes the destructive item', () => {
+  // B is brake while driving, so it must not double as "quit the race" the
+  // moment the overlay is up — the cursor is how you choose that, deliberately.
+  for (const btn of [BTN.B, BTN.BACK, BTN.START]) {
+    const { net, g } = pausedRig();
+    withPads([pad(0, [btn])], () => g.poll(null));
+    assert.deepEqual(net.sent.at(-1), { id: 'pad-0', type: MSG.RESUME_GAME });
+    assert.equal(g.cursor, 0);
+  }
+});
+
+test('pause menu: the cursor is cleared when the overlay goes away', () => {
+  const net = fakeNet(ROOM_STATE.PLAYING);
+  net.seats.push({ peerIndex: 'pad-0', carIndex: 0, ready: false });
+  const focus = [];
+  let paused = true;
+  const g = new Gamepads({
+    net,
+    isPaused: () => paused,
+    pauseMenu: { items: [MSG.RESUME_GAME, MSG.RETURN_TO_LOBBY], onFocus: (i) => focus.push(i) }
+  });
+  withPads([pad(0)], () => g.poll(null));
+  withPads([pad(0)], () => g.poll(null));
+  paused = false;
+  withPads([pad(0)], () => g.poll({ hasCar: () => false })) ;
+  assert.deepEqual(focus, [0, -1]);
+});
+
+test('pause menu: a TV with no pad on it grows no cursor', () => {
+  const net = fakeNet(ROOM_STATE.PLAYING);
+  const focus = [];
+  const g = new Gamepads({
+    net,
+    isPaused: () => true,
+    pauseMenu: { items: [MSG.RESUME_GAME], onFocus: (i) => focus.push(i) }
+  });
+  withPads([], () => g.poll(null));
+  withPads([], () => g.poll(null));
+  assert.deepEqual(focus, []);
 });
 
 test('results: confirm advances a cup and starts a new game otherwise', () => {

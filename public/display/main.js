@@ -603,6 +603,10 @@ function forfeitCar(peerIndex) {
 net.flow.on('playerleave', ({ peerIndex }) => forfeitCar(peerIndex));
 
 // ---- pads on the TV ----
+// The pause overlay's buttons in the order they sit on screen — the cursor's
+// row. Paired with the message list handed to Gamepads below; the two must stay
+// in the same order, which is why they are written side by side.
+const PAUSE_MENU_IDS = ['pause-continue', 'pause-newgame'];
 // Every gamepad the browser reveals takes a seat of its own, alongside (and
 // competing for the same four seats as) the phones. Polled from the frame loop
 // below — before its pause/frozen guards, because a pad has to be able to lift
@@ -623,6 +627,13 @@ const gamepads = _isTestMode ? null : new Gamepads({
   // The frames a car may not be moved on: the silent auto-pause and the frozen
   // field behind the results glass. The BUTTONS still route on those frames.
   canDrive: () => !autoPaused && !raceEnded,
+  // The pause overlay as a menu a pad walks. `items` are the MESSAGES its two
+  // buttons send, in their on-screen order, so a highlighted choice and a click
+  // land on the same verdict; all this side owns is where the cursor is drawn.
+  pauseMenu: {
+    items: [MSG.RESUME_GAME, MSG.RETURN_TO_LOBBY],
+    onFocus: (i) => PAUSE_MENU_IDS.forEach((id, n) => el(id).classList.toggle('is-cursor', n === i))
+  },
   resultsAction: () => ui.resultsAction(net.flow.handle),
   // The lobby's "press a button" hint has done its job once a pad is seated.
   onSeatChange: (n) => el('tagline').classList.toggle('has-pad', n > 0)

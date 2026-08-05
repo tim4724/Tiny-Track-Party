@@ -39,7 +39,7 @@ const riggedDisplay = async (page) => {
   return openDisplay(page);
 };
 
-const A = 0, START = 9, DPAD_D = 13, DPAD_R = 15;
+const A = 0, B = 1, START = 9, DPAD_D = 13, DPAD_R = 15;
 
 // One button press on one pad. The constants stay on this side, so a case reads
 // as buttons rather than as indices.
@@ -105,13 +105,27 @@ test('a pad-only party joins, picks, starts and drives', async ({ page }) => {
   expect(await steerOf('pad-1')).toBe(0);
   await page.evaluate(() => window.__pads.axis(0, 0, 0));
 
-  // Start pauses, and the same button lifts it — the pad has to be able to
-  // reach the overlay it raised (the poll runs ahead of the frame loop's
-  // frozen guards for exactly this).
+  // Start pauses, and the pad can then walk the overlay — it has to be able to
+  // reach the menu it raised (the poll runs ahead of the frame loop's frozen
+  // guards for exactly this). The cursor opens on Continue.
   await tap(page, 0, START);
   await expect(page.locator('#pause-overlay')).toBeVisible();
-  await tap(page, 0, A);
+  await expect(page.locator('#pause-continue')).toHaveClass(/is-cursor/);
+  await tap(page, 0, DPAD_R);
+  await expect(page.locator('#pause-newgame')).toHaveClass(/is-cursor/);
+  await expect(page.locator('#pause-continue')).not.toHaveClass(/is-cursor/);
+  // Back out rather than taking the highlighted (destructive) item, and the
+  // cursor goes with the overlay.
+  await tap(page, 0, B);
   await expect(page.locator('#pause-overlay')).toBeHidden();
+  await expect(page.locator('#pause-newgame')).not.toHaveClass(/is-cursor/);
+
+  // ...and the highlighted item is what a confirm actually takes: pause again,
+  // walk to "New game", press A, land back in the lobby.
+  await tap(page, 0, START);
+  await tap(page, 0, DPAD_R);
+  await tap(page, 0, A);
+  await page.waitForFunction(() => window.__net.roomState === 'lobby', null, { timeout: 10000 });
 });
 
 test('a pad and a phone share the same four seats', async ({ page, browser }) => {

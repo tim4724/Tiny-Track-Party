@@ -69,10 +69,18 @@ seats are string-keyed so they cannot collide with a relay peer index, and
 A pad only exists once its first button is pressed — every engine hides an
 untouched one — so the lobby has to advertise it rather than react to it.
 
-The map itself is in that file's header. The one part that is not pure device
-policy is the PICK LIST a host pad cycles: the room's pick gates the start and
-is otherwise phone-only UI, so without it a pads-only party has no way out of
-the lobby. `main.js` composes it from the same chooser the phones read.
+The map itself is in that file's header. Two parts of it are not pure device
+policy, and both exist because a pad-only party would otherwise be stuck: the
+PICK LIST a host pad cycles (the room's pick gates the start and is otherwise
+phone-only UI), and the PAUSE MENU's cursor. `main.js` composes both — the pick
+list off the same chooser the phones read, the menu as the overlay's buttons in
+screen order — and each menu entry is the MESSAGE its button sends, so a
+highlighted choice and a click reach the same verdict.
+
+The cursor itself is the pad's, not the model's: it is the display-side echo of
+the local picker state a phone keeps while it sends only the result. It is drawn
+(`.btn.is-cursor`) only while a pad is connected, so a mouse-only TV never grows
+a highlight it cannot move.
 
 ## Boot and the back stack
 
