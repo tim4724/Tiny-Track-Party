@@ -25,6 +25,10 @@ import { setBackdrop3D, crossfadeBackdrop } from './backdrop.js';
 // fullscreen toggle, the copy toast. Importing this module installs them.
 import { revealRaceChrome, holdRaceChrome, enterFullscreen, showToast, copyText } from './chrome.js';
 import { dismissDeviceChoice, startWhenDeviceChosen } from './deviceChoice.js';
+// Pads plugged into the TV, seated as ordinary players. A CONTROLLER, like the
+// phone page — it maps buttons and decides nothing: its presses go through the
+// same peer-message walk a phone's do, its steering through the bots' seam.
+import { Gamepads } from './Gamepads.js';
 // The UI MODEL is C++ too (ttp_ui.h over libttp-runtime/ttp/ui_model.cc). Every
 // screen decision below — which seats, which race card, which rows, whether the
 // field may freeze — is ITS answer; this file renders and decides nothing.
@@ -404,6 +408,10 @@ let raceEnded = false;      // race over → freeze the scene behind the (transl
 let debugSolo = null;       // DEBUG ?solo=1 keyboard player (null in normal play); see DebugSolo.js
 
 scene.onFrame = (dt) => {
+  // FIRST, ahead of every guard below: a pad that paused the race has to be able
+  // to unpause it, and a pad joins from the lobby where there is no session at
+  // all. Driving input is gated inside (canDrive), not here.
+  if (gamepads) gamepads.poll(session);
   if (!session) { lobbyDemo.step(dt); return; } // no race → run the lobby attract demo
   if (paused || autoPaused || raceEnded) return; // frozen: cars hold their last pose
   // During countdown the session exists but isn't racing yet: we still draw
@@ -593,6 +601,32 @@ function forfeitCar(peerIndex) {
   perform(flow.forfeitCar(session ? session.h : 0, peerIndex).effects);
 }
 net.flow.on('playerleave', ({ peerIndex }) => forfeitCar(peerIndex));
+
+// ---- pads on the TV ----
+// Every gamepad the browser reveals takes a seat of its own, alongside (and
+// competing for the same four seats as) the phones. Polled from the frame loop
+// below — before its pause/frozen guards, because a pad has to be able to lift
+// the pause it raised. Gallery/test surfaces drive fake screens and get none.
+const gamepads = _isTestMode ? null : new Gamepads({
+  net,
+  // What a pad host cycles through with up/down. The phone's picker offers these
+  // same top-level choices (a cup, a random run, the World Tour) off the same
+  // catalogue; its exact-track tiles live one level down inside an open cup and
+  // stay a phone affordance. Without SOME pick a pads-only party could never
+  // start — the start gate reads the room's pick, and nothing else here can set it.
+  picks: [
+    ...ui.catalogue().cups.map((c) => ({ mode: 'cup', cupId: c.id })),
+    { mode: 'random', randomRaces: window.RANDOM_RACES.DEFAULT },
+    { mode: 'tour' }
+  ],
+  isPaused: () => paused,
+  // The frames a car may not be moved on: the silent auto-pause and the frozen
+  // field behind the results glass. The BUTTONS still route on those frames.
+  canDrive: () => !autoPaused && !raceEnded,
+  resultsAction: () => ui.resultsAction(net.flow.handle),
+  // The lobby's "press a button" hint has done its job once a pad is seated.
+  onSeatChange: (n) => el('tagline').classList.toggle('has-pad', n > 0)
+});
 
 // The TV tab going away IS the party ending: tear the room down so every phone
 // bails to its "Race over" screen at once (their sockets close 4001) and stale

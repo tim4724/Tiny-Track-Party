@@ -112,8 +112,14 @@
       </button>
       <!-- Scan hint — hangs just under the ticket for the whole lobby
            (joining stays possible until the race starts). -->
+      <!-- The pad line is the ONLY hint a gamepad player ever gets, and it has
+           to be up before they touch anything: browsers hide a connected pad
+           from the page until its first button press, so there is nothing to
+           react to. It drops out once a pad is seated (main.js toggles
+           .has-pad). -->
       <div class="tagline" id="tagline">
         <div class="tagline__main">Scan the code with your phone!</div>
+        <div class="tagline__pad">Got a controller? Press any button to join.</div>
       </div>
     </div>
 

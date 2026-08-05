@@ -222,6 +222,14 @@ html, body {
   font-family: var(--font-display); font-weight: 600;
   font-size: clamp(16px, 1.7vw, 25px); line-height: 1.1;
 }
+/* Second line of the same sticker: the pad invitation. Quieter than the scan
+   hint (that one is the main way in) and gone once a pad has taken a seat. */
+.tagline__pad {
+  margin-top: 0.35em;
+  font-weight: 600; color: var(--ink-2);
+  font-size: clamp(12px, 1.15vw, 17px); line-height: 1.15;
+}
+.tagline.has-pad .tagline__pad { display: none; }
 
 /* Seat dock (bottom-centre) — the joined headline over a horizontal row of
    sticker seat chips. Room is capped at 4 players, so the dock never wraps. */

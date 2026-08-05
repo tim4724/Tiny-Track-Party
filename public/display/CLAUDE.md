@@ -56,6 +56,24 @@ or `flow.seriesState` when it needs one. Walks go through `flow.runWalk`,
 which keeps NativeRoomFlow's provider-sync and event-drain discipline around a
 mutation the class's own methods didn't make.
 
+## Pads on the TV
+
+`Gamepads.js` is a CONTROLLER, not a game layer — the display-side twin of
+`public/controller/`, and the same exemption applies: a button map is device
+policy and belongs beside the device. It seats each pad the browser reveals and
+then goes through the phone's own seams, `net.localMessage` (the identical
+peer-message walk, so every gate stays C++'s) and `session.processInput`. Local
+seats are string-keyed so they cannot collide with a relay peer index, and
+`DisplayNet.sendTo` drops the per-seat sends that would be addressed to nobody.
+
+A pad only exists once its first button is pressed — every engine hides an
+untouched one — so the lobby has to advertise it rather than react to it.
+
+The map itself is in that file's header. The one part that is not pure device
+policy is the PICK LIST a host pad cycles: the room's pick gates the start and
+is otherwise phone-only UI, so without it a pads-only party has no way out of
+the lobby. `main.js` composes it from the same chooser the phones read.
+
 ## Boot and the back stack
 
 Boot lands on the welcome board with the room warming eagerly behind it; NEW GAME

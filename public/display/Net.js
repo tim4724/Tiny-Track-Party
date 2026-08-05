@@ -542,8 +542,26 @@ export class DisplayNet extends GameNet {
     this.party.close();
   }
 
+  // A message from a LOCAL controller — a gamepad plugged into the TV
+  // (Gamepads.js) — routed through the SAME walk a relayed one takes, so every
+  // seat, ready, car-pick and start gate stays where it is decided (C++) rather
+  // than being re-derived for a second kind of controller. The only difference
+  // is that nothing came off a socket: the id is a local one (a string, so it
+  // can never collide with a relay peer index) and sendTo below drops the
+  // per-seat sends that would otherwise be addressed to nobody.
+  localMessage(peerIndex, data) { this._onMessage(peerIndex, data); }
+
+  // Proof of life for a local seat. Same walk the fastlane's input path stamps
+  // with: it keeps a pad that is sitting still off the liveness sweep, and lifts
+  // its own seat back to connected if the pad returns before the grace expires.
+  noteSeen(peerIndex) { this._seen(peerIndex); }
+
   broadcast(data) { if (this.party) this.party.broadcast(data); }
-  sendTo(id, data) { if (this.party) this.party.sendTo(id, data); }
+  // The relay addresses NUMERIC peer slots, so a per-seat send to a local seat
+  // (a gamepad's 'pad-N') would be addressed to nobody. Those seats need none of
+  // it either: the ITEM light and the reconnect card are phone chrome, and a pad
+  // player reads the TV.
+  sendTo(id, data) { if (this.party && typeof id === 'number') this.party.sendTo(id, data); }
   // Room state is owned by RoomFlow — read it straight through so the display
   // never keeps a second copy that can drift out of sync with the machine.
   get roomState() { return this.flow.state; }
