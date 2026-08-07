@@ -12,17 +12,17 @@
 namespace ttp {
 
 // ---- module constants (Game.js) ---------------------------------------------
-static const double ACCEL = 7.0;
-static const double VMAX = 9.0;
-static const double BRAKE_DECEL = 4.5;
-static const double TURN_RATE = 0.90;
+static const double ACCEL = 9.0;
+static const double VMAX = 11.6;
+static const double BRAKE_DECEL = 5.8;
+static const double TURN_RATE = 1.16;
 static const double STEER_EXPO = 1.25;
 static const double MAX_HEADING = 1.25;
 static const double WALL_SPEED_FRAC = 0.28;
 static const double WALL_DECEL = 20.0;
 static const double WALL_RASH_T = 0.5;
 static const double LAT_MARGIN = 0.3;
-static const double STEER_SCRUB = 0.28;
+static const double STEER_SCRUB = 0.35;
 static const double COLLIDE_SHRINK = 0.9;
 static const double RESTITUTION = 0.12;
 static const double KNOCK_DAMP = 6.0;
@@ -41,7 +41,7 @@ static const double BOOST_ITEM_MUL = 1.5;
 static const double BOOST_ITEM_DUR_MIN = 1.6;
 static const double BOOST_ITEM_DUR_MAX = 3.0;
 static const double ITEM_USE_READY = 0.9;
-static const double BOOST_ACCEL = 22.0;
+static const double BOOST_ACCEL = 28.5;
 static const double BOOST_FADE = 0.5;
 static const double PAD_RADIUS = 0.65;
 static const double BOX_RADIUS = 0.45;
@@ -55,11 +55,11 @@ static const double ROCKET_HIT = 0.6;
 static const double ROCKET_TARGET_MIN = 0.5;
 static const double ROCKET_LIFE = 10.0;
 static const double ROCKET_MIN_LIFE = 0.4;
-static const double ROCKET_CRUISE = 22.0;
+static const double ROCKET_CRUISE = 28.5;
 static const double ROCKET_IMPACT = 1.2;
 static const double ROCKET_APPROACH_K = 1.8;
-static const double ROCKET_ACCEL = 18.0;
-static const double ROCKET_DECEL = 16.0;
+static const double ROCKET_ACCEL = 23.0;
+static const double ROCKET_DECEL = 20.5;
 static const double ROCKET_WHIFF_SPEED = ROCKET_CRUISE;
 static const double ROCKET_LAUNCH_AHEAD = 0.7;
 static const double MONSTER_DUR_MIN = 4.0;
