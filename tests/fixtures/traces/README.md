@@ -1,16 +1,33 @@
-# Golden traces — FROZEN cross-implementation evidence
+# Traces — C++-authored regression evidence (parity evidence SPENT)
 
-These are recorded runs of the **retired JS engine** (`public/display/engine/Game.js`,
-deleted when the sim went native — see git history). That is exactly why they are
-valuable and why they must **never be re-recorded from C++**: they are the only
-artifacts that prove the C++ engine reproduces the JS engine bit for bit. A trace
-re-recorded from C++ would only prove C++ matches itself.
+These were recorded runs of the **retired JS engine** (`public/display/engine/Game.js`,
+deleted when the sim went native — see git history), and were the only artifacts
+proving the C++ engine reproduced the JS engine bit for bit.
 
-The replay contract is EXACT float equality (same operation order, same vendored
-math), compared per frame as an FNV-1a of the canonical snapshot plus the event
-list, with periodic full snapshots.
+**That parity evidence is gone, spent deliberately on 2026-08-07.** The pace
+retune (the base constants at the top of `native/libttp-sim/ttp/game.cc`, and
+their two mirrors in `ai_driver.cc`) changed every car's motion, so every replay
+diverged. The JS engine no longer exists to re-record against, so the files were
+RE-EMITTED from C++ instead: each line's own recorded INPUT was fed back through
+the port and the answers rewritten. **The scenarios are unchanged** — the same
+inputs, session ops, dt jitter and schedule ops the JS recorder captured — but the
+answers are now C++'s own.
 
-## Status: ARMED
+What that costs, precisely: these files answer "did the sim change since the
+retune", and **nothing about JS parity**. The sim has no cross-implementation
+oracle left. A future port or refactor has a regression baseline to check itself
+against, not a second implementation. Weigh that before spending the same way twice.
+
+The audio corpus was re-emitted in the same move and for the same reason — its
+scenarios are DRIVEN by replaying these traces (`audio_check` takes a traces dir),
+so it could not survive them. Its own JS oracle was deleted long before, so it too
+is now C++-authored only.
+
+The replay contract is unchanged: EXACT float equality (same operation order, same
+vendored math), compared per frame as an FNV-1a of the canonical snapshot plus the
+event list, with periodic full snapshots.
+
+## Status: ARMED (as regression evidence)
 
 Replayed by `native/build/replay_cli <trace>` — the `replay_*` ctest entries — on
 **linux, macOS, wasm/Node and the tvOS simulator**, because every leg runs the same

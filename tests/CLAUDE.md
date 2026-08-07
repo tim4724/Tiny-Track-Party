@@ -12,9 +12,15 @@ prove C++ matches itself.
 
 **If a replay disagrees, the committed file is right and the port is wrong.**
 
+**Two corpora no longer qualify.** On 2026-08-07 the pace retune moved the sim's
+base constants, every trace replay diverged, and the traces plus the audio corpus
+were re-emitted from C++ as a deliberate, user-authorised override of this rule.
+They are now class 2. The rule stands for everything else, and the traces' README
+records exactly what was spent — read it before spending the same way again.
+
 ## Two classes of fixture, and only one settles parity questions
 
-**Class 1 — JS-recorded** (the golden traces + every `gen-*-corpus` file):
+**Class 1 — JS-recorded** (every `gen-*-corpus` file except audio):
 cross-implementation evidence.
 
 **Class 2 — C++-authored** (the `--record` mode of the sim, sweep and runtime

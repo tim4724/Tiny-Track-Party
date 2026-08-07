@@ -281,14 +281,17 @@ var CAR_STATS = [
   // in proportion to steering input, and a grippy car needs less input for the same bend.
   // The vmax spread is deliberately TIGHT (0.98–1.06): vmax bills on every meter of every
   // lap while turn only bills in corners, so a wide vmax gap (the old 0.97–1.11) made the
-  // fastest car unbeatable everywhere. Sim-tuned (2026-07-17 at base TURN_RATE 0.90,
-  // solo laps × all 20 tracks, both driving styles): disciplined/AI-style cup winners
-  // rotate (Bolt beach, Dash snow, Carve backyard+canyon+playroom, thin stable margins);
-  // flat-out/casual style leaves Bolt a ~0.3–0.6s identity edge except backyard (Dash),
-  // paid for by heavy washouts (curb-capped) and the lightest mass (loses every shove).
-  // Flat-out washout risk is the felt ladder: Bolt worst, then Rumble, then Dash
-  // occasionally; Carve never curbs. Re-price the spread whenever the engine's base
-  // TURN_RATE or STEER_SCRUB moves — they set how much of a lap the turn stat bills.
+  // fastest car unbeatable everywhere. The spread itself is sim-tuned from 2026-07-17
+  // and has NOT been re-priced since; the engine's base moved under it on 2026-08-07
+  // (the pace retune — see the constants in native/libttp-sim/ttp/game.cc) and these
+  // four rows were carried across unchanged. It is serviceable but no longer tuned to
+  // the engine it runs on. Rotation improved against the old base (probe:cars matrix —
+  // Carve 1→4 wins, Dash 12→6; packed races Dash 38→30 of 80). Read BOTH probes before
+  // judging a spread: the two disagree, and they disagreed hardest at a nearby pace
+  // that looked healthy solo and handed Dash 39 of 80 packed. Flat-out washout
+  // risk is the felt ladder: Bolt worst, then Rumble, then Dash occasionally; Carve
+  // never curbs. Re-price whenever base TURN_RATE or STEER_SCRUB moves — they set how
+  // much of a lap turn bills.
   { accel: 1.04, vmax: 1.02, turn: 1.10, mass: 1.00, halfLen: 0.44, halfWid: 0.26 }, // Dash (Low Racer) — balanced all-rounder with the best launch; occasionally washes out flat-out (learn to brake), owns snow (and backyard when driven flat-out)
   { accel: 1.05, vmax: 1.06, turn: 0.95, mass: 0.78, halfLen: 0.44, halfWid: 0.28 }, // Bolt (Speedster) — the rocket: FASTEST top speed, lightest (shoved easily), weakest handling. Owns flowing tracks; washes out flat-out in tight corners — brake or eat curb
   { accel: 1.02, vmax: 0.98, turn: 1.27, mass: 0.86, halfLen: 0.44, halfWid: 0.26 }, // Carve (Racer) — corner king: rails the tightest bend, scrubs the least speed steering, NEVER washes out; pays with the lowest top end. Owns the technical cups when driven well

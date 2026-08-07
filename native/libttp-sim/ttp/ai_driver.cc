@@ -43,12 +43,12 @@ static const double RL_CORNER_K = 0.02;
 static const double RL_PAYOFF = 0.95;
 static const double FAN_MIN_ROOM = 0.7;
 
-static const double TURN_RATE_FALLBACK = 0.90;
+static const double TURN_RATE_FALLBACK = 1.16;
 static const double BRAKE_LOOK_NEAR = 1.5;
 static const double BRAKE_LOOK_FAR = 22.0;
 static const double BRAKE_LOOK_STEP = 1.0;
 static const double CORNER_MARGIN = 1.25;
-static const double BRAKE_DECEL_REF = 4.5;
+static const double BRAKE_DECEL_REF = 5.8;
 
 const Persona AI_PERSONALITIES[4] = {
     {"Bolt", 1.05, -0.6}, {"Pixel", 1.00, 0.6}, {"Rusty", 0.97, -0.25}, {"Zippy", 0.94, 0.25}};
