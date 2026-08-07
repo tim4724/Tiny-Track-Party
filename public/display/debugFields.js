@@ -33,10 +33,14 @@ export function displayDebugFields({ maxPlayers, carNames, trackList, biomeNames
       min: 0.6, max: 3, step: 0.05, value: steerDefault,
       live: (x) => sim.setNativeSteerExpo(x),
       format: (n) => n.toFixed(2) + (Math.abs(n - 1) < 1e-9 ? ' · linear' : Math.abs(n - steerDefault) < 1e-9 ? ' · default' : '') },
-    // Live: scales the whole scene's per-frame dt (sim, props, FX, camera) for slow-mo inspection — no
-    // reload. 1 = normal; drag down to watch fast action (e.g. a rocket strike) play out frame by frame.
-    { key: 'timescale', label: 'Time scale', hint: 'slow-mo · live', type: 'range',
-      min: 0.1, max: 1, step: 0.05, value: 1, live: (n) => scene.setTimeScale(n),
+    // Live: scales the whole scene's per-frame dt (sim, props, FX, camera) — no reload. Drag DOWN to
+    // watch fast action (a rocket strike) play out frame by frame; drag UP to sit through a race at
+    // speed while testing pacing. The top stops at 2 because BOTH the frame loop and Game::update clamp
+    // a step to 50 ms: at 60 Hz, 3× already lands exactly on that clamp, so a slider that went higher
+    // would keep moving while the race stopped getting any faster. Above 1 the sim takes bigger
+    // integration steps, so it is a pacing tool, not a handling one.
+    { key: 'timescale', label: 'Time scale', hint: 'slow-mo ⇄ fast-forward · live', type: 'range',
+      min: 0.1, max: 2, step: 0.05, value: 1, live: (n) => scene.setTimeScale(n),
       format: (n) => n.toFixed(2) + '×' + (Math.abs(n - 1) < 1e-9 ? ' · normal' : '') },
     { section: 'Track' },
     { key: 'track', label: 'Preselect', type: 'select',
