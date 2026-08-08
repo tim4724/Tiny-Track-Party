@@ -105,7 +105,7 @@ Theme grassTheme() {
   t.hills = { 0x8cc578, 0x7cb86a, 0x9bce86 };
   // The Backyard is a PLACE, not the default: garden clutter trackside, drifting
   // pollen in the sun, and a hot-air balloon over the meadow.
-  ambientKind(t.ambient, AMB_POLLEN); t.ambient.count = 140; t.ambient.tint = 0xfff2c4;
+  ambientKind(t.ambient, AMB_POLLEN); t.ambient.count = 7; t.ambient.tint = 0xfff2c4;
   t.balloon = { { 0xd94f3d, 0xf5f0e2 }, 44, 6 };
   t.landmarks = { LM_GNOME, LM_DOGHOUSE, LM_PICNIC };
   t.scenery = grassScenery();
@@ -126,7 +126,7 @@ Theme sunsetTheme() {
   t.key = { 0xffa850, 1.55f };
   t.groundKind = GROUND_LAWN;
   t.hills = { 0xc69a86, 0xb98a72, 0xd0a890 };
-  ambientKind(t.ambient, AMB_POLLEN); t.ambient.count = 160; t.ambient.tint = 0xffd9a0;
+  ambientKind(t.ambient, AMB_POLLEN); t.ambient.count = 8; t.ambient.tint = 0xffd9a0;
   t.balloon = { { 0xf2c14e, 0x8a76d8 }, 46, 6 };
   t.landmarks = { LM_GNOME, LM_DOGHOUSE, LM_PICNIC };  // the same backyard, later in the day
   t.scenery = grassScenery();
@@ -217,7 +217,7 @@ Theme canyonTheme() {
   t.road.kerbA = 0xc06a42; t.road.kerbB = 0xe3cfa4;  // rust / sand
   deriveRoad(t.road, /*dashSet=*/true, false, /*shoulderSet=*/true);
   // Grit on the wind: fast low sand streaks under the drifting dust banks.
-  ambientKind(t.ambient, AMB_SAND); t.ambient.count = 700; t.ambient.tint = 0xe9c9a0;
+  ambientKind(t.ambient, AMB_SAND); t.ambient.count = 240; t.ambient.tint = 0xe9c9a0;
   t.structure = 0xb4714d;  // supports read as red-rock columns, not city concrete
   t.landmarks = { LM_HOODOO, LM_WINDMILL };
   // Vultures riding a thermal — soaring, barely a wing-beat.
@@ -267,7 +267,7 @@ Theme snowTheme() {
   t.road.kerbW = 0.55f; t.road.kerbH = 0.3f;         // squat ploughed bank, not a kerb
   deriveRoad(t.road, false, false, false);
   ambientKind(t.ambient, AMB_FLAKE);
-  t.ambient.count = 1200; t.ambient.size = 0.3f; t.ambient.tint = 0xffffff;
+  t.ambient.count = 3200; t.ambient.size = 0.3f; t.ambient.tint = 0xffffff;
   // A pair of geese crossing high.
   t.birds.count = 2; t.birds.tint = 0x555b66; t.birds.size = 3.4f; t.birds.y = 32;
   t.birds.rc = 140; t.birds.rb = 24; t.birds.speed = 0.12f; t.birds.flap = 0.7f; t.birds.flapHz = 1.3f;
@@ -328,7 +328,7 @@ Theme playroomTheme() {
   deriveRoad(t.road, /*dashSet=*/true, /*skirtSet=*/true, false);
   // Dust motes hanging in the window sunbeams, and a paper airplane on a long
   // lazy glide around the room (REAL 3D — a folded dart that banks into turns).
-  ambientKind(t.ambient, AMB_MOTE); t.ambient.count = 240; t.ambient.tint = 0xffdf9e;
+  ambientKind(t.ambient, AMB_MOTE); t.ambient.count = 11; t.ambient.tint = 0xffdf9e;
   t.hasPlane = true;
   t.plane.tint = 0xfaf7ec; t.plane.size = 3.2f; t.plane.y = 22;
   t.plane.rc = 95; t.plane.rb = 32; t.plane.speed = 0.3f; t.plane.bank = 0.4f;
@@ -475,12 +475,17 @@ Theme resolve_theme(const char* biomeName, const char* trackId) {
 
   // Weather varies ACROSS the snow cup: each track patches the flake cloud, so
   // the four races read as four different winter days rather than one repeated
-  // snow globe. (themes.js ambientByTrack, merged over `ambient`.)
+  // snow globe. A count is "particles in the camera box" (the renderer's
+  // vpoint cloud wraps them around each view's camera), NOT over the map.
+  // Glacier carries the highest count because its flakes are the cup's finest
+  // — by count x size^2 it still lays less ink than flurry, an ice dust
+  // rather than a heavy fall (powder is the lightest day of the four). The
+  // renderer clamps at 9600.
   if (b && std::strcmp(b->name, "snow") == 0) {
-    if (track == "powder") { t.ambient.count = 1000; t.ambient.size = 0.28f; }
-    else if (track == "flurry") { t.ambient.count = 2000; }
-    else if (track == "glacier") { t.ambient.count = 550; t.ambient.size = 0.22f; }
-    else if (track == "avalanche") { t.ambient.count = 1800; t.ambient.size = 0.36f; t.ambient.wind = 1.6f; }
+    if (track == "powder") { t.ambient.count = 2800; t.ambient.size = 0.28f; }
+    else if (track == "flurry") { t.ambient.count = 4500; }
+    else if (track == "glacier") { t.ambient.count = 6000; t.ambient.size = 0.22f; }
+    else if (track == "avalanche") { t.ambient.count = 3600; t.ambient.size = 0.36f; t.ambient.wind = 1.6f; }
   }
 
   // shorelineFn's per-track seed, so the island's lobes/crinkle/swash come out

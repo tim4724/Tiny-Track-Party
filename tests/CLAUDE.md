@@ -6,22 +6,28 @@ tvOS-sim), because each leg just runs `ctest`.
 
 ## The rule that outranks everything here
 
-The corpora are **permanent cross-implementation evidence**, recorded against the
-JS engine while it existed. **Never re-record them from C++** — that would only
-prove C++ matches itself.
+The corpora exist so an entire module can be rewritten and still prove it does
+what it did — regression evidence, not a freeze on the game's behaviour. (Rule
+lowered 2026-08-08; before that they were permanent JS-recorded parity
+evidence, never re-recordable, and the 2026-08-07 pace retune that first spent
+that evidence is documented in the traces' README.)
 
-**If a replay disagrees, the committed file is right and the port is wrong.**
+**An unexplained replay failure is a defect in the change, never in the
+fixture.** Fix the code; never touch a corpus to make a broken change pass.
 
-**Two corpora no longer qualify.** On 2026-08-07 the pace retune moved the sim's
-base constants, every trace replay diverged, and the traces plus the audio corpus
-were re-emitted from C++ as a deliberate, user-authorised override of this rule.
-They are now class 2. The rule stands for everything else, and the traces' README
-records exactly what was spent — read it before spending the same way again.
+**A deliberate behaviour change re-records, from green.** Prove the suite green
+on the old recording FIRST, make the change, re-emit through the check's
+`--record` mode (`npm run test:native -- -R "^record_"` names them), and read
+the fixture diff — it must contain the intended change and nothing else. A
+corpus whose check has no record mode (raceflow) is edited by hand under the
+same green-first, read-the-diff rule.
 
-## Two classes of fixture, and only one settles parity questions
+## Two classes of fixture
 
-**Class 1 — JS-recorded** (every `gen-*-corpus` file except audio):
-cross-implementation evidence.
+**Class 1 — JS-recorded**: cross-implementation evidence from the port era. A
+deliberate re-record demotes the fixture to class 2 from that commit on; the
+JS-parity claim stays with the old bytes in git history. The traces, audio and
+theme corpora have been demoted this way.
 
 **Class 2 — C++-authored** (the `--record` mode of the sim, sweep and runtime
 checks): regression evidence only. It proves the sim and cameras still do what
@@ -47,10 +53,11 @@ See `tests/fixtures/traces/README.md`.
 Some `scripts/gen-*-corpus.mjs` are **frozen** — their JS twin is retired, so they
 can no longer run against a live implementation. Frozen headers name the `git show`
 that restores a twin, and `npm run revive:js-oracle` does the set. The audio, ui,
-session, schematic and raceflow oracles were **deleted outright** with their twins;
-those corpora can never be re-derived at all. The `record_*` roundtrip replaced the
-first four's freshness obligation; the raceflow check replays structurally and
-deliberately has no record mode, so its obligation simply ended with the oracle.
+session, schematic, theme and raceflow oracles were **deleted outright** with their
+twins; those corpora can never be re-derived from JS at all. The `record_*`
+roundtrip carries the freshness obligation for all of those except raceflow, whose
+check replays structurally and deliberately has no record mode, so its obligation
+simply ended with the oracle.
 
 `tests/codegen-freshness.test.js` is the only thing in the tree that runs any
 generator, so **an entry missing from it is not a weaker gate, it is no gate** —
@@ -59,15 +66,15 @@ that **re-derives a committed artifact from an input that can move**, whether th
 input is JS or an ABI; a generator can rot without its own source changing.
 
 **A frozen generator must stay OUT**, even though its source is still sitting
-there. Running one would re-derive a frozen corpus, which is root rule 4 exactly.
-The list is the authority — read it rather than inferring membership.
+there. Running one would rewrite a corpus outside the deliberate green-first
+re-record path. The list is the authority — read it rather than inferring
+membership.
 
-What a frozen corpus costs is that it can never GROW: a new scenario can only be
-authored from C++, which proves nothing about the JS it replaced. Before judging
-one redundant, check what else covers its ground — the session corpus, for
-instance, is the only thing exercising the SET_CAR/SET_READY **rejection** paths,
-the claim URL, the rejoin-token normalizer and the cross-device seat claim, since
-wire-compat drives the accepted paths only.
+A corpus can still be judged redundant, but check what else covers its ground
+first — the session corpus, for instance, is the only thing exercising the
+SET_CAR/SET_READY **rejection** paths, the claim URL, the rejoin-token
+normalizer and the cross-device seat claim, since wire-compat drives the
+accepted paths only.
 
 ## A synthetic world rides in the corpus, never in the C++
 

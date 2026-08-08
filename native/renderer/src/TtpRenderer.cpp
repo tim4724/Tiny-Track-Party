@@ -814,8 +814,7 @@ void TtpRenderer::releaseScene() {
     mShadowSpots.clear();
     mPollenMat = nullptr; // a scene-scope instance — sceneInstance() destroyed it
     if (mGroundTex) { mEngine->destroy(mGroundTex); mGroundTex = nullptr; }
-    mAmbBase.clear();
-    mAmbSpeed.clear();
+    if (mAmbFloorTex) { mEngine->destroy(mAmbFloorTex); mAmbFloorTex = nullptr; }
     mWheelTrails.clear();
     mGroundBands.clear();
     mHillAnchors.clear();

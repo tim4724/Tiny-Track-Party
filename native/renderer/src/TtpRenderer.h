@@ -890,14 +890,22 @@ private:
     // is anchored in the world or depth-tested (the rear name plates, the boost
     // aura, the skids, the gantry).
 
-    // Ambient particles (theme.ambient): base positions from the 74747 stream,
-    // drifted per frame (fall/wind/bob) with a whole-VB re-upload.
+    // Ambient particles (theme.ambient): immutable SEEDS in a kAmbBox-wide
+    // column; vpoint.mat evaluates the motion and wraps x/z around each view's
+    // camera per frame, so after the build the CPU never touches this mesh —
+    // the only per-frame work is the `time` uniform (renderAmbient).
     Mesh mPollen;
-    std::vector<filament::math::float3> mAmbBase;
-    std::vector<float> mAmbSpeed;
-    // The kind's motion preset (AMB_KINDS, resolved into track.bin).
-    float mAmbSize = 0.15f, mAmbFall = 0.1f, mAmbWind = 1.2f;
-    float mAmbBob = 0.6f, mAmbBandH = 34.0f * 0.35f;
+    float mAmbSize = 0.15f; // half the authored sprite size; re-fitted per frame
+    // Flake floor (FLAKE kind only): a coarse max-height grid of terrain + road
+    // ribbon over the whole track, uploaded as an R16F texture the vertex
+    // shader taps so a falling flake fades out ONTO the surface instead of
+    // depth-slicing through an elevated deck. The other kinds bind a 1x1
+    // "-1000" texel — canyon sand BLOWS across the deck at ground height, and
+    // flooring it would dim the streaks over the road.
+    filament::Texture* mAmbFloorTex = nullptr;
+    static constexpr float kAmbR = 170.0f;  // the flake-floor grid's half-span
+    static constexpr int kAmbFloorN = 86;   // ~4u cells across it
+    static constexpr float kAmbBox = 60.0f; // the camera box's x/z extent
     std::vector<filament::math::float3> mPrevRockets;
     uint32_t mPrevRocketCount = 0;
     filament::math::float3 mLastCar0{}; // reset/teleport detector

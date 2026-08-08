@@ -1317,48 +1317,109 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     }
 
     // Ambient particles (theme.ambient): the first `count` of buildAmbient's
-    // 74747 stream as tiny tinted sprites, drifted per frame by the kind's
-    // motion preset (flake / mote / sand / pollen — all resolved into the
-    // theme, ttp::rt::ambientKind).
+    // 74747 stream as tiny tinted sprites. The mesh is SEEDS ONLY — vpoint.mat
+    // applies the kind's motion preset (flake / mote / sand / pollen) and wraps
+    // x/z around each view's camera, so the count is "particles in the air
+    // around a camera", not over the map, and nothing here is touched again
+    // after this build (see the material's header).
     if (mPointMaterial && tb.ambKind != 0 && tb.ambCount > 0) {
-        const int AMB_COUNT = (int) std::min(tb.ambCount, 2400u);
-        constexpr float AMB_R = 170.0f, AMB_H = 34.0f;
+        const int AMB_COUNT = (int) std::min(tb.ambCount, 9600u);
+        constexpr float AMB_H = 34.0f;
         // Half the JS Points sprite size — the material pushes each corner out
         // by this along the camera axes, so the quad spans the full `size`.
         mAmbSize = tb.ambSize * 0.5f;
-        mAmbFall = tb.ambFall;
-        mAmbWind = tb.ambWind;
-        mAmbBob = tb.ambBob;
-        mAmbBandH = std::max(2.0f, AMB_H * tb.ambBand);
+        const float bandH = std::max(2.0f, AMB_H * tb.ambBand);
         uint32_t s74 = 74747;
         const auto arnd = [&]() {
             s74 = s74 * 1664525u + 1013904223u;
             return (double) s74 / 4294967296.0;
         };
-        mAmbBase.resize(AMB_COUNT);
-        mAmbSpeed.resize(AMB_COUNT);
-        for (int i = 0; i < AMB_COUNT; i++) {
-            const float a = (float) arnd() * 2.0f * (float) M_PI;
-            const float r = std::sqrt((float) arnd()) * AMB_R;
-            mAmbBase[i] = { std::cos(a) * r, (float) arnd() * AMB_H, std::sin(a) * r };
-            mAmbSpeed[i] = 1.1f + (float) arnd() * 1.4f;
+        // Flake floor: terrain sampled at the grid corners, then the road
+        // ribbon's own CPU verts rasterized in as a cell max — each vert bumps
+        // its four surrounding corners, so the bilinear tap never
+        // underestimates under the deck. Uploaded as an R16F texture for the
+        // shader's fade; the other kinds get a floor far below everything.
+        int floorN = 1;
+        std::vector<math::half> floorTexels{ math::half(-1000.0f) };
+        if (tb.ambKind == ttp::rt::AMB_FLAKE) {
+            constexpr int N = kAmbFloorN;
+            const float cell = 2 * kAmbR / (N - 1);
+            std::vector<float> floorY((size_t) N * N);
+            for (int gz = 0; gz < N; gz++) {
+                for (int gx = 0; gx < N; gx++) {
+                    floorY[(size_t) gz * N + gx] =
+                            groundSurfaceY(tb, -kAmbR + gx * cell, -kAmbR + gz * cell);
+                }
+            }
+            for (const Vertex& rv : mRoad.verts) {
+                const int gx = (int) std::floor((rv.px + kAmbR) / cell);
+                const int gz = (int) std::floor((rv.pz + kAmbR) / cell);
+                for (int dz = 0; dz <= 1; dz++) {
+                    for (int dx = 0; dx <= 1; dx++) {
+                        const int cx = gx + dx, cz = gz + dz;
+                        if (cx < 0 || cx >= N || cz < 0 || cz >= N) continue;
+                        float& h = floorY[(size_t) cz * N + cx];
+                        h = std::max(h, rv.py);
+                    }
+                }
+            }
+            floorN = N;
+            floorTexels.assign(floorY.begin(), floorY.end());
+        }
+        mAmbFloorTex = Texture::Builder()
+                .width((uint32_t) floorN).height((uint32_t) floorN).levels(1)
+                .sampler(Texture::Sampler::SAMPLER_2D)
+                .format(Texture::InternalFormat::R16F)
+                .build(*mEngine);
+        {
+            // The upload is asynchronous — heap-owned pixels with a release
+            // callback, the same rule as the ground tile above.
+            auto* px = new std::vector<math::half>(std::move(floorTexels));
+            mAmbFloorTex->setImage(*mEngine, 0, Texture::PixelBufferDescriptor(
+                    px->data(), px->size() * sizeof(math::half),
+                    Texture::Format::R, Texture::Type::HALF,
+                    [](void*, size_t, void* user) {
+                        delete (std::vector<math::half>*) user;
+                    }, px));
         }
         const uint32_t tint = packLinear(srgbToLinear(tb.ambTint), 1.0f, tb.ambOpacity);
-        // Four vertices per particle, all carrying the SAME world centre: the
-        // corner in uv0 is what vpoint.mat spreads along the camera's right/up,
-        // so the sprite faces every cell's camera and comes out round.
-        mPollen.verts.resize(AMB_COUNT * 4, { 0, -1000, 0, tint });
+        // Four vertices per particle, all carrying the SAME seed: the corner in
+        // uv0 is what vpoint.mat spreads along the camera's right/up, so the
+        // sprite faces every cell's camera and comes out round — and the seed
+        // hash lands identically on all four, keeping the quad rigid.
+        mPollen.verts.resize(AMB_COUNT * 4);
         mPollen.uvs.resize(AMB_COUNT * 4);
         mPollen.idx.resize(AMB_COUNT * 6);
         static const math::float2 CORNER[4] = { { -1, -1 }, { 1, -1 }, { 1, 1 }, { -1, 1 } };
         static const uint32_t QUAD[6] = { 0, 1, 2, 0, 2, 3 };
         for (int i = 0; i < AMB_COUNT; i++) {
-            for (int k = 0; k < 4; k++) mPollen.uvs[i * 4 + k] = CORNER[k];
+            const Vertex seed = { (float) arnd() * kAmbBox, (float) arnd() * AMB_H,
+                                  (float) arnd() * kAmbBox, tint };
+            for (int k = 0; k < 4; k++) {
+                mPollen.verts[i * 4 + k] = seed;
+                mPollen.uvs[i * 4 + k] = CORNER[k];
+            }
             for (int k = 0; k < 6; k++) mPollen.idx[i * 6 + k] = i * 4 + QUAD[k];
         }
         mPollenMat = sceneInstance(mPointMaterial);
         mPollenMat->setParameter("halfSize", mAmbSize); // re-fitted per frame, below
+        mPollenMat->setParameter("time", 0.0f);         // advanced per frame
+        mPollenMat->setParameter("fall", tb.ambFall);
+        mPollenMat->setParameter("wind", tb.ambWind);
+        mPollenMat->setParameter("bob", tb.ambBob);
+        mPollenMat->setParameter("bandH", bandH);
+        mPollenMat->setParameter("boxXZ", kAmbBox);
+        mPollenMat->setParameter("floorOrigin", math::float2{ -kAmbR, -kAmbR });
+        mPollenMat->setParameter("floorInvSpan", 1.0f / (2 * kAmbR));
+        mPollenMat->setParameter("floorTex", mAmbFloorTex,
+                TextureSampler(TextureSampler::MinFilter::LINEAR,
+                        TextureSampler::MagFilter::LINEAR));
         if (!buildMesh(mPollen, true, mPollenMat)) return false;
+        // The drawn positions follow the cameras, so no authored-time AABB can
+        // bound them: make the box world-sized instead of culling on a lie.
+        auto& rcm = mEngine->getRenderableManager();
+        rcm.setAxisAlignedBoundingBox(rcm.getInstance(mPollen.entity),
+                { { 0, 0, 0 }, { 1e4f, 1e4f, 1e4f } });
     }
 
     // Impact bursts, the JS spec (TrackProps): a THIN shockwave ring that

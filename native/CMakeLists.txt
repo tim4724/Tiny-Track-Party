@@ -795,11 +795,10 @@ add_test(NAME audio
 )
 
 # ---- Conformance: the biome palettes ----------------------------------------
-# JS-RECORDED evidence, unlike the two checks above: the corpus was taken off the
-# live public/shared/themes.js + render/trackPayload.js + shared/trackBin.js
-# before they were deleted, so it settles the parity question the way the golden
-# traces do for the sim. There is no --record mode here on purpose — the JS twin
-# is gone, and re-recording from C++ would only prove C++ matches itself.
+# Regression evidence pinning the whole resolved palette, originally taken off
+# the live JS palette before it was deleted. A deliberate look change re-records
+# through --record under the green-first rule in tests/CLAUDE.md; record_theme
+# gates the roundtrip byte-for-byte like the other record_* tests.
 #
 # It needs the shipped scenery GLBs, because half of the recolour rule is the
 # models' own authored material colours (a palm's fronds and trunk differ).
@@ -811,6 +810,14 @@ add_test(NAME theme
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/theme-corpus.jsonl
     ${CMAKE_CURRENT_SOURCE_DIR}/../public/assets/toycar
 )
+add_test(NAME record_theme
+  COMMAND ${CMAKE_COMMAND}
+    -DCLI=$<TARGET_FILE:theme_check>
+    "-DEMULATOR=${CMAKE_CROSSCOMPILING_EMULATOR}"
+    -DFIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/theme-corpus.jsonl
+    -DOUT=${CMAKE_CURRENT_BINARY_DIR}/rerecord/theme-corpus.jsonl
+    -DEXTRA=${CMAKE_CURRENT_SOURCE_DIR}/../public/assets/toycar
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/record_roundtrip.cmake)
 
 # ---- Behavioural: the asphalt-patch planner over the catalogue ---------------
 # Class-2, no corpus (wear never existed in JS). Pins determinism, the planner's

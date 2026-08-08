@@ -92,10 +92,11 @@ nothing. A shell that has to re-derive a rule from prose is the bug.
 about to pull state out of one wasm layer only to hand it straight to another,
 add a seam accessor in C++ instead. See `native/CLAUDE.md`.
 
-**4. The corpora are frozen cross-implementation evidence.** They were recorded
-against the JS engine while it existed. **Never re-record them from C++** — that
-would only prove C++ matches itself. If a replay disagrees, the committed file is
-right and the port is wrong. See `tests/CLAUDE.md`.
+**4. The corpora are the refactor net, re-recorded only on purpose.** An
+unexplained replay failure is a defect in the change, never in the fixture — fix
+the code. A DELIBERATE behaviour change may re-record through the check's
+`--record` mode, but only from a green suite, so the fixture diff is exactly the
+intended change; read that diff before committing it. See `tests/CLAUDE.md`.
 
 **5. Bit-exactness is the contract.** The strict-FP flags (`-ffp-contract=off`,
 `-fno-builtin`) are why four platforms agree to the bit. **Never add fast-math**,

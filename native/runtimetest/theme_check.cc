@@ -1,17 +1,16 @@
-// theme_check — the C++ biome tables against the JS palette they were ported
-// from (tests/fixtures/theme-corpus.jsonl, recorded by the now-frozen
-// scripts/gen-theme-corpus.mjs).
+// theme_check — the C++ biome tables against tests/fixtures/theme-corpus.jsonl.
 //
-// WHAT THIS IS. JS-RECORDED cross-implementation evidence — class 1 in
-// tests/fixtures/traces/README.md, the kind that can actually settle a parity
-// question. The corpus was recorded off the live public/shared/themes.js +
-// render/trackPayload.js + shared/trackBin.js before those were deleted, so
-// every number in it is one the shipping browser game was drawing with. Nothing
-// in this file may be "fixed" by re-recording: the JS twin is gone, and a
-// re-record would only prove C++ matches itself.
+// WHAT THIS IS. Regression evidence: the corpus pins the whole palette so the
+// theme module can be refactored wholesale and still prove it resolves what it
+// resolved. It was originally recorded off the live JS palette (the deleted
+// public/shared/themes.js + render/trackPayload.js + shared/trackBin.js);
+// since 2026-08-08 a DELIBERATE look change may re-record it via --record —
+// from a green suite first, so the fixture diff is exactly the intended change
+// (tests/CLAUDE.md has the rule). An unexplained replay failure is still a
+// defect in the change, never in the fixture.
 //
-// WHY IT MATTERS MORE THAN ITS SIZE SUGGESTS. A biome is pure data, so a port
-// slip does not crash or fail a race — it silently changes what a cup LOOKS
+// WHY IT MATTERS MORE THAN ITS SIZE SUGGESTS. A biome is pure data, so a slip
+// does not crash or fail a race — it silently changes what a cup LOOKS
 // like, on a surface no other test in the tree renders. The corpus therefore
 // pins every biome against every track (the snow cup patches its flake cloud
 // per track, and the beach's shoreline seed is a hash of the track id), the
@@ -23,9 +22,10 @@
 // ONE CLAIM HERE IS NOT THE CORPUS'S, and is reported separately for that
 // reason: that no untextured model the game stages falls through the tint table
 // (see "Beyond the corpus" below). It is behavioural, derived from the shipped
-// GLBs, and free to change with the assets — everything above it is frozen.
+// GLBs, and free to change with the assets.
 //
 // Usage: theme_check <theme-corpus.jsonl> <assetDir>
+//        theme_check --record <corpus> --out=<file> <assetDir>
 //   assetDir is public/assets/toycar (the scenery GLBs the tint maps key on).
 
 #include <cstdio>
@@ -35,6 +35,7 @@
 #include <vector>
 
 #include "corpus_diff.h"
+#include "corpus_record.h"
 #include "ttp/json_parse.h"
 #include "ttp/showcase.h"
 #include "ttp/theme.h"
@@ -208,6 +209,26 @@ Value themeOf(const rt::Theme& t) {
   return o;
 }
 
+Value shadesOf(uint32_t boost) {
+  const rt::BoostShades s = rt::boost_shades(boost);
+  Value o = Value::Obj();
+  o.set("base", u(s.base)); o.set("light", u(s.light)); o.set("dark", u(s.dark));
+  o.set("strip", u(s.strip)); o.set("disk", u(s.disk));
+  o.set("streak", u(s.streak)); o.set("icon", u(s.icon));
+  return o;
+}
+
+Value pairsOf(const std::vector<rt::MatTint>& pairs) {
+  Value got = Value::Arr();
+  for (const rt::MatTint& p : pairs) {
+    Value e = Value::Arr();
+    e.push(Value::Str(p.name));
+    e.push(u(p.rgb));
+    got.push(e);
+  }
+  return got;
+}
+
 std::vector<uint8_t> readFile(const std::string& path) {
   std::ifstream in(path, std::ios::binary);
   if (!in) return {};
@@ -217,11 +238,78 @@ std::vector<uint8_t> readFile(const std::string& path) {
 
 const char* str(const Value* v) { return (v && v->type == Value::STR) ? v->str.c_str() : nullptr; }
 
+// Re-emit the corpus from the port: the same resolutions as the replay below,
+// the comparison replaced by a write. The header row copies through verbatim
+// (UNDEF), and the inputs are read straight off the committed line, so a
+// re-record can never invent a case — corpus_record.h states the contract.
+int recordCorpus(const std::string& fixture, const std::string& outPath,
+                 const std::string& assetDir) {
+  bool bad = false;
+  const int rc = corpus::record(fixture, outPath, [&](const Value& root) {
+    const Value* kindV = root.find("case");
+    if (!kindV) return Value();
+    const std::string kind = kindV->str;
+    // The generator's key SET per case; canonical_stringify sorts them.
+    Value line = Value::Obj();
+    line.set("case", Value::Str(kind));
+    if (kind == "biomes") {
+      Value names = Value::Arr();
+      for (int i = 0; i < rt::biome_count(); i++) names.push(Value::Str(rt::biome_name(i)));
+      line.set("names", names);
+    } else if (kind == "cup") {
+      const Value* cupV = root.find("cup");  // JSON null is JS's "no cup at all"
+      line.set("cup", cupV ? *cupV : Value::Null());
+      line.set("biome", Value::Str(rt::biome_for_cup(str(cupV))));
+    } else if (kind == "track") {
+      const Value* trackV = root.find("track");
+      line.set("track", trackV ? *trackV : Value::Null());
+      line.set("biome", Value::Str(rt::biome_for_track(str(trackV))));
+    } else if (kind == "boost") {
+      const char* biome = str(root.find("biome"));
+      line.set("biome", Value::Str(biome ? biome : ""));
+      line.set("shades", shadesOf(rt::resolve_theme(biome, "").boost));
+    } else if (kind == "theme") {
+      const char* biome = str(root.find("biome"));
+      const char* track = str(root.find("track"));
+      line.set("biome", Value::Str(biome ? biome : ""));
+      line.set("track", Value::Str(track ? track : ""));
+      line.set("resolved", themeOf(rt::resolve_theme(biome, track)));
+    } else if (kind == "tints") {
+      const Value* biomeV = root.find("biome");
+      const char* model = str(root.find("model"));
+      const std::vector<uint8_t> glb =
+          readFile(assetDir + "/" + (model ? model : "") + ".glb");
+      if (!model || glb.empty()) {
+        std::fprintf(stderr, "--record: missing asset %s/%s.glb\n",
+                     assetDir.c_str(), model ? model : "?");
+        bad = true;
+        return Value();
+      }
+      line.set("biome", biomeV ? *biomeV : Value::Null());
+      line.set("model", Value::Str(model));
+      line.set("pairs", pairsOf(rt::resolve_model_tints(model, glb.data(), glb.size())));
+    } else {
+      std::fprintf(stderr, "--record: unknown corpus case '%s'\n", kind.c_str());
+      bad = true;
+      return Value();
+    }
+    return line;
+  });
+  return bad ? 2 : rc;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
+  {
+    // record_roundtrip.cmake appends the assetDir as the trailing positional.
+    std::string fixture, outPath;
+    if (corpus::wants_record(argc, argv, &fixture, &outPath))
+      return recordCorpus(fixture, outPath, argv[argc - 1]);
+  }
   if (argc != 3) {
-    std::fprintf(stderr, "usage: theme_check <theme-corpus.jsonl> <assetDir>\n");
+    std::fprintf(stderr, "usage: theme_check <theme-corpus.jsonl> <assetDir>\n"
+                         "       theme_check --record <corpus> --out=<file> <assetDir>\n");
     return 2;
   }
   std::ifstream in(argv[1]);
@@ -271,12 +359,7 @@ int main(int argc, char** argv) {
 
     } else if (std::string(kind) == "boost") {
       const char* biome = str(root.find("biome"));
-      const rt::Theme t = rt::resolve_theme(biome, "");
-      const rt::BoostShades s = rt::boost_shades(t.boost);
-      Value got = Value::Obj();
-      got.set("base", u(s.base)); got.set("light", u(s.light)); got.set("dark", u(s.dark));
-      got.set("strip", u(s.strip)); got.set("disk", u(s.disk));
-      got.set("streak", u(s.streak)); got.set("icon", u(s.icon));
+      const Value got = shadesOf(rt::resolve_theme(biome, "").boost);
       report("boost " + std::string(biome), diff_val(*root.find("shades"), got, "shades"));
 
     } else if (std::string(kind) == "theme") {
@@ -298,15 +381,7 @@ int main(int argc, char** argv) {
         std::fprintf(stderr, "missing asset %s/%s.glb\n", assetDir.c_str(), model);
         return 2;
       }
-      const std::vector<rt::MatTint> pairs =
-          rt::resolve_model_tints(model, glb.data(), glb.size());
-      Value got = Value::Arr();
-      for (const rt::MatTint& p : pairs) {
-        Value e = Value::Arr();
-        e.push(Value::Str(p.name));
-        e.push(u(p.rgb));
-        got.push(e);
-      }
+      const Value got = pairsOf(rt::resolve_model_tints(model, glb.data(), glb.size()));
       report("tints " + std::string(biome) + "/" + model,
              diff_val(*root.find("pairs"), got, "pairs"));
 

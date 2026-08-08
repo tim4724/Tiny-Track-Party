@@ -61,7 +61,10 @@ const UPLOADED_SAMPLERS = new Set([
   // PNG by gltfio's stb provider and bound by AssetLoader. An upload — and
   // vglb goes further and turns Filament's uv flip OFF entirely (flipUV:false),
   // because glTF hands its uv0 over in image orientation already.
-  'baseColorMap'
+  'baseColorMap',
+  // vpoint's flake floor: the max-height grid, Texture::setImage in
+  // buildScene's ambient block.
+  'floorTex'
 ]);
 
 const materials = () => readdirSync(MATERIALS).filter((f) => /\.(mat|inc)$/.test(f));

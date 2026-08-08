@@ -23,6 +23,12 @@ scenarios are DRIVEN by replaying these traces (`audio_check` takes a traces dir
 so it could not survive them. Its own JS oracle was deleted long before, so it too
 is now C++-authored only.
 
+On 2026-08-08 the rule itself was lowered (`tests/CLAUDE.md`): any corpus may now
+be re-recorded for a deliberate change, green-first. The theme corpus was the
+first under the new rule — the ambient particle counts were re-authored (denser
+snow, then the camera-box count semantics), `ambient.count` rows and nothing
+else.
+
 The replay contract is unchanged: EXACT float equality (same operation order, same
 vendored math), compared per frame as an FNV-1a of the canonical snapshot plus the
 event list, with periodic full snapshots.

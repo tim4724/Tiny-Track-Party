@@ -1443,29 +1443,9 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
         }
     }
 
-    // Ambient drift (stepAmbient): sink at fall-scaled per-particle speed, ride
-    // the eastward wind, wander vertically, wrapping inside the kind's height
-    // band and the authored spread.
-    if (!mPollen.entity.isNull() && !mAmbBase.empty()) {
-        const float FALL = mAmbFall, WIND = mAmbWind, BOB = mAmbBob;
-        constexpr float AMB_R = 170.0f;
-        const float BAND_H = mAmbBandH;
-        for (size_t i = 0; i < mAmbBase.size(); i++) {
-            const float t = mTime;
-            float x = mAmbBase[i].x + WIND * t;
-            x = std::fmod(x + AMB_R, 2 * AMB_R) - AMB_R;
-            float y = mAmbBase[i].y - mAmbSpeed[i] * FALL * t
-                    + std::sin(t * 0.7f + i) * BOB * 0.3f;
-            y = std::fmod(std::fmod(y, BAND_H) + BAND_H, BAND_H) + 0.5f;
-            const float z = mAmbBase[i].z;
-            // All four corners get the centre; the material spreads them.
-            Vertex* v = &mPollen.verts[i * 4];
-            for (int k = 0; k < 4; k++) { v[k].px = x; v[k].py = y; v[k].pz = z; }
-        }
-        mPollen.vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
-                mPollen.verts.data(), mPollen.verts.size() * sizeof(Vertex), nullptr));
-        refreshBounds(mPollen);
-    }
+    // Ambient drift is entirely in vpoint.mat now (motion + the camera-box
+    // wrap + both fades); its whole per-frame cost is the `time` uniform,
+    // set in renderAmbient beside the sprite-size fit.
 
     // Furniture reconcile: boxes hide when collected (respawn = state flips
     // back), bananas place the first N pool entries at their track positions.
@@ -2019,6 +1999,7 @@ void TtpRenderer::renderAmbient(const TtpFrameInput& input) {
         const float fov = vc ? ttp_frame_views(&input)[0].fov : 50.0f;
         mPollenMat->setParameter("halfSize",
                 mAmbSize * (float) rows * std::tan(fov * (float) M_PI / 360.0f));
+        mPollenMat->setParameter("time", mTime); // drives the shader-side drift
     }
 
     // Frame pacing. beginFrame() drops a frame when the GPU is behind — it waits

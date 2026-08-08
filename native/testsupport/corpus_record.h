@@ -20,7 +20,9 @@
 // that, and they were written by the JS. See tests/fixtures/traces/README.md.
 //
 // The corollary is the one worth remembering: if a --record output ever differs
-// from the committed file, the committed file is right. Do not overwrite it.
+// from the committed file UNEXPECTEDLY, the committed file is right — do not
+// overwrite it to make a broken change pass. A DELIBERATE behaviour change may
+// overwrite it, under the green-first re-record rule in tests/CLAUDE.md.
 #pragma once
 
 #include <cstdio>

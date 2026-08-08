@@ -9,6 +9,22 @@
 // VIEW for free — the split-screen cells all look in different directions, and
 // one CPU billboard can only ever face one of them.
 //
+// THE CLOUD IS A CHEAT, fully evaluated here in the vertex shader. The mesh
+// holds only immutable SEEDS in a boxXZ-wide column; each frame this shader
+// applies the kind's motion (fall / wind / bob, from one `time` uniform) and
+// wraps the result's x/z around THIS VIEW'S camera, toroidally. Flakes
+// therefore exist only where someone can see them — every split-screen cell
+// gets its own full box from the same draw — and the CPU never touches the
+// vertices again: no drift loop, no per-frame re-upload. Height stays
+// ABSOLUTE (the kind's band above the world floor), which is what keeps sand
+// hugging the ground and snow falling from above while the camera flies.
+//
+// Two alpha fades ride along: a rim fade at the wrap boundary so a particle
+// dissolves instead of popping in, and the flake-floor fade — a max-height
+// grid of terrain + road deck, sampled as a texture — so snow settles onto an
+// elevated deck instead of depth-slicing through it. Other kinds bind a 1x1
+// "floor at -1000" texel and are untouched by it.
+//
 // The fragment then rebuilds the sprite texture's radial gradient from the same
 // uv (opaque core, 0.9 at 0.4r, out to nothing at the rim), so the silhouette
 // is a circle no matter how few vertices are behind it.
@@ -24,15 +40,59 @@ material {
     depthWrite : false,
     flipUV : false,
     parameters : [
-        { type : float, name : halfSize }
+        { type : float, name : halfSize },
+        // World units and long-running seconds — high, or Metal's fp16
+        // default quantizes them (see metal notes in the repo memory).
+        { type : float, name : time, precision : high },
+        { type : float, name : fall },
+        { type : float, name : wind },
+        { type : float, name : bob },
+        { type : float, name : bandH, precision : high },
+        { type : float, name : boxXZ, precision : high },
+        { type : float2, name : floorOrigin, precision : high },
+        { type : float, name : floorInvSpan, precision : high },
+        { type : sampler2d, name : floorTex }
     ]
 }
 
 vertex {
     void materialVertex(inout MaterialVertexInputs material) {
         highp mat4 w = getWorldFromViewMatrix();
-        material.worldPosition.xyz +=
-                (w[0].xyz * material.uv0.x + w[1].xyz * material.uv0.y)
+        // Filament renders camera-relative: shader world != API world. The wrap
+        // is computed in USER world (the offset is a pure translation) and the
+        // result converted back on the way out — same trap vroad.mat documents.
+        highp vec3 off = getUserWorldFromWorldMatrix()[3].xyz;
+        highp vec3 seed = material.worldPosition.xyz + off;
+        highp vec3 camU = w[3].xyz + off;
+        highp float t = materialParams.time;
+        // Per-particle fall speed and bob phase, from the VERTEX INDEX (all
+        // four corners of particle i are indices 4i..4i+3, so >>2 lands the
+        // quad on one value). NOT a hash of the seed position: worldPosition
+        // reconstructs through the per-frame camera-relative origin, and a
+        // sin-fract hash amplifies that reconstruction's fp noise into a NEW
+        // random number every frame — the flakes strobed. The index is exact.
+        highp float h1 = fract(float(getVertexIndex() >> 2) * 0.6180339887);
+        highp float speed = 1.1 + 1.4 * h1;
+        // Height: the old CPU drift verbatim — absolute band above the world
+        // floor, per-particle fall, shared sinusoidal bob.
+        highp float y = seed.y - speed * materialParams.fall * t
+                + sin(t * 0.7 + h1 * 61.0) * materialParams.bob * 0.3;
+        y = mod(y, materialParams.bandH) + 0.5;
+        // x/z: ride the wind, then wrap into a boxXZ-wide column centred on
+        // the camera (GLSL mod is non-negative, so one mod suffices).
+        highp float bx = materialParams.boxXZ;
+        highp vec2 p = seed.xz + vec2(materialParams.wind * t, 0.0);
+        highp vec2 rel = mod(p - camU.xz, vec2(bx)) - 0.5 * bx;
+        highp vec3 posU = vec3(camU.x + rel.x, y, camU.z + rel.y);
+        // Dissolve at the wrap boundary (Chebyshev distance IS the distance to
+        // the seam), and fade out against the local surface — an alpha fade
+        // only, the vertex is never repositioned — instead of clipping it.
+        float edge = 1.0 - smoothstep(0.8, 1.0, max(abs(rel.x), abs(rel.y)) / (0.5 * bx));
+        highp vec2 uv = (posU.xz - materialParams.floorOrigin) * materialParams.floorInvSpan;
+        float land = clamp(y - textureLod(materialParams_floorTex, uv, 0.0).r, 0.0, 1.0);
+        material.color.a *= edge * land;
+        material.worldPosition.xyz = posU - off
+                + (w[0].xyz * material.uv0.x + w[1].xyz * material.uv0.y)
                         * materialParams.halfSize;
     }
 }

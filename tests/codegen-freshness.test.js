@@ -35,9 +35,10 @@
 //
 // The FROZEN generators are deliberately NOT covered — gen-roomflow-corpus,
 // gen-grandprix-corpus, gen-trackbuilder-corpus, gen-track-sampler-corpus,
-// gen-math-corpus, gen-theme-corpus, and now gen-ui-corpus / gen-session-corpus
-// / gen-audio-corpus / gen-schematic-corpus, whose twins went with the port.
-// Re-deriving those is impossible by design.
+// gen-math-corpus, and now gen-ui-corpus / gen-session-corpus /
+// gen-audio-corpus / gen-schematic-corpus / gen-theme-corpus, whose twins (and
+// in theme's case the generator itself) went with the port. Re-deriving those
+// from JS is impossible by design.
 //
 // WHAT MUST NOT HAPPEN HERE, because it already did once: an entry being dropped
 // while its generator is still live. This list is the only thing that runs these
