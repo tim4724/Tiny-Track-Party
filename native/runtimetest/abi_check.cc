@@ -4019,7 +4019,7 @@ void raceLiveWalks() {
             std::string("advance_live's action is the rule's (") + where + "): " +
                 json::str_field(got, "action"));
       sameOps(got, expected, std::string("advance_live effects (") + where + ")");
-      if (want.action != race::AdvanceAction::ADVANCE) return;
+      if (want.action != race::AdvanceAction::ADVANCE) return got;
       // What the executor did: the series moved on, the pick follows it, and
       // the launch that rode along names the circuit the series now sits on.
       const Value after = parseOrNull(ttp_race_series_state_json(room), "series after");
@@ -4032,6 +4032,7 @@ void raceLiveWalks() {
       for (const Value& e : at(got, "effects").arr)
         if (json::str_field(e, "op") == "create-session")
           check(json::str_field(e, "trackId") == next, "…which is what the launch races on");
+      return got;
     };
     sameAdvance(0, "the scene is not built");
     sameAdvance(1, "mid-cup");
@@ -4063,13 +4064,27 @@ void raceLiveWalks() {
                         "{\"playerId\":\"ai-0\",\"rank\":4,\"finished\":false}]",
                         "[{\"peerIndex\":2,\"name\":\"Bo\",\"colorIndex\":1,\"ai\":false}]",
                         nullptr);
-      sameAdvance(1, "chained grid");
+      const Value got = sameAdvance(1, "chained grid");
       const Value retained = ttp_room_field_value(room);
       std::string ids;
       for (const Value& f : retained.arr)
         ids += canonical_stringify(at(f, "peerIndex")) + " ";
       check(ids == "2 \"ai-1\" 1 \"ai-0\" ",
             "a chained race grids on the previous finish order (DNF included)\n  got  " + ids);
+      // The SCENE roster is NOT the grid: it keeps the build's humans-then-bots
+      // order even with a bot on pole. Stage's rebuild signature and the
+      // reroster fast path are order-sensitive, so a grid-ordered roster would
+      // force a full rebuild of the scene prepared under the intermission board
+      // (and shuffle the split cells by finish order) at every chained start.
+      for (const Value& e : at(got, "effects").arr) {
+        if (json::str_field(e, "op") != "reset-scene-cars") continue;
+        bool seenAi = false, stable = true;
+        for (const Value& c : at(e, "cars").arr) {
+          if (!json::truthy(c.find("cell"))) seenAi = true;
+          else if (seenAi) stable = false;
+        }
+        check(stable, "the chained launch's scene roster keeps the built order");
+      }
       ttp_room_store_series(room, 0);
     }
   }

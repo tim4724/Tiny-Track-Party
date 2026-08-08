@@ -88,10 +88,13 @@ test('an untouched intermission auto-advances into the next race', async ({ page
   await waitForRacing(page);
 
   await finishHumans(page);
-  await inResults(page);
-  // Nobody taps anything: the shortened intermission chains into race 2 by itself.
+  // Nobody taps anything: the shortened intermission chains into race 2 by
+  // itself. The 1.2 s results window is too brief to OBSERVE reliably (rAF
+  // polling misses it under load), so assert the outcome instead — race 2 is
+  // reachable only through RESULTS (startRace's LOBBY guard keeps every other
+  // path out), so racing BEACH[1] proves the intermission happened and chained.
+  await page.waitForFunction((id) => window.__net.trackId === id, BEACH[1], { timeout: 30000 });
   await waitForRacing(page);
-  expect(await page.evaluate(() => window.__net.trackId)).toBe(BEACH[1]);
   expect(await page.evaluate(() => window.__series().raceIndex)).toBe(1);
 });
 

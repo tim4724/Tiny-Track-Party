@@ -415,6 +415,14 @@ static std::vector<FieldEntry> orderGrid(std::vector<FieldEntry> field,
 LaunchResult launchRace(const LaunchInput& in) {
   LaunchResult out;
   BuiltField built = buildField(in.players, in.seed, in.world);
+  // The scene roster is captured BEFORE the grid is ordered. The renderer keys
+  // cars by id and reads poses off the session, so the scene never needs the
+  // grid order — and a roster that is STABLE across a series is load-bearing:
+  // Stage's rebuild signature and the reroster fast path are order-sensitive,
+  // so a reordered roster would turn every chained start's reset-scene-cars
+  // into a full rebuild of the scene prepared under the intermission board,
+  // and shuffle the players' split cells by finish order.
+  const std::vector<FieldEntry> sceneRoster = built.field;
   built.field = orderGrid(std::move(built.field), in);
   out.field = built.field;
   out.aiIds = built.aiIds;
@@ -447,7 +455,7 @@ LaunchResult launchRace(const LaunchInput& in) {
   // what puts the warning cones back upright, clears last race's rubber patina
   // and restores every collected item box.
   e = mk(Op::RESET_SCENE_CARS);
-  for (const FieldEntry& p : built.field) {
+  for (const FieldEntry& p : sceneRoster) {
     SceneCar c;
     c.id = p.peerIndex;
     c.colorIndex = p.colorIndex;
