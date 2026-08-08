@@ -265,6 +265,11 @@ function syncRoom(data) {
   if (me.name) myName = me.name;
   amReady = !!me.ready;
   applyLivery();
+  // The FIRST snapshot can seat us under the engine's placeholder ("Player N")
+  // with our HELLO name still in flight — and the auto-shown settings popup
+  // reads the name at open. Keep the open card's demo phone tracking the
+  // snapshot (no-op while it's closed).
+  refreshHelpName(myName || 'Racer');
   if (!amReady) maybeRestoreCar(); // ready = car locked; don't fight the display's record
 
   const rs = data.roomState;
