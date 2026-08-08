@@ -183,11 +183,16 @@
     <div id="settings-card" class="settings-card">
       <div class="settings-head">
         <h2 id="settings-title" class="settings-title">Settings</h2>
-        <!-- Steering mode — the one setting. A two-sticker toggle; the picked
-             side fills like every picked tile on the phone. -->
-        <div class="seg" role="radiogroup" aria-label="Steering">
-          <button id="input-tilt" type="button" class="seg__opt" role="radio" aria-checked="true">Tilt</button>
-          <button id="input-buttons" type="button" class="seg__opt" role="radio" aria-checked="false">Buttons</button>
+        <!-- Steering mode — the one setting. Two sticker TILES (the same
+             pick-a-tile language as the lobby's pickers: paper at rest, the
+             picked one fills with your livery), labelled by the kicker pill so
+             the choice reads apart from the info panel below. -->
+        <div class="settings-group">
+          <span class="pill">Steering</span>
+          <div class="seg" role="radiogroup" aria-label="Steering">
+            <button id="input-tilt" type="button" class="seg__opt" role="radio" aria-checked="true">Tilt</button>
+            <button id="input-buttons" type="button" class="seg__opt" role="radio" aria-checked="false">Buttons</button>
+          </div>
         </div>
       </div>
 
@@ -222,8 +227,10 @@
           <span class="chev chev--r" aria-hidden="true"></span>
         </div>
 
-        <!-- Captions — compact labels rather than fake buttons, swapped with the
-             mode: tilt teaches ITEM + BRAKE, buttons teaches the ‹ › chord + ITEM. -->
+        <!-- Captions — a SUNKEN info panel (surface-2, the theme's "not a
+             control" surface) so the legend can't be mistaken for buttons; the
+             chips map colours to the demo's controls. Rows swap with the mode:
+             tilt teaches ITEM + BRAKE, buttons the ‹ › chord + ITEM. -->
         <div class="settings-side">
           <div class="help-ctrl help-ctrl--chord">
             <span class="help-chip help-chip--steer"><span class="steer-glyph steer-glyph--l"></span><span class="steer-glyph steer-glyph--r"></span></span>
@@ -237,9 +244,10 @@
             <span class="help-chip help-chip--brake">BRAKE</span>
             <span class="help-ctrl__cap">Hold to slow &amp; stop</span>
           </div>
-          <button id="settings-done" class="btn btn--brand settings-done" type="button">Got it</button>
         </div>
       </div>
+
+      <button id="settings-done" class="btn btn--brand settings-done" type="button">Got it</button>
     </div>
   </div>
 
