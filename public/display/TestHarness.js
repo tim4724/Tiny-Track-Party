@@ -225,7 +225,11 @@ export function runDisplayScenario(opts, ctx) {
   const COLORS = window.CAR_COLORS || ['#e6492d'];
   const scenario = opts.scenario || 'racing';
   // != null (not ||) so an explicit players=0 clamps to 1 rather than 4.
-  const players = Math.max(1, Math.min(opts.players != null ? opts.players : 4, COLORS.length));
+  // `players` is the HUMAN count — the roster seats and the split-screen cells —
+  // capped at the live phone cap. Race previews then top the field up to the
+  // live FIELD_SIZE with cell-less CPU racers (raceGrid below), so a gallery
+  // race reads like a real one: 8 cars, at most 4 cells.
+  const players = Math.max(1, Math.min(opts.players != null ? opts.players : 4, window.MAX_PLAYERS || 4));
   const host = (opts.host == null || isNaN(opts.host)) ? null : Math.max(0, Math.min(opts.host, 7));
 
   // What a sim-backed preview waits on: the GLBs + track (main.js's scenePromise) AND
@@ -252,8 +256,8 @@ export function runDisplayScenario(opts, ctx) {
   function cupBoard(raceIdx, final) {
     const cup = CUPS[0];
     const nextId = cup.tracks[raceIdx + 1] || null;
-    const order = buildSlots(players).map((s, i) => ({
-      playerId: s, name: FAKE_NAMES[s], colorIndex: s, finished: true, time: FAKE_TIMES[i],
+    const order = humansFirst(raceGrid(buildSlots(players))).map((g, i) => ({
+      playerId: g.slot, name: g.name, colorIndex: g.slot, finished: true, time: FAKE_TIMES[i],
       gained: POINTS_BY_RANK[i] || 0,
       points: (FAKE_POINTS[i] || 0) + (POINTS_BY_RANK[i] || 0)
     })).sort((a, b) => b.points - a.points);
@@ -354,6 +358,49 @@ export function runDisplayScenario(opts, ctx) {
     return slots.length ? slots[0] : null;
   }
 
+  // The CPU fill for the given human slots, by the wasm's own seat rule
+  // (cpuSeats): lowest free livery, carIndex wraps the model list, plate =
+  // the persona that drives it. `personaBase` is where the persona deal
+  // starts: 0 for a launch (buildField names bots by bot ordinal — Bolt is
+  // always the first bot), slots.length for the lobby demo (buildDemoField
+  // names by final grid index so personas spread across the whole field).
+  const modelCount = () => (window.CAR_MODELS || []).length || 4;
+  function cpuFill(slots, personaBase) {
+    const fieldSize = Math.max(slots.length, Math.min(window.FIELD_SIZE || 8, COLORS.length));
+    const fill = [];
+    const used = slots.slice();
+    for (let i = 0; used.length < fieldSize; i++) {
+      if (used.includes(i)) continue;
+      used.push(i);
+      const p = AI_PERSONALITIES[(personaBase + fill.length) % AI_PERSONALITIES.length];
+      fill.push({ slot: i, human: false, name: p.name, persona: p, carIndex: i % modelCount() });
+    }
+    return fill;
+  }
+  function humanEntries(slots) {
+    return slots.map((s) => ({ slot: s, human: true, name: FAKE_NAMES[s], carIndex: s % modelCount() }));
+  }
+  // A race field in LAUNCH shape — the order the live walks hand begin_field,
+  // which seats it verbatim (race_flow's orderGrid, humansAtBack): the CPU
+  // field out front, the humans gridded at the back. botSpecs deals personas
+  // by the same positions, so plate and driving stay matched.
+  function raceGrid(slots) {
+    return cpuFill(slots, 0).concat(humanEntries(slots));
+  }
+  // The lobby demo's shape (buildDemoField): the roster first, the fill behind
+  // it, and EVERY entry driven by the persona at its final grid index — the
+  // fill's plates carry that persona's name — exactly what flow.demoLive
+  // answers off a live room. cpuFill(slots.length) lines its plates up with
+  // the same index by construction.
+  function demoGrid(slots) {
+    return humanEntries(slots).concat(cpuFill(slots, slots.length)).map((g, n) => ({
+      ...g, persona: AI_PERSONALITIES[n % AI_PERSONALITIES.length]
+    }));
+  }
+  // Board previews list the humans on top — the fake-points drama is authored
+  // on the roster names — with the CPU fill trailing.
+  const humansFirst = (grid) => grid.filter((g) => g.human).concat(grid.filter((g) => !g.human));
+
   // Seat grid via the SAME renderer as the live lobby (lobbySeats.js), so the
   // preview can't drift from the real markup. The preview varies the car per
   // slot (carIndex = slot) so the lobby shows a mix of models.
@@ -380,14 +427,9 @@ export function runDisplayScenario(opts, ctx) {
   // seat's car in its seat colour), topped up with CPU racers to a full grid —
   // the shape flow.demoLive answers off a live room.
   function startAttractDemo(slots) {
-    const ids = slots.slice();
-    const fieldSize = Math.min(window.MAX_PLAYERS || 4, COLORS.length);
-    for (let i = 0; ids.length < fieldSize; i++) {
-      if (!ids.includes(i)) ids.push(i);
-    }
-    const field = ids.map((s, n) => ({
-      id: s, colorIndex: s, carIndex: s, name: FAKE_NAMES[s], stats: statsFor(s),
-      persona: AI_PERSONALITIES[n % AI_PERSONALITIES.length]
+    const field = demoGrid(slots).map((g) => ({
+      id: g.slot, colorIndex: g.slot, carIndex: g.carIndex, name: g.name, stats: statsFor(g.carIndex),
+      persona: g.persona
     }));
     const demo = new LobbyDemo(ctx.scene);
     // The SAME automation hook live play publishes (main.js), so one E2E
@@ -474,16 +516,17 @@ export function runDisplayScenario(opts, ctx) {
       // keep the calm auto-orbit turntable (you can't comfortably drag a thumbnail).
       if (!enableFreeCamIfStandalone(scene)) scene.orbit = true;
 
-      const ids = [];
-      for (let i = 0; i < players; i++) ids.push(i);
-      const newSession = () => bareSession(ids.map((i) => ({ peerIndex: i })), track, { bots: botSpecs(ids) });
+      const grid = raceGrid(buildSlots(players));
+      const ids = grid.map((g) => g.slot);
+      const newSession = () => bareSession(
+        grid.map((g) => ({ peerIndex: g.slot, stats: statsFor(g.carIndex) })), track, { bots: botSpecs(ids) });
       let engine = newSession();
       window.__engine = engine;
 
       for (const id of [...scene.cars.keys()]) scene.removeCar(id);
-      // cell:false → opponents in the shared world with no split-screen viewport,
-      // so _order stays empty and the overview camera frames the whole track.
-      ids.forEach((i) => scene.addCar(i, i, FAKE_NAMES[i], { cell: false }));
+      // cell:false on EVERY car — opponents in the shared world with no split-screen
+      // viewport, so _order stays empty and the overview camera frames the whole track.
+      grid.forEach((g) => scene.addCar(g.slot, g.slot, g.name, { cell: false, carIndex: g.carIndex }));
 
       const minimap = buildMinimap(el('race'), track.id, COLORS);
       scene.bindSession(engine.h); // the renderer draws this session's cars
@@ -940,8 +983,9 @@ export function runDisplayScenario(opts, ctx) {
     function setupChain() {
       const { scene, built } = ctx;
       const cup = CUPS[0];
-      const slots = buildSlots(players);
-      const field = slots.map((i) => ({ peerIndex: i, stats: statsFor(i) }));
+      const grid = raceGrid(buildSlots(players));
+      const ids = grid.map((g) => g.slot);
+      const field = grid.map((g) => ({ peerIndex: g.slot, stats: statsFor(g.carIndex) }));
       const entry = (id) => built.get(id);
 
       let leg = 0;          // which of the cup's tracks is racing
@@ -957,14 +1001,14 @@ export function runDisplayScenario(opts, ctx) {
         scene.setTrack(t);                                    // place-track
         el('results').classList.add('hidden');                // hide-results
         for (const id of [...scene.cars.keys()]) scene.removeCar(id);
-        slots.forEach((i) => scene.addCar(i, i, FAKE_NAMES[i], { carIndex: i }));
+        grid.forEach((g) => scene.addCar(g.slot, g.slot, g.name, { carIndex: g.carIndex, cell: g.human }));
         scene.rebuild();                                      // reset-scene-cars
         if (engine) engine.dispose();                         // dispose-session
         // A COUNTDOWN-MODE session, not a bare one: the beats, their cadence and
         // the moment the field is allowed to move are all its own, drained to
         // the banner through the callback the live shell uses.
         engine = new NativeRaceSession(field, t, {            // create-session
-          bots: botSpecs(slots),
+          bots: botSpecs(ids),
           onCountdownTick: (n) => showCountdownBanner(countdownBeat(n))
         });
         window.__engine = engine;
@@ -1024,11 +1068,11 @@ export function runDisplayScenario(opts, ctx) {
     const { scene, track } = ctx;
     // (race screen already shown synchronously above, before the GLB load)
 
-    const ids = [];
-    for (let i = 0; i < players; i++) ids.push(i);
     // Give each preview car the model + stats for its slot so the gallery shows
     // the real spread of handling and the new car-car bumping, not a uniform field.
-    const field = ids.map((i) => ({ peerIndex: i, stats: statsFor(i) }));
+    const grid = raceGrid(buildSlots(players));
+    const ids = grid.map((g) => g.slot);
+    const field = grid.map((g) => ({ peerIndex: g.slot, stats: statsFor(g.carIndex) }));
 
     // The 'rocket' scenario routes the engine's hit event to the impact burst (live
     // main.js does this in onRaceEvent; the gallery has no relay, so we wire it here).
@@ -1078,7 +1122,9 @@ export function runDisplayScenario(opts, ctx) {
     window.__engine = engine;
 
     for (const id of [...scene.cars.keys()]) scene.removeCar(id);
-    ids.forEach((i) => scene.addCar(i, i, FAKE_NAMES[i], { carIndex: i }));
+    // Humans get their split-screen cell, the CPU fill drives cell-less — the
+    // C++ rule live launches apply (race_flow's cell = !ai).
+    grid.forEach((g) => scene.addCar(g.slot, g.slot, g.name, { carIndex: g.carIndex, cell: g.human }));
     scene.bindSession(engine.h); // the renderer draws this session's cars
 
     const live = kind === 'racing' || kind === 'rocket' || kind === 'monster';
@@ -1167,7 +1213,11 @@ export function runDisplayScenario(opts, ctx) {
       // then freeze. Their split-screen cell shows the centred FINISHED card
       // (place + time); every other cell keeps its live lap/place HUD.
       for (let t = 0; t < 160; t++) engine.update(33);
-      const leadId = engine.getSnapshot().cars.reduce((a, b) => (a.position <= b.position ? a : b)).id;
+      // The finisher must be a HUMAN — the FINISHED card lives in a split-screen
+      // cell, and the CPU fill has none.
+      const humanIds = new Set(grid.filter((g) => g.human).map((g) => g.slot));
+      const leadId = engine.getSnapshot().cars.filter((c) => humanIds.has(c.id))
+        .reduce((a, b) => (a.position <= b.position ? a : b)).id;
       engine.forceFinish(leadId, FAKE_TIMES[0]); // promote the finisher to P1; the rest keep racing for position
       const fnCars = engine.getSnapshot().cars;
       dressItems(fnCars); // the still-racing cells carry items (setCarHud clears the finisher's own slot)
@@ -1177,13 +1227,16 @@ export function runDisplayScenario(opts, ctx) {
       // Freeze the grid behind the blurred results overlay. Every row is a plain
       // finish; the late joiner riding along under the field gets the model's
       // `joining` shape (no rank, no time — they race the next one).
-      const slots = buildSlots(players);
-      const order = slots.map((s, i) => ({
-        playerId: s, name: FAKE_NAMES[s], colorIndex: s, finished: true, time: FAKE_TIMES[i]
+      const roster = humansFirst(grid);
+      const order = roster.map((g, i) => ({
+        playerId: g.slot, name: g.name, colorIndex: g.slot, finished: true, time: FAKE_TIMES[i]
       }));
-      const j = slots.length % FAKE_NAMES.length;
+      // The late joiner riding along under the field. Its seat colour can repeat
+      // a CPU livery — exactly as live, where a mid-race join takes a free SEAT,
+      // not a free livery in the running race.
+      const j = players % FAKE_NAMES.length;
       order.push({ playerId: j, name: FAKE_NAMES[j], colorIndex: j, joining: true });
-      showBoard({ over: true, hostPeerIndex: slots[0], order });
+      showBoard({ over: true, hostPeerIndex: roster[0].slot, order });
     } else if (kind === 'intermission' || kind === 'podium') {
       // Cup dressings of the same overlay: frozen grid behind either the mid-cup
       // intermission (points board + "next up" footer) or the final podium.

@@ -27,8 +27,9 @@ async function boardText(page, id) {
 test('gallery results board: plain finishes plus the joining row', async ({ page }) => {
   await page.goto('/?scenario=results&players=3');
   expect(await boardText(page, 'results-title')).toBe('Results');
-  // 3 racers + the late joiner riding along underneath.
-  expect(await page.locator('#results-list li').count()).toBe(4);
+  // 3 humans + the CPU fill to the live 8-car field, plus the late joiner
+  // riding along underneath.
+  expect(await page.locator('#results-list li').count()).toBe(9);
   // The joining row is a DIFFERENT shape, not a racer with empty fields: no
   // time, the "Next race" cell instead.
   await expect(page.locator('#results-list li.is-joining')).toHaveCount(1);
@@ -63,8 +64,9 @@ test('gallery cup podium: champs header, three steps, list from 4th', async ({ p
   expect(await page.locator('#results-podium .podium__col').evaluateAll(
     (cols) => cols.map((c) => c.dataset.place)
   )).toEqual(['2', '1', '3']);
-  // The top three are ON the steps, so the list holds only 4th and below.
-  await expect(page.locator('#results-list li')).toHaveCount(1);
+  // The top three are ON the steps, so the list holds only 4th and below —
+  // five rows of the 8-car field.
+  await expect(page.locator('#results-list li')).toHaveCount(5);
   await expect(page.locator('#results')).toHaveClass(/is-podium/);
   await expect(page.locator('#results-sub')).toBeHidden();
 });
