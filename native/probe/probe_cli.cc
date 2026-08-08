@@ -53,7 +53,7 @@ constexpr double DT_MS = 1000.0 / 60.0;
 
 // ttp::AI_PERSONALITIES itself, not a copy of it. Persona 0 ("Bolt", the
 // overdriver) is the single driver used by laptime + matrix, so the only variable
-// there is the car; packed uses all four, one per grid slot.
+// there is the car; packed deals one per grid slot, in table order.
 //
 // This file used to hand-transcribe the four {caution, laneBias} pairs under a
 // comment pointing at a JS file that no longer exists, which is the exact drift

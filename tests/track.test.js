@@ -25,7 +25,7 @@ const NATIVE_WASM = path.join(__dirname, '..', 'public/display/engine/native/ttp
 const NATIVE_SKIP = fs.existsSync(NATIVE_MJS) && fs.existsSync(NATIVE_WASM)
   ? false
   : 'ttp_runtime.mjs/.wasm not built — run native/scripts/build-runtime-web.sh';
-// [car id, caution, laneBias] — the four AI_PERSONALITIES knob pairs from
+// [car id, caution, laneBias] — the first four AI_PERSONALITIES knob pairs from
 // native/libttp-sim/ttp/ai_driver.cc, under the traces' cpu-<name> id convention.
 const NATIVE_PERSONAS = [
   ['cpu-bolt', 1.05, -0.6], ['cpu-pixel', 1.00, 0.6],

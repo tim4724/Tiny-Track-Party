@@ -380,9 +380,42 @@ StartResult startRace(const StartInput& in) {
   return r;
 }
 
+// launchRace's grid reorder — see LaunchInput. Pure permutation: livery, model,
+// persona and bot seed were all fixed by the fill above; only who starts where
+// moves. Stable throughout, so ties keep the built (join) order.
+static std::vector<FieldEntry> orderGrid(std::vector<FieldEntry> field,
+                                         const LaunchInput& in) {
+  if (in.gridOrder.empty() && !in.humansAtBack) return field;
+  std::vector<FieldEntry> ordered;
+  ordered.reserve(field.size());
+  std::vector<char> placed(field.size(), 0);
+  for (const Id& id : in.gridOrder) {
+    for (size_t i = 0; i < field.size(); i++) {
+      if (!placed[i] && field[i].peerIndex == id) {
+        placed[i] = 1;
+        ordered.push_back(std::move(field[i]));
+        break;
+      }
+    }
+  }
+  // The leftovers start at the back — CPU ahead of humans when humansAtBack,
+  // which is also the whole rule for a first race (empty gridOrder).
+  for (int wantAi = 1; wantAi >= 0; wantAi--) {
+    for (size_t i = 0; i < field.size(); i++) {
+      if (placed[i]) continue;
+      if (in.humansAtBack && field[i].ai != (wantAi == 1)) continue;
+      placed[i] = 1;
+      ordered.push_back(std::move(field[i]));
+    }
+    if (!in.humansAtBack) break;  // one pass took everyone, in built order
+  }
+  return ordered;
+}
+
 LaunchResult launchRace(const LaunchInput& in) {
   LaunchResult out;
   BuiltField built = buildField(in.players, in.seed, in.world);
+  built.field = orderGrid(std::move(built.field), in);
   out.field = built.field;
   out.aiIds = built.aiIds;
   out.bots = built.bots;

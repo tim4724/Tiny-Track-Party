@@ -89,6 +89,20 @@ std::vector<GpStanding> CupSeries::standings() const {
   return rows;
 }
 
+std::vector<Id> CupSeries::lastRaceOrder() const {
+  std::vector<std::pair<int, Id>> ranked;
+  for (const auto& kv : meta_) {
+    const Meta& m = kv.second;
+    if (!m.lastRankNull && m.lastRaceIndex == lastApplied_) ranked.push_back({m.lastRank, kv.first});
+  }
+  std::stable_sort(ranked.begin(), ranked.end(),
+                   [](const auto& a, const auto& b) { return a.first < b.first; });
+  std::vector<Id> out;
+  out.reserve(ranked.size());
+  for (const auto& r : ranked) out.push_back(r.second);
+  return out;
+}
+
 void CupSeries::rekey(const Id& oldId, const Id& newId) {
   if (oldId == newId || !findMeta(oldId)) return;
   for (auto& kv : meta_) if (kv.first == oldId) kv.first = newId;

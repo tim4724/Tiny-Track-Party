@@ -265,6 +265,12 @@ struct RuntimeSession {
   std::string forceItem;
   std::vector<PlayerDesc> humans;  // add order
   std::vector<BotEntry> bots;      // add order
+  // The grid, in hand-over order — filled only by ttp_session_begin_field,
+  // whose field IS the grid (the race walks order it: humans at the back,
+  // chained races on the previous finish). Empty on the add_human/add_bot
+  // path, which keeps its historical humans-then-bots composition — the
+  // trace replays feed rosters through it and their hashes seat that way.
+  std::vector<PlayerDesc> seats;
 
   bool started = false;  // startCountdown fired (or bare mode running)
   bool built = false;    // session objects constructed (may precede started)
@@ -283,6 +289,15 @@ struct RuntimeSession {
   void driveBots() {
     for (auto& b : bots)
       if (b.ai) eng->driveBot(b.id, *b.ai, nullptr);
+  }
+
+  // The grid: the handed-over field when there is one (begin_field), else
+  // humans first then bots, both in add order.
+  std::vector<PlayerDesc> gridPlayers() const {
+    if (!seats.empty()) return seats;
+    std::vector<PlayerDesc> players = humans;
+    for (const auto& b : bots) players.push_back(PlayerDesc{b.id, b.hasStats, b.stats});
+    return players;
   }
 };
 
@@ -858,9 +873,10 @@ int ttp_session_begin_field(const char* trackId, uint32_t seed, int laps,
     for (const Value& b : bots.arr)
       if (const Value* pid = b.find("peerIndex")) spec[canonical_stringify(*pid)] = &b;
 
-  // ONE PASS OVER THE FIELD, in its order. The buckets keep that order, and
-  // the grid is humans first then bots (buildSession's contract), which is
-  // what every shell's hand-written loop produced.
+  // ONE PASS OVER THE FIELD, in its order — and that order IS the grid
+  // (`seats`): the race walks hand a field they already ordered. The buckets
+  // are still filled beside it, bots for the controllers, humans for the
+  // queries that read them.
   const Value field = json::parse_or(fieldJson, Value::Arr());
   const auto optNum = [](const Value* e, const char* key, double dflt) {
     const Value* f = e->find(key);   // absent OR null -> the default (JS ??)
@@ -879,11 +895,13 @@ int ttp_session_begin_field(const char* trackId, uint32_t seed, int laps,
         b.laneBias = optNum(it->second, "laneBias", 0);
         b.aiSeed = jsToUint32(optNum(it->second, "seed", 1));
         if (st && st->type == Value::OBJ) { b.hasStats = true; b.stats = statsOf(*st); }
+        rs->seats.push_back(PlayerDesc{b.id, b.hasStats, b.stats});
         rs->bots.push_back(std::move(b));
       } else {
         PlayerDesc pd;
         pd.id = json::id_of<Id>(pid);
         if (st && st->type == Value::OBJ) { pd.hasStats = true; pd.stats = statsOf(*st); }
+        rs->seats.push_back(pd);
         rs->humans.push_back(pd);
       }
     }
@@ -916,9 +934,7 @@ static void buildSession(RuntimeSession* rs) {
   if (rs->built || rs->bare) return;
   rs->built = true;
 
-  // Grid order: humans first, then bots, both in add order.
-  std::vector<PlayerDesc> players = rs->humans;
-  for (auto& b : rs->bots) players.push_back(PlayerDesc{b.id, b.hasStats, b.stats});
+  std::vector<PlayerDesc> players = rs->gridPlayers();
 
   RuntimeSession* self = rs;
   auto onEvent = [self](const Event& e) {
@@ -961,8 +977,7 @@ void ttp_session_start(int h, int countdownSeconds) {
     rs->started = true;
     rs->bare = true;
     rs->racingBare = true;
-    std::vector<PlayerDesc> players = rs->humans;
-    for (auto& b : rs->bots) players.push_back(PlayerDesc{b.id, b.hasStats, b.stats});
+    std::vector<PlayerDesc> players = rs->gridPlayers();
     RuntimeSession* self = rs;
     auto onEvent = [self](const Event& e) {
       self->outQueue.push_back(e.toValue());

@@ -334,6 +334,17 @@ struct LaunchInput {
   double countdownSeconds = 3;
   OptStr forceItem;
   FieldWorld world;
+  // Grid order. The field array IS the grid — index 0 is pole (the session
+  // seats cars in field order) — and these two knobs reorder it AFTER the fill:
+  //   * gridOrder, when non-empty, is the previous race's finish order and wins
+  //     outright (a chained series race). Ids it does not name — a mid-series
+  //     joiner, a fresh fill bot — start at the back.
+  //   * humansAtBack sends the CPU field out front (a first race, and the
+  //     back-of-grid rule for ids gridOrder missed).
+  // Both default OFF because the raceflow corpus predates them: recorded
+  // launches replay the recorded grid, and the live walks pass the game's rule.
+  bool humansAtBack = false;
+  std::vector<Id> gridOrder;
 };
 struct LaunchResult {
   Effects effects;

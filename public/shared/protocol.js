@@ -102,9 +102,14 @@ var ROOM_STATE = {
 
 // ---- Game constants (shared so display + controller agree) ----
 // Human seats per room. A short-handed lobby is topped up to a full grid with AI
-// ("CPU") racers on the display side (see display/main.js FIELD_SIZE), so this is
-// the cap on PHONES, not on cars in a race.
+// ("CPU") racers on the display side, so this is the cap on PHONES, not on cars
+// in a race — FIELD_SIZE below is that.
 var MAX_PLAYERS = 4;
+// Cars in every race: the connected humans plus AI filling the grid up to this.
+// The display feeds it to the engine's race orchestration at boot; humans start
+// from the back of it. Never larger than CAR_COLORS — every seat needs its own
+// livery.
+var FIELD_SIZE = 8;
 var TOTAL_LAPS = 3;
 var COUNTDOWN_SECONDS = 3;
 // The schematic codec's max deviation (shared/schematicCodec.js SCHEMATIC_EPS,
@@ -310,7 +315,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     MSG, FASTLANE_TYPES, ROOM_STATE,
     RELAY_URL, STUN_URL, STUN_FALLBACK_URL,
-    MAX_PLAYERS, TOTAL_LAPS, COUNTDOWN_SECONDS, SCHEMATIC_EPS, STEER, LIVENESS, RANDOM_RACES,
+    MAX_PLAYERS, FIELD_SIZE, TOTAL_LAPS, COUNTDOWN_SECONDS, SCHEMATIC_EPS, STEER, LIVENESS, RANDOM_RACES,
     CAR_COLORS, CAR_MODELS, CAR_NAMES, CAR_MODEL_YAW,
     CAR_STATS, carStats
   };

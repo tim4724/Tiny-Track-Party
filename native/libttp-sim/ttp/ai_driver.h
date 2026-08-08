@@ -51,7 +51,7 @@ double cornerBrake(const Car& car, Centerline& centerline,
                    double turn, double caution, const RacingLine* line);
 
 struct Persona { const char* name; double caution; double laneBias; };
-extern const Persona AI_PERSONALITIES[4];
+extern const Persona AI_PERSONALITIES[7];
 
 class AiController {
  public:

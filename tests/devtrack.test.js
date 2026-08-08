@@ -32,7 +32,7 @@ const skip = fs.existsSync(MJS) && fs.existsSync(WASM)
   ? false
   : 'ttp_runtime.mjs/.wasm not built — run native/scripts/build-runtime-web.sh';
 
-// [car id, caution, laneBias] — the four AI_PERSONALITIES knob pairs from
+// [car id, caution, laneBias] — the first four AI_PERSONALITIES knob pairs from
 // native/libttp-sim/ttp/ai_driver.cc, under the traces' cpu-<name> id convention.
 const PERSONAS = [
   ['cpu-bolt', 1.05, -0.6], ['cpu-pixel', 1.00, 0.6],

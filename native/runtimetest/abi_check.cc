@@ -74,6 +74,7 @@
 // room_flow.h and session.h are libttp-party's. This check already links both
 // libraries and recompiles the shims, which is the same standing this file's
 // includes of ttp_room.h / ttp_session.h have.
+#include "ttp/grand_prix.h"  // CupSeries::lastRaceOrder — the chained grid the race walks read
 #include "ttp/race_flow.h"
 #include "ttp/room_flow.h"
 #include "ttp/session.h"
@@ -2549,15 +2550,19 @@ void uiLiveTwinsMatchJsonPaths() {
 
 // ---------------------------------------------------------------------------
 // ttp_session_begin_field against the begin + add loop it replaces. The
-// composite adds no rule — same buckets, same order, same defaults — so the
-// two constructions must produce bit-identical worlds under identical driving.
+// composite carries exactly ONE rule of its own: its field's order IS the
+// grid (the race walks order the field — humans at the back, chained races
+// on the previous finish). Everything else — buckets, defaults — matches the
+// manual path, so a humans-then-bots field must produce a bit-identical
+// world under identical driving, and an interleaved field must seat exactly
+// as handed (which the manual path cannot spell: it seats humans first).
 // ---------------------------------------------------------------------------
 void beginFieldMatchesManualPath() {
   const int a = ttp_session_begin_field(
       "tidepool", 7u, 3, nullptr,
       "[{\"peerIndex\":1,\"stats\":{\"accel\":1.05},\"name\":\"Ada\",\"colorIndex\":0},"
-      "{\"peerIndex\":\"ai-7\",\"stats\":null},"
-      "{\"peerIndex\":3}]",
+      "{\"peerIndex\":3},"
+      "{\"peerIndex\":\"ai-7\",\"stats\":null}]",
       "[{\"peerIndex\":\"ai-7\",\"caution\":0.9,\"laneBias\":0.2,\"seed\":42},"
       "{\"peerIndex\":\"ai-9\"}]");   // a spec no field entry names is inert
   if (a <= 0) { fail("begin_field: no handle"); return; }
@@ -2593,7 +2598,16 @@ void beginFieldMatchesManualPath() {
   check(std::string(ttp_snapshot_json(c)) == ttp_snapshot_json(d),
         "begin_field: {} spec == the engine defaults");
 
-  ttp_dispose(a); ttp_dispose(b); ttp_dispose(c); ttp_dispose(d);
+  // The ordering rule itself: a field with bots in front seats in FIELD order
+  // — index 0 is pole (game.cc seats by index). This is the live path the
+  // walks' humansAtBack/gridOrder ordering rides on; buckets must not undo it.
+  const int e = ttp_session_begin_field("tidepool", 7u, 3, nullptr,
+      "[{\"peerIndex\":\"ai-0\"},{\"peerIndex\":\"ai-1\"},{\"peerIndex\":1}]",
+      "[{\"peerIndex\":\"ai-0\"},{\"peerIndex\":\"ai-1\"}]");
+  check(std::string(ttp_car_ids_json(e)) == "[\"ai-0\",\"ai-1\",1]",
+        "begin_field: an interleaved field is the grid, verbatim");
+
+  ttp_dispose(a); ttp_dispose(b); ttp_dispose(c); ttp_dispose(d); ttp_dispose(e);
 }
 
 // ---------------------------------------------------------------------------
@@ -3750,6 +3764,7 @@ void raceLiveWalks() {
     li.countdownSeconds = countdownSeconds;
     if (forceItem && *forceItem) li.forceItem = race::OptStr::Of(forceItem);
     li.world = W;
+    li.humansAtBack = true;  // the walks' standing grid rule
     return race::launchRace(li);
   };
 
@@ -3837,6 +3852,16 @@ void raceLiveWalks() {
     }
     check(statsSurvive, "the opaque car-stats row survives into the retained field");
     check(botIdsAreStrings, "a bot's id is the STRING \"ai-0\" there too, never a number");
+    // The grid rule itself, not just walk==rule agreement: the field array IS
+    // the grid (index 0 = pole), and a fresh start sends every CPU out front
+    // with the humans at the back.
+    bool humansSeen = false, humansBehindCpu = !retained.arr.empty();
+    for (const Value& f : retained.arr) {
+      if (!json::truthy(f.find("ai"))) humansSeen = true;
+      else if (humansSeen) humansBehindCpu = false;
+    }
+    check(humansSeen && humansBehindCpu,
+          "a fresh start grids every CPU ahead of every human");
 
     // The payload fields a marshaller can quietly drop, on the one op that
     // still crosses — plus the enrichment the executor added to it.
@@ -3871,6 +3896,7 @@ void raceLiveWalks() {
     li.forceItem = race::OptStr::Of("rocket");
     li.world = W;
     li.world.botCap = race::OptNum::Of(1);
+    li.humansAtBack = true;
     sameOps(forced, race::launchRace(li).effects, "start_live with ?item and ?bots");
     for (const Value& e : at(forced, "effects").arr)
       if (json::str_field(e, "op") == "create-session")
@@ -3979,6 +4005,12 @@ void raceLiveWalks() {
         li.trackId = next;
         li.countdownSeconds = 3;
         li.world = W;
+        li.humansAtBack = true;
+        // The chained grid: the previous race's finish order, read off the
+        // stored series exactly as the walk reads it (advance() moves only
+        // raceIndex, so either side of the call answers the same).
+        if (const ttp::CupSeries* sp = ttp_gp_series(ttp_room_series(room)))
+          li.gridOrder = sp->lastRaceOrder();
         for (race::Effect& e : race::launchRace(li).effects) expected.push_back(std::move(e));
       }
       const Value got = parseOrNull(
@@ -4015,6 +4047,31 @@ void raceLiveWalks() {
     check(std::string(ttp_race_series_state_json(room)) == "null",
           "premise: the room holds no series");
     sameAdvance(1, "no series at all");
+
+    // ---- the chained grid: the previous race's finish order ------------------
+    // A fresh 2-race cup with race 1 banked in a deliberately shuffled order
+    // (a bot on pole, a human winning nothing): the chained launch must grid
+    // exactly that order, and sameAdvance holds the walk to the rule.
+    {
+      const int gp = ttp_gp_create(
+          "{\"id\":\"beach\",\"name\":\"Beach\",\"tracks\":[\"tidepool\",\"helix\"]}", 0);
+      ttp_room_store_series(room, gp);
+      ttp_gp_apply_race(gp,
+                        "[{\"playerId\":2,\"rank\":1,\"finished\":true},"
+                        "{\"playerId\":\"ai-1\",\"rank\":2,\"finished\":true},"
+                        "{\"playerId\":1,\"rank\":3,\"finished\":true},"
+                        "{\"playerId\":\"ai-0\",\"rank\":4,\"finished\":false}]",
+                        "[{\"peerIndex\":2,\"name\":\"Bo\",\"colorIndex\":1,\"ai\":false}]",
+                        nullptr);
+      sameAdvance(1, "chained grid");
+      const Value retained = ttp_room_field_value(room);
+      std::string ids;
+      for (const Value& f : retained.arr)
+        ids += canonical_stringify(at(f, "peerIndex")) + " ";
+      check(ids == "2 \"ai-1\" 1 \"ai-0\" ",
+            "a chained race grids on the previous finish order (DNF included)\n  got  " + ids);
+      ttp_room_store_series(room, 0);
+    }
   }
 
   // ---- return_live: the way out, with its own draws protocol -----------------

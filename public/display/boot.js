@@ -32,7 +32,7 @@ export function trackEntry(t, totalLaps) {
 // Boot the native stack and hand back everything the page reads off it. The
 // window globals (field sizes, car table, lap count) arrive as `world` rather
 // than being read here, so this module has no opinion about where they live.
-export async function bootEngine({ maxPlayers, carModels, carColors, carNames, carStatsRows, totalLaps }) {
+export async function bootEngine({ maxPlayers, fieldSize, carModels, carColors, carNames, carStatsRows, totalLaps }) {
   const sim = await import('./NativeRaceSession.js');
   // The audio DECISIONS are C++ too (ttp_audio.h). Only the device half — the
   // AudioContext, the cue palette, the song element — is still JS, and it decides
@@ -74,7 +74,7 @@ export async function bootEngine({ maxPlayers, carModels, carColors, carNames, c
   //   * carStats rows cross OPAQUE — copied into a field entry and never read —
   //     which is what keeps CAR_STATS out of the decision layer.
   flow.configure({
-    fieldSize: maxPlayers, carCount: carModels.length, colorCount: carColors.length,
+    fieldSize, carCount: carModels.length, colorCount: carColors.length,
     aiPrefix: 'ai-', personas: flow.personas(),
     carStats: carStatsRows, cups
   });

@@ -64,6 +64,10 @@ class CupSeries {
   void applyRace(const std::vector<GpResult>& results, const std::vector<GpFieldEntry>& field);
   void advance();
   std::vector<GpStanding> standings() const;
+  // The LAST APPLIED race's finish order (ids by that race's rank) — the next
+  // race's grid. Empty before any race is banked. Only rows ranked by that
+  // race qualify; a player who sat it out has no position to inherit.
+  std::vector<Id> lastRaceOrder() const;
   void rekey(const Id& oldId, const Id& newId);
 
  private:

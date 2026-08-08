@@ -126,10 +126,14 @@ race::OptStr optStrOfC(const char* s) {
   return s && *s ? race::OptStr::Of(s) : race::OptStr();
 }
 
-// The launch, shared by the start walk and the cup chain's launch.
+// The launch, shared by the start walk and the cup chain's launch. The grid
+// rule is the GAME's, so it lives here in the shared walk rather than in any
+// shell: humans always start at the back, and a chained series race grids by
+// the previous race's finish order (gridOrder — empty on a fresh start).
 race::LaunchResult launchOff(int roomHandle, std::vector<race::Human> players,
                              double seed, double countdownSeconds,
-                             const char* forceItemOrNull, const char* botCapJson) {
+                             const char* forceItemOrNull, const char* botCapJson,
+                             std::vector<race::Id> gridOrder = {}) {
   race::LaunchInput li;
   li.players = std::move(players);
   li.seed = seed;
@@ -138,6 +142,8 @@ race::LaunchResult launchOff(int roomHandle, std::vector<race::Human> players,
   li.countdownSeconds = countdownSeconds;
   li.forceItem = optStrOfC(forceItemOrNull);
   li.world = worldWithCap(botCapJson);
+  li.humansAtBack = true;
+  li.gridOrder = std::move(gridOrder);
   return race::launchRace(li);
 }
 
@@ -702,9 +708,12 @@ const char* ttp_race_advance_live_json(int roomHandle, int sceneReady, double se
   if (r.action == race::AdvanceAction::ADVANCE) {
     // The advance re-aimed the pick at the cup's next circuit (executed
     // above), so the launch reads everything back off the handles. One walk:
-    // RESULTS -> COUNTDOWN with no shell sequencing in between.
+    // RESULTS -> COUNTDOWN with no shell sequencing in between. The chained
+    // grid is the previous race's finish order (advance() moved raceIndex, not
+    // the banked ranks, so the read is the same on either side of it).
     race::LaunchResult lr = launchOff(roomHandle, ai.players, seed, countdownSeconds,
-                                      forceItemOrNull, botCapJson);
+                                      forceItemOrNull, botCapJson,
+                                      s ? s->lastRaceOrder() : std::vector<race::Id>{});
     executeAndSpell(roomHandle, lr.effects, nullptr, fx);
   }
   v.set("effects", std::move(fx));

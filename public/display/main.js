@@ -38,7 +38,7 @@ import { dismissDeviceChoice, startWhenDeviceChosen } from './deviceChoice.js';
 import * as ui from './NativeUiModel.js';
 import { ITEM_IDS } from './engine/contract.js';
 
-const { MSG, ROOM_STATE, COUNTDOWN_SECONDS, TOTAL_LAPS, CAR_COLORS, CAR_MODELS, MAX_PLAYERS, carStats } = window;
+const { MSG, ROOM_STATE, COUNTDOWN_SECONDS, TOTAL_LAPS, CAR_COLORS, CAR_MODELS, MAX_PLAYERS, FIELD_SIZE, carStats } = window;
 const el = (id) => document.getElementById(id);
 const screens = { welcome: el('welcome'), lobby: el('lobby'), race: el('race') };
 // Back stack (live play only): each forward step pushes one history entry, each
@@ -129,7 +129,7 @@ const {
   sim: _nativeSim, audio: _nativeAudio, flow, biomes: _biomes,
   trackList: TRACK_LIST, built, trackCatalog, trackChooser, carChooser, party: _nativeParty
 } = await bootEngine({
-  maxPlayers: MAX_PLAYERS, carModels: CAR_MODELS, carColors: CAR_COLORS,
+  maxPlayers: MAX_PLAYERS, fieldSize: FIELD_SIZE, carModels: CAR_MODELS, carColors: CAR_COLORS,
   carNames: window.CAR_NAMES || [], carStatsRows: CAR_MODELS.map((_, i) => carStats(i)),
   totalLaps: TOTAL_LAPS
 });

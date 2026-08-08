@@ -50,8 +50,15 @@ static const double BRAKE_LOOK_STEP = 1.0;
 static const double CORNER_MARGIN = 1.25;
 static const double BRAKE_DECEL_REF = 5.8;
 
-const Persona AI_PERSONALITIES[4] = {
-    {"Bolt", 1.05, -0.6}, {"Pixel", 1.00, 0.6}, {"Rusty", 0.97, -0.25}, {"Zippy", 0.94, 0.25}};
+// Seven so a FIELD_SIZE-8 single-player race fills without a repeated name.
+// The first four are the originals and stay first: cpuSeats deals personas in
+// order, so short fields keep the exact roster they always had. New entries
+// stay inside the proven caution band [0.94, 1.05] (the ladder below it was
+// removed on purpose) and avoid the CAR names (Dash/Bolt/Carve/Rumble aside —
+// Bolt's double duty predates this table).
+const Persona AI_PERSONALITIES[7] = {
+    {"Bolt", 1.05, -0.6}, {"Pixel", 1.00, 0.6}, {"Rusty", 0.97, -0.25}, {"Zippy", 0.94, 0.25},
+    {"Turbo", 1.02, 0.4}, {"Gizmo", 0.99, -0.4}, {"Scoot", 0.96, 0.1}};
 
 // ---- RacingLine --------------------------------------------------------------
 RacingLine::RacingLine(Centerline& centerline) {

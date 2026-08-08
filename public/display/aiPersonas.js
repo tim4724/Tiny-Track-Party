@@ -17,4 +17,9 @@ export const AI_PERSONALITIES = [
   { name: 'Pixel', caution: 1.00, laneBias:  0.6 },  // corners at the true limit of its car
   { name: 'Rusty', caution: 0.97, laneBias: -0.25 },
   { name: 'Zippy', caution: 0.94, laneBias:  0.25 }, // the tail still lifts earliest/deepest — but the whole field moved up from the old 1.00/0.97/0.94/0.91
+  // Rows 5-7 exist for the 8-car fields: a single player gets 7 bots, and four
+  // names meant three duplicates. Dealt in order after the originals.
+  { name: 'Turbo', caution: 1.02, laneBias:  0.4 },
+  { name: 'Gizmo', caution: 0.99, laneBias: -0.4 },
+  { name: 'Scoot', caution: 0.96, laneBias:  0.1 },
 ];
