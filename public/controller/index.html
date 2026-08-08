@@ -46,19 +46,19 @@
 
   <!-- Lobby — who you are, your car, the track (the shared display owns the
        player roster). -->
-  <!-- Landscape spread: a fixed LEFT column (who you are, your car's hero card,
-       the ready/start footer) beside a flexible RIGHT column (the car strip and
-       the host's race picker). The page scrolls vertically when the right
-       column runs long. -->
+  <!-- Landscape spread, grouped by MEANING: "your car" on the left (the hero
+       card with its strip right under it), "the race + go" on the right (the
+       host's picker over the ready/start footer, pinned to the bottom). The
+       page scrolls vertically when a column runs long. -->
   <section id="lobby" class="hidden">
-    <div class="lobby-left">
-      <!-- your identity, up top — name in your livery colour (no dot needed). Hidden
-           wholesale inside the CouchPad shell (the launcher shows the name in its
-           own chip), where the row collapses to nothing. -->
-      <div class="lobby-me">
-        <span id="me-name" class="lobby-me__name"></span>
-      </div>
+    <!-- your identity, up top — name in your livery colour (no dot needed). Hidden
+         wholesale inside the CouchPad shell (the launcher shows the name in its
+         own chip), where the row collapses to nothing. -->
+    <div class="lobby-me">
+      <span id="me-name" class="lobby-me__name"></span>
+    </div>
 
+    <div class="lobby-car">
       <!-- your car — no section header; the card speaks for itself. The gear reopens
            the Settings popup (input mode + the how-to-drive demo; always available in
            the lobby; also auto-shows once on the first visit — see openSettings in
@@ -69,20 +69,22 @@
         <button id="settings-btn" class="settings-btn icon-btn" type="button" aria-label="Settings" aria-haspopup="dialog">&#9881;&#xFE0E;</button>
         <div id="car-hero" class="car-hero"></div>
       </div>
+      <div id="carpick" class="carpick"></div>
 
       <!-- lobby footer — non-hosts ready up; the host's button is "Start race",
-           disabled until everyone else is ready. See renderReadyFoot (ui.js). -->
+           disabled until everyone else is ready. See renderReadyFoot (ui.js).
+           Lives under the car column so the primary action stays ABOVE THE FOLD
+           while the (taller) race picker scrolls. -->
       <button id="ready-btn" class="btn btn--brand hidden">I’m ready</button>
       <div id="ready-note" class="hidden"></div>
     </div>
 
-    <div class="lobby-right">
-      <div id="carpick" class="carpick"></div>
-
+    <div class="lobby-race">
       <!-- what to race — host only: 🎲 Random / a cup (4-race Grand Prix) / an
            exact track from the open cup's panel. Everyone else sees the pick on
            the big screen instead. Hidden until the catalog arrives (WELCOME);
-           see renderModePicker. -->
+           see renderModePicker — when it's hidden the whole column collapses
+           and the car column centres (see #lobby:has in controller.css). -->
       <div id="trackpick" class="trackpick hidden">
         <div class="lobby-head"><span class="pill">Race</span></div>
         <div id="track-strip" class="trackpick__strip"></div>
