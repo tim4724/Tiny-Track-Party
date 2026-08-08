@@ -33,6 +33,18 @@ html, body {
   color: var(--ink);
   touch-action: manipulation;
 }
+/* Very small devices: nearly everything here is sized in rem, so shrinking
+   the ROOT font scales the whole rhythm — cards, buttons, pickers, overlays —
+   proportionally, instead of a per-component media query for each screen.
+   Tier 1 covers small landscape phones (SE-class); tier 2 covers the same
+   with browser chrome eating the height. px-sized art (the demo phones, ink
+   borders) has its own scale tiers below. */
+@media (max-height: 360px), (max-width: 700px) {
+  html { font-size: 14px; }
+}
+@media (max-height: 300px), (max-width: 580px) {
+  html { font-size: 12.5px; }
+}
 /* dvh tracks the *visible* viewport, so bottom content never hides under the
    mobile browser navbar (100vh = the larger toolbar-retracted height). */
 body { display: flex; min-height: 100vh; min-height: 100dvh; position: relative; }
@@ -110,6 +122,17 @@ input[type=text]:disabled { opacity: 0.6; }
 #lobby:has(#trackpick.hidden) .carpick {
   grid-template-columns: repeat(auto-fit, minmax(4.5rem, 5.5rem));
   justify-content: center;
+}
+/* Narrow screens: two columns leave both cramped — stack the car group over
+   the race picker instead and let the page scroll (it already does). */
+@media (max-width: 620px) {
+  #lobby {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'car'
+      'race';
+    row-gap: 1rem;
+  }
 }
 
 /* Player identity, up top — your name as a livery-tinted sticker (coloured bg,
