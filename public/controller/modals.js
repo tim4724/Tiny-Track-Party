@@ -69,7 +69,7 @@ function refreshSettingsCard() {
 
 function openSettings() {
   _settingsReturnFocus = document.activeElement;
-  el('phone-name').textContent = _playerName();   // demo phone reads as "your phone" (livery via --car)
+  setDemoNames(_playerName());   // both demo phones read as "your phone" (livery via --car)
   refreshSettingsCard();
   el('settings-overlay').classList.remove('hidden');
   setBackgroundInert(true);
@@ -84,9 +84,15 @@ function closeSettings() {
   _onModalToggle();
 }
 
-// A live launcher rename (§2) while the demo phone is on screen.
+// Both mode cards carry a demo phone, so the name is a class, not an id.
+function setDemoNames(name) {
+  for (const n of document.querySelectorAll('.phone-name')) n.textContent = name;
+}
+
+// A live launcher rename (§2) — or a snapshot catching up on the engine's
+// placeholder — while the demo phones are on screen.
 export function refreshHelpName(name) {
-  if (settingsOpen()) el('phone-name').textContent = name;
+  if (settingsOpen()) setDemoNames(name);
 }
 
 function maybeAutoShowSettings() {

@@ -89,13 +89,11 @@ input[type=text]:disabled { opacity: 0.6; }
 #lobby {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
-  grid-template-rows: auto 1fr;
-  grid-template-areas:
-    'me  me'
-    'car race';
+  grid-template-areas: 'car race';
   column-gap: 1.4rem;
   align-content: start;
-  padding-top: calc(0.7rem + var(--safe-top));
+  /* extra top room for the name sticker overhanging the hero card's corner */
+  padding-top: calc(1.2rem + var(--safe-top));
 }
 .lobby-car  { grid-area: car;  display: flex; flex-direction: column; min-width: 0; }
 .lobby-race { grid-area: race; display: flex; flex-direction: column; min-width: 0; }
@@ -105,9 +103,7 @@ input[type=text]:disabled { opacity: 0.6; }
    works — it's just lopsided. */
 #lobby:has(#trackpick.hidden) {
   grid-template-columns: minmax(0, 30rem);
-  grid-template-areas:
-    'me'
-    'car';
+  grid-template-areas: 'car';
   justify-content: center;
 }
 #lobby:has(#trackpick.hidden) .lobby-race { display: none; }
@@ -118,13 +114,19 @@ input[type=text]:disabled { opacity: 0.6; }
 
 /* Player identity, up top — your name as a livery-tinted sticker (coloured bg,
    white text, slapped on at −2°; mirrors the display's cell name tags). */
-.lobby-me { grid-area: me; display: flex; align-items: center; margin: 0 0 0.9rem; }
+/* …slapped OVER the hero card's top-left corner like a real sticker (the card
+   is its anchor), which is what frees the old standalone identity row. The
+   card's max-content name keeps it clear of the corner overhang. */
+.lobby-me {
+  position: absolute; z-index: 3; top: -0.75rem; left: -0.5rem;
+  display: flex; max-width: 80%;
+}
 .lobby-me__name {
-  font-family: var(--font-display); font-weight: 700; font-size: 1.5rem; line-height: 1;
+  font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; line-height: 1;
   color: #fff; background: var(--car, var(--brand));
   border: 3px solid var(--ink); border-radius: var(--r-sm);
   padding: 0.3em 0.6em;
-  transform: rotate(-2deg);
+  transform: rotate(-3deg);
   box-shadow: var(--shadow-pop);
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
@@ -223,7 +225,8 @@ input[type=text]:disabled { opacity: 0.6; }
   padding: 0.5rem; margin: -0.5rem -0.5rem 0;
 }
 .modepick {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(6.2rem, 1fr));
+  /* fixed 3-up: five cups + Random land as an even 3×2, no ragged tail row */
+  display: grid; grid-template-columns: repeat(3, 1fr);
   gap: 0.5rem;
 }
 /* compact tiles — name + tendency meter + hint; the tracks themselves show in
@@ -435,8 +438,8 @@ input[type=text]:disabled { opacity: 0.6; }
 #game.mode-buttons #brake-btn.brake { display: none; }
 
 /* Thick-ink chevron glyph for the steer buttons (and their mini/demo copies) —
-   drawn from two borders on a rotated box, like the settings card's .chev: the
-   font's chevron is hairline at any size and this carries the theme's weight. */
+   drawn from two borders on a rotated box: the font's chevron is hairline at
+   any size and this carries the theme's weight. */
 .steer-glyph {
   display: inline-block; width: 0.85em; height: 0.85em;
   border: 0 solid currentColor; border-radius: 2px;
@@ -614,96 +617,52 @@ input[type=text]:disabled { opacity: 0.6; }
 /* the motion card shares the surface but stays content-sized — it's an alert,
    not the full settings sheet */
 .motion-card { height: auto; }
-.settings-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.settings-head { display: flex; align-items: center; gap: 0.8rem; }
 .settings-title {
   font-family: var(--font-display); font-weight: 700;
   font-size: 1.4rem; margin: 0; color: var(--ink);
 }
 
-/* The steering-mode control: a kicker pill naming the group, then two sticker
-   TILES — plain paper in a thick ink outline at rest, the picked one filled
-   with the player's livery. Exactly the pick-a-tile language of the lobby's
-   car/cup pickers, so "this is the thing you choose" reads on sight (the old
-   slim pill toggle read as a label). */
-.settings-group { display: flex; align-items: center; gap: 0.8rem; }
-.seg { display: flex; gap: 0.6rem; }
-.seg__opt {
-  padding: 0.5rem 1.4rem; cursor: pointer;
-  font-family: var(--font-display); font-weight: 700; font-size: 1rem; color: var(--ink-2);
-  background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r-sm);
+/* The steering-mode control: two big SELECTABLE CARDS sharing the row, each
+   holding its own demo phone. Paper in a thick ink outline at rest; the picked
+   one tints toward the player's livery (the lobby pickers' picked-tile mark)
+   and its demo animates, while the unpicked one sits dimmed and still. */
+.seg { flex: 1; min-height: 0; display: flex; gap: 0.9rem; }
+.mode-card {
+  flex: 1; min-width: 0; min-height: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0.3rem; padding: 0.5rem; cursor: pointer;
+  background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r);
   box-shadow: var(--shadow-pop);
   transition: transform 0.08s, box-shadow 0.08s, background 0.08s;
 }
-.seg__opt:active { transform: translate(2px, 2px); box-shadow: none; }
-.seg__opt[aria-checked='true'] { background: var(--car, var(--brand)); color: #fff; }
+.mode-card:active { transform: translate(2px, 2px); box-shadow: none; }
+.mode-card[aria-checked='true'] { background: color-mix(in srgb, var(--car, var(--brand)) 16%, #fff); }
+.mode-card__name {
+  font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; line-height: 1;
+  color: var(--ink);
+}
+.mode-card__cap { font-weight: 800; font-size: 0.78rem; color: var(--ink-3); line-height: 1; }
+.mode-card[aria-checked='true'] .mode-card__cap { color: var(--ink-2); }
+/* the unpicked card's demo: dimmed and FROZEN (its animations hold their pose) */
+.mode-card[aria-checked='false'] .steer-demo { opacity: 0.45; filter: saturate(0.5); }
+.mode-card[aria-checked='false'] .steer-demo * { animation-play-state: paused !important; }
 
-/* body: demo | info, taking the card's height (the card fills the screen —
-   the demo is the whole point of the sheet, so it gets the room). The side is
-   a SUNKEN panel (surface-2 = the theme's informational surface), so the
-   legend reads as explanation, never as another row of buttons. */
-.settings-body { flex: 1; min-height: 0; display: flex; align-items: center; gap: 1.2rem; }
-.settings-side {
-  flex: 1; min-width: 11rem; display: flex; flex-direction: column; gap: 0.7rem;
-  padding: 0.9rem 1rem;
+/* Legend — a SUNKEN strip (surface-2 = the theme's informational surface), so
+   the chips read as a legend for the demos, never as another row of buttons.
+   Rows swap with the picked mode: tilt teaches ITEM + BRAKE, buttons the ‹ ›
+   chord + ITEM. */
+.settings-legend {
+  flex: none; display: flex; align-items: center; justify-content: center;
+  gap: 1.6rem; flex-wrap: wrap;
+  padding: 0.5rem 0.9rem;
   background: var(--surface-2); border-radius: var(--r-sm);
 }
-.settings-done { width: 100%; margin-top: 0.3rem; flex: none; }
-
-/* Caption rows swapped with the mode: tilt teaches ITEM + BRAKE, buttons the
-   ‹ › chord + ITEM. */
 .settings-card .help-ctrl--chord { display: none; }
 .settings-card.is-buttons .help-ctrl--chord { display: flex; }
 .settings-card.is-buttons .help-ctrl--brake { display: none; }
 
-/* STEER — the animated demo, centred: chevron | phone | chevron. The 1fr side
-   columns are equal, so each chevron lands in the MIDDLE of the free space
-   beside the phone at any card width — and the phone stays centred even though
-   only one chevron is ever visible. */
-.steer-stage { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; flex: 1.2; }
-
-/* Steer chevrons — drawn from two borders on a rotated box rather than set as a
-   type glyph: the font's chevron is hairline-thin at any size, and this carries the
-   theme's thick-ink weight instead. Livery-tinted to tie them to the steer fill.
-   Only the LEANING side is ever lit: both fade to nothing as the tilt crosses centre,
-   so the pair reads as "lean this way", never as a tappable left/right control. */
-.chev {
-  justify-self: center; pointer-events: none;
-  width: 26px; height: 26px;
-  border: 0 solid var(--car); border-radius: 3px;
-  transform: rotate(45deg);
-}
-.chev--l {
-  border-left-width: 8px; border-bottom-width: 8px;
-  animation: chev-fade-l 2.6s ease-in-out infinite;
-}
-.chev--r {
-  border-right-width: 8px; border-top-width: 8px;
-  animation: chev-fade-r 2.6s ease-in-out infinite;
-}
-/* Same 2.6s timeline as phone-twist/steer-slide: lit through the matching
-   HOLD (0–18% left, 50–68% right), faded out across the swings. */
-@keyframes chev-fade-l {
-  0%, 18% { opacity: 1; }
-  34%     { opacity: 0; }
-  84%     { opacity: 0; }
-  100%    { opacity: 1; }
-}
-@keyframes chev-fade-r {
-  0%, 34%  { opacity: 0; }
-  50%, 68% { opacity: 1; }
-  84%, 100% { opacity: 0; }
-}
-/* Buttons mode: the chevrons SNAP with the fill and the pressed mini. */
-.settings-card.is-buttons .chev--l { animation: chev-snap-l 2.6s linear infinite; }
-.settings-card.is-buttons .chev--r { animation: chev-snap-r 2.6s linear infinite; }
-@keyframes chev-snap-l {
-  0%, 49.9% { opacity: 1; }
-  50%, 100% { opacity: 0; }
-}
-@keyframes chev-snap-r {
-  0%, 49.9% { opacity: 0; }
-  50%, 100% { opacity: 1; }
-}
+.settings-done { width: 100%; margin-top: 0.1rem; flex: none; }
 
 /* STEER demo — a stylized LANDSCAPE phone whose screen is a MINIATURE of the
    real driving HUD in the picked mode. Tilt: the phone TWISTS in the screen
@@ -712,7 +671,9 @@ input[type=text]:disabled { opacity: 0.6; }
    with the strip filling the matching side in lockstep. Buttons: the phone
    holds still while the ‹ › minis take turns pressing and the strip SNAPS
    between full lock left/right. */
-.steer-demo { display: flex; flex-direction: column; align-items: center; padding: 0.35rem 0 0.5rem; perspective: 560px; }
+/* fixed stage height: the twist swings the phone's bounding box, so without a
+   reserved stage the card's caption would shimmy with the rotation */
+.steer-demo { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 132px; padding: 0; perspective: 560px; }
 /* Wrapper carries the steering-wheel twist. */
 .phone-lean {
   position: relative; transform-style: preserve-3d;
@@ -723,8 +684,8 @@ input[type=text]:disabled { opacity: 0.6; }
    rotateX tip). */
 .phone-frame {
   position: relative; transform-style: preserve-3d; transform: translateZ(6px);
-  width: 248px; height: 124px;
-  border: 3px solid #1b2430; border-radius: 22px;
+  width: 176px; height: 88px;
+  border: 3px solid #1b2430; border-radius: 18px;
   background: linear-gradient(155deg, #44515f 0%, var(--ink) 62%);
   padding: 6px;
 }
@@ -743,26 +704,23 @@ input[type=text]:disabled { opacity: 0.6; }
 .phone-inner {
   position: relative;
   width: 100%; height: 100%; border-radius: 15px; overflow: hidden;
-  display: grid; gap: 5px;
-  padding: 19px 24px 7px;
+  display: grid; gap: 4px;
+  padding: 13px 16px 5px;
   background: var(--paper);
   transform: translateZ(1px);
 }
 /* Both mini layouts mirror the REAL HUD: the strip centred in the stretchy top
    band, the mode's controls in a bottom row. tilt: ITEM | BRAKE share the
    width; buttons: ‹ | ITEM | › in three equal columns. */
-.phone-inner { grid-template-rows: 1fr 38px; }
-.settings-card:not(.is-buttons) .phone-inner { grid-template-columns: 1fr 1fr; }
-.settings-card:not(.is-buttons) .mini-btn--steer { display: none; }
-.settings-card:not(.is-buttons) .mini-steer      { grid-column: 1 / -1; grid-row: 1; align-self: center; justify-self: center; width: 66%; }
-.settings-card:not(.is-buttons) .mini-btn--item  { grid-column: 1; grid-row: 2; }
-.settings-card:not(.is-buttons) .mini-btn--brake { grid-column: 2; grid-row: 2; }
-.settings-card.is-buttons .phone-inner { grid-template-columns: 1fr 1fr 1fr; }
-.settings-card.is-buttons .mini-btn--brake { display: none; }
-.settings-card.is-buttons .mini-steer { grid-column: 1 / -1; grid-row: 1; align-self: center; justify-self: center; width: 66%; }
-.settings-card.is-buttons .mini-btn--steerl { grid-column: 1; grid-row: 2; }
-.settings-card.is-buttons .mini-btn--item   { grid-column: 2; grid-row: 2; }
-.settings-card.is-buttons .mini-btn--steerr { grid-column: 3; grid-row: 2; }
+.phone-inner { grid-template-rows: 1fr 26px; }
+.mini-steer { grid-column: 1 / -1; grid-row: 1; align-self: center; justify-self: center; width: 66%; }
+.steer-demo--tilt .phone-inner { grid-template-columns: 1fr 1fr; }
+.steer-demo--tilt .mini-btn--item  { grid-column: 1; grid-row: 2; }
+.steer-demo--tilt .mini-btn--brake { grid-column: 2; grid-row: 2; }
+.steer-demo--buttons .phone-inner { grid-template-columns: 1fr 1fr 1fr; }
+.steer-demo--buttons .mini-btn--steerl { grid-column: 1; grid-row: 2; }
+.steer-demo--buttons .mini-btn--item   { grid-column: 2; grid-row: 2; }
+.steer-demo--buttons .mini-btn--steerr { grid-column: 3; grid-row: 2; }
 /* Glassy screen sheen — a soft diagonal highlight (top-left) for a 3D, glossy feel.
    Fades out before the buttons so it never washes their colour. */
 .phone-inner::after {
@@ -772,8 +730,8 @@ input[type=text]:disabled { opacity: 0.6; }
 /* Island — the camera pill, on the LEFT edge in landscape. Pure iconography:
    it's what makes the illustration read instantly as "a phone". */
 .phone-island {
-  position: absolute; z-index: 2; left: 6px; top: 50%; transform: translateY(-50%);
-  width: 8px; height: 34%; border-radius: var(--r-pill);
+  position: absolute; z-index: 2; left: 5px; top: 50%; transform: translateY(-50%);
+  width: 7px; height: 34%; border-radius: var(--r-pill);
   background: #0E1218;
 }
 /* The player's own name, top-left like the real HUD — livery-tinted (var(--car))
@@ -781,9 +739,9 @@ input[type=text]:disabled { opacity: 0.6; }
    makes the preview read as "your phone, in the app". Out of the flow so the
    grid below owns the strip + buttons. */
 .phone-name {
-  position: absolute; z-index: 1; top: 6px; left: 20px; right: 20px;
+  position: absolute; z-index: 1; top: 4px; left: 16px; right: 16px;
   text-align: center;
-  font-family: var(--font-display); font-weight: 700; font-size: 11px; line-height: 1;
+  font-family: var(--font-display); font-weight: 700; font-size: 10px; line-height: 1;
   color: var(--car, var(--ink));
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
@@ -792,7 +750,7 @@ input[type=text]:disabled { opacity: 0.6; }
    or snapping full-side (buttons). The 2px border is deliberately out of scale
    so the card's ink language holds at this size. */
 .mini-steer {
-  position: relative; height: 17px; overflow: hidden;
+  position: relative; height: 14px; overflow: hidden;
   box-sizing: border-box;
   background: var(--surface); border: 2px solid var(--ink); border-radius: var(--r-pill);
 }
@@ -811,7 +769,7 @@ input[type=text]:disabled { opacity: 0.6; }
    steps(1, jump-none) easing is invalid CSS and silently killed the whole
    animation.) Both timelines run to ±50% — FULL lock, exactly the real bar's
    travel; anything shy of the rail reads as "almost". */
-.settings-card.is-buttons .mini-steer__fill { animation-name: steer-snap; }
+.steer-demo--buttons .mini-steer__fill { animation-name: steer-snap; }
 /* Mini buttons — scaled-down versions of the real controls: same labels,
    colours, ink border and bottom ledge, in the same positions. They live inside
    the non-interactive phone illustration, so their realism teaches recognition
@@ -820,21 +778,21 @@ input[type=text]:disabled { opacity: 0.6; }
 .mini-btn {
   display: flex; align-items: center; justify-content: center;
   color: #fff; font-family: var(--font-display); font-weight: 700;
-  font-size: 9px; letter-spacing: 0.04em;
-  border-radius: 7px; border: 2px solid var(--ink);
+  font-size: 8px; letter-spacing: 0.04em;
+  border-radius: 6px; border: 2px solid var(--ink);
   box-shadow: 0 1.5px 0 var(--btn-ledge);
 }
 .mini-btn--item  { background: var(--item); }
 .mini-btn--brake { background: var(--danger); }
 .mini-btn--steer { background: var(--blue); }
-.mini-btn .steer-glyph { font-size: 11px; border-radius: 1px; }
+.mini-btn .steer-glyph { font-size: 10px; border-radius: 1px; }
 /* ‹ › minis take turns pressing, on the same 2.6s clock as the strip: left
    HELD through the first half-cycle, right through the second — swapping in
    one visible snap at 50%/100%. A pressed mini SINKS onto its ledge and
    darkens — deliberately louder than the real button's press, so the tiny
    illustration still reads as "held down". */
-.settings-card.is-buttons .mini-btn--steerl { animation: mini-press-l 2.6s linear infinite; }
-.settings-card.is-buttons .mini-btn--steerr { animation: mini-press-r 2.6s linear infinite; }
+.steer-demo--buttons .mini-btn--steerl { animation: mini-press-l 2.6s linear infinite; }
+.steer-demo--buttons .mini-btn--steerr { animation: mini-press-r 2.6s linear infinite; }
 @keyframes mini-press-l {
   0%, 49.9% { transform: translateY(2px) scale(0.95); box-shadow: none; filter: brightness(0.8); }
   50%, 100% { transform: none; box-shadow: 0 1.5px 0 var(--btn-ledge); filter: none; }
@@ -852,11 +810,11 @@ input[type=text]:disabled { opacity: 0.6; }
    full-right through 50–68%, swing back. Without the holds the sine motion
    never rests and the eye can't verify the three agree. */
 @keyframes phone-twist {
-  0%, 18%   { transform: rotateX(8deg) rotateZ(-22deg); }
-  50%, 68%  { transform: rotateX(8deg) rotateZ(22deg); }
-  100%      { transform: rotateX(8deg) rotateZ(-22deg); }
+  0%, 18%   { transform: rotateX(8deg) rotateZ(-15deg); }
+  50%, 68%  { transform: rotateX(8deg) rotateZ(15deg); }
+  100%      { transform: rotateX(8deg) rotateZ(-15deg); }
 }
-.settings-card.is-buttons .phone-lean { animation: none; transform: rotateX(8deg); }
+.steer-demo--buttons .phone-lean { animation: none; transform: rotateX(8deg); }
 @keyframes steer-slide {
   0%, 18%   { transform: translateX(-50%); }
   50%, 68%  { transform: translateX(50%); }
@@ -954,20 +912,14 @@ input[type=text]:disabled { opacity: 0.6; }
    vanishing. */
 @media (prefers-reduced-motion: reduce) {
   .phone-lean { animation: none; transform: rotateX(8deg) rotateZ(-16deg); }
-  .settings-card.is-buttons .phone-lean { transform: rotateX(8deg); }
+  .steer-demo--buttons .phone-lean { transform: rotateX(8deg); }
   .mini-steer__fill { animation: none; transform: translateX(-50%); }
-  .settings-card.is-buttons .mini-steer__fill { transform: translateX(-50%); }
-  .settings-card.is-buttons .mini-btn--steerr { animation: none; }
+  .steer-demo--buttons .mini-btn--steerr { animation: none; }
   /* …with ‹ frozen HELD, matching the frozen full-left strip */
-  .settings-card.is-buttons .mini-btn--steerl {
+  .steer-demo--buttons .mini-btn--steerl {
     animation: none;
     transform: translateY(2px) scale(0.95); box-shadow: none; filter: brightness(0.8);
   }
-  /* Freeze the chevrons into that same LEFT-leaning pose (left lit, right gone) —
-     otherwise they'd be the only thing still moving on the card. */
-  .chev { animation: none; }
-  .chev--l { opacity: 1; }
-  .chev--r { opacity: 0; }
   .rotate__phone { animation: none; transform: rotate(-90deg); }
 }
 
@@ -982,7 +934,7 @@ input[type=text]:disabled { opacity: 0.6; }
   .steer { width: clamp(11rem, 34vw, 18rem); }
   .settings-card { gap: 0.5rem; padding: 0.7rem 0.9rem; }
   .settings-title { font-size: 1.2rem; }
-  .phone-frame { width: 196px; height: 100px; }
-  .phone-inner { padding: 15px 19px 6px; grid-template-rows: 1fr 30px; }
+  .phone-frame { width: 160px; height: 80px; }
+  .phone-inner { padding: 12px 15px 5px; grid-template-rows: 1fr 24px; }
   .results-title { font-size: 1.3rem; }
 }

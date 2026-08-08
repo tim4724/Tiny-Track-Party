@@ -176,7 +176,8 @@ export function runControllerScenario(opts) {
       // recovery is its own scenario below.
       show('lobby');
       el('me-name').textContent = FAKE_NAMES[color];
-      el('phone-name').textContent = FAKE_NAMES[color];   // demo phone shows the player's name (mirrors openSettings)
+      // both mode cards' demo phones show the player's name (mirrors openSettings)
+      for (const n of document.querySelectorAll('.phone-name')) n.textContent = FAKE_NAMES[color];
       renderCarPicker(color);
       renderModePicker(DEFAULT_MODE, true);
       renderReadyPreview(true, false, null, [
