@@ -322,7 +322,9 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 #game.mode-buttons #drive-hud {
   grid-template-columns: 1fr 1fr 1fr;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  /* the ‹/ITEM/› row keeps a fixed share of the height so the MID row is the
+     stretchy one — the steer bar floats with its space around it vertically */
+  grid-template-rows: auto minmax(0, 1fr) 58%;
   grid-template-areas:
     'name name name'
     'mid  mid  mid'
@@ -330,10 +332,14 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 .drive-controls { display: contents; }
 
-/* Player name only — top-left, tinted with the car livery (like the display's
-   .cell-label__name). No place/lap on the phone — the standings live on the
-   big screen. */
-.hud-top { grid-area: name; display: flex; align-items: center; min-height: 2.2rem; }
+/* Top row: the player name (livery sticker, like the display's
+   .cell-label__name) on the left, settings + pause pinned FAR RIGHT.
+   margin-left:auto rather than space-between, so the buttons stay right when
+   the shell hides the name. No place/lap on the phone — the standings live on
+   the big screen. */
+.hud-top { grid-area: name; display: flex; align-items: center; min-height: 2.9rem; }
+.hud-btns { display: flex; gap: 0.55rem; margin-left: auto; }
+.hud-btns .icon-btn { width: 2.9rem; height: 2.9rem; font-size: 1.5rem; }
 .hud-name {
   font-family: var(--font-display); font-weight: 700; font-size: 1.15rem; line-height: 1;
   color: #fff; background: var(--car, var(--brand));
@@ -355,15 +361,16 @@ input[type=text]:disabled { opacity: 0.6; }
 .cp-shell .lobby-me,
 .cp-shell .hud-name { display: none; }
 
-/* MID row — the steer indicator with pause + settings in a row beside it,
-   centred as a group. The bar deliberately echoes the DISPLAY's own bar: the
+/* MID row — the steer indicator alone, centred on the TOTAL screen width (the
+   flanking grid columns are equal in both modes) with the row's free height
+   spaced around it. The bar deliberately echoes the DISPLAY's own bar: the
    same 270:34 composition (border and centre tick scaled with it), at roughly
    the share of screen the display gives one player, so the phone's indicator
    reads as a miniature of the one on the TV. */
 .hud-mid {
   grid-area: mid; align-self: center;
   display: flex; align-items: center; justify-content: center;
-  gap: 0.9rem; min-width: 0;
+  min-width: 0;
 }
 .steer { width: clamp(13rem, 38vw, 21rem); }
 .steer__track {
@@ -372,8 +379,6 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 .steer__track::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 3px; background: color-mix(in srgb, var(--ink) 40%, transparent); }
 #steer-fill { position: absolute; left: 50%; top: 0; bottom: 0; width: 50%; margin-left: -25%; background: var(--car); border-radius: var(--r-pill); transition: transform 0.05s linear; }
-.hud-btns { display: flex; gap: 0.55rem; }
-.hud-btns .icon-btn { width: 2.9rem; height: 2.9rem; font-size: 1.5rem; }
 
 /* The big controls. All four share the sticker-button anatomy; the grid areas
    above decide which show and where. Height comes from the grid (they stretch

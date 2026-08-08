@@ -99,18 +99,18 @@
        buttons = three equal ‹ / ITEM / › in a row, hold both ‹ › to brake. -->
   <section id="game" class="hidden mode-tilt">
     <div id="drive-hud" class="hidden">
-      <!-- Player name only — top-left. No place/lap on the phone; the live
-           standings live on the big screen. -->
+      <!-- Top row: player name left, settings + pause FAR RIGHT. No place/lap on
+           the phone; the live standings live on the big screen. -->
       <div class="hud-top">
         <div id="hud-name" class="hud-name"></div>
+        <div class="hud-btns">
+          <button id="settings-btn-game" class="icon-btn" type="button" aria-label="Settings" aria-haspopup="dialog">&#9881;&#xFE0E;</button>
+          <button id="pause-btn" class="icon-btn" aria-label="Pause"><span class="pause-glyph"></span></button>
+        </div>
       </div>
       <div class="hud-mid">
         <div class="steer">
           <div class="steer__track"><div id="steer-fill"></div></div>
-        </div>
-        <div class="hud-btns">
-          <button id="settings-btn-game" class="icon-btn" type="button" aria-label="Settings" aria-haspopup="dialog">&#9881;&#xFE0E;</button>
-          <button id="pause-btn" class="icon-btn" aria-label="Pause"><span class="pause-glyph"></span></button>
         </div>
       </div>
       <!-- Shown mid-race only in tilt mode while tilt is blocked (see
