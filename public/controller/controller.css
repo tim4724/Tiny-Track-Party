@@ -925,6 +925,15 @@ input[type=text]:disabled { opacity: 0.6; }
 
 /* Short landscape screens (small phones with the browser bar up): tighten the
    rhythm so the HUD's buttons keep their height and the lobby stays tappable. */
+/* Short screens, in two tiers. The settings demos SCALE rather than reflow:
+   the `scale` property composes with the twist animation's `transform`, so
+   every internal proportion of the phone survives — only its footprint (and
+   the reserved stage height) shrinks. */
+@media (max-height: 400px) {
+  .steer-demo { height: 104px; }
+  .phone-lean { scale: 0.78; }
+  .mode-card { gap: 0.2rem; }
+}
 @media (max-height: 380px) {
   section { padding-top: max(var(--safe-top), 6px); }
   #drive-hud { gap: 0.4rem 0.7rem; }
@@ -932,9 +941,14 @@ input[type=text]:disabled { opacity: 0.6; }
   .hud-name { font-size: 1rem; }
   .hud-btns .icon-btn { width: 2.5rem; height: 2.5rem; font-size: 1.3rem; }
   .steer { width: clamp(11rem, 34vw, 18rem); }
-  .settings-card { gap: 0.5rem; padding: 0.7rem 0.9rem; }
-  .settings-title { font-size: 1.2rem; }
-  .phone-frame { width: 160px; height: 80px; }
-  .phone-inner { padding: 12px 15px 5px; grid-template-rows: 1fr 24px; }
   .results-title { font-size: 1.3rem; }
+}
+@media (max-height: 356px) {
+  .settings-card { gap: 0.45rem; padding: 0.6rem 1rem 0.8rem; }
+  .settings-title { font-size: 1.15rem; }
+  .steer-demo { height: 76px; }
+  .phone-lean { scale: 0.58; }
+  .mode-card__cap { display: none; }   /* the demo says it; the caption is the first thing to go */
+  .settings-legend { padding: 0.35rem 0.7rem; gap: 1rem; }
+  .settings-legend .help-ctrl__cap { font-size: 0.8rem; }
 }
