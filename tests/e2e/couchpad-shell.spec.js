@@ -13,12 +13,20 @@ const { test, expect, openDisplay, startRace, waitForRacing, visible } = require
 // form. `__cpEnded` records the last gameEnded reason the game reported. Returns
 // the controller page.
 async function shellJoin(browser, roomCode, name, { room = roomCode } = {}) {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  // Landscape: the launcher pins the device to landscape (§10) and the page is
+  // landscape-only, so the shell context matches what the WebView really shows.
+  const context = await browser.newContext({ viewport: { width: 844, height: 390 } });
   await context.addInitScript(() => {
     try { localStorage.setItem('tinytrack_seen_help', '1'); } catch (_) {}
     window.__cpEnded = null;
-    // Mirrors the launcher's addJavascriptInterface host (§3).
-    window.CouchPadHost = { gameEnded: (reason) => { window.__cpEnded = reason; } };
+    window.__cpOrient = [];      // §10 setOrientation calls, in order
+    window.__cpBackCalls = [];   // §9 enableSystemBack transitions, in order
+    // Mirrors the launcher's addJavascriptInterface host (§3, §9, §10).
+    window.CouchPadHost = {
+      gameEnded: (reason) => { window.__cpEnded = reason; },
+      setOrientation: (mode) => { window.__cpOrient.push(mode); },
+      enableSystemBack: (on) => { window.__cpBackCalls.push(on); }
+    };
   });
   const page = await context.newPage();
   await page.goto(`/${room}?cpName=${encodeURIComponent(name)}`);
@@ -58,7 +66,7 @@ test('a `cp*` param the launcher did not send is not mistaken for the shell', as
   // player loses the name screen and gets seated as an empty name.
   const roomCode = await openDisplay(page);
 
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const context = await browser.newContext({ viewport: { width: 844, height: 390 } });
   await context.addInitScript(() => {
     try { localStorage.setItem('tinytrack_seen_help', '1'); } catch (_) {}
   });
@@ -167,6 +175,41 @@ test('theming metas ship and the accent retints to the player livery (§4); safe
     return parseFloat(getComputedStyle(document.getElementById('lobby')).paddingTop);
   });
   expect(padTop).toBeGreaterThanOrEqual(48);
+});
+
+test('the shell asks for landscape before first paint (§10)', async ({ page, browser }) => {
+  const roomCode = await openDisplay(page);
+
+  const zoe = await shellJoin(browser, roomCode, 'Zoe');
+  // The head script fires before any body script — by lobby time the request
+  // must be there, exactly once, and be the literal 'landscape'.
+  await zoe.waitForSelector(visible('#lobby'));
+  expect(await zoe.evaluate(() => window.__cpOrient)).toEqual(['landscape']);
+});
+
+test('system back arms in the lobby, disarms for the race, and closes an open dialog (§9)', async ({ page, browser }) => {
+  const roomCode = await openDisplay(page);
+
+  const zoe = await shellJoin(browser, roomCode, 'Zoe');
+  await zoe.waitForSelector(visible('#lobby'));
+  // Lobby: armed (back = leave through the launcher). Transitions only, no chatter.
+  await expect.poll(() => zoe.evaluate(() => window.__cpBackCalls)).toEqual([true]);
+
+  await startRace(zoe, []);
+  await waitForRacing(page);
+  // Racing: the screen edges belong to steering — disarmed.
+  await expect.poll(() => zoe.evaluate(() => window.__cpBackCalls)).toEqual([true, false]);
+
+  // Opening the settings dialog mid-race re-arms; the gesture closes it
+  // (consumed → true) and the disarm follows.
+  await zoe.click('#settings-btn-game');
+  await expect.poll(() => zoe.evaluate(() => window.__cpBackCalls)).toEqual([true, false, true]);
+  expect(await zoe.evaluate(() => window.CouchPad.back())).toBe(true);
+  await expect(zoe.locator('#settings-overlay')).toBeHidden();
+  await expect.poll(() => zoe.evaluate(() => window.__cpBackCalls)).toEqual([true, false, true, false]);
+
+  // With nothing open mid-race a back gesture is not ours: the launcher leaves.
+  expect(await zoe.evaluate(() => window.CouchPad.back())).toBe(false);
 });
 
 test('backgrounding the app drops the seat at once; returning takes it back (§7)', async ({ page, browser }) => {

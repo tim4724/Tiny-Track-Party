@@ -116,15 +116,15 @@ export function runControllerScenario(opts) {
   // The item identity shows on the DISPLAY, not the phone — the only controller cue
   // is the ITEM button lighting up. Preview that by toggling its disabled state.
   function setUse(holding) { const a = el('action-btn'); if (a) a.disabled = !holding; }
-  function showDriveHud() {
+  // mode: 'tilt' (default) | 'buttons' — flips the #game mode class exactly like
+  // the live setInputMode, so the gallery previews both control layouts.
+  function showDriveHud(mode = 'tilt') {
     show('game');
-    el('drive-hud').classList.remove('hidden');
+    const game = el('game');
+    game.classList.toggle('mode-tilt', mode !== 'buttons');
+    game.classList.toggle('mode-buttons', mode === 'buttons');
+    el('drive-hud').classList.remove('hidden');   // pause + settings ride inside it
     el('motion-tip').classList.add('hidden');
-    // The pause + "?" buttons ride with the HUD live (see startDriving in main.js),
-    // so the gallery shows them too. Both are z-8 fixed, so the paused/conn overlays
-    // (z-15/z-30) still cover them where those scenarios layer one on top.
-    el('pause-btn').classList.remove('hidden');
-    el('help-btn-game').classList.remove('hidden');
   }
 
   switch (scenario) {
@@ -166,22 +166,28 @@ export function runControllerScenario(opts) {
         [{ name: FAKE_NAMES[(color + 2) % FAKE_NAMES.length], color: COLORS[(color + 2) % COLORS.length], ready: true }]);
       break;
 
-    case 'help': {
-      // How-to-Drive popup over the lobby, for the gallery. main.js owns the live
-      // open/close (and its auto-show is suppressed in scenario mode), so here we
-      // just lay out the host lobby and pop the overlay open — the instructional
-      // popup (animated steer demo, brake/item swatches, upright note) is
-      // screenshottable without a relay. Motion recovery is its own scenario below.
+    case 'settings':
+    case 'settings-buttons': {
+      // Settings popup over the lobby, for the gallery — both faces: the tilt
+      // demo (default) and the buttons demo ('settings-buttons'). modals.js owns
+      // the live open/close (and its auto-show is suppressed in scenario mode),
+      // so here we just lay out the host lobby and pop the overlay open with the
+      // card flipped to the right mode (mirrors refreshSettingsCard). Motion
+      // recovery is its own scenario below.
       show('lobby');
       el('me-name').textContent = FAKE_NAMES[color];
-      el('phone-name').textContent = FAKE_NAMES[color];   // demo phone shows the player's name (mirrors openHelp)
+      el('phone-name').textContent = FAKE_NAMES[color];   // demo phone shows the player's name (mirrors openSettings)
       renderCarPicker(color);
       renderModePicker(DEFAULT_MODE, true);
       renderReadyPreview(true, false, null, [
         { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], color: COLORS[(color + 1) % COLORS.length], ready: true }
       ]);
-      el('help-overlay').classList.remove('hidden');
-      el('help-done').focus();   // seed focus inside the dialog (mirrors openHelp)
+      const buttons = scenario === 'settings-buttons';
+      el('settings-card').classList.toggle('is-buttons', buttons);
+      el('input-tilt').setAttribute('aria-checked', String(!buttons));
+      el('input-buttons').setAttribute('aria-checked', String(buttons));
+      el('settings-overlay').classList.remove('hidden');
+      el('settings-done').focus();   // seed focus inside the dialog (mirrors openSettings)
       break;
     }
 
@@ -238,6 +244,17 @@ export function runControllerScenario(opts) {
       setHudName();
       setUse(true);            // USE lit (holding an item; identity is on the display)
       setLatency(16, true);    // fastlane up: low RTT + bolt
+      break;
+
+    case 'playing-buttons':
+      // The button-steering face of the drive HUD: ‹ / ITEM / › in a row, the
+      // left button held (steer bar hard left mirrors it — binary, so full lock).
+      showDriveHud('buttons');
+      setSteer(-1);
+      el('steer-left').classList.add('held');
+      setHudName();
+      setUse(true);
+      setLatency(16, true);
       break;
 
     case 'finished':

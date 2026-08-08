@@ -12,17 +12,19 @@
    regressions). Every fixed/edge element pads against these, never bare env(). */
 :root {
   --safe-top:    max(var(--cp-safe-top,    0px), env(safe-area-inset-top,    0px));
-  --safe-right:  max(var(--cp-safe-right,  0px), env(safe-area-inset-right,  0px));
   --safe-bottom: max(var(--cp-safe-bottom, 0px), env(safe-area-inset-bottom, 0px));
-  --safe-left:   max(var(--cp-safe-left,   0px), env(safe-area-inset-left,   0px));
+  /* LEFT and RIGHT are LEVELLED to the larger of the pair: the page is
+     landscape-only and its layouts are symmetric, so a one-sided camera cutout
+     must not shove them off the physical centre. (The CouchPad launcher already
+     levels its own vars — contract §5 — this makes bare-browser env() agree.) */
+  --safe-x: max(var(--cp-safe-left,  0px), env(safe-area-inset-left,  0px),
+                var(--cp-safe-right, 0px), env(safe-area-inset-right, 0px));
 
-  /* Screen margin = the safe inset, floored at a small design gutter. A plain
-     12px edge (never the old 7vh/8vw, which read as a huge margin on tall
-     phones) that still clears a real notch/home-indicator when one is larger. */
-  --edge-top:    max(var(--safe-top),    12px);
-  --edge-right:  max(var(--safe-right),  12px);
-  --edge-bottom: max(var(--safe-bottom), 12px);
-  --edge-left:   max(var(--safe-left),   12px);
+  /* Screen margin = the safe inset, floored at a small design gutter that
+     still clears a real notch/home-indicator when one is larger. */
+  --edge-top:    max(var(--safe-top),    10px);
+  --edge-bottom: max(var(--safe-bottom), 10px);
+  --edge-x:      max(var(--safe-x),      14px);
 }
 
 html, body {
@@ -41,21 +43,30 @@ section {
   position: relative; z-index: 1;
   flex: 1; display: flex; flex-direction: column;
   padding:
-    var(--edge-top) var(--edge-right)
-    var(--edge-bottom) var(--edge-left);
+    var(--edge-top) var(--edge-x)
+    var(--edge-bottom) var(--edge-x);
 }
-/* The join screen centres vertically in the AVAILABLE height. The keyboard
-   shrinks that height (interactive-widget=resizes-content shrinks the layout
-   viewport, and body's 100dvh + this section's flex:1 follow), so the content
-   glides up exactly as far as the keyboard takes — no focus-driven relayout
-   (a :focus-within jump once moved the Join button out from under the first
-   tap; iOS ignores the hint and natively pans the focused input into view).
-   The padding biases the centre upward a touch. */
-#name { justify-content: center; padding-bottom: calc(10vh + var(--safe-bottom)); }
+/* The join screen is a two-column landscape spread: the wordmark badge on the
+   left, the form (+ status line under it) on the right, centred as a pair in
+   the AVAILABLE height. The keyboard shrinks that height
+   (interactive-widget=resizes-content shrinks the layout viewport, and body's
+   100dvh + this section's flex follow), so the pair glides up exactly as far
+   as the keyboard takes — no focus-driven relayout (a :focus-within jump once
+   moved the Join button out from under the first tap; iOS ignores the hint and
+   natively pans the focused input into view). */
+#name {
+  display: grid;
+  grid-template-columns: auto minmax(14rem, 22rem);
+  grid-template-rows: auto auto;
+  align-content: center; justify-content: center; align-items: center;
+  column-gap: clamp(1.4rem, 6vw, 4rem);
+}
 
 /* the name screen's wordmark badge (kit .wordmark supplies the die-cut look),
-   centred over the form */
-.name-wordmark { font-size: 34px; margin: 0 0 1.6rem; align-self: center; text-align: center; }
+   beside the form */
+.name-wordmark { font-size: clamp(26px, 4.5vw, 38px); margin: 0; grid-row: 1 / 3; text-align: center; }
+#name-form { align-self: end; }
+#name-status { grid-column: 2; align-self: start; }
 
 /* ---- name form ---- */
 input[type=text] {
@@ -70,17 +81,24 @@ input[type=text]:disabled { opacity: 0.6; }
 #name-status { color: var(--ink-2); font-weight: 700; margin-top: 1rem; min-height: 1.4em; }
 
 /* ---- lobby: your name, your car, the track ---- */
-/* Top-aligned with the name at the very top; the WHOLE PAGE scrolls if the car +
-   track strips don't fit (no inner scroll boxes). Top padding is just the safe-
-   area inset plus a little breathing room. */
+/* A landscape spread: fixed LEFT column (identity, hero card, ready footer)
+   beside the flexible RIGHT column (car strip + host's race picker). The WHOLE
+   PAGE scrolls if the right column doesn't fit (no inner scroll boxes). */
 #lobby {
-  justify-content: flex-start;
-  padding-top: calc(0.9rem + var(--safe-top));
+  flex-direction: row; align-items: flex-start;
+  gap: 1.2rem;
+  padding-top: calc(0.7rem + var(--safe-top));
 }
+.lobby-left {
+  flex: 0 0 clamp(13rem, 36vw, 19rem);
+  display: flex; flex-direction: column;
+  position: sticky; top: calc(0.7rem + var(--safe-top));   /* stays put while the strips scroll */
+}
+.lobby-right { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
 /* Player identity, up top — your name as a livery-tinted sticker (coloured bg,
    white text, slapped on at −2°; mirrors the display's cell name tags). */
-.lobby-me { display: flex; align-items: center; margin: 0 0 1.2rem; }
+.lobby-me { display: flex; align-items: center; margin: 0 0 1rem; }
 .lobby-me__name {
   font-family: var(--font-display); font-weight: 700; font-size: 1.5rem; line-height: 1;
   color: #fff; background: var(--car, var(--brand));
@@ -106,7 +124,7 @@ input[type=text]:disabled { opacity: 0.6; }
    feature card. Soft surface so it pops; row layout stays short in landscape.
    The folded-in "?" clears the content two ways: the name reserves room with its
    own padding-right, and the button is sized to overlap only the name row (the
-   stat bars sit below it) — see .car-hero__name / .help-btn. */
+   stat bars sit below it) — see .car-hero__name / .settings-btn. */
 .car-hero {
   display: flex; align-items: center; gap: 0.9rem;
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r);
@@ -275,27 +293,49 @@ input[type=text]:disabled { opacity: 0.6; }
 
 /* ---- game / driving HUD ---- */
 /* No countdown here — the full HUD shows immediately so players can pre-steer
-   while the display counts down 3..2..1..GO. Top padding lines the name row up with
-   the fixed pause/? buttons (top: 0.6rem). The backdrop is paper tinted toward
-   the player's livery, so each phone reads as "yours" at a glance. */
+   while the display counts down 3..2..1..GO. The backdrop is paper tinted toward
+   the player's livery, so each phone reads as "yours" at a glance.
+
+   Landscape-only. One grid per input mode (#game.mode-tilt / .mode-buttons, set
+   by setInputMode): the name row up top, the steer indicator + the pause/settings
+   pair in a MID row (a row beside the bar, not above it — height is the scarce
+   axis), and the mode's controls taking all remaining height. .drive-controls is
+   display:contents so each button lands in its own grid area per mode. */
 #game {
   align-items: stretch; justify-content: flex-start; user-select: none;
-  padding-top: calc(0.6rem + var(--safe-top));
+  padding-top: calc(0.5rem + var(--safe-top));
   background: color-mix(in srgb, var(--car, var(--brand)) 12%, #FFF6EB);
 }
-/* Reserve the ping chip's row at the bottom: it's position:fixed at
-   bottom (0.5rem + safe-bottom) and ~1.7rem tall, so the ITEM/BRAKE buttons
-   would otherwise sit under it. This padding lifts them clear, leaving the
-   ping text just below with a minor gap to the screen edge. */
-#drive-hud { display: flex; flex-direction: column; gap: 1.4rem; flex: 1; padding-bottom: 1.7rem; }
+#drive-hud {
+  flex: 1; min-height: 0;
+  display: grid; gap: 0.6rem 0.9rem;
+  /* keep the bottom row's buttons clear of the fixed latency chip */
+  padding-bottom: 0.4rem;
+}
+#game.mode-tilt #drive-hud {
+  grid-template-columns: minmax(6.5rem, 1fr) auto minmax(6.5rem, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'name name  name'
+    'item mid   brake'
+    'item tip   brake';
+}
+#game.mode-buttons #drive-hud {
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-areas:
+    'name name name'
+    'mid  mid  mid'
+    'left item right';
+}
+.drive-controls { display: contents; }
+
 /* Player name only — top-left, tinted with the car livery (like the display's
-   .cell-label__name). It shares the top row with the fixed pause/? buttons: a
-   min-height matching the 3.2rem buttons + centred text levels it with them, and the
-   right padding reserves the buttons' zone so a long name ellipsises before it. No
-   place/lap on the phone — the standings live on the big screen. */
-.hud-top { display: flex; align-items: center; min-height: 3.2rem; padding-right: 7rem; }
+   .cell-label__name). No place/lap on the phone — the standings live on the
+   big screen. */
+.hud-top { grid-area: name; display: flex; align-items: center; min-height: 2.2rem; }
 .hud-name {
-  font-family: var(--font-display); font-weight: 700; font-size: 1.4rem; line-height: 1;
+  font-family: var(--font-display); font-weight: 700; font-size: 1.15rem; line-height: 1;
   color: #fff; background: var(--car, var(--brand));
   border: 3px solid var(--ink); border-radius: var(--r-sm);
   padding: 0.3em 0.6em;
@@ -306,67 +346,85 @@ input[type=text]:disabled { opacity: 0.6; }
 
 /* CouchPad shell: the launcher owns identity and shows the player's name in
    its native top-bar chip, so our own copies are duplicates — drop them (lobby
-   identity, in-race HUD). The whole lobby identity row collapses (the `?` now lives
+   identity, in-race HUD). The whole lobby identity row collapses (the gear lives
    in the car card, not this row); .hud-top keeps its min-height so the HUD's top
-   spacing is unchanged. NOT the how-to-drive demo phone: its name isn't a second
+   spacing is unchanged. NOT the settings demo phone: its name isn't a second
    copy of the launcher's chip, it's a PICTURE of it — the illustration is of the
    player's phone running the app, so inside the shell it's the accurate thing to
    draw, not a duplicate. */
 .cp-shell .lobby-me,
 .cp-shell .hud-name { display: none; }
 
-.steer { margin-top: auto; }
+/* MID row — the steer indicator with pause + settings in a row beside it,
+   centred as a group. The bar deliberately echoes the DISPLAY's own bar: the
+   same 270:34 composition (border and centre tick scaled with it), at roughly
+   the share of screen the display gives one player, so the phone's indicator
+   reads as a miniature of the one on the TV. */
+.hud-mid {
+  grid-area: mid; align-self: center;
+  display: flex; align-items: center; justify-content: center;
+  gap: 0.9rem; min-width: 0;
+}
+.steer { width: clamp(13rem, 38vw, 21rem); }
 .steer__track {
-  position: relative; height: 44px; overflow: hidden;
+  position: relative; aspect-ratio: 270 / 34; overflow: hidden;
   background: var(--surface); border: 4px solid var(--ink); border-radius: var(--r-pill);
 }
 .steer__track::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 3px; background: color-mix(in srgb, var(--ink) 40%, transparent); }
 #steer-fill { position: absolute; left: 50%; top: 0; bottom: 0; width: 50%; margin-left: -25%; background: var(--car); border-radius: var(--r-pill); transition: transform 0.05s linear; }
-.steer__label { text-align: center; color: var(--ink-2); font-weight: 700; font-size: 0.9rem; margin-top: 0.5rem; }
+.hud-btns { display: flex; gap: 0.55rem; }
+.hud-btns .icon-btn { width: 2.9rem; height: 2.9rem; font-size: 1.5rem; }
 
-/* BRAKE — big red hold-to-brake sticker button; depresses while held (.held by
-   JS). Extra-tall by design (~2x the previous height) for an easy thumb target. */
-#brake-btn.brake {
-  margin-top: 0; padding: 6.8rem 1.4rem; font-family: var(--font-display); font-weight: 700;
-  font-size: 1.6rem; letter-spacing: 0.08em; color: #fff;
-  border: 3px solid var(--ink);
-  border-radius: var(--r); background: var(--danger);
+/* The big controls. All four share the sticker-button anatomy; the grid areas
+   above decide which show and where. Height comes from the grid (they stretch
+   to whatever the screen has left), so no fixed paddings. */
+#brake-btn.brake, #action-btn.action, .steerbtn {
+  font-family: var(--font-display); font-weight: 700; color: #fff;
+  border: 3px solid var(--ink); border-radius: var(--r);
   box-shadow: 0 var(--btn-drop) 0 var(--btn-ledge);   /* same ledge as every other button */
-  touch-action: none; transition: transform 0.06s, box-shadow 0.06s, filter 0.06s;
+  touch-action: none; transition: transform 0.06s, box-shadow 0.06s, filter 0.06s, opacity 0.15s;
+  min-height: 0; padding: 0.4rem;
 }
-#brake-btn.brake.held {
+#brake-btn.brake.held, #action-btn.action.held, .steerbtn.held {
   filter: brightness(1.05);
   transform: translateY(var(--btn-sink));
   box-shadow: 0 calc(var(--btn-drop) - var(--btn-sink)) 0 var(--btn-ledge);
 }
-
-/* BRAKE + ITEM sit side by side, equal halves (BRAKE is held, ITEM is a tap).
-   ITEM is PURPLE — the item colour everywhere in the chrome (was amber). */
-.drive-controls { display: flex; gap: 0.8rem; align-items: stretch; }
-.drive-controls .brake { flex: 1; }
-#action-btn.action {
-  flex: 1; padding: 6.8rem 1.4rem; font-family: var(--font-display); font-weight: 700; /* h-pad matches BRAKE so the halves are exactly equal */
-  font-size: 1.5rem; letter-spacing: 0.06em; color: #fff;
-  border: 3px solid var(--ink);
-  border-radius: var(--r); background: var(--item);
-  box-shadow: 0 var(--btn-drop) 0 var(--btn-ledge);
-  touch-action: none; transition: transform 0.06s, box-shadow 0.06s, filter 0.06s, opacity 0.15s;
-}
-#action-btn.action.held {
-  transform: translateY(var(--btn-sink));
-  box-shadow: 0 calc(var(--btn-drop) - var(--btn-sink)) 0 var(--btn-ledge);
-}
+/* tilt mode: ITEM is the left thumb column, BRAKE the right (PURPLE = items,
+   RED = brake, everywhere in the chrome) */
+#action-btn.action { grid-area: item; background: var(--item); font-size: 1.4rem; letter-spacing: 0.06em; }
 #action-btn.action:disabled { opacity: 0.4; filter: grayscale(0.4); }
+#brake-btn.brake { grid-area: brake; background: var(--danger); font-size: 1.5rem; letter-spacing: 0.08em; }
+/* buttons mode: ‹ / ITEM / › in three EQUAL columns; BRAKE is the ‹ › chord */
+.steerbtn { background: var(--blue); }
+#steer-left { grid-area: left; }
+#steer-right { grid-area: right; }
+#game.mode-tilt .steerbtn { display: none; }
+#game.mode-buttons #brake-btn.brake { display: none; }
+
+/* Thick-ink chevron glyph for the steer buttons (and their mini/demo copies) —
+   drawn from two borders on a rotated box, like the settings card's .chev: the
+   font's chevron is hairline at any size and this carries the theme's weight. */
+.steer-glyph {
+  display: inline-block; width: 0.85em; height: 0.85em;
+  border: 0 solid currentColor; border-radius: 2px;
+  transform: rotate(45deg); font-size: 1.6rem;
+}
+.steer-glyph--l { border-left-width: 0.22em; border-bottom-width: 0.22em; }
+.steer-glyph--r { border-right-width: 0.22em; border-top-width: 0.22em; }
 
 /* In-race "tilt is off" chip — a tappable pill (reopens the motion-blocked popup),
-   so it reads as actionable on a touch screen. Shown only while motion isn't granted. */
+   so it reads as actionable on a touch screen. Tilt mode only, while motion isn't
+   granted (driveSurface.refreshMotionTip). */
 .motion-tip {
-  align-self: center; margin: 0; padding: 0.45rem 0.95rem;
+  grid-area: tip; justify-self: center; align-self: end;
+  margin: 0; padding: 0.4rem 0.9rem;
   background: var(--surface); border: 2px solid var(--hairline); border-radius: var(--r-pill);
-  color: var(--ink-2); font-family: var(--font-body); font-weight: 800; font-size: 0.9rem;
+  color: var(--ink-2); font-family: var(--font-body); font-weight: 800; font-size: 0.85rem;
   box-shadow: var(--shadow-pop); cursor: pointer;
 }
 .motion-tip:active { transform: translateY(1px); box-shadow: none; }
+#game.mode-buttons .motion-tip { display: none; }
 
 /* ---- latency chip ---- */
 /* One-way latency (RTT/2), pinned to the bottom-right corner. A white sticker
@@ -378,11 +436,11 @@ input[type=text]:disabled { opacity: 0.6; }
    Right edge: the safe inset ONLY, no design gutter on top of it. It's a readout,
    not chrome the player aims at, so it hugs the corner rather than sitting on a
    margin of its own that poked out past the button column (which rides the 12px
-   --edge-right). The sticker's 3px offset shadow would fall off-screen there, so
+   --edge-x). The sticker's 3px offset shadow would fall off-screen there, so
    it goes: a half-clipped shadow reads as a rendering glitch. */
 .latency {
   position: fixed;
-  right: var(--safe-right);
+  right: var(--safe-x);
   bottom: calc(0.5rem + var(--safe-bottom));
   z-index: 20;
   display: inline-flex; align-items: center; gap: 3px;
@@ -403,32 +461,23 @@ input[type=text]:disabled { opacity: 0.6; }
 .latency--bad  { color: var(--ping-bad); }
 
 /* ---- pause ---- */
-/* Pause button — top-right of the game screen, reachable from the first beat,
-   below the pause overlay + latency chip.
-   .icon-btn (theme.css) supplies the toy-button look. */
-#pause-btn {
-  position: fixed; z-index: 8;
-  top: calc(0.6rem + var(--safe-top));
-  right: calc(0.6rem + var(--safe-right));
-  width: 3.2rem; height: 3.2rem;
-}
-
 /* Pause overlay — frosted glass, the same Continue / New game choices the big
-   screen shows. Buttons fill the column like the rest of the phone UI. */
+   screen shows (the pause BUTTON itself lives in the HUD's mid row). Landscape:
+   a shallow title over a row of the two choices. */
 #pause-overlay {
   position: fixed; inset: 0; z-index: 15;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 1rem;
+  gap: 0.9rem;
   padding:
-    calc(7vh + var(--safe-top)) calc(10vw + var(--safe-right))
-    calc(7vh + var(--safe-bottom)) calc(10vw + var(--safe-left));
+    calc(4vh + var(--safe-top)) calc(6vw + var(--safe-x))
+    calc(4vh + var(--safe-bottom)) calc(6vw + var(--safe-x));
   background: rgba(255, 246, 235, 0.82); backdrop-filter: blur(8px);
 }
 #pause-overlay h2 {
   font-family: var(--font-display); font-weight: 700;
-  font-size: 2.6rem; margin: 0 0 0.6rem; color: var(--ink);
+  font-size: 2.2rem; margin: 0 0 0.3rem; color: var(--ink);
 }
-#pause-overlay .btn { width: min(82%, 18rem); margin-top: 0; }
+#pause-overlay .btn { width: min(82%, 16rem); margin-top: 0; }
 
 /* Connection overlay — screen-agnostic, sits above everything (incl. pause) so a
    dropped relay link always wins the screen. Same frosted glass as the pause UI. */
@@ -436,8 +485,8 @@ input[type=text]:disabled { opacity: 0.6; }
   position: fixed; inset: 0; z-index: 30;
   display: flex; align-items: center; justify-content: center;
   padding:
-    calc(7vh + var(--safe-top)) calc(10vw + var(--safe-right))
-    calc(7vh + var(--safe-bottom)) calc(10vw + var(--safe-left));
+    calc(4vh + var(--safe-top)) calc(6vw + var(--safe-x))
+    calc(4vh + var(--safe-bottom)) calc(6vw + var(--safe-x));
   background: rgba(255, 246, 235, 0.92); backdrop-filter: blur(8px);
   text-align: center;
 }
@@ -449,10 +498,14 @@ input[type=text]:disabled { opacity: 0.6; }
 
 /* ---- results overlay ---- */
 /* Shown on your phone once you finish; the board fills in as the rest of the
-   field crosses the line. Centred in the section column like the other screens. */
-#results { justify-content: center; gap: 1.2rem; }
+   field crosses the line. Landscape: a shallow title, the list taking the
+   height (scrolling inside itself), the footer's buttons in a row. */
+/* Capped to the viewport (border-box, so the safe-area padding stays inside):
+   a tall board scrolls INSIDE .result-list rather than pushing the footer's
+   buttons off the bottom of a short landscape screen. */
+#results { justify-content: center; gap: 0.7rem; max-height: 100dvh; box-sizing: border-box; }
 .results-title {
-  font-family: var(--font-display); font-weight: 700; font-size: 2rem;
+  font-family: var(--font-display); font-weight: 700; font-size: 1.6rem;
   text-align: center; margin: 0; color: var(--ink);
 }
 .result-list {
@@ -488,48 +541,71 @@ input[type=text]:disabled { opacity: 0.6; }
 .result-list .res-gain { margin-left: auto; color: var(--brand); font-weight: 800; }
 .result-list .res-gain.is-zero { color: var(--ink-3); }
 .result-list .res-pts { color: var(--ink-2); font-weight: 800; font-variant-numeric: tabular-nums; min-width: 3.4em; text-align: right; }
-#result-foot { display: flex; flex-direction: column; align-items: center; gap: 0.6rem; }
-#result-foot .btn { width: min(82%, 18rem); margin-top: 0; }
+#result-foot { display: flex; flex-direction: row; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0.6rem; }
+#result-foot .btn { width: auto; min-width: 11rem; margin-top: 0; }
 .result-wait { color: var(--ink-2); font-weight: 700; text-align: center; }
 
-/* ---- How-to-Drive popup ----
+/* ---- Settings popup ----
    Frosted glass mirroring #pause-overlay/#conn, but z 17 so it sits ABOVE the
    lobby/game yet BELOW #conn (z 30) — a dropped link always wins the screen.
-   Built to fit ONE phone screen without scrolling: STEER is the hero (the only
-   animated, full-width block); BRAKE/ITEM compress into one row; everything else
-   is a single line. The card still scrolls as a fallback on very short screens. */
-#help-overlay {
+   Landscape-shaped: the head row holds the title + the steering-mode seg, then
+   the body puts the animated demo phone LEFT and the captions + Got-it RIGHT.
+   The card still scrolls as a fallback on very short screens. */
+#settings-overlay {
   position: fixed; inset: 0; z-index: 17;
   display: flex; align-items: center; justify-content: center;
   padding:
-    calc(3vh + var(--safe-top)) calc(6vw + var(--safe-right))
-    calc(3vh + var(--safe-bottom)) calc(6vw + var(--safe-left));
+    calc(2vh + var(--safe-top)) calc(4vw + var(--safe-x))
+    calc(2vh + var(--safe-bottom)) calc(4vw + var(--safe-x));
   background: rgba(255, 246, 235, 0.9); backdrop-filter: blur(8px);
 }
-#help-overlay.hidden { display: none; }
+#settings-overlay.hidden { display: none; }
 
-.help-card {
+.settings-card {
   position: relative;
-  width: 100%; max-width: 21rem; max-height: 100%; overflow-y: auto;
-  display: flex; flex-direction: column; gap: 0.85rem;
-  padding: 1.2rem 1.2rem 1.1rem;
+  width: 100%; max-width: 33rem; max-height: 100%; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 0.7rem;
+  padding: 0.9rem 1.2rem 1rem;
   background: var(--surface);
   border-radius: var(--r-lg); box-shadow: var(--shadow-card);
 }
-.help-card h2 {
+.settings-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.settings-title {
   font-family: var(--font-display); font-weight: 700;
-  font-size: 1.5rem; margin: 0; color: var(--ink);
+  font-size: 1.4rem; margin: 0; color: var(--ink);
 }
-/* The how-to-drive title only — bigger and centred over the demo it introduces,
-   because here the title IS the instruction. #motion-title shares .help-card h2
-   and stays a plain left-aligned alert heading. */
-.help-title { text-align: center; font-size: 1.75rem; line-height: 1.05; }
 
-/* STEER — the hero: the animated demo, centred, with the title doing the talking.
-   chevron | phone | chevron. The 1fr side columns are equal, so each chevron lands
-   in the MIDDLE of the free space beside the phone at any card width — and the phone
-   stays centred even though only one chevron is ever visible. */
-.steer-stage { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; width: 100%; }
+/* The steering-mode seg — two die-cut halves in one pill; the picked half fills
+   with the player's livery, exactly the picked-tile language the lobby uses. */
+.seg {
+  display: inline-flex; overflow: hidden;
+  background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r-pill);
+  box-shadow: var(--shadow-pop);
+}
+.seg__opt {
+  padding: 0.4rem 1.1rem; border: 0; background: transparent; cursor: pointer;
+  font-family: var(--font-display); font-weight: 700; font-size: 0.95rem; color: var(--ink-2);
+}
+.seg__opt + .seg__opt { border-left: 3px solid var(--ink); }
+.seg__opt[aria-checked='true'] { background: var(--car, var(--brand)); color: #fff; }
+
+/* body: demo | captions. Collapses to a column only if the card ever renders
+   narrow (portrait would, but the rotate overlay owns portrait). */
+.settings-body { display: flex; align-items: center; gap: 1.1rem; }
+.settings-side { flex: 1; min-width: 10rem; display: flex; flex-direction: column; gap: 0.55rem; }
+.settings-done { width: 100%; margin-top: 0.2rem; }
+
+/* Caption rows swapped with the mode: tilt teaches ITEM + BRAKE, buttons the
+   ‹ › chord + ITEM. */
+.settings-card .help-ctrl--chord { display: none; }
+.settings-card.is-buttons .help-ctrl--chord { display: flex; }
+.settings-card.is-buttons .help-ctrl--brake { display: none; }
+
+/* STEER — the animated demo, centred: chevron | phone | chevron. The 1fr side
+   columns are equal, so each chevron lands in the MIDDLE of the free space
+   beside the phone at any card width — and the phone stays centred even though
+   only one chevron is ever visible. */
+.steer-stage { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; flex: 1.2; }
 
 /* Steer chevrons — drawn from two borders on a rotated box rather than set as a
    type glyph: the font's chevron is hairline-thin at any size, and this carries the
@@ -566,11 +642,13 @@ input[type=text]:disabled { opacity: 0.6; }
   100% { opacity: 0; }
 }
 
-/* STEER demo — a stylized phone whose screen is a MINIATURE of the real driving
-   HUD: a steer strip up top, the two buttons below (ITEM purple left, BRAKE red
-   right). The phone LEANS side to side (doodle-jump) — a 3D roll about its vertical
-   axis (rotateY) inside a perspective box, NOT a flat in-plane twist — and the
-   steer strip fills the matching side in lockstep. */
+/* STEER demo — a stylized LANDSCAPE phone whose screen is a MINIATURE of the
+   real driving HUD in the picked mode. Tilt: ITEM/BRAKE thumb columns flank the
+   centred steer strip, and the phone LEANS side to side (doodle-jump) — a 3D
+   roll about the screen's vertical axis (rotateY) inside a perspective box, NOT
+   a flat in-plane twist — with the strip filling the matching side in lockstep.
+   Buttons: the phone holds still while the ‹ › minis take turns pressing and
+   the strip SNAPS between full lock left/right. */
 .steer-demo { display: flex; flex-direction: column; align-items: center; padding: 0.35rem 0 0.5rem; perspective: 560px; }
 /* Wrapper carries the 3D lean and the slab's actual left/right depth planes. */
 .phone-lean {
@@ -580,7 +658,7 @@ input[type=text]:disabled { opacity: 0.6; }
 .phone-lean::before,
 .phone-lean::after {
   content: ''; position: absolute; pointer-events: none;
-  top: 20px; bottom: 20px; width: 12px;
+  top: 14px; bottom: 14px; width: 12px;
   background: linear-gradient(180deg, #536170 0%, #202a35 100%);
   border: 2px solid #1b2430;
   transform: rotateY(90deg);
@@ -591,66 +669,72 @@ input[type=text]:disabled { opacity: 0.6; }
    plate sits 12px behind it, and the side planes above bridge that depth. */
 .phone-frame {
   position: relative; transform-style: preserve-3d; transform: translateZ(6px);
-  width: 112px; height: 208px;
-  border: 3px solid #1b2430; border-radius: 20px;
+  width: 200px; height: 104px;
+  border: 3px solid #1b2430; border-radius: 18px;
   background: linear-gradient(155deg, #44515f 0%, var(--ink) 62%);
-  padding: 6px;
+  padding: 5px;
 }
 .phone-frame::before {
   content: ''; position: absolute; pointer-events: none;
   inset: -3px; box-sizing: border-box;
   background: linear-gradient(155deg, #36424f 0%, #141c25 68%);
-  border: 3px solid #1b2430; border-radius: 20px;
+  border: 3px solid #1b2430; border-radius: 18px;
   transform: translateZ(-12px);
 }
-/* The "screen" — a slice of the sunny sky (page gradient), laid out like the real
-   HUD: the steer strip sits directly ON TOP of the buttons, both grouped at the
-   bottom (open sky above, like the live screen). The insets + gap are the real
-   screen's, scaled: the live HUD sits 12px in from a 390px-wide screen (3.1%) and
-   33px up from the bottom of an 844px-tall one (3.9%), which at this size is ~3px
-   and ~7px. */
+/* The "screen", laid out like the real landscape HUD per mode (see the grids
+   below): the name up top, the steer strip centred, the mode's controls in
+   their live positions. */
 .phone-inner {
   position: relative;
-  width: 100%; height: 100%; border-radius: 14px; overflow: hidden;
-  display: flex; flex-direction: column; justify-content: flex-end; gap: 11px;
-  padding: 8px 3px 7px;
+  width: 100%; height: 100%; border-radius: 12px; overflow: hidden;
+  display: grid; gap: 4px;
+  padding: 17px 8px 6px;
   background: var(--paper);
   transform: translateZ(1px);
 }
+/* tilt: ITEM and BRAKE are full-height thumb columns flanking the strip */
+.settings-card:not(.is-buttons) .phone-inner { grid-template-columns: 30px 1fr 30px; grid-template-rows: 1fr; }
+.settings-card:not(.is-buttons) .mini-btn--steer { display: none; }
+.settings-card:not(.is-buttons) .mini-btn--item  { grid-column: 1; grid-row: 1; height: auto; }
+.settings-card:not(.is-buttons) .mini-steer      { grid-column: 2; grid-row: 1; align-self: center; }
+.settings-card:not(.is-buttons) .mini-btn--brake { grid-column: 3; grid-row: 1; height: auto; }
+/* buttons: strip up top, ‹ / ITEM / › in three equal columns below */
+.settings-card.is-buttons .phone-inner { grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 30px; }
+.settings-card.is-buttons .mini-btn--brake { display: none; }
+.settings-card.is-buttons .mini-steer { grid-column: 1 / -1; grid-row: 1; align-self: center; justify-self: center; width: 66%; }
+.settings-card.is-buttons .mini-btn--steerl { grid-column: 1; grid-row: 2; }
+.settings-card.is-buttons .mini-btn--item   { grid-column: 2; grid-row: 2; }
+.settings-card.is-buttons .mini-btn--steerr { grid-column: 3; grid-row: 2; }
 /* Glassy screen sheen — a soft diagonal highlight (top-left) for a 3D, glossy feel.
    Fades out before the buttons so it never washes their colour. */
 .phone-inner::after {
   content: ''; position: absolute; inset: 0; pointer-events: none;
   background: linear-gradient(138deg, rgba(255, 255, 255, 0.38) 0%, rgba(255, 255, 255, 0) 44%);
 }
-/* Island bar — the pill cut out of the top of the screen. Pure iconography: it's
-   what makes the illustration read instantly as "a phone" rather than a rounded
-   rectangle. Sized as a fraction of the frame so it holds up at the small-screen
-   frame size below. */
+/* Island — the camera pill, on the LEFT edge in landscape. Pure iconography:
+   it's what makes the illustration read instantly as "a phone". */
 .phone-island {
-  position: absolute; z-index: 2; top: 4px; left: 50%; transform: translateX(-50%);
-  width: 41%; height: 9px; border-radius: var(--r-pill);
+  position: absolute; z-index: 2; left: 4px; top: 50%; transform: translateY(-50%);
+  width: 7px; height: 34%; border-radius: var(--r-pill);
   background: #0E1218;
 }
-/* The player's own name, centred just under the island — livery-tinted (var(--car))
+/* The player's own name, top-left like the real HUD — livery-tinted (var(--car))
    plain text with no chip, which is how the CouchPad launcher renders it. That
-   makes the preview read as "your phone, in the app". Taken out of the flow so the
-   steer strip + buttons stay grouped at the bottom of the screen. */
+   makes the preview read as "your phone, in the app". Out of the flow so the
+   grid below owns the strip + buttons. */
 .phone-name {
-  position: absolute; z-index: 1; top: 26px; left: 0; right: 0;
-  padding: 0 8px; text-align: center;
-  font-family: var(--font-display); font-weight: 700; font-size: 12px; line-height: 1;
+  position: absolute; z-index: 1; top: 5px; left: 16px; right: 16px;
+  text-align: center;
+  font-family: var(--font-display); font-weight: 700; font-size: 10px; line-height: 1;
   color: var(--car, var(--ink));
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* Mini steer strip — the live HUD track scaled down: paper surface, ink outline,
-   centre marker, and the same livery-colour fill sliding with the phone lean.
-   Height is deliberately OFF true scale (the second such break after the border,
-   below): 5.2% of the screen is 10px here, of which the 2px ink border eats 4 —
-   6px of paint for the one thing the card exists to teach. 16px doubles the
-   visible fill, so the sliding bar reads as the steering at a glance. */
+   centre marker, and the same livery-colour fill sliding with the lean (tilt)
+   or snapping full-side (buttons). The 2px border is deliberately out of scale
+   so the card's ink language holds at this size. */
 .mini-steer {
-  position: relative; height: 16px; overflow: hidden;   /* true scale is 10px — 44px of 844 (5.2%) */
+  position: relative; height: 14px; overflow: hidden;
   box-sizing: border-box;
   background: var(--surface); border: 2px solid var(--ink); border-radius: var(--r-pill);
 }
@@ -664,23 +748,15 @@ input[type=text]:disabled { opacity: 0.6; }
   background: var(--car); border-radius: var(--r-pill);
   animation: steer-slide 2.6s ease-in-out infinite;
 }
-/* Mini buttons — scaled-down versions of the real controls: same labels, colours,
-   ink border and bottom ledge, in the same left/right positions. They live inside
+/* Buttons mode: the fill SNAPS to whichever side is held — binary steering is
+   the whole lesson, so nothing glides. */
+.settings-card.is-buttons .mini-steer__fill { animation-timing-function: steps(1, jump-none); }
+/* Mini buttons — scaled-down versions of the real controls: same labels,
+   colours, ink border and bottom ledge, in the same positions. They live inside
    the non-interactive phone illustration, so their realism teaches recognition
-   without creating another tappable-looking row in the modal itself.
-   Every proportion here is the real button's, measured and scaled to this size:
-     height  30% of the screen   (real: 254.6 of 844)
-     ledge   2.4% of the height  (real: 6 of 254.6)  — 3px read as twice too heavy
-     gap     3.3% of the screen  (real: 12.8 of 390)
-   The 2px border is the ONE thing deliberately out of scale (true scale is 0.8px,
-   which would vanish) — the card's ink language needs the outline to hold.
-   The radius then has to pay for that: what the eye reads is the PAINT corner,
-   radius minus border, and an oversized border eats it. True-scale 4px left a 2px
-   paint corner against the real button's 13px (inner/outer 0.5 vs 0.81) and looked
-   square. 6px restores a true-scale paint corner under the oversized ink. */
-.mini-controls { display: flex; gap: 3px; position: relative; z-index: 1; }
+   without creating another tappable-looking row in the modal itself. */
+.mini-controls { display: contents; }
 .mini-btn {
-  flex: 1; height: 57px;
   display: flex; align-items: center; justify-content: center;
   color: #fff; font-family: var(--font-display); font-weight: 700;
   font-size: 7px; letter-spacing: 0.04em;
@@ -689,47 +765,64 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 .mini-btn--item  { background: var(--item); }
 .mini-btn--brake { background: var(--danger); }
-/* Phone leans side to side and the strip fills the matching side, in lockstep. */
+.mini-btn--steer { background: var(--blue); }
+.mini-btn .steer-glyph { font-size: 9px; border-radius: 1px; }
+/* ‹ › minis take turns pressing, on the same 2.6s clock as the strip: left held
+   through the first half-cycle, right through the second. */
+.settings-card.is-buttons .mini-btn--steerl { animation: mini-press-l 2.6s steps(1, jump-none) infinite; }
+.settings-card.is-buttons .mini-btn--steerr { animation: mini-press-r 2.6s steps(1, jump-none) infinite; }
+@keyframes mini-press-l {
+  0%, 100% { transform: translateY(1.5px); box-shadow: none; filter: brightness(1.08); }
+  50%      { transform: none; box-shadow: 0 1.5px 0 var(--btn-ledge); filter: none; }
+}
+@keyframes mini-press-r {
+  0%, 100% { transform: none; box-shadow: 0 1.5px 0 var(--btn-ledge); filter: none; }
+  50%      { transform: translateY(1.5px); box-shadow: none; filter: brightness(1.08); }
+}
+/* Phone leans side to side and the strip fills the matching side, in lockstep —
+   tilt mode only; button steering happens with the phone held still. */
 @keyframes phone-lean {
   0%, 100% { transform: rotateX(10deg) rotateY(-32deg); }
   50%      { transform: rotateX(10deg) rotateY(32deg); }
 }
+.settings-card.is-buttons .phone-lean { animation: none; transform: rotateX(8deg); }
 @keyframes steer-slide {
   0%, 100% { transform: translateX(-46%); }
   50%      { transform: translateX(46%); }
 }
 
-/* BRAKE + ITEM — compact, shadowless labels rather than a second set of controls. */
-.help-controls { display: flex; gap: 0.6rem; }
-.help-ctrl { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.35rem; text-align: center; }
+/* Caption rows — compact, shadowless labels rather than a second set of controls. */
+.help-ctrl { display: flex; flex-direction: row; align-items: center; gap: 0.55rem; text-align: left; }
 .help-chip {
-  display: inline-flex; align-items: center; justify-content: center;
-  padding: 0.32rem 0.75rem;
+  display: inline-flex; align-items: center; justify-content: center; gap: 2px;
+  padding: 0.32rem 0.75rem; flex: none;
   font-family: var(--font-display); font-weight: 700; font-size: 0.9rem; letter-spacing: 0.05em;
   border-radius: var(--r-pill); user-select: none;
 }
 .help-chip--brake { color: #fff; background: var(--danger); }
 .help-chip--item  { color: #fff; background: var(--item); }
+.help-chip--steer { color: #fff; background: var(--blue); }
+.help-chip--steer .steer-glyph { font-size: 0.72rem; border-radius: 1px; }
 .help-ctrl__cap { color: var(--ink-2); font-weight: 700; font-size: 0.9rem; line-height: 1.25; }
 
-/* "Got it" CTA — the primary close action, fills the column. */
-.help-done { width: 100%; margin-top: 0.1rem; }
-
 /* ---- Motion-blocked popup ----
-   A SEPARATE alert from the instructions (z 18 — above #help-overlay 17, below
-   #conn 30). Same frosted glass + card surface as the help popup; reuses .help-card
-   for the surface, .help-copy/.help-motion-fix for the body. */
+   A SEPARATE alert from the settings (z 18 — above #settings-overlay 17, below
+   #conn 30). Same frosted glass + card surface; reuses .settings-card for the
+   surface, .help-copy/.help-motion-fix for the body. */
 #motion-overlay {
   position: fixed; inset: 0; z-index: 18;
   display: flex; align-items: center; justify-content: center;
   padding:
-    calc(3vh + var(--safe-top)) calc(6vw + var(--safe-right))
-    calc(3vh + var(--safe-bottom)) calc(6vw + var(--safe-left));
+    calc(2vh + var(--safe-top)) calc(4vw + var(--safe-x))
+    calc(2vh + var(--safe-bottom)) calc(4vw + var(--safe-x));
   background: rgba(255, 246, 235, 0.92); backdrop-filter: blur(8px);
 }
 #motion-overlay.hidden { display: none; }
-.motion-card { max-width: 20rem; text-align: center; align-items: stretch; }
-.motion-card h2 { font-size: 1.45rem; }
+.motion-card { max-width: 24rem; text-align: center; align-items: stretch; }
+.motion-card h2 {
+  font-family: var(--font-display); font-weight: 700;
+  font-size: 1.45rem; margin: 0; color: var(--ink);
+}
 .motion-card .btn { width: 100%; margin-top: 0; }
 /* Shared body copy + the (reused) Settings-fix callout. */
 .help-copy { margin: 0; color: var(--ink-2); font-weight: 700; font-size: 0.9rem; line-height: 1.35; }
@@ -740,11 +833,11 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 .help-motion-fix em { color: var(--ink); font-style: normal; font-weight: 800; }
 
-/* The persistent "?" trigger in the lobby — folded into the car hero's top-right
+/* The persistent gear trigger in the lobby — folded into the car hero's top-right
    corner (absolute over the .car-card anchor). A compact round ghost chip: it reads
    as a subtle affordance on the card, not a second button competing with the strip.
    Sized to overlap only the name row so the stat bars below stay clear. */
-.help-btn {
+.settings-btn {
   position: absolute; z-index: 2;
   top: 0.5rem; right: 0.55rem;
   width: 2.4rem; height: 2.4rem;
@@ -752,46 +845,68 @@ input[type=text]:disabled { opacity: 0.6; }
   background: var(--surface-2);
   font-family: var(--font-display); font-size: 1.3rem; line-height: 1;
 }
-/* The game-screen "?" — fixed, just left of the pause button (same row, same size). */
-.help-btn-game {
-  position: fixed; z-index: 8;
-  top: calc(0.6rem + var(--safe-top));
-  right: calc(4.2rem + var(--safe-right));   /* pause-btn is 3.2rem + 0.6rem gutter */
-  width: 3.2rem; height: 3.2rem; font-family: var(--font-display); font-size: 1.7rem;
-}
 
-/* Reduced motion: the demo must still TEACH, so freeze the phone in a clear
-   leaned pose with the bar offset to match (a calm, static illustration of the
-   gesture) rather than animating or vanishing. */
+/* ---- rotate overlay (portrait) ----
+   The controller is landscape-only. Pure CSS: portrait shows this over
+   EVERYTHING (z 40, above #conn) on solid paper, so no half-working sideways
+   screen shows through. The little phone pantomimes the fix. */
+.rotate { display: none; }
+@media (orientation: portrait) {
+  .rotate {
+    position: fixed; inset: 0; z-index: 40;
+    display: flex; align-items: center; justify-content: center;
+    padding: 2rem calc(1.5rem + var(--safe-x));
+    background: var(--paper);
+    text-align: center;
+  }
+}
+.rotate__card { display: flex; flex-direction: column; align-items: center; gap: 0.9rem; max-width: 22rem; }
+.rotate__phone {
+  width: 44px; height: 80px;
+  background: var(--surface); border: 4px solid var(--ink); border-radius: 10px;
+  box-shadow: var(--shadow-pop);
+  animation: rotate-phone 2.4s ease-in-out infinite;
+}
+@keyframes rotate-phone {
+  0%, 18%  { transform: rotate(0deg); }
+  55%, 100% { transform: rotate(-90deg); }
+}
+.rotate__title {
+  font-family: var(--font-display); font-weight: 700; font-size: 1.6rem;
+  margin: 0; color: var(--ink);
+}
+.rotate__msg { margin: 0; color: var(--ink-2); font-weight: 700; line-height: 1.4; }
+
+/* Reduced motion: the demos must still TEACH, so freeze them in a clear pose
+   (a calm, static illustration of the gesture) rather than animating or
+   vanishing. */
 @media (prefers-reduced-motion: reduce) {
   .phone-lean { animation: none; transform: rotateX(10deg) rotateY(-26deg); }
+  .settings-card.is-buttons .phone-lean { transform: rotateX(8deg); }
   .mini-steer__fill { animation: none; transform: translateX(-30%); }
+  .settings-card.is-buttons .mini-steer__fill { transform: translateX(-46%); }
+  .settings-card.is-buttons .mini-btn--steerl,
+  .settings-card.is-buttons .mini-btn--steerr { animation: none; }
   /* Freeze the chevrons into that same LEFT-leaning pose (left lit, right gone) —
      otherwise they'd be the only thing still moving on the card. */
   .chev { animation: none; }
   .chev--l { opacity: 1; }
   .chev--r { opacity: 0; }
+  .rotate__phone { animation: none; transform: rotate(-90deg); }
 }
 
-/* Landscape: less vertical room, so compact the paddings and shrink the big
-   targets a touch. The HUD stays a single column; the brake stays thumb-sized. */
-@media (orientation: landscape) {
-  #drive-hud { gap: 0.8rem; }
-  #brake-btn.brake { padding: 2.8rem 1.4rem; }   /* shorter than portrait, but still 2x for the thumb */
-  #action-btn.action { padding: 2.8rem 1.4rem; }   /* match BRAKE's height + h-pad in landscape (equal halves) */
-  .steer { margin-top: 0.4rem; }
-  /* Help popup compacts too — trim gaps + shrink the demo so more fits; the card
-     still scrolls if it overflows a short landscape phone. */
-  .help-card { gap: 0.6rem; padding: 0.9rem 1.1rem; }
-  .help-title { font-size: 1.5rem; }
-  .steer-demo { padding: 0.2rem 0; }
-  .phone-frame { width: 92px; height: 170px; }
-  /* Everything inside the phone rides the shorter frame down by the same 170/208
-     factor, so the proportions above survive the shrink. The island's width and the
-     buttons' widths are already relative, so only the vertical rhythm restates. */
-  .phone-island { height: 7px; top: 3px; }
-  .phone-name { top: 21px; font-size: 11px; }
-  .mini-steer { height: 13px; }
-  .mini-btn { height: 47px; }
-  .phone-inner { gap: 9px; }
+/* Short landscape screens (small phones with the browser bar up): tighten the
+   rhythm so the HUD's buttons keep their height and the lobby stays tappable. */
+@media (max-height: 380px) {
+  section { padding-top: max(var(--safe-top), 6px); }
+  #drive-hud { gap: 0.4rem 0.7rem; }
+  .hud-top { min-height: 1.8rem; }
+  .hud-name { font-size: 1rem; }
+  .hud-btns .icon-btn { width: 2.5rem; height: 2.5rem; font-size: 1.3rem; }
+  .steer { width: clamp(11rem, 34vw, 18rem); }
+  .settings-card { gap: 0.5rem; padding: 0.7rem 0.9rem; }
+  .settings-title { font-size: 1.2rem; }
+  .phone-frame { width: 168px; height: 88px; }
+  .phone-inner { padding: 14px 7px 5px; }
+  .results-title { font-size: 1.3rem; }
 }

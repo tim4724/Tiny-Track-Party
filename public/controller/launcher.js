@@ -73,10 +73,31 @@ export function setAccentColor(color) {
 // shell — a plain browser renames via the name screen. The name is NEVER
 // persisted (§1): the injected identity must not leak into the game's own storage.
 export function installRenameHook(onRename) {
-  window.CouchPad = {
-    setName(name) {
-      if (!inShell) return;
-      onRename(cleanName(name) || 'Racer');
-    }
+  window.CouchPad = window.CouchPad || {};
+  window.CouchPad.setName = (name) => {
+    if (!inShell) return;
+    onRename(cleanName(name) || 'Racer');
   };
+}
+
+// System back (§9). Armed, a back gesture reaches window.CouchPad.back (and the
+// screen edges go to the system); disarmed, edge swipes stay gameplay input and
+// LEAVE is the only exit. Deduped on transitions — the contract expects state
+// changes, not chatter — and feature-detected like every other touchpoint.
+let _backArmed = null;
+export function armSystemBack(want) {
+  const host = window.CouchPadHost;
+  if (!(host && typeof host.enableSystemBack === 'function')) return;
+  want = !!want;
+  if (want === _backArmed) return;
+  _backArmed = want;
+  host.enableSystemBack(want);
+}
+
+// The launcher calls this once per gesture, only while armed. Return true =
+// consumed (a dialog closed), anything else = leave the game through the same
+// exit as the LEAVE bar — which is exactly what a lobby/results back should do.
+export function installBackHook(onBack) {
+  window.CouchPad = window.CouchPad || {};
+  window.CouchPad.back = () => onBack() === true;
 }
