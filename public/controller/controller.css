@@ -487,14 +487,13 @@ input[type=text]:disabled { opacity: 0.6; }
    it never eats taps). The colour comes from the .latency--good|ok|bad modifier;
    the bolt only shows under .latency--fastlane (P2P DataChannel carrying the
    input/ping path).
-   Right edge: the safe inset ONLY, no design gutter on top of it. It's a readout,
-   not chrome the player aims at, so it hugs the corner rather than sitting on a
-   margin of its own that poked out past the button column (which rides the 12px
-   --edge-x). The sticker's 3px offset shadow would fall off-screen there, so
-   it goes: a half-clipped shadow reads as a rendering glitch. */
+   Right edge: the PHYSICAL screen edge, ignoring the safe inset — it's a
+   passive readout, not chrome the player aims at, so it lives in the unsafe
+   strip the buttons must keep clear of and stops crowding them. Shadowless,
+   so nothing clips at the bezel. */
 .latency {
   position: fixed;
-  right: var(--safe-x);
+  right: 0.25rem;
   bottom: calc(0.5rem + var(--safe-bottom));
   z-index: 20;
   display: inline-flex; align-items: center; gap: 3px;
