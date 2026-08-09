@@ -628,7 +628,8 @@ input[type=text]:disabled { opacity: 0.6; }
   position: relative;
   width: 100%; max-width: 46rem; height: 100%; max-height: 100%; overflow-y: auto;
   display: grid;
-  grid-template-columns: 14.5rem minmax(0, 1fr);
+  /* an even 50/50 split: the choices weigh the same as the stage */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
   grid-template-areas:
     'head stage'
@@ -691,9 +692,39 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 .settings-card:not(.is-buttons) .steer-demo--buttons { display: none; }
 .settings-card.is-buttons .steer-demo--tilt { display: none; }
-/* the stage's demo scales UP from the art's native px size — `scale` composes
-   with the twist animation's transform, so the phone's proportions survive */
-.demo-stage .phone-lean { scale: 1.45; }
+/* the stage's demo scales UP from the art's native px size with `zoom`, which
+   RE-LAYS-OUT the px art at the bigger size — `scale` upsampled the rasterized
+   layer instead, which is what made the ink outlines pixelated */
+.demo-stage .phone-lean { zoom: 1.3; }
+
+/* Direction chevrons flanking the phone — the steering EFFECT, on the demo's
+   own 2.6s clock: the side being steered toward lights in the livery colour
+   while the other sits faint. Tilt eases with the twist's holds; buttons SNAPS
+   with the strip. */
+.demo-chev { flex: none; display: flex; color: var(--car, var(--brand)); opacity: 0.18; }
+.demo-chev .steer-glyph { font-size: 2.1rem; }
+.steer-demo--tilt .demo-chev--l { animation: chev-tilt-l 2.6s ease-in-out infinite; }
+.steer-demo--tilt .demo-chev--r { animation: chev-tilt-r 2.6s ease-in-out infinite; }
+.steer-demo--buttons .demo-chev--l { animation: chev-snap-l 2.6s linear infinite; }
+.steer-demo--buttons .demo-chev--r { animation: chev-snap-r 2.6s linear infinite; }
+@keyframes chev-tilt-l {
+  0%, 18%  { opacity: 1; }
+  50%, 68% { opacity: 0.18; }
+  100%     { opacity: 1; }
+}
+@keyframes chev-tilt-r {
+  0%, 18%  { opacity: 0.18; }
+  50%, 68% { opacity: 1; }
+  100%     { opacity: 0.18; }
+}
+@keyframes chev-snap-l {
+  0%, 49.9% { opacity: 1; }
+  50%, 100% { opacity: 0.18; }
+}
+@keyframes chev-snap-r {
+  0%, 49.9% { opacity: 0.18; }
+  50%, 100% { opacity: 1; }
+}
 
 /* Legend — shadowless caption rows on the stage, so the chips read as a legend
    for the demo, never as another row of buttons. Rows swap with the picked
@@ -719,7 +750,7 @@ input[type=text]:disabled { opacity: 0.6; }
 /* the demo fills the stage's stretchy middle: its box comes from the grid, not
    from the phone's bounding box, so the twist's bbox swing can't shimmy the
    legend below */
-.steer-demo { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 0; perspective: 560px; }
+.steer-demo { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; gap: 0.7rem; padding: 0; perspective: 560px; }
 /* Wrapper carries the steering-wheel twist. */
 .phone-lean {
   position: relative; transform-style: preserve-3d;
@@ -780,13 +811,12 @@ input[type=text]:disabled { opacity: 0.6; }
   width: 7px; height: 34%; border-radius: var(--r-pill);
   background: #0E1218;
 }
-/* The player's own name, top-left like the real HUD — livery-tinted (var(--car))
-   plain text with no chip, which is how the CouchPad launcher renders it. That
-   makes the preview read as "your phone, in the app". Out of the flow so the
+/* The player's own name, top-LEFT exactly like the real HUD's sticker —
+   livery-tinted (var(--car)) plain text with no chip. Out of the flow so the
    grid below owns the strip + buttons. */
 .phone-name {
   position: absolute; z-index: 1; top: 4px; left: 16px; right: 16px;
-  text-align: center;
+  text-align: left;
   font-family: var(--font-display); font-weight: 700; font-size: 10px; line-height: 1;
   color: var(--car, var(--ink));
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -910,14 +940,12 @@ input[type=text]:disabled { opacity: 0.6; }
 .help-motion-fix em { color: var(--ink); font-style: normal; font-weight: 800; }
 
 /* The persistent gear trigger in the lobby — pinned to the ribbon's far right.
-   A compact round ghost chip: a subtle affordance, not a second button
-   competing with the pickers. */
+   The theme's .icon-btn sticker square at the SAME size as the in-game gear
+   (.hud-btns), so the button reads as the same control on both screens. */
 .settings-btn {
   margin-left: auto; flex: none;
-  width: 2.4rem; height: 2.4rem;
-  border-radius: var(--r-pill);
-  background: var(--surface-2);
-  font-family: var(--font-display); font-size: 1.3rem; line-height: 1;
+  width: 2.9rem; height: 2.9rem;
+  font-size: 1.5rem; line-height: 1;
 }
 
 /* ---- rotate overlay (portrait) ----
@@ -964,6 +992,9 @@ input[type=text]:disabled { opacity: 0.6; }
     animation: none;
     transform: translateY(2px) scale(0.95); box-shadow: none; filter: brightness(0.8);
   }
+  /* the left chevron holds lit, agreeing with the frozen full-left pose */
+  .demo-chev { animation: none !important; }
+  .demo-chev--l { opacity: 1; }
   .rotate__phone { animation: none; transform: rotate(-90deg); }
 }
 
@@ -974,7 +1005,8 @@ input[type=text]:disabled { opacity: 0.6; }
    every internal proportion of the phone survives — only its footprint (and
    the reserved stage height) shrinks. */
 @media (max-height: 400px) {
-  .demo-stage .phone-lean { scale: 1.1; }
+  .demo-stage .phone-lean { zoom: 1; }
+  .demo-chev .steer-glyph { font-size: 1.6rem; }
   .mode-card { padding: 0.55rem 0.8rem; }
 }
 @media (max-height: 380px) {
@@ -987,9 +1019,10 @@ input[type=text]:disabled { opacity: 0.6; }
   .results-title { font-size: 1.3rem; }
 }
 @media (max-height: 356px) {
-  .settings-card { gap: 0.45rem 0.9rem; padding: 0.6rem 1rem 0.8rem; grid-template-columns: 12rem minmax(0, 1fr); }
+  .settings-card { gap: 0.45rem 0.9rem; padding: 0.6rem 1rem 0.8rem; }
   .settings-title { font-size: 1.15rem; }
-  .demo-stage .phone-lean { scale: 0.85; }
+  .demo-stage .phone-lean { zoom: 0.85; }
+  .demo-chev .steer-glyph { font-size: 1.3rem; }
   .mode-card__cap { display: none; }   /* the demo says it; the hint is the first thing to go */
   .settings-legend { gap: 1rem; }
   .settings-legend .help-ctrl__cap { font-size: 0.8rem; }
