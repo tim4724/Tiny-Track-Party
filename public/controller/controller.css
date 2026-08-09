@@ -394,6 +394,10 @@ input[type=text]:disabled { opacity: 0.6; }
 .hud-top { grid-area: name; display: flex; align-items: center; min-height: 2.9rem; }
 .hud-btns { display: flex; gap: 0.55rem; margin-left: auto; }
 .hud-btns .icon-btn { width: 2.9rem; height: 2.9rem; font-size: 1.5rem; }
+/* The gear is DRAWN (inline SVG, currentColor) like .pause-glyph/.steer-glyph —
+   the old ⚙ text glyph came from whatever system font had it: thin, small and
+   different on every platform. Sized in em so both button tiers scale it. */
+.gear-glyph { width: 1.55em; height: 1.55em; fill: currentColor; }
 .hud-name {
   font-family: var(--font-display); font-weight: 700; font-size: 1.15rem; line-height: 1;
   color: #fff; background: var(--car, var(--brand));
