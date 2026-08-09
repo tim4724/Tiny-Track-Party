@@ -87,9 +87,9 @@ test('shell join skips the name screen, seats the injected name, never persists 
   // The name still seats the display roster and feeds our labels…
   await expect(zoe.locator('#me-name')).toHaveText('Zoe');
   await expect(page.locator('#players')).toContainText('Zoe');
-  // …but in the shell those labels are hidden: the launcher's native top-bar chip
-  // already shows the name, so the in-game copies would be a redundant duplicate.
-  await expect(zoe.locator('#me-name')).toBeHidden();
+  // …and stays VISIBLE in the shell too: the launcher's own name chip sits in a
+  // top bar that landscape hides, so our sticker is the only name on screen.
+  await expect(zoe.locator('#me-name')).toBeVisible();
   await expect(zoe.locator('.cp-shell')).toHaveCount(1);
 
   // §1: the injected identity must not leak into the game's own name storage.

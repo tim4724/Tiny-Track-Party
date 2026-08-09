@@ -24,7 +24,9 @@
      still clears a real notch/home-indicator when one is larger. */
   --edge-top:    max(var(--safe-top),    10px);
   --edge-bottom: max(var(--safe-bottom), 10px);
-  --edge-x:      max(var(--safe-x),      14px);
+  /* Left/right the gutter is ADDITIVE: content clears the safe inset AND keeps
+     a visible margin — flush against a notch boundary reads as cramped. */
+  --edge-x:      calc(var(--safe-x) + 14px);
 }
 
 html, body {
@@ -339,8 +341,8 @@ input[type=text]:disabled { opacity: 0.6; }
 
 /* ---- game / driving HUD ---- */
 /* No countdown here — the full HUD shows immediately so players can pre-steer
-   while the display counts down 3..2..1..GO. The backdrop is paper tinted toward
-   the player's livery, so each phone reads as "yours" at a glance.
+   while the display counts down 3..2..1..GO. Same paper backdrop as the lobby;
+   the livery lives in the stickers (name, steer fill), not the page.
 
    Landscape-only. One grid per input mode (#game.mode-tilt / .mode-buttons, set
    by setInputMode): the name row up top, the steer indicator + the pause/settings
@@ -350,7 +352,6 @@ input[type=text]:disabled { opacity: 0.6; }
 #game {
   align-items: stretch; justify-content: flex-start; user-select: none;
   padding-top: calc(0.5rem + var(--safe-top));
-  background: color-mix(in srgb, var(--car, var(--brand)) 12%, #FFF6EB);
 }
 #drive-hud {
   flex: 1; min-height: 0;
@@ -399,16 +400,10 @@ input[type=text]:disabled { opacity: 0.6; }
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* CouchPad shell: the launcher owns identity and shows the player's name in
-   its native top-bar chip, so our own copies are duplicates — drop them (lobby
-   identity, in-race HUD). The whole lobby identity row collapses (the gear lives
-   in the car card, not this row); .hud-top keeps its min-height so the HUD's top
-   spacing is unchanged. NOT the settings demo phone: its name isn't a second
-   copy of the launcher's chip, it's a PICTURE of it — the illustration is of the
-   player's phone running the app, so inside the shell it's the accurate thing to
-   draw, not a duplicate. */
-.cp-shell .lobby-me,
-.cp-shell .hud-name { display: none; }
+/* CouchPad shell: the name stickers STAY. The launcher's own name chip lives in
+   its top bar, which is hidden in landscape — hiding our copies too left the
+   player nameless on every screen (they were dropped as duplicates once; that
+   assumed the portrait chrome). */
 
 /* MID row — the steer indicator over its one-line mode hint, centred on the
    TOTAL screen width with the row's free height spaced around the pair. The
