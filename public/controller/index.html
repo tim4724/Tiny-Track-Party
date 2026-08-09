@@ -51,26 +51,21 @@
        host's picker over the ready/start footer, pinned to the bottom). The
        page scrolls vertically when a column runs long. -->
   <section id="lobby" class="hidden">
+    <!-- Identity ribbon — your NAME as a livery sticker on the left (visible in
+         the CouchPad shell too: the launcher's own chip lives in a top bar that
+         landscape hides), the Settings gear pinned far right. A slim row of its
+         own, so neither has to squat on the car card. -->
+    <div class="lobby-top">
+      <div class="lobby-me"><span id="me-name" class="lobby-me__name"></span></div>
+      <button id="settings-btn" class="settings-btn icon-btn" type="button" aria-label="Settings" aria-haspopup="dialog">&#9881;&#xFE0E;</button>
+    </div>
+
     <div class="lobby-car">
-      <!-- your car — no section header; the card speaks for itself. Your NAME is
-           a die-cut sticker slapped over the card's top-left corner (livery
-           colour; hidden wholesale inside the CouchPad shell, where the
-           launcher's own chip shows it). The gear reopens the Settings popup
-           and is folded into the top-right corner. Both sit OUTSIDE #car-hero
-           (which buildCarPicker rewrites) so a render never wipes them. -->
+      <!-- your car — no section header; the card speaks for itself. -->
       <div class="car-card">
-        <div class="lobby-me"><span id="me-name" class="lobby-me__name"></span></div>
-        <button id="settings-btn" class="settings-btn icon-btn" type="button" aria-label="Settings" aria-haspopup="dialog">&#9881;&#xFE0E;</button>
         <div id="car-hero" class="car-hero"></div>
       </div>
       <div id="carpick" class="carpick"></div>
-
-      <!-- lobby footer — non-hosts ready up; the host's button is "Start race",
-           disabled until everyone else is ready. See renderReadyFoot (ui.js).
-           Lives under the car column so the primary action stays ABOVE THE FOLD
-           while the (taller) race picker scrolls. -->
-      <button id="ready-btn" class="btn btn--brand hidden">I’m ready</button>
-      <div id="ready-note" class="hidden"></div>
     </div>
 
     <div class="lobby-race">
@@ -84,6 +79,15 @@
       <div id="trackpick" class="trackpick hidden">
         <div id="track-strip" class="trackpick__strip"></div>
       </div>
+    </div>
+
+    <!-- The GO bar — non-hosts ready up; the host's button is "Start race",
+         disabled until everyone else is ready (renderReadyFoot, ui.js). A
+         full-width bar pinned to the bottom of the screen, so the primary
+         action is always visible while the columns above scroll. -->
+    <div class="lobby-go">
+      <button id="ready-btn" class="btn btn--brand hidden">I’m ready</button>
+      <div id="ready-note" class="hidden"></div>
     </div>
   </section>
 
@@ -181,71 +185,78 @@
         <span class="pill">Steering</span>
       </div>
 
-      <!-- Steering mode — the one setting, as two big SELECTABLE CARDS, each
-           carrying its own demo phone (a miniature of the real driving screen
-           in that mode). The picked card tints toward your livery and its demo
-           ANIMATES — tilt twists like a steering wheel with the strip sliding
-           in lockstep, buttons takes turns pressing ‹ › with the strip
-           snapping full-side; the unpicked card sits dimmed and still. The
-           choice IS the layout, so nothing needs a caption to say "pick one". -->
+      <!-- Steering mode — pick LEFT, watch RIGHT. The seg is a column of two
+           compact radio rows (dot + name + one-line hint); the picked row tints
+           toward your livery. The demo phones live on the STAGE beside them —
+           one per mode, .is-buttons (refreshSettingsCard) showing the picked
+           one. Tilt twists like a steering wheel with the strip sliding in
+           lockstep; buttons takes turns pressing ‹ › with the strip snapping
+           full-side. -->
       <div class="seg" role="radiogroup" aria-label="Steering">
         <button id="input-tilt" type="button" class="mode-card" role="radio" aria-checked="true">
-          <span class="mode-card__name">Tilt</span>
-          <div class="steer-demo steer-demo--tilt" aria-hidden="true">
-            <div class="phone-lean">
-              <div class="phone-frame">
-                <div class="phone-inner">
-                  <span class="phone-island"></span>
-                  <span class="phone-name"></span>
-                  <div class="mini-steer"><div class="mini-steer__fill"></div></div>
-                  <div class="mini-controls">
-                    <span class="mini-btn mini-btn--item">ITEM</span>
-                    <span class="mini-btn mini-btn--brake">BRAKE</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <span class="mode-card__cap">Twist like a wheel</span>
+          <span class="mode-card__label">
+            <span class="mode-card__name">Tilt</span>
+            <span class="mode-card__cap">Twist like a wheel</span>
+          </span>
         </button>
         <button id="input-buttons" type="button" class="mode-card" role="radio" aria-checked="false">
-          <span class="mode-card__name">Buttons</span>
-          <div class="steer-demo steer-demo--buttons" aria-hidden="true">
-            <div class="phone-lean">
-              <div class="phone-frame">
-                <div class="phone-inner">
-                  <span class="phone-island"></span>
-                  <span class="phone-name"></span>
-                  <div class="mini-steer"><div class="mini-steer__fill"></div></div>
-                  <div class="mini-controls">
-                    <span class="mini-btn mini-btn--steer mini-btn--steerl"><span class="steer-glyph steer-glyph--l"></span></span>
-                    <span class="mini-btn mini-btn--item">ITEM</span>
-                    <span class="mini-btn mini-btn--steer mini-btn--steerr"><span class="steer-glyph steer-glyph--r"></span></span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-          <span class="mode-card__cap">Hold ‹ › &middot; both = brake</span>
+          <span class="mode-card__label">
+            <span class="mode-card__name">Buttons</span>
+            <span class="mode-card__cap">Hold ‹ › &middot; both = brake</span>
+          </span>
         </button>
       </div>
 
-      <!-- Legend — a SUNKEN strip (surface-2, the theme's "not a control"
-           surface): the chips map colours to the demos' controls. Rows swap
-           with the picked mode: tilt teaches ITEM + BRAKE, buttons the ‹ ›
-           chord + ITEM. -->
-      <div class="settings-legend">
-        <div class="help-ctrl help-ctrl--chord">
-          <span class="help-chip help-chip--steer"><span class="steer-glyph steer-glyph--l"></span><span class="steer-glyph steer-glyph--r"></span></span>
-          <span class="help-ctrl__cap">Hold both to brake</span>
+      <!-- The stage — a sunken surface (surface-2, "not a control") holding the
+           picked mode's animated demo phone with the legend attached beneath:
+           everything on it is information, everything in the seg is a choice.
+           Legend rows swap with the mode: tilt teaches ITEM + BRAKE, buttons
+           the ‹ › chord + ITEM. -->
+      <div class="demo-stage">
+        <div class="steer-demo steer-demo--tilt" aria-hidden="true">
+          <div class="phone-lean">
+            <div class="phone-frame">
+              <div class="phone-inner">
+                <span class="phone-island"></span>
+                <span class="phone-name"></span>
+                <div class="mini-steer"><div class="mini-steer__fill"></div></div>
+                <div class="mini-controls">
+                  <span class="mini-btn mini-btn--item">ITEM</span>
+                  <span class="mini-btn mini-btn--brake">BRAKE</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="help-ctrl">
-          <span class="help-chip help-chip--item">ITEM</span>
-          <span class="help-ctrl__cap">Tap to use a pickup</span>
+        <div class="steer-demo steer-demo--buttons" aria-hidden="true">
+          <div class="phone-lean">
+            <div class="phone-frame">
+              <div class="phone-inner">
+                <span class="phone-island"></span>
+                <span class="phone-name"></span>
+                <div class="mini-steer"><div class="mini-steer__fill"></div></div>
+                <div class="mini-controls">
+                  <span class="mini-btn mini-btn--steer mini-btn--steerl"><span class="steer-glyph steer-glyph--l"></span></span>
+                  <span class="mini-btn mini-btn--item">ITEM</span>
+                  <span class="mini-btn mini-btn--steer mini-btn--steerr"><span class="steer-glyph steer-glyph--r"></span></span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="help-ctrl help-ctrl--brake">
-          <span class="help-chip help-chip--brake">BRAKE</span>
-          <span class="help-ctrl__cap">Hold to slow &amp; stop</span>
+        <div class="settings-legend">
+          <div class="help-ctrl help-ctrl--chord">
+            <span class="help-chip help-chip--steer"><span class="steer-glyph steer-glyph--l"></span><span class="steer-glyph steer-glyph--r"></span></span>
+            <span class="help-ctrl__cap">Hold both to brake</span>
+          </div>
+          <div class="help-ctrl">
+            <span class="help-chip help-chip--item">ITEM</span>
+            <span class="help-ctrl__cap">Tap to use a pickup</span>
+          </div>
+          <div class="help-ctrl help-ctrl--brake">
+            <span class="help-chip help-chip--brake">BRAKE</span>
+            <span class="help-ctrl__cap">Hold to slow &amp; stop</span>
+          </div>
         </div>
       </div>
 

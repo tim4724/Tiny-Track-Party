@@ -95,57 +95,63 @@ input[type=text]:disabled { opacity: 0.6; }
 #name-status { color: var(--ink-2); font-weight: 700; margin-top: 1rem; min-height: 1.4em; }
 
 /* ---- lobby: your name, your car, the track ---- */
-/* A landscape spread grouped by meaning: "your car" (hero + its strip) on the
-   left, "the race + go" (picker + ready/start pinned to the bottom) on the
-   right. Both columns stretch to the taller one, which is what keeps the
-   footer level with the car column's bottom edge; the WHOLE PAGE scrolls if a
-   column doesn't fit (no inner scroll boxes). */
+/* Ribbon top, GO bar bottom: a slim identity row (name sticker + gear) across
+   the top, the "your car" and "the race" columns in the middle, and the
+   ready/start bar pinned FULL-WIDTH to the bottom. The section is clamped to
+   the viewport so the bar is ALWAYS on screen; each middle column scrolls by
+   itself when it doesn't fit. */
 #lobby {
   display: grid;
+  height: 100dvh; box-sizing: border-box;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
-  grid-template-areas: 'car race';
-  column-gap: 1.4rem;
-  align-content: start;
-  /* extra top room for the name sticker overhanging the hero card's corner */
-  padding-top: calc(1.2rem + var(--safe-top));
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'top top'
+    'car race'
+    'go  go';
+  column-gap: 1.4rem; row-gap: 0.8rem;
 }
-.lobby-car  { grid-area: car;  display: flex; flex-direction: column; min-width: 0; }
-.lobby-race { grid-area: race; display: flex; flex-direction: column; min-width: 0; }
+.lobby-top { grid-area: top; display: flex; align-items: center; gap: 0.8rem; }
+.lobby-car  { grid-area: car;  display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow-y: auto; }
+.lobby-race { grid-area: race; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow-y: auto; }
+.lobby-go { grid-area: go; display: flex; flex-direction: column; }
+.lobby-go .btn { width: 100%; margin: 0; }
 /* No picker (non-host, or the catalog hasn't landed) → the race column is
-   empty: collapse it and centre the car column rather than leaving half the
-   screen blank. Browsers without :has keep the two-column layout, which still
-   works — it's just lopsided. */
+   empty: collapse to one column and centre the car group (the ribbon and GO
+   bar keep the full width). Browsers without :has keep the two-column layout,
+   which still works — it's just lopsided. */
 #lobby:has(#trackpick.hidden) {
-  grid-template-columns: minmax(0, 30rem);
-  grid-template-areas: 'car';
-  justify-content: center;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'top' 'car' 'go';
 }
 #lobby:has(#trackpick.hidden) .lobby-race { display: none; }
+#lobby:has(#trackpick.hidden) .lobby-car { width: min(100%, 30rem); margin-inline: auto; }
 #lobby:has(#trackpick.hidden) .carpick {
   grid-template-columns: repeat(auto-fit, minmax(4.5rem, 5.5rem));
   justify-content: center;
 }
-/* Narrow screens: two columns leave both cramped — stack the car group over
-   the race picker instead and let the page scroll (it already does). */
+/* Narrow screens: two columns leave both cramped — stack, and go back to PAGE
+   scrolling (a pinned bar would leave the stacked middle almost no height).
+   The GO bar slots in right under the car group, ABOVE the race picker, so the
+   primary action stays near the fold instead of trailing the full catalog. */
 @media (max-width: 620px) {
   #lobby {
+    height: auto;
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
+      'top'
       'car'
+      'go'
       'race';
     row-gap: 1rem;
   }
+  .lobby-car, .lobby-race { overflow-y: visible; }
 }
 
-/* Player identity, up top — your name as a livery-tinted sticker (coloured bg,
-   white text, slapped on at −2°; mirrors the display's cell name tags). */
-/* …slapped OVER the hero card's top-left corner like a real sticker (the card
-   is its anchor), which is what frees the old standalone identity row. The
-   card's max-content name keeps it clear of the corner overhang. */
-.lobby-me {
-  position: absolute; z-index: 3; top: -0.75rem; left: -0.5rem;
-  display: flex; max-width: 80%;
-}
+/* Player identity — your name as a livery-tinted sticker (coloured bg, white
+   text, slapped on at −3°; mirrors the display's cell name tags), leading the
+   ribbon. */
+.lobby-me { display: flex; max-width: 70%; }
 .lobby-me__name {
   font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; line-height: 1;
   color: #fff; background: var(--car, var(--brand));
@@ -161,17 +167,11 @@ input[type=text]:disabled { opacity: 0.6; }
 
 /* Car picker = a big HERO (selected car + stats) over a compact tap STRIP. */
 
-/* Card wrapper — just an anchor for the folded-in "?" help button, which sits in
-   the hero's top-right corner. It wraps only #car-hero (NOT the strip), so its box
-   tracks the hero exactly; buildCarPicker only rewrites #car-hero, so the button
-   (a sibling) survives every re-render. */
+/* Card wrapper — wraps only #car-hero, which buildCarPicker rewrites. */
 .car-card { position: relative; margin-bottom: 0.9rem; }
 
 /* Hero — the chosen car shown large with its name + handling stats, like a
-   feature card. Soft surface so it pops; row layout stays short in landscape.
-   The folded-in "?" clears the content two ways: the name reserves room with its
-   own padding-right, and the button is sized to overlap only the name row (the
-   stat bars sit below it) — see .car-hero__name / .settings-btn. */
+   feature card. Soft surface so it pops; row layout stays short in landscape. */
 .car-hero {
   display: flex; align-items: center; gap: 0.9rem;
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r);
@@ -184,8 +184,7 @@ input[type=text]:disabled { opacity: 0.6; }
 .car-hero__name {
   font-family: var(--font-display); font-weight: 700; font-size: 1.35rem;
   line-height: 1; color: var(--ink);
-  /* keep a long name clear of the corner "?" — ellipsise before it */
-  padding-right: 2.6rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
 /* Handling stat bars — one chunky rounded pill per stat, filled in the player's
@@ -232,8 +231,8 @@ input[type=text]:disabled { opacity: 0.6; }
    fill alone says which is yours (the hero shows which it is too; the pale-blue
    highlight didn't fit the warm palette) */
 .car-opt--mine { background: color-mix(in srgb, var(--car, var(--brand)) 16%, #fff); }
-/* under the footer button: why it's gated / who we're waiting on */
-#ready-note { color: var(--ink-2); font-weight: 700; text-align: center; margin-top: 1rem; }
+/* under the GO bar's button: why it's gated / who we're waiting on */
+#ready-note { color: var(--ink-2); font-weight: 700; text-align: center; margin-top: 0.45rem; }
 /* Host name in the wait text — tinted in their livery colour (set inline from
    CAR_COLORS), heavier weight so the colour reads as intentional. */
 .host-name { font-weight: 800; }
@@ -608,8 +607,9 @@ input[type=text]:disabled { opacity: 0.6; }
 /* ---- Settings popup ----
    Frosted glass mirroring #pause-overlay/#conn, but z 17 so it sits ABOVE the
    lobby/game yet BELOW #conn (z 30) — a dropped link always wins the screen.
-   Landscape-shaped: the head row holds the title + the steering-mode seg, then
-   the body puts the animated demo phone LEFT and the captions + Got-it RIGHT.
+   Landscape-shaped, pick-left-watch-right: the title, the two mode radios and
+   Got-it stack in a narrow LEFT column; the RIGHT side is one sunken stage
+   holding the picked mode's big animated demo with the legend beneath it.
    The card still scrolls as a fallback on very short screens. */
 #settings-overlay {
   position: fixed; inset: 0; z-index: 17;
@@ -626,61 +626,88 @@ input[type=text]:disabled { opacity: 0.6; }
 
 .settings-card {
   position: relative;
-  width: 100%; max-width: 42rem; height: 100%; max-height: 100%; overflow-y: auto;
-  display: flex; flex-direction: column; gap: 0.7rem;
+  width: 100%; max-width: 46rem; height: 100%; max-height: 100%; overflow-y: auto;
+  display: grid;
+  grid-template-columns: 14.5rem minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'head stage'
+    'seg  stage'
+    'done stage';
+  gap: 0.7rem 1.1rem;
   padding: 1rem 1.4rem 1.1rem;
   background: var(--surface);
   border-radius: var(--r-lg); box-shadow: var(--shadow-card);
 }
 /* the motion card shares the surface but stays content-sized — it's an alert,
    not the full settings sheet */
-.motion-card { height: auto; }
-.settings-head { display: flex; align-items: center; gap: 0.8rem; }
+.motion-card { height: auto; display: flex; flex-direction: column; gap: 0.7rem; }
+.settings-head { grid-area: head; display: flex; align-items: center; gap: 0.8rem; }
 .settings-title {
   font-family: var(--font-display); font-weight: 700;
   font-size: 1.4rem; margin: 0; color: var(--ink);
 }
 
-/* The steering-mode control: two big SELECTABLE CARDS sharing the row, each
-   holding its own demo phone. Paper in a thick ink outline at rest; the picked
-   one tints toward the player's livery (the lobby pickers' picked-tile mark)
-   and its demo animates, while the unpicked one sits dimmed and still. */
-.seg { flex: 1; min-height: 0; display: flex; gap: 0.9rem; }
+/* The steering-mode control: two compact RADIO ROWS stacked in the left
+   column — a drawn radio dot, the mode's name and a one-line hint. The dot is
+   what says "pick one"; the picked row also tints toward the player's livery
+   (the lobby pickers' picked-tile mark). */
+.seg { grid-area: seg; align-self: start; display: flex; flex-direction: column; gap: 0.7rem; }
 .mode-card {
-  flex: 1; min-width: 0; min-height: 0;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 0.3rem; padding: 0.5rem; cursor: pointer;
+  display: flex; align-items: center; justify-content: flex-start;
+  gap: 0.7rem; padding: 0.8rem 0.9rem; cursor: pointer;
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r);
   box-shadow: var(--shadow-pop);
   transition: transform 0.08s, box-shadow 0.08s, background 0.08s;
 }
 .mode-card:active { transform: translate(2px, 2px); box-shadow: none; }
 .mode-card[aria-checked='true'] { background: color-mix(in srgb, var(--car, var(--brand)) 16%, #fff); }
+/* the radio dot — drawn, so it carries the theme's ink weight; the picked one
+   fills with the livery inside a white ring */
+.mode-card::before {
+  content: ''; flex: none; width: 1.05em; height: 1.05em; box-sizing: border-box;
+  border: 3px solid var(--ink); border-radius: var(--r-pill); background: var(--surface);
+}
+.mode-card[aria-checked='true']::before {
+  background: var(--car, var(--brand));
+  box-shadow: inset 0 0 0 3px #fff;
+}
+.mode-card__label { display: flex; flex-direction: column; align-items: flex-start; gap: 0.32rem; min-width: 0; }
 .mode-card__name {
   font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; line-height: 1;
   color: var(--ink);
 }
-.mode-card__cap { font-weight: 800; font-size: 0.78rem; color: var(--ink-3); line-height: 1; }
+.mode-card__cap { font-weight: 800; font-size: 0.78rem; color: var(--ink-3); line-height: 1; text-align: left; }
 .mode-card[aria-checked='true'] .mode-card__cap { color: var(--ink-2); }
-/* the unpicked card's demo: dimmed and FROZEN (its animations hold their pose) */
-.mode-card[aria-checked='false'] .steer-demo { opacity: 0.45; filter: saturate(0.5); }
-.mode-card[aria-checked='false'] .steer-demo * { animation-play-state: paused !important; }
 
-/* Legend — a SUNKEN strip (surface-2 = the theme's informational surface), so
-   the chips read as a legend for the demos, never as another row of buttons.
-   Rows swap with the picked mode: tilt teaches ITEM + BRAKE, buttons the ‹ ›
-   chord + ITEM. */
+/* The stage — surface-2 (the theme's informational surface), holding the
+   picked mode's demo phone with the legend attached beneath. Only one demo
+   shows at a time: .is-buttons (refreshSettingsCard) flips which. */
+.demo-stage {
+  grid-area: stage; min-height: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0.3rem; padding: 0.7rem;
+  background: var(--surface-2); border-radius: var(--r-sm);
+}
+.settings-card:not(.is-buttons) .steer-demo--buttons { display: none; }
+.settings-card.is-buttons .steer-demo--tilt { display: none; }
+/* the stage's demo scales UP from the art's native px size — `scale` composes
+   with the twist animation's transform, so the phone's proportions survive */
+.demo-stage .phone-lean { scale: 1.45; }
+
+/* Legend — shadowless caption rows on the stage, so the chips read as a legend
+   for the demo, never as another row of buttons. Rows swap with the picked
+   mode: tilt teaches ITEM + BRAKE, buttons the ‹ › chord + ITEM. */
 .settings-legend {
   flex: none; display: flex; align-items: center; justify-content: center;
-  gap: 1.6rem; flex-wrap: wrap;
-  padding: 0.5rem 0.9rem;
-  background: var(--surface-2); border-radius: var(--r-sm);
+  gap: 1.4rem; flex-wrap: wrap;
+  padding: 0.2rem 0.4rem;
 }
 .settings-card .help-ctrl--chord { display: none; }
 .settings-card.is-buttons .help-ctrl--chord { display: flex; }
 .settings-card.is-buttons .help-ctrl--brake { display: none; }
 
-.settings-done { width: 100%; margin-top: 0.1rem; flex: none; }
+.settings-done { grid-area: done; width: 100%; margin: 0; align-self: end; }
 
 /* STEER demo — a stylized LANDSCAPE phone whose screen is a MINIATURE of the
    real driving HUD in the picked mode. Tilt: the phone TWISTS in the screen
@@ -689,9 +716,10 @@ input[type=text]:disabled { opacity: 0.6; }
    with the strip filling the matching side in lockstep. Buttons: the phone
    holds still while the ‹ › minis take turns pressing and the strip SNAPS
    between full lock left/right. */
-/* fixed stage height: the twist swings the phone's bounding box, so without a
-   reserved stage the card's caption would shimmy with the rotation */
-.steer-demo { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 132px; padding: 0; perspective: 560px; }
+/* the demo fills the stage's stretchy middle: its box comes from the grid, not
+   from the phone's bounding box, so the twist's bbox swing can't shimmy the
+   legend below */
+.steer-demo { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 0; perspective: 560px; }
 /* Wrapper carries the steering-wheel twist. */
 .phone-lean {
   position: relative; transform-style: preserve-3d;
@@ -881,13 +909,11 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 .help-motion-fix em { color: var(--ink); font-style: normal; font-weight: 800; }
 
-/* The persistent gear trigger in the lobby — folded into the car hero's top-right
-   corner (absolute over the .car-card anchor). A compact round ghost chip: it reads
-   as a subtle affordance on the card, not a second button competing with the strip.
-   Sized to overlap only the name row so the stat bars below stay clear. */
+/* The persistent gear trigger in the lobby — pinned to the ribbon's far right.
+   A compact round ghost chip: a subtle affordance, not a second button
+   competing with the pickers. */
 .settings-btn {
-  position: absolute; z-index: 2;
-  top: 0.5rem; right: 0.55rem;
+  margin-left: auto; flex: none;
   width: 2.4rem; height: 2.4rem;
   border-radius: var(--r-pill);
   background: var(--surface-2);
@@ -948,9 +974,8 @@ input[type=text]:disabled { opacity: 0.6; }
    every internal proportion of the phone survives — only its footprint (and
    the reserved stage height) shrinks. */
 @media (max-height: 400px) {
-  .steer-demo { height: 104px; }
-  .phone-lean { scale: 0.78; }
-  .mode-card { gap: 0.2rem; }
+  .demo-stage .phone-lean { scale: 1.1; }
+  .mode-card { padding: 0.55rem 0.8rem; }
 }
 @media (max-height: 380px) {
   section { padding-top: max(var(--safe-top), 6px); }
@@ -962,11 +987,10 @@ input[type=text]:disabled { opacity: 0.6; }
   .results-title { font-size: 1.3rem; }
 }
 @media (max-height: 356px) {
-  .settings-card { gap: 0.45rem; padding: 0.6rem 1rem 0.8rem; }
+  .settings-card { gap: 0.45rem 0.9rem; padding: 0.6rem 1rem 0.8rem; grid-template-columns: 12rem minmax(0, 1fr); }
   .settings-title { font-size: 1.15rem; }
-  .steer-demo { height: 76px; }
-  .phone-lean { scale: 0.58; }
-  .mode-card__cap { display: none; }   /* the demo says it; the caption is the first thing to go */
-  .settings-legend { padding: 0.35rem 0.7rem; gap: 1rem; }
+  .demo-stage .phone-lean { scale: 0.85; }
+  .mode-card__cap { display: none; }   /* the demo says it; the hint is the first thing to go */
+  .settings-legend { gap: 1rem; }
   .settings-legend .help-ctrl__cap { font-size: 0.8rem; }
 }
