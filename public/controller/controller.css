@@ -109,11 +109,19 @@ input[type=text]:disabled { opacity: 0.6; }
     'top top'
     'car race'
     'go  go';
-  column-gap: 1.4rem; row-gap: 0.8rem;
+  column-gap: 1.1rem; row-gap: 0.5rem;
 }
 .lobby-top { grid-area: top; display: flex; align-items: center; gap: 0.8rem; }
-.lobby-car  { grid-area: car;  display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow-y: auto; }
-.lobby-race { grid-area: race; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow-y: auto; }
+/* The columns are SCROLL CONTAINERS, so they carry the shadow room themselves:
+   padding + matching negative margin (content stays on the grid tracks, the
+   tiles' shadow-pop lands in the padding instead of being clipped). A bleed on
+   a child instead makes the column scroll sideways by the bleed's width. */
+.lobby-car, .lobby-race {
+  display: flex; flex-direction: column; min-width: 0; min-height: 0;
+  overflow-y: auto; padding: 0.5rem; margin: -0.5rem;
+}
+.lobby-car  { grid-area: car; }
+.lobby-race { grid-area: race; }
 .lobby-go { grid-area: go; display: flex; flex-direction: column; }
 .lobby-go .btn { width: 100%; margin: 0; }
 /* No picker (non-host, or the catalog hasn't landed) → the race column is
@@ -168,14 +176,14 @@ input[type=text]:disabled { opacity: 0.6; }
 /* Car picker = a big HERO (selected car + stats) over a compact tap STRIP. */
 
 /* Card wrapper — wraps only #car-hero, which buildCarPicker rewrites. */
-.car-card { position: relative; margin-bottom: 0.9rem; }
+.car-card { position: relative; margin-bottom: 0.6rem; }
 
 /* Hero — the chosen car shown large with its name + handling stats, like a
    feature card. Soft surface so it pops; row layout stays short in landscape. */
 .car-hero {
   display: flex; align-items: center; gap: 0.9rem;
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r);
-  box-shadow: var(--shadow-card); padding: 0.8rem 1rem;
+  box-shadow: var(--shadow-card); padding: 0.65rem 1rem;
 }
 /* The 5:4 .carthumb (theme.css) sizes to this box; the livery ring lives on
    the strip tile, not here, so the big render reads clean. */
@@ -209,9 +217,7 @@ input[type=text]:disabled { opacity: 0.6; }
    whole page scrolls if it doesn't fit. */
 .carpick {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(4.5rem, 1fr)); gap: 0.55rem;
-  /* pad so the tiles' soft shadow isn't clipped, then bleed it back out so
-     tiles stay flush with the edges. */
-  padding: 0.5rem; margin: -0.5rem -0.5rem 0.8rem;
+  /* no bleed here — the scroll column (.lobby-car) carries the shadow room */
 }
 .car-opt {
   position: relative; cursor: pointer; padding: 0.4rem;
@@ -232,7 +238,7 @@ input[type=text]:disabled { opacity: 0.6; }
    highlight didn't fit the warm palette) */
 .car-opt--mine { background: color-mix(in srgb, var(--car, var(--brand)) 16%, #fff); }
 /* under the GO bar's button: why it's gated / who we're waiting on */
-#ready-note { color: var(--ink-2); font-weight: 700; text-align: center; margin-top: 0.45rem; }
+#ready-note { color: var(--ink-2); font-weight: 700; text-align: center; margin-top: 0.25rem; }
 /* Host name in the wait text — tinted in their livery colour (set inline from
    CAR_COLORS), heavier weight so the colour reads as intentional. */
 .host-name { font-weight: 800; }
@@ -241,13 +247,10 @@ input[type=text]:disabled { opacity: 0.6; }
    Five big tiles — 🎲 Random + one per cup — instead of a scrolling 16-track
    strip; the picked cup opens a panel of its 4 exact-pick map tiles below.
    Host only (everyone else sees the pick on the big screen). */
-.trackpick { margin: 0 0 1rem; }
-/* the strip stacks the mode grid over the open cup's track panel. padding +
-   matching negative margin so tile shadow-pop isn't clipped at the edges. */
-.trackpick__strip {
-  display: flex; flex-direction: column; gap: 0.55rem;
-  padding: 0.5rem; margin: -0.5rem -0.5rem 0;
-}
+.trackpick { margin: 0; }
+/* the strip stacks the mode grid over the open cup's track panel (the scroll
+   column .lobby-race carries the shadow room, so no bleed) */
+.trackpick__strip { display: flex; flex-direction: column; gap: 0.55rem; }
 .modepick {
   /* fixed 3-up: five cups + Random land as an even 3×2, no ragged tail row */
   display: grid; grid-template-columns: repeat(3, 1fr);
@@ -260,7 +263,7 @@ input[type=text]:disabled { opacity: 0.6; }
    unpicked tiles was tried instead — it faded the whole picker next to those cars. */
 .mode-opt {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.2rem;
-  cursor: pointer; padding: 0.45rem 0.4rem 0.4rem;
+  cursor: pointer; padding: 0.3rem 0.4rem;
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r-sm);
   box-shadow: var(--shadow-pop);
   transition: transform 0.08s, box-shadow 0.08s, background 0.08s;
@@ -293,14 +296,14 @@ input[type=text]:disabled { opacity: 0.6; }
    not a sticker, and at PANEL_TINT the colour draws its own edge against the paper
    (the hairline this used to carry was a crutch from when the tint was far fainter). */
 .modepick__tracks {
-  padding: 0.45rem;
+  padding: 0.35rem;
   border-radius: var(--r-sm);
 }
 .modepick__tracks .trackpick__grid { grid-template-columns: repeat(4, 1fr); gap: 0.45rem; }
 /* Random's panel holds RUNS, not tracks, but wears the exact same grid and tile
    anatomy — a "?" square (.track-map--q) where a schematic would sit — so
    swapping a cup for Random moves nothing below the picker. */
-.modepick__tracks .track-opt { padding: 0.3rem 0.25rem 0.35rem; border-width: 2px; }
+.modepick__tracks .track-opt { padding: 0.25rem 0.25rem 0.3rem; gap: 0.25rem; border-width: 2px; }
 .modepick__tracks .track-opt__name { font-size: 0.64rem; }
 /* difficulty TENDENCY meter — 4 pips, the first `data-level` filled RED
    (matching the display's cup slot; the old green→amber ramp died with amber
