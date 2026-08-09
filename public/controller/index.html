@@ -182,24 +182,27 @@
     <div id="settings-card" class="settings-card">
       <div class="settings-head">
         <h2 id="settings-title" class="settings-title">Settings</h2>
-        <span class="pill">Steering</span>
       </div>
 
-      <!-- Steering mode — pick LEFT, watch RIGHT. The seg is a column of two
-           compact radio rows (dot + name + one-line hint); the picked row tints
-           toward your livery. The demo phones live on the STAGE beside them —
-           one per mode, .is-buttons (refreshSettingsCard) showing the picked
-           one. Tilt twists like a steering wheel with the strip sliding in
+      <!-- Steering mode — pick LEFT, watch RIGHT. "Steering" heads the group
+           itself; the seg is a column of two compact radio rows (dot + mode
+           icon + name + one-line hint); the picked row tints toward your
+           livery. The demo phones live on the STAGE beside them — one per
+           mode, .is-buttons (refreshSettingsCard) showing the picked one.
+           Tilt twists like a steering wheel with the strip sliding in
            lockstep; buttons takes turns pressing ‹ › with the strip snapping
            full-side. -->
-      <div class="seg" role="radiogroup" aria-label="Steering">
+      <div class="seg" role="radiogroup" aria-labelledby="steering-label">
+        <span id="steering-label" class="seg-label">Steering</span>
         <button id="input-tilt" type="button" class="mode-card" role="radio" aria-checked="true">
+          <span class="mode-card__icon" aria-hidden="true"><span class="mode-phone"></span></span>
           <span class="mode-card__label">
             <span class="mode-card__name">Tilt</span>
             <span class="mode-card__cap">Twist like a wheel</span>
           </span>
         </button>
         <button id="input-buttons" type="button" class="mode-card" role="radio" aria-checked="false">
+          <span class="mode-card__icon" aria-hidden="true"><span class="steer-glyph steer-glyph--l"></span><span class="steer-glyph steer-glyph--r"></span></span>
           <span class="mode-card__label">
             <span class="mode-card__name">Buttons</span>
             <span class="mode-card__cap">Hold ‹ › &middot; both = brake</span>

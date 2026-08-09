@@ -649,11 +649,15 @@ input[type=text]:disabled { opacity: 0.6; }
   font-size: 1.4rem; margin: 0; color: var(--ink);
 }
 
-/* The steering-mode control: two compact RADIO ROWS stacked in the left
-   column — a drawn radio dot, the mode's name and a one-line hint. The dot is
-   what says "pick one"; the picked row also tints toward the player's livery
-   (the lobby pickers' picked-tile mark). */
+/* The steering-mode control: an uppercase group label heading two compact
+   RADIO ROWS in the left column — a drawn radio dot, the mode's icon, its name
+   and a one-line hint. The dot is what says "pick one"; the picked row also
+   tints toward the player's livery (the lobby pickers' picked-tile mark). */
 .seg { grid-area: seg; align-self: start; display: flex; flex-direction: column; gap: 0.7rem; }
+.seg-label {
+  font-family: var(--font-display); font-weight: 700; font-size: 0.8rem;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3);
+}
 .mode-card {
   display: flex; align-items: center; justify-content: flex-start;
   gap: 0.7rem; padding: 0.8rem 0.9rem; cursor: pointer;
@@ -672,6 +676,19 @@ input[type=text]:disabled { opacity: 0.6; }
 .mode-card[aria-checked='true']::before {
   background: var(--car, var(--brand));
   box-shadow: inset 0 0 0 3px #fff;
+}
+/* the mode's icon — a fixed box so both labels align: Tilt a twisted phone
+   outline, Buttons the ‹ › pair, both drawn in ink */
+.mode-card__icon {
+  flex: none; width: 2.2rem; height: 1.5rem;
+  display: flex; align-items: center; justify-content: center; gap: 0.22rem;
+  color: var(--ink);
+}
+.mode-card__icon .steer-glyph { font-size: 0.8rem; border-radius: 1px; }
+.mode-phone {
+  display: inline-block; width: 1.55rem; height: 1rem; box-sizing: border-box;
+  border: 3px solid var(--ink); border-radius: 4px;
+  transform: rotate(-14deg); background: var(--surface);
 }
 .mode-card__label { display: flex; flex-direction: column; align-items: flex-start; gap: 0.32rem; min-width: 0; }
 .mode-card__name {
@@ -899,16 +916,18 @@ input[type=text]:disabled { opacity: 0.6; }
 
 /* Caption rows — compact, shadowless labels rather than a second set of controls. */
 .help-ctrl { display: flex; flex-direction: row; align-items: center; gap: 0.55rem; text-align: left; }
+/* one FIXED pill size for every chip — ITEM, BRAKE and the ‹ › chord read as
+   the same kind of thing (sized to the widest label, BRAKE) */
 .help-chip {
-  display: inline-flex; align-items: center; justify-content: center; gap: 2px;
-  padding: 0.32rem 0.75rem; flex: none;
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  width: 4.4rem; height: 1.7rem; box-sizing: border-box; padding: 0; flex: none;
   font-family: var(--font-display); font-weight: 700; font-size: 0.9rem; letter-spacing: 0.05em;
   border-radius: var(--r-pill); user-select: none;
 }
 .help-chip--brake { color: #fff; background: var(--danger); }
 .help-chip--item  { color: #fff; background: var(--item); }
 .help-chip--steer { color: #fff; background: var(--blue); }
-.help-chip--steer .steer-glyph { font-size: 0.72rem; border-radius: 1px; }
+.help-chip--steer .steer-glyph { font-size: 0.8rem; border-radius: 1px; }
 .help-ctrl__cap { color: var(--ink-2); font-weight: 700; font-size: 0.9rem; line-height: 1.25; }
 
 /* ---- Motion-blocked popup ----
