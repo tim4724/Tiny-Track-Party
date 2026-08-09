@@ -358,8 +358,10 @@ input[type=text]:disabled { opacity: 0.6; }
 #drive-hud {
   flex: 1; min-height: 0;
   display: grid; gap: 0.6rem 0.9rem;
-  /* keep the bottom row's buttons clear of the fixed latency chip */
-  padding-bottom: 0.4rem;
+  /* keep the bottom row's buttons clear of the fixed latency readout — bare
+     ink text has no box to save it when it lands on the red BRAKE, so the
+     bottom strip is its lane */
+  padding-bottom: 1.1rem;
 }
 /* Both modes share one vertical rhythm: name row, then the stretchy MID row
    (the steer bar floats with its space around it vertically), then the
@@ -480,38 +482,29 @@ input[type=text]:disabled { opacity: 0.6; }
 .motion-tip:active { transform: translateY(1px); box-shadow: none; }
 #game.mode-buttons .motion-tip { display: none; }
 
-/* ---- latency chip ---- */
-/* One-way latency (RTT/2), pinned to the bottom-right corner. A white sticker
-   pill: the green/blue/red ping colours read on white, and the ink border keeps
-   it visible over the red BRAKE button it can overlap (pointer-events:none, so
-   it never eats taps). The colour comes from the .latency--good|ok|bad modifier;
-   the bolt only shows under .latency--fastlane (P2P DataChannel carrying the
-   input/ping path).
-   Right edge: the PHYSICAL screen edge, ignoring the safe inset — it's a
-   passive readout, not chrome the player aims at, so it lives in the unsafe
-   strip the buttons must keep clear of and stops crowding them. Shadowless,
-   so nothing clips at the bezel. */
+/* ---- latency readout ---- */
+/* One-way latency (RTT/2), pinned to the bottom-right PHYSICAL corner,
+   ignoring the safe inset — it's a passive readout (pointer-events:none), not
+   chrome the player aims at, so it lives in the unsafe strip the buttons must
+   keep clear of. Bare ink text + bolt, no box: a boxed pill read as another
+   button down among the controls. The good/ok/bad state classes stay on the
+   element (linkStatus.js) but paint nothing — the number is the readout. The
+   bolt only shows under .latency--fastlane (P2P DataChannel carrying the
+   input/ping path). */
 .latency {
   position: fixed;
-  right: 0.25rem;
+  right: 0.4rem;
   bottom: calc(0.5rem + var(--safe-bottom));
   z-index: 20;
   display: inline-flex; align-items: center; gap: 3px;
-  padding: 0.26rem 0.55rem;
   font-family: var(--font-body); font-weight: 800; font-size: 0.72rem; line-height: 1;
   font-variant-numeric: tabular-nums;            /* stable width as the ms count ticks */
   color: var(--ink);
-  background: var(--surface);
-  border: 2.5px solid var(--ink);
-  border-radius: var(--r-pill);
   pointer-events: none; user-select: none;
 }
 .latency__bolt { display: none; font-size: 0.9em; }
 .latency__bolt::before { content: "\26A1\FE0E"; }  /* ⚡ forced to monochrome text presentation */
 .latency--fastlane .latency__bolt { display: inline; }
-.latency--good { color: var(--ping-good); }
-.latency--ok   { color: var(--ping-ok); }
-.latency--bad  { color: var(--ping-bad); }
 
 /* ---- pause ---- */
 /* Overlays that coincide with ARMING the shell's system back (§9) share a
