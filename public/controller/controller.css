@@ -396,13 +396,17 @@ input[type=text]:disabled { opacity: 0.6; }
 .hud-btns .icon-btn { width: 2.9rem; height: 2.9rem; font-size: 1.5rem; }
 /* The gear is DRAWN (inline SVG, currentColor) like .pause-glyph/.steer-glyph —
    the old ⚙ text glyph came from whatever system font had it: thin, small and
-   different on every platform. Sized in em so both button tiers scale it. */
-.gear-glyph { width: 1.55em; height: 1.55em; fill: currentColor; }
+   different on every platform. Sized in em so both button tiers scale it; the
+   size (and the widened centre hole in the path itself) is tuned so its ink
+   weight sits level with the pause bars beside it. */
+.gear-glyph { width: 1.3em; height: 1.3em; fill: currentColor; }
 .hud-name {
-  font-family: var(--font-display); font-weight: 700; font-size: 1.15rem; line-height: 1;
+  font-family: var(--font-display); font-weight: 700; font-size: 1.4rem; line-height: 1;
   color: #fff; background: var(--car, var(--brand));
   border: 3px solid var(--ink); border-radius: var(--r-sm);
-  padding: 0.3em 0.6em;
+  /* padding tuned so the sticker's height lands on the 2.9rem icon buttons
+     across the row — the smaller chip read as an afterthought beside them */
+  padding: 0.39em 0.6em;
   transform: rotate(-2deg);
   box-shadow: var(--shadow-pop);
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -425,8 +429,10 @@ input[type=text]:disabled { opacity: 0.6; }
   gap: 0.45rem; min-width: 0;
 }
 .steer { width: clamp(13rem, 38vw, 21rem); }
-/* the mode hint — one muted line; the #game mode class picks which span shows */
-.hud-hint { color: var(--ink-3); font-weight: 800; font-size: 0.85rem; line-height: 1; }
+/* the mode hint — one line under the strip; the #game mode class picks which
+   span shows. ink-2 at 1rem: it's the only steering instruction on the screen,
+   so it must survive glare, not whisper. */
+.hud-hint { color: var(--ink-2); font-weight: 800; font-size: 1rem; line-height: 1; }
 #game.mode-tilt .hud-hint__buttons { display: none; }
 #game.mode-buttons .hud-hint__tilt { display: none; }
 .steer__track {
@@ -568,7 +574,14 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 .result-list {
   list-style: none; counter-reset: li; margin: 0 -5px; padding: 0 5px;
-  display: flex; flex-direction: column; gap: 0.5rem;
+  /* TWO columns filled top-to-bottom — an 8-car board splits 1-4 | 5-8 on a
+     landscape phone instead of scrolling. --result-rows (renderResultsBoard)
+     is ceil(rows/2), so an odd board leaves its gap bottom-right and a
+     late-joiner row can't spill into a third column. */
+  display: grid; grid-auto-flow: column;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: repeat(var(--result-rows, 4), auto);
+  gap: 0.5rem;
   /* overflow-y:auto forces overflow-x to compute to auto too, which clips the
      is-me livery ring / pop shadow at the sides — the padding/-margin pair gives
      them room inside the clip rect without changing the row width. */
@@ -578,7 +591,9 @@ input[type=text]:disabled { opacity: 0.6; }
   counter-increment: li;
   display: flex; align-items: center; gap: 0.6rem;
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r-sm);
-  padding: 0.7rem 0.9rem; font-weight: 800; color: var(--ink);
+  /* shallow rows: a late joiner makes a 5-row column, which must still fit a
+     short landscape screen without the list scrolling */
+  padding: 0.55rem 0.9rem; font-weight: 800; color: var(--ink);
   box-shadow: var(--shadow-pop);
 }
 .result-list li::before {
@@ -671,6 +686,7 @@ input[type=text]:disabled { opacity: 0.6; }
 .mode-card::before {
   content: ''; flex: none; width: 1.05em; height: 1.05em; box-sizing: border-box;
   border: 3px solid var(--ink); border-radius: var(--r-pill); background: var(--surface);
+  transition: background 0.12s, box-shadow 0.12s;   /* the pick lands with a visible fill, not a hard swap */
 }
 .mode-card[aria-checked='true']::before {
   background: var(--car, var(--brand));
@@ -691,8 +707,19 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 .mode-card__label { display: flex; flex-direction: column; align-items: flex-start; gap: 0.32rem; min-width: 0; }
 .mode-card__name {
+  display: inline-flex; align-items: center; gap: 0.45rem;
   font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; line-height: 1;
   color: var(--ink);
+}
+/* "Recommended" sticker on the Tilt row — brand green (the theme's "good"
+   chrome colour), tiny and tilted so it reads as a sticker slapped on the
+   card, not a third control. */
+.mode-card__badge {
+  font-size: 0.56rem; letter-spacing: 0.07em; text-transform: uppercase; line-height: 1;
+  color: #fff; background: var(--brand);
+  border: 2px solid var(--ink); border-radius: var(--r-pill);
+  padding: 0.3em 0.6em;
+  transform: rotate(-2deg);
 }
 .mode-card__cap { font-weight: 800; font-size: 0.78rem; color: var(--ink-3); line-height: 1; text-align: left; }
 .mode-card[aria-checked='true'] .mode-card__cap { color: var(--ink-2); }
@@ -723,15 +750,19 @@ input[type=text]:disabled { opacity: 0.6; }
 .steer-demo--tilt .demo-chev--r { animation: chev-tilt-r 2.6s ease-in-out infinite; }
 .steer-demo--buttons .demo-chev--l { animation: chev-snap-l 2.6s linear infinite; }
 .steer-demo--buttons .demo-chev--r { animation: chev-snap-r 2.6s linear infinite; }
+/* Timed against phone-twist's centre crossings (34% and 84%): the outgoing
+   side is fully back to faint BY the time the phone passes centre, and the
+   incoming side only starts lighting FROM centre — a chevron still half-lit
+   while the phone reads "straight ahead" contradicted the lesson. */
 @keyframes chev-tilt-l {
   0%, 18%  { opacity: 1; }
-  50%, 68% { opacity: 0.18; }
+  34%, 84% { opacity: 0.18; }
   100%     { opacity: 1; }
 }
 @keyframes chev-tilt-r {
-  0%, 18%  { opacity: 0.18; }
-  50%, 68% { opacity: 1; }
-  100%     { opacity: 0.18; }
+  0%, 34%   { opacity: 0.18; }
+  50%, 68%  { opacity: 1; }
+  84%, 100% { opacity: 0.18; }
 }
 @keyframes chev-snap-l {
   0%, 49.9% { opacity: 1; }
@@ -906,7 +937,13 @@ input[type=text]:disabled { opacity: 0.6; }
   50%, 68%  { transform: rotateX(8deg) rotateZ(15deg); }
   100%      { transform: rotateX(8deg) rotateZ(-15deg); }
 }
-.steer-demo--buttons .phone-lean { animation: none; transform: rotateX(8deg); }
+/* Buttons mode: the phone HOLDS STILL, so it doesn't earn the 3D tip — a
+   static rotateX just rasterizes the ink outline into a permanently fuzzy
+   edge. Render it flat: no transform anywhere in the slab, and the back
+   plate (which only ever showed under the tip) off. */
+.steer-demo--buttons .phone-lean { animation: none; transform: none; }
+.steer-demo--buttons .phone-frame, .steer-demo--buttons .phone-inner { transform: none; }
+.steer-demo--buttons .phone-frame::before { display: none; }
 @keyframes steer-slide {
   0%, 18%   { transform: translateX(-50%); }
   50%, 68%  { transform: translateX(50%); }

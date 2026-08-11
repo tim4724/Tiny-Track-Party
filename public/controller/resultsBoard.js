@@ -25,6 +25,9 @@ export function renderResultsBoard(data, { meId, hostPeerIndex, amHost, liveryOf
   const cupBoard = !!(s && data.over);
   const list = el('result-list');
   list.innerHTML = '';
+  // Two-column board (controller.css): the grid fills columns top-to-bottom,
+  // so half the rows (rounded up) per column keeps 1-4 left of 5-8.
+  list.style.setProperty('--result-rows', Math.max(1, Math.ceil((data.order || []).length / 2)));
   (data.order || []).forEach((o) => {
     const li = document.createElement('li');
     const isMe = o.playerId === meId;

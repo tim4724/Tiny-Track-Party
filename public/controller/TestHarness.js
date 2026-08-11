@@ -260,13 +260,15 @@ export function runControllerScenario(opts) {
 
     case 'finished':
       // Your car crossed the line — the phone flips to the results board with your
-      // finished row while the rest are still out (not the drive HUD).
+      // finished row while the rest of the 8-car field is still out (not the
+      // drive HUD).
       setLatency(19, true);
       showBoard([
         { name: FAKE_NAMES[color], colorIndex: color, time: 31.2, me: true, finished: true },
-        { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, finished: false },
-        { name: 'Bolt', colorIndex: (color + 2) % COLORS.length, ai: true, finished: false },
-        { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, finished: false }
+        ...[1, 2, 3, 4, 5, 6, 7].map((i) => ({
+          name: i === 2 ? 'Bolt' : FAKE_NAMES[(color + i) % FAKE_NAMES.length],
+          colorIndex: (color + i) % COLORS.length, ai: i >= 2, finished: false
+        }))
       ], { over: false });
       break;
 
@@ -281,15 +283,20 @@ export function runControllerScenario(opts) {
       break;
 
     case 'results':
-      // Final board (race over), viewed as the host so the "New game" button
-      // shows. The last row is a late joiner waiting on the next race.
+      // Final board (race over) on the full 8-car field, viewed as the host so
+      // the "New game" button shows. The last row is a late joiner waiting on
+      // the next race.
       setLatency(20, true);
       showBoard([
         { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, time: 28.4, finished: true },
         { name: FAKE_NAMES[color],                           colorIndex: color,                       time: 31.2, me: true, finished: true },
         { name: 'Bolt',                                      colorIndex: (color + 2) % COLORS.length, time: 33.9, ai: true, finished: true },
         { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, time: 36.5, finished: true },
-        { name: FAKE_NAMES[(color + 4) % FAKE_NAMES.length], colorIndex: (color + 4) % COLORS.length, joining: true }
+        ...[4, 5, 6, 7].map((i) => ({
+          name: FAKE_NAMES[(color + i) % FAKE_NAMES.length],
+          colorIndex: (color + i) % COLORS.length, ai: true, time: 36.5 + i, finished: true
+        })),
+        { name: 'Pip', colorIndex: (color + 4) % COLORS.length, joining: true }
       ], { over: true });
       break;
 
@@ -302,7 +309,13 @@ export function runControllerScenario(opts) {
         { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, gained: 6, points: 21 },
         { name: FAKE_NAMES[color],                           colorIndex: color,                       gained: 9, points: 19, me: true },
         { name: 'Bolt',                                      colorIndex: (color + 2) % COLORS.length, gained: 3, points: 9, ai: true },
-        { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, gained: 0, points: 3 }
+        { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, gained: 0, points: 3 },
+        ...[4, 5, 6, 7].map((i) => ({
+          name: FAKE_NAMES[(color + i) % FAKE_NAMES.length],
+          colorIndex: (color + i) % COLORS.length, ai: true,
+          // cup order is sorted by TOTAL — the tail must not out-point row 4's 3 pts
+          gained: i === 4 ? 1 : 0, points: [3, 2, 1, 0][i - 4]
+        }))
       ], { over: true, series: { final: false, raceIndex: 1, raceCount: 4, cupName: PREVIEW_TRACKS[0].cupName } });
       break;
 
@@ -313,7 +326,11 @@ export function runControllerScenario(opts) {
         { name: FAKE_NAMES[color],                           colorIndex: color,                       gained: 9, points: 36, me: true },
         { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, gained: 6, points: 24 },
         { name: 'Bolt',                                      colorIndex: (color + 2) % COLORS.length, gained: 3, points: 12, ai: true },
-        { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, gained: 1, points: 4 }
+        { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, gained: 1, points: 4 },
+        ...[4, 5, 6, 7].map((i) => ({
+          name: FAKE_NAMES[(color + i) % FAKE_NAMES.length],
+          colorIndex: (color + i) % COLORS.length, ai: true, gained: 0, points: 8 - i
+        }))
       ], { over: true, series: { final: true, raceIndex: 3, raceCount: 4, cupName: PREVIEW_TRACKS[0].cupName } });
       break;
 
