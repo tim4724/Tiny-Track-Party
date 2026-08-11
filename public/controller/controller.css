@@ -61,26 +61,28 @@ section {
     var(--edge-bottom) var(--edge-x);
 }
 /* The join screen is a two-column landscape spread: the wordmark badge on the
-   left, the form (+ status line under it) on the right, centred as a pair in
-   the AVAILABLE height. The keyboard shrinks that height
-   (interactive-widget=resizes-content shrinks the layout viewport, and body's
-   100dvh + this section's flex follow), so the pair glides up exactly as far
-   as the keyboard takes — no focus-driven relayout (a :focus-within jump once
-   moved the Join button out from under the first tap; iOS ignores the hint and
-   natively pans the focused input into view). */
+   left, the form on the right, EACH centred in the available height. The
+   status line hangs below the form's cell absolutely, so it reserves no
+   centring space — in the flow its empty reserved line pushed the form
+   visibly higher than the badge. The keyboard OVERLAYS the page
+   (interactive-widget=resizes-visual) and the browser pans the focused input
+   into view — no keyboard-driven relayout: shrinking the layout viewport
+   instead re-fired the font scale tiers above and shrank the form mid-tap. */
 #name {
   display: grid;
   grid-template-columns: auto minmax(14rem, 22rem);
-  grid-template-rows: auto auto;
+  /* the row must be EXPLICIT: the absolutely-positioned status can only bind
+     to explicit grid lines — against an implicit row its area falls back to
+     the section's padding edge and the line renders off-screen */
+  grid-template-rows: auto;
   align-content: center; justify-content: center; align-items: center;
   column-gap: clamp(1.4rem, 6vw, 4rem);
 }
 
 /* the name screen's wordmark badge (kit .wordmark supplies the die-cut look),
    beside the form */
-.name-wordmark { font-size: clamp(26px, 4.5vw, 38px); margin: 0; grid-row: 1 / 3; text-align: center; }
-#name-form { align-self: end; }
-#name-status { grid-column: 2; align-self: start; }
+.name-wordmark { font-size: clamp(26px, 4.5vw, 38px); margin: 0; text-align: center; }
+#name-status { grid-area: 1 / 2 / 2 / 3; position: absolute; top: 100%; left: 0; right: 0; text-align: center; }
 
 /* ---- name form ---- */
 input[type=text] {
@@ -493,20 +495,25 @@ input[type=text]:disabled { opacity: 0.6; }
 #game.mode-buttons .motion-tip { display: none; }
 
 /* ---- latency readout ---- */
-/* One-way latency (RTT/2), pinned to the bottom-right PHYSICAL corner,
-   ignoring the safe inset — it's a passive readout (pointer-events:none), not
-   chrome the player aims at, so it lives in the unsafe strip the buttons must
-   keep clear of. Bare ink text + bolt, no box: a boxed pill read as another
-   button down among the controls. The good/ok/bad state classes stay on the
-   element (linkStatus.js) but paint nothing — the number is the readout. The
-   bolt only shows under .latency--fastlane (P2P DataChannel carrying the
-   input/ping path). */
+/* One-way latency (RTT/2), living in the bottom-right UNSAFE strip — it's a
+   passive readout (pointer-events:none), not chrome the player aims at, so it
+   uses the space the buttons must keep clear of. The element is a box as wide
+   as that strip (--safe-x) with the number CENTRED in it; the 3.4rem floor
+   means a thin/absent inset pushes the box into safe content rather than
+   squeezing the text off the edge. Bare ink text + bolt, no pill: a boxed
+   pill read as another button down among the controls. The good/ok/bad state
+   classes stay on the element (linkStatus.js) but paint nothing — the number
+   is the readout. The bolt only shows under .latency--fastlane (P2P
+   DataChannel carrying the input/ping path). z 14: UNDER every frosted
+   overlay (pause is the lowest at 15), so a covered screen scrims the number
+   with everything else; above the page sections (z 1). */
 .latency {
   position: fixed;
-  right: 0.4rem;
+  right: 0;
+  width: max(var(--safe-x), 3.4rem);
   bottom: calc(0.5rem + var(--safe-bottom));
-  z-index: 20;
-  display: inline-flex; align-items: center; gap: 3px;
+  z-index: 14;
+  display: inline-flex; align-items: center; justify-content: center; gap: 3px;
   font-family: var(--font-body); font-weight: 800; font-size: 0.72rem; line-height: 1;
   font-variant-numeric: tabular-nums;            /* stable width as the ms count ticks */
   color: var(--ink);

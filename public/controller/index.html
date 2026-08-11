@@ -2,11 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <!-- interactive-widget=resizes-content: the software keyboard SHRINKS the
-       layout viewport (Chrome/Android), so 100dvh flex centring re-centres in
-       the visible strip instead of leaving the name input under the keys.
-       iOS ignores it — #name:focus-within (controller.css) covers that. -->
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content" />
+  <!-- interactive-widget=resizes-visual: the software keyboard OVERLAYS the
+       page and the browser pans the focused input into view — Android now
+       behaves like iOS always has. resizes-content was tried: shrinking the
+       layout viewport re-fired the small-screen font tiers (controller.css),
+       visibly scaling the name form down under the player's fingers. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-visual" />
   <!-- CouchPad launcher theming hints (contract §4): the host tints its floating
        chrome to match. theme-color = the warm paper the page art fades into behind
        the status bar; cp-accent-color = the launcher accents (name chip, spinner,
