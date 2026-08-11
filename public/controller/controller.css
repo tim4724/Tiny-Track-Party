@@ -452,6 +452,10 @@ input[type=text]:disabled { opacity: 0.6; }
   border: 3px solid var(--ink); border-radius: var(--r);
   box-shadow: 0 var(--btn-drop) 0 var(--btn-ledge);   /* same ledge as every other button */
   touch-action: none; transition: transform 0.06s, box-shadow 0.06s, filter 0.06s, opacity 0.15s;
+  /* no selection on a HELD control — with touch-action:none this closes off
+     Android's long-press gesture (whose OS haptic buzzed mid-hold); the
+     drive surface also preventDefaults contextmenu (driveSurface.js) */
+  user-select: none; -webkit-user-select: none;
   min-height: 0; padding: 0.4rem;
 }
 #brake-btn.brake.held, #action-btn.action.held, .steerbtn.held {
