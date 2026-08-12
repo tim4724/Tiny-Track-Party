@@ -1,14 +1,16 @@
 // The controller's two popups and the plumbing they share.
 //
-// They are deliberately SEPARATE popups with separate triggers: How-to-Drive is
-// purely instructional (teaches tilt/brake/item, auto-shows once per device), while
-// the motion popup is an actionable recovery path for a blocked sensor. Collapsing
-// them would mean either nagging a working phone with a fix it doesn't need, or
-// burying the fix inside an intro a returning player never re-opens.
+// They are deliberately SEPARATE popups with separate triggers: Settings holds
+// the steering-mode switch plus the animated how-to-drive demo (auto-shows once
+// per device, doubling as the tutorial), while the motion popup is an actionable
+// recovery path for a blocked sensor. Collapsing them would mean either nagging
+// a working phone with a fix it doesn't need, or burying the fix inside a
+// settings card a returning player never re-opens.
 //
 // Ordering rules live here rather than at the call sites, because they only make
 // sense against each other: the motion popup wins the lobby-entry beat (the two
-// must never stack), motion sits above help for Escape, and a pause closes both.
+// must never stack), motion sits above settings for Escape, and a pause closes
+// both.
 import { motionHelpCopy } from './ui.js';
 import { helpSeen, markHelpSeen } from './prefs.js';
 
@@ -18,6 +20,9 @@ let _screens = null;
 let _tilt = null;
 let _buzz = () => {};
 let _playerName = () => 'Racer';
+let _getInputMode = () => 'tilt';
+let _setInputMode = () => {};
+let _onModalToggle = () => {};
 
 // True in gallery/scenario mode — auto-popups stay shut there (the harness opens
 // the one it's previewing; a real WELCOME never fires anyway).
@@ -45,44 +50,63 @@ function trapTab(overlay, e) {
 
 const restoreFocus = (node) => { if (node && node.focus) node.focus(); };
 
-// ---- How-to-Drive popup ----
-// Auto-shows ONCE per device on first lobby entry; the "?" buttons (lobby + game)
-// reopen it. _helpReturnFocus is the element focused before opening, so closing
-// returns focus to it (the "?" that opened it).
-let _helpReturnFocus = null;
+// ---- Settings popup ----
+// Auto-shows ONCE per device on first lobby entry (it teaches the controls); the
+// gear buttons (lobby + game) reopen it. _settingsReturnFocus is the element
+// focused before opening, so closing returns focus to it.
+let _settingsReturnFocus = null;
 
-const helpOpen = () => !el('help-overlay').classList.contains('hidden');
+const settingsOpen = () => !el('settings-overlay').classList.contains('hidden');
 
-function openHelp() {
-  _helpReturnFocus = document.activeElement;
-  el('phone-name').textContent = _playerName();   // demo phone reads as "your phone" (livery via --car)
-  el('help-overlay').classList.remove('hidden');
+// Sync the card to the CURRENT input mode: the seg's checked side and the
+// .is-buttons class that flips the demo phone + captions between modes.
+function refreshSettingsCard() {
+  const buttons = _getInputMode() === 'buttons';
+  el('settings-card').classList.toggle('is-buttons', buttons);
+  el('input-tilt').setAttribute('aria-checked', String(!buttons));
+  el('input-buttons').setAttribute('aria-checked', String(buttons));
+}
+
+function openSettings() {
+  _settingsReturnFocus = document.activeElement;
+  setDemoNames(_playerName());   // both demo phones read as "your phone" (livery via --car)
+  refreshSettingsCard();
+  el('settings-overlay').classList.remove('hidden');
   setBackgroundInert(true);
-  el('help-done').focus();   // keyboard-operable + announced; the trap keeps Tab inside
+  el('settings-done').focus();   // keyboard-operable + announced; the trap keeps Tab inside
+  _onModalToggle();
 }
 
-function closeHelp() {
-  el('help-overlay').classList.add('hidden');
+function closeSettings() {
+  el('settings-overlay').classList.add('hidden');
   if (!motionOpen()) setBackgroundInert(false);   // un-inert BEFORE restoring focus
-  restoreFocus(_helpReturnFocus); _helpReturnFocus = null;
+  restoreFocus(_settingsReturnFocus); _settingsReturnFocus = null;
+  _onModalToggle();
 }
 
-// A live launcher rename (§2) while the demo phone is on screen.
+// Both mode cards carry a demo phone, so the name is a class, not an id.
+function setDemoNames(name) {
+  for (const n of document.querySelectorAll('.phone-name')) n.textContent = name;
+}
+
+// A live launcher rename (§2) — or a snapshot catching up on the engine's
+// placeholder — while the demo phones are on screen.
 export function refreshHelpName(name) {
-  if (helpOpen()) el('phone-name').textContent = name;
+  if (settingsOpen()) setDemoNames(name);
 }
 
-function maybeAutoShowHelp() {
-  if (inScenario() || helpSeen() || helpOpen()) return;
-  openHelp();        // show first, THEN stamp — a throw before it shows can't burn the once
+function maybeAutoShowSettings() {
+  if (inScenario() || helpSeen() || settingsOpen()) return;
+  openSettings();    // show first, THEN stamp — a throw before it shows can't burn the once
   markHelpSeen();
 }
 
 // ---- Motion-blocked popup ----
 // Surfaces when the tilt sensor is blocked (iOS denied) or absent (unsupported),
 // with the live recovery path. Auto-shows once per page load on lobby entry while
-// blocked (no nagging on every lobby return). Copy + action live in ui.js
-// (motionHelpCopy) so they can't drift from the gallery.
+// blocked (no nagging on every lobby return) — and only in TILT mode: button
+// steering needs no sensor, so a buttons phone is never nagged. Copy + action
+// live in ui.js (motionHelpCopy) so they can't drift from the gallery.
 let _motionAlertShown = false;
 let _motionReturnFocus = null;
 
@@ -109,12 +133,14 @@ function openMotionPopup() {
   el('motion-overlay').classList.remove('hidden');
   setBackgroundInert(true);
   el('motion-done').focus();
+  _onModalToggle();
 }
 
 function closeMotionPopup() {
   el('motion-overlay').classList.add('hidden');
-  if (!helpOpen()) setBackgroundInert(false);
+  if (!settingsOpen()) setBackgroundInert(false);
   restoreFocus(_motionReturnFocus); _motionReturnFocus = null;
+  _onModalToggle();
 }
 
 function maybeShowMotionAlert() {
@@ -125,31 +151,67 @@ function maybeShowMotionAlert() {
 
 // ---- the rules that only make sense against each other ----
 
-// On reaching the lobby: if tilt is blocked, the actionable motion popup wins the
-// beat (so the two never stack); otherwise teach the controls once. A blocked
-// player still gets the controls intro later — once motion is sorted, this runs
-// again with the help flag still unseen.
+// On reaching the lobby: if tilt is the mode and the sensor is blocked, the
+// actionable motion popup wins the beat (so the two never stack); otherwise
+// teach the controls once. A blocked player still gets the intro later — once
+// motion is sorted, this runs again with the seen flag still unset.
 export function onEnterLobby() {
   if (inScenario()) return;
-  if (motionBlocked()) maybeShowMotionAlert();
-  else maybeAutoShowHelp();
+  if (_getInputMode() === 'tilt' && motionBlocked()) maybeShowMotionAlert();
+  else maybeAutoShowSettings();
 }
 
 // Pause is authoritative and must win the screen; leaving the room must not
 // strand a popup over the name screen. Both want the same thing: whatever is up,
 // close it.
 export function closeAnyModal() {
-  if (helpOpen()) closeHelp();
+  if (settingsOpen()) closeSettings();
   if (motionOpen()) closeMotionPopup();
 }
 
-export function initModals({ screens, tilt, buzz, playerName }) {
-  _screens = screens; _tilt = tilt; _buzz = buzz; _playerName = playerName;
+// Whether any popup is up — the shell's system-back sync reads this (an open
+// dialog is what back should close, even mid-race).
+export function anyModalOpen() { return settingsOpen() || motionOpen(); }
 
-  el('help-btn').addEventListener('click', () => { _buzz(15); openHelp(); });
-  el('help-btn-game').addEventListener('click', () => { _buzz(15); openHelp(); });
-  el('help-done').addEventListener('click', () => { _buzz(15); closeHelp(); });
-  el('help-overlay').addEventListener('keydown', (e) => trapTab(el('help-overlay'), e));
+// Close the topmost popup, report whether one was there — the shell's
+// window.CouchPad.back handler (motion sits above settings, so it goes first).
+export function closeTopModal() {
+  if (motionOpen()) { closeMotionPopup(); return true; }
+  if (settingsOpen()) { closeSettings(); return true; }
+  return false;
+}
+
+export function initModals({ screens, tilt, buzz, playerName, getInputMode, setInputMode, onModalToggle }) {
+  _screens = screens; _tilt = tilt; _buzz = buzz; _playerName = playerName;
+  if (getInputMode) _getInputMode = getInputMode;
+  if (setInputMode) _setInputMode = setInputMode;
+  if (onModalToggle) _onModalToggle = onModalToggle;
+
+  el('settings-btn').addEventListener('click', () => { _buzz(15); openSettings(); });
+  el('settings-btn-game').addEventListener('click', () => { _buzz(15); openSettings(); });
+  el('settings-done').addEventListener('click', () => { _buzz(15); closeSettings(); });
+  el('settings-overlay').addEventListener('keydown', (e) => trapTab(el('settings-overlay'), e));
+
+  // The steering-mode seg. Picking Tilt (re-)requests motion permission INSIDE
+  // this tap (the iOS gesture rule); if the sensor stays blocked, surface the
+  // recovery popup right away rather than letting the player discover it
+  // mid-race. Picking Buttons needs nothing from the platform.
+  el('input-buttons').addEventListener('click', () => {
+    if (_getInputMode() === 'buttons') return;
+    _buzz(15);
+    _setInputMode('buttons');
+    refreshSettingsCard();
+  });
+  el('input-tilt').addEventListener('click', async () => {
+    if (_getInputMode() === 'tilt') return;
+    _buzz(15);
+    _setInputMode('tilt');
+    refreshSettingsCard();
+    if (_tilt.motionState !== 'granted') {
+      await _tilt.enableMotion();
+      if (motionBlocked()) openMotionPopup();
+    }
+  });
 
   el('motion-done').addEventListener('click', () => { _buzz(15); closeMotionPopup(); });
   el('motion-overlay').addEventListener('keydown', (e) => trapTab(el('motion-overlay'), e));
@@ -180,10 +242,10 @@ export function initModals({ screens, tilt, buzz, playerName }) {
     }
   });
 
-  // Escape closes whichever modal is up (motion sits above help — close it first).
+  // Escape closes whichever modal is up (motion sits above settings — close it first).
   window.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (motionOpen()) { e.preventDefault(); e.stopPropagation(); closeMotionPopup(); }
-    else if (helpOpen()) { e.preventDefault(); e.stopPropagation(); closeHelp(); }
+    else if (settingsOpen()) { e.preventDefault(); e.stopPropagation(); closeSettings(); }
   });
 }

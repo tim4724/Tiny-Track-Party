@@ -25,12 +25,13 @@ import { createWakeLock } from '../shared/wakeLock.js';
 // seatable name apply their own `|| 'Racer'` default (the shell keeps '' so a
 // missing cpName falls back to the name screen).
 import { cleanName } from '../shared/names.js';
-import { inShell, shellName, endSession, terminalReason, setAccentColor, installRenameHook } from './launcher.js';
-import { storedName, saveName, storedMode, saveMode, storedCarIndex, saveCarIndex } from './prefs.js';
+import { inShell, shellName, endSession, terminalReason, setAccentColor, installRenameHook, armSystemBack, installBackHook } from './launcher.js';
+import { storedName, saveName, storedMode, saveMode, storedCarIndex, saveCarIndex, storedInputMode, saveInputMode } from './prefs.js';
 import { showConn, hideConn, linkCopy, initLinkStatus } from './linkStatus.js';
-import { initModals, onEnterLobby, closeAnyModal, refreshHelpName } from './modals.js';
+import { initModals, onEnterLobby, closeAnyModal, anyModalOpen, closeTopModal, refreshHelpName } from './modals.js';
 import { renderResultsBoard } from './resultsBoard.js';
-import { initDriveSurface, startDriving, stopDriving, setHeldItem, resetHeldItem } from './driveSurface.js';
+import { initDriveSurface, startDriving, stopDriving, setInputMode, setHeldItem, resetHeldItem } from './driveSurface.js';
+import { initOrientation } from './orientation.js';
 
 const { MSG, ROOM_STATE } = window;
 const el = (id) => document.getElementById(id);
@@ -52,6 +53,19 @@ function show(name) {
   // In the shell the launcher owns the back gesture (it swallows it and shows its
   // own LEAVE bar), so we push nothing — our own back handling would fight it (§1).
   if (!inShell && (SCREEN_ORDER[name] || 0) > (SCREEN_ORDER[prev] || 0)) history.pushState({ screen: name }, '');
+  syncShellBack();
+}
+
+// Shell §9: arm the system back gesture wherever an edge swipe isn't gameplay —
+// the lobby and results screens (back = leave, the launcher's own exit), a
+// paused race, and any open popup (back = close it, see the back hook at the
+// bottom). Disarmed only while actually DRIVING, where the screen edges must
+// stay steering input. Re-derived on every screen change, popup toggle and
+// pause flip; armSystemBack dedupes the transitions.
+function syncShellBack() {
+  if (!inShell) return;
+  const paused = !el('pause-overlay').classList.contains('hidden');
+  armSystemBack(currentScreen !== 'game' || paused || anyModalOpen());
 }
 
 // haptics — vibrate the phone (ignored where unsupported; iOS Safari has no
@@ -147,8 +161,26 @@ const tilt = new TiltInput({
   onControl: (c) => net.sendControl(c)
 });
 
-initModals({ screens, tilt, buzz, playerName: () => myName || 'Racer' });
+// Steering input mode — 'tilt' (default) or 'buttons', remembered per device.
+// setInputMode applies it everywhere (TiltInput signal path + the #game mode
+// class); the Settings popup's seg drives changes through here.
+let inputMode = storedInputMode();
+function applyInputMode(mode) {
+  inputMode = mode;
+  saveInputMode(mode);
+  setInputMode(mode);
+}
+
+initModals({
+  screens, tilt, buzz,
+  playerName: () => myName || 'Racer',
+  getInputMode: () => inputMode,
+  setInputMode: applyInputMode,
+  onModalToggle: syncShellBack
+});
 initDriveSurface({ tilt, buzz, haptics });
+setInputMode(inputMode);
+initOrientation({ inShell });
 
 function setStatus(t) { el('name-status').textContent = t; }
 // Lock the join form while a connection is in flight so a double-tap can't fire
@@ -233,6 +265,11 @@ function syncRoom(data) {
   if (me.name) myName = me.name;
   amReady = !!me.ready;
   applyLivery();
+  // The FIRST snapshot can seat us under the engine's placeholder ("Player N")
+  // with our HELLO name still in flight — and the auto-shown settings popup
+  // reads the name at open. Keep the open card's demo phone tracking the
+  // snapshot (no-op while it's closed).
+  refreshHelpName(myName || 'Racer');
   if (!amReady) maybeRestoreCar(); // ready = car locked; don't fight the display's record
 
   const rs = data.roomState;
@@ -250,9 +287,7 @@ function syncRoom(data) {
     // Drop into the live race (or the countdown — tilt streams so the display reacts).
     inResults = false;
     show('game');
-    el('drive-hud').classList.remove('hidden');
-    el('pause-btn').classList.remove('hidden');
-    el('help-btn-game').classList.remove('hidden');
+    el('drive-hud').classList.remove('hidden');  // pause + settings ride inside it
     setPauseOverlay(!!data.paused);  // re-raise a pause missed while away
     if (data.paused) haptics.stopLoop();
     startDriving(myName || 'Racer'); // resume/continue streaming tilt to our car
@@ -267,8 +302,6 @@ function syncRoom(data) {
     const entering = currentScreen !== 'lobby';
     stopDriving();
     setPauseOverlay(false);
-    el('pause-btn').classList.add('hidden');
-    el('help-btn-game').classList.add('hidden');
     renderLobby();
     show('lobby');
     if (entering) onEnterLobby(); // teach controls / surface blocked motion once, on entry
@@ -282,8 +315,6 @@ function syncRoom(data) {
 function showResultsScreen() {
   if (!inResults) { inResults = true; stopDriving(); }
   setPauseOverlay(false);
-  el('pause-btn').classList.add('hidden');
-  el('help-btn-game').classList.add('hidden');
   show('results');
 }
 
@@ -450,8 +481,6 @@ function leaveToName() {
   amReady = false;
   roster = [];
   setPauseOverlay(false);
-  el('pause-btn').classList.add('hidden');
-  el('help-btn-game').classList.add('hidden');
   closeAnyModal();     // don't strand either popup over the name screen
   setJoining(false);
   setStatus('');
@@ -493,13 +522,15 @@ async function joinRace(name, { persist } = {}) {
   if (persist) saveName(n);
   setStatus('');           // the disabled button signals the in-flight join
   setJoining(true);
-  // Request motion permission within this user gesture (iOS requirement). AWAIT it
-  // so motionState is resolved before the lobby's auto-shown help reads it — the
-  // request itself is fired synchronously inside this gesture (enableMotion calls
-  // requestPermission before its first await), so awaiting the result is safe and
-  // doesn't break the gesture rule. On iOS this waits out the system prompt; on
-  // Android/desktop it resolves on the next microtask (no prompt, negligible delay).
-  await tilt.enableMotion();
+  // Request motion permission within this user gesture (iOS requirement) — but
+  // only when TILT is the steering mode; a buttons phone never needs the sensor
+  // (switching to Tilt later re-requests inside that tap, see modals.js). AWAIT it
+  // so motionState is resolved before the lobby's auto-shown settings reads it —
+  // the request itself is fired synchronously inside this gesture (enableMotion
+  // calls requestPermission before its first await), so awaiting the result is
+  // safe and doesn't break the gesture rule. On iOS this waits out the system
+  // prompt; on Android/desktop it resolves on the next microtask.
+  if (inputMode === 'tilt') await tilt.enableMotion();
   net.connect(n);
 }
 el('name-form').addEventListener('submit', (e) => {
@@ -531,6 +562,7 @@ function setPauseOverlay(on) {
   if (on) closeAnyModal();
   el('pause-overlay').classList.toggle('hidden', !on);
   el('pause-btn').disabled = on;
+  syncShellBack();   // a paused race welcomes back (= continue); a live one doesn't
 }
 el('pause-btn').addEventListener('click', () => { buzz(15); net.send(MSG.PAUSE_GAME); });
 el('pause-continue').addEventListener('click', () => { buzz(15); net.send(MSG.RESUME_GAME); });
@@ -553,8 +585,17 @@ installRenameHook((n) => {
   myName = n;
   el('me-name').textContent = n;    // lobby identity
   el('hud-name').textContent = n;   // in-race HUD
-  refreshHelpName(n);               // how-to-drive demo phone
+  refreshHelpName(n);               // settings demo phone
   net.rename(n);                    // → display roster + LOBBY_UPDATE echo
+});
+
+// Shell §9: what an armed back gesture DOES. A popup closes (motion above
+// settings); a paused race continues; anywhere else — the lobby, the results —
+// returning false hands the exit to the launcher, same as its LEAVE bar.
+installBackHook(() => {
+  if (closeTopModal()) return true;
+  if (!el('pause-overlay').classList.contains('hidden')) { net.send(MSG.RESUME_GAME); return true; }
+  return false;
 });
 
 // Boot. In the shell the launcher owns identity: skip the name screen entirely

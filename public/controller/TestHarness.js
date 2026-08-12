@@ -11,6 +11,7 @@ import { TRACK_SCHEMATICS } from '../shared/trackSchematics.js';
 import { packSchematic, unpackSchematic } from '../shared/schematicCodec.js';
 import { applyLatencyChip, renderReadyFoot, motionHelpCopy } from './ui.js';
 import { renderResultsBoard } from './resultsBoard.js';
+import { setInputMode } from './driveSurface.js';
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
 
@@ -116,15 +117,15 @@ export function runControllerScenario(opts) {
   // The item identity shows on the DISPLAY, not the phone — the only controller cue
   // is the ITEM button lighting up. Preview that by toggling its disabled state.
   function setUse(holding) { const a = el('action-btn'); if (a) a.disabled = !holding; }
-  function showDriveHud() {
+  // mode: 'tilt' (default) | 'buttons' — through the LIVE setInputMode (main.js
+  // booted the drive surface before delegating here), so the gallery previews
+  // whatever the real mode switch does, not a copy of it. It doesn't persist —
+  // that's main.js's applyInputMode, which a preview must never reach.
+  function showDriveHud(mode = 'tilt') {
     show('game');
-    el('drive-hud').classList.remove('hidden');
-    el('motion-tip').classList.add('hidden');
-    // The pause + "?" buttons ride with the HUD live (see startDriving in main.js),
-    // so the gallery shows them too. Both are z-8 fixed, so the paused/conn overlays
-    // (z-15/z-30) still cover them where those scenarios layer one on top.
-    el('pause-btn').classList.remove('hidden');
-    el('help-btn-game').classList.remove('hidden');
+    setInputMode(mode);
+    el('drive-hud').classList.remove('hidden');   // pause + settings ride inside it
+    el('motion-tip').classList.add('hidden');     // no motion nag in a preview
   }
 
   switch (scenario) {
@@ -166,22 +167,29 @@ export function runControllerScenario(opts) {
         [{ name: FAKE_NAMES[(color + 2) % FAKE_NAMES.length], color: COLORS[(color + 2) % COLORS.length], ready: true }]);
       break;
 
-    case 'help': {
-      // How-to-Drive popup over the lobby, for the gallery. main.js owns the live
-      // open/close (and its auto-show is suppressed in scenario mode), so here we
-      // just lay out the host lobby and pop the overlay open — the instructional
-      // popup (animated steer demo, brake/item swatches, upright note) is
-      // screenshottable without a relay. Motion recovery is its own scenario below.
+    case 'settings':
+    case 'settings-buttons': {
+      // Settings popup over the lobby, for the gallery — both faces: the tilt
+      // demo (default) and the buttons demo ('settings-buttons'). modals.js owns
+      // the live open/close (and its auto-show is suppressed in scenario mode),
+      // so here we just lay out the host lobby and pop the overlay open with the
+      // card flipped to the right mode (mirrors refreshSettingsCard). Motion
+      // recovery is its own scenario below.
       show('lobby');
       el('me-name').textContent = FAKE_NAMES[color];
-      el('phone-name').textContent = FAKE_NAMES[color];   // demo phone shows the player's name (mirrors openHelp)
+      // both mode cards' demo phones show the player's name (mirrors openSettings)
+      for (const n of document.querySelectorAll('.phone-name')) n.textContent = FAKE_NAMES[color];
       renderCarPicker(color);
       renderModePicker(DEFAULT_MODE, true);
       renderReadyPreview(true, false, null, [
         { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], color: COLORS[(color + 1) % COLORS.length], ready: true }
       ]);
-      el('help-overlay').classList.remove('hidden');
-      el('help-done').focus();   // seed focus inside the dialog (mirrors openHelp)
+      const buttons = scenario === 'settings-buttons';
+      el('settings-card').classList.toggle('is-buttons', buttons);
+      el('input-tilt').setAttribute('aria-checked', String(!buttons));
+      el('input-buttons').setAttribute('aria-checked', String(buttons));
+      el('settings-overlay').classList.remove('hidden');
+      el('settings-done').focus();   // seed focus inside the dialog (mirrors openSettings)
       break;
     }
 
@@ -240,15 +248,28 @@ export function runControllerScenario(opts) {
       setLatency(16, true);    // fastlane up: low RTT + bolt
       break;
 
+    case 'playing-buttons':
+      // The button-steering face of the drive HUD: ‹ / ITEM / › in a row, the
+      // left button held (steer bar hard left mirrors it — binary, so full lock).
+      showDriveHud('buttons');
+      setSteer(-1);
+      el('steer-left').classList.add('held');
+      setHudName();
+      setUse(true);
+      setLatency(16, true);
+      break;
+
     case 'finished':
       // Your car crossed the line — the phone flips to the results board with your
-      // finished row while the rest are still out (not the drive HUD).
+      // finished row while the rest of the 8-car field is still out (not the
+      // drive HUD).
       setLatency(19, true);
       showBoard([
         { name: FAKE_NAMES[color], colorIndex: color, time: 31.2, me: true, finished: true },
-        { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, finished: false },
-        { name: 'Bolt', colorIndex: (color + 2) % COLORS.length, ai: true, finished: false },
-        { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, finished: false }
+        ...[1, 2, 3, 4, 5, 6, 7].map((i) => ({
+          name: i === 2 ? 'Bolt' : FAKE_NAMES[(color + i) % FAKE_NAMES.length],
+          colorIndex: (color + i) % COLORS.length, ai: i >= 2, finished: false
+        }))
       ], { over: false });
       break;
 
@@ -263,15 +284,20 @@ export function runControllerScenario(opts) {
       break;
 
     case 'results':
-      // Final board (race over), viewed as the host so the "New game" button
-      // shows. The last row is a late joiner waiting on the next race.
+      // Final board (race over) on the full 8-car field, viewed as the host so
+      // the "New game" button shows. The last row is a late joiner waiting on
+      // the next race.
       setLatency(20, true);
       showBoard([
         { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, time: 28.4, finished: true },
         { name: FAKE_NAMES[color],                           colorIndex: color,                       time: 31.2, me: true, finished: true },
         { name: 'Bolt',                                      colorIndex: (color + 2) % COLORS.length, time: 33.9, ai: true, finished: true },
         { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, time: 36.5, finished: true },
-        { name: FAKE_NAMES[(color + 4) % FAKE_NAMES.length], colorIndex: (color + 4) % COLORS.length, joining: true }
+        ...[4, 5, 6, 7].map((i) => ({
+          name: FAKE_NAMES[(color + i) % FAKE_NAMES.length],
+          colorIndex: (color + i) % COLORS.length, ai: true, time: 36.5 + i, finished: true
+        })),
+        { name: 'Pip', colorIndex: (color + 4) % COLORS.length, joining: true }
       ], { over: true });
       break;
 
@@ -284,7 +310,13 @@ export function runControllerScenario(opts) {
         { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, gained: 6, points: 21 },
         { name: FAKE_NAMES[color],                           colorIndex: color,                       gained: 9, points: 19, me: true },
         { name: 'Bolt',                                      colorIndex: (color + 2) % COLORS.length, gained: 3, points: 9, ai: true },
-        { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, gained: 0, points: 3 }
+        { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, gained: 0, points: 3 },
+        ...[4, 5, 6, 7].map((i) => ({
+          name: FAKE_NAMES[(color + i) % FAKE_NAMES.length],
+          colorIndex: (color + i) % COLORS.length, ai: true,
+          // cup order is sorted by TOTAL — the tail must not out-point row 4's 3 pts
+          gained: i === 4 ? 1 : 0, points: [3, 2, 1, 0][i - 4]
+        }))
       ], { over: true, series: { final: false, raceIndex: 1, raceCount: 4, cupName: PREVIEW_TRACKS[0].cupName } });
       break;
 
@@ -295,7 +327,11 @@ export function runControllerScenario(opts) {
         { name: FAKE_NAMES[color],                           colorIndex: color,                       gained: 9, points: 36, me: true },
         { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, gained: 6, points: 24 },
         { name: 'Bolt',                                      colorIndex: (color + 2) % COLORS.length, gained: 3, points: 12, ai: true },
-        { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, gained: 1, points: 4 }
+        { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, gained: 1, points: 4 },
+        ...[4, 5, 6, 7].map((i) => ({
+          name: FAKE_NAMES[(color + i) % FAKE_NAMES.length],
+          colorIndex: (color + i) % COLORS.length, ai: true, gained: 0, points: 8 - i
+        }))
       ], { over: true, series: { final: true, raceIndex: 3, raceCount: 4, cupName: PREVIEW_TRACKS[0].cupName } });
       break;
 

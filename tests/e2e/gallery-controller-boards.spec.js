@@ -30,7 +30,8 @@ test('phone results board: finish times, the joining row, host gets New game', a
   await boardReady(page);
   // A single race has no series, which is the only way to reach this title.
   await expect(page.locator('#results-title')).toHaveText('Results');
-  await expect(page.locator('#result-list li')).toHaveCount(5);
+  // The full 8-car field plus the joining row.
+  await expect(page.locator('#result-list li')).toHaveCount(9);
   // The joining row is a DIFFERENT shape, not a racer with blank fields.
   await expect(page.locator('#result-list li.is-joining')).toHaveCount(1);
   await expect(page.locator('#result-list li.is-joining .res-time')).toHaveText('Next race');
@@ -49,7 +50,7 @@ test('phone results board mid-race: my time, everyone else still racing', async 
   // per-row `finished` is what separates them — a payload that lost either would
   // mark every row the same.
   await expect(page.locator('#result-list li.is-me .res-time')).toHaveText('31.2s');
-  await expect(page.locator('#result-list li.is-racing')).toHaveCount(3);
+  await expect(page.locator('#result-list li.is-racing')).toHaveCount(7);
   await expect(page.locator('#result-list li.is-racing .res-time').first()).toHaveText('Racing…');
   // Nobody may start anything while cars are still out.
   await expect(page.locator('#newgame-btn')).toBeHidden();

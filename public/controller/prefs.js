@@ -12,6 +12,7 @@ const MODE_KEY = 'tinytrack_mode';     // host's last pick, JSON {mode, trackId?
 const TRACK_KEY = 'tinytrack_track';   // legacy pre-mode key (bare track id) — read-only fallback
 const CAR_KEY = 'tinytrack_car';       // last-picked car model index
 const HELP_SEEN_KEY = 'tinytrack_seen_help';
+const INPUT_KEY = 'tinytrack_input';   // steering input mode: 'tilt' (default) | 'buttons'
 
 const read = (k) => { try { return localStorage.getItem(k); } catch (_) { return null; } };
 const write = (k, v) => { try { localStorage.setItem(k, v); } catch (_) {} };
@@ -27,6 +28,11 @@ export const saveCarIndex = (i) => write(CAR_KEY, String(i));
 
 export const helpSeen = () => read(HELP_SEEN_KEY) === '1';
 export const markHelpSeen = () => write(HELP_SEEN_KEY, '1');
+
+// Steering input mode — anything but the literal 'buttons' is tilt, so a
+// corrupted value degrades to the default rather than to a surprise.
+export const storedInputMode = () => (read(INPUT_KEY) === 'buttons' ? 'buttons' : 'tilt');
+export const saveInputMode = (m) => write(INPUT_KEY, m === 'buttons' ? 'buttons' : 'tilt');
 
 export const saveMode = (m) => write(MODE_KEY, JSON.stringify(m));
 export function storedMode() {

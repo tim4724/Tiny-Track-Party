@@ -30,6 +30,11 @@
 // as a target speed of (1 - BRAKE_LEVEL) × top speed, so a full hold (1) bleeds
 // the car all the way down to a standstill.
 //
+// BUTTON steering mode (setMode('buttons')): the sensor is ignored and the two
+// on-screen ‹ › buttons steer BINARY — full lock left/right, no ramp (ramps were
+// tried and read as two steps anyway). Holding BOTH is the brake. Same {s,b,u}
+// frame either way; the display never knows which mode a phone is in.
+//
 // Fallbacks (no tilt / desktop / permission denied): arrow keys or A/D steer,
 // Space/Down brake. Steer = roll + keys (so the loop is testable headlessly).
 // Emits {s,b,u} to onControl on every sensor sample and on every button/key
@@ -88,9 +93,11 @@ export class TiltInput {
     // the flat seed only stands in until the first reading arrives)
     this._g = { x: 0, y: 0, z: -1 };
 
+    this.mode = 'tilt';    // 'tilt' | 'buttons' (see setMode)
     this._steer = 0;       // smoothed steer output (-1..1)
     this._key = 0;         // keyboard steer (-1/0/1)
     this._keyL = false; this._keyR = false;
+    this._btnL = false; this._btnR = false; // on-screen ‹ › steer buttons (buttons mode)
     this._brakeBtn = 0;    // brake from the on-screen BRAKE button (0 or BRAKE_LEVEL)
     this._brakeKey = 0;    // brake from keyboard (0 or BRAKE_LEVEL)
     this._useCount = 0;    // ACTION presses, mod 256 — a wrapping use-counter (see _tick)
@@ -156,6 +163,7 @@ export class TiltInput {
   stop() {
     clearInterval(this._timer); this._timer = null;
     this._brakeBtn = 0;
+    this._btnL = this._btnR = false; // a held ‹/› must not survive into the next race
     this._useCount = 0; // fresh race → restart the counter (display's useSeq resets too)
     this._actKeyDown = false; // clear held-key state so a missed keyup can't suppress the next race's first press
   }
@@ -190,30 +198,56 @@ export class TiltInput {
   }
 
   _tick() {
-    let target = this._sensorSteer();
-    // dead-zone the centre, then re-expand so full lock still reaches ±1
-    if (Math.abs(target) < DEADZONE) target = 0;
-    else target = (target - Math.sign(target) * DEADZONE) / (1 - DEADZONE);
-    this._steer += (target - this._steer) * SMOOTH;
-    // Snap out of the EMA's asymptote: the filter halves the residual per
-    // sample, so it nears a held target but never lands on it — and the tail
-    // of a full flick then sits under the send gate's dead-band, reading as a
-    // steer bar stuck at ~97% until the idle resend. Once the residual is
-    // inside 0.01 (a third of the gate, invisible authority) converge exactly,
-    // so full lock and a released centre are values that actually occur.
-    if (Math.abs(target - this._steer) < 0.01) this._steer = target;
+    if (this.mode === 'buttons') {
+      // Binary steering: no sensor, no smoothing — an edge IS the value.
+      this._steer = 0;
+    } else {
+      let target = this._sensorSteer();
+      // dead-zone the centre, then re-expand so full lock still reaches ±1
+      if (Math.abs(target) < DEADZONE) target = 0;
+      else target = (target - Math.sign(target) * DEADZONE) / (1 - DEADZONE);
+      this._steer += (target - this._steer) * SMOOTH;
+      // Snap out of the EMA's asymptote: the filter halves the residual per
+      // sample, so it nears a held target but never lands on it — and the tail
+      // of a full flick then sits under the send gate's dead-band, reading as a
+      // steer bar stuck at ~97% until the idle resend. Once the residual is
+      // inside 0.01 (a third of the gate, invisible authority) converge exactly,
+      // so full lock and a released centre are values that actually occur.
+      if (Math.abs(target - this._steer) < 0.01) this._steer = target;
+    }
 
-    const s = clamp1(this._steer + this._key);
-    const b = Math.max(this._brakeBtn, this._brakeKey);
+    const s = clamp1(this._steer + this._key + this._btnSteer());
+    const b = Math.max(this._brakeBtn, this._brakeKey, this._btnBrake());
     // u is a wrapping use-counter: the display fires the held item once each time it
     // CHANGES, so it survives the fastlane's latest-wins drops (a dropped frame just
     // re-delivers the same value) without a separate reliable message.
     this.onControl({ s: +s.toFixed(3), b: +b.toFixed(3), u: this._useCount });
   }
 
+  // The ‹ › buttons' contribution: ±1 while exactly one is held. Both held is
+  // the BRAKE chord — steer reads centre so the car slows straight.
+  _btnSteer() { return (this._btnR ? 1 : 0) - (this._btnL ? 1 : 0); }
+  _btnBrake() { return this._btnL && this._btnR ? BRAKE_LEVEL : 0; }
+
   // current steer (for the on-screen steer indicator)
   get state() {
-    return { steer: clamp1(this._steer + this._key) };
+    return { steer: clamp1(this._steer + this._key + this._btnSteer()) };
+  }
+
+  // Steering input mode. Switching mid-hold releases the other mode's residue:
+  // buttons → tilt keeps no stuck ±1, tilt → buttons drops the smoothed lean.
+  setMode(mode) {
+    this.mode = mode === 'buttons' ? 'buttons' : 'tilt';
+    this._btnL = this._btnR = false;
+    this._steer = 0;
+    if (this._timer) this._tick();
+  }
+
+  // On-screen ‹ › steer buttons (buttons mode): held → full lock that side,
+  // both → brake. Emits on the edge, same as every other button.
+  pressSteer(side, on) {
+    if (side === 'left') this._btnL = !!on; else this._btnR = !!on;
+    if (this._timer) this._tick();
   }
 
   // --- keyboard fallback / testing ---

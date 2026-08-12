@@ -157,6 +157,51 @@ test('the ACTION use-counter wraps at 256 (matches the display fire-on-change pr
   assert.equal(t._useCount, 0, 'the wrapping counter returns to 0 after 256 presses');
 });
 
+// ---- button steering mode: binary ±1, both-held = brake, sensor ignored ----
+
+test('buttons mode: ‹/› steer binary full lock, release returns to exact 0', () => {
+  const out = [];
+  const t = new TiltInput({ onControl: (c) => out.push(c) });
+  t.setMode('buttons');
+  t.pressSteer('left', true); t._tick();
+  assert.equal(out.at(-1).s, -1, 'held ‹ is 100% left, no ramp');
+  t.pressSteer('left', false); t.pressSteer('right', true); t._tick();
+  assert.equal(out.at(-1).s, 1, 'held › is 100% right');
+  t.pressSteer('right', false); t._tick();
+  assert.equal(out.at(-1).s, 0, 'released lands on exactly 0');
+});
+
+test('buttons mode: the ‹+› chord brakes at full level with the steer centred', () => {
+  const out = [];
+  const t = new TiltInput({ onControl: (c) => out.push(c) });
+  t.setMode('buttons');
+  t.pressSteer('left', true); t.pressSteer('right', true); t._tick();
+  assert.equal(out.at(-1).b, 1, 'both held = full brake');
+  assert.equal(out.at(-1).s, 0, 'the chord steers nothing (the car slows straight)');
+  t.pressSteer('left', false); t._tick();
+  assert.equal(out.at(-1).b, 0, 'lifting one thumb releases the brake');
+  assert.equal(out.at(-1).s, 1, '…and the still-held › steers again');
+});
+
+test('buttons mode ignores the tilt sensor entirely', () => {
+  withScreenAngle(0, () => {
+    const out = [];
+    const t = new TiltInput({ onControl: (c) => out.push(c) });
+    t.setMode('buttons');
+    t._onOrient({ beta: 0, gamma: 75 }); // hard lean — must not steer
+    for (let i = 0; i < 5; i++) t._tick();
+    assert.equal(out.at(-1).s, 0, 'a leaned phone steers nothing in buttons mode');
+  });
+});
+
+test('switching back to tilt drops any held ‹/› so no lock survives the mode change', () => {
+  const t = new TiltInput({});
+  t.setMode('buttons');
+  t.pressSteer('right', true);
+  t.setMode('tilt');
+  assert.equal(t.state.steer, 0, 'the held › died with the mode');
+});
+
 test('stop() resets brake + ACTION state so the next race cannot inherit a stale press', () => {
   const t = new TiltInput({});
   t.setActionEnabled(true);

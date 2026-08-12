@@ -88,11 +88,13 @@ async function openDisplay(page) {
 // Returns the controller page. Does NOT assert which screen it lands on —
 // a mid-race joiner lands on the waiting lobby, others on the normal lobby.
 async function joinController(browser, roomCode, name) {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
-  // Pre-seed the "How to drive" popup's seen-flag so its first-run auto-show
+  // LANDSCAPE — the controller is landscape-only; a portrait viewport gets the
+  // full-screen rotate overlay, which would sit over every button these specs click.
+  const context = await browser.newContext({ viewport: { width: 844, height: 390 } });
+  // Pre-seed the Settings popup's seen-flag so its first-run auto-show
   // doesn't cover the lobby and block ready/start clicks. These specs drive the
   // game flow (a returning player who's already dismissed it); the popup's own
-  // coverage is the gallery 'help' scenario. Key mirrors HELP_SEEN_KEY in main.js.
+  // coverage is the gallery 'settings' scenario. Key mirrors HELP_SEEN_KEY in prefs.js.
   await context.addInitScript(() => {
     try { localStorage.setItem('tinytrack_seen_help', '1'); } catch (_) {}
   });

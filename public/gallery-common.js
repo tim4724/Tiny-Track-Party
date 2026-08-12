@@ -57,7 +57,7 @@ const STATE_KEY = 'tinytrack_gallery_state_v1';
 const defaults = {
   displayAR: '16x9',
   controllerDevice: 'iphone14',
-  controllerOrientation: 'portrait',
+  controllerOrientation: 'landscape',   // the controller is landscape-only now
   controllerBrowserChrome: false,
   players: 4,
   viewAs: 0
