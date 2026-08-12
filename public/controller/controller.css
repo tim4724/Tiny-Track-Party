@@ -105,6 +105,9 @@ input[type=text]:disabled { opacity: 0.6; }
 #lobby {
   display: grid;
   height: 100dvh; box-sizing: border-box;
+  /* same top padding as #game: the name chip + gear carry over between the two
+     screens, and a different inset made them hop on the transition */
+  padding-top: calc(0.5rem + var(--safe-top));
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
   grid-template-areas:
@@ -159,8 +162,9 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 
 /* Player identity — your name as a livery-tinted sticker (coloured bg, white
-   text, slapped on at −3°; mirrors the display's cell name tags), leading the
-   ribbon. */
+   text; mirrors the display's cell name tags), leading the ribbon. Sized,
+   padded and rotated exactly like .hud-name: it is the SAME chip in the same
+   corner on the next screen. */
 .lobby-me { display: flex; max-width: 70%; }
 .lobby-me__name {
   /* size matches .hud-name so the sticker reads as the same chip on both
@@ -169,7 +173,7 @@ input[type=text]:disabled { opacity: 0.6; }
   color: #fff; background: var(--car, var(--brand));
   border: 3px solid var(--ink); border-radius: var(--r-sm);
   padding: 0.39em 0.6em;
-  transform: rotate(-3deg);
+  transform: rotate(-2deg);   /* same twist as .hud-name — it must not budge on the lobby→game transition */
   box-shadow: var(--shadow-pop);
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
