@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <!-- interactive-widget=resizes-visual: the software keyboard OVERLAYS the
+       page and the browser pans the focused input into view — Android now
+       behaves like iOS always has. resizes-content was tried: shrinking the
+       layout viewport re-fired the small-screen font tiers (controller.css),
+       visibly scaling the name form down under the player's fingers. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-visual" />
+  <!-- CouchPad launcher theming hints (contract §4): the host tints its floating
+       chrome to match. theme-color = the warm paper the page art fades into behind
+       the status bar; cp-accent-color = the launcher accents (name chip, spinner,
+       rename sheet) — main.js retints it live to the player's livery colour. Pure
+       cosmetics: a plain browser ignores cp-accent-color and honours theme-color as
+       the standard PWA meta, so both are harmless outside the shell. -->
+  <meta name="app-version" content="__APP_VERSION__" />
+  <meta name="relay-url" content="__RELAY_URL__" />
+  <title>Tiny Track</title>
+  <!-- CouchPad shell §10: rotate to landscape before first paint. MUST be an
+       external classic script this early — inline dies on the CSP, a module runs
+       too late and the player watches the page turn. -->
+  <script src="controller/shellOrient.js?v=__APP_V__"></script>
+  <link rel="preload" as="font" type="font/woff2" href="assets/fonts/fredoka-variable.woff2" crossorigin />
+  <link rel="preload" as="font" type="font/woff2" href="assets/fonts/nunito-variable.woff2" crossorigin />
+  <link rel="stylesheet" href="shared/theme.css?v=__APP_V__" />
+  <link rel="stylesheet" href="controller/controller.css?v=__APP_V__" />
+  <script src="shared/protocol.js?v=__APP_V__"></script>
+  <script src="partyplug/PartyConnection.js?v=__APP_V__"></script>
+  <script src="partyplug/PartyFastlane.js?v=__APP_V__"></script>
+  <script src="https://www.airconsole.com/api/airconsole-1.11.0.js"></script>
+  <script src="partyplug/AirConsoleAdapter.js?v=__APP_V__"></script>
+  <script src="partyplug/AirConsoleStorage.js?v=__APP_V__"></script>
+  <script src="controller/controller-airconsole.js?v=__APP_V__"></script>
+</head>
+<body class="airconsole">
+  <!-- Name -->
+  <section id="name">
+    <div class="wordmark name-wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></div>
+    <form id="name-form">
+      <input id="name-input" type="text" placeholder="Your name" maxlength="16" autocomplete="off" />
+      <button id="join-btn" type="submit" class="btn btn--brand">Join race</button>
+    </form>
+    <div id="name-status"></div>
+  </section>
+
+  <!-- Lobby — who you are, your car, the track (the shared display owns the
+       player roster). -->
+  <!-- Landscape spread, grouped by MEANING: "your car" on the left (the hero
+       card with its strip right under it), "the race + go" on the right (the
+       host's picker over the ready/start footer, pinned to the bottom). The
+       page scrolls vertically when a column runs long. -->
+  <section id="lobby" class="hidden">
+    <!-- Identity ribbon — your NAME as a livery sticker on the left (visible in
+         the CouchPad shell too: the launcher's own chip lives in a top bar that
+         landscape hides), the Settings gear pinned far right. A slim row of its
+         own, so neither has to squat on the car card. -->
+    <div class="lobby-top">
+      <div class="lobby-me"><span id="me-name" class="lobby-me__name"></span></div>
+      <button id="settings-btn" class="settings-btn icon-btn" type="button" aria-label="Settings" aria-haspopup="dialog"><svg class="gear-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 16.9c-2.7 0-4.9-2.21-4.9-4.9s2.21-4.9 4.9-4.9 4.9 2.21 4.9 4.9-2.21 4.9-4.9 4.9z"/></svg></button>
+    </div>
+
+    <div class="lobby-car">
+      <!-- your car — no section header; the card speaks for itself. -->
+      <div class="car-card">
+        <div id="car-hero" class="car-hero"></div>
+      </div>
+      <div id="carpick" class="carpick"></div>
+    </div>
+
+    <div class="lobby-race">
+      <!-- what to race — host only: 🎲 Random / a cup (4-race Grand Prix) / an
+           exact track from the open cup's panel. Everyone else sees the pick on
+           the big screen instead. No header — the tiles say it, and dropping
+           the kicker keeps this column's top level with the hero card's.
+           Hidden until the catalog arrives (WELCOME); see renderModePicker —
+           when it's hidden the whole column collapses and the car column
+           centres (see #lobby:has in controller.css). -->
+      <div id="trackpick" class="trackpick hidden">
+        <div id="track-strip" class="trackpick__strip"></div>
+      </div>
+    </div>
+
+    <!-- The GO bar — non-hosts ready up; the host's button is "Start race",
+         disabled until everyone else is ready (renderReadyFoot, ui.js). A
+         full-width bar pinned to the bottom of the screen, so the primary
+         action is always visible while the columns above scroll. -->
+    <div class="lobby-go">
+      <button id="ready-btn" class="btn btn--brand hidden">I’m ready</button>
+      <div id="ready-note" class="hidden"></div>
+    </div>
+  </section>
+
+  <!-- Game: tilt (or the ‹ › buttons) to steer. Landscape-only layout: the
+       steer indicator sits centred mid-screen (roughly the display bar's own
+       270:34 shape), with pause + settings in a row beside it — there is no
+       height for a fixed top-corner button column. The mode class (mode-tilt /
+       mode-buttons, set by setInputMode in driveSurface.js) decides which of
+       the controls below show: tilt = ITEM left, BRAKE right (thumb columns);
+       buttons = three equal ‹ / ITEM / › in a row, hold both ‹ › to brake. -->
+  <section id="game" class="hidden mode-tilt">
+    <div id="drive-hud" class="hidden">
+      <!-- Top row: player name left, settings + pause FAR RIGHT. No place/lap on
+           the phone; the live standings live on the big screen. -->
+      <div class="hud-top">
+        <div id="hud-name" class="hud-name"></div>
+        <div class="hud-btns">
+          <button id="settings-btn-game" class="icon-btn" type="button" aria-label="Settings" aria-haspopup="dialog"><svg class="gear-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 16.9c-2.7 0-4.9-2.21-4.9-4.9s2.21-4.9 4.9-4.9 4.9 2.21 4.9 4.9-2.21 4.9-4.9 4.9z"/></svg></button>
+          <button id="pause-btn" class="icon-btn" aria-label="Pause"><span class="pause-glyph"></span></button>
+        </div>
+      </div>
+      <!-- Mid row: the steer indicator over a one-line mode hint (which of the
+           two spans shows rides the #game mode class). The motion chip sits
+           with them — mid-race, tilt mode only, while tilt is blocked (see
+           refreshMotionTip); a tap reopens the motion-blocked popup to fix it
+           on the spot. -->
+      <div class="hud-mid">
+        <div class="steer">
+          <div class="steer__track"><div id="steer-fill"></div></div>
+        </div>
+        <div class="hud-hint">
+          <span class="hud-hint__tilt">Tilt your phone to steer</span>
+          <span class="hud-hint__buttons">Hold left + right to brake</span>
+        </div>
+        <button id="motion-tip" class="motion-tip hidden" type="button">Tilt steering is off. Tap to fix.</button>
+      </div>
+      <div class="drive-controls">
+        <button id="steer-left" class="steerbtn" aria-label="Steer left"><span class="steer-glyph steer-glyph--l"></span></button>
+        <button id="action-btn" class="action" disabled aria-label="Use item">ITEM</button>
+        <button id="steer-right" class="steerbtn" aria-label="Steer right"><span class="steer-glyph steer-glyph--r"></span></button>
+        <button id="brake-btn" class="brake">BRAKE</button>
+      </div>
+    </div>
+    <!-- Pause overlay — frosted glass with the same choices as the big screen -->
+    <div id="pause-overlay" class="hidden">
+      <h2>Paused</h2>
+      <button id="pause-continue" class="btn btn--brand">Continue</button>
+      <button id="pause-newgame" class="btn btn--ghost">New game</button>
+    </div>
+  </section>
+
+  <!-- Results — shown once your car finishes; the board fills in as the rest of
+       the field crosses the line. The host starts the next game from here.
+       During a cup it doubles as the intermission (points board, host's "Next
+       race" + the only way to abandon a cup early) and the final podium board. -->
+  <section id="results" class="hidden">
+    <h2 id="results-title" class="results-title">Results</h2>
+    <ol id="result-list" class="result-list"></ol>
+    <div id="result-foot">
+      <button id="newgame-btn" class="btn btn--brand hidden">New game</button>
+      <button id="quitcup-btn" class="btn btn--ghost hidden">End cup early</button>
+      <div id="result-wait" class="result-wait hidden"></div>
+    </div>
+  </section>
+
+  <!-- Connection overlay — screen-agnostic. Covers the phone whenever the relay
+       link drops so the player isn't tapping a dead surface: "Reconnecting…" while
+       PartyConnection retries, then "Connection lost" with a retry (and a nudge to
+       the big screen's reconnect QR) once it gives up. Hidden on a clean (re)join. -->
+  <div id="conn" class="conn hidden" role="alertdialog" aria-live="assertive">
+    <div class="conn__card">
+      <div id="conn-title" class="conn__title">Reconnecting…</div>
+      <div id="conn-msg" class="conn__msg"></div>
+      <button id="conn-retry" type="button" class="btn btn--brand hidden">Try again</button>
+      <!-- Escape hatch for terminal states (display gone for good, seat taken
+           over, retries exhausted) — without it the overlay is a dead end and
+           only the back gesture gets you out. -->
+      <button id="conn-leave" type="button" class="btn btn--ghost hidden">Exit to start</button>
+    </div>
+  </div>
+
+  <!-- Settings popup — frosted glass like #pause-overlay/#conn, sits ABOVE the
+       lobby and BELOW #conn (z 17) so a dropped link always wins. One setting
+       (the steering input mode, tilt vs buttons) plus the animated how-to-drive
+       demo for whichever mode is picked — it doubles as the tutorial and
+       auto-shows ONCE per device on first lobby entry (localStorage
+       'tinytrack_seen_help'); the gear buttons reopen it. The motion-permission
+       recovery is a SEPARATE popup (#motion-overlay). Wiring in modals.js. -->
+  <div id="settings-overlay" class="hidden" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <!-- .is-buttons (set by refreshSettingsCard) flips the demo + captions to
+         button steering; the default card teaches tilt. -->
+    <div id="settings-card" class="settings-card">
+      <div class="settings-head">
+        <h2 id="settings-title" class="settings-title">Settings</h2>
+      </div>
+
+      <!-- Steering mode — pick LEFT, watch RIGHT. "Steering" heads the group
+           itself; the seg is a column of two plain radio rows (a drawn dot +
+           the mode's name, nothing else — the animated demo beside them does
+           ALL the teaching); the picked row tints toward your livery. The
+           demo phones live on the STAGE — one per mode, .is-buttons
+           (refreshSettingsCard) showing the picked one. Tilt twists like a
+           steering wheel with the strip sliding in lockstep; buttons takes
+           turns pressing ‹ › with the strip snapping full-side. -->
+      <div class="seg" role="radiogroup" aria-labelledby="steering-label">
+        <span id="steering-label" class="seg-label">Steering</span>
+        <button id="input-tilt" type="button" class="mode-card" role="radio" aria-checked="true">
+          <span class="mode-card__name">Tilt</span>
+          <span class="mode-card__badge">Recommended</span>
+        </button>
+        <button id="input-buttons" type="button" class="mode-card" role="radio" aria-checked="false">
+          <span class="mode-card__name">Buttons</span>
+        </button>
+      </div>
+
+      <!-- The stage — a sunken surface (surface-2, "not a control") holding the
+           picked mode's animated demo phone with the legend attached beneath:
+           everything on it is information, everything in the seg is a choice.
+           Legend rows swap with the mode: tilt teaches ITEM + BRAKE, buttons
+           the ‹ › chord + ITEM. -->
+      <div class="demo-stage">
+        <div class="steer-demo steer-demo--tilt" aria-hidden="true">
+          <span class="demo-chev demo-chev--l"><span class="steer-glyph steer-glyph--l"></span></span>
+          <div class="phone-lean">
+            <div class="phone-frame">
+              <div class="phone-inner">
+                <span class="phone-island"></span>
+                <span class="phone-name"></span>
+                <div class="mini-steer"><div class="mini-steer__fill"></div></div>
+                <div class="mini-controls">
+                  <span class="mini-btn mini-btn--item">ITEM</span>
+                  <span class="mini-btn mini-btn--brake">BRAKE</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <span class="demo-chev demo-chev--r"><span class="steer-glyph steer-glyph--r"></span></span>
+        </div>
+        <div class="steer-demo steer-demo--buttons" aria-hidden="true">
+          <span class="demo-chev demo-chev--l"><span class="steer-glyph steer-glyph--l"></span></span>
+          <div class="phone-lean">
+            <div class="phone-frame">
+              <div class="phone-inner">
+                <span class="phone-island"></span>
+                <span class="phone-name"></span>
+                <div class="mini-steer"><div class="mini-steer__fill"></div></div>
+                <div class="mini-controls">
+                  <span class="mini-btn mini-btn--steer mini-btn--steerl"><span class="steer-glyph steer-glyph--l"></span></span>
+                  <span class="mini-btn mini-btn--item">ITEM</span>
+                  <span class="mini-btn mini-btn--steer mini-btn--steerr"><span class="steer-glyph steer-glyph--r"></span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <span class="demo-chev demo-chev--r"><span class="steer-glyph steer-glyph--r"></span></span>
+        </div>
+        <div class="settings-legend">
+          <div class="help-ctrl help-ctrl--chord">
+            <span class="help-chip help-chip--steer"><span class="steer-glyph steer-glyph--l"></span><span class="steer-glyph steer-glyph--r"></span></span>
+            <span class="help-ctrl__cap">Hold both to brake</span>
+          </div>
+          <div class="help-ctrl">
+            <span class="help-chip help-chip--item">ITEM</span>
+            <span class="help-ctrl__cap">Tap to use a pickup</span>
+          </div>
+          <div class="help-ctrl help-ctrl--brake">
+            <span class="help-chip help-chip--brake">BRAKE</span>
+            <span class="help-ctrl__cap">Hold to slow &amp; stop</span>
+          </div>
+        </div>
+      </div>
+
+      <button id="settings-done" class="btn btn--brand settings-done" type="button">Got it</button>
+    </div>
+  </div>
+
+  <!-- Motion-blocked popup — a SEPARATE alert (not part of the instructions): shown
+       when the tilt sensor is blocked (iOS denied) or absent (unsupported), with the
+       live recovery path. Sits above #settings-overlay (z 18) but below #conn. Title,
+       copy + the primary button's action come from tilt.motionState (see
+       refreshMotionPopup / motionHelpCopy). Once iOS has denied, that button RELOADS
+       (the only way to re-raise the prompt) rather than uselessly re-requesting. -->
+  <div id="motion-overlay" class="hidden" role="alertdialog" aria-modal="true" aria-labelledby="motion-title" aria-describedby="motion-status">
+    <div class="settings-card motion-card">
+      <h2 id="motion-title">Motion sensor is blocked</h2>
+      <p id="motion-status" class="help-copy"></p>
+      <button id="motion-allow" class="btn btn--brand" type="button">Reload &amp; ask again</button>
+      <p id="motion-fix" class="help-copy help-motion-fix hidden"></p>
+      <button id="motion-done" class="btn btn--ghost" type="button">Got it</button>
+    </div>
+  </div>
+
+  <!-- Rotate overlay — the controller is LANDSCAPE-ONLY. Pure CSS: the portrait
+       media query shows it over everything (z 40, above #conn) so no screen is
+       usable sideways-wrong. In the CouchPad shell the launcher pins landscape
+       (§10) so this never shows; in a plain browser it is the fallback for
+       platforms where fullscreen + orientation lock (orientation.js) can't be
+       had, iOS Safari first among them. -->
+  <div id="rotate" class="rotate" role="alertdialog" aria-live="assertive">
+    <div class="rotate__card">
+      <div class="rotate__phone" aria-hidden="true"></div>
+      <h2 class="rotate__title">Turn your phone sideways</h2>
+      <p class="rotate__msg">This controller plays in landscape. Once you're sideways, lock rotation so tilting doesn't flip the screen.</p>
+    </div>
+  </div>
+
+  <!-- Latency chip — one-way (RTT/2), pinned bottom-right across all screens.
+       Hidden until the first reading lands (post-join). The bolt shows only
+       while the input/ping path is on the P2P fastlane DataChannel. -->
+  <div id="latency" class="latency hidden" role="status" aria-live="off">
+    <span class="latency__bolt" aria-hidden="true"></span><span class="latency__text">-- ms</span>
+  </div>
+
+  <script type="module" src="controller/main.js?v=__APP_V__"></script>
+</body>
+</html>

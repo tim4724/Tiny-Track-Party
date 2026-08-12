@@ -148,6 +148,11 @@ the server's `RELAY_URL`, so it needs no production relay. Import `test`/`expect
 from `tests/e2e/helpers.js` (it reaps leaked phone contexts), and run
 `npx playwright install chromium` once.
 
+`airconsole.spec.js` is the exception to the relay stub: it drives the generated
+AC entries over a mocked SDK (`airconsole-mock.js`, a BroadcastChannel transport)
+with the real SDK's CDN URL blocked — controllers must share the DISPLAY's
+browser context, or the channel cannot reach them.
+
 `/gallery.html` is a manual no-relay preview surface; `/gallery-assets.html` is one
 live scene you fly, and is dev-only. Its KIT FIELD stands models the game does not
 ship, out of a cache no test has (`npm run fetch:kits`) — so what is gated is the

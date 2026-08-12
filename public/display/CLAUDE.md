@@ -18,6 +18,16 @@ stake in a race lives beside it instead — the backdrop crossfade, the overlays
 the TV furniture. When something in `main.js` grows a timer or a generation
 counter of its own, that is the signal it has become one of those.
 
+## AirConsole (screen.html)
+
+`display-airconsole.js` is a classic script only the generated `screen.html`
+loads: it swaps the transport (adapter for the relay connection, a no-op
+fastlane, AC's master/liveness providers via `window.__acParty`) and
+neutralizes the History API — AirConsole reads the screen iframe's
+`history.back()` as "game ended". Platform lifecycle (boot flow, pause, the
+ad break, the QR-less ticket) is the `window.airconsole` branch in `main.js`;
+everything below it — the walks, the performers, the model — runs unchanged.
+
 ## Rendering from the model, not deciding
 
 `main.js` and the render modules beside it (`lobbySeats.js`, `raceOverlays.js`)

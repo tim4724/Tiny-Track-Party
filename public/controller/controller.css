@@ -1208,3 +1208,8 @@ input[type=text]:disabled { opacity: 0.6; }
   .settings-legend { gap: 1rem; }
   .settings-legend .help-ctrl__cap { font-size: 0.8rem; }
 }
+
+/* ---- AirConsole (controller.html) ---- There is no name screen to exit to
+   (AC owns identity and leaving), so the conn overlay keeps its retry but
+   drops the exit. */
+body.airconsole #conn-leave { display: none; }

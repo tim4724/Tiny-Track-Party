@@ -12,6 +12,8 @@
     "fetch:kits": "node scripts/fetch-kits.mjs",
     "fetch:music": "node scripts/fetch-music.mjs",
     "gen:schematics": "node scripts/gen-track-schematics.js",
+    "gen:airconsole": "node scripts/gen-airconsole-html.mjs",
+    "build:airconsole": "bash scripts/build-airconsole.sh",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "measure": "node scripts/measure-kit.js \"$KIT/Models/GLB format\"",

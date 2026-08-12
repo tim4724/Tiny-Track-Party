@@ -36,6 +36,11 @@ import { initOrientation } from './orientation.js';
 const { MSG, ROOM_STATE } = window;
 const el = (id) => document.getElementById(id);
 
+// AirConsole (controller.html): the bootstrap swapped the transport globals
+// before this module ran and left the platform surface here — the ready
+// promise, the profile nickname, SDK-routed haptics. Null everywhere else.
+const acBoot = window.__acController || null;
+
 const screens = { name: el('name'), lobby: el('lobby'), game: el('game'), results: el('results') };
 // Screen "depth": name is the entry point (0); every in-room screen sits one
 // level above it (1). lobby↔game↔results are same-level shuffles. Used to push a
@@ -74,7 +79,9 @@ function syncShellBack() {
 // something landed. ONE motor, so every cue routes through this instance: a
 // transient fired while the brake rumble is running would otherwise silence it
 // until the next renewal. See Haptics.js.
-const haptics = new Haptics();
+// In the AC iframe navigator.vibrate is usually blocked by the permissions
+// policy, so the cues route through the SDK there (Haptics' injection seam).
+const haptics = new Haptics(acBoot ? { vibrate: acBoot.vibrate } : {});
 const buzz = (p) => haptics.tick(p);
 
 let myColorIndex = null;
@@ -199,7 +206,10 @@ initModals({
 });
 initDriveSurface({ tilt, buzz, haptics });
 setInputMode(inputMode);
-initOrientation({ inShell });
+// "The platform owns the device" covers AirConsole too: the SDK pins the
+// orientation (see the bootstrap's constructor options), and fullscreen
+// requests from inside the AC iframe are its host's business, not ours.
+initOrientation({ inShell: inShell || !!acBoot });
 
 function setStatus(t) { el('name-status').textContent = t; }
 // Lock the join form while a connection is in flight so a double-tap can't fire
@@ -587,7 +597,10 @@ function leaveToName() {
   el('name-input').focus();
 }
 window.addEventListener('popstate', () => {
-  if (inShell) return;   // shell owns leaving (§1) — we never pushed, and don't self-leave
+  // Shell/AirConsole own leaving — we never pushed, and don't self-leave. In
+  // the AC iframe a spurious pop (SDK location check, bfcache) must not
+  // disconnect a live seat.
+  if (inShell || acBoot) return;
   if (currentScreen && currentScreen !== 'name') leaveToName();
 });
 
@@ -685,15 +698,18 @@ el('newgame-btn').addEventListener('click', () => {
   net.send(s && !s.final ? MSG.SERIES_NEXT : MSG.RETURN_TO_LOBBY);
 });
 
-// Applies the launcher's rename locally (the labels that carry the name) AND
-// broadcasts it to the display via a re-HELLO, exactly like a join.
-installRenameHook((n) => {
+// Applies a shell rename locally (the labels that carry the name) AND
+// broadcasts it to the display via a re-HELLO, exactly like a join. Two
+// callers: the CouchPad launcher's setName below, and the AirConsole profile
+// change in the AC branch at the bottom.
+function applyShellRename(n) {
   myName = n;
   el('me-name').textContent = n;    // lobby identity
   el('hud-name').textContent = n;   // in-race HUD
   refreshHelpName(n);               // settings demo phone
   net.rename(n);                    // → display roster + LOBBY_UPDATE echo
-});
+}
+installRenameHook(applyShellRename);
 
 // Shell §9: what an armed back gesture DOES. A popup closes (motion above
 // settings); a paused race continues; anywhere else — the lobby, the results —
@@ -714,6 +730,26 @@ if (inShell && shellName) {
   // over the blank sky until WELCOME lands and show('lobby') takes over.
   screens.name.classList.add('hidden');
   joinRace(shellName, { persist: false });
+} else if (acBoot) {
+  // AirConsole owns identity like the shell does: skip the name screen, join
+  // as the profile nickname once the SDK is ready (getNickname is only valid
+  // from onReady; the adapter defers `joined` to the same moment, so nothing
+  // is lost by waiting). Never persisted — the name belongs to the platform.
+  screens.name.classList.add('hidden');
+  acBoot.ready.then(() => joinRace(acBoot.nickname(), { persist: false }));
+  // The pref shim hydrates after the module read its defaults — re-apply the
+  // one pref that changes live wiring (steering mode; a stored car pick is
+  // read later, at WELCOME, and usually wins the race).
+  acBoot.storage.onLoad(() => applyInputMode(storedInputMode()));
+  // Live profile rename (the AC profile editor, or a late-loading profile):
+  // same path as the CouchPad launcher's setName. Only our own device — the
+  // event fires for every device whose profile changed. The adapter never
+  // wires onDeviceProfileChange, so this assignment is durable.
+  acBoot.airconsole.onDeviceProfileChange = (deviceId) => {
+    if (deviceId !== acBoot.airconsole.getDeviceId()) return;
+    const n = cleanName(acBoot.nickname());
+    if (n) applyShellRename(n);
+  };
 } else {
   show('name');
 }

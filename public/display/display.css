@@ -1005,3 +1005,13 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
   display: block; width: clamp(96px, 9vw, 132px); aspect-ratio: 1 / 1;
   border-radius: var(--r-sm); image-rendering: pixelated;
 }
+
+/* ---- AirConsole (screen.html) ---- Players pair through the AC app, so the
+   ticket keeps its wordmark masthead and the tagline (retexted by main.js's AC
+   branch) but drops the QR + URL line; a dropped seat's reconnect card drops
+   its rejoin QR the same way (AC reconnects the device itself). Fullscreen is
+   the host page's business inside the AC iframe. */
+body.airconsole #qr,
+body.airconsole .ticket__urlbox,
+body.airconsole .rc-card__qr,
+body.airconsole #fullscreen-btn { display: none; }

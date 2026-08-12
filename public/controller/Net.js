@@ -99,7 +99,11 @@ export class ControllerNet extends GameNet {
         // (harmless otherwise — the display ignores a token that matches our own
         // fresh slot or names a seat that's no longer waiting).
         this.party.sendTo(0, { type: MSG.HELLO, name: this.playerName, rejoinToken: this.rejoinToken });
-        this._startPing();
+        // No WS ping on AirConsole: STEER.SEND_MIN_INTERVAL_MS is sized so the
+        // CONTROL stream alone fills the platform's 25 msg/s budget — a ping on
+        // top would breach it. AC's own connect/disconnect events carry
+        // liveness, and the latency chip simply stays dark.
+        if (!window.airconsole) this._startPing();
         this.onJoined(this.peerIndex);
       } else if (type === 'error') {
         this.onStatus('error', msg.message);
@@ -180,6 +184,10 @@ export class ControllerNet extends GameNet {
   // so our own close can't come back through onClose and flash 'Reconnecting…'
   // over a page nobody is looking at.
   suspend() {
+    // AirConsole owns the app lifecycle: the platform pauses the iframe and
+    // reconnects devices itself, and tearing the adapter down here would
+    // orphan it — the SDK's onReady never re-fires into a replacement.
+    if (window.airconsole) return;
     if (!this.party || this._terminal) return;
     this.gate.reset();   // link down: what the display holds is no longer knowable
     this._dropLink();

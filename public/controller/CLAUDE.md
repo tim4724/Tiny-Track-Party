@@ -40,6 +40,17 @@ That trades a loud failure for a quiet one — a renamed payload field answers a
 plainer dressing instead of throwing — so every dressing the harness can reach is
 pinned by `tests/e2e/gallery-controller-boards.spec.js`.
 
+## AirConsole (controller.html)
+
+`controller-airconsole.js` is a classic script only the generated
+`controller.html` loads: it re-points `window.PartyConnection` at the adapter
+and `window.PartyFastlane` at a stub before the modules capture them, installs
+the AC-backed pref shim, and hands `main.js` the platform surface
+(`window.__acController`: ready promise, nickname, SDK haptics). The few
+in-module gates test `window.airconsole`: no WS ping (steering alone fills
+AC's 25 msg/s budget — that is what sized `STEER.SEND_MIN_INTERVAL_MS`), no
+suspend/resume teardown, no history, no self-leave on popstate.
+
 ## The display is authoritative
 
 The phone renders what the snapshot says and sends requests. Every local change

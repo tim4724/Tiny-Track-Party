@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="app-version" content="__APP_VERSION__" />
+  <meta name="relay-url" content="__RELAY_URL__" />
+  <title>Tiny Track Party</title>
+  <link rel="preload" as="font" type="font/woff2" href="assets/fonts/fredoka-variable.woff2" crossorigin />
+  <link rel="preload" as="font" type="font/woff2" href="assets/fonts/nunito-variable.woff2" crossorigin />
+  <!-- The engine: sim, party layer and Filament renderer in one wasm module.
+       Nothing draws until it lands and main.js awaits it at boot, so start the
+       glue early rather than let it be discovered deep in the module graph
+       (modulepreload doesn't follow a module's own imports). The .wasm itself is
+       deliberately NOT preloaded: the glue fetches it with credentials
+       'same-origin', which a `preload as=fetch crossorigin` request would not
+       match — the browser would download all 2.7 MB of it twice. -->
+  <link rel="modulepreload" href="display/engine/native/ttp_runtime.mjs" />
+  <link rel="stylesheet" href="shared/theme.css?v=__APP_V__" />
+  <link rel="stylesheet" href="display/display.css?v=__APP_V__" />
+
+  <!-- Transport + shared contract: classic scripts set window globals BEFORE
+       the deferred module entry runs. -->
+  <script src="shared/protocol.js?v=__APP_V__"></script>
+  <!-- PartyConnection + PartyFastlane survive the native port: they own the
+       WebSocket and the WebRTC handshake (which wasm cannot), and the native
+       fastlane SUBCLASSES PartyFastlane to inherit that handshake. RoomFlow.js is
+       gone — the room state machine is C++ now (NativeRoomFlow). -->
+  <script src="partyplug/PartyConnection.js?v=__APP_V__"></script>
+  <script src="partyplug/PartyFastlane.js?v=__APP_V__"></script>
+  <script src="https://www.airconsole.com/api/airconsole-1.11.0.js"></script>
+  <script src="partyplug/AirConsoleAdapter.js?v=__APP_V__"></script>
+  <script src="partyplug/AirConsoleStorage.js?v=__APP_V__"></script>
+  <script src="display/display-airconsole.js?v=__APP_V__"></script>
+</head>
+<body class="airconsole">
+  <!-- Default lobby backdrop: the sunny diorama (shown until a track is picked).
+       Once the host picks a track, the 3D #scene below covers it with the live
+       orbiting preview. (Decorative; see .scene in /shared/theme.css.) -->
+  <div class="scene" id="lobby-diorama" aria-hidden="true">
+    <div class="scene__sky"></div>
+    <div class="scene__sun"></div>
+    <div class="scene__cloud scene__cloud--a"></div>
+    <div class="scene__cloud scene__cloud--b"></div>
+    <div class="scene__cloud scene__cloud--c"></div>
+    <div class="scene__grass"></div>
+  </div>
+
+  <!-- Persistent 3D backdrop. In the lobby it orbits the SELECTED track's shape (the live
+       preview); in a race it draws the split-screen world. Starts transparent (.is-dim) and
+       reveals over the diorama on the first pick; later picks crossfade one track straight
+       into the next (see #scene-snap). The lobby + race sections layer on top of it. -->
+  <div id="scene" class="is-dim"></div>
+
+  <!-- Device chooser — the display URL opened on a phone-sized screen. The race
+       runs on a big screen while phones steer, so a cramped viewport most likely
+       means someone followed the wrong link while trying to JOIN a game. Offer
+       the fork instead of booting a TV layout they can't use. Hidden on big
+       screens and once dismissed (display.css media query + the
+       html.device-choice-dismissed class); main.js defers opening a room until
+       a choice is made, so a stray phone visit never spawns a ghost room.
+       role="dialog" WITHOUT aria-modal on purpose: aria-modal promises focus
+       containment we don't implement (no focus trap) — tabbing out lands on
+       the benign lobby behind, which the screen reader can then read honestly. -->
+  <div id="device-choice" role="dialog" aria-labelledby="device-choice-title">
+    <div class="device-card card">
+      <h1 id="device-choice-title">Tiny Track <span>Party</span></h1>
+      <p>This page is the <strong>big screen</strong> — it runs the race while everyone steers with their phone.</p>
+      <p>Joining a party? Scan the QR code on your group’s big screen instead.</p>
+      <button id="device-continue" class="btn btn--brand">Use this device as the big screen</button>
+    </div>
+  </div>
+
+  <!-- Welcome — the title board shown at boot, over the paper diorama. The
+       room is already warming behind it (net.start() runs at boot, gated only
+       on the device chooser), so NEW GAME reveals a lobby whose QR is ready.
+       Being the session's first real click, the button also carries the
+       browser unlocks that need a user gesture: fullscreen + audio (the
+       newgame-btn click handler in main.js). Back from the lobby returns
+       here, ending the party (see the popstate handler in main.js). -->
+  <section id="welcome">
+    <div class="wordmark welcome__wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></div>
+    <p class="welcome__tag">Race your friends! Everyone steers with their phone.</p>
+    <button id="newgame-btn" class="btn btn--brand welcome__btn">NEW GAME</button>
+    <!-- Build badge: version + short commit, shown on preview (non-production)
+         builds only. The server fills __VERSION_BADGE__ with "x.y.z (#sha)" off
+         production and leaves it empty in prod; .version-badge:empty hides it.
+         Lives on the title board so the lobby chrome stays clean. -->
+    <div class="version-badge" aria-label="Build version">__VERSION_BADGE__</div>
+  </section>
+
+  <!-- Lobby — Sticker Bash chrome pinned to the glass: the join ticket
+       (wordmark masthead + QR + scan hint) on the left rail, the cup slot on
+       the right rail, the seat dock bottom-centre. The chrome sits at the
+       SAME positions in both lobby states: on the paper stage before the host
+       picks, floating over the live 3D preview after — nothing moves between
+       the two. -->
+  <section id="lobby" class="hidden">
+    <!-- Join ticket — ONE sticker card with the wordmark as its masthead:
+         TINY TRACK PARTY! over QR + the join URL (code highlighted in the
+         accent colour by renderJoinUrl in Net.js). It's a <button>: click (or
+         Enter/Space) copies the full join link, confirmed by the #toast. -->
+    <div class="ticket-rail">
+      <button type="button" class="ticket" id="joinbox" aria-label="Copy join link">
+        <span class="wordmark ticket__wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></span>
+        <canvas id="qr"></canvas>
+        <!-- "Loading…" holds the URL line until the room opens; the real URL
+             crossfades in over it (renderJoinUrl stamps .is-in). -->
+        <div class="ticket__urlbox">
+          <div class="ticket__url ticket__wait">Loading…</div>
+          <div class="ticket__url" id="joinurl"></div>
+        </div>
+      </button>
+      <!-- Scan hint — hangs just under the ticket for the whole lobby
+           (joining stays possible until the race starts). -->
+      <div class="tagline" id="tagline">
+        <div class="tagline__main">Scan the code with your phone!</div>
+      </div>
+    </div>
+
+    <!-- Cup slot — empty until the host picks on their phone, then the pick
+         as the race card (red cup sticker + minis + races pill + pips).
+         Filled by renderCupSlot via renderLobbyPick (both lobbySeats.js);
+         keep this markup in sync with what renderCupSlot expects. -->
+    <div class="cup-slot" id="cup-slot">
+      <div class="cup-slot__pick hidden">
+        <div class="cup-sticker"></div>
+        <div class="cup-maps"></div>
+        <div class="cup-races"></div>
+        <div class="cup-meter" aria-label="Difficulty"><i></i><i></i><i></i><i></i></div>
+      </div>
+    </div>
+
+    <!-- Seat dock — a horizontal row of sticker seat chips (no headline: the
+         ticket's JOIN AT already carries the call-to-action). Seeded with four
+         open-seat placeholders so the dock paints at its full footprint the
+         moment the lobby is revealed. lobbySeats.js's renderSeats() then
+         replaces these (always keeping >=4 seats) as players join — keep this
+         markup in sync with its `seat--open` branch. -->
+    <div class="lobby-foot">
+      <div id="players">
+        <div class="seat seat--open"><div class="seat__open"></div><div class="seat__name"><span class="seat__label">Open</span></div></div>
+        <div class="seat seat--open"><div class="seat__open"></div><div class="seat__name"><span class="seat__label">Open</span></div></div>
+        <div class="seat seat--open"><div class="seat__open"></div><div class="seat__name"><span class="seat__label">Open</span></div></div>
+        <div class="seat seat--open"><div class="seat__open"></div><div class="seat__name"><span class="seat__label">Open</span></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Corner buttons — pinned top-right over every screen, outside the sections
+       so the fullscreen toggle survives welcome → lobby → race. Fullscreen sits
+       LEFT of pause; pause joins the row only during a race (main.js toggles its
+       .hidden). Both fade together while the race chrome is idle (see
+       display.css) so they stop covering each cell's place/lap readout. -->
+  <div id="corner-btns">
+    <button id="fullscreen-btn" class="icon-btn" aria-label="Enter fullscreen" aria-pressed="false">
+      <!-- Two glyphs, one shown at a time (theme.css picks by aria-pressed):
+           corners pointing out = enter, pointing in = exit. -->
+      <svg class="fs-glyph fs-glyph--enter" viewBox="0 0 20 20" aria-hidden="true">
+        <path d="M7.5 2.5H2.5V7.5M12.5 2.5H17.5V7.5M17.5 12.5V17.5H12.5M7.5 17.5H2.5V12.5" />
+      </svg>
+      <svg class="fs-glyph fs-glyph--exit" viewBox="0 0 20 20" aria-hidden="true">
+        <path d="M2.5 7.5H7.5V2.5M17.5 7.5H12.5V2.5M12.5 17.5V12.5H17.5M2.5 12.5H7.5V17.5" />
+      </svg>
+    </button>
+    <button id="pause-btn" class="icon-btn hidden" aria-label="Pause"><span class="pause-glyph"></span></button>
+  </div>
+
+  <!-- Race: overlays over the persistent #scene backdrop -->
+  <section id="race" class="hidden">
+    <!-- Now-playing credit (bottom-left): the current track + artist, linking to
+         its source. Doubles as the CC-BY attribution for the music. main.js fills
+         the label/href and toggles .hidden with the music lifecycle. -->
+    <a id="music-credit" class="music-credit hidden" target="_blank" rel="noopener"></a>
+    <div id="countdown"></div>
+    <!-- Pause overlay — frosted glass over the frozen race -->
+    <div id="pause-overlay" class="hidden">
+      <div class="pause-card card">
+        <h2>Paused</h2>
+        <div class="pause-card__btns">
+          <button id="pause-continue" class="btn btn--brand">Continue</button>
+          <button id="pause-newgame" class="btn btn--ghost">New game</button>
+        </div>
+      </div>
+    </div>
+    <!-- Results / cup intermission / cup podium — one overlay, three dressings
+         (showResults picks by series state). Sub = "Cup · Race M of N"; podium =
+         top-three steps at cup end; next = "Next up: … starting in N…". -->
+    <div id="results" class="hidden">
+      <h2 id="results-title">Results</h2>
+      <div id="results-sub" class="results-sub hidden"></div>
+      <div id="results-podium" class="results-podium hidden"></div>
+      <ol id="results-list"></ol>
+      <div id="results-next" class="results-next hidden"></div>
+      <button id="results-newgame" class="btn btn--brand">New Game</button>
+    </div>
+  </section>
+
+  <!-- Transient "Copied" confirmation, shown when the join box is clicked. -->
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <!-- Audio-unlock hint: browsers keep a page muted until a real click/key on
+       it, so this pill shows while sound is still locked (lobby and race
+       alike). Any gesture unlocks; clicking the pill is the obvious one. -->
+  <button id="sound-hint" class="sound-hint hidden">🔇 tap for sound</button>
+
+  <script type="module" src="display/main.js?v=__APP_V__"></script>
+</body>
+</html>

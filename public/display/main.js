@@ -562,6 +562,10 @@ const net = new DisplayNet({
   // The room state machine, relay framing and fastlane netcode all run on the
   // C++ party layer; DisplayNet has no JS fallback to choose from.
   ...(_nativeParty || {}),
+  // AirConsole (screen.html): the bootstrap swaps the transport half —
+  // adapter for the relay connection, a no-op fastlane, the platform's
+  // master/liveness providers. The room machine and walks above are untouched.
+  ...(window.__acParty || {}),
   trackCatalog,
   // Slim, display-authoritative chooser content for the retained room snapshot.
   carChooser, trackChooser, colorPalette,
@@ -583,6 +587,9 @@ const net = new DisplayNet({
     selectTrack(id); renderPick();
   },
   onRoomReady: ({ roomCode, joinUrl }) => {
+    // AirConsole: players join through the AC app, not by scanning — no URL and
+    // no QR. currentJoinUrl stays '', so the ticket's copy click is a no-op too.
+    if (window.airconsole) return;
     // The room code rides along in the join URL's path; the ticket shows one
     // URL line with the trailing code highlighted in the accent colour.
     currentJoinUrl = joinUrl;                   // the full link the join ticket copies
@@ -1136,6 +1143,13 @@ function showResults(results) {
   const final = !!(board.series && board.series.final);
   renderResults(ui.resultsView(board, { intermissionMs: intermissionMs() }), CAR_COLORS,
                 final ? () => net.setStandings({ ...board, settled: true }) : null);
+  // AirConsole: request the platform ad break — on FINAL results only (a
+  // 4-race Grand Prix must not stall on an ad at every intermission). AC
+  // rate-limits showAd internally, so no local throttle; the music duck rides
+  // onAdShow/onAdComplete in the AC boot branch below.
+  if (window.airconsole && ui.resultsAction(net.flow.handle) !== 'advance') {
+    try { window.airconsole.showAd(); } catch (_) {}
+  }
 }
 
 function returnToLobby() {
@@ -1308,6 +1322,40 @@ if (_scenario) {
     window.__debugSolo = debugSolo;
     debugSolo.start();
   });
+} else if (window.airconsole) {
+  // AirConsole (screen.html): the platform owns pairing and the iframe's
+  // chrome — no welcome board, no device chooser, no history entries (the
+  // bootstrap neutralized the History API: AC reads the screen iframe's
+  // history.back() as "game ended"). Straight to the lobby with the room
+  // opening through the adapter.
+  const ac = window.airconsole;
+  dismissDeviceChoice();
+  show('lobby');
+  renderRoster([], null);
+  updateBackdrop();
+  // The AC iframe carries allow=autoplay, so the AudioContext resumes without
+  // a gesture; if a host build ever refuses, the sound-hint pill still shows.
+  audio.resume();
+  el('tagline').firstElementChild.textContent = 'Join from the AirConsole app on your phones!';
+  net.start();
+
+  // Platform pause (AC menu / connection wobble) rides the same manual-pause
+  // walk the pause button drives — flow.pauseRace validates (live session,
+  // not already paused), and a host pause already standing simply wins: this
+  // resume only lifts what this flag set.
+  let acPaused = false;
+  ac.onPause = () => {
+    if (session && !paused) { acPaused = true; pauseRace(); }
+  };
+  ac.onResume = () => {
+    if (acPaused) { acPaused = false; resumeRace(); }
+  };
+
+  // The ad break itself is requested in showResults (final results only);
+  // here the music ducks for the ad's duration — resumeMusic no-ops when
+  // nothing was playing.
+  ac.onAdShow = () => { sfx(audioDecide.pauseMusic()); };
+  ac.onAdComplete = () => { sfx(audioDecide.resumeMusic()); };
 } else {
   // NEW GAME — reveal the (already-connecting) lobby. The listener and the
   // pre-boot half of the handshake live at the top of the file; here the click

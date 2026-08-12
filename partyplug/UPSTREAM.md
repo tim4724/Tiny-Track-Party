@@ -69,11 +69,17 @@ unexplained diff hunk. Update the hash in the same commit as the edit.
 
 | File | sha256 (ours) | Local delta |
 | --- | --- | --- |
+| `AirConsoleAdapter.js` | `bc91ccb31d7cca54` | none |
+| `AirConsoleAdapter.d.ts` | `b59c4d59d3edf6d8` | none |
+| `AirConsoleStorage.js` | `a6bb8320b1c598e2` | none |
+| `AirConsoleStorage.d.ts` | `0558e4cb30661ef9` | none |
 | `PartyConnection.js` | `a432dd641ccc449f` | comments only — the scalar-message note cites our `ttp_framing_classify` where upstream cites its Kotlin/Swift ports |
 | `PartyConnection.d.ts` | `81ea8d52afffa564` | none |
 | `PartyFastlane.js` | `ded18593c20e25d5` | exports `PartyFastlane.TICK_MS` so `scripts/gen-fastlane-corpus.mjs` stamps the real cadence instead of re-typing 50. Worth upstreaming |
 | `PartyFastlane.d.ts` | `777cb55352d4988b` | none |
 | `RoomFlow.d.ts` | `1d749261479089d5` | kept as the interface the C++ port implements, though `RoomFlow.js` is not here |
+| `tests/airconsole-adapter.test.js` | `6875e39512769536` | none |
+| `tests/airconsole-storage.test.js` | `a5c1c9e0c0d302b7` | none |
 | `tests/party-connection.test.js` | `7f8467c4673d2ed8` | comments only, same reason as `PartyConnection.js` |
 | `tests/party-fastlane.test.js` | `bb048dd7e480c164` | none — but ours is a **superset** upstream lacks (loss+retransmit loopback suite, the `'p2p'` return assert). Never clobber it wholesale |
 
@@ -82,8 +88,12 @@ unexplained diff hunk. Update the hash in the same commit as the edit.
 - `RoomFlow.js` — the room state machine is C++ here (`native/libttp-party`,
   adapter `public/display/NativeRoomFlow.js`), with the frozen behavioural
   corpus `tests/fixtures/roomflow-corpus.jsonl` as its oracle.
-- `AirConsoleAdapter.*`, `AirConsoleStorage.*`, `tests/airconsole-*.test.js` —
-  that platform was dropped. `package.json` and `README.md` are adapted to match.
+
+The AirConsole files (`AirConsoleAdapter.*`, `AirConsoleStorage.*`,
+`tests/airconsole-*.test.js`) were dropped 2026-06 (commit 50d6a05) and
+re-adopted verbatim 2026-08-12 when this game shipped to AirConsole. The
+TTP-specific glue (the `setStateFrame` bridge, the fastlane stub) lives in
+`public/display/` / `public/controller/`, not in the kit.
 
 ## What would actually end the drift
 

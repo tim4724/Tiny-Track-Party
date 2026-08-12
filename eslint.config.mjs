@@ -39,6 +39,7 @@ export default [
       '.claude/**',
       '.playwright-mcp/**',
       'test-results/**',
+      'build/**',                         // AirConsole zip staging (scripts/build-airconsole.sh)
       'native/**',                        // C++ tree; build dirs emit emscripten glue JS
       'public/display/engine/native/**',  // generated wasm artifacts (ttp_runtime.mjs — emscripten glue)
       'public/shared/qrcode-generator.js', // vendored verbatim; upstream style, not ours
@@ -56,6 +57,38 @@ export default [
       ecmaVersion: 'latest',
       sourceType: 'module',
       globals: browserGlobals,
+    },
+  },
+
+  // ── AirConsole classic scripts ────────────────────────────────────────────
+  // The two page bootstraps and the kit's AC modules are classic <script>s on
+  // the generated AC entries only: they read the SDK's global (AirConsole) and
+  // each other's (AirConsoleAdapter/AirConsoleStorage set themselves on window).
+  {
+    files: [
+      'partyplug/AirConsoleAdapter.js',
+      'partyplug/AirConsoleStorage.js',
+    ],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'script',
+      globals: { ...browserGlobals, AirConsole: 'readonly' },
+    },
+  },
+  {
+    files: [
+      'public/display/display-airconsole.js',
+      'public/controller/controller-airconsole.js',
+    ],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'script',
+      globals: {
+        ...browserGlobals,
+        AirConsole: 'readonly',
+        AirConsoleAdapter: 'readonly',
+        AirConsoleStorage: 'readonly',
+      },
     },
   },
 
