@@ -15,7 +15,7 @@ import { init as initNativeSim, NativeRaceSession } from './NativeRaceSession.js
 import { HUD_TICK_MS } from './Stage.js';
 import { AI_PERSONALITIES } from './aiPersonas.js';
 import { fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
-import { renderSeats, renderLobbyPick } from './lobbySeats.js';
+import { renderSeats, renderLobbyPick, renderCupShelf } from './lobbySeats.js';
 // The live results overlay and countdown banner. Driving the REAL renderers off
 // the REAL ui model (a synthesized board in, the same markup out) is what keeps
 // these previews from drifting — this file used to carry a second implementation
@@ -274,8 +274,18 @@ export function runDisplayScenario(opts, ctx) {
 
   // The lobby's cup slot, off the same renderLobbyPick the live lobby calls: a
   // PICK goes in, the model decides the whole card. null empties the slot.
+  // The synthesized progression dresses the card's stars and the shelf below —
+  // mid-game numbers (three cups starred, the Playroom still locked), so
+  // gallery-lobby.spec can pin dressings only the right payload produces.
+  const PREVIEW_SHELF = CUPS.map((c, i) => ({
+    id: c.id, name: c.name,
+    stars: [3, 2, 1, 0, 0][i] || 0,
+    locked: c.id === 'rooftop',
+    ...(c.id === 'rooftop' ? { unlockDone: 3, unlockNeed: 4 } : {})
+  }));
+  const PREVIEW_PROGRESS = { cups: PREVIEW_SHELF, tour: { stars: 1 } };
   const previewCatalog = TRACK_LIST.map((t) => ({ id: t.id, svg: TRACK_SCHEMATICS[t.id] }));
-  const showPick = (pick) => renderLobbyPick(el('cup-slot'), pick || {}, previewCatalog);
+  const showPick = (pick) => renderLobbyPick(el('cup-slot'), pick || {}, previewCatalog, PREVIEW_PROGRESS);
 
   // ?picked=<mode> → the pick the preview shows. A matching ?track=<id> aims the
   // card at that circuit (and its cup) so the card names what the 3D preview is
@@ -496,6 +506,8 @@ export function runDisplayScenario(opts, ctx) {
     // calls. Pair the card with a matching ?track=<id> so the orbiting preview
     // shows the circuit the card names.
     showPick(opts.picked ? previewPick(opts.picked) : null);
+    // The left rail's star shelf, off the same renderer as live play.
+    renderCupShelf(el('cup-shelf'), PREVIEW_SHELF);
     return;
   }
 

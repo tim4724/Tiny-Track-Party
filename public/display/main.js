@@ -10,7 +10,7 @@ import { DisplayNet, fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from
 import { Stage, HUD_TICK_MS } from './Stage.js';
 import { DEV_TRACKS } from '../shared/devTracks.js';
 import { LobbyDemo } from './LobbyDemo.js';
-import { renderSeats, renderLobbyPick } from './lobbySeats.js';
+import { renderSeats, renderLobbyPick, renderCupShelf } from './lobbySeats.js';
 import { createWakeLock } from '../shared/wakeLock.js';
 import { RaceAudio } from './Audio.js';
 // The native stack, stood up once in a fixed order (configure before read, world
@@ -716,8 +716,15 @@ function renderRoster(rosterSize, hostPeerIndex) {
 // gallery preview so the two cannot drift. The scan hint under the ticket stays
 // up for the whole lobby — joining is possible until the race starts.
 function renderPick() {
-  renderLobbyPick(el('cup-slot'), net.pick, trackCatalog);
+  renderLobbyPick(el('cup-slot'), net.pick, trackCatalog, progressChooser());
 }
+
+// The left rail's "Your cups" shelf, from the wasm-stamped catalogue. Refreshed
+// only when the record can have moved: boot (below) and the persist performer.
+function refreshCupShelf() {
+  if (!_isTestMode) renderCupShelf(el('cup-shelf'), ui.catalogue().cups);
+}
+refreshCupShelf();
 
 // Dropped-seat reconnect cards: a QR centred in each disconnected player's
 // split-screen cell (same placement as the FINISHED card) so they can scan — their
@@ -879,6 +886,7 @@ const RACE_PERFORMERS = {
   'persist-progression': (e) => {
     try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(e.progress)); } catch (_) {}
     net.setChooser({ progress: progressChooser() });
+    refreshCupShelf();
   }
 };
 

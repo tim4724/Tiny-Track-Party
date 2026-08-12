@@ -223,6 +223,37 @@ html, body {
   font-size: clamp(16px, 1.7vw, 25px); line-height: 1.1;
 }
 
+/* "Your cups" — the couch's star shelf, in flow under the ticket with enough
+   top margin to clear the absolutely-hung scan hint. COMPACT on purpose: a
+   two-column grid of short-name chips (renderCupShelf strips the " Cup"
+   suffix), because five full-width rows are taller than the left rail's
+   leftover band on a 16:9 screen. The locked cup trails its unlock count. */
+.cup-shelf {
+  /* Absolute like the scan hint, so the rail's height stays the ticket's and
+     the card keeps its centring; hung a step further down, past the hint. */
+  position: absolute; top: calc(100% + clamp(4.2rem, 7vh, 5rem));
+  left: 50%; transform: translateX(-50%);
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0.3rem;
+  width: min(92%, 290px);
+}
+.cup-shelf__label { grid-column: 1 / -1; justify-self: start; font-size: 0.58rem; }
+.cup-shelf__row {
+  display: flex; align-items: center; gap: 0.35rem; min-width: 0;
+  background: var(--surface); border: 2.5px solid var(--ink); border-radius: var(--r-pill);
+  padding: 0.16rem 0.6rem 0.16rem 0.5rem;
+  box-shadow: var(--shadow-pop);
+  font-family: var(--font-display); font-weight: 700;
+  font-size: clamp(11px, 1.05vw, 15px); color: var(--ink);
+}
+.cup-shelf__row .dot { width: 0.6rem; height: 0.6rem; }
+.cup-shelf__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cup-shelf__row .starrow { margin-left: auto; font-size: 0.78em; flex: none; }
+.cup-shelf__row .lock-glyph { width: 0.85em; height: 0.85em; flex: none; }
+.cup-shelf__row--locked { background: var(--surface-2); }
+.cup-shelf__row--locked b { margin-left: auto; font-size: 0.85em; }
+/* the cup slot's star badge, between the sticker and the minis */
+.cup-stars { font-size: clamp(14px, 1.5vw, 20px); }
+
 /* Seat dock (bottom-centre) — the joined headline over a horizontal row of
    sticker seat chips. Room is capped at 4 players, so the dock never wraps. */
 .lobby-foot {
@@ -745,6 +776,7 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
     animation-delay: 80ms;
   }
   .cup-slot__pick { animation-delay: 120ms; }
+  .cup-shelf { animation: sticker-slap 240ms cubic-bezier(0.2, 1.5, 0.35, 1) both; animation-delay: 140ms; }
   .lobby-foot { animation-delay: 160ms; }
 
   #results h2, .results-sub, .results-podium, #results-list li, .results-next, #results-newgame {
@@ -774,6 +806,8 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
   /* in the column the hint flows under the card instead of hanging over
      whatever comes next */
   .tagline { position: static; transform: rotate(-2deg); margin: 0.9rem auto 0; width: fit-content; }
+  /* the shelf follows the now-static hint in the column — no hung hint to clear */
+  .cup-shelf { position: static; transform: none; margin: 0.9rem auto 0; }
   .cup-slot { order: 3; width: min(84vw, 360px); max-width: none; }
   .lobby-foot { order: 4; }
   #players { flex-wrap: wrap; justify-content: center; }
