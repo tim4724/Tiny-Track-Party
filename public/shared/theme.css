@@ -283,6 +283,20 @@ body {
   border: 0.16em solid currentColor;
 }
 
+/* Star row — cup progression (built by starRow in shared/trackPicker.js): a row
+   of die-cut stars, filled = earned. RED on purpose — amber/gold is vetoed in
+   chrome, and celebration is red. Size by context via font-size. */
+.starrow { display: inline-flex; gap: 0.14em; line-height: 1; }
+.starrow .star { width: 1em; height: 1em; }
+.starrow .star path { fill: var(--red); stroke: var(--ink); stroke-width: 2.4; stroke-linejoin: round; }
+.starrow .star--off path { fill: #fff; opacity: 0.35; }
+
+/* Drawn padlock (lockGlyph in shared/trackPicker.js) — platform lock emoji are
+   coloured and clash with the sticker ink, so the theme draws its own. */
+.lock-glyph { width: 1em; height: 1em; }
+.lock-glyph path { fill: none; stroke: var(--ink); stroke-width: 2.6; stroke-linecap: round; }
+.lock-glyph rect { fill: var(--ink); }
+
 /* Dot — a livery colour swatch; set its background inline from CAR_COLORS. */
 .dot {
   width: 0.85rem;

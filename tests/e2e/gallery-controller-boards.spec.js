@@ -84,3 +84,37 @@ test('phone cup podium: cup-named final header, no quit hatch', async ({ page })
   await expect(page.locator('#newgame-btn')).toHaveText('New game');
   await expect(page.locator('#quitcup-btn')).toBeHidden();
 });
+
+// The RACE page's progression dressings — same contract as the boards above:
+// each assertion pins something only the right `progress` payload can produce
+// (a renamed field degrades to a starless, lock-less picker rather than throw).
+test('phone race page: the pick list carries stars; the first cup detail is open', async ({ page }) => {
+  await page.goto(`${CONTROLLER}lobby-race&color=1`);
+  await page.waitForSelector('.racelist .mode-opt');
+  // Cups in ladder order plus Random last — 6 rows for a 5-cup catalogue.
+  await expect(page.locator('.racelist .mode-opt')).toHaveCount(6);
+  // Stars only the payload can produce: Beach earned 3, Canyon none.
+  await expect(page.locator('.racelist .mode-opt', { hasText: 'Beach' })
+    .locator('.star:not(.star--off)')).toHaveCount(3);
+  await expect(page.locator('.racelist .mode-opt', { hasText: 'Canyon' })
+    .locator('.star:not(.star--off)')).toHaveCount(0);
+  // The locked row trails its unlock progress, not stars.
+  await expect(page.locator('.mode-opt--locked')).toContainText('3/4');
+  // The auto-picked first cup's detail: header name + its four named maps.
+  await expect(page.locator('.raceinfo__name')).toHaveText('Beach Cup');
+  await expect(page.locator('.modepick__tracks .track-opt')).toHaveCount(4);
+});
+
+test('phone race page: examining the locked cup swaps the detail for the unlock pitch', async ({ page }) => {
+  await page.goto(`${CONTROLLER}lobby-race-locked&color=1`);
+  await page.waitForSelector('.modepick__tracks--locked');
+  await expect(page.locator('.raceinfo__name')).toHaveText('Playroom Cup');
+  await expect(page.locator('.raceinfo__meta')).toContainText('Finish every cup');
+  // Per-cup checks: three done, one to go — only the payload knows which.
+  await expect(page.locator('.unlock-rules__row')).toHaveCount(4);
+  await expect(page.locator('.unlock-rules__row--todo')).toHaveCount(1);
+  await expect(page.locator('.unlock-rules__row--todo')).toContainText('Canyon');
+  await expect(page.locator('.unlock-rules__foot')).toHaveText('3 of 4 done');
+  // The pick itself is untouched: the locked row is the CURSOR, not the pick.
+  await expect(page.locator('.mode-opt--locked')).toHaveClass(/mode-opt--cursor/);
+});

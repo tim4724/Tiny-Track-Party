@@ -202,50 +202,122 @@ function cupMeter(level) {
   return meter;
 }
 
-// One compact mode tile (🎲 Random or a cup): name line (optional glyph), the
-// cup's tendency meter, and a small hint ("4 races" / "endless"). No track art —
-// the panel a picked cup opens below is where the tracks show.
-// `pickTint` is this tile's own colour, worn ONLY when it's the pick — at rest every
-// tile is white paper. Exactly ONE thing in the picker is ever `mine`: pick a track
-// and its cup hands the mark down to it.
-function modeTile({ label, glyph, sub, meter, mine, pickTint, canPick, onTap }) {
+// The couch's star badge — a row of `max` die-cut stars, `n` of them earned.
+// Shared with the display's lobby (theme.css owns the look; stars are RED —
+// amber is vetoed in chrome and celebration is red).
+export function starRow(n, max = 3) {
+  const row = document.createElement('span');
+  row.className = 'starrow';
+  row.setAttribute('aria-label', `${n} of ${max} stars`);
+  for (let i = 0; i < max; i++) {
+    const s = document.createElementNS(SVGNS, 'svg');
+    s.setAttribute('viewBox', '0 0 24 24');
+    s.setAttribute('class', 'star' + (i < n ? '' : ' star--off'));
+    s.setAttribute('aria-hidden', 'true');
+    const p = document.createElementNS(SVGNS, 'path');
+    p.setAttribute('d', 'M12 2.6l2.8 5.9 6.3.8-4.6 4.4 1.2 6.3L12 17l-5.7 3 1.2-6.3L2.9 9.3l6.3-.8z');
+    s.appendChild(p);
+    row.appendChild(s);
+  }
+  return row;
+}
+
+// A drawn padlock (no emoji: platform lock glyphs are coloured and clash with
+// the sticker ink). Shared with the display's shelf, like starRow.
+export function lockGlyph() {
+  const s = document.createElementNS(SVGNS, 'svg');
+  s.setAttribute('viewBox', '0 0 24 24');
+  s.setAttribute('class', 'lock-glyph');
+  s.setAttribute('aria-hidden', 'true');
+  const shackle = document.createElementNS(SVGNS, 'path');
+  shackle.setAttribute('d', 'M7 11V8a5 5 0 0 1 10 0v3');
+  const body = document.createElementNS(SVGNS, 'rect');
+  body.setAttribute('x', '5'); body.setAttribute('y', '10.5');
+  body.setAttribute('width', '14'); body.setAttribute('height', '10.5');
+  body.setAttribute('rx', '2.6');
+  s.appendChild(shackle);
+  s.appendChild(body);
+  return s;
+}
+
+// One row of the pick LIST (left column): the name leading, the trail (stars /
+// run hint / lock progress) trailing. `mine` marks the current pick's row with
+// its own colour; `cursor` marks whose detail the right panel is showing — the
+// two usually coincide, but a locked row can be examined without being picked.
+function listRow({ label, trail, locked, mine, cursor, pickTint, canPick, onTap }) {
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = 'mode-opt' + (mine ? ' mode-opt--mine' : '');
+  btn.className = 'mode-opt' + (mine ? ' mode-opt--mine' : '')
+    + (cursor ? ' mode-opt--cursor' : '') + (locked ? ' mode-opt--locked' : '');
   if (mine) {
     btn.setAttribute('aria-current', 'true');
     if (pickTint) btn.style.background = pickTint;
   }
   btn.setAttribute('aria-label', label);
   btn.disabled = !canPick;
+  if (locked) btn.appendChild(lockGlyph());
   const lab = document.createElement('span');
   lab.className = 'mode-opt__name';
-  if (glyph) {
-    const g = document.createElement('span');
-    g.setAttribute('aria-hidden', 'true');
-    g.textContent = `${glyph} `;
-    lab.appendChild(g);
-  }
-  lab.append(label);
+  lab.textContent = label;
   btn.appendChild(lab);
-  if (meter) btn.appendChild(meter);
-  const hint = document.createElement('span');
-  hint.className = 'mode-opt__sub';
-  hint.textContent = sub;
-  btn.appendChild(hint);
+  if (trail) btn.appendChild(trail);
   if (canPick && onTap) btn.addEventListener('click', onTap);
   return btn;
 }
 
-// Render the picker into `stripEl`.
+const subSpan = (text) => {
+  const s = document.createElement('span');
+  s.className = 'mode-opt__sub';
+  s.textContent = text;
+  return s;
+};
+
+// The detail panel's header: name (+stars), the cup meter far right, and one
+// small meta line. Both the cup and the random panels wear one, at the same
+// height, so switching families moves nothing below it.
+function detailHeader({ title, starsEl, meter, meta }) {
+  const head = document.createElement('div');
+  head.className = 'raceinfo';
+  const row = document.createElement('div');
+  row.className = 'raceinfo__title';
+  const nm = document.createElement('span');
+  nm.className = 'raceinfo__name';
+  nm.textContent = title;
+  row.appendChild(nm);
+  if (starsEl) row.appendChild(starsEl);
+  if (meter) row.appendChild(meter);
+  head.appendChild(row);
+  const m = document.createElement('div');
+  m.className = 'raceinfo__meta';
+  m.textContent = meta || '';
+  head.appendChild(m);
+  return head;
+}
+
+// Render the picker into `stripEl` — a pick LIST on the left (the cups in
+// ladder order, the locked Playroom in place, Random last) and a DETAIL panel
+// on the right describing whatever the cursor rests on: a cup's stars,
+// difficulty and four named maps (tap one for a single race), the locked cup's
+// unlock rules, or Random's run lengths with the World Tour beside them.
 //   catalog   : [{ id, name, svg, cup, cupName, cupDifficulty }] (from the display)
+//   progress  : the snapshot's progress key — {cups:[{id,stars,locked,
+//               unlockDone?,unlockNeed?}], tour:{stars}} | null (absent = a
+//               fresh couch drawn starless and nothing locked phone-side; the
+//               display enforces the real lock either way)
 //   selection : {mode:'track'|'cup'|'random'|'tour', trackId?, cupId?, randomRaces?} | null
+//   highlight : which list row the detail panel describes ('random' or a cup
+//               id) | null — null follows the selection. Owned by the CALLER:
+//               a locked row can be examined without being picked, which is
+//               the one place cursor and pick part ways.
 //   canPick   : whether taps are live (host only)
 //   onPickMode: ({mode, trackId?, cupId?, randomRaces?}) => void — every
 //               random-family tap fires, same pick or not: each one deals fresh
 //               track(s) on the display, so don't filter them.
+//   onHighlight: (rowId) => void — a row was tapped; re-render with it as
+//               `highlight`.
 // A catalog whose entries predate cups collapses to a flat grid of exact picks.
-export function buildModePicker({ stripEl, catalog, selection, canPick, onPickMode }) {
+export function buildModePicker({ stripEl, catalog, progress, selection, highlight,
+                                  canPick, onPickMode, onHighlight }) {
   if (!stripEl) return;
   stripEl.innerHTML = '';
   const list = catalog || [];
@@ -271,17 +343,19 @@ export function buildModePicker({ stripEl, catalog, selection, canPick, onPickMo
     return;
   }
 
-  // Which cup's exact-track panel is open: the picked cup, or the cup owning an
-  // exact-picked track. Derived, not stored — every tap that changes it changes
-  // the selection too. Random keeps the panel closed.
-  const ownerOf = (id) => { const t = list.find((x) => x.id === id); return t ? t.cup : null; };
-  const expanded = sel.mode === 'cup' ? sel.cupId : sel.mode === 'track' ? ownerOf(sel.trackId) : null;
+  // The couch's progression, absent-tolerant: a fresh couch draws starless.
+  const progressCups = (progress && progress.cups) || [];
+  const progressOf = (id) => progressCups.find((c) => c.id === id) || null;
+  const lockedOf = (id) => { const p = progressOf(id); return !!(p && p.locked); };
+  const starsOf = (id) => { const p = progressOf(id); return p ? p.stars : 0; };
 
-  // Random and the World Tour are one FAMILY: both live on the 🎲 tile, whose
+  const ownerOf = (id) => { const t = list.find((x) => x.id === id); return t ? t.cup : null; };
+
+  // Random and the World Tour are one FAMILY: both live on the 🎲 row, whose
   // panel offers the run lengths and the tour side by side.
   const randomFamily = sel.mode === 'random' || sel.mode === 'tour';
   // The length a Random tap carries: whatever it's already set to, so tapping
-  // the main tile re-rolls the draw without also resetting the run's shape. A
+  // the main row re-rolls the draw without also resetting the run's shape. A
   // selection with no length at all (a phone whose stored pick predates them, or
   // a tour pick — the display echoes the tour's own race count, which is not a
   // run length) takes the default, so 0 has to be tested for rather than
@@ -289,87 +363,117 @@ export function buildModePicker({ stripEl, catalog, selection, canPick, onPickMo
   const randomRaces = sel.mode === 'random' && Number.isInteger(sel.randomRaces)
     ? sel.randomRaces : randomDefaultRaces();
 
-  const grid = document.createElement('div');
-  grid.className = 'modepick';
+  // Whose detail the right panel shows: the caller's cursor, else the pick's
+  // own row, else the first unlocked cup (a fresh host lobby).
+  const rowOfSel = sel.mode === 'cup' ? sel.cupId
+    : sel.mode === 'track' ? ownerOf(sel.trackId)
+      : randomFamily ? 'random' : null;
+  const firstOpen = groups.find((g) => !lockedOf(g.id));
+  const cursor = highlight || rowOfSel || (firstOpen ? firstOpen.id : 'random');
+  const focus = (id) => { if (onHighlight && id !== cursor) onHighlight(id); };
 
+  const cols = document.createElement('div');
+  cols.className = 'racecols';
+
+  // ---- the pick list ----------------------------------------------------------
+  const listEl = document.createElement('div');
+  listEl.className = 'racelist';
   for (const g of groups) {
-    grid.appendChild(modeTile({
-      label: g.name, sub: `${g.items.length} races`,
-      meter: g.diff != null ? cupMeter(g.diff) : null,
-      // Picked only when the CUP itself is the pick: picking one of its TRACKS hands
-      // the mark down to that track tile and leaves this one white. The panel standing
-      // open below is what shows where the pick came from, so the cup neither needs
-      // nor should wear a mark of its own.
-      mine: sel.mode === 'cup' && sel.cupId === g.id,
+    const locked = lockedOf(g.id);
+    const p = progressOf(g.id);
+    listEl.appendChild(listRow({
+      label: g.name,
+      // A locked row trails its unlock progress; an open one its stars.
+      trail: locked ? subSpan(`${(p && p.unlockDone) || 0}/${(p && p.unlockNeed) || 0}`)
+        : starRow(starsOf(g.id)),
+      locked,
+      // Picked only when the cup (or one of its tracks) IS the pick.
+      mine: !locked && rowOfSel === g.id,
+      cursor: cursor === g.id,
       pickTint: cupTint(g.id, PICK_TINT),
       canPick,
-      onTap: () => pick({ mode: 'cup', cupId: g.id })
+      // A locked row can be EXAMINED (the detail panel becomes the unlock
+      // pitch) but never picked — the display would refuse it anyway.
+      onTap: () => { focus(g.id); if (!locked) pick({ mode: 'cup', cupId: g.id }); }
     }));
   }
-
   // Random sits AFTER the cups: the cups are the game's own ladder and read in
-  // difficulty order, so a tile in front of them cut that order in half. Last, it
-  // reads as what it is — the thing you reach for once the five named cups aren't
+  // difficulty order, so a row in front of them cut that order in half. Last, it
+  // reads as what it is — the thing you reach for once the named cups aren't
   // what you want.
-  grid.appendChild(modeTile({
-    label: 'Random', glyph: '🎲', sub: sel.mode === 'random' ? randomSub(randomRaces) : TOUR_LABEL.toLowerCase(),
+  listEl.appendChild(listRow({
+    label: '🎲 Random',
+    trail: subSpan(sel.mode === 'random' ? randomSub(randomRaces) : TOUR_LABEL.toLowerCase()),
     mine: randomFamily,
-    // Belonging to no cup, it has no colour of its own — a neutral grey stands in so it
-    // still wears the same fill-and-drop mark the cups do.
+    cursor: cursor === 'random',
+    // Belonging to no cup, it has no colour of its own — a neutral grey stands
+    // in so it still wears the same fill-and-drop mark the cups do.
     pickTint: towardWhite(NEUTRAL_COLOR, PICK_TINT),
     canPick,
-    // From outside the family the tile lands on its DEFAULT, the World Tour.
+    // From outside the family the row lands on its DEFAULT, the World Tour.
     // Inside it, it re-sends the current pick — which, like every family tap,
     // deals fresh track(s) on the display.
-    onTap: () => pick(sel.mode === 'random'
-      ? { mode: 'random', randomRaces }
-      : { mode: 'tour' })
+    onTap: () => {
+      focus('random');
+      pick(sel.mode === 'random' ? { mode: 'random', randomRaces } : { mode: 'tour' });
+    }
   }));
-  stripEl.appendChild(grid);
+  cols.appendChild(listEl);
 
-  // A picked Random opens a panel of its own, in the same slot, the same inset
-  // surface AND the same tile grid a cup's four tracks open into — four tiles
-  // in a row, each a "?" square where a schematic would sit, so swapping a cup
-  // for Random moves nothing on the phone. Where a cup panel asks WHICH track,
-  // this one asks WHAT KIND OF RUN: the tour (the tile's default, so it leads),
-  // then the two lengths and endless.
-  if (randomFamily) {
-    const panel = document.createElement('div');
-    panel.className = 'modepick__tracks';
+  // ---- the detail panel -------------------------------------------------------
+  // ONE surface (.modepick__tracks) whatever the cursor rests on, with the same
+  // header + four-tile anatomy for the cup and random families — so switching
+  // rows moves nothing on the phone. The locked cup swaps the grid for the
+  // unlock rules.
+  const detail = document.createElement('div');
+  detail.className = 'racedetail';
+  const panel = document.createElement('div');
+  panel.className = 'modepick__tracks';
+
+  const qTile = ({ label, glyph, mine, onTap }) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'track-opt' + (mine ? ' track-opt--mine' : '');
+    if (mine) {
+      btn.setAttribute('aria-current', 'true');
+      btn.style.background = towardWhite(NEUTRAL_COLOR, PICK_TINT);
+    }
+    btn.setAttribute('aria-label', label);
+    btn.disabled = !canPick;
+    const box = document.createElement('span');
+    box.className = 'track-map track-map--q';
+    box.style.background = towardWhite(NEUTRAL_COLOR, FIELD_TINT);
+    if (glyph) {
+      const g = document.createElement('span');
+      g.textContent = glyph;
+      box.appendChild(g);
+    } else {
+      // No glyph = the tour's ring, DRAWN rather than typed: no circle
+      // codepoint matches the ∞'s ink weight across the fonts phones fall
+      // back to, so the theme draws one that does (.track-map--q > i).
+      box.appendChild(document.createElement('i'));
+    }
+    btn.appendChild(box);
+    const lab = document.createElement('span');
+    lab.className = 'track-opt__name';
+    lab.textContent = label;
+    btn.appendChild(lab);
+    if (canPick && onTap) btn.addEventListener('click', onTap);
+    return btn;
+  };
+
+  if (cursor === 'random') {
     panel.style.background = towardWhite(NEUTRAL_COLOR, PANEL_TINT);
+    panel.appendChild(detailHeader({
+      title: sel.mode === 'tour' ? TOUR_LABEL : 'Random',
+      // The tour's own badge (it banks like a cup) shows while the tour is the
+      // pick; plain Random has no stars to wear.
+      starsEl: sel.mode === 'tour' ? starRow((progress && progress.tour && progress.tour.stars) || 0) : null,
+      meta: sel.mode === 'tour' ? 'One track from every unlocked cup, in cup order'
+        : 'Any unlocked track, dealt by the dice'
+    }));
     const tgrid = document.createElement('div');
     tgrid.className = 'trackpick__grid';
-    const qTile = ({ label, glyph, mine, onTap }) => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'track-opt' + (mine ? ' track-opt--mine' : '');
-      if (mine) {
-        btn.setAttribute('aria-current', 'true');
-        btn.style.background = towardWhite(NEUTRAL_COLOR, PICK_TINT);
-      }
-      btn.setAttribute('aria-label', label);
-      btn.disabled = !canPick;
-      const box = document.createElement('span');
-      box.className = 'track-map track-map--q';
-      box.style.background = towardWhite(NEUTRAL_COLOR, FIELD_TINT);
-      if (glyph) {
-        const g = document.createElement('span');
-        g.textContent = glyph;
-        box.appendChild(g);
-      } else {
-        // No glyph = the tour's ring, DRAWN rather than typed: no circle
-        // codepoint matches the ∞'s ink weight across the fonts phones fall
-        // back to, so the theme draws one that does (.track-map--q > i).
-        box.appendChild(document.createElement('i'));
-      }
-      btn.appendChild(box);
-      const lab = document.createElement('span');
-      lab.className = 'track-opt__name';
-      lab.textContent = label;
-      btn.appendChild(lab);
-      if (canPick && onTap) btn.addEventListener('click', onTap);
-      return btn;
-    };
     tgrid.appendChild(qTile({
       // No glyph: the tour wears the drawn ring — a plain circle in the same
       // ink family as ? and ∞, where the globe emoji clashed with the sticker
@@ -386,25 +490,60 @@ export function buildModePicker({ stripEl, catalog, selection, canPick, onPickMo
       }));
     }
     panel.appendChild(tgrid);
-    stripEl.appendChild(panel);
-  }
-
-  const openCup = expanded != null ? byCup.get(expanded) : null;
-  if (openCup) {
-    const panel = document.createElement('div');
-    panel.className = 'modepick__tracks';
-    // The cup's colour, and the panel is the only place it shows when the pick is one
-    // of the TRACKS (that hands the mark down, leaving the cup tile white) — so this
-    // wash is what ties the four tracks back to the cup they belong to. Pitched between
-    // the white tiles on it and the louder fill of the picked one.
-    panel.style.background = cupTint(openCup.id, PANEL_TINT);
+  } else if (lockedOf(cursor)) {
+    const g = byCup.get(cursor);
+    const p = progressOf(cursor) || {};
+    panel.classList.add('modepick__tracks--locked');
+    panel.appendChild(detailHeader({
+      title: g ? g.name : cursor,
+      meta: 'Finish every cup\'s Grand Prix to unlock the stunt cup.'
+    }));
+    const rules = document.createElement('div');
+    rules.className = 'unlock-rules';
+    for (const g2 of groups) {
+      if (g2.id === cursor) continue;
+      const row = document.createElement('div');
+      row.className = 'unlock-rules__row' + (starsOf(g2.id) > 0 ? '' : ' unlock-rules__row--todo');
+      const dot = document.createElement('i');
+      dot.className = 'dot';
+      dot.style.background = cupTint(g2.id, 100);
+      row.appendChild(dot);
+      const nm = document.createElement('span');
+      nm.textContent = g2.name;
+      row.appendChild(nm);
+      const mark = document.createElement('b');
+      mark.textContent = starsOf(g2.id) > 0 ? '✓' : '';
+      row.appendChild(mark);
+      rules.appendChild(row);
+    }
+    const foot = document.createElement('div');
+    foot.className = 'unlock-rules__foot';
+    foot.textContent = `${p.unlockDone || 0} of ${p.unlockNeed || 0} done`;
+    rules.appendChild(foot);
+    panel.appendChild(rules);
+  } else {
+    const g = byCup.get(cursor);
+    // The cup's colour washes the panel — the one place it shows when the pick
+    // is one of the TRACKS (that hands the mark down, leaving the row white).
+    panel.style.background = cupTint(cursor, PANEL_TINT);
+    panel.appendChild(detailHeader({
+      title: g ? g.name : cursor,
+      starsEl: starRow(starsOf(cursor)),
+      meter: g && g.diff != null ? cupMeter(g.diff) : null,
+      meta: `Grand Prix · ${g ? g.items.length : 0} races`
+    }));
     const tgrid = document.createElement('div');
     tgrid.className = 'trackpick__grid';
-    for (const t of openCup.items) {
-      tgrid.appendChild(trackTile(t, sel.mode === 'track' && t.id === sel.trackId, canPick,
-        (id) => pick({ mode: 'track', trackId: id })));
+    if (g) {
+      for (const t of g.items) {
+        tgrid.appendChild(trackTile(t, sel.mode === 'track' && t.id === sel.trackId, canPick,
+          (id) => pick({ mode: 'track', trackId: id })));
+      }
     }
     panel.appendChild(tgrid);
-    stripEl.appendChild(panel);
   }
+
+  detail.appendChild(panel);
+  cols.appendChild(detail);
+  stripEl.appendChild(cols);
 }

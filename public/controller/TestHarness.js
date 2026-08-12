@@ -60,15 +60,40 @@ export function runControllerScenario(opts) {
     });
   }
 
+  // The couch progression a preview lobby carries — the snapshot's `progress`
+  // shape, synthesized mid-game: two starred cups, the Playroom still locked.
+  // (gallery-controller-boards.spec pins the dressings only this shape can
+  // produce, per the harness rule.)
+  const PREVIEW_PROGRESS = {
+    cups: [
+      { id: 'beach', stars: 3, locked: false },
+      { id: 'snow', stars: 2, locked: false },
+      { id: 'backyard', stars: 1, locked: false },
+      { id: 'canyon', stars: 0, locked: false },
+      { id: 'rooftop', stars: 0, locked: true, unlockDone: 3, unlockNeed: 4 }
+    ],
+    tour: { stars: 1 }
+  };
+
+  // The CAR | RACE tab strip + page state — mirrors main.js renderLobbyTabs.
+  function setLobbyPage(tab, isHost) {
+    el('lobby-tabs').classList.toggle('hidden', !isHost);
+    el('lobby').classList.toggle('lobby--race', isHost && tab === 'race');
+    el('tab-car').setAttribute('aria-selected', String(tab === 'car'));
+    el('tab-race').setAttribute('aria-selected', String(tab === 'race'));
+  }
+
   // Mode picker — mirrors main.js renderModePicker: host only (non-host lobby
-  // has no picker at all). Host taps re-render so the gallery shows the ring
-  // move / the tapped cup's exact-pick panel open live.
-  function renderModePicker(selection, canPick) {
+  // has no picker at all), on the RACE page. Taps re-render so the gallery
+  // shows the pick move / the detail panel swap live, cursor included.
+  function renderModePicker(selection, canPick, highlight = null) {
     if (!canPick) { el('trackpick').classList.add('hidden'); return; }
     el('trackpick').classList.remove('hidden');
     buildModePicker({
-      stripEl: el('track-strip'), catalog: PREVIEW_TRACKS, selection, canPick: true,
-      onPickMode: (pick) => renderModePicker(pick, true)
+      stripEl: el('track-strip'), catalog: PREVIEW_TRACKS, progress: PREVIEW_PROGRESS,
+      selection, highlight, canPick: true,
+      onPickMode: (pick) => renderModePicker(pick, true),
+      onHighlight: (rowId) => renderModePicker(selection, true, rowId)
     });
   }
   // The auto-picked default a host lobby opens with (mirrors maybeAutoSelectMode).
@@ -79,11 +104,11 @@ export function runControllerScenario(opts) {
   // shows the held-down "Ready ✓" + waiting note live — and re-renders the car
   // picker locked while ready (mirrors main.js renderLobby); the host's "Start
   // race" button just renders (no race to start here).
-  function renderReadyPreview(amHost, amReady, host, others) {
-    renderReadyFoot(el('ready-btn'), el('ready-note'), { amHost, amReady, canStart: true, host, others });
+  function renderReadyPreview(amHost, amReady, host, others, tab = 'car') {
+    renderReadyFoot(el('ready-btn'), el('ready-note'), { amHost, amReady, tab, canStart: true, host, others });
     if (!amHost) {
       renderCarPicker(carSel, !amReady);
-      el('ready-btn').onclick = () => renderReadyPreview(amHost, !amReady, host, others);
+      el('ready-btn').onclick = () => renderReadyPreview(amHost, !amReady, host, others, tab);
     }
   }
 
@@ -144,20 +169,48 @@ export function runControllerScenario(opts) {
       break;
 
     case 'lobby-host':
+      // The host's CAR page: tabs up top, the picker waiting on the RACE tab,
+      // the stepper saying "Select race".
       show('lobby');
       el('me-name').textContent = FAKE_NAMES[color];
+      setLobbyPage('car', true);
       renderCarPicker(color); // default pick mirrors the livery slot
-      renderModePicker(DEFAULT_MODE, true); // host enters with the first cup auto-picked
-      // Everyone else is already ready, so the host's "Start race" is enabled.
+      renderModePicker(null, false); // the picker lives on the RACE page
       renderReadyPreview(true, false, null, [
         { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], color: COLORS[(color + 1) % COLORS.length], ready: true },
         { name: FAKE_NAMES[(color + 2) % FAKE_NAMES.length], color: COLORS[(color + 2) % COLORS.length], ready: true }
-      ]);
+      ], 'car');
+      break;
+
+    case 'lobby-race':
+      // The host's RACE page: the pick list with its stars, the auto-picked
+      // first cup's detail open, everyone ready so Start is live.
+      show('lobby');
+      el('me-name').textContent = FAKE_NAMES[color];
+      setLobbyPage('race', true);
+      renderModePicker(DEFAULT_MODE, true);
+      renderReadyPreview(true, false, null, [
+        { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], color: COLORS[(color + 1) % COLORS.length], ready: true },
+        { name: FAKE_NAMES[(color + 2) % FAKE_NAMES.length], color: COLORS[(color + 2) % COLORS.length], ready: true }
+      ], 'race');
+      break;
+
+    case 'lobby-race-locked':
+      // The locked Playroom examined: the detail panel is the unlock pitch
+      // (rules + per-cup checks), the pick itself untouched.
+      show('lobby');
+      el('me-name').textContent = FAKE_NAMES[color];
+      setLobbyPage('race', true);
+      renderModePicker(DEFAULT_MODE, true, 'rooftop');
+      renderReadyPreview(true, false, null, [
+        { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], color: COLORS[(color + 1) % COLORS.length], ready: true }
+      ], 'race');
       break;
 
     case 'lobby-waiting':
       show('lobby');
       el('me-name').textContent = FAKE_NAMES[color];
+      setLobbyPage('car', false);
       renderCarPicker(color);
       renderModePicker(null, false); // non-host: no picker (the big screen shows the pick)
       // Already readied up and so is everyone else, so the note shows the
@@ -179,11 +232,12 @@ export function runControllerScenario(opts) {
       el('me-name').textContent = FAKE_NAMES[color];
       // both mode cards' demo phones show the player's name (mirrors openSettings)
       for (const n of document.querySelectorAll('.phone-name')) n.textContent = FAKE_NAMES[color];
+      setLobbyPage('car', true);
       renderCarPicker(color);
-      renderModePicker(DEFAULT_MODE, true);
+      renderModePicker(null, false);   // the host's CAR page sits behind the popup
       renderReadyPreview(true, false, null, [
         { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], color: COLORS[(color + 1) % COLORS.length], ready: true }
-      ]);
+      ], 'car');
       const buttons = scenario === 'settings-buttons';
       el('settings-card').classList.toggle('is-buttons', buttons);
       el('input-tilt').setAttribute('aria-checked', String(!buttons));
@@ -200,11 +254,12 @@ export function runControllerScenario(opts) {
       // drift from the live text.
       show('lobby');
       el('me-name').textContent = FAKE_NAMES[color];
+      setLobbyPage('car', true);
       renderCarPicker(color);
-      renderModePicker(DEFAULT_MODE, true);
+      renderModePicker(null, false);   // the host's CAR page sits behind the popup
       renderReadyPreview(true, false, null, [
         { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], color: COLORS[(color + 1) % COLORS.length], ready: true }
-      ]);
+      ], 'car');
       const copy = motionHelpCopy('denied');
       el('motion-title').textContent = copy.title;
       el('motion-status').textContent = copy.status;
@@ -223,6 +278,7 @@ export function runControllerScenario(opts) {
       // (mirrors main.js renderLobby's waitingForNextRace branch).
       show('lobby');
       el('me-name').textContent = FAKE_NAMES[color];
+      setLobbyPage('car', false);   // mid-race joiner: no tabs, no race page
       renderCarPicker(color);
       renderModePicker(null, false);
       el('ready-btn').classList.add('hidden');

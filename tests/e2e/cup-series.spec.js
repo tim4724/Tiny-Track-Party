@@ -133,6 +133,7 @@ test('Random runs an endless series of drawn tracks until the host ends it', asy
   // lands on the World Tour (the tile's default), and opens the panel for the
   // endless run.
   await page.waitForFunction(() => window.__net.mode === 'cup', null, { timeout: 10000 });
+  await alice.click('#tab-race');   // the picker lives on the host's RACE page
   await alice.locator('.mode-opt', { hasText: 'Random' }).click();
   await page.waitForFunction(() => window.__net.mode === 'tour' && window.__net.trackId != null, null, { timeout: 10000 });
   await alice.locator('.modepick__tracks .track-opt', { hasText: 'Endless' }).click();
@@ -179,6 +180,7 @@ test('every random tap deals a fresh draw; the fixed cards stay secret', async (
   const alice = await joinController(browser, roomCode, 'Alice');
   const trackNow = () => page.evaluate(() => window.__net.trackId);
   await page.waitForFunction(() => window.__net.mode === 'cup', null, { timeout: 10000 });
+  await alice.click('#tab-race');   // the picker lives on the host's RACE page
   await alice.locator('.mode-opt', { hasText: 'Random' }).click();
   await page.waitForFunction(() => window.__net.mode === 'tour', null, { timeout: 10000 });
   await alice.locator('.modepick__tracks .track-opt', { hasText: '4 races' }).click();
@@ -238,9 +240,10 @@ test('World Tour draws one track per cup and races them in cup order', async ({ 
   const roomCode = await openDisplay(page);
   const alice = await joinController(browser, roomCode, 'Alice');
   await page.waitForFunction(() => window.__net.mode === 'cup', null, { timeout: 10000 });
-  // The auto-picked cup's track panel is open; remember its height — Random's
-  // run panel must occupy the exact same space (same grid, same tile anatomy),
-  // so switching families moves nothing on the phone.
+  await alice.click('#tab-race');   // the picker lives on the host's RACE page
+  // The auto-picked cup's detail panel is open; remember its height — Random's
+  // run panel must occupy the exact same space (same header, same grid, same
+  // tile anatomy), so switching rows moves nothing on the phone.
   await alice.waitForSelector('.modepick__tracks .track-opt');
   const cupPanelH = await alice.evaluate(() => document.querySelector('.modepick__tracks').offsetHeight);
   // The 🎲 tile's DEFAULT is the tour — one tap from a cup lands on it.

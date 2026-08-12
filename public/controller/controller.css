@@ -116,7 +116,32 @@ input[type=text]:disabled { opacity: 0.6; }
     'go  go';
   column-gap: 1.1rem; row-gap: 0.5rem;
 }
-.lobby-top { grid-area: top; display: flex; align-items: center; gap: 0.8rem; }
+.lobby-top { grid-area: top; display: flex; align-items: center; gap: 0.8rem; position: relative; }
+/* CAR | RACE — the host's page strip, dead centre of the ribbon (absolute, so
+   the name chip's width never nudges it). Segmented pill: the active page is
+   an ink fill, exactly the .pill treatment. */
+.lobby-tabs {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  display: flex; background: var(--surface);
+  border: 3px solid var(--ink); border-radius: var(--r-pill); overflow: hidden;
+  box-shadow: var(--shadow-pop);
+}
+.lobby-tabs button {
+  font-family: var(--font-display); font-weight: 700; font-size: 0.78rem;
+  letter-spacing: 0.05em; padding: 0.34em 1.1em; border: 0;
+  background: transparent; color: var(--ink); cursor: pointer;
+}
+.lobby-tabs button[aria-selected="true"] { background: var(--ink); color: #fff; }
+/* The RACE page: the picker owns the full width; the car column waits on the
+   other tab. (The CAR page is the existing :has collapse below — a hidden
+   picker IS the car page.) */
+#lobby.lobby--race {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'top' 'race' 'go';
+}
+#lobby.lobby--race .lobby-car { display: none; }
+/* The stepper's forward face ("Select race") — blue, so brand green stays "go". */
+.btn--step { --btn-bg: var(--blue); }
 /* The columns are SCROLL CONTAINERS, so they carry the shadow room themselves:
    padding + matching negative margin (content stays on the grid tracks, the
    tiles' shadow-pop lands in the padding instead of being clipped). A bleed on
@@ -251,51 +276,66 @@ input[type=text]:disabled { opacity: 0.6; }
    CAR_COLORS), heavier weight so the colour reads as intentional. */
 .host-name { font-weight: 800; }
 
-/* ---- mode picker (track / cup / random) ----
-   Five big tiles — 🎲 Random + one per cup — instead of a scrolling 16-track
-   strip; the picked cup opens a panel of its 4 exact-pick map tiles below.
-   Host only (everyone else sees the pick on the big screen). */
-.trackpick { margin: 0; }
-/* the strip stacks the mode grid over the open cup's track panel (the scroll
-   column .lobby-race carries the shadow room, so no bleed) */
-.trackpick__strip { display: flex; flex-direction: column; gap: 0.55rem; }
-.modepick {
-  /* fixed 3-up: five cups + Random land as an even 3×2, no ragged tail row */
-  display: grid; grid-template-columns: repeat(3, 1fr);
-  gap: 0.5rem;
-}
-/* compact tiles — name + tendency meter + hint; the tracks themselves show in
-   the panel the picked cup opens below. At rest a tile is plain white paper inside a
-   thick ink outline, exactly like an unpicked car in the strip above; only the picked
-   one takes a fill (painted inline by buildModePicker). Thinning the outline on
-   unpicked tiles was tried instead — it faded the whole picker next to those cars. */
+/* ---- mode picker: the RACE page (pick list + detail panel) ----
+   The host's second lobby page: every pick as a ROW on the left (cups in
+   ladder order with their stars, the locked Playroom in place, 🎲 Random
+   last), and a detail panel on the right describing whatever the cursor rests
+   on. Host only (everyone else sees the pick on the big screen). */
+.trackpick { margin: 0; display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.trackpick__strip { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.racecols { display: flex; gap: 0.7rem; align-items: stretch; min-height: 0; flex: 1; }
+.racelist { flex: 0 0 44%; display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
+/* A row is plain white paper in a thick ink outline, like an unpicked car tile;
+   the picked one fills with its own colour (painted inline — the fill IS the
+   cup, so the mark and the identity are the same stroke; see .car-opt--mine for
+   why no chrome ring). */
 .mode-opt {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.2rem;
-  cursor: pointer; padding: 0.3rem 0.4rem;
+  flex: 1; display: flex; align-items: center; gap: 0.45rem; min-height: 2rem;
+  cursor: pointer; padding: 0.24rem 0.7rem;
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r-sm);
   box-shadow: var(--shadow-pop);
   transition: transform 0.08s, box-shadow 0.08s, background 0.08s;
 }
 .mode-opt:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: none; }
 .mode-opt:disabled { cursor: default; }
-/* ONE picked look across the whole picker (see .track-opt--mine), and it's the one
-   the lobby already uses a row above (.car-opt--mine): the tile fills with its own
-   colour, and that fill is the WHOLE mark. The drop stays exactly as it is on every
-   other tile — it belongs to being pressable, not to being picked, and a taller one
-   would say "picked" in a second language the fill is already saying. No chrome
-   colour is dragged in either, which is what made the old green ring shout green and
-   fight the cup colour under it — the fill IS the cup, so the mark and the identity
-   are the same stroke. The fill itself is painted inline by buildModePicker, so
-   --mine carries no rule of its own here beyond the text contrast below.
-   the hint is muted for scanning past on white paper; on a loud fill that muting
-   turns into poor contrast, so a picked tile takes it back up */
+/* The CURSOR (whose detail shows) when it is not also the pick — the one case
+   is a locked row being examined. Same outline mark as the car strip's .sel. */
+.mode-opt--cursor:not(.mode-opt--mine) { outline: 3px solid var(--ink); outline-offset: 2px; }
+/* Locked: sunken paper, the name recedes, the trail shows unlock progress. */
+.mode-opt--locked { background: var(--surface-2); }
+.mode-opt--locked .mode-opt__name { opacity: 0.85; }
 .mode-opt--mine .mode-opt__sub { color: var(--ink-2); }
 .mode-opt__name {
   font-family: var(--font-display); font-weight: 700; font-size: 0.8rem;
-  color: var(--ink); max-width: 100%;
+  color: var(--ink); min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.mode-opt__sub { font-weight: 800; font-size: 0.62rem; color: var(--ink-3); }
+.mode-opt__sub { margin-left: auto; font-weight: 800; font-size: 0.62rem; color: var(--ink-3); flex: none; }
+.mode-opt .starrow { margin-left: auto; font-size: 0.62rem; flex: none; }
+.mode-opt .lock-glyph { width: 0.8em; height: 0.8em; flex: none; }
+/* the detail panel column: the surface fills the page height beside the list */
+.racedetail { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.racedetail .modepick__tracks { flex: 1; display: flex; flex-direction: column; gap: 0.45rem; }
+/* the panel's header: name (+stars), meter far right, one meta line — the SAME
+   height for the cup and random families, so switching rows moves nothing */
+.raceinfo { display: flex; flex-direction: column; gap: 0.1rem; }
+.raceinfo__title { display: flex; align-items: center; gap: 0.5rem; min-height: 1.5rem; }
+.raceinfo__name { font-family: var(--font-display); font-weight: 700; font-size: 1rem; color: var(--ink); }
+.raceinfo__title .starrow { font-size: 0.78rem; }
+.raceinfo__title .trackpick__cup-meter { margin-left: auto; }
+.raceinfo__meta { font-weight: 700; font-size: 0.66rem; color: var(--ink-2); }
+/* the locked cup's unlock pitch, in place of the track grid */
+.modepick__tracks--locked { background: var(--surface-2); }
+.unlock-rules { display: flex; flex-direction: column; gap: 0.28rem; }
+.unlock-rules__row {
+  display: flex; align-items: center; gap: 0.5rem;
+  background: var(--surface); border: 2.5px solid var(--ink); border-radius: 10px;
+  padding: 0.16rem 0.6rem;
+  font-family: var(--font-display); font-weight: 700; font-size: 0.72rem; color: var(--ink);
+}
+.unlock-rules__row--todo { opacity: 0.55; }
+.unlock-rules__row b { margin-left: auto; }
+.unlock-rules__foot { font-weight: 800; font-size: 0.64rem; color: var(--ink-2); text-align: right; }
 /* the open cup's exact-pick panel — an inset under the mode tiles. One compact
    4-across row so the lobby stays a single screen. The background is painted inline
    in its cup's colour (buildModePicker), deeper than the cup tiles so it reads as a

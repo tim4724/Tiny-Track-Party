@@ -58,6 +58,15 @@
          own, so neither has to squat on the car card. -->
     <div class="lobby-top">
       <div class="lobby-me"><span id="me-name" class="lobby-me__name"></span></div>
+      <!-- CAR | RACE — the HOST's two lobby pages, centered in the ribbon.
+           Non-hosts have no race page (the big screen shows the pick), so the
+           strip stays hidden for them and their lobby is the car page alone.
+           The bottom bar is the stepper between the two: on CAR it says
+           "Select race", on RACE "Start race" (renderReadyFoot). -->
+      <div id="lobby-tabs" class="lobby-tabs hidden" role="tablist" aria-label="Lobby page">
+        <button id="tab-car" type="button" role="tab" aria-selected="true">CAR</button>
+        <button id="tab-race" type="button" role="tab" aria-selected="false">RACE</button>
+      </div>
       <button id="settings-btn" class="settings-btn icon-btn" type="button" aria-label="Settings" aria-haspopup="dialog"><svg class="gear-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 16.9c-2.7 0-4.9-2.21-4.9-4.9s2.21-4.9 4.9-4.9 4.9 2.21 4.9 4.9-2.21 4.9-4.9 4.9z"/></svg></button>
     </div>
 
