@@ -678,16 +678,18 @@ input[type=text]:disabled { opacity: 0.6; }
   font-size: 1.4rem; margin: 0; color: var(--ink);
 }
 
-/* The steering-mode control: an uppercase group label heading two compact
-   RADIO ROWS in the left column — a drawn radio dot, the mode's icon, its name
-   and a one-line hint. The dot is what says "pick one"; the picked row also
-   tints toward the player's livery (the lobby pickers' picked-tile mark). */
+/* The steering-mode control: an uppercase group label heading two plain
+   RADIO ROWS in the left column — a drawn radio dot and the mode's name,
+   nothing else (the demo on the stage does the teaching). The dot is what
+   says "pick one"; the picked row also tints toward the player's livery (the
+   lobby pickers' picked-tile mark). */
 .seg { grid-area: seg; align-self: start; display: flex; flex-direction: column; gap: 0.7rem; }
 .seg-label {
   font-family: var(--font-display); font-weight: 700; font-size: 0.8rem;
   letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3);
 }
 .mode-card {
+  position: relative;   /* anchors the corner badge */
   display: flex; align-items: center; justify-content: flex-start;
   gap: 0.7rem; padding: 0.8rem 0.9rem; cursor: pointer;
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r);
@@ -697,9 +699,11 @@ input[type=text]:disabled { opacity: 0.6; }
 .mode-card:active { transform: translate(2px, 2px); box-shadow: none; }
 .mode-card[aria-checked='true'] { background: color-mix(in srgb, var(--car, var(--brand)) 16%, #fff); }
 /* the radio dot — drawn, so it carries the theme's ink weight; the picked one
-   fills with the livery inside a white ring */
+   fills with the livery inside a white ring. Sized in rem, big enough that the
+   fill survives the 3px ink border + 3px ring around it — at the old em size
+   the visible fill was ~2px and picked read the same as unpicked. */
 .mode-card::before {
-  content: ''; flex: none; width: 1.05em; height: 1.05em; box-sizing: border-box;
+  content: ''; flex: none; width: 1.25rem; height: 1.25rem; box-sizing: border-box;
   border: 3px solid var(--ink); border-radius: var(--r-pill); background: var(--surface);
   transition: background 0.12s, box-shadow 0.12s;   /* the pick lands with a visible fill, not a hard swap */
 }
@@ -707,37 +711,22 @@ input[type=text]:disabled { opacity: 0.6; }
   background: var(--car, var(--brand));
   box-shadow: inset 0 0 0 3px #fff;
 }
-/* the mode's icon — a fixed box so both labels align: Tilt a twisted phone
-   outline, Buttons the ‹ › pair, both drawn in ink */
-.mode-card__icon {
-  flex: none; width: 2.2rem; height: 1.5rem;
-  display: flex; align-items: center; justify-content: center; gap: 0.22rem;
-  color: var(--ink);
-}
-.mode-card__icon .steer-glyph { font-size: 0.8rem; border-radius: 1px; }
-.mode-phone {
-  display: inline-block; width: 1.55rem; height: 1rem; box-sizing: border-box;
-  border: 3px solid var(--ink); border-radius: 4px;
-  transform: rotate(-14deg); background: var(--surface);
-}
-.mode-card__label { display: flex; flex-direction: column; align-items: flex-start; gap: 0.32rem; min-width: 0; }
 .mode-card__name {
-  display: inline-flex; align-items: center; gap: 0.45rem;
-  font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; line-height: 1;
+  font-family: var(--font-display); font-weight: 700; font-size: 1.3rem; line-height: 1;
   color: var(--ink);
 }
 /* "Recommended" sticker on the Tilt row — brand green (the theme's "good"
-   chrome colour), tiny and tilted so it reads as a sticker slapped on the
-   card, not a third control. */
+   chrome colour), tiny and slapped OVER the card's top-right corner (absolute,
+   overhanging the border) so it reads as a sticker on the card, not a third
+   control competing with the title. */
 .mode-card__badge {
+  position: absolute; top: -0.6em; right: 0.6rem;
   font-size: 0.56rem; letter-spacing: 0.07em; text-transform: uppercase; line-height: 1;
   color: #fff; background: var(--brand);
   border: 2px solid var(--ink); border-radius: var(--r-pill);
   padding: 0.3em 0.6em;
   transform: rotate(-2deg);
 }
-.mode-card__cap { font-weight: 800; font-size: 0.78rem; color: var(--ink-3); line-height: 1; text-align: left; }
-.mode-card[aria-checked='true'] .mode-card__cap { color: var(--ink-2); }
 
 /* The stage — surface-2 (the theme's informational surface), holding the
    picked mode's demo phone with the legend attached beneath. Only one demo
@@ -1093,7 +1082,6 @@ input[type=text]:disabled { opacity: 0.6; }
   .settings-title { font-size: 1.15rem; }
   .demo-stage .phone-lean { zoom: 0.85; }
   .demo-chev .steer-glyph { font-size: 1.3rem; }
-  .mode-card__cap { display: none; }   /* the demo says it; the hint is the first thing to go */
   .settings-legend { gap: 1rem; }
   .settings-legend .help-ctrl__cap { font-size: 0.8rem; }
 }
