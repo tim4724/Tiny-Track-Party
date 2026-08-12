@@ -24,6 +24,7 @@
 #include "ttp/grand_prix.h"
 #include "ttp/json_parse.h"
 #include "ttp/json_read.h"
+#include "ttp/progression.h"
 #include "ttp/scalar_id.h"
 #include "ttp/ui_model.h"
 // The live room and the live race, through the two seams that hand over plain
@@ -32,12 +33,14 @@
 // ttp_runtime.h is here for the gp accessors the series twins gather from —
 // C ABI functions of this same module, called directly.
 #include "ttp_live.h"
+#include "ttp_progress.h"
 #include "ttp_room.h"
 #include "ttp_runtime.h"
 #include "ttp_session.h"
 
 using namespace ttp;
 namespace ui = ttp::rt::ui;
+namespace progression = ttp::rt::progression;
 
 namespace {
 
@@ -49,6 +52,19 @@ int g_carCount = 0;
 std::vector<ui::Cup> g_cups;
 std::vector<ui::CatalogEntry> g_catalog;
 
+// ---- the couch's progression record ------------------------------------------
+// Owned here (the header says why), reached by the race executor and the net
+// walks through the ttp_progress.h seam. Always against the SHIPPED cups, like
+// the catalogue itself — a synthetic conformance world never locks anything.
+progression::Record g_progress;
+bool g_unlockAll = false;
+
+std::vector<std::string> shippedCupIds() {
+  std::vector<std::string> ids;
+  for (const ui::Cup& c : ui::shippedCups()) ids.push_back(c.id);
+  return ids;
+}
+
 // ---- scratch buffers ---------------------------------------------------------
 // One per string-returning export rather than one shared: two of these are read
 // back-to-back on the same tick (the roster's seats then its grid, the board
@@ -58,7 +74,7 @@ std::vector<ui::CatalogEntry> g_catalog;
 std::string g_bufSeats, g_bufGrid, g_bufConnected, g_bufSlot, g_bufDiff,
     g_bufPushes, g_bufWelcome, g_bufFlow, g_bufAutoPause, g_bufSeries,
     g_bufBoard, g_bufView, g_bufCatalogue, g_bufFlowLive, g_bufAutoLive,
-    g_bufSeriesGp, g_bufBoardLive, g_bufFreeze, g_bufResultsAction;
+    g_bufSeriesGp, g_bufBoardLive, g_bufFreeze, g_bufResultsAction, g_bufProgress;
 
 const char* put(std::string& buf, const Value& v) {
   ordered_stringify_into(v, buf);
@@ -280,6 +296,7 @@ int ttp_ui_cup_field_tint_pct(void) { return ui::cupFieldTintPct(); }
 const char* ttp_ui_catalogue_json(void) {
   Value out = Value::Obj();
   Value cups = Value::Arr();
+  const std::vector<std::string> cupIds = shippedCupIds();
   for (const ui::Cup& c : ui::shippedCups()) {
     Value v = Value::Obj();
     v.set("id", Value::Str(c.id));
@@ -291,6 +308,15 @@ const char* ttp_ui_catalogue_json(void) {
     // own colour type and none of them wants to parse a string to do it. The
     // web is the exception and already has the authored table on the page.
     v.set("color", Value::Num((double) c.color));
+    // The couch's DERIVED progression (see the header): a shell draws these,
+    // it never re-derives a threshold or the unlock rule.
+    v.set("stars", Value::Num(progression::stars(g_progress.bestOf(c.id))));
+    const bool locked = !g_unlockAll && !progression::unlocked(g_progress, c.id, cupIds);
+    v.set("locked", Value::Bool(locked));
+    if (locked) {
+      v.set("unlockDone", Value::Num(progression::unlockDone(g_progress, c.id, cupIds)));
+      v.set("unlockNeed", Value::Num(progression::unlockNeed(c.id, cupIds)));
+    }
     cups.push(std::move(v));
   }
   Value cat = Value::Arr();
@@ -304,7 +330,42 @@ const char* ttp_ui_catalogue_json(void) {
   }
   out.set("cups", std::move(cups));
   out.set("catalog", std::move(cat));
+  // The World Tour's own badge — it banks like a cup but is not a cup row.
+  Value tour = Value::Obj();
+  tour.set("stars", Value::Num(progression::stars(g_progress.bestOf("tour"))));
+  out.set("tour", std::move(tour));
   return put(g_bufCatalogue, out);
+}
+
+// ---- the couch's progression record ------------------------------------------
+
+int ttp_ui_progress_load(const char* jsonOrNull, int unlockAll) {
+  g_unlockAll = unlockAll != 0;
+  bool ok = false;
+  const Value v = json::parse(jsonOrNull && *jsonOrNull ? jsonOrNull : "", &ok);
+  // Tolerant on purpose: a corrupt save loads a fresh couch, never a failure.
+  g_progress = ok ? progression::parse(v) : progression::Record();
+  return 1;
+}
+
+const char* ttp_ui_progress_json(void) {
+  // CANONICAL, unlike this ABI's other answers (see the header): the blob is a
+  // persistence payload, and byte-stability for a given record is the point.
+  g_bufProgress = canonical_stringify(progression::serialize(g_progress));
+  return g_bufProgress.c_str();
+}
+
+// ---- the ttp_progress.h seam (the store's other readers live in sibling shims)
+
+int ttp_progress_bank(const std::string& cupId, const std::vector<bool>& aiByRank) {
+  if (!progression::bankEligible(cupId, shippedCupIds())) return 0;
+  return progression::bank(g_progress, cupId, aiByRank) ? 1 : 0;
+}
+
+ttp::Value ttp_progress_value(void) { return progression::serialize(g_progress); }
+
+bool ttp_progress_cup_unlocked(const std::string& cupId) {
+  return g_unlockAll || progression::unlocked(g_progress, cupId, shippedCupIds());
 }
 
 // ---- screens -----------------------------------------------------------------

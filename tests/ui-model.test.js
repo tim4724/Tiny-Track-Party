@@ -56,6 +56,8 @@ function ui_() {
       resultsView: c('ttp_ui_results_view_json', 'string', ['string', 'number']),
       seriesInfoLive: c('ttp_ui_series_info_live_json', 'string', ['number', 'number']),
       catalogue: c('ttp_ui_catalogue_json', 'string', []),
+      progressLoad: c('ttp_ui_progress_load', 'number', ['string', 'number']),
+      progressJson: c('ttp_ui_progress_json', 'string', []),
       cupTintRgb: c('ttp_ui_cup_tint_rgb', 'number', ['string', 'number']),
       cupFieldTintPct: c('ttp_ui_cup_field_tint_pct', 'number', []),
       // The walks a party is driven through. Same module, so the room, the race
@@ -117,6 +119,8 @@ function ui_() {
     return {
       CUPS, TRACK_LIST, protocol,
       catalogue: () => JSON.parse(raw.catalogue()),
+      progressLoad: (json, unlockAll) => raw.progressLoad(json || '', unlockAll ? 1 : 0),
+      progressJson: () => raw.progressJson(),
       backEffect: (s) => raw.backEffect(s),
       screenStep: (a, b) => raw.screenStep(a, b),
       cupSlot: (x) => JSON.parse(raw.cupSlot(J(x))),
@@ -233,10 +237,18 @@ test('the shipped catalogue in the wasm is the one shared/tracks.js authors', as
   // cup's paper colour is authored data like its name, and the cheapest way for
   // it to rot is to be excluded from the check that already covers the row.
   const { CUP_COLOR } = await load('public/shared/trackPicker.js');
+  // Progression rides the same rows (stars/locked, unlock progress on the one
+  // locked cup) — asserted here at its FRESH-COUCH values: nothing loaded, so
+  // zero stars everywhere and only the Playroom locked. The derivations behind
+  // these numbers are pinned by the progression ctest; the loaded-record path
+  // is the next test's.
   assert.deepEqual(got.cups, CUPS.map((c) => ({
     id: c.id, name: c.name, tracks: c.tracks,
-    color: parseInt(CUP_COLOR[c.id].slice(1), 16)
-  })), 'cups, their display names, track order and paper colour come out as authored');
+    color: parseInt(CUP_COLOR[c.id].slice(1), 16),
+    stars: 0, locked: c.id === 'rooftop',
+    ...(c.id === 'rooftop' ? { unlockDone: 0, unlockNeed: CUPS.length - 1 } : {})
+  })), 'cups, their display names, track order, paper colour and fresh progression come out as authored');
+  assert.deepEqual(got.tour, { stars: 0 }, 'the tour badge rides the catalogue top level');
   assert.deepEqual(got.catalog, TRACK_LIST.map((t) => ({
     id: t.id, name: t.name, cup: t.cup, cupDifficulty: t.cupDifficulty
   })), 'every track name, its cup and its cup TENDENCY come out as authored');
@@ -255,6 +267,38 @@ test('the shipped catalogue in the wasm is the one shared/tracks.js authors', as
     assert.ok(!ids.has(dev), `dev track "${dev}" must not appear in the catalogue`);
   }
   assert.ok(Object.keys(DEV_TRACKS).length > 0, 'premise: there are dev tracks to exclude');
+});
+
+// The progression exports through the SHIPPED wasm — the abi ctest gates the
+// same agreement on every leg, but only this file exercises the artifact the
+// browser actually loads. Values here restate the decided rules (won=3,
+// podium=2, finished=1; the Playroom opens on four finished cups) rather than
+// deriving them, so a wasm that drifts from the decision fails loudly.
+test('a loaded record stamps stars and the unlock onto the catalogue', async () => {
+  const u = await ui_();
+  u.progressLoad(JSON.stringify({
+    v: 1,
+    cups: { beach: { best: 1 }, snow: { best: 3 }, backyard: { best: 6 }, canyon: { best: 8 }, tour: { best: 2 } }
+  }), false);
+  try {
+    const got = u.catalogue();
+    const byId = Object.fromEntries(got.cups.map((c) => [c.id, c]));
+    assert.equal(byId.beach.stars, 3, 'a win is three stars');
+    assert.equal(byId.snow.stars, 2, 'a podium is two stars');
+    assert.equal(byId.backyard.stars, 1, 'a finish is one star');
+    assert.equal(byId.canyon.stars, 1);
+    assert.deepEqual(got.tour, { stars: 2 }, 'the tour banks like a cup');
+    assert.equal(byId.rooftop.locked, false, 'four finished cups unlock the Playroom');
+    assert.ok(!('unlockDone' in byId.rooftop), 'unlock progress exists only while locked');
+    assert.equal(u.progressJson(), JSON.stringify({
+      cups: {
+        backyard: { best: 6 }, beach: { best: 1 }, canyon: { best: 8 },
+        snow: { best: 3 }, tour: { best: 2 }
+      }, v: 1
+    }), 'the read-back is the record, canonical and byte-stable');
+  } finally {
+    u.progressLoad(null, false);   // leave the fresh couch other tests assume
+  }
 });
 
 test('every board acts on back, and only the root swallows', async () => {

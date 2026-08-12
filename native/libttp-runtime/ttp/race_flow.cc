@@ -70,6 +70,7 @@ const char* key(Op op) {
     case Op::RENDER_LOBBY_PICK: return "render-lobby-pick";
     case Op::REFRESH_LOBBY_DEMO: return "refresh-lobby-demo";
     case Op::UPDATE_BACKDROP: return "update-backdrop";
+    case Op::PERSIST_PROGRESSION: return "persist-progression";
   }
   return "";
 }
@@ -555,6 +556,10 @@ Effects endRace(const EndRaceInput& in) {
   // Bank the cup points FIRST — the final board broadcast below must already
   // carry this race's gains, and the intermission/podium read them too.
   if (in.hasSeries) out.push_back(mk(Op::APPLY_RACE_POINTS));
+  // A finished series banks the couch's star record — AFTER the points, so the
+  // standings the executor reads are final.
+  if (in.hasSeries && in.seriesFinished && in.bankProgression)
+    out.push_back(mk(Op::PERSIST_PROGRESSION));
   // hold the finish frame behind the translucent results overlay
   e = mk(Op::SET_RACE_FLAGS);
   e.paused = false; e.autoPaused = false; e.raceEnded = true;

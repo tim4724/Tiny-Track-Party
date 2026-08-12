@@ -44,6 +44,8 @@ export async function init() {
   fn = {
     configure: c('ttp_ui_configure', 'number', ['string']),
     catalogue: c('ttp_ui_catalogue_json', 'string', []),
+    progressLoad: c('ttp_ui_progress_load', 'number', ['string', 'number']),
+    progressJson: c('ttp_ui_progress_json', 'string', []),
     screenStep: c('ttp_ui_screen_step', 'number', ['string', 'string']),
     backEffect: c('ttp_ui_back_effect', 'string', ['string']),
     rosterSeatsFromRoom: c('ttp_ui_roster_seats_room_json', 'string', ['number', 'string']),
@@ -99,6 +101,15 @@ export function configure({ maxPlayers, carCount, cups, catalog }) {
 // `catalog` is CUPS order flattened, which is the order every picker draws and
 // the order the model's own contract depends on.
 export function catalogue() { return JSON.parse(fn.catalogue()); }
+
+// ---- the couch's progression record -----------------------------------------
+// The shell PERSISTS the blob and DECIDES nothing about it: hand whatever
+// localStorage held to progressLoad at boot (null/corrupt loads a fresh couch),
+// and write back the blob the race walk's persist-progression effect carries.
+// Stars, the Playroom lock and the unlock progress come out stamped on
+// catalogue() above. `unlockAll` is the ?unlockAll=1 dev/test override.
+export function progressLoad(json, unlockAll) { fn.progressLoad(json || '', unlockAll ? 1 : 0); }
+export function progressJson() { return fn.progressJson(); }
 
 // ---- screens ---------------------------------------------------------------
 // >0 = a forward step, <0 = a retreat, 0 = same level. WALKING the stack is the

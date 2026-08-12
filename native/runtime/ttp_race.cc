@@ -33,6 +33,7 @@
 // registries, only on the shim that already links them.
 #include "ttp_live.h"
 #include "ttp_net.h"
+#include "ttp_progress.h"
 #include "ttp_room.h"
 #include "ttp_runtime.h"
 #include "ttp_session.h"
@@ -311,6 +312,9 @@ Value effectVal(const race::Effect& e) {
     case race::Op::RENDER_LOBBY_PICK:
     case race::Op::REFRESH_LOBBY_DEMO:
     case race::Op::UPDATE_BACKDROP:
+    // Bare from the DECISION layer; the executor enriches it with the banked
+    // record (`progress`) the same way create-session gains its field rows.
+    case race::Op::PERSIST_PROGRESSION:
       break;
   }
   return v;
@@ -416,6 +420,21 @@ void executeAndSpell(int roomHandle, const race::Effects& es,
         // this same walk.
         Value v = effectVal(e);
         v.set("field", ttp_room_field_value(roomHandle));
+        out.push(std::move(v));
+        break;
+      }
+      case race::Op::PERSIST_PROGRESSION: {
+        // The list puts this AFTER apply-race-points, so the series standings
+        // read here are final. The bank decides which human's rank counts (and
+        // whether this series id may bank at all); the shell only writes the
+        // enriched blob.
+        if (const ttp::CupSeries* s = ttp_gp_series(ttp_room_series(roomHandle))) {
+          std::vector<bool> aiByRank;
+          for (const ttp::GpStanding& row : s->standings()) aiByRank.push_back(row.ai);
+          ttp_progress_bank(s->cup().id, aiByRank);
+        }
+        Value v = effectVal(e);
+        v.set("progress", ttp_progress_value());
         out.push(std::move(v));
         break;
       }
@@ -665,6 +684,9 @@ const char* ttp_race_events_live_json(int sessionHandle, int roomHandle,
         ei.intermissionMs = intermissionMs;
         ei.nowMs = nowMs;
         ei.resultsFailsafeMs = resultsFailsafeMs;
+        // The live walk always banks a finished series; the flag exists so the
+        // frozen corpus lines (which predate progression) stay byte-identical.
+        ei.bankProgression = true;
         if (const Value* r = e.find("results")) results = *r;
         // Points bank HERE, against the retained field — before the board
         // effects the shell performs, exactly the order the corpus pins.

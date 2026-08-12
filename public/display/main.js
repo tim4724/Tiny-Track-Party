@@ -163,6 +163,18 @@ if (!selectedTrackId && !_isTestMode && !_isDebugSolo) {
   try { last = localStorage.getItem(LAST_TRACK_KEY); } catch (_) {}
   selectedTrackId = (last && built.has(last)) ? last : TRACK_LIST[0].id;
 }
+
+// The couch's star record: the shell only ferries the blob between storage and
+// the engine — every derivation (stars, the Playroom lock) is the wasm's. Test
+// surfaces skip the load so gallery/E2E scenarios start from the fresh couch
+// they synthesize; ?unlockAll=1 is the dev override, and it still loads the
+// record so banking keeps working under it.
+const PROGRESS_KEY = 'tinytrack_progress';
+if (!_isTestMode) {
+  let saved = null;
+  try { saved = localStorage.getItem(PROGRESS_KEY); } catch (_) {}
+  ui.progressLoad(saved, _trackParams.has('unlockAll'));
+}
 let track = built.get(selectedTrackId || TRACK_LIST[0].id);
 
 // ---- scene ----
@@ -855,7 +867,13 @@ const RACE_PERFORMERS = {
   'rekey-scene-car': (e) => scene.rekeyCar(e.oldId, e.newId),
   'set-auto-paused': (e) => { autoPaused = e.on; },
   'sync-frozen': () => syncSessionFrozen(),
-  'return-to-lobby': () => returnToLobby()
+  'return-to-lobby': () => returnToLobby(),
+  // The walk banked a finished cup's stars; the shell just writes the blob it
+  // was handed. Same try/catch as every localStorage touch (Safari private
+  // mode throws on access).
+  'persist-progression': (e) => {
+    try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(e.progress)); } catch (_) {}
+  }
 };
 
 // The boot proof: every op this build's race walks can emit has a performer.

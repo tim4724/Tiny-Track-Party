@@ -75,6 +75,7 @@
 // libraries and recompiles the shims, which is the same standing this file's
 // includes of ttp_room.h / ttp_session.h have.
 #include "ttp/grand_prix.h"  // CupSeries::lastRaceOrder — the chained grid the race walks read
+#include "ttp/progression.h"  // the star record's rules — uiProgression composes them
 #include "ttp/race_flow.h"
 #include "ttp/room_flow.h"
 #include "ttp/session.h"
@@ -1838,6 +1839,71 @@ void uiShippedCatalogue() {
         "the synthetic world still overrides");
   check(std::string(ttp_ui_catalogue_json()) == shipped,
         "the getter ignores whatever was configured");
+}
+
+// The progression exports and the catalogue's stamping over them. The RULES
+// (star thresholds, the 'rooftop' lock, the tolerant parse) are pinned by
+// progression_check; what is gated here is agreement — the marshalled answers
+// must be byte-for-byte what the same libttp-runtime functions compose to over
+// the same record, so the stamping can never grow a private spelling.
+void uiProgression() {
+  namespace prog = ttp::rt::progression;
+  // A corrupt save loads a fresh couch, and the read-back is canonical.
+  check(ttp_ui_progress_load("not json at all", 0) == 1, "a corrupt save still loads");
+  check(std::string(ttp_ui_progress_json()) == "{\"cups\":{},\"v\":1}",
+        "…as the empty record, canonically spelled");
+
+  const char* blob = "{\"v\":1,\"cups\":{\"beach\":{\"best\":1},\"snow\":{\"best\":2},"
+                     "\"backyard\":{\"best\":7},\"tour\":{\"best\":3}}}";
+  check(ttp_ui_progress_load(blob, 0) == 1, "a real record loads");
+  bool ok = false;
+  const prog::Record rec = prog::parse(json::parse(blob, &ok));
+  check(ok && std::string(ttp_ui_progress_json()) ==
+                  canonical_stringify(prog::serialize(rec)),
+        "the read-back is the record, canonically re-serialized");
+
+  // The catalogue rows agree with the functions composed directly.
+  const Value cat = json::parse_or(ttp_ui_catalogue_json(), Value::Obj());
+  const Value* cups = cat.find("cups");
+  std::vector<std::string> ids;
+  if (cups && cups->type == Value::ARR)
+    for (const Value& c : cups->arr) ids.push_back(json::str_field(c, "id"));
+  bool rowsAgree = cups && cups->type == Value::ARR && !ids.empty();
+  bool sawLocked = false;
+  if (rowsAgree) {
+    for (const Value& c : cups->arr) {
+      const std::string id = json::str_field(c, "id");
+      if (json::num_field(c, "stars") != prog::stars(rec.bestOf(id))) rowsAgree = false;
+      const bool locked = !prog::unlocked(rec, id, ids);
+      if (json::truthy(c.find("locked")) != locked) rowsAgree = false;
+      if (locked) {
+        sawLocked = true;
+        if (json::num_field(c, "unlockDone") != prog::unlockDone(rec, id, ids) ||
+            json::num_field(c, "unlockNeed") != prog::unlockNeed(id, ids))
+          rowsAgree = false;
+      } else if (c.has("unlockDone") || c.has("unlockNeed")) {
+        rowsAgree = false;   // the keys exist only while locked
+      }
+    }
+  }
+  check(rowsAgree, "every cup row's stars/locked/unlock progress is the composed answer");
+  check(sawLocked, "premise: this record leaves a cup locked (canyon unfinished)");
+  const Value* tour = cat.find("tour");
+  check(tour && tour->type == Value::OBJ &&
+            json::num_field(*tour, "stars") == prog::stars(rec.bestOf("tour")),
+        "the tour's own badge rides the catalogue top level");
+
+  // The dev override unlocks without touching the record.
+  check(ttp_ui_progress_load(blob, 1) == 1, "unlockAll loads");
+  const Value cat2 = json::parse_or(ttp_ui_catalogue_json(), Value::Obj());
+  bool anyLocked = false;
+  if (const Value* c2 = cat2.find("cups"))
+    if (c2->type == Value::ARR)
+      for (const Value& c : c2->arr) anyLocked = anyLocked || json::truthy(c.find("locked"));
+  check(!anyLocked, "unlockAll leaves nothing locked");
+  check(std::string(ttp_ui_progress_json()) == canonical_stringify(prog::serialize(rec)),
+        "…and the record itself is untouched");
+  ttp_ui_progress_load(nullptr, 0);   // leave a fresh couch for later cases
 }
 
 // cupTendency, the one RULE that came with the catalogue — and the reason it is
@@ -4666,6 +4732,7 @@ int main(int argc, char** argv) {
   themeThroughAbi();
   audioThroughAbi();
   uiShippedCatalogue();
+  uiProgression();
   uiCupTendency();
   uiCorpusThroughAbi(argv[3]);
   handlePathsMatchJsonPaths();
