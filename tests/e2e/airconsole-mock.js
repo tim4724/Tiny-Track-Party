@@ -222,6 +222,13 @@
     if (nickname != null) window.__AC_NICKNAME = nickname;
     if (this.onDeviceProfileChange) this.onDeviceProfileChange(this._deviceId);
   };
+  // Simulate a native sensor sample arriving over the SDK's device_motion
+  // relay (x/y/z = accelerometer, alpha/beta/gamma = gyroscope). Delivered
+  // only when the constructor armed it, matching the real SDK's gating.
+  AirConsole.prototype.triggerDeviceMotion = function(x, y, z) {
+    if (!this._opts.device_motion) return;
+    if (this.onDeviceMotion) this.onDeviceMotion({ x: x, y: y, z: z, alpha: 0, beta: 0, gamma: 0 });
+  };
 
   window.AirConsole = AirConsole;
 })();

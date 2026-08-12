@@ -204,6 +204,24 @@ export class TiltInput {
     });
   }
 
+  // External gravity feed, for hosts where DeviceOrientation never fires
+  // (the AirConsole app's webview: the SDK relays native accelerometer data
+  // through its own device_motion channel instead). Takes the PROPER
+  // acceleration vector (W3C accelerationIncludingGravity: flat face-up =
+  // (0,0,+9.81)); gravity is its negation, normalized here. Feeding this makes
+  // motion "granted" — the sensor demonstrably works, whatever the
+  // DeviceOrientation permission dance said.
+  setGravity(ax, ay, az) {
+    const n = Math.hypot(ax, ay, az);
+    if (!(n > 1)) return; // linear-only / empty sample: no gravity to read
+    this.haveTilt = true;
+    this.motionState = 'granted';
+    this._g.x = -ax / n;
+    this._g.y = -ay / n;
+    this._g.z = -az / n;
+    if (this._timer) this._tick();
+  }
+
   _onOrient(e) {
     if (e.beta == null && e.gamma == null) return;
     this.haveTilt = true;
