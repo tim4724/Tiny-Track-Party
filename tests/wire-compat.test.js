@@ -164,6 +164,7 @@ async function bringUpRealDisplay(relayOpts = {}, opts = {}) {
     carChooser: [{ id: 'vehicle-racer-low', name: 'Dash' }, { id: 'vehicle-speedster', name: 'Bolt' }],
     colorPalette: ['#e6492d', '#f2b134', '#2bb673', '#2d9cdb'],
     trackChooser: [{ id: 'tidepool', name: 'Tidepool', cup: 'beach' }],
+    progressChooser: { cups: [{ id: 'beach', stars: 2, locked: false }], tour: { stars: 0 } },
     defaultTrackId: 'tidepool',
     onRoomReady: (r) => seen.roomReady.push(r),
     onRosterChange: (r, host) => seen.roster.push({ r, host }),
@@ -415,9 +416,14 @@ test('wire: the LOBBY_UPDATE the display AUTHORS survives the round trip, field 
   // 1. THE TOP-LEVEL SCHEMA. Every key syncRoom reads, and nothing it does not.
   assert.deepEqual(Object.keys(snap).sort(), [
     'cars', 'colors', 'cupId', 'hostPeerIndex', 'mode', 'paused', 'players',
-    'randomRaces', 'roomState', 'standings', 'trackId', 'tracks', 'type',
+    'progress', 'randomRaces', 'roomState', 'standings', 'trackId', 'tracks', 'type',
   ], 'the snapshot schema is the contract; renaming or dropping a key is silent');
   assert.equal(snap.type, MSG.LOBBY_UPDATE, 'routed by the shared type tag');
+  // The progression chooser crosses OPAQUELY (like tracks): the phone draws
+  // stars/locks straight off it, so its shape is part of the wire contract.
+  assert.deepEqual(snap.progress,
+    { cups: [{ id: 'beach', stars: 2, locked: false }], tour: { stars: 0 } },
+    'the couch progression rides the lobby snapshot verbatim');
 
   // 2. THE ROSTER, whose every field crosses from C++ (RoomFlow) through JS
   //    (DisplayNet.roster) and back through C++ (encode_set_state).

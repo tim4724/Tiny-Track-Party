@@ -73,8 +73,14 @@ const idJson = (v) => J(v === undefined ? null : v);
 // total at boot, so a missing arm fails the load instead of dropping a step.
 export function effectOps() { return JSON.parse(fn.effectOps()); }
 
-export function configure({ cars, colors, tracks }) {
-  const ok = fn.configure(J({ cars: cars || [], colors: colors || [], tracks: tracks || [] }));
+export function configure({ cars, colors, tracks, progress }) {
+  const ok = fn.configure(J({
+    cars: cars || [], colors: colors || [], tracks: tracks || [],
+    // The couch's progression rides as a fourth key when the shell composed
+    // one (boot.progressChooser); absent, the snapshot simply carries none —
+    // the bagless/test surfaces predate progression and stay byte-identical.
+    ...(progress ? { progress } : {})
+  }));
   if (!ok) throw nativeError('configuring the chooser payload');
 }
 

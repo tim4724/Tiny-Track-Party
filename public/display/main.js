@@ -15,7 +15,7 @@ import { createWakeLock } from '../shared/wakeLock.js';
 import { RaceAudio } from './Audio.js';
 // The native stack, stood up once in a fixed order (configure before read, world
 // before any render) — see boot.js.
-import { bootEngine, trackEntry } from './boot.js';
+import { bootEngine, trackEntry, progressChooser } from './boot.js';
 // The two race-screen overlays, painting model answers; the gallery previews
 // drive these same functions so a preview cannot drift from live play.
 import { showCountdownBanner, renderResults } from './raceOverlays.js';
@@ -527,6 +527,10 @@ const net = new DisplayNet({
   trackCatalog,
   // Slim, display-authoritative chooser content for the retained room snapshot.
   carChooser, trackChooser, colorPalette,
+  // The couch's stars/lock for the phones' picker — composed AFTER the
+  // progression load above, so a returning couch's first snapshot already
+  // carries its record.
+  progressChooser: progressChooser(),
   defaultTrackId: _defaultPickId,
   // The random-track shuffle bag lives BEHIND THE ROOM now; what the shell
   // supplies is one page-entropy seed (DisplayNet hands it to init_pick).
@@ -868,11 +872,13 @@ const RACE_PERFORMERS = {
   'set-auto-paused': (e) => { autoPaused = e.on; },
   'sync-frozen': () => syncSessionFrozen(),
   'return-to-lobby': () => returnToLobby(),
-  // The walk banked a finished cup's stars; the shell just writes the blob it
-  // was handed. Same try/catch as every localStorage touch (Safari private
-  // mode throws on access).
+  // The walk banked a finished cup's stars; the shell writes the blob it was
+  // handed (same try/catch as every localStorage touch — Safari private mode
+  // throws on access) and recomposes the snapshot's progress chooser, so the
+  // phones' pickers carry the new stars when the party is back in the lobby.
   'persist-progression': (e) => {
     try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(e.progress)); } catch (_) {}
+    net.setChooser({ progress: progressChooser() });
   }
 };
 

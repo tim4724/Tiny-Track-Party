@@ -206,12 +206,17 @@ export class DisplayNet extends GameNet {
     this.trackChooser = opts.trackChooser || this.tracks;
     this.carChooser = opts.carChooser || [];
     this.colorPalette = opts.colorPalette || [];
+    // The couch's progression (boot.progressChooser's shape) — the one chooser
+    // key that changes at RUNTIME: the persist-progression performer recomposes
+    // it after a cup banks, via setChooser below.
+    this.progressChooser = opts.progressChooser || null;
     // Handed to the session model ONCE: it is authored data that changes when
     // the game ships, not while it runs, so it does not ride every publish
     // across the boundary. The snapshot composition treats it as opaque; the
     // MODE PICK walk reads its `tracks` as the catalogue, which is what let
     // the pick rules cross at all.
-    session.configure({ cars: this.carChooser, colors: this.colorPalette, tracks: this.trackChooser });
+    session.configure({ cars: this.carChooser, colors: this.colorPalette,
+                        tracks: this.trackChooser, progress: this.progressChooser });
     assertNetOps();
     // Latest standings board, mirrored into the snapshot so a phone that reconnects
     // on the results screen (or after its car finished) recovers it by replay.
@@ -505,11 +510,13 @@ export class DisplayNet extends GameNet {
   // the cases where it genuinely changes: a shell that loads its catalogue
   // late, and the wire-compat fixture that pushes an oversize one to prove the
   // relay's 16 KiB cap actually bites. Republishes, like every other writer.
-  setChooser({ cars, colors, tracks } = {}) {
+  setChooser({ cars, colors, tracks, progress } = {}) {
     if (cars) this.carChooser = cars;
     if (colors) this.colorPalette = colors;
     if (tracks) this.trackChooser = tracks;
-    session.configure({ cars: this.carChooser, colors: this.colorPalette, tracks: this.trackChooser });
+    if (progress) this.progressChooser = progress;
+    session.configure({ cars: this.carChooser, colors: this.colorPalette,
+                        tracks: this.trackChooser, progress: this.progressChooser });
     assertNetOps();
     this._publishLobby();
   }
