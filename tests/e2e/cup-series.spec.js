@@ -251,11 +251,13 @@ test('World Tour draws one track per cup and races them in cup order', async ({ 
   const first = await page.evaluate(() => window.__net.trackId);
   expect(BEACH).toContain(first); // race 1 is drawn from the FIRST cup
 
-  // The race card: five cup-tinted "?" boxes — the ladder itself, nothing
-  // spoiled (the drawn beach race included).
-  await expect(page.locator('.cup-maps .cup-maps__tile--q')).toHaveCount(5);
+  // The race card: four cup-tinted "?" boxes — the UNLOCKED ladder, nothing
+  // spoiled (the drawn beach race included). A fresh couch has the Playroom
+  // locked, so the tour spans the four open cups; a fifth box joins with the
+  // unlock (the progression ctests own that rule).
+  await expect(page.locator('.cup-maps .cup-maps__tile--q')).toHaveCount(4);
   await expect(page.locator('.cup-maps .track-map')).toHaveCount(0);
-  await expect(page.locator('.cup-races')).toHaveText('5 races');
+  await expect(page.locator('.cup-races')).toHaveText('4 races');
   await expect(page.locator('.cup-sticker')).toHaveText('World Tour');
 
   await startRace(alice, []);
@@ -263,9 +265,9 @@ test('World Tour draws one track per cup and races them in cup order', async ({ 
   expect(await page.evaluate(() => window.__net.trackId)).toBe(first);
   await finishHumans(page);
   await inResults(page);
-  await expect(page.locator('#results-sub')).toHaveText('World Tour · Race 1 of 5');
+  await expect(page.locator('#results-sub')).toHaveText('World Tour · Race 1 of 4');
   expect(await page.evaluate(() => ({ endless: window.__series().endless, races: window.__series().raceCount })))
-    .toEqual({ endless: false, races: 5 });
+    .toEqual({ endless: false, races: 4 });
 });
 
 test('a mid-cup joiner is seated into the next series race and scores from there', async ({ page, browser }) => {

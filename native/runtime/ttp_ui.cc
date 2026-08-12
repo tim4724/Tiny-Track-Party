@@ -442,11 +442,24 @@ const char* ttp_ui_seat_grid_json(const char* seatsJson) {
 
 const char* ttp_ui_cup_slot_json(const char* pickJson) {
   const Value in = json::parse_or(pickJson, Value::Obj());
+  const ui::PickMode mode = ui::pickModeOf(strOf(in.find("mode")));
+  // The TOUR spans the UNLOCKED ladder — its card is one chip per cup it will
+  // actually race, so a locked cup contributes no "?" box and no race to the
+  // count. Composed HERE like the net walks compose the same lock: the pure
+  // layer keeps mapping whatever list it is handed (which is what the frozen
+  // corpus replays, over synthetic cups that never lock).
+  std::vector<ui::Cup> cups = g_cups;
+  if (mode == ui::PickMode::TOUR) {
+    std::vector<ui::Cup> open;
+    for (const ui::Cup& c : cups)
+      if (ttp_progress_cup_unlocked(c.id)) open.push_back(c);
+    cups = std::move(open);
+  }
   ui::CupSlot slot;
-  const bool any = ui::cupSlot(ui::pickModeOf(strOf(in.find("mode"))),
+  const bool any = ui::cupSlot(mode,
                                strOf(in.find("cupId")), strOf(in.find("trackId")),
                                numOf(in.find("randomRaces")),
-                               g_cups, g_catalog, slot);
+                               cups, g_catalog, slot);
   if (!any) return put(g_bufSlot, Value::Null());
   Value o = Value::Obj();
   o.set("nameKey", Value::Str(ui::key(slot.nameKey)));

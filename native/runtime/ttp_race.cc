@@ -621,9 +621,15 @@ const char* ttp_race_start_live_json(int roomHandle, int sceneReady, double seed
     return put(g_bufStart, refuse(race::key(r.reason)));
   const int need = race::drawsNeeded(si.mode, si.randomRaces);
   if (si.mode == "tour") {
-    // The World Tour draws per cup, in cup order — race 1 is the pick's own
-    // first-cup draw, so the card's remaining races come from cups[1..].
-    for (size_t c = 1; c < g_cups.size() && (int)si.draws.size() < need; ++c) {
+    // The World Tour draws per UNLOCKED cup, in cup order — race 1 is the
+    // pick's own draw from the first unlocked cup (the pick walk restricted
+    // it), so the card's remaining races skip that lead cup and every locked
+    // one. Pre-unlock the tour is simply shorter; drawsNeeded already read the
+    // count off the pick's randomRaces.
+    bool leadSkipped = false;
+    for (size_t c = 0; c < g_cups.size() && (int)si.draws.size() < need; ++c) {
+      if (!ttp_progress_cup_unlocked(g_cups[c].id)) continue;
+      if (!leadSkipped) { leadSkipped = true; continue; }
       const std::string d = ttp_live_bag_draw_cup(roomHandle, g_cups[c].id);
       if (d.empty()) break;
       si.draws.push_back(d);
@@ -758,9 +764,14 @@ const char* ttp_race_return_live_json(int roomHandle) {
     bool drew = true;
     for (int i = 0; i < need; ++i) {
       // The tour's re-aim is race 1's preview, so its re-roll draws from the
-      // FIRST cup only — and a cupless world refuses rather than drawing wide.
+      // first UNLOCKED cup only — and a cupless world refuses rather than
+      // drawing wide.
+      std::string lead;
+      if (ri.mode == "tour")
+        for (const race::Cup& c : g_cups)
+          if (ttp_progress_cup_unlocked(c.id)) { lead = c.id; break; }
       const std::string d = ri.mode == "tour"
-          ? (g_cups.empty() ? std::string() : ttp_live_bag_draw_cup(roomHandle, g_cups[0].id))
+          ? (lead.empty() ? std::string() : ttp_live_bag_draw_cup(roomHandle, lead))
           : ttp_live_bag_draw(roomHandle);
       if (d.empty()) { drew = false; break; }
       ri.draws.push_back(d);

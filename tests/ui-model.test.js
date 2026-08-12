@@ -342,18 +342,21 @@ test('the lobby race card resolves the SHIPPED cups and tracks', async () => {
   assert.equal(rnd.name, null);
   assert.equal(rnd.difficulty, null, 'a random draw shows no difficulty meter');
 
-  // The World Tour: one chip per SHIPPED cup, in cup (difficulty) order — ALL
+  // The World Tour: one chip per UNLOCKED cup, in cup (difficulty) order — ALL
   // undrawn ("?"), the already-drawn first race included, each wearing its own
-  // cup for the tint. The card is the ladder itself and spoils nothing.
+  // cup for the tint. The card is the ladder itself and spoils nothing. This
+  // test runs on a fresh couch, so the locked Playroom ('rooftop') contributes
+  // no chip and no race; the unlock rule itself is the progression ctest's.
+  const openCups = CUPS.filter((c) => c.id !== 'rooftop');
   const tour = ui.cupSlot({ mode: 'tour', trackId: TRACK_LIST[0].id, cups: CUPS, catalog });
   assert.equal(tour.nameKey, 'tour');
   assert.equal(tour.name, null);
-  assert.equal(tour.raceCount, CUPS.length);
+  assert.equal(tour.raceCount, openCups.length);
   assert.equal(tour.difficulty, null, 'the tour spans the whole ladder — no single meter');
   assert.equal(tour.cupId, null, 'no single cup owns the card');
-  assert.deepEqual(tour.maps.map((m) => m.trackId), CUPS.map(() => null),
+  assert.deepEqual(tour.maps.map((m) => m.trackId), openCups.map(() => null),
     'every race is undrawn — the drawn first included');
-  assert.deepEqual(tour.maps.map((m) => m.cup), CUPS.map((c) => c.id),
+  assert.deepEqual(tour.maps.map((m) => m.cup), openCups.map((c) => c.id),
     'each chip wears its cup, in cup order');
 });
 

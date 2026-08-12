@@ -4698,6 +4698,74 @@ void raceLiveWalks() {
     ttp_room_dispose(troom);
   }
 
+  // ---- the LOCK: a locked cup refuses picks and never deals -------------------
+  // The seam asks the SHIPPED cup list (a synthetic chooser cup can never lock),
+  // so this chooser names the real locked id: on a fresh couch 'rooftop' is
+  // locked, its cup and exact-track picks are silently refused, the tour skips
+  // it, and the global bag deals around it. Loading a record with every other
+  // shipped cup finished opens all of it back up.
+  {
+    ttp_ui_progress_load(nullptr, 0);   // a fresh couch
+    ttp_net_configure(
+        "{\"cars\":[{\"id\":\"dash\"}],\"colors\":[\"#f00\"],"
+        "\"tracks\":[{\"id\":\"tidepool\",\"name\":\"Tidepool\",\"cup\":\"beach\"},"
+        "{\"id\":\"skyline\",\"name\":\"Skyline\",\"cup\":\"rooftop\"}]}");
+    const int lroom = ttp_room_create("{}");
+    ttp_room_add_player(lroom, "1",
+                        "{\"name\":\"Ada\",\"colorIndex\":0,\"carIndex\":2,\"ready\":true}");
+    ttp_net_init_pick(lroom, nullptr, 1, 271828);
+    ttp_room_events_json(lroom);
+
+    walkOf(ttp_net_on_peer_message_json(
+               lroom, 0, "1", "{\"type\":\"select_mode\",\"mode\":\"cup\",\"cupId\":\"rooftop\"}",
+               0, 5000),
+           "select locked cup");
+    // The slot itself exists from init_pick (it carries hasBag), so a refusal
+    // reads as "no mode stored", not as a missing object.
+    check(json::str_field(parseOrNull(ttp_net_pick_json(lroom), "pick after locked cup"), "mode")
+              .empty(),
+          "a locked cup pick is refused");
+    walkOf(ttp_net_on_peer_message_json(
+               lroom, 0, "1",
+               "{\"type\":\"select_mode\",\"mode\":\"track\",\"trackId\":\"skyline\"}", 0, 5000),
+           "select locked track");
+    check(json::str_field(parseOrNull(ttp_net_pick_json(lroom), "pick after locked track"), "mode")
+              .empty(),
+          "a locked cup's exact track is refused too");
+
+    walkOf(ttp_net_on_peer_message_json(lroom, 0, "1",
+                                        "{\"type\":\"select_mode\",\"mode\":\"tour\"}", 0, 5000),
+           "select tour under the lock");
+    Value pick = parseOrNull(ttp_net_pick_json(lroom), "tour pick under the lock");
+    check(json::num_field(pick, "randomRaces") == 1 &&
+              json::str_field(pick, "trackId") == "tidepool",
+          "the tour counts and draws only the unlocked cup");
+
+    walkOf(ttp_net_on_peer_message_json(lroom, 0, "1",
+                                        "{\"type\":\"select_mode\",\"mode\":\"random\"}", 0, 5000),
+           "select random under the lock");
+    pick = parseOrNull(ttp_net_pick_json(lroom), "random pick under the lock");
+    check(json::str_field(pick, "trackId") == "tidepool",
+          "the bag's deck holds only unlocked tracks, so the draw is an equality");
+
+    check(ttp_ui_progress_load("{\"v\":1,\"cups\":{\"beach\":{\"best\":1},\"snow\":{\"best\":1},"
+                               "\"backyard\":{\"best\":1},\"canyon\":{\"best\":1}}}",
+                               0) == 1,
+          "the unlocking record loads");
+    walkOf(ttp_net_on_peer_message_json(
+               lroom, 0, "1", "{\"type\":\"select_mode\",\"mode\":\"cup\",\"cupId\":\"rooftop\"}",
+               0, 5000),
+           "select the now-unlocked cup");
+    pick = parseOrNull(ttp_net_pick_json(lroom), "pick after unlock");
+    check(json::str_field(pick, "mode") == "cup" &&
+              json::str_field(pick, "cupId") == "rooftop" &&
+              json::str_field(pick, "trackId") == "skyline",
+          "four finished cups open the Playroom to the pick walk");
+
+    ttp_ui_progress_load(nullptr, 0);   // leave a fresh couch for later cases
+    ttp_room_dispose(lroom);
+  }
+
   ttp_room_dispose(room);
   ttp_net_configure("");
   std::printf("  race walks against the composed decision functions\n");
