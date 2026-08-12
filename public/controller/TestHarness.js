@@ -11,6 +11,7 @@ import { TRACK_SCHEMATICS } from '../shared/trackSchematics.js';
 import { packSchematic, unpackSchematic } from '../shared/schematicCodec.js';
 import { applyLatencyChip, renderReadyFoot, motionHelpCopy } from './ui.js';
 import { renderResultsBoard } from './resultsBoard.js';
+import { setInputMode } from './driveSurface.js';
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
 
@@ -116,15 +117,15 @@ export function runControllerScenario(opts) {
   // The item identity shows on the DISPLAY, not the phone — the only controller cue
   // is the ITEM button lighting up. Preview that by toggling its disabled state.
   function setUse(holding) { const a = el('action-btn'); if (a) a.disabled = !holding; }
-  // mode: 'tilt' (default) | 'buttons' — flips the #game mode class exactly like
-  // the live setInputMode, so the gallery previews both control layouts.
+  // mode: 'tilt' (default) | 'buttons' — through the LIVE setInputMode (main.js
+  // booted the drive surface before delegating here), so the gallery previews
+  // whatever the real mode switch does, not a copy of it. It doesn't persist —
+  // that's main.js's applyInputMode, which a preview must never reach.
   function showDriveHud(mode = 'tilt') {
     show('game');
-    const game = el('game');
-    game.classList.toggle('mode-tilt', mode !== 'buttons');
-    game.classList.toggle('mode-buttons', mode === 'buttons');
+    setInputMode(mode);
     el('drive-hud').classList.remove('hidden');   // pause + settings ride inside it
-    el('motion-tip').classList.add('hidden');
+    el('motion-tip').classList.add('hidden');     // no motion nag in a preview
   }
 
   switch (scenario) {
