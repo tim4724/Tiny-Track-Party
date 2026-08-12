@@ -30,10 +30,10 @@ jobs:
               `- App: ${base}`,
               `- Display gallery: ${base}/gallery.html`,
               `- Phone gallery: ${base}/gallery-controller.html`,
-              // The simulator appends screen.html / controller.html itself, so
-              // it takes the base with a trailing slash.
-              `- AirConsole screen: ${base}/screen.html`,
-              `- AirConsole simulator: https://www.airconsole.com/simulator/#${base}/`,
+              // AirConsole takes the game's base URL after its # and loads
+              // screen.html / controller.html from it itself.
+              `- AirConsole: https://www.airconsole.com/#${base}`,
+              `- AirConsole simulator: https://www.airconsole.com/simulator/#${base}`,
               marker,
             ].join('\n');
 
