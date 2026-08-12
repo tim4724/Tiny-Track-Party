@@ -1015,3 +1015,10 @@ body.airconsole #qr,
 body.airconsole .ticket__urlbox,
 body.airconsole .rc-card__qr,
 body.airconsole #fullscreen-btn { display: none; }
+
+/* The welcome board never shows in AC — the LOBBY is the boot screen (its
+   markup is complete without the engine: open seats + the loading ticket).
+   CSS rather than the bootstrap so not even the first paint flashes it; the
+   bootstrap reveals #lobby at DOMContentLoaded, and main.js's AC branch takes
+   over from there. */
+body.airconsole #welcome { display: none; }

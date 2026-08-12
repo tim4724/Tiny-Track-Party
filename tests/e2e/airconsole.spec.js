@@ -21,8 +21,13 @@ async function openAcDisplay(page) {
   await page.addInitScript({ path: MOCK_PATH });
   await blockSdk(page);
   await page.goto('/screen.html');
-  // No welcome board, no device chooser in AC: the lobby is the boot screen,
-  // with the room opening through the adapter (roomCode = the SDK ready code).
+  // No welcome board in AC — the LOBBY is the boot screen. Asserted HERE,
+  // before the engine-boot waits below, so this pins the boot window itself:
+  // the welcome is CSS-dead from first paint (display.css) and the bootstrap
+  // reveals the lobby's static markup at DOMContentLoaded.
+  await expect(page.locator('#welcome')).toBeHidden();
+  await expect(page.locator('#lobby')).toBeVisible();
+  // …and the room opens through the adapter (roomCode = the SDK ready code).
   await page.waitForFunction(() => {
     const n = window.__net;
     return !!(n && n.flow && n.party && n.roomCode);

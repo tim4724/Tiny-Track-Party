@@ -35,6 +35,16 @@ history.pushState = function () {};
 history.replaceState = function () {};
 history.back = function () {};
 
+// The lobby is the boot screen in AC (display.css keeps #welcome dead), and
+// the engine boot main.js awaits takes seconds — reveal the lobby's static
+// markup (open seats, the loading ticket) as soon as the DOM exists, so the
+// player never watches a blank page. main.js's AC branch re-runs show('lobby')
+// once the engine is up, which is what adds the backdrop and the seat grid.
+document.addEventListener('DOMContentLoaded', function () {
+  var lobby = document.getElementById('lobby');
+  if (lobby) lobby.classList.remove('hidden');
+});
+
 // The SDK fires onReady AT MOST ONCE per page load, but a fresh adapter is
 // wired per _connect(). Cache the code and replay it into every adapter the
 // factory below builds (multi-shot, unlike AirConsoleAdapter.captureEarlyReady).
