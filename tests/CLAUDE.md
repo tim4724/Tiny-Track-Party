@@ -151,7 +151,10 @@ from `tests/e2e/helpers.js` (it reaps leaked phone contexts), and run
 `airconsole.spec.js` is the exception to the relay stub: it drives the generated
 AC entries over a mocked SDK (`airconsole-mock.js`, a BroadcastChannel transport)
 with the real SDK's CDN URL blocked — controllers must share the DISPLAY's
-browser context, or the channel cannot reach them.
+browser context, or the channel cannot reach them. Its LIVE mode (`AC_LIVE=1`,
+local only) runs the REAL SDK through AirConsole's HTTP simulator in headed
+Firefox instead — the one automatable real-platform path, since the HTTPS
+simulator wants a developer login and phone controllers are app-only now.
 
 `/gallery.html` is a manual no-relay preview surface; `/gallery-assets.html` is one
 live scene you fly, and is dev-only. Its KIT FIELD stands models the game does not
