@@ -129,8 +129,8 @@ public:
             const std::vector<TtpRosterCar>& roster, const ttp::rt::WearPlan& wear);
     // Re-dress the BUILT scene's car slots in place — same track, same slot
     // count, camera state and cosmetic clocks untouched. `remodel` slots reload
-    // their GLB (the shell re-provided car<slot>.glb first) plus ghost,
-    // silhouette and plate; `redress` slots rebuild only what wears the livery.
+    // their GLB (the shell re-provided car<slot>.glb first) plus ghost and
+    // silhouette; `redress` slots rebuild only what wears the livery.
     // Which slots go in which list is planReroster's call (ttp/roster.h) — this
     // performs it. False = no scene to re-dress or a slot failed; the caller
     // falls back to a full build.
@@ -585,7 +585,6 @@ private:
         float skidHold = 0;                        // scuff strength, released over SKID_RELEASE
         float skidAllHold = 0;                     // same, for the four-wheel (scrub/spin) channel
         float footW = 0.95f, footL = 2.0f;         // car footprint (asset AABB) — blob + boost disk
-        filament::math::float3 bbMin{}, bbMax{};   // asset AABB — rear plate anchor
         bool monsterOn = false;                    // morph edge detect
         float popT = 0;                            // grow/shrink pop clock (0.34 s)
         utils::Entity axle;                        // exposed axle rod (some models) — stripped by MonsterRig
@@ -630,7 +629,7 @@ private:
     float mTime = 0; // idle-animation clock (accumulated FrameInput.dt)
 
     // Translucent bits (vblend material, vertex alpha): baked ground shadows,
-    // name plates, the water glaze, tree canopies.
+    // the water glaze, tree canopies.
     filament::Material* mBlendMaterial = nullptr;
     // Round camera-facing sprites (vpoint): the ambient-particle cloud. The
     // billboard + the radial falloff both live in the shader — see vpoint.mat.
@@ -683,7 +682,6 @@ private:
     // Normalised shadow depth per WORLD unit (1 / the ortho depth range), so the
     // slope-scaled bias in vlit/vground means the same distance on every track.
     float mShadowDepthScale = 0.0f;
-    std::vector<Mesh> mPlates; // rear name plates (livery sticker + pixel-font name)
     // Boost wind streaks (SceneRenderer STREAK_*): 4 thin axial-billboard
     // quads per car slicing past the body while boosting.
     struct Streak {
@@ -887,8 +885,8 @@ private:
     // tvOS. The two exceptions are the steer bar and the cell dividers
     // (mOverlay*, voverlay.mat): cell-anchored and textless, so they need no
     // toolkit and must not be laid out twice. Everything else the renderer draws
-    // is anchored in the world or depth-tested (the rear name plates, the boost
-    // aura, the skids, the gantry).
+    // is anchored in the world or depth-tested (the boost aura, the skids, the
+    // gantry).
 
     // Ambient particles (theme.ambient): immutable SEEDS in a kAmbBox-wide
     // column; vpoint.mat evaluates the motion and wraps x/z around each view's
@@ -956,8 +954,7 @@ private:
     // are already sized to the field.
     bool buildCarSlot(const TrackBin& tb, uint32_t c);   // GLB via loadCarAsset, else box marker
     void buildCarGhost(uint32_t c);                      // 50%-alpha occlusion twin (+ decode pump)
-    bool buildCarPlate(const TrackBin& tb, uint32_t c);  // rear name plate (GLB cars only)
-    void destroyCarSlot(uint32_t c);                     // the inverse of the three above
+    void destroyCarSlot(uint32_t c);                     // the inverse of the two above
     void dropAsset(filament::gltfio::FilamentAsset*& a);
     // Attach finished texture decodes: the async queue only binds on a pump, so
     // every batch of loads ends with one (see the note in buildTrackScene).

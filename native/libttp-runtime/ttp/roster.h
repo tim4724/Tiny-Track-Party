@@ -2,9 +2,9 @@
 // scene build.
 //
 // This is the last thing about a race that the SHELL genuinely knows and C++
-// does not: the sim's cars carry no livery and no display name, because neither
-// changes an outcome. So a roster crosses the ttp_display_build boundary, and
-// this is where it stops being text.
+// does not: the sim's cars carry no livery, because a livery never changes an
+// outcome. So a roster crosses the ttp_display_build boundary, and this is
+// where it stops being text.
 //
 // IT USED TO CROSS TWICE, in two shapes. The ids went as a JSON array
 // (ttp_display_build's second argument) and the liveries went as "track.bin" —
@@ -13,9 +13,9 @@
 // each side. Two encoders of one list, in two languages, is exactly the drift
 // the corpora exist to catch and the one thing they could never see: no fixture
 // anywhere held a track.bin. Worse, it was work every shell had to redo, since
-// a tvOS display would have needed its own byte-exact writer to render a name
-// plate. Both halves are gone; the roster is one JSON argument and the
-// arithmetic below is written once.
+// a tvOS display would have needed its own byte-exact writer. Both halves are
+// gone; the roster is one JSON argument and the arithmetic below is written
+// once.
 //
 // Nothing here names a platform API, which is why it is in libttp-runtime and
 // not beside the ABI: runtimetest/frame_check.cc compiles and runs it on all
@@ -43,10 +43,10 @@ struct Roster {
 
 // Parse ttp_display_build's roster argument:
 //
-//   [{"id": <scalar>, "name": "…", "carIndex": <n>, "color": "#rrggbb"}, …]
+//   [{"id": <scalar>, "carIndex": <n>, "color": "#rrggbb"}, …]
 //
 // Lenient in the ABI's usual way — a malformed argument yields an EMPTY roster
-// rather than a failure, because a scene with no name plates is a better answer
+// rather than a failure, because a scene with no liveries is a better answer
 // than no scene. Entries missing `id` are dropped (a slot with no identity can
 // never be matched to a car); every other field falls back.
 Roster parseRoster(const char* json);
@@ -59,29 +59,16 @@ Roster parseRoster(const char* json);
 //   - ok requires the SAME slots in the SAME order: slot identity is baked into
 //     the scene (cameras, HUD readback, held poses all go by slot), so a
 //     join/leave/reorder is never a re-dress.
-//   - `remodel` — slots whose MODEL changed (carIndex): the slot's GLB, ghost,
-//     silhouette and plate are all rebuilt.
-//   - `redress` — slots whose livery/name changed under the same model: only
-//     what wears them (the plate, or a GLB-less slot's box marker) is rebuilt.
+//   - `remodel` — slots whose MODEL changed (carIndex): the slot's GLB, ghost
+//     and silhouette are all rebuilt.
+//   - `redress` — slots whose livery changed under the same model: only what
+//     wears it (a GLB-less slot's box marker) is rebuilt.
 struct RerosterPlan {
   bool ok = false;
   std::vector<uint32_t> remodel;
   std::vector<uint32_t> redress;
 };
 RerosterPlan planReroster(const Roster& prev, const Roster& next);
-
-// The rear name plate's height on a model's back panel, in world Y, indexed by
-// the car's position in CAR_MODELS. Hand-tuned per model because the plate sits
-// on a flat rear surface the renderer cannot raycast for the way a scene graph
-// could.
-//
-// TOTAL over int: an index past the last model wraps, matching the shell's own
-// modulo, and a NEGATIVE one wraps forward rather than falling through. That
-// last part is a small, deliberate divergence from the retired JS, where
-// `PLATE_Y[i % 4] ?? null` handed a negative index the -1 "auto" fallback. A
-// carIndex is a seat's chosen car (0..3), so neither answer is reachable; this
-// one is stated because frame_check pins it.
-float plateY(int carIndex);
 
 // '#rrggbb' -> the 0xAABBGGRR word the renderer wants, opaque.
 //

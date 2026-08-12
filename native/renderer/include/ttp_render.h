@@ -34,16 +34,14 @@ extern "C" {
  * in a comment, which is the same shape of silent divergence the effect-list
  * ABIs exist to prevent; the roster crosses the ttp_display_build boundary as
  * JSON now and libttp-runtime's parseRoster (ttp/roster.h) fills this struct,
- * so the colour arithmetic and the per-model plate table are written once.
+ * so the colour arithmetic is written once.
  */
 typedef struct TtpRosterCar {
     uint32_t colorABGR;   /* livery, premultiplied-alpha-free 0xAABBGGRR */
-    char name[9];         /* rear name plate: 8 chars + NUL, 0-padded */
-    float plateY;         /* plate height on this model's back panel; < 0 = auto */
     /* Which kit model this slot drives. The renderer never resolves it to a
      * file — the shell fetches the GLB and provides it as car<slot>.glb — but a
      * re-roster (ttp_display_reroster) needs to know whether a slot's MODEL
-     * changed, and plateY is not that signal: two models may share a height. */
+     * changed. */
     int32_t carIndex;
 } TtpRosterCar;
 

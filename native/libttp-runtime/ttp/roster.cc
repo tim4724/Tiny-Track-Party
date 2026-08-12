@@ -1,22 +1,10 @@
 #include "ttp/roster.h"
 
-#include <cstring>
-
 #include "ttp/json_parse.h"
 
 namespace ttp {
 namespace rt {
 namespace {
-
-// Per-model plate height (world Y on the rear face), indexed by CAR_MODELS
-// position (protocol.js): racer-low, speedster, racer, vintage-racer.
-//
-// The VALUES are trackBin.js's, unchanged. Its comment listed the models in the
-// wrong order (racer and racer-low swapped, ~1 mm apart, so nothing ever
-// noticed); this table is the single source three shells read now, so the label
-// is corrected here rather than carried across with the numbers.
-constexpr float PLATE_Y[] = { 0.157f, 0.245f, 0.156f, 0.134f };
-constexpr int PLATE_Y_COUNT = (int) (sizeof(PLATE_Y) / sizeof(PLATE_Y[0]));
 
 int hexDigit(char c) {
   if (c >= '0' && c <= '9') return c - '0';
@@ -25,59 +13,7 @@ int hexDigit(char c) {
   return -1;
 }
 
-// The next UTF-16 code UNIT sequence of a UTF-8 string, appended to `out`.
-//
-// Code units, not code points, and that is deliberate: the plate's 8 slots are
-// filled by JS `charCodeAt`, so an astral character (an emoji) has always eaten
-// TWO of them and masked down to '=' plus a NUL that ends the plate early.
-// Decoding to code points instead would silently change what the back of a car
-// says for exactly the names most likely to carry one. A malformed byte yields
-// itself, so a truncated name can never spin here.
-void utf16Units(const std::string& s, std::vector<uint32_t>& out) {
-  for (size_t i = 0; i < s.size();) {
-    const unsigned char c = (unsigned char) s[i];
-    uint32_t cp;
-    size_t len;
-    if (c < 0x80) { cp = c; len = 1; }
-    else if ((c & 0xE0) == 0xC0) { cp = c & 0x1Fu; len = 2; }
-    else if ((c & 0xF0) == 0xE0) { cp = c & 0x0Fu; len = 3; }
-    else if ((c & 0xF8) == 0xF0) { cp = c & 0x07u; len = 4; }
-    else { out.push_back(c); i++; continue; }
-    if (i + len > s.size()) { out.push_back(c); i++; continue; }
-    bool ok = true;
-    for (size_t k = 1; k < len; k++) {
-      const unsigned char cc = (unsigned char) s[i + k];
-      if ((cc & 0xC0) != 0x80) { ok = false; break; }
-      cp = (cp << 6) | (cc & 0x3Fu);
-    }
-    if (!ok) { out.push_back(c); i++; continue; }
-    i += len;
-    if (cp >= 0x10000u) {
-      const uint32_t v = cp - 0x10000u;
-      out.push_back(0xD800u + (v >> 10));
-      out.push_back(0xDC00u + (v & 0x3FFu));
-    } else {
-      out.push_back(cp);
-    }
-  }
-}
-
-void writePlate(const std::string& name, char out[9]) {
-  std::vector<uint32_t> units;
-  utf16Units(name, units);
-  for (int i = 0; i < 8; i++) {
-    out[i] = (char) (i < (int) units.size() ? (units[(size_t) i] & 0x7Fu) : 0u);
-  }
-  out[8] = 0;
-}
-
 }  // namespace
-
-float plateY(int carIndex) {
-  int i = carIndex % PLATE_Y_COUNT;
-  if (i < 0) i += PLATE_Y_COUNT;
-  return PLATE_Y[i];
-}
 
 uint32_t liveryABGR(const std::string& css) {
   const std::string s = css.empty() ? "#888888" : css;
@@ -108,14 +44,11 @@ Roster parseRoster(const char* json) {
     else if (id->type == Value::STR) out.ids.push_back(ScalarId::Str(id->str));
     else continue;
 
-    const Value* name = e.find("name");
     const Value* carIndex = e.find("carIndex");
     const Value* color = e.find("color");
     TtpRosterCar car{};
     car.colorABGR = liveryABGR(color && color->type == Value::STR ? color->str : std::string());
-    writePlate(name && name->type == Value::STR ? name->str : std::string(), car.name);
     car.carIndex = carIndex && carIndex->type == Value::NUM ? (int32_t) carIndex->num : 0;
-    car.plateY = plateY(car.carIndex);
     out.cars.push_back(car);
   }
   return out;
@@ -132,11 +65,9 @@ RerosterPlan planReroster(const Roster& prev, const Roster& next) {
   for (size_t i = 0; i < next.cars.size(); i++) {
     const TtpRosterCar& a = prev.cars[i];
     const TtpRosterCar& b = next.cars[i];
-    // plateY is not compared: parseRoster derives it from carIndex alone, so
-    // with carIndex equal it cannot differ.
     if (a.carIndex != b.carIndex) {
       plan.remodel.push_back((uint32_t) i);
-    } else if (a.colorABGR != b.colorABGR || std::string(a.name) != b.name) {
+    } else if (a.colorABGR != b.colorABGR) {
       plan.redress.push_back((uint32_t) i);
     }
   }

@@ -359,7 +359,7 @@ export function runDisplayScenario(opts, ctx) {
   }
 
   // The CPU fill for the given human slots, by the wasm's own seat rule
-  // (cpuSeats): lowest free livery, carIndex wraps the model list, plate =
+  // (cpuSeats): lowest free livery, carIndex wraps the model list, name =
   // the persona that drives it. `personaBase` is where the persona deal
   // starts: 0 for a launch (buildField names bots by bot ordinal — Bolt is
   // always the first bot), slots.length for the lobby demo (buildDemoField
@@ -383,15 +383,15 @@ export function runDisplayScenario(opts, ctx) {
   // A race field in LAUNCH shape — the order the live walks hand begin_field,
   // which seats it verbatim (race_flow's orderGrid, humansAtBack): the CPU
   // field out front, the humans gridded at the back. botSpecs deals personas
-  // by the same positions, so plate and driving stay matched.
+  // by the same positions, so name and driving stay matched.
   function raceGrid(slots) {
     return cpuFill(slots, 0).concat(humanEntries(slots));
   }
   // The lobby demo's shape (buildDemoField): the roster first, the fill behind
   // it, and EVERY entry driven by the persona at its final grid index — the
-  // fill's plates carry that persona's name — exactly what flow.demoLive
-  // answers off a live room. cpuFill(slots.length) lines its plates up with
-  // the same index by construction.
+  // fill carries that persona's name — exactly what flow.demoLive answers off
+  // a live room. cpuFill(slots.length) lines its names up with the same index
+  // by construction.
   function demoGrid(slots) {
     return humanEntries(slots).concat(cpuFill(slots, slots.length)).map((g, n) => ({
       ...g, persona: AI_PERSONALITIES[n % AI_PERSONALITIES.length]
@@ -578,7 +578,7 @@ export function runDisplayScenario(opts, ctx) {
       const MODELS = window.CAR_MODELS || [];
       const MODEL_NAMES = window.CAR_NAMES || [];
       // Three-quarters behind the grid, at car height: the opening frame is the
-      // parked lineup wearing its liveries and rear name plates, with the gantry
+      // parked lineup wearing its liveries, with the gantry
       // and then the whole exhibition straight receding past it — the cars, and
       // where to fly next, in one shot. Fitted to the showroom's own geometry
       // (the line is at world origin, the road runs +x, the grid sits behind
@@ -588,9 +588,7 @@ export function runDisplayScenario(opts, ctx) {
       const cam = enableFreeCam(scene, START_CAM);
 
       // One seat per LIVERY, cycling the models — eight cars covers every model
-      // twice over, and no model is represented by only one paint job. Each
-      // wears its model's own name on the rear plate, which makes the lineup
-      // self-labelling.
+      // twice over, and no model is represented by only one paint job.
       //
       // TWO PER MODEL, CYCLING IN SLOT ORDER is load-bearing beyond the paint:
       // the parked showroom puts the monster rig on the BACK HALF of the grid

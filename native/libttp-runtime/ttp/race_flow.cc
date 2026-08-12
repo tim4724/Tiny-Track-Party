@@ -269,7 +269,7 @@ std::vector<DemoEntry> buildDemoField(const std::vector<Human>& humans, const Fi
     field.push_back(std::move(e));
   }
   // Persona by FINAL GRID INDEX so they spread across the whole field; each CPU
-  // also takes THAT persona's name, so its plate matches how it drives.
+  // also takes THAT persona's name, so its HUD name matches how it drives.
   for (size_t i = 0; i < field.size(); i++) {
     if (!w.personas.empty()) field[i].persona = w.personas[i % w.personas.size()];
     if (i >= humanCount) field[i].name = field[i].persona.name;

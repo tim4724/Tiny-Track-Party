@@ -6,7 +6,7 @@
 // the recolour seams, with baked fallbacks a plain <img> renders as-is:
 // --icon-accent (the boost chevrons — the biome's boost accent) and
 // --icon-car (the monster cab — the body colour of the car model the player
-// drives, matching the in-race graft; the livery only ever paints the plate).
+// drives, matching the in-race graft; a livery never repaints a car body).
 import { ITEM_IDS } from '../display/engine/contract.js';
 
 // The four car models' painted body tones, parallel to CAR_MODELS

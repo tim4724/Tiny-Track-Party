@@ -43,7 +43,7 @@
 //
 // What a run does — a 180° yaw baked into the geometry rather than a per-model
 // rotation hook, so the asset matches the convention the whole renderer
-// (wheels, skids, plates, silhouettes, thumbnails) already assumes:
+// (wheels, skids, silhouettes, thumbnails) already assumes:
 //   - POSITION / NORMAL / TANGENT: negate x and z (a yaw of π; determinant +1,
 //     so triangle winding is untouched)
 //   - node translations: negate x and z

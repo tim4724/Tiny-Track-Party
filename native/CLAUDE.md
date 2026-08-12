@@ -122,8 +122,8 @@ or check writes neither: it includes them.**
 No JS twin. `ttp_display_build` runs the builder itself, so the renderer meshes
 from the same track the sim races on: the browser holds no geometry and **nothing
 about a scene is serialized**. The roster crosses as an argument with a single
-reader, so livery encoding and name-plate data are written once for three shells
-rather than once per shell.
+reader, so livery encoding is written once for three shells rather than once per
+shell.
 
 The projection behind the schematic bake rounds through JS `toFixed`, which printf
 cannot reproduce — it routes through double-conversion's `ToFixed` (V8's own).

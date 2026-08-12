@@ -211,16 +211,12 @@ void TtpRenderer::destroyMesh(Mesh& m) {
 // This used to be a byte parser over "track.bin" — a version word, three
 // parallel arrays and four length checks, mirrored by a writer in JS. The
 // liveries arrive as plain structs now (libttp-runtime's parseRoster does the
-// colour arithmetic and the plate table once), so what is left is a copy.
+// colour arithmetic once), so what is left is a copy.
 void TtpRenderer::applyRoster(TrackBin& out, const std::vector<TtpRosterCar>& roster) {
     const size_t n = roster.size();
     out.carColors.resize(n);
-    out.carNames.resize(n);
-    out.carPlateY.resize(n);
     for (size_t i = 0; i < n; i++) {
         out.carColors[i] = roster[i].colorABGR;
-        out.carNames[i] = roster[i].name; // NUL-terminated, 8 chars max
-        out.carPlateY[i] = roster[i].plateY;
     }
 }
 
@@ -691,7 +687,6 @@ void TtpRenderer::releaseScene() {
     for (auto& m : mCars) destroyMesh(m);
     destroyMesh(mGantry);
     for (auto& m : mStreakMeshes) destroyMesh(m);
-    for (auto& m : mPlates) destroyMesh(m);
     for (auto& m : mClouds) destroyMesh(m);
     destroyMesh(mBoulders);
     destroyMesh(mLandmarks);
@@ -790,7 +785,6 @@ void TtpRenderer::releaseScene() {
     mBoxGlowMats.clear(); // the box assets own them (dropAsset above) — handles only
     mConeStates.clear();
     mSignMeshes.clear();
-    mPlates.clear();
     mStreaks.clear();
     mStreakMeshes.clear();
     mStreakSeed.clear();

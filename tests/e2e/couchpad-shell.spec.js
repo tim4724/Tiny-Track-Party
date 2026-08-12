@@ -133,9 +133,6 @@ test('a setName MID-RACE moves the display cell chip, not just the lobby seat', 
 
   await zoe.evaluate(() => window.CouchPad.setName('Zephyr'));
   await expect(chip).toHaveText('Zephyr');
-  // The car's REAR NAME PLATE is not asserted and does not follow: it is baked
-  // into the scene's geometry at build time, so it keeps the name the car
-  // launched under until the next build (Stage.setCarName says why).
 });
 
 test('a rejected join reports gameEnded(room_not_found) to the launcher', async ({ page, browser }) => {

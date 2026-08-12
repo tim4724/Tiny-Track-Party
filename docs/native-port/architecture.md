@@ -90,7 +90,7 @@ viewer (the renderer dev harness).
 - **HUD in the SHELL, in platform-native UI** (reversed 2026-07-25 — the
   original decision was in-renderer with platform UI as the fallback). The
   split is anchored vs screen-space, not 2D vs 3D: the renderer draws what
-  lives in the world or depth-tests (rear name plates, boost aura, skids,
+  lives in the world or depth-tests (boost aura, skids,
   the gantry banner); everything in screen space (place card, lap pill,
   item slot, name chip, countdown, results, lobby) is DOM/CSS on web,
   Compose on Android TV, SwiftUI on tvOS. The Sticker Bash look IS a UI

@@ -237,8 +237,8 @@ BuiltField buildField(const std::vector<Human>& humans, double seed, const Field
 
 // The attract field. Same CPU fill, different ids, and one extra rule: persona
 // by FINAL GRID INDEX so they spread across the whole field, with each CPU
-// taking that persona's name so its plate matches how it drives. Humans keep
-// their own name but still drive on a persona — no phones steer here.
+// taking that persona's name so its HUD name matches how it drives. Humans
+// keep their own name but still drive on a persona — no phones steer here.
 struct DemoEntry {
   std::string id;
   std::string name;

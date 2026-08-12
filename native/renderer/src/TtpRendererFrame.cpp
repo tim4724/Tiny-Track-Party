@@ -771,7 +771,6 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                     if (dot(d, d) < 3.0f * 3.0f) blockMask |= (1u << vi);
                 }
             }
-            static const mat4f MPARK2 = mat4f::translation(float3{ 0, -1000, 0 });
             const bool isMonster = c.monster > 0.5f
                     && mMonsterInstances.size() > i && mMonsterInstances[i];
             // MonsterRig graft: the kit chassis (cab collapsed) rides the pose;
@@ -830,13 +829,6 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                 mv.mask = blockMask;
                 mv.rig = rigPose;
                 mv.body = pose;
-            }
-            // Rear name plate rides the body pose (banks/dives/pops with it).
-            // It's a child of the NORMAL body in the JS, so it vanishes with
-            // the car while the monster transform is up.
-            if (mPlates.size() > i && !mPlates[i].entity.isNull()) {
-                tcm.setTransform(tcm.getInstance(mPlates[i].entity),
-                        isMonster ? MPARK2 : pose);
             }
             // Wheel cosmetics (SceneRenderer's readability numbers): roll from
             // the car's REAL travel this frame (ds/r × WHEEL_SPIN_SCALE 0.4 —

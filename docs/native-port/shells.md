@@ -158,7 +158,7 @@ Three properties of that surface matter more than the list:
     `--icon-accent` (the boost chevrons, `ttp_theme_boost_icon`) and
     `--icon-car` (the monster cab: the body tone of the car MODEL the player
     drives, per `CAR_BODY_COLORS` in `public/shared/itemIcons.js` — not the
-    livery, which only ever paints the name plate). A shell that cannot
+    livery, which never repaints a car body). A shell that cannot
     evaluate CSS vars substitutes those two tokens and rasterizes; the baked
     fallback colours are the pre-theme look.
 12. **WHEN the scene is built.** A build blocks the thread long enough to be

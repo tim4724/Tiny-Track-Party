@@ -153,7 +153,8 @@ async function main() {
       return !!(s && e && s.cars.size >= n);
     }, PLAYERS, { timeout: 20000 });
 
-    // Plates render with the self-hosted Fredoka face — wait so text isn't a fallback.
+    // The HUD chips render with the self-hosted Fredoka face — wait so text
+    // isn't a fallback.
     await page.evaluate(() => document.fonts && document.fonts.ready);
 
     // The perf HUD is ON by default in development (render/PerfHud.js), and this is

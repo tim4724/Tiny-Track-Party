@@ -8,7 +8,7 @@
 // place this frame's labels.
 //
 // What the Stage tracks per car is only what the HUD needs — the cell it owns,
-// its name plate colour, its place/lap/item chips — plus the roster order the
+// its livery colour, its place/lap/item chips — plus the roster order the
 // renderer baked its models and liveries in. Even WHERE a cell is comes from
 // C++ (display.cellRects): this file used to score the split-screen grid a
 // second time, and the two copies had already drifted once.
@@ -240,11 +240,11 @@ export class Stage {
   // frame then finds a car's slot by its id, so this order only has to be
   // stable within one build, not to mean anything to the sim.
   //
-  // A slot is four fields, and the split between them is the whole contract:
-  // id/name/carIndex/colour go to C++ verbatim (ttp_display_build parses them —
-  // the livery arithmetic and the name-plate height are ITS business, not this
-  // file's), while `model` never crosses at all. It names the GLB to FETCH,
-  // which is the one part of a scene build that is a platform job.
+  // A slot is three fields, and the split between them is the whole contract:
+  // id/carIndex/colour go to C++ verbatim (ttp_display_build parses them —
+  // the livery arithmetic is ITS business, not this file's), while `model`
+  // never crosses at all. It names the GLB to FETCH, which is the one part of
+  // a scene build that is a platform job.
   _roster() {
     const seen = new Set(this._order.filter((id) => this.cars.has(id)));
     const all = [...seen, ...[...this.cars.keys()].filter((id) => !seen.has(id))];
@@ -253,7 +253,7 @@ export class Stage {
       const c = this.cars.get(id);
       const carIndex = c.carIndex ?? 0;
       return {
-        id, name: c.name || '', carIndex,
+        id, carIndex,
         color: this.colors[(c.colorIndex ?? 0) % this.colors.length],
         model: models[carIndex % (models.length || 1)] || null
       };
@@ -391,7 +391,7 @@ export class Stage {
       label.style.setProperty('--c', colHex);
       // The monster chip's cab wears the CAR's own body tone, not the player's
       // livery — the in-race transform grafts the player's body onto the
-      // chassis, and the body keeps its model paint (the livery is the plate's).
+      // chassis, and the body keeps its model paint.
       label.style.setProperty('--icon-car', CAR_BODY_COLORS[carIndex % CAR_BODY_COLORS.length]);
       this.overlay.appendChild(label);
       c.label = label;
@@ -491,11 +491,10 @@ export class Stage {
     return true;
   }
 
-  // A seated player changed their name (DisplayNet's onPlayerRenamed). Moves
-  // the cell chip, which is DOM, and re-dresses the rear name plate: a rename
-  // is a roster-only change on a live scene, which _rebuild routes through
-  // ttp_display_reroster — the plate re-bakes in place, mid-race or mid-lobby,
-  // and nothing else (meshes, skids, cameras) moves.
+  // A seated player changed their name (DisplayNet's onPlayerRenamed). A name
+  // is HUD-only — the cell chip is DOM, and nothing in the 3D scene wears it —
+  // so this never touches the renderer: the roster the scene builds from
+  // carries no name, and _rebuild sees an unchanged signature.
   setCarName(id, name) { return this.updateCar(id, { name }); }
 
   // Show (el) or clear (null) a dropped player's reconnect card, centred in

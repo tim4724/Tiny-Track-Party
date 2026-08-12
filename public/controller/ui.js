@@ -20,7 +20,7 @@ export function applyLatencyChip(chipEl, halfMs, viaFastlane) {
 }
 
 // "Waiting for NAME<suffix>" — NAME is the host, tinted in their livery colour
-// (matching the in-race name plate). Built from DOM nodes so a player-supplied
+// (matching their in-race HUD chip). Built from DOM nodes so a player-supplied
 // name is always inserted as text, never markup. Falls back to "the host" until
 // the roster naming the host has arrived. `color` is a CSS colour string (or
 // falsy to leave the default).

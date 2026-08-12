@@ -1658,15 +1658,6 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     // road-shader stamp sized per frame in render().
     mBoostDiskLin = srgbToLinear(ttp::rt::boost_shades(tb.boostCol).disk);
     if (mBlendMaterial) {
-        // Rear name plates (makePlate): a livery rounded-rect sticker with a
-        // white feathered rim and the player's name, fixed to the car's rear
-        // — the chase cam reads the plate of whoever it's chasing. The face is
-        // a pixel font (the JS sets Fredoka); it's MIXED CASE like the roster,
-        // since a shouty all-caps "MIA" was the loudest difference on the plate.
-        mPlates.resize(carCount);
-        for (uint32_t c = 0; c < carCount; c++) {
-            if (!buildCarPlate(tb, c)) return false;
-        }
         // Boost wind streaks: the JS is a UNIT QUAD (length along Z, width
         // along X, facing +Y) carrying makeStreakTexture — an ellipse
         // (rx 24, ry 3 on a 64×16 canvas) blurred by 3px, so it's soft at both

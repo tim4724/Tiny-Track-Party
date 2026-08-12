@@ -295,12 +295,11 @@ export class Display {
       })
     ]);
 
-    // The roster goes across whole — id, name, carIndex and livery, in slot
-    // order. `model` stays here: it named the GLBs fetched above, which is the
-    // only part of a slot this side has any business knowing. Everything else
-    // about it (the livery's ABGR word, the name plate's 8 chars, how high that
-    // plate sits on this model's back panel) is decided by ttp/roster.h — it
-    // used to be a byte buffer this file packed by hand.
+    // The roster goes across whole — id, carIndex and livery, in slot order.
+    // `model` stays here: it named the GLBs fetched above, which is the only
+    // part of a slot this side has any business knowing. Everything else about
+    // it (the livery's ABGR word) is decided by ttp/roster.h — it used to be a
+    // byte buffer this file packed by hand.
     // The reason is the engine's: no surface, or a track this build does not have.
     if (!this._fn.build(trackId, JSON.stringify(this._slots(roster)))) throw nativeError(`building the scene for '${trackId}'`);
     this._slotIdCache = null; // a build is the one thing that can change slot ids
@@ -308,7 +307,7 @@ export class Display {
   }
 
   // Re-dress the BUILT scene's car slots in place (ttp_display_reroster): same
-  // slots, new models/liveries/names. What earns it a second entry point is
+  // slots, new models/liveries. What earns it a second entry point is
   // everything setTrack would reset and this keeps — the scene meshes, the
   // baked shadows, the skid patina and the preview camera's orbit phase.
   // Whether the change IS a re-dress is C++'s decision; false means it was a
@@ -341,7 +340,7 @@ export class Display {
   // between what crosses and what stays).
   _slots(roster) {
     return (roster || []).map((r) => ({
-      id: r.id, name: r.name || '', carIndex: r.carIndex ?? 0, color: r.color || ''
+      id: r.id, carIndex: r.carIndex ?? 0, color: r.color || ''
     }));
   }
 
