@@ -712,7 +712,6 @@ private:
     // texture is per-track (sized by lap length); everything else here is
     // engine-lifetime, built lazily by ensureSkidLayer().
     filament::Texture* mSkidTex = nullptr;        // per-track, R8
-    filament::RenderTarget* mSkidRT = nullptr;    // per-track, colour-only
     filament::Texture* mSkidNullTex = nullptr;    // 1x1 zero, binds when no track
     filament::View* mSkidStampView = nullptr;
     filament::Scene* mSkidStampScene = nullptr;

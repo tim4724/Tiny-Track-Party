@@ -1283,14 +1283,19 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
                 .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE
                         | Texture::Usage::GEN_MIPMAPPABLE)
                 .build(*mEngine);
-        if (mSkidTex) {
-            mSkidRT = RenderTarget::Builder()
-                    .texture(RenderTarget::AttachmentPoint::COLOR, mSkidTex)
-                    .build(*mEngine);
-        }
-        if (mSkidRT) {
+        // The stamp target is created FRESH around every pass and destroyed
+        // after it, here and in renderSkids. Not churn: on the Metal backend a
+        // texture still attached to a live RenderTarget SAMPLES AS ZERO, so a
+        // persistent target made vroad's tap read no ink on tvOS while the
+        // same build inked on GL (found 2026-08-12 by binding a known-good
+        // texture to the tap, then detaching the target). The bake passes
+        // (TtpRendererBakes.cpp) always worked this way.
+        RenderTarget* rt = mSkidTex ? RenderTarget::Builder()
+                .texture(RenderTarget::AttachmentPoint::COLOR, mSkidTex)
+                .build(*mEngine) : nullptr;
+        if (rt) {
             mSkidStampView->setViewport({ 0, 0, W, H });
-            mSkidStampView->setRenderTarget(mSkidRT);
+            mSkidStampView->setRenderTarget(rt);
             // Zero the texture NOW, not via mSkidWipe on the first frame: a
             // fresh render target holds garbage, and the frame loop's skid
             // block only runs when the scene has wheel trails — the LOBBY
@@ -1304,6 +1309,13 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
             mRenderer->setClearOptions(co);
             mRenderer->renderStandaloneView(mSkidStampView);
             mRenderer->setClearOptions(prev);
+            mSkidStampView->setRenderTarget(nullptr);
+            mEngine->destroy(rt);
+            // Zero the whole mip chain too. The GL backend clamps sampling to
+            // level 0 until the first generateMipmaps; Metal has no such
+            // clamp, so an un-generated chain is garbage under the trilinear
+            // tap. Generating off the just-cleared level 0 is a one-time cost.
+            mSkidTex->generateMipmaps(*mEngine);
         } else {
             if (mSkidTex) { mEngine->destroy(mSkidTex); mSkidTex = nullptr; }
             mSkidLatHalf = 0;

@@ -135,9 +135,10 @@ void TtpRenderer::bindSkidLayer(MaterialInstance* mi) {
     // Trilinear + anisotropic: the deck ahead minifies this layer hard, and a
     // no-mip LINEAR tap made every mark scintillate in motion (deck-wide
     // temporal aliasing). Aniso keeps the marks readable at the road's grazing
-    // angles instead of trilinear mush. Until the first generateMipmaps lands
-    // Filament clamps sampling to level 0 on its own (RenderTarget attachment
-    // sets the texture's LOD range), so there is no window on ungenerated mips.
+    // angles instead of trilinear mush. There is no window on ungenerated
+    // mips: the build-time wipe generates the chain off the cleared level 0
+    // (the GL backend's own level-0 clamp covered this, Metal's does not
+    // exist — see the wipe in TtpRendererTrack.cpp).
     TextureSampler smp(t == mSkidTex
                     ? TextureSampler::MinFilter::LINEAR_MIPMAP_LINEAR
                     : TextureSampler::MinFilter::LINEAR,

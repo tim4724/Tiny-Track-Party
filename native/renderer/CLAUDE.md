@@ -299,6 +299,13 @@ no lift; unbounded marks cost fixed memory. The tap reads through
 enforces this), and the stamper keeps the texture's outer lat rows empty,
 which is what parks the kerbs' and underside's out-of-band v on zero ink.
 
+**A sampled texture's RenderTarget must be TRANSIENT.** On the Metal backend a
+texture still attached to a live `RenderTarget` samples as ZERO — silently, and
+GL doesn't care, so the web never shows it. Every pass that renders into a
+texture the scene also samples (the bakes, the rubber stamps) creates its
+target around the pass and destroys it after; a persistent attachment is how
+tvOS shipped with no tire marks while the same build inked on the web.
+
 ## The per-frame budget
 
 A steady-state race frame is one `ttp_display_frame(dt)`, one
