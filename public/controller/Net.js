@@ -274,7 +274,7 @@ export class ControllerNet extends GameNet {
         setTimeout(() => { if (this.fastlane && this.peerIndex != null) this.fastlane.open(0); }, 2000);
       },
     });
-    this.fastlane.open(0);
+    if (this.fastlane) this.fastlane.open(0); // null with no WebRTC: relay only
   }
 
   // ---- ping / pong (WS relay-liveness + WS-path latency) ----

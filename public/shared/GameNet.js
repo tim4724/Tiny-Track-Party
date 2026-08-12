@@ -22,6 +22,11 @@ export class GameNet {
     // handshake is inherited from the kit). Unset, this is the kit class.
     const Impl = this.FastlaneImpl || PartyFastlane;
     if (this.fastlane) { this.fastlane.closeAll(); this.fastlane = null; }
+    // The fastlane is an enhancement, not a requirement. With WebRTC absent
+    // (old phones, privacy browsers/policies that disable it) the kit's
+    // constructor throws — leave this.fastlane null instead: every caller
+    // treats null as "relay carries everything".
+    if (typeof RTCPeerConnection === 'undefined') return;
     this.fastlane = new Impl({
       selfIndex,
       // Ours first, the manifest's public fallback second — same candidate

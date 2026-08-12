@@ -119,7 +119,7 @@ const NET_PERFORMERS = {
   'send-to': (n, e) => n.party.sendTo(e.to, e.data),
   'publish': (n) => n._publishLobby(),
   'announce': (n) => n._announce(),
-  'close-fastlane': (n, e) => n.fastlane.close(e.peerIndex),
+  'close-fastlane': (n, e) => { if (n.fastlane) n.fastlane.close(e.peerIndex); },
   // The claim URL needs this shell's base origin (D3), so it is spliced
   // here; the card payload and the DIFF over the set stay C++'s.
   'show-reconnect': (n, e) => {
@@ -338,7 +338,7 @@ export class DisplayNet extends GameNet {
   // ---- connection ----
   _connect() {
     if (this.party) this.party.close(); // fresh-room fallback replaces the connection
-    this.fastlane.closeAll();
+    if (this.fastlane) this.fastlane.closeAll();
     // The sharded dial URL, from ttp::framing::pin_instance_url — the same
     // encoder party.pinInstance calls below, rather than a second hand-built
     // copy of the string in the same file. No instance = the plain relay URL.
