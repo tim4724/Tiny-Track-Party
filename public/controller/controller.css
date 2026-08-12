@@ -163,10 +163,12 @@ input[type=text]:disabled { opacity: 0.6; }
    ribbon. */
 .lobby-me { display: flex; max-width: 70%; }
 .lobby-me__name {
-  font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; line-height: 1;
+  /* size matches .hud-name so the sticker reads as the same chip on both
+     screens (the gear beside it already does, see .settings-btn) */
+  font-family: var(--font-display); font-weight: 700; font-size: 1.4rem; line-height: 1;
   color: #fff; background: var(--car, var(--brand));
   border: 3px solid var(--ink); border-radius: var(--r-sm);
-  padding: 0.3em 0.6em;
+  padding: 0.39em 0.6em;
   transform: rotate(-3deg);
   box-shadow: var(--shadow-pop);
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
