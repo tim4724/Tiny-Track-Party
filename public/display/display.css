@@ -1016,9 +1016,10 @@ body.airconsole .rc-card__qr,
 body.airconsole #fullscreen-btn { display: none; }
 
 /* Without the QR the ticket would be a near-empty sticker card floating
-   mid-rail, so it sheds the card entirely: the bare die-cut wordmark pinned
-   top-left, with the join hint (retexted by main.js's AC branch) hanging
-   under it. Pointer-events off — there is no join link to copy. */
+   mid-rail, so it sheds the card entirely: just the bare die-cut wordmark
+   pinned top-left. The scan hint goes too — the platform's own UI handles
+   joining. Pointer-events off — there is no join link to copy. */
+body.airconsole .tagline { display: none; }
 body.airconsole .ticket-rail { align-self: start; }
 body.airconsole .ticket {
   background: none; border: 0; box-shadow: none; padding: 0;
@@ -1030,10 +1031,6 @@ body.airconsole .ticket__wordmark {
   font-size: clamp(28px, 3vw, 46px);
   -webkit-text-stroke-width: 7px;   /* die-cut edge back — no white card behind it */
   filter: drop-shadow(3px 3px 0 var(--shadow-ink));
-}
-body.airconsole .tagline {
-  left: 0; transform: rotate(-2deg);   /* left-aligned under the wordmark */
-  opacity: 1;                          /* no QR fade to gate on */
 }
 
 /* The welcome board never shows in AC — the LOBBY is the boot screen (its

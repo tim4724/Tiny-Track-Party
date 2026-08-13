@@ -1336,7 +1336,6 @@ if (_scenario) {
   // The AC iframe carries allow=autoplay, so the AudioContext resumes without
   // a gesture; if a host build ever refuses, the sound-hint pill still shows.
   audio.resume();
-  el('tagline').firstElementChild.textContent = 'Join from the AirConsole app on your phones!';
   net.start();
 
   // Platform pause (AC menu / connection wobble) rides the same manual-pause

@@ -79,11 +79,11 @@ async function joinAcController(displayPage, deviceId, nickname) {
 test('AC: screen boots to the lobby, profile-named phones join, a race runs', async ({ page }) => {
   await openAcDisplay(page);
 
-  // The join ticket carries no QR and no URL line in AC (players pair through
-  // the platform), and the tagline says so.
+  // The join ticket carries no QR, no URL line and no scan hint in AC —
+  // players pair through the platform's own UI.
   await expect(page.locator('#qr')).toBeHidden();
   await expect(page.locator('#joinurl')).toBeHidden();
-  await expect(page.locator('#tagline')).toContainText('AirConsole');
+  await expect(page.locator('#tagline')).toBeHidden();
 
   const ana = await joinAcController(page, 101, 'Ana');   // first in → host
   const ben = await joinAcController(page, 102, 'Ben');
