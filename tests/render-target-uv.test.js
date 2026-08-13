@@ -46,10 +46,7 @@ const RENDER_TARGET_SAMPLERS = new Set([
   // RTs by vesm, then sampled per lit fragment (TtpRenderer::bakeShadowMap).
   'shadowMap',
   // vesm/vblur read the pass before them; vpresent reads the scene target.
-  'src', 'scene',
-  // The rubber layer: vskid stamps into it, vroad samples it per deck
-  // fragment (TtpRenderer::ensureSkidLayer).
-  'skidLayer'
+  'src', 'scene'
 ]);
 
 /** Samplers fed by an UPLOAD, which have no flip and must not be wrapped. */
@@ -64,7 +61,13 @@ const UPLOADED_SAMPLERS = new Set([
   'baseColorMap',
   // vpoint's flake floor: the max-height grid, Texture::setImage in
   // buildScene's ambient block.
-  'floorTex'
+  'floorTex',
+  // The rubber layer: CPU-rasterized stamps uploaded as dirty rects
+  // (TtpRenderer::renderSkids / uploadSkidRects), sampled by vroad's tap.
+  // It WAS a render target; the A10X's below-the-API misbehaviour around
+  // accumulating attachments is why it no longer is — see the mSkidPix
+  // comment in TtpRenderer.h before ever moving it back.
+  'skidLayer'
 ]);
 
 const materials = () => readdirSync(MATERIALS).filter((f) => /\.(mat|inc)$/.test(f));

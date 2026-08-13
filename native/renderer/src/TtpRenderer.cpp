@@ -717,13 +717,14 @@ void TtpRenderer::releaseScene() {
     destroyMesh(mPlane);
     for (auto& m : mBirds) destroyMesh(m);
     for (auto& m : mKites) destroyMesh(m);
-    // The rubber texture is per-track; the pass machinery around it is
-    // engine-lifetime, and its RenderTarget is transient per pass (Metal
-    // samples an attached texture as zero), so only the texture goes here.
+    // The rubber texture and its CPU accumulation buffer are per-track
+    // (sized by lap length); the 1x1 null tap texture is engine-lifetime.
     if (mSkidTex) { mEngine->destroy(mSkidTex); mSkidTex = nullptr; }
+    std::vector<uint8_t>().swap(mSkidPix); // megabytes — actually release
+    mSkidDirty.clear();
+    mSkidTexW = mSkidTexH = 0;
     mSkidLatHalf = 0;
     mSkidWipe = false;
-    mSkidQuadCount = 0;
     mSkidMipsDirty = false;
     mSkidMipsAt = 0; // mTime restarts at 0 per scene; a stale stamp here would
                      // hold the refresh gate shut for the whole next race
@@ -848,21 +849,7 @@ TtpRenderer::~TtpRenderer() {
     if (mGroundMaterial) mEngine->destroy(mGroundMaterial);
     if (mEsmMaterial) mEngine->destroy(mEsmMaterial);
     if (mBlurMaterial) mEngine->destroy(mBlurMaterial);
-    if (mSkidStampView) mEngine->destroy(mSkidStampView);
-    if (mSkidStampScene) mEngine->destroy(mSkidStampScene);
-    if (!mSkidStampEnt.isNull()) {
-        mEngine->destroy(mSkidStampEnt);
-        utils::EntityManager::get().destroy(mSkidStampEnt);
-    }
-    if (mSkidStampMI) mEngine->destroy(mSkidStampMI);
-    if (mSkidVB) mEngine->destroy(mSkidVB);
-    if (mSkidIB) mEngine->destroy(mSkidIB);
-    if (mSkidCam) {
-        mEngine->destroyCameraComponent(mSkidCamEnt);
-        utils::EntityManager::get().destroy(mSkidCamEnt);
-    }
     if (mSkidNullTex) mEngine->destroy(mSkidNullTex);
-    if (mSkidMaterial) mEngine->destroy(mSkidMaterial);
     if (mWhiteTex) mEngine->destroy(mWhiteTex);
     if (mDecalMaskArray) mEngine->destroy(mDecalMaskArray);
     if (mShadowMap) mEngine->destroy(mShadowMap);

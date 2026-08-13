@@ -269,42 +269,59 @@ discard=false) at the render call; the accumulation views stay on the
 default OPAQUE blend mode. bakeSilhouette keeps TRANSLUCENT because
 alpha-compositing is exactly what a mask bake wants.
 
-**Skid marks are the same road-shader paint, accumulated.** The transient
-decals above are re-packed every frame; rubber instead lands in a per-track
-R8 texture in track space (u = s / lap, v = lat across the deck) that
-`vroad` samples with one extra tap. **Paint, then rubber, then decals** is the
-compositing order, and it is a rule about what a thing IS: a repair or a pad is
-the deck's own surface so ink lays over it, while a shadow, an aura or an oil
-film is laid ON the deck so it composites over the ink the way it would over
-bare asphalt. Get it wrong and an opaque stamp blanks the ink under its own
-footprint — the racing line comes out with clean holes punched in it, which is
-what the pads and repairs used to do from the decal side. (The deck's lane
-dashes never had the bug, being vertex colour on the road mesh, already under
-the tap.) The oil slick stays a decal deliberately — a spill, and on the beach
-standing water, sits on top — and its full opacity is what stopped lines and
-wear ghosting through it. ONE offscreen pass owns it
-(`ensureSkidLayer`): additive stamps (`vskid.mat`) for each committed trail
-segment. Ink is permanent until the race-restart wipe — a clear on that same
-pass — because a decay pass was the layer's whole recurring GPU cost
-(megatexels of read-modify-write) and permanence is also how a real toy
-track behaves; the racing line rubbers in over a race. Do not reintroduce a
-per-frame fullscreen pass here without measuring on the weakest shell — the
-**mip refresh is throttled to ~7 Hz** for exactly that reason. The layer needs
-that chain: the tap is trilinear because the deck ahead minifies a 16k-wide
-texture, and a no-mip LINEAR tap scintillated every mark across the whole deck.
-Its throttle rides `mTime`, which restarts per scene, so its timestamp is
-per-scene state and is cleared with the texture. There is no pool, no budget and
-no lift; unbounded marks cost fixed memory. The tap reads through
-`uvToRenderTargetUV` (the layer is a render target — the suite audit
-enforces this), and the stamper keeps the texture's outer lat rows empty,
-which is what parks the kerbs' and underside's out-of-band v on zero ink.
+**Skid marks are the same road-shader paint, accumulated — on the CPU.** The
+transient decals above are re-packed every frame; rubber instead lands in a
+per-track R8 texture in track space (u = s / lap, v = lat across the deck)
+that `vroad` samples with one extra tap. **Paint, then rubber, then decals** is
+the compositing order, and it is a rule about what a thing IS: a repair or a
+pad is the deck's own surface so ink lays over it, while a shadow, an aura or
+an oil film is laid ON the deck so it composites over the ink the way it would
+over bare asphalt. Get it wrong and an opaque stamp blanks the ink under its
+own footprint — the racing line comes out with clean holes punched in it,
+which is what the pads and repairs used to do from the decal side. (The deck's
+lane dashes never had the bug, being vertex colour on the road mesh, already
+under the tap.) The oil slick stays a decal deliberately — a spill, and on the
+beach standing water, sits on top — and its full opacity is what stopped lines
+and wear ghosting through it.
 
-**A sampled texture's RenderTarget must be TRANSIENT.** On the Metal backend a
-texture still attached to a live `RenderTarget` samples as ZERO — silently, and
-GL doesn't care, so the web never shows it. Every pass that renders into a
-texture the scene also samples (the bakes, the rubber stamps) creates its
-target around the pass and destroys it after; a persistent attachment is how
-tvOS shipped with no tire marks while the same build inked on the web.
+The writer is a CPU rasterizer, not a pass: each committed trail segment's
+4-column quad is filled top-left-rule into a persistent CPU buffer
+(`mSkidPix`, additive with saturation — `vskid.mat`'s old blend) and the
+frame's dirty rects upload by `setImage`. Ink is permanent until the
+race-restart wipe — a memset + full re-upload — because a decay pass was the
+layer's whole recurring GPU cost (megatexels of read-modify-write) and
+permanence is also how a real toy track behaves; the racing line rubbers in
+over a race. Do not reintroduce a per-frame fullscreen pass here without
+measuring on the weakest shell — the **mip refresh is throttled to ~7 Hz**
+for exactly that reason. The layer needs that chain: the tap is trilinear
+because the deck ahead minifies a 16k-wide texture, and a no-mip LINEAR tap
+scintillated every mark across the whole deck. Its throttle rides `mTime`,
+which restarts per scene, so its timestamp is per-scene state and is cleared
+with the texture. There is no pool, no budget and no lift; unbounded marks
+cost fixed memory. The tap reads the uv RAW — an upload has no per-backend
+flip, and the suite audit (`tests/render-target-uv.test.js`) classifies the
+sampler — and the stamper keeps the texture's outer lat rows empty, which is
+what parks the kerbs' and underside's out-of-band v on zero ink.
+
+**Why the rubber layer is not a render target, and must not become one.**
+The GPU-stamped shape (additive `vskid.mat` quads into an attached RT) was
+device-broken in every arrangement on the A10X Apple TV, each tripping a
+different below-the-API behaviour that neither GL nor the tvOS simulator
+reproduces: a persistent target's texture SAMPLED AS ZERO unless its binding
+churned every frame; a transient-per-pass target lost the accumulated ink
+(only the newest stamps survived); a draw-less clear rode a cullable pass and
+never landed; and the persistent+rebind+zeroed shape still artifacted in real
+races (stray patches, a faint full-track line). The 2026-08-14 source audit
+of the pinned Filament fork closed the case: the Metal backend emits
+IDENTICAL command streams for the transient and persistent arrangements
+(same `MTLTexture` for write and read, fresh `MTLRenderPassDescriptor` per
+pass, load/store from the pass params either way), so the differences were
+inside the driver and no RT arrangement at our layer can be trusted for an
+ACCUMULATING attachment on that device. Uploads are the path every other
+texture in the game already proves out, and dropping the stamp pass also
+dropped a full-size TBDR load/store per stamp frame. The bakes stay
+transient-RT and are fine — they repaint whole layers, so an undefined start
+is harmless there.
 
 ## The per-frame budget
 

@@ -40,76 +40,132 @@ Texture* TtpRenderer::ensureDecalMaskArray() {
     return mDecalMaskArray;
 }
 
-// The rubber layer's engine-lifetime half: ONE offscreen pass over the
-// per-track R8 accumulation texture, adding this frame's committed trail
-// segments. There is no decay pass — ink is permanent until the restart
-// wipe, which is a plain clear on this same pass. Everything is
-// vertexDomain:device — the camera exists only because a View requires one.
-bool TtpRenderer::ensureSkidLayer() {
-    if (mSkidStampView) return true;
-    if (!mEngine || !mRenderer || !mSkidMaterial) return false;
-    mSkidCamEnt = utils::EntityManager::get().create();
-    mSkidCam = mEngine->createCamera(mSkidCamEnt);
+// Zero the rubber layer — the build-time init and the race-restart wipe. A
+// memset of the CPU accumulation buffer, a whole-level-0 upload, and a mip
+// regeneration. Deliberately not a GPU clear: a draw-less clear rides a pass
+// the FrameGraph may cull (it did, on the A10X), and this layer has no
+// passes at all any more — see the mSkidPix comment in TtpRenderer.h.
+void TtpRenderer::clearSkidLayer() {
+    if (!mSkidTex || mSkidPix.empty()) return;
+    std::fill(mSkidPix.begin(), mSkidPix.end(), (uint8_t) 0);
+    mSkidDirty.clear();
+    const size_t bytes = mSkidPix.size();
+    auto* zeros = new uint8_t[bytes]();
+    mSkidTex->setImage(*mEngine, 0,
+            Texture::PixelBufferDescriptor(zeros, bytes,
+                    Texture::Format::R, Texture::Type::UBYTE,
+                    [](void* b, size_t, void*) { delete[] (uint8_t*) b; },
+                    nullptr));
+    // The whole mip chain too. The GL backend clamps sampling to level 0
+    // until the first generateMipmaps; Metal has no such clamp, so an
+    // un-generated chain is garbage under the trilinear tap.
+    mSkidTex->generateMipmaps(*mEngine);
+}
 
-    // The stamp buffers: a fixed pool of 4-column quads (the mesh pool's old
-    // feather profile — outer columns zero ink), fully rewritten on any frame
-    // that commits a segment. Unused slots stay all-zero, which is a
-    // zero-area quad the rasterizer never touches, so the index count can be
-    // the full capacity and nothing tracks a live range.
-    mSkidVerts.assign((size_t) kSkidQuadCap * 8, { 0, 0, 0, 0 });
-    mSkidVB = VertexBuffer::Builder()
-            .vertexCount(kSkidQuadCap * 8).bufferCount(1)
-            .attribute(VertexAttribute::POSITION, 0,
-                    VertexBuffer::AttributeType::FLOAT3, 0, sizeof(Vertex))
-            .attribute(VertexAttribute::COLOR, 0,
-                    VertexBuffer::AttributeType::UBYTE4, 12, sizeof(Vertex))
-            .normalized(VertexAttribute::COLOR)
-            .build(*mEngine);
-    auto* idx = new std::vector<uint32_t>((size_t) kSkidQuadCap * 18);
-    for (uint32_t q = 0; q < kSkidQuadCap; q++) {
-        const uint32_t b = q * 8;      // rear b..b+3, front b+4..b+7 (L→R)
-        uint32_t* dst = idx->data() + (size_t) q * 18;
-        for (uint32_t k = 0; k < 3; k++) { // one quad per column pair
-            const uint32_t r = b + k, f = b + 4 + k;
-            const uint32_t src[6] = { r, f + 1, r + 1, r, f, f + 1 };
-            std::copy(src, src + 6, dst + k * 6);
+// One stamp triangle into the CPU accumulation buffer: texel space, top-left
+// fill rule (shared joint edges never double-ink — the same guarantee the GPU
+// rasterizer gave the connected ribbons), ink linearly interpolated across
+// the triangle and added with saturation (vskid.mat was blending:add on R8).
+// x arrives UNWRAPPED (a segment near the seam runs past W); the write wraps
+// per row. y is clamped-out rather than wrapped — the stamper's lat margin
+// keeps real marks rows away from the CLAMP edge anyway.
+void TtpRenderer::rasterSkidTri(const float2* p, const float* ink) {
+    const int W = (int) mSkidTexW, H = (int) mSkidTexH;
+    if (W <= 0 || H <= 0) return;
+    const float area = (p[1].x - p[0].x) * (p[2].y - p[0].y)
+                     - (p[2].x - p[0].x) * (p[1].y - p[0].y);
+    if (area == 0.0f) return;
+    // Winding-independent: flip to counter-clockwise once so the edge tests
+    // and the top-left rule read the same for both triangles of a quad.
+    const float2 a = p[0];
+    const float2 b = area > 0 ? p[1] : p[2];
+    const float2 c = area > 0 ? p[2] : p[1];
+    const float ib = area > 0 ? ink[1] : ink[2];
+    const float ic = area > 0 ? ink[2] : ink[1];
+    const float inv = 1.0f / std::fabs(area);
+    const int y0 = std::max(0, (int) std::ceil(
+            std::min(a.y, std::min(b.y, c.y)) - 0.5f));
+    const int y1 = std::min(H - 1, (int) std::floor(
+            std::max(a.y, std::max(b.y, c.y)) - 0.5f + 1.0f));
+    const int x0 = (int) std::ceil(std::min(a.x, std::min(b.x, c.x)) - 0.5f);
+    const int x1 = (int) std::floor(std::max(a.x, std::max(b.x, c.x)) - 0.5f + 1.0f);
+    // Edge functions at pixel centres (x+0.5, y+0.5); top-left rule: a pixel
+    // exactly on an edge belongs to the triangle whose edge is top or left.
+    const auto edge = [](const float2& e0, const float2& e1, float px, float py) {
+        return (e1.x - e0.x) * (py - e0.y) - (e1.y - e0.y) * (px - e0.x);
+    };
+    const auto topLeft = [](const float2& e0, const float2& e1) {
+        return (e0.y == e1.y && e1.x < e0.x) || e1.y > e0.y;
+    };
+    const bool tlAB = topLeft(a, b), tlBC = topLeft(b, c), tlCA = topLeft(c, a);
+    for (int y = y0; y <= y1; y++) {
+        uint8_t* row = mSkidPix.data() + (size_t) y * W;
+        const float py = (float) y + 0.5f;
+        for (int x = x0; x <= x1; x++) {
+            const float px = (float) x + 0.5f;
+            const float eAB = edge(a, b, px, py);
+            const float eBC = edge(b, c, px, py);
+            const float eCA = edge(c, a, px, py);
+            if ((eAB > 0 || (eAB == 0 && tlAB))
+                    && (eBC > 0 || (eBC == 0 && tlBC))
+                    && (eCA > 0 || (eCA == 0 && tlCA))) {
+                // Barycentric ink: eBC weighs vertex a, eCA weighs b, eAB c.
+                const float w = (ink[0] * eBC + ib * eCA + ic * eAB) * inv;
+                const int wx = ((x % W) + W) % W;
+                const int sum = (int) row[wx]
+                        + (int) std::lround(std::max(0.0f, w) * 255.0f);
+                row[wx] = (uint8_t) std::min(255, sum);
+            }
         }
     }
-    mSkidIB = IndexBuffer::Builder()
-            .indexCount((uint32_t) idx->size())
-            .bufferType(IndexBuffer::IndexType::UINT)
-            .build(*mEngine);
-    mSkidIB->setBuffer(*mEngine, IndexBuffer::BufferDescriptor(
-            idx->data(), idx->size() * sizeof(uint32_t),
-            [](void*, size_t, void* user) { delete (std::vector<uint32_t>*) user; },
-            idx));
-    mSkidStampMI = mSkidMaterial->createInstance();
-    mSkidStampEnt = utils::EntityManager::get().create();
-    RenderableManager::Builder(1)
-            .boundingBox({ { -1, -1, 0 }, { 1, 1, 1 } })
-            .material(0, mSkidStampMI)
-            .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
-                    mSkidVB, mSkidIB, 0, kSkidQuadCap * 18)
-            .culling(false).castShadows(false).receiveShadows(false)
-            .build(*mEngine, mSkidStampEnt);
-    mSkidStampScene = mEngine->createScene();
-    mSkidStampScene->addEntity(mSkidStampEnt);
+}
 
-    View* v = mEngine->createView();
-    v->setScene(mSkidStampScene);
-    v->setCamera(mSkidCam);
-    v->setPostProcessingEnabled(false);
-    v->setShadowingEnabled(false);
-    v->setFrustumCullingEnabled(false);
-    // BlendMode stays OPAQUE (the default). TRANSLUCENT looked like the
-    // "preserve the target" switch, but it also composites the view's draws
-    // as premultiplied SRC_OVER — overriding vskid's additive blend, so every
-    // stamp REPLACED the ink under its footprint (a light mark punched a hole
-    // through a dark one, and each stamp's zero-ink skirt gnawed the previous
-    // stamp's edge into a sawtooth). Preservation comes from ClearOptions
-    // (clear=false, discard=false) at the render call, not from the blend mode.
-    mSkidStampView = v;
-    return true;
+// Push this frame's dirty rects into the texture. Each rect is a tight copy
+// with its own free callback — the CPU buffer is mutated again next frame,
+// and native drivers read uploads asynchronously, so handing them a pointer
+// into mSkidPix would race. Rects are a few hundred texels; the copies are
+// noise. Unwrapped x splits at the lap seam here, once per rect.
+void TtpRenderer::uploadSkidRects() {
+    const int W = (int) mSkidTexW, H = (int) mSkidTexH;
+    for (const SkidRect& r : mSkidDirty) {
+        const int y0 = std::max(0, r.y0), y1 = std::min(H, r.y1);
+        if (y0 >= y1) continue;
+        // A rect spanning the whole width (a teleport-length segment cannot
+        // happen, but belt and braces) collapses to one full-width strip.
+        int spans[2][2];
+        int nSpans = 0;
+        if (r.x1 - r.x0 >= W) {
+            spans[nSpans][0] = 0; spans[nSpans][1] = W; nSpans = 1;
+        } else {
+            const int wx0 = ((r.x0 % W) + W) % W;
+            const int wx1 = wx0 + (r.x1 - r.x0);
+            if (wx1 <= W) {
+                spans[nSpans][0] = wx0; spans[nSpans][1] = wx1; nSpans = 1;
+            } else {                       // crosses the seam: two strips
+                spans[0][0] = wx0; spans[0][1] = W;
+                spans[1][0] = 0;   spans[1][1] = wx1 - W;
+                nSpans = 2;
+            }
+        }
+        for (int s = 0; s < nSpans; s++) {
+            const int sx0 = spans[s][0], sx1 = spans[s][1];
+            const int sw = sx1 - sx0, sh = y1 - y0;
+            if (sw <= 0 || sh <= 0) continue;
+            auto* buf = new uint8_t[(size_t) sw * sh];
+            for (int y = 0; y < sh; y++) {
+                std::memcpy(buf + (size_t) y * sw,
+                        mSkidPix.data() + (size_t) (y0 + y) * W + sx0,
+                        (size_t) sw);
+            }
+            mSkidTex->setImage(*mEngine, 0, (uint32_t) sx0, (uint32_t) y0,
+                    (uint32_t) sw, (uint32_t) sh,
+                    Texture::PixelBufferDescriptor(buf, (size_t) sw * sh,
+                            Texture::Format::R, Texture::Type::UBYTE,
+                            [](void* b, size_t, void*) { delete[] (uint8_t*) b; },
+                            nullptr));
+        }
+    }
+    mSkidDirty.clear();
 }
 
 // Bound to every vroad instance, because a declared sampler must be bound even

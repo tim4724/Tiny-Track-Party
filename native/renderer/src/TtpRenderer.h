@@ -370,11 +370,18 @@ private:
     filament::Texture* mDecalMaskArray = nullptr;
     uint16_t mMaskLayerBakedBits = 0;
     filament::Texture* ensureDecalMaskArray();
-    // Engine-lifetime half of the rubber layer (views, scenes, stamp buffers,
-    // material instances, the 1x1 null texture). The per-track texture itself
-    // is made in buildTrackScene and dies in releaseScene.
-    bool ensureSkidLayer();
+    // The rubber layer's tap binding (the 1x1 null texture is the
+    // engine-lifetime half). The per-track texture + CPU buffer are made in
+    // buildTrackScene and die in releaseScene.
     void bindSkidLayer(filament::MaterialInstance* mi);
+    // Zero the rubber layer: memset the CPU buffer, upload level 0 whole,
+    // regenerate the mip chain. Build-time init and the race-restart wipe.
+    void clearSkidLayer();
+    // Saturating-additive CPU raster of one stamp triangle (texel space,
+    // top-left fill rule, ink linearly interpolated) into mSkidPix.
+    void rasterSkidTri(const filament::math::float2* p, const float* ink);
+    // Push this frame's dirty rects to the texture as sub-rect uploads.
+    void uploadSkidRects();
     filament::math::float3 mBoostDiskLin{};
     // The one vlit instance that SAMPLES the baked sun map. Three's receiver set
     // is the road, the structures and the berms and nothing else — the lawn,
@@ -649,9 +656,6 @@ private:
     filament::Material* mEsmMaterial = nullptr;
     // Bake-time gaussian over the per-car silhouette mask (vblur.mat).
     filament::Material* mBlurMaterial = nullptr;
-    // The rubber layer's one pass: additive trail stamps (vskid.mat). The
-    // restart wipe is a clear on the same pass, not a material.
-    filament::Material* mSkidMaterial = nullptr;
     filament::Texture* mGroundTex = nullptr; // scene scope — a new biome, a new floor
     // The ground's own instance, kept so the baked sun map can be bound to it
     // after bakeShadowMap runs (it is created well before that).
@@ -705,30 +709,35 @@ private:
     std::vector<filament::math::mat4f> mCarBasisInv;
     // Skid trails — the same per-wheel channels the SkidMarks.js port drove
     // (slip/scrub/spin/brake/launch, attack/release strength), but committed
-    // segments are STAMPED into a track-space R8 accumulation texture that
-    // vroad.mat samples, instead of grown as a pooled world-space mesh. Ink
-    // is PERMANENT until the race-restart wipe (a clear on the stamp pass) —
-    // there is no decay pass, which is what makes the steady-state GPU cost
-    // a handful of tiny quads plus one tap the road already amortizes. The
-    // texture is per-track (sized by lap length); everything else here is
-    // engine-lifetime, built lazily by ensureSkidLayer().
-    filament::Texture* mSkidTex = nullptr;        // per-track, R8
+    // segments are RASTERIZED ON THE CPU into a persistent track-space R8
+    // accumulation buffer (mSkidPix) whose dirty rects upload into mSkidTex,
+    // the texture vroad.mat samples. Ink is PERMANENT until the race-restart
+    // wipe (a memset + full re-upload) — there is no decay pass, which is
+    // what keeps the steady-state cost at a few tiny sub-rect uploads plus
+    // one tap the road already amortizes.
+    //
+    // NO RENDER TARGET, DELIBERATELY — this texture must never carry
+    // COLOR_ATTACHMENT. The GPU-stamped shape (vskid.mat quads into an
+    // attached RT) was tried in every arrangement on the A10X Apple TV and
+    // each tripped a different below-the-API device behaviour: a persistent
+    // target's texture sampled as zero unless its binding churned every
+    // frame, a transient-per-pass target lost the accumulated ink, and the
+    // persistent+rebind+zeroed shape still artifacted in real races. The
+    // 2026-08-14 source audit of the pinned Filament fork showed the Metal
+    // backend emits IDENTICAL command streams for those arrangements — the
+    // difference was inside the driver, so no RT arrangement can be trusted
+    // for an ACCUMULATING target on that device. Plain uploads are the one
+    // path every texture in the game already proves out, and dropping the
+    // pass also drops a full-size TBDR load/store per stamp frame.
+    filament::Texture* mSkidTex = nullptr;        // per-track, R8, upload-only
     filament::Texture* mSkidNullTex = nullptr;    // 1x1 zero, binds when no track
-    filament::View* mSkidStampView = nullptr;
-    filament::Scene* mSkidStampScene = nullptr;
-    utils::Entity mSkidCamEnt;
-    filament::Camera* mSkidCam = nullptr;
-    filament::MaterialInstance* mSkidStampMI = nullptr;
-    utils::Entity mSkidStampEnt;
-    // Stamp capacity per frame. Worst case measured in intent, not in fear: 4
-    // cars x 4 wheels x a couple of commits a frame x the 2 lap-seam copies is
-    // ~64; the rest is headroom. Overflow drops the stamp (the trail's next
-    // segment covers the gap), it never grows the buffer.
-    static constexpr uint32_t kSkidQuadCap = 192;
-    filament::VertexBuffer* mSkidVB = nullptr;    // kSkidQuadCap quads, rewritten
-    filament::IndexBuffer* mSkidIB = nullptr;     // fixed 3-quads-per-stamp pattern
-    std::vector<Vertex> mSkidVerts;               // CPU staging for the stamp VB
-    uint32_t mSkidQuadCount = 0;   // quads staged this frame (2 per segment: mark + wrap copy)
+    std::vector<uint8_t> mSkidPix;                // CPU truth, W×H, row 0 = -latHalf
+    uint32_t mSkidTexW = 0, mSkidTexH = 0;
+    // Dirty texel rects laid this frame, in UNWRAPPED x (may run past W; the
+    // upload splits at the seam). A handful per frame — one per committed
+    // segment, merged when they touch.
+    struct SkidRect { int x0, y0, x1, y1; };      // half-open [x0,x1)×[y0,y1)
+    std::vector<SkidRect> mSkidDirty;
     float mSkidLatHalf = 0;                       // half the lat span the texture covers
     // Texel edges in world units per axis. The stamp feather is sized from
     // the texel footprint along the mark's own width direction, so straights

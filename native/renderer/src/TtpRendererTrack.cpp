@@ -1246,15 +1246,14 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         }
     }
 
-    // The rubber layer — one RG8 accumulation texture in track space (s across
-    // the width, lat across the height), stamped by ensureSkidLayer's passes
-    // and sampled by every vroad instance. Per-track because its width is the
-    // lap length at a fixed texel density; the density is capped by the 8192
-    // universal texture-size floor, so a very long lap trades edge crispness,
-    // never correctness.
+    // The rubber layer — one R8 accumulation texture in track space (s across
+    // the width, lat across the height), rasterized on the CPU (mSkidPix) and
+    // uploaded as dirty rects, sampled by every vroad instance. Per-track
+    // because its width is the lap length at a fixed texel density; the
+    // density is capped by the 8192 universal texture-size floor, so a very
+    // long lap trades edge crispness, never correctness.
     mWheelTrails.assign(carCount * 4, {});
-    mSkidQuadCount = 0;
-    if (ensureSkidLayer() && tb.length > 1.0f) {
+    if (tb.length > 1.0f) {
         float maxHalf = tb.roadWidth * 0.5f;
         for (const TrackBin::Sample& r : tb.rings) {
             maxHalf = std::max(maxHalf, r.width * 0.5f);
@@ -1276,48 +1275,33 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         const uint32_t H = 512;
         mSkidTexelS = tb.length / (float) W;
         mSkidTexelLat = (2.0f * mSkidLatHalf) / (float) H;
+        // UPLOAD-ONLY — no COLOR_ATTACHMENT, no RenderTarget, ever. The
+        // GPU-stamped shape was tried in every RT arrangement on the A10X
+        // and each tripped a different below-the-API device behaviour; the
+        // full account is at mSkidPix in TtpRenderer.h. The CPU raster in
+        // renderSkids is the only writer, through setImage.
         mSkidTex = Texture::Builder()
                 .width(W).height(H).levels(0xff) // full chain — see the mip
                                                  // refresh in the stamp block
                 .format(Texture::InternalFormat::R8)
-                .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE
+                .usage(Texture::Usage::SAMPLEABLE | Texture::Usage::UPLOADABLE
                         | Texture::Usage::GEN_MIPMAPPABLE)
                 .build(*mEngine);
-        // The stamp target is created FRESH around every pass and destroyed
-        // after it, here and in renderSkids. Not churn: on the Metal backend a
-        // texture still attached to a live RenderTarget SAMPLES AS ZERO, so a
-        // persistent target made vroad's tap read no ink on tvOS while the
-        // same build inked on GL (found 2026-08-12 by binding a known-good
-        // texture to the tap, then detaching the target). The bake passes
-        // (TtpRendererBakes.cpp) always worked this way.
-        RenderTarget* rt = mSkidTex ? RenderTarget::Builder()
-                .texture(RenderTarget::AttachmentPoint::COLOR, mSkidTex)
-                .build(*mEngine) : nullptr;
-        if (rt) {
-            mSkidStampView->setViewport({ 0, 0, W, H });
-            mSkidStampView->setRenderTarget(rt);
+        if (mSkidTex) {
+            mSkidTexW = W;
+            mSkidTexH = H;
+            mSkidPix.assign((size_t) W * H, 0);
             // Zero the texture NOW, not via mSkidWipe on the first frame: a
-            // fresh render target holds garbage, and the frame loop's skid
-            // block only runs when the scene has wheel trails — the LOBBY
-            // preview has none, so a deferred wipe left its road speckled
-            // with uninitialized memory. The staging pool is all zeros here,
-            // so the pass draws nothing and only the clear lands.
-            const Renderer::ClearOptions prev = mRenderer->getClearOptions();
-            Renderer::ClearOptions co{};
-            co.clear = true;
-            co.clearColor = { 0, 0, 0, 0 };
-            mRenderer->setClearOptions(co);
-            mRenderer->renderStandaloneView(mSkidStampView);
-            mRenderer->setClearOptions(prev);
-            mSkidStampView->setRenderTarget(nullptr);
-            mEngine->destroy(rt);
-            // Zero the whole mip chain too. The GL backend clamps sampling to
-            // level 0 until the first generateMipmaps; Metal has no such
-            // clamp, so an un-generated chain is garbage under the trilinear
-            // tap. Generating off the just-cleared level 0 is a one-time cost.
-            mSkidTex->generateMipmaps(*mEngine);
+            // fresh texture holds garbage, and the frame loop's skid block
+            // only runs when the scene has wheel trails — the LOBBY preview
+            // has none, so a deferred wipe left its road speckled with
+            // uninitialized memory. clearSkidLayer also generates the mip
+            // chain off the zeroed level 0 (the GL backend clamps sampling
+            // to level 0 until the first generateMipmaps; Metal has no such
+            // clamp, so an un-generated chain is garbage under the
+            // trilinear tap).
+            clearSkidLayer();
         } else {
-            if (mSkidTex) { mEngine->destroy(mSkidTex); mSkidTex = nullptr; }
             mSkidLatHalf = 0;
         }
         // The road instances bound the null texture while the road was built;
@@ -1986,12 +1970,6 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
     if (!mBlurMaterial && vblur != mAssets.end()) {
         mBlurMaterial = Material::Builder()
                 .package(vblur->second.data(), vblur->second.size())
-                .build(*mEngine);
-    }
-    const auto vskid = mAssets.find("vskid.filamat");
-    if (!mSkidMaterial && vskid != mAssets.end()) {
-        mSkidMaterial = Material::Builder()
-                .package(vskid->second.data(), vskid->second.size())
                 .build(*mEngine);
     }
     const auto vesm = mAssets.find("vesm.filamat");

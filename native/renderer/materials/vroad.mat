@@ -398,11 +398,10 @@ fragment {
             // texel of a 16k-wide layer — and mediump would smear the marks.
             highp vec2 suv = vec2(tc.x * materialParams.invTrackLength,
                     (tc.y + lh) / (2.0 * lh));
-            // The layer is an offscreen render target, so the read goes
-            // through uvToRenderTargetUV (identity on GL, the y-flip on
-            // Metal/Vulkan) — see tests/render-target-uv.test.js.
-            float ink = texture(materialParams_skidLayer,
-                    uvToRenderTargetUV(suv)).r;
+            // The layer is a CPU-rasterized UPLOAD (row 0 = -latHalf), not a
+            // render target, so the read is raw — uploads have no
+            // per-backend flip. See tests/render-target-uv.test.js.
+            float ink = texture(materialParams_skidLayer, suv).r;
             vec4 sc = materialParams.skidColor;
             base = mix(base, sc.rgb, min(ink, sc.a));
         }
