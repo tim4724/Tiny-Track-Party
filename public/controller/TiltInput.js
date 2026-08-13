@@ -99,6 +99,13 @@ function sensorPolicyBlocked() {
 // AirConsole device_motion path; the DeviceOrientation path never uses these,
 // its fusion already did this in the OS). Phone-only tuning knobs, so they
 // live here rather than in the shared STEER manifest.
+// DeviceOrientation outranks the accelerometer relay wherever both deliver
+// (the AirConsole page in a real phone BROWSER, e.g. the HTTP simulator):
+// the fused signal is strictly better, and without this preference the raw
+// relay would overwrite it sample-for-sample. An orientation event this
+// recent silences setGravity; in the AC app's webview orientation never
+// fires, so the relay self-selects there.
+const ORIENT_FRESH_MS = 1000;
 const ACCEL_G = 9.81;        // 1 g, the magnitude a motionless sample reads
 // The low-pass carries the recentring damping: a smooth lateral swing adds
 // mostly PERPENDICULAR acceleration, which tilts the measured vector a lot
@@ -144,6 +151,7 @@ export class TiltInput {
     // latest gravity unit vector in the device frame (overwritten each event;
     // the flat seed only stands in until the first reading arrives)
     this._g = { x: 0, y: 0, z: -1 };
+    this._orientAt = 0;    // last DeviceOrientation event (0 = never) — see setGravity
 
     this.mode = 'tilt';    // 'tilt' | 'buttons' (see setMode)
     this._steer = 0;       // smoothed steer output (-1..1)
@@ -239,6 +247,8 @@ export class TiltInput {
   //    acceleration phases against each other, small enough that a held lean
   //    reads full within a quarter second.
   setGravity(ax, ay, az) {
+    // Fused DeviceOrientation is live — it owns gravity (see ORIENT_FRESH_MS).
+    if (Date.now() - this._orientAt < ORIENT_FRESH_MS) return;
     const n = Math.hypot(ax, ay, az);
     if (!(n > 1)) return; // linear-only / empty sample: no gravity to read
     this.haveTilt = true;
@@ -271,6 +281,7 @@ export class TiltInput {
     // listener is attached, i.e. permission was granted — the constructor's two
     // routes to 'unsupported' never attach one.)
     if (this.motionState === 'unsupported') this.motionState = 'granted';
+    this._orientAt = Date.now(); // outranks the accel relay while fresh
 
     // Gravity (unit, pointing down) in the device frame from the W3C Z-X'-Y''
     // Euler angles. alpha (compass yaw) doesn't tilt gravity, so it drops out —
