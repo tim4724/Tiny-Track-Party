@@ -24,48 +24,64 @@ const { CAR_COLORS, CAR_MODELS } = window;
 // handed to the model once at boot (NativeUiModel.configure), so this file no
 // longer holds a second copy of either.
 export function renderSeats(listEl, seats) {
-  listEl.innerHTML = '';
-  for (const p of seatGrid(seats)) {
-    const seat = document.createElement('div');
-    if (!p.open) {
-      seat.className = 'seat' + (p.off ? ' seat--off' : '') + (p.ready ? ' seat--ready' : '');
-      seat.style.setProperty('--c', CAR_COLORS[p.colorIndex] || '#888');
-      // the name itself carries the livery colour (via the seat's --c) — no dot
-      const row = document.createElement('div');
-      row.className = 'seat__name';
-      const nm = document.createElement('span'); nm.className = 'seat__label';
-      nm.textContent = p.name;
-      row.appendChild(nm);
-      // host marker — a black star pinned to the seat's top-right corner (the
-      // same slot as the ready check; the host never readies, so they can't
-      // collide). Out of the name so a long name can't push it off-screen.
-      if (p.host) {
-        const hs = document.createElement('span');
-        hs.className = 'seat__host';
-        hs.setAttribute('aria-label', 'Host');
-        hs.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l2.9 5.9 6.5.95-4.7 4.58 1.1 6.47L12 17.9l-5.8 3.05 1.1-6.47-4.7-4.58 6.5-.95z"/></svg>';
-        seat.appendChild(hs);
-      }
-      // each joined car rotates in spin mode, in lockstep via the shared clock
-      seat.appendChild(carThumbNode(CAR_MODELS[p.modelIndex], { spin: true }));
-      seat.appendChild(row);
-      // readiness check — a circle checkmark pinned to the seat's top-right
-      // corner (visibility-toggled in CSS, so it never shifts the seat layout).
-      const rd = document.createElement('span');
-      rd.className = 'seat__ready';
-      rd.setAttribute('aria-label', 'Ready');
-      rd.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.4 4.4L19 7" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-      seat.appendChild(rd);
-    } else {
-      seat.className = 'seat seat--open';
-      const ph = document.createElement('div'); ph.className = 'seat__open';
-      const lab = document.createElement('div'); lab.className = 'seat__name';
-      const nm = document.createElement('span'); nm.className = 'seat__label'; nm.textContent = 'Open';
-      lab.appendChild(nm);
-      seat.appendChild(ph); seat.appendChild(lab);
+  // Runs on EVERY roster push (any player's car pick, ready toggle, join…), so
+  // each seat carries a value signature and only the seats that actually changed
+  // rebuild — recreating an unchanged seat re-runs its thumb's still→spin
+  // cross-fade, a visible flicker across the whole grid. Mirrors the sig guard
+  // on the lobby demo (main.js refreshLobbyDemo). The index.html placeholders
+  // carry no signature, so the first render replaces them as before.
+  const grid = seatGrid(seats);
+  grid.forEach((p, i) => {
+    const sig = JSON.stringify(p);
+    const cur = listEl.children[i];
+    if (cur && cur.dataset.sig === sig) return;
+    const seat = buildSeat(p);
+    seat.dataset.sig = sig;
+    if (cur) cur.replaceWith(seat); else listEl.appendChild(seat);
+  });
+  while (listEl.children.length > grid.length) listEl.lastChild.remove();
+}
+
+function buildSeat(p) {
+  const seat = document.createElement('div');
+  if (!p.open) {
+    seat.className = 'seat' + (p.off ? ' seat--off' : '') + (p.ready ? ' seat--ready' : '');
+    seat.style.setProperty('--c', CAR_COLORS[p.colorIndex] || '#888');
+    // the name itself carries the livery colour (via the seat's --c) — no dot
+    const row = document.createElement('div');
+    row.className = 'seat__name';
+    const nm = document.createElement('span'); nm.className = 'seat__label';
+    nm.textContent = p.name;
+    row.appendChild(nm);
+    // host marker — a black star pinned to the seat's top-right corner (the
+    // same slot as the ready check; the host never readies, so they can't
+    // collide). Out of the name so a long name can't push it off-screen.
+    if (p.host) {
+      const hs = document.createElement('span');
+      hs.className = 'seat__host';
+      hs.setAttribute('aria-label', 'Host');
+      hs.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5l2.9 5.9 6.5.95-4.7 4.58 1.1 6.47L12 17.9l-5.8 3.05 1.1-6.47-4.7-4.58 6.5-.95z"/></svg>';
+      seat.appendChild(hs);
     }
-    listEl.appendChild(seat);
+    // each joined car rotates in spin mode, in lockstep via the shared clock
+    seat.appendChild(carThumbNode(CAR_MODELS[p.modelIndex], { spin: true }));
+    seat.appendChild(row);
+    // readiness check — a circle checkmark pinned to the seat's top-right
+    // corner (visibility-toggled in CSS, so it never shifts the seat layout).
+    const rd = document.createElement('span');
+    rd.className = 'seat__ready';
+    rd.setAttribute('aria-label', 'Ready');
+    rd.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.4 4.4L19 7" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    seat.appendChild(rd);
+  } else {
+    seat.className = 'seat seat--open';
+    const ph = document.createElement('div'); ph.className = 'seat__open';
+    const lab = document.createElement('div'); lab.className = 'seat__name';
+    const nm = document.createElement('span'); nm.className = 'seat__label'; nm.textContent = 'Open';
+    lab.appendChild(nm);
+    seat.appendChild(ph); seat.appendChild(lab);
   }
+  return seat;
 }
 
 // Right-rail cup slot (markup in display/index.html #cup-slot) — shared by the

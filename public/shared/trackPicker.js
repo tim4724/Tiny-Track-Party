@@ -319,6 +319,14 @@ function detailHeader({ title, starsEl, meter, meta }) {
 export function buildModePicker({ stripEl, catalog, progress, selection, highlight,
                                   canPick, onPickMode, onHighlight }) {
   if (!stripEl) return;
+  // Rebuilt from scratch below, but this runs on EVERY room snapshot push (any
+  // player's car pick or ready toggle re-renders the host's lobby) — so skip
+  // when nothing it renders changed. By value: the snapshot re-sends the
+  // catalogue as a fresh object each push. Same signature-guard idiom as
+  // buildCarPicker (coarser: the list and detail panel are one rendered unit).
+  const sig = JSON.stringify([catalog, progress, selection, highlight, !!canPick]);
+  if (stripEl.dataset.sig === sig) return;
+  stripEl.dataset.sig = sig;
   stripEl.innerHTML = '';
   const list = catalog || [];
   const sel = selection || {};

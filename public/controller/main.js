@@ -88,6 +88,7 @@ let hostPeerIndex = null;
 // display. tracks ride the snapshot in the lobby only; cars + the livery palette
 // always. Car images load by id from the web host (carThumbs.js).
 let trackCatalog = [];     // [{id,name,svg,cup,cupName,cupDifficulty}] — snapshot.tracks (lobby only)
+let trackCatalogRaw = '';  // the packed snapshot.tracks it was decoded from (skip re-decoding per push)
 let carCatalog = [];       // [{id,name,stats}] — snapshot.cars
 let colorPalette = (window.CAR_COLORS || []).slice(); // snapshot.colors (bundled palette = pre-snapshot fallback)
 const liveryOf = (i) => colorPalette[i] || '#888';
@@ -250,8 +251,15 @@ function syncRoom(data) {
   if (data.cars) carCatalog = data.cars;
   if (data.colors) colorPalette = data.colors;
   // Each track's svg rides the snapshot as a packed base64 string (RDP + uint8);
-  // decode it back to the { viewBox, d, start } the picker renders.
-  if (data.tracks) trackCatalog = data.tracks.map((t) => ({ ...t, svg: unpackSchematic(t.svg) }));
+  // decode it back to the { viewBox, d, start } the picker renders. The same
+  // catalogue rides EVERY lobby push, so only re-decode when it actually changed.
+  if (data.tracks) {
+    const raw = JSON.stringify(data.tracks);
+    if (raw !== trackCatalogRaw) {
+      trackCatalogRaw = raw;
+      trackCatalog = data.tracks.map((t) => ({ ...t, svg: unpackSchematic(t.svg) }));
+    }
+  }
   if (data.progress) progressData = data.progress;
 
   roster = data.players || [];

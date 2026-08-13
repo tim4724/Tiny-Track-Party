@@ -78,34 +78,51 @@ export function buildCarPicker({ heroEl, stripEl, selected, onPick, canPick = tr
   const list = (cars && cars.length) ? cars : carsFromWindow();
   const count = list.length || 4;
   const sel = Math.max(0, Math.min(selected | 0, count - 1));
-  const dom = statDomain(list);
   const nameOf = (i) => (list[i] && list[i].name) || ('Car ' + (i + 1));
   const idOf = (i) => list[i] && list[i].id;
+  // Every room snapshot re-sends the catalogue as a FRESH object, and this runs
+  // on every push — so change is detected by value, not identity, and an
+  // unchanged part is left alone. Rebuilding a thumb re-runs its still→spin
+  // cross-fade, which reads as a flicker on every phone whenever anyone in the
+  // room touches anything.
+  const listSig = JSON.stringify(list.map((c) => [c.id, c.name, c.stats]));
 
-  if (heroEl) {
+  const heroSig = listSig + '|' + sel;
+  if (heroEl && heroEl.dataset.sig !== heroSig) {
+    heroEl.dataset.sig = heroSig;
     heroEl.innerHTML = '';
     const view = document.createElement('div'); view.className = 'car-hero__view';
     view.appendChild(carThumbNode(idOf(sel), { spin: true })); // only the chosen car spins
     const info = document.createElement('div'); info.className = 'car-hero__info';
     const nm = document.createElement('div'); nm.className = 'car-hero__name'; nm.textContent = nameOf(sel);
     info.appendChild(nm);
-    info.appendChild(statBarsNode(list[sel] && list[sel].stats, dom));
+    info.appendChild(statBarsNode(list[sel] && list[sel].stats, statDomain(list)));
     heroEl.appendChild(view); heroEl.appendChild(info);
   }
 
   if (stripEl) {
-    stripEl.innerHTML = '';
-    for (let i = 0; i < count; i++) {
-      const mine = i === sel;
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'car-opt' + (mine ? ' car-opt--mine' : '');
-      btn.disabled = !canPick;
-      if (mine) btn.setAttribute('aria-current', 'true');
-      btn.setAttribute('aria-label', nameOf(i));
-      btn.appendChild(carThumbNode(idOf(i), { spin: false })); // strip tiles are stills (cheap; hero draws the eye)
-      if (canPick && onPick) btn.addEventListener('click', () => onPick(i));
-      stripEl.appendChild(btn);
+    // Tiles change only with the catalogue or the ready lock; a selection move
+    // is just the ring, toggled in place below so the stills never rebuild.
+    const stripSig = listSig + '|' + !!canPick;
+    if (stripEl.dataset.sig !== stripSig) {
+      stripEl.dataset.sig = stripSig;
+      stripEl.innerHTML = '';
+      for (let i = 0; i < count; i++) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'car-opt';
+        btn.disabled = !canPick;
+        btn.setAttribute('aria-label', nameOf(i));
+        btn.appendChild(carThumbNode(idOf(i), { spin: false })); // strip tiles are stills (cheap; hero draws the eye)
+        if (canPick && onPick) btn.addEventListener('click', () => onPick(i));
+        stripEl.appendChild(btn);
+      }
+    }
+    for (let i = 0; i < stripEl.children.length; i++) {
+      const btn = stripEl.children[i];
+      btn.classList.toggle('car-opt--mine', i === sel);
+      if (i === sel) btn.setAttribute('aria-current', 'true');
+      else btn.removeAttribute('aria-current');
     }
   }
 }
