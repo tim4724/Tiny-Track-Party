@@ -1,0 +1,45 @@
+name: AirConsole release
+
+# Version tags are bare semver (1.2.3, no v prefix — see the repo's tag
+# convention). The zip is built from the committed tree (the engine wasm is a
+# checked-in artifact, so no native toolchain is needed) and attached to a
+# GitHub Release. The upload to airconsole.com/developers itself stays manual:
+# the developer console has no API.
+on:
+  push:
+    tags: ['[0-9]+.[0-9]+.[0-9]+']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          # Plain reproducibility pin, same as test.yml — the zip's content is
+          # the committed tree; Node only runs the entry codegen and sed bakes.
+          node-version: 26
+          cache: 'npm'
+      - run: npm ci
+      # The zip bakes package.json's version into both pages and its own file
+      # name, so a tag that disagrees would publish a release whose asset says
+      # a different version. Fail loudly instead.
+      - name: Check tag matches package.json version
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$PKG_VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME != package.json version $PKG_VERSION" >&2
+            exit 1
+          fi
+      - run: npm run build:airconsole
+      - name: Create release with the zip attached
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ZIP="build/tiny-track-party-airconsole-$GITHUB_REF_NAME.zip"
+          gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes "$ZIP" \
+            || gh release upload "$GITHUB_REF_NAME" "$ZIP" --clobber

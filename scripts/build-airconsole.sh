@@ -51,6 +51,21 @@ rm -f "$BUILD_DIR/display/screen.html" "$BUILD_DIR/controller/controller.html" \
 # Favicons belong to the top document — the AC iframe can't surface them.
 rm -rf "$BUILD_DIR/assets/icon"
 
+# Dev-only modules the AC pages can never load: each is a dynamic import behind
+# a query param (?scenario= gallery, ?solo, ?netstats=1) that the AirConsole
+# iframe never carries. debugPanel/debugFields stay — main.js imports them
+# unconditionally.
+rm -f "$BUILD_DIR/display/TestHarness.js" "$BUILD_DIR/display/DebugSolo.js" \
+      "$BUILD_DIR/controller/TestHarness.js" "$BUILD_DIR/controller/NetStats.js"
+
+# Docs and build-time records nothing at runtime reads. License and credit
+# files (OFL, Kenney, CREDITS.txt, engine_loop.LICENSE.txt) deliberately stay.
+find "$BUILD_DIR" -name CLAUDE.md -delete
+rm -f "$BUILD_DIR/display/engine/native/BUILD_STAMP.json" \
+      "$BUILD_DIR/shared/design-tokens.json" \
+      "$BUILD_DIR/assets/audio/cues/manifest.json" \
+      "$BUILD_DIR/assets/audio/music/SOURCES.json"
+
 cd "$BUILD_DIR"
 rm -f "$ZIP_FILE"
 zip -qr "$ZIP_FILE" . -x '*.DS_Store'
