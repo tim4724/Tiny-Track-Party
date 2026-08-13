@@ -111,12 +111,17 @@ async function joinController(browser, roomCode, name) {
 // auto-waits on that). Ready SURVIVES race → lobby and the button is a
 // toggle, so only tap phones that aren't already ready — a blind click on a
 // still-ready returning racer would un-ready them and deadlock the start.
+// The host's bar is a STEPPER: on the CAR page it says "Select race" and only
+// advances to the RACE page, so a host still there needs the extra tap. A spec
+// that already switched tabs (to reach the picker) is on "Start race" already.
 async function startRace(host, others) {
   for (const p of others) {
     const btn = p.locator('#ready-btn');
     if (!(await btn.evaluate((b) => b.classList.contains('is-pressed')))) await btn.click();
   }
-  await host.click('#ready-btn');
+  const hostBtn = host.locator('#ready-btn');
+  if ((await hostBtn.textContent()) === 'Select race') await hostBtn.click();
+  await hostBtn.click();
 }
 
 const visible = (sel) => `${sel}:not(.hidden)`;

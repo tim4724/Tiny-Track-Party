@@ -4,7 +4,7 @@
 // first paint — keep its `seat--open` placeholders in sync with the open branch
 // here; this module is the source of truth.)
 import { carThumbNode } from '../shared/carThumbs.js';
-import { schematicSvg, cupTint, neutralTint, FIELD_TINT } from '../shared/trackPicker.js';
+import { schematicSvg, cupTint, neutralTint, FIELD_TINT, starRow, lockGlyph } from '../shared/trackPicker.js';
 import { seatGrid, cupSlot } from './NativeUiModel.js';
 
 const { CAR_COLORS, CAR_MODELS } = window;
@@ -74,24 +74,31 @@ export function renderSeats(listEl, seats) {
 //   pre-pick : null / no `name`         → the slot is simply EMPTY
 //   picked   : { name, races?, raceCount?, difficulty?, maps?, cupId? }
 //              → the race card: red cup sticker over the picked circuits as mini
-//              schematics (maps = [{ svg?, n?, q?, glyph?, cup? }] — 4 numbered
-//              minis for a cup, 1 for an exact track, the tour's five per-cup
-//              chips; cupId biome-tints their fields exactly like the phone
-//              picker, a chip's own `cup` outranks it; a q chip shows `glyph`
-//              or "?"), races pill + difficulty pips (0–4 filled; null hides
-//              the meter)
+//              schematics (maps = [{ svg?, n?, q?, glyph?, cup?, locked? }] — 4
+//              numbered minis for a cup, 1 for an exact track, the tour's five
+//              per-cup chips; cupId biome-tints their fields exactly like the
+//              phone picker, a chip's own `cup` outranks it; a q chip shows
+//              `glyph` or "?"; a locked chip is the tour's teaser for a locked
+//              cup — padlock on sunken paper, counted by no races pill), races
+//              pill + difficulty pips (0–4 filled; null hides the meter)
 export function renderCupSlot(slotEl, state) {
   const picked = !!(state && state.name);
   slotEl.querySelector('.cup-slot__pick').classList.toggle('hidden', !picked);
   if (!picked) return;
   slotEl.querySelector('.cup-sticker').textContent = state.name;
+  // The couch's star badge for this pick (cup cards only; null hides it —
+  // the tour, random and exact-track cards carry none).
+  const starsEl = slotEl.querySelector('.cup-stars');
+  starsEl.classList.toggle('hidden', state.stars == null);
+  starsEl.textContent = '';
+  if (state.stars != null) starsEl.appendChild(starRow(state.stars));
   const mapsEl = slotEl.querySelector('.cup-maps');
   // The model names the KNOWN circuits (a chip with q and no svg is an undrawn
   // race). A counted card shows one box per race, so boxes past the known maps
   // pad out as "?" placeholders — that's the random card's not-yet-drawn races.
   // A known chip whose schematic is missing (dev mid-rebuild) still just costs
   // its picture.
-  const maps = (state.maps || []).filter((m) => m && (m.q || m.svg));
+  const maps = (state.maps || []).filter((m) => m && (m.q || m.svg || m.locked));
   if (state.raceCount) while (maps.length < state.raceCount) maps.push({ q: true });
   mapsEl.textContent = '';
   mapsEl.classList.toggle('hidden', !maps.length);
@@ -102,7 +109,13 @@ export function renderCupSlot(slotEl, state) {
   for (const m of maps) {
     const tile = document.createElement('div');
     tile.className = 'cup-maps__tile';
-    if (m.q) {
+    if (m.locked) {
+      // The tour's teaser for a locked cup: padlock on sunken paper. It shows
+      // the ladder's locked rung without selling it as a race — the races pill
+      // never counts it.
+      tile.classList.add('cup-maps__tile--locked');
+      tile.appendChild(lockGlyph());
+    } else if (m.q) {
       // An undrawn race: its own cup's wash when the chip names one (the
       // tour), the picker's neutral grey when the cup is unknown too (a
       // random run's later races). Never the card-level tint — an unknown
@@ -144,12 +157,26 @@ export function renderCupSlot(slotEl, state) {
 // that live here. `trackCatalog` supplies the baked mini-maps by id.
 const RACES_COPY = { one: () => '1 race', endless: () => 'endless', count: (n) => `${n} races` };
 const NAME_COPY = { random: 'Random', tour: 'World Tour' };
-export function renderLobbyPick(slotEl, pick, trackCatalog) {
+// `progress` is the snapshot's progress shape ({cups:[{id,stars,…}]}) or null —
+// it dresses the card with the couch's stars, merged SHELL-SIDE so the frozen
+// ui corpus's cupSlot answers stay untouched (stars are not catalogue data).
+// Only a CUP card wears one: the stars are the cups' reward arc, so the tour,
+// random and exact-track cards all go bare.
+export function renderLobbyPick(slotEl, pick, trackCatalog, progress) {
   if (!slotEl) return;
   const svgOf = (id) => { const t = trackCatalog.find((e) => e.id === id); return t && t.svg; };
+  const starsFor = (m) => {
+    if (!progress || !m) return null;
+    if (m.nameKey === 'cup' && m.cupId) {
+      const row = (progress.cups || []).find((c) => c.id === m.cupId);
+      return row ? row.stars : 0;
+    }
+    return null;
+  };
   const m = cupSlot(pick);
   renderCupSlot(slotEl, m && {
     name: NAME_COPY[m.nameKey] || m.name || '?',
+    stars: starsFor(m),
     races: RACES_COPY[m.racesKey](m.raceCount),
     // raceCount sizes the maps grid (renderCupSlot pads a counted card's
     // not-yet-drawn races with "?" boxes); endless is a single ∞ box. RANDOM
@@ -163,7 +190,50 @@ export function renderLobbyPick(slotEl, pick, trackCatalog) {
     // card's to sell. A veil here rather than in the model — the frozen ui
     // corpus pins cupSlot's random answers to the drawn chip.
     maps: m.nameKey === 'random' ? (m.racesKey === 'endless' ? [{ q: true, glyph: '∞' }] : [])
-      : m.maps.map((x) => ({ svg: x.trackId ? svgOf(x.trackId) : null, q: !x.trackId, n: x.n, cup: x.cup })),
+      : m.maps.map((x) => ({ svg: x.trackId ? svgOf(x.trackId) : null, q: !x.trackId && !x.locked,
+        n: x.n, cup: x.cup, locked: x.locked })),
     cupId: m.cupId   // biome-tints the mini fields, like the phone picker
   });
+}
+
+// The "Cups" shelf in the lobby's bottom-right corner — one row per cup with
+// the couch's stars, the locked cup trailing its unlock progress instead.
+// `cups` is the wasm-stamped catalogue's cups list (or a preview's synthesis):
+// [{id, name, stars, locked, unlockDone?, unlockNeed?}]. It sits under the
+// "Up next" card so the stars read beside the pick they dress.
+export function renderCupShelf(shelfEl, cups) {
+  if (!shelfEl) return;
+  shelfEl.textContent = '';
+  if (!cups || !cups.length) { shelfEl.classList.add('hidden'); return; }
+  shelfEl.classList.remove('hidden');
+  const label = document.createElement('span');
+  label.className = 'pill cup-shelf__label';
+  label.textContent = 'Cups';
+  shelfEl.appendChild(label);
+  for (const c of cups) {
+    const row = document.createElement('div');
+    row.className = 'cup-shelf__row' + (c.locked ? ' cup-shelf__row--locked' : '');
+    if (c.locked) {
+      row.appendChild(lockGlyph());
+    } else {
+      const dot = document.createElement('i');
+      dot.className = 'dot';
+      dot.style.background = cupTint(c.id, 100);
+      row.appendChild(dot);
+    }
+    const nm = document.createElement('span');
+    nm.className = 'cup-shelf__name';
+    // Short names: every cup is one on this shelf, so " Cup" says nothing and
+    // the two-column chips have no room for it.
+    nm.textContent = (c.name || '').replace(/ Cup$/, '');
+    row.appendChild(nm);
+    if (c.locked) {
+      const b = document.createElement('b');
+      b.textContent = `${c.unlockDone || 0}/${c.unlockNeed || 0}`;
+      row.appendChild(b);
+    } else {
+      row.appendChild(starRow(c.stars || 0));
+    }
+    shelfEl.appendChild(row);
+  }
 }

@@ -71,12 +71,31 @@ test('a cup chains through all 4 races to the podium (host advancing early)', as
   await expect(alice.locator('#quitcup-btn')).toBeHidden();
   await expect(alice.locator('#result-list')).toContainText('pts');
 
+  // The finished GP BANKED: the persist-progression effect wrote the engine's
+  // record to localStorage. Both humans out-finish the fast-forwarded AI in
+  // every race (their synthetic times beat any full race), so the series
+  // winner is human and beach banks best=1 — the exact blob, no more keys.
+  await page.waitForFunction(() => !!localStorage.getItem('tinytrack_progress'), null, { timeout: 5000 });
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('tinytrack_progress'))))
+    .toEqual({ v: 1, cups: { beach: { best: 1 } } });
+
   // New game → lobby, series gone, cup rewound to race 1 for a rematch.
   await alice.click('#newgame-btn');
   await page.waitForFunction(() => window.__net.roomState === 'lobby', null, { timeout: 10000 });
   expect(await page.evaluate(() => ({ series: window.__series(), track: window.__net.trackId, mode: window.__net.mode })))
     .toEqual({ series: null, track: BEACH[0], mode: 'cup' });
   await expect(alice.locator(visible('#lobby'))).toBeVisible();
+
+  // …and the couch SEES the bank: the shelf's Beach row wears the won cup's
+  // three stars, the locked Playroom's unlock count moved to 1/4, and the
+  // host's RACE page draws the same stars off the republished snapshot —
+  // engine record → localStorage → chooser → both screens, end to end.
+  await expect(page.locator('.cup-shelf__row', { hasText: 'Beach' })
+    .locator('.star:not(.star--off)')).toHaveCount(3);
+  await expect(page.locator('.cup-shelf__row--locked')).toContainText('1/4');
+  await alice.click('#tab-race');
+  await expect(alice.locator('.mode-opt', { hasText: 'Beach Cup' })
+    .locator('.star:not(.star--off)')).toHaveCount(3);
 });
 
 test('an untouched intermission auto-advances into the next race', async ({ page, browser }) => {
@@ -133,6 +152,7 @@ test('Random runs an endless series of drawn tracks until the host ends it', asy
   // lands on the World Tour (the tile's default), and opens the panel for the
   // endless run.
   await page.waitForFunction(() => window.__net.mode === 'cup', null, { timeout: 10000 });
+  await alice.click('#tab-race');   // the picker lives on the host's RACE page
   await alice.locator('.mode-opt', { hasText: 'Random' }).click();
   await page.waitForFunction(() => window.__net.mode === 'tour' && window.__net.trackId != null, null, { timeout: 10000 });
   await alice.locator('.modepick__tracks .track-opt', { hasText: 'Endless' }).click();
@@ -179,6 +199,7 @@ test('every random tap deals a fresh draw; the fixed cards stay secret', async (
   const alice = await joinController(browser, roomCode, 'Alice');
   const trackNow = () => page.evaluate(() => window.__net.trackId);
   await page.waitForFunction(() => window.__net.mode === 'cup', null, { timeout: 10000 });
+  await alice.click('#tab-race');   // the picker lives on the host's RACE page
   await alice.locator('.mode-opt', { hasText: 'Random' }).click();
   await page.waitForFunction(() => window.__net.mode === 'tour', null, { timeout: 10000 });
   await alice.locator('.modepick__tracks .track-opt', { hasText: '4 races' }).click();
@@ -238,9 +259,10 @@ test('World Tour draws one track per cup and races them in cup order', async ({ 
   const roomCode = await openDisplay(page);
   const alice = await joinController(browser, roomCode, 'Alice');
   await page.waitForFunction(() => window.__net.mode === 'cup', null, { timeout: 10000 });
-  // The auto-picked cup's track panel is open; remember its height — Random's
-  // run panel must occupy the exact same space (same grid, same tile anatomy),
-  // so switching families moves nothing on the phone.
+  await alice.click('#tab-race');   // the picker lives on the host's RACE page
+  // The auto-picked cup's detail panel is open; remember its height — Random's
+  // run panel must occupy the exact same space (same header, same grid, same
+  // tile anatomy), so switching rows moves nothing on the phone.
   await alice.waitForSelector('.modepick__tracks .track-opt');
   const cupPanelH = await alice.evaluate(() => document.querySelector('.modepick__tracks').offsetHeight);
   // The 🎲 tile's DEFAULT is the tour — one tap from a cup lands on it.
@@ -251,11 +273,15 @@ test('World Tour draws one track per cup and races them in cup order', async ({ 
   const first = await page.evaluate(() => window.__net.trackId);
   expect(BEACH).toContain(first); // race 1 is drawn from the FIRST cup
 
-  // The race card: five cup-tinted "?" boxes — the ladder itself, nothing
-  // spoiled (the drawn beach race included).
-  await expect(page.locator('.cup-maps .cup-maps__tile--q')).toHaveCount(5);
+  // The race card: the WHOLE ladder — four cup-tinted "?" boxes plus the
+  // locked Playroom's padlock teaser, nothing spoiled (the drawn beach race
+  // included). A fresh couch has the Playroom locked, so the teaser counts no
+  // race; it becomes a fifth "?" with the unlock (the progression ctests own
+  // that rule).
+  await expect(page.locator('.cup-maps .cup-maps__tile--q')).toHaveCount(4);
+  await expect(page.locator('.cup-maps .cup-maps__tile--locked')).toHaveCount(1);
   await expect(page.locator('.cup-maps .track-map')).toHaveCount(0);
-  await expect(page.locator('.cup-races')).toHaveText('5 races');
+  await expect(page.locator('.cup-races')).toHaveText('4 races');
   await expect(page.locator('.cup-sticker')).toHaveText('World Tour');
 
   await startRace(alice, []);
@@ -263,9 +289,9 @@ test('World Tour draws one track per cup and races them in cup order', async ({ 
   expect(await page.evaluate(() => window.__net.trackId)).toBe(first);
   await finishHumans(page);
   await inResults(page);
-  await expect(page.locator('#results-sub')).toHaveText('World Tour · Race 1 of 5');
+  await expect(page.locator('#results-sub')).toHaveText('World Tour · Race 1 of 4');
   expect(await page.evaluate(() => ({ endless: window.__series().endless, races: window.__series().raceCount })))
-    .toEqual({ endless: false, races: 5 });
+    .toEqual({ endless: false, races: 4 });
 });
 
 test('a mid-cup joiner is seated into the next series race and scores from there', async ({ page, browser }) => {

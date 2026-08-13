@@ -103,6 +103,14 @@ Three properties of that surface matter more than the list:
    1165 lines of CSS, of which the decisions are already gone. Consume
    `public/shared/design-tokens.json` rather than re-authoring the sticker
    palette.
+   The couch's PROGRESSION is part of this surface: read the persisted blob at
+   boot and hand it to `ttp_ui_progress_load` (NSUserDefaults on tvOS — the web
+   reference is main.js's `PROGRESS_KEY`), perform the race walks'
+   `persist-progression` effect by writing `progress` back verbatim, and
+   compose the snapshot's `progress` chooser key off the stamped catalogue
+   (the web reference is `boot.js` `progressChooser()`). Stars, the Playroom
+   lock and the unlock progress are all DERIVED in the wasm/lib — a shell that
+   re-implements a threshold has copied a rule that will drift.
 5. **Transport.** A WebSocket client, and optionally a WebRTC DataChannel. The
    fastlane is an enhancement by design (CONTROL falls back to the relay), so
    relay-only is a legitimate launch. The framing and packet codecs are already

@@ -338,6 +338,14 @@ Value effectVal(const race::Effect& e) {
     case race::Op::SYNC_STATE:
     case race::Op::SYNC_FROZEN:
     case race::Op::RETURN_TO_LOBBY:
+    case race::Op::CLOSE_ROOM:
+    case race::Op::CLEAR_PICK:
+    case race::Op::RENDER_LOBBY_PICK:
+    case race::Op::REFRESH_LOBBY_DEMO:
+    case race::Op::UPDATE_BACKDROP:
+    // Bare here: the ENRICHED spelling (`progress`) is the live executor's,
+    // which abi_check gates; the decision layer answers only the op.
+    case race::Op::PERSIST_PROGRESSION:
       break;
   }
   return v;
@@ -467,6 +475,7 @@ void applyEffect(Shell& s, const race::Effect& e) {
     case race::Op::RENDER_LOBBY_PICK:
     case race::Op::REFRESH_LOBBY_DEMO:
     case race::Op::UPDATE_BACKDROP:
+    case race::Op::PERSIST_PROGRESSION:
       break;
   }
 }
@@ -665,6 +674,9 @@ Value runStep(Shell& s, const std::string& op, const Value& in) {
     ei.intermissionMs = json::num_field(in, "intermissionMs");
     ei.nowMs = json::num_field(in, "nowMs");
     ei.resultsFailsafeMs = json::num_field(in, "resultsFailsafeMs");
+    // Absent on every frozen line (they predate progression) — truthy reads
+    // that as false, which is what keeps them byte-identical.
+    ei.bankProgression = json::truthy(in.find("bankProgression"));
     race::Effects es = race::endRace(ei);
     applyAll(s, es);
     Value v = Value::Obj();

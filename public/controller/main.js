@@ -93,6 +93,9 @@ let colorPalette = (window.CAR_COLORS || []).slice(); // snapshot.colors (bundle
 const liveryOf = (i) => colorPalette[i] || '#888';
 let selectedMode = null;   // current pick {mode:'track'|'cup'|'random'|'tour', trackId?, cupId?} (host-controlled, echoed to all)
 let displayMode = null;    // pick the display last reported (WELCOME/LOBBY_UPDATE); null = it has none
+let progressData = null;   // snapshot.progress — the couch's stars/locks (lobby only; cached like tracks)
+let lobbyTab = 'car';      // the host's lobby page: 'car' | 'race' (non-hosts only ever see 'car')
+let raceCursor = null;     // which race-list row the detail panel describes; null follows the pick
 let amReady = false;       // my lobby ready flag (optimistic; LOBBY_UPDATE confirms)
 let inResults = false;     // showing the results overlay (my car finished / race over)
 // Joined while a race was already running (WELCOME said inRace:false): we have
@@ -249,6 +252,7 @@ function syncRoom(data) {
   // Each track's svg rides the snapshot as a packed base64 string (RDP + uint8);
   // decode it back to the { viewBox, d, start } the picker renders.
   if (data.tracks) trackCatalog = data.tracks.map((t) => ({ ...t, svg: unpackSchematic(t.svg) }));
+  if (data.progress) progressData = data.progress;
 
   roster = data.players || [];
   hostPeerIndex = data.hostPeerIndex;
@@ -344,6 +348,7 @@ function applyLivery() {
 function renderLobby() {
   maybeAutoSelectMode();    // host: leave the display's plain diorama for the 3D preview right away
   el('me-name').textContent = myName || 'Racer'; // who you are, up top (livery dot is var(--car))
+  renderLobbyTabs();
   buildCarPicker({ heroEl: el('car-hero'), stripEl: el('carpick'), selected: myCarIndex, onPick: chooseCar, canPick: !amReady, cars: carCatalog });
   renderModePicker();
   const hostP = roster.find((p) => p.peerIndex === hostPeerIndex);
@@ -361,6 +366,7 @@ function renderLobby() {
   }
   renderReadyFoot(el('ready-btn'), el('ready-note'), {
     amHost, amReady,
+    tab: lobbyTab,                // the stepper: CAR says "Select race", RACE "Start race"
     canStart: !!selectedMode,     // host can't start without a pick (auto-picked, so ~always true)
     host: hostP && { name: hostP.name, color: liveryOf(hostP.colorIndex) },
     others: roster   // every non-host racer but me (for the host that's everyone else)
@@ -369,6 +375,26 @@ function renderLobby() {
   });
 }
 
+// The CAR | RACE tab strip — host only (a non-host lobby IS the car page, so
+// the strip would be a one-tab strip saying nothing). The bottom bar steps
+// forward; these step anywhere, including back.
+function setLobbyTab(tab) {
+  if (tab === lobbyTab) return;
+  lobbyTab = tab;
+  renderLobby();
+}
+function renderLobbyTabs() {
+  const tabs = el('lobby-tabs');
+  const showTabs = amHost && trackCatalog.length > 0 && !waitingForNextRace;
+  tabs.classList.toggle('hidden', !showTabs);
+  if (!showTabs) { lobbyTab = 'car'; }
+  el('lobby').classList.toggle('lobby--race', showTabs && lobbyTab === 'race');
+  el('tab-car').setAttribute('aria-selected', String(lobbyTab === 'car'));
+  el('tab-race').setAttribute('aria-selected', String(lobbyTab === 'race'));
+}
+el('tab-car').addEventListener('click', () => setLobbyTab('car'));
+el('tab-race').addEventListener('click', () => setLobbyTab('race'));
+
 // Mode picker — host only: one tile per cup then 🎲 Random (a cup pick runs its
 // 4-race Grand Prix and its open panel offers exact single-track picks; Random's
 // panel offers the run's length instead). Sent as SELECT_MODE. Everyone else gets no picker at all — the big screen
@@ -376,22 +402,41 @@ function renderLobby() {
 // pre-WELCOME). Layout in shared/trackPicker.js.
 function renderModePicker() {
   const wrap = el('trackpick');
-  if (!amHost || !trackCatalog.length) { wrap.classList.add('hidden'); return; }
+  if (!amHost || !trackCatalog.length || lobbyTab !== 'race') { wrap.classList.add('hidden'); return; }
   wrap.classList.remove('hidden');
   buildModePicker({
     stripEl: el('track-strip'),
-    catalog: trackCatalog, selection: selectedMode, canPick: true, onPickMode: chooseMode
+    catalog: trackCatalog, progress: progressData,
+    selection: selectedMode, highlight: raceCursor,
+    canPick: true, onPickMode: chooseMode,
+    // A tapped row moves the detail cursor; a LOCKED row moves only it — the
+    // panel becomes the unlock pitch without touching the pick.
+    onHighlight: (rowId) => { raceCursor = rowId; renderModePicker(); }
   });
 }
 
+// Cup ids the snapshot's progression marks LOCKED. UX only — the display's
+// walks refuse a locked pick regardless — but re-asserting one would silently
+// no-op, and auto-picking one would strand the Start gate.
+function lockedCupIds() {
+  return new Set(((progressData && progressData.cups) || [])
+    .filter((c) => c.locked).map((c) => c.id));
+}
+
 // A stored pick is only worth re-asserting if this catalog still backs it
-// (tracks/cups can churn between visits; 'random' always resolves).
+// (tracks/cups can churn between visits; 'random' always resolves) AND the
+// couch hasn't got it locked (a progress reset can re-lock a cup this phone
+// once raced).
 function modeInCatalog(m) {
   if (!m) return false;
+  const locked = lockedCupIds();
   if (m.mode === 'random') return true;
   if (m.mode === 'tour') return trackCatalog.some((t) => t.cup); // needs cups to tour
-  if (m.mode === 'cup') return trackCatalog.some((t) => t.cup === m.cupId);
-  if (m.mode === 'track') return trackCatalog.some((t) => t.id === m.trackId);
+  if (m.mode === 'cup') return !locked.has(m.cupId) && trackCatalog.some((t) => t.cup === m.cupId);
+  if (m.mode === 'track') {
+    const t = trackCatalog.find((x) => x.id === m.trackId);
+    return !!t && !locked.has(t.cup);
+  }
   return false;
 }
 
@@ -406,7 +451,10 @@ function maybeAutoSelectMode() {
   if (!amHost || !trackCatalog.length) return;
   if (!selectedMode) {
     const stored = storedMode();
-    const firstCup = trackCatalog.find((t) => t.cup);
+    // The first UNLOCKED cup — auto-picking a locked one would send a pick the
+    // display silently refuses, stranding the Start gate.
+    const locked = lockedCupIds();
+    const firstCup = trackCatalog.find((t) => t.cup && !locked.has(t.cup));
     selectedMode = modeInCatalog(stored) ? stored
       : firstCup ? { mode: 'cup', cupId: firstCup.cup }
         : { mode: 'track', trackId: trackCatalog[0].id }; // cup-less catalog (older display)
@@ -434,8 +482,9 @@ function chooseMode(pick) {
         : false);
   if (same) return;
   selectedMode = { ...pick };  // optimistic; LOBBY_UPDATE is the source of truth
+  raceCursor = null;           // the detail panel follows the pick again
   saveMode(pick);              // remember it so the next lobby auto-picks this mode
-  renderModePicker();          // move the ring (and open the cup's panel) now
+  renderModePicker();          // move the mark (and swap the detail panel) now
   net.send(MSG.SELECT_MODE, pick);
   buzz(15);
 }
@@ -543,6 +592,10 @@ el('name-form').addEventListener('submit', (e) => {
 // ready toggle. The display validates both messages.
 el('ready-btn').addEventListener('click', () => {
   if (amHost) {
+    // The stepper: on the CAR page the button ADVANCES to the race page; on
+    // the RACE page it starts. Two taps from a fresh lobby, matching the two
+    // decisions a host actually makes.
+    if (lobbyTab !== 'race') { setLobbyTab('race'); buzz(15); return; }
     net.send(MSG.START_GAME);
   } else {
     amReady = !amReady;   // optimistic; LOBBY_UPDATE is the source of truth

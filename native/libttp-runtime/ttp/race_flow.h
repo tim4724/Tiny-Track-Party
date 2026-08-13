@@ -93,12 +93,12 @@ enum class Op {
   CLEAR_FIELD, FADE_TO_LOBBY, REMOVE_SCENE_CAR, STOP_CAR_AUDIO, SYNC_STATE,
   SERIES_REKEY, REKEY_SCENE_CAR, REKEY_FIELD, SET_AUTO_PAUSED, SYNC_FROZEN,
   RETURN_TO_LOBBY, CLOSE_ROOM, CLEAR_PICK, RENDER_LOBBY_PICK,
-  REFRESH_LOBBY_DEMO, UPDATE_BACKDROP
+  REFRESH_LOBBY_DEMO, UPDATE_BACKDROP, PERSIST_PROGRESSION
 };
 // One past the last op — the vocabulary export walks [0, OP_COUNT) and a new
-// op joins it by construction. Keep UPDATE_BACKDROP the last enumerator or
+// op joins it by construction. Keep PERSIST_PROGRESSION the last enumerator or
 // move this with it.
-inline constexpr int OP_COUNT = static_cast<int>(Op::UPDATE_BACKDROP) + 1;
+inline constexpr int OP_COUNT = static_cast<int>(Op::PERSIST_PROGRESSION) + 1;
 const char* key(Op op);
 
 // ---- the pieces an effect carries -------------------------------------------
@@ -390,6 +390,10 @@ struct EndRaceInput {
   double intermissionMs = 0;
   double nowMs = 0;
   double resultsFailsafeMs = 0;
+  // Emit persist-progression on a finished series' podium. Default-off keeps
+  // the frozen corpus lines byte-identical (same trick as LaunchInput's
+  // humansAtBack); the live executor always sets it.
+  bool bankProgression = false;
 };
 Effects endRace(const EndRaceInput& in);
 

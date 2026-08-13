@@ -75,6 +75,7 @@
 // libraries and recompiles the shims, which is the same standing this file's
 // includes of ttp_room.h / ttp_session.h have.
 #include "ttp/grand_prix.h"  // CupSeries::lastRaceOrder — the chained grid the race walks read
+#include "ttp/progression.h"  // the star record's rules — uiProgression composes them
 #include "ttp/race_flow.h"
 #include "ttp/room_flow.h"
 #include "ttp/session.h"
@@ -1838,6 +1839,71 @@ void uiShippedCatalogue() {
         "the synthetic world still overrides");
   check(std::string(ttp_ui_catalogue_json()) == shipped,
         "the getter ignores whatever was configured");
+}
+
+// The progression exports and the catalogue's stamping over them. The RULES
+// (star thresholds, the 'rooftop' lock, the tolerant parse) are pinned by
+// progression_check; what is gated here is agreement — the marshalled answers
+// must be byte-for-byte what the same libttp-runtime functions compose to over
+// the same record, so the stamping can never grow a private spelling.
+void uiProgression() {
+  namespace prog = ttp::rt::progression;
+  // A corrupt save loads a fresh couch, and the read-back is canonical.
+  check(ttp_ui_progress_load("not json at all", 0) == 1, "a corrupt save still loads");
+  check(std::string(ttp_ui_progress_json()) == "{\"cups\":{},\"v\":1}",
+        "…as the empty record, canonically spelled");
+
+  const char* blob = "{\"v\":1,\"cups\":{\"beach\":{\"best\":1},\"snow\":{\"best\":2},"
+                     "\"backyard\":{\"best\":7},\"tour\":{\"best\":3}}}";
+  check(ttp_ui_progress_load(blob, 0) == 1, "a real record loads");
+  bool ok = false;
+  const prog::Record rec = prog::parse(json::parse(blob, &ok));
+  check(ok && std::string(ttp_ui_progress_json()) ==
+                  canonical_stringify(prog::serialize(rec)),
+        "the read-back is the record, canonically re-serialized");
+
+  // The catalogue rows agree with the functions composed directly.
+  const Value cat = json::parse_or(ttp_ui_catalogue_json(), Value::Obj());
+  const Value* cups = cat.find("cups");
+  std::vector<std::string> ids;
+  if (cups && cups->type == Value::ARR)
+    for (const Value& c : cups->arr) ids.push_back(json::str_field(c, "id"));
+  bool rowsAgree = cups && cups->type == Value::ARR && !ids.empty();
+  bool sawLocked = false;
+  if (rowsAgree) {
+    for (const Value& c : cups->arr) {
+      const std::string id = json::str_field(c, "id");
+      if (json::num_field(c, "stars") != prog::stars(rec.bestOf(id))) rowsAgree = false;
+      const bool locked = !prog::unlocked(rec, id, ids);
+      if (json::truthy(c.find("locked")) != locked) rowsAgree = false;
+      if (locked) {
+        sawLocked = true;
+        if (json::num_field(c, "unlockDone") != prog::unlockDone(rec, id, ids) ||
+            json::num_field(c, "unlockNeed") != prog::unlockNeed(id, ids))
+          rowsAgree = false;
+      } else if (c.has("unlockDone") || c.has("unlockNeed")) {
+        rowsAgree = false;   // the keys exist only while locked
+      }
+    }
+  }
+  check(rowsAgree, "every cup row's stars/locked/unlock progress is the composed answer");
+  check(sawLocked, "premise: this record leaves a cup locked (canyon unfinished)");
+  // The tour earns no badge, but a save carrying its old "tour" row (the blob
+  // above) must still round-trip: parse keeps unknown ids, the catalogue just
+  // derives nothing from them.
+  check(!cat.has("tour"), "the tour has no star badge on the catalogue");
+
+  // The dev override unlocks without touching the record.
+  check(ttp_ui_progress_load(blob, 1) == 1, "unlockAll loads");
+  const Value cat2 = json::parse_or(ttp_ui_catalogue_json(), Value::Obj());
+  bool anyLocked = false;
+  if (const Value* c2 = cat2.find("cups"))
+    if (c2->type == Value::ARR)
+      for (const Value& c : c2->arr) anyLocked = anyLocked || json::truthy(c.find("locked"));
+  check(!anyLocked, "unlockAll leaves nothing locked");
+  check(std::string(ttp_ui_progress_json()) == canonical_stringify(prog::serialize(rec)),
+        "…and the record itself is untouched");
+  ttp_ui_progress_load(nullptr, 0);   // leave a fresh couch for later cases
 }
 
 // cupTendency, the one RULE that came with the catalogue — and the reason it is
@@ -4632,6 +4698,98 @@ void raceLiveWalks() {
     ttp_room_dispose(troom);
   }
 
+  // ---- the LOCK: a locked cup refuses picks and never deals -------------------
+  // The seam asks the SHIPPED cup list (a synthetic chooser cup can never lock),
+  // so this chooser names the real locked id: on a fresh couch 'rooftop' is
+  // locked, its cup and exact-track picks are silently refused, the tour skips
+  // it, and the global bag deals around it. Loading a record with every other
+  // shipped cup finished opens all of it back up.
+  {
+    ttp_ui_progress_load(nullptr, 0);   // a fresh couch
+    ttp_net_configure(
+        "{\"cars\":[{\"id\":\"dash\"}],\"colors\":[\"#f00\"],"
+        "\"tracks\":[{\"id\":\"tidepool\",\"name\":\"Tidepool\",\"cup\":\"beach\"},"
+        "{\"id\":\"skyline\",\"name\":\"Skyline\",\"cup\":\"rooftop\"}]}");
+    const int lroom = ttp_room_create("{}");
+    ttp_room_add_player(lroom, "1",
+                        "{\"name\":\"Ada\",\"colorIndex\":0,\"carIndex\":2,\"ready\":true}");
+    ttp_net_init_pick(lroom, nullptr, 1, 271828);
+    ttp_room_events_json(lroom);
+
+    walkOf(ttp_net_on_peer_message_json(
+               lroom, 0, "1", "{\"type\":\"select_mode\",\"mode\":\"cup\",\"cupId\":\"rooftop\"}",
+               0, 5000),
+           "select locked cup");
+    // The slot itself exists from init_pick (it carries hasBag), so a refusal
+    // reads as "no mode stored", not as a missing object.
+    check(json::str_field(parseOrNull(ttp_net_pick_json(lroom), "pick after locked cup"), "mode")
+              .empty(),
+          "a locked cup pick is refused");
+    walkOf(ttp_net_on_peer_message_json(
+               lroom, 0, "1",
+               "{\"type\":\"select_mode\",\"mode\":\"track\",\"trackId\":\"skyline\"}", 0, 5000),
+           "select locked track");
+    check(json::str_field(parseOrNull(ttp_net_pick_json(lroom), "pick after locked track"), "mode")
+              .empty(),
+          "a locked cup's exact track is refused too");
+
+    walkOf(ttp_net_on_peer_message_json(lroom, 0, "1",
+                                        "{\"type\":\"select_mode\",\"mode\":\"tour\"}", 0, 5000),
+           "select tour under the lock");
+    Value pick = parseOrNull(ttp_net_pick_json(lroom), "tour pick under the lock");
+    check(json::num_field(pick, "randomRaces") == 1 &&
+              json::str_field(pick, "trackId") == "tidepool",
+          "the tour counts and draws only the unlocked cup");
+
+    // The tour CARD under the lock: one chip per SHIPPED cup in ladder order,
+    // the locked cup's as a `locked` teaser — exact spelling, the key present
+    // only on the teaser, and raceCount staying the OPEN count.
+    check(ttp_ui_configure(
+              "{\"maxPlayers\":4,\"carCount\":12,"
+              "\"cups\":[{\"id\":\"beach\",\"name\":\"Beach\",\"tracks\":[\"tidepool\"]},"
+              "{\"id\":\"snow\",\"name\":\"Snow\",\"tracks\":[\"drift\"]},"
+              "{\"id\":\"rooftop\",\"name\":\"Playroom\",\"tracks\":[\"skyline\"]}],"
+              "\"catalog\":[{\"id\":\"tidepool\",\"name\":\"Tidepool\",\"cup\":\"beach\","
+              "\"cupDifficulty\":1},"
+              "{\"id\":\"drift\",\"name\":\"Drift\",\"cup\":\"snow\",\"cupDifficulty\":2},"
+              "{\"id\":\"skyline\",\"name\":\"Skyline\",\"cup\":\"rooftop\","
+              "\"cupDifficulty\":4}]}") == 1,
+          "lock: the ui world configured");
+    const std::string lslot = ttp_ui_cup_slot_json(
+        "{\"mode\":\"tour\",\"cupId\":null,\"trackId\":\"tidepool\",\"randomRaces\":2}");
+    const std::string wantL =
+        "{\"nameKey\":\"tour\",\"name\":null,\"racesKey\":\"count\",\"raceCount\":2,"
+        "\"difficulty\":null,\"maps\":[{\"trackId\":null,\"cup\":\"beach\"},"
+        "{\"trackId\":null,\"cup\":\"snow\"},"
+        "{\"trackId\":null,\"cup\":\"rooftop\",\"locked\":true}],\"cupId\":null}";
+    check(lslot == wantL, "lock: the tour card teases the locked cup\n  want " + wantL +
+                              "\n  got  " + lslot);
+
+    walkOf(ttp_net_on_peer_message_json(lroom, 0, "1",
+                                        "{\"type\":\"select_mode\",\"mode\":\"random\"}", 0, 5000),
+           "select random under the lock");
+    pick = parseOrNull(ttp_net_pick_json(lroom), "random pick under the lock");
+    check(json::str_field(pick, "trackId") == "tidepool",
+          "the bag's deck holds only unlocked tracks, so the draw is an equality");
+
+    check(ttp_ui_progress_load("{\"v\":1,\"cups\":{\"beach\":{\"best\":1},\"snow\":{\"best\":1},"
+                               "\"backyard\":{\"best\":1},\"canyon\":{\"best\":1}}}",
+                               0) == 1,
+          "the unlocking record loads");
+    walkOf(ttp_net_on_peer_message_json(
+               lroom, 0, "1", "{\"type\":\"select_mode\",\"mode\":\"cup\",\"cupId\":\"rooftop\"}",
+               0, 5000),
+           "select the now-unlocked cup");
+    pick = parseOrNull(ttp_net_pick_json(lroom), "pick after unlock");
+    check(json::str_field(pick, "mode") == "cup" &&
+              json::str_field(pick, "cupId") == "rooftop" &&
+              json::str_field(pick, "trackId") == "skyline",
+          "four finished cups open the Playroom to the pick walk");
+
+    ttp_ui_progress_load(nullptr, 0);   // leave a fresh couch for later cases
+    ttp_room_dispose(lroom);
+  }
+
   ttp_room_dispose(room);
   ttp_net_configure("");
   std::printf("  race walks against the composed decision functions\n");
@@ -4666,6 +4824,7 @@ int main(int argc, char** argv) {
   themeThroughAbi();
   audioThroughAbi();
   uiShippedCatalogue();
+  uiProgression();
   uiCupTendency();
   uiCorpusThroughAbi(argv[3]);
   handlePathsMatchJsonPaths();

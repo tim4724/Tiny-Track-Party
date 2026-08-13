@@ -10,12 +10,12 @@ import { DisplayNet, fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from
 import { Stage, HUD_TICK_MS } from './Stage.js';
 import { DEV_TRACKS } from '../shared/devTracks.js';
 import { LobbyDemo } from './LobbyDemo.js';
-import { renderSeats, renderLobbyPick } from './lobbySeats.js';
+import { renderSeats, renderLobbyPick, renderCupShelf } from './lobbySeats.js';
 import { createWakeLock } from '../shared/wakeLock.js';
 import { RaceAudio } from './Audio.js';
 // The native stack, stood up once in a fixed order (configure before read, world
 // before any render) — see boot.js.
-import { bootEngine, trackEntry } from './boot.js';
+import { bootEngine, trackEntry, progressChooser } from './boot.js';
 // The two race-screen overlays, painting model answers; the gallery previews
 // drive these same functions so a preview cannot drift from live play.
 import { showCountdownBanner, renderResults } from './raceOverlays.js';
@@ -162,6 +162,18 @@ if (!selectedTrackId && !_isTestMode && !_isDebugSolo) {
   let last = null;
   try { last = localStorage.getItem(LAST_TRACK_KEY); } catch (_) {}
   selectedTrackId = (last && built.has(last)) ? last : TRACK_LIST[0].id;
+}
+
+// The couch's star record: the shell only ferries the blob between storage and
+// the engine — every derivation (stars, the Playroom lock) is the wasm's. Test
+// surfaces skip the load so gallery/E2E scenarios start from the fresh couch
+// they synthesize; ?unlockAll=1 is the dev override, and it still loads the
+// record so banking keeps working under it.
+const PROGRESS_KEY = 'tinytrack_progress';
+if (!_isTestMode) {
+  let saved = null;
+  try { saved = localStorage.getItem(PROGRESS_KEY); } catch (_) {}
+  ui.progressLoad(saved, _trackParams.has('unlockAll'));
 }
 let track = built.get(selectedTrackId || TRACK_LIST[0].id);
 
@@ -515,6 +527,10 @@ const net = new DisplayNet({
   trackCatalog,
   // Slim, display-authoritative chooser content for the retained room snapshot.
   carChooser, trackChooser, colorPalette,
+  // The couch's stars/lock for the phones' picker — composed AFTER the
+  // progression load above, so a returning couch's first snapshot already
+  // carries its record.
+  progressChooser: progressChooser(),
   defaultTrackId: _defaultPickId,
   // The random-track shuffle bag lives BEHIND THE ROOM now; what the shell
   // supplies is one page-entropy seed (DisplayNet hands it to init_pick).
@@ -700,8 +716,15 @@ function renderRoster(rosterSize, hostPeerIndex) {
 // gallery preview so the two cannot drift. The scan hint under the ticket stays
 // up for the whole lobby — joining is possible until the race starts.
 function renderPick() {
-  renderLobbyPick(el('cup-slot'), net.pick, trackCatalog);
+  renderLobbyPick(el('cup-slot'), net.pick, trackCatalog, progressChooser());
 }
+
+// The bottom-right "Cups" shelf, from the wasm-stamped catalogue. Refreshed
+// only when the record can have moved: boot (below) and the persist performer.
+function refreshCupShelf() {
+  if (!_isTestMode) renderCupShelf(el('cup-shelf'), ui.catalogue().cups);
+}
+refreshCupShelf();
 
 // Dropped-seat reconnect cards: a QR centred in each disconnected player's
 // split-screen cell (same placement as the FINISHED card) so they can scan — their
@@ -855,7 +878,16 @@ const RACE_PERFORMERS = {
   'rekey-scene-car': (e) => scene.rekeyCar(e.oldId, e.newId),
   'set-auto-paused': (e) => { autoPaused = e.on; },
   'sync-frozen': () => syncSessionFrozen(),
-  'return-to-lobby': () => returnToLobby()
+  'return-to-lobby': () => returnToLobby(),
+  // The walk banked a finished cup's stars; the shell writes the blob it was
+  // handed (same try/catch as every localStorage touch — Safari private mode
+  // throws on access) and recomposes the snapshot's progress chooser, so the
+  // phones' pickers carry the new stars when the party is back in the lobby.
+  'persist-progression': (e) => {
+    try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(e.progress)); } catch (_) {}
+    net.setChooser({ progress: progressChooser() });
+    refreshCupShelf();
+  }
 };
 
 // The boot proof: every op this build's race walks can emit has a performer.

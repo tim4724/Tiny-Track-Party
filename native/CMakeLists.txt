@@ -593,6 +593,10 @@ add_library(libttp_runtime STATIC
   # re-derives. Same reason as its neighbours for living here: no platform API,
   # so every leg compiles AND executes it.
   libttp-runtime/ttp/race_flow.cc
+  # The cup star record and the Playroom unlock rule — the derivations behind
+  # the persisted progression blob. Pure functions over plain data; the store
+  # itself lives in the ABI shim (runtime/ttp_ui.cc) beside the catalogue.
+  libttp-runtime/ttp/progression.cc
   # The audio DECISIONS — public/display/audio/decide.js ported. Here rather
   # than in a library of its own because it is the same thing the two files
   # above are: a display rule that names no platform API, so every leg compiles
@@ -724,6 +728,17 @@ target_include_directories(frame_check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/runti
 target_link_libraries(frame_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(frame_check)
 add_test(NAME frame_builder COMMAND frame_check)
+
+# ---- Behaviour: the cup star record -----------------------------------------
+# Assertions rather than a corpus, like frame_check above and for the same
+# reason: ttp/progression.h is a NEW layer with no JS oracle, so this file IS
+# where its decided rules are pinned (stars 1/2/3, the 'rooftop' lock, the
+# best-human bank, tolerant parsing of the persisted blob). The abi ctest gates
+# the marshalling and the catalogue stamping over the same functions.
+add_executable(progression_check runtimetest/progression_check.cc)
+target_link_libraries(progression_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(progression_check)
+add_test(NAME progression COMMAND progression_check)
 
 # ---- Conformance: the per-player race HUD -----------------------------------
 # JS-RECORDED evidence, like the biome check below and unlike the two above: the
@@ -919,6 +934,8 @@ set(TTP_APP_SOURCES
   libttp-runtime/ttp/hud.cc
   # The rest of the UI model: every shell's boards are rendered from this.
   libttp-runtime/ttp/ui_model.cc
+  # The cup star record's derivations (stars, the lock, the bank).
+  libttp-runtime/ttp/progression.cc
   # ... and the ABI over it. JSON in, JSON out: this layer answers once per
   # event and half of what it answers is text, so there is nothing to pack.
   runtime/ttp_ui.cc

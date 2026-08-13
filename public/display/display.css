@@ -178,6 +178,15 @@ html, body {
    that tile is the endless card's lone big square or one of the long card's
    eight small ones */
 .cup-maps__tile--q span { font-size: 34cqw; }
+/* the tour's teaser for a locked cup: the "?" box anatomy on sunken paper,
+   a padlock where the glyph would be — a rung on the ladder, not a race */
+.cup-maps__tile--locked {
+  aspect-ratio: 1 / 1;
+  display: grid; place-items: center;
+  border: 2.5px solid var(--ink); border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+.cup-maps__tile--locked .lock-glyph { width: 34%; height: auto; }
 .cup-maps__n {
   position: absolute; top: -6px; left: -6px;
   min-width: 1.5em; text-align: center;
@@ -222,6 +231,44 @@ html, body {
   font-family: var(--font-display); font-weight: 600;
   font-size: clamp(16px, 1.7vw, 25px); line-height: 1.1;
 }
+
+/* "Cups" — the couch's star shelf, pinned to the lobby's BOTTOM-RIGHT corner
+   under the "Up next" card (whose pick these stars dress). ONE column of
+   short-name chips (renderCupShelf strips the " Cup" suffix): the corner's
+   width is capped by the centred seat dock, so the chips buy their READ-FROM-
+   THE-COUCH size from height, not width. The locked cup trails its unlock
+   count. */
+.cup-shelf {
+  /* Absolute over the scene (chrome floats bare, like every lobby sticker),
+     inset by the lobby's own gutters so its right edge lines up with the
+     up-next card above it. The dock row's seats are centred, so the corner
+     stays clear on any 16:9 screen. */
+  position: absolute;
+  right: clamp(32px, 4.5vw, 88px);
+  bottom: clamp(16px, 3vh, 32px);
+  display: grid; grid-template-columns: 1fr; gap: 0.45rem;
+  width: min(19vw, 300px);
+  padding-top: 0.5rem;   /* room for the corner label to straddle the edge */
+}
+/* the label rides the shelf's top-left corner like a sticker tab — a full
+   label row is height the column can't spare above the 720p seat band */
+.cup-shelf__label { position: absolute; top: -0.45rem; left: 0.65rem; z-index: 1; font-size: 0.8rem; }
+.cup-shelf__row {
+  display: flex; align-items: center; gap: 0.45rem; min-width: 0;
+  background: var(--surface); border: 2.5px solid var(--ink); border-radius: var(--r-pill);
+  padding: 0.24rem 0.8rem 0.24rem 0.7rem;
+  box-shadow: var(--shadow-pop);
+  font-family: var(--font-display); font-weight: 700;
+  font-size: clamp(14px, 1.5vw, 21px); color: var(--ink);
+}
+.cup-shelf__row .dot { width: 0.65rem; height: 0.65rem; }
+.cup-shelf__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cup-shelf__row .starrow { margin-left: auto; font-size: 0.78em; flex: none; }
+.cup-shelf__row .lock-glyph { width: 0.85em; height: 0.85em; flex: none; }
+.cup-shelf__row--locked { background: var(--surface-2); }
+.cup-shelf__row--locked b { margin-left: auto; font-size: 0.85em; }
+/* the cup slot's star badge, between the sticker and the minis */
+.cup-stars { font-size: clamp(14px, 1.5vw, 20px); }
 
 /* Seat dock (bottom-centre) — the joined headline over a horizontal row of
    sticker seat chips. Room is capped at 4 players, so the dock never wraps. */
@@ -745,6 +792,7 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
     animation-delay: 80ms;
   }
   .cup-slot__pick { animation-delay: 120ms; }
+  .cup-shelf { animation: sticker-slap 240ms cubic-bezier(0.2, 1.5, 0.35, 1) both; animation-delay: 140ms; }
   .lobby-foot { animation-delay: 160ms; }
 
   #results h2, .results-sub, .results-podium, #results-list li, .results-next, #results-newgame {
@@ -774,8 +822,10 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
   /* in the column the hint flows under the card instead of hanging over
      whatever comes next */
   .tagline { position: static; transform: rotate(-2deg); margin: 0.9rem auto 0; width: fit-content; }
+  /* the shelf joins the column after the pick card — no corner to pin to */
+  .cup-shelf { position: static; margin: 0 auto; width: min(84vw, 360px); order: 4; }
   .cup-slot { order: 3; width: min(84vw, 360px); max-width: none; }
-  .lobby-foot { order: 4; }
+  .lobby-foot { order: 5; }
   #players { flex-wrap: wrap; justify-content: center; }
   /* the stage clouds are placed for the wide layout — behind the stacked
      column they poke out from odd corners, so they sit this one out */

@@ -33,6 +33,7 @@
 // registries, only on the shim that already links them.
 #include "ttp_live.h"
 #include "ttp_net.h"
+#include "ttp_progress.h"
 #include "ttp_room.h"
 #include "ttp_runtime.h"
 #include "ttp_session.h"
@@ -311,6 +312,9 @@ Value effectVal(const race::Effect& e) {
     case race::Op::RENDER_LOBBY_PICK:
     case race::Op::REFRESH_LOBBY_DEMO:
     case race::Op::UPDATE_BACKDROP:
+    // Bare from the DECISION layer; the executor enriches it with the banked
+    // record (`progress`) the same way create-session gains its field rows.
+    case race::Op::PERSIST_PROGRESSION:
       break;
   }
   return v;
@@ -416,6 +420,21 @@ void executeAndSpell(int roomHandle, const race::Effects& es,
         // this same walk.
         Value v = effectVal(e);
         v.set("field", ttp_room_field_value(roomHandle));
+        out.push(std::move(v));
+        break;
+      }
+      case race::Op::PERSIST_PROGRESSION: {
+        // The list puts this AFTER apply-race-points, so the series standings
+        // read here are final. The bank decides which human's rank counts (and
+        // whether this series id may bank at all); the shell only writes the
+        // enriched blob.
+        if (const ttp::CupSeries* s = ttp_gp_series(ttp_room_series(roomHandle))) {
+          std::vector<bool> aiByRank;
+          for (const ttp::GpStanding& row : s->standings()) aiByRank.push_back(row.ai);
+          ttp_progress_bank(s->cup().id, aiByRank);
+        }
+        Value v = effectVal(e);
+        v.set("progress", ttp_progress_value());
         out.push(std::move(v));
         break;
       }
@@ -602,9 +621,15 @@ const char* ttp_race_start_live_json(int roomHandle, int sceneReady, double seed
     return put(g_bufStart, refuse(race::key(r.reason)));
   const int need = race::drawsNeeded(si.mode, si.randomRaces);
   if (si.mode == "tour") {
-    // The World Tour draws per cup, in cup order — race 1 is the pick's own
-    // first-cup draw, so the card's remaining races come from cups[1..].
-    for (size_t c = 1; c < g_cups.size() && (int)si.draws.size() < need; ++c) {
+    // The World Tour draws per UNLOCKED cup, in cup order — race 1 is the
+    // pick's own draw from the first unlocked cup (the pick walk restricted
+    // it), so the card's remaining races skip that lead cup and every locked
+    // one. Pre-unlock the tour is simply shorter; drawsNeeded already read the
+    // count off the pick's randomRaces.
+    bool leadSkipped = false;
+    for (size_t c = 0; c < g_cups.size() && (int)si.draws.size() < need; ++c) {
+      if (!ttp_progress_cup_unlocked(g_cups[c].id)) continue;
+      if (!leadSkipped) { leadSkipped = true; continue; }
       const std::string d = ttp_live_bag_draw_cup(roomHandle, g_cups[c].id);
       if (d.empty()) break;
       si.draws.push_back(d);
@@ -661,10 +686,20 @@ const char* ttp_race_events_live_json(int sessionHandle, int roomHandle,
       } else if (type == "_raceEnd") {
         race::EndRaceInput ei;
         ei.hasSeries = series != nullptr;
-        ei.seriesFinished = series && series->finished();
+        // "Finished" must mean AFTER this race's points apply: done_ flips
+        // inside applyRace, which APPLY_RACE_POINTS runs later in this very
+        // walk — read it here and the final race still says false, the
+        // persist op never emits, and no cup ever banks (the bug the podium
+        // E2E caught). An endless series extends itself instead of ending.
+        ei.seriesFinished =
+            series && (series->finished() ||
+                       (!series->endless() && series->raceIndex() + 1 >= series->raceCount()));
         ei.intermissionMs = intermissionMs;
         ei.nowMs = nowMs;
         ei.resultsFailsafeMs = resultsFailsafeMs;
+        // The live walk always banks a finished series; the flag exists so the
+        // frozen corpus lines (which predate progression) stay byte-identical.
+        ei.bankProgression = true;
         if (const Value* r = e.find("results")) results = *r;
         // Points bank HERE, against the retained field — before the board
         // effects the shell performs, exactly the order the corpus pins.
@@ -736,9 +771,14 @@ const char* ttp_race_return_live_json(int roomHandle) {
     bool drew = true;
     for (int i = 0; i < need; ++i) {
       // The tour's re-aim is race 1's preview, so its re-roll draws from the
-      // FIRST cup only — and a cupless world refuses rather than drawing wide.
+      // first UNLOCKED cup only — and a cupless world refuses rather than
+      // drawing wide.
+      std::string lead;
+      if (ri.mode == "tour")
+        for (const race::Cup& c : g_cups)
+          if (ttp_progress_cup_unlocked(c.id)) { lead = c.id; break; }
       const std::string d = ri.mode == "tour"
-          ? (g_cups.empty() ? std::string() : ttp_live_bag_draw_cup(roomHandle, g_cups[0].id))
+          ? (lead.empty() ? std::string() : ttp_live_bag_draw_cup(roomHandle, lead))
           : ttp_live_bag_draw(roomHandle);
       if (d.empty()) { drew = false; break; }
       ri.draws.push_back(d);

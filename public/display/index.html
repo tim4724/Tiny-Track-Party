@@ -117,6 +117,13 @@
       </div>
     </div>
 
+    <!-- "Cups" — the couch's star shelf, the long game to the ticket's
+         tonight. One row per cup with its earned stars; the locked Playroom
+         trails its unlock progress instead. Filled by renderCupShelf
+         (lobbySeats.js) from the wasm-stamped catalogue; pinned to the lobby's
+         BOTTOM-RIGHT corner, under the "Up next" pick it feeds into. -->
+    <div class="cup-shelf" id="cup-shelf" aria-label="Cup progress"></div>
+
     <!-- Cup slot — empty until the host picks on their phone, then the pick
          as the race card (red cup sticker + minis + races pill + pips).
          Filled by renderCupSlot via renderLobbyPick (both lobbySeats.js);
@@ -124,6 +131,7 @@
     <div class="cup-slot" id="cup-slot">
       <div class="cup-slot__pick hidden">
         <div class="cup-sticker"></div>
+        <div class="cup-stars hidden"></div>
         <div class="cup-maps"></div>
         <div class="cup-races"></div>
         <div class="cup-meter" aria-label="Difficulty"><i></i><i></i><i></i><i></i></div>

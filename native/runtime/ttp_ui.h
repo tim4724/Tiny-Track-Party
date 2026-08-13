@@ -115,8 +115,35 @@ TTP_ABI int ttp_ui_configure(const char* json);
  *
  * Always the shipped tables, never whatever ttp_ui_configure last installed:
  * the override exists for a synthetic conformance world, and answering with one
- * here would let a test's fiction reach a picker. */
+ * here would let a test's fiction reach a picker.
+ *
+ * Each cup row additionally carries the couch's DERIVED progression — `stars`
+ * (0..3), `locked`, and on a locked row `unlockDone`/`unlockNeed` — and the
+ * answer's top level carries `tour: {stars}` for the World Tour's own badge.
+ * Derived from whatever ttp_ui_progress_load installed (nothing loaded = a
+ * fresh couch: zero stars everywhere, the Playroom locked), so a shell reads
+ * ONE catalogue and never re-implements a star threshold or the unlock rule. */
 TTP_ABI const char* ttp_ui_catalogue_json(void);
+
+/* ---- the couch's progression record -----------------------------------------
+ *
+ * The star record persists ON THE SHELL (localStorage / NSUserDefaults) but is
+ * DECIDED here. At boot the shell hands the stored blob over once, exactly as
+ * ttp_net_init_pick hands over the page's entropy:
+ *
+ *   ttp_ui_progress_load('{"v":1,"cups":{"beach":{"best":2}}}', 0)
+ *
+ * Null, empty or corrupt text loads a fresh couch rather than failing — a bad
+ * save must not brick a boot. `unlockAll` nonzero is the dev/test override
+ * (?unlockAll=1): the record still loads and banks, only the lock stops.
+ *
+ * From then on the engine owns the record: a finished Grand Prix banks the best
+ * human's final standing and the race walk answers a `persist-progression`
+ * effect carrying the new blob (`progress`), which the shell writes back
+ * verbatim. ttp_ui_progress_json is the same blob on demand — canonical
+ * key-sorted JSON, byte-stable for a given record. */
+TTP_ABI int ttp_ui_progress_load(const char* jsonOrNull, int unlockAll);
+TTP_ABI const char* ttp_ui_progress_json(void);
 
 /* ---- cup paper colours ------------------------------------------------------
  *

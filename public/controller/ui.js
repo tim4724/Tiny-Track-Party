@@ -85,15 +85,20 @@ export function motionHelpCopy(state) {
   }
 }
 
-export function renderReadyFoot(btnEl, noteEl, { amHost, amReady, canStart, host, others }) {
+export function renderReadyFoot(btnEl, noteEl, { amHost, amReady, tab, canStart, host, others }) {
   btnEl.classList.remove('hidden');
   const allReady = others.every((p) => p.ready);
   if (amHost) {
-    btnEl.textContent = 'Start race';
-    btnEl.disabled = !canStart || !allReady;
+    // The host's bar is a STEPPER between the two lobby pages: on CAR it
+    // advances ("Select race", always enabled — picking needs no permission),
+    // on RACE it launches. Blue for the step, brand green stays "go".
+    const onCar = tab === 'car';
+    btnEl.textContent = onCar ? 'Select race' : 'Start race';
+    btnEl.classList.toggle('btn--step', onCar);
+    btnEl.disabled = onCar ? false : (!canStart || !allReady);
     btnEl.classList.remove('is-pressed');
-    noteEl.classList.toggle('hidden', allReady);
-    if (!allReady) noteEl.textContent = 'Waiting for all players to get ready…';
+    noteEl.classList.toggle('hidden', onCar || allReady);
+    if (!onCar && !allReady) noteEl.textContent = 'Waiting for all players to get ready…';
   } else {
     btnEl.disabled = false;
     btnEl.textContent = amReady ? 'Ready ✓' : 'I’m ready';

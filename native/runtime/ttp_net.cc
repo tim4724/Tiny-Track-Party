@@ -45,6 +45,7 @@
 #include "ttp/room_flow.h"
 #include "ttp_party.h"  // ttp_room_sync_active_order — the one participant-set rule
 #include "ttp_live.h"
+#include "ttp_progress.h"  // the lock — a pick and a draw both honour it here
 #include "ttp_room.h"
 #include "ttp_session.h"
 #include "ttp_ui.h"     // ttp_ui_all_racers_ready — the start gate, asked not re-spelled
@@ -488,6 +489,21 @@ bool catalogueHasTrack(const Value* wanted) {
   return false;
 }
 
+// A locked cup locks its tracks — asked through the progression seam so a
+// hacked phone cannot race the Playroom by naming an exact track. Cupless
+// entries (dev surfaces) and unknown ids never lock; existence is
+// catalogueHasTrack's question, not this one's.
+bool chooserTrackUnlocked(const Value* wanted) {
+  const Value* tracks = g_chooser.find("tracks");
+  if (!tracks || tracks->type != Value::ARR || !wanted) return true;
+  for (const Value& t : tracks->arr) {
+    if (t.type != Value::OBJ || !strictEquals(orUndef(t.find("id")), *wanted)) continue;
+    const Value* c = t.find("cup");
+    return !c || c->type != Value::STR || ttp_progress_cup_unlocked(c->str);
+  }
+  return true;
+}
+
 // ---- the shuffle bag ---------------------------------------------------------
 // {seed, deck:[ids], cursor} behind the room handle. xorshift64* over the
 // chooser's track ids, re-shuffled when the deck empties — the JS bag's rule
@@ -514,12 +530,19 @@ std::string bagDraw(int roomHandle) {
   size_t cursor = (curV && curV->type == Value::NUM && curV->num >= 0) ? (size_t)curV->num : 0;
   if (cursor >= deck.size()) {
     deck.clear();
+    // The refill is the ONE place the deck is populated, so filtering the lock
+    // here excludes locked cups' tracks from every global draw. A deck dealt
+    // before an unlock keeps its remaining cards — the no-repeat walk finishes
+    // before the wider world joins the next shuffle.
     if (const Value* tracks = g_chooser.find("tracks"))
       if (tracks->type == Value::ARR)
-        for (const Value& t : tracks->arr)
-          if (t.type == Value::OBJ)
-            if (const Value* id = t.find("id"))
-              if (id->type == Value::STR) deck.push_back(id->str);
+        for (const Value& t : tracks->arr) {
+          if (t.type != Value::OBJ) continue;
+          const Value* c = t.find("cup");
+          if (c && c->type == Value::STR && !ttp_progress_cup_unlocked(c->str)) continue;
+          if (const Value* id = t.find("id"))
+            if (id->type == Value::STR) deck.push_back(id->str);
+        }
     for (size_t i = deck.size(); i > 1; --i) {
       rng = bagNext(rng);
       std::swap(deck[i - 1], deck[rng % i]);
@@ -539,8 +562,10 @@ std::string bagDraw(int roomHandle) {
   return out;
 }
 
-// The chooser's cup ids, first-appearance order — which IS difficulty order,
-// the catalogue being cups-order flattened. Cupless tracks contribute nothing.
+// The chooser's UNLOCKED cup ids, first-appearance order — which IS difficulty
+// order, the catalogue being cups-order flattened. Cupless tracks contribute
+// nothing, and a locked cup is invisible here: the tour's cup count (and so
+// its race count) falls straight out of this list.
 std::vector<std::string> chooserCups() {
   std::vector<std::string> cups;
   const Value* tracks = g_chooser.find("tracks");
@@ -549,6 +574,7 @@ std::vector<std::string> chooserCups() {
       if (t.type != Value::OBJ) continue;
       const Value* c = t.find("cup");
       if (!c || c->type != Value::STR) continue;
+      if (!ttp_progress_cup_unlocked(c->str)) continue;
       bool seen = false;
       for (const std::string& s : cups) if (s == c->str) { seen = true; break; }
       if (!seen) cups.push_back(c->str);
@@ -639,11 +665,15 @@ bool selectModeWalk(int roomHandle, const PeerId& from, const Value& msg,
   if (mode == "track") {
     const Value* tid = mfind(msg, "trackId");
     if (!catalogueHasTrack(tid)) return false;
+    // The lock is enforced HERE, on the authority — the phone's grey-out is UX.
+    if (!chooserTrackUnlocked(tid)) return false;
     if (curMode == "track" && strictEquals(orUndef(tid), orUndef(mfind(pick, "trackId"))))
       return false;
     storePickAndPush(roomHandle, effects, Value::Str(mode), Value::Null(), 0, orUndef(tid));
   } else if (mode == "cup") {
     const Value* cupId = mfind(msg, "cupId");
+    if (cupId && cupId->type == Value::STR && !ttp_progress_cup_unlocked(cupId->str))
+      return false;   // same silent refusal as an unknown cup
     const Value* first = firstCupTrackId(cupId);
     if (!first) return false;
     if (curMode == "cup" && strictEquals(orUndef(cupId), orUndef(mfind(pick, "cupId"))))
