@@ -1007,14 +1007,34 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
 }
 
 /* ---- AirConsole (screen.html) ---- Players pair through the AC app, so the
-   ticket keeps its wordmark masthead and the tagline (retexted by main.js's AC
-   branch) but drops the QR + URL line; a dropped seat's reconnect card drops
-   its rejoin QR the same way (AC reconnects the device itself). Fullscreen is
-   the host page's business inside the AC iframe. */
+   QR + URL line go; a dropped seat's reconnect card drops its rejoin QR the
+   same way (AC reconnects the device itself). Fullscreen is the host page's
+   business inside the AC iframe. */
 body.airconsole #qr,
 body.airconsole .ticket__urlbox,
 body.airconsole .rc-card__qr,
 body.airconsole #fullscreen-btn { display: none; }
+
+/* Without the QR the ticket would be a near-empty sticker card floating
+   mid-rail, so it sheds the card entirely: the bare die-cut wordmark pinned
+   top-left, with the join hint (retexted by main.js's AC branch) hanging
+   under it. Pointer-events off — there is no join link to copy. */
+body.airconsole .ticket-rail { align-self: start; }
+body.airconsole .ticket {
+  background: none; border: 0; box-shadow: none; padding: 0;
+  align-items: flex-start; text-align: left;
+  transform: none;                  /* the wordmark carries the kit tilt */
+  pointer-events: none;
+}
+body.airconsole .ticket__wordmark {
+  font-size: clamp(28px, 3vw, 46px);
+  -webkit-text-stroke-width: 7px;   /* die-cut edge back — no white card behind it */
+  filter: drop-shadow(3px 3px 0 var(--shadow-ink));
+}
+body.airconsole .tagline {
+  left: 0; transform: rotate(-2deg);   /* left-aligned under the wordmark */
+  opacity: 1;                          /* no QR fade to gate on */
+}
 
 /* The welcome board never shows in AC — the LOBBY is the boot screen (its
    markup is complete without the engine: open seats + the loading ticket).
