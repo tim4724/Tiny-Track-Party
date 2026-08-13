@@ -11,21 +11,24 @@
 #
 # Layers, each produced on demand and then reused:
 #   1. emsdk        — pinned emscripten toolchain (~/emsdk unless EMSDK_DIR)
-#   2. Filament SDK — the pinned fork (branch tvos-v1.75.0, carrying our tvOS +
-#                     newer-clang patches) built for wasm and installed to
+#   2. Filament SDK — the fork commit pinned in native/filament.pin (carrying
+#                     our tvOS + newer-clang patches), resolved by
+#                     scripts/filament-checkout.sh into a version-addressed
+#                     checkout, built for wasm and installed to
 #                     out/wasm-release/filament
 #   3. materials    — compiled with the FORK'S OWN matc (never a system matc:
 #                     .filamat blobs are MATERIAL_VERSION-locked to the tree)
 #   4. the module   — native/ configured with -DFILAMENT_SDK
 #
-# Env: FILAMENT_SRC (fork checkout), EMSDK_DIR.
+# Env: FILAMENT_SRC (override; must sit at the pinned commit), EMSDK_DIR.
 #
 # The strict-FP flags (-ffp-contract=off / -fno-builtin, applied by CMake to the
 # sim targets) are the determinism contract — never add fast-math.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-FILAMENT_SRC="${FILAMENT_SRC:-$HOME/Projects/filament}"
+# shellcheck disable=SC1091
+source "$ROOT/native/scripts/filament-checkout.sh"   # sets FILAMENT_SRC + FILAMENT_COMMIT
 EMSDK_DIR="${EMSDK_DIR:-${EMSDK:-$HOME/emsdk}}"
 EMSDK_VERSION="6.0.4"   # first green build 2026-07-24; bump deliberately
 BUILD="$ROOT/native/build/web"
@@ -69,6 +72,7 @@ EMCC_VERSION="$(emcc --version | head -1)"
 cat > "$OUTDIR/BUILD_STAMP.json" <<JSON
 {
   "sourceHash": "$HASH",
+  "filament": "$FILAMENT_COMMIT",
   "emcc": "$EMCC_VERSION",
   "note": "sourceHash covers every file feeding ttp_runtime_web (native/scripts/runtime-source-hash.mjs). Rebuild with native/scripts/build-runtime-web.sh after touching native/."
 }

@@ -1,0 +1,11 @@
+# The Filament toolchain pin: every artifact build (web today, tvOS / Android TV
+# via the same sourced resolver) compiles against exactly this fork commit.
+# Resolved by native/scripts/filament-checkout.sh; enforced at commit time by
+# tests/native-artifact.test.js against the commit stamped in BUILD_STAMP.json.
+#
+# To upgrade Filament: push the new fork branch, change FILAMENT_COMMIT, run
+# native/scripts/build-runtime-web.sh, and commit pin + .filamat blobs + wasm
+# TOGETHER — materials are MATERIAL_VERSION-locked to the tree, so a half
+# upgrade fails at load time in the browser.
+FILAMENT_REMOTE=https://github.com/tim4724/filament.git
+FILAMENT_COMMIT=3489f2e894a2a15aa9fd49167f5074e5553dbbcd

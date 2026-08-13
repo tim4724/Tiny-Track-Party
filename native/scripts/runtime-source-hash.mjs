@@ -35,6 +35,7 @@ const ROOTS = [
   'native/vendor/fdlibm',
   'native/vendor/double-conversion',
   'native/scripts/build-runtime-web.sh',
+  'native/scripts/filament-checkout.sh',
 ];
 
 // .mat and .js are in here because the artifacts include the renderer: its

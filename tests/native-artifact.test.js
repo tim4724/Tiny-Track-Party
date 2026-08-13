@@ -34,6 +34,23 @@ test('the checked-in native runtime artifacts exist', () => {
   }
 });
 
+test('the checked-in native runtime was built against the pinned Filament', () => {
+  const stamp = JSON.parse(fs.readFileSync(STAMP, 'utf8'));
+  const pin = fs.readFileSync(path.join(ROOT, 'native/filament.pin'), 'utf8')
+    .match(/^FILAMENT_COMMIT=([0-9a-f]{40})$/m)?.[1];
+  assert.ok(pin, 'native/filament.pin has no FILAMENT_COMMIT line');
+  assert.strictEqual(
+    stamp.filament, pin,
+    `MIXED-TOOLCHAIN artifact: native/filament.pin pins Filament ${pin}\n` +
+    `but the checked-in wasm + .filamat blobs were built against ` +
+    `${stamp.filament}.\n` +
+    `The .filamat blobs are MATERIAL_VERSION-locked to the Filament tree, so a ` +
+    `runtime/materials mismatch fails at load time in the browser — sourceHash ` +
+    `cannot see this, it only covers native/. Fix: ${REBUILD} (the script ` +
+    `resolves the pinned checkout itself).`
+  );
+});
+
 test('the checked-in native runtime was built from the current native/ sources', async () => {
   const { runtimeSourceHash } = await import('../native/scripts/runtime-source-hash.mjs');
   const stamp = JSON.parse(fs.readFileSync(STAMP, 'utf8'));

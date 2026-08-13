@@ -133,7 +133,13 @@ Node reads geometry through `scripts/native-track.mjs` over the shipped wasm.
 ## Building
 
 `native/scripts/build-runtime-web.sh` builds the engine and needs the Filament
-fork plus emsdk, both fetched on first run. CMake only adds the renderer under
+fork plus emsdk, both fetched on first run. The fork commit is pinned in
+`native/filament.pin`, resolved by `scripts/filament-checkout.sh` (sourced by
+every platform's artifact build) into an immutable version-addressed checkout —
+never a shared mutable tree, which a concurrent build once paid for. Upgrading
+Filament is one commit: bump the pin, rebuild, ship pin + blobs + wasm together;
+the `check:artifact` test fails a mixed-toolchain artifact via the Filament
+commit stamped into `BUILD_STAMP.json`. CMake only adds the renderer under
 `-DFILAMENT_SDK`, which CI lacks — so CI's wasm leg link-checks the browser ABI
 against a sim-only build of the same target.
 
