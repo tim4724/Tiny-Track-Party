@@ -29,6 +29,11 @@ first under the new rule — the ambient particle counts were re-authored (dense
 snow, then the camera-box count semantics), `ambient.count` rows and nothing
 else.
 
+On 2026-08-13 finished cars became solid to each other (still ghosts to the
+racing pack — `Game::resolveCollisions`). Only skysnake races to all-finished,
+so only it drifted and was re-emitted: the divergence starts after the second
+car finishes, and every finish time is byte-identical to the previous recording.
+
 The replay contract is unchanged: EXACT float equality (same operation order, same
 vendored math), compared per frame as an FNV-1a of the canonical snapshot plus the
 event list, with periodic full snapshots.

@@ -670,13 +670,21 @@ void Game::collidePair(Car& a, Car& b) {
 }
 
 void Game::resolveCollisions(double dt) {
+  // A finished car is a ghost to the racing pack — a coasting winner must never
+  // block or deflect a car still fighting for its result — but solid to the
+  // other finished cars, so the victory lap doesn't overlap. Poles stay
+  // ghosted after the line: the autopilot never aims at one, and nothing a
+  // pole hit protects still matters.
   std::vector<Car*>& list = carScratch_;
   list.clear();
-  for (const auto& c : cars_) if (!c->finished) list.push_back(c.get());
+  for (const auto& c : cars_) list.push_back(c.get());
   for (size_t i = 0; i < list.size(); i++)
-    for (size_t j = i + 1; j < list.size(); j++) collidePair(*list[i], *list[j]);
+    for (size_t j = i + 1; j < list.size(); j++)
+      if (list[i]->finished == list[j]->finished) collidePair(*list[i], *list[j]);
   if (!poles_.empty())
-    for (Car* c : list) for (const PoleRt& p : poles_) collidePole(*c, p);
+    for (Car* c : list)
+      if (!c->finished)
+        for (const PoleRt& p : poles_) collidePole(*c, p);
   for (Car* c : list) clampCurb(*c, dt);
 }
 
