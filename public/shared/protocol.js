@@ -259,49 +259,45 @@ var CAR_NAMES = [
 // baking the car thumbnails, so the picker preview matches the racing car.
 var CAR_MODEL_YAW = [0, 0, 0, 0];
 
-// Per-model handling stats, parallel to CAR_MODELS. The engine (Game.js) reads a
+// Per-model handling stats, parallel to CAR_MODELS. The native engine reads a
 // resolved stats object per car; these are the source of truth the display feeds
-// in. accel/vmax/turn are MULTIPLIERS on the engine's benchmark (1 = the Dash
-// baseline); `mass` is relative (only the ratio matters when two cars collide);
-// halfLen/halfWid are the collision footprint half-extents in WORLD units,
-// measured from the Kenney meshes (length×width: racer 0.88×0.53, speedster
-// 0.88×0.56). `turn` is the "Handling" stat shown in the picker — the car's
-// turn rate, which sets its max corner speed: the engine does NOT auto-slow, so a
-// low-handling car that carries too much speed simply can't yaw fast enough and
-// washes WIDE (understeer) into the curb — you must brake yourself. A grippy car
-// rails the same bend much faster. So the spread here is deliberately wide. The
-// two fast cars split "fast" by axis: BOLT owns outright TOP SPEED (highest vmax —
-// the name promises lightning, so it's the fastest thing on a straight), while
-// RUMBLE is the heavy bruiser that wins by WEIGHT — it shoves everyone off-line
-// (an edge the solo lap-time probe can't see). Each car owns a track family:
-// Bolt the flowing straights, Carve the tight corners, Dash the medium mix,
-// Rumble the scrum.
-// Spread tuned against the cup tracks with scripts/probe-car-matrix.js so Bolt
-// wins fast tracks but has real bad tracks, Carve keeps tight tracks, and Dash
-// can take medium/technical layouts. Re-run it after edits; use the packed-race
-// probe for Rumble's collision value.
+// in. accel/vmax/turn are MULTIPLIERS on the engine's benchmark; `mass` is
+// relative (only the ratio matters when two cars collide); halfLen/halfWid are
+// the collision footprint half-extents in WORLD units, measured from the Kenney
+// meshes (length×width: racer 0.88×0.53, speedster 0.88×0.56).
+//
+// The roster is ONE BALANCED CAR plus three specialists, each bad at exactly ONE
+// stat. Weight is not a fourth lever: it is DERIVED from accel (carMass below) —
+// the weakest launch is the heaviest car — so Rumble's contact strength is the
+// flip side of its launch hole, never a separate number to tune.
+//
+// Hole depth is priced by how often the stat bills, measured flat-out
+// (probe_cli --nobrake) because humans drive flat-out:
+//   - vmax bills on every meter: its hole is the SHALLOWEST, and ±0.01 here
+//     moves packed-race points by whole placings. Touch it last.
+//   - turn ("Handling" in the picker) SATURATES flat-out: past holding the line
+//     without scrub, extra turn converts poorly — Carve's big number is worth
+//     less than linear, Bolt's deep hole is livable. The engine does NOT
+//     auto-slow: a low-turn car carrying too much speed washes WIDE into the
+//     curb (brake yourself); a grippy one rails the same bend and scrubs less
+//     speed steering.
+//   - accel bills per RECOVERY (launch, wall hit, knock, spin): nearly free
+//     alone, constant in traffic — where the derived mass pays it back, which is
+//     what makes Rumble's pairing self-balancing.
+//   - the balanced car sits slightly ABOVE baseline: the specialists' packages
+//     all net positive, so an exactly-1.0 car finishes last.
+// After ANY edit here — or to the engine's base TURN_RATE / STEER_SCRUB, which
+// set how much of a lap turn bills — re-run `npm run probe:cars` and judge the
+// --nobrake variant of both modes: Bolt should win the flowing tracks solo,
+// Carve the twisty ones, Dash the technical middle and never be worst; Rumble
+// reads slow ALONE — its value is the scrum, visible only to the packed probe.
+function carMass(accel) { return Math.round((1 + 3.3 * (1 - accel)) * 100) / 100; }
 var CAR_STATS = [
-  // accel, vmax, turn(=handling), mass. Turn caps corner speed two ways: holdable line
-  // ≈ turn/κ (understeer past it), and the engine's steer scrub — cornering costs speed
-  // in proportion to steering input, and a grippy car needs less input for the same bend.
-  // The vmax spread is deliberately TIGHT (0.98–1.06): vmax bills on every meter of every
-  // lap while turn only bills in corners, so a wide vmax gap (the old 0.97–1.11) made the
-  // fastest car unbeatable everywhere. The spread itself is sim-tuned from 2026-07-17
-  // and has NOT been re-priced since; the engine's base moved under it on 2026-08-07
-  // (the pace retune — see the constants in native/libttp-sim/ttp/game.cc) and these
-  // four rows were carried across unchanged. It is serviceable but no longer tuned to
-  // the engine it runs on. Rotation improved against the old base (probe:cars matrix —
-  // Carve 1→4 wins, Dash 12→6; packed races Dash 38→30 of 80). Read BOTH probes before
-  // judging a spread: the two disagree, and they disagreed hardest at a nearby pace
-  // that looked healthy solo and handed Dash 39 of 80 packed. Flat-out washout
-  // risk is the felt ladder: Bolt worst, then Rumble, then Dash occasionally; Carve
-  // never curbs. Re-price whenever base TURN_RATE or STEER_SCRUB moves — they set how
-  // much of a lap turn bills.
-  { accel: 1.04, vmax: 1.02, turn: 1.10, mass: 1.00, halfLen: 0.44, halfWid: 0.26 }, // Dash (Low Racer) — balanced all-rounder with the best launch; occasionally washes out flat-out (learn to brake), owns snow (and backyard when driven flat-out)
-  { accel: 1.05, vmax: 1.06, turn: 0.95, mass: 0.78, halfLen: 0.44, halfWid: 0.28 }, // Bolt (Speedster) — the rocket: FASTEST top speed, lightest (shoved easily), weakest handling. Owns flowing tracks; washes out flat-out in tight corners — brake or eat curb
-  { accel: 1.02, vmax: 0.98, turn: 1.27, mass: 0.86, halfLen: 0.44, halfWid: 0.26 }, // Carve (Racer) — corner king: rails the tightest bend, scrubs the least speed steering, NEVER washes out; pays with the lowest top end. Owns the technical cups when driven well
-  { accel: 0.96, vmax: 1.04, turn: 0.98, mass: 1.35, halfLen: 0.44, halfWid: 0.28 }  // Rumble (Vintage) — heavy bruiser: 2nd-fastest flat-out, ponderous in corners (washes out like Bolt), heaviest by far (wins every shove)
-];
+  { accel: 1.01, vmax: 1.01, turn: 1.01, halfLen: 0.44, halfWid: 0.26 }, // Dash (Low Racer) — the balanced pick: no hole, never punished, never the best
+  { accel: 1.02, vmax: 1.06, turn: 0.88, halfLen: 0.44, halfWid: 0.28 }, // Bolt (Speedster) — the fastest: top-speed king, BAD TURN (washes wide in tight corners) and light enough to shove
+  { accel: 1.03, vmax: 0.97, turn: 1.24, halfLen: 0.44, halfWid: 0.26 }, // Carve (Racer) — corner king: rails bends, never washes out, BAD VMAX — tops out early on every straight
+  { accel: 0.93, vmax: 1.00, turn: 1.05, halfLen: 0.44, halfWid: 0.28 }  // Rumble (Vintage) — the heavy roller: BAD ACCEL (slow launch, slow recovery), heaviest by far — wins every shove, priced for the scrum
+].map(function (c) { c.mass = carMass(c.accel); return c; });
 
 // Resolve a carIndex to its stats (wraps the array; null/garbage → the Dash
 // benchmark). Both the display engine wiring and the controller picker call this.
