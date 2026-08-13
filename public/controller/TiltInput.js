@@ -95,6 +95,18 @@ function sensorPolicyBlocked() {
   try { return !fp.allowsFeature('accelerometer'); } catch (_) { return null; }
 }
 
+// Gravity extraction for the RAW-accelerometer feed (setGravity — the
+// AirConsole device_motion path; the DeviceOrientation path never uses these,
+// its fusion already did this in the OS). Phone-only tuning knobs, so they
+// live here rather than in the shared STEER manifest.
+const ACCEL_G = 9.81;        // 1 g, the magnitude a motionless sample reads
+// The low-pass carries the recentring damping: a smooth lateral swing adds
+// mostly PERPENDICULAR acceleration, which tilts the measured vector a lot
+// while moving its magnitude only a little (√(g²+a²)−g ≈ a²/2g), so the
+// trust gate below catches shakes and jolts, not swings.
+const ACCEL_LP = 0.2;        // per-sample low-pass toward a fully-trusted sample
+const ACCEL_TRUST_BAND = 4;  // m/s² of |a|−g deviation at which trust reaches 0
+
 const DEG = Math.PI / 180;
 const RAD = 180 / Math.PI;
 const clamp1 = (v) => Math.max(-1, Math.min(1, v));
@@ -208,17 +220,42 @@ export class TiltInput {
   // (the AirConsole app's webview: the SDK relays native accelerometer data
   // through its own device_motion channel instead). Takes the PROPER
   // acceleration vector (W3C accelerationIncludingGravity: flat face-up =
-  // (0,0,+9.81)); gravity is its negation, normalized here. Feeding this makes
+  // (0,0,+9.81)); gravity is its negation. Feeding this makes
   // motion "granted" — the sensor demonstrably works, whatever the
   // DeviceOrientation permission dance said.
+  //
+  // Unlike DeviceOrientation (OS-fused with the gyro, so linear acceleration
+  // is rejected before we ever see it), this is the RAW accelerometer:
+  // gravity + the hand's own motion. Recentring the phone is itself an
+  // acceleration that reads as opposite tilt, so taking samples verbatim made
+  // the steer overshoot and ring around centre. Gravity is extracted here
+  // instead, per sample:
+  //  - TRUST: a sample whose magnitude sits away from 1 g is mostly hand
+  //    motion, so it moves the estimate proportionally less. Pure rotation
+  //    keeps ~1 g, so twisting the wheel stays full-rate responsive — only
+  //    translation is distrusted.
+  //  - a one-pole low-pass over the trusted remainder (~73 ms at the relay's
+  //    16 ms cadence) — enough to average a recentring swing's two opposing
+  //    acceleration phases against each other, small enough that a held lean
+  //    reads full within a quarter second.
   setGravity(ax, ay, az) {
     const n = Math.hypot(ax, ay, az);
     if (!(n > 1)) return; // linear-only / empty sample: no gravity to read
     this.haveTilt = true;
     this.motionState = 'granted';
-    this._g.x = -ax / n;
-    this._g.y = -ay / n;
-    this._g.z = -az / n;
+    const k = ACCEL_LP * Math.max(0, 1 - Math.abs(n - ACCEL_G) / ACCEL_TRUST_BAND);
+    if (k > 0) {
+      const g = this._g;
+      g.x += (-ax / n - g.x) * k;
+      g.y += (-ay / n - g.y) * k;
+      g.z += (-az / n - g.z) * k;
+      // Blending unit vectors shrinks the result; keep the direction, restore
+      // the length so the roll math downstream reads a clean unit gravity.
+      const m = Math.hypot(g.x, g.y, g.z) || 1;
+      g.x /= m; g.y /= m; g.z /= m;
+    }
+    // An untrusted (pure-motion) sample holds the last estimate — still tick,
+    // so held steer keeps flowing at sensor rate.
     if (this._timer) this._tick();
   }
 
