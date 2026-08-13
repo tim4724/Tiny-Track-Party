@@ -506,7 +506,7 @@ export function runDisplayScenario(opts, ctx) {
     // calls. Pair the card with a matching ?track=<id> so the orbiting preview
     // shows the circuit the card names.
     showPick(opts.picked ? previewPick(opts.picked) : null);
-    // The left rail's star shelf, off the same renderer as live play.
+    // The bottom-right star shelf, off the same renderer as live play.
     renderCupShelf(el('cup-shelf'), PREVIEW_SHELF);
     return;
   }

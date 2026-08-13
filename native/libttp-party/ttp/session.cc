@@ -245,8 +245,8 @@ Value lobby_snapshot(const Value& input, const Value& chooser) {
   copyKey(out, chooser, "colors");
   if (lobby) copyKey(out, chooser, "tracks");
   else out.set("tracks", Value::Null());
-  // The couch's progression (per-cup stars/locked + the tour badge), composed
-  // by the display off the ui catalogue. Lobby-gated like `tracks` — it dresses
+  // The couch's progression (per-cup stars/locked), composed by the display
+  // off the ui catalogue. Lobby-gated like `tracks` — it dresses
   // the picker — but simply absent elsewhere: phones cache it, and there is no
   // pre-progression reader expecting an explicit null.
   if (lobby) copyKey(out, chooser, "progress");
