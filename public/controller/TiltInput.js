@@ -144,7 +144,12 @@ export class TiltInput {
     // permission flow: no DeviceOrientationEvent constructor (no sensor, ever),
     // or a permissions policy that withholds the sensors from this document.
     // The THIRD way can only be found by listening — see _settle.
-    this.motionState = (typeof window !== 'undefined'
+    //
+    // EXCEPT on AirConsole, where neither route means what it says: the SDK's
+    // device_motion relay is the sensor (setGravity), and the frame is expected
+    // to fail both checks. Stay 'unknown' and let the first relayed sample
+    // resolve it to 'granted'.
+    this.motionState = (typeof window !== 'undefined' && !window.airconsole
       && (!window.DeviceOrientationEvent || sensorPolicyBlocked() === true))
       ? 'unsupported' : 'unknown';
 
