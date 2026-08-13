@@ -11,7 +11,7 @@
 #
 # Layers, each produced on demand and then reused:
 #   1. emsdk        — pinned emscripten toolchain (~/emsdk unless EMSDK_DIR)
-#   2. Filament SDK — the pinned fork (branch tvos-v1.74.0, carrying our tvOS +
+#   2. Filament SDK — the pinned fork (branch tvos-v1.75.0, carrying our tvOS +
 #                     newer-clang patches) built for wasm and installed to
 #                     out/wasm-release/filament
 #   3. materials    — compiled with the FORK'S OWN matc (never a system matc:
