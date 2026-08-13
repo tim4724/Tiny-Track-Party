@@ -737,6 +737,23 @@ if (inShell && shellName) {
   // is lost by waiting). Never persisted — the name belongs to the platform.
   screens.name.classList.add('hidden');
   acBoot.ready.then(() => joinRace(acBoot.nickname(), { persist: false }));
+  // iOS browsers grant motion only from inside a user gesture, and the AC
+  // auto-join above has none — its enableMotion() resolves 'denied' and tilt
+  // falls back to the (deliberately damped) accelerometer relay. Every tap IS
+  // a gesture though, so keep re-asking on taps until granted; the moment the
+  // fused DeviceOrientation feed starts, it outranks the relay (TiltInput) and
+  // AC tilt becomes the normal mechanism. No-op where permission needs no
+  // gesture (Android grants at join) and in the AC app (no requestPermission).
+  const DOE = window.DeviceOrientationEvent;
+  if (DOE && typeof DOE.requestPermission === 'function') {
+    const askOnTap = async () => {
+      if (inputMode !== 'tilt') return;
+      if ((await tilt.enableMotion()) === 'granted') {
+        document.removeEventListener('pointerdown', askOnTap);
+      }
+    };
+    document.addEventListener('pointerdown', askOnTap);
+  }
   // The pref shim hydrates after the module read its defaults — re-apply the
   // one pref that changes live wiring (steering mode; a stored car pick is
   // read later, at WELCOME, and usually wins the race).
