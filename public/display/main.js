@@ -485,11 +485,16 @@ scene.onFrame = (dt) => {
   // HUD is the slow-tick poll below; the last per-frame getSnapshot went with
   // this call.
   sfx(audioDecide.frame(now));
-  if (!session.racing) return; // countdown: visible + steerable, but no HUD yet
-  // The other half of the slow tick hoisted above. `lastHudTick` is stamped
-  // HERE rather than at the top, so a countdown frame (which returns above) does
-  // not consume the tick the first racing frame wants.
+  // The other half of the slow tick hoisted above — and it runs through the
+  // COUNTDOWN too: the grid already carries ranks and displayLap clamps to 1,
+  // so each cell reads its start position and "Lap 1/N" while the lights count.
+  // The walk's one-shot paint-initial-hud fires before reset-scene-cars' async
+  // rebuild has landed the new slot table, so this poll is what actually fills
+  // the countdown chrome (and CLEAR_ITEM_CACHE's empty-ITEM resend rides the
+  // first tick, countdown or not).
   if (slowTick) {
+    // Stamped only when the tick is spent — the finish.allDone branch above can
+    // still return before this line, and that frame must not consume the tick.
     lastHudTick = now;
     // The HUD values (ordinal, lap counter, held item, finish card) are the
     // ENGINE's, read back packed (ttp_hud.h) rather than picked out of a
