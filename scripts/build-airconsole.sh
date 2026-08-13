@@ -51,12 +51,14 @@ rm -f "$BUILD_DIR/display/screen.html" "$BUILD_DIR/controller/controller.html" \
 # Favicons belong to the top document — the AC iframe can't surface them.
 rm -rf "$BUILD_DIR/assets/icon"
 
-# Dev-only modules the AC pages can never load: each is a dynamic import behind
-# a query param (?scenario= gallery, ?solo, ?netstats=1) that the AirConsole
-# iframe never carries. debugPanel/debugFields stay — main.js imports them
-# unconditionally.
+# Dev-only modules the AC pages never load: each is a dynamic import behind a
+# gate the AirConsole iframe can't satisfy — a query param (?scenario= gallery,
+# ?solo, ?netstats=1) or, for the wrench debug panel, main.js's
+# !window.airconsole check.
 rm -f "$BUILD_DIR/display/TestHarness.js" "$BUILD_DIR/display/DebugSolo.js" \
-      "$BUILD_DIR/controller/TestHarness.js" "$BUILD_DIR/controller/NetStats.js"
+      "$BUILD_DIR/display/debugFields.js" \
+      "$BUILD_DIR/controller/TestHarness.js" "$BUILD_DIR/controller/NetStats.js" \
+      "$BUILD_DIR/shared/debugPanel.js" "$BUILD_DIR/shared/debugPanel.css"
 
 # Docs and build-time records nothing at runtime reads. License and credit
 # files (OFL, Kenney, CREDITS.txt, engine_loop.LICENSE.txt) deliberately stay.

@@ -1430,8 +1430,10 @@ window.__biomes = _biomes;
 // Debug settings (faint wrench, bottom-left): interactive editor for this
 // page's query params — edits reload the page so each param takes effect
 // through its normal boot path above. Lazy import: dev aid, not boot-critical.
-// The field list is debugFields.js.
-Promise.all([import('../shared/debugPanel.js'), import('./debugFields.js')])
+// The field list is debugFields.js. Not on AirConsole: the panel's whole
+// mechanism is query-param edits + reload, which the AC iframe doesn't carry,
+// and the gate is what lets the zip drop the debug modules entirely.
+if (!window.airconsole) Promise.all([import('../shared/debugPanel.js'), import('./debugFields.js')])
   .then(([{ initDebugPanel }, { displayDebugFields }]) => initDebugPanel(
     displayDebugFields({
       maxPlayers: MAX_PLAYERS, carNames: window.CAR_NAMES || [], trackList: TRACK_LIST,
