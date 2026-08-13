@@ -19,13 +19,12 @@ var airconsole = new AirConsole({
   // The TTP controller is landscape-only (the plain web page enforces it with
   // fullscreen+lock and a rotate overlay); AC pins the device for us.
   orientation: AirConsole.ORIENTATION_LANDSCAPE,
-  silence_inactive_players: false,
-  // The AC app's webview never delivers DeviceOrientation events to the game,
-  // so TILT would be dead without this: the SDK relays the native
-  // accelerometer through onDeviceMotion every N ms instead (local postMessage
-  // only — no message-budget cost). 16 ms ≈ the 60 Hz sensor rate TiltInput's
-  // steer filter is tuned against. Wired to the tilt in main.js's AC branch.
-  device_motion: 16
+  silence_inactive_players: false
+  // Deliberately NOT armed: device_motion (the SDK's raw-accelerometer relay,
+  // for webviews that block DeviceOrientation in the game iframe). It was
+  // tried with a damping filter and removed 2026-08-13 — the damped feel
+  // wasn't worth it. Where the iframe gets DeviceOrientation, tilt works
+  // normally; elsewhere phones fall back to button steering.
 });
 
 // Replace window.localStorage BEFORE main.js reads the stored prefs. The

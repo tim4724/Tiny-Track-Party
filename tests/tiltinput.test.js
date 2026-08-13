@@ -300,28 +300,6 @@ test('a real sample resolves granted immediately, without paying the settle wind
   });
 });
 
-test("AirConsole with no DeviceOrientationEvent stays 'unknown' — the SDK's device_motion relay is the sensor there", () => {
-  const hadW = Object.prototype.hasOwnProperty.call(globalThis, 'window');
-  const prevW = globalThis.window;
-  globalThis.window = { addEventListener() {}, airconsole: {} };
-  try {
-    assert.equal(new TiltInput({}).motionState, 'unknown');
-  } finally {
-    if (hadW) globalThis.window = prevW; else delete globalThis.window;
-  }
-});
-
-test("AirConsole withheld the sensors by policy — still 'unknown', the relay is the sensor", async () => {
-  // The AC frame's REAL shape: DeviceOrientationEvent present, permissions
-  // policy refusing it. Both of the constructor's routes to 'unsupported' fire
-  // here, and both are wrong about this page, because the sensor arrives over
-  // the SDK channel instead.
-  await withFakeBrowser({ policyAllows: false }, () => {
-    globalThis.window.airconsole = {};
-    assert.equal(new TiltInput({}).motionState, 'unknown');
-  });
-});
-
 test('stop() resets brake + ACTION state so the next race cannot inherit a stale press', () => {
   const t = new TiltInput({});
   t.setActionEnabled(true);

@@ -95,25 +95,6 @@ function sensorPolicyBlocked() {
   try { return !fp.allowsFeature('accelerometer'); } catch (_) { return null; }
 }
 
-// Gravity extraction for the RAW-accelerometer feed (setGravity — the
-// AirConsole device_motion path; the DeviceOrientation path never uses these,
-// its fusion already did this in the OS). Phone-only tuning knobs, so they
-// live here rather than in the shared STEER manifest.
-// DeviceOrientation outranks the accelerometer relay wherever both deliver
-// (the AirConsole page in a real phone BROWSER, e.g. the HTTP simulator):
-// the fused signal is strictly better, and without this preference the raw
-// relay would overwrite it sample-for-sample. An orientation event this
-// recent silences setGravity; in the AC app's webview orientation never
-// fires, so the relay self-selects there.
-const ORIENT_FRESH_MS = 1000;
-const ACCEL_G = 9.81;        // 1 g, the magnitude a motionless sample reads
-// The low-pass carries the recentring damping: a smooth lateral swing adds
-// mostly PERPENDICULAR acceleration, which tilts the measured vector a lot
-// while moving its magnitude only a little (√(g²+a²)−g ≈ a²/2g), so the
-// trust gate below catches shakes and jolts, not swings.
-const ACCEL_LP = 0.2;        // per-sample low-pass toward a fully-trusted sample
-const ACCEL_TRUST_BAND = 4;  // m/s² of |a|−g deviation at which trust reaches 0
-
 const DEG = Math.PI / 180;
 const RAD = 180 / Math.PI;
 const clamp1 = (v) => Math.max(-1, Math.min(1, v));
@@ -144,19 +125,13 @@ export class TiltInput {
     // permission flow: no DeviceOrientationEvent constructor (no sensor, ever),
     // or a permissions policy that withholds the sensors from this document.
     // The THIRD way can only be found by listening — see _settle.
-    //
-    // EXCEPT on AirConsole, where neither route means what it says: the SDK's
-    // device_motion relay is the sensor (setGravity), and the frame is expected
-    // to fail both checks. Stay 'unknown' and let the first relayed sample
-    // resolve it to 'granted'.
-    this.motionState = (typeof window !== 'undefined' && !window.airconsole
+    this.motionState = (typeof window !== 'undefined'
       && (!window.DeviceOrientationEvent || sensorPolicyBlocked() === true))
       ? 'unsupported' : 'unknown';
 
     // latest gravity unit vector in the device frame (overwritten each event;
     // the flat seed only stands in until the first reading arrives)
     this._g = { x: 0, y: 0, z: -1 };
-    this._orientAt = 0;    // last DeviceOrientation event (0 = never) — see setGravity
 
     this.mode = 'tilt';    // 'tilt' | 'buttons' (see setMode)
     this._steer = 0;       // smoothed steer output (-1..1)
@@ -229,50 +204,13 @@ export class TiltInput {
     });
   }
 
-  // External gravity feed, for hosts where DeviceOrientation never fires
-  // (the AirConsole app's webview: the SDK relays native accelerometer data
-  // through its own device_motion channel instead). Takes the PROPER
-  // acceleration vector (W3C accelerationIncludingGravity: flat face-up =
-  // (0,0,+9.81)); gravity is its negation. Feeding this makes
-  // motion "granted" — the sensor demonstrably works, whatever the
-  // DeviceOrientation permission dance said.
-  //
-  // Unlike DeviceOrientation (OS-fused with the gyro, so linear acceleration
-  // is rejected before we ever see it), this is the RAW accelerometer:
-  // gravity + the hand's own motion. Recentring the phone is itself an
-  // acceleration that reads as opposite tilt, so taking samples verbatim made
-  // the steer overshoot and ring around centre. Gravity is extracted here
-  // instead, per sample:
-  //  - TRUST: a sample whose magnitude sits away from 1 g is mostly hand
-  //    motion, so it moves the estimate proportionally less. Pure rotation
-  //    keeps ~1 g, so twisting the wheel stays full-rate responsive — only
-  //    translation is distrusted.
-  //  - a one-pole low-pass over the trusted remainder (~73 ms at the relay's
-  //    16 ms cadence) — enough to average a recentring swing's two opposing
-  //    acceleration phases against each other, small enough that a held lean
-  //    reads full within a quarter second.
-  setGravity(ax, ay, az) {
-    // Fused DeviceOrientation is live — it owns gravity (see ORIENT_FRESH_MS).
-    if (Date.now() - this._orientAt < ORIENT_FRESH_MS) return;
-    const n = Math.hypot(ax, ay, az);
-    if (!(n > 1)) return; // linear-only / empty sample: no gravity to read
-    this.haveTilt = true;
-    this.motionState = 'granted';
-    const k = ACCEL_LP * Math.max(0, 1 - Math.abs(n - ACCEL_G) / ACCEL_TRUST_BAND);
-    if (k > 0) {
-      const g = this._g;
-      g.x += (-ax / n - g.x) * k;
-      g.y += (-ay / n - g.y) * k;
-      g.z += (-az / n - g.z) * k;
-      // Blending unit vectors shrinks the result; keep the direction, restore
-      // the length so the roll math downstream reads a clean unit gravity.
-      const m = Math.hypot(g.x, g.y, g.z) || 1;
-      g.x /= m; g.y /= m; g.z /= m;
-    }
-    // An untrusted (pure-motion) sample holds the last estimate — still tick,
-    // so held steer keeps flowing at sensor rate.
-    if (this._timer) this._tick();
-  }
+  // NOTE (AirConsole): tilt here rides DeviceOrientation like everywhere else.
+  // The SDK's device_motion relay (raw accelerometer posted into the iframe —
+  // AirConsole's answer to browsers that block sensors in embedded frames) was
+  // tried with a gravity-extraction filter and REMOVED 2026-08-13: the damped
+  // feel wasn't worth a second input path. Git history has it (setGravity)
+  // if AC-app tilt is ever required; until then those phones fall back to
+  // button steering through the ordinary no-sensor flow.
 
   _onOrient(e) {
     if (e.beta == null && e.gamma == null) return;
@@ -286,7 +224,6 @@ export class TiltInput {
     // listener is attached, i.e. permission was granted — the constructor's two
     // routes to 'unsupported' never attach one.)
     if (this.motionState === 'unsupported') this.motionState = 'granted';
-    this._orientAt = Date.now(); // outranks the accel relay while fresh
 
     // Gravity (unit, pointing down) in the device frame from the W3C Z-X'-Y''
     // Euler angles. alpha (compass yaw) doesn't tilt gravity, so it drops out —

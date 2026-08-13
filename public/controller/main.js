@@ -767,17 +767,9 @@ if (inShell && shellName) {
     const n = cleanName(acBoot.nickname());
     if (n) applyShellRename(n);
   };
-  // TILT rides the SDK's device_motion relay (armed in the bootstrap's
-  // constructor options): the AC app's webview never delivers
-  // DeviceOrientation to the game, so the native accelerometer arrives here
-  // instead. data.x/y/z is the proper acceleration (W3C
-  // accelerationIncludingGravity convention, flat face-up = +9.81 z);
-  // setGravity negates and normalizes. The gyroscope half (alpha/beta/gamma
-  // rotation rates) is not used — steering is absolute roll, not rate.
-  acBoot.airconsole.onDeviceMotion = (data) => {
-    if (!data || typeof data.x !== 'number') return;
-    tilt.setGravity(data.x, data.y, data.z);
-  };
+  // TILT rides plain DeviceOrientation here too — the SDK's device_motion
+  // relay was tried and removed (see controller-airconsole.js); a webview
+  // that blocks orientation in the game iframe falls back to buttons.
 } else {
   show('name');
 }
