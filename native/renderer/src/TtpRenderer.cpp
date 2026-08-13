@@ -7,7 +7,19 @@ TtpRenderer::TtpRenderer() = default;
 
 bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
         uint32_t width, uint32_t height) {
-    mEngine = Engine::create(backend);
+    // The skid stamp pass only runs on frames that commit a trail segment, so
+    // its FrameGraph depth transient (a deck-sized ~16 MB texture) sits unused
+    // for a frame or two between passes. The texture cache's default max age
+    // of 1 frame evicts it in that gap, and every stamp pass re-allocated it —
+    // measured at ~33 allocations/s in an attract race. Four frames of age
+    // covers the stamp cadence; idle transients still free, just 3 frames
+    // later.
+    Engine::Config engineConfig{};
+    engineConfig.resourceAllocatorCacheMaxAge = 4;
+    mEngine = Engine::Builder()
+            .backend(backend)
+            .config(&engineConfig)
+            .build();
     if (mEngine) {
         // The scenery is dozens of copies of a handful of GLBs — trees, boxes,
         // cones — and each instance was its own draw call. Filament can merge
