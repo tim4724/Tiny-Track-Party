@@ -40,6 +40,8 @@ test('a cup chains through all 4 races to the podium (host advancing early)', as
   await startRace(alice, [bob]);
   await waitForRacing(page);
   expect(await page.evaluate(() => window.__series() && window.__series().raceIndex)).toBe(0);
+  // Baseline for the in-loop guard below: the cell HUD is up in race 1.
+  await expect(page.locator('.cell-label').first()).toBeVisible();
 
   // Races 1-3: finish → intermission board on both screens → host taps "Next race".
   for (let race = 1; race <= 3; race++) {
@@ -59,6 +61,14 @@ test('a cup chains through all 4 races to the podium (host advancing early)', as
     await alice.click('#newgame-btn');
     await waitForRacing(page);
     expect(await page.evaluate(() => window.__net.trackId)).toBe(BEACH[race]);
+    // The cell HUD (name/item/place/lap) must come back in EVERY chained race.
+    // The bug: reset-scene-cars recreates the CSS-hidden HUD elements, and when
+    // the new layout signature matches Stage's placement latch (same seats,
+    // same rects, and no finish flag ever painted — the race ends the same
+    // frame the last human crosses), the placement pass was skipped and the
+    // HUD stayed display:none for every following race until a window resize.
+    await expect(page.locator('.cell-label').first()).toBeVisible();
+    await expect(page.locator('.cell-rank').first()).toBeVisible();
   }
 
   // Race 4: finish → podium (title = cup champs sticker, top-three steps, "New game").

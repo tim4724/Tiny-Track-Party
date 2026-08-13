@@ -426,6 +426,13 @@ export class Stage {
       c.finishEl = finishEl;
       c.finPlaceEl = finishEl.querySelector('.cell-finish__place');
       c.finTimeEl = finishEl.querySelector('.cell-finish__time');
+
+      // Every element above is CSS display:none until _loop's placement pass
+      // shows it, so the "already placed" latch is stale the moment they exist.
+      // Without this, reset-scene-cars rebuilding the SAME layout (same ids,
+      // rects and flags — a chained cup race whose finish flags never got a
+      // placement pass) skips the pass and the whole cell HUD stays hidden.
+      this._hudSig = null;
     }
 
     this.cars.set(id, c);
