@@ -32,9 +32,12 @@ export function generateAirconsoleHtml(sdkVersion = SDK_VERSION) {
 
     // Strip what the AC iframe can never surface to the host browser: favicons
     // and home-screen icons belong to the top document, theme-color /
-    // cp-accent-color are launcher-shell hints.
-    html = html.replace(/^\s*<link rel="(icon|apple-touch-icon)"[^>]*>\n/gm, '');
-    html = html.replace(/^\s*<meta name="(theme-color|cp-accent-color)"[^>]*>\n/gm, '');
+    // cp-accent-color are launcher-shell hints. Anchored on the TAG, not on
+    // line isolation: the zip prunes assets/icon/ whole, so an icon reference
+    // this regex missed after a head reflow would 404 only in the uploaded
+    // build — the one surface nothing automated exercises.
+    html = html.replace(/[ \t]*<link rel="(icon|apple-touch-icon)"[^>]*>\n?/g, '');
+    html = html.replace(/[ \t]*<meta name="(theme-color|cp-accent-color)"[^>]*>\n?/g, '');
 
     // Absolute → relative in src/href, so the same file resolves from the zip
     // root and from the dev server's root-rewritten route.
