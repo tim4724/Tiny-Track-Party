@@ -254,11 +254,13 @@ test('World Tour draws one track per cup and races them in cup order', async ({ 
   const first = await page.evaluate(() => window.__net.trackId);
   expect(BEACH).toContain(first); // race 1 is drawn from the FIRST cup
 
-  // The race card: four cup-tinted "?" boxes — the UNLOCKED ladder, nothing
-  // spoiled (the drawn beach race included). A fresh couch has the Playroom
-  // locked, so the tour spans the four open cups; a fifth box joins with the
-  // unlock (the progression ctests own that rule).
+  // The race card: the WHOLE ladder — four cup-tinted "?" boxes plus the
+  // locked Playroom's padlock teaser, nothing spoiled (the drawn beach race
+  // included). A fresh couch has the Playroom locked, so the teaser counts no
+  // race; it becomes a fifth "?" with the unlock (the progression ctests own
+  // that rule).
   await expect(page.locator('.cup-maps .cup-maps__tile--q')).toHaveCount(4);
+  await expect(page.locator('.cup-maps .cup-maps__tile--locked')).toHaveCount(1);
   await expect(page.locator('.cup-maps .track-map')).toHaveCount(0);
   await expect(page.locator('.cup-races')).toHaveText('4 races');
   await expect(page.locator('.cup-sticker')).toHaveText('World Tour');

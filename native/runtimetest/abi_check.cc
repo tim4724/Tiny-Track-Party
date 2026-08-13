@@ -4741,6 +4741,30 @@ void raceLiveWalks() {
               json::str_field(pick, "trackId") == "tidepool",
           "the tour counts and draws only the unlocked cup");
 
+    // The tour CARD under the lock: one chip per SHIPPED cup in ladder order,
+    // the locked cup's as a `locked` teaser — exact spelling, the key present
+    // only on the teaser, and raceCount staying the OPEN count.
+    check(ttp_ui_configure(
+              "{\"maxPlayers\":4,\"carCount\":12,"
+              "\"cups\":[{\"id\":\"beach\",\"name\":\"Beach\",\"tracks\":[\"tidepool\"]},"
+              "{\"id\":\"snow\",\"name\":\"Snow\",\"tracks\":[\"drift\"]},"
+              "{\"id\":\"rooftop\",\"name\":\"Playroom\",\"tracks\":[\"skyline\"]}],"
+              "\"catalog\":[{\"id\":\"tidepool\",\"name\":\"Tidepool\",\"cup\":\"beach\","
+              "\"cupDifficulty\":1},"
+              "{\"id\":\"drift\",\"name\":\"Drift\",\"cup\":\"snow\",\"cupDifficulty\":2},"
+              "{\"id\":\"skyline\",\"name\":\"Skyline\",\"cup\":\"rooftop\","
+              "\"cupDifficulty\":4}]}") == 1,
+          "lock: the ui world configured");
+    const std::string lslot = ttp_ui_cup_slot_json(
+        "{\"mode\":\"tour\",\"cupId\":null,\"trackId\":\"tidepool\",\"randomRaces\":2}");
+    const std::string wantL =
+        "{\"nameKey\":\"tour\",\"name\":null,\"racesKey\":\"count\",\"raceCount\":2,"
+        "\"difficulty\":null,\"maps\":[{\"trackId\":null,\"cup\":\"beach\"},"
+        "{\"trackId\":null,\"cup\":\"snow\"},"
+        "{\"trackId\":null,\"cup\":\"rooftop\",\"locked\":true}],\"cupId\":null}";
+    check(lslot == wantL, "lock: the tour card teases the locked cup\n  want " + wantL +
+                              "\n  got  " + lslot);
+
     walkOf(ttp_net_on_peer_message_json(lroom, 0, "1",
                                         "{\"type\":\"select_mode\",\"mode\":\"random\"}", 0, 5000),
            "select random under the lock");

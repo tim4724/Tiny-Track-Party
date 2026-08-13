@@ -178,6 +178,15 @@ html, body {
    that tile is the endless card's lone big square or one of the long card's
    eight small ones */
 .cup-maps__tile--q span { font-size: 34cqw; }
+/* the tour's teaser for a locked cup: the "?" box anatomy on sunken paper,
+   a padlock where the glyph would be — a rung on the ladder, not a race */
+.cup-maps__tile--locked {
+  aspect-ratio: 1 / 1;
+  display: grid; place-items: center;
+  border: 2.5px solid var(--ink); border-radius: var(--r-sm);
+  background: var(--surface-2);
+}
+.cup-maps__tile--locked .lock-glyph { width: 34%; height: auto; }
 .cup-maps__n {
   position: absolute; top: -6px; left: -6px;
   min-width: 1.5em; text-align: center;
@@ -223,27 +232,31 @@ html, body {
   font-size: clamp(16px, 1.7vw, 25px); line-height: 1.1;
 }
 
-/* "Your cups" — the couch's star shelf, in flow under the ticket with enough
-   top margin to clear the absolutely-hung scan hint. COMPACT on purpose: a
-   two-column grid of short-name chips (renderCupShelf strips the " Cup"
+/* "Cups" — the couch's star shelf, hung under the ticket past the scan hint.
+   A two-column grid of short-name chips (renderCupShelf strips the " Cup"
    suffix), because five full-width rows are taller than the left rail's
-   leftover band on a 16:9 screen. The locked cup trails its unlock count. */
+   leftover band on a 16:9 screen. Sized to be READ from the couch — the chips
+   ride the rail's own width, not a fixed pixel cap. The locked cup trails its
+   unlock count. */
 .cup-shelf {
   /* Absolute like the scan hint, so the rail's height stays the ticket's and
      the card keeps its centring; hung a step further down, past the hint. */
   position: absolute; top: calc(100% + clamp(4.2rem, 7vh, 5rem));
   left: 50%; transform: translateX(-50%);
-  display: grid; grid-template-columns: 1fr 1fr; gap: 0.3rem;
-  width: min(92%, 290px);
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem;
+  width: 100%;
+  padding-top: 0.5rem;   /* room for the corner label to straddle the edge */
 }
-.cup-shelf__label { grid-column: 1 / -1; justify-self: start; font-size: 0.58rem; }
+/* the label rides the shelf's top-left corner like a sticker tab — a full
+   label row was the height that pushed the last chip row off a 720p screen */
+.cup-shelf__label { position: absolute; top: -0.35rem; left: 0.65rem; z-index: 1; font-size: 0.72rem; }
 .cup-shelf__row {
-  display: flex; align-items: center; gap: 0.35rem; min-width: 0;
+  display: flex; align-items: center; gap: 0.4rem; min-width: 0;
   background: var(--surface); border: 2.5px solid var(--ink); border-radius: var(--r-pill);
-  padding: 0.16rem 0.6rem 0.16rem 0.5rem;
+  padding: 0.2rem 0.7rem 0.2rem 0.6rem;
   box-shadow: var(--shadow-pop);
   font-family: var(--font-display); font-weight: 700;
-  font-size: clamp(11px, 1.05vw, 15px); color: var(--ink);
+  font-size: clamp(13px, 1.25vw, 16px); color: var(--ink);
 }
 .cup-shelf__row .dot { width: 0.6rem; height: 0.6rem; }
 .cup-shelf__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

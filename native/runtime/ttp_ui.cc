@@ -443,11 +443,12 @@ const char* ttp_ui_seat_grid_json(const char* seatsJson) {
 const char* ttp_ui_cup_slot_json(const char* pickJson) {
   const Value in = json::parse_or(pickJson, Value::Obj());
   const ui::PickMode mode = ui::pickModeOf(strOf(in.find("mode")));
-  // The TOUR spans the UNLOCKED ladder — its card is one chip per cup it will
-  // actually race, so a locked cup contributes no "?" box and no race to the
-  // count. Composed HERE like the net walks compose the same lock: the pure
-  // layer keeps mapping whatever list it is handed (which is what the frozen
-  // corpus replays, over synthetic cups that never lock).
+  // The TOUR spans the UNLOCKED ladder — it counts and races one chip per open
+  // cup — but its CARD still shows the whole ladder: a locked cup rides as a
+  // LOCKED teaser chip (below), never as a race. Composed HERE like the net
+  // walks compose the same lock: the pure layer keeps mapping whatever list it
+  // is handed (which is what the frozen corpus replays, over synthetic cups
+  // that never lock).
   std::vector<ui::Cup> cups = g_cups;
   if (mode == ui::PickMode::TOUR) {
     std::vector<ui::Cup> open;
@@ -468,12 +469,32 @@ const char* ttp_ui_cup_slot_json(const char* pickJson) {
   o.set("raceCount", valOf(slot.raceCount));
   o.set("difficulty", valOf(slot.difficulty));
   Value maps = Value::Arr();
-  for (const ui::MapChip& m : slot.maps) {
+  const auto chipVal = [](const ui::MapChip& m) {
     Value e = Value::Obj();
     e.set("trackId", valOf(m.trackId));
     if (m.n.has) e.set("n", Value::Num(m.n.v));   // only a cup numbers its minis
     if (m.cup.has) e.set("cup", Value::Str(m.cup.v));   // only the tour cups its chips
-    maps.push(e);
+    return e;
+  };
+  if (mode == ui::PickMode::TOUR) {
+    // The whole ladder, in ladder order: the open cups' chips are the model's
+    // own (1:1 with the filtered list above), and each locked cup interleaves
+    // as a locked teaser so the card shows what a finished ladder opens.
+    // raceCount stays the OPEN count — the teaser is a chip, never a race.
+    size_t next = 0;
+    for (const ui::Cup& c : g_cups) {
+      if (ttp_progress_cup_unlocked(c.id)) {
+        if (next < slot.maps.size()) maps.push(chipVal(slot.maps[next++]));
+      } else {
+        Value e = Value::Obj();
+        e.set("trackId", Value::Null());
+        e.set("cup", Value::Str(c.id));
+        e.set("locked", Value::Bool(true));
+        maps.push(e);
+      }
+    }
+  } else {
+    for (const ui::MapChip& m : slot.maps) maps.push(chipVal(m));
   }
   o.set("maps", maps);
   o.set("cupId", valOf(slot.cupId));

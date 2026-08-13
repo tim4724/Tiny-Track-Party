@@ -544,6 +544,20 @@ export function buildModePicker({ stripEl, catalog, progress, selection, highlig
   }
 
   detail.appendChild(panel);
+  // What the badges mean, as a quiet key under the panel: one star for
+  // finishing the cup, two for a top-3 human, three for a win.
+  const legend = document.createElement('div');
+  legend.className = 'star-legend';
+  for (const [n, word] of [[1, 'finish'], [2, 'top 3'], [3, 'win']]) {
+    const item = document.createElement('span');
+    item.className = 'star-legend__item';
+    item.appendChild(starRow(n));
+    const t = document.createElement('span');
+    t.textContent = word;
+    item.appendChild(t);
+    legend.appendChild(item);
+  }
+  detail.appendChild(legend);
   cols.appendChild(detail);
   stripEl.appendChild(cols);
 }

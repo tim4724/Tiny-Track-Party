@@ -74,12 +74,13 @@ export function renderSeats(listEl, seats) {
 //   pre-pick : null / no `name`         → the slot is simply EMPTY
 //   picked   : { name, races?, raceCount?, difficulty?, maps?, cupId? }
 //              → the race card: red cup sticker over the picked circuits as mini
-//              schematics (maps = [{ svg?, n?, q?, glyph?, cup? }] — 4 numbered
-//              minis for a cup, 1 for an exact track, the tour's five per-cup
-//              chips; cupId biome-tints their fields exactly like the phone
-//              picker, a chip's own `cup` outranks it; a q chip shows `glyph`
-//              or "?"), races pill + difficulty pips (0–4 filled; null hides
-//              the meter)
+//              schematics (maps = [{ svg?, n?, q?, glyph?, cup?, locked? }] — 4
+//              numbered minis for a cup, 1 for an exact track, the tour's five
+//              per-cup chips; cupId biome-tints their fields exactly like the
+//              phone picker, a chip's own `cup` outranks it; a q chip shows
+//              `glyph` or "?"; a locked chip is the tour's teaser for a locked
+//              cup — padlock on sunken paper, counted by no races pill), races
+//              pill + difficulty pips (0–4 filled; null hides the meter)
 export function renderCupSlot(slotEl, state) {
   const picked = !!(state && state.name);
   slotEl.querySelector('.cup-slot__pick').classList.toggle('hidden', !picked);
@@ -97,7 +98,7 @@ export function renderCupSlot(slotEl, state) {
   // pad out as "?" placeholders — that's the random card's not-yet-drawn races.
   // A known chip whose schematic is missing (dev mid-rebuild) still just costs
   // its picture.
-  const maps = (state.maps || []).filter((m) => m && (m.q || m.svg));
+  const maps = (state.maps || []).filter((m) => m && (m.q || m.svg || m.locked));
   if (state.raceCount) while (maps.length < state.raceCount) maps.push({ q: true });
   mapsEl.textContent = '';
   mapsEl.classList.toggle('hidden', !maps.length);
@@ -108,7 +109,13 @@ export function renderCupSlot(slotEl, state) {
   for (const m of maps) {
     const tile = document.createElement('div');
     tile.className = 'cup-maps__tile';
-    if (m.q) {
+    if (m.locked) {
+      // The tour's teaser for a locked cup: padlock on sunken paper. It shows
+      // the ladder's locked rung without selling it as a race — the races pill
+      // never counts it.
+      tile.classList.add('cup-maps__tile--locked');
+      tile.appendChild(lockGlyph());
+    } else if (m.q) {
       // An undrawn race: its own cup's wash when the chip names one (the
       // tour), the picker's neutral grey when the cup is unknown too (a
       // random run's later races). Never the card-level tint — an unknown
@@ -183,12 +190,13 @@ export function renderLobbyPick(slotEl, pick, trackCatalog, progress) {
     // card's to sell. A veil here rather than in the model — the frozen ui
     // corpus pins cupSlot's random answers to the drawn chip.
     maps: m.nameKey === 'random' ? (m.racesKey === 'endless' ? [{ q: true, glyph: '∞' }] : [])
-      : m.maps.map((x) => ({ svg: x.trackId ? svgOf(x.trackId) : null, q: !x.trackId, n: x.n, cup: x.cup })),
+      : m.maps.map((x) => ({ svg: x.trackId ? svgOf(x.trackId) : null, q: !x.trackId && !x.locked,
+        n: x.n, cup: x.cup, locked: x.locked })),
     cupId: m.cupId   // biome-tints the mini fields, like the phone picker
   });
 }
 
-// The "Your cups" shelf under the join ticket — one row per cup with the
+// The "Cups" shelf under the join ticket — one row per cup with the
 // couch's stars, the locked cup trailing its unlock progress instead. `cups`
 // is the wasm-stamped catalogue's cups list (or a preview's synthesis):
 // [{id, name, stars, locked, unlockDone?, unlockNeed?}]. It lives on the LEFT
@@ -200,7 +208,7 @@ export function renderCupShelf(shelfEl, cups) {
   shelfEl.classList.remove('hidden');
   const label = document.createElement('span');
   label.className = 'pill cup-shelf__label';
-  label.textContent = 'Your cups';
+  label.textContent = 'Cups';
   shelfEl.appendChild(label);
   for (const c of cups) {
     const row = document.createElement('div');

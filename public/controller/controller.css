@@ -127,8 +127,8 @@ input[type=text]:disabled { opacity: 0.6; }
   box-shadow: var(--shadow-pop);
 }
 .lobby-tabs button {
-  font-family: var(--font-display); font-weight: 700; font-size: 0.78rem;
-  letter-spacing: 0.05em; padding: 0.34em 1.1em; border: 0;
+  font-family: var(--font-display); font-weight: 700; font-size: 1rem;
+  letter-spacing: 0.05em; padding: 0.4em 1.2em; border: 0;
   background: transparent; color: var(--ink); cursor: pointer;
 }
 .lobby-tabs button[aria-selected="true"] { background: var(--ink); color: #fff; }
@@ -165,8 +165,21 @@ input[type=text]:disabled { opacity: 0.6; }
 #lobby:has(#trackpick.hidden) .lobby-race { display: none; }
 #lobby:has(#trackpick.hidden) .lobby-car { width: min(100%, 30rem); margin-inline: auto; }
 #lobby:has(#trackpick.hidden) .carpick {
-  grid-template-columns: repeat(auto-fit, minmax(4.5rem, 5.5rem));
+  grid-template-columns: repeat(auto-fit, minmax(4.5rem, 6rem));
   justify-content: center;
+}
+/* With the row to itself, the car page spends the leftover height instead of
+   stacking at the top: auto margins centre the group in the band (auto margins,
+   not justify-content — they collapse to nothing when the column overflows
+   into its scroll, where centering would clip the top), and the hero render
+   scales with the SCREEN height. Height-driven (dvh) with the two-column
+   size as the floor, so a squat phone keeps today's compact hero. */
+#lobby:has(#trackpick.hidden) .lobby-car > :first-child { margin-top: auto; }
+#lobby:has(#trackpick.hidden) .lobby-car > :last-child { margin-bottom: auto; }
+#lobby:has(#trackpick.hidden) .car-hero__view {
+  flex: none; width: auto;
+  height: clamp(4.6rem, 30dvh, 13rem); aspect-ratio: 5 / 4;
+  max-width: 45%;
 }
 /* Narrow screens: two columns leave both cramped — stack, and go back to PAGE
    scrolling (a pinned bar would leave the stacked middle almost no height).
@@ -336,6 +349,16 @@ input[type=text]:disabled { opacity: 0.6; }
 .unlock-rules__row--todo { opacity: 0.55; }
 .unlock-rules__row b { margin-left: auto; }
 .unlock-rules__foot { font-weight: 800; font-size: 0.64rem; color: var(--ink-2); text-align: right; }
+/* the star key under the detail panel, bottom right — what the badges mean */
+.star-legend {
+  display: flex; gap: 0.75rem; justify-content: flex-end;
+  margin-top: 0.35rem; flex: none;
+}
+.star-legend__item {
+  display: flex; align-items: center; gap: 0.28rem;
+  font-weight: 800; font-size: 0.62rem; color: var(--ink-2);
+}
+.star-legend .starrow { font-size: 0.58rem; }
 /* the open cup's exact-pick panel — an inset under the mode tiles. One compact
    4-across row so the lobby stays a single screen. The background is painted inline
    in its cup's colour (buildModePicker), deeper than the cup tiles so it reads as a
