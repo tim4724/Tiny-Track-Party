@@ -16,13 +16,71 @@ const filter = new TiltInput({});
 let nOrient = 0, nMotion = 0, nRates = 0;
 
 function onOrient(e) { nOrient++; truth._onOrient(e); }
+const RAW_N = 1080; // ~18 s of raw motion samples for offline unit/axis checks
+const raw = [];
 function onMotion(e) {
   const a = e.accelerationIncludingGravity, r = e.rotationRate;
   if (!a || a.x == null) return;
   nMotion++;
   if (r && (Math.abs(r.alpha || 0) + Math.abs(r.beta || 0) + Math.abs(r.gamma || 0)) > 0.5) nRates++;
+  raw.push({ t: Date.now(), iv: e.interval, ax: a.x, ay: a.y, az: a.z,
+    ra: r && r.alpha || 0, rb: r && r.beta || 0, rg: r && r.gamma || 0 });
+  if (raw.length > RAW_N) raw.shift();
   filter.setGravity(a.x, a.y, a.z, r && r.alpha || 0, r && r.beta || 0, r && r.gamma || 0);
 }
+
+// Guided calibration run: timed phases shown full-screen, every raw sample
+// tagged with the phase it belongs to — so offline analysis segments
+// deterministically instead of guessing from energy. window.__guided fills
+// when the run completes.
+// Single-axis phases on purpose: body rates equal the matching Euler-angle
+// derivative ONLY for near-single-axis motion — a free 3D wiggle through
+// gimbal poses decorrelates them completely (measured: |r| < 0.3).
+const PHASES = [
+  ['GET READY', 3],
+  ['ROLL: smooth right/left leans, phone upright facing you', 6], ['REST', 2],
+  ['PITCH: smooth top-edge away/toward you', 6], ['REST', 2],
+  ['YAW: flat on palm, smooth compass twists', 6],
+  ['DONE — hold still', 2],
+];
+let guidedPhase = null;
+// Latest fused orientation, merged into every recorded motion sample — the
+// definitive reference for rate-channel units/sign (deg by spec, OS-fused).
+const lastOrient = { oa: null, ob: null, og: null };
+window.addEventListener('deviceorientation', (e) => {
+  lastOrient.oa = e.alpha; lastOrient.ob = e.beta; lastOrient.og = e.gamma;
+});
+window.__startGuided = () => {
+  const banner = document.createElement('div');
+  banner.style.cssText = 'position:fixed;inset:0;background:#000d;color:#fff;display:flex;' +
+    'align-items:center;justify-content:center;font-size:28px;text-align:center;padding:24px;z-index:9';
+  document.body.appendChild(banner);
+  window.__guided = null;
+  const rec = [];
+  const onRec = (e) => {
+    const a = e.accelerationIncludingGravity, r = e.rotationRate;
+    if (!a || a.x == null || !guidedPhase) return;
+    rec.push({ t: Date.now(), phase: guidedPhase, ax: a.x, ay: a.y, az: a.z,
+      ra: r && r.alpha || 0, rb: r && r.beta || 0, rg: r && r.gamma || 0,
+      oa: lastOrient.oa, ob: lastOrient.ob, og: lastOrient.og });
+  };
+  window.addEventListener('devicemotion', onRec);
+  let i = 0;
+  const step = () => {
+    if (i >= PHASES.length) {
+      window.removeEventListener('devicemotion', onRec);
+      guidedPhase = null; banner.remove();
+      window.__guided = rec;
+      return;
+    }
+    banner.textContent = PHASES[i][0];
+    guidedPhase = PHASES[i][0].split(':')[0];
+    setTimeout(step, PHASES[i][1] * 1000);
+    i++;
+  };
+  step();
+  return 'guided run started';
+};
 
 el('start').addEventListener('click', async () => {
   const DOE = window.DeviceOrientationEvent, DME = window.DeviceMotionEvent;
@@ -110,11 +168,21 @@ function tick(t) {
                            : `<div class="bad">REST WOBBLE: ${m.wobbleRms.toFixed(3)} (rings at centre)</div>`,
       ].join('');
     }
+    const scale = filter.gyroScale();
     el('stats').textContent =
       `orientation ${nOrient} ev · motion ${nMotion} ev · live gyro samples ${nRates}\n` +
-      `gyro armed: ${filter._gyroSeen}   truth ${sT[(head - 1 + N) % N].toFixed(2)}   filter ${sF[(head - 1 + N) % N].toFixed(2)}`;
-    // machine-readable for remote (adb/DevTools) collection
-    window.__tiltLab = { metrics: m, nOrient, nMotion, nRates, gyroSeen: filter._gyroSeen };
+      `gyro scale: ${scale == null ? 'calibrating…' : scale.toFixed(4)}   ` +
+      `truth ${sT[(head - 1 + N) % N].toFixed(2)}   filter ${sF[(head - 1 + N) % N].toFixed(2)}`;
+    // machine-readable for remote (adb/DevTools) collection — trace is the
+    // last WINDOW_S seconds of both steers, oldest → newest, for offline
+    // analysis (the on-page metrics alias on periodic motion).
+    const tn = Math.min(filled, N), truthArr = new Array(tn), filtArr = new Array(tn);
+    for (let i = 0; i < tn; i++) {
+      truthArr[i] = sT[(head - tn + i + 5 * N) % N];
+      filtArr[i] = sF[(head - tn + i + 5 * N) % N];
+    }
+    window.__tiltLab = { metrics: m, nOrient, nMotion, nRates, gyroScale: scale,
+      hz: HZ, truth: truthArr, filter: filtArr, raw };
   }
   requestAnimationFrame(tick);
 }

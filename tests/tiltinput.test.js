@@ -322,26 +322,50 @@ test('accel-only relay (no gyro): a held lean converges to the tilt within a bur
   });
 });
 
-test('gyro predict: a roll RATE swings the steer with the accel still reading flat', () => {
-  withScreenAngle(0, () => {
-    const t = new TiltInput({});
-    // Rotating right about y (W3C rotationRate.gamma > 0) while the accel
-    // still claims flat: the gyro must carry the response on its own (the
-    // accel's drift-anchor pull is negligible at ACCEL_CORRECT). dt clamps at
-    // 8 ms in a tight loop, so 60 samples × 100°/s × 8 ms = 48° of roll —
-    // past ROLL_LOCK, so full right lock.
-    for (let i = 0; i < 60; i++) t.setGravity(0, 0, 9.81, 0, 0, 100);
-    assert.ok(t._sensorSteer() > 0.95, `gyro drove the steer, got ${t._sensorSteer()}`);
-  });
-});
+// Feed a physically consistent roll about the device y axis: accel tracks the
+// angle, the rate is the angle's derivative in the SOURCE's units. dt clamps
+// to 8 ms in a tight loop, so each step's rate is dθ/0.008.
+// θ > 0 leans right: gravity x = sin θ, accel reads its negation. The y-axis
+// rate rides the BETA parameter — the implementation axis order (alpha/beta/
+// gamma = x/y/z), see setGravity.
+function feedRoll(t, degPerSample, steps, rateUnit) {
+  let deg = t.__deg || 0;
+  for (let i = 0; i < steps; i++) {
+    deg += degPerSample;
+    const th = deg * Math.PI / 180;
+    const rate = (degPerSample / 0.008) * (rateUnit === 'rad' ? Math.PI / 180 : 1);
+    t.setGravity(-9.81 * Math.sin(th), 0, 9.81 * Math.cos(th), 0, rate, 0);
+  }
+  t.__deg = deg;
+}
 
-test('sticky gyro: once rotation was seen, hand-shake accel barely moves the estimate', () => {
+for (const unit of ['deg', 'rad']) {
+  test(`gyro fusion self-calibrates a ${unit}/s rate source and tracks a roll to lock`, () => {
+    withScreenAngle(0, () => {
+      const t = new TiltInput({});
+      t.setGravity(0, 0, 9.81, 0, 0, 0);         // seed clocks at flat
+      feedRoll(t, 0.8, 60, unit);                 // 48° sweep at 100°/s
+      const s = t.gyroScale();
+      const expected = unit === 'rad' ? 1 : Math.PI / 180;
+      assert.ok(s != null, 'calibrated');
+      // The applied scale SNAPS to the unit family's exact constant — the raw
+      // least-squares magnitude is attenuation-biased and only classifies.
+      assert.ok(Math.abs(s - expected) < 1e-9, `scale snaps to ${expected}, got ${s}`);
+      assert.ok(t._sensorSteer() > 0.95, `tracked to lock, got ${t._sensorSteer()}`);
+    });
+  });
+}
+
+test('after calibration, a translation shake barely moves the steer', () => {
   withScreenAngle(0, () => {
     const t = new TiltInput({});
-    for (let i = 0; i < 10; i++) t.setGravity(0, 0, 9.81, 0, 0, 5); // arm the gyro, stay ~flat
+    t.setGravity(0, 0, 9.81, 0, 0, 0);
+    feedRoll(t, 0.8, 25, 'rad');                  // out to 20°…
+    feedRoll(t, -0.8, 25, 'rad');                 // …and back to flat — calibrated
     const before = t._sensorSteer();
     // A recentring-style lateral shake: strong sideways acceleration, zero
-    // rotation. Pre-fusion this rang the steer; now it must barely register.
+    // rotation. Pre-fusion this rang the steer; now the calibrated filter
+    // trusts the (silent) gyro and the accel only at drift-anchor rate.
     for (let i = 0; i < 10; i++) t.setGravity(-3, 0, 9.81, 0, 0, 0);
     assert.ok(Math.abs(t._sensorSteer() - before) < 0.1,
       `shake suppressed, moved ${Math.abs(t._sensorSteer() - before)}`);
