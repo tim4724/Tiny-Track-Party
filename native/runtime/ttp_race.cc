@@ -686,7 +686,14 @@ const char* ttp_race_events_live_json(int sessionHandle, int roomHandle,
       } else if (type == "_raceEnd") {
         race::EndRaceInput ei;
         ei.hasSeries = series != nullptr;
-        ei.seriesFinished = series && series->finished();
+        // "Finished" must mean AFTER this race's points apply: done_ flips
+        // inside applyRace, which APPLY_RACE_POINTS runs later in this very
+        // walk — read it here and the final race still says false, the
+        // persist op never emits, and no cup ever banks (the bug the podium
+        // E2E caught). An endless series extends itself instead of ending.
+        ei.seriesFinished =
+            series && (series->finished() ||
+                       (!series->endless() && series->raceIndex() + 1 >= series->raceCount()));
         ei.intermissionMs = intermissionMs;
         ei.nowMs = nowMs;
         ei.resultsFailsafeMs = resultsFailsafeMs;

@@ -71,12 +71,31 @@ test('a cup chains through all 4 races to the podium (host advancing early)', as
   await expect(alice.locator('#quitcup-btn')).toBeHidden();
   await expect(alice.locator('#result-list')).toContainText('pts');
 
+  // The finished GP BANKED: the persist-progression effect wrote the engine's
+  // record to localStorage. Both humans out-finish the fast-forwarded AI in
+  // every race (their synthetic times beat any full race), so the series
+  // winner is human and beach banks best=1 — the exact blob, no more keys.
+  await page.waitForFunction(() => !!localStorage.getItem('tinytrack_progress'), null, { timeout: 5000 });
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('tinytrack_progress'))))
+    .toEqual({ v: 1, cups: { beach: { best: 1 } } });
+
   // New game → lobby, series gone, cup rewound to race 1 for a rematch.
   await alice.click('#newgame-btn');
   await page.waitForFunction(() => window.__net.roomState === 'lobby', null, { timeout: 10000 });
   expect(await page.evaluate(() => ({ series: window.__series(), track: window.__net.trackId, mode: window.__net.mode })))
     .toEqual({ series: null, track: BEACH[0], mode: 'cup' });
   await expect(alice.locator(visible('#lobby'))).toBeVisible();
+
+  // …and the couch SEES the bank: the shelf's Beach row wears the won cup's
+  // three stars, the locked Playroom's unlock count moved to 1/4, and the
+  // host's RACE page draws the same stars off the republished snapshot —
+  // engine record → localStorage → chooser → both screens, end to end.
+  await expect(page.locator('.cup-shelf__row', { hasText: 'Beach' })
+    .locator('.star:not(.star--off)')).toHaveCount(3);
+  await expect(page.locator('.cup-shelf__row--locked')).toContainText('1/4');
+  await alice.click('#tab-race');
+  await expect(alice.locator('.mode-opt', { hasText: 'Beach Cup' })
+    .locator('.star:not(.star--off)')).toHaveCount(3);
 });
 
 test('an untouched intermission auto-advances into the next race', async ({ page, browser }) => {
