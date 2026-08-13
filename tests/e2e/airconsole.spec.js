@@ -12,7 +12,7 @@
 // LIVE mode (AC_LIVE=1, local only): the REAL SDK through AirConsole's HTTP
 // simulator — see the describe block at the bottom. Not part of the default
 // suite: it needs the network, a headed Firefox, and ~2 minutes.
-const { test, expect, waitForRacing, visible } = require('./helpers');
+const { test, expect, startRace, waitForRacing, visible } = require('./helpers');
 const { firefox } = require('@playwright/test');
 const path = require('path');
 
@@ -93,10 +93,9 @@ test('AC: screen boots to the lobby, profile-named phones join, a race runs', as
   await expect(ana.locator('#me-name')).toHaveText('Ana');
   await expect(ben.locator('#me-name')).toHaveText('Ben');
 
-  // Ready → start → countdown → racing, the same flow the relay suite drives.
-  const readyBtn = ben.locator('#ready-btn');
-  if (!(await readyBtn.evaluate((b) => b.classList.contains('is-pressed')))) await readyBtn.click();
-  await ana.click('#ready-btn');
+  // Ready → start → countdown → racing, the same flow the relay suite drives
+  // (startRace knows the host bar is a stepper: Select race → Start race).
+  await startRace(ana, [ben]);
   await page.waitForSelector(visible('#race'));
   await ana.waitForSelector(visible('#game'));
   await ben.waitForSelector(visible('#game'));
@@ -261,7 +260,11 @@ test.describe('AC live (real SDK over the HTTP simulator)', () => {
         window.__net.flow.size >= 1, null, { timeout: 30000 });
 
       // Host starts the race; the display flips to the race and reaches racing.
-      await ctrlFrame.locator('#ready-btn').click();
+      // The host bar is a stepper (Select race → Start race), same as helpers'
+      // startRace, which can't be used here — these are frame locators.
+      const hostBtn = ctrlFrame.locator('#ready-btn');
+      if ((await hostBtn.textContent()) === 'Select race') await hostBtn.click();
+      await hostBtn.click();
       await screenFrame.waitForFunction(() =>
         !document.getElementById('race').classList.contains('hidden'), null, { timeout: 30000 });
       await screenFrame.waitForFunction(() =>
