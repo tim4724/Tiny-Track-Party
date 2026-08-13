@@ -24,7 +24,7 @@ function carsFromWindow() {
 
 // Stat bars read in the player's livery. Each bar is normalised across the WHOLE
 // roster — the engine stats are multipliers/weights with awkward absolute ranges,
-// so the roster-lowest car shows a 2/3 bar and the highest a full bar. Every row
+// so the roster-lowest car shows a 2/3 bar and a CLEAR leader a full one. Every row
 // is "more = more" (a full Weight bar = heaviest) so they read consistently. The
 // floor sits high (66%, not 0) on purpose: these are all hero cars — every one
 // should read as genuinely capable at everything, with the real spread shown as
@@ -40,8 +40,14 @@ function statDomain(cars) {
   return STAT_ROWS.map(({ key }) => {
     const vals = cars.map((c) => c.stats && c.stats[key]).filter((v) => v != null);
     if (!vals.length) return { lo: 0, span: 1 };
-    const lo = Math.min(...vals), hi = Math.max(...vals);
-    return { lo, span: (hi - lo) || 1 };
+    const sorted = vals.slice().sort((a, b) => b - a);
+    const lo = sorted[sorted.length - 1];
+    const span = (sorted[0] - lo) || 1;
+    // A full bar means CLEARLY the roster's best, not best by a pricing step:
+    // unless the leader is ahead of second place by ≥30% of the row's spread,
+    // pad the top of the scale so a near-tied lead renders tall but not full.
+    const gap = sorted.length > 1 ? sorted[0] - sorted[1] : span;
+    return { lo, span: span + Math.max(0, 0.3 * span - gap) };
   });
 }
 function statBarsNode(stats, dom) {
