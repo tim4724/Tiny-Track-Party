@@ -19,6 +19,15 @@ RaceSession::RaceSession(const std::vector<PlayerDesc>& players, const GameTrack
 void RaceSession::startCountdown(int seconds) {
   countdown_ = Countdown{seconds, 0};
   if (onCountdownTick_) onCountdownTick_(countdown_->n);
+  // A zero count is GO on the spot — the tick above WAS the beat. Racing
+  // otherwise only flips when a decrement lands on 0, so starting at 0
+  // showed GO and held the field at the grid forever (the demo launches
+  // with 0; every real race counts from 3, which is why no one had seen it).
+  if (seconds <= 0) {
+    racing_ = true;
+    onRaceStart();
+    raceMs_ = 0;
+  }
 }
 
 void RaceSession::stepCountdown(double dtMs) {
