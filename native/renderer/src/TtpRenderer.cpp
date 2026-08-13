@@ -706,9 +706,8 @@ void TtpRenderer::releaseScene() {
     for (auto& m : mBirds) destroyMesh(m);
     for (auto& m : mKites) destroyMesh(m);
     // The rubber texture is per-track; the pass machinery around it is
-    // engine-lifetime and just loses its target here.
-    if (mSkidStampView) mSkidStampView->setRenderTarget(nullptr);
-    if (mSkidRT) { mEngine->destroy(mSkidRT); mSkidRT = nullptr; }
+    // engine-lifetime, and its RenderTarget is transient per pass (Metal
+    // samples an attached texture as zero), so only the texture goes here.
     if (mSkidTex) { mEngine->destroy(mSkidTex); mSkidTex = nullptr; }
     mSkidLatHalf = 0;
     mSkidWipe = false;

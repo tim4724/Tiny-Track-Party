@@ -1934,7 +1934,7 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
         // at all otherwise. The restart wipe rides the same pass as a clear
         // (the staging pool is zeroed after every draw, so a wipe with no
         // fresh stamps clears and draws nothing).
-        if ((mSkidWipe || mSkidQuadCount > 0) && mSkidStampView && mSkidRT) {
+        if ((mSkidWipe || mSkidQuadCount > 0) && mSkidStampView && mSkidTex) {
             const Renderer::ClearOptions prev = mRenderer->getClearOptions();
             Renderer::ClearOptions co{};
             co.clear = mSkidWipe;
@@ -1946,7 +1946,18 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
                         mSkidVerts.data(), mSkidVerts.size() * sizeof(Vertex),
                         nullptr));
             }
-            mRenderer->renderStandaloneView(mSkidStampView);
+            // The target lives only for this pass: attached any longer and the
+            // Metal backend samples the texture as zero — the WHY is at the
+            // build-time wipe in TtpRendererTrack.cpp.
+            RenderTarget* rt = RenderTarget::Builder()
+                    .texture(RenderTarget::AttachmentPoint::COLOR, mSkidTex)
+                    .build(*mEngine);
+            if (rt) {
+                mSkidStampView->setRenderTarget(rt);
+                mRenderer->renderStandaloneView(mSkidStampView);
+                mSkidStampView->setRenderTarget(nullptr);
+                mEngine->destroy(rt);
+            }
             if (mSkidQuadCount > 0) {
                 std::memset(mSkidVerts.data(), 0,
                         (size_t) mSkidQuadCount * 8 * sizeof(Vertex));
