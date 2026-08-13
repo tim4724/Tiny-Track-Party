@@ -233,9 +233,11 @@ html, body {
 }
 
 /* "Cups" — the couch's star shelf, pinned to the lobby's BOTTOM-RIGHT corner
-   under the "Up next" card (whose pick these stars dress). A two-column grid
-   of short-name chips (renderCupShelf strips the " Cup" suffix) so it stays a
-   corner card rather than a column. The locked cup trails its unlock count. */
+   under the "Up next" card (whose pick these stars dress). ONE column of
+   short-name chips (renderCupShelf strips the " Cup" suffix): the corner's
+   width is capped by the centred seat dock, so the chips buy their READ-FROM-
+   THE-COUCH size from height, not width. The locked cup trails its unlock
+   count. */
 .cup-shelf {
   /* Absolute over the scene (chrome floats bare, like every lobby sticker),
      inset by the lobby's own gutters so its right edge lines up with the
@@ -244,24 +246,24 @@ html, body {
   position: absolute;
   right: clamp(32px, 4.5vw, 88px);
   bottom: clamp(16px, 3vh, 32px);
-  display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem;
-  width: min(24vw, 310px);
+  display: grid; grid-template-columns: 1fr; gap: 0.45rem;
+  width: min(19vw, 300px);
   padding-top: 0.5rem;   /* room for the corner label to straddle the edge */
 }
 /* the label rides the shelf's top-left corner like a sticker tab — a full
-   label row was the height that pushed the last chip row off a 720p screen */
-.cup-shelf__label { position: absolute; top: -0.35rem; left: 0.65rem; z-index: 1; font-size: 0.72rem; }
+   label row is height the column can't spare above the 720p seat band */
+.cup-shelf__label { position: absolute; top: -0.45rem; left: 0.65rem; z-index: 1; font-size: 0.8rem; }
 .cup-shelf__row {
-  display: flex; align-items: center; gap: 0.35rem; min-width: 0;
+  display: flex; align-items: center; gap: 0.45rem; min-width: 0;
   background: var(--surface); border: 2.5px solid var(--ink); border-radius: var(--r-pill);
-  padding: 0.2rem 0.55rem 0.2rem 0.6rem;
+  padding: 0.24rem 0.8rem 0.24rem 0.7rem;
   box-shadow: var(--shadow-pop);
   font-family: var(--font-display); font-weight: 700;
-  font-size: clamp(13px, 1.25vw, 16px); color: var(--ink);
+  font-size: clamp(14px, 1.5vw, 21px); color: var(--ink);
 }
-.cup-shelf__row .dot { width: 0.6rem; height: 0.6rem; }
+.cup-shelf__row .dot { width: 0.65rem; height: 0.65rem; }
 .cup-shelf__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cup-shelf__row .starrow { margin-left: auto; font-size: 0.7em; flex: none; }
+.cup-shelf__row .starrow { margin-left: auto; font-size: 0.78em; flex: none; }
 .cup-shelf__row .lock-glyph { width: 0.85em; height: 0.85em; flex: none; }
 .cup-shelf__row--locked { background: var(--surface-2); }
 .cup-shelf__row--locked b { margin-left: auto; font-size: 0.85em; }
