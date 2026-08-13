@@ -906,7 +906,8 @@ private:
     static constexpr float kAmbBox = 60.0f; // the camera box's x/z extent
     std::vector<filament::math::float3> mPrevRockets;
     uint32_t mPrevRocketCount = 0;
-    filament::math::float3 mLastCar0{}; // reset/teleport detector
+    filament::math::float3 mLastCar0{}; // reset/teleport detector: first...
+    filament::math::float3 mLastCarN{}; // ...and last car — both must jump
     utils::Entity mSun;
     utils::Entity mFill;
     filament::IndirectLight* mAmbient = nullptr;
