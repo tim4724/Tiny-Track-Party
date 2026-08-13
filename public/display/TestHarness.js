@@ -283,7 +283,7 @@ export function runDisplayScenario(opts, ctx) {
     locked: c.id === 'rooftop',
     ...(c.id === 'rooftop' ? { unlockDone: 3, unlockNeed: 4 } : {})
   }));
-  const PREVIEW_PROGRESS = { cups: PREVIEW_SHELF, tour: { stars: 1 } };
+  const PREVIEW_PROGRESS = { cups: PREVIEW_SHELF };
   const previewCatalog = TRACK_LIST.map((t) => ({ id: t.id, svg: TRACK_SCHEMATICS[t.id] }));
   const showPick = (pick) => renderLobbyPick(el('cup-slot'), pick || {}, previewCatalog, PREVIEW_PROGRESS);
 

@@ -143,10 +143,10 @@ export async function bootEngine({ maxPlayers, fieldSize, carModels, carColors, 
   };
 }
 
-// The snapshot's `progress` chooser key: the couch's per-cup stars/locked (and
-// the tour badge), read off the catalogue the wasm stamps and slimmed to what a
-// phone draws. A FUNCTION, not a value from bootEngine — it changes when a cup
-// banks, and main.js recomposes it inside the persist-progression performer.
+// The snapshot's `progress` chooser key: the couch's per-cup stars/locked,
+// read off the catalogue the wasm stamps and slimmed to what a phone draws. A
+// FUNCTION, not a value from bootEngine — it changes when a cup banks, and
+// main.js recomposes it inside the persist-progression performer.
 // Composition only: every number here was derived inside the engine.
 export function progressChooser() {
   const cat = ui.catalogue();
@@ -154,7 +154,6 @@ export function progressChooser() {
     cups: cat.cups.map((c) => ({
       id: c.id, stars: c.stars, locked: c.locked,
       ...(c.locked ? { unlockDone: c.unlockDone, unlockNeed: c.unlockNeed } : {})
-    })),
-    tour: cat.tour
+    }))
   };
 }

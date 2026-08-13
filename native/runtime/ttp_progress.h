@@ -12,9 +12,9 @@
 
 #include "ttp/canonical.h"
 
-// Bank a finished series' final standings under `cupId` ("tour" included;
-// "random" and unknown ids are refused inside). `aiByRank` is the standings'
-// ai flags in rank order. Returns 1 when the stored record improved.
+// Bank a finished series' final standings under `cupId` (shipped cups only;
+// "tour", "random" and unknown ids are refused inside). `aiByRank` is the
+// standings' ai flags in rank order. Returns 1 when the stored record improved.
 int ttp_progress_bank(const std::string& cupId, const std::vector<bool>& aiByRank);
 
 // The current record as a Value — the persist effect's payload.

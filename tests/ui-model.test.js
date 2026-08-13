@@ -248,7 +248,7 @@ test('the shipped catalogue in the wasm is the one shared/tracks.js authors', as
     stars: 0, locked: c.id === 'rooftop',
     ...(c.id === 'rooftop' ? { unlockDone: 0, unlockNeed: CUPS.length - 1 } : {})
   })), 'cups, their display names, track order, paper colour and fresh progression come out as authored');
-  assert.deepEqual(got.tour, { stars: 0 }, 'the tour badge rides the catalogue top level');
+  assert.ok(!('tour' in got), 'the tour earns no badge — stars are the cups\' reward arc');
   assert.deepEqual(got.catalog, TRACK_LIST.map((t) => ({
     id: t.id, name: t.name, cup: t.cup, cupDifficulty: t.cupDifficulty
   })), 'every track name, its cup and its cup TENDENCY come out as authored');
@@ -287,7 +287,7 @@ test('a loaded record stamps stars and the unlock onto the catalogue', async () 
     assert.equal(byId.snow.stars, 2, 'a podium is two stars');
     assert.equal(byId.backyard.stars, 1, 'a finish is one star');
     assert.equal(byId.canyon.stars, 1);
-    assert.deepEqual(got.tour, { stars: 2 }, 'the tour banks like a cup');
+    assert.ok(!('tour' in got), 'a stored "tour" row (the brief era it banked) derives nothing');
     assert.equal(byId.rooftop.locked, false, 'four finished cups unlock the Playroom');
     assert.ok(!('unlockDone' in byId.rooftop), 'unlock progress exists only while locked');
     assert.equal(u.progressJson(), JSON.stringify({

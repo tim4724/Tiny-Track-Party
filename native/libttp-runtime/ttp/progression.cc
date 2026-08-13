@@ -78,7 +78,6 @@ int unlockNeed(const std::string& cupId, const std::vector<std::string>& allCupI
 }
 
 bool bankEligible(const std::string& cupId, const std::vector<std::string>& allCupIds) {
-  if (cupId == "tour") return true;
   for (const std::string& id : allCupIds)
     if (id == cupId) return true;
   return false;

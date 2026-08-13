@@ -152,8 +152,10 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 .lobby-car  { grid-area: car; }
 .lobby-race { grid-area: race; }
-.lobby-go { grid-area: go; display: flex; flex-direction: column; }
-.lobby-go .btn { width: 100%; margin: 0; }
+/* The GO bar: a centred pill, not a full-width slab — the button reads as a
+   button, and the centring matches the tab strip above it. */
+.lobby-go { grid-area: go; display: flex; flex-direction: column; align-items: center; }
+.lobby-go .btn { width: min(100%, 24rem); margin: 0; }
 /* No picker (non-host, or the catalog hasn't landed) → the race column is
    empty: collapse to one column and centre the car group (the ribbon and GO
    bar keep the full width). Browsers without :has keep the two-column layout,
@@ -296,15 +298,15 @@ input[type=text]:disabled { opacity: 0.6; }
    on. Host only (everyone else sees the pick on the big screen). */
 .trackpick { margin: 0; display: flex; flex-direction: column; min-height: 0; flex: 1; }
 .trackpick__strip { display: flex; flex-direction: column; min-height: 0; flex: 1; }
-.racecols { display: flex; gap: 0.7rem; align-items: stretch; min-height: 0; flex: 1; }
-.racelist { flex: 0 0 44%; display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
+.racecols { display: flex; gap: 1rem; align-items: stretch; min-height: 0; flex: 1; }
+.racelist { flex: 0 0 42%; display: flex; flex-direction: column; gap: 0.45rem; min-width: 0; }
 /* A row is plain white paper in a thick ink outline, like an unpicked car tile;
    the picked one fills with its own colour (painted inline — the fill IS the
    cup, so the mark and the identity are the same stroke; see .car-opt--mine for
    why no chrome ring). */
 .mode-opt {
-  flex: 1; display: flex; align-items: center; gap: 0.45rem; min-height: 2rem;
-  cursor: pointer; padding: 0.24rem 0.7rem;
+  flex: 1; display: flex; align-items: center; gap: 0.55rem; min-height: 2rem;
+  cursor: pointer; padding: 0.24rem 0.85rem;
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r-sm);
   box-shadow: var(--shadow-pop);
   transition: transform 0.08s, box-shadow 0.08s, background 0.08s;
@@ -319,46 +321,46 @@ input[type=text]:disabled { opacity: 0.6; }
 .mode-opt--locked .mode-opt__name { opacity: 0.85; }
 .mode-opt--mine .mode-opt__sub { color: var(--ink-2); }
 .mode-opt__name {
-  font-family: var(--font-display); font-weight: 700; font-size: 0.8rem;
+  font-family: var(--font-display); font-weight: 700; font-size: 0.92rem;
   color: var(--ink); min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.mode-opt__sub { margin-left: auto; font-weight: 800; font-size: 0.62rem; color: var(--ink-3); flex: none; }
-.mode-opt .starrow { margin-left: auto; font-size: 0.62rem; flex: none; }
+.mode-opt__sub { margin-left: auto; font-weight: 800; font-size: 0.7rem; color: var(--ink-3); flex: none; }
+.mode-opt .starrow { margin-left: auto; font-size: 0.72rem; flex: none; }
 .mode-opt .lock-glyph { width: 0.8em; height: 0.8em; flex: none; }
 /* the detail panel column: the surface fills the page height beside the list */
 .racedetail { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.racedetail .modepick__tracks { flex: 1; display: flex; flex-direction: column; gap: 0.45rem; }
+.racedetail .modepick__tracks { flex: 1; display: flex; flex-direction: column; gap: 0.6rem; }
 /* the panel's header: name (+stars), meter far right, one meta line — the SAME
    height for the cup and random families, so switching rows moves nothing */
-.raceinfo { display: flex; flex-direction: column; gap: 0.1rem; }
+.raceinfo { display: flex; flex-direction: column; gap: 0.15rem; }
 .raceinfo__title { display: flex; align-items: center; gap: 0.5rem; min-height: 1.5rem; }
-.raceinfo__name { font-family: var(--font-display); font-weight: 700; font-size: 1rem; color: var(--ink); }
-.raceinfo__title .starrow { font-size: 0.78rem; }
+.raceinfo__name { font-family: var(--font-display); font-weight: 700; font-size: 1.15rem; color: var(--ink); }
+.raceinfo__title .starrow { font-size: 0.85rem; }
 .raceinfo__title .trackpick__cup-meter { margin-left: auto; }
-.raceinfo__meta { font-weight: 700; font-size: 0.66rem; color: var(--ink-2); }
+.raceinfo__meta { font-weight: 700; font-size: 0.75rem; color: var(--ink-2); }
 /* the locked cup's unlock pitch, in place of the track grid */
 .modepick__tracks--locked { background: var(--surface-2); }
-.unlock-rules { display: flex; flex-direction: column; gap: 0.28rem; }
+.unlock-rules { display: flex; flex-direction: column; gap: 0.35rem; }
 .unlock-rules__row {
   display: flex; align-items: center; gap: 0.5rem;
   background: var(--surface); border: 2.5px solid var(--ink); border-radius: 10px;
-  padding: 0.16rem 0.6rem;
-  font-family: var(--font-display); font-weight: 700; font-size: 0.72rem; color: var(--ink);
+  padding: 0.22rem 0.7rem;
+  font-family: var(--font-display); font-weight: 700; font-size: 0.8rem; color: var(--ink);
 }
 .unlock-rules__row--todo { opacity: 0.55; }
 .unlock-rules__row b { margin-left: auto; }
-.unlock-rules__foot { font-weight: 800; font-size: 0.64rem; color: var(--ink-2); text-align: right; }
+.unlock-rules__foot { font-weight: 800; font-size: 0.72rem; color: var(--ink-2); text-align: right; }
 /* the star key under the detail panel, bottom right — what the badges mean */
 .star-legend {
-  display: flex; gap: 0.75rem; justify-content: flex-end;
-  margin-top: 0.35rem; flex: none;
+  display: flex; gap: 1rem; justify-content: flex-end;
+  margin-top: 0.4rem; flex: none;
 }
 .star-legend__item {
-  display: flex; align-items: center; gap: 0.28rem;
-  font-weight: 800; font-size: 0.62rem; color: var(--ink-2);
+  display: flex; align-items: center; gap: 0.35rem;
+  font-weight: 800; font-size: 0.82rem; color: var(--ink-2);
 }
-.star-legend .starrow { font-size: 0.58rem; }
+.star-legend .starrow { font-size: 0.8rem; }
 /* the open cup's exact-pick panel — an inset under the mode tiles. One compact
    4-across row so the lobby stays a single screen. The background is painted inline
    in its cup's colour (buildModePicker), deeper than the cup tiles so it reads as a
@@ -367,7 +369,7 @@ input[type=text]:disabled { opacity: 0.6; }
    not a sticker, and at PANEL_TINT the colour draws its own edge against the paper
    (the hairline this used to carry was a crutch from when the tint was far fainter). */
 .modepick__tracks {
-  padding: 0.35rem;
+  padding: 0.55rem;
   border-radius: var(--r-sm);
 }
 .modepick__tracks .trackpick__grid { grid-template-columns: repeat(4, 1fr); gap: 0.45rem; }

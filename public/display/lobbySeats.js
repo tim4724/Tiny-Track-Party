@@ -86,8 +86,8 @@ export function renderCupSlot(slotEl, state) {
   slotEl.querySelector('.cup-slot__pick').classList.toggle('hidden', !picked);
   if (!picked) return;
   slotEl.querySelector('.cup-sticker').textContent = state.name;
-  // The couch's star badge for this pick (cup and tour cards; null hides it —
-  // random and exact-track cards carry none).
+  // The couch's star badge for this pick (cup cards only; null hides it —
+  // the tour, random and exact-track cards carry none).
   const starsEl = slotEl.querySelector('.cup-stars');
   starsEl.classList.toggle('hidden', state.stars == null);
   starsEl.textContent = '';
@@ -157,16 +157,16 @@ export function renderCupSlot(slotEl, state) {
 // that live here. `trackCatalog` supplies the baked mini-maps by id.
 const RACES_COPY = { one: () => '1 race', endless: () => 'endless', count: (n) => `${n} races` };
 const NAME_COPY = { random: 'Random', tour: 'World Tour' };
-// `progress` is the snapshot's progress shape ({cups:[{id,stars,…}], tour:{stars}})
-// or null — it dresses the card with the couch's stars, merged SHELL-SIDE so the
-// frozen ui corpus's cupSlot answers stay untouched (stars are not catalogue
-// data). Cup and tour cards wear one; random and exact-track cards don't.
+// `progress` is the snapshot's progress shape ({cups:[{id,stars,…}]}) or null —
+// it dresses the card with the couch's stars, merged SHELL-SIDE so the frozen
+// ui corpus's cupSlot answers stay untouched (stars are not catalogue data).
+// Only a CUP card wears one: the stars are the cups' reward arc, so the tour,
+// random and exact-track cards all go bare.
 export function renderLobbyPick(slotEl, pick, trackCatalog, progress) {
   if (!slotEl) return;
   const svgOf = (id) => { const t = trackCatalog.find((e) => e.id === id); return t && t.svg; };
   const starsFor = (m) => {
     if (!progress || !m) return null;
-    if (m.nameKey === 'tour') return (progress.tour && progress.tour.stars) || 0;
     if (m.nameKey === 'cup' && m.cupId) {
       const row = (progress.cups || []).find((c) => c.id === m.cupId);
       return row ? row.stars : 0;
@@ -196,11 +196,11 @@ export function renderLobbyPick(slotEl, pick, trackCatalog, progress) {
   });
 }
 
-// The "Cups" shelf under the join ticket — one row per cup with the
-// couch's stars, the locked cup trailing its unlock progress instead. `cups`
-// is the wasm-stamped catalogue's cups list (or a preview's synthesis):
-// [{id, name, stars, locked, unlockDone?, unlockNeed?}]. It lives on the LEFT
-// rail so the long game never crowds the right rail's "up next" pick.
+// The "Cups" shelf in the lobby's bottom-right corner — one row per cup with
+// the couch's stars, the locked cup trailing its unlock progress instead.
+// `cups` is the wasm-stamped catalogue's cups list (or a preview's synthesis):
+// [{id, name, stars, locked, unlockDone?, unlockNeed?}]. It sits under the
+// "Up next" card so the stars read beside the pick they dress.
 export function renderCupShelf(shelfEl, cups) {
   if (!shelfEl) return;
   shelfEl.textContent = '';

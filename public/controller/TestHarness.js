@@ -71,8 +71,7 @@ export function runControllerScenario(opts) {
       { id: 'backyard', stars: 1, locked: false },
       { id: 'canyon', stars: 0, locked: false },
       { id: 'rooftop', stars: 0, locked: true, unlockDone: 3, unlockNeed: 4 }
-    ],
-    tour: { stars: 1 }
+    ]
   };
 
   // The CAR | RACE tab strip + page state — mirrors main.js renderLobbyTabs.

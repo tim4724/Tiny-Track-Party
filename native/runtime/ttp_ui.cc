@@ -330,10 +330,6 @@ const char* ttp_ui_catalogue_json(void) {
   }
   out.set("cups", std::move(cups));
   out.set("catalog", std::move(cat));
-  // The World Tour's own badge — it banks like a cup but is not a cup row.
-  Value tour = Value::Obj();
-  tour.set("stars", Value::Num(progression::stars(g_progress.bestOf("tour"))));
-  out.set("tour", std::move(tour));
   return put(g_bufCatalogue, out);
 }
 

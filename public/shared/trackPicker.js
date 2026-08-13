@@ -301,7 +301,7 @@ function detailHeader({ title, starsEl, meter, meta }) {
 // unlock rules, or Random's run lengths with the World Tour beside them.
 //   catalog   : [{ id, name, svg, cup, cupName, cupDifficulty }] (from the display)
 //   progress  : the snapshot's progress key — {cups:[{id,stars,locked,
-//               unlockDone?,unlockNeed?}], tour:{stars}} | null (absent = a
+//               unlockDone?,unlockNeed?}]} | null (absent = a
 //               fresh couch drawn starless and nothing locked phone-side; the
 //               display enforces the real lock either way)
 //   selection : {mode:'track'|'cup'|'random'|'tour', trackId?, cupId?, randomRaces?} | null
@@ -466,9 +466,8 @@ export function buildModePicker({ stripEl, catalog, progress, selection, highlig
     panel.style.background = towardWhite(NEUTRAL_COLOR, PANEL_TINT);
     panel.appendChild(detailHeader({
       title: sel.mode === 'tour' ? TOUR_LABEL : 'Random',
-      // The tour's own badge (it banks like a cup) shows while the tour is the
-      // pick; plain Random has no stars to wear.
-      starsEl: sel.mode === 'tour' ? starRow((progress && progress.tour && progress.tour.stars) || 0) : null,
+      // No stars on the random family — the badges are the cups' reward arc,
+      // and a run mode wearing one read as a sixth cup.
       meta: sel.mode === 'tour' ? 'One track from every unlocked cup, in cup order'
         : 'Any unlocked track, dealt by the dice'
     }));

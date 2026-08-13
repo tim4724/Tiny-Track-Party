@@ -1888,10 +1888,10 @@ void uiProgression() {
   }
   check(rowsAgree, "every cup row's stars/locked/unlock progress is the composed answer");
   check(sawLocked, "premise: this record leaves a cup locked (canyon unfinished)");
-  const Value* tour = cat.find("tour");
-  check(tour && tour->type == Value::OBJ &&
-            json::num_field(*tour, "stars") == prog::stars(rec.bestOf("tour")),
-        "the tour's own badge rides the catalogue top level");
+  // The tour earns no badge, but a save carrying its old "tour" row (the blob
+  // above) must still round-trip: parse keeps unknown ids, the catalogue just
+  // derives nothing from them.
+  check(!cat.has("tour"), "the tour has no star badge on the catalogue");
 
   // The dev override unlocks without touching the record.
   check(ttp_ui_progress_load(blob, 1) == 1, "unlockAll loads");

@@ -4,7 +4,8 @@
 // reproducible on every leg (integer compares, list walks, a tolerant parse) and
 // there is no JS oracle — the layer is NEW, decided 2026-08-12 (stars 1/2/3 =
 // finished / podium / won, the 'rooftop' cup locked until every other shipped
-// cup is finished, best-HUMAN standing banks, "tour" banks as a pseudo-cup).
+// cup is finished, best-HUMAN standing banks; shipped cups only — the tour
+// earns nothing, decided 2026-08-13).
 // This file is where those decisions are pinned; the abi ctest separately gates
 // the marshalling and the catalogue stamping over the same functions.
 #include <cstdio>
@@ -117,7 +118,7 @@ int main() {
 
   // ---- eligibility ------------------------------------------------------------
   check(progression::bankEligible("beach", SHIPPED), "a shipped cup banks");
-  check(progression::bankEligible("tour", SHIPPED), "the tour banks as a pseudo-cup");
+  check(!progression::bankEligible("tour", SHIPPED), "the tour earns nothing");
   check(!progression::bankEligible("random", SHIPPED), "random never banks");
   check(!progression::bankEligible("", SHIPPED), "a nameless series never banks");
 

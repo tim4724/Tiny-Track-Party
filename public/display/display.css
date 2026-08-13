@@ -232,35 +232,36 @@ html, body {
   font-size: clamp(16px, 1.7vw, 25px); line-height: 1.1;
 }
 
-/* "Cups" — the couch's star shelf, hung under the ticket past the scan hint.
-   A two-column grid of short-name chips (renderCupShelf strips the " Cup"
-   suffix), because five full-width rows are taller than the left rail's
-   leftover band on a 16:9 screen. Sized to be READ from the couch — the chips
-   ride the rail's own width, not a fixed pixel cap. The locked cup trails its
-   unlock count. */
+/* "Cups" — the couch's star shelf, pinned to the lobby's BOTTOM-RIGHT corner
+   under the "Up next" card (whose pick these stars dress). A two-column grid
+   of short-name chips (renderCupShelf strips the " Cup" suffix) so it stays a
+   corner card rather than a column. The locked cup trails its unlock count. */
 .cup-shelf {
-  /* Absolute like the scan hint, so the rail's height stays the ticket's and
-     the card keeps its centring; hung a step further down, past the hint. */
-  position: absolute; top: calc(100% + clamp(4.2rem, 7vh, 5rem));
-  left: 50%; transform: translateX(-50%);
+  /* Absolute over the scene (chrome floats bare, like every lobby sticker),
+     inset by the lobby's own gutters so its right edge lines up with the
+     up-next card above it. The dock row's seats are centred, so the corner
+     stays clear on any 16:9 screen. */
+  position: absolute;
+  right: clamp(32px, 4.5vw, 88px);
+  bottom: clamp(16px, 3vh, 32px);
   display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem;
-  width: 100%;
+  width: min(24vw, 310px);
   padding-top: 0.5rem;   /* room for the corner label to straddle the edge */
 }
 /* the label rides the shelf's top-left corner like a sticker tab — a full
    label row was the height that pushed the last chip row off a 720p screen */
 .cup-shelf__label { position: absolute; top: -0.35rem; left: 0.65rem; z-index: 1; font-size: 0.72rem; }
 .cup-shelf__row {
-  display: flex; align-items: center; gap: 0.4rem; min-width: 0;
+  display: flex; align-items: center; gap: 0.35rem; min-width: 0;
   background: var(--surface); border: 2.5px solid var(--ink); border-radius: var(--r-pill);
-  padding: 0.2rem 0.7rem 0.2rem 0.6rem;
+  padding: 0.2rem 0.55rem 0.2rem 0.6rem;
   box-shadow: var(--shadow-pop);
   font-family: var(--font-display); font-weight: 700;
   font-size: clamp(13px, 1.25vw, 16px); color: var(--ink);
 }
 .cup-shelf__row .dot { width: 0.6rem; height: 0.6rem; }
 .cup-shelf__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cup-shelf__row .starrow { margin-left: auto; font-size: 0.78em; flex: none; }
+.cup-shelf__row .starrow { margin-left: auto; font-size: 0.7em; flex: none; }
 .cup-shelf__row .lock-glyph { width: 0.85em; height: 0.85em; flex: none; }
 .cup-shelf__row--locked { background: var(--surface-2); }
 .cup-shelf__row--locked b { margin-left: auto; font-size: 0.85em; }
@@ -819,10 +820,10 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
   /* in the column the hint flows under the card instead of hanging over
      whatever comes next */
   .tagline { position: static; transform: rotate(-2deg); margin: 0.9rem auto 0; width: fit-content; }
-  /* the shelf follows the now-static hint in the column — no hung hint to clear */
-  .cup-shelf { position: static; transform: none; margin: 0.9rem auto 0; }
+  /* the shelf joins the column after the pick card — no corner to pin to */
+  .cup-shelf { position: static; margin: 0 auto; width: min(84vw, 360px); order: 4; }
   .cup-slot { order: 3; width: min(84vw, 360px); max-width: none; }
-  .lobby-foot { order: 4; }
+  .lobby-foot { order: 5; }
   #players { flex-wrap: wrap; justify-content: center; }
   /* the stage clouds are placed for the wide layout — behind the stacked
      column they poke out from odd corners, so they sit this one out */

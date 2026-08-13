@@ -11,9 +11,10 @@
 // than a position so the synthetic conformance worlds (which carry no
 // 'rooftop') lock nothing under replay.
 //
-// The World Tour banks under the pseudo-cup id "tour" — it has final standings
-// and a podium like any cup, but it never counts toward the unlock and is
-// never itself locked (bank eligibility admits it explicitly).
+// Only the SHIPPED cups bank. The World Tour and Random earn nothing — the
+// stars are the cups' reward arc, and a run mode wearing one read as a sixth
+// cup. (A save that still holds a "tour" row from the brief era it banked
+// loads fine — parse keeps unknown ids — it just derives nothing.)
 #pragma once
 
 #include <string>
@@ -51,8 +52,8 @@ int unlockDone(const Record& r, const std::string& cupId,
                const std::vector<std::string>& allCupIds);
 int unlockNeed(const std::string& cupId, const std::vector<std::string>& allCupIds);
 
-// May this series id bank at all? Shipped cups and the tour do; "random" (and
-// anything else a future mode invents) does not.
+// May this series id bank at all? Shipped cups only; "tour", "random" (and
+// anything else a future mode invents) do not.
 bool bankEligible(const std::string& cupId, const std::vector<std::string>& allCupIds);
 
 // Bank a FINISHED series: `aiByRank` is the final standings' ai flags in rank

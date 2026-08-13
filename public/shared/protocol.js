@@ -67,7 +67,7 @@ var MSG = {
                                 //   players:[{peerIndex,name,colorIndex,carIndex,connected,ready,inRace}],
                                 //   standings:{over,order:[…],series?}|null (playing/results),
                                 //   cars:[{id,name,stats}], colors:['#…'], tracks:[{id,name,cup,cupName,cupDifficulty,svg}]|null (lobby only),
-                                //   progress:{cups:[{id,stars,locked,unlockDone?,unlockNeed?}], tour:{stars}} (lobby only; absent, not null, elsewhere —
+                                //   progress:{cups:[{id,stars,locked,unlockDone?,unlockNeed?}]} (lobby only; absent, not null, elsewhere —
                                 //   the couch's DERIVED star record, composed display-side off the wasm catalogue; phones draw it, never re-derive it) }.
                                 //   trackId is always the RESOLVED track (exact pick / cup's current race / random draw). Pushed live
                                 //   on change, replayed to each (re)joiner right after `joined`. Car images load by id from the web host.
