@@ -69,7 +69,13 @@ export class ControllerNet extends GameNet {
     // Gates the sensor-rate CONTROL stream down to what the display doesn't already
     // hold (see InputGate). opts.gate lets tests/measurement pass a configured
     // one; the default is the shipping policy.
-    this.gate = opts.gate || new InputGate();
+    //
+    // TEMPORARY (with the AC ping below): while the WS ping runs on AirConsole,
+    // the 1 ping/s rides on top of the CONTROL stream in the controller's own
+    // send budget, so the gate floor gives that message its headroom:
+    // 42 ms ⇒ ≤23.8 CONTROL/s, +1 ping/s < the platform's 25 msg/s. Revert to
+    // the plain default when the ping gate below goes back in.
+    this.gate = opts.gate || new InputGate(window.airconsole ? { sendMinIntervalMs: 42 } : {});
     this._srtt = 0;
     // §7 lifecycle state. _suspended: the link was dropped by suspend() and is
     // ours to rebuild on return. _terminal: the relay finished this session for
@@ -99,11 +105,14 @@ export class ControllerNet extends GameNet {
         // (harmless otherwise — the display ignores a token that matches our own
         // fresh slot or names a seat that's no longer waiting).
         this.party.sendTo(0, { type: MSG.HELLO, name: this.playerName, rejoinToken: this.rejoinToken });
-        // No WS ping on AirConsole: STEER.SEND_MIN_INTERVAL_MS is sized so the
-        // CONTROL stream alone fills the platform's 25 msg/s budget — a ping on
-        // top would breach it. AC's own connect/disconnect events carry
-        // liveness, and the latency chip simply stays dark.
-        if (!window.airconsole) this._startPing();
+        // TEMPORARILY also on AirConsole, to measure real-platform latency
+        // (the chip was dark there): the controller's budget headroom for this
+        // 1 ping/s comes from the AC gate floor set in the constructor, and
+        // the PONG answers ride the DISPLAY's near-idle send budget. The
+        // steady state this reverts to: no WS ping on AC — steering alone is
+        // sized to fill the 25 msg/s budget, and AC's own connect/disconnect
+        // events carry liveness.
+        this._startPing();
         this.onJoined(this.peerIndex);
       } else if (type === 'error') {
         this.onStatus('error', msg.message);

@@ -114,6 +114,13 @@ test('AC: screen boots to the lobby, profile-named phones join, a race runs', as
     for (let i = 0; i < 8; i++) window.airconsole.triggerDeviceMotion(0, 0, 9.81);
   });
 
+  // The latency chip lights over the AC transport (TEMPORARY: the WS ping runs
+  // in AC for real-platform readings) — which also proves the display's C++
+  // net walk answers PING through the adapter. A digit-anchored match: the
+  // pre-sample placeholder is '-- ms' and a dead link reads 'no signal', so
+  // only a real round trip satisfies it.
+  await expect(ana.locator('#latency')).toContainText(/\d+ ms/, { timeout: 5000 });
+
   // Platform pause freezes the race through the same walk the pause button
   // drives (overlay up everywhere), and the platform resume lifts exactly it.
   await page.evaluate(() => window.airconsole.triggerPause());

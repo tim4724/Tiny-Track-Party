@@ -47,9 +47,12 @@ pinned by `tests/e2e/gallery-controller-boards.spec.js`.
 and `window.PartyFastlane` at a stub before the modules capture them, installs
 the AC-backed pref shim, and hands `main.js` the platform surface
 (`window.__acController`: ready promise, nickname, SDK haptics). The few
-in-module gates test `window.airconsole`: no WS ping (steering alone fills
-AC's 25 msg/s budget — that is what sized `STEER.SEND_MIN_INTERVAL_MS`), no
-suspend/resume teardown, no history, no self-leave on popstate.
+in-module gates test `window.airconsole`: no suspend/resume teardown, no
+history, no self-leave on popstate. The WS ping is TEMPORARILY on in AC too
+(real-platform latency readings); its budget headroom comes from a raised AC
+gate floor in `Net.js` — the steady state it reverts to is no ping, with
+steering alone sized to fill AC's 25 msg/s budget
+(`STEER.SEND_MIN_INTERVAL_MS`).
 
 ## The display is authoritative
 
