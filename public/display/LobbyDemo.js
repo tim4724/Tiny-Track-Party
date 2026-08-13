@@ -4,7 +4,9 @@
 // driven by an in-wasm AI bot, showing the liveries/models the players have CURRENTLY
 // picked topped up to a full grid with CPU racers. Cars are added cell:false so the
 // renderer keeps its single orbiting overview camera (no split-screen) and frames the
-// whole track; the loop re-grids and laps forever.
+// whole track; the race is ENDLESS — a lap count no car ever reaches, so the field
+// contests items and positions continuously instead of popping back to the grid
+// every three laps.
 //
 // This is lobby eye-candy only — no net, no HUD, no results. The real race takes over
 // the scene the instant the host starts it. The field + per-frame stepping mirror
@@ -14,6 +16,13 @@ import { init as initNativeSim, NativeRaceSession } from './NativeRaceSession.js
 
 const DEMO_SEED = 0x5eed; // base for the bots' wander streams — lobby determinism doesn't
                           // matter, this just keeps each bot's weave distinct.
+
+// A lap count no car reaches, so the demo race never finishes: nobody drops into
+// the coasting no-items victory-lap mode and catch-up keeps the field bunched.
+// Accepted trade-offs of never finishing: the DNF ladder never arms (it waits for
+// a first finisher), and a mid-demo car swap's new handling stats only land on the
+// next full rebuild (join/leave/track switch) — both invisible in eye-candy.
+const ENDLESS_LAPS = 1e9;
 
 // The native sim is initialised once at boot by main.js (top-level await), so this is
 // already resolved by the time a lobby demo can start. We hold our own handle on it so a
@@ -69,7 +78,7 @@ export class LobbyDemo {
         seed: (DEMO_SEED + i * 2 + 1) >>> 0
       };
     });
-    const engine = new NativeRaceSession(players, this.track, { bots });
+    const engine = new NativeRaceSession(players, { ...this.track, totalLaps: ENDLESS_LAPS }, { bots });
     engine.startBare(); // attract mode: already racing, no countdown to sit through
     return engine;
   }
@@ -94,23 +103,11 @@ export class LobbyDemo {
 
   // One frame-loop tick (driven by Stage.onFrame; dt in seconds). A no-op until
   // start() has run, so the display can call it unconditionally each frame.
+  // No "done yet?" poll: with ENDLESS_LAPS the race can't end, so stepping is
+  // all there is.
   step(dt) {
     if (!this.active || !this.engine) return;
     this.engine.update(dt * 1000); // the bots are stepped inside ttp_update, in the live loop's order
-    // Endless: once every car is home, re-grid and lap again. Bare mode has no
-    // session layer to fire a raceEnd, so this is the engine's own `raceOver`
-    // rule (finishedOrder >= cars). Polled every half second rather than every
-    // frame — the renderer no longer needs a snapshot, and a lap takes a minute,
-    // so reading the whole field 60 times a second to ask "done yet?" is the
-    // only thing that would still be marshalling state for the attract loop.
-    if ((this._tick = (this._tick || 0) + 1) % 30) return;
-    // Per-car scalar reads, not a ~4 KB snapshot parse for one boolean.
-    const ids = this.engine.carIds();
-    if (ids.length > 0 && ids.every((id) => this.engine.carFinished(id))) {
-      this.engine.dispose();
-      this.engine = this._buildEngine();
-      this.scene.bindSession(this.engine.h);
-    }
   }
 
   // Unbinds only OUR session. stop() doubles as the "make sure the demo isn't
