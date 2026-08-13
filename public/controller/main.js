@@ -167,8 +167,11 @@ const tilt = new TiltInput({
 
 // Steering input mode — 'tilt' (default) or 'buttons', remembered per device.
 // setInputMode applies it everywhere (TiltInput signal path + the #game mode
-// class); the Settings popup's seg drives changes through here.
-let inputMode = storedInputMode();
+// class); the Settings popup's seg drives changes through here. A device with
+// no motion sensor can never steer by tilt, so it's forced onto buttons (the
+// stored pref is ignored, not overwritten — it only means anything where tilt
+// exists) and the settings card shows Tilt disabled (refreshSettingsCard).
+let inputMode = tilt.motionState === 'unsupported' ? 'buttons' : storedInputMode();
 function applyInputMode(mode) {
   inputMode = mode;
   saveInputMode(mode);

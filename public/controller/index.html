@@ -206,6 +206,9 @@
         <span id="steering-label" class="seg-label">Steering</span>
         <button id="input-tilt" type="button" class="mode-card" role="radio" aria-checked="true">
           <span class="mode-card__name">Tilt</span>
+          <!-- Badge text is re-resolved on every open by refreshSettingsCard
+               ("Not available" + disabled card on a device with no motion
+               sensor); the literal below is what the gallery scenario shows. -->
           <span class="mode-card__badge">Recommended</span>
         </button>
         <button id="input-buttons" type="button" class="mode-card" role="radio" aria-checked="false">

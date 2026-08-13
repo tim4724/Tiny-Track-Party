@@ -761,7 +761,8 @@ input[type=text]:disabled { opacity: 0.6; }
   box-shadow: var(--shadow-pop);
   transition: transform 0.08s, box-shadow 0.08s, background 0.08s;
 }
-.mode-card:active { transform: translate(2px, 2px); box-shadow: none; }
+.mode-card:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: none; }
+.mode-card:disabled { cursor: default; opacity: 0.45; }
 .mode-card[aria-checked='true'] { background: color-mix(in srgb, var(--car, var(--brand)) 16%, #fff); }
 /* the radio dot — drawn, so it carries the theme's ink weight; the picked one
    fills with the livery inside a white ring. Sized in rem, big enough that the
@@ -780,10 +781,12 @@ input[type=text]:disabled { opacity: 0.6; }
   font-family: var(--font-display); font-weight: 700; font-size: 1.3rem; line-height: 1;
   color: var(--ink);
 }
-/* "Recommended" sticker on the Tilt row — brand green (the theme's "good"
+/* The sticker on the Tilt row — brand green "Recommended" (the theme's "good"
    chrome colour), tiny and slapped OVER the card's top-right corner (absolute,
    overhanging the border) so it reads as a sticker on the card, not a third
-   control competing with the title. */
+   control competing with the title. On a device with no motion sensor the row
+   is disabled and the sticker reads "Not available" instead (refreshSettingsCard)
+   — muted, since it's no longer praise. */
 .mode-card__badge {
   position: absolute; top: -0.6em; right: 0.6rem;
   font-size: 0.56rem; letter-spacing: 0.07em; text-transform: uppercase; line-height: 1;
@@ -792,6 +795,7 @@ input[type=text]:disabled { opacity: 0.6; }
   padding: 0.3em 0.6em;
   transform: rotate(-2deg);
 }
+.mode-card:disabled .mode-card__badge { background: var(--ink-3); }
 
 /* The stage — surface-2 (the theme's informational surface), holding the
    picked mode's demo phone with the legend attached beneath. Only one demo

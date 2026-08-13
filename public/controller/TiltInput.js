@@ -87,7 +87,12 @@ export class TiltInput {
     this.onControl = onControl || (() => {});
     this.surface = surface || (typeof document !== 'undefined' ? document.body : null);
     this.haveTilt = false;
-    this.motionState = 'unknown'; // unknown | granted | denied | unsupported
+    // unknown | granted | denied | unsupported. Unsupported needs no gesture to
+    // detect — no DeviceOrientationEvent means no sensor, ever — so it's resolved
+    // right here, letting startup fall back to buttons before any permission flow
+    // (main.js) and the settings card disable Tilt (modals.js).
+    this.motionState = (typeof window !== 'undefined' && !window.DeviceOrientationEvent)
+      ? 'unsupported' : 'unknown';
 
     // latest gravity unit vector in the device frame (overwritten each event;
     // the flat seed only stands in until the first reading arrives)
@@ -113,7 +118,7 @@ export class TiltInput {
   // Call from a user gesture (e.g. the Join tap). Returns the permission state.
   async enableMotion() {
     const DOE = window.DeviceOrientationEvent;
-    if (!DOE) { this.motionState = 'unsupported'; return this.motionState; }
+    if (!DOE) return this.motionState; // 'unsupported' since the constructor — nothing to request
     try {
       if (typeof DOE.requestPermission === 'function') {
         const res = await DOE.requestPermission(); // iOS

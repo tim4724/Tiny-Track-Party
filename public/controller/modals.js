@@ -60,11 +60,18 @@ const settingsOpen = () => !el('settings-overlay').classList.contains('hidden');
 
 // Sync the card to the CURRENT input mode: the seg's checked side and the
 // .is-buttons class that flips the demo phone + captions between modes.
+// On a device with no motion sensor (main.js forced buttons at startup) the
+// Tilt row is disabled outright and its sticker says why — a pickable-looking
+// Tilt would only lead into a recovery popup with no recovery.
 function refreshSettingsCard() {
   const buttons = _getInputMode() === 'buttons';
   el('settings-card').classList.toggle('is-buttons', buttons);
   el('input-tilt').setAttribute('aria-checked', String(!buttons));
   el('input-buttons').setAttribute('aria-checked', String(buttons));
+  const noTilt = _tilt.motionState === 'unsupported';
+  el('input-tilt').disabled = noTilt;
+  el('input-tilt').querySelector('.mode-card__badge').textContent =
+    noTilt ? 'Not available' : 'Recommended';
 }
 
 function openSettings() {

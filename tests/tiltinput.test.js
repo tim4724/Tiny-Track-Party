@@ -202,6 +202,23 @@ test('switching back to tilt drops any held ‹/› so no lock survives the mode
   assert.equal(t.state.steer, 0, 'the held › died with the mode');
 });
 
+// ---- motionState: 'unsupported' is resolved at construction, without a gesture ----
+
+test("a browser with no DeviceOrientationEvent constructs as 'unsupported'", () => {
+  const hadW = Object.prototype.hasOwnProperty.call(globalThis, 'window');
+  const prevW = globalThis.window;
+  globalThis.window = { addEventListener() {} }; // a window, but no sensor API
+  try {
+    assert.equal(new TiltInput({}).motionState, 'unsupported');
+  } finally {
+    if (hadW) globalThis.window = prevW; else delete globalThis.window;
+  }
+});
+
+test("headless (no window at all) stays 'unknown' — Node suites are not sensorless phones", () => {
+  assert.equal(new TiltInput({}).motionState, 'unknown');
+});
+
 test('stop() resets brake + ACTION state so the next race cannot inherit a stale press', () => {
   const t = new TiltInput({});
   t.setActionEnabled(true);
