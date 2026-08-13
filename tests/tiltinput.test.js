@@ -300,6 +300,54 @@ test('a real sample resolves granted immediately, without paying the settle wind
   });
 });
 
+test("AirConsole with no DeviceOrientationEvent stays 'unknown' — the SDK's device_motion relay is the sensor there", () => {
+  const hadW = Object.prototype.hasOwnProperty.call(globalThis, 'window');
+  const prevW = globalThis.window;
+  globalThis.window = { addEventListener() {}, airconsole: {} };
+  try {
+    assert.equal(new TiltInput({}).motionState, 'unknown');
+  } finally {
+    if (hadW) globalThis.window = prevW; else delete globalThis.window;
+  }
+});
+
+// ---- setGravity: the AirConsole relay's complementary filter ----
+
+test('accel-only relay (no gyro): a held lean converges to the tilt within a burst', () => {
+  withScreenAngle(0, () => {
+    const t = new TiltInput({});
+    // 30° right lean as raw accel: gravity +x component, reading = -gravity.
+    for (let i = 0; i < 40; i++) t.setGravity(-4.905, 0, 8.496, 0, 0, 0);
+    assert.ok(t._sensorSteer() > 0.95, `converged, got ${t._sensorSteer()}`);
+  });
+});
+
+test('gyro predict: a roll RATE swings the steer with the accel still reading flat', () => {
+  withScreenAngle(0, () => {
+    const t = new TiltInput({});
+    // Rotating right about y (W3C rotationRate.gamma > 0) while the accel
+    // still claims flat: the gyro must carry the response on its own (the
+    // accel's drift-anchor pull is negligible at ACCEL_CORRECT). dt clamps at
+    // 8 ms in a tight loop, so 60 samples × 100°/s × 8 ms = 48° of roll —
+    // past ROLL_LOCK, so full right lock.
+    for (let i = 0; i < 60; i++) t.setGravity(0, 0, 9.81, 0, 0, 100);
+    assert.ok(t._sensorSteer() > 0.95, `gyro drove the steer, got ${t._sensorSteer()}`);
+  });
+});
+
+test('sticky gyro: once rotation was seen, hand-shake accel barely moves the estimate', () => {
+  withScreenAngle(0, () => {
+    const t = new TiltInput({});
+    for (let i = 0; i < 10; i++) t.setGravity(0, 0, 9.81, 0, 0, 5); // arm the gyro, stay ~flat
+    const before = t._sensorSteer();
+    // A recentring-style lateral shake: strong sideways acceleration, zero
+    // rotation. Pre-fusion this rang the steer; now it must barely register.
+    for (let i = 0; i < 10; i++) t.setGravity(-3, 0, 9.81, 0, 0, 0);
+    assert.ok(Math.abs(t._sensorSteer() - before) < 0.1,
+      `shake suppressed, moved ${Math.abs(t._sensorSteer() - before)}`);
+  });
+});
+
 test('stop() resets brake + ACTION state so the next race cannot inherit a stale press', () => {
   const t = new TiltInput({});
   t.setActionEnabled(true);

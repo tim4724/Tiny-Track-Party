@@ -19,12 +19,14 @@ var airconsole = new AirConsole({
   // The TTP controller is landscape-only (the plain web page enforces it with
   // fullscreen+lock and a rotate overlay); AC pins the device for us.
   orientation: AirConsole.ORIENTATION_LANDSCAPE,
-  silence_inactive_players: false
-  // Deliberately NOT armed: device_motion (the SDK's raw-accelerometer relay,
-  // for webviews that block DeviceOrientation in the game iframe). It was
-  // tried with a damping filter and removed 2026-08-13 — the damped feel
-  // wasn't worth it. Where the iframe gets DeviceOrientation, tilt works
-  // normally; elsewhere phones fall back to button steering.
+  silence_inactive_players: false,
+  // The game is a cross-origin iframe (airconsole.com in a browser, or the AC
+  // app's webview) and neither embedder delegates motion sensors to the
+  // frame, so DeviceOrientation NEVER fires in here — the SDK's relay is the
+  // only tilt source on this platform (local postMessage, no message-budget
+  // cost). 16 ms ≈ the 60 Hz cadence TiltInput's complementary filter
+  // integrates the gyro rates at. Wired in main.js's AC branch.
+  device_motion: 16
 });
 
 // Replace window.localStorage BEFORE main.js reads the stored prefs. The

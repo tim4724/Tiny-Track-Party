@@ -95,6 +95,20 @@ function sensorPolicyBlocked() {
   try { return !fp.allowsFeature('accelerometer'); } catch (_) { return null; }
 }
 
+// The complementary filter behind setGravity (the AirConsole sensor relay —
+// the DeviceOrientation path never touches these, the OS fused it already).
+// Phone-only tuning knobs, so they live here, not in the STEER manifest.
+const ORIENT_FRESH_MS = 1000;    // fused events this recent silence the relay
+const ACCEL_G = 9.81;            // 1 g, what a motionless sample reads
+const ACCEL_TRUST_BAND = 4;      // m/s² of |a|−g deviation at which trust hits 0
+// With a live gyro the accelerometer only anchors drift: ~0.8 s time constant
+// at the 16 ms relay cadence — hand-motion contamination barely registers.
+const ACCEL_CORRECT = 0.02;
+// No gyro seen yet (boot, or a device without one): the accel is the only
+// signal, so correct at the old damped-filter rate instead.
+const ACCEL_ONLY_CORRECT = 0.2;
+const GYRO_LIVE_DPS = 0.5;       // a rotation past this many °/s proves a gyro exists
+
 const DEG = Math.PI / 180;
 const RAD = 180 / Math.PI;
 const clamp1 = (v) => Math.max(-1, Math.min(1, v));
@@ -125,13 +139,21 @@ export class TiltInput {
     // permission flow: no DeviceOrientationEvent constructor (no sensor, ever),
     // or a permissions policy that withholds the sensors from this document.
     // The THIRD way can only be found by listening — see _settle.
-    this.motionState = (typeof window !== 'undefined'
+    //
+    // EXCEPT on AirConsole, where neither route means what it says: the SDK's
+    // device_motion relay is the sensor there (setGravity), and the frame is
+    // expected to fail both checks. Stay 'unknown' and let the first relayed
+    // sample resolve it to 'granted'.
+    this.motionState = (typeof window !== 'undefined' && !window.airconsole
       && (!window.DeviceOrientationEvent || sensorPolicyBlocked() === true))
       ? 'unsupported' : 'unknown';
 
     // latest gravity unit vector in the device frame (overwritten each event;
     // the flat seed only stands in until the first reading arrives)
     this._g = { x: 0, y: 0, z: -1 };
+    this._orientAt = 0;   // last fused DeviceOrientation event (0 = never)
+    this._motionAt = 0;   // last relayed sensor sample (setGravity's dt clock)
+    this._gyroSeen = false; // a real rotation rate arrived — arms the predict step
 
     this.mode = 'tilt';    // 'tilt' | 'buttons' (see setMode)
     this._steer = 0;       // smoothed steer output (-1..1)
@@ -204,13 +226,72 @@ export class TiltInput {
     });
   }
 
-  // NOTE (AirConsole): tilt here rides DeviceOrientation like everywhere else.
-  // The SDK's device_motion relay (raw accelerometer posted into the iframe —
-  // AirConsole's answer to browsers that block sensors in embedded frames) was
-  // tried with a gravity-extraction filter and REMOVED 2026-08-13: the damped
-  // feel wasn't worth a second input path. Git history has it (setGravity)
-  // if AC-app tilt is ever required; until then those phones fall back to
-  // button steering through the ordinary no-sensor flow.
+  // External sensor feed, for AirConsole — the game is a cross-origin iframe
+  // inside airconsole.com (browser) or the AC app's webview, and neither
+  // delegates motion sensors to the frame, so DeviceOrientation NEVER fires
+  // here (the AC docs say so outright and offer this relay instead). The
+  // SDK's top-level page reads the sensors — it isn't in an iframe — and
+  // posts every sample in: accel = W3C accelerationIncludingGravity (flat
+  // face-up = +9.81 z), rates = W3C rotationRate (deg/s: alpha about z,
+  // beta about x, gamma about y).
+  //
+  // The raw accelerometer is gravity + the hand's own motion, and taking it
+  // verbatim rang the steer around centre; a plain low-pass damped the ring
+  // but felt spongy. This is the COMPLEMENTARY FILTER instead — the same
+  // shape as the OS fusion behind DeviceOrientation:
+  //  - PREDICT from the gyro: rotate the gravity estimate by the body rates
+  //    (a world-fixed vector seen from a rotating body evolves as
+  //    dg/dt = −ω × g). The gyro is blind to linear acceleration, so this
+  //    carries ALL the fast response with none of the wobble.
+  //  - CORRECT from the accelerometer, slowly (ACCEL_CORRECT, further scaled
+  //    by how close the sample is to 1 g) — it only anchors gyro drift.
+  // A device whose relay carries no live gyro falls back to a faster
+  // accel-only correction (ACCEL_ONLY_CORRECT — the old damped filter),
+  // because then the accel is the only signal there is.
+  setGravity(ax, ay, az, ra, rb, rg) {
+    // If real fused DeviceOrientation is somehow delivering (an embedder that
+    // DOES delegate sensors), it owns gravity — never fight it with raw data.
+    if (Date.now() - this._orientAt < ORIENT_FRESH_MS) return;
+    const now = Date.now();
+    const dt = Math.min(0.05, Math.max(0.008, (now - this._motionAt) / 1000));
+    this._motionAt = now;
+    const g = this._g;
+
+    // Gyro predict. Rates are deg/s about the DEVICE axes: x=beta, y=gamma,
+    // z=alpha. STICKY detection: one sample of real rotation proves the gyro
+    // exists, and from then on it owns the fast path — a still phone reads
+    // ~0 rates, which is a correct "not rotating", not a dead gyro. Until
+    // then (boot, or a device with no gyro) the accel corrects at the fast
+    // rate, which also makes initial gravity acquisition immediate.
+    const wx = (rb || 0) * DEG, wy = (rg || 0) * DEG, wz = (ra || 0) * DEG;
+    if (Math.abs(wx) + Math.abs(wy) + Math.abs(wz) > GYRO_LIVE_DPS * DEG) this._gyroSeen = true;
+    if (this._gyroSeen) {
+      const dx = -(wy * g.z - wz * g.y) * dt;
+      const dy = -(wz * g.x - wx * g.z) * dt;
+      const dz = -(wx * g.y - wy * g.x) * dt;
+      g.x += dx; g.y += dy; g.z += dz;
+    }
+
+    // Accel correct, trust-weighted by closeness to 1 g.
+    const n = Math.hypot(ax, ay, az);
+    if (n > 1) {
+      this.haveTilt = true;
+      this.motionState = 'granted';
+      const base = this._gyroSeen ? ACCEL_CORRECT : ACCEL_ONLY_CORRECT;
+      const k = base * Math.max(0, 1 - Math.abs(n - ACCEL_G) / ACCEL_TRUST_BAND);
+      if (k > 0) {
+        g.x += (-ax / n - g.x) * k;
+        g.y += (-ay / n - g.y) * k;
+        g.z += (-az / n - g.z) * k;
+      }
+    }
+
+    // Predict and correct both bend the length; keep the direction, restore
+    // unit length so the roll math downstream reads clean gravity.
+    const m = Math.hypot(g.x, g.y, g.z) || 1;
+    g.x /= m; g.y /= m; g.z /= m;
+    if (this._timer) this._tick();
+  }
 
   _onOrient(e) {
     if (e.beta == null && e.gamma == null) return;
@@ -224,6 +305,7 @@ export class TiltInput {
     // listener is attached, i.e. permission was granted — the constructor's two
     // routes to 'unsupported' never attach one.)
     if (this.motionState === 'unsupported') this.motionState = 'granted';
+    this._orientAt = Date.now(); // fused events outrank the relay while fresh (setGravity returns early)
 
     // Gravity (unit, pointing down) in the device frame from the W3C Z-X'-Y''
     // Euler angles. alpha (compass yaw) doesn't tilt gravity, so it drops out —

@@ -101,22 +101,19 @@ test('AC: screen boots to the lobby, profile-named phones join, a race runs', as
   await ben.waitForSelector(visible('#game'));
   await waitForRacing(page);
 
-  // TILT rides plain DeviceOrientation in AC mode too (the SDK's device_motion
-  // relay was tried and removed — see controller-airconsole.js), and the AC
-  // auto-join attached the listener without a gesture (Chromium has no
-  // requestPermission). Synthesize a 30° right lean — gamma = ROLL_LOCK, full
-  // lock — and the steer output must swing right; a few events, because the
-  // steer low-pass converges per sample.
+  // TILT arrives over the SDK's device_motion relay — no AC embedder
+  // delegates motion sensors to the game iframe, so DeviceOrientation never
+  // fires there and the relay is the only source. Feed a ~30° right lean as
+  // raw accelerometer samples (reading = -gravity, so a right lean reads
+  // x<0); the mock sends no gyro rates, so this drives the filter's
+  // accel-only fallback — 24 samples ≈ 0.4 s of a held lean at the 16 ms
+  // cadence, enough for its damped convergence.
   await ana.evaluate(() => {
-    for (let i = 0; i < 8; i++) {
-      window.dispatchEvent(new DeviceOrientationEvent('deviceorientation', { alpha: 0, beta: 0, gamma: 30 }));
-    }
+    for (let i = 0; i < 24; i++) window.airconsole.triggerDeviceMotion(-4.9, 0, 8.5);
   });
   expect(await ana.evaluate(() => window.__tilt.state.steer)).toBeGreaterThan(0.9);
   await ana.evaluate(() => {
-    for (let i = 0; i < 8; i++) {
-      window.dispatchEvent(new DeviceOrientationEvent('deviceorientation', { alpha: 0, beta: 0, gamma: 0 }));
-    }
+    for (let i = 0; i < 24; i++) window.airconsole.triggerDeviceMotion(0, 0, 9.81);
   });
 
   // The latency chip lights over the AC transport (TEMPORARY: the WS ping runs
