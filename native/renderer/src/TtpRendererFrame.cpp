@@ -1592,8 +1592,19 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
         // and wipe the skid layer (the JS cleared marks + patina on restart;
         // here the wipe is one unconditional clear).
         if (input.carCount > 0) {
+            // A RESET teleports the whole field; a lone car jumping is a
+            // RESPAWN (off the deck, back to the line). The detector once
+            // watched car 0 alone, and car 0 is a roster seat — usually a
+            // human — so every fall wiped the whole track's rubber mid-race.
+            // Two witnesses (first and last car) separate the cases; a solo
+            // field keeps the single-witness behaviour, which is the fixture
+            // scrubbing this block was built for.
             const float3 c0 = { cars[0].pos.x, cars[0].pos.y, cars[0].pos.z };
-            if (length(c0 - mLastCar0) > 5.0f) {
+            const TtpCarInput& cn = cars[input.carCount - 1];
+            const float3 cN = { cn.pos.x, cn.pos.y, cn.pos.z };
+            const bool jumped0 = length(c0 - mLastCar0) > 5.0f;
+            const bool jumpedN = input.carCount == 1 || length(cN - mLastCarN) > 5.0f;
+            if (jumped0 && jumpedN) {
                 mPrevRockets.clear();
                 mPrevRocketCount = 0;
                 for (Burst& b : mBursts) b.t = -1;
@@ -1603,6 +1614,7 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
                 }
             }
             mLastCar0 = c0;
+            mLastCarN = cN;
         }
         // Detonations, as the engine reported them this frame.
         //

@@ -830,6 +830,7 @@ void TtpRenderer::releaseScene() {
     mHillSf = 1;
     mTime = 0;
     mLastCar0 = {};
+    mLastCarN = {};
     mMonsterFootW = mMonsterFootL = 0;
     mMonsterWheels.clear();
     mMonsterWheelRadius = 0;
