@@ -869,7 +869,15 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                 // everywhere but the two ends. Full lock is untouched (both are
                 // 1 there); this only takes the slack out of the middle.
                 // ttp_render.h has why the ANGLE itself stays exaggerated.
-                const float yaw = c.steerYaw * WHEEL_TURN_MAX;
+                // A phone's steer lands at the wire rate, so the raw value is a
+                // staircase the render frame rate makes visible on the wheels.
+                // Damp toward it with a ~50 ms time constant — enough to bridge
+                // one input interval — dt-based like `lean` above so the lag
+                // doesn't double at 30 fps. Purely cosmetic: the sim keeps
+                // turning by the raw value.
+                w.steerYawS += (c.steerYaw - w.steerYawS)
+                        * (1.0f - std::exp(-20.0f * input.dt));
+                const float yaw = w.steerYawS * WHEEL_TURN_MAX;
                 const mat4f rollM = mat4f::rotation(w.roll * w.rollSign, float3{ 1, 0, 0 });
                 const mat4f steerRoll = mat4f::rotation(yaw, float3{ 0, 1, 0 }) * rollM;
                 // ── SUSPENSION TRAVEL ───────────────────────────────────────

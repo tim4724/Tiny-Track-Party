@@ -546,6 +546,7 @@ private:
         filament::math::float3 flT, frT, blT, brT; // original local translations
         float roll = 0;                            // accumulated roll angle (wrapped (−π,π])
         float lean = 0;                            // damped body roll (JS LEAN_MAX 0.05, 0.2/frame)
+        float steerYawS = 0;                       // damped steerYaw — phone steer steps at the wire rate
         float pitch = 0, prevSpd = 0;              // weight-transfer state (dspd of NORMALIZED spd)
         float accelNorm = 0;                       // forward-bite 0..1 — launch-scratch skids read it
         filament::math::float3 lastPos{};          // wheel-roll travel measurement
