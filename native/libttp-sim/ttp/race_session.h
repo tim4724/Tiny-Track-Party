@@ -55,6 +55,7 @@ class RaceSession {
   void stepCountdown(double dtMs);
   void onRaceStart() {}
   void finish();
+  bool timedOut();
 
   std::unique_ptr<Game> engine_;
   bool racing_ = false;
@@ -67,6 +68,11 @@ class RaceSession {
   struct Countdown { int n = 0; double ms = 0; };
   std::optional<Countdown> countdown_;
   double raceMs_ = 0;
+  // raceMs_ when the grace clocks started, -1 while unarmed: the first flag
+  // arms the field-wide clock, the field dropping to one straggler arms the
+  // short one (see timedOut for the windows).
+  double firstFinishAt_ = -1;
+  double lastCarAt_ = -1;
   bool ended_ = false;
   bool paused_ = false;
 };

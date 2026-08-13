@@ -3,6 +3,8 @@
 namespace ttp {
 
 static const double MAX_RACE_MS = 180000;
+static const double FIRST_FINISH_GRACE_MS = 30000;
+static const double LAST_CAR_GRACE_MS = 5000;
 
 RaceSession::RaceSession(const std::vector<PlayerDesc>& players, const GameTrack& track,
                          std::function<void(const Event&)> onRaceEvent,
@@ -44,7 +46,21 @@ void RaceSession::update(double dtMs) {
   if (!wasRacing) return;
   engine_->update(dtMs);
   raceMs_ += dtMs;
-  if (engine_->raceOver() || raceMs_ >= MAX_RACE_MS) finish();
+  if (engine_->raceOver() || timedOut()) finish();
+}
+
+// The DNF ladder: once the first car is home the rest get 30 s, once only one
+// straggler is left it gets 5 s, and MAX_RACE_MS caps a race where nobody
+// finishes at all. Cut-off cars keep their `finished:false` / null-time result.
+// The straggler clock requires a finisher so a 1-car solo race is never cut.
+bool RaceSession::timedOut() {
+  if (raceMs_ >= MAX_RACE_MS) return true;
+  long fin = engine_->finishedCount();
+  if (fin >= 1 && firstFinishAt_ < 0) firstFinishAt_ = raceMs_;
+  if (fin >= 1 && engine_->carCount() - fin == 1 && lastCarAt_ < 0) lastCarAt_ = raceMs_;
+  if (firstFinishAt_ >= 0 && raceMs_ - firstFinishAt_ >= FIRST_FINISH_GRACE_MS) return true;
+  if (lastCarAt_ >= 0 && raceMs_ - lastCarAt_ >= LAST_CAR_GRACE_MS) return true;
+  return false;
 }
 
 void RaceSession::finish() {
@@ -76,7 +92,7 @@ void RaceSession::resume() {
 void RaceSession::fastForwardToEnd(const std::function<void()>& stepBots, double dtMs) {
   if (!racing_ || paused_ || ended_) return;
   long guard = 0;
-  while (!engine_->raceOver() && raceMs_ < MAX_RACE_MS && guard++ < 100000) {
+  while (!engine_->raceOver() && !timedOut() && guard++ < 100000) {
     if (stepBots) stepBots();
     engine_->update(dtMs);
     raceMs_ += dtMs;

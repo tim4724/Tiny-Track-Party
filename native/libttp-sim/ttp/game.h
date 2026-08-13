@@ -197,7 +197,9 @@ class Game {
   // with it by inspection.
   double displayLap(const Car& c) const;
   int totalLaps() const { return totalLaps_; }
-  bool raceOver() const { return (long)finishedOrder_.size() >= (long)cars_.size(); }
+  bool raceOver() const { return finishedCount() >= carCount(); }
+  long finishedCount() const { return (long)finishedOrder_.size(); }
+  long carCount() const { return (long)cars_.size(); }
 
   double length() const { return length_; }
   double maxLat() const { return maxLat_; }

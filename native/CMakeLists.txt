@@ -294,6 +294,14 @@ target_link_libraries(race_isolation_check PRIVATE libttp_sim ttp_strict_fp ttp_
 ttp_emscripten_cli(race_isolation_check)
 add_test(NAME race_isolation COMMAND race_isolation_check)
 
+# ---- The race-timeout ladder --------------------------------------------------
+# 30 s field grace / 5 s straggler grace / MAX_RACE_MS backstop. No golden trace
+# reaches any of these windows, so this check is their only gate.
+add_executable(timeout_check simtest/timeout_check.cc)
+target_link_libraries(timeout_check PRIVATE libttp_sim ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(timeout_check)
+add_test(NAME timeout COMMAND timeout_check)
+
 # ---- Regression: the whole catalogue raced -----------------------------------
 # The golden traces race 3 of the 20 shipped tracks; the other 17 were proven as
 # GEOMETRY only. This races every one and pins checkpoint hashes + end state, then

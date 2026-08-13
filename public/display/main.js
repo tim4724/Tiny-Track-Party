@@ -912,8 +912,9 @@ function startRace() {
 function createSession(e) {
   // events:'external' — the race walk (drainRaceEvents) owns the queue and the
   // lifecycle routing; the adapter must not touch it. Fail-safe note:
-  // RaceSession enforces MAX_RACE_MS internally so AFK/DNF cars can't hang the
-  // room forever. A clean 3-lap is ~50-80 s.
+  // RaceSession enforces its DNF timeout ladder internally (grace after the
+  // first flag, a shorter one for a lone straggler, a hard cap when nobody
+  // finishes) so AFK/DNF cars can't hang the room. A clean 3-lap is ~50-80 s.
   session = new _nativeSim.NativeRaceSession(e.field, track, {
     events: 'external',
     seed: e.seed,
