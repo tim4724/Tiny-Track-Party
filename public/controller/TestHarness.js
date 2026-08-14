@@ -241,6 +241,10 @@ export function runControllerScenario(opts) {
       el('settings-card').classList.toggle('is-buttons', buttons);
       el('input-tilt').setAttribute('aria-checked', String(!buttons));
       el('input-buttons').setAttribute('aria-checked', String(buttons));
+      // This is the HOST's card, so the TV section shows with Sound on
+      // (mirrors refreshSettingsCard's host branch).
+      el('tv-seg').classList.remove('hidden');
+      el('sound-toggle').setAttribute('aria-checked', 'true');
       el('settings-overlay').classList.remove('hidden');
       el('settings-done').focus();   // seed focus inside the dialog (mirrors openSettings)
       break;

@@ -155,11 +155,27 @@
   </section>
 
   <!-- Corner buttons — pinned top-right over every screen, outside the sections
-       so the fullscreen toggle survives welcome → lobby → race. Fullscreen sits
-       LEFT of pause; pause joins the row only during a race (main.js toggles its
-       .hidden). Both fade together while the race chrome is idle (see
-       display.css) so they stop covering each cell's place/lap readout. -->
+       so the mute and fullscreen toggles survive lobby → race. Order: mute,
+       fullscreen, pause. Mute ships hidden and stays OFF the welcome board
+       (user call: the title board stays clean) — main.js show()/newGameClick
+       reveal it from the lobby on; pause joins the row only during a race. All
+       fade together while the race chrome is idle (see display.css) so they
+       stop covering each cell's place/lap readout. -->
   <div id="corner-btns">
+    <button id="mute-btn" class="icon-btn hidden" aria-label="Mute sound" aria-pressed="false">
+      <!-- Two glyphs, one shown at a time (theme.css picks by aria-pressed):
+           speaker with waves = sound on, speaker with a cross = muted. The same
+           state rides the room snapshot as soundOn, so the host phone's Sound
+           setting and this button flip one switch (main.js setSoundOn). -->
+      <svg class="snd-glyph snd-glyph--on" viewBox="0 0 20 20" aria-hidden="true">
+        <path class="snd-body" d="M1.5 7H5.5L10 3.5V16.5L5.5 13H1.5Z" />
+        <path d="M12.8 7.6C13.7 8.8 13.7 11.2 12.8 12.4M15.4 5.2C17.3 7.7 17.3 12.3 15.4 14.8" />
+      </svg>
+      <svg class="snd-glyph snd-glyph--off" viewBox="0 0 20 20" aria-hidden="true">
+        <path class="snd-body" d="M1.5 7H5.5L10 3.5V16.5L5.5 13H1.5Z" />
+        <path d="M13 7.8L17.6 12.2M17.6 7.8L13 12.2" />
+      </svg>
+    </button>
     <button id="fullscreen-btn" class="icon-btn" aria-label="Enter fullscreen" aria-pressed="false">
       <!-- Two glyphs, one shown at a time (theme.css picks by aria-pressed):
            corners pointing out = enter, pointing in = exit. -->

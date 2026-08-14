@@ -239,7 +239,10 @@ export function runDisplayScenario(opts, ctx) {
   const ready = () => Promise.all([ctx.scenePromise, initNativeSim()]);
 
   const screens = { welcome: el('welcome'), lobby: el('lobby'), race: el('race') };
-  const show = (name) => { for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name); };
+  const show = (name) => {
+    for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name);
+    el('mute-btn').classList.toggle('hidden', name === 'welcome');  // same rule as main.js show()
+  };
 
   // Paint the results overlay from a SYNTHESIZED board — the same shape
   // standingsPayload hands live play — through the real ui model and the real

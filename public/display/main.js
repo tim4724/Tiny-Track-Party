@@ -56,6 +56,7 @@ function show(name) {
   const prev = currentScreen;
   currentScreen = name;
   for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name);
+  el('mute-btn').classList.toggle('hidden', name === 'welcome');  // title board stays clean
   updateSoundHint();
   if (_isTestMode || _isDebugSolo) return;
   const step = ui.screenStep(prev, name);
@@ -78,6 +79,7 @@ let newGameClick = () => {
   newGameClicked = true;
   screens.welcome.classList.add('hidden');
   screens.lobby.classList.remove('hidden');
+  el('mute-btn').classList.remove('hidden');   // mute joins the corner off-welcome
   enterFullscreen();
 };
 el('newgame-btn').addEventListener('click', () => newGameClick());
@@ -362,6 +364,28 @@ const audioDecide = new _nativeAudio.NativeAudioDecider();
 // Perform a decision stream. Every audio call in this file goes through here.
 const sfx = (cmds) => audio.apply(cmds);
 
+// ---- the display mute switch ----
+// One switch, two flippers: the corner button here and the host phone's Sound
+// setting (SET_SOUND through the C++ verdict below). RaceAudio holds and
+// persists the state; the snapshot's soundOn (Net.js isSoundOn) tells every
+// phone, so both surfaces stay in step through the usual echo. The button rides
+// every screen EXCEPT welcome (hidden in index.html, revealed by show() /
+// newGameClick) — the title board stays clean.
+function syncMuteBtn() {
+  const b = el('mute-btn');
+  b.setAttribute('aria-pressed', audio.muted ? 'true' : 'false');
+  b.setAttribute('aria-label', audio.muted ? 'Unmute sound' : 'Mute sound');
+}
+function setSoundOn(on) {
+  if (audio.muted === !on) return;   // no change — don't republish the snapshot
+  audio.setMuted(!on);
+  syncMuteBtn();
+  net.syncState();
+}
+// Toggle: the desired ON state IS the current muted flag (double negation).
+el('mute-btn').addEventListener('click', () => setSoundOn(audio.muted));
+syncMuteBtn();   // a reload seats the button on the persisted state
+
 // Now-playing credit chip (bottom-left): the current song + artist, linking to
 // its source — and the on-screen CC-BY attribution. Filled from whichever song
 // startMusic picked for this race (audio.nowPlaying); toggled with the music
@@ -569,6 +593,9 @@ const net = new DisplayNet({
   // Manual pause only: the silent auto-pause lifts on the reconnect itself
   // (refreshAutoPause fires on the roster change), before the WELCOME goes out.
   isPaused: () => paused,
+  // The display's mute switch, for the snapshot's soundOn — so the host
+  // phone's Sound setting shows the live state, TV-button flips included.
+  isSoundOn: () => !audio.muted,
   // RoomFlow's abandoned-race deadline expired: no racer left and someone is
   // waiting for the next one. Same exit as any other quit path.
   onRaceAbandoned: returnToLobby,
@@ -599,6 +626,9 @@ const net = new DisplayNet({
       case 'pause': pauseRace(); break;
       case 'resume': resumeRace(); break;
       case 'return-to-lobby': returnToLobby(); break;
+      // Host's Sound setting (the verdict re-checks host); the republish inside
+      // setSoundOn echoes the new state back to every phone.
+      case 'set-sound': setSoundOn(!!data.on); break;
     }
   }
 });

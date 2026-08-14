@@ -2055,7 +2055,7 @@ void handlePathsMatchJsonPaths() {
 
   // The shell hands over only what the walks cannot know; the pick rides the
   // room handle (staged here exactly as a select_mode walk would store it).
-  const char* kFields = "{\"paused\":false,\"standings\":null}";
+  const char* kFields = "{\"paused\":false,\"soundOn\":false,\"standings\":null}";
   const char* kPick =
       "{\"mode\":\"cup\",\"cupId\":\"beach\",\"randomRaces\":0,"
       "\"trackId\":\"tidepool\",\"hasBag\":false}";
@@ -2601,6 +2601,8 @@ void uiLiveTwinsMatchJsonPaths() {
   check(act("2", "start_game", sess) == "none", "start: not the host");
   check(act("2", "series_next", sess) == "none", "series-next: not the host");
   check(act("1", "series_next", sess) == "series-next", "series-next: the host");
+  check(act("2", "set_sound", sess) == "none", "set-sound: not the host");
+  check(act("1", "set_sound", sess) == "set-sound", "set-sound: the host");
   check(act("1", "pause_game", sess) == "pause", "pause: any player");
   check(act("3", "resume_game", sess) == "resume", "resume: any player");
   check(act("3", "return_to_lobby", sess) == "return-to-lobby", "new game: any player");

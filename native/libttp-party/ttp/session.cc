@@ -221,6 +221,10 @@ Value lobby_snapshot(const Value& input, const Value& chooser) {
   copyKey(out, input, "hostPeerIndex");
   copyKey(out, input, "roomState");
   out.set("paused", Value::Bool(truthy(input.find("paused"))));
+  // The display's mute state — passthrough (absent stays absent) so snapshots
+  // recorded before the key existed replay byte-identically; the shell always
+  // hands a bool, and a phone reading an old display treats absent as ON.
+  copyKey(out, input, "soundOn");
 
   const Value* roster = input.find("roster");
   const Value* inRace = input.find("inRace");

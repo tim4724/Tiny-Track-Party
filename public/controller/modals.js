@@ -22,6 +22,9 @@ let _buzz = () => {};
 let _playerName = () => 'Racer';
 let _getInputMode = () => 'tilt';
 let _setInputMode = () => {};
+let _isHost = () => false;
+let _getSoundOn = () => true;
+let _setSoundOn = () => {};
 let _onModalToggle = () => {};
 
 // True in gallery/scenario mode — auto-popups stay shut there (the harness opens
@@ -72,6 +75,18 @@ function refreshSettingsCard() {
   el('input-tilt').disabled = noTilt;
   el('input-tilt').querySelector('.mode-card__badge').textContent =
     noTilt ? 'Not available' : 'Recommended';
+  // The TV section — the DISPLAY's controls, host only (the display's verdict
+  // re-checks, so hiding it here is UX, not the gate). The Sound switch renders
+  // the snapshot's soundOn.
+  el('tv-seg').classList.toggle('hidden', !_isHost());
+  el('sound-toggle').setAttribute('aria-checked', String(_getSoundOn()));
+}
+
+// The snapshot moved something the open card renders — host handover, or the
+// display's own mute button flipping soundOn. No-op while the card is closed
+// (openSettings re-syncs anyway).
+export function refreshSettingsState() {
+  if (settingsOpen()) refreshSettingsCard();
 }
 
 function openSettings() {
@@ -190,10 +205,14 @@ export function closeTopModal() {
   return false;
 }
 
-export function initModals({ screens, tilt, buzz, playerName, getInputMode, setInputMode, onModalToggle }) {
+export function initModals({ screens, tilt, buzz, playerName, getInputMode, setInputMode,
+                             isHost, getSoundOn, setSoundOn, onModalToggle }) {
   _screens = screens; _tilt = tilt; _buzz = buzz; _playerName = playerName;
   if (getInputMode) _getInputMode = getInputMode;
   if (setInputMode) _setInputMode = setInputMode;
+  if (isHost) _isHost = isHost;
+  if (getSoundOn) _getSoundOn = getSoundOn;
+  if (setSoundOn) _setSoundOn = setSoundOn;
   if (onModalToggle) _onModalToggle = onModalToggle;
 
   el('settings-btn').addEventListener('click', () => { _buzz(15); openSettings(); });
@@ -220,6 +239,14 @@ export function initModals({ screens, tilt, buzz, playerName, getInputMode, setI
       await _tilt.enableMotion();
       if (motionBlocked()) openMotionPopup();
     }
+  });
+
+  // The Sound switch — optimistic like every lobby control: send, render, and
+  // let the next LOBBY_UPDATE (the display echoes soundOn) be the truth.
+  el('sound-toggle').addEventListener('click', () => {
+    _buzz(15);
+    _setSoundOn(!_getSoundOn());
+    refreshSettingsCard();
   });
 
   el('motion-done').addEventListener('click', () => { _buzz(15); closeMotionPopup(); });

@@ -211,6 +211,19 @@ body {
 }
 [aria-pressed="false"] .fs-glyph--exit, [aria-pressed="true"] .fs-glyph--enter { display: none; }
 
+/* Sound glyph — a speaker with waves while live, a cross while muted. Same
+   two-glyph pattern as fullscreen: pressed = muted. Bigger than the fullscreen
+   brackets and with a FILLED body: an outline-only speaker at bracket size
+   read too small next to them. Stroke-width compensates for the upscale so
+   the ink weight still matches (2.2 × 24/20 ≈ the brackets' 2.6). */
+.snd-glyph {
+  width: 24px; height: 24px;
+  fill: none; stroke: currentColor; stroke-width: 2.2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.snd-glyph .snd-body { fill: currentColor; }
+[aria-pressed="false"] .snd-glyph--off, [aria-pressed="true"] .snd-glyph--on { display: none; }
+
 /* Chip — a small white sticker token with a colour dot (player in a roster). */
 .chip {
   display: inline-flex;

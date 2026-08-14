@@ -35,6 +35,7 @@ inline const std::vector<std::pair<std::string, std::string>> MSG = {
     {"PAUSE_GAME", "pause_game"}, {"RESUME_GAME", "resume_game"},
     {"SET_CAR", "set_car"},     {"SET_READY", "set_ready"},
     {"SELECT_MODE", "select_mode"}, {"SERIES_NEXT", "series_next"},
+    {"SET_SOUND", "set_sound"},
     {"LEAVE", "leave"},         {"PING", "ping"},
     {"LOBBY_UPDATE", "lobby_update"}, {"ITEM", "item"},
     {"PONG", "pong"},           {"COUNTDOWN", "countdown"},

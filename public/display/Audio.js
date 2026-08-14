@@ -28,7 +28,7 @@
 // Browsers require a user gesture before audio runs; call resume() from
 // pointerdown/keydown. Every play method no-ops safely while locked.
 import { resolveVariant, loadSampleBuffers } from './audio/cues.js';
-import { createMasterBus, storedVolume } from './audio/bus.js';
+import { createMasterBus, storedVolume, storedMuted, saveMuted } from './audio/bus.js';
 import { storedPicks } from './audio/picks.js';
 
 // THIS FILE IMPORTS NO TABLE, and that is the whole of the device half's job
@@ -53,6 +53,7 @@ export class RaceAudio {
     this._music = null;       // streamed background track (HTMLAudioElement)
     this._musicUrl = null;    // its current src, so we only reload on a track change
     this.nowPlaying = null;   // the picked song descriptor — read by the credit chip
+    this._muted = storedMuted(); // the display's mute switch, persisted in bus.js
   }
 
   _ensure() {
@@ -64,6 +65,7 @@ export class RaceAudio {
     // galleries build, which is what makes their A/B a comparison of cues rather
     // than of mixes.
     this.master = createMasterBus(this.ctx);
+    if (this._muted) this.master.gain.value = 0;
     // Decode the one recorded cue (the engine loop) up front, on the same
     // user-gesture that creates the context — so the buffer is ready by the
     // time the first race frame asks for an engine. Fire-and-forget: the voice
@@ -76,6 +78,17 @@ export class RaceAudio {
     if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
   }
   get ready() { return !!this.ctx && this.ctx.state === 'running'; }
+
+  // The display's mute switch. Two silencers on purpose: the master gain covers
+  // every bus-routed source, and the element's own `muted` covers the music's
+  // no-MediaElementSource fallback (where level lands on el.volume instead).
+  get muted() { return this._muted; }
+  setMuted(on) {
+    this._muted = !!on;
+    saveMuted(this._muted);
+    if (this.master) this.master.gain.value = this._muted ? 0 : storedVolume();
+    if (this._music) this._music.muted = this._muted;
+  }
 
   // Music is an <audio> element routed straight to the device rather than through
   // the bus, so it has to scale itself by the same preference the bus was built
@@ -221,6 +234,7 @@ export class RaceAudio {
       const el = new Audio();
       el.loop = true;
       el.preload = 'auto';
+      el.muted = this._muted;
       this._music = el;
       try {
         const node = this.ctx.createMediaElementSource(el);

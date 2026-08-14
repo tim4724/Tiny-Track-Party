@@ -416,9 +416,11 @@ test('wire: the LOBBY_UPDATE the display AUTHORS survives the round trip, field 
   // 1. THE TOP-LEVEL SCHEMA. Every key syncRoom reads, and nothing it does not.
   assert.deepEqual(Object.keys(snap).sort(), [
     'cars', 'colors', 'cupId', 'hostPeerIndex', 'mode', 'paused', 'players',
-    'progress', 'randomRaces', 'roomState', 'standings', 'trackId', 'tracks', 'type',
+    'progress', 'randomRaces', 'roomState', 'soundOn', 'standings', 'trackId', 'tracks', 'type',
   ], 'the snapshot schema is the contract; renaming or dropping a key is silent');
   assert.equal(snap.type, MSG.LOBBY_UPDATE, 'routed by the shared type tag');
+  assert.equal(typeof snap.soundOn, 'boolean',
+    'soundOn is a BOOLEAN — the host phone\'s Sound switch renders it directly');
   // The progression chooser crosses OPAQUELY (like tracks): the phone draws
   // stars/locks straight off it, so its shape is part of the wire contract.
   assert.deepEqual(snap.progress,

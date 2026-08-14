@@ -28,7 +28,7 @@ import { cleanName } from '../shared/names.js';
 import { inShell, shellName, endSession, terminalReason, setAccentColor, installRenameHook, armSystemBack, installBackHook } from './launcher.js';
 import { storedName, saveName, storedMode, saveMode, storedCarIndex, saveCarIndex, storedInputMode, saveInputMode } from './prefs.js';
 import { showConn, hideConn, linkCopy, initLinkStatus } from './linkStatus.js';
-import { initModals, onEnterLobby, closeAnyModal, anyModalOpen, closeTopModal, refreshHelpName } from './modals.js';
+import { initModals, onEnterLobby, closeAnyModal, anyModalOpen, closeTopModal, refreshHelpName, refreshSettingsState } from './modals.js';
 import { renderResultsBoard } from './resultsBoard.js';
 import { initDriveSurface, startDriving, stopDriving, setInputMode, setHeldItem, resetHeldItem } from './driveSurface.js';
 import { initOrientation } from './orientation.js';
@@ -83,6 +83,7 @@ let myName = '';           // this player's name, shown at the top of the lobby
 let amHost = false;
 let roster = [];           // latest lobby roster (for the host name in the wait text)
 let hostPeerIndex = null;
+let displaySoundOn = true; // the DISPLAY's mute state (snapshot soundOn) — the host's Sound setting renders it
 // Chooser content, driven entirely off the relay room snapshot (set_state) — the
 // phone bundles none of it, so it can't diverge from a differently-versioned
 // display. tracks ride the snapshot in the lobby only; cars + the livery palette
@@ -183,6 +184,12 @@ initModals({
   playerName: () => myName || 'Racer',
   getInputMode: () => inputMode,
   setInputMode: applyInputMode,
+  // The host-only Sound switch — the DISPLAY's mute, not this phone's.
+  // Optimistic like every lobby control: the next LOBBY_UPDATE's soundOn
+  // (echoed by the display's republish) is the truth.
+  isHost: () => amHost,
+  getSoundOn: () => displaySoundOn,
+  setSoundOn: (on) => { displaySoundOn = on; net.send(MSG.SET_SOUND, { on }); },
   onModalToggle: syncShellBack
 });
 initDriveSurface({ tilt, buzz, haptics });
@@ -268,6 +275,11 @@ function syncRoom(data) {
   roster = data.players || [];
   hostPeerIndex = data.hostPeerIndex;
   amHost = net.isHost(hostPeerIndex);
+  // The display's mute state — absent (an older display) means sound ON. Keep
+  // the open settings card in step: a host handover or the TV's own mute
+  // button can move it while the card is up.
+  displaySoundOn = data.soundOn !== false;
+  refreshSettingsState();
   displayMode = modeFrom(data);
   if (displayMode) selectedMode = displayMode;
 

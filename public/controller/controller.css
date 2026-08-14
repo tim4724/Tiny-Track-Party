@@ -768,13 +768,18 @@ input[type=text]:disabled { opacity: 0.6; }
   position: relative;
   width: 100%; max-width: 46rem; height: 100%; max-height: 100%; overflow-y: auto;
   display: grid;
-  /* an even 50/50 split: the choices weigh the same as the stage */
+  /* an even 50/50 split: the choices weigh the same as the stage. The left
+     column reads top-down — Steering with TV DIRECTLY below it (the stretchy
+     row is the empty one after them, so no gap opens between the two) —
+     and "Got it" spans the full width alone at the bottom. */
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   grid-template-areas:
     'head stage'
     'seg  stage'
-    'done stage';
+    'tv   stage'
+    '.    stage'
+    'done done';
   gap: 0.7rem 1.1rem;
   padding: 1rem 1.4rem 1.1rem;
   background: var(--surface);
@@ -842,6 +847,37 @@ input[type=text]:disabled { opacity: 0.6; }
   transform: rotate(-2deg);
 }
 .mode-card:disabled .mode-card__badge { background: var(--ink-3); }
+
+/* The host-only TV section — controls for the big screen, not this phone.
+   Hidden for non-hosts (its grid row collapses). Each row is PLAIN — label
+   left, control right, no sticker-card chrome: a bordered row would read as
+   one big button when only the switch is clickable (user call). "Sound"
+   carries a die-cut slide switch — pill track and knob in the theme's ink
+   weight, brand green when on. */
+.seg--tv { grid-area: tv; }
+.tv-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 0.7rem; padding: 0.15rem 0.2rem;
+}
+.tv-row__name {
+  font-family: var(--font-display); font-weight: 700; font-size: 1.3rem; line-height: 1;
+  color: var(--ink);
+}
+.switch {
+  position: relative; flex: none; width: 3.6rem; height: 1.9rem; padding: 0;
+  background: var(--surface-2); border: 3px solid var(--ink); border-radius: var(--r-pill);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.switch::after {
+  content: ''; position: absolute; top: 50%; left: 0.14rem;
+  width: 1.3rem; height: 1.3rem; box-sizing: border-box;
+  transform: translateY(-50%);
+  background: #fff; border: 3px solid var(--ink); border-radius: var(--r-pill);
+  transition: left 0.12s;
+}
+.switch[aria-checked='true'] { background: var(--brand); }
+.switch[aria-checked='true']::after { left: calc(100% - 1.44rem); }
 
 /* The stage — surface-2 (the theme's informational surface), holding the
    picked mode's demo phone with the legend attached beneath. Only one demo

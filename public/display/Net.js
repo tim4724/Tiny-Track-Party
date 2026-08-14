@@ -175,6 +175,9 @@ export class DisplayNet extends GameNet {
     // Asked per publish: is the race manually paused? A rejoiner must re-raise
     // the pause overlay it missed while away, or its wheel just feels dead.
     this.isPaused = opts.isPaused || (() => false);
+    // Asked per publish: is the display's sound on? Display-owned like the
+    // pause latch; the host phone's Sound setting renders it off the snapshot.
+    this.isSoundOn = opts.isSoundOn || (() => true);
     // Fired by the welcome-item effect — a HELLO from a seat whose car is in
     // the live race (the predicate is C++'s, off the session handle). The game
     // layer relights the per-owner ITEM; everything else a (re)joiner needs
@@ -482,6 +485,7 @@ export class DisplayNet extends GameNet {
     // The pick is not here: the frame reads the stored one off the handle.
     this.party.setStateFrame(session.lobbyFrame(this.flow.handle, this.sessionHandle(), {
       paused: !!this.isPaused(),
+      soundOn: !!this.isSoundOn(),
       standings: this._standings      // results board (playing/results), else null
     }));
   }

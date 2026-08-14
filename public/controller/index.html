@@ -216,6 +216,20 @@
         </button>
       </div>
 
+      <!-- TV — HOST ONLY (refreshSettingsCard hides it for everyone else; the
+           display's C++ verdict re-checks host anyway). These control the BIG
+           SCREEN, not this phone: Sound sends SET_SOUND and renders the
+           snapshot's soundOn — so the TV's own mute button and this switch
+           stay in step. -->
+      <div id="tv-seg" class="seg seg--tv hidden" aria-labelledby="tv-label">
+        <span id="tv-label" class="seg-label">TV</span>
+        <div class="tv-row">
+          <span id="sound-label" class="tv-row__name">Sound</span>
+          <button id="sound-toggle" type="button" class="switch" role="switch"
+                  aria-checked="true" aria-labelledby="sound-label"></button>
+        </div>
+      </div>
+
       <!-- The stage — a sunken surface (surface-2, "not a control") holding the
            picked mode's animated demo phone with the legend attached beneath:
            everything on it is information, everything in the seg is a choice.
