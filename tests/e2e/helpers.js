@@ -97,6 +97,13 @@ async function joinController(browser, roomCode, name) {
   // coverage is the gallery 'settings' scenario. Key mirrors HELP_SEEN_KEY in prefs.js.
   await context.addInitScript(() => {
     try { localStorage.setItem('tinytrack_seen_help', '1'); } catch (_) {}
+    // A headless Chromium HAS DeviceOrientationEvent and never fires it, which
+    // is precisely the shape TiltInput now falls back on — so without this every
+    // spec's phone would quietly run in BUTTONS mode. These specs are about a
+    // normal phone, so give it a level sensor. The fallback's own coverage is
+    // no-motion.spec.js.
+    setInterval(() => window.dispatchEvent(
+      new DeviceOrientationEvent('deviceorientation', { beta: 0, gamma: 0 })), 50);
   });
   const page = await context.newPage();
   await page.goto(`/${roomCode}`);

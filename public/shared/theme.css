@@ -30,14 +30,17 @@
   font-style: normal;
   font-weight: 300 700;            /* variable axis */
   font-display: swap;
-  src: url('/assets/fonts/fredoka-variable.woff2') format('woff2');
+  /* Relative to THIS FILE (shared/ is one level below the game root), never
+     document-absolute: hosting the tree under a prefix makes the document root
+     stop being the game root. Same rule as shared/assetUrl.js. */
+  src: url('../assets/fonts/fredoka-variable.woff2') format('woff2');
 }
 @font-face {
   font-family: 'Nunito';
   font-style: normal;
   font-weight: 200 1000;           /* variable axis */
   font-display: swap;
-  src: url('/assets/fonts/nunito-variable.woff2') format('woff2');
+  src: url('../assets/fonts/nunito-variable.woff2') format('woff2');
 }
 
 /* 2. Design tokens -------------------------------------------------------- */

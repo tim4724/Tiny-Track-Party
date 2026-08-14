@@ -8,6 +8,7 @@
 // --icon-car (the monster cab — the body colour of the car model the player
 // drives, matching the in-race graft; a livery never repaints a car body).
 import { ITEM_IDS } from '../display/engine/contract.js';
+import { assetUrl } from './assetUrl.js';
 
 // The four car models' painted body tones, parallel to CAR_MODELS
 // (shared/protocol.js). The paint itself lives in the kit GLBs — these are the
@@ -27,7 +28,7 @@ let icons = null;
 export function loadItemIcons() {
   if (!icons) {
     icons = Promise.all(ITEM_IDS.map(async (id) => {
-      const res = await fetch(`/assets/items/${id}.svg`);
+      const res = await fetch(assetUrl(`/assets/items/${id}.svg`));
       if (!res.ok) throw new Error(`item icon ${id}: HTTP ${res.status}`);
       return [id, await res.text()];
     })).then(Object.fromEntries)

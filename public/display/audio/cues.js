@@ -17,6 +17,8 @@
 // both AudioContext and OfflineAudioContext (no performance.now, no globals).
 
 // ---- note palette (Hz) ----
+import { assetUrl } from '../../shared/assetUrl.js';
+
 const C5 = 523.25, E5 = 659.25, G5 = 783.99;
 const C6 = 1046.50, E6 = 1318.51;
 
@@ -51,10 +53,10 @@ function noiseBuf(ctx) {
 // simply silent — in practice the decode finishes during the lobby, long before
 // the first race frame asks for an engine.
 const SAMPLE_URLS = {
-  engine: '/assets/audio/engine_loop.ogg',
+  engine: assetUrl('/assets/audio/engine_loop.ogg'),
   // The rocket impact — a real CC0 recording (assets/audio/sfx/SFX.LICENSE.txt), decoded with
   // the engine loop on the first user gesture and played one-shot by the rocket_hit cue.
-  explosionPunch: '/assets/audio/sfx/explosion-punch.ogg'
+  explosionPunch: assetUrl('/assets/audio/sfx/explosion-punch.ogg')
 };
 const sampleBufs = new WeakMap(); // ctx -> { engine: AudioBuffer, ... }
 

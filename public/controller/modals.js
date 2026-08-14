@@ -127,9 +127,10 @@ function maybeAutoShowSettings() {
 // Surfaces when the tilt sensor is blocked (iOS denied), with the live recovery
 // path. Auto-shows once per page load on lobby entry while blocked (no nagging
 // on every lobby return) — and only in TILT mode: button steering needs no
-// sensor, so a buttons phone is never nagged. A device with no sensor at all
-// ('unsupported') never qualifies: startup forced it onto buttons (main.js) and
-// the settings card's Tilt row says why, so there is no popup face for it. Copy
+// sensor, so a buttons phone is never nagged. A page that cannot get tilt at all
+// ('unsupported') never qualifies: whoever resolved it also put the phone on
+// buttons, and the settings card's Tilt row says why — there is nothing a popup
+// could offer, which is why it has no face for that state. Copy
 // + action live in ui.js (motionHelpCopy) so they can't drift from the gallery.
 let _motionAlertShown = false;
 let _motionReturnFocus = null;
@@ -237,6 +238,11 @@ export function initModals({ screens, tilt, buzz, playerName, getInputMode, setI
     refreshSettingsCard();
     if (_tilt.motionState !== 'granted') {
       await _tilt.enableMotion();
+      // Trying is the only way to prove a sensor absent on a browser that can't
+      // be asked, so the Tilt row can be live at click time and dead by now.
+      // Put the phone back on buttons and let the card say why.
+      if (_tilt.motionState === 'unsupported') _setInputMode('buttons');
+      refreshSettingsCard();
       if (motionBlocked()) openMotionPopup();
     }
   });
@@ -268,6 +274,14 @@ export function initModals({ screens, tilt, buzz, playerName, getInputMode, setI
     const btn = el('motion-allow');
     btn.disabled = true; btn.textContent = 'Asking…';
     await _tilt.enableMotion();
+    // Allowed, but the sensor delivers nothing. There is no recovery to offer
+    // (the dead-end "tilt isn't available" face was removed on purpose), so
+    // close and fall back rather than loop the player through Allow again.
+    if (_tilt.motionState === 'unsupported') {
+      _setInputMode('buttons');
+      closeMotionPopup();
+      return;
+    }
     if (_tilt.motionState === 'granted') {
       el('motion-title').textContent = 'Motion access on';
       el('motion-status').textContent = 'Tilt to steer is ready.';

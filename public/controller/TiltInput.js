@@ -24,7 +24,10 @@
 // changes for the common case.
 //
 // iOS 13+ needs requestPermission() from a user gesture (call enableMotion() in a
-// tap handler). HTTPS is required for sensors.
+// tap handler). HTTPS is required for sensors. Permission is not delivery,
+// though: enableMotion() also waits for a first real sample before it answers,
+// because a granted-but-silent sensor is the common failure and it used to
+// present as a dead steering wheel (see _settle / sensorPolicyBlocked).
 //
 // Braking: a held BRAKE button. Held → brake = BRAKE_LEVEL; the engine reads it
 // as a target speed of (1 - BRAKE_LEVEL) × top speed, so a full hold (1) bleeds
@@ -66,6 +69,32 @@ export const SMOOTH = 0.5;
 
 const BRAKE_LEVEL = 1.0;   // held brake decelerates the car to a full stop
 
+// How long a listening page has to receive its first USABLE sample before the
+// sensor is declared absent. Both platforms deliver at ~60 Hz from the moment
+// the listener attaches, so a real sensor answers within a frame or two and
+// pays none of this window; it only has to outlast a slow first sample.
+const SENSOR_SETTLE_MS = 600;
+
+// Does this document's permissions policy allow the motion sensors?
+// false = the embedder withheld them, null = this browser cannot say.
+//
+// A cross-origin iframe is granted the sensors only if its embedder spends an
+// `allow` attribute on them, and where it doesn't, DeviceOrientationEvent still
+// EXISTS on window and simply never fires. The presence of the constructor
+// therefore proves nothing, which is why this is asked separately.
+//
+// Blink-only (`document.featurePolicy`; there is no `document.permissionsPolicy`
+// despite the rename of the header). WebKit and Gecko expose no equivalent, so
+// they get no early answer and fall back to SENSOR_SETTLE_MS. Only the
+// accelerometer is consulted: it is required for any gravity reading at all,
+// while a gyroscope-only withholding is left to the settle check rather than
+// risking a false "no sensor" on a phone that would have worked.
+function sensorPolicyBlocked() {
+  const fp = typeof document !== 'undefined' && document.featurePolicy;
+  if (!fp || typeof fp.allowsFeature !== 'function') return null;
+  try { return !fp.allowsFeature('accelerometer'); } catch (_) { return null; }
+}
+
 const DEG = Math.PI / 180;
 const RAD = 180 / Math.PI;
 const clamp1 = (v) => Math.max(-1, Math.min(1, v));
@@ -87,11 +116,17 @@ export class TiltInput {
     this.onControl = onControl || (() => {});
     this.surface = surface || (typeof document !== 'undefined' ? document.body : null);
     this.haveTilt = false;
-    // unknown | granted | denied | unsupported. Unsupported needs no gesture to
-    // detect — no DeviceOrientationEvent means no sensor, ever — so it's resolved
-    // right here, letting startup fall back to buttons before any permission flow
-    // (main.js) and the settings card disable Tilt (modals.js).
-    this.motionState = (typeof window !== 'undefined' && !window.DeviceOrientationEvent)
+    // unknown | granted | denied | unsupported. 'unsupported' means THIS PAGE
+    // cannot get tilt, however that came about, because nothing downstream can
+    // act on the difference: startup falls back to buttons (main.js) and the
+    // settings card disables Tilt (modals.js) either way.
+    //
+    // Two ways in need no gesture, so both resolve right here, before any
+    // permission flow: no DeviceOrientationEvent constructor (no sensor, ever),
+    // or a permissions policy that withholds the sensors from this document.
+    // The THIRD way can only be found by listening — see _settle.
+    this.motionState = (typeof window !== 'undefined'
+      && (!window.DeviceOrientationEvent || sensorPolicyBlocked() === true))
       ? 'unsupported' : 'unknown';
 
     // latest gravity unit vector in the device frame (overwritten each event;
@@ -115,7 +150,9 @@ export class TiltInput {
     this._initSurface();
   }
 
-  // Call from a user gesture (e.g. the Join tap). Returns the permission state.
+  // Call from a user gesture (e.g. the Join tap). Resolves once the sensor has
+  // been proved to deliver or not, so the returned state is final: callers can
+  // switch steering mode off it without a second round.
   async enableMotion() {
     const DOE = window.DeviceOrientationEvent;
     if (!DOE) return this.motionState; // 'unsupported' since the constructor — nothing to request
@@ -129,13 +166,56 @@ export class TiltInput {
     } catch (_) {
       this.motionState = 'denied';
     }
-    if (this.motionState === 'granted') window.addEventListener('deviceorientation', this._onOrient);
+    if (this.motionState === 'granted') {
+      window.addEventListener('deviceorientation', this._onOrient);
+      await this._settle();
+    }
     return this.motionState;
+  }
+
+  // Permission is not delivery. A page can hold a granted listener that never
+  // fires — an embedder withholding the sensors from the frame (the common one:
+  // a cross-origin iframe with no `allow` for them), or hardware that simply
+  // has no gyroscope — and downstream that is indistinguishable from having no
+  // sensor, so resolve it to 'unsupported' rather than leave a dead steering
+  // wheel in tilt mode. Waits for the first USABLE sample, so a working phone
+  // pays a frame rather than the window — and a sample that lands after the
+  // window still takes the verdict back (see _onOrient), so a slow sensor
+  // costs a fallback, never a stranding.
+  _settle() {
+    if (this.haveTilt) return Promise.resolve();
+    return new Promise((resolve) => {
+      let timer = null;
+      const finish = () => {
+        clearTimeout(timer);
+        window.removeEventListener('deviceorientation', onSample);
+        resolve();
+      };
+      // _onOrient attached first, so for this very event it has already decided
+      // whether the sample was usable. That matters: Chromium emits one
+      // all-null deviceorientation event on sensorless hardware, and an event
+      // count would read it as a working sensor.
+      const onSample = () => { if (this.haveTilt) finish(); };
+      timer = setTimeout(() => {
+        if (!this.haveTilt) this.motionState = 'unsupported';
+        finish();
+      }, SENSOR_SETTLE_MS);
+      window.addEventListener('deviceorientation', onSample);
+    });
   }
 
   _onOrient(e) {
     if (e.beta == null && e.gamma == null) return;
     this.haveTilt = true;
+    // A usable sample after _settle gave up means the sensor was slow, not
+    // absent, so take the verdict back. Worth the line because 'unsupported' is
+    // otherwise TERMINAL for the page load: the Settings Tilt row it disables is
+    // the only way back to tilt, so a single over-eager timeout would strand a
+    // working phone on buttons until a reload. The card re-reads motionState on
+    // every open, so this is all the recovery needs. (Only reachable while the
+    // listener is attached, i.e. permission was granted — the constructor's two
+    // routes to 'unsupported' never attach one.)
+    if (this.motionState === 'unsupported') this.motionState = 'granted';
 
     // Gravity (unit, pointing down) in the device frame from the W3C Z-X'-Y''
     // Euler angles. alpha (compass yaw) doesn't tilt gravity, so it drops out —
