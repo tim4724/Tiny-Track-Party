@@ -151,12 +151,11 @@ export class TiltInput {
     // or a permissions policy that withholds the sensors from this document.
     // The THIRD way can only be found by listening — see _settle.
     //
-    // AirConsole is no longer excepted: the frame fails the policy check, and
-    // with the relay unplugged that verdict is now TRUE of it. Those phones
-    // take the ordinary no-sensor route to button steering. (Re-arming the
-    // relay means excepting `window.airconsole` here again — its samples
-    // resolve this to 'granted' through setGravity.)
-    this.motionState = (typeof window !== 'undefined'
+    // EXCEPT on AirConsole, where neither route means what it says: the SDK's
+    // device_motion relay is the sensor there (setGravity), and the frame is
+    // expected to fail both checks. Stay 'unknown' and let the first relayed
+    // sample resolve it to 'granted'.
+    this.motionState = (typeof window !== 'undefined' && !window.airconsole
       && (!window.DeviceOrientationEvent || sensorPolicyBlocked() === true))
       ? 'unsupported' : 'unknown';
 

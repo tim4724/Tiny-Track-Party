@@ -300,20 +300,18 @@ test('a real sample resolves granted immediately, without paying the settle wind
   });
 });
 
-test("AirConsole's frame is policy-blocked, and with the relay unplugged that is the truth", async () => {
-  // The AC frame's real shape: DeviceOrientationEvent present, permissions
-  // policy refusing the sensors. While the SDK relay was armed this had to be
-  // excepted; unplugged, there IS no sensor here, so the ordinary no-sensor
-  // route to button steering is the right answer.
-  await withFakeBrowser({ policyAllows: false }, () => {
-    globalThis.window.airconsole = {};
-    assert.equal(new TiltInput({}).motionState, 'unsupported');
-  });
+test("AirConsole with no DeviceOrientationEvent stays 'unknown' — the SDK's device_motion relay is the sensor there", () => {
+  const hadW = Object.prototype.hasOwnProperty.call(globalThis, 'window');
+  const prevW = globalThis.window;
+  globalThis.window = { addEventListener() {}, airconsole: {} };
+  try {
+    assert.equal(new TiltInput({}).motionState, 'unknown');
+  } finally {
+    if (hadW) globalThis.window = prevW; else delete globalThis.window;
+  }
 });
 
 // ---- setGravity: the AirConsole relay's complementary filter ----
-// (Currently UNPLUGGED — nothing arms device_motion or wires onDeviceMotion —
-// but the filter stays correct and tested for when the relay returns.)
 
 test('accel-only relay (no gyro): a held lean converges to the tilt within a burst', () => {
   withScreenAngle(0, () => {

@@ -12,7 +12,7 @@
 // LIVE mode (AC_LIVE=1, local only): the REAL SDK through AirConsole's HTTP
 // simulator — see the describe block at the bottom. Not part of the default
 // suite: it needs the network, a headed Firefox, and ~2 minutes.
-const { test, expect, installLevelSensor, startRace, waitForRacing, visible } = require('./helpers');
+const { test, expect, startRace, waitForRacing, visible } = require('./helpers');
 const { firefox } = require('@playwright/test');
 const path = require('path');
 
@@ -62,12 +62,20 @@ async function joinAcController(displayPage, deviceId, nickname) {
     window.__AC_NICKNAME = nickname;
   }, { deviceId, nickname });
   await page.addInitScript({ path: MOCK_PATH });
-  // A DELEGATED frame: the sensors reach it and DeviceOrientation fires. That
-  // is the case this spec is about (the tilt assertion below), and it has to be
-  // said out loud now, because a frame that gets nothing resolves 'unsupported'
-  // and falls back to buttons — which is what real AirConsole does today, and
-  // what tests/e2e/no-motion.spec.js covers.
-  await installLevelSensor(page);
+  // An UNDELEGATED frame, which is what real AirConsole is: DeviceOrientation
+  // never fires and the SDK's device_motion relay is the only sensor. So the
+  // level feed that other suites install (helpers.installLevelSensor) is the
+  // relay here — without one, `enableMotion`'s settle window finds nothing
+  // delivered, resolves 'unsupported' and puts the phone on buttons, and the
+  // lean assertion below reads a steer of 0. Self-terminating for the same
+  // reason as the DeviceOrientation one: a level sample landing between the
+  // spec's lean and its read pulls the smoothed steer back toward centre.
+  await page.addInitScript(() => {
+    const id = setInterval(() => {
+      if (window.__tilt && window.__tilt.haveTilt) { clearInterval(id); return; }
+      if (window.airconsole) window.airconsole.triggerDeviceMotion(0, 0, 9.81);
+    }, 50);
+  });
   await blockSdk(page);
   await page.setViewportSize({ width: 844, height: 390 }); // landscape-only controller
   await page.goto('/controller.html');
@@ -120,23 +128,19 @@ test('AC: screen boots to the lobby, profile-named phones join, a race runs', as
   await ben.waitForSelector(visible('#game'));
   await waitForRacing(page);
 
-  // TILT rides plain DeviceOrientation while the SDK's device_motion relay is
-  // UNPLUGGED (see controller-airconsole.js) — the AC auto-join attached the
-  // listener without a gesture (Chromium has no requestPermission), and
-  // joinAcController's feed proved it delivers, so the phone stayed in tilt.
-  // Synthesize a 30° right lean — gamma = ROLL_LOCK, full lock — and the
-  // steer output must swing right; a few events, because the steer low-pass
-  // converges per sample.
+  // TILT arrives over the SDK's device_motion relay — no AC embedder
+  // delegates motion sensors to the game iframe, so DeviceOrientation never
+  // fires there and the relay is the only source. Feed a ~30° right lean as
+  // raw accelerometer samples (reading = -gravity, so a right lean reads
+  // x<0); the mock sends no gyro rates, so this drives the filter's
+  // accel-only fallback — 24 samples ≈ 0.4 s of a held lean at the 16 ms
+  // cadence, enough for its damped convergence.
   await ana.evaluate(() => {
-    for (let i = 0; i < 8; i++) {
-      window.dispatchEvent(new DeviceOrientationEvent('deviceorientation', { alpha: 0, beta: 0, gamma: 30 }));
-    }
+    for (let i = 0; i < 24; i++) window.airconsole.triggerDeviceMotion(-4.9, 0, 8.5);
   });
   expect(await ana.evaluate(() => window.__tilt.state.steer)).toBeGreaterThan(0.9);
   await ana.evaluate(() => {
-    for (let i = 0; i < 8; i++) {
-      window.dispatchEvent(new DeviceOrientationEvent('deviceorientation', { alpha: 0, beta: 0, gamma: 0 }));
-    }
+    for (let i = 0; i < 24; i++) window.airconsole.triggerDeviceMotion(0, 0, 9.81);
   });
 
   // The latency chip lights over the AC transport (TEMPORARY: the WS ping runs

@@ -785,12 +785,18 @@ if (inShell && shellName) {
     const n = cleanName(acBoot.nickname());
     if (n) applyShellRename(n);
   };
-  // TILT: no onDeviceMotion wiring while the relay is UNPLUGGED (see
-  // controller-airconsole.js) — tilt rides plain DeviceOrientation, which
-  // works exactly where the embedder delegates motion sensors to this iframe
-  // and nowhere else. The wiring to restore is:
-  //   acBoot.airconsole.onDeviceMotion = (d) =>
-  //     tilt.setGravity(d.x, d.y, d.z, d.alpha, d.beta, d.gamma);
+  // TILT rides the SDK's device_motion relay (armed in the bootstrap): no AC
+  // embedder delegates motion sensors to the game iframe, so DeviceOrientation
+  // never fires here and the relay is the only source. data.x/y/z is the
+  // proper acceleration (W3C accelerationIncludingGravity, flat face-up =
+  // +9.81 z), data.alpha/beta/gamma the gyro rates (deg/s) — TiltInput's
+  // complementary filter fuses the two (gyro = response, accel = drift
+  // anchor), which is what the OS would have done had we gotten
+  // DeviceOrientation.
+  acBoot.airconsole.onDeviceMotion = (data) => {
+    if (!data || typeof data.x !== 'number') return;
+    tilt.setGravity(data.x, data.y, data.z, data.alpha, data.beta, data.gamma);
+  };
 } else {
   show('name');
 }

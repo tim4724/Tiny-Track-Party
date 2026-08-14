@@ -48,7 +48,19 @@ and `window.PartyFastlane` at a stub before the modules capture them, installs
 the AC-backed pref shim, and hands `main.js` the platform surface
 (`window.__acController`: ready promise, nickname, SDK haptics). The few
 in-module gates test `window.airconsole`: no suspend/resume teardown, no
-history, no self-leave on popstate. The WS ping is TEMPORARILY on in AC too
+history, no self-leave on popstate.
+
+**TILT THERE IS THE SDK's `device_motion` RELAY, permanently.** The game is a
+cross-origin iframe and no AC embedder delegates the motion sensors to it, so
+`DeviceOrientation` never fires — the relay's raw accel + gyro go through
+`TiltInput.setGravity`'s complementary filter instead, and `motionState` is
+excepted from the constructor's policy verdict because the first relayed sample
+is what resolves it. Asking the platform for
+`allow="accelerometer; gyroscope"` would not end this: WebKit refuses motion in
+cross-origin frames outright and never consults `allow`, so iOS needs the relay
+whatever AirConsole ships.
+
+The WS ping is TEMPORARILY on in AC too
 (real-platform latency readings); its budget headroom comes from a raised AC
 gate floor in `Net.js` — the steady state it reverts to is no ping, with
 steering alone sized to fill AC's 25 msg/s budget
