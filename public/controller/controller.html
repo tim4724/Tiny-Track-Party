@@ -151,13 +151,21 @@
   <!-- Results — shown once your car finishes; the board fills in as the rest of
        the field crosses the line. The host starts the next game from here.
        During a cup it doubles as the intermission (points board, host's "Next
-       race" + the only way to abandon a cup early) and the final podium board. -->
+       race") and the final podium board. -->
   <section id="results" class="hidden">
     <h2 id="results-title" class="results-title">Results</h2>
-    <ol id="result-list" class="result-list"></ol>
+    <!-- WHERE YOU CAME, and nothing else. The cup table is the TV's, and the TV
+         now REVEALS it — counting the points across and re-ranking as it goes —
+         so a phone printing the new standing the moment the board appears would
+         hand four people the answer before the big screen got to it. One
+         ranking also means there is only one number here, which is the only way
+         it can never be mistaken for the other one. See resultsBoard.js. -->
+    <div id="result-me" class="result-me hidden">
+      <span id="result-place" class="result-me__place">–</span>
+      <span id="result-time" class="res-time"></span>
+    </div>
     <div id="result-foot">
       <button id="newgame-btn" class="btn btn--brand hidden">New game</button>
-      <button id="quitcup-btn" class="btn btn--ghost hidden">End cup early</button>
       <div id="result-wait" class="result-wait hidden"></div>
     </div>
   </section>

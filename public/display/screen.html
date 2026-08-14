@@ -87,6 +87,18 @@
          production and leaves it empty in prod; .version-badge:empty hides it.
          Lives on the title board so the lobby chrome stays clean. -->
     <div class="version-badge" aria-label="Build version">__VERSION_BADGE__</div>
+    <!-- Legal footer — the only screen that carries it. The lobby and the race
+         are read across a room and stay clean; the welcome board is the one
+         anybody sits and looks at. Licenses is ours and opens in place (the
+         warm room is cheap to re-open); privacy and imprint are couchpad.games
+         pages and open away so the game survives the trip. Keep the four in
+         step with public/licenses.html — tests/credits.test.js pins them. -->
+    <footer class="site-foot welcome__foot">
+      <a href="https://github.com/tim4724/Tiny-Track-Party" target="_blank" rel="noopener">Developed by Tim</a>
+      <a href="licenses.html">Licenses</a>
+      <a href="https://couchpad.games/en/privacy" target="_blank" rel="noopener">Privacy</a>
+      <a href="https://couchpad.games/en/imprint" target="_blank" rel="noopener">Imprint</a>
+    </footer>
   </section>
 
   <!-- Lobby — Sticker Bash chrome pinned to the glass: the join ticket
@@ -216,7 +228,6 @@
     <div id="results" class="hidden">
       <h2 id="results-title">Results</h2>
       <div id="results-sub" class="results-sub hidden"></div>
-      <div id="results-podium" class="results-podium hidden"></div>
       <ol id="results-list"></ol>
       <div id="results-next" class="results-next hidden"></div>
       <button id="results-newgame" class="btn btn--brand">New Game</button>
