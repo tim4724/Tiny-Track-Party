@@ -731,12 +731,30 @@ if (inShell && shellName) {
   screens.name.classList.add('hidden');
   joinRace(shellName, { persist: false });
 } else if (acBoot) {
-  // AirConsole owns identity like the shell does: skip the name screen, join
-  // as the profile nickname once the SDK is ready (getNickname is only valid
-  // from onReady; the adapter defers `joined` to the same moment, so nothing
-  // is lost by waiting). Never persisted — the name belongs to the platform.
-  screens.name.classList.add('hidden');
-  acBoot.ready.then(() => joinRace(acBoot.nickname(), { persist: false }));
+  // AirConsole owns identity like the shell does: there is no name to type, so
+  // the form goes — but the name screen STAYS, as the surface we wait on.
+  //
+  // Hiding it outright (what the shell can afford, having its own chrome
+  // behind) left this page with nothing on it whatsoever until the retained
+  // snapshot arrived: a blank phone whose only mark was the latency chip
+  // reading "no signal". The gap is real and not rare — the snapshot is the
+  // FIRST thing that puts this phone on a screen (there is no per-phone
+  // greeting to land sooner; see protocol.js), so any display that is booting,
+  // slow or absent leaves the page empty for exactly that long. It is also the
+  // one state `onStatus` cannot report from: its full-screen #conn overlay is
+  // gated on being IN a room, on the reasoning that anywhere else the name
+  // screen's own status line is enough. That is still true — so keep the name
+  // screen, and the status line is enough here too.
+  el('name-form').classList.add('hidden');
+  setStatus('Connecting…');
+  acBoot.ready.then(async () => {
+    // Awaited so this lands AFTER the join: joinRace clears the status line and
+    // the transport's synchronous `joined` (onJoined) clears it again, so a
+    // message set before either would be wiped by both. If the snapshot beats
+    // us here, syncRoom has already shown a screen and the text is never seen.
+    await joinRace(acBoot.nickname(), { persist: false });
+    setStatus('Waiting for the screen…');
+  });
   // iOS browsers grant motion only from inside a user gesture, and the AC
   // auto-join above has none — its enableMotion() resolves 'denied' and tilt
   // falls back to the (deliberately damped) accelerometer relay. Every tap IS

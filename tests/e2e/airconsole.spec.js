@@ -182,6 +182,26 @@ test('AC: a first-time couch starts on a fresh record', async ({ page }) => {
   await expect(beachStars(page)).toHaveAttribute('aria-label', '0 of 3 stars');
 });
 
+test('AC: a phone whose screen never answers says so, instead of showing nothing', async ({ page }) => {
+  // The retained snapshot is the FIRST thing that puts a phone on a screen, so
+  // everything before it arrives is a wait — seconds while a display boots its
+  // wasm, forever if no display is there at all. This page has no name form to
+  // fall back on (AC owns identity), and the #conn overlay that reports a bad
+  // link only shows once IN a room, so the state had no surface of its own: the
+  // phone rendered a blank page whose only mark was the latency chip. Found on
+  // a real device, where "blank screen, no signal" is all there was to go on.
+  await page.addInitScript(() => { window.__AC_DEVICE_ID = 131; window.__AC_NICKNAME = 'Ana'; });
+  await page.addInitScript({ path: MOCK_PATH });
+  await blockSdk(page);
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.goto('/controller.html');   // no display page in this context — nothing to answer
+
+  await expect(page.locator('#name')).toBeVisible();
+  await expect(page.locator('#name-status')).toHaveText(/Waiting for the screen/, { timeout: 10000 });
+  // The name FORM stays gone either way — AC owns identity, there is nothing to type.
+  await expect(page.locator('#name-form')).toBeHidden();
+});
+
 test('AC: a dropped controller frees its lobby seat', async ({ page }) => {
   await openAcDisplay(page);
   const _ana = await joinAcController(page, 111, 'Ana'); // keeps a seat, so the roster change below is a REMOVAL
