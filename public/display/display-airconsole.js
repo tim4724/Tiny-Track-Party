@@ -19,12 +19,24 @@ var airconsole = new AirConsole({
   silence_inactive_players: false
 });
 
-// localStorage shim with an EMPTY allowlist: the display's own keys (last
-// track, volume) are per-session conveniences that read synchronously at boot
-// — before AC persistent data could ever hydrate — so allowlisting them buys
-// nothing. The shim's job here is to keep stray writes out of the AC iframe's
-// storage partition.
-AirConsoleStorage.install(airconsole, { allowlist: [] });
+// localStorage shim: the AC iframe's own storage partition is the platform's
+// to clear, so the display's DURABLE record rides AirConsole persistent data
+// instead. The progression blob is the one that matters — stars and the
+// Playroom unlock — and dropping it is the difference between a couch that
+// keeps its cups and one that starts over every launch.
+//
+// Every read here is SYNCHRONOUS at module init and hydration is not, so an
+// allowlisted key reads null the first time BY CONSTRUCTION — it is worth
+// allowlisting only if something re-applies it once it lands. So the list is
+// exactly what main.js's AC branch re-applies through storage.onLoad, and the
+// display's other two keys stay out on purpose: the volume slider ships only
+// on the audition galleries (pruned from the zip, so the AC pages never write
+// it), and the last-track preview is one frame of lobby attract that the
+// catalogue's first track already fills. The mute switch is stored on no
+// platform at all — see audio/bus.js.
+var _acStorage = AirConsoleStorage.install(airconsole, {
+  allowlist: ['tinytrack_progress']   // cup stars + the Playroom unlock (main.js)
+});
 
 // AirConsole watches the screen iframe's history and reads history.back() as
 // "game ended, reset the master controller" (observed upstream in the
@@ -49,7 +61,12 @@ document.addEventListener('DOMContentLoaded', function () {
 // wired per _connect(). Cache the code and replay it into every adapter the
 // factory below builds (multi-shot, unlike AirConsoleAdapter.captureEarlyReady).
 var _acReadyCode;
-airconsole.onReady = function (code) { _acReadyCode = code; };
+function noteReady(code) {
+  _acReadyCode = code;
+  // getDeviceId()/getUID() are only valid from here — hydrate the pref shim.
+  try { _acStorage.requestLoad(); } catch (_) {}
+}
+airconsole.onReady = noteReady;
 
 // DisplayNet publishes the retained room snapshot as C++-composed relay frame
 // TEXT ({"type":"set_state","data":{…}} — see NativePartyConnection.
@@ -76,6 +93,10 @@ class AirConsoleFastlaneStub {
   handleSignal() { return false; }
 }
 
+// The platform surface main.js's AC branch reads (the transport half is
+// __acParty below, which is spread straight into DisplayNet's opts).
+window.__acDisplay = { storage: _acStorage };
+
 window.__acParty = {
   // Constructed by DisplayNet._connect as `new Impl(url, {clientId})` — both
   // arguments are relay-isms the adapter ignores. A function returning an
@@ -87,7 +108,7 @@ window.__acParty = {
     // before this adapter existed (connect() turns it into created/peer_joined).
     var adapterOnReady = airconsole.onReady;
     airconsole.onReady = function (code) {
-      _acReadyCode = code;
+      noteReady(code);
       adapterOnReady.call(airconsole, code);
     };
     if (_acReadyCode !== undefined) airconsole.onReady(_acReadyCode);

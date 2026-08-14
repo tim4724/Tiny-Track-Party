@@ -1143,10 +1143,13 @@ function showResults(results) {
   const final = !!(board.series && board.series.final);
   renderResults(ui.resultsView(board, { intermissionMs: intermissionMs() }), CAR_COLORS,
                 final ? () => net.setStandings({ ...board, settled: true }) : null);
-  // AirConsole: request the platform ad break — on FINAL results only (a
-  // 4-race Grand Prix must not stall on an ad at every intermission). AC
-  // rate-limits showAd internally, so no local throttle; the music duck rides
-  // onAdShow/onAdComplete in the AC boot branch below.
+  // AirConsole: request the platform ad break — only where this board ENDS the
+  // session (a 4-race Grand Prix must not stall on an ad at every
+  // intermission). That is the results button's own condition, not the `final`
+  // above: `final` is the cup's last race, and a single race is neither final
+  // nor an intermission but still ends here. AC rate-limits showAd internally,
+  // so no local throttle; the music duck rides onAdShow/onAdComplete in the AC
+  // boot branch below.
   if (window.airconsole && ui.resultsAction(net.flow.handle) !== 'advance') {
     try { window.airconsole.showAd(); } catch (_) {}
   }
@@ -1355,6 +1358,20 @@ if (_scenario) {
   // nothing was playing.
   ac.onAdShow = () => { sfx(audioDecide.pauseMusic()); };
   ac.onAdComplete = () => { sfx(audioDecide.resumeMusic()); };
+
+  // The couch's star record lives in AirConsole persistent data here, and that
+  // hydrates asynchronously — so the boot read above resolved null and loaded a
+  // FRESH couch. Load it again for real once the platform answers, then rebuild
+  // everything derived from it, exactly as the persist-progression effect does
+  // after a cup is banked. Fires at most once, before anyone can have picked.
+  window.__acDisplay.storage.onLoad(() => {
+    let saved = null;
+    try { saved = localStorage.getItem(PROGRESS_KEY); } catch (_) {}
+    if (!saved) return;                 // no record yet — the fresh couch stands
+    ui.progressLoad(saved, _trackParams.has('unlockAll'));
+    net.setChooser({ progress: progressChooser() });
+    refreshCupShelf();
+  });
 } else {
   // NEW GAME — reveal the (already-connecting) lobby. The listener and the
   // pre-boot half of the handshake live at the top of the file; here the click

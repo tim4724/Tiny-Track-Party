@@ -31,7 +31,10 @@
 
     // Per-device persistent-data store (in-memory; per-tab — sufficient
     // for the existing e2e suite which doesn't exercise reload persistence).
-    this._persistentData = {};
+    // window.__AC_PERSISTENT seeds it, which is how a spec stands up a device
+    // that has PLAYED BEFORE: the platform's record is the only thing carrying
+    // state across AC sessions (the iframe's own localStorage is shimmed away).
+    this._persistentData = Object.assign({}, window.__AC_PERSISTENT || {});
 
     // Per-device custom device state (the SDK's retained per-device blob).
     // Keyed by deviceId and replicated across pages over the channel so a

@@ -28,6 +28,14 @@ neutralizes the History API — AirConsole reads the screen iframe's
 ad break, the QR-less ticket) is the `window.airconsole` branch in `main.js`;
 everything below it — the walks, the performers, the model — runs unchanged.
 
+**Anything durable there rides AirConsole persistent data, and hydrates LATE.**
+`localStorage` is shimmed onto the platform's store, which answers
+asynchronously — so every synchronous read at module init returns null on an AC
+launch, whatever the allowlist says. A key is worth allowlisting only if
+something re-applies it from `storage.onLoad`; the star record is, and its
+re-apply is in the AC branch. The mute switch is stored on no platform at all
+(`audio/bus.js`).
+
 ## Rendering from the model, not deciding
 
 `main.js` and the render modules beside it (`lobbySeats.js`, `raceOverlays.js`)

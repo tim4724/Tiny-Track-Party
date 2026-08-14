@@ -147,6 +147,36 @@ test('AC: screen boots to the lobby, profile-named phones join, a race runs', as
   await expect(page.locator('#players')).toContainText('Benji');
 });
 
+// The couch's star record is the one durable thing the display owns, and in AC
+// it cannot ride the iframe's localStorage — that is shimmed onto AirConsole
+// persistent data, which hydrates AFTER main.js's synchronous boot read has
+// already loaded a fresh couch. So the re-apply on storage.onLoad is the whole
+// mechanism, and without it AC players would silently never keep a cup: no
+// stars, and the Playroom locked forever.
+//
+// Read off the TV's own Cups shelf, which the re-apply rebuilds: its star row
+// carries the count in an aria-label, so the assertion is rendered state and
+// not an internal.
+const beachStars = (page) =>
+  page.locator('.cup-shelf__row', { hasText: 'Beach' }).locator('.starrow');
+
+test('AC: a played-before couch keeps its cups (progression hydrates from the platform)', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.__AC_PERSISTENT = { tinytrack_progress: '{"v":1,"cups":{"beach":{"best":1}}}' };
+  });
+  await openAcDisplay(page);
+  // Hydration lands after boot, so this is a wait, not a read: the shelf shows
+  // the fresh couch first and is rebuilt when the platform's record arrives.
+  await expect(beachStars(page)).toHaveAttribute('aria-label', '3 of 3 stars');
+});
+
+test('AC: a first-time couch starts on a fresh record', async ({ page }) => {
+  // The other half of the pair: with no platform record the boot load stands,
+  // so the test above is proving hydration and not "beach always has stars".
+  await openAcDisplay(page);
+  await expect(beachStars(page)).toHaveAttribute('aria-label', '0 of 3 stars');
+});
+
 test('AC: a dropped controller frees its lobby seat', async ({ page }) => {
   await openAcDisplay(page);
   const _ana = await joinAcController(page, 111, 'Ana'); // keeps a seat, so the roster change below is a REMOVAL

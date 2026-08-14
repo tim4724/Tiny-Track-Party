@@ -40,5 +40,6 @@ artwork/trailer/
 scripts/.preview-tracks.html
 *.jpeg
 
-# AirConsole zip staging + packages (scripts/build-airconsole.sh)
-build/
+# AirConsole zip staging + packages (scripts/build-airconsole.sh). Anchored:
+# unanchored, it would also swallow any future nested build/ dir.
+/build/
