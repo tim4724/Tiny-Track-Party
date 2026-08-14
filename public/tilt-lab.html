@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tilt Lab</title>
+  <style>
+    body { font: 14px/1.5 system-ui, sans-serif; margin: 0; padding: 16px; background: #1b1b20; color: #eee; }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    .hint { color: #9a9aa5; margin: 0 0 12px; }
+    button { font: inherit; padding: 12px 20px; border-radius: 8px; border: 0; background: #4a7dff; color: #fff; }
+    .row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+    .row label { width: 120px; color: #9a9aa5; }
+    .bar { position: relative; flex: 1; height: 22px; background: #2a2a32; border-radius: 6px; overflow: hidden; }
+    .bar i { position: absolute; top: 0; bottom: 0; left: 50%; width: 3px; background: currentColor; }
+    .bar.truth { color: #58d68d; } .bar.filter { color: #ff7f50; }
+    .bar em { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: #555; }
+    #verdict div { margin: 3px 0; }
+    .ok { color: #58d68d; } .bad { color: #ff6b6b; } .warn { color: #f4d03f; }
+    canvas { width: 100%; height: 120px; background: #14141a; border-radius: 8px; margin-top: 10px; }
+    #stats { color: #9a9aa5; font-variant-numeric: tabular-nums; white-space: pre; }
+  </style>
+</head>
+<body>
+  <h1>Tilt Lab</h1>
+  <p class="hint">Compares the OS-fused DeviceOrientation (truth, green) against the
+  AirConsole-style raw-sensor filter (orange) on this phone's real sensors.
+  Tap start, then: lean left/right a few times, snap back to center and hold,
+  then shake the phone sideways without rotating it.</p>
+  <button id="start">Start sensors</button>
+  <div id="ui" style="display:none">
+    <div class="row"><label>OS fused</label><div class="bar truth"><em></em><i id="b-truth"></i></div></div>
+    <div class="row"><label>Raw filter</label><div class="bar filter"><em></em><i id="b-filter"></i></div></div>
+    <canvas id="trace" width="800" height="240"></canvas>
+    <div id="verdict"></div>
+    <div id="stats"></div>
+  </div>
+  <script type="module" src="tilt-lab.js"></script>
+</body>
+</html>

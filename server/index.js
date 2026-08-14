@@ -164,6 +164,23 @@ function cspHeader(frameAncestors) {
   ].join('; ');
 }
 
+// The two AirConsole entry points invert the framing story: they exist to be
+// FRAMED by www.airconsole.com (the non-prod http origin admits the HTTP
+// simulator framing a localhost build), load the SDK from that origin, and
+// show AC profile avatars. Everything else stays as tight as cspHeader.
+function airconsoleCspHeader() {
+  return [
+    "default-src 'self'",
+    "script-src 'self' 'wasm-unsafe-eval' https://www.airconsole.com",
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self'",
+    "connect-src 'self' https://www.airconsole.com",
+    "img-src 'self' data: https://www.airconsole.com",
+    "object-src 'none'",
+    "frame-ancestors https://www.airconsole.com" + (IS_PROD ? '' : ' http://http.airconsole.com'),
+  ].join('; ');
+}
+
 const server = http.createServer((req, res) => {
   let urlPath = req.url.split('?')[0];
 
@@ -198,6 +215,12 @@ const server = http.createServer((req, res) => {
     // It is in RESERVED_SEGMENTS, so without this it would 404 rather than be
     // mistaken for a join code.
     urlPath = '/licenses.html';
+  } else if (urlPath === '/screen.html' || urlPath === '/controller.html') {
+    // AirConsole loads both entries from the ROOT (of the uploaded zip; the
+    // simulator does the same against this server). The browser URL stays at
+    // the root, which is what makes the entries' relative asset paths resolve
+    // identically here and inside the zip.
+    urlPath = urlPath === '/screen.html' ? '/display/screen.html' : '/controller/controller.html';
   } else if (isRoomCode(urlPath)) {
     // Bare join code (e.g. /ABCD) -> phone controller. Reserved/non-code paths
     // fall through to the static handler (and 404 if there's no such file).
@@ -247,8 +270,11 @@ const server = http.createServer((req, res) => {
                  .replace(/__APP_V__/g, APP_VERSION)
                  .replace(/__RELAY_URL__/g, RELAY_URL_OVERRIDE);
       data = Buffer.from(text);
+      const isAirConsole = urlPath === '/display/screen.html' || urlPath === '/controller/controller.html';
       const iframeable = urlPath === '/display/index.html' || urlPath === '/controller/index.html';
-      headers['Content-Security-Policy'] = cspHeader(iframeable ? "'self'" : "'none'");
+      headers['Content-Security-Policy'] = isAirConsole
+        ? airconsoleCspHeader()
+        : cspHeader(iframeable ? "'self'" : "'none'");
     }
 
     // HTML + scripts + the engine always no-store (avoid stale-version

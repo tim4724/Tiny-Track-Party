@@ -84,6 +84,27 @@ async function openDisplay(page) {
   return page.evaluate(() => window.__net.roomCode);
 }
 
+// Give a phone a motion sensor that actually DELIVERS.
+//
+// Headless Chromium has the DeviceOrientationEvent constructor and fires
+// nothing, which TiltInput reads — correctly — as "no sensor here" and answers
+// with button steering. Without this every spec's phone would quietly leave
+// tilt mode; the fallback's own coverage is no-motion.spec.js.
+//
+// The feed STOPS the moment it has been believed, and that is not tidiness: a
+// level sample still arriving while a spec synthesizes a lean pulls the
+// smoothed steer back toward centre between the dispatch and the read (SMOOTH
+// halves the residual per sample). That race passes locally and fails on a
+// slower CI runner, which is exactly how it was found.
+async function installLevelSensor(target) {
+  await target.addInitScript(() => {
+    const id = setInterval(() => {
+      if (window.__tilt && window.__tilt.haveTilt) { clearInterval(id); return; }
+      window.dispatchEvent(new DeviceOrientationEvent('deviceorientation', { beta: 0, gamma: 0 }));
+    }, 50);
+  });
+}
+
 // New phone: fresh context (own localStorage) + join through the name form.
 // Returns the controller page. Does NOT assert which screen it lands on —
 // a mid-race joiner lands on the waiting lobby, others on the normal lobby.
@@ -97,14 +118,8 @@ async function joinController(browser, roomCode, name) {
   // coverage is the gallery 'settings' scenario. Key mirrors HELP_SEEN_KEY in prefs.js.
   await context.addInitScript(() => {
     try { localStorage.setItem('tinytrack_seen_help', '1'); } catch (_) {}
-    // A headless Chromium HAS DeviceOrientationEvent and never fires it, which
-    // is precisely the shape TiltInput now falls back on — so without this every
-    // spec's phone would quietly run in BUTTONS mode. These specs are about a
-    // normal phone, so give it a level sensor. The fallback's own coverage is
-    // no-motion.spec.js.
-    setInterval(() => window.dispatchEvent(
-      new DeviceOrientationEvent('deviceorientation', { beta: 0, gamma: 0 })), 50);
   });
+  await installLevelSensor(context);
   const page = await context.newPage();
   await page.goto(`/${roomCode}`);
   await page.fill('#name-input', name);
@@ -151,4 +166,4 @@ async function waitForRacing(displayPage, timeout = 45000) {
     () => window.__session() && window.__session().racing, null, { timeout });
 }
 
-module.exports = { test, expect: base.expect, openDisplay, joinController, startRace, waitForRacing, visible };
+module.exports = { test, expect: base.expect, openDisplay, joinController, installLevelSensor, startRace, waitForRacing, visible };

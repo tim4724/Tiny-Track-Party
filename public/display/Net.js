@@ -248,8 +248,18 @@ export class DisplayNet extends GameNet {
     // what the display uses; keep the kit class as the documented default.
     this._PartyConnectionImpl = opts.PartyConnectionImpl || PartyConnection;
     if (opts.FastlaneImpl) this.FastlaneImpl = opts.FastlaneImpl;
+    // Two RoomFlow provider seams a transport may claim (AirConsole does —
+    // see display-airconsole.js): the transport-designated master controller,
+    // and switching our own lastSeen expiry off where the platform's
+    // connect/disconnect events are already authoritative. Absent (the relay),
+    // both fall back to the machine's defaults: sticky-lowest-slot host
+    // election, liveness on.
     this.flow = new this._RoomFlowImpl({
-      liveness: { timeoutMs: LIVENESS_TIMEOUT_MS, graceMs: ABANDONED_RACE_GRACE_MS }
+      masterProvider: opts.masterProvider || null,
+      liveness: {
+        timeoutMs: LIVENESS_TIMEOUT_MS, graceMs: ABANDONED_RACE_GRACE_MS,
+        enabledProvider: opts.livenessEnabledProvider || null
+      }
     });
     session.initPick(this.flow.handle,
       opts.defaultTrackId != null ? opts.defaultTrackId : null, this._hasBag,

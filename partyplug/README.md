@@ -32,8 +32,8 @@ bare `require('partyplug')` intentionally resolves nothing.
 
 - **Slot 0 is the display; slots 1..N are controllers.**
 - **Transport is pluggable.** Talk to the Party Sockets relay
-  (`PartyConnection`) — or any adapter that speaks the same interface — with an
-  optional P2P low-latency input path (`PartyFastlane`).
+  (`PartyConnection`) or run on AirConsole (`AirConsoleAdapter`) behind one
+  interface, with an optional P2P low-latency input path (`PartyFastlane`).
 - **`RoomFlow` is the brain** — who is in the room, who is host, what state we
   are in. It is headless: it emits events, your view renders.
 - **The kit knows nothing about your game.** No DOM, no rendering, no colors,
@@ -45,6 +45,8 @@ bare `require('partyplug')` intentionally resolves nothing.
 | --- | --- |
 | `PartyConnection.js` | WebSocket client for the Party Sockets relay. Stable `clientId` bearer token for reconnect. |
 | `PartyFastlane.js` | Optional P2P WebRTC DataChannel layer (low-latency input). Piggybacks on the connection for signaling, falls back to it. |
+| `AirConsoleAdapter.js` | Drop-in `PartyConnection` replacement that speaks the AirConsole SDK. |
+| `AirConsoleStorage.js` | AirConsole persistent-data backed `localStorage` shim. |
 | `RoomFlow.js` | Headless room/lobby/host state machine: room state, roster, sticky-host election, presence. **Not in this fork** (see the note above) — the C++ port implements it, and `RoomFlow.d.ts` remains as that interface. |
 
 The transport modules read **no** game globals: deployment config (relay URL,

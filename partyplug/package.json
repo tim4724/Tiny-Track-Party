@@ -1,11 +1,13 @@
 {
   "name": "partyplug",
   "version": "0.1.0",
-  "description": "Reusable framework for shared-screen + phone-controller party games: transport (relay/WebRTC) plus a headless room/lobby/host state machine.",
+  "description": "Reusable framework for shared-screen + phone-controller party games: transport (relay/WebRTC/AirConsole) plus a headless room/lobby/host state machine.",
   "type": "commonjs",
   "exports": {
     "./PartyConnection": { "types": "./PartyConnection.d.ts", "default": "./PartyConnection.js" },
-    "./PartyFastlane": { "types": "./PartyFastlane.d.ts", "default": "./PartyFastlane.js" }
+    "./PartyFastlane": { "types": "./PartyFastlane.d.ts", "default": "./PartyFastlane.js" },
+    "./AirConsoleAdapter": { "types": "./AirConsoleAdapter.d.ts", "default": "./AirConsoleAdapter.js" },
+    "./AirConsoleStorage": { "types": "./AirConsoleStorage.d.ts", "default": "./AirConsoleStorage.js" }
   },
   "files": [
     "*.js",
@@ -17,6 +19,8 @@
   },
   "sideEffects": [
     "PartyConnection.js",
-    "PartyFastlane.js"
+    "PartyFastlane.js",
+    "AirConsoleAdapter.js",
+    "AirConsoleStorage.js"
   ]
 }

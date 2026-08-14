@@ -6,11 +6,8 @@
   <meta name="app-version" content="__APP_VERSION__" />
   <meta name="relay-url" content="__RELAY_URL__" />
   <title>Tiny Track Party</title>
-  <link rel="icon" type="image/svg+xml" href="/assets/icon/favicon.svg?v=__APP_V__" />
-  <link rel="icon" type="image/png" sizes="32x32" href="/assets/icon/favicon-32.png?v=__APP_V__" />
-  <link rel="apple-touch-icon" href="/assets/icon/apple-touch-icon.png?v=__APP_V__" />
-  <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/fredoka-variable.woff2" crossorigin />
-  <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/nunito-variable.woff2" crossorigin />
+  <link rel="preload" as="font" type="font/woff2" href="assets/fonts/fredoka-variable.woff2" crossorigin />
+  <link rel="preload" as="font" type="font/woff2" href="assets/fonts/nunito-variable.woff2" crossorigin />
   <!-- The engine: sim, party layer and Filament renderer in one wasm module.
        Nothing draws until it lands and main.js awaits it at boot, so start the
        glue early rather than let it be discovered deep in the module graph
@@ -18,21 +15,25 @@
        deliberately NOT preloaded: the glue fetches it with credentials
        'same-origin', which a `preload as=fetch crossorigin` request would not
        match — the browser would download all 2.7 MB of it twice. -->
-  <link rel="modulepreload" href="/display/engine/native/ttp_runtime.mjs" />
-  <link rel="stylesheet" href="/shared/theme.css?v=__APP_V__" />
-  <link rel="stylesheet" href="/display/display.css?v=__APP_V__" />
+  <link rel="modulepreload" href="display/engine/native/ttp_runtime.mjs" />
+  <link rel="stylesheet" href="shared/theme.css?v=__APP_V__" />
+  <link rel="stylesheet" href="display/display.css?v=__APP_V__" />
 
   <!-- Transport + shared contract: classic scripts set window globals BEFORE
        the deferred module entry runs. -->
-  <script src="/shared/protocol.js?v=__APP_V__"></script>
+  <script src="shared/protocol.js?v=__APP_V__"></script>
   <!-- PartyConnection + PartyFastlane survive the native port: they own the
        WebSocket and the WebRTC handshake (which wasm cannot), and the native
        fastlane SUBCLASSES PartyFastlane to inherit that handshake. RoomFlow.js is
        gone — the room state machine is C++ now (NativeRoomFlow). -->
-  <script src="/partyplug/PartyConnection.js?v=__APP_V__"></script>
-  <script src="/partyplug/PartyFastlane.js?v=__APP_V__"></script>
+  <script src="partyplug/PartyConnection.js?v=__APP_V__"></script>
+  <script src="partyplug/PartyFastlane.js?v=__APP_V__"></script>
+  <script src="https://www.airconsole.com/api/airconsole-1.11.0.js"></script>
+  <script src="partyplug/AirConsoleAdapter.js?v=__APP_V__"></script>
+  <script src="partyplug/AirConsoleStorage.js?v=__APP_V__"></script>
+  <script src="display/display-airconsole.js?v=__APP_V__"></script>
 </head>
-<body>
+<body class="airconsole">
   <!-- Default lobby backdrop: the sunny diorama (shown until a track is picked).
        Once the host picks a track, the 3D #scene below covers it with the live
        orbiting preview. (Decorative; see .scene in /shared/theme.css.) -->
@@ -96,7 +97,7 @@
          copy — tests/credits.test.js pins all three. -->
     <footer class="site-foot welcome__foot">
       <a href="https://github.com/tim4724/Tiny-Track-Party" target="_blank" rel="noopener">Developed by Tim</a>
-      <a href="/licenses.html">Licenses</a>
+      <a href="licenses.html">Licenses</a>
       <a href="https://couchpad.games/en/privacy" target="_blank" rel="noopener">Privacy</a>
       <a href="https://couchpad.games/en/imprint" target="_blank" rel="noopener">Imprint</a>
     </footer>
@@ -149,7 +150,7 @@
            Keep in step with the welcome board's footer above. -->
       <footer class="site-foot lobby__foot">
         <a href="https://github.com/tim4724/Tiny-Track-Party" target="_blank" rel="noopener">Developed by Tim</a>
-        <a href="/licenses.html" target="_blank" rel="noopener">Licenses</a>
+        <a href="licenses.html" target="_blank" rel="noopener">Licenses</a>
         <a href="https://couchpad.games/en/privacy" target="_blank" rel="noopener">Privacy</a>
         <a href="https://couchpad.games/en/imprint" target="_blank" rel="noopener">Imprint</a>
       </footer>
@@ -274,6 +275,6 @@
        alike). Any gesture unlocks; clicking the pill is the obvious one. -->
   <button id="sound-hint" class="sound-hint hidden">🔇 tap for sound</button>
 
-  <script type="module" src="/display/main.js?v=__APP_V__"></script>
+  <script type="module" src="display/main.js?v=__APP_V__"></script>
 </body>
 </html>

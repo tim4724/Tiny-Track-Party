@@ -29,6 +29,9 @@ npx playwright test tests/e2e/flow.spec.js   # A single E2E spec
 npm run check:artifact            # Is the checked-in wasm current?
 npm start / npm run dev           # Serve (with --watch)
 native/scripts/build-runtime-web.sh   # Rebuild the engine wasm → public/display/engine/native/
+npm run gen:airconsole            # Regenerate the committed AirConsole entries from index.html
+npm run build:airconsole          # AirConsole upload zip (screen.html/controller.html at its root)
+npm run cover                     # Square store cover tile → artwork/ (uploaded by hand)
 ```
 
 `npm run setup` is the only command a fresh worktree needs, and it prints the
@@ -64,6 +67,13 @@ under `/partyplug/`. It is a **copy-fork**, so every local edit to a kit file
 must be declared in `partyplug/UPSTREAM.md` — `tests/partyplug-fork.test.js`
 fails until it is. 3D assets are the Kenney Toy Car Kit under
 `public/assets/toycar/` — `toycar` names the asset pack, not the game.
+
+**AirConsole is a swapped transport, not a mode.** The generated
+`display/screen.html` / `controller/controller.html` entries load the kit's
+`AirConsoleAdapter` behind the same PartyConnection surface plus one classic
+bootstrap per page (`display-airconsole.js` / `controller-airconsole.js`); the
+room machine, the walks and the wire vocabulary run unchanged. Gates in shared
+modules test `window.airconsole`.
 
 Browser code is ES modules. Modules Node imports directly via dynamic `import()`
 (`shared/tracks.js`, `shared/devTracks.js`, `shared/protocol.js`,

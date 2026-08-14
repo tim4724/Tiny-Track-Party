@@ -18,6 +18,32 @@ stake in a race lives beside it instead — the backdrop crossfade, the overlays
 the TV furniture. When something in `main.js` grows a timer or a generation
 counter of its own, that is the signal it has become one of those.
 
+## AirConsole (screen.html)
+
+**There is no welcome board there, so the LOBBY carries the legal footer** — the
+credits are an attribution condition of what ships, not a nicety. It is the same
+markup as the welcome board's (`tests/credits.test.js` pins every copy),
+CSS-gated on `body.airconsole`, and every link opens away: navigating the screen
+iframe drops the SDK session. `scripts/build-airconsole.sh` therefore ships
+`licenses.html` at the zip root, since the license texts under `assets/` travel
+with the build and that page is the only thing pointing at them.
+
+`display-airconsole.js` is a classic script only the generated `screen.html`
+loads: it swaps the transport (adapter for the relay connection, a no-op
+fastlane, AC's master/liveness providers via `window.__acParty`) and
+neutralizes the History API — AirConsole reads the screen iframe's
+`history.back()` as "game ended". Platform lifecycle (boot flow, pause, the
+ad break, the QR-less ticket) is the `window.airconsole` branch in `main.js`;
+everything below it — the walks, the performers, the model — runs unchanged.
+
+**Anything durable there rides AirConsole persistent data, and hydrates LATE.**
+`localStorage` is shimmed onto the platform's store, which answers
+asynchronously — so every synchronous read at module init returns null on an AC
+launch, whatever the allowlist says. A key is worth allowlisting only if
+something re-applies it from `storage.onLoad`; the star record is, and its
+re-apply is in the AC branch. The mute switch is stored on no platform at all
+(`audio/bus.js`).
+
 ## Rendering from the model, not deciding
 
 `main.js` and the render modules beside it (`lobbySeats.js`, `raceOverlays.js`)

@@ -16,7 +16,7 @@ export function displayDebugFields({ maxPlayers, carNames, trackList, biomeNames
   return [
     { section: 'Test harness' },
     { key: 'scenario', label: 'Scenario', hint: 'no relay, fake players', type: 'select',
-      options: ['welcome', 'device-choice', 'lobby-loading', 'lobby-empty', 'lobby', 'track', 'assets', 'countdown', 'racing', 'results', 'intermission', 'podium']
+      options: ['welcome', 'device-choice', 'lobby-loading', 'lobby-empty', 'lobby', 'lobby-ac', 'track', 'assets', 'countdown', 'racing', 'results', 'intermission', 'podium']
         .map((s) => ({ value: s, label: s })) },
     { key: 'players', label: 'Players', hint: 'fake roster size', type: 'int', min: 1, max: maxPlayers },
     { key: 'host', label: 'Host seat', hint: 'blank = no host', type: 'int', min: 0, max: maxPlayers - 1 },

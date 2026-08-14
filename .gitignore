@@ -39,3 +39,7 @@ artwork/trailer/
 # its gallery beside itself; captures land wherever they are pointed).
 scripts/.preview-tracks.html
 *.jpeg
+
+# AirConsole zip staging + packages (scripts/build-airconsole.sh). Anchored:
+# unanchored, it would also swallow any future nested build/ dir.
+/build/

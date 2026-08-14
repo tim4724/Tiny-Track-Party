@@ -95,6 +95,31 @@ function sensorPolicyBlocked() {
   try { return !fp.allowsFeature('accelerometer'); } catch (_) { return null; }
 }
 
+// The complementary filter behind setGravity (the AirConsole sensor relay —
+// the DeviceOrientation path never touches these, the OS fused it already).
+// Phone-only tuning knobs, so they live here, not in the STEER manifest.
+const ORIENT_FRESH_MS = 1000;    // fused events this recent silence the relay
+const ACCEL_G = 9.81;            // 1 g, what a motionless sample reads
+const ACCEL_TRUST_BAND = 4;      // m/s² of |a|−g deviation at which trust hits 0
+// With a calibrated gyro the accelerometer only anchors drift: ~0.8 s time
+// constant at the 16 ms relay cadence — hand-motion contamination barely
+// registers.
+const ACCEL_CORRECT = 0.02;
+// Not calibrated yet (boot, or a device without a gyro): the accel is the
+// only signal, so correct at the old damped-filter rate instead.
+const ACCEL_ONLY_CORRECT = 0.2;
+// The scale estimator only learns from samples this close to 1 g (m/s²) —
+// tighter than the trust band, because here the accel must BE gravity.
+const ACCEL_CAL_BAND = 1.5;
+// Calibration threshold on the estimator's denominator (Σ|gyro delta|²,
+// raw-rate units): a single deliberate lean clears it for a rad/s source,
+// one sample-burst for a deg/s source (57× the deltas, 3300× the energy).
+const GYRO_CAL_DEN = 3e-3;
+// Minimum fit quality (r²) to trust the calibration — separates a correct
+// axis mapping (measured 0.2+ on real hand data) from a permuted one
+// (measured 0.004) by a wide margin.
+const GYRO_CAL_R2 = 0.05;
+
 const DEG = Math.PI / 180;
 const RAD = 180 / Math.PI;
 const clamp1 = (v) => Math.max(-1, Math.min(1, v));
@@ -125,13 +150,24 @@ export class TiltInput {
     // permission flow: no DeviceOrientationEvent constructor (no sensor, ever),
     // or a permissions policy that withholds the sensors from this document.
     // The THIRD way can only be found by listening — see _settle.
-    this.motionState = (typeof window !== 'undefined'
+    //
+    // EXCEPT on AirConsole, where neither route means what it says: the SDK's
+    // device_motion relay is the sensor there (setGravity), and the frame is
+    // expected to fail both checks. Stay 'unknown' and let the first relayed
+    // sample resolve it to 'granted'.
+    this.motionState = (typeof window !== 'undefined' && !window.airconsole
       && (!window.DeviceOrientationEvent || sensorPolicyBlocked() === true))
       ? 'unsupported' : 'unknown';
 
     // latest gravity unit vector in the device frame (overwritten each event;
     // the flat seed only stands in until the first reading arrives)
     this._g = { x: 0, y: 0, z: -1 };
+    this._orientAt = 0;   // last fused DeviceOrientation event (0 = never)
+    this._motionAt = 0;   // last relayed sensor sample (setGravity's dt clock)
+    // The online gyro-scale estimator (see setGravity): num/den = the signed
+    // scalar mapping raw relayed rates onto observed gravity motion.
+    this._gyroNum = 0; this._gyroDen = 0; this._gyroObs = 0;
+    this._aPrev = null;   // previous near-1g accel direction (estimator input)
 
     this.mode = 'tilt';    // 'tilt' | 'buttons' (see setMode)
     this._steer = 0;       // smoothed steer output (-1..1)
@@ -204,6 +240,141 @@ export class TiltInput {
     });
   }
 
+  // External sensor feed, for AirConsole — the game is a cross-origin iframe
+  // inside airconsole.com (browser) or the AC app's webview, and the embedder
+  // delegates no motion sensors to the frame (verified on-device: the game
+  // iframe's allow list is "autoplay; microphone; camera"), so
+  // DeviceOrientation NEVER fires here. The SDK's top-level page reads the
+  // sensors — it isn't in an iframe — and posts every sample in: accel =
+  // accelerationIncludingGravity (flat face-up = +9.81 z), rates = the gyro
+  // about the device axes (alpha: z, beta: x, gamma: y).
+  //
+  // The raw accelerometer is gravity + the hand's own motion, and taking it
+  // verbatim rang the steer around centre; a plain low-pass damped the ring
+  // but felt spongy. This is the COMPLEMENTARY FILTER instead — the same
+  // shape as the OS fusion behind DeviceOrientation:
+  //  - PREDICT from the gyro: rotate the gravity estimate by the body rates
+  //    (a world-fixed vector seen from a rotating body evolves as
+  //    dg/dt = −ω × g). The gyro is blind to linear acceleration, so this
+  //    carries ALL the fast response with none of the wobble.
+  //  - CORRECT from the accelerometer, slowly (ACCEL_CORRECT, further scaled
+  //    by how close the sample is to 1 g) — it only anchors gyro drift.
+  //
+  // The rate UNITS AND SIGN are deliberately not assumed: the spec says
+  // deg/s, Chrome on Android delivers rad/s (measured on a Pixel 7 — a 73°
+  // roll integrated to 1.1 "degrees"), and what each AC app build relays is
+  // unverified. One signed scalar absorbs all of it, ESTIMATED ONLINE by
+  // correlating the gyro's predicted gravity motion against the motion the
+  // accelerometer actually observed (least squares, accumulated only on
+  // near-1g samples). A single deliberate lean locks it in; until then the
+  // accel corrects at the fast rate (ACCEL_ONLY_CORRECT — also what a
+  // gyro-less device permanently gets, and what makes boot acquisition
+  // immediate).
+  setGravity(ax, ay, az, ra, rb, rg) {
+    // If real fused DeviceOrientation is somehow delivering (an embedder that
+    // DOES delegate sensors), it owns gravity — never fight it with raw data.
+    if (Date.now() - this._orientAt < ORIENT_FRESH_MS) return;
+    const now = Date.now();
+    const dt = Math.min(0.05, Math.max(0.008, (now - this._motionAt) / 1000));
+    this._motionAt = now;
+    const g = this._g;
+
+    // The gyro's predicted gravity delta in RAW rate units (scale applied
+    // only after calibration): dg = −(ω × g)·dt. AXIS MAPPING: rotationRate's
+    // alpha/beta/gamma are the rates about x/y/z IN THAT ORDER — the mapping
+    // browsers actually implement (measured on a Pixel 7: a pure roll about y
+    // rode the beta channel at 0.93 correlation, and the full-capture fit put
+    // the spec-text ordering at r²=0.004), documented as the cross-browser
+    // implementation reality in the W3C geolocation list, 2017-08. If a
+    // platform ever ships the other ordering, the r² gate below rejects the
+    // calibration and tilt degrades to the damped accel-only mode rather
+    // than engaging a garbage scale.
+    const wx = ra || 0, wy = rb || 0, wz = rg || 0;
+    const dxr = -(wy * g.z - wz * g.y) * dt;
+    const dyr = -(wz * g.x - wx * g.z) * dt;
+    const dzr = -(wx * g.y - wy * g.x) * dt;
+
+    const n = Math.hypot(ax, ay, az);
+    const nearG = n > 1 && Math.abs(n - ACCEL_G) < ACCEL_CAL_BAND;
+
+    // Online scale estimation: on consecutive near-1g samples the accel IS
+    // the gravity direction, so its frame-to-frame delta is the observed
+    // motion the gyro delta should explain — accumulate the least-squares
+    // ratio between the two. The predicted delta here is computed against the
+    // PREVIOUS ACCEL DIRECTION, never against the filter's own estimate: the
+    // estimate moves with the calibrated scale, and teaching the scale from a
+    // reference it steers is a feedback loop (a drifted scale corrupts the
+    // very data that should correct it — observed live as a sign flip).
+    // Halving past the cap keeps the running sums finite, ratio preserved.
+    if (nearG) {
+      const adx = -ax / n, ady = -ay / n, adz = -az / n;
+      const p = this._aPrev;
+      if (p) {
+        const ex = -(wy * p.z - wz * p.y) * dt;
+        const ey = -(wz * p.x - wx * p.z) * dt;
+        const ez = -(wx * p.y - wy * p.x) * dt;
+        this._gyroNum += (adx - p.x) * ex + (ady - p.y) * ey + (adz - p.z) * ez;
+        this._gyroDen += ex * ex + ey * ey + ez * ez;
+        this._gyroObs += (adx - p.x) ** 2 + (ady - p.y) ** 2 + (adz - p.z) ** 2;
+        if (this._gyroDen > 20) { this._gyroNum *= 0.5; this._gyroDen *= 0.5; this._gyroObs *= 0.5; }
+      }
+      this._aPrev = { x: adx, y: ady, z: adz };
+    } else {
+      this._aPrev = null; // never difference across an untrusted gap
+    }
+
+    const s = this._snappedScale();
+    if (s !== null) {
+      g.x += dxr * s; g.y += dyr * s; g.z += dzr * s;
+    }
+    const calibrated = s !== null;
+
+    // Accel correct, trust-weighted by closeness to 1 g.
+    if (n > 1) {
+      this.haveTilt = true;
+      this.motionState = 'granted';
+      const base = calibrated ? ACCEL_CORRECT : ACCEL_ONLY_CORRECT;
+      const k = base * Math.max(0, 1 - Math.abs(n - ACCEL_G) / ACCEL_TRUST_BAND);
+      if (k > 0) {
+        g.x += (-ax / n - g.x) * k;
+        g.y += (-ay / n - g.y) * k;
+        g.z += (-az / n - g.z) * k;
+      }
+    }
+
+    // Predict and correct both bend the length; keep the direction, restore
+    // unit length so the roll math downstream reads clean gravity.
+    const m = Math.hypot(g.x, g.y, g.z) || 1;
+    g.x /= m; g.y /= m; g.z /= m;
+    if (this._timer) this._tick();
+  }
+
+  // The scale the predict step actually applies, or null while uncalibrated.
+  // The raw least-squares magnitude is attenuation-biased (noise in the accel
+  // reference shrinks it, measured 0.4–0.8x of truth depending on how hard
+  // the hand swings), so the estimate is used only to CLASSIFY — sign, and
+  // which unit family the source speaks — and the EXACT constant for that
+  // family is applied. deg/s and rad/s sit 57x apart, far beyond any
+  // attenuation, so the bands cannot be crossed by noise:
+  //   |raw| in (0.004..0.08)  → deg/s source → ±π/180
+  //   |raw| in (0.25..4)      → rad/s source → ±1
+  // Anything else (including a wrong axis order, which lands near 0 and is
+  // additionally rejected by the r² gate) stays uncalibrated — the damped
+  // accel-only mode, functional if spongier.
+  _snappedScale() {
+    const ok = this._gyroDen > GYRO_CAL_DEN
+      && (this._gyroNum * this._gyroNum) > GYRO_CAL_R2 * this._gyroDen * this._gyroObs;
+    if (!ok) return null;
+    const raw = this._gyroNum / this._gyroDen, m = Math.abs(raw);
+    if (m > 0.004 && m < 0.08) return Math.sign(raw) * DEG;
+    if (m > 0.25 && m < 4) return Math.sign(raw);
+    return null;
+  }
+
+  // Diagnostic surface (tilt-lab): the applied (snapped) scale — ±π/180 for a
+  // deg/s source, ±1 for rad/s — or null before a lean has calibrated it.
+  gyroScale() { return this._snappedScale(); }
+
   _onOrient(e) {
     if (e.beta == null && e.gamma == null) return;
     this.haveTilt = true;
@@ -216,6 +387,7 @@ export class TiltInput {
     // listener is attached, i.e. permission was granted — the constructor's two
     // routes to 'unsupported' never attach one.)
     if (this.motionState === 'unsupported') this.motionState = 'granted';
+    this._orientAt = Date.now(); // fused events outrank the relay while fresh (setGravity returns early)
 
     // Gravity (unit, pointing down) in the device frame from the W3C Z-X'-Y''
     // Euler angles. alpha (compass yaw) doesn't tilt gravity, so it drops out —

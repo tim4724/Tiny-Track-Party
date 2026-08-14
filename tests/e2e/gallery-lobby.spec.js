@@ -46,6 +46,10 @@ for (const q of [
   'scenario=lobby&players=2',
   'scenario=lobby&picked=track&track=driftwood',
   'scenario=lobby&picked=tour',
+  // The AirConsole dressing runs the same attract: it is the ordinary lobby
+  // path with <body class="airconsole"> stamped on, so a card that stopped
+  // attracting there would mean the class had started changing more than CSS.
+  'scenario=lobby-ac&picked=track&track=driftwood',
 ]) {
   test(`gallery ${q} attracts like the live lobby`, async ({ page }) => {
     await page.goto('/?' + q);

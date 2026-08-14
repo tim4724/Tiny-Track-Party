@@ -3,7 +3,7 @@
 // ON BY DEFAULT while the game is in development: the frame budget is something
 // to keep under your eye, not something to remember to switch on. Turning the
 // PANEL off for release is a one-line change here — gate the show() below on
-// whatever release signal exists at that point.
+// whatever release signal exists at that point. AirConsole is now that signal.
 //
 // SHOWING AND MEASURING ARE SEPARATE (instrument()). The hide path stops every
 // canvas draw and DOM write, but a hidden HUD still keeps its ring and its timer
@@ -179,7 +179,16 @@ export class PerfHud {
     this._ctx = scope.getContext('2d');
     this._ctx.scale(2, 2);
 
-    this.show();
+    // AirConsole is the tree's only RELEASE surface — the uploaded zip is played
+    // by strangers, where a green developer readout pinned to the TV is just a
+    // bug they can't dismiss. Every other surface is a dev one and keeps the
+    // budget under your eye, and "P" still toggles it on, which is what the AC
+    // simulator needs.
+    //
+    // Hiding stops the DRAWING, not the measuring (see instrument() below), so
+    // this gate costs the adaptive render scale nothing — which matters, because
+    // the release build is exactly where it has to keep working.
+    if (!window.airconsole) this.show();
     window.addEventListener('keydown', (e) => {
       if (e.key === 'p' || e.key === 'P') this.toggle();
     });
