@@ -212,11 +212,11 @@ export function renderLobbyPick(slotEl, pick, trackCatalog, progress) {
   });
 }
 
-// The "Cups" shelf in the lobby's bottom-right corner — one row per cup with
-// the couch's stars, the locked cup trailing its unlock progress instead.
+// The "Cups" shelf at the bottom of the lobby's race rail — one row per cup
+// with the couch's stars, the locked cup trailing its unlock progress instead.
 // `cups` is the wasm-stamped catalogue's cups list (or a preview's synthesis):
-// [{id, name, stars, locked, unlockDone?, unlockNeed?}]. It sits under the
-// "Up next" card so the stars read beside the pick they dress.
+// [{id, name, stars, locked, unlockDone?, unlockNeed?}]. It shares the rail
+// with the "Up next" card so the stars read beside the pick they dress.
 export function renderCupShelf(shelfEl, cups) {
   if (!shelfEl) return;
   shelfEl.textContent = '';
@@ -240,7 +240,7 @@ export function renderCupShelf(shelfEl, cups) {
     const nm = document.createElement('span');
     nm.className = 'cup-shelf__name';
     // Short names: every cup is one on this shelf, so " Cup" says nothing and
-    // the two-column chips have no room for it.
+    // the rail is too narrow to spend width on it.
     nm.textContent = (c.name || '').replace(/ Cup$/, '');
     row.appendChild(nm);
     if (c.locked) {

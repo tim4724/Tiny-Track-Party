@@ -10,45 +10,62 @@ html, body {
   overflow: hidden;
 }
 
+/* The corner button row's geometry, declared once: it is FIXED over every
+   screen, so chrome that must not sit under it (the lobby's right rail) has to
+   derive its own clearance from these — see .race-rail. */
+html {
+  --corner-top: calc(1.1rem + env(safe-area-inset-top));
+  --corner-edge: 1.1rem;
+  --corner-btn: 3.4rem;
+}
+
 /* ---- Lobby ---- */
-/* Sticker chrome on ONE poster grid over the full viewport (paper stage OR
-   live 3D preview behind — the layout is identical in both states): a content
-   band where the join ticket (wordmark masthead + QR + scan hint) and the cup
-   slot CENTRE on the same line, and a footer band (seat dock). Shared
-   gutters, one alignment line per band — the hand-slapped tilts stay playful
-   because the grid beneath is straight. */
+/* Sticker chrome FRAMING the board (paper stage OR live 3D preview behind —
+   the layout is identical in both states): two rails that run the full height
+   of the content band, and a footer band (seat dock) that closes it. One top
+   line, one bottom line, two gutters, and the middle left open for the track.
+   The hand-slapped tilts stay playful because the grid beneath is straight.
+
+   Both rails are capped by VIEWPORT HEIGHT as well as width (the `min()` in
+   the columns): a rail's cards are sized by their column, so on a squat board
+   an unclamped column makes a card taller than the band it has to fit in. */
 #lobby {
   position: relative;
   z-index: 1;                 /* float the lobby over the #scene backdrop */
   height: 100%;
   display: grid;
-  grid-template-columns: clamp(270px, 27vw, 430px) 1fr clamp(190px, 17vw, 270px);
+  grid-template-columns:
+    min(clamp(240px, 26vw, 440px), 38vh)
+    1fr
+    min(clamp(220px, 24vw, 460px), 32vh);
   grid-template-rows: 1fr auto;
+  /* the middle cell is deliberately EMPTY — what shows there is #scene, behind
+     the whole grid, not an item in it */
   grid-template-areas:
-    "ticket tagline cup"
-    "dock   dock    dock";
+    "ticket .    race"
+    "dock   dock dock";
   column-gap: clamp(16px, 2vw, 36px);
+  row-gap: clamp(10px, 1.6vh, 20px);
   /* generous side gutters: the rails frame the centre without hugging the
-     bezel (the middle stays open for the tagline / live track preview) */
+     bezel (the middle stays open for the live track preview) */
   padding:
-    clamp(14px, 2.4vh, 26px) clamp(32px, 4.5vw, 88px)
-    clamp(16px, 3vh, 32px);
+    clamp(14px, 2.4vh, 26px) clamp(28px, 3.6vw, 72px)
+    clamp(16px, 2.6vh, 30px);
 }
 
-/* Left rail — the join ticket with the scan hint hanging under it. The rail
-   is the grid item; the hint is absolute so its pre/post-pick toggle never
-   moves the ticket. */
+/* Left rail — the join ticket, which carries its own scan hint. The rail
+   spans the band and CENTRES the ticket rather than stretching it: the QR is
+   what sets the card's height, and a card grown past its content is just a
+   field of white with a small QR marooned in it. */
 .ticket-rail {
-  grid-area: ticket; align-self: center;
-  position: relative;
-  width: 100%;
-  max-width: 58vh;                    /* never taller than the band on squat windows */
+  grid-area: ticket; align-self: stretch;
+  display: flex; align-items: center;
 }
 /* Join ticket — the wordmark masthead over QR + URL, one sticker card.
    A <button>: the whole ticket copies the join link. */
 .ticket {
   width: 100%;                        /* the QR is the lobby's MAIN element */
-  display: flex; flex-direction: column; align-items: center; gap: 0.55rem;
+  display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
   padding: 0.85rem 0.85rem 1rem;
   font: inherit; color: var(--ink); text-align: center;
   background: var(--surface);
@@ -117,12 +134,24 @@ html, body {
   color: var(--accent); font-weight: 700; letter-spacing: 0.04em;
 }
 
-/* Cup slot (right rail) — empty pre-pick, the race card post-pick
-   (renderCupSlot fills it). Centre-aligned with the join ticket. */
+/* Race rail — tonight's race over the long game. It spans the band; the pick
+   hangs from the top, the shelf from the bottom. */
+.race-rail {
+  grid-area: race; align-self: stretch;
+  display: flex; flex-direction: column;
+  gap: clamp(10px, 1.4vh, 18px);
+  /* clear #corner-btns, which is FIXED over every screen — without this the
+     pick card would sit under the mute/fullscreen row. */
+  padding-top: calc(var(--corner-top) + var(--corner-btn) + 0.5rem);
+}
+
+/* Cup slot — empty pre-pick, the race card post-pick (renderCupSlot fills it).
+   The auto margin below it is what pins the SHELF to the rail's bottom: the
+   slot is empty (zero-height) until the host picks, and a `space-between`
+   rail would park the lone shelf at the TOP and then drop it when the pick
+   arrived. This way the shelf never moves. */
 .cup-slot {
-  grid-area: cup; align-self: center; justify-self: end;   /* centre-aligned with the ticket */
-  width: 100%;
-  max-width: 44vh;                    /* same squat-window guard as the ticket */
+  margin-bottom: auto;
   display: flex; justify-content: center;
 }
 /* the pick sits on its own white sticker card (mirroring the join ticket's
@@ -211,67 +240,66 @@ html, body {
 }
 .cup-meter i.is-on { background: var(--red); }
 
-/* Scan hint — a quiet white sticker hanging centred under the ticket for the
-   whole lobby; absolute, so it never affects the card's position. Hidden until
-   there's a code to scan (the QR's .is-in), then it fades — or, with motion
-   on, slaps — in with it. */
+/* Scan hint — the ticket's own last line, under the join URL. Not a sticker of
+   its own: as a floating card it needed the join URL's whole width beside the
+   seat dock, and on a 720p board it landed on the first seat. Hidden until
+   there's a code to scan (the QR's .is-in), then it fades in with it. */
 .tagline {
-  position: absolute; top: calc(100% + 14px); left: 50%;
-  transform: translateX(-50%) rotate(-2deg);
-  width: max-content; max-width: 120%;
+  max-width: 100%;
   text-align: center;
-  color: var(--ink); background: var(--surface);
-  border: 3px solid var(--ink); border-radius: var(--r);
-  padding: 0.55em 1.1em;
-  box-shadow: var(--shadow-pop);
+  color: var(--ink-2);
   opacity: 0; transition: opacity 0.4s ease;
 }
-.ticket-rail:has(#qr.is-in) .tagline { opacity: 1; }
+.ticket:has(#qr.is-in) .tagline { opacity: 1; }
 .tagline__main {
   font-family: var(--font-display); font-weight: 600;
-  font-size: clamp(16px, 1.7vw, 25px); line-height: 1.1;
+  font-size: clamp(13px, 1.05vw, 18px); line-height: 1.15;
 }
 
-/* "Cups" — the couch's star shelf, pinned to the lobby's BOTTOM-RIGHT corner
-   under the "Up next" card (whose pick these stars dress). ONE column of
-   short-name chips (renderCupShelf strips the " Cup" suffix): the corner's
-   width is capped by the centred seat dock, so the chips buy their READ-FROM-
-   THE-COUCH size from height, not width. The locked cup trails its unlock
-   count. */
+/* "Cups" — the couch's star shelf, at the bottom of the right rail under the
+   "Up next" card (whose pick these stars dress). ONE sticker card of
+   short-name rows (renderCupShelf strips the " Cup" suffix) rather than a
+   stack of separate pills: five pills with five outlines, five drops and a gap
+   between each read as five things scattered down the corner, and the shelf is
+   one thing. The locked cup trails its unlock count. */
+/* Ships .hidden (index.html) because the shelf is a CARD now, and an unfilled
+   one paints a blank white slab for the whole first paint. renderCupShelf owns
+   the class from there. */
 .cup-shelf {
-  /* Absolute over the scene (chrome floats bare, like every lobby sticker),
-     inset by the lobby's own gutters so its right edge lines up with the
-     up-next card above it. The dock row's seats are centred, so the corner
-     stays clear on any 16:9 screen. */
-  position: absolute;
-  right: clamp(32px, 4.5vw, 88px);
-  bottom: clamp(16px, 3vh, 32px);
-  display: grid; grid-template-columns: 1fr; gap: 0.45rem;
-  width: min(19vw, 300px);
-  padding-top: 0.5rem;   /* room for the corner label to straddle the edge */
+  position: relative;
+  background: var(--surface);
+  border: 3px solid var(--ink); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-card);
+  transform: rotate(-1deg);
+  padding: 0.5rem 0.7rem 0.45rem;
 }
-/* the label rides the shelf's top-left corner like a sticker tab — a full
-   label row is height the column can't spare above the 720p seat band */
-.cup-shelf__label { position: absolute; top: -0.45rem; left: 0.65rem; z-index: 1; font-size: 0.8rem; }
+/* the label rides the card's top-left corner like a sticker tab — a full
+   label row is height the rail can't spare above the 720p seat band */
+.cup-shelf__label { position: absolute; top: -0.75rem; left: 0.7rem; z-index: 1; font-size: 0.8rem; }
+/* rows are separated by a hairline, not by air: inside one card the divider is
+   what makes them a list */
 .cup-shelf__row {
   display: flex; align-items: center; gap: 0.45rem; min-width: 0;
-  background: var(--surface); border: 2.5px solid var(--ink); border-radius: var(--r-pill);
-  padding: 0.24rem 0.8rem 0.24rem 0.7rem;
-  box-shadow: var(--shadow-pop);
+  border-bottom: 2px solid var(--hairline);
+  padding: 0.34rem 0.15rem;
   font-family: var(--font-display); font-weight: 700;
   font-size: clamp(14px, 1.5vw, 21px); color: var(--ink);
 }
+.cup-shelf__row:last-child { border-bottom: 0; }
 .cup-shelf__row .dot { width: 0.65rem; height: 0.65rem; }
 .cup-shelf__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cup-shelf__row .starrow { margin-left: auto; font-size: 0.78em; flex: none; }
 .cup-shelf__row .lock-glyph { width: 0.85em; height: 0.85em; flex: none; }
-.cup-shelf__row--locked { background: var(--surface-2); }
+/* locked: the row recedes in place. It can't take the sunken fill any more —
+   inside one card that would read as a hole punched in the paper. */
+.cup-shelf__row--locked { color: var(--ink-2); }
 .cup-shelf__row--locked b { margin-left: auto; font-size: 0.85em; }
 /* the cup slot's star badge, between the sticker and the minis */
 .cup-stars { font-size: clamp(14px, 1.5vw, 20px); }
 
-/* Seat dock (bottom-centre) — the joined headline over a horizontal row of
-   sticker seat chips. Room is capped at 4 players, so the dock never wraps. */
+/* Seat dock — a horizontal row of sticker seat cards across the bottom of the
+   board, and the floor the two rails stop at. Room is capped at 4 players, so
+   the dock never wraps. */
 .lobby-foot {
   grid-area: dock;
   display: flex; flex-direction: column; align-items: center; gap: 0.8rem;
@@ -776,12 +804,12 @@ html.cam-free #race { pointer-events: none; }
    button's own .icon-btn hover/press transitions untouched. */
 #corner-btns {
   position: fixed; z-index: 12;
-  top: calc(1.1rem + env(safe-area-inset-top));
-  right: calc(1.1rem + env(safe-area-inset-right));
+  top: var(--corner-top);
+  right: calc(var(--corner-edge) + env(safe-area-inset-right));
   display: flex; gap: 0.6rem;
   transition: opacity 0.4s ease;
 }
-#corner-btns .icon-btn { width: 3.4rem; height: 3.4rem; }
+#corner-btns .icon-btn { width: var(--corner-btn); height: var(--corner-btn); }
 
 /* The welcome board has no fullscreen toggle: NEW GAME is the gesture that
    claims fullscreen, so a second control beside it is only a way to spend the
@@ -851,14 +879,18 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
   html:not(.device-choice-dismissed) #device-choice { display: flex; }
 }
 
-/* ---- Motion: sticker slap-ins (sticker-slap keyframes in theme.css;
-   the scan hint's scale-only tagline-slap twin lives below) ----
+/* ---- Motion: sticker slap-ins (sticker-slap keyframes in theme.css) ----
    Lobby chrome slaps on in a quick stagger every time #lobby is (re)shown
    (display:none → shown restarts CSS animations), the cup sticker pops as the
    pick lands (.cup-slot__pick loses .hidden), and the results board's pieces
    land one after another on reveal. Countdown digits are re-triggered from JS
    (the .slap class) since their element never re-enters the DOM. All of it
-   only exists under prefers-reduced-motion: no-preference. */
+   only exists under prefers-reduced-motion: no-preference.
+
+   The scan hint has no slap of its own: it's a line INSIDE the ticket now, so
+   it arrives with the card and only its QR-gated fade is left (see .tagline).
+   Slapping a line of text inside a card that is itself slapping reads as a
+   glitch, not as a second sticker. */
 @media (prefers-reduced-motion: no-preference) {
   .welcome__wordmark, .welcome__tag, .welcome__btn,
   .ticket, .cup-slot__pick, .lobby-foot {
@@ -867,20 +899,6 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
   .welcome__tag { animation-delay: 60ms; }
   .welcome__btn { animation-delay: 120ms; }
   .ticket { animation-delay: 40ms; }
-  /* The scan hint's slap is SCALE-ONLY: opacity belongs to the QR-gated fade
-     (see .tagline above), so when the QR lands mid-lobby the hint fades in
-     quietly — no pop next to a card that's been sitting still. On a lobby
-     re-show the restarted animation and the already-in QR line up, and the
-     hint slaps with the rest of the chrome. */
-  @keyframes tagline-slap {
-    0%   { scale: 1.15; rotate: 2deg; }
-    60%  { scale: 0.96; rotate: -0.6deg; }
-    100% { scale: 1; rotate: 0deg; }
-  }
-  .tagline {
-    animation: tagline-slap 240ms cubic-bezier(0.2, 1.5, 0.35, 1) both;
-    animation-delay: 80ms;
-  }
   .cup-slot__pick { animation-delay: 120ms; }
   .cup-shelf { animation: sticker-slap 240ms cubic-bezier(0.2, 1.5, 0.35, 1) both; animation-delay: 140ms; }
   .lobby-foot { animation-delay: 160ms; }
@@ -912,14 +930,11 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
     display: flex; flex-direction: column; align-items: center;
     gap: 1.4rem; padding: 1.4rem 1rem 2rem;
   }
-  .ticket-rail { order: 1; width: min(84vw, 400px); max-width: none; }
-  /* in the column the hint flows under the card instead of hanging over
-     whatever comes next */
-  .tagline { position: static; transform: rotate(-2deg); margin: 0.9rem auto 0; width: fit-content; }
-  /* the shelf joins the column after the pick card — no corner to pin to */
-  .cup-shelf { position: static; margin: 0 auto; width: min(84vw, 360px); order: 4; }
-  .cup-slot { order: 3; width: min(84vw, 360px); max-width: none; }
-  .lobby-foot { order: 5; }
+  .ticket-rail { order: 1; width: min(84vw, 400px); }
+  /* the race rail joins the column whole (pick, then shelf); nothing above it
+     to clear, and no band to spread over */
+  .race-rail { order: 2; width: min(84vw, 360px); padding-top: 0; }
+  .lobby-foot { order: 3; }
   #players { flex-wrap: wrap; justify-content: center; }
   /* the stage clouds are placed for the wide layout — behind the stacked
      column they poke out from odd corners, so they sit this one out */

@@ -535,13 +535,13 @@ export function runDisplayScenario(opts, ctx) {
     renderRoster(slots, hostIdx);
     fakeJoin('TEST');
     startAttractDemo(slots);
-    // Post-pick lobby: race card in the slot, hint gone. `picked` names the MODE
-    // ('cup' — legacy '1' — 'track', 'random' or 'tour'); everything the card
-    // then says is the model's, off the same renderLobbyPick the live lobby
-    // calls. Pair the card with a matching ?track=<id> so the orbiting preview
-    // shows the circuit the card names.
+    // Post-pick lobby: the race card fills the rail's slot. `picked` names the
+    // MODE ('cup' — legacy '1' — 'track', 'random' or 'tour'); everything the
+    // card then says is the model's, off the same renderLobbyPick the live
+    // lobby calls. Pair the card with a matching ?track=<id> so the orbiting
+    // preview shows the circuit the card names.
     showPick(opts.picked ? previewPick(opts.picked) : null);
-    // The bottom-right star shelf, off the same renderer as live play.
+    // The star shelf under it, off the same renderer as live play.
     renderCupShelf(el('cup-shelf'), PREVIEW_SHELF);
     return;
   }

@@ -763,7 +763,7 @@ function renderPick() {
   renderLobbyPick(el('cup-slot'), net.pick, trackCatalog, progressChooser());
 }
 
-// The bottom-right "Cups" shelf, from the wasm-stamped catalogue. Refreshed
+// The race rail's "Cups" shelf, from the wasm-stamped catalogue. Refreshed
 // only when the record can have moved: boot (below) and the persist performer.
 function refreshCupShelf() {
   if (!_isTestMode) renderCupShelf(el('cup-shelf'), ui.catalogue().cups);
