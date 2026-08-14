@@ -132,8 +132,9 @@ Three properties of that surface matter more than the list:
 7. **A QR encoder.** Settled in [shared-cpp-plan.md](shared-cpp-plan.md) (§QR):
    there is deliberately no C++ encoder, because the URL composition is shared
    and only the module bitmap is per-platform. `CIQRCodeGenerator` on tvOS,
-   ZXing on Android. The web shell gets its matrix from the server's `/api/qr`;
-   a TV app should encode locally.
+   ZXing on Android, `public/shared/qr.js` in the browser — copy its policy (EC
+   level L, a 1-module quiet zone), not its library. Every shell encodes
+   locally: no display asks its own origin to draw its own join code.
 8. **A base URL, and this shell's `cpp` value.** `session.h`'s `join_url` needs
    an origin serving the phone controller, and a native app has none of its own.
    The web deployment is therefore a runtime dependency of every TV app.

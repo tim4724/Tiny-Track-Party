@@ -31,7 +31,7 @@ const browserGlobals = {
 export default [
   // ── What never gets linted ────────────────────────────────────────────────
   // worktrees/ and .claude/ hold gitignored sibling checkouts other agents work
-  // in; the rest are run/build artefacts.
+  // in; the rest are run/build artefacts and vendored upstream code.
   {
     ignores: [
       'node_modules/**',
@@ -41,6 +41,7 @@ export default [
       'test-results/**',
       'native/**',                        // C++ tree; build dirs emit emscripten glue JS
       'public/display/engine/native/**',  // generated wasm artifacts (ttp_runtime.mjs — emscripten glue)
+      'public/shared/qrcode-generator.js', // vendored verbatim; upstream style, not ours
       'artwork/**',
     ],
   },

@@ -23,10 +23,9 @@ import * as session from './NativeSessionModel.js';
 // The sharded dial URL, from the same encoder party.pinInstance calls. This file
 // used to build that string by hand eleven lines above asking C++ for it.
 import { pinUrl } from './NativePartyConnection.js';
+import { buildQRMatrix } from '../shared/qr.js';
 
 const { PartyConnection, RELAY_URL, CAR_COLORS, LIVENESS } = window;
-
-const enc = encodeURIComponent;
 
 // Presence windows. The manifest numbers this shell still SPENDS itself: the
 // detection windows feed RoomFlow at construction, and the tick rate arms the
@@ -607,11 +606,8 @@ export function renderJoinUrl(el, fullText, code) {
   el.classList.add('is-in'); // the lobby ticket fades its content in on first render
 }
 
-// QR matrix fetch + canvas render (server returns a module bitmap).
-export async function fetchQR(text) {
-  const r = await fetch('/api/qr?text=' + enc(text));
-  return r.json();
-}
+// Canvas render of a shared/qr.js matrix. A null one (encode failed) leaves the
+// canvas untouched rather than clearing it.
 // `bg` is the quiet-zone fill (default white). Pass a falsy bg for a transparent
 // background — black modules sit straight on whatever's behind the canvas.
 export function renderQR(canvas, qr, px = 480, bg = '#ffffff') {
@@ -633,8 +629,7 @@ export function renderQR(canvas, qr, px = 480, bg = '#ffffff') {
 // Stage.setCarReconnect / _loop). Reuses the .cell-finish chrome (frosted
 // card, livery top-border, centred placement) so it matches the FINISHED card.
 // `seat` is {name, colorIndex, url}. Shared by the live display (main.js) and the
-// gallery harness so the markup stays in one place. QR matrices are cached by url.
-const _rcQrCache = new Map();
+// gallery harness so the markup stays in one place.
 export function buildReconnectCard(seat) {
   const card = document.createElement('div');
   card.className = 'cell-finish cell-reconnect'; // .cell-finish = positioning + card chrome
@@ -654,11 +649,7 @@ export function buildReconnectCard(seat) {
   card.append(head, sub, qr);
 
   // Transparent QR background → black modules sit straight on the frosted card.
-  const cached = _rcQrCache.get(seat.url);
-  if (cached) renderQR(qr, cached, 220, null);
-  else fetchQR(seat.url)
-    .then((m) => { _rcQrCache.set(seat.url, m); renderQR(qr, m, 220, null); })
-    .catch((e) => console.warn('reconnect QR failed', e));
+  renderQR(qr, buildQRMatrix(seat.url), 220, null);
 
   return card;
 }

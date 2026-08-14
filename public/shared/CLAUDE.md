@@ -77,6 +77,16 @@ The projection half is retired. The bake is native now:
 committed `trackSchematics.js` BYTE-IDENTICALLY, which is why the historical key
 order is respelled on the Node side.
 
+## The join QR
+
+`qr.js` encodes the join URL **in the browser** — there is no server endpoint and
+no C++ encoder, and why is `docs/native-port/shells.md` §7. It owns the encoding
+policy the other shells reimplement, so its EC level and quiet zone are asserted
+structurally rather than left to prose.
+
+`qrcode-generator.js` under it is vendored verbatim, hence lint-ignored: leave
+upstream's style alone and keep its MIT notice, which is how that licence ships.
+
 ## biomes.js and the track descriptors
 
 `biomes.js` is the browser's whole edge of the native palette; what may be added to

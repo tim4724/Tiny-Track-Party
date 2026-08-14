@@ -10,8 +10,9 @@
 //    — they derive from display/Audio.js RACE_MUSIC via creditsFor(), so a
 //    picks change can never desync the screen.
 //  - CC0 entries (Kenney kit, OpenGameArt clips) need nothing; we credit anyway.
-//  - OFL / Apache-2.0 keep their license files in-repo (assets/fonts/, the
-//    Filament fork); the screen line is good practice, not the license mechanism.
+//  - OFL / Apache-2.0 / MIT keep their notice in-repo (assets/fonts/, the Filament
+//    fork, the vendored QR encoder's own header); the screen line is good
+//    practice, not the license mechanism.
 
 export const ASSET_CREDITS = [
   {
@@ -80,10 +81,10 @@ export const ASSET_CREDITS = [
   },
   {
     section: 'Software',
-    title: 'node-qrcode (join-code QR, server-side)',
-    author: 'Ryan Day',
+    title: 'qrcode-generator (join-code QR, in-browser)',
+    author: 'Kazuhiko Arase',
     license: 'MIT',
-    url: 'https://github.com/soldair/node-qrcode',
+    url: 'https://github.com/kazuhikoarase/qrcode-generator',
     required: false,
   },
 ];

@@ -6,7 +6,8 @@
 // session, the pause/auto-pause latches, the effect walk that performs the
 // orchestration layer's answers, and the net callbacks. Everything with its own
 // state and no stake in a race was split out beside it — see the imports below.
-import { DisplayNet, fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
+import { DisplayNet, renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
+import { buildQRMatrix } from '../shared/qr.js';
 import { Stage, HUD_TICK_MS } from './Stage.js';
 import { DEV_TRACKS } from '../shared/devTracks.js';
 import { LobbyDemo } from './LobbyDemo.js';
@@ -573,13 +574,13 @@ const net = new DisplayNet({
     if (id && built.has(id)) { try { localStorage.setItem(LAST_TRACK_KEY, id); } catch (_) {} }
     selectTrack(id); renderPick();
   },
-  onRoomReady: async ({ roomCode, joinUrl }) => {
+  onRoomReady: ({ roomCode, joinUrl }) => {
     // The room code rides along in the join URL's path; the ticket shows one
     // URL line with the trailing code highlighted in the accent colour.
     currentJoinUrl = joinUrl;                   // the full link the join ticket copies
     try { const u = new URL(joinUrl); renderJoinUrl(el('joinurl'), u.host + u.pathname, roomCode); }
     catch (_) { renderJoinUrl(el('joinurl'), joinUrl, roomCode); }
-    try { renderQR(el('qr'), await fetchQR(joinUrl)); } catch (e) { console.warn('QR failed', e); }
+    renderQR(el('qr'), buildQRMatrix(joinUrl));
   },
   onRosterChange: renderRoster,
   onReconnectChange: renderReconnect,   // dropped seats awaiting a rejoin → QR cards

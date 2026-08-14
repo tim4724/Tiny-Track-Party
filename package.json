@@ -27,9 +27,6 @@
     "test:e2e": "playwright test",
     "thumbs:car": "node scripts/capture-car-thumbs.js"
   },
-  "dependencies": {
-    "qrcode": "^1.5.4"
-  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "1.60.0",

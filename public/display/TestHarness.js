@@ -14,7 +14,8 @@ import { init as initNativeSim, NativeRaceSession } from './NativeRaceSession.js
 // number.
 import { HUD_TICK_MS } from './Stage.js';
 import { AI_PERSONALITIES } from './aiPersonas.js';
-import { fetchQR, renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
+import { renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
+import { buildQRMatrix } from '../shared/qr.js';
 import { renderSeats, renderLobbyPick, renderCupShelf } from './lobbySeats.js';
 // The live results overlay and countdown banner. Driving the REAL renderers off
 // the REAL ui model (a synthesized board in, the same markup out) is what keeps
@@ -427,9 +428,7 @@ export function runDisplayScenario(opts, ctx) {
 
   function fakeJoin(code) {
     renderJoinUrl(el('joinurl'), (location.host || 'tinytrack.party') + '/' + code, code);
-    fetchQR((location.origin || 'https://tinytrack.party') + '/' + code)
-      .then((m) => renderQR(el('qr'), m))
-      .catch(() => { /* gallery still works without the QR */ });
+    renderQR(el('qr'), buildQRMatrix((location.origin || 'https://tinytrack.party') + '/' + code));
   }
 
   // ---- lobby attract demo ----
@@ -480,7 +479,7 @@ export function runDisplayScenario(opts, ctx) {
     renderRoster([], null);
     renderJoinUrl(el('joinurl'), (location.host || 'tinytrack.party'), null); // stamps the fade-in class
     showPick(null);   // no pick yet → empty slot
-    fetchQR((location.origin || 'https://tinytrack.party')).then((m) => renderQR(el('qr'), m)).catch(() => {});
+    renderQR(el('qr'), buildQRMatrix(location.origin || 'https://tinytrack.party'));
     startAttractDemo([]);
     return;
   }
@@ -1214,7 +1213,7 @@ export function runDisplayScenario(opts, ctx) {
       // Fake a dropped racer: the last filled slot is reconnecting. Its car keeps
       // its cell; the reconnect QR is centred in that cell (the renderer positions
       // it). The QR encodes the join URL with the seat's ?claim= token (no relay
-      // needed — /api/qr serves it).
+      // needed — the matrix is built in-browser).
       const dropped = buildSlots(players).slice(-1)[0];
       scene.setCarReconnect(dropped, buildReconnectCard({
         name: FAKE_NAMES[dropped], colorIndex: dropped,

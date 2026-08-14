@@ -209,9 +209,9 @@ composed English string in a HUD field.
   `'SUNSET CHAMPS!'`. The copy table ships as data from the same mechanism as
   the design tokens, so localization and platform dynamic-type stay possible.
   Player names and track names pass through as data, not keys.
-- **QR:** no C++ encoder. `CIQRCodeGenerator` on tvOS, ZXing on Android, the
-  existing endpoint on web — three one-liners are not worth ~600 lines of C++ to
-  unify. The URL *composition* is shared; only the module bitmap is per-platform.
+- **QR:** no C++ encoder. `CIQRCodeGenerator` on tvOS, ZXing on Android, a
+  vendored JS encoder on web — three one-liners are not worth ~600 lines of C++
+  to unify. The URL *composition* is shared; only the module bitmap is per-platform.
 - **`scenerySeeds`:** freeze the quirk bit-for-bit. It reads
   `track.id || track.name` off the `buildTrack` OUTPUT, which has neither field,
   so it is effectively `String(Math.round(length * 100))`. All 20 rounded lengths

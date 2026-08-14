@@ -11,7 +11,6 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const zlib = require('zlib');
-const QRCode = require('qrcode');
 
 const PORT = parseInt(process.env.PORT, 10) || 4000;
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
@@ -105,21 +104,6 @@ function brotliFor(filePath, data) {
   return encoded;
 }
 
-function generateQRMatrix(text) {
-  const qr = QRCode.create(text, { errorCorrectionLevel: 'L' });
-  const size = qr.modules.size;
-  const modules = Array.from(qr.modules.data);
-  const quiet = 1;
-  const padded = size + quiet * 2;
-  const paddedModules = new Array(padded * padded).fill(0);
-  for (let row = 0; row < size; row++) {
-    for (let col = 0; col < size; col++) {
-      paddedModules[(row + quiet) * padded + (col + quiet)] = modules[row * size + col];
-    }
-  }
-  return { size: padded, modules: paddedModules };
-}
-
 function getLocalIP() {
   const interfaces = os.networkInterfaces();
   for (const name of Object.keys(interfaces)) {
@@ -173,17 +157,6 @@ const server = http.createServer((req, res) => {
   let urlPath = req.url.split('?')[0];
 
   // --- JSON endpoints ---
-  if (urlPath === '/api/qr' && req.method === 'GET') {
-    const url = new URL(req.url, `http://${req.headers.host}`);
-    const text = url.searchParams.get('text');
-    if (!text || text.length > 2048) {
-      sendJson(res, 400, { error: !text ? 'Missing text parameter' : 'Text too long' });
-      return;
-    }
-    try { sendJson(res, 200, generateQRMatrix(text)); }
-    catch (err) { sendJson(res, 500, { error: 'QR generation failed' }); }
-    return;
-  }
   if (urlPath === '/health') { sendJson(res, 200, { status: 'ok' }); return; }
   if (urlPath === '/api/baseurl') {
     sendJson(res, 200, { baseUrl: process.env.BASE_URL || `http://${getLocalIP()}:${PORT}` });

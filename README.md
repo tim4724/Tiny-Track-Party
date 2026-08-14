@@ -65,7 +65,7 @@ public/
   display/     # The browser shell: renders and performs
   controller/  # Phone tilt controller
   shared/      # protocol.js — wire contract, tilt/presence manifest, theme
-server/        # Static-file + QR-code host (no game logic)
+server/        # Static-file host (no game logic)
 partyplug/     # Reusable party-game transport kit
 tests/         # Unit, wire-compat and E2E suites; conformance fixtures
 ```
@@ -84,4 +84,4 @@ The engine is checked against recorded traces of the original JavaScript impleme
 
 ## Tech Stack
 
-C++17 compiled to WebAssembly for the engine (the Filament renderer at C++20). Vanilla JavaScript + ES modules for the shells, with no build step and no framework. 3D assets are the Kenney Toy Car Kit. Transport is the [Party-Sockets](https://github.com/tim4724/Party-Sockets) WebSocket relay plus WebRTC DataChannels for low-latency input. One production dependency (`qrcode`).
+C++17 compiled to WebAssembly for the engine (the Filament renderer at C++20). Vanilla JavaScript + ES modules for the shells, with no build step and no framework. 3D assets are the Kenney Toy Car Kit. Transport is the [Party-Sockets](https://github.com/tim4724/Party-Sockets) WebSocket relay plus WebRTC DataChannels for low-latency input. No production dependencies: the server is node builtins only.
