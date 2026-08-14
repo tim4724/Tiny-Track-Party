@@ -95,7 +95,7 @@ void testCompleteness() {
   // Every kind DECLARED, not merely every kind some biome happens to use: the
   // enum is the vocabulary, and a kind the renderer can draw but no biome lists
   // is exactly the thing a gallery is for.
-  for (uint32_t k = rt::LM_GNOME; k <= rt::LM_TRAIN; k++) {
+  for (uint32_t k = rt::LM_GNOME; k <= rt::LM_BOOKS; k++) {
     check(hasKind(show.landmarks, k), "showcase stages landmark kind " + std::to_string(k));
   }
   for (uint32_t k = rt::CL_FLOWER; k <= rt::CL_DOMINO; k++) {
@@ -219,14 +219,13 @@ void testInventory() {
   const std::string json = rt::showcase_inventory_json();
   check(json.rfind("{\"clutter\":", 0) == 0, "inventory is canonical (keys sorted)");
   const Theme t = rt::showcase_theme("grass", "showroom");
-  check(json.find("\"wind-up train\"") != std::string::npos, "inventory names the train");
   check(json.find("\"dominoes\"") != std::string::npos, "inventory names the dominoes");
   check(json.find("\"hot-air balloon\"") != std::string::npos, "inventory names the balloon");
   for (const std::string& m : rt::showcase_models()) {
     check(json.find("\"" + m + "\"") != std::string::npos, "inventory names " + m);
   }
   // Once each: the union dedupes, so the staged list is exactly the enum.
-  check(t.landmarks.size() == (size_t) (rt::LM_TRAIN + 1), "every landmark kind is staged once");
+  check(t.landmarks.size() == (size_t) (rt::LM_BOOKS + 1), "every landmark kind is staged once");
 }
 
 // The standing exhibits. Placement is TASTE and nothing here judges it; what is

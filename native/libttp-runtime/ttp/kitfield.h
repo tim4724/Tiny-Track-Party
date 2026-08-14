@@ -55,7 +55,15 @@ constexpr float kKitMinCell = 0.6f;
 // How much clear ground the field wants around it. Nothing the scene decorates
 // the horizon with may stand inside this, or a row comes out parked behind a
 // mountain — which is a browser you have to fly around to read.
+//
+// The APRON takes half of it: ground reads as a border a few paces past the
+// last model, where a hill that close still looms over the row behind it. Same
+// number because it is the same question asked of two different things.
 constexpr float kKitFieldClear = 30.0f;
+// How far PAST the track and its terrain the field stands. Far enough that a
+// circuit's own scatter is behind you when you are reading a row, and that the
+// terrain grid has faded to flat ground under it.
+constexpr float kKitFieldStandoff = 24.0f;
 // And how far above the ground its own apron sits. Enough to clear a biome's
 // water sheet, which covers every piece of ground far enough out to hold a
 // field; invisible on a dry one.

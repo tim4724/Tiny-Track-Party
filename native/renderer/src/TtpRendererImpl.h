@@ -237,7 +237,7 @@ struct TtpRenderer::TrackBin {
     // prop<i>.glb by slot.
     uint32_t prModelCount = 0;
     float prDensity = 0;
-    struct PropStamp { uint32_t slot; float w, s0, s1; };
+    struct PropStamp { uint32_t slot; float w, s0, s1; bool face; };
     std::vector<PropStamp> prScatter;
     uint32_t lmSeed = 0;                 // landmark stream (51966-FNV)
     std::vector<uint32_t> lmKinds;       // 0 gnome, 1 doghouse, 2 picnic

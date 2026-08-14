@@ -94,7 +94,10 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
             } else if (roll < tb.scMixBush && tb.scHasBush) {
                 const float bs = tb.scBush.s0 + (float) rnd() * tb.scBush.s1;
                 placeTree(x, z, (int) tb.scBush.model, bs, tb.scBush.sink);
-            } else {
+            } else if (!tb.scRocks.empty()) {
+                // A biome may carry no boulder palette at all — the snow cup
+                // dresses its verges with snow-capped kit rock instead, and
+                // grey granite beside that reads as a different game.
                 Boulder b;
                 b.rr = tb.scRockS[0] + (float) rnd() * tb.scRockS[1];
                 b.grey = tb.scRocks[(size_t) std::floor(rnd() * tb.scRocks.size())];
@@ -212,7 +215,7 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
         return true;
     };
 
-    struct Placement { uint32_t slot; float x, y, z, s, yaw, r, h; };
+    struct Placement { uint32_t slot; float x, y, z, s, yaw, h; };
     std::vector<Placement> placements;
 
     // Scattered pieces, the buildScenery idiom: a candidate every 9u per side,
@@ -234,10 +237,16 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
                     if (roll < acc) { e = &p; break; }
                 }
                 const float s = e->s0 + (float) rnd() * e->s1;
-                const float yaw = (float) rnd() * 2.0f * (float) M_PI;
+                // The roll is consumed either way, so a prop that faces the
+                // road does not reshuffle the scatter behind it.
+                const float spun = (float) rnd() * 2.0f * (float) M_PI;
+                // Facing = square to the deck, looking across it: the lateral
+                // axis, negated on the side the prop stands. Same frame the
+                // procedural snowman used to face itself by.
+                const float yaw = e->face
+                        ? std::atan2(-f.lat.x * side, -f.lat.z * side) : spun;
                 const float py = footprintY(tb, x, z, 0.45f * s);
-                placements.push_back({ e->slot, x, py, z, s, yaw,
-                                       0.75f * s, 0.6f * s });
+                placements.push_back({ e->slot, x, py, z, s, yaw, 0.6f * s });
             }
         }
     }
@@ -245,6 +254,12 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
     mPropAssets.resize(tb.prModelCount, nullptr);
     mPropInstances.resize(tb.prModelCount);
     auto& tcm = mEngine->getTransformManager();
+    // The pools, and each model's OWN footprint. The scatter above cannot know
+    // how big a model is — that is in the GLB and nowhere else — so the spacing
+    // rule below cannot run until the assets are here. Pools are sized to the
+    // candidates; what the rule then drops parks out of sight, which is the same
+    // thing the item-box pool does with its spare entries.
+    std::vector<float> reach(tb.prModelCount, 0.0f);  // half-footprint at scale 1
     for (uint32_t m = 0; m < tb.prModelCount; m++) {
         size_t count = 0;
         for (const auto& p : placements) if (p.slot == m) count++;
@@ -252,6 +267,8 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
         const std::string name = "prop" + std::to_string(m) + ".glb";
         mPropAssets[m] = loadInstancedProp(name.c_str(), count, mPropInstances[m]);
         if (!mPropAssets[m]) continue;
+        const filament::Aabb bb = mPropAssets[m]->getBoundingBox();
+        reach[m] = 0.5f * std::max(bb.max.x - bb.min.x, bb.max.z - bb.min.z);
         // The buildScenery metal fix: the shared matte read on every piece.
         for (auto* inst : mPropInstances[m]) {
             MaterialInstance* const* mis = inst->getMaterialInstances();
@@ -260,15 +277,62 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
                 mis[i]->setParameter("roughnessFactor", 1.0f);
             }
         }
+    }
+
+    // NOTHING MAY MERGE INTO ANYTHING. Two props sharing a patch of ground read
+    // as one broken object, and a prop standing inside a tree reads worse. The
+    // scatter only ever checked its distance from the ROAD, which was enough
+    // while every prop was a crate; a snowman beside a rock cluster beside a
+    // train set is not.
+    //
+    // mShadowSpots is the record of what is already standing — every landmark,
+    // tree and boulder pushed one before this ran — so it is both the test and
+    // the place a kept prop registers itself.
+    //
+    // A loser is DROPPED, never nudged: the scatter's shape is its seeded
+    // stream, and moving a placement walks it into the next one.
+    const float CLEAR = 0.35f;   // daylight between two things that both stand
+    std::vector<size_t> kept;
+    for (size_t i = 0; i < placements.size(); i++) {
+        const Placement& p = placements[i];
+        const float pr = reach[p.slot] * p.s;   // what this prop covers
+        bool clash = false;
+        for (const float4& spot : mShadowSpots) {
+            const float dx = p.x - spot.x, dz = p.z - spot.y;
+            const float lim = pr + spot.z + CLEAR;
+            if (dx * dx + dz * dz < lim * lim) { clash = true; break; }
+        }
+        if (clash) continue;
+        kept.push_back(i);
+        mShadowSpots.push_back({ p.x, p.z, pr, p.h });
+    }
+
+    // Pose what survived; park the rest under the floor.
+    for (uint32_t m = 0; m < tb.prModelCount; m++) {
+        if (!mPropAssets[m]) continue;
         size_t k = 0;
-        for (const auto& p : placements) {
+        for (const size_t i : kept) {
+            const Placement& p = placements[i];
             if (p.slot != m) continue;
             const mat4f xf = mat4f::translation(float3{ p.x, p.y, p.z })
                     * mat4f::rotation(p.yaw, float3{ 0, 1, 0 })
                     * mat4f::scaling(float3{ p.s, p.s, p.s });
             tcm.setTransform(tcm.getInstance(mPropInstances[m][k]->getRoot()), xf);
-            mShadowSpots.push_back({ p.x, p.z, p.r, p.h });
+            // A prop model may name ONE node "spin", and the renderer turns it
+            // about its own origin every frame — which is how the toy train
+            // drives its rails (scripts/gen-trainset.mjs). Collected here
+            // because that is where the instances are; per frame it is one
+            // transform each and nothing else in the set moves.
+            for (size_t e = 0; e < mPropInstances[m][k]->getEntityCount(); e++) {
+                const utils::Entity ent = mPropInstances[m][k]->getEntities()[e];
+                const char* nm = mPropAssets[m]->getName(ent);
+                if (nm && std::strcmp(nm, "spin") == 0) mPropSpins.push_back(ent);
+            }
             k++;
+        }
+        for (; k < mPropInstances[m].size(); k++) {
+            tcm.setTransform(tcm.getInstance(mPropInstances[m][k]->getRoot()),
+                    mat4f::translation(float3{ 0, -100, 0 }));
         }
     }
 }
@@ -578,7 +642,8 @@ void TtpRenderer::buildKitField(const TrackBin& tb) {
         maxX = std::max(maxX, s.pos.x);
         minZ = std::min(minZ, s.pos.z);
     }
-    const float ox = std::max(maxX, mTerrainX1) + 24.0f, oz = minZ;
+    const float ox = std::max(maxX, mTerrainX1) + ttp::rt::kKitFieldStandoff;
+    const float oz = minZ;
 
     const std::vector<ttp::rt::KitSpot> spots = ttp::rt::kit_field_layout(foot);
     auto& tcm = mEngine->getTransformManager();
@@ -808,7 +873,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
     for (const float3& a : mHillAnchors) {
         if (!lowest || a.z < lowest->z) lowest = &a; // .z carries `top`
     }
-    if (has(7) && lowest) { // lighthouse — banded tower on its island
+    if (has(ttp::rt::LM_LIGHTHOUSE) && lowest) { // lighthouse — banded tower on its island
         constexpr float LH = 1.75f; // LH_SCALE (~16.5u tall)
         const Spot at{ lowest->x * mHillSf, lowest->y * mHillSf, 0, true };
         const float baseY = lowest->z - 0.8f; // sunk into the island crown
@@ -826,7 +891,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         seg(0.62f, 0.62f, 0.85f, 8.35f, 0xffd98a); // lamp room — warm, reads lit
         part(primCone(0.85f * LH, 0.9f * LH, 10), 0, baseY + 9.2f * LH, 0, at, 0xb2453a);
     }
-    if (has(8) && mShoreFn) { // sailboat — anchored out in the shallows
+    if (has(ttp::rt::LM_SAILBOAT) && mShoreFn) { // sailboat — anchored out in the shallows
         // A third of the way round from the lighthouse's island, so the two
         // never share a sight-line; radius = the shoreline ON THAT BEARING
         // plus an open-water margin.
@@ -883,7 +948,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
                 0, 5.85f, -0.1f, 0xd94f3d);                            // masthead pennant
     }
 
-    if (has(3)) { // hoodoo — a balanced-rock family trackside (canyon)
+    if (has(ttp::rt::LM_HOODOO)) { // hoodoo — a balanced-rock family trackside (canyon)
         const uint32_t* rocks = tb.scRocks.data();
         const auto hoodoo = [&](float hx, float hz, float T) {
             const float radii[4] = { 0.20f * T, 0.15f * T, 0.115f * T, 0.095f * T };
@@ -926,66 +991,13 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         }
     }
 
-    if (has(4)) { // snowman — the trackside greeter (snow)
-        for (float s = 30; s < tb.length - 10; s += 3) {
-            const TrackBin::Sample f = tb.frameAt(s);
-            if (f.pos.y - gy > 0.8f) continue;
-            const int side = rnd() < 0.5 ? -1 : 1;
-            const float lat = side * (f.width / 2 + 3.6f);
-            const float x = f.pos.x + f.lat.x * lat, z = f.pos.z + f.lat.z * lat;
-            if (!isClear(x, z, 2.6f)) continue;
-            const float fx = -f.lat.x * side, fz = -f.lat.z * side; // faces the road
-            const Spot sp{ x, z, std::atan2(fx, fz), true };
-            const auto ball = [&](float r, float cy, uint32_t hex) {
-                part(primIcoDetail(r, 2), 0, cy, 0, sp, hex, 0.98f);
-            };
-            ball(1.05f, 0.72f, 0xf6f9fc); // base, sunk into the snow
-            ball(0.78f, 2.02f, 0xfafcfe);
-            ball(0.54f, 3.08f, 0xf6f9fc); // head
-            // Carrot nose: a tapered cone with a rounded nub, drooped a touch.
-            {
-                constexpr float NOSE = 0.32f, TIP = 0.06f;
-                const mat4f into = rotX((float) M_PI / 2 + 0.16f);
-                part(applyPre(primCylinder(TIP, 0.19f, NOSE, 16), into),
-                        0, 3.12f, 0.58f, sp, 0xe8833a);
-                part(applyPre(applyPre(primSphere(TIP, 12, 8),
-                            mat4f::translation(float3{ 0, NOSE / 2, 0 })), into),
-                        0, 3.12f, 0.58f, sp, 0xe8833a);
-            }
-            // Coal: eyes + smile on the head, three buttons down the belly
-            // (offsets in the facing frame — ox right, oz toward the road).
-            const auto dot = [&](float ox, float oy, float oz, float r) {
-                part(primIcoDetail(r, 1), ox, oy, oz, sp, 0x343a44);
-            };
-            dot(-0.2f, 3.32f, 0.44f, 0.08f); dot(0.2f, 3.32f, 0.44f, 0.08f);
-            for (int i = -2; i <= 2; i++) dot(i * 0.12f, 2.82f + i * i * 0.03f, 0.46f, 0.05f);
-            dot(0, 2.30f, 0.72f, 0.08f); dot(0, 2.00f, 0.76f, 0.08f); dot(0, 1.70f, 0.72f, 0.08f);
-            // Soft knit beanie: rolled brim, stretched crown dome, pom-pom.
-            constexpr uint32_t HAT = 0x3b6fb0;
-            part(primTorusArc(0.42f, 0.15f, 8, 18, 2.0f * (float) M_PI), 0, 3.5f, 0, sp, HAT, 1.08f);
-            part(applyPre(primSphereBand(0.42f, 20, 12, 0, (float) M_PI / 2),
-                        mat4f::scaling(float3{ 1, 1.28f, 1 })), 0, 3.5f, 0, sp, HAT);
-            part(primIcoDetail(0.17f, 2), 0, 4.12f, 0, sp, 0xf6f9fc);
-            // Knit scarf: a ring at the neck with a tail draped down the belly.
-            part(primTorusArc(0.47f, 0.14f, 8, 18, 2.0f * (float) M_PI), 0, 2.66f, 0, sp, 0xd8463f);
-            part(applyPre(primBox(0.26f, 0.62f, 0.14f),
-                        rotX(0.45f) * mat4f::translation(float3{ 0, -0.31f, 0 })),
-                    0, 2.62f, 0.5f, sp, 0xd8463f, 1.04f);
-            // Twig arms: chunky stubs swung out and tilted up, with a shoulder knob.
-            for (const int sd : { 1, -1 }) {
-                part(applyPre(primCylinder(0.06f, 0.09f, 0.95f, 8),
-                            rotZ(-sd * ((float) M_PI / 2 - 0.5f))
-                                    * mat4f::translation(float3{ 0, 0.47f, 0 })),
-                        sd * 0.62f, 2.24f, 0, sp, 0x6b4a2f);
-                part(primIcoDetail(0.09f, 1), sd * 0.62f, 2.24f, 0, sp, 0x6b4a2f);
-            }
-            placed.push_back({ x, z, 3 });
-            mShadowSpots.push_back({ x, z, 1.1f, 3.5f });
-            break;
-        }
-    }
+    // NO has(4). The snowman that stood here was procedural, and the snow biome
+    // plants the Holiday Kit's own instead (theme.cc, the prop scatter) — so the
+    // geometry went with the placement rather than sitting here unreachable. The
+    // KIND is still in LandmarkKind: renumbering that enum would rewrite every
+    // biome's recorded landmark list to say nothing new.
 
-    if (has(5)) { // blocks — giant alphabet blocks (playroom)
+    if (has(ttp::rt::LM_BLOCKS)) { // blocks — giant alphabet blocks (playroom)
         static const uint32_t TONES[3] = { 0xe66a5a, 0x5a8fd8, 0xf2c14e };
         const auto block = [&](float bx, float bz, float size, float cy, float yaw,
                 uint32_t hex) {
@@ -1026,7 +1038,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         }
     }
 
-    if (has(9)) { // duck — a chunky bath-toy spectator (playroom)
+    if (has(ttp::rt::LM_DUCK)) { // duck — a chunky bath-toy spectator (playroom)
         constexpr uint32_t YELLOW = 0xf6cf46, BILL = 0xf2953c;
         for (float s = 30; s < tb.length - 10; s += 3) {
             const TrackBin::Sample f = tb.frameAt(s);
@@ -1061,7 +1073,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         }
     }
 
-    if (has(10)) { // ball — the classic panelled play ball (playroom)
+    if (has(ttp::rt::LM_BALL)) { // ball — the classic panelled play ball (playroom)
         constexpr float BR = 1.5f;
         static const uint32_t PANELS[6] = { 0xdf4a3c, 0xf5f2ea, 0x3f6fd1,
                                             0xf5f2ea, 0xf2c14e, 0xf5f2ea };
@@ -1107,7 +1119,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         }
     }
 
-    if (has(11)) { // umbrella — a day at the beach
+    if (has(ttp::rt::LM_UMBRELLA)) { // umbrella — a day at the beach
         const Spot sp = findSpot(45, 5.2f, 4);
         if (sp.ok) {
             constexpr float TILT = 0.2f; // leans gently toward the road
@@ -1161,7 +1173,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         }
     }
 
-    if (has(12)) { // sandcastle — a bucket-castle at sandbox scale
+    if (has(ttp::rt::LM_SANDCASTLE)) { // sandcastle — a bucket-castle at sandbox scale
         Spot sp = findSpotMid(3.2f);
         if (!sp.ok) sp = findSpot(80, 6.0f, 3.2f);
         if (sp.ok) {
@@ -1211,7 +1223,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         }
     }
 
-    if (has(6)) { // windmill — a western water-pump derrick with a spinning rotor
+    if (has(ttp::rt::LM_WINDMILL)) { // windmill — a western water-pump derrick with a spinning rotor
         const Spot sp = findSpot(70, 13 + (float) rnd() * 5, 5);
         if (sp.ok) {
             constexpr float H = 10.5f; // hub height
@@ -1275,7 +1287,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         }
     }
 
-    if (has(13)) { // cabin — a log cabin with smoke curling from the chimney
+    if (has(ttp::rt::LM_CABIN)) { // cabin — a log cabin with smoke curling from the chimney
         const Spot sp = findSpot(65, 10 + (float) rnd() * 5, 5);
         if (sp.ok) {
             constexpr uint32_t LOG = 0x8a6142, LOG2 = 0x7a5438, SNOWC = 0xf3f7fb;
@@ -1357,14 +1369,14 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         }
     }
 
-    if (has(0)) { // gnome
+    if (has(ttp::rt::LM_GNOME)) { // gnome
         const Spot sp = findSpot(30, 3.4f, 2.2f);
         if (sp.ok) {
             mShadowSpots.push_back({ sp.x, sp.z, 0.9f, 1.2f });
             buildGnomeModel(at(sp), mModelVariant[MODEL_GNOME]);
         }
     }
-    if (has(1)) { // doghouse
+    if (has(ttp::rt::LM_DOGHOUSE)) { // doghouse
         const float off = 8 + (float) rnd() * 3;
         const Spot sp = findSpot(60, off, 3.2f);
         if (sp.ok) {
@@ -1391,7 +1403,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
             }
         }
     }
-    if (has(2)) { // picnic
+    if (has(ttp::rt::LM_PICNIC)) { // picnic
         Spot sp = findSpotMid(3.2f);
         if (!sp.ok) sp = findSpot(95, 4.8f, 3.2f);
         if (sp.ok) {
@@ -1415,7 +1427,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         }
     }
 
-    if (has(14)) { // crayons — four fat wax sticks spilled, a fifth thrown across
+    if (has(ttp::rt::LM_CRAYONS)) { // crayons — four fat wax sticks spilled, a fifth thrown across
         const Spot sp = findSpot(110, 4.4f, 3);
         if (sp.ok) {
             static const uint32_t COLS[5] = { 0xd8463f, 0x3f6fd1, 0x3fa14e,
@@ -1445,7 +1457,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         }
     }
 
-    if (has(15)) { // books — three stacked picture books, spines askew
+    if (has(ttp::rt::LM_BOOKS)) { // books — three stacked picture books, spines askew
         const Spot sp = findSpot(130, 8 + (float) rnd() * 3, 3);
         if (sp.ok) {
             static const uint32_t COVERS[3] = { 0x3f6fd1, 0xd8463f, 0x3fa14e };
@@ -1466,82 +1478,13 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         }
     }
 
-    if (has(16)) { // train — a wind-up loco trundling a slow oval on the floor
-        constexpr float RT = TRAIN_RT, LT = TRAIN_LT;
-        constexpr float OM = RT + LT / 2 + 1.5f;    // footprint kept clear
-        Spot sp = findSpotMid(OM);                  // the middle of the floor first
-        if (!sp.ok) sp = findSpot(40, OM + 2, OM);
-        if (sp.ok) {
-            // The oval's long axis rides the road tangent. findSpotMid yaws at
-            // random, so derive the frame from the spot's own yaw either way.
-            const float ao = sp.yaw;
-            const float co = std::cos(ao), so = std::sin(ao);
-            const Spot rail{ sp.x, sp.z, ao, true };
-            // THE TRACK, which used to be two brown hoops lying in the grass at
-            // y 0.03 — the same thin cylinder for the straights and the bends,
-            // no sleepers, and a loco whose wheels passed straight through it.
-            // A model railway is read by its LADDER: cross-ties at a regular
-            // beat, with the rails proud on top of them.
-            //
-            // Sleepers walk the shared stadium path (trainAt) at a fixed
-            // spacing, so they follow the ends round instead of stopping at the
-            // straights, and so they cannot drift from the line the loco takes.
-            constexpr float TIE_STEP = 0.62f;
-            const float perim = trainPerim();
-            const int ties = (int) std::round(perim / TIE_STEP);
-            for (int i = 0; i < ties; i++) {
-                const TrainAt t = trainAt((float) i * (perim / (float) ties));
-                const float head = std::atan2(t.dx, t.dz);
-                part(applyPre(primBox(TRAIN_GAUGE * 2 + 0.34f, TRAIN_SLEEPER_Y, 0.2f),
-                            rotY(head)),
-                        t.x, TRAIN_SLEEPER_Y / 2, t.z, rail, 0x9a7b52, 1.0f);
-            }
-            // Rails: STEEL now, not wood, and sitting on the ties rather than in
-            // the grass. Same two-piece construction as before (a cylinder per
-            // straight, a half-torus per end) because it costs four prims for
-            // the whole loop where a swept ribbon would cost hundreds.
-            for (const float rr : { RT - TRAIN_GAUGE, RT + TRAIN_GAUGE }) {
-                for (const float zs : { -rr, rr }) { // two straights
-                    part(applyPre(primCylinder(TRAIN_RAIL_R, TRAIN_RAIL_R, LT, 8),
-                                rotZ((float) M_PI / 2)),
-                            0, TRAIN_RAIL_Y, zs, rail, 0x8d949e, 1.0f);
-                }
-                for (const int es : { 1, -1 }) {     // two half-torus ends
-                    part(applyPre(primTorusArc(rr, TRAIN_RAIL_R, 6, 20, (float) M_PI),
-                                rotY(es * ((float) M_PI / 2))),
-                            es * (LT / 2), TRAIN_RAIL_Y, 0, rail, 0x8d949e, 1.0f);
-                }
-            }
-            // The loco (and its winding key) are their own meshes — the render
-            // loop drives them round the stadium.
-            const auto lp = [&](Mesh& mesh, Prim prim, float lx, float ly, float lz,
-                    uint32_t hex, float shade) {
-                const uint32_t c = packLinear(srgbToLinear(hex), shade);
-                const uint32_t base = (uint32_t) mesh.verts.size();
-                for (const float3& v : prim.v) {
-                    mesh.verts.push_back({ v.x + lx, v.y + ly, v.z + lz, c });
-                }
-                for (const uint32_t i : prim.i) mesh.idx.push_back(base + i);
-            };
-            const int tv = mModelVariant[MODEL_TRAIN];
-            buildTrainModel([&](const Prim& p, float lx, float ly, float lz,
-                    uint32_t hex, float shade) { lp(mTrain, p, lx, ly, lz, hex, shade); }, tv);
-            accumulateNormals(mTrain);
-            buildMesh(mTrain);
-            buildTrainKeyModel([&](const Prim& p, float lx, float ly, float lz,
-                    uint32_t hex, float shade) { lp(mTrainKey, p, lx, ly, lz, hex, shade); }, tv);
-            accumulateNormals(mTrainKey);
-            buildMesh(mTrainKey);
-            // ON the rails, not through them: the loco's wheels stand at y 0,
-            // so the whole thing rides at the rail head. Before the ties went in
-            // the track was a decal under a train sitting on the grass, and the
-            // difference did not show; now it would.
-            mTrainCentre = { sp.x, gy + TRAIN_RIDE_Y, sp.z };
-            mTrainCos = co;
-            mTrainSin = so;
-            mHasTrain = true;
-        }
-    }
+    // NO LM_TRAIN. The wind-up loco that ran an oval here is the Holiday Kit's
+    // own train set now — a composed model on the playroom's prop scatter
+    // (scripts/gen-trainset.mjs, theme.cc) — so the oval, its sleepers and the
+    // per-frame walk went with the placement. buildTrainModel SURVIVES in
+    // TtpRendererKit.h: it is the asset gallery's model bench, which is where
+    // retired shapes live.
+
     if (!mLandmarks.verts.empty()) {
         accumulateNormals(mLandmarks);
         for (const auto& [idx, n] : smoothNormals) {

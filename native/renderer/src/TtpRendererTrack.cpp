@@ -1790,7 +1790,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     // every cell: a 4-way split paid for the whole circuit four times.
     for (Mesh* m : { &mStructures, &mBerms, &mGantry, &mBoulders, &mLandmarks,
                      &mClutter, &mWater, &mWet,
-                     &mBalloon, &mWindmill, &mTrain, &mTrainKey }) {
+                     &mBalloon, &mWindmill }) {
         setMeshCulling(*m, true);
     }
 

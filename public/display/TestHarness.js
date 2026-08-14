@@ -762,15 +762,13 @@ export function runDisplayScenario(opts, ctx) {
           scene.bindSession(engine.h);
           return scene.kitLayout();
         },
-        // Stand in front of model `i` of the field, at its own size: a doll's
-        // house needs a step closer than a loop piece, and a row read from one
-        // fixed distance is a row you cannot judge. Off the LAYOUT, so the
-        // camera cannot end up somewhere the model is not.
+        // Stand in front of one model of the field, at ITS OWN size: a coin
+        // needs a step closer than a loop piece, and a row read from one fixed
+        // range is a row you cannot judge. Off the LAYOUT, so the camera cannot
+        // end up somewhere the model is not.
         lookAtKit(spot) {
           if (!spot) return;
-          // Its own size sets the distance — a coin needs a step closer than a
-          // loop piece, and a row read from one fixed range is a row you cannot
-          // judge. Height counts as much as footprint: the tall thin models
+          // Height counts as much as footprint here: the tall thin models
           // (gantries, palms) are exactly the ones a footprint under-reads.
           const reach = Math.max(spot.w, spot.d, spot.h, 1.0);
           cam.eye = { x: spot.x, y: spot.y + reach * 0.45, z: spot.z - reach * 2.4 };

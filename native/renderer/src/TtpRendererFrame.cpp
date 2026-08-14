@@ -1237,25 +1237,15 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
                 * mat4f::scaling(float3{ t.planeSize }));
     }
 
-    // The wind-up train trundles its stadium oval (two straights along local X
-    // at z = ±RT, run CCW), nose along the tangent, key winding as it goes.
-    if (mHasTrain) {
-        // The path is trainAt()'s, which is also what the sleepers were laid
-        // along — see the note there. This used to be a second copy of the same
-        // piecewise walk, with its own RT and LT.
-        const TrainAt t = trainAt(std::fmod(mTime * 1.9f, trainPerim())); // ~1.9 u/s
-        const float lpx = t.x, lpz = t.z, dx = t.dx, dz = t.dz;
-        const float co = mTrainCos, so = mTrainSin;
-        const mat4f pose = mat4f::translation(float3{
-                    mTrainCentre.x + lpx * co + lpz * so, mTrainCentre.y,
-                    mTrainCentre.z - lpx * so + lpz * co })
-                * mat4f::rotation(std::atan2(dx * co + dz * so, -dx * so + dz * co),
-                        float3{ 0, 1, 0 });
-        if (!mTrain.entity.isNull()) tcm.setTransform(tcm.getInstance(mTrain.entity), pose);
-        if (!mTrainKey.entity.isNull()) {
-            tcm.setTransform(tcm.getInstance(mTrainKey.entity),
-                    pose * mat4f::translation(float3{ 0, 1.8f, -0.85f })
-                    * mat4f::rotation(mTime * 2.6f, float3{ 0, 1, 0 }));
+    // Props that carry a "spin" node turn it about its own origin: the toy
+    // train walking its rails, and nothing else so far. One transform each, and
+    // only for the props that have one — the list is empty in most scenes.
+    if (!mPropSpins.empty()) {
+        // ~10 s a lap of a 3.2-unit ring: a wind-up toy's trundle, not a train.
+        const mat4f turn = mat4f::rotation(mTime * -0.62f, float3{ 0, 1, 0 });
+        for (const utils::Entity e : mPropSpins) {
+            const auto ti = tcm.getInstance(e);
+            if (ti) tcm.setTransform(ti, turn);
         }
     }
 

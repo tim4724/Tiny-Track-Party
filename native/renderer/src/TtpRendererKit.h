@@ -275,44 +275,11 @@ inline const mat4f rotXm(float a) { return mat4f::rotation(a, float3{ 1, 0, 0 })
 inline const mat4f rotYm(float a) { return mat4f::rotation(a, float3{ 0, 1, 0 }); }
 inline const mat4f rotZm(float a) { return mat4f::rotation(a, float3{ 0, 0, 1 }); }
 
-// ---- the wind-up train's stadium ------------------------------------------
-// Two straights along local X at z = ±TRAIN_RT, joined by half-circles at
-// x = ±TRAIN_LT/2, run counter-clockwise.
-//
-// ONE definition of it, and that is the point of these being here. The RAILS
-// are laid from this at scene build and the LOCO is driven round it every
-// frame, from code eight thousand lines apart — and sleepers spaced along a
-// path that disagreed by a hair with the one the train takes is a toy train
-// running beside its own track. The two used to share nothing but a pair of
-// retyped constants and a comment.
-constexpr float TRAIN_RT = 5.0f, TRAIN_LT = 7.0f;
-// THE GAUGE IS THE LOCO'S OWN WHEEL TRACK (buildTrainModel puts the tyres at
-// x = ±0.58). It was 0.32 — barely half that — so the wheels ran outside the
-// rails, which nobody could see while the "track" was two thin brown lines
-// lying in the grass. A ladder of sleepers makes it obvious in one glance, and
-// that is the general shape of what laying real track flushed out.
-constexpr float TRAIN_GAUGE = 0.58f;      // rail centres, either side of the line
-constexpr float TRAIN_SLEEPER_Y = 0.055f; // sleeper top
-constexpr float TRAIN_RAIL_Y = 0.10f;     // rail axis, sitting on the sleepers
-constexpr float TRAIN_RAIL_R = 0.045f;
-// What the loco's wheels stand on: the top of the railhead, not its centre.
-constexpr float TRAIN_RIDE_Y = TRAIN_RAIL_Y + TRAIN_RAIL_R;
-
-struct TrainAt { float x, z, dx, dz; };
-inline float trainPerim() { return 2 * TRAIN_LT + 2 * (float) M_PI * TRAIN_RT; }
-inline TrainAt trainAt(float s) {
-    const float R = TRAIN_RT, L = TRAIN_LT, ARC = (float) M_PI * R;
-    if (s < L) return { -L / 2 + s, -R, 1, 0 };                 // near straight, +X
-    if (s < L + ARC) {                                          // right end
-        const float u = (s - L) / R;
-        return { L / 2 + std::sin(u) * R, -std::cos(u) * R, std::cos(u), std::sin(u) };
-    }
-    if (s < 2 * L + ARC) {                                      // far straight, -X
-        return { L / 2 - (s - L - ARC), R, -1, 0 };
-    }
-    const float u = (s - 2 * L - ARC) / R;                      // left end
-    return { -L / 2 - std::sin(u) * R, std::cos(u) * R, -std::cos(u), -std::sin(u) };
-}
+// ---- the wind-up train ----------------------------------------------------
+// buildTrainModel below still draws the loco, for the asset gallery's model
+// bench alone. The stadium oval it used to trundle — the path, the sleepers,
+// the gauge they were laid to and the per-frame walk — went when the playroom's
+// train became the Holiday Kit's own set on its own rails (theme.cc).
 
 // ---- rocket ---------------------------------------------------------------
 // SLEEK AND MODERN, decided after four rounds of toy shapes were turned down.

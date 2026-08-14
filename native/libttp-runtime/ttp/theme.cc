@@ -88,9 +88,14 @@ ScenerySpec grassScenery() {
 // light rigs.
 PropsSpec gardenProps() {
   PropsSpec p;
-  p.models = { "prop-hay", "prop-crate" };
+  // The tent is Nature Kit, which is authored small — a third of a car length —
+  // so it is staged at better than twice its own size to read as something you
+  // could camp in beside a toy car. The generated crate and bale are already at
+  // world scale and are not.
+  p.models = { "prop-hay", "prop-crate", "tent-open" };
   p.scatterDensity = 0.1f;
-  p.scatter = { { 0, 0.7f, 0.85f, 0.4f }, { 1, 0.3f, 0.9f, 0.25f } };
+  p.scatter = { { 0, 0.55f, 0.85f, 0.4f }, { 1, 0.25f, 0.9f, 0.25f },
+                { 2, 0.2f, 2.0f, 0.5f } };
   return p;
 }
 
@@ -276,7 +281,9 @@ Theme snowTheme() {
   t.hasIce = true; t.ice = { 0xa9d7ee, 0xf0f8fd };
   t.gate = 0xdfe9f6;  // cold-cast gate grade
   t.gantry.pylon = 0x3f7bd9; t.gantry.finial = 0xfff6eb;  // pops against the white world
-  t.landmarks = { LM_SNOWMAN, LM_CABIN };
+  // The snowman that used to head this list is a Holiday Kit model now, in the
+  // prop scatter below — one greeter a track became several a lap.
+  t.landmarks = { LM_CABIN };
   // Snow-capped pines from the Holiday Kit — three variants so a treeline never
   // reads as stamped clones.
   ScenerySpec& s = t.scenery;
@@ -285,16 +292,26 @@ Theme snowTheme() {
               { "tree-snow-c", 0.25f, 1.05f, 0.4f } };
   s.hasBush = false;
   s.mixTree = 0.55f; s.mixBush = 0.55f;
-  s.rocks = { 0xcdd4e0, 0xb9c1d0, 0x9fa8ba };  // cold blue-grey granite
-  s.rockS[0] = 0.4f; s.rockS[1] = 0.6f;
+  // NO boulder palette: the flat-shaded grey granite this cup used to scatter
+  // sat wrong beside the snow-capped kit rock in the props below, which is the
+  // rock this biome has now. An empty palette places none (buildScenery).
+  s.rocks = {};
   s.density = 0.55f;
   s.clutter = { { CL_DRIFT, 1, { 0xf3f7fb, 0xe9eff6 } } };  // wind-blown snow heaps
   s.clutterDensity = 0.3f;
   deriveModels(s);
-  // Sled crates.
-  t.props.models = { "prop-crate" };
-  t.props.scatterDensity = 0.05f;
-  t.props.scatter = { { 0, 1.0f, 0.9f, 0.3f } };
+  // The snow the crates used to stand in for: a greeter by the road, sleds left
+  // out, wind-heaped drifts and snow-capped rock, all Holiday Kit. The SNOWMAN
+  // is here rather than in the landmark list it used to head, because a scatter
+  // gives several a lap where a landmark gives one a track — and it is the same
+  // object either way.
+  t.props.models = { "snowman", "sled", "snow-pile", "rocks-medium", "rocks-large" };
+  t.props.scatterDensity = 0.14f;
+  t.props.scatter = { { 0, 0.2f, 1.0f, 0.3f, true },   // snowman, facing the road
+                      { 1, 0.2f, 1.0f, 0.3f },        // sled
+                      { 2, 0.25f, 1.0f, 0.6f },       // drift
+                      { 3, 0.25f, 0.9f, 0.4f },       // rock cluster
+                      { 4, 0.1f, 0.85f, 0.35f } };    // the big one, sparingly
   return t;
 }
 
@@ -333,7 +350,10 @@ Theme playroomTheme() {
   t.plane.tint = 0xfaf7ec; t.plane.size = 3.2f; t.plane.y = 22;
   t.plane.rc = 95; t.plane.rb = 32; t.plane.speed = 0.3f; t.plane.bank = 0.4f;
   t.structure = 0x4a6fc4;  // support columns read as the kit's blue connectors
-  t.landmarks = { LM_BLOCKS, LM_DUCK, LM_BALL, LM_CRAYONS, LM_BOOKS, LM_TRAIN };
+  // LM_TRAIN is gone from here: the wind-up loco is the Holiday Kit's own train
+  // set now (the prop below). Its procedural geometry survives as the asset
+  // gallery's model bench, which is where retired shapes live.
+  t.landmarks = { LM_BLOCKS, LM_DUCK, LM_BALL, LM_CRAYONS, LM_BOOKS };
   t.gate = 0xfff3e2;  // warm indoor-light gate grade
   t.gantry.pylon = 0x5cb168; t.gantry.finial = 0xff5040;  // a third primary
   // No trees indoors — the "boulder" channel does all the work: faceted toy bits
@@ -349,6 +369,15 @@ Theme playroomTheme() {
                 { CL_DOMINO, 0.2f, { 0xf5f2ea } } };
   s.clutterDensity = 0.22f;
   deriveModels(s);
+  // The toy train, as the Holiday Kit's own set on a ring of its own rails
+  // (scripts/gen-trainset.mjs). ONE composed model, because a train set is one
+  // object to a player and a dozen to a scatter: dropped in as pieces this
+  // channel would strew rails across the floor. Sparse and near its own size —
+  // the set is nearly two car lengths across, and the scatter's clearance from
+  // the road does not scale with the model.
+  t.props.models = { "trainset" };
+  t.props.scatterDensity = 0.03f;
+  t.props.scatter = { { 0, 1.0f, 0.85f, 0.15f } };
   return t;
 }
 

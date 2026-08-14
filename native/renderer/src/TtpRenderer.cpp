@@ -290,7 +290,7 @@ void TtpRenderer::applyTheme(TrackBin& out, const ttp::rt::Theme& th) {
     out.prDensity = th.props.scatterDensity;
     out.prScatter.clear();
     for (const ttp::rt::PropStamp& p : th.props.scatter) {
-        out.prScatter.push_back({ p.slot, p.w, p.s0, p.s1 });
+        out.prScatter.push_back({ p.slot, p.w, p.s0, p.s1, p.face });
     }
 
     out.lmKinds = th.landmarks;
@@ -708,8 +708,6 @@ void TtpRenderer::releaseScene() {
     destroyMesh(mBerms);
     for (auto& m : mHaze) destroyMesh(m);
     destroyMesh(mWindmill);
-    destroyMesh(mTrain);
-    destroyMesh(mTrainKey);
     for (auto& m : mSmoke) destroyMesh(m);
     for (auto& m : mSignMeshes) destroyMesh(m);
     destroyMesh(mWater);
@@ -785,6 +783,7 @@ void TtpRenderer::releaseScene() {
     mSceneryInstances.clear();
     mPropAssets.clear();
     mPropInstances.clear();
+    mPropSpins.clear();
     mKitAssets.clear();
     mBoxXf.clear();
     mGroundInst = nullptr; // a scene instance; sceneInstance() owns the teardown
@@ -829,7 +828,6 @@ void TtpRenderer::releaseScene() {
     mShoreFn = nullptr;
     mTrack.reset();
     mHasTrack = false;
-    mHasTrain = false;
     mHillSf = 1;
     mTime = 0;
     mLastCar0 = {};

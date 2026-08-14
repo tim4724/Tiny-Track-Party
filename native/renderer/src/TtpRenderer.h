@@ -802,14 +802,15 @@ private:
     // Trackside props (prop<i>.glb): scattered set dressing.
     std::vector<filament::gltfio::FilamentAsset*> mPropAssets;
     std::vector<std::vector<filament::gltfio::FilamentInstance*>> mPropInstances;
+    // The "spin" node of every placed prop that has one — turned about its own
+    // origin each frame (buildProps). The toy train's rails are its only user.
+    std::vector<utils::Entity> mPropSpins;
     Mesh mBoulders;
     Mesh mLandmarks; // procedural hero set-pieces (seeded placement)
     Mesh mWindmill;  // the windmill's rotor — its own mesh, spun per frame
     // Chimney smoke (cabin): three soft puffs rising on a staggered loop.
     std::vector<Mesh> mSmoke;
     filament::math::float3 mSmokeOrigin{};
-    // The wind-up train: loco + key, driven round a stadium oval each frame.
-    Mesh mTrain, mTrainKey;
     // Per-model variant picks and the bench, indexed by the .cpp's ModelId
     // (rocket, gnome, train, starfish). Sized by hand because that enum lives
     // beside the builders it names; a static_assert in the .cpp holds the two
@@ -841,9 +842,6 @@ private:
     // field, which is every build but the gallery's.
     float mKitFieldMinX = 0, mKitFieldMaxX = -1, mKitFieldMinZ = 0, mKitFieldMaxZ = -1;
 
-    filament::math::float3 mTrainCentre{};
-    float mTrainCos = 1, mTrainSin = 0;
-    bool mHasTrain = false;
     filament::math::mat4f mWindmillBase{};
     // Baked lawn shadows: soft ink blobs under trees/pylons/landmarks — the
     // stand-in for the JS shadow map's casters landing on grass.
