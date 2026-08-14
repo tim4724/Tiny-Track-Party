@@ -27,9 +27,12 @@ import { ITEM_IDS } from '../engine/contract.js';
 // TTP_CAM_* (ttp_display.h).
 export const CAM = { STILL: 0, ORBIT: 1, BBOX: 2, FREE: 3 };
 
+// `vskid` is GONE with `vdecal`, same story: the rubber layer is a CPU
+// raster + upload now (TtpRenderer::renderSkids), so there is no stamp
+// material to serve.
 const MATERIALS = ['vcolor', 'vblend', 'vlit', 'vroad', 'vglb', 'vglbfade', 'vpoint',
                    'vcloud', 'vground', 'vpresent', 'vesm', 'vblur', 'vburst',
-                   'voverlay', 'vskid'];
+                   'voverlay'];
 
 // The GLBs every scene needs whatever the track and the biome are: the track's
 // own furniture, and the truck a monster item turns a car into. Exported because

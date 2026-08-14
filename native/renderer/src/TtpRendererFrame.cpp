@@ -1728,9 +1728,9 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
     // there — the stamp's rear edge is the previous stamp's front edge — and
     // commits a segment once it spans SKID_SEG_MIN. Ink is PERMANENT until
     // the race-restart wipe — there is no decay pass, by decision: the layer's
-    // steady-state GPU cost is then just this pass's tiny quads, the throttled
-    // mip refresh below, and vroad's one tap, and a racing line rubbers in over
-    // the laps like a real toy track.
+    // steady-state cost is then just a few CPU-rasterized quads, their
+    // sub-rect uploads, the throttled mip refresh below, and vroad's one tap,
+    // and a racing line rubbers in over the laps like a real toy track.
     //
     // What the mesh pool had that this deliberately does not: the live stamp
     // that stretched to the tyre every frame. Additive accumulation cannot
@@ -1744,6 +1744,16 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
     // hugs the tyre. Per-frame stamp count is bounded by wheels, not by
     // SEG_MIN, so this costs nothing.
     if (mSkidTex && mTrack && !mWheelTrails.empty()) {
+        // The restart wipe goes FIRST, so the frame that wipes still lands
+        // its own fresh stamps — the order the old clear-on-the-stamp-pass
+        // gave. A memset + full upload, never a GPU clear (a draw-less clear
+        // rides a pass the FrameGraph is free to cull, and on the A10X it
+        // did — the layer has no passes at all now).
+        if (mSkidWipe) {
+            clearSkidLayer(); // regenerates the mip chain itself — no
+                              // mSkidMipsDirty needed here
+            mSkidWipe = false;
+        }
         constexpr float SKID_MAX_OPACITY = 0.28f, SKID_THRESH = 0.2f;
         constexpr float SKID_SEG_MIN = 0.06f, SKID_SEG_MAX = 1.5f;
         constexpr float SKID_EDGE_DOT = 0.3f, SKID_BRAKE_MIN = 0.6f;
@@ -1754,18 +1764,15 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
         const auto wrapS = [&](float d) {
             return (L > 0) ? d - L * std::round(d / L) : d;
         };
-        // One committed segment → one 4-column stamp in DEVICE space over the
-        // rubber texture (x = s/L into [-1,1], y = lat/latHalf), plus a copy
-        // shifted one full lap so a segment straddling the start line lands on
-        // both sides. The copy is usually entirely off-viewport and clips for
-        // free. Corner s-values arrive RELATIVE to the segment's own centre so
-        // the lap wrap is taken once, not per corner.
+        // One committed segment → one 4-column stamp rasterized on the CPU
+        // into the rubber buffer, in TEXEL space (x = s/L × W unwrapped — the
+        // raster wraps per write, so a segment straddling the start line
+        // needs no second copy; y = lat mapped across the height). Corner
+        // s-values arrive RELATIVE to the segment's own centre so the lap
+        // wrap is taken once, not per corner.
         const auto stamp = [&](float midS, const float2& rL, const float2& rR,
                 const float2& fL, const float2& fR, float strength) {
-            if (mSkidQuadCount + 2 > kSkidQuadCap) return;
             const float peak = SKID_MAX_OPACITY * std::min(1.0f, strength);
-            const uint32_t rr = (uint32_t) std::lround(peak * 255.0f);
-            const uint32_t ink = 0xff000000u | rr;
             const float u0 = (L > 0) ? (midS - L * std::floor(midS / L)) / L : 0.0f;
             const float2 e[2][2] = { { rL, rR }, { fL, fR } };
             // The outer columns ARE the tyre's contact width and the ink
@@ -1789,7 +1796,12 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
                 ramp = 1.3f * std::sqrt(ws * ws * mSkidTexelS * mSkidTexelS
                         + wl * wl * mSkidTexelLat * mSkidTexelLat);
             }
-            Vertex* v = &mSkidVerts[(size_t) mSkidQuadCount * 8];
+            // The 8 column points in texel space, and the mesh pool's old ink
+            // profile: outer columns zero, inner pair at peak, the ramp being
+            // the k2 sliver between them.
+            float2 tp[2][4];
+            float tink[4];
+            const float texW = (float) mSkidTexW, texH = (float) mSkidTexH;
             for (int ed = 0; ed < 2; ed++) {
                 const float2& a = e[ed][0];
                 const float2& b = e[ed][1];
@@ -1800,20 +1812,46 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
                 const float2 cols[4] = { a, { a.x + d.x, a.y + d.y },
                                          { b.x - d.x, b.y - d.y }, b };
                 for (int k = 0; k < 4; k++) {
-                    Vertex& o = v[ed * 4 + k];
-                    o.px = (u0 + cols[k].x / std::max(L, 1e-3f)) * 2.0f - 1.0f;
-                    o.py = cols[k].y / mSkidLatHalf;
-                    o.pz = 0.0f;
-                    o.abgr = (k == 0 || k == 3) ? (ink & 0xff000000u) : ink;
+                    tp[ed][k] = {
+                        (u0 + cols[k].x / std::max(L, 1e-3f)) * texW,
+                        (cols[k].y / mSkidLatHalf * 0.5f + 0.5f) * texH,
+                    };
+                    tink[k] = (k == 0 || k == 3) ? 0.0f : peak;
                 }
             }
-            Vertex* w = v + 8;
-            const float shift = (u0 > 0.5f) ? -2.0f : 2.0f;
-            for (int k = 0; k < 8; k++) {
-                w[k] = v[k];
-                w[k].px += shift;
+            // The same diagonal split the stamp mesh's index pattern used:
+            // per column pair, (rear k, front k+1, rear k+1) and
+            // (rear k, front k, front k+1).
+            for (int k = 0; k < 3; k++) {
+                const float2 t1[3] = { tp[0][k], tp[1][k + 1], tp[0][k + 1] };
+                const float i1[3] = { tink[k], tink[k + 1], tink[k + 1] };
+                rasterSkidTri(t1, i1);
+                const float2 t2[3] = { tp[0][k], tp[1][k], tp[1][k + 1] };
+                const float i2[3] = { tink[k], tink[k], tink[k + 1] };
+                rasterSkidTri(t2, i2);
             }
-            mSkidQuadCount += 2;
+            // The stamp's dirty rect, one texel padded. Merged into a
+            // touching rect when there is one (a car's four wheels land
+            // together), appended otherwise — renderSkids uploads and clears
+            // the list every frame, so it never grows past this frame's
+            // stamps.
+            SkidRect r{ (int) std::floor(std::min(std::min(tp[0][0].x, tp[0][3].x),
+                                std::min(tp[1][0].x, tp[1][3].x))) - 1,
+                        (int) std::floor(std::min(std::min(tp[0][0].y, tp[0][3].y),
+                                std::min(tp[1][0].y, tp[1][3].y))) - 1,
+                        (int) std::ceil(std::max(std::max(tp[0][0].x, tp[0][3].x),
+                                std::max(tp[1][0].x, tp[1][3].x))) + 1,
+                        (int) std::ceil(std::max(std::max(tp[0][0].y, tp[0][3].y),
+                                std::max(tp[1][0].y, tp[1][3].y))) + 1 };
+            for (SkidRect& q : mSkidDirty) {
+                if (r.x0 <= q.x1 + 8 && q.x0 <= r.x1 + 8
+                        && r.y0 <= q.y1 + 8 && q.y0 <= r.y1 + 8) {
+                    q.x0 = std::min(q.x0, r.x0); q.y0 = std::min(q.y0, r.y0);
+                    q.x1 = std::max(q.x1, r.x1); q.y1 = std::max(q.y1, r.y1);
+                    return;
+                }
+            }
+            mSkidDirty.push_back(r);
         };
         for (uint32_t i = 0; i < nCars; i++) {
             const TtpCarInput& c = cars[i];
@@ -1949,42 +1987,11 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
                 st.last = cur;
             }
         }
-        // The GPU pass — the ONLY recurring cost of the whole layer: a
-        // handful of tiny quads on frames that committed a segment, nothing
-        // at all otherwise. The restart wipe rides the same pass as a clear
-        // (the staging pool is zeroed after every draw, so a wipe with no
-        // fresh stamps clears and draws nothing).
-        if ((mSkidWipe || mSkidQuadCount > 0) && mSkidStampView && mSkidTex) {
-            const Renderer::ClearOptions prev = mRenderer->getClearOptions();
-            Renderer::ClearOptions co{};
-            co.clear = mSkidWipe;
-            co.clearColor = { 0, 0, 0, 0 };
-            co.discard = false; // the whole point is what the target holds
-            mRenderer->setClearOptions(co);
-            if (mSkidQuadCount > 0) {
-                mSkidVB->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
-                        mSkidVerts.data(), mSkidVerts.size() * sizeof(Vertex),
-                        nullptr));
-            }
-            // The target lives only for this pass: attached any longer and the
-            // Metal backend samples the texture as zero — the WHY is at the
-            // build-time wipe in TtpRendererTrack.cpp.
-            RenderTarget* rt = RenderTarget::Builder()
-                    .texture(RenderTarget::AttachmentPoint::COLOR, mSkidTex)
-                    .build(*mEngine);
-            if (rt) {
-                mSkidStampView->setRenderTarget(rt);
-                mRenderer->renderStandaloneView(mSkidStampView);
-                mSkidStampView->setRenderTarget(nullptr);
-                mEngine->destroy(rt);
-            }
-            if (mSkidQuadCount > 0) {
-                std::memset(mSkidVerts.data(), 0,
-                        (size_t) mSkidQuadCount * 8 * sizeof(Vertex));
-                mSkidQuadCount = 0;
-            }
-            mSkidWipe = false;
-            mRenderer->setClearOptions(prev);
+        // The upload — the ONLY recurring cost of the whole layer: a few
+        // tiny sub-rect copies on frames that committed a segment, nothing
+        // at all otherwise.
+        if (!mSkidDirty.empty()) {
+            uploadSkidRects();
             mSkidMipsDirty = true;
         }
         // Refresh the rubber layer's mip chain, throttled. The tap filters
