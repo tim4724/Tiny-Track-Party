@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trailer editor — Tiny Track Party</title>
+<link rel="stylesheet" href="/shared/theme.css">
+<link rel="stylesheet" href="/trailer/editor.css">
+</head>
+<body>
+  <header class="bar">
+    <h1>Trailer editor</h1>
+    <p class="hint">Configure the cut live. Nothing renders until you say so.</p>
+    <div class="bar__spacer"></div>
+    <span id="total" class="pill">0 shots · 0.0s</span>
+    <button id="play-cut" class="btn btn--brand">Play cut</button>
+    <button id="export" class="btn btn--ghost">Copy shots.js</button>
+  </header>
+
+  <main>
+    <!-- The rack: the edit itself. Ordered, and the order is the cut. -->
+    <section class="rack">
+      <div class="rack__head">
+        <h2>Shots</h2>
+        <button id="add" class="btn btn--ghost btn--sm">Add shot</button>
+      </div>
+      <ol id="shots" class="shots"></ol>
+      <p class="rack__note">
+        Click a shot to load it in the monitor. Drag the handle to reorder.
+      </p>
+    </section>
+
+    <!-- The monitor: one live game, driven frame by frame from here. -->
+    <section class="monitor">
+      <div class="stage">
+        <div id="frame-wrap" class="frame-wrap"></div>
+        <div id="status" class="status">No shot selected</div>
+      </div>
+
+      <!-- Where the playhead is, and which slice of the race the trailer keeps.
+           Click to seek: forward winds, backward re-deals the race. -->
+      <div id="bar" class="bar-scrub" title="Click to seek">
+        <div id="bar-in" class="bar-scrub__in"></div>
+        <div id="bar-now" class="bar-scrub__now"></div>
+      </div>
+
+      <div class="transport">
+        <button id="play" class="btn btn--brand btn--sm" disabled>Play</button>
+        <button id="to-in" class="btn btn--ghost btn--sm" disabled>Wind to in</button>
+        <button id="set-in" class="btn btn--accent btn--sm" disabled>Start shot here</button>
+        <button id="slowmo" class="btn btn--ghost btn--sm" title="Play at half speed — the simulation is unchanged, it is only watched slower">0.5&times;</button>
+        <label class="follow" title="Off: the race starts at 0 and keeps running past the end of the shot, so you can hunt for a new in-point">
+          <input type="checkbox" id="follow" checked>
+          <span>Follow cut</span>
+        </label>
+        <div class="transport__spacer"></div>
+        <span id="rec" class="rec">IN SHOT</span>
+        <span id="clock" class="clock">0.00s</span>
+      </div>
+      <p class="hint hint--mono" id="marks">no shot loaded</p>
+      <p class="hint legend">
+        <b>in</b> is where the rendered clip starts — the sim time the trailer cuts to.
+        <b>len</b> is how long it runs from there.
+        With <b>Follow cut</b> on, the monitor plays the trailer: it opens each shot on
+        its in-point and moves to the next at the out-point. Turn it off to scout — the
+        race starts from 0 and keeps running past the end of the shot, so you can watch
+        for the moment you want and mark it with <b>Start shot here</b>.
+      </p>
+    </section>
+  </main>
+
+  <script type="module" src="/trailer/editor.js"></script>
+</body>
+</html>

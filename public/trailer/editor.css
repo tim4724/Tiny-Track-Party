@@ -1,0 +1,181 @@
+/* Trailer editor — LAYOUT only. Colour, type, surface and shadow come from
+   /shared/theme.css, which this page links first (see public/shared/CLAUDE.md).
+   A dev tool, not a shipped screen: it borrows the kit so it looks like the game
+   without inventing a second design language. */
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-display);
+  display: flex;
+  flex-direction: column;
+}
+
+/* -- top bar --------------------------------------------------------------- */
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 1rem;
+  border-bottom: 3px solid var(--ink);
+  background: var(--surface);
+  flex-wrap: wrap;
+}
+.bar h1 { font-size: 1.1rem; margin: 0; }
+.bar__spacer { flex: 1 1 auto; }
+.hint { color: var(--ink-3); font-size: 0.85rem; margin: 0; }
+.hint--mono { font-family: ui-monospace, Menlo, monospace; font-size: 0.78rem; padding: 0 1rem 0.8rem; }
+
+/* Kit buttons are chunky by default; the editor needs a denser row of them. */
+.btn--sm { padding: 0.32rem 0.7rem; font-size: 0.82rem; }
+
+/* -- two columns ----------------------------------------------------------- */
+main {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: minmax(20rem, 27rem) 1fr;
+  gap: 1rem;
+  padding: 1rem;
+  align-items: start;
+  min-height: 0;
+}
+@media (max-width: 60rem) { main { grid-template-columns: 1fr; } }
+
+/* -- the rack -------------------------------------------------------------- */
+.rack { display: flex; flex-direction: column; gap: 0.6rem; min-width: 0; }
+.rack__head { display: flex; align-items: center; gap: 0.6rem; }
+.rack__head h2 { font-size: 0.95rem; margin: 0; flex: 1 1 auto; }
+.rack__note { color: var(--ink-3); font-size: 0.78rem; margin: 0; }
+
+.shots { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+
+.shot {
+  background: var(--surface);
+  border: 2.5px solid var(--ink);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-pop);
+  padding: 0.5rem 0.6rem;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas: "grip head kill" "grip body body";
+  gap: 0.35rem 0.5rem;
+  cursor: pointer;
+}
+.shot.is-live { outline: 3px solid var(--brand); outline-offset: 2px; }
+.shot.is-playing { outline: 3px solid var(--accent); outline-offset: 2px; }
+.shot[draggable="true"] { user-select: none; }
+.shot.is-drag { opacity: 0.4; }
+
+.shot__grip {
+  grid-area: grip; align-self: stretch; display: flex; align-items: center;
+  color: var(--ink-3); cursor: grab; padding-right: 0.15rem; font-size: 0.9rem;
+}
+.shot__head { grid-area: head; display: flex; align-items: baseline; gap: 0.4rem; min-width: 0; }
+.shot__n {
+  font-family: ui-monospace, Menlo, monospace; font-size: 0.72rem;
+  color: var(--ink-3); font-variant-numeric: tabular-nums;
+}
+.shot__name { font-size: 0.92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shot__kill {
+  grid-area: kill; border: 0; background: none; cursor: pointer;
+  color: var(--ink-3); font-size: 1rem; line-height: 1; padding: 0 0.2rem;
+}
+.shot__kill:hover { color: var(--danger); }
+.shot__body { grid-area: body; display: flex; flex-wrap: wrap; gap: 0.3rem; }
+
+/* Kit .field is a full-width input; these are inline pickers in a dense row. */
+.shot__body select,
+.shot__body input {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 0.74rem;
+  padding: 0.16rem 0.3rem;
+  border: 2px solid var(--ink);
+  border-radius: 7px;
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.shot__body input { width: 3.6rem; text-align: right; }
+.shot__body label { display: inline-flex; align-items: center; gap: 0.22rem; font-size: 0.7rem; color: var(--ink-3); }
+
+/* -- the monitor ----------------------------------------------------------- */
+.monitor { display: flex; flex-direction: column; gap: 0.6rem; min-width: 0; }
+
+.stage {
+  position: relative;
+  background: var(--ink);
+  border: 3px solid var(--ink);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+}
+.frame-wrap { position: absolute; inset: 0; }
+/* Both the live frame and the one being preloaded behind it live here; only the
+   one marked live is visible, so a cut does not flash a loading screen. */
+.frame-wrap iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; opacity: 0; }
+.frame-wrap iframe.is-live { opacity: 1; }
+
+.status {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  background: rgba(42, 39, 53, 0.82); color: #fff;
+  font-family: ui-monospace, Menlo, monospace; font-size: 0.74rem;
+  padding: 0.3rem 0.6rem;
+}
+.status.is-hidden { display: none; }
+
+/* Lit only while the frames on screen are frames the trailer keeps.
+   OUTSIDE the picture, beside the clock. There is no free corner inside it: each cell
+   puts a name chip top-left and a place chip top-right, and in a 2x2 the top-left cell's
+   place chip lands on the stage's own centre line, so every in-picture position collides
+   in at least one of the three split layouts. */
+.rec {
+  display: none; align-items: center; gap: 0.35rem;
+  background: var(--red); color: #fff;
+  border: 2.5px solid var(--ink); border-radius: var(--r-pill);
+  box-shadow: var(--shadow-pop);
+  font-size: 0.72rem; letter-spacing: 0.08em; padding: 0.15rem 0.6rem;
+}
+.rec.is-on { display: flex; }
+.rec::before {
+  content: ""; width: 0.5rem; height: 0.5rem; border-radius: 50%;
+  background: #fff;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .rec.is-on::before { animation: rec-pulse 1.1s ease-in-out infinite; }
+  @keyframes rec-pulse { 50% { opacity: 0.25; } }
+}
+
+/* Scrub bar: the whole run so far, with the kept span marked on it. */
+.bar-scrub {
+  position: relative; height: 0.85rem;
+  background: var(--surface-2);
+  border: 2.5px solid var(--ink); border-radius: var(--r-pill);
+  overflow: hidden; cursor: pointer;
+}
+.bar-scrub:hover { box-shadow: var(--shadow-pop); }
+
+.btn.is-on { --btn-bg: var(--blue); color: #fff; }
+
+.follow { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.78rem; color: var(--ink-2); cursor: pointer; }
+.follow input { accent-color: var(--brand); width: 1rem; height: 1rem; }
+.bar-scrub__in {
+  position: absolute; top: 0; bottom: 0; left: 0; width: 0;
+  background: var(--red);
+}
+.bar-scrub__now {
+  position: absolute; top: -2px; bottom: -2px; left: 0; width: 3px;
+  background: var(--ink);
+}
+
+.clock.is-live { color: var(--red); }
+.legend { padding: 0 1rem 1rem; max-width: 44rem; line-height: 1.5; }
+.legend b { color: var(--ink); }
+
+.transport { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.transport__spacer { flex: 1 1 auto; }
+.clock {
+  font-family: ui-monospace, Menlo, monospace; font-variant-numeric: tabular-nums;
+  font-size: 1.05rem; font-weight: 700;
+}

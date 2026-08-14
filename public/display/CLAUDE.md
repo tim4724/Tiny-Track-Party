@@ -102,6 +102,21 @@ models, and in what order, is entirely this side's; where they stand is entirely
 the renderer's, and the layout comes back so the chrome's camera and the scene
 cannot disagree about where one is.
 
+**The frame clock can be handed out.** `Stage.setFixedStep(sec)` makes dt the
+named step rather than the rAF delta, so the sim advances once per frame DRAWN
+however long the frame took; `?gate=1` (`frameGate.js`) then queues
+`requestAnimationFrame` from before boot and lets an outside driver pump it. Both
+halves are needed and neither is enough alone: the step alone gives a smooth
+capture whose start point still drifts, because the scene free-runs between page
+load and the first call. Together they are what `scripts/trailer/` renders video
+with, and what lets its browser editor show the frame the renderer will produce.
+The gate drives CSS animations from the same clock too — otherwise a one-second
+fade finishes inside three captured frames. Nothing in normal play sets either.
+
+The capture scripts must run HEADED: headless Chromium is SwiftShader, headed gets
+ANGLE-on-Metal, and that gap is the whole reason `capture-artwork.js` races at a
+cheap resolution.
+
 ## Measuring frame cost
 
 `render/PerfHud.js` is on by default in development ("P" toggles it) and reports

@@ -85,6 +85,7 @@ export class Stage {
     this._running = false;
     this._last = 0;
     this._timeScale = 1;
+    this._fixedDt = 0;       // >0: ignore the rAF clock entirely (see setFixedStep)
     this._track = null;
     this._biome = 'grass';   // resolved from the track's cup, or forced by biomeOverride
     this.display = null;     // set by boot()
@@ -860,6 +861,27 @@ export class Stage {
     this._timeScale = Number.isFinite(v) ? Math.max(0.05, Math.min(4, v)) : 1;
     return this._timeScale;
   }
+  // OFFLINE CAPTURE: cut the scene loose from the wall clock. With a fixed step the
+  // per-frame dt is whatever is named here rather than the rAF delta, so the sim
+  // advances by exactly one step per frame DRAWN, no matter how long the frame took
+  // to draw or how long the caller then sat on it.
+  //
+  // This is what makes a rendered video possible at all. The usual loop derives dt
+  // from real time and clamps it at 50 ms (see _loop), which is a frame-rate/sim-rate
+  // coupling: a capture that screenshots each frame runs the tab at ~3 fps, so a
+  // wall-clock dt yields either a slideshow of 50 ms lurches or, once the clamp bites,
+  // a race that barely advances — the trap scripts/capture-artwork.js documents at
+  // length and works around by racing at a cheap resolution. Stepping instead means
+  // the OUTPUT is a clean 60 fps and only the render TIME is slow, which nobody sees.
+  //
+  // Pairs with start() + pauseAfterFrame() to advance exactly one frame per call.
+  // 0 (the default) restores the real clock. _timeScale still applies, so a shot can
+  // be stepped in slow motion without changing the step.
+  setFixedStep(sec) {
+    const v = parseFloat(sec);
+    this._fixedDt = Number.isFinite(v) && v > 0 ? Math.min(v, 0.05) : 0;
+    return this._fixedDt;
+  }
   // Render exactly one more frame with the state set so far, then halt. Gallery
   // previews hold a still this way instead of redrawing an unchanged scene at
   // 60fps; the held frame renders fully, so resuming picks up seamlessly.
@@ -898,7 +920,9 @@ export class Stage {
     // carries the frame's vsync timestamp, which can sit a fraction of a
     // millisecond EARLIER — and a negative dt runs the camera damping backwards,
     // walking the chase camera away from the car until the scene is off-screen.
-    const dt = Math.min(Math.max(rawMs, 0) / 1000, 0.05) * this._timeScale;
+    // A fixed step (offline capture) replaces the clock outright — clamp included,
+    // since setFixedStep already caps at the same 50 ms.
+    const dt = (this._fixedDt || Math.min(Math.max(rawMs, 0) / 1000, 0.05)) * this._timeScale;
     this._last = t;
     if (rawMs > 0 && rawMs < 1000) this.perf.tick(t, rawMs); // skip absurd post-stall deltas
     if (this.onFrame) this.onFrame(dt);

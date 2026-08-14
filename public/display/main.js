@@ -6,6 +6,7 @@
 // session, the pause/auto-pause latches, the effect walk that performs the
 // orchestration layer's answers, and the net callbacks. Everything with its own
 // state and no stake in a race was split out beside it — see the imports below.
+import { installFrameGate } from './frameGate.js';
 import { DisplayNet, renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
 import { buildQRMatrix } from '../shared/qr.js';
 import { Stage, HUD_TICK_MS } from './Stage.js';
@@ -38,6 +39,13 @@ import { dismissDeviceChoice, startWhenDeviceChosen } from './deviceChoice.js';
 // below, because a dev range is a debug surface and never reaches a picker.
 import * as ui from './NativeUiModel.js';
 import { ITEM_IDS } from './engine/contract.js';
+
+// THE FIRST THING THIS FILE DOES. ?gate=1 takes the frame clock away from the browser so
+// an external driver owns every frame from the first one; without the param it is a
+// no-op. It has to precede anything that could schedule a frame — the imports above only
+// define things, and nothing below runs until this has — because the whole point is that
+// no frame escapes ungated. See frameGate.js.
+installFrameGate();
 
 const { MSG, ROOM_STATE, COUNTDOWN_SECONDS, TOTAL_LAPS, CAR_COLORS, CAR_MODELS, MAX_PLAYERS, FIELD_SIZE, carStats } = window;
 const el = (id) => document.getElementById(id);
@@ -1269,7 +1277,13 @@ if (_scenario) {
       scenario: _scn,
       players: _int(_params.get('players'), 4),
       host: _params.get('host') === null ? null : _int(_params.get('host'), 0),
-      picked: _params.get('picked') || false   // lobby scenario: post-pick chrome ('cup'|'track'|'random'; legacy '1' = cup)
+      picked: _params.get('picked') || false,  // lobby scenario: post-pick chrome ('cup'|'track'|'random'; legacy '1' = cup)
+      // ?seed=: the race's item/wander seed. Harness races are otherwise pinned to
+      // ONE seed (NativeRaceSession's default), so every take of a preview is the
+      // same take — fine for a gallery card, useless for a capture that wants a
+      // choice of takes. Naming a seed re-rolls the whole race; the trailer rig
+      // scouts seeds this way and then pins the number it liked.
+      seed: _params.get('seed') === null ? null : _int(_params.get('seed'), 1)
     },
     // `built` is the track catalogue as entries — the chained-start preview is
     // the one scenario that shows a SECOND circuit, so it needs to name one.

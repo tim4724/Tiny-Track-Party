@@ -231,6 +231,11 @@ export function runDisplayScenario(opts, ctx) {
   // live FIELD_SIZE with cell-less CPU racers (raceGrid below), so a gallery
   // race reads like a real one: 8 cars, at most 4 cells.
   const players = Math.max(1, Math.min(opts.players != null ? opts.players : 4, window.MAX_PLAYERS || 4));
+  // ?seed= (see main.js): null leaves NativeRaceSession's own default, which is what
+  // every gallery card wants — one pinned take, so a preview never shifts under a
+  // reviewer. Spread into the session opts rather than defaulted here so the number
+  // still has exactly one home.
+  const seedOpt = opts.seed != null ? { seed: opts.seed } : {};
   const host = (opts.host == null || isNaN(opts.host)) ? null : Math.max(0, Math.min(opts.host, 7));
 
   // What a sim-backed preview waits on: the GLBs + track (main.js's scenePromise) AND
@@ -1046,13 +1051,18 @@ export function runDisplayScenario(opts, ctx) {
 
     function setupChain() {
       const { scene, built } = ctx;
-      const cup = CUPS[0];
+      // START WHERE ?track= ASKED. This is the only scenario that runs a real countdown,
+      // so it is also the only way to preview a launch on a chosen circuit — filming the
+      // start of a race is a fair thing to want on a track other than the first cup's
+      // first one. The chain then carries on through THAT track's cup, so the preview
+      // still shows what it is for: one cup, raced in order.
+      const cup = CUPS.find((c) => c.tracks.includes(ctx.track.trackId)) || CUPS[0];
       const grid = raceGrid(buildSlots(players));
       const ids = grid.map((g) => g.slot);
       const field = grid.map((g) => ({ peerIndex: g.slot, stats: statsFor(g.carIndex) }));
       const entry = (id) => built.get(id);
 
-      let leg = 0;          // which of the cup's tracks is racing
+      let leg = Math.max(0, cup.tracks.indexOf(ctx.track.trackId));  // which of the cup's tracks is racing
       let engine = null;
       let onBoard = false;  // the intermission is up; the sim is done
       let boardMs = 0, raceMs = 0, lastHud = 0;
@@ -1181,7 +1191,7 @@ export function runDisplayScenario(opts, ctx) {
     // this one item (the same knob as the debug ?item=). Cars still have to collect it,
     // so the first showcase shot lands a box-run into the race rather than at 0.8s.
     const forceItem = (kind === 'rocket' || kind === 'monster') ? kind : null;
-    const newSession = () => bareSession(field, track, { bots: botSpecs(ids), onRaceEvent, forceItem });
+    const newSession = () => bareSession(field, track, { bots: botSpecs(ids), onRaceEvent, forceItem, ...seedOpt });
     let engine = newSession();
     window.__engine = engine;
 

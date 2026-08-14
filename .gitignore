@@ -29,6 +29,11 @@ public/assets/audio/_music-pool/
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
 native/build/
+# Trailer renders — frames, per-shot clips and the cut master (a 4K/60 master runs to
+# hundreds of MB). Wholly derived from scripts/trailer/shots.js, and the shot seeds are
+# pinned there, so `npm run trailer` reproduces the same film: the bytes are an output,
+# not a source. Publish the master from a release, don't commit it.
+artwork/trailer/
 
 # Local scratch from the authoring/preview scripts (preview-tracks.mjs writes
 # its gallery beside itself; captures land wherever they are pointed).
