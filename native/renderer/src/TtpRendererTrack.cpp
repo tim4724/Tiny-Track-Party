@@ -1250,8 +1250,8 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     // the width, lat across the height), rasterized on the CPU (mSkidPix) and
     // uploaded as dirty rects, sampled by every vroad instance. Per-track
     // because its width is the lap length at a fixed texel density; the
-    // density is capped by the 8192 universal texture-size floor, so a very
-    // long lap trades edge crispness, never correctness.
+    // density is capped by the device's max texture size, so a very long
+    // lap trades edge crispness, never correctness.
     mWheelTrails.assign(carCount * 4, {});
     if (tb.length > 1.0f) {
         float maxHalf = tb.roadWidth * 0.5f;

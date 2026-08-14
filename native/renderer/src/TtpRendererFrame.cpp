@@ -1750,9 +1750,9 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
         // rides a pass the FrameGraph is free to cull, and on the A10X it
         // did — the layer has no passes at all now).
         if (mSkidWipe) {
-            clearSkidLayer();
+            clearSkidLayer(); // regenerates the mip chain itself — no
+                              // mSkidMipsDirty needed here
             mSkidWipe = false;
-            mSkidMipsDirty = true;
         }
         constexpr float SKID_MAX_OPACITY = 0.28f, SKID_THRESH = 0.2f;
         constexpr float SKID_SEG_MIN = 0.06f, SKID_SEG_MAX = 1.5f;

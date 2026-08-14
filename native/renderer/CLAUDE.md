@@ -265,9 +265,9 @@ overriding the material's own blending — vskid's additive stamps silently
 became replace, so a light mark punched a hole through a dark one and every
 stamp's zero-ink skirt gnawed its neighbour's edge into a sawtooth. Target
 preservation comes from `Renderer::ClearOptions` (clear=false,
-discard=false) at the render call; the accumulation views stay on the
-default OPAQUE blend mode. bakeSilhouette keeps TRANSLUCENT because
-alpha-compositing is exactly what a mask bake wants.
+discard=false) at the render call, never from the blend mode.
+bakeSilhouette keeps TRANSLUCENT because alpha-compositing is exactly what
+a mask bake wants.
 
 **Skid marks are the same road-shader paint, accumulated — on the CPU.** The
 transient decals above are re-packed every frame; rubber instead lands in a

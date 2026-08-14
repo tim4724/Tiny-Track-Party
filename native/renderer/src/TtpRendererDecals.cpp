@@ -169,8 +169,8 @@ void TtpRenderer::uploadSkidRects() {
 }
 
 // Bound to every vroad instance, because a declared sampler must be bound even
-// while no track (or no vskid material) gives it anything to hold — same rule
-// as the decal mask above. skidLatHalf 0 is what actually disables the tap.
+// while no track gives it anything to hold — same rule as the decal mask
+// above. skidLatHalf 0 is what actually disables the tap.
 void TtpRenderer::bindSkidLayer(MaterialInstance* mi) {
     if (!mSkidNullTex) {
         mSkidNullTex = Texture::Builder()
