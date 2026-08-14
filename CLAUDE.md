@@ -31,6 +31,7 @@ npm start / npm run dev           # Serve (with --watch)
 native/scripts/build-runtime-web.sh   # Rebuild the engine wasm → public/display/engine/native/
 npm run gen:airconsole            # Regenerate the committed AirConsole entries from index.html
 npm run build:airconsole          # AirConsole upload zip (screen.html/controller.html at its root)
+npm run cover                     # Square store cover tile → artwork/ (uploaded by hand)
 ```
 
 `npm run setup` is the only command a fresh worktree needs, and it prints the

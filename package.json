@@ -14,6 +14,7 @@
     "gen:schematics": "node scripts/gen-track-schematics.js",
     "gen:airconsole": "node scripts/gen-airconsole-html.mjs",
     "build:airconsole": "bash scripts/build-airconsole.sh",
+    "cover": "node scripts/capture-cover.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "measure": "node scripts/measure-kit.js \"$KIT/Models/GLB format\"",
