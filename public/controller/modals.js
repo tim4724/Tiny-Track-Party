@@ -109,16 +109,18 @@ function maybeAutoShowSettings() {
 }
 
 // ---- Motion-blocked popup ----
-// Surfaces when the tilt sensor is blocked (iOS denied) or absent (unsupported),
-// with the live recovery path. Auto-shows once per page load on lobby entry while
-// blocked (no nagging on every lobby return) — and only in TILT mode: button
-// steering needs no sensor, so a buttons phone is never nagged. Copy + action
-// live in ui.js (motionHelpCopy) so they can't drift from the gallery.
+// Surfaces when the tilt sensor is blocked (iOS denied), with the live recovery
+// path. Auto-shows once per page load on lobby entry while blocked (no nagging
+// on every lobby return) — and only in TILT mode: button steering needs no
+// sensor, so a buttons phone is never nagged. A device with no sensor at all
+// ('unsupported') never qualifies: startup forced it onto buttons (main.js) and
+// the settings card's Tilt row says why, so there is no popup face for it. Copy
+// + action live in ui.js (motionHelpCopy) so they can't drift from the gallery.
 let _motionAlertShown = false;
 let _motionReturnFocus = null;
 
 const motionOpen = () => !el('motion-overlay').classList.contains('hidden');
-const motionBlocked = () => { const s = _tilt.motionState; return s === 'denied' || s === 'unsupported'; };
+const motionBlocked = () => _tilt.motionState === 'denied';
 
 // Populate the popup's title/status/Allow/fix from the resolved state.
 function refreshMotionPopup() {

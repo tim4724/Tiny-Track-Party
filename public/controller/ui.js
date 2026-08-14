@@ -55,8 +55,10 @@ export function renderWaitNote(waitEl, { name, color } = {}, suffix) {
 // it's a one-tap rejoin). If the global Safari toggle is off, even reload won't
 // prompt, hence the Settings fix line. 'granted' (incl. Android/desktop, which resolve
 // granted on the Join tap) needs no recovery, so the popup stays shut. 'unsupported'
-// drops the button entirely (no prompt to raise on that platform). 'unknown' (the
-// gallery / pre-prompt edge) is the one state where a fresh request CAN still prompt.
+// has no case: a device with no sensor is forced onto button steering at startup
+// (main.js) and the settings card's Tilt row reads "Not available" — nothing to
+// recover, so it never reaches this popup. 'unknown' (the gallery / pre-prompt
+// edge) is the one state where a fresh request CAN still prompt.
 export function motionHelpCopy(state) {
   switch (state) {
     case 'granted':
@@ -67,13 +69,6 @@ export function motionHelpCopy(state) {
         title: 'Motion sensor is blocked',
         status: 'Steering uses your phone’s tilt, which is switched off.',
         fix: 'Still off after reloading? Turn on <em>Settings → Apps → Safari → Motion &amp; Orientation Access</em>, then rejoin.'
-      };
-    case 'unsupported':
-      return {
-        show: true, allow: false, action: null, allowText: 'Allow motion',
-        title: 'Tilt steering isn’t available',
-        status: 'This device doesn’t report motion, so tilt steering won’t work here. Try joining from a phone.',
-        fix: null
       };
     default: // 'unknown' — before the Join tap resolved permission (e.g. the gallery)
       return {
