@@ -686,9 +686,10 @@ html.cam-free #race { pointer-events: none; }
 }
 
 /* ---- Corner buttons ---- */
-/* The top-right row over the scene: fullscreen (always) + pause (races only,
-   .hidden off-race). .icon-btn (theme.css) gives them the toy-button look; we
-   only place them here. The row shares the top-right corner with each cell's
+/* The top-right row over the scene: mute + fullscreen (everywhere but the
+   welcome board, see below) + pause (races only, .hidden off-race). .icon-btn
+   (theme.css) gives them the toy-button look; we only place them here. The row
+   shares the top-right corner with each cell's
    place/lap readout, so it auto-fades once the race chrome goes idle (see
    html.chrome-idle below). The fade is the ROW's transition, which leaves each
    button's own .icon-btn hover/press transitions untouched. */
@@ -700,6 +701,14 @@ html.cam-free #race { pointer-events: none; }
   transition: opacity 0.4s ease;
 }
 #corner-btns .icon-btn { width: 3.4rem; height: 3.4rem; }
+
+/* The welcome board has no fullscreen toggle: NEW GAME is the gesture that
+   claims fullscreen, so a second control beside it is only a way to spend the
+   gesture early. Not the mute button's route (markup .hidden + show()) because
+   chrome.js already owns this button's .hidden for the no-fullscreen-API case,
+   and the welcome board is also what the FIRST PAINT shows — before any screen
+   switch has run to re-hide it. */
+#welcome:not(.hidden) ~ #corner-btns #fullscreen-btn { display: none; }
 
 /* Idle race chrome — main.js sets html.chrome-idle after a few seconds without
    a pointer move / tap / key press, and ONLY while a race is running (never on
