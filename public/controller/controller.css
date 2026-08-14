@@ -153,8 +153,9 @@ input[type=text]:disabled { opacity: 0.6; }
 .lobby-car  { grid-area: car; }
 .lobby-race { grid-area: race; }
 /* The GO bar: a centred pill, not a full-width slab — the button reads as a
-   button, and the centring matches the tab strip above it. */
-.lobby-go { grid-area: go; display: flex; flex-direction: column; align-items: center; }
+   button, and the centring matches the tab strip above it. position: relative
+   anchors the floating #ready-note chip. */
+.lobby-go { grid-area: go; display: flex; flex-direction: column; align-items: center; position: relative; }
 .lobby-go .btn { width: min(100%, 24rem); margin: 0; }
 /* No picker (non-host, or the catalog hasn't landed) → the race column is
    empty: collapse to one column and centre the car group (the ribbon and GO
@@ -162,8 +163,23 @@ input[type=text]:disabled { opacity: 0.6; }
    which still works — it's just lopsided. */
 #lobby:has(#trackpick.hidden) {
   grid-template-columns: minmax(0, 1fr);
-  grid-template-areas: 'top' 'car' 'go';
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas: 'car' 'go';
 }
+/* On this page the ribbon only occupies its corners (name left, gear right —
+   the host's tab strip in the middle), so it doesn't get a grid row: it FLOATS
+   over the car band, which takes the full height. The centred card clears the
+   corners on usual devices; where it doesn't, the ribbon wins the overlap
+   (z-index) and its empty middle passes taps through to the card below. The
+   RACE page keeps the reserved row — its full-width picker starts at the top
+   left and really would collide. */
+#lobby:has(#trackpick.hidden) .lobby-top {
+  position: absolute; z-index: 2;
+  left: var(--edge-x); right: var(--edge-x);
+  top: calc(0.5rem + var(--safe-top)); /* where the in-flow ribbon sat — the chip and gear must not hop between pages */
+  pointer-events: none;
+}
+#lobby:has(#trackpick.hidden) .lobby-top > * { pointer-events: auto; }
 #lobby:has(#trackpick.hidden) .lobby-race { display: none; }
 #lobby:has(#trackpick.hidden) .lobby-car { width: min(100%, 30rem); margin-inline: auto; }
 #lobby:has(#trackpick.hidden) .carpick {
@@ -199,6 +215,13 @@ input[type=text]:disabled { opacity: 0.6; }
     row-gap: 1rem;
   }
   .lobby-car, .lobby-race { overflow-y: visible; }
+  /* Stacked = content starts at the very top, so the ribbon goes back into
+     the flow (a floating one would sit ON the card here, on every device). */
+  #lobby:has(#trackpick.hidden) {
+    grid-template-rows: auto;
+    grid-template-areas: 'top' 'car' 'go';
+  }
+  #lobby:has(#trackpick.hidden) .lobby-top { position: relative; inset: auto; pointer-events: auto; }
 }
 
 /* Player identity — your name as a livery-tinted sticker (coloured bg, white
@@ -277,16 +300,39 @@ input[type=text]:disabled { opacity: 0.6; }
    the theme's own press (.icon-btn), so a tile presses like every other
    button on the page */
 .car-opt:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: none; }
-/* locked strip (player is READY): the pick stands, the alternatives recede */
-.car-opt:disabled { cursor: default; }
+/* locked strip (player is READY): the pick stands, the alternatives recede.
+   pointer-events off so a tap on a locked tile falls through to the strip
+   container, where main.js answers with the "tap Ready ✓ to change" hint —
+   a dead tap on a visible control otherwise just reads as broken. */
+.car-opt:disabled { cursor: default; pointer-events: none; }
 .car-opt:disabled:not(.car-opt--mine) { opacity: 0.45; }
+/* the hint's pointer: wiggle the held-down ready button sideways (keeping its
+   is-pressed sink) so the eye lands on the thing that unlocks the strip */
+@keyframes btn-nudge {
+  0%, 100% { transform: translate(0, var(--btn-sink)); }
+  25% { transform: translate(-5px, var(--btn-sink)); }
+  75% { transform: translate(5px, var(--btn-sink)); }
+}
+.btn--nudge { animation: btn-nudge 0.2s 2; }
 /* selected strip tile: tinted toward YOUR livery. The drop is NOT the mark —
    every tile wears the same one, because every tile is equally pressable; the
    fill alone says which is yours (the hero shows which it is too; the pale-blue
    highlight didn't fit the warm palette) */
 .car-opt--mine { background: color-mix(in srgb, var(--car, var(--brand)) 16%, #fff); }
-/* under the GO bar's button: why it's gated / who we're waiting on */
-#ready-note { color: var(--ink-2); font-weight: 700; text-align: center; margin-top: 0.25rem; }
+/* over the GO bar's button: why it's gated / who we're waiting on. A floating
+   sticker chip OUT OF FLOW (so text coming and going never moves the button,
+   and an empty note costs no height), hung above the button's centre. It may
+   overlap the strip's bottom edge — harmless: whenever it shows, the strip
+   behind it is the locked, dimmed one. Hidden by :empty (renderReadyFoot
+   clears it rather than toggling a class). */
+#ready-note {
+  position: absolute; bottom: calc(100% + 0.4rem); left: 50%; transform: translateX(-50%);
+  max-width: calc(100% - 1rem); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: var(--ink-2); font-weight: 700; text-align: center;
+  background: var(--surface); border: 2.5px solid var(--ink); border-radius: var(--r-pill);
+  padding: 0.2em 0.9em; box-shadow: var(--shadow-pop);
+}
+#ready-note:empty { display: none; }
 /* Host name in the wait text — tinted in their livery colour (set inline from
    CAR_COLORS), heavier weight so the colour reads as intentional. */
 .host-name { font-weight: 800; }

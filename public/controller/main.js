@@ -370,9 +370,7 @@ function renderLobby() {
     // still hides the start controls — acceptable: the abandoned-race timer on
     // the display returns everyone to the lobby, where we get them normally.
     el('ready-btn').classList.add('hidden');
-    const note = el('ready-note');
-    note.classList.remove('hidden');
-    note.textContent = 'You’re in the next race!'; // copy duplicated in TestHarness.js 'lobby-joining'
+    el('ready-note').textContent = 'You’re in the next race!'; // copy duplicated in TestHarness.js 'lobby-joining'
     return;
   }
   renderReadyFoot(el('ready-btn'), el('ready-note'), {
@@ -508,6 +506,28 @@ function chooseCar(i) {
   net.send(MSG.SET_CAR, { carIndex: i });
   buzz(15);
 }
+
+// A tap on the LOCKED strip — while ready the tiles are disabled with
+// pointer-events off (controller.css), so the tap lands here on the container.
+// A dead tap on a visible control reads as broken, so answer it: say how to
+// unlock in the note line and wiggle the ready button. The note re-renders from
+// the roster on the next renderLobby; the timer restores it sooner so the
+// waiting text isn't gone for long. (Enabled tiles' taps bubble here too —
+// the amReady guard drops those.)
+let lockedHintTimer = 0;
+el('carpick').addEventListener('click', () => {
+  if (!amReady) return;
+  el('ready-note').textContent = 'Tap “Ready ✓” to change your car';
+  const btn = el('ready-btn');
+  btn.classList.remove('btn--nudge');
+  void btn.offsetWidth; // restart the wiggle when it's already run
+  btn.classList.add('btn--nudge');
+  clearTimeout(lockedHintTimer);
+  lockedHintTimer = setTimeout(() => {
+    btn.classList.remove('btn--nudge');
+    if (!el('lobby').classList.contains('hidden')) renderLobby();
+  }, 2500);
+});
 
 // Restore the car model this phone last used, overriding the display's slot-based
 // default assigned on join. Sent as SET_CAR exactly like a tap; the display

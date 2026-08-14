@@ -87,6 +87,9 @@ export function motionHelpCopy(state) {
 
 export function renderReadyFoot(btnEl, noteEl, { amHost, amReady, tab, canStart, host, others }) {
   btnEl.classList.remove('hidden');
+  // The note is a floating chip OUT OF FLOW above the button (controller.css),
+  // hidden by :empty — so it's cleared, never display:none'd, and toggling
+  // ready never moves the button.
   const allReady = others.every((p) => p.ready);
   if (amHost) {
     // The host's bar is a STEPPER between the two lobby pages: on CAR it
@@ -97,16 +100,13 @@ export function renderReadyFoot(btnEl, noteEl, { amHost, amReady, tab, canStart,
     btnEl.classList.toggle('btn--step', onCar);
     btnEl.disabled = onCar ? false : (!canStart || !allReady);
     btnEl.classList.remove('is-pressed');
-    noteEl.classList.toggle('hidden', onCar || allReady);
-    if (!onCar && !allReady) noteEl.textContent = 'Waiting for all players to get ready…';
+    noteEl.textContent = (!onCar && !allReady) ? 'Waiting for all players to get ready…' : '';
   } else {
     btnEl.disabled = false;
     btnEl.textContent = amReady ? 'Ready ✓' : 'I’m ready';
     btnEl.classList.toggle('is-pressed', amReady); // stays visually held down while ready
-    noteEl.classList.toggle('hidden', !amReady);
-    if (amReady) {
-      if (allReady) renderWaitNote(noteEl, host || {}, ' to start…');
-      else noteEl.textContent = 'Waiting for all players to get ready…';
-    }
+    if (!amReady) noteEl.textContent = '';
+    else if (allReady) renderWaitNote(noteEl, host || {}, ' to start…');
+    else noteEl.textContent = 'Waiting for all players to get ready…';
   }
 }

@@ -281,7 +281,6 @@ export function runControllerScenario(opts) {
       renderCarPicker(color);
       renderModePicker(null, false);
       el('ready-btn').classList.add('hidden');
-      el('ready-note').classList.remove('hidden');
       el('ready-note').textContent = 'You’re in the next race!'; // keep in sync with main.js renderLobby
       break;
 

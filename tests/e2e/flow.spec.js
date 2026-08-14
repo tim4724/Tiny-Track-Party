@@ -16,6 +16,10 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
   await bob.click('#ready-btn');
   await expect(bob.locator('#ready-btn')).toHaveClass(/is-pressed/);
   await expect(bob.locator('.car-opt').first()).toBeDisabled();
+  // A tap on the locked strip answers with the unlock hint (locked tiles have
+  // pointer-events off, so the tap lands on the container — see main.js).
+  await bob.click('#carpick');
+  await expect(bob.locator('#ready-note')).toContainText('change your car');
   await bob.click('#ready-btn');
   await expect(bob.locator('#ready-btn')).not.toHaveClass(/is-pressed/);
   await expect(bob.locator('.car-opt').first()).toBeEnabled();
