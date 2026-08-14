@@ -676,15 +676,14 @@ el('pause-continue').addEventListener('click', () => { buzz(15); net.send(MSG.RE
 el('pause-newgame').addEventListener('click', () => { buzz(15); net.send(MSG.RETURN_TO_LOBBY); });
 
 // Host's results button: mid-series it advances to the next race, otherwise it
-// sends everyone to the lobby. The ghost quit button is the intermission's
-// escape hatch ("End cup early" / endless: "Back to lobby").
+// sends everyone to the lobby. It is the board's ONLY button — abandoning a
+// running cup is the pause overlay's job (see resultsBoard's renderFoot).
 el('newgame-btn').addEventListener('click', () => {
   if (!amHost) return;
   buzz(15);
   const s = lastStandings && lastStandings.series;
   net.send(s && !s.final ? MSG.SERIES_NEXT : MSG.RETURN_TO_LOBBY);
 });
-el('quitcup-btn').addEventListener('click', () => { if (amHost) { buzz(15); net.send(MSG.RETURN_TO_LOBBY); } });
 
 // Applies the launcher's rename locally (the labels that carry the name) AND
 // broadcasts it to the display via a re-HELLO, exactly like a join.

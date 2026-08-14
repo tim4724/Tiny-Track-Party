@@ -117,8 +117,8 @@ export function runControllerScenario(opts) {
   // the cup board hardcoded "Race 2 of 4" instead of deriving it from the series.
   // A preview renders through the live renderer, never a copy of it.
   //
-  // Every board is viewed as the HOST, so the host-only footers (the "New game" /
-  // "Next race ▸" button and the "End cup early" ghost) are what the gallery shows.
+  // Every board is viewed as the HOST, so the host-only footer (the "New game" /
+  // "Next race ▸" button) is what the gallery shows.
   // A row is FINISHED unless the scenario says otherwise: the renderer marks any
   // unfinished row `is-racing` (still out on track), which a completed board must
   // not show. Only the "you crossed the line first" scenario opts rows out.
@@ -361,8 +361,8 @@ export function runControllerScenario(opts) {
 
     case 'intermission':
       // Mid-cup standings between two series races, viewed as the host: points
-      // board in cup order (the +6 row leads on total despite this race's +9),
-      // "Next race ▸" + the "End cup early" ghost.
+      // board in cup order (the +6 row leads on total despite this race's +9)
+      // and the host's "Next race ▸".
       setLatency(20, true);
       showBoard([
         { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, gained: 6, points: 21 },

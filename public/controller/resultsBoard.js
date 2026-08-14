@@ -62,18 +62,17 @@ export function renderResultsBoard(data, { meId, hostPeerIndex, amHost, liveryOf
 }
 
 // Footer: while cars are still out, a waiting note for everyone. Once the race is
-// over, the host gets the button — "Next race" during a cup intermission (plus the
-// ghost "End cup early", the only way to abandon a cup from here) or "New game"
-// otherwise; everyone else gets a note. Intermissions auto-advance, so non-hosts
-// see "starting soon" rather than a who-to-wait-on name.
+// over, the host gets ONE button — "Next race" during a cup intermission, "New
+// game" otherwise; everyone else gets a note. There is deliberately no abandon
+// button beside it: a run in progress is left through the pause overlay's "New
+// game" in the next race, so the board can't be tapped out of a cup by mistake.
+// That exit is any phone's, not just the host's. Intermissions auto-advance, so
+// non-hosts see "starting soon" rather than a who-to-wait-on name.
 function renderFoot(data, { hostPeerIndex, amHost, liveryOf }) {
   const btn = el('newgame-btn');
   const wait = el('result-wait');
   const s = data.series;
   const intermission = !!(s && !s.final && data.over);
-  const quit = el('quitcup-btn');
-  quit.classList.toggle('hidden', !(intermission && amHost));
-  if (intermission) quit.textContent = s.endless ? 'Back to lobby' : 'End cup early';
   if (!data.over) {
     btn.classList.add('hidden');
     wait.classList.remove('hidden');

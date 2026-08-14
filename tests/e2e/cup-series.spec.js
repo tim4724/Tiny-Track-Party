@@ -1,7 +1,7 @@
 // @ts-check
 // Grand Prix cups: a fresh host auto-picks the Beach Cup, so Start commits to
 // its 4 tracks back-to-back — intermission standings between races (host can
-// advance early or quit; otherwise it auto-advances), podium after race 4,
+// advance early; otherwise it auto-advances), podium after race 4,
 // then "New game" back to the lobby with the cup rewound to race 1. Races are
 // ended by force-finishing every human car (the same recipe as the display
 // TestHarness 'finished' scenario): humansAllDone then fast-forwards the AI to
@@ -50,7 +50,6 @@ test('a cup chains through all 4 races to the podium (host advancing early)', as
     await expect(page.locator('#results-sub')).toContainText(`Race ${race} of 4`);
     await expect(page.locator('#results-next')).toContainText(BEACH[race].charAt(0).toUpperCase() + BEACH[race].slice(1));
     await expect(alice.locator('#newgame-btn')).toHaveText('Next race ▸');
-    await expect(alice.locator(visible('#quitcup-btn'))).toBeVisible();
     await expect(bob.locator('#result-wait')).toContainText('starting soon');
     // The next circuit is MESHED UNDER THIS BOARD (main.js prepareNextTrack), not
     // under the countdown that follows it — a scene build blocks the main thread
@@ -78,7 +77,6 @@ test('a cup chains through all 4 races to the podium (host advancing early)', as
   expect(await page.locator('.podium__col').count()).toBe(3);
   await expect(alice.locator('#results-title')).toContainText('Beach Cup — Final');
   await expect(alice.locator('#newgame-btn')).toHaveText('New game');
-  await expect(alice.locator('#quitcup-btn')).toBeHidden();
   await expect(alice.locator('#result-list')).toContainText('pts');
 
   // The finished GP BANKED: the persist-progression effect wrote the engine's
@@ -127,7 +125,7 @@ test('an untouched intermission auto-advances into the next race', async ({ page
   expect(await page.evaluate(() => window.__series().raceIndex)).toBe(1);
 });
 
-test('"End cup early" cancels the series and a restart begins at race 1', async ({ page, browser }) => {
+test('abandoning a cup mid-race cancels the series and a restart begins at race 1', async ({ page, browser }) => {
   await page.addInitScript(() => { window.__intermissionMs = 60000; });
   const roomCode = await openDisplay(page);
   const alice = await joinController(browser, roomCode, 'Alice');
@@ -137,14 +135,20 @@ test('"End cup early" cancels the series and a restart begins at race 1', async 
 
   await finishHumans(page);
   await inResults(page);
-  await alice.click('#quitcup-btn');
+  // The intermission board offers no way out — it advances, or it waits. The
+  // exit from a running cup is the pause overlay, one race later.
+  await alice.click('#newgame-btn');
+  await waitForRacing(page);
+  await alice.click('#pause-btn');
+  await alice.click('#pause-newgame');
+
   await page.waitForFunction(() => window.__net.roomState === 'lobby', null, { timeout: 10000 });
   expect(await page.evaluate(() => window.__series())).toBe(null);
   await expect(alice.locator(visible('#lobby'))).toBeVisible();
-  // The lobby attracts on the circuit its own card names. Quitting FROM an
-  // intermission is the case that can break this: prepareNextTrack has already
-  // meshed race 2 speculatively, and the rewind to race 1 moves no pick — so
-  // nothing would put the scene back unless fade-to-lobby places it anyway.
+  // The lobby attracts on the circuit its own card names. Quitting DURING race 2
+  // is the case that can break this: the scene is standing on race 2's track and
+  // the rewind to race 1 moves no pick — so nothing would put the scene back
+  // unless fade-to-lobby places it anyway.
   await page.waitForFunction((id) => window.__scene._track.id === id, BEACH[0], { timeout: 15000 });
 
   // A fresh Start races the cup from the top, not from where it was abandoned.
@@ -178,12 +182,10 @@ test('Random runs an endless series of drawn tracks until the host ends it', asy
   await waitForRacing(page);
   await finishHumans(page);
   await inResults(page);
-  // Endless intermission: numbered but not "of N", always a next draw on deck,
-  // and the ghost reads as the way OUT (there is no podium to reach).
+  // Endless intermission: numbered but not "of N", always a next draw on deck.
   await expect(page.locator('#results-sub')).toHaveText('Random · Race 1');
   await expect(page.locator(visible('#results-next'))).toBeVisible();
   await expect(alice.locator('#newgame-btn')).toHaveText('Next race ▸');
-  await expect(alice.locator('#quitcup-btn')).toHaveText('Back to lobby');
 
   await alice.click('#newgame-btn');
   await waitForRacing(page);
@@ -193,7 +195,12 @@ test('Random runs an endless series of drawn tracks until the host ends it', asy
   await finishHumans(page);
   await inResults(page);
   await expect(page.locator('#results-sub')).toHaveText('Random · Race 2');
-  await alice.click('#quitcup-btn'); // the only way an endless run ends
+  // An endless run has no podium to reach, so pausing out of a race is the only
+  // way it ever ends.
+  await alice.click('#newgame-btn');
+  await waitForRacing(page);
+  await alice.click('#pause-btn');
+  await alice.click('#pause-newgame');
   await page.waitForFunction(() => window.__net.roomState === 'lobby', null, { timeout: 10000 });
   expect(await page.evaluate(() => ({ series: window.__series(), mode: window.__net.mode })))
     .toEqual({ series: null, mode: 'random' });

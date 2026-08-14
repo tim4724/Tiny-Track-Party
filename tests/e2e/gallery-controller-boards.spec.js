@@ -57,7 +57,7 @@ test('phone results board mid-race: my time, everyone else still racing', async 
   await expect(page.locator('#result-wait')).toHaveText('Waiting for the other racers to finish…');
 });
 
-test('phone cup intermission: points board, race counter, both host buttons', async ({ page }) => {
+test('phone cup intermission: points board, race counter, one host button', async ({ page }) => {
   await page.goto(`${CONTROLLER}intermission&color=1`);
   await boardReady(page);
   // Derived from series.raceIndex/raceCount — the harness used to hardcode this.
@@ -67,12 +67,13 @@ test('phone cup intermission: points board, race counter, both host buttons', as
   await expect(page.locator('#result-list li .res-time')).toHaveCount(0);
   // A finished cup board must NOT mark its rows as still out on track.
   await expect(page.locator('#result-list li.is-racing')).toHaveCount(0);
-  // Mid-series ⇒ advance, plus the only escape hatch out of a cup.
+  // Mid-series ⇒ advance, and that is the WHOLE footer: an intermission offers
+  // no way to abandon the cup (leaving is the pause overlay's "New game").
   await expect(page.locator('#newgame-btn')).toHaveText('Next race ▸');
-  await expect(page.locator('#quitcup-btn')).toHaveText('End cup early');
+  await expect(page.locator('#result-foot button:visible')).toHaveCount(1);
 });
 
-test('phone cup podium: cup-named final header, no quit hatch', async ({ page }) => {
+test('phone cup podium: cup-named final header', async ({ page }) => {
   await page.goto(`${CONTROLLER}cup-podium&color=1`);
   await boardReady(page);
   // series.final is the flag the harness has to spell right; without it this
@@ -80,9 +81,8 @@ test('phone cup podium: cup-named final header, no quit hatch', async ({ page })
   await expect(page.locator('#results-title')).toHaveText(/ — Final$/);
   await expect(page.locator('#result-list li .res-pts').first()).toBeVisible();
   await expect(page.locator('#result-list li.is-racing')).toHaveCount(0);
-  // The cup is done: back to the lobby, and nothing left to abandon.
+  // The cup is done: back to the lobby.
   await expect(page.locator('#newgame-btn')).toHaveText('New game');
-  await expect(page.locator('#quitcup-btn')).toBeHidden();
 });
 
 // The RACE page's progression dressings — same contract as the boards above:

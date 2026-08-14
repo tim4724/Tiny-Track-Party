@@ -892,11 +892,12 @@ const RACE_PERFORMERS = {
   // ALWAYS place the track, not only on the effect's `placeTrack`. That flag
   // answers "did the PICK move" (a random re-roll, a cup rewind), which was the
   // only way the scene could be showing the wrong circuit — until prepareNextTrack
-  // gave the shell its own reason to have moved it. Quitting a cup FROM the
-  // intermission rewinds to race 1, which is usually the circuit already
-  // selected, so the pick has not moved and the layer says there is nothing to
-  // place — while the scene is sitting on the speculatively-meshed race 2. The
-  // lobby then attracts on a circuit its own card does not name. Placing
+  // gave the shell its own reason to have moved it. Reaching the lobby straight
+  // from an intermission board does exactly that: the room left mid-intermission
+  // (or the results failsafe fired) with the pick still on the race just run, so
+  // the layer says there is nothing to place — while the scene is sitting on the
+  // speculatively-meshed NEXT race. The lobby then attracts on a circuit its own
+  // card does not name. Placing
   // unconditionally costs nothing when the scene is already right (Stage skips
   // an unchanged signature), and the promise goes back to the crossfade so the
   // still holds until the swap lands instead of uncovering the old one.

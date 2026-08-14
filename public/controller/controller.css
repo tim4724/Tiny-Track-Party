@@ -740,7 +740,9 @@ input[type=text]:disabled { opacity: 0.6; }
 .result-list .res-gain { margin-left: auto; color: var(--brand); font-weight: 800; }
 .result-list .res-gain.is-zero { color: var(--ink-3); }
 .result-list .res-pts { color: var(--ink-2); font-weight: 800; font-variant-numeric: tabular-nums; min-width: 3.4em; text-align: right; }
-#result-foot { display: flex; flex-direction: row; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0.6rem; }
+/* Exactly one child is ever visible (renderFoot: the host's button XOR the note),
+   so this only has to centre it. */
+#result-foot { display: flex; align-items: center; justify-content: center; }
 #result-foot .btn { width: auto; min-width: 11rem; margin-top: 0; }
 .result-wait { color: var(--ink-2); font-weight: 700; text-align: center; }
 
