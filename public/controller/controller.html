@@ -96,7 +96,7 @@
          action is always visible while the columns above scroll. -->
     <div class="lobby-go">
       <button id="ready-btn" class="btn btn--brand hidden">I’m ready</button>
-      <div id="ready-note" class="hidden"></div>
+      <div id="ready-note"></div>
     </div>
   </section>
 
@@ -277,11 +277,13 @@
   </div>
 
   <!-- Motion-blocked popup — a SEPARATE alert (not part of the instructions): shown
-       when the tilt sensor is blocked (iOS denied) or absent (unsupported), with the
-       live recovery path. Sits above #settings-overlay (z 18) but below #conn. Title,
-       copy + the primary button's action come from tilt.motionState (see
-       refreshMotionPopup / motionHelpCopy). Once iOS has denied, that button RELOADS
-       (the only way to re-raise the prompt) rather than uselessly re-requesting. -->
+       when the tilt sensor is blocked (iOS denied), with the live recovery path. A
+       device with no sensor at all never sees it — startup forces button steering
+       and the settings card's Tilt row reads "Not available" instead. Sits above
+       #settings-overlay (z 18) but below #conn. Title, copy + the primary button's
+       action come from tilt.motionState (see refreshMotionPopup / motionHelpCopy).
+       Once iOS has denied, that button RELOADS (the only way to re-raise the
+       prompt) rather than uselessly re-requesting. -->
   <div id="motion-overlay" class="hidden" role="alertdialog" aria-modal="true" aria-labelledby="motion-title" aria-describedby="motion-status">
     <div class="settings-card motion-card">
       <h2 id="motion-title">Motion sensor is blocked</h2>
