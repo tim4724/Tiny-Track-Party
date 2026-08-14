@@ -219,6 +219,75 @@ test("headless (no window at all) stays 'unknown' — Node suites are not sensor
   assert.equal(new TiltInput({}).motionState, 'unknown');
 });
 
+// A fake browser: a window with the sensor API present, a settable permissions
+// policy, and a hand-driven `deviceorientation` listener list. This is the shape
+// that matters — every case below has DeviceOrientationEvent DEFINED, because
+// the whole point is that its presence proves nothing about delivery.
+async function withFakeBrowser({ policyAllows = true, hasFeaturePolicy = true }, fn) {
+  const had = ['window', 'document'].map((k) => [k, Object.prototype.hasOwnProperty.call(globalThis, k), globalThis[k]]);
+  const listeners = new Set();
+  globalThis.window = {
+    DeviceOrientationEvent: function () {},   // present, as on every real browser
+    addEventListener: (type, fn2) => { if (type === 'deviceorientation') listeners.add(fn2); },
+    removeEventListener: (type, fn2) => { if (type === 'deviceorientation') listeners.delete(fn2); },
+  };
+  globalThis.document = hasFeaturePolicy
+    ? { featurePolicy: { allowsFeature: (f) => (f === 'accelerometer' ? policyAllows : true) } }
+    : {};
+  const emit = (e) => { for (const l of [...listeners]) l(e); };
+  // AWAIT before the teardown: the settle timer fires 600 ms after fn returns
+  // its promise, and would find the fake window already gone.
+  try { return await fn({ emit }); } finally {
+    for (const [k, existed, prev] of had) { if (existed) globalThis[k] = prev; else delete globalThis[k]; }
+  }
+}
+
+test("a permissions policy that withholds the accelerometer constructs as 'unsupported'", async () => {
+  await withFakeBrowser({ policyAllows: false }, () => {
+    // DeviceOrientationEvent is defined here and would never fire — the exact
+    // shape of a cross-origin iframe whose embedder spent no `allow` on it.
+    assert.equal(new TiltInput({}).motionState, 'unsupported');
+  });
+});
+
+test('a policy that allows the accelerometer leaves the state unresolved for the gesture', async () => {
+  await withFakeBrowser({ policyAllows: true }, () => {
+    assert.equal(new TiltInput({}).motionState, 'unknown');
+  });
+});
+
+test("a granted listener that delivers nothing settles to 'unsupported'", async () => {
+  await withFakeBrowser({ hasFeaturePolicy: false }, async () => {
+    const t = new TiltInput({});
+    assert.equal(await t.enableMotion(), 'unsupported',
+      'no sample inside the settle window means no usable sensor, whatever permission said');
+  });
+});
+
+test("an all-null sample does NOT count as delivery — it still settles 'unsupported'", async () => {
+  await withFakeBrowser({ hasFeaturePolicy: false }, async ({ emit }) => {
+    const t = new TiltInput({});
+    const state = t.enableMotion();
+    // Chromium emits exactly one of these on sensorless hardware; counting
+    // events instead of usable samples would read it as a working sensor.
+    emit({ beta: null, gamma: null });
+    assert.equal(await state, 'unsupported');
+    assert.equal(t.haveTilt, false);
+  });
+});
+
+test('a real sample resolves granted immediately, without paying the settle window', async () => {
+  await withFakeBrowser({ hasFeaturePolicy: false }, async ({ emit }) => {
+    const t = new TiltInput({});
+    const started = Date.now();
+    const state = t.enableMotion();
+    emit({ beta: 10, gamma: 15 });
+    assert.equal(await state, 'granted');
+    assert.ok(t.haveTilt, 'the sample was applied, not just counted');
+    assert.ok(Date.now() - started < 300, 'a working sensor must not wait out the window');
+  });
+});
+
 test('stop() resets brake + ACTION state so the next race cannot inherit a stale press', () => {
   const t = new TiltInput({});
   t.setActionEnabled(true);

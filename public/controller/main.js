@@ -622,7 +622,14 @@ async function joinRace(name, { persist } = {}) {
   // calls requestPermission before its first await), so awaiting the result is
   // safe and doesn't break the gesture rule. On iOS this waits out the system
   // prompt; on Android/desktop it resolves on the next microtask.
-  if (inputMode === 'tilt') await tilt.enableMotion();
+  // enableMotion resolves the state completely (permission AND delivery), so a
+  // phone whose sensor turns out to be absent or withheld is put on buttons
+  // here rather than steering with a dead wheel. Not persisted, same as the
+  // startup fallback above: the stored pref only means anything where tilt exists.
+  if (inputMode === 'tilt' && (await tilt.enableMotion()) === 'unsupported') {
+    inputMode = 'buttons';
+    setInputMode('buttons');
+  }
   net.connect(n);
 }
 el('name-form').addEventListener('submit', (e) => {
