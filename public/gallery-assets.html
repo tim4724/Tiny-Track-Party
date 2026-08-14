@@ -48,6 +48,15 @@
     </label>
   </div>
 
+  <!-- The KIT FIELD: every model in the three Kenney kits, standing on the
+       ground beyond the track. Not a picker beside the scene — the scene. -->
+  <div class="group">
+    <label class="checkbox-label" for="asset-kits">
+      <input type="checkbox" id="asset-kits">
+      Kit field
+    </label>
+  </div>
+
   <!-- In a .group so the mobile header collapses it behind ⚙ with the rest. -->
   <div class="group">
     <button class="ctrl" id="asset-home">Back to the cars</button>
@@ -74,6 +83,17 @@
   <aside class="legend" id="asset-legend-panel" hidden>
     <p class="legend__hint">Drag to look · scroll to fly · WASD · Q/E</p>
     <div id="asset-legend-lists"></div>
+  </aside>
+  <!-- The field's TABLE OF CONTENTS. The models themselves are out there on the
+       ground at their own size; this is how you find one among six hundred — a
+       row flies the camera to it, and the filter rebuilds the field with only
+       what matches. -->
+  <aside class="kits" id="kit-sheet" hidden>
+    <div class="kits__bar">
+      <input type="search" id="kit-filter" placeholder="Filter by name…" autocomplete="off">
+      <span class="kits__count" id="kit-count"></span>
+    </div>
+    <div id="kit-body"></div>
   </aside>
 </section>
 

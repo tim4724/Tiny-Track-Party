@@ -74,6 +74,10 @@ const variantSel = document.getElementById('asset-variant');
 const legendPanel = document.getElementById('asset-legend-panel');
 const legendLists = document.getElementById('asset-legend-lists');
 const homeBtn = document.getElementById('asset-home');
+const kitSheet = document.getElementById('kit-sheet');
+const kitBody = document.getElementById('kit-body');
+const kitFilter = document.getElementById('kit-filter');
+const kitCount = document.getElementById('kit-count');
 
 // The showroom's control surface, once the frame has built its scene. Same
 // origin, so this is a property read; the poll is for the wasm + GLB load, which
@@ -321,6 +325,140 @@ async function buildLegend() {
   legendLists.appendChild(foot);
 }
 
+// ---- the kit field ---------------------------------------------------------
+// The other half of the page. The legend above says what this scene DRAWS; the
+// field says what it could have drawn — every model of the three Kenney kits
+// the game picks from, standing on the ground beyond the track at the size it
+// would ship, under the biome's own light.
+//
+// It is the scene, not a panel over it: a sheet of Kenney's preview renders can
+// say what a model IS, and only the field can say whether it belongs beside
+// what already ships. What is left here is a TABLE OF CONTENTS — six hundred
+// models is more than you can find by flying — and it drives the camera by the
+// LAYOUT the renderer answers with, never by re-deriving where a model went.
+//
+// The kits are NOT in the tree (CC0 and re-fetchable: `npm run fetch:kits` puts
+// them in .cache/, see that script's header), so everything here has to survive
+// them being absent. That is the empty state below rather than an error — on a
+// fresh worktree it is the normal condition.
+let kitModels = null;   // [{ id, name, tris, inGame }] in field order, once fetched
+let kitLayout = [];     // the renderer's answer, same order
+let kitRows = [];       // the row elements, same order
+
+function kitEmpty(message) {
+  const p = document.createElement('p');
+  p.className = 'kits__empty';
+  p.textContent = message;
+  kitBody.innerHTML = '';
+  kitBody.appendChild(p);
+}
+
+// The catalogue: the kit manifest joined to the provenance of what we already
+// ship. Which kit model each shipped .glb came from is AUTHORED, in the
+// SOURCES.json beside those files — our copies have been renamed and edited, so
+// there is no rule that recovers it.
+async function loadKitModels() {
+  const [i, s] = await Promise.all([fetch('/kits/index.json'), fetch('/assets/toycar/SOURCES.json')]);
+  if (!i.ok) throw new Error('no kit cache');
+  const index = await i.json();
+  const sources = await s.json();
+  const inGame = new Map();
+  for (const [file, src] of Object.entries(sources.models)) {
+    if (src.kit) inGame.set(`${src.kit}/${src.model}`, file);
+  }
+  const out = [];
+  for (const kit of index.kits) {
+    for (const m of kit.models) {
+      out.push({ id: `kit:${kit.id}/${m.name}`, kit: kit.label, name: m.name,
+                 tris: m.tris, inGame: inGame.get(`${kit.id}/${m.name}`) || null });
+    }
+  }
+  return out;
+}
+
+function matching() {
+  const q = kitFilter.value.trim().toLowerCase();
+  return q ? kitModels.filter((m) => m.name.toLowerCase().includes(q)) : kitModels;
+}
+
+// Build the field, then the list of what is in it. A rebuild is a scene build
+// with several hundred models in it, so this is the expensive path on the page
+// and every caller is a deliberate act (ticking the box, changing the filter).
+async function buildKitField() {
+  const s = showroom();
+  if (!s) return;
+  if (!kitModels) {
+    kitEmpty('Loading the kits…');
+    try {
+      kitModels = await loadKitModels();
+    } catch (_) {
+      kitEmpty('The kits are not on this machine yet. Run `npm run fetch:kits` and reload — '
+        + 'it downloads the three CC0 kits into .cache/ (~20 MB, they are not in the tree).');
+      return;
+    }
+  }
+  const shown = matching();
+  kitCount.textContent = `${shown.length} of ${kitModels.length} models`;
+  kitEmpty(`Standing ${shown.length} models…`);
+  kitLayout = await s.kits(shown.map((m) => m.id));
+  buildKitList(shown);
+  // Land on the first of them rather than wherever the last look left you: the
+  // field is somewhere off past the track, and a rebuild you cannot see is
+  // indistinguishable from one that did not happen.
+  s.lookAtKit(kitLayout[0]);
+}
+
+function buildKitList(shown) {
+  const frag = document.createDocumentFragment();
+  kitRows = shown.map((m, i) => {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = m.inGame ? 'kit-row kit-row--in' : 'kit-row';
+    row.title = m.inGame ? `${m.kit} · in the game as ${m.inGame}` : m.kit;
+    const name = document.createElement('span');
+    name.className = 'kit-row__name';
+    name.textContent = m.name;
+    const tris = document.createElement('span');
+    tris.className = 'kit-row__tris';
+    tris.textContent = `${m.tris}`;
+    row.append(name, tris);
+    row.addEventListener('click', () => {
+      const s = showroom();
+      if (s) s.lookAtKit(kitLayout[i]);
+      for (const r of kitRows) r.classList.remove('kit-row--at');
+      row.classList.add('kit-row--at');
+      frame.focus();   // the camera keys live in the FRAME's document
+    });
+    frag.appendChild(row);
+    return row;
+  });
+  kitBody.innerHTML = '';
+  kitBody.appendChild(frag);
+}
+
+// Rebuilding the field on every keystroke would stand six hundred models to
+// show you the result of "t". The delay is long enough to type a word in.
+let filterTimer = 0;
+kitFilter.addEventListener('input', () => {
+  clearTimeout(filterTimer);
+  if (state.assetKits) filterTimer = setTimeout(buildKitField, 450);
+});
+
+Gallery.bindCheckbox(state, 'asset-kits', 'assetKits', () => {
+  kitSheet.hidden = !state.assetKits;
+  if (state.assetKits) {
+    buildKitField();
+  } else {
+    // Tear the field down rather than leaving it standing out of sight: it is
+    // several hundred assets, and this page is also where the shipping scene
+    // gets looked at.
+    const s = showroom();
+    if (s) { s.kits([]); s.home(); }
+  }
+});
+kitSheet.hidden = !state.assetKits;
+
+
 // ---- boot -------------------------------------------------------------------
 
 whenReady((s) => {
@@ -359,6 +497,10 @@ whenReady((s) => {
   s.biome(state.assetBiome);
   if (state.assetItem) s.item(state.assetItem);
   if (state.assetDrive) s.drive(true);
+  // LAST, and the one that does not collapse into the build above: it has
+  // several hundred models to fetch first, and it flies the camera when it
+  // lands. A page reloaded with the field up comes back up standing in it.
+  if (state.assetKits) buildKitField();
 });
 
 Gallery.initMobileOptionsToggle();

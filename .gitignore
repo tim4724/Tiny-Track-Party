@@ -15,10 +15,12 @@ test-results/
 public/assets/audio/_stk-audition/
 public/assets/audio/_engine-audition/
 public/assets/audio/_music-pool/
-# Race-music MASTERS — the 256-320 kbps incompetech downloads the shipped VBR
-# files are encoded from (~164 MB). They are re-fetchable from the URL + sha256
-# in public/assets/audio/music/SOURCES.json, so the bytes are a cache, not a
-# source: `npm run fetch:music` fills this and re-encodes.
+# Re-fetchable third-party bytes, each behind a URL + sha256 and a script that
+# rebuilds it. They are a cache, not a source:
+#   music-masters/ the 256-320 kbps incompetech downloads the shipped VBR files
+#                  are encoded from (~164 MB) — `npm run fetch:music`
+#   kenney-kits/   the three CC0 kits the game's models are picked from, for the
+#                  asset gallery's kit browser (~30 MB) — `npm run fetch:kits`
 .cache/
 # Local-only Claude Code state — keeps the .claude/ root committable for shared
 # project settings/hooks while excluding per-user runtime files (worktrees,

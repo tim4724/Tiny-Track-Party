@@ -4,6 +4,8 @@
 #include "TtpRendererImpl.h"
 #include "TtpRendererKit.h"
 
+#include "ttp/kitfield.h"   // header-only; the renderer may not link libttp-runtime
+
 
 namespace {
 // Terrain value noise: integer lattice hash, cosine-eased bilinear blend.
@@ -818,6 +820,13 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         if (!buildMesh(mSky)) return false;
     }
 
+    // The gallery's kit field, off in every build but its own. BEFORE the hill
+    // ring, which is the one thing in the scene that reaches as far out as the
+    // field does: the ring reads the bounds this leaves behind and stands no
+    // hill inside them, so the field gets the clear horizon a browser needs
+    // instead of a row of models parked behind a mountain.
+    buildKitField(tb);
+
     // Horizon hill ring (environment.js buildHillRingGeometry, 'dome' shape):
     // 18 squashed spheres, fully deterministic index math, theme colours cycled,
     // ring pushed out for big circuits (sf) exactly like setTrack does.
@@ -860,6 +869,20 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
                 r = 150 + (i % 3) * 18;
             }
             const float cx = std::cos(a) * r, cz = std::sin(a) * r;
+            // The gallery's kit field takes precedence over the horizon where
+            // the two meet (DEV; mKitField* is empty in every other build). A
+            // hill is the only thing out there big enough to hide a row of
+            // models behind, and a browser you have to fly around a mountain to
+            // read is not one. Skipped whole rather than moved: the ring is
+            // deterministic index math, and nudging one feature would land it
+            // on its neighbour.
+            if (mKitFieldMaxX > mKitFieldMinX
+                    && (cx + sx) * sf > mKitFieldMinX - ttp::rt::kKitFieldClear
+                    && (cx - sx) * sf < mKitFieldMaxX + ttp::rt::kKitFieldClear
+                    && (cz + sz) * sf > mKitFieldMinZ - ttp::rt::kKitFieldClear
+                    && (cz - sz) * sf < mKitFieldMaxZ + ttp::rt::kKitFieldClear) {
+                continue;
+            }
             mHillAnchors.push_back({ cx, cz, sy - 1.0f }); // authored coords
             const float3 hc = srgbToLinear(
                     tb.hillColors.empty() ? 0x8cc578u
@@ -1158,6 +1181,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
                             { -G / TILE, G / TILE }, { G / TILE, G / TILE } };
             mGround.idx = { 0, 2, 1, 1, 2, 3 };
             mGround.normals.assign(mGround.verts.size(), float3{ 0, 1, 0 });
+            kitFieldApron(mGround, groundY, TILE, white);
         } else {
             // Heightfield grid over the terrain region, flat sheet as a 4-strip
             // ring out to ±G. One mesh, one material instance — the relief costs
@@ -1210,6 +1234,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
             flatQuad(mTerrainX1, -G, G, G);             // east strip
             flatQuad(mTerrainX0, -G, mTerrainX1, mTerrainZ0); // north strip
             flatQuad(mTerrainX0, mTerrainZ1, mTerrainX1, G);  // south strip
+            kitFieldApron(mGround, groundY, TILE, white);
 
             // Depth-pass stand-in (see the caster note before bakeShadowMap):
             // the relief must NOT cast — a heightfield rendered into its own

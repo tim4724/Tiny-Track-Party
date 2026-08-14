@@ -124,6 +124,25 @@ than a list. It is **dev-only** and reached by nothing on the shipping path, and
 `showcase.cc` sits beside `theme.cc` rather than inside it precisely so a gallery
 can never move a number the shipping game draws with.
 
+**The kit field** is the other half of the same question. The showroom stages what
+the game DRAWS; the field stands what it could have drawn — all ~585 models of the
+three Kenney kits — on flat ground beyond the track, each at the size it would
+ship and under the same light. It is a BROWSER, and it is 3D on purpose: a sheet
+of Kenney's preview renders says what a model is, and only the field says whether
+it belongs beside what already ships.
+
+`ttp/kitfield.h` is the packing, and it is header-only because the renderer needs
+it and may not link this library (`boost_shades` in `theme.h` is the same shape).
+The renderer measures each model's footprint off its own glTF AABB, offsets the
+field past the track and the terrain grid, and answers with the layout; the chrome
+flies its camera by that rather than re-deriving where anything went. The
+`kitfield` ctest holds the properties the field is useless without.
+
+The kits are not in the tree (`npm run fetch:kits`, whose header has the why), and
+which kit model each shipped `.glb` came from is authored in
+`public/assets/toycar/SOURCES.json` because it cannot be derived — our copies have
+been renamed and edited.
+
 **The showcase theme** takes the picked biome's palette unchanged and merges in
 every other biome's vocabulary, first-appearance-wins. A biome added to `theme.cc`
 therefore joins the gallery on the same commit, and the `showcase` ctest says so —

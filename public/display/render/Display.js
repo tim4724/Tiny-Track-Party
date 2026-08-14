@@ -84,6 +84,7 @@ export class Display {
     this._rectPtr = 0;       // cellRects' heap scratch, grown on demand
     this._rectBytes = 0;
     this._showcase = false;  // the asset gallery's showroom; see showcase()
+    this._kitModels = [];    // …and its kit field; see kitField()
     // No slot→car-id list here anymore: the HUD block is indexed by slot and
     // hud() maps entries back to cars via ttp_display_slot_ids_json — the
     // built scene's OWN roster, not a copy this class authors.
@@ -101,6 +102,8 @@ export class Display {
       showcase: mod.cwrap('ttp_display_showcase', null, ['number']),
       modelVariant: mod.cwrap('ttp_display_model_variant', null, ['string', 'number']),
       bench: mod.cwrap('ttp_display_bench', null, ['string']),
+      kitField: mod.cwrap('ttp_display_kit_field', null, ['number']),
+      kitLayout: mod.cwrap('ttp_display_kit_field_layout', 'string', []),
       release: mod.cwrap('ttp_display_release', null, []),
       bind: mod.cwrap('ttp_display_bind', null, ['number']),
       cells: mod.cwrap('ttp_display_cells', null, ['string']),
@@ -229,6 +232,20 @@ export class Display {
   modelVariant(model, variant) { this._fn.modelVariant(model, variant | 0); }
   bench(model) { this._fn.bench(model || ''); }
 
+  // DEV. The asset gallery's KIT FIELD: the models to stand on clear ground
+  // beyond the track, as GLB names this class fetches (`kit:<kit>/<model>` for
+  // the kits the game does not ship, see assetCache). Held rather than pushed,
+  // because unlike every other latch this one is a FETCH LIST — the bytes go
+  // over as kit<i>.glb during setTrack, and the count only means anything once
+  // they have. [] is no field, which is every caller but the gallery.
+  kitField(models) { this._kitModels = Array.isArray(models) ? models : []; }
+
+  // Where the built field put them, in the same order — footprint and spot per
+  // model (ttp_display_kit_field_layout). [] until a build with a field in it.
+  kitLayout() {
+    try { return JSON.parse(this._fn.kitLayout()) || []; } catch (_) { return []; }
+  }
+
   // Build (or REBUILD) the scene for a track. Every race start comes through
   // here — a Grand Prix chains four tracks, and even a restart wants the skid
   // ribbons, kicked cones and collected boxes back at their opening state.
@@ -267,10 +284,18 @@ export class Display {
     const prBytes = await Promise.all(prModels.map((m) => assets.glb(m)));
     prBytes.forEach((b, i) => { if (b) this.provide(`prop${i}.glb`, b); });
 
+    // The KIT FIELD's models (dev; empty in play). Fetched CONCURRENTLY because
+    // there are hundreds of them — one await each would turn a field into a
+    // minute of round trips — and provided in the order given, which is the
+    // order the layout comes back in and the order the chrome names them by.
+    const kitBytes = await Promise.all(this._kitModels.map((m) => assets.glb(m)));
+    kitBytes.forEach((b, i) => { if (b) this.provide(`kit${i}.glb`, b); });
+    this._fn.kitField(kitBytes.length);
+
     // An unparseable model answers with an empty list and just renders
     // untextured, which is what the try/catch here used to buy.
     const texUris = new Set();
-    for (const bytes of [...scBytes, ...prBytes]) {
+    for (const bytes of [...scBytes, ...prBytes, ...kitBytes]) {
       if (bytes) for (const uri of this._imageUris(bytes)) texUris.add(uri);
     }
     texUris.add('Textures/colormap.png'); // the toy-car kit's shared palette
@@ -536,5 +561,20 @@ export function assetCache() {
     cache.set(url, p);
     return p;
   };
-  return { raw, glb: (name) => raw(assetUrl(`/assets/toycar/${name}.glb`)) };
+  const glb = (name) => {
+    const kit = kitPath(name);
+    return raw(kit ? assetUrl(kit) : assetUrl(`/assets/toycar/${name}.glb`));
+  };
+  return { raw, glb };
+}
+
+// DEV. `kit:<kit>/<model>` names a model from a Kenney kit the game does NOT
+// ship — the asset gallery's kit browser stages candidates on the showroom grid,
+// out of the local kit cache the server serves at /kits (npm run fetch:kits).
+// It is spelled as a MODEL NAME because that is all a car slot's `model` is: the
+// GLB to fetch, which never crosses the ABI, so nothing below this line — and
+// nothing in C++ — can tell a candidate from a shipped car.
+function kitPath(name) {
+  const m = /^kit:([\w-]+)\/([\w.-]+)$/.exec(name);
+  return m ? `/kits/${m[1]}/models/${m[2]}.glb` : null;
 }

@@ -18,6 +18,11 @@ const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 // vendored dependency, served via the remap below. Restricted to .js so
 // package artifacts / binaries can't be walked.
 const PARTYPLUG_DIR = path.join(__dirname, '..', 'partyplug');
+// The three Kenney kits the game's models are PICKED FROM, for the asset
+// gallery's kit browser. `npm run fetch:kits` fills this (a cache: gitignored
+// and dockerignored, so it is never in an image), which is why the route below
+// is allowed to 404 — the gallery reads that as "not fetched" and says so.
+const KITS_DIR = path.join(__dirname, '..', '.cache', 'kenney-kits');
 const APP_VERSION = require('../package.json').version;
 const APP_ENV = String(process.env.APP_ENV || (process.env.NODE_ENV === 'production' ? 'production' : 'development')).toLowerCase();
 const IS_PROD = APP_ENV === 'production';
@@ -205,6 +210,23 @@ const server = http.createServer((req, res) => {
     if (!/^\/[\w.-]+\.js$/.test(urlPath.slice('/partyplug'.length))) { res.writeHead(404); res.end('Not Found'); return; }
     baseDir = PARTYPLUG_DIR;
     lookupPath = urlPath.slice('/partyplug'.length);
+  } else if (urlPath.startsWith('/kits/')) {
+    // The kit cache, for /gallery-assets.html's kit browser: its manifest, one
+    // preview render per model, and the models themselves — the browser stages a
+    // candidate on the showroom grid by handing the renderer its bytes.
+    //
+    // Reachable here is not the same as shipped: a kit model ENTERS the game by
+    // being copied into public/assets/toycar and recorded in its SOURCES.json.
+    // Nothing may load one of these at play time, because this cache exists on
+    // one laptop and in no image.
+    const rest = urlPath.slice('/kits'.length);
+    if (!/^\/index\.json$/.test(rest)
+        && !/^\/[\w-]+\/previews\/[\w.-]+\.png$/.test(rest)
+        && !/^\/[\w-]+\/models\/[\w.-]+\.glb$/.test(rest)) {
+      res.writeHead(404); res.end('Not Found'); return;
+    }
+    baseDir = KITS_DIR;
+    lookupPath = rest;
   }
 
   const filePath = path.join(baseDir, lookupPath);

@@ -149,7 +149,9 @@ from `tests/e2e/helpers.js` (it reaps leaked phone contexts), and run
 `npx playwright install chromium` once.
 
 `/gallery.html` is a manual no-relay preview surface; `/gallery-assets.html` is one
-live scene you fly, and is dev-only.
+live scene you fly, and is dev-only. Its KIT FIELD stands models the game does not
+ship, out of a cache no test has (`npm run fetch:kits`) — so what is gated is the
+packing, in the `kitfield` ctest, and nothing asserts that a kit is on the disk.
 
 ## Auditing the suite itself
 

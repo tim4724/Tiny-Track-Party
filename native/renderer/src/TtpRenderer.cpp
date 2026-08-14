@@ -741,6 +741,7 @@ void TtpRenderer::releaseScene() {
     for (auto*& a : mCarGhostAssets) dropAsset(a);
     for (auto*& a : mSceneryAssets) dropAsset(a);
     for (auto*& a : mPropAssets) dropAsset(a);
+    for (auto*& a : mKitAssets) dropAsset(a);
     dropAsset(mBoxAsset);
     dropAsset(mBoxFadeAsset);
     dropAsset(mBananaAsset);
@@ -784,6 +785,7 @@ void TtpRenderer::releaseScene() {
     mSceneryInstances.clear();
     mPropAssets.clear();
     mPropInstances.clear();
+    mKitAssets.clear();
     mBoxXf.clear();
     mGroundInst = nullptr; // a scene instance; sceneInstance() owns the teardown
     mBoxCollectT.clear();

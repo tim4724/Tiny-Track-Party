@@ -9,6 +9,7 @@
     "check:artifact": "node --test tests/native-artifact.test.js",
     "check:music-loudness": "node scripts/check-music-loudness.mjs",
     "dev": "node --watch server/index.js",
+    "fetch:kits": "node scripts/fetch-kits.mjs",
     "fetch:music": "node scripts/fetch-music.mjs",
     "gen:schematics": "node scripts/gen-track-schematics.js",
     "lint": "eslint .",

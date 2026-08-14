@@ -751,6 +751,32 @@ export function runDisplayScenario(opts, ctx) {
           }
           return model || '';
         },
+        // The KIT FIELD: every model the gallery hands over, standing on clear
+        // ground beyond the track (ttp_display_kit_field). This is the browser
+        // itself — not a picker beside the scene but the scene — so it answers
+        // with the LAYOUT, which is what the chrome flies its camera by and
+        // names models from. A scene rebuild, like the biome and the bench.
+        async kits(models) {
+          scene.kitField(models || []);
+          await scene.setTrack(track);
+          scene.bindSession(engine.h);
+          return scene.kitLayout();
+        },
+        // Stand in front of model `i` of the field, at its own size: a doll's
+        // house needs a step closer than a loop piece, and a row read from one
+        // fixed distance is a row you cannot judge. Off the LAYOUT, so the
+        // camera cannot end up somewhere the model is not.
+        lookAtKit(spot) {
+          if (!spot) return;
+          // Its own size sets the distance — a coin needs a step closer than a
+          // loop piece, and a row read from one fixed range is a row you cannot
+          // judge. Height counts as much as footprint: the tall thin models
+          // (gantries, palms) are exactly the ones a footprint under-reads.
+          const reach = Math.max(spot.w, spot.d, spot.h, 1.0);
+          cam.eye = { x: spot.x, y: spot.y + reach * 0.45, z: spot.z - reach * 2.4 };
+          cam.yaw = 0;              // +z, straight down the row's near side
+          cam.pitch = -0.1;
+        },
         // Which variant of a prop the SCENE is built with, which is the answer
         // the bench exists to reach: pick one here and it is what the showroom
         // (and every race, until the page reloads) draws.

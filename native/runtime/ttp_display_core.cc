@@ -124,6 +124,16 @@ void ttp_display_bench(const char* model) {
     if (g_disp && g_disp->renderer) g_disp->renderer->setModelBench(model);
 }
 
+void ttp_display_kit_field(int count) {
+    if (g_disp && g_disp->renderer) g_disp->renderer->setKitField(count);
+}
+
+const char* ttp_display_kit_field_layout(void) {
+    // The renderer owns the string (it is written once per build), so this
+    // hands back its buffer rather than copying into a static of its own.
+    return (g_disp && g_disp->renderer) ? g_disp->renderer->kitFieldLayout() : "[]";
+}
+
 int ttp_display_build(const char* trackId, const char* rosterJson) {
     ttp::clear_error();
     // The two ways this refuses are unrelated and read identically from outside:

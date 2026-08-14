@@ -110,6 +110,23 @@ public:
     void setModelVariant(const char* model, int variant);
     void setModelBench(const char* model);
 
+    // ---- the kit field (dev) ----------------------------------------------
+    // Stand `count` provided models — kit0.glb … kit<count-1>.glb — on clear
+    // ground beside the track, each seated on the surface at the size it would
+    // ship. That is the asset gallery's browser for the Kenney kits the game
+    // picks from: a sheet of preview renders can say what a model is, and only
+    // the field can say whether it belongs beside what already ships.
+    //
+    // Latched like the bench, and for the same reason — the field is meshed at
+    // buildScene. 0 builds no field, which is every caller but the gallery.
+    //
+    // kitFieldLayout() answers where they ended up: a JSON array in the same
+    // order, one {"d","h","w","x","y","z"} per model — its size, measured off
+    // its own glTF AABB, and the spot it stands on. The chrome frames a model
+    // from that, so the two cannot disagree about where one is or how big.
+    void setKitField(int count);
+    const char* kitFieldLayout() const { return mKitLayout.c_str(); }
+
     bool provideAsset(const char* name, const uint8_t* bytes, uint32_t len);
     // The bytes provided under `name`, or nullptr. The scene's caller needs the
     // scenery GLBs back: half of a biome's recolour rule is each model's own
@@ -813,6 +830,16 @@ private:
     // gallery-assets.js's BENCH_MODELS mirrors these for its captions.
     int mModelVariant[4] = { 1, 1, 1, 4 };
     int mBenchModel = -1;
+    // The kit field: one asset per model (no instancing — every one of them is
+    // a different model, which is the point), and the layout the chrome reads
+    // back. Empty unless the gallery latched it on.
+    int mKitFieldCount = 0;
+    std::vector<filament::gltfio::FilamentAsset*> mKitAssets;
+    std::string mKitLayout = "[]";
+    // What ground the field ended up covering, so the horizon ring can leave it
+    // alone (see buildTrackScene). Inverted — max < min — when there is no
+    // field, which is every build but the gallery's.
+    float mKitFieldMinX = 0, mKitFieldMaxX = -1, mKitFieldMinZ = 0, mKitFieldMaxZ = -1;
 
     filament::math::float3 mTrainCentre{};
     float mTrainCos = 1, mTrainSin = 0;
@@ -983,6 +1010,8 @@ private:
     void buildFliers(const TrackBin& tb);
     void buildGantry(const TrackBin& tb);
     void buildScenery(const TrackBin& tb);
+    void buildKitField(const TrackBin& tb);
+    void kitFieldApron(Mesh& ground, float groundY, float tile, uint32_t col) const;
     void buildProps(const TrackBin& tb);
     void buildLandmarks(const TrackBin& tb);
     void buildClutter(const TrackBin& tb);

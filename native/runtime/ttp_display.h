@@ -113,6 +113,31 @@ TTP_ABI void ttp_display_showcase(int on);
 TTP_ABI void ttp_display_model_variant(const char* model, int variant);
 TTP_ABI void ttp_display_bench(const char* model);
 
+/* ---- the kit field (DEV) ------------------------------------------------ *
+ *
+ * The other half of the gallery's question. The showroom above stages what the
+ * game DRAWS; this stands what it could have drawn — every model of the Kenney
+ * kits it picks from — on clear ground beyond the track, each at the size it
+ * would ship and under the same light. A sheet of preview renders can say what
+ * a model is; only this can say whether it belongs beside what already ships.
+ *
+ * The shell provides the bytes as kit0.glb … kit<count-1>.glb and passes the
+ * count here; 0 builds no field. Latched, like the bench: it changes what the
+ * next ttp_display_build meshes. WHICH models, and in what order, is entirely
+ * the shell's — the kits are not in the tree and this layer has never heard of
+ * them (see scripts/fetch-kits.mjs).
+ *
+ * ttp_display_kit_field_layout answers where they ended up, as a JSON array in
+ * the same order — one {"d","h","w","x","y","z"} per model: its size, measured
+ * off its own glTF AABB, and the spot it stands on. The height is there for the
+ * same reason as the footprint — a chrome framing one model needs to know
+ * whether it is a coin or a loop. A chrome that wants to fly
+ * its camera to a model reads it here rather than re-deriving the packing,
+ * which is the one way the two could disagree about where a model is. Valid
+ * until the next build; "[]" when no field is staged. */
+TTP_ABI void ttp_display_kit_field(int count);
+TTP_ABI const char* ttp_display_kit_field_layout(void);
+
 /* Build the scene for `trackId` from the GLBs/textures the resolved biome names
  * and the roster handed over here.
  *

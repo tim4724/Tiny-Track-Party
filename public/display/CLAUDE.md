@@ -91,6 +91,17 @@ capture scripts. Do not reintroduce it to the display page.
 anything tempted onto the per-frame path must actually CHANGE per frame. See
 `native/renderer/CLAUDE.md` for what the frame itself costs.
 
+**Fetching assets is the shell's whole half of a scene build.** C++ names what it
+needs (scenery, props, cars, the kit field's models) and this side answers with
+bytes; nothing about which file that was crosses back. The asset gallery's KIT
+FIELD is the extreme case — several hundred models the game does not ship,
+fetched by `kit:<kit>/<model>` out of the local kit cache
+(`scripts/fetch-kits.mjs`) and provided as `kit<i>.glb`, all of it concurrent
+because one await each would turn a field into a minute of round trips. Which
+models, and in what order, is entirely this side's; where they stand is entirely
+the renderer's, and the layout comes back so the chrome's camera and the scene
+cannot disagree about where one is.
+
 ## Measuring frame cost
 
 `render/PerfHud.js` is on by default in development ("P" toggles it) and reports

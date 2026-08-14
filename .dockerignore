@@ -13,7 +13,8 @@ test-results
 public/assets/audio/_music-pool
 public/assets/audio/_stk-audition
 public/assets/audio/_engine-audition
-# Race-music masters (see .gitignore). No COPY targets them, but a tree that has
-# run `npm run fetch:music` would otherwise push 164 MB through the build
-# context on every image build for files that never enter the image.
+# Re-fetchable third-party bytes (see .gitignore): the race-music masters and the
+# Kenney kits. No COPY targets them, but a tree that has run `npm run fetch:music`
+# would otherwise push 164 MB through the build context on every image build for
+# files that never enter the image.
 .cache
