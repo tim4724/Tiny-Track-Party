@@ -75,7 +75,12 @@ const MIME_TYPES = {
   '.flac': 'audio/flac',
   '.mp3': 'audio/mpeg',
   // Compiled Filament materials, shipped beside the engine wasm.
-  '.filamat': 'application/octet-stream'
+  '.filamat': 'application/octet-stream',
+  // License notices, linked from /licenses.html. Without these they'd fall back
+  // to octet-stream and DOWNLOAD instead of opening — a license text nobody can
+  // read in place is not a notice.
+  '.txt': 'text/plain; charset=utf-8',
+  '.md': 'text/plain; charset=utf-8'
 };
 
 function sendJson(res, statusCode, payload) {
@@ -89,7 +94,7 @@ function sendJson(res, statusCode, payload) {
 // without a stat, and quality 5 keeps the one-time cost tens of ms rather than
 // the seconds quality 11 would take on the wasm. Media types stay raw — they
 // are already compressed formats, and they're the ones that get range requests.
-const COMPRESSIBLE = new Set(['.html', '.js', '.mjs', '.css', '.json', '.svg', '.wasm']);
+const COMPRESSIBLE = new Set(['.html', '.js', '.mjs', '.css', '.json', '.svg', '.wasm', '.txt', '.md']);
 const brotliCache = new Map(); // filePath -> { src, encoded }
 function brotliFor(filePath, data) {
   const hit = brotliCache.get(filePath);
@@ -120,7 +125,8 @@ function getLocalIP() {
 // be mistaken for a room and must 404 instead of spinning up a controller.
 const RESERVED_SEGMENTS = new Set([
   'display', 'controller', 'shared', 'assets', 'partyplug', 'gallery',
-  'api', 'health', 'privacy', 'about', 'terms', 'robots', 'sitemap', 'favicon'
+  'api', 'health', 'privacy', 'about', 'terms', 'robots', 'sitemap', 'favicon',
+  'licenses', 'licences', 'credits', 'imprint', 'legal'
 ]);
 function isRoomCode(urlPath) {
   const segs = urlPath.split('/').filter(Boolean);
@@ -182,6 +188,11 @@ const server = http.createServer((req, res) => {
   // --- route remaps ---
   if (urlPath === '/') {
     urlPath = '/display/index.html';
+  } else if (urlPath === '/licenses' || urlPath === '/licenses/') {
+    // The footer links /licenses.html, but the bare word is what anyone types.
+    // It is in RESERVED_SEGMENTS, so without this it would 404 rather than be
+    // mistaken for a join code.
+    urlPath = '/licenses.html';
   } else if (isRoomCode(urlPath)) {
     // Bare join code (e.g. /ABCD) -> phone controller. Reserved/non-code paths
     // fall through to the static handler (and 404 if there's no such file).

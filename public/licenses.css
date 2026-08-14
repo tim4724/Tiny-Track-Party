@@ -1,0 +1,146 @@
+/* Licenses page — a reading sheet in the Sticker Bash language. Unlike the TV
+   boards this one SCROLLS and is read at arm's length on a phone as often as
+   across a room, so type is body-sized and the entries column down to one on a
+   narrow screen.
+   Colour/type/surface come from /shared/theme.css; this file owns layout only. */
+
+.scene { position: fixed; }        /* the stage must not scroll away with the sheet */
+
+/* Wide, because the credits are a LIST and the entries column into it (see
+   .entries). The prose that is still prose keeps its own reading width. */
+.sheet {
+  position: relative; z-index: 1;
+  max-width: 100rem;
+  margin: 0 auto;
+  padding: clamp(1.6rem, 5vw, 3rem) clamp(1rem, 4vw, 2rem) 2.5rem;
+  display: flex; flex-direction: column; gap: clamp(1.4rem, 3vw, 2rem);
+}
+
+/* The wordmark doubles as the way back into the game. */
+.sheet__wordmark {
+  align-self: flex-start;
+  font-size: clamp(30px, 6vw, 46px);
+  text-decoration: none;
+}
+
+.sheet__title {
+  margin: 0;
+  font-family: var(--font-display); font-weight: 700;
+  font-size: clamp(34px, 7vw, 54px);
+  transform: rotate(-1deg);
+}
+/* What the GAME is, as opposed to what it is built from. Set off by a rule so
+   it reads as a footnote to the title rather than as the first credit. */
+.sheet__own {
+  margin: -0.7rem 0 0;
+  padding-left: 0.9rem;
+  border-left: 3px solid rgba(42, 39, 53, 0.18);
+  font-weight: 600; font-size: 0.88rem; line-height: 1.55; color: var(--ink-2);
+  max-width: 34rem;
+}
+.sheet__own a { color: var(--ink); text-underline-offset: 3px; }
+
+/* ---- Type section ---- one sticker card per type, its name on the badge. The
+   accent is decoration, not meaning, so it just cycles the four chrome colours
+   (red/green/blue/purple are the only ones allowed) and a new section needs no
+   CSS. `--sec` also tints the entry chips and title underlines inside. */
+#sections { display: flex; flex-direction: column; gap: clamp(1.9rem, 4vw, 2.6rem); }
+.sec { padding: clamp(1rem, 3vw, 1.6rem); }
+.sec:nth-child(4n+1) { --sec: var(--red); }
+.sec:nth-child(4n+2) { --sec: var(--blue); }
+.sec:nth-child(4n+3) { --sec: var(--purple); }
+.sec:nth-child(4n)   { --sec: var(--green); }
+
+/* The name straddles the card's top edge, die-cut style — the top margin is
+   what lifts it onto the border, and it is half the badge's own height so the
+   border runs through the middle of it. The rotation pulls the badge's optical
+   left edge in, so the negative left margin puts it back over the card's, in
+   line with the entry titles below. */
+.sec__badge {
+  display: inline-block;
+  margin: -1.55rem 0 1.1rem -0.3rem;
+  font-family: var(--font-display); font-weight: 700;
+  font-size: clamp(17px, 2.4vw, 22px); line-height: 1.1;
+  color: #fff;
+  background: var(--sec);
+  border: 3px solid var(--ink); border-radius: var(--r);
+  padding: 0.34em 0.7em 0.4em;
+  box-shadow: var(--shadow-pop);
+  transform: rotate(-1.6deg);
+}
+
+/* Both <noscript> only — so nothing else styles their links. */
+.sec__must a, .sec__nojs a { color: var(--ink); text-underline-offset: 3px; }
+.sec__nojs {
+  margin: 0 0 0.9rem;
+  font-weight: 600; color: var(--ink-2);
+  font-size: 0.88rem; line-height: 1.5;
+}
+.sec__must {          /* the long-form credit */
+  margin: 0 0 0.8rem;
+  background: var(--surface-2);
+  border: 2px solid var(--hairline); border-radius: var(--r-sm);
+  padding: 0.7rem 0.85rem;
+  font-weight: 700; font-size: 0.86rem; line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* ---- One work per row ---- what it is on the left, what it costs us on the
+   right. The left box shrinks and wraps internally (min-width:0 is what lets
+   it), so a long title never pushes the license chip onto a line of its own.
+
+   A column is added only when one more still leaves each of them wide enough to
+   hold a title, its author and the chip on ONE line — a column that splits the
+   author off reads as a broken row, so the breakpoints are set by that, not by
+   how much width is free. A section with fewer entries than columns leaves the
+   tail empty. */
+.entries {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: 1fr;
+  column-gap: clamp(1.2rem, 3vw, 2.4rem);
+}
+@media (min-width: 64rem)  { .entries { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 100rem) { .entries { grid-template-columns: repeat(3, 1fr); } }
+.entry {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem 0.8rem;
+  padding: 0.55rem 0;
+  border-top: 2px dashed rgba(42, 39, 53, 0.16);
+}
+
+/* The 12rem basis is the wrap threshold, not a width: wide enough that a phone
+   drops the license chip onto its own line (and gives the title the full row)
+   rather than squeezing a title into two words per line. */
+.entry__what { flex: 1 1 12rem; min-width: 0; }
+.entry__title {
+  font-weight: 800; color: var(--ink); text-decoration: none;
+  border-bottom: 2px solid transparent;
+}
+.entry__title:hover { border-bottom-color: var(--sec); }
+.entry__author {
+  font-weight: 600; font-size: 0.86rem; color: var(--ink-2);
+  margin-left: 0.5rem;
+}
+/* The entry's one link to its terms: our served copy of the license text where
+   the license demands one ship, else the canonical text. See licenseChip(). */
+.entry__license {
+  flex: none; margin-left: auto;
+  background: var(--sec); text-decoration: none; white-space: nowrap;
+}
+
+/* On a phone the row has no room for two columns: the title wraps to two lines
+   and the license chip ends up floating beside a fragment of it. Stack it
+   instead — title, author, then what it costs, in reading order. */
+@media (max-width: 30rem) {
+  .entry { flex-direction: column; align-items: flex-start; gap: 0.3rem; }
+  /* the 12rem basis is a WIDTH threshold in a row; down a column it would be a
+     12rem-tall box */
+  .entry__what { flex: 0 0 auto; }
+  .entry__license { margin-left: 0; }
+  .entry__author { margin-left: 0; display: block; }
+}
+
+/* ---- Foot of the sheet ---- the way back, then the legal row (.site-foot
+   lives in theme.css; this is only where it sits). */
+.sheet__back { align-self: center; transform: rotate(-1.2deg); text-decoration: none; }
+.sheet__back:active, .sheet__back.is-pressed { transform: rotate(-1.2deg) translateY(var(--btn-sink)); }
+.site-foot { margin-top: 0.2rem; }

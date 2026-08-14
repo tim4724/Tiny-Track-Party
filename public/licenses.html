@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Licenses · Tiny Track Party</title>
+  <meta name="description" content="Every third-party work that ships inside Tiny Track Party: the music, models, sounds, typefaces and code, with the license each one is under." />
+  <link rel="icon" type="image/svg+xml" href="/assets/icon/favicon.svg?v=__APP_V__" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/icon/favicon-32.png?v=__APP_V__" />
+  <link rel="apple-touch-icon" href="/assets/icon/apple-touch-icon.png?v=__APP_V__" />
+  <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/fredoka-variable.woff2" crossorigin />
+  <link rel="preload" as="font" type="font/woff2" href="/assets/fonts/nunito-variable.woff2" crossorigin />
+  <link rel="stylesheet" href="/shared/theme.css?v=__APP_V__" />
+  <link rel="stylesheet" href="/licenses.css?v=__APP_V__" />
+</head>
+<body>
+  <!-- Paper stage, same backdrop as the welcome board (see .scene in
+       /shared/theme.css). Fixed rather than absolute here: this page scrolls.
+       No clouds: they are placed for the TV board, where nothing sits at their
+       height, and on a page of running text they land on top of it. -->
+  <div class="scene" aria-hidden="true">
+    <div class="scene__sky"></div>
+    <div class="scene__grass"></div>
+  </div>
+
+  <main class="sheet">
+    <a class="wordmark sheet__wordmark" href="/" aria-label="Back to Tiny Track Party"><span>TINY TRACK</span><span class="l2">PARTY!</span></a>
+
+    <h1 class="sheet__title">Licenses</h1>
+    <p class="sheet__own">
+      The game itself is © 2026 Tim Vogel, all rights reserved.
+      <a href="https://github.com/tim4724/Tiny-Track-Party" target="_blank" rel="noopener">Source on GitHub</a>.
+    </p>
+
+    <!-- Filled by /licenses.js from shared/credits.js. The songs are NOT written
+         out here: they derive from the live music catalogue, so a change to the
+         picks cannot leave this page crediting the wrong thing. -->
+    <div id="sections"></div>
+    <!-- Without JS there is no list, and the music's credit is a license
+         condition rather than a nicety. So point at the STATIC, served file
+         that already carries it in full, instead of re-typing a song list here
+         that would be free to drift from the build. -->
+    <noscript>
+      <div class="card sec">
+        <p class="sec__must">
+          Music by Kevin MacLeod (incompetech.com). Licensed under
+          <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">Creative Commons: By Attribution 4.0</a>.
+        </p>
+        <p class="sec__nojs">
+          The full list needs JavaScript. Without it, read
+          <a href="/assets/audio/music/CREDITS.txt">the music credits</a>.
+        </p>
+      </div>
+    </noscript>
+
+    <a class="btn btn--brand sheet__back" href="/">Back to the game</a>
+
+    <!-- Keep these four in step with the welcome board's footer in
+         display/index.html (tests/credits.test.js pins the pair together). -->
+    <footer class="site-foot">
+      <a href="https://github.com/tim4724/Tiny-Track-Party" target="_blank" rel="noopener">Developed by Tim</a>
+      <a href="/licenses.html" aria-current="page">Licenses</a>
+      <a href="https://couchpad.games/en/privacy" target="_blank" rel="noopener">Privacy</a>
+      <a href="https://couchpad.games/en/imprint" target="_blank" rel="noopener">Imprint</a>
+    </footer>
+  </main>
+
+  <script type="module" src="/licenses.js?v=__APP_V__"></script>
+</body>
+</html>

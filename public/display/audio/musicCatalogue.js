@@ -26,6 +26,12 @@
 // seconds, baked so galleries can show a song's length without loading its
 // metadata (the race itself never reads it).
 
+// `source` is the collection page, not a per-song one, and that is as specific
+// as it gets: incompetech renders its catalogue client-side, so there is no
+// per-track URL to link (the ?isrc= form serves the same generic shell). The
+// per-song MASTER download is recorded in assets/audio/music/SOURCES.json,
+// which is where provenance lives — it is a 5 MB file, not a page to send a
+// reader to.
 export const MACLEOD = {
   artist: 'Kevin MacLeod',
   license: 'CC-BY 4.0',

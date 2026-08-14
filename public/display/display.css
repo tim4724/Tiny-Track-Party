@@ -400,6 +400,24 @@ html, body {
 /* keep the sticker tilt through the press (the kit's :active would drop it) */
 .welcome__btn:active, .welcome__btn.is-pressed { transform: rotate(1.4deg) translateY(var(--btn-sink)); }
 
+/* Legal footer (.site-foot lives in theme.css) — pinned along the bottom of the
+   title board rather than sitting in its centred column, so it never pushes the
+   wordmark off the optical centre. It stops short of the version badge's
+   corner, which is absolute at the same edge. Deliberately NOT in the slap-in
+   stagger above: it is the one piece of chrome that should not draw an eye. */
+.welcome__foot {
+  position: absolute; z-index: 2;
+  left: 50%; transform: translateX(-50%);
+  bottom: clamp(0.7rem, 1.4vh, 1.3rem);
+  max-width: min(90%, 40rem);
+  text-align: center;
+  /* This row lands on the GRASS band, not on paper, so it takes a darker ink
+     than the kit's default — the muted greys the theme uses on paper wash out
+     against green. */
+  color: var(--ink-2);
+}
+.welcome__foot a { color: var(--ink); text-decoration-color: rgba(42, 39, 53, 0.45); }
+
 /* ---- 3D scene: a persistent backdrop behind BOTH the lobby (orbiting preview)
    and the race (split-screen). The lobby/race sections layer on top. ---- */
 /* Diorama backdrop (shown until a track is picked) — pin it to the viewport so it
