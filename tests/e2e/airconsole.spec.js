@@ -12,7 +12,7 @@
 // LIVE mode (AC_LIVE=1, local only): the REAL SDK through AirConsole's HTTP
 // simulator — see the describe block at the bottom. Not part of the default
 // suite: it needs the network, a headed Firefox, and ~2 minutes.
-const { test, expect, startRace, waitForRacing, visible } = require('./helpers');
+const { test, expect, installLevelSensor, startRace, waitForRacing, visible } = require('./helpers');
 const { firefox } = require('@playwright/test');
 const path = require('path');
 
@@ -67,10 +67,7 @@ async function joinAcController(displayPage, deviceId, nickname) {
   // said out loud now, because a frame that gets nothing resolves 'unsupported'
   // and falls back to buttons — which is what real AirConsole does today, and
   // what tests/e2e/no-motion.spec.js covers.
-  await page.addInitScript(() => {
-    setInterval(() => window.dispatchEvent(
-      new DeviceOrientationEvent('deviceorientation', { beta: 0, gamma: 0 })), 50);
-  });
+  await installLevelSensor(page);
   await blockSdk(page);
   await page.setViewportSize({ width: 844, height: 390 }); // landscape-only controller
   await page.goto('/controller.html');
