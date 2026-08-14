@@ -91,6 +91,11 @@ test('AC: screen boots to the lobby, profile-named phones join, a race runs', as
   await expect(page.locator('#joinurl')).toBeHidden();
   await expect(page.locator('#tagline')).toBeHidden();
 
+  // …and no perf HUD: AC is the one surface strangers play, so the frame-cost
+  // readout that every dev surface wants pinned to the corner would be a bug
+  // they cannot dismiss. ("P" still toggles it on for the simulator.)
+  expect(await page.evaluate(() => window.__perf.visible)).toBe(false);
+
   const ana = await joinAcController(page, 101, 'Ana');   // first in → host
   const ben = await joinAcController(page, 102, 'Ben');
   await expect(page.locator('#players')).toContainText('Ana');
