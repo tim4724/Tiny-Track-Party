@@ -28,6 +28,7 @@
 // Browsers require a user gesture before audio runs; call resume() from
 // pointerdown/keydown. Every play method no-ops safely while locked.
 import { resolveVariant, loadSampleBuffers } from './audio/cues.js';
+import { assetUrl } from '../shared/assetUrl.js';
 import { createMasterBus, storedVolume, storedMuted, saveMuted } from './audio/bus.js';
 import { storedPicks } from './audio/picks.js';
 
@@ -249,7 +250,9 @@ export class RaceAudio {
     // Swap src only on a real song change; re-racing the same song keeps it
     // buffered. createMediaElementSource follows the element, so the routing
     // survives a src change.
-    if (this._musicUrl !== song.file) { this._music.src = song.file; this._musicUrl = song.file; }
+    // song.file is the wasm's canonical site path; resolve it here at the
+    // device edge (see shared/assetUrl.js — the AC zip serves from a subpath).
+    if (this._musicUrl !== song.file) { this._music.src = assetUrl(song.file); this._musicUrl = song.file; }
     try { this._music.currentTime = 0; } catch (_) { /* not seekable yet */ }
     this._music.play().catch(() => { /* gesture/decoding race — stays silent */ });
   }

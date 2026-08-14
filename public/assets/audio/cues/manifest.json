@@ -8,7 +8,7 @@
   "noiseSeed": 1414811697,
   "source": {
     "file": "public/display/audio/cues.js",
-    "sharedSha256": "c928aefcdf2830993d7ecf2106b9e532dd9da046ee511d37dbd07793b446cf51",
+    "sharedSha256": "cea8a7c5dac81b019a3dc942cca76d721aaa19e0a96680dccc9dab12568a3aad",
     "sharedScope": "everything above `export const CUES = [` — the helpers every variant calls",
     "perCue": "cues.<id>.sourceSha256 is that cue's picked variant block",
     "derived": "the sustained voices' gainFormula/smoothTauSec are QUOTED from cues.js by the baker, not transcribed; the stop filter parameters are cross-checked against the sweeps it schedules."
@@ -512,7 +512,7 @@
           "body60Sec": 0.375208,
           "peak": 0.327433,
           "rms": 0.052709,
-          "sha256": "8881658c5a47abb3a12406c994d03dc8779e3ecc44ab7e7e6da1054546b22fbc",
+          "sha256": "4b02792e7deeba18290e6040efadd8410d8a6d41ce4e2f64ebb27695f01434fa",
           "jitterDurationDriftMs": [
             -13.892413,
             14.299491

@@ -25,6 +25,8 @@
 // 'range' field's live(n) callback, which pushes its value straight into the page
 // at drag time — used for feel-tuning (e.g. the steering curve) without a reload.
 
+import { assetUrl } from './assetUrl.js';
+
 function el(tag, className, text) {
   const n = document.createElement(tag);
   if (className) n.className = className;
@@ -40,7 +42,7 @@ export function initDebugPanel(schema, { title = 'Debug' } = {}) {
     const link = el('link');
     link.id = 'dbg-style';
     link.rel = 'stylesheet';
-    link.href = '/shared/debugPanel.css' + (v && !v.startsWith('__') ? '?v=' + encodeURIComponent(v) : '');
+    link.href = assetUrl('/shared/debugPanel.css') + (v && !v.startsWith('__') ? '?v=' + encodeURIComponent(v) : '');
     document.head.appendChild(link);
   }
 

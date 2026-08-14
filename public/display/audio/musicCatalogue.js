@@ -60,6 +60,11 @@ export const MUSIC_TARGET_LUFS = -19.2;
 // ADDING A SONG: measure its LUFS, then take the literal from
 //   node -e "console.log(10 ** ((-19.2 - <lufs>) / 20))"
 const song = (file, title, duration, lufs, gain, credit = MACLEOD) => ({
+  // Root-absolute ON PURPOSE, unlike every other asset reference (which goes
+  // through shared/assetUrl.js): this string is CANONICAL DATA, mirrored
+  // bit-for-bit in the C++ audio layer's table (tests/audio-abi.test.js pins
+  // the two equal), and the wasm hands it back in the music-start descriptor.
+  // The device edge (Audio.js) resolves it to a real URL at .src time.
   file: `/assets/audio/music/${file}`,
   title,
   duration,

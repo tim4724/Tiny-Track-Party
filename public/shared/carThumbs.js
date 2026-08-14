@@ -11,7 +11,9 @@
 // Spin sync: ALL spinning cars are driven by ONE shared requestAnimationFrame
 // clock, so they read the same frame index every tick and rotate in lockstep
 // (the display shows several cars pointing the same way, not a random jumble).
-const BASE = '/assets/toycar/thumbs/';
+import { assetUrl } from './assetUrl.js';
+
+const BASE = assetUrl('/assets/toycar/thumbs/');
 
 const carStill = (model) => BASE + model + '.png';
 const carStrip = (model) => BASE + model + '.strip.png';

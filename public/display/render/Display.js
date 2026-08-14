@@ -21,6 +21,7 @@
 
 import { loadNativeRuntime, nativeError } from '../nativeRuntime.js';
 import { loadBiomes } from '../../shared/biomes.js';
+import { assetUrl } from '../../shared/assetUrl.js';
 import { ITEM_IDS } from '../engine/contract.js';
 
 // Camera modes for a surface with no split-screen cells — the C side's
@@ -140,7 +141,7 @@ export class Display {
       throw new Error('ttp_display_create failed (no WebGL2 context?)');
     }
     await Promise.all(MATERIALS.map(async (name) => {
-      const res = await fetch(`/display/engine/native/${name}.filamat`);
+      const res = await fetch(assetUrl(`/display/engine/native/${name}.filamat`));
       if (res.ok) d.provide(`${name}.filamat`, new Uint8Array(await res.arrayBuffer()));
     }));
     return d;
@@ -274,7 +275,7 @@ export class Display {
     }
     texUris.add('Textures/colormap.png'); // the toy-car kit's shared palette
     await Promise.all([...texUris].map(async (uri) => {
-      const bytes = await assets.raw(`/assets/toycar/${uri}`);
+      const bytes = await assets.raw(assetUrl(`/assets/toycar/${uri}`));
       if (bytes) this.provide(uri, bytes);
     }));
 
@@ -535,5 +536,5 @@ export function assetCache() {
     cache.set(url, p);
     return p;
   };
-  return { raw, glb: (name) => raw(`/assets/toycar/${name}.glb`) };
+  return { raw, glb: (name) => raw(assetUrl(`/assets/toycar/${name}.glb`)) };
 }
