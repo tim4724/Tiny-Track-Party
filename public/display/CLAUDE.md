@@ -37,6 +37,18 @@ stopped using. Where the harness has to synthesize a model INPUT (a standings
 board, a pick), an E2E case pins a dressing only the correct shape can produce —
 a renamed field degrades quietly instead of throwing.
 
+**A card declares its motion, and the declaration is gated.** `animated` means
+the SIM animates it, and the preview becomes a play/pause surface over
+`window.__preview`. `replayable` means the DOM animates it — an entrance, or the
+results board's race→standings turn — which plays once and is then over, so the
+card gets a ▶ that runs `window.__TEST__.replay`. Restarting a CSS animation
+needs the element to go `display:none` and back **with a style recalc between**;
+a hide/show in one task is a silent no-op. A card may declare a ▶ with no hook
+behind it and look fine, which is how the phone's Countdown card carried a dead
+button — `tests/e2e/gallery-replay.spec.js` walks the real gallery pages and
+follows every ▶ to the scenario it points at, so a flag without a hook fails on
+the commit that adds it.
+
 `perform()` walks the race flow's ordered effect list and **may not reorder, batch
 or skip** — an op it cannot perform throws rather than being dropped. Several
 correctness constraints live in that order alone. Both performer tables

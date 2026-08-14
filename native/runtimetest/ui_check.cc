@@ -390,9 +390,26 @@ Value rowValue(const ui::BoardRow& r) {
   o.set("ai", Value::Bool(r.ai));
   o.set("finished", Value::Bool(r.finished));
   o.set("time", valOf(r.time));
+  o.set("racePlace", Value::Num(r.racePlace));
   if (r.hasPoints) o.set("points", Value::Num(r.points));
   if (r.hasGained) o.set("gained", Value::Num(r.gained));
   return o;
+}
+
+// A results-view phase: the board row plus what this phase says about it.
+Value listValue(const std::vector<ui::ListRow>& rows) {
+  Value out = Value::Arr();
+  for (const ui::ListRow& lr : rows) {
+    Value row = rowValue(*lr.row);
+    row.set("kind", Value::Str(ui::key(lr.kind)));
+    // On BOTH cup kinds: the race phase DISPLAYS this total and the standings
+    // phase counts up from it, so it is the row's starting value either way.
+    if (lr.kind == ui::RowKind::POINTS || lr.kind == ui::RowKind::TIME_GAIN)
+      row.set("pointsBefore", Value::Num(lr.pointsBefore));
+    if (lr.medal) row.set("medal", Value::Num(lr.medal));
+    out.push(row);
+  }
+  return out;
 }
 
 Value boardValue(const ui::Board& b) {
@@ -423,20 +440,11 @@ Value viewValue(const ui::ResultsView& v) {
   } else {
     o.set("sub", Value::Null());
   }
-  if (v.hasPodiumRows) {
-    Value rows = Value::Arr();
-    for (const ui::BoardRow* r : v.podiumRows) rows.push(rowValue(*r));
-    o.set("podiumRows", rows);
-  } else {
-    o.set("podiumRows", Value::Null());
-  }
-  Value list = Value::Arr();
-  for (const ui::ListRow& lr : v.listRows) {
-    Value row = rowValue(*lr.row);
-    row.set("kind", Value::Str(ui::key(lr.kind)));
-    list.push(row);
-  }
-  o.set("listRows", list);
+  o.set("twoPhase", Value::Bool(v.twoPhase));
+  o.set("raceTitleKey", Value::Str(ui::key(v.raceTitleKey)));
+  o.set("raceRows", listValue(v.raceRows));
+  o.set("listRows", listValue(v.listRows));
+  o.set("racePhaseMs", Value::Num(v.racePhaseMs));
   if (v.hasNext) {
     Value next = Value::Obj();
     next.set("trackName", Value::Str(v.nextTrackName));

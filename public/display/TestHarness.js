@@ -22,7 +22,7 @@ import { renderSeats, renderLobbyPick, renderCupShelf } from './lobbySeats.js';
 // these previews from drifting — this file used to carry a second implementation
 // of both in template literals, and the lobby's twin had already drifted to a
 // screen that no longer existed by the time anyone noticed.
-import { renderResults, showCountdownBanner } from './raceOverlays.js';
+import { renderResults, hideResults, showCountdownBanner } from './raceOverlays.js';
 import { resultsView } from './NativeUiModel.js';
 import { intermissionMs } from './NativeRaceFlow.js';
 import { LobbyDemo } from './LobbyDemo.js';
@@ -245,12 +245,33 @@ export function runDisplayScenario(opts, ctx) {
     el('mute-btn').classList.toggle('hidden', name === 'welcome');  // same rule as main.js show()
   };
 
+  // ---- the gallery card's ▶ ----------------------------------------------------
+  // A screen whose animation is DOM (an entrance slap-in, the results board's
+  // race→standings turn) plays once on arrival and is then over, so a preview of
+  // it is a still of whatever it settled into. `replayable` paints the screen and
+  // registers the card's ▶ to paint it again.
+  //
+  // Restarting a CSS animation means the element must go display:none and back —
+  // and BOTH halves have to be seen by a style recalc, or the browser folds the
+  // pair away and nothing re-runs. Hence the forced reflow between them; a plain
+  // hide(); paint(); is a no-op for every element the repaint does not recreate.
+  //
+  // Scene cards do NOT come through here: their animation is the sim, driven by
+  // the preview overlay's play/pause (window.__preview) instead.
+  function replayable(hide, paint) {
+    window.__TEST__.replay = () => { hide(); void document.body.offsetWidth; paint(); };
+    paint();
+  }
+
   // Paint the results overlay from a SYNTHESIZED board — the same shape
   // standingsPayload hands live play — through the real ui model and the real
   // renderer. The preview's whole job is choosing what board to show; every
   // decision after that (dressing, row kinds, podium split, footer) is the
   // model's, exactly as in a real race.
   const showBoard = (board) => renderResults(resultsView(board, { intermissionMs: intermissionMs() }), COLORS);
+  // …and the board is the card's animation on a cup: ▶ replays the race phase
+  // turning into the standings, which otherwise happens once and never again.
+  const playBoard = (board) => replayable(hideResults, () => showBoard(board));
 
   // A board for the first cup, as it stands after its race `raceIdx`: real cup
   // and track names, fake points, with a leader swap so the table shows cup
@@ -260,8 +281,14 @@ export function runDisplayScenario(opts, ctx) {
   function cupBoard(raceIdx, final) {
     const cup = CUPS[0];
     const nextId = cup.tracks[raceIdx + 1] || null;
+    // Built in FINISHING order (times and gains ride the index), then sorted into
+    // cup order — the same two orders standingsPayload produces, and `racePlace`
+    // is what carries the first one through the sort. Without it the board's
+    // race phase would replay the cup table and the preview would show a leader
+    // swap that never happened.
     const order = humansFirst(raceGrid(buildSlots(players))).map((g, i) => ({
       playerId: g.slot, name: g.name, colorIndex: g.slot, finished: true, time: FAKE_TIMES[i],
+      racePlace: i + 1,
       gained: POINTS_BY_RANK[i] || 0,
       points: (FAKE_POINTS[i] || 0) + (POINTS_BY_RANK[i] || 0)
     })).sort((a, b) => b.points - a.points);
@@ -456,8 +483,9 @@ export function runDisplayScenario(opts, ctx) {
 
   if (scenario === 'welcome') {
     // The title board at boot: just the section over the diorama (the room
-    // warms invisibly behind it in live play — nothing to fake here).
-    show('welcome');
+    // warms invisibly behind it in live play — nothing to fake here). The
+    // wordmark/tagline/button slap in on arrival, so ▶ replays that.
+    replayable(() => el('welcome').classList.add('hidden'), () => show('welcome'));
     return;
   }
 
@@ -520,7 +548,7 @@ export function runDisplayScenario(opts, ctx) {
   // which is what makes the orbiting whole-track shot possible.
   if (scenario === 'track') {
     show('race');
-    el('results').classList.add('hidden');
+    hideResults();
     ready().then(() => setupTrackPreview()).catch((e) => console.warn('[TestHarness] track preview failed to start', e));
 
     function setupTrackPreview() {
@@ -584,7 +612,7 @@ export function runDisplayScenario(opts, ctx) {
   // (a reload would re-fetch the wasm and every GLB to change a dropdown).
   if (scenario === 'assets') {
     show('race');
-    el('results').classList.add('hidden');
+    hideResults();
     ready().then(() => setupShowroom()).catch((e) => console.warn('[TestHarness] showroom failed to start', e));
 
     function setupShowroom() {
@@ -795,7 +823,7 @@ export function runDisplayScenario(opts, ctx) {
   // else imports it. Keep it that way — it is allowed to be blunt.
   if (scenario === 'warp') {
     show('race');
-    el('results').classList.add('hidden');
+    hideResults();
     ready().then(() => runWarpBench()).catch((e) =>
       console.warn('[TestHarness] warp bench failed to start', e));
     return;
@@ -989,7 +1017,7 @@ export function runDisplayScenario(opts, ctx) {
   const CHAIN_RACE_MS = 8000;    // long enough to leave the grid and read as a race
   if (scenario === 'chain') {
     show('race');
-    el('results').classList.add('hidden');
+    hideResults();
     ready().then(() => setupChain()).catch((e) => console.warn('[TestHarness] chain preview failed to start', e));
 
     function setupChain() {
@@ -1011,7 +1039,7 @@ export function runDisplayScenario(opts, ctx) {
       function launch() {
         const t = entry(cup.tracks[leg]);
         scene.setTrack(t);                                    // place-track
-        el('results').classList.add('hidden');                // hide-results
+        hideResults();                // hide-results
         for (const id of [...scene.cars.keys()]) scene.removeCar(id);
         grid.forEach((g) => scene.addCar(g.slot, g.slot, g.name, { carIndex: g.carIndex, cell: g.human }));
         scene.rebuild();                                      // reset-scene-cars
@@ -1073,7 +1101,7 @@ export function runDisplayScenario(opts, ctx) {
   // doesn't flash while the GLBs load. Build the engine + scene cars once the
   // GLBs are ready, place them at the grid, then install our own frame hook.
   show('race');
-  el('results').classList.add('hidden');
+  hideResults();
   ready().then(() => setupRace(scenario)).catch((e) => console.warn('[TestHarness] race preview failed to start', e));
 
   function setupRace(kind) {
@@ -1241,21 +1269,22 @@ export function runDisplayScenario(opts, ctx) {
       // `joining` shape (no rank, no time — they race the next one).
       const roster = humansFirst(grid);
       const order = roster.map((g, i) => ({
-        playerId: g.slot, name: g.name, colorIndex: g.slot, finished: true, time: FAKE_TIMES[i]
+        playerId: g.slot, name: g.name, colorIndex: g.slot, finished: true, time: FAKE_TIMES[i],
+        racePlace: i + 1
       }));
       // The late joiner riding along under the field. Its seat colour can repeat
       // a CPU livery — exactly as live, where a mid-race join takes a free SEAT,
       // not a free livery in the running race.
       const j = players % FAKE_NAMES.length;
       order.push({ playerId: j, name: FAKE_NAMES[j], colorIndex: j, joining: true });
-      showBoard({ over: true, hostPeerIndex: roster[0].slot, order });
+      playBoard({ over: true, hostPeerIndex: roster[0].slot, order });
     } else if (kind === 'intermission' || kind === 'podium') {
       // Cup dressings of the same overlay: frozen grid behind either the mid-cup
       // intermission (points board + "next up" footer) or the final podium.
       // WHICH dressing is the model's call off `final` — the two previews differ
       // only in the board handed to it.
       const final = kind === 'podium';
-      showBoard(cupBoard(final ? CUPS[0].tracks.length - 1 : 1, final));
+      playBoard(cupBoard(final ? CUPS[0].tracks.length - 1 : 1, final));
     }
     // gallery: animated previews (racing/rocket/monster) hold a still grid and run via
     // the card's ▶; frozen previews (countdown/paused/reconnect/finished/results) paint

@@ -403,7 +403,8 @@ test('the standings board keeps its wire key order', async () => {
   // The controller reads this by key, but the shape is a contract two languages
   // will implement, so pin it rather than leave it to whoever writes the struct.
   assert.deepEqual(Object.keys(board), ['over', 'hostPeerIndex', 'total', 'order']);
-  assert.deepEqual(Object.keys(board.order[0]), ['playerId', 'name', 'colorIndex', 'ai', 'finished', 'time']);
+  assert.deepEqual(Object.keys(board.order[0]),
+    ['playerId', 'name', 'colorIndex', 'ai', 'finished', 'time', 'racePlace']);
   assert.deepEqual(Object.keys(board.order[1]), ['playerId', 'name', 'colorIndex', 'joining']);
   assert.equal(board.total, board.order.length, 'total always counts the joining rows too');
   // The joining row is dressed from the ROOM record, not from the race field.
@@ -419,7 +420,7 @@ test('the standings board keeps its wire key order', async () => {
   const cupBoard = gp.board({ over: true, results: gp.finish([1]) });
   assert.deepEqual(Object.keys(cupBoard), ['over', 'hostPeerIndex', 'series', 'total', 'order']);
   assert.deepEqual(Object.keys(cupBoard.order[0]),
-    ['playerId', 'name', 'colorIndex', 'ai', 'finished', 'time', 'points', 'gained']);
+    ['playerId', 'name', 'colorIndex', 'ai', 'finished', 'time', 'racePlace', 'points', 'gained']);
 });
 
 test('a live cup board stays in race order; only the final board re-sorts', async () => {
@@ -452,11 +453,32 @@ test('a live cup board stays in race order; only the final board re-sorts', asyn
   assert.deepEqual(final.order.map((r) => r.playerId), [ADA, BO],
     'the final board tells the cup story');
   assert.deepEqual(final.order.map((r) => r.gained), [6, 9]);
+  // …and the RACE the re-sort just hid survives on the rows, which is the only
+  // way the board's first phase can still show who actually crossed first.
+  assert.deepEqual(final.order.map((r) => r.racePlace), [2, 1]);
+
+  const v = ui.resultsView(final, { intermissionMs: 10000 });
+  assert.equal(v.twoPhase, true, 'a cup board has a race to show before the table');
+  assert.deepEqual(v.raceRows.map((r) => r.playerId), [BO, ADA], 'phase 1 is the race');
+  assert.deepEqual(v.listRows.map((r) => r.playerId), [ADA, BO], 'phase 2 is the cup');
+  assert.deepEqual(v.raceRows.map((r) => r.kind), ['time_gain', 'time_gain'],
+    'phase 1 shows the lap time AND what the place scored');
+  // The two phases must lay out the SAME cells — time_gain and points differ by
+  // the running total alone. A phase 1 of plain `time` rows is what made every
+  // row change size the instant the shell started animating the re-sort.
+  assert.deepEqual(v.listRows.map((r) => r.kind), ['points', 'points']);
+  // Two races of 9/6 to Ada, then this one's 6/9 — so the totals climb 18→24
+  // and 12→21 while the rows hold their order. pointsBefore is the count-up's
+  // start, so no shell subtracts `gained` itself.
+  assert.deepEqual(v.listRows.map((r) => r.pointsBefore), [18, 12]);
+  assert.deepEqual(v.listRows.map((r) => r.points), [24, 21]);
 });
 
-test('the results overlay splits the podium from the list the frozen way', async () => {
+test('the results overlay lists the whole field and medals the cup top three', async () => {
   const ui = await ui_();
-  const row = (playerId, o = {}) => ({ playerId, name: `P${playerId}`, colorIndex: 0, ...o });
+  const row = (playerId, o = {}) => ({
+    playerId, name: `P${playerId}`, colorIndex: 0, racePlace: playerId + 1, ...o
+  });
   const board = {
     over: true, hostPeerIndex: 0,
     series: { cupName: 'Sunrise', final: true, endless: false, raceIndex: 3, raceCount: 4 },
@@ -465,12 +487,36 @@ test('the results overlay splits the podium from the list the frozen way', async
   };
   const v = ui.resultsView(board, { intermissionMs: 10000 });
   assert.equal(v.podium, true);
-  // The steps skip the joining row; the list still starts at index 3. That gap
-  // is the recorded quirk — 2 lands on neither.
-  assert.deepEqual(v.podiumRows.map((r) => r.playerId), [0, 1, 2]);
-  assert.deepEqual(v.listRows.map((r) => r.playerId), [2, 3]);
+  // Everyone is on the board. The old shape lifted the top three onto steps and
+  // started the list at index 3 of the RAW order, so a joining row among the
+  // first three dropped a racer off BOTH — P2 here landed on neither.
+  assert.deepEqual(v.listRows.map((r) => r.playerId), [0, 1, 9, 2, 3]);
+  // Medals rank the RACERS, so the joining row neither takes one nor shifts the
+  // ones below it.
+  assert.deepEqual(v.listRows.map((r) => r.medal || 0), [1, 2, 0, 3, 0]);
   assert.equal(v.next, null, 'a podium queues nothing');
   assert.equal(v.newGameKey, 'new_game');
+});
+
+test('the race phase is scaled off the intermission, never a flat hold', async () => {
+  const ui = await ui_();
+  const row = (playerId) => ({ playerId, name: `P${playerId}`, colorIndex: 0, racePlace: playerId + 1 });
+  const board = {
+    over: true, hostPeerIndex: 0,
+    series: { cupName: 'Sunrise', final: false, endless: false, raceIndex: 1, raceCount: 4 },
+    total: 2, order: [row(0), row(1)]
+  };
+  // A full intermission caps at the authored hold; a shrunk one (E2E drives the
+  // budget down to milliseconds) takes a share of it instead, so the board can
+  // never still be on phase 1 when the next race starts.
+  assert.equal(ui.resultsView(board, { intermissionMs: 10000 }).racePhaseMs, 2600);
+  assert.equal(ui.resultsView(board, { intermissionMs: 400 }).racePhaseMs, 120);
+
+  const single = { over: true, hostPeerIndex: 0, total: 1, order: [row(0)] };
+  const sv = ui.resultsView(single, { intermissionMs: 10000 });
+  assert.equal(sv.twoPhase, false, 'a single race has no cup table to become');
+  assert.deepEqual(sv.raceRows, []);
+  assert.equal(sv.racePhaseMs, 0);
 });
 
 // The auto-pause pair is gone from here with its ABI spelling. The consult rule

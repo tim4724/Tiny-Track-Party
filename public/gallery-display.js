@@ -5,10 +5,20 @@
 //   { key, title, hostVariant?, animated?, replayable? }
 // hostVariant cards swap their `host` URL param when the host selector changes
 // (no iframe rebuild) so the ★ host marker can be previewed per slot.
+//
+// TWO KINDS OF MOTION, and a card declares whichever it has:
+//   animated    the SIM is the animation — a live scene that would otherwise
+//               render forever. The preview itself becomes a play/pause surface
+//               over window.__preview, and idles on one held frame until asked.
+//   replayable  the DOM is the animation — an entrance slap-in, or the results
+//               board's race→standings turn. It plays once on arrival and is
+//               then over, so the card gets a ▶ in its header that runs it
+//               again through window.__TEST__.replay.
+// A card with neither is a still, and correctly has no button.
 
 import * as Gallery from './gallery-common.js';
 var DISPLAY_CARDS = [
-  { key: 'welcome',     title: 'Welcome' },
+  { key: 'welcome',     title: 'Welcome', replayable: true },
   { key: 'lobby-loading', title: 'Lobby (loading)' },
   { key: 'lobby-empty', title: 'Lobby (waiting)', animated: true },
   { key: 'lobby',       title: 'Lobby (track picked)',  hostVariant: true, animated: true, params: { picked: 'track',  track: 'driftwood' } },
@@ -25,10 +35,10 @@ var DISPLAY_CARDS = [
   { key: 'paused',    title: 'Paused' },
   { key: 'reconnect', title: 'Reconnect' },
   { key: 'finished',  title: 'Player finished' },
-  { key: 'results',   title: 'Results' },
-  { key: 'intermission', title: 'Cup intermission' },
+  { key: 'results',   title: 'Results', replayable: true },
+  { key: 'intermission', title: 'Cup intermission', replayable: true },
   { key: 'chain',     title: 'Cup: race → next race', animated: true },
-  { key: 'podium',    title: 'Cup podium' }
+  { key: 'podium',    title: 'Cup podium', replayable: true }
 ];
 
 var state = Gallery.loadState();

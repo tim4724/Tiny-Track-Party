@@ -119,14 +119,31 @@ export function runControllerScenario(opts) {
   //
   // Every board is viewed as the HOST, so the host-only footer (the "New game" /
   // "Next race ▸" button) is what the gallery shows.
-  // A row is FINISHED unless the scenario says otherwise: the renderer marks any
-  // unfinished row `is-racing` (still out on track), which a completed board must
-  // not show. Only the "you crossed the line first" scenario opts rows out.
+  // A row is FINISHED unless the scenario says otherwise: an unfinished row of
+  // your own reads "Still racing" on the card, which a completed board must not
+  // show. Only the "you crossed the line first" scenario opts rows out.
+  //
+  // `racePlace` defaults to the array position, which is right on any board still
+  // in RACE order. A cup board is in CUP order, so its scenario states the race
+  // placings itself — the card reports the RACE place, and defaulting them would
+  // have the cup leader also winning every race.
+  //
+  // A FINISHED ROW ALWAYS CARRIES A TIME, because the model guarantees it and
+  // both boards read it without checking. The cup scenarios used to set
+  // `finished` and no `time`, which is a shape no real board produces — and the
+  // moment the phone started showing a lap time it threw on the preview. The
+  // default keeps the pairing whatever a scenario overrides.
   const ME = 1;   // this phone's peerIndex in the synthesized board; also the host
-  const showBoard = (order, { over, series }) => {
+  const showBoard = (order, { over, series, settled }) => {
     show('results');
     renderResultsBoard(
-      { over, series, order: order.map((o, i) => ({ finished: true, ...o, playerId: o.me ? ME : 100 + i })) },
+      { over, series, settled, order: order.map((o, i) => {
+        const row = { finished: true, racePlace: i + 1, ...o, playerId: o.me ? ME : 100 + i };
+        // off racePlace, not the array index: a cup board is in CUP order, so
+        // indexing here would hand the quickest lap to whoever leads the cup.
+        if (row.finished && row.time == null) row.time = 28.4 + (row.racePlace - 1) * 2.3;
+        return row;
+      }) },
       { meId: ME, hostPeerIndex: ME, amHost: true, liveryOf: (i) => COLORS[i] || '#888' }
     );
   };
@@ -365,33 +382,46 @@ export function runControllerScenario(opts) {
       // and the host's "Next race ▸".
       setLatency(20, true);
       showBoard([
-        { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, gained: 6, points: 21 },
-        { name: FAKE_NAMES[color],                           colorIndex: color,                       gained: 9, points: 19, me: true },
-        { name: 'Bolt',                                      colorIndex: (color + 2) % COLORS.length, gained: 3, points: 9, ai: true },
-        { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, gained: 0, points: 3 },
+        { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, gained: 6, points: 21, racePlace: 2 },
+        { name: FAKE_NAMES[color],                           colorIndex: color,                       gained: 9, points: 19, me: true, racePlace: 1 },
+        { name: 'Bolt',                                      colorIndex: (color + 2) % COLORS.length, gained: 3, points: 9, ai: true, racePlace: 3 },
+        { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, gained: 0, points: 3, racePlace: 5 },
         ...[4, 5, 6, 7].map((i) => ({
           name: FAKE_NAMES[(color + i) % FAKE_NAMES.length],
           colorIndex: (color + i) % COLORS.length, ai: true,
           // cup order is sorted by TOTAL — the tail must not out-point row 4's 3 pts
-          gained: i === 4 ? 1 : 0, points: [3, 2, 1, 0][i - 4]
+          gained: i === 4 ? 1 : 0, points: [3, 2, 1, 0][i - 4],
+          racePlace: i === 4 ? 4 : i + 2
         }))
       ], { over: true, series: { final: false, raceIndex: 1, raceCount: 4, cupName: PREVIEW_TRACKS[0].cupName } });
       break;
 
     case 'cup-podium':
-      // The cup's final board, viewed as the host ("New game" back to the lobby).
+    case 'cup-podium-settled': {
+      // The cup's last board, in its two states. Before the TV has revealed the
+      // cup this screen is still about the RACE; `settled` is the display's cue
+      // that the reveal has landed and it can report the cup instead.
+      //
+      // The two disagree ON PURPOSE here: I came 3rd in the last race and still
+      // took the cup. A card wired to the wrong one, or a title that did not
+      // move with it, would read perfectly plausibly on a preview where they
+      // happened to match.
       setLatency(20, true);
       showBoard([
-        { name: FAKE_NAMES[color],                           colorIndex: color,                       gained: 9, points: 36, me: true },
-        { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, gained: 6, points: 24 },
-        { name: 'Bolt',                                      colorIndex: (color + 2) % COLORS.length, gained: 3, points: 12, ai: true },
-        { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, gained: 1, points: 4 },
+        { name: FAKE_NAMES[color],                           colorIndex: color,                       gained: 3, points: 36, me: true, racePlace: 3 },
+        { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, gained: 9, points: 24, racePlace: 1 },
+        { name: 'Bolt',                                      colorIndex: (color + 2) % COLORS.length, gained: 6, points: 12, ai: true, racePlace: 2 },
+        { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, gained: 1, points: 4, racePlace: 4 },
         ...[4, 5, 6, 7].map((i) => ({
           name: FAKE_NAMES[(color + i) % FAKE_NAMES.length],
-          colorIndex: (color + i) % COLORS.length, ai: true, gained: 0, points: 8 - i
+          colorIndex: (color + i) % COLORS.length, ai: true, gained: 0, points: 8 - i, racePlace: i + 1
         }))
-      ], { over: true, series: { final: true, raceIndex: 3, raceCount: 4, cupName: PREVIEW_TRACKS[0].cupName } });
+      ], {
+        over: true, settled: scenario === 'cup-podium-settled',
+        series: { final: true, raceIndex: 3, raceCount: 4, cupName: PREVIEW_TRACKS[0].cupName }
+      });
       break;
+    }
 
     case 'conn-lost':
     case 'conn-screen-gone':

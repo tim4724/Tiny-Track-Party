@@ -19,7 +19,7 @@ import { RaceAudio } from './Audio.js';
 import { bootEngine, trackEntry, progressChooser } from './boot.js';
 // The two race-screen overlays, painting model answers; the gallery previews
 // drive these same functions so a preview cannot drift from live play.
-import { showCountdownBanner, renderResults } from './raceOverlays.js';
+import { showCountdownBanner, renderResults, hideResults } from './raceOverlays.js';
 // The lobby's 3D backdrop: reveal + the track→track crossfade state machine.
 import { setBackdrop3D, crossfadeBackdrop } from './backdrop.js';
 // TV-surface furniture with no stake in the race: the auto-hiding chrome, the
@@ -809,7 +809,7 @@ const RACE_PERFORMERS = {
   'stop-lobby-demo': () => lobbyDemo.stop(),
   'clear-item-cache': () => _lastItem.clear(),
   'show-screen': (e) => show(e.screen),
-  'hide-results': () => el('results').classList.add('hidden'),
+  'hide-results': () => hideResults(),
   'set-race-flags': (e) => {
     paused = e.paused; autoPaused = e.autoPaused; raceEnded = e.raceEnded;
   },
@@ -1118,7 +1118,16 @@ function renderIntermissionCountdown() {
 // live board, and the intermission budget.
 function showResults(results) {
   const board = standingsPayload(results, true);
-  renderResults(ui.resultsView(board, { intermissionMs: intermissionMs() }), CAR_COLORS);
+  // The phones were handed this board the moment the race ended, which is the
+  // moment this one STARTS revealing what the cup did with it. So on a cup's
+  // last race they are sent it a second time once the reveal has landed, marked
+  // `settled` — that is their cue to stop reporting the race and report the cup.
+  // Ahead of it they would be crowning the champion on four screens while the
+  // TV was still counting points towards it. Mid-cup boards need no second push:
+  // the phone stays on the race there, and the standings stay the TV's.
+  const final = !!(board.series && board.series.final);
+  renderResults(ui.resultsView(board, { intermissionMs: intermissionMs() }), CAR_COLORS,
+                final ? () => net.setStandings({ ...board, settled: true }) : null);
 }
 
 function returnToLobby() {

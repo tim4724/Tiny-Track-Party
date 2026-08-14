@@ -5,60 +5,86 @@
 //
 // A preview renders through the live renderer, never a copy of it: the harness
 // synthesizes a STANDINGS payload and calls the same function the race does.
+//
+// IT SHOWS ONE PLAYER, ONE RANKING: where YOU came in the race. The full field,
+// the cup table and the points that moved it are the TV's story, told there at
+// TV size with the totals counting across and the rows re-ranking as they go —
+// and everyone in the room is looking at it. Eight rows of small type here
+// competed with that screen and lost; the cup standing competed with it worse,
+// because printing the new position on four phones the moment the board arrives
+// gives away the reveal the TV is still building. What stays is the half the TV
+// cannot personalise, plus the controls only this phone has.
 import { renderWaitNote } from './ui.js';
 
 const el = (id) => document.getElementById(id);
 
-// Render the standings rows + the footer. `data` is the STANDINGS payload as the
-// display sends it: { over, series?, order: [{ playerId, name, colorIndex,
-// joining?, ai?, finished?, time?, points?, gained? }] }.
+// Render your card + the footer. `data` is the STANDINGS payload as the display
+// sends it: { over, series?, settled?, order: [{ playerId, name, colorIndex,
+// joining?, ai?, finished?, time?, racePlace?, points?, gained? }] }.
 //
-// Cup boards (data.series) trade the lap clock for points — "+9 · 15 pts" — and
-// arrive from the display already in cup order; the title tracks the series
-// ("Race 2 of 4", then "Beach Cup — Final" on the podium board).
+// `settled` arrives only on a cup's LAST board, and only once the TV has
+// finished revealing the cup (display main.js showResults). Before it this
+// screen is about the race; after it, about the cup — and the title has to move
+// with the card, or a phone reading "Beach Cup · Final" over a RACE place tells
+// whoever won the last race that they won the cup.
 export function renderResultsBoard(data, { meId, hostPeerIndex, amHost, liveryOf }) {
   const s = data.series;
+  const cupDone = !!(s && s.final && data.settled);
   el('results-title').textContent = !s ? 'Results'
-    : s.final ? `${s.cupName} — Final`
+    : cupDone ? `${s.cupName} · Final`
       : s.endless ? `Race ${s.raceIndex + 1}`                  // endless random: no "of N"
         : `Race ${s.raceIndex + 1} of ${s.raceCount}`;
-  const cupBoard = !!(s && data.over);
-  const list = el('result-list');
-  list.innerHTML = '';
-  // Two-column board (controller.css): the grid fills columns top-to-bottom,
-  // so half the rows (rounded up) per column keeps 1-4 left of 5-8.
-  list.style.setProperty('--result-rows', Math.max(1, Math.ceil((data.order || []).length / 2)));
-  (data.order || []).forEach((o) => {
-    const li = document.createElement('li');
-    const isMe = o.playerId === meId;
-    if (isMe) li.classList.add('is-me');
-    if (o.joining) li.classList.add('is-joining');      // late joiner — no car this race
-    else if (!o.finished) li.classList.add('is-racing');
-    const dot = document.createElement('span');
-    dot.className = 'res-dot';
-    dot.style.background = liveryOf(o.colorIndex);
-    const name = document.createElement('span');
-    name.className = 'res-name';
-    name.textContent = o.name + (o.ai ? ' (CPU)' : isMe ? ' (You)' : '');
-    li.append(dot, name);
-    if (cupBoard && !o.joining) {
-      const gain = document.createElement('span');
-      gain.className = 'res-gain' + (o.gained ? '' : ' is-zero');
-      gain.textContent = `+${o.gained || 0}`;
-      const pts = document.createElement('span');
-      pts.className = 'res-pts';
-      pts.textContent = `${o.points || 0} pts`;
-      li.append(gain, pts);
-    } else {
-      const time = document.createElement('span');
-      time.className = 'res-time';
-      time.textContent = o.joining ? 'Next race'
-        : o.finished ? `${o.time.toFixed(1)}s` : (data.over ? 'DNF' : 'Racing…');
-      li.appendChild(time);
-    }
-    list.appendChild(li);
-  });
+  renderMe(data, meId, cupDone);
   renderFoot(data, { hostPeerIndex, amHost, liveryOf });
+}
+
+// 1st/2nd/3rd/4th… — the teens are all "th", which is why this is not a lookup
+// on the last digit alone. The field plus late joiners can reach the teens.
+function ordinal(n) {
+  const tens = n % 100;
+  if (tens >= 11 && tens <= 13) return `${n}th`;
+  return n + ({ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th');
+}
+
+// WHERE YOU CAME IN THE RACE — one ranking, and deliberately not the cup one.
+//
+// The cup standing is the TV's to reveal: it counts the points across one at a
+// time and re-ranks live, and a phone that printed the new position the moment
+// the board arrived would spoil that for everyone holding one. The race place
+// is the half the TV cannot personalise, it is true the instant you cross the
+// line, and being the only number here it can never be read as the other one.
+function renderMe(data, meId, cupDone) {
+  const card = el('result-me');
+  const order = data.order || [];
+  const idx = order.findIndex((o) => o.playerId === meId);
+  const me = idx < 0 ? null : order[idx];
+  // A phone with no car this race (spectating, or the display's own host seat)
+  // has no placement to report; the TV is showing the board either way.
+  card.classList.toggle('hidden', !me);
+  if (!me) return;
+
+  const place = el('result-place');
+  const time = el('result-time');
+  if (me.joining) {
+    card.classList.remove('result-me--won');
+    place.textContent = '–';
+    time.textContent = "You're in the next race";
+    return;
+  }
+  // The cup is decided and the TV has said so: report THAT. The board arrives in
+  // cup order, so the position in it is the cup finish.
+  if (cupDone) {
+    card.classList.toggle('result-me--won', idx === 0);
+    place.textContent = ordinal(idx + 1);
+    time.textContent = `${me.points || 0} pts`;
+    return;
+  }
+  // `racePlace` survives the cup re-sort, so this stays the FINISHING place even
+  // when the board it came on is sorted by the cup.
+  card.classList.toggle('result-me--won', !!me.finished && me.racePlace === 1);
+  place.textContent = me.finished ? ordinal(me.racePlace) : (data.over ? '–' : '…');
+  time.textContent = me.finished ? `${me.time.toFixed(1)}s`
+    : data.over ? 'DNF' : 'Still racing';
 }
 
 // Footer: while cars are still out, a waiting note for everyone. Once the race is

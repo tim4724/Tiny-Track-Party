@@ -483,9 +483,13 @@ Board standingsPayload(const std::vector<ResultRow>& results,
   }
 
   b.order.reserve(results.size() + lateJoiners.size());
-  for (const ResultRow& res : results) {
+  for (size_t i = 0; i < results.size(); i++) {
+    const ResultRow& res = results[i];
     const FieldRow* p = fieldFor(res.playerId);
     BoardRow r;
+    // `results` IS the finishing order, so the index is the race place. Stamped
+    // here because the cup re-sort below is about to destroy this ordering.
+    r.racePlace = (double) i + 1.0;
     r.playerId = res.playerId;
     // An empty name is falsy in JS, so a nameless field row falls back to the
     // id exactly as an absent one does.
@@ -568,6 +572,7 @@ const char* key(SubKey k) {
 
 const char* key(RowKind k) {
   switch (k) {
+    case RowKind::TIME_GAIN: return "time_gain";
     case RowKind::POINTS: return "points";
     case RowKind::JOINING: return "joining";
     case RowKind::TIME: break;
@@ -588,31 +593,54 @@ ResultsView resultsView(const Board& board, double intermissionMs) {
   ResultsView v;
   v.podium = s && s->isFinal;
   v.intermission = s && !s->isFinal;
+  v.twoPhase = s != nullptr;   // every cup board opens on the race it just ran
   v.titleKey = v.podium ? TitleKey::CUP_CHAMPS : (s ? TitleKey::STANDINGS : TitleKey::RESULTS);
+  v.raceTitleKey = TitleKey::RESULTS;
   v.cupName = s ? s->cupName : OptStr::None();
-  if (v.intermission) {
+  // The cup/race line rides BOTH phases on a cup board — including the podium's,
+  // where phase 1 is still just "race 4 of 4" and only phase 2 celebrates. So a
+  // shell shows it in phase 1 whenever the board HAS one (`sub`), and in phase 2
+  // only on an intermission; neither needs a flag of its own.
+  if (s) {
     v.hasSub = true;
     v.subKey = s->endless ? SubKey::CUP_RACE : SubKey::CUP_RACE_OF;
     v.subCupName = s->cupName;
     v.subRace = s->raceIndex + 1;
     v.subOf = s->endless ? OptNum::None() : s->raceCount;
   }
-  if (v.podium) {
-    v.hasPodiumRows = true;   // an empty podium is [] here, never null
-    for (const BoardRow& r : board.order) {
-      if (r.joining) continue;
-      v.podiumRows.push_back(&r);
-      if (v.podiumRows.size() == 3) break;
+  // Phase 2 (or the only phase): the order the board already carries — cup
+  // standings once the race is over, the race itself when there is no cup.
+  double rank = 0;
+  for (const BoardRow& r : board.order) {
+    ListRow lr;
+    lr.row = &r;
+    lr.kind = r.joining ? RowKind::JOINING : (s ? RowKind::POINTS : RowKind::TIME);
+    if (lr.kind == RowKind::POINTS) lr.pointsBefore = r.points - r.gained;
+    if (!r.joining) {
+      rank += 1;
+      if (v.podium && rank <= 3) lr.medal = rank;
     }
+    v.listRows.push_back(lr);
   }
-  // The list starts at index 3 of the RAW order on a podium — see the header:
-  // a joining row inside the first three shortens the steps without shifting
-  // this. Frozen on purpose.
-  const size_t start = v.podium ? 3 : 0;
-  for (size_t i = start; i < board.order.size(); i++) {
-    const BoardRow& r = board.order[i];
-    v.listRows.push_back(ListRow{&r, r.joining ? RowKind::JOINING
-                                               : (s ? RowKind::POINTS : RowKind::TIME)});
+  // Phase 1: the same rows back in finishing order, reading as a plain race
+  // board. Joining rows raced nothing, so they stay under the field exactly as
+  // they do in phase 2 rather than sorting to the front on racePlace 0.
+  if (v.twoPhase) {
+    v.raceRows = v.listRows;
+    std::stable_sort(v.raceRows.begin(), v.raceRows.end(),
+                     [](const ListRow& x, const ListRow& y) {
+                       if (x.row->joining != y.row->joining) return y.row->joining;
+                       return x.row->racePlace < y.row->racePlace;
+                     });
+    for (ListRow& lr : v.raceRows) {
+      // TIME_GAIN, not TIME: the race phase already shows what each place
+      // scored, so phase 2 only has to fill the running total in. See the
+      // header — a trailing cell that changes SHAPE re-flows the board under
+      // the re-sort animation.
+      if (lr.kind == RowKind::POINTS) lr.kind = RowKind::TIME_GAIN;
+      lr.medal = 0;   // the medals are the CUP's, and phase 1 has not told it yet
+    }
+    v.racePhaseMs = js_min(RACE_PHASE_MS, intermissionMs * RACE_PHASE_SHARE);
   }
   if (v.intermission) {
     v.hasNext = true;

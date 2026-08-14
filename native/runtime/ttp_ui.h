@@ -356,18 +356,21 @@ TTP_ABI const char* ttp_ui_standings_live_json(int sessionHandle, int roomHandle
  * above (pass its JSON straight back).
  *   plain single-race board  titleKey "results",    rows carry a lap time
  *   cup intermission         titleKey "standings" + a sub + a "next up" footer
- *   cup podium               titleKey "cup_champs", top three on the steps
- *   -> {"podium","intermission","titleKey","cupName",
+ *   cup podium               titleKey "cup_champs", the top three medalled
+ *   -> {"podium","intermission","twoPhase","titleKey","raceTitleKey","cupName",
  *       "sub": null|{"key":"cup_race"|"cup_race_of","cupName","race","of"},
- *       "podiumRows": null|[row, ...],
- *       "listRows":[row + {"kind":"time"|"points"|"joining"}, ...],
+ *       "raceRows":[row, ...], "listRows":[row, ...],
+ *         each row + {"kind":"time"|"time_gain"|"points"|"joining"}
+ *                  + {"pointsBefore"} on a time_gain or points row
+ *                  + {"medal":1|2|3} on the podium's top three
+ *       "racePhaseMs",
  *       "next": null|{"trackName","secs"},
  *       "newGameKey":"new_game"|"next_race"}
  * Rows come from the same board the phones get, so both screens always tell the
- * same story. Note the podium's split: the STEPS take the top three non-joining
- * rows while the list starts at index 3 of the RAW order, so a joining row
- * inside the first three shortens the steps without shifting the list. That is
- * deliberate and frozen — a shell that "fixes" it drops a racer off both. */
+ * same story. A CUP BOARD IS TWO PHASES: raceRows (who won the race, in
+ * finishing order, lap times) holds for racePhaseMs, then becomes listRows (the
+ * cup table it rewrote, in standings order, points). A shell that paints only
+ * listRows states the delta and never shows the change. */
 TTP_ABI const char* ttp_ui_results_view_json(const char* boardJson, double intermissionMs);
 
 /* The intermission's "starting in N", against the auto-advance deadline. A

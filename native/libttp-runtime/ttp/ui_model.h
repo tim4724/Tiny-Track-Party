@@ -489,6 +489,11 @@ struct BoardRow {
   bool ai = false;
   bool finished = false;
   OptNum time;
+  // Where this row CROSSED THE LINE (1-based). Stamped before the cup re-sort
+  // below, which is the only reason the race's own order survives onto a cup
+  // board at all — without it the standings overwrite the result nobody has
+  // seen yet. 0 on a joining row, which raced nothing.
+  double racePlace = 0;
   bool hasPoints = false;
   double points = 0;
   bool hasGained = false;
@@ -527,15 +532,42 @@ Board standingsPayload(const std::vector<ResultRow>& results,
 
 // ---- the results overlay ----------------------------------------------------
 // Three dressings, as semantic values:
-//   plain single-race board  RESULTS,    rows carry a lap time
+//   plain single-race board  RESULTS,    rows carry a lap time, ONE phase
 //   cup intermission         STANDINGS + a sub + a "next up" footer
-//   cup podium               CUP_CHAMPS, top three on the steps
+//   cup podium               CUP_CHAMPS, the champion medalled in the list
 // Rows come from the same board the phones get, so both screens always tell the
 // same story (order, points, joining rows). `kind` is what each row's trailing
 // cell says.
+//
+// A CUP BOARD IS TWO PHASES, and that is the whole point of the shape below.
+// Phase 1 is `raceRows` — who won the race that just ended, in finishing order,
+// with its lap times and what each place scored. Phase 2 is `listRows` — the cup
+// table the race rewrote, in standings order, the same cells plus the running
+// total. Emitting both lets a shell animate the SECOND out of the FIRST (the
+// rows re-order under the points that moved them), which is the only place the
+// cup's story is legible. A shell that paints only `listRows` states the delta
+// and never shows the change.
+//
+// The two phases carry the SAME CELLS on purpose, and the ONLY difference is
+// which value sits in the total: the race phase shows what the row had coming
+// in, the standings phase shows what it banked. Nothing appears, nothing
+// disappears, nothing resizes — one number moves and the rows re-order, which is
+// the whole animation.
+//
+// Both halves of that are load-bearing and were learned the hard way. A phase
+// that swaps its trailing cell for a differently-sized one re-flows the board
+// while the shell is animating row POSITIONS, which reads as a glitch rather
+// than as a re-sort. And a total that only APPEARS in phase 2 has no visible
+// before state — it lands and starts climbing in the same frame, so the change
+// it is meant to show is the one thing nobody can see.
 enum class TitleKey { RESULTS, STANDINGS, CUP_CHAMPS };
 enum class SubKey { CUP_RACE, CUP_RACE_OF };
-enum class RowKind { TIME, POINTS, JOINING };
+// TIME       a single race: the lap clock alone
+// TIME_GAIN  a cup's race phase: the lap clock, what the place scored, and the
+//            cup total the row held COMING IN (pointsBefore)
+// POINTS     a cup's standings phase: the same three, with the total now banked
+// JOINING    a seat with no car this round
+enum class RowKind { TIME, TIME_GAIN, POINTS, JOINING };
 enum class NewGameKey { NEW_GAME, NEXT_RACE };
 const char* key(TitleKey k);
 const char* key(SubKey k);
@@ -545,24 +577,37 @@ const char* key(NewGameKey k);
 struct ListRow {
   const BoardRow* row = nullptr;
   RowKind kind = RowKind::TIME;
+  // Both cup kinds: the cup total this row held BEFORE the race. TIME_GAIN
+  // DISPLAYS it — the change is only legible if the before state was on screen
+  // long enough to read — and POINTS counts up from it to `points`, so no shell
+  // subtracts `gained` for itself.
+  double pointsBefore = 0;
+  // Podium boards only: 1/2/3 for the cup's top three, 0 for everyone else. The
+  // list is ranked, so a shell COULD count — but it would be counting past the
+  // joining rows, which is exactly the off-by-one the old podium split hid.
+  double medal = 0;
 };
 struct ResultsView {
   bool podium = false;
   bool intermission = false;
-  TitleKey titleKey = TitleKey::RESULTS;
+  // Cup boards only: phase 1 (raceRows) then phase 2 (listRows). A single race
+  // has nothing to turn into and paints listRows alone.
+  bool twoPhase = false;
+  TitleKey titleKey = TitleKey::RESULTS;         // phase 2, or the only phase
+  TitleKey raceTitleKey = TitleKey::RESULTS;     // phase 1
   OptStr cupName;
   bool hasSub = false;
   SubKey subKey = SubKey::CUP_RACE;
   OptStr subCupName;
   double subRace = 0;          // 1-based
   OptNum subOf;                // null for endless
-  // The podium's split is deliberate and FROZEN: the STEPS take the top three
-  // non-joining rows, while the list starts at index 3 of the RAW order. A
-  // joining row inside the first three therefore shortens the steps without
-  // shifting the list. A shell that "fixes" it drops a racer off both.
-  bool hasPodiumRows = false;  // false = null (not a podium), not an empty list
-  std::vector<const BoardRow*> podiumRows;
-  std::vector<ListRow> listRows;
+  std::vector<ListRow> raceRows;   // phase 1: finishing order, lap times
+  std::vector<ListRow> listRows;   // phase 2: cup order, points
+  // How long phase 1 holds before it becomes phase 2. Scaled off the
+  // intermission budget rather than a flat constant, because E2E shrinks that
+  // budget to milliseconds and a fixed hold would then outlast the whole
+  // intermission — the board would auto-advance having never shown the cup.
+  double racePhaseMs = 0;
   bool hasNext = false;
   std::string nextTrackName;   // "" when the next circuit resolves to nothing
   double nextSecs = 0;
@@ -570,6 +615,10 @@ struct ResultsView {
 };
 // Rows are POINTERS into `board`, which must outlive the view.
 ResultsView resultsView(const Board& board, double intermissionMs);
+
+// The phase-1 hold, capped at a share of the intermission (see racePhaseMs).
+inline constexpr double RACE_PHASE_MS = 2600;
+inline constexpr double RACE_PHASE_SHARE = 0.3;
 
 // The intermission's "starting in N", against the auto-advance deadline. A
 // fresh ceil each beat rather than a decrementing counter, so it cannot drift.

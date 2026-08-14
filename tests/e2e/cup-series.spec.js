@@ -70,14 +70,23 @@ test('a cup chains through all 4 races to the podium (host advancing early)', as
     await expect(page.locator('.cell-rank').first()).toBeVisible();
   }
 
-  // Race 4: finish → podium (title = cup champs sticker, top-three steps, "New game").
+  // Race 4: finish → podium. The TV board opens on the RACE like every cup board,
+  // then accounts the points one at a time, and only crowns the champion once the
+  // last one has landed — some seconds after `inResults` goes true. The generous
+  // timeout is that animation plus the scene teardown that can block the page
+  // through it, not slack for a hang.
   await finishHumans(page);
   await inResults(page);
-  await expect(page.locator('#results-title')).toHaveText('Beach Cup CHAMPS!');
-  expect(await page.locator('.podium__col').count()).toBe(3);
-  await expect(alice.locator('#results-title')).toContainText('Beach Cup — Final');
+  await expect(page.locator('#results-title')).toHaveText('Beach Cup CHAMPS!', { timeout: 20000 });
+  await expect(page.locator('#results-list li.is-medal-1')).toHaveCount(1);
+  await expect(alice.locator('#results-title')).toContainText('Beach Cup · Final');
   await expect(alice.locator('#newgame-btn')).toHaveText('New game');
-  await expect(alice.locator('#result-list')).toContainText('pts');
+  // …and only NOW do the phones report the cup: the display pushes the standings
+  // a second time once its reveal has landed (showResults' settled callback), so
+  // the card swaps off the race place onto the cup finish. Before that push it
+  // is still showing the race — which is the whole point of sending it twice.
+  await expect(alice.locator('#results-title')).toContainText('Beach Cup · Final');
+  await expect(alice.locator('#result-time')).toContainText('pts');
 
   // The finished GP BANKED: the persist-progression effect wrote the engine's
   // record to localStorage. Both humans out-finish the fast-forwarded AI in
@@ -363,10 +372,10 @@ test('a mid-cup joiner is seated into the next series race and scores from there
   expect(midRace.offenders).toEqual([]);
   expect(midRace.firstCountdownOk).toBe(true);
 
-  // She scores from race 2 on: the next board carries a points row for her.
+  // She RACED this one: her card now reports a finishing place, where the round
+  // she sat out gave her the "next race" placeholder and no place at all.
   await finishHumans(page);
   await inResults(page);
   await expect(carol.locator(visible('#results'))).toBeVisible();
-  await expect(carol.locator('#result-list')).toContainText('Carol');
-  await expect(carol.locator('#result-list')).toContainText('pts');
+  await expect(carol.locator('#result-place')).toHaveText(/^\d+(st|nd|rd|th)$/);
 });

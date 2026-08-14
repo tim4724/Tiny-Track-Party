@@ -111,6 +111,23 @@ Three properties of that surface matter more than the list:
    (the web reference is `boot.js` `progressChooser()`). Stars, the Playroom
    lock and the unlock progress are all DERIVED in the wasm/lib — a shell that
    re-implements a threshold has copied a rule that will drift.
+   **The results board on a cup is TWO PHASES**, and a shell that paints only
+   one of them has dropped the cup's whole story. `ttp_ui_results_view_json`
+   answers `raceRows` (the race that just ended, finishing order, lap time +
+   what the place scored) AND `listRows` (the cup table it rewrote, standings
+   order, the same cells plus the running total), plus the `racePhaseMs` the
+   first holds for. Show phase 1, then turn it into phase 2 — the rows
+   re-ordering under the points that moved them is the only place a player can
+   see what the race DID. `pointsBefore` is on every points row so the total can
+   climb rather than jump, and no shell subtracts `gained` for itself.
+   **Lay the two phases out identically.** The kinds are `time_gain` and
+   `points`, differing by the total alone, precisely so phase 2 fills a cell
+   rather than replacing one: give the cells fixed widths and reserve any footer
+   that arrives with phase 2. Otherwise every row changes size at the moment the
+   shell starts animating its POSITION, and the board re-flows under the
+   re-sort — which reads as a glitch, not as a ranking. The web reference is
+   `raceOverlays.js`, and `tests/e2e/gallery-boards.spec.js` pins both phases
+   plus the board's geometry across the transition.
 5. **Transport.** A WebSocket client, and optionally a WebRTC DataChannel. The
    fastlane is an enhancement by design (CONTROL falls back to the relay), so
    relay-only is a legitimate launch. The framing and packet codecs are already
