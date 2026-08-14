@@ -62,6 +62,15 @@ async function joinAcController(displayPage, deviceId, nickname) {
     window.__AC_NICKNAME = nickname;
   }, { deviceId, nickname });
   await page.addInitScript({ path: MOCK_PATH });
+  // A DELEGATED frame: the sensors reach it and DeviceOrientation fires. That
+  // is the case this spec is about (the tilt assertion below), and it has to be
+  // said out loud now, because a frame that gets nothing resolves 'unsupported'
+  // and falls back to buttons — which is what real AirConsole does today, and
+  // what tests/e2e/no-motion.spec.js covers.
+  await page.addInitScript(() => {
+    setInterval(() => window.dispatchEvent(
+      new DeviceOrientationEvent('deviceorientation', { beta: 0, gamma: 0 })), 50);
+  });
   await blockSdk(page);
   await page.setViewportSize({ width: 844, height: 390 }); // landscape-only controller
   await page.goto('/controller.html');
@@ -103,7 +112,8 @@ test('AC: screen boots to the lobby, profile-named phones join, a race runs', as
 
   // TILT rides plain DeviceOrientation while the SDK's device_motion relay is
   // UNPLUGGED (see controller-airconsole.js) — the AC auto-join attached the
-  // listener without a gesture (Chromium has no requestPermission).
+  // listener without a gesture (Chromium has no requestPermission), and
+  // joinAcController's feed proved it delivers, so the phone stayed in tilt.
   // Synthesize a 30° right lean — gamma = ROLL_LOCK, full lock — and the
   // steer output must swing right; a few events, because the steer low-pass
   // converges per sample.
