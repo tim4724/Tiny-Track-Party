@@ -48,6 +48,38 @@ bake "$BUILD_DIR/controller/controller.html" "$BUILD_DIR/controller.html"
 rm -f "$BUILD_DIR/display/screen.html" "$BUILD_DIR/controller/controller.html" \
       "$BUILD_DIR/display/index.html" "$BUILD_DIR/controller/index.html"
 
+# THE ENGINE GLUE SHIPS AS .js, NOT .mjs.
+#
+# A CDN answers by extension, and .mjs is not one every CDN knows. Served as
+# application/octet-stream a module script is REFUSED OUTRIGHT — strict MIME
+# checking per the HTML spec, not a warning — and it 200s while doing it, so
+# nothing 404s and no request "fails". That kills the engine, and a display
+# with no engine never opens a room or publishes a snapshot, so every phone
+# that joins sits blank on "no signal".
+#
+# It is invisible everywhere we test: our own server maps .mjs explicitly (see
+# server/index.js), which covers the web, the previews and the AC simulator. It
+# bites only in the uploaded build. .js is the one extension every CDN gets
+# right, and the glue carries no reference to its own name — only to the .wasm
+# beside it — so the rename costs two references and nothing else.
+#
+# .wasm needs no such care: a wrong type there costs the streaming path and
+# emscripten falls back to ArrayBuffer instantiation, which is a log line, not
+# a failure. Verified by serving this tree from a server that knows neither.
+mv "$BUILD_DIR/display/engine/native/ttp_runtime.mjs" \
+   "$BUILD_DIR/display/engine/native/ttp_runtime.js"
+for f in "$BUILD_DIR/display/nativeRuntime.js" "$BUILD_DIR/screen.html"; do
+  sed -e 's|ttp_runtime\.mjs|ttp_runtime.js|g' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+done
+# Any .mjs left is one nothing above knew about — fail rather than ship a build
+# whose engine may not start on the CDN.
+if find "$BUILD_DIR" -name '*.mjs' | grep -q .; then
+  echo "ERROR: .mjs files remain in the package (a CDN may serve them as octet-stream," >&2
+  echo "       which refuses them as module scripts):" >&2
+  find "$BUILD_DIR" -name '*.mjs' >&2
+  exit 1
+fi
+
 # Favicons belong to the top document — the AC iframe can't surface them.
 rm -rf "$BUILD_DIR/assets/icon"
 
