@@ -101,19 +101,27 @@
     </footer>
   </section>
 
-  <!-- Lobby — Sticker Bash chrome pinned to the glass: the join ticket
-       (wordmark masthead + QR + scan hint) on the left rail, the cup slot on
-       the right rail, the seat dock bottom-centre. The chrome sits at the
-       SAME positions in both lobby states: on the paper stage before the host
-       picks, floating over the live 3D preview after — nothing moves between
-       the two. -->
+  <!-- Lobby — Sticker Bash chrome framing the live 3D preview: the join
+       ticket on the left rail, the race pick over the cup shelf on the right
+       rail, the seat dock across the bottom. Both rails run the full height of
+       the board and the dock closes it, so there is ONE top line, ONE bottom
+       line and two gutters — the tilts stay playful because the frame beneath
+       them is straight. The chrome sits at the SAME positions in both lobby
+       states: on the paper stage before the host picks, floating over the live
+       preview after — nothing moves between the two. -->
   <section id="lobby" class="hidden">
     <!-- Join ticket — ONE sticker card with the wordmark as its masthead:
          TINY TRACK PARTY! over QR + the join URL (code highlighted in the
-         accent colour by renderJoinUrl in Net.js). It's a <button>: click (or
-         Enter/Space) copies the full join link, confirmed by the #toast. -->
+         accent colour by renderJoinUrl in Net.js) + the scan hint as its last
+         line. It's a <button>: click (or Enter/Space) copies the full join
+         link, confirmed by the #toast. -->
     <div class="ticket-rail">
-      <button type="button" class="ticket" id="joinbox" aria-label="Copy join link">
+      <!-- aria-describedby reaches the scan hint: a button's children are
+           presentational, so the hint became unreadable the moment it moved
+           inside the card. A DESCRIPTION is still computed from the referenced
+           subtree, and the hint is the one line that says what the card is
+           for. -->
+      <button type="button" class="ticket" id="joinbox" aria-label="Copy join link" aria-describedby="tagline">
         <span class="wordmark ticket__wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></span>
         <canvas id="qr"></canvas>
         <!-- "Loading…" holds the URL line until the room opens; the real URL
@@ -122,33 +130,42 @@
           <div class="ticket__url ticket__wait">Loading…</div>
           <div class="ticket__url" id="joinurl"></div>
         </div>
+        <!-- Scan hint — the ticket's own last line for the whole lobby
+             (joining stays possible until the race starts). Inside the card
+             rather than hanging under it: as a free-floating sticker it
+             overlapped the first seat on a 720p board. -->
+        <div class="tagline" id="tagline">
+          <div class="tagline__main">Scan the code with your phone!</div>
+        </div>
       </button>
-      <!-- Scan hint — hangs just under the ticket for the whole lobby
-           (joining stays possible until the race starts). -->
-      <div class="tagline" id="tagline">
-        <div class="tagline__main">Scan the code with your phone!</div>
-      </div>
     </div>
 
-    <!-- "Cups" — the couch's star shelf, the long game to the ticket's
-         tonight. One row per cup with its earned stars; the locked Playroom
-         trails its unlock progress instead. Filled by renderCupShelf
-         (lobbySeats.js) from the wasm-stamped catalogue; pinned to the lobby's
-         BOTTOM-RIGHT corner, under the "Up next" pick it feeds into. -->
-    <div class="cup-shelf" id="cup-shelf" aria-label="Cup progress"></div>
-
-    <!-- Cup slot — empty until the host picks on their phone, then the pick
-         as the race card (red cup sticker + minis + races pill + pips).
-         Filled by renderCupSlot via renderLobbyPick (both lobbySeats.js);
-         keep this markup in sync with what renderCupSlot expects. -->
-    <div class="cup-slot" id="cup-slot">
-      <div class="cup-slot__pick hidden">
-        <div class="cup-sticker"></div>
-        <div class="cup-stars hidden"></div>
-        <div class="cup-maps"></div>
-        <div class="cup-races"></div>
-        <div class="cup-meter" aria-label="Difficulty"><i></i><i></i><i></i><i></i></div>
+    <!-- Race rail — tonight's race over the long game, one column. The pick
+         hangs from the TOP and the shelf from the BOTTOM (see .cup-slot's auto
+         margin), so the pick landing mid-lobby cannot shift the shelf. -->
+    <div class="race-rail">
+      <!-- Cup slot — empty until the host picks on their phone, then the pick
+           as the race card (red cup sticker + minis + races pill + pips).
+           Filled by renderCupSlot via renderLobbyPick (both lobbySeats.js);
+           keep this markup in sync with what renderCupSlot expects. -->
+      <div class="cup-slot" id="cup-slot">
+        <div class="cup-slot__pick hidden">
+          <div class="cup-sticker"></div>
+          <div class="cup-stars hidden"></div>
+          <div class="cup-maps"></div>
+          <div class="cup-races"></div>
+          <div class="cup-meter" aria-label="Difficulty"><i></i><i></i><i></i><i></i></div>
+        </div>
       </div>
+
+      <!-- "Cups" — the couch's star shelf, the long game to the ticket's
+           tonight. ONE card, one hairline-separated row per cup with its
+           earned stars; the locked Playroom trails its unlock progress
+           instead. Filled by renderCupShelf (lobbySeats.js) from the
+           wasm-stamped catalogue, which owns the .hidden from the first render
+           on — it ships hidden because an unfilled card is a blank white
+           slab. -->
+      <div class="cup-shelf hidden" id="cup-shelf" aria-label="Cup progress"></div>
     </div>
 
     <!-- Seat dock — a horizontal row of sticker seat chips (no headline: the
