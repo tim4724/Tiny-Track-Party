@@ -290,17 +290,20 @@ test('every served license text is intact', () => {
   assert.deepEqual(fs.readdirSync(dir).sort(), [...Object.keys(marks), 'SOURCES.md'].sort());
 });
 
-// The legal footer exists twice (welcome board + licenses page) as plain markup
-// on purpose: a footer that needs JS to name its imprint is a footer that can
-// fail to. This is what keeps the two copies one footer.
-test('the welcome board and the licenses page carry the same legal footer', () => {
-  const footerOf = (rel) => {
+// The legal footer is copied rather than built: on the welcome board, in the
+// lobby (the AirConsole boot screen, which has no welcome board) and on the
+// licenses page, all three as plain markup on purpose — a footer that needs JS
+// to name its imprint is a footer that can fail to. This is what keeps the
+// copies one footer. EVERY .site-foot is checked, so a fourth copy is pinned
+// the moment it appears.
+test('every legal footer carries the same four links', () => {
+  const footersOf = (rel) => {
     const html = fs.readFileSync(path.join(PUBLIC_DIR, rel), 'utf8');
-    const m = /<footer class="site-foot[^"]*">([\s\S]*?)<\/footer>/.exec(html);
-    assert.ok(m, `${rel} has no .site-foot footer`);
-    return m[1];
+    const found = [...html.matchAll(/<footer class="site-foot[^"]*">([\s\S]*?)<\/footer>/g)]
+      .map((m) => m[1]);
+    assert.ok(found.length, `${rel} has no .site-foot footer`);
+    return found;
   };
-  const pages = ['display/index.html', 'licenses.html'].map((rel) => [rel, footerOf(rel)]);
   const want = [
     'https://github.com/tim4724/Tiny-Track-Party',
     '/licenses.html',
@@ -308,9 +311,11 @@ test('the welcome board and the licenses page carry the same legal footer', () =
     'https://couchpad.games/en/imprint',
   ];
 
-  for (const [rel, foot] of pages) {
-    assert.match(foot, /Developed by Tim/, `${rel} names the developer`);
-    assert.deepEqual([...foot.matchAll(/href="([^"]+)"/g)].map((h) => h[1]), want,
-      `${rel} links the repo, licenses, privacy and imprint, in that order`);
+  for (const rel of ['display/index.html', 'licenses.html']) {
+    for (const foot of footersOf(rel)) {
+      assert.match(foot, /Developed by Tim/, `${rel} names the developer`);
+      assert.deepEqual([...foot.matchAll(/href="([^"]+)"/g)].map((h) => h[1]), want,
+        `${rel} links the repo, licenses, privacy and imprint, in that order`);
+    }
   }
 });

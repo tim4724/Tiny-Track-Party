@@ -91,6 +91,14 @@ test('AC: screen boots to the lobby, profile-named phones join, a race runs', as
   await expect(page.locator('#joinurl')).toBeHidden();
   await expect(page.locator('#tagline')).toBeHidden();
 
+  // There is no welcome board in AC, so the lobby is where the legal footer
+  // lives — and the credits are an attribution CONDITION of what the game
+  // ships, not a nicety, so an unreachable licenses page is a violation. It
+  // opens AWAY: navigating this iframe would drop the SDK session.
+  const legal = page.locator('#lobby .lobby__foot a[href="licenses.html"]');
+  await expect(legal).toBeVisible();
+  await expect(legal).toHaveAttribute('target', '_blank');
+
   // …and no perf HUD: AC is the one surface strangers play, so the frame-cost
   // readout that every dev surface wants pinned to the corner would be a bug
   // they cannot dismiss. ("P" still toggles it on for the simulator.)

@@ -87,12 +87,14 @@
          production and leaves it empty in prod; .version-badge:empty hides it.
          Lives on the title board so the lobby chrome stays clean. -->
     <div class="version-badge" aria-label="Build version">__VERSION_BADGE__</div>
-    <!-- Legal footer — the only screen that carries it. The lobby and the race
-         are read across a room and stay clean; the welcome board is the one
-         anybody sits and looks at. Licenses is ours and opens in place (the
-         warm room is cheap to re-open); privacy and imprint are couchpad.games
-         pages and open away so the game survives the trip. Keep the four in
-         step with public/licenses.html — tests/credits.test.js pins them. -->
+    <!-- Legal footer. The race is read across a room and stays clean; the
+         welcome board is the one anybody sits and looks at, so it carries it
+         here — and the lobby carries a second copy for AirConsole, which has
+         no welcome board (see .lobby__foot below). Licenses is ours and opens
+         in place (the warm room is cheap to re-open); privacy and imprint are
+         couchpad.games pages and open away so the game survives the trip.
+         Keep the four in step with public/licenses.html and with the lobby's
+         copy — tests/credits.test.js pins all three. -->
     <footer class="site-foot welcome__foot">
       <a href="https://github.com/tim4724/Tiny-Track-Party" target="_blank" rel="noopener">Developed by Tim</a>
       <a href="licenses.html">Licenses</a>
@@ -138,6 +140,20 @@
           <div class="tagline__main">Scan the code with your phone!</div>
         </div>
       </button>
+
+      <!-- The legal footer again, shown on AirConsole ONLY (display.css hides
+           it everywhere else): there the lobby IS the boot screen, so without
+           this copy the credits are unreachable — and the attribution licenses
+           the game ships under make that a violation, not a missing link.
+           Every link opens AWAY, including our own: navigating the AC screen
+           iframe drops the SDK session and ends the party for everybody.
+           Keep in step with the welcome board's footer above. -->
+      <footer class="site-foot lobby__foot">
+        <a href="https://github.com/tim4724/Tiny-Track-Party" target="_blank" rel="noopener">Developed by Tim</a>
+        <a href="licenses.html" target="_blank" rel="noopener">Licenses</a>
+        <a href="https://couchpad.games/en/privacy" target="_blank" rel="noopener">Privacy</a>
+        <a href="https://couchpad.games/en/imprint" target="_blank" rel="noopener">Imprint</a>
+      </footer>
     </div>
 
     <!-- Race rail — tonight's race over the long game, one column. The pick

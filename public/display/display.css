@@ -1020,7 +1020,11 @@ body.airconsole #fullscreen-btn { display: none; }
    pinned top-left. The scan hint goes too — the platform's own UI handles
    joining. Pointer-events off — there is no join link to copy. */
 body.airconsole .tagline { display: none; }
-body.airconsole .ticket-rail { align-self: start; }
+/* Wordmark at the top of the rail, legal footer at its foot (see below) — the
+   rail spans the band, so space-between is what pins each to an end. */
+body.airconsole .ticket-rail {
+  flex-direction: column; align-items: stretch; justify-content: space-between;
+}
 body.airconsole .ticket {
   background: none; border: 0; box-shadow: none; padding: 0;
   align-items: flex-start; text-align: left;
@@ -1039,3 +1043,20 @@ body.airconsole .ticket__wordmark {
    bootstrap reveals #lobby at DOMContentLoaded, and main.js's AC branch takes
    over from there. */
 body.airconsole #welcome { display: none; }
+
+/* …which is why the lobby carries the legal footer, and only there: elsewhere
+   the welcome board is where anybody sits and reads, and the lobby stays clean.
+   It floats bare over the live preview like the wordmark above it, so it wears
+   the same die-cut edge at footer scale rather than a paper strip (chrome never
+   gets a paper background over the 3D view). */
+.lobby__foot { display: none; }
+body.airconsole .lobby__foot {
+  display: flex; justify-content: flex-start;
+  /* One line, sized to its content rather than to the rail: the rail is as
+     narrow as the QR it no longer holds, and four links do not fit across it on
+     a 720p board — the last one wraps alone. What it overhangs into is the
+     empty middle column, which is the track preview and nothing else. */
+  flex-wrap: nowrap; width: max-content;
+  -webkit-text-stroke: 3px #fff;
+  paint-order: stroke fill;
+}

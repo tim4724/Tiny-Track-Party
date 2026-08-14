@@ -528,12 +528,21 @@ export function runDisplayScenario(opts, ctx) {
     return;
   }
 
-  if (scenario === 'lobby') {
+  // The AirConsole lobby is the SAME lobby wearing <body class="airconsole">:
+  // the generated screen.html sets that class and the AC block in display.css
+  // does the rest — no QR and no join URL (players pair in the AC app), a bare
+  // die-cut wordmark instead of the ticket card, and the legal footer that the
+  // missing welcome board would otherwise have carried. So this preview stamps
+  // the class and runs the ordinary lobby path; no SDK is present in the gallery
+  // and none is needed to show the dressing.
+  if (scenario === 'lobby-ac') document.body.classList.add('airconsole');
+
+  if (scenario === 'lobby' || scenario === 'lobby-ac') {
     const slots = buildSlots(players);
     const hostIdx = hostSlot(slots);
     show('lobby');
     renderRoster(slots, hostIdx);
-    fakeJoin('TEST');
+    if (scenario !== 'lobby-ac') fakeJoin('TEST');   // AC: onRoomReady returns before both (main.js)
     startAttractDemo(slots);
     // Post-pick lobby: the race card fills the rail's slot. `picked` names the
     // MODE ('cup' — legacy '1' — 'track', 'random' or 'tour'); everything the

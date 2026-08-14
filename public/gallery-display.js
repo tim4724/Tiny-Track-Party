@@ -24,6 +24,9 @@ var DISPLAY_CARDS = [
   { key: 'lobby',       title: 'Lobby (track picked)',  hostVariant: true, animated: true, params: { picked: 'track',  track: 'driftwood' } },
   { key: 'lobby',       title: 'Lobby (tour picked)',   hostVariant: true, animated: true, params: { picked: 'tour' } },
   { key: 'lobby',       title: 'Lobby (random picked)', hostVariant: true, animated: true, params: { picked: 'random', track: 'powder' } },
+  // The AirConsole dressing of the same lobby — and the only screen there is,
+  // since AC has no welcome board. It is what carries the legal footer.
+  { key: 'lobby-ac',    title: 'Lobby (AirConsole)',   hostVariant: true, animated: true, params: { picked: 'track',  track: 'driftwood' } },
   { key: 'countdown', title: 'Countdown', replayable: true },
   { key: 'racing',    title: 'Race',      animated: true },
   // Deck-decal check: hairpins force scrub skids and the pads sit on the racing

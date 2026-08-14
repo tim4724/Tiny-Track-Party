@@ -48,6 +48,39 @@ bake "$BUILD_DIR/controller/controller.html" "$BUILD_DIR/controller.html"
 rm -f "$BUILD_DIR/display/screen.html" "$BUILD_DIR/controller/controller.html" \
       "$BUILD_DIR/display/index.html" "$BUILD_DIR/controller/index.html"
 
+# The licenses page, which the AC lobby's legal footer opens in a NEW TAB (the
+# screen iframe itself must never navigate — that drops the SDK session and ends
+# the party). It is the only web page besides the two entries that ships, and it
+# has to: the license texts under assets/ travel with the build, and this page is
+# the one thing that points at them. It sits at the zip ROOT because licenses.js
+# resolves ./shared/ and ./display/ against itself.
+#
+# Four transforms. The first two are what gen-airconsole-html.mjs does to the
+# entries: drop the icon links (assets/icon/ is pruned below) and turn absolute
+# hrefs relative. The other two remove the way BACK — in a tab the game did not
+# open, "back to the game" has nowhere to go, and screen.html loaded outside the
+# AirConsole iframe is a dead game. So the button goes and the wordmark loses its
+# href, which leaves it rendering as the plain badge it already looks like.
+bake "$PROJECT_DIR/public/licenses.html" "$BUILD_DIR/licenses.html"
+cp "$PROJECT_DIR/public/licenses.js" "$PROJECT_DIR/public/licenses.css" "$BUILD_DIR/"
+sed -E -e '/<link rel="(icon|apple-touch-icon)"/d' \
+       -e '/class="btn btn--brand sheet__back"/d' \
+       -e 's#(class="wordmark sheet__wordmark") href="/" aria-label="[^"]*"#\1#' \
+       -e 's#(src|href)="/([^/])#\1="\2#g' \
+       "$BUILD_DIR/licenses.html" > "$BUILD_DIR/licenses.html.tmp"
+mv "$BUILD_DIR/licenses.html.tmp" "$BUILD_DIR/licenses.html"
+# All four are silent no-ops if that page's markup moves, and the failure they
+# would ship is a page that looks right and strands the reader (or one whose
+# stylesheet 404s), so assert the outcome rather than trusting the patterns: the
+# footer's own link is bare "licenses.html", and no root-absolute href survives.
+grep -q 'href="licenses.html"' "$BUILD_DIR/licenses.html" || {
+  echo "ERROR: licenses.html did not come out with relative hrefs" >&2; exit 1; }
+if grep -q 'href="/' "$BUILD_DIR/licenses.html"; then
+  echo "ERROR: licenses.html still carries root-absolute links, which have no root in the zip:" >&2
+  grep -n 'href="/' "$BUILD_DIR/licenses.html" >&2
+  exit 1
+fi
+
 # THE ENGINE GLUE SHIPS AS .js, NOT .mjs.
 #
 # A CDN answers by extension, and .mjs is not one every CDN knows. Served as

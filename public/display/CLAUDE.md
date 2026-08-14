@@ -20,6 +20,14 @@ counter of its own, that is the signal it has become one of those.
 
 ## AirConsole (screen.html)
 
+**There is no welcome board there, so the LOBBY carries the legal footer** — the
+credits are an attribution condition of what ships, not a nicety. It is the same
+markup as the welcome board's (`tests/credits.test.js` pins every copy),
+CSS-gated on `body.airconsole`, and every link opens away: navigating the screen
+iframe drops the SDK session. `scripts/build-airconsole.sh` therefore ships
+`licenses.html` at the zip root, since the license texts under `assets/` travel
+with the build and that page is the only thing pointing at them.
+
 `display-airconsole.js` is a classic script only the generated `screen.html`
 loads: it swaps the transport (adapter for the relay connection, a no-op
 fastlane, AC's master/liveness providers via `window.__acParty`) and
