@@ -51,6 +51,50 @@ const ITEM_KEYS = [...ITEM_IDS];
 // the bar shows under a card.
 const cardOwnsCell = (c) => !!(c.finished || c.reconnecting);
 
+// The band the drawing buffer lives in, in lines, whatever the screen is.
+//
+// A frame's cost is close to linear in fragments (see native/renderer/CLAUDE.md:
+// the road ribbon and the ambient cloud are fill, and split-screen draws the
+// scene once per cell), and the devices this runs on are three orders of
+// magnitude apart — an M1 Max draws a 4-cell race at 4K in 7.5 ms, and the TV
+// browsers this game is FOR are the weakest GPUs it will ever see. No single
+// number serves both: capped at the floor a good screen reads as pixelated,
+// capped at the ceiling the weak TV has four times the fill it can afford.
+//
+// So the number is DECIDED, per device, from what its frames actually cost —
+// _adaptScale below, over the rule in native/libttp-runtime/ttp/render_scale.h.
+// These two are only the band it may move in. The ceiling is 4K because past it
+// nobody is sitting close enough. The floor is 720 lines and is deliberately
+// BELOW the commonest panel: a floor equal to the screen collapses the band to a
+// point on an ordinary 1080p TV, which is the exact device this exists for — it
+// could not have dropped a single pixel, and the whole mechanism would have been
+// a sharpness feature for good screens wearing a weak-device justification.
+//
+// Lines, not pixel counts: height is the axis every display shares, so an
+// ultrawide keeps its full width rather than being letterboxed into a budget.
+// Layout is unaffected by any of it — the cell grid and the HUD are computed
+// from the buffer and divided back out by _dpr (see _cellRects), so this changes
+// how many pixels the picture has and nothing about where anything sits.
+//
+// An explicit ?dpr= (or setRenderScale) is a caller naming a buffer scale and
+// BYPASSES the whole mechanism — that is how the trailer renders a true 4K
+// master, and how a fixed resolution is pinned for an A/B.
+const MAX_BUFFER_H = 2160;
+const MIN_BUFFER_H = 720;
+
+// How often the scale is re-decided. The C++ holds are seconds long, so this
+// only has to be fast enough to catch the load changing (a race starting behind
+// a lobby, a fourth player joining) within about a second of it happening.
+const SCALE_POLL_MS = 1000;
+
+// NOTHING IS REMEMBERED ACROSS SESSIONS, on purpose. Persisting the learned
+// scale looks like free value — a weak TV would skip the seconds it spends
+// adapting in race one — but it combines badly with the half of the controller
+// that can only step DOWN: a device with no GPU timer would descend on one bad
+// window (a thermal blip, a cold shader cache, a heavy tab at boot) and have no
+// path back on any later session. A ratchet on exactly the devices this is for
+// is worse than re-learning, which costs a couple of seconds and self-corrects.
+
 // The race loop's SLOW TICK: everything on that loop which is not the frame
 // itself runs off this one guard — the HUD paint, the phones' ITEM push, and the
 // finish check that triggers the fast-forward to results. Exported because the
@@ -120,12 +164,32 @@ export class Stage {
     // never pixels (it has no screenshot comparisons), and every render path
     // still executes at a sane resolution. An explicit ?dpr= still wins, so the
     // gallery's 0.5 and a manual override behave exactly as before.
+    //
+    // An explicit scale is a REQUEST, not a cap: it wins over devicePixelRatio
+    // and over MAX_BUFFER_H alike (the gallery asks for half a card, the trailer
+    // asks for two). Everything else lands on the automatic path in _sizeCanvas,
+    // which is where the height cap is applied — it depends on the container's
+    // size, so it cannot be resolved once here and has to be recomputed on every
+    // resize.
     const automation = this._automation =
         typeof navigator !== 'undefined' && !!navigator.webdriver;
     const dprCap = parseFloat(new URLSearchParams(location.search).get('dpr'));
-    this._dpr = Math.min(window.devicePixelRatio || 1,
-                         Number.isFinite(dprCap) && dprCap > 0 ? dprCap
-                                                               : (automation ? 0.25 : 2));
+    this._dprRequest = Number.isFinite(dprCap) && dprCap > 0 ? dprCap : null;
+    this._autoCap = automation ? 0.25 : 2;
+    this._dpr = 1;           // real value comes from the _sizeCanvas below
+    // The adaptive scale's state: the scale in force, when it last moved, and
+    // when it was last re-decided. Infinity rather than a number, so the band's
+    // ceiling is the only place that knows what "as sharp as this screen allows"
+    // means (_sizeCanvas clamps it before the first frame).
+    this._autoScale = Infinity;
+    this._scaleAt = 0;
+    // Left at 0 deliberately, so the first decision is not held back: `t` is a
+    // rAF timestamp measured from page load, which means the first poll already
+    // satisfies both holds and a device that cannot hold its opening frames is
+    // rescued at once rather than 2.5 s in. Only a step DOWN can come of it —
+    // the scale starts clamped at the ceiling, so there is nothing to rise into.
+    this._scaleMovedAt = 0;
+    this._presentFloor = 0;  // the running fastest present (ttp_display_present_floor)
     this._canvas = document.createElement('canvas');
     this._canvas.id = 'scene-canvas';
     this._canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
@@ -134,9 +198,12 @@ export class Stage {
     this._sizeCanvas();
     this._initOverlay();
     // Frame-cost readout, on by default while the game is in development ("P"
-    // hides it). Inert while hidden: it instruments the frame only when someone
-    // is looking at it.
+    // hides it). Hiding stops the DRAWING; whether it keeps MEASURING is the
+    // next line's business.
     this.perf = new PerfHud(this.container, this._canvas);
+    // The scale is decided from the perf HUD's own measurements, so it has to
+    // keep measuring with the panel hidden — which is the shipped state.
+    if (this._dprRequest == null && !automation) this.perf.instrument(true);
     this._assets = assetCache();
     this._free = null;       // free-cam state, once enableUserCamera() runs
     this._cellSig = null;    // last pushed cell list / camera mode (see _loop)
@@ -165,9 +232,35 @@ export class Stage {
     return this.display;
   }
 
+  // The band the adaptive scale may move in, for THIS container at THIS moment.
+  // A function of the box, so it is asked for rather than stored: the same tab
+  // moved to a 4K screen, or a preview card that grows, moves both ends.
+  //
+  // The floor is the softest picture this will show — but only where there is
+  // room for it to be a floor at all. Under the automation cap, or in a window
+  // shorter than MIN_BUFFER_H, the min() collapses the band onto the ceiling and
+  // nothing can adapt, which is exactly right: the E2E suite's 0.25 and a
+  // preview card's half scale are not budgets to be renegotiated.
+  _scaleBand() {
+    const ch = Math.max(1, this.container.clientHeight);
+    const max = Math.min(window.devicePixelRatio || 1, this._autoCap, MAX_BUFFER_H / ch);
+    return { min: Math.min(max, MIN_BUFFER_H / ch), max };
+  }
+
+  // Size the drawing buffer to the container, and pick the scale it is sized by.
+  // The scale is resolved HERE rather than at construction because the band is a
+  // function of the box, and _onResize already runs on every change to it.
   _sizeCanvas() {
-    const w = Math.max(1, Math.round(this.container.clientWidth * this._dpr));
-    const h = Math.max(1, Math.round(this.container.clientHeight * this._dpr));
+    const cw = Math.max(1, this.container.clientWidth);
+    const ch = Math.max(1, this.container.clientHeight);
+    if (this._dprRequest != null) {
+      this._dpr = this._dprRequest;
+    } else {
+      const band = this._scaleBand();
+      this._dpr = this._autoScale = Math.min(Math.max(this._autoScale, band.min), band.max);
+    }
+    const w = Math.max(1, Math.round(cw * this._dpr));
+    const h = Math.max(1, Math.round(ch * this._dpr));
     this._canvas.width = w;
     this._canvas.height = h;
     return { w, h };
@@ -887,6 +980,55 @@ export class Stage {
   // 60fps; the held frame renders fully, so resuming picks up seamlessly.
   pauseAfterFrame() { if (this._running) this._idleAfterFrame = true; }
 
+  // ADAPTIVE resolution: re-decide the render scale about once a second from
+  // what the last window of frames cost. Everything JUDGED about those numbers
+  // is C++'s (native/libttp-runtime/ttp/render_scale.h, which carries the whole
+  // argument); this half measures, hands the measurements over unjudged, and
+  // performs the resize.
+  //
+  // WHAT "low hardware" MEANS here: not a device probe. There is no honest one
+  // in a browser — a UA string lies and WEBGL_debug_renderer_info is being taken
+  // away — and a probe would have to guess at the load anyway. What is measured
+  // instead is THIS device drawing THIS game's frames, so a weak GPU, a hot
+  // laptop, a heavy tab next door and four cells instead of one all arrive as
+  // the same fact: the frames cost too much, render fewer pixels.
+  //
+  // It therefore adapts in the LOBBY as well as in a race, and the two are not
+  // the same load — the lobby is one camera, a race is four. That is not a
+  // problem to be special-cased: a lobby that has climbed then meets a race that
+  // has not, notices inside a second and gives the pixels back, because the
+  // holds are asymmetric.
+  _adaptScale(t) {
+    if (this._dprRequest != null || this._automation) return;   // a named scale is not ours to move
+    if (t - this._scaleAt < SCALE_POLL_MS) return;
+    // A throttled tab presents at whatever rate the browser feels like, and none
+    // of it describes the device. Nothing is measured or decided while hidden.
+    if (typeof document !== 'undefined' && document.hidden) { this._scaleAt = t; return; }
+    this._scaleAt = t;
+    const s = this.perf.sample();
+    // The fastest present is the one number carried between windows, so the fold
+    // happens here — but WHICH samples may become one is the rule's, not ours.
+    this._presentFloor = this.display.presentFloor(this._presentFloor, s.frame.p05 || 0);
+    const band = this._scaleBand();
+    const next = this.display.scaleStep(this._autoScale, {
+      // A missing GPU timer, and a percentile no frame has landed in yet, are
+      // both "nothing measured" — 0, which the rule reads as no signal.
+      gpuShareP95: s.gpuTimer === 'ext' ? s.gpuUsedP95 || 0 : 0,
+      gpuFrames: s.gpu.n,
+      presentP95Ms: s.frame.p95 || 0,
+      presentFloorMs: this._presentFloor,
+      presentFrames: s.frame.n,
+    }, (t - this._scaleMovedAt) / 1000, band.min, band.max);
+    if (next === this._autoScale) return;
+    this._autoScale = next;
+    this._scaleMovedAt = t;
+    this._onResize();
+    // The window that just decided this describes the OLD resolution. Keeping it
+    // would judge the new one on the old one's frames for the next two seconds,
+    // which is how a controller talks itself into a second step it does not need.
+    this.perf.reset();
+  }
+
   // DEBUG resolution scale: re-point the drawing buffer at n x the layout size,
   // live. ?dpr= picks the value at boot and is the normal way to set it; this is
   // for the one caller that needs to CHANGE it mid-session — scripts/capture-artwork.js,
@@ -896,8 +1038,10 @@ export class Stage {
   // is 20 s of wall clock for 0.6 s of race) and then lifts it for the shot alone.
   //
   // Clamped to the renderer's pixel-ratio cap of 2, but NOT to devicePixelRatio
-  // the way the ctor is: a caller naming a scale is asking for a buffer size, and
-  // on a DPR-1 screen 2 means supersample, which is exactly what the capture wants.
+  // or to the adaptive band the way the automatic path is: a caller naming a
+  // scale is asking for a buffer size, and on a DPR-1 screen 2 means supersample,
+  // which is exactly what the capture wants. It also LATCHES the request, so the
+  // adaptive controller stops touching the buffer from here on.
   //
   // _onResize is the whole of it. The renderer's two chrome pieces used to need
   // the new scale pushed after it (uiScale), and no longer do — they size
@@ -905,8 +1049,12 @@ export class Stage {
   // surface. So nothing here has to stay in step with a second copy of the size.
   setRenderScale(n) {
     const v = parseFloat(n);
-    this._dpr = Number.isFinite(v) && v > 0 ? Math.min(v, 2) : 1;
-    this._onResize();
+    this._dprRequest = Number.isFinite(v) && v > 0 ? Math.min(v, 2) : 1;
+    // Nothing reads the frame cost from here on, so stop paying for it — a timer
+    // query per frame with no reader, on exactly the capture paths that are
+    // slowest already. The panel keeps whatever visibility it had.
+    if (!this.perf.visible) this.perf.instrument(false);
+    this._onResize();        // resolves _dpr from the request, in _sizeCanvas
     return this._dpr;
   }
 
@@ -927,6 +1075,7 @@ export class Stage {
     if (rawMs > 0 && rawMs < 1000) this.perf.tick(t, rawMs); // skip absurd post-stall deltas
     if (this.onFrame) this.onFrame(dt);
     if (!this.display) { this._scheduleNext(); return; }
+    this._adaptScale(t);
 
     const ids = this.soloCam ? [] : this._order.filter((id) => this.cars.has(id));
     if (ids.length) this._hudHidden = false; // cells are back; the HUD gets placed below

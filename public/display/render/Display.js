@@ -92,6 +92,10 @@ export class Display {
       create: mod.cwrap('ttp_display_create', 'number', ['string', 'number', 'number']),
       asset: mod.cwrap('ttp_display_asset', 'number', ['string', 'number', 'number']),
       resize: mod.cwrap('ttp_display_resize', null, ['number', 'number']),
+      scaleStep: mod.cwrap('ttp_display_scale_step', 'number',
+                           ['number', 'number', 'number', 'number', 'number', 'number',
+                            'number', 'number', 'number']),
+      presentFloor: mod.cwrap('ttp_display_present_floor', 'number', ['number', 'number']),
       build: mod.cwrap('ttp_display_build', 'number', ['string', 'string']),
       reroster: mod.cwrap('ttp_display_reroster', 'number', ['string']),
       debugDecals: mod.cwrap('ttp_display_debug_decals', 'string', []),
@@ -213,6 +217,17 @@ export class Display {
     this.canvas.height = h;
     this._fn.resize(w, h);
   }
+
+  // What scale to render at next, given what the last window of frames cost, and
+  // the running fastest-present that feeds it. Both rules are C++'s
+  // (ttp/render_scale.h) — this side measures and performs, and passes the
+  // numbers over unjudged. See Stage._adaptScale.
+  scaleStep(current, cost, sinceChangeSec, min, max) {
+    return this._fn.scaleStep(current, cost.gpuShareP95, cost.gpuFrames, cost.presentP95Ms,
+                              cost.presentFloorMs, cost.presentFrames, sinceChangeSec, min, max);
+  }
+
+  presentFloor(prevFloorMs, p05Ms) { return this._fn.presentFloor(prevFloorMs, p05Ms); }
 
   // Build every scene from here on as the ASSET GALLERY's showroom: the picked
   // biome's palette carrying every biome's vocabulary (ttp_display_showcase).

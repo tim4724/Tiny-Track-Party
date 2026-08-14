@@ -72,7 +72,20 @@ fragment {
         // from a 5-tap luma cross, then blends along it; falls back to the
         // unfiltered centre on flat areas, so interiors stay sharp and only
         // contrast edges soften.
-        const float SPAN_MAX = 8.0, REDUCE_MUL = 1.0 / 8.0, REDUCE_MIN = 1.0 / 128.0;
+        // SPAN_MAX is how far along an edge the blend may reach, in texels, and
+        // REDUCE_MUL is what pulls that reach back on bright edges. Both are
+        // tuned for a picture that is USUALLY UPSCALED: the buffer is decided
+        // between 720 and 2160 lines (Stage MIN_BUFFER_H/MAX_BUFFER_H) and the
+        // compositor stretches whatever that is onto the panel, so a stair-step
+        // is magnified along with everything else and there is no
+        // display-resolution detail left for a long blend to destroy. 16 is the
+        // reference FXAA's own span; the console variant shipped 8 because it was
+        // filtering a picture at native resolution.
+        //
+        // A device holding the ceiling IS at native resolution, and there the
+        // wide span is slightly soft. That is the accepted side of the trade: the
+        // resolutions below it are the common case and the ones that need help.
+        const float SPAN_MAX = 16.0, REDUCE_MUL = 1.0 / 16.0, REDUCE_MIN = 1.0 / 128.0;
         const vec3 LUMA = vec3(0.299, 0.587, 0.114);
 
         highp vec2 uv = variable_uv.xy;
@@ -93,9 +106,13 @@ fragment {
         // matte toy scene is mostly flat — sky dome, road interior, lawn, hill
         // domes — so this is the common case, and the taps are the whole cost of
         // this pass now that they carry no encode. Thresholds are the reference
-        // FXAA_QUALITY constants (EDGE_THRESHOLD 1/8, EDGE_THRESHOLD_MIN 1/16),
-        // scaled to lMax so bright areas need proportionally more contrast.
-        if (lMax - lMin < max(1.0 / 16.0, lMax * (1.0 / 8.0))) {
+        // FXAA_QUALITY constants at its QUALITY tuning (EDGE_THRESHOLD 1/16,
+        // EDGE_THRESHOLD_MIN 1/32) rather than its default (1/8, 1/16), scaled to
+        // lMax so bright areas need proportionally more contrast. The looser pair
+        // let the medium-contrast edges through — facet seams on a barrier, the
+        // shading break where a hill meets the sky — which are most of what still
+        // stepped once the buffer became something the compositor magnifies.
+        if (lMax - lMin < max(1.0 / 32.0, lMax * (1.0 / 16.0))) {
             material.emissive = vec4(mC, 0.0);
             return;
         }

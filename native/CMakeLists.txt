@@ -740,6 +740,17 @@ target_link_libraries(progression_check PRIVATE libttp_runtime ttp_strict_fp ttp
 ttp_emscripten_cli(progression_check)
 add_test(NAME progression COMMAND progression_check)
 
+# ---- Behaviour: the adaptive render scale -----------------------------------
+# Assertions again, and for the same reason: ttp/render_scale.h is a NEW layer
+# with no JS oracle. What it pins beyond the thresholds is CONVERGENCE — the
+# controller is a feedback loop, and a loop that chases its own tail shows up as
+# a picture that softens and sharpens forever rather than as a failing frame.
+# Header-only, so nothing new is linked; libttp_runtime carries the include path.
+add_executable(render_scale_check runtimetest/render_scale_check.cc)
+target_link_libraries(render_scale_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(render_scale_check)
+add_test(NAME render_scale COMMAND render_scale_check)
+
 # ---- Conformance: the per-player race HUD -----------------------------------
 # JS-RECORDED evidence, like the biome check below and unlike the two above: the
 # `hud` steps of tests/fixtures/ui-corpus.jsonl were recorded off the live
@@ -936,6 +947,10 @@ set(TTP_APP_SOURCES
   # not rendering, and CI's Filament-less wasm leg is where the browser's link
   # to it gets checked.
   runtime/ttp_theme.cc
+  # The adaptive render scale's shim. Deciding how big the buffer should be
+  # names neither a platform API nor the renderer, so it is here rather than
+  # beside ttp_display_core.cc — same argument as the biome ABI above.
+  runtime/ttp_render_scale.cc
   libttp-runtime/ttp/camera.cc
   libttp-runtime/ttp/framing.cc
   libttp-runtime/ttp/frame_builder.cc

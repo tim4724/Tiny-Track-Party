@@ -15,6 +15,11 @@ change the authored fov. Read it before touching the frame builder; they are the
 rules most easily broken from here, and the ones a fixture is least likely to
 catch.
 
+`render_scale` is here for a different reason: it decides how big the drawing
+buffer should be from what the last window of frames cost, and every platform
+meets the same spread of devices. A shell hands over MEASUREMENTS — it may not
+judge them, and the header says which judgements are the rule's.
+
 ## The UI model
 
 `ttp/ui_model.{h,cc}` behind `runtime/ttp_ui.h` owns the decisions behind the 2D

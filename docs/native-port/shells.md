@@ -196,6 +196,18 @@ Three properties of that surface matter more than the list:
     connected humans, so the prepared scene is the one it wants. The web
     reference is `prepareNextTrack()` in `public/display/main.js` plus
     `Stage.prepare`/`rebuild`, and `tests/e2e/cup-series.spec.js` pins it.
+13. **The render scale, measured.** The buffer is not the panel: a shell polls
+    `ttp_display_scale_step` with what its last window of frames cost and
+    resizes to the answer, so the same build holds 60 fps on a weak TV and
+    stays sharp on a strong one. What a shell owes is the MEASUREMENT and the
+    band, and nothing else — percentiles of GPU time (as a share of the frame
+    budget) and of the frame interval, their sample counts, and the running
+    `ttp_display_present_floor`. Every judgement about those numbers is the
+    rule's: which signal decides, which way each may move, how many samples
+    count, the holds, the steps. If you find yourself writing an `if` around a
+    measurement before passing it, it belongs in `ttp/render_scale.h` instead —
+    that header also carries the reasoning, including why a dropped-frame count
+    is not a signal. Web reference: `Stage._adaptScale`.
 
 ## The asymmetries worth knowing before you start
 

@@ -47,6 +47,42 @@ TTP_ABI void ttp_display_destroy(void);
  * (TtpRenderer::drawOverlay), and every number crossing this ABI is back in the
  * surface's own physical pixels. */
 
+/* HOW BIG that surface should be, decided from what the last window of frames
+ * cost: pass the scale in force, the RAW measurements, how long the current
+ * scale has been in force, and the band this shell allows; take back the scale
+ * to render at next. The shell then sizes its buffer and calls
+ * ttp_display_resize with the result.
+ *
+ *   gpuShareP95 / gpuFrames        p95 GPU time as a fraction of the frame
+ *                                  budget, from a timer query around the frame,
+ *                                  and how many frames carried a result. Pass 0
+ *                                  where the platform has no GPU timer.
+ *   presentP95Ms / presentFrames   p95 frame interval, and its sample count.
+ *   presentFloorMs                 ttp_display_present_floor's running answer.
+ *
+ * Everything JUDGED about those numbers — which signal decides, which
+ * directions each may move in, how many samples a percentile needs, the holds
+ * and the step sizes — is in ttp/render_scale.h, where every leg's ctest
+ * executes it. Hand over measurements, not opinions, and honour the answer; a
+ * shell that has measured nothing gets its current scale back, clamped.
+ *
+ * Pure arithmetic, no display state: both of these answer before
+ * ttp_display_create and after ttp_display_destroy. */
+TTP_ABI double ttp_display_scale_step(double current,
+                                      double gpuShareP95, int gpuFrames,
+                                      double presentP95Ms, double presentFloorMs,
+                                      int presentFrames, double sinceChangeSec,
+                                      double minScale, double maxScale);
+
+/* The device's own fastest present, folded one window at a time: pass the value
+ * this returned last time (0 to begin) and the window's p05 frame interval, keep
+ * what comes back, and hand it to ttp_display_scale_step as presentFloorMs.
+ *
+ * The shell holds it because it is a MEASUREMENT — but WHICH samples may become
+ * one, and the fact that it must outlive both the stats window and a resize, are
+ * rules, and they are in ttp/render_scale.h with the rest. */
+TTP_ABI double ttp_display_present_floor(double prevFloorMs, double p05Ms);
+
 /* ---- scene -------------------------------------------------------------- */
 
 /* Hand the display a named asset's bytes (materials, GLBs, textures). The shell

@@ -1,10 +1,16 @@
 // Perf HUD — the display's frame-cost readout (bottom-right; "P" hides it).
 //
 // ON BY DEFAULT while the game is in development: the frame budget is something
-// to keep under your eye, not something to remember to switch on. The hide path
-// is fully wired and inert (no GL queries, no wasm profile reads, no canvas
-// draws while hidden), so turning it off for release is a one-line change here —
-// gate the show() below on whatever release signal exists at that point.
+// to keep under your eye, not something to remember to switch on. Turning the
+// PANEL off for release is a one-line change here — gate the show() below on
+// whatever release signal exists at that point.
+//
+// SHOWING AND MEASURING ARE SEPARATE (instrument()). The hide path stops every
+// canvas draw and DOM write, but a hidden HUD still keeps its ring and its timer
+// query for a caller that reads sample() rather than looking at it — which the
+// adaptive render scale (Stage) does on a shipped TV, where this panel is off.
+// So gating show() no longer makes the class inert, and must not: the release
+// build is exactly the case the scale controller has to keep working in.
 //
 // THE BAR IS 60 fps, FLAT. The budget is a CONSTANT 16.7 ms and the panel's
 // refresh rate is deliberately not detected, because nothing here needs it: a
@@ -128,6 +134,14 @@ export class PerfHud {
   constructor(container, canvas) {
     this._canvas = canvas;
     this._visible = false;
+    // MEASURING is not the same as SHOWING, and the difference is the whole of
+    // what the adaptive render scale (Stage) needs: it decides from the GPU
+    // timer on a shipped TV, where this panel is off. Measuring costs a ring
+    // write and one timer query per frame; DRAWING (the DOM text and the scope)
+    // is what stays gated on _visible, so a release build with the panel off
+    // still pays nothing to look at.
+    this._instrumenting = false;
+    this._measuring = false;
     this._frames = [];        // ring of { interval, cpu, gpu, drops }, slot = n % CAP
     this._n = 0;              // absolute frame counter (never wraps)
     this._stamps = [];        // rAF timestamps in the trailing second
@@ -171,20 +185,45 @@ export class PerfHud {
     });
   }
 
-  // ---- visibility (everything below is inert while hidden) --------------------
+  // ---- visibility and measurement (drawing is what hiding stops) --------------
 
   show() { this._setVisible(true); }
   hide() { this._setVisible(false); }
   toggle() { this._setVisible(!this._visible); }
   get visible() { return this._visible; }
 
+  // Keep measuring with the panel hidden, for a caller that reads sample()
+  // rather than looking at it. Independent of show/hide in both directions: "P"
+  // during a race hides the panel without blinding the scale controller behind
+  // it, and the controller switching off does not close a panel someone opened.
+  instrument(on) {
+    const want = on !== false;
+    if (want === this._instrumenting) return;
+    this._instrumenting = want;
+    this._syncMeasuring();
+  }
+
   _setVisible(on) {
     if (on === this._visible) return;
     this._visible = on;
     this._el.style.display = on ? '' : 'none';
-    if (!on) this._dropQueries();
-    else { this._frames = []; this._n = 0; this._stamps = []; this.warmUp(); } // stale history is worse than none
+    this._syncMeasuring();
   }
+
+  _syncMeasuring() {
+    const on = this._visible || this._instrumenting;
+    if (on === this._measuring) return;
+    this._measuring = on;
+    if (!on) this._dropQueries();
+    else this.reset();   // stale history is worse than none
+  }
+
+  // Throw the window away and start measuring again from cold. For a caller
+  // that has CHANGED what a frame costs — the scale controller resizing the
+  // buffer — where keeping the old frames would judge the new resolution partly
+  // on the old one's timings. warmUp() alone is not enough: it stops the next
+  // few frames being recorded, it does not forget the ones already in the ring.
+  reset() { this._frames = []; this._n = 0; this._stamps = []; this.warmUp(); }
 
   // Re-arm the warm-up discard. Called when the rAF loop starts from cold: a
   // stopped-then-restarted loop pays the same first-frame costs a boot does.
@@ -196,7 +235,7 @@ export class PerfHud {
 
   // One real frame's cadence (rawMs = the unclamped rAF delta).
   tick(t, rawMs) {
-    if (!this._visible) return;
+    if (!this._measuring) return;
     // Discard the run's warm-up entirely — recording it would describe the
     // shader compiler, not the game (see warmupRun). The frame that completes
     // the run is itself a good one, so it is the first one kept.
@@ -210,14 +249,14 @@ export class PerfHud {
     this._n++;
     this._stamps.push(t);
     while (this._stamps.length && t - this._stamps[0] > 1000) this._stamps.shift();
-    if (t - this._lastText >= TEXT_MS) { this._lastText = t; this._render(); }
+    if (this._visible && t - this._lastText >= TEXT_MS) { this._lastText = t; this._render(); }
   }
 
   // Bracket the renderer's GL work. gpuBegin/gpuEnd must wrap ONLY the
   // display.frame() call: a query spanning anything else (a canvas readback, the
   // HUD's own DOM writes) stops being a measure of the renderer.
   gpuBegin() {
-    if (!this._visible || this._n === 0) return; // nothing to attach a result to yet
+    if (!this._measuring || this._n === 0) return; // nothing to attach a result to yet
     const gl = this._acquire();
     if (!gl || this._open) return;
     const query = gl.createQuery();
@@ -247,7 +286,7 @@ export class PerfHud {
   // This frame's CPU cost, from Display.profile(). Called after the frame so the
   // numbers are the ones the renderer just posted.
   cpu(ms) {
-    if (!this._visible || ms == null || this._n === 0) return;
+    if (!this._measuring || ms == null || this._n === 0) return;
     const f = this._frames[(this._n - 1) % CAP]; // the frame tick() just recorded
     if (f) f.cpu = ms;
   }
@@ -332,8 +371,13 @@ export class PerfHud {
     const w = this._window(STAT_FRAMES);
     const stat = (key) => {
       const a = w.map((f) => f[key]).filter((v) => v != null).sort((x, y) => x - y);
-      return a.length ? { p50: pct(a, 0.5), p95: pct(a, 0.95), max: a[a.length - 1], n: a.length }
-                      : { p50: null, p95: null, max: null, n: 0 };
+      // p05 is here for ONE reader: the adaptive scale's fallback signal wants
+      // the device's own FASTEST present (its vsync period, whatever that panel's
+      // rate is) and the raw minimum is not it — a pair of rAFs inside one vsync,
+      // or one bad timestamp, and the minimum is half the period forever.
+      return a.length ? { p05: pct(a, 0.05), p50: pct(a, 0.5), p95: pct(a, 0.95),
+                          max: a[a.length - 1], n: a.length }
+                      : { p05: null, p50: null, p95: null, max: null, n: 0 };
     };
     const all = this._window(CAP);
     const gpu = stat('gpu'), cpu = stat('cpu');

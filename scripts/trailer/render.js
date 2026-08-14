@@ -152,6 +152,13 @@ async function renderShot(page, shot, port) {
     scenario: shot.scenario,
     players: String(shot.players),
     track: shot.track,
+    // The master's resolution, NAMED rather than inherited, because on the
+    // automatic path the shell decides the buffer size from what frames cost and
+    // may resize mid-capture (Stage._adaptScale) — a master whose resolution
+    // changes at shot 4 because the machine warmed up. An explicit scale latches
+    // that off, so DSF is what actually reaches the canvas: --dsf 2 renders true
+    // 4K, --preview stays cheap.
+    dpr: String(DSF),
   });
   if (shot.seed != null) q.set('seed', String(shot.seed));
   if (shot.dividers === false) q.set('dividers', '0');

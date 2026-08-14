@@ -87,6 +87,40 @@ the canvas, the DOM HUD and the rAF loop.
 **Three.js is gone.** It survives only as a test-only devDependency for the offline
 capture scripts. Do not reintroduce it to the display page.
 
+**The drawing buffer's size is MEASURED, not chosen.** It lives between 720 and
+2160 lines (`Stage`'s `MIN_BUFFER_H`/`MAX_BUFFER_H`, on height alone so an
+ultrawide keeps its width) and `Stage._adaptScale` re-decides where, about once a
+second, from what the last window of frames cost. The decision itself is C++
+(`native/libttp-runtime/ttp/render_scale.h`); this side only measures and
+resizes.
+
+**The floor is below the commonest panel, and nothing is persisted.** Both were
+tried the other way. A floor at 1080 collapses the band to a point on an ordinary
+1080p TV — the exact device this exists for could not drop a single pixel.
+Remembering the learned scale across sessions ratchets: the signal that a
+timer-less browser uses may only step DOWN, so one bad window would pin a device
+lower forever. Re-learning costs a few seconds per session and self-corrects.
+
+**There is no device probe, and there must not be one.** A UA string lies and
+`WEBGL_debug_renderer_info` is going away; what is measured is this device
+drawing this game's frames, so a weak GPU, a hot laptop and four cells instead of
+one all arrive as the same fact. It therefore adapts in the lobby too, where the
+load is a quarter of a race's — handled by the asymmetric holds, not by a special
+case.
+
+**This side may not judge its own measurements.** Which of the two signals
+decides, which way each may move, how many samples a percentile needs: all of it
+is in the header, and the shell passes percentiles and counts over raw. The one
+number it stores is the running fastest present, and even the fold is a call
+(`ttp_display_present_floor`).
+
+An explicit `?dpr=` — or `setRenderScale` — is a caller naming a buffer scale and
+switches the whole mechanism off; that is how the trailer renders a 4K master and
+how a fixed resolution is pinned for an A/B. Under automation the band collapses
+onto the E2E cap, so the suite never adapts. Nothing else needs to know a scale
+is in play: the cell grid and every HUD element are placed from the renderer's
+device-pixel rects divided back out by the same number.
+
 **Nothing in the DOM is written per frame** — the HUD is a low-rate poll, and
 anything tempted onto the per-frame path must actually CHANGE per frame. See
 `native/renderer/CLAUDE.md` for what the frame itself costs.
@@ -120,9 +154,14 @@ cheap resolution.
 ## Measuring frame cost
 
 `render/PerfHud.js` is on by default in development ("P" toggles it) and reports
-real GPU ms from a timer query wrapped around the frame call. It instruments
-nothing while hidden, so **switching it off for release is gating the `show()` in
-its constructor** — one line. `window.__perf` is the live and scripted-sweep surface.
+real GPU ms from a timer query wrapped around the frame call. `window.__perf` is
+the live and scripted-sweep surface, and **switching the panel off for release is
+gating the `show()` in its constructor** — one line.
+
+**Showing and measuring are separate** (`instrument()`), because the adaptive
+render scale reads `sample()` on a shipped TV where the panel is off. Only the
+DRAWING is gated on visibility; a caller that has changed what a frame costs
+should `reset()` rather than reason about the ring.
 
 **Three ways of getting this number that do not work:** Filament's
 `getFrameInfoHistory()` (on emscripten the timer-query path is compiled out, so it
