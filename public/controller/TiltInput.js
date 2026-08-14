@@ -179,7 +179,9 @@ export class TiltInput {
   // has no gyroscope — and downstream that is indistinguishable from having no
   // sensor, so resolve it to 'unsupported' rather than leave a dead steering
   // wheel in tilt mode. Waits for the first USABLE sample, so a working phone
-  // pays a frame rather than the window.
+  // pays a frame rather than the window — and a sample that lands after the
+  // window still takes the verdict back (see _onOrient), so a slow sensor
+  // costs a fallback, never a stranding.
   _settle() {
     if (this.haveTilt) return Promise.resolve();
     return new Promise((resolve) => {
@@ -205,6 +207,15 @@ export class TiltInput {
   _onOrient(e) {
     if (e.beta == null && e.gamma == null) return;
     this.haveTilt = true;
+    // A usable sample after _settle gave up means the sensor was slow, not
+    // absent, so take the verdict back. Worth the line because 'unsupported' is
+    // otherwise TERMINAL for the page load: the Settings Tilt row it disables is
+    // the only way back to tilt, so a single over-eager timeout would strand a
+    // working phone on buttons until a reload. The card re-reads motionState on
+    // every open, so this is all the recovery needs. (Only reachable while the
+    // listener is attached, i.e. permission was granted — the constructor's two
+    // routes to 'unsupported' never attach one.)
+    if (this.motionState === 'unsupported') this.motionState = 'granted';
 
     // Gravity (unit, pointing down) in the device frame from the W3C Z-X'-Y''
     // Euler angles. alpha (compass yaw) doesn't tilt gravity, so it drops out —

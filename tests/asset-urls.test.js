@@ -12,6 +12,14 @@
 // New asset references go through assetUrl() in JS (it resolves against the
 // MODULE's location, giving identical URLs on the web) or a file-relative
 // url() in CSS. This gate keeps the class dead.
+//
+// HTML is deliberately NOT scanned, and its root-absolute <link>/<script> hrefs
+// are deliberately left: the two pages are served from REMAPPED urls (server
+// remaps '/' and a bare room code onto display/ and controller/index.html), so
+// one file answers at two depths and no single relative href — nor a static
+// <base> — is right at both. Prefix-hosting the tree therefore still needs its
+// packager to rewrite those tags; what this gate buys is that everything the
+// pages then LOAD follows along on its own.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');

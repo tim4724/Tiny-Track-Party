@@ -264,6 +264,18 @@ test("a granted listener that delivers nothing settles to 'unsupported'", async 
   });
 });
 
+test("a sample after the window takes the 'unsupported' verdict back", async () => {
+  await withFakeBrowser({ hasFeaturePolicy: false }, async ({ emit }) => {
+    const t = new TiltInput({});
+    assert.equal(await t.enableMotion(), 'unsupported');
+    // A slow sensor, not an absent one. Without this the phone would sit on
+    // buttons with the Tilt row disabled — the only way back — until a reload.
+    emit({ beta: 10, gamma: 15 });
+    assert.equal(t.motionState, 'granted');
+    assert.ok(t.haveTilt);
+  });
+});
+
 test("an all-null sample does NOT count as delivery — it still settles 'unsupported'", async () => {
   await withFakeBrowser({ hasFeaturePolicy: false }, async ({ emit }) => {
     const t = new TiltInput({});

@@ -168,14 +168,19 @@ const tilt = new TiltInput({
 
 // Steering input mode — 'tilt' (default) or 'buttons', remembered per device.
 // setInputMode applies it everywhere (TiltInput signal path + the #game mode
-// class); the Settings popup's seg drives changes through here. A device with
-// no motion sensor can never steer by tilt, so it's forced onto buttons (the
-// stored pref is ignored, not overwritten — it only means anything where tilt
-// exists) and the settings card shows Tilt disabled (refreshSettingsCard).
+// class); the Settings popup's seg drives changes through here. A page that
+// can't get tilt can never steer by it, so it's forced onto buttons and the
+// settings card shows Tilt disabled (refreshSettingsCard).
+//
+// Where tilt is unsupported the mode is FORCED, not chosen, so it isn't saved:
+// the stored pref only means anything where tilt exists, and the same browser
+// on a page that does get the sensors must not inherit a fallback as a
+// preference. Every caller goes through here, so the rule holds in one place —
+// the startup seed below, the Settings seg, and the join fallback alike.
 let inputMode = tilt.motionState === 'unsupported' ? 'buttons' : storedInputMode();
 function applyInputMode(mode) {
   inputMode = mode;
-  saveInputMode(mode);
+  if (tilt.motionState !== 'unsupported') saveInputMode(mode);
   setInputMode(mode);
 }
 
@@ -624,11 +629,10 @@ async function joinRace(name, { persist } = {}) {
   // prompt; on Android/desktop it resolves on the next microtask.
   // enableMotion resolves the state completely (permission AND delivery), so a
   // phone whose sensor turns out to be absent or withheld is put on buttons
-  // here rather than steering with a dead wheel. Not persisted, same as the
-  // startup fallback above: the stored pref only means anything where tilt exists.
+  // here rather than steering with a dead wheel. applyInputMode declines to
+  // save it, since the state it just resolved is 'unsupported'.
   if (inputMode === 'tilt' && (await tilt.enableMotion()) === 'unsupported') {
-    inputMode = 'buttons';
-    setInputMode('buttons');
+    applyInputMode('buttons');
   }
   net.connect(n);
 }
