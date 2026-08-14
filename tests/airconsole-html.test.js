@@ -28,3 +28,9 @@ test('the AC entries carry no absolute asset paths', () => {
     assert.deepEqual(abs, [], `${rel} still references absolute paths`);
   }
 });
+
+// The same trap one layer down — a '/assets/…' literal built in JS or CSS — is
+// NOT re-checked here. tests/asset-urls.test.js holds that rule for the whole
+// tree, and a second copy with its own exemption list is exactly the drift the
+// one-source rule exists to stop. Note it is the stricter of the two: it scans
+// the dev-only files this zip prunes as well.
