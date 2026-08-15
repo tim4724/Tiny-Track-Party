@@ -176,6 +176,19 @@ enum Copy {
     /// the cups' difficulty order. (`NAME_COPY`, `main.js`.)
     static let worldTour = "World Tour"
 
+    /// The corner tab on the cups shelf. A tab, not a sentence: the five rows
+    /// under it say what they are.
+    static let cupsShelf = "Cups"
+    /// The shelf's star badge, spoken. Transcribed from `starRow`'s own
+    /// aria-label (`shared/trackPicker.js`) rather than invented, so the
+    /// television and the phones announce the same thing.
+    static func stars(earned: Int, of total: Int) -> String { "\(earned) of \(total) stars" }
+    /// A locked cup's unlock count, spoken. The bare "2/4" on screen is legible
+    /// beside four rows of stars; read aloud on its own it is not.
+    static func cupsLocked(done: Int, need: Int) -> String {
+        "locked, \(done) of \(need) cups finished"
+    }
+
     // MARK: - Info board
 
     /// The lobby's ⓘ, which is icon-only on screen — this is what a screen

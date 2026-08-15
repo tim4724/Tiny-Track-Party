@@ -157,14 +157,47 @@ struct LobbyView: View {
             // instead.
             JoinTicket(joinURL: state.joinURL, roomCode: state.roomCode, qr: state.joinQR)
             Spacer(minLength: 0)
+            raceRail
+        }
+        .frame(maxHeight: .infinity)
+    }
+
+    /// Tonight's race over the long game: the pick hangs from the TOP of the
+    /// rail, the cups shelf from the BOTTOM.
+    ///
+    /// The `Spacer` between them is `.cup-slot { margin-bottom: auto }`, and it
+    /// is load-bearing for the same reason the web spells it that way rather
+    /// than with `space-between`: the pick is ABSENT until the host chooses, and
+    /// a rail that distributed its children would park the lone shelf in the
+    /// middle of the rail and then drop it when the pick arrived. Pinned to the
+    /// bottom, the shelf never moves.
+    ///
+    /// The rail is framed once, here, so both cards share the width the metrics
+    /// authored for the right rail.
+    private var raceRail: some View {
+        VStack(spacing: 14) {
             // HIDDEN ENTIRELY pre-pick — not an empty card, not a placeholder.
             // The model answers null until the host has picked, and an empty
             // sticker would promise a card that has nothing to say.
             if let slot = state.cupSlot {
                 CupCard(slot: slot)
             }
+            Spacer(minLength: 0)
+            // Also hidden when empty, but for a different reason: an empty
+            // catalogue means boot has not read one yet, and an outlined card
+            // with no rows in it is a blank slab of paper.
+            if !state.cups.isEmpty {
+                CupShelf(cups: state.cups)
+            }
         }
-        .frame(maxHeight: .infinity)
+        .frame(width: LobbyViewMetrics.cupWidth)
+        // CLEAR THE ⓘ. The badge floats in `infoBand`, a sibling of this whole
+        // stack, so nothing about layout keeps it off a card that now hangs from
+        // the top of the rail — photographed on the device, it sat on the pick
+        // card's corner. The web pads its race rail for exactly this
+        // (`.race-rail { padding-top: corner-top + corner-btn + 0.5rem }`,
+        // clearing the fixed mute/fullscreen row), and this is that padding.
+        .padding(.top, InfoGlyph.diameter + 10)
     }
 
     // THERE IS STILL NO START BUTTON ON THIS BOARD, and its absence is the
@@ -578,6 +611,140 @@ private struct QuestionTile: View {
         .clipShape(RoundedRectangle(cornerRadius: Sticker.radiusSmall, style: .continuous))
         .stickerOutline(Sticker.hairlineBorder, radius: Sticker.radiusSmall)
         .accessibilityHidden(true)   // the races pill counts the run in words
+    }
+}
+
+// MARK: - (b2) Cups shelf
+
+/// The couch's long game, under tonight's pick: one row per cup, wearing the
+/// stars it has earned and the padlock it has not opened.
+///
+/// **ONE CARD, NOT FIVE PILLS** — the web's own finding (`display.css`,
+/// `.cup-shelf`): five separate stickers with five outlines and five shadows
+/// read as five things scattered down the corner, and this is one thing. Rows
+/// are separated by a hairline rather than by air for the same reason.
+///
+/// Every number is `ttp_ui_catalogue_json`'s. The star thresholds and the unlock
+/// rule live in `libttp-runtime/ttp/progression.{h,cc}` and are DERIVED before
+/// this ever sees them, which is why there is no arithmetic in this file — a
+/// shell that counted its own stars would be a second answer to a question the
+/// phones' picker already asks the same engine.
+@MainActor
+private struct CupShelf: View {
+    let cups: [GameState.CupProgress]
+
+    var body: some View {
+        StickerCard(tint: Tokens.surface, rotation: 0, padding: 12) {
+            VStack(spacing: 0) {
+                ForEach(Array(cups.enumerated()), id: \.element.id) { i, cup in
+                    row(cup)
+                    // Between rows only: a trailing rule under the last one
+                    // would read as an empty sixth row (`:last-child { 0 }`).
+                    if i < cups.count - 1 {
+                        Rectangle().fill(Tokens.hairline).frame(height: 2)
+                    }
+                }
+            }
+        }
+        // The label rides the card's top-left corner like a sticker tab. A full
+        // label ROW is height this rail cannot spare — the web found that at
+        // 720p, where it pushed the fifth cup off the shelf.
+        .overlay(alignment: .topLeading) {
+            StickerPill(Copy.cupsShelf, size: 15).offset(x: 14, y: -13)
+        }
+        // The tilt is applied out here, not by `StickerCard`, so the label tab
+        // leans WITH the card instead of standing square against it.
+        .rotationEffect(.degrees(-1))
+    }
+
+    private func row(_ cup: GameState.CupProgress) -> some View {
+        HStack(spacing: 9) {
+            // A locked cup trades its colour dot for the padlock: it has no
+            // identity to advertise yet.
+            if cup.locked {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(Tokens.ink2)
+            } else {
+                Circle()
+                    .fill(Self.swatch(cup.color))
+                    .frame(width: 14, height: 14)
+                    .overlay(Circle().strokeBorder(Tokens.ink, lineWidth: 2))
+            }
+            Text(Self.shortName(cup.name))
+                .font(Fonts.display(23, weight: .bold))
+                // Locked RECEDES IN PLACE. It cannot take a sunken fill: inside
+                // one card that reads as a hole punched in the paper.
+                .foregroundStyle(cup.locked ? Tokens.ink2 : Tokens.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            Spacer(minLength: 6)
+            if cup.locked {
+                // The unlock bar, as a count. The RULE behind it is the phones'
+                // to explain (their locked detail panel spells it out); on the
+                // television it is a progress fact next to four cups that show
+                // stars, which is the same sentence said shorter.
+                Text("\(cup.unlockDone)/\(cup.unlockNeed)")
+                    .font(Fonts.display(20, weight: .bold))
+                    .foregroundStyle(Tokens.ink2)
+                    .accessibilityLabel(Copy.cupsLocked(done: cup.unlockDone, need: cup.unlockNeed))
+            } else {
+                StarRow(earned: cup.stars)
+            }
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 2)
+    }
+
+    /// Every row on this shelf is a cup, so " Cup" says nothing and the rail is
+    /// too narrow to spend the width on it. Presentation, not data — `GameState`
+    /// keeps the catalogue's real name.
+    private static func shortName(_ name: String) -> String {
+        name.hasSuffix(" Cup") ? String(name.dropLast(4)) : name
+    }
+
+    /// The catalogue's packed 0xRRGGBB, unmixed. `Schematic.wash` is the wrong
+    /// helper here: it mixes 26% of the cup into white for a schematic FIELD,
+    /// and a swatch that pale would not read as a colour at all.
+    private static func swatch(_ rgb: UInt32) -> Color {
+        Color(red: Double((rgb >> 16) & 0xFF) / 255,
+              green: Double((rgb >> 8) & 0xFF) / 255,
+              blue: Double(rgb & 0xFF) / 255)
+    }
+}
+
+/// Three die-cut stars, `earned` of them filled.
+///
+/// RED, never gold: amber is vetoed in chrome and celebration is red
+/// (`theme.css`, `.starrow .star`). The unearned ones are white at 0.35 — the
+/// CSS puts that opacity on the whole path, so the ink edge fades with the
+/// fill and an empty star stays a ghost rather than an outline.
+///
+/// The ink edge is a larger glyph behind a smaller one, the same trick the host
+/// star above uses, because SwiftUI has no symbol stroke.
+@MainActor
+private struct StarRow: View {
+    let earned: Int
+    static let total = 3
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(0..<Self.total, id: \.self) { i in star(filled: i < earned) }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Copy.stars(earned: earned, of: Self.total))
+    }
+
+    private func star(filled: Bool) -> some View {
+        ZStack {
+            Image(systemName: "star.fill")
+                .font(.system(size: 21))
+                .foregroundStyle(Tokens.ink)
+            Image(systemName: "star.fill")
+                .font(.system(size: 15))
+                .foregroundStyle(filled ? Tokens.red : .white)
+        }
+        .opacity(filled ? 1 : 0.35)
     }
 }
 

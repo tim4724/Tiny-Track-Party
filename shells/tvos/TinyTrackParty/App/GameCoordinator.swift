@@ -151,6 +151,10 @@ final class GameCoordinator: ObservableObject {
         // rule, NativeUiModel.js) — nothing stored loads a fresh couch.
         _ = ttp_ui_progress_load(UserDefaults.standard.string(forKey: Self.progressKey), 0)
         let catalogue = TTP.obj(ttp_ui_catalogue_json())
+        // The lobby's shelf, from the catalogue that was just stamped with the
+        // record above. A fresh couch is five zero-star rows and a locked
+        // Playroom, which is a shelf worth drawing — it states the goal.
+        refreshCupShelf(catalogue)
 
         // No `personas` key: absent asks for libttp-sim's own table (the single
         // source), so boot hands over nothing it read back.
@@ -312,6 +316,17 @@ final class GameCoordinator: ObservableObject {
         }]
     }
 
+    /// The lobby's "Cups" shelf, off the SAME stamped catalogue the chooser is
+    /// composed from — so the television and the phones cannot disagree about
+    /// how many stars the couch has.
+    ///
+    /// Takes the parsed catalogue rather than re-reading it: both callers have
+    /// already paid for that parse, and this is the web's `refreshCupShelf`
+    /// called at exactly its two points — boot, and the persist performer.
+    func refreshCupShelf(_ catalogue: [String: Any]) {
+        state.cups = (catalogue["cups"] as? [[String: Any]] ?? []).map(GameState.CupProgress.init)
+    }
+
     /// `persist-progression`: the walk banked a finished cup's stars; the shell
     /// writes the blob it was handed and recomposes the snapshot's progress
     /// chooser, so the phones' pickers carry the new stars when the party is
@@ -321,7 +336,11 @@ final class GameCoordinator: ObservableObject {
             UserDefaults.standard.set(TTP.json(p), forKey: Self.progressKey)
         }
         // The web's setChooser: the same configure, recomposed, republished.
+        // The catalogue is re-read because the BANK moved it — `ttp_ui_progress_load`
+        // holds the record inside the engine and every star on these rows is
+        // derived from it, so this is the one place the answer actually changes.
         let catalogue = TTP.obj(ttp_ui_catalogue_json())
+        refreshCupShelf(catalogue)
         requireOK(ttp_net_configure(TTP.json([
             "cars": chooserCars(),
             "colors": proto.carColors,

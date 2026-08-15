@@ -129,6 +129,13 @@ Three properties of that surface matter more than the list:
    (the web reference is `boot.js` `progressChooser()`). Stars, the Playroom
    lock and the unlock progress are all DERIVED in the wasm/lib — a shell that
    re-implements a threshold has copied a rule that will drift.
+   A FOURTH obligation, and the one those three do not imply: the lobby SHOWS
+   the record, as a cups shelf off `ttp_ui_catalogue_json`'s rows (web:
+   `refreshCupShelf`; tvOS: `CupShelf` in `LobbyView.swift`). A shell can bank,
+   persist and publish stars correctly and still never show the couch a single
+   one — the reward arc then exists only on the phones, which is where nobody
+   is looking. Refresh it where the record can MOVE and nowhere else: boot, and
+   the `persist-progression` performer.
    **The results board on a cup is TWO PHASES**, and a shell that paints only
    one of them has dropped the cup's whole story. `ttp_ui_results_view_json`
    answers `raceRows` (the race that just ended, finishing order, lap time +

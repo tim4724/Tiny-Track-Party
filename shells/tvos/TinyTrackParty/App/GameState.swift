@@ -103,6 +103,39 @@ final class GameState: ObservableObject {
         }
     }
 
+    /// `ttp_ui_catalogue_json`'s cup rows: the couch's long game, for the
+    /// lobby's "Cups" shelf.
+    ///
+    /// The progression on each row is DERIVED IN THE ENGINE off the blob
+    /// `ttp_ui_progress_load` was handed at boot. Nothing here re-derives a star
+    /// threshold or the unlock rule — that is the whole reason the catalogue
+    /// carries these fields rather than the raw record.
+    ///
+    /// Refreshed only where the record can have MOVED (boot and the
+    /// `persist-progression` performer), which is the web's rule for the same
+    /// shelf (`main.js refreshCupShelf`): the catalogue is otherwise a constant,
+    /// and re-reading it per lobby redraw would be a JSON parse per frame for an
+    /// answer that cannot have changed.
+    @Published var cups: [CupProgress] = []
+
+    struct CupProgress: Identifiable {
+        let id: String
+        /// The catalogue's full name ("Beach Cup"). The shelf shortens it — see
+        /// `CupShelf`, which owns that because it is a presentation choice about
+        /// a narrow rail, not a fact about the cup.
+        let name: String
+        /// Packed 0xRRGGBB, the catalogue's own. Read from the ABI rather than
+        /// from `Schematic.cupColor` so the shelf cannot drift from the shipped
+        /// table (that copy predates the field and is the same five values).
+        let color: UInt32
+        /// 0...3.
+        let stars: Int
+        let locked: Bool
+        /// Only meaningful while `locked` — how many cups of the bar are done.
+        let unlockDone: Int
+        let unlockNeed: Int
+    }
+
     // MARK: - The info board
 
     /// The lobby's navigation path: the info board and the license pages the
@@ -385,6 +418,23 @@ extension GameState.CupSlot {
         return GameState.CupSlot(nameKey: nameKey, name: name, racesKey: racesKey,
                                  raceCount: raceCount, difficulty: difficulty,
                                  maps: veil, cupId: cupId)
+    }
+}
+
+extension GameState.CupProgress {
+    /// One row of the catalogue's `cups` array.
+    ///
+    /// `unlockDone`/`unlockNeed` are only emitted on a LOCKED row, so both
+    /// default to 0 — the shelf reads them only under `locked` anyway, and an
+    /// optional pair would make every call site spell that rule again.
+    init(_ d: [String: Any]) {
+        self.init(id: d["id"] as? String ?? "",
+                  name: d["name"] as? String ?? "",
+                  color: UInt32(d["color"] as? Double ?? 0),
+                  stars: Int(d["stars"] as? Double ?? 0),
+                  locked: d["locked"] as? Bool ?? false,
+                  unlockDone: Int(d["unlockDone"] as? Double ?? 0),
+                  unlockNeed: Int(d["unlockNeed"] as? Double ?? 0))
     }
 }
 
