@@ -58,13 +58,25 @@ final class ShotTests: XCTestCase {
             // and is SKIPPED, not failed: the web's welcome board exists only to
             // collect a browser gesture, so there is nothing here to photograph
             // and the gallery showing one column for it is correct.
-            if app.otherElements["ttp-unsupported"].waitForExistence(timeout: 3) {
+            //
+            // ONE WAIT FOR EITHER VERDICT, because asking the two questions in
+            // sequence made the cheap answer expensive: `waitForExistence` only
+            // answers false when its clock runs out, so polling "unsupported"
+            // first charged every SUPPORTED board the full timeout to be told
+            // nothing. Seventeen of the eighteen paid it, which was most of a
+            // minute per capture spent waiting on an element that was never
+            // going to appear. Matching both identifiers in one query returns
+            // the moment either lands — still waiting on the APP, never on a
+            // clock, which is the rule above and the reason this is not a sleep.
+            let verdict = app.otherElements.matching(
+                NSPredicate(format: "identifier IN %@", ["ttp-ready", "ttp-unsupported"])
+            ).firstMatch
+            if !verdict.waitForExistence(timeout: 30) {
+                XCTFail("\(id): the app never signalled ready")
                 app.terminate()
                 continue
             }
-            let ready = app.otherElements["ttp-ready"]
-            if !ready.waitForExistence(timeout: 30) {
-                XCTFail("\(id): the app never signalled ready")
+            if verdict.identifier == "ttp-unsupported" {
                 app.terminate()
                 continue
             }

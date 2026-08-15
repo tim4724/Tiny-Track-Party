@@ -206,13 +206,22 @@ async function main() {
   const bundle = path.join(os.tmpdir(), `ttp-shots-${PLATFORM}.xcresult`);
   fs.rmSync(bundle, { recursive: true, force: true });
 
-  // ONE `xcodebuild test` for the whole table: the build, sign and install dominate
-  // the wall clock (about 60 s cold), and the test phase itself was 7.4 s on
-  // device. The scenario list is COMPILED IN — Generated/ShotScenarios.swift,
-  // baked by shells/tvos/scripts/gen-scenarios.mjs, because a device run never
-  // receives a TEST_RUNNER_ environment variable (see that generator's header) —
-  // so the device shoots every scenario and `--only` filters on the HOST, at the
-  // attachment lookup after export.
+  // ONE `xcodebuild test` for the whole table: the build, sign and install
+  // dominate the wall clock. The scenario list is COMPILED IN —
+  // Generated/ShotScenarios.swift, baked by shells/tvos/scripts/gen-scenarios.mjs,
+  // because a device run never receives a TEST_RUNNER_ environment variable (see
+  // that generator's header) — so the device shoots every scenario and `--only`
+  // filters on the HOST, at the attachment lookup after export.
+  //
+  // `-only-testing` IS NOT AN OPTIMISATION, it is the difference between this
+  // script doing its job and running two unrelated harnesses every time. The
+  // shots target also holds `RealRaceShotTests`, which sleeps 15 s twenty times
+  // over (five minutes, deliberately — it photographs a real race for the rubber
+  // layer), and `SkidShotTests`, which sleeps another 90 s. Without this flag
+  // `xcodebuild test` runs the WHOLE TARGET, so every gallery capture paid both:
+  // ~10 minutes wall for a job that is a couple of minutes. SkidShotTests' own
+  // header already claims it is "reached only by an explicit -only-testing" —
+  // this is the line that finally makes that true.
   const signing = [];
   if (SIM) {
     // The simulator runs unsigned, and asking it to sign only invents a reason
@@ -235,6 +244,7 @@ async function main() {
     '-destination', destination,
     '-resultBundlePath', bundle,
     '-derivedDataPath', path.join(os.tmpdir(), `ttp-dd-${PLATFORM}`),
+    '-only-testing:TinyTrackPartyShots/ShotTests',
     '-allowProvisioningUpdates',
     ...signing
   ], { stdio: ['ignore', args.verbose ? 'inherit' : 'ignore', 'inherit'], cwd: TVOS });

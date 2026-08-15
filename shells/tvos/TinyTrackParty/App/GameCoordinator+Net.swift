@@ -135,6 +135,11 @@ extension GameCoordinator {
         // faster than it has to.
         display.onFrame = { [weak self] dt in self?.frame(dt) }
         display.onSlowTick = { [weak self] in self?.slowTick() }
+        // Fires once, when a built scene first reaches the panel. At boot the
+        // preview pick lands long before the pixels do, so without this nothing
+        // ever asks the backdrop question again and the paper would stay up for
+        // the whole lobby (the mirror of the flash it exists to stop).
+        display.onFirstPaint = { [weak self] in self?.refreshBackdrop() }
     }
 
     // MARK: - The two loops

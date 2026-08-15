@@ -35,6 +35,10 @@ final class DisplayHost {
     /// renderer decides whether to draw a steer bar under it.
     var onSlowTick: (() -> Void)?
 
+    /// Fired ONCE, the first time a built scene actually reaches the panel. The
+    /// coordinator re-evaluates the backdrop on it — see `hasPainted`.
+    var onFirstPaint: (() -> Void)?
+
     // MARK: - State the ABI cannot be asked for
 
     /// Whether `ttp_display_create` has succeeded. A no-display ABI is a
@@ -46,6 +50,22 @@ final class DisplayHost {
     /// launch, because four cameras pointed at nothing is what an unbuilt track
     /// looks like.
     private(set) var hasScene = false
+
+    /// Whether a BUILT scene has ever reached the panel — the web's `sceneReady`
+    /// (`main.js`), and the clause `refreshBackdrop` needs so the paper diorama
+    /// does not lift off a surface with nothing on it yet.
+    ///
+    /// `hasScene` is the wrong question and answers a different one: it is true
+    /// the instant `ttp_display_build` returns, which is before a single pixel of
+    /// that track exists. Between those two moments the shell would be fading the
+    /// backdrop out over an undrawn Metal layer, which is the boot flash — the
+    /// web's own note calls it coming "up from black instead of from the
+    /// diorama", and reveals two frames late to avoid it.
+    ///
+    /// ONE-SHOT, never cleared, exactly as the web's is. A later track change
+    /// rebuilds under cover of a surface that is already painted, so re-arming
+    /// this would put the paper back for a frame every time the host picks.
+    private(set) var hasPainted = false
 
     /// The roster the current scene was built from, in SLOT order.
     ///
@@ -270,6 +290,15 @@ final class DisplayHost {
         // rAF, arrived at by a different road. Hence the verdict goes to the
         // monitor rather than the floor.
         let presented = ttp_display_frame(dt) != 0
+
+        // The first painted frame OF A BUILT SCENE, which is what the backdrop
+        // waits on. Both halves matter: a present with no scene is the renderer
+        // clearing an empty view, and revealing that is the same black flash as
+        // revealing nothing at all.
+        if presented && hasScene && !hasPainted {
+            hasPainted = true
+            onFirstPaint?()
+        }
 
         perf.record(now: link.timestamp, interval: elapsed, presented: presented,
                     cells: cellCount, pixels: surfacePixels)

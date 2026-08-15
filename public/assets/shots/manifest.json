@@ -113,6 +113,18 @@
     },
     {
       "scenario": "lobby-loading",
+      "platform": "tvos-device",
+      "file": "tvos-device/lobby-loading.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 17654,
+      "capturedAt": "2026-08-15T19:41:33.129Z",
+      "gitSha": "c0b12861",
+      "deviceName": "Spielzimmer",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
+    },
+    {
+      "scenario": "lobby-loading",
       "platform": "web",
       "file": "web/lobby-loading.webp",
       "w": 1280,
@@ -159,9 +171,9 @@
       "file": "tvos-device/lobby-track.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 56252,
-      "capturedAt": "2026-08-15T19:10:29.472Z",
-      "gitSha": "678139a9",
+      "bytes": 53248,
+      "capturedAt": "2026-08-15T19:41:33.216Z",
+      "gitSha": "c0b12861",
       "deviceName": "Spielzimmer",
       "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
     },

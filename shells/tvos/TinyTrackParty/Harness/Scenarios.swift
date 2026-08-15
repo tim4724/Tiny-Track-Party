@@ -76,6 +76,27 @@ enum Scenarios {
             // better than a lobby filed under the wrong name.
             return false
 
+        case "lobby-loading":
+            // THE FIRST THING A VIEWER EVER SEES, and until now the one board
+            // this shell could not photograph. Every other lobby scenario
+            // previews a circuit, so the 3D surface covers the backdrop — which
+            // means the PAPER DIORAMA has never appeared in a tvOS shot, on a
+            // platform whose whole point is that the paper is what stands there
+            // while the engine warms up. A defect in it is invisible to the one
+            // surface that exists to catch defects.
+            //
+            // The state is boot's, before anything has arrived: no circuit
+            // previewed (which is what `refreshBackdrop` reads to keep the paper
+            // up), no room, no seats, no pick. `release()` drops any scene a
+            // previous boot left in the renderer, so the backdrop is deciding
+            // this picture rather than an empty 3D view happening to be black.
+            game.show(.lobby)
+            game.trackId = ""
+            game.display.release()
+            game.refreshBackdrop()
+            state.seats = []
+            state.cupSlot = nil
+
         case "lobby-empty":
             game.show(.lobby)
             state.seats = (0..<4).map(GameState.Seat.open(at:))

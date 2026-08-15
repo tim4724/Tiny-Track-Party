@@ -433,19 +433,29 @@ final class GameCoordinator: ObservableObject {
 
     /// Paper, or the live 3D behind it.
     ///
-    /// The rule is the web's `backdropShow3D()` and it has three clauses, not
-    /// one: never over the welcome board, and in the LOBBY only once a track is
-    /// actually picked. This shell had `screen != .welcome` alone, so a fresh
-    /// lobby — before anyone has chosen anything, which is the FIRST thing a
-    /// viewer sees — showed the 3D surface with no scene built on it. A black
-    /// screen, where the web shows the warm paper diorama.
+    /// The rule is the web's `backdropShow3D()` and it has THREE clauses, in
+    /// this order: never before the surface has painted, never over the welcome
+    /// board, and in the LOBBY only once a track is actually picked.
+    ///
+    /// Both of the last two were learned the same way. This shell had
+    /// `screen != .welcome` alone, so a fresh lobby — the FIRST thing a viewer
+    /// sees — showed the 3D surface with no scene built on it: a black screen
+    /// where the web shows the warm paper diorama. Adding the pick clause fixed
+    /// the empty lobby and left the BOOT, because a picked track is not a drawn
+    /// one. `previewLastCircuit` sets the id, the build runs, and for the frames
+    /// between them the paper was fading off an undrawn Metal layer — the flash
+    /// on every launch. `hasPainted` is the web's `sceneReady`, which exists for
+    /// precisely this and is why its reveal waits two frames into the loop.
     ///
     /// It has to be re-evaluated on a PICK as well as on a screen change, which
     /// is why this is a function and not a line inside `show`: the track can
-    /// arrive from a phone long after the lobby is already up.
+    /// arrive from a phone long after the lobby is already up. And on the first
+    /// PAINT, which is `DisplayHost.onFirstPaint` — at boot the pick lands long
+    /// before the pixels do, so nothing else would ever re-ask.
     func refreshBackdrop() {
         let racing = net.roomState != "lobby"
-        state.sceneVisible = state.screen != .welcome && (!trackId.isEmpty || racing)
+        state.sceneVisible = display.hasPainted
+            && state.screen != .welcome && (!trackId.isEmpty || racing)
     }
 
     /// The landing after the room itself died under us — host `close_room`
