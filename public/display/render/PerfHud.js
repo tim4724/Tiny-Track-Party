@@ -71,7 +71,14 @@ const STRIP = 180;          // columns drawn in the scope (3 s at 60 Hz)
 const STRIP_H = 34;         // scope height, CSS px
 const STAT_FRAMES = 120;    // frames folded into the percentiles
 const TEXT_MS = 250;        // text refresh cadence
-const MAX_PENDING = 8;      // in-flight GPU queries before we assume a stall
+// How many GPU timer queries may be in flight. It is a SAMPLING pool, not a
+// stall guard (see gpuBegin): results come back at the driver's rate rather than
+// the frame's, so the pool being full is the signal to skip this frame's query,
+// not to throw the backlog away. Sized for the UNCAPPED measurement run
+// (--disable-frame-rate-limit), which is the only honest way to compare two
+// builds — at 60 Hz the GPU is idle four fifths of every frame, downclocks, and
+// identical builds then read across a wide band.
+const MAX_PENDING = 64;
 
 // The bar, and the denominator of every percentage here.
 export const GOOD_HZ = 60;
@@ -223,7 +230,12 @@ export class PerfHud {
   // buffer — where keeping the old frames would judge the new resolution partly
   // on the old one's timings. warmUp() alone is not enough: it stops the next
   // few frames being recorded, it does not forget the ones already in the ring.
-  reset() { this._frames = []; this._n = 0; this._stamps = []; this.warmUp(); }
+  // In-flight queries go too: they were opened against the frames just thrown
+  // away, so their results would land in the new window's slots.
+  reset() {
+    this._dropQueries();
+    this._frames = []; this._n = 0; this._stamps = []; this.warmUp();
+  }
 
   // Re-arm the warm-up discard. Called when the rAF loop starts from cold: a
   // stopped-then-restarted loop pays the same first-frame costs a boot does.
@@ -257,8 +269,15 @@ export class PerfHud {
   // HUD's own DOM writes) stops being a measure of the renderer.
   gpuBegin() {
     if (!this._measuring || this._n === 0) return; // nothing to attach a result to yet
-    const gl = this._acquire();
-    if (!gl || this._open) return;
+    // SAMPLE WHAT THE POOL CAN CARRY, rather than issuing a query per frame and
+    // throwing the overflow away. Results come back at the driver's own rate,
+    // not the frame's, and past a few hundred fps the frames win: measured
+    // uncapped on an empty scene the pool sat pinned at MAX_PENDING and NOT ONE
+    // result ever landed, so the readout was blank exactly where the frame was
+    // cheapest. Skipping instead makes the query rate self-pacing — every query
+    // issued is one that resolves — and the ring simply samples fewer frames.
+    const gl = this._acquire();   // before the pool check, so context loss is still seen
+    if (!gl || this._open || this._pending.length >= MAX_PENDING) return;
     const query = gl.createQuery();
     if (!query) return;
     gl.beginQuery(this._ext.TIME_ELAPSED_EXT, query);
@@ -269,18 +288,18 @@ export class PerfHud {
   }
 
   gpuEnd() {
-    if (!this._open) return;
     const gl = this._gl;
-    gl.endQuery(this._ext.TIME_ELAPSED_EXT);
-    this._pending.push(this._open);
-    this._open = null;
-    this._drain();
-    // A backlog means results stopped arriving (context loss, a driver that
-    // never signals). Let them go rather than growing the pool forever.
-    while (this._pending.length > MAX_PENDING) {
-      const old = this._pending.shift();
-      gl.deleteQuery(old.query);
+    if (!gl) return;
+    if (this._open) {
+      gl.endQuery(this._ext.TIME_ELAPSED_EXT);
+      this._pending.push(this._open);
+      this._open = null;
     }
+    // DRAINING IS NOT CONDITIONAL ON HAVING OPENED ONE. A frame that skipped its
+    // query (the pool was full) is exactly the frame whose job it is to collect
+    // what came back, and gating this on _open deadlocks: the pool stays full,
+    // so every later frame skips too, so nothing ever drains it.
+    this._drain();
   }
 
   // This frame's CPU cost, from Display.profile(). Called after the frame so the

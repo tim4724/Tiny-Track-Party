@@ -28,6 +28,17 @@ import { ITEM_IDS } from '../engine/contract.js';
 // TTP_CAM_* (ttp_display.h).
 export const CAM = { STILL: 0, ORBIT: 1, BBOX: 2, FREE: 3 };
 
+// Feature-ablation bits for debugFeatures() — the C side's TTP_FEAT_*
+// (ttp_display.h). DEBUG ONLY: the per-feature GPU cost map's instrument.
+export const FEAT = {
+  ROAD: 0x04, TERRAIN: 0x08, DRESSING: 0x10,
+  SKY: 0x20, CARS: 0x40, EFFECTS: 0x80,
+  // The road shader's own channels — these shade the same deck one channel
+  // shorter rather than hiding anything.
+  ROAD_DECALS: 0x100, ROAD_RUBBER: 0x200, ROAD_PAINT: 0x400, ROAD_SHADOW: 0x800,
+  ALL: 0xFFC,
+};
+
 // `vskid` is GONE with `vdecal`, same story: the rubber layer is a CPU
 // raster + upload now (TtpRenderer::renderSkids), so there is no stamp
 // material to serve.
@@ -102,6 +113,7 @@ export class Display {
       debugHideCars: mod.cwrap('ttp_display_debug_hide_cars', null, ['number']),
       debugWipeSkids: mod.cwrap('ttp_display_debug_wipe_skids', null, []),
       debugForceMaskLayer: mod.cwrap('ttp_display_debug_force_mask_layer', null, ['number']),
+      debugFeatures: mod.cwrap('ttp_display_debug_features', null, ['number']),
       biome: mod.cwrap('ttp_display_biome', null, ['string']),
       showcase: mod.cwrap('ttp_display_showcase', null, ['number']),
       modelVariant: mod.cwrap('ttp_display_model_variant', null, ['string', 'number']),
@@ -546,6 +558,11 @@ export class Display {
   debugHideCars(on) { this._fn.debugHideCars(on ? 1 : 0); }
   debugWipeSkids() { this._fn.debugWipeSkids(); }
   debugForceMaskLayer(layer) { this._fn.debugForceMaskLayer(layer | 0); }
+  // Feature ablation for the per-feature GPU cost map (TTP_FEAT_* in
+  // ttp_display.h): a cleared bit hides that group of renderables, so the perf
+  // HUD's timer reads what it was costing to draw. FEATURES names the bits so a
+  // sweep script does not re-type them; DEBUG ONLY, nothing on a play path.
+  debugFeatures(mask) { this._fn.debugFeatures(mask >>> 0); }
 
   profile() {
     const ptr = this.m._ttp_display_profile();

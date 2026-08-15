@@ -163,6 +163,19 @@ render scale reads `sample()` on a shipped TV where the panel is off. Only the
 DRAWING is gated on visibility; a caller that has changed what a frame costs
 should `reset()` rather than reason about the ring.
 
+**Where the frame's cost actually is** — `scripts/perf-features.mjs`. It ablates
+one group of renderables at a time (`ttp_display_debug_features`) inside ONE page
+load and reads the timer per arm. Its header lists the traps it is shaped around,
+and they are the whole reason it is a script rather than something to redo by
+hand: a frozen scenario (a live race moves the camera, and framing swamps the
+effect), a pinned `?dpr=` (the adaptive scale would resize mid-sweep), frames
+pumped in bursts through `?gate=1` (uncapped, an ablated arm runs so fast the
+timer's own pool cannot keep up), and every arm preceded by the same conditioning
+load (a cheap arm lets the machine cool, and the next reading comes back faster
+for a reason that has nothing to do with what it is measuring). It prints each
+arm's median beside a paired reading; **the two disagreeing means the machine was
+busy**, not that a feature is free.
+
 **Three ways of getting this number that do not work:** Filament's
 `getFrameInfoHistory()` (on emscripten the timer-query path is compiled out, so it
 reports CPU submit time wearing a GPU label); a `fenceSync`/`clientWaitSync` poll

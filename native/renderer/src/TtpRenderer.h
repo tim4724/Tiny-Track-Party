@@ -370,9 +370,13 @@ private:
         // What this chunk's instance was last handed (folded), so a chunk whose
         // stretch nothing dynamic crossed skips its uniform writes entirely.
         std::vector<DeckDecal> last;
+        // The paint entries this chunk was built with. Written once per track,
+        // so it is kept only so the ablation debug can put the channel back.
+        int paintN = 0;
     };
     std::vector<RoadChunk> mRoadChunks;
     std::vector<DeckDecal> mRoadInstLast;  // ditto for the whole-lap fallback chunk
+    int mRoadInstPaintN = 0;               // and its RoadChunk::paintN
     // The masked decals' silhouette store: one 2D-array texture, one layer per
     // car slot (0..7), one for the monster rig, one for the generic
     // superellipse. Engine-lifetime — layers are REBAKED per scene, the flags
@@ -1077,9 +1081,55 @@ public:
     // construction, so it separates "the bake is wrong" from "everything
     // downstream of the bake is wrong" without reading the texture back.
     void debugForceMaskLayer(int layer) { mForceMaskLayer = layer; }
+
+    // FEATURE ABLATION — the per-feature cost map's only instrument.
+    //
+    // The frame is submission-bound (per-cell draw calls, not fill), so "what
+    // does the sky cost" cannot be answered by reading a shader: it is a
+    // question about how many renderables a feature puts in front of every
+    // cell's culler. This drops one group at a time and lets the GPU timer
+    // answer. `mask` carries kFeat* bits; a cleared bit hides that group.
+    //
+    // WHY LAYERS AND NOT SCENE MEMBERSHIP: half these groups are pools whose
+    // membership the frame itself rewrites (boxes, streaks, bursts), so a
+    // removal would be undone by the next update pass. A layer bit is set once
+    // and filtered at the view, which is also where the per-cell cost is.
+    // The trade is that FScene::prepare still walks a hidden entity — the
+    // reading is the DRAW half of a feature's cost, not the whole of it.
+    static constexpr uint8_t kFeatRoad     = 0x04; // the deck ribbon (chunked)
+    static constexpr uint8_t kFeatTerrain  = 0x08; // ground, sky, hills, water, structures
+    static constexpr uint8_t kFeatDressing = 0x10; // scenery, props, landmarks, clutter, cones
+    static constexpr uint8_t kFeatSky      = 0x20; // clouds, haze, fliers, balloon
+    static constexpr uint8_t kFeatCars     = 0x40; // car GLBs, monster rigs, boost streaks
+    static constexpr uint8_t kFeatEffects  = 0x80; // item pools, rockets, bursts, ambient
+    static constexpr uint8_t kFeatAll = kFeatRoad | kFeatTerrain | kFeatDressing
+            | kFeatSky | kFeatCars | kFeatEffects;
+    // The road turns out to BE the frame's cost, so it gets a second set of
+    // bits — its fragment shader's four channels, switched by the uniforms that
+    // already gate them (vroad.mat early-outs on each count / half-width being
+    // zero). These do not hide anything: the same deck is drawn, shaded with
+    // one channel skipped, which is exactly what a candidate optimisation of
+    // that channel could ever be worth.
+    static constexpr uint32_t kFeatRoadDecals = 0x0100;
+    static constexpr uint32_t kFeatRoadRubber = 0x0200;
+    static constexpr uint32_t kFeatRoadPaint  = 0x0400;
+    static constexpr uint32_t kFeatRoadShadow = 0x0800;
+    static constexpr uint32_t kFeatRoadAll = kFeatRoadDecals | kFeatRoadRubber
+            | kFeatRoadPaint | kFeatRoadShadow;
+    void debugFeatureMask(uint32_t mask);
 private:
     bool mHideCars = false;
     int mForceMaskLayer = -1;
+    // Feature-ablation state (debugFeatureMask). mFeatureTagged latches the one
+    // pass that moves every renderable off the default layer bit onto its
+    // group's — until a caller asks, nothing here touches a shipped frame.
+    uint8_t mFeatureMask = kFeatAll;
+    uint32_t mRoadMask = kFeatRoadAll;
+    bool mFeatureTagged = false;
+    void tagFeatures();
+    void tagEntities(const utils::Entity* e, size_t n, uint8_t bit);
+    void tagMesh(const Mesh& m, uint8_t bit);
+    void applyRoadDebug();
     // Frustum culling, off by default (buildMesh): a mesh whose vertices are
     // rewritten in WORLD space every frame — the billboards, the burst pools —
     // outlives its build-time bounds, so only meshes that stay put (or move by

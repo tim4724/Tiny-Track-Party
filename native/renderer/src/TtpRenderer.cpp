@@ -671,6 +671,133 @@ void TtpRenderer::setShadows(const utils::Entity* e, size_t n, bool cast, bool r
     }
 }
 
+// ---------------------------------------------------------------------------
+// Feature ablation (debugFeatureMask — see the header for why it is layers).
+// ---------------------------------------------------------------------------
+
+// Move a renderable off the default layer bit onto its feature's. It has to be
+// a MOVE: bit 0 is set on everything and every view draws it, so a renderable
+// keeping bit 0 would still draw with its own group hidden. mGroundProxy is the
+// one renderable that already clears bit 0 (it exists for the bake only) and is
+// deliberately in no group, so nothing here can hand it to a main view.
+void TtpRenderer::tagEntities(const utils::Entity* e, size_t n, uint8_t bit) {
+    auto& rcm = mEngine->getRenderableManager();
+    for (size_t i = 0; i < n; i++) {
+        const auto ri = rcm.getInstance(e[i]);
+        if (!ri) continue;
+        rcm.setLayerMask(ri, (uint8_t) (0x01 | bit), bit);
+    }
+}
+
+void TtpRenderer::tagMesh(const Mesh& m, uint8_t bit) {
+    if (!m.entity.isNull()) tagEntities(&m.entity, 1, bit);
+    if (!m.chunks.empty()) tagEntities(m.chunks.data(), m.chunks.size(), bit);
+}
+
+void TtpRenderer::tagFeatures() {
+    auto meshes = [&](std::initializer_list<const Mesh*> ms, uint8_t bit) {
+        for (const Mesh* m : ms) tagMesh(*m, bit);
+    };
+    auto meshVec = [&](const std::vector<Mesh>& v, uint8_t bit) {
+        for (const Mesh& m : v) tagMesh(m, bit);
+    };
+    auto instVec = [&](const std::vector<gltfio::FilamentInstance*>& v, uint8_t bit) {
+        for (gltfio::FilamentInstance* in : v) {
+            if (in) tagEntities(in->getEntities(), in->getEntityCount(), bit);
+        }
+    };
+
+    // The deck the race is driven on — decals, laid rubber and deck paint all
+    // ride its fragment shader, so this bit carries them too.
+    tagMesh(mRoad, kFeatRoad);
+
+    // The world the deck stands in. mGroundProxy stays out (see tagEntities).
+    meshes({ &mGround, &mSky, &mHills, &mWater, &mWet, &mStructures, &mBerms,
+             &mGroundShadows, &mGantry }, kFeatTerrain);
+
+    // Set dressing: everything scattered beside the track.
+    meshes({ &mBoulders, &mLandmarks, &mWindmill, &mClutter }, kFeatDressing);
+    meshVec(mSmoke, kFeatDressing);
+    meshVec(mSignMeshes, kFeatDressing);
+    instVec(mConeInstances, kFeatDressing);
+    for (const auto& per : mSceneryInstances) instVec(per, kFeatDressing);
+    for (const auto& per : mPropInstances) instVec(per, kFeatDressing);
+
+    // The sky's moving furniture — all billboards, all re-aimed per cell.
+    meshVec(mClouds, kFeatSky);
+    meshVec(mHaze, kFeatSky);
+    meshVec(mBirds, kFeatSky);
+    meshVec(mKites, kFeatSky);
+    meshes({ &mPlane, &mBalloon }, kFeatSky);
+
+    // The field.
+    meshVec(mCars, kFeatCars);
+    meshVec(mStreakMeshes, kFeatCars);
+    for (gltfio::FilamentAsset* a : mCarAssets) {
+        if (a) tagEntities(a->getEntities(), a->getEntityCount(), kFeatCars);
+    }
+    for (gltfio::FilamentAsset* a : mCarGhostAssets) {
+        if (a) tagEntities(a->getEntities(), a->getEntityCount(), kFeatCars);
+    }
+    instVec(mMonsterInstances, kFeatCars);
+    instVec(mMonsterGhostInstances, kFeatCars);
+
+    // Items and the transient pools.
+    tagMesh(mPollen, kFeatEffects);
+    meshVec(mRockets, kFeatEffects);
+    meshVec(mRocketFlames, kFeatEffects);
+    for (const Mesh& m : mBurstMeshes) tagMesh(m, kFeatEffects);
+    for (const Mesh& m : mBurstBalls) tagMesh(m, kFeatEffects);
+    instVec(mBoxInstances, kFeatEffects);
+    instVec(mBoxFadeInstances, kFeatEffects);
+    instVec(mBananaInstances, kFeatEffects);
+}
+
+// The road shader's channels, switched by the uniforms that already gate them.
+// Called once per frame from uploadDeckDecals — after it, so the decal count it
+// just wrote is the one being overridden.
+void TtpRenderer::applyRoadDebug() {
+    if (mRoadMask == kFeatRoadAll) return;
+    const float texel = mShadowMap ? mShadowTexel : 0.0f;
+    const auto set = [&](MaterialInstance* mi) {
+        if (!mi) return;
+        if (!(mRoadMask & kFeatRoadDecals)) mi->setParameter("decalCount", 0);
+        if (!(mRoadMask & kFeatRoadPaint)) mi->setParameter("paintCount", 0);
+        if (!(mRoadMask & kFeatRoadRubber)) mi->setParameter("skidLatHalf", 0.0f);
+        mi->setParameter("shadowTexel", (mRoadMask & kFeatRoadShadow) ? texel : 0.0f);
+    };
+    for (RoadChunk& ch : mRoadChunks) set(ch.mi);
+    set(mRoadInst);
+}
+
+void TtpRenderer::debugFeatureMask(uint32_t mask) {
+    mFeatureMask = (uint8_t) (mask & kFeatAll);
+    mRoadMask = mask & kFeatRoadAll;
+    // Re-tag on every call rather than once: a scene built after the first call
+    // (a Grand Prix's next track, a biome rebuild) arrives untagged, and an
+    // ablation sweep that silently stopped ablating would read as "this feature
+    // is free".
+    if (!mScene) return;
+    tagFeatures();
+    mFeatureTagged = true;
+    // uploadDeckDecals only writes a chunk whose folded list CHANGED, so a
+    // channel switched back on would stay off for the rest of the run. Forget
+    // what each chunk was last handed and let the next frame rewrite it.
+    //
+    // The whole-lap fallback instance goes through the same restore, because
+    // applyRoadDebug already overrides it alongside the chunks: leaving it out
+    // here would strand ITS channels off for good on the no-chunk path.
+    const auto restore = [&](MaterialInstance* mi, int paintN, std::vector<DeckDecal>& last) {
+        last.clear();
+        if (!mi) return;
+        mi->setParameter("skidLatHalf", mSkidTex ? mSkidLatHalf : 0.0f);
+        mi->setParameter("shadowTexel", mShadowMap ? mShadowTexel : 0.0f);
+        mi->setParameter("paintCount", paintN);   // written once per track
+    };
+    for (RoadChunk& ch : mRoadChunks) restore(ch.mi, ch.paintN, ch.last);
+    restore(mRoadInst, mRoadInstPaintN, mRoadInstLast);
+}
+
 // A MaterialInstance owned by the scene: recorded for releaseScene().
 MaterialInstance* TtpRenderer::sceneInstance(Material* m) {
     MaterialInstance* mi = m->createInstance();

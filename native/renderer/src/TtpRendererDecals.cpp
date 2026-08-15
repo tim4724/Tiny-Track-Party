@@ -432,13 +432,14 @@ void TtpRenderer::buildDeckPaint(const TrackBin& tb, const ttp::rt::WearPlan& we
             mi->setParameter("paintShape", shape, (size_t) n);
         }
         mi->setParameter("paintCount", n);
+        return n;
     };
     for (RoadChunk& ch : mRoadChunks) {
-        writeTo(ch.mi, (ch.sMin + ch.sMax) * 0.5f, (ch.sMax - ch.sMin) * 0.5f);
+        ch.paintN = writeTo(ch.mi, (ch.sMin + ch.sMax) * 0.5f, (ch.sMax - ch.sMin) * 0.5f);
     }
     // The whole-lap fallback instance, when the chunk pass produced nothing.
     if (mRoadChunks.empty() && mRoadInst) {
-        writeTo(mRoadInst, 0.0f, L > 0.0f ? L : 1.0e9f);
+        mRoadInstPaintN = writeTo(mRoadInst, 0.0f, L > 0.0f ? L : 1.0e9f);
     }
 }
 
@@ -478,11 +479,25 @@ void TtpRenderer::uploadDeckDecals() {
             float4 rect[kMaxDeckDecals], col[kMaxDeckDecals], shape[kMaxDeckDecals],
                     trot[kMaxDeckDecals], wpos[kMaxDeckDecals], wfwd[kMaxDeckDecals],
                     wright[kMaxDeckDecals];
+            // The union of the entries' own reject windows, for the one box the
+            // shader tests before entering the loop. It MUST be built from the
+            // same two bounds the loop rejects on — r.zw for a profile stamp,
+            // and the measured reach in decalWFwd/WRight's w for a masked one —
+            // or the box clips a stamp the loop would have drawn.
+            float4 bounds{ 1e9f, -1e9f, 1e9f, -1e9f };
             for (int i = 0; i < n; i++) {
                 rect[i] = sel[i].rect; col[i] = sel[i].color; shape[i] = sel[i].shape;
                 trot[i] = sel[i].texrot;
                 wpos[i] = sel[i].wpos; wfwd[i] = sel[i].wfwd; wright[i] = sel[i].wright;
+                const bool masked = sel[i].texrot.w > 0.5f;
+                const float bS = masked ? sel[i].wfwd.w : sel[i].rect.z;
+                const float bL = masked ? sel[i].wright.w : sel[i].rect.w;
+                bounds.x = std::min(bounds.x, sel[i].rect.x - bS);
+                bounds.y = std::max(bounds.y, sel[i].rect.x + bS);
+                bounds.z = std::min(bounds.z, sel[i].rect.y - bL);
+                bounds.w = std::max(bounds.w, sel[i].rect.y + bL);
             }
+            mi->setParameter("decalBounds", bounds);
             mi->setParameter("decalRect", rect, (size_t) n);
             mi->setParameter("decalColor", col, (size_t) n);
             mi->setParameter("decalShape", shape, (size_t) n);
@@ -504,6 +519,7 @@ void TtpRenderer::uploadDeckDecals() {
         // (its wrap constants are set at build, like the chunks').
         uploadTo(mRoadInst, 0.0f, L > 0.0f ? L : 1.0e9f, mRoadInstLast);
     }
+    applyRoadDebug();   // no-op unless a caller asked for an ablation
 }
 
 MaterialInstance* TtpRenderer::litShadowInstance() {

@@ -109,13 +109,13 @@ export default [
     },
   },
 
-  // ── Node ESM that drives a browser: the cue baker ─────────────────────────
+  // ── Node ESM that drives a browser: the cue baker, the perf sweep ─────────
   // Same reasoning as the CommonJS capture-script block above — the file is
   // Node, but its page.evaluate() closures run in Chromium and reference window.
   // (scripts/lib/bake-harness.js is browser-only and is covered by the
   // scripts/**/*.js block, which already carries browser globals.)
   {
-    files: ['scripts/bake-cues.mjs'],
+    files: ['scripts/bake-cues.mjs', 'scripts/perf-features.mjs'],
     languageOptions: {
       globals: { ...globals.node, ...globals.browser },
     },

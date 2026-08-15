@@ -414,6 +414,37 @@ TTP_ABI void ttp_display_debug_wipe_skids(void);
 // separates "the bake is wrong" from "everything downstream of it is wrong".
 TTP_ABI void ttp_display_debug_force_mask_layer(int layer);
 
+/* FEATURE ABLATION, for the per-feature cost map. Each bit KEEPS one group of
+ * renderables; a cleared bit hides it, so the GPU timer around the frame reads
+ * that group's draw cost directly. The frame is submission-bound (per-cell draw
+ * calls rather than fill), which is why the question is answered by removing
+ * groups and not by reading a shader.
+ *
+ * The mask is latched, and the first call also does the one-time tag pass, so
+ * nothing on the shipped path pays for this until something asks. Passing
+ * TTP_FEAT_ALL restores the full picture but leaves the tags in place — which
+ * is the intended way to run a sweep, since it keeps every arm on the same
+ * code path. What it CANNOT measure is a hidden group's FScene::prepare, which
+ * still runs: this is the draw half of a feature's cost. */
+#define TTP_FEAT_ROAD     0x04  /* the deck ribbon — decals, rubber and paint ride its shader */
+#define TTP_FEAT_TERRAIN  0x08  /* ground, sky dome, hills, water, pillars, berms, gantry */
+#define TTP_FEAT_DRESSING 0x10  /* scenery, props, landmarks, clutter, cones, signs */
+#define TTP_FEAT_SKY      0x20  /* clouds, dust banks, birds, kites, balloon */
+#define TTP_FEAT_CARS     0x40  /* car GLBs, monster rigs, boost streaks */
+#define TTP_FEAT_EFFECTS  0x80  /* item pools, rockets, bursts, ambient particles */
+/* The road turns out to BE the frame's cost, so it has a second set of bits:
+ * the four channels of its fragment shader, switched by the uniforms that
+ * already gate them. These hide nothing — the same deck is drawn, one channel
+ * shorter — which is the most any optimisation of that channel could be worth.
+ * The paint channel is static per track and is restored from what the build
+ * wrote, so an arm may turn it off and a later arm turn it back on. */
+#define TTP_FEAT_ROAD_DECALS 0x0100  /* the per-fragment decal loop (shadows, auras, statics) */
+#define TTP_FEAT_ROAD_RUBBER 0x0200  /* the laid-rubber texture tap */
+#define TTP_FEAT_ROAD_PAINT  0x0400  /* the deck's own paint (repairs, boost pads) */
+#define TTP_FEAT_ROAD_SHADOW 0x0800  /* the sun map's one bilinear tap */
+#define TTP_FEAT_ALL      0xFFC
+TTP_ABI void ttp_display_debug_features(unsigned int mask);
+
 #ifdef __cplusplus
 }
 #endif

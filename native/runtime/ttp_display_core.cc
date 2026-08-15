@@ -404,6 +404,10 @@ void ttp_display_debug_force_mask_layer(int layer) {
     if (g_disp && g_disp->renderer) g_disp->renderer->debugForceMaskLayer(layer);
 }
 
+void ttp_display_debug_features(unsigned int mask) {
+    if (g_disp && g_disp->renderer) g_disp->renderer->debugFeatureMask((uint32_t) mask);
+}
+
 const char* ttp_display_debug_decals(void) {
     static std::string json;
     json = "[";

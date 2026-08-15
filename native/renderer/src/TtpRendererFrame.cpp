@@ -2042,6 +2042,11 @@ void TtpRenderer::renderAmbient(const TtpFrameInput& input) {
 void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
     auto& tcm = mEngine->getTransformManager();
     const TtpViewInput* views = ttp_frame_views(&input);
+    // Feature ablation, off until a caller asks for it: the tag pass has moved
+    // every renderable off bit 0 onto its group's, so from here the view's
+    // visible layers are what decides. Bits 0 and 1 are left alone — 1 is the
+    // shadow bake's caster set, and its view filters on that alone.
+    if (mFeatureTagged) mView->setVisibleLayers(kFeatAll, mFeatureMask);
     if (input.viewCount == 0) {
         mRenderer->render(mView);
     } else {
@@ -2050,6 +2055,11 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
         mProfile[kProfCellSetup] = 0; mProfile[kProfCellRender] = 0;
         ensureSceneTarget();
         ensureCells(input.viewCount);
+        // After ensureCells, or a freshly created cell view keeps Filament's
+        // default visible layers (bit 0 alone) and draws an empty picture.
+        if (mFeatureTagged) {
+            for (View* cv : mCellViews) if (cv) cv->setVisibleLayers(kFeatAll, mFeatureMask);
+        }
         for (uint32_t i = 0; i < input.viewCount; i++) {
             // A CELL gets its tile of the fitted grid; an OVERVIEW gets the
             // surface entire. The frame says which (TTP_FRAME_OVERVIEW) rather

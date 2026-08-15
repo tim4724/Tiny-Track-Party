@@ -169,6 +169,16 @@ readback.
    reshape moved the UB. Every CPU-side input was verified sane at the
    failing moment before the sample was suspected; start there next time.
 
+**One box gates the whole loop.** The entries a chunk carries CLUSTER — they are
+mostly the cars, and the cars are in a pack — while the chunk is tens of metres
+of deck, so without a gate the road's biggest, nearest fragments each ran every
+entry's reject to draw nothing. `decalBounds` is the union of the entries' own
+reject windows, so it is exact rather than conservative: a fragment it rejects
+would have rejected each entry in turn. **Build it from the same two bounds the
+loop tests** — `rect.zw` for a profile stamp, the MEASURED reach in
+`decalWFwd`/`decalWRight`'s w for a masked one — or the box clips a stamp the
+loop would have drawn.
+
 **Chevrons are SDFs**, which let the pads move without a texture atlas. The apex
 must LEAD or every chevron reads as a brake marking. A pad is **flat paint** —
 reproducing the old mesh's radial gradient came out as an emissive saucer, the
@@ -330,6 +340,25 @@ A steady-state race frame is one `ttp_display_frame(dt)`, one
 low-rate poll: **nothing in the DOM is written per frame.**
 
 **Anything tempted onto the per-frame path needs to actually CHANGE per frame.**
+
+**THE DECK IS THE FRAME.** `ttp_display_debug_features` drops one group of
+renderables at a time and `scripts/perf-features.mjs` reads the GPU timer around
+each arm; run it before optimising anything here, because the answer is lopsided
+enough to make most instincts wrong:
+
+- The **road** drawn alone costs more than the whole scene does. Terrain, set
+  dressing, the sky's billboards and the item/effect pools together come to
+  roughly the empty-scene floor — they are not where a millisecond is.
+- **Cars are a net NEGATIVE.** They cost about a fifth of the frame to draw and
+  occlude several times that much deck, so hiding them makes the frame slower.
+  The corollary is the useful one: on this scene, anything that keeps a road
+  fragment from being shaded is worth more than anything that makes a car
+  cheaper.
+- Inside the road, the **decal loop** is the channel worth watching; the rubber
+  tap, the deck paint and the sun's one shadow tap are each a fraction of it.
+
+So the deck's fragment shader is the budget, and the way to spend less of it is
+to shade fewer of its fragments — not to trim triangles elsewhere.
 
 `public/display/render/Display.js` is the browser's whole edge of this; for
 measuring frame cost see `public/display/CLAUDE.md`.

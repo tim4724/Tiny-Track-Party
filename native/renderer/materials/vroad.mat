@@ -77,6 +77,16 @@ material {
         //   xy = centre (s, lat), zw = half-extents — ALL world units, matching
         // uv0 exactly, EXCEPT that x arrives relative to this chunk's centre
         // (see chunkMid) so the loop needs no per-decal lap wrap.
+        // THE WHOLE LOOP'S BOUNDING BOX, in the same chunk-local frame: the
+        // union of every live entry's own reject window, as (sMin, sMax, latMin,
+        // latMax). It is a pure early-out — a fragment outside it would have
+        // rejected all N entries one at a time — and it is here because the
+        // decals on a chunk CLUSTER (they are the cars, and the cars are in a
+        // pack) while the chunk is tens of metres of deck. Without it the road's
+        // biggest, nearest fragments each pay N rejects to draw nothing.
+        // Written by uploadDeckDecals beside decalCount; a chunk with none
+        // leaves it collapsed, which the decalCount > 0 guard already covers.
+        { type : float4, name : decalBounds, precision : high },
         { type : float4[32], name : decalRect, precision : high },
         //   rgb = colour, a = peak alpha
         { type : float4[32], name : decalColor },
@@ -405,7 +415,15 @@ fragment {
             vec4 sc = materialParams.skidColor;
             base = mix(base, sc.rgb, min(ink, sc.a));
         }
-        if (materialParams.decalCount > 0) base = deckDecals(base, sLocal, tc.y);
+        if (materialParams.decalCount > 0) {
+            // One box in front of the loop — see decalBounds. Exact, not
+            // conservative: the box IS the union of the per-entry windows the
+            // loop tests, so a fragment it rejects had nothing to draw.
+            highp vec4 db = materialParams.decalBounds;
+            if (sLocal >= db.x && sLocal <= db.y && tc.y >= db.z && tc.y <= db.w) {
+                base = deckDecals(base, sLocal, tc.y);
+            }
+        }
 
         // emissive.w = 0 → no second exposure; both terms are pre-exposed.
         material.emissive = vec4(ttpGrade(ttpMatteShade(base, n)), 0.0);
