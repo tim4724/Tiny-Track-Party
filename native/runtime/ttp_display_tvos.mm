@@ -15,10 +15,16 @@
 // `ttp_display_tvos.cc` and it was wrong. Filament's MetalSwapChain asserts
 // its native window `isKindOfClass:[CAMetalLayer class]`, so the pointer has
 // to be produced on the ObjC side of the bridge.
+//
+// There is NO tvOS-only entry point beside the ABI any more. There used to be
+// (`ttp_display_create_layer`, in its own header), for one reason: the ABI
+// typed its surface as `const char*`, so reaching it from Swift meant an
+// `UnsafePointer<CChar>` reinterpret of a CAMetalLayer at the call site — a
+// cast that reads like a bug forever after. The parameter is `const void*` now
+// and the forwarder had nothing left to do.
 
 #include "ttp_display.h"
 #include "ttp_display_core.h"
-#include "ttp_display_tvos.h"
 
 #import <QuartzCore/CAMetalLayer.h>
 
@@ -30,26 +36,14 @@
 // shared core's renderer->resize, and a copy of the pointer parked in the core
 // would only ever be written. Add one when something below actually reads it.
 
-// ---------------------------------------------------------------------------
-// The Swift-facing surface entry point.
-// ---------------------------------------------------------------------------
-// NOT part of ttp_display.h's ABI, and not a replacement for it: the ABI's
-// ttp_display_create takes a `const char*` because on web that is a CSS
-// selector, and it has live JS callers. Reaching it from Swift would mean
-// bouncing a CAMetalLayer through Unmanaged.toOpaque() and an
-// UnsafePointer<CChar> reinterpret at the call site — legal, and the kind of
-// cast that looks like a bug forever after. This forwards instead, so the
-// Swift side never spells a pointer cast.
-extern "C" int ttp_display_create_layer(void* layer, uint32_t width, uint32_t height) {
-    return ttp_display_create((const char*) layer, width, height);
-}
-
 extern "C" {
 
-int ttp_display_create(const char* surface, uint32_t width, uint32_t height) {
+int ttp_display_create(const void* surface, uint32_t width, uint32_t height) {
     if (ttp::rt::displayCore()) return 1;
 
-    CAMetalLayer* layer = (__bridge CAMetalLayer*) (void*) surface;
+    // const_cast first: __bridge does not strip const, and the layer is not
+    // ours to own — the view holds it and outlives the display.
+    CAMetalLayer* layer = (__bridge CAMetalLayer*) const_cast<void*>(surface);
     // Filament would hard-abort on a wrong class rather than fail; on a TV the
     // difference between a crash at boot and a black screen with a log line is
     // worth one check.

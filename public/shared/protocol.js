@@ -51,6 +51,10 @@ var MSG = {
                                 // The display derives ttp_process_input's presence MASK from which fields arrived (bit1 s:number,
                                 // bit2 b:number-or-boolean, bit4 u:number); the wire carries no mask. Derive from THIS line, not
                                 // from another shell's code. (A C++ seam for this path was measured and refuted — stays JS.)
+                                // Absent fields are left UNTOUCHED on the car, which is what makes a partial message safe —
+                                // a `u` defaulted to 0 would read as a fresh use-counter and fire the car's held item.
+                                // ttp_process_input answers the mask it consumed (-1 = no such car), so a shell bringing this
+                                // path up can assert once rather than steer nothing in silence; tests/control-mask.test.js pins both.
   START_GAME: 'start_game',     // host only — starts the race; the display ignores it until every other player is ready (SET_READY)
   RETURN_TO_LOBBY: 'return_to_lobby', // "New game" — abort the race back to the lobby (any player)
   PAUSE_GAME: 'pause_game',     // request a pause (any player, mid-countdown/race)

@@ -19,9 +19,9 @@ import UIKit
 /// engine drawing into a layer that is no longer on screen.
 final class MetalSurfaceView: UIView {
 
-    /// The layer IS the surface. `ttp_display_create_layer` takes it straight
-    /// across (`ttp_display_tvos.h`), and Filament's `MetalSwapChain` asserts
-    /// that its native window `isKindOfClass:[CAMetalLayer class]`.
+    /// The layer IS the surface. `ttp_display_create` takes it straight across
+    /// as an opaque `const void*`, and Filament's `MetalSwapChain` asserts that
+    /// its native window `isKindOfClass:[CAMetalLayer class]`.
     override class var layerClass: AnyClass { CAMetalLayer.self }
 
     var metalLayer: CAMetalLayer { layer as! CAMetalLayer }
@@ -49,7 +49,7 @@ final class MetalSurfaceView: UIView {
         l.pixelFormat = .bgra8Unorm
         // Seeded from the screen because a view that has never laid out has no
         // box of its own yet, and the surface has to be valid before
-        // `ttp_display_create_layer` sees it. `layoutSubviews` takes over below.
+        // `ttp_display_create` sees it. `layoutSubviews` takes over below.
         l.drawableSize = UIScreen.main.nativeBounds.size
         contentScaleFactor = UIScreen.main.nativeScale
         // `device` and `framebufferOnly` are deliberately NOT set here: Filament

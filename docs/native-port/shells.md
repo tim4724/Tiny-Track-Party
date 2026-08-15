@@ -88,10 +88,16 @@ Three properties of that surface matter more than the list:
    `ttp::rt::displayCore()` (`ttp_display_core.h`). Every other display ABI
    body is shared in `runtime/ttp_display_core.cc`, which your module compiles
    as-is — a shell porting from a revision where those bodies lived in the web
-   file deletes its copies. `ttp_display_tvos.mm` is the Metal one — ObjC++,
+   file deletes its copies, and `tests/display-surface-split.test.js` is what
+   now fails if one comes back. `ttp_display_tvos.mm` is the Metal one — ObjC++,
    because the `CAMetalLayer` must be produced ObjC-side. The platform-free
    half below both is in `libttp-runtime` and must stay there. If a line names
    no platform API, it is in the wrong file.
+   `ttp_display_create`'s surface is a `const void*` and means whatever your
+   platform's window is (an `ANativeWindow*` for Android TV); the cast back
+   belongs in your file, which is the one that knows. You owe NO entry point of
+   your own — tvOS carried one for a while, purely because the parameter used
+   to be typed as the web's CSS selector.
 2. **A module target.** Add it beside `ttp_runtime_web` in
    `native/CMakeLists.txt` and compile `${TTP_APP_SOURCES}` plus
    `runtime/ttp_display_core.cc` plus your surface file. Do not retype the

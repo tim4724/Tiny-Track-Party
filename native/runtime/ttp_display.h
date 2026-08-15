@@ -33,8 +33,18 @@ extern "C" {
 
 /* surface is platform-defined: a CSS selector for the target <canvas> on web,
  * a CAMetalLayer* on tvOS, an ANativeWindow* on Android. width/height are
- * physical pixels. Returns 1 on success, 0 on failure. */
-TTP_ABI int ttp_display_create(const char* surface, uint32_t width, uint32_t height);
+ * physical pixels. Returns 1 on success, 0 on failure.
+ *
+ * `const void*`, not `const char*`. Only ONE of the three platforms passes a
+ * string here — the web, whose selector is a `const char*` the surface file
+ * casts back on arrival — and the other two pass an opaque handle. Typing the
+ * parameter as the web's case made the majority spelling the wrong one: tvOS
+ * carried a whole extra header and forwarder whose only job was to keep a
+ * `CAMetalLayer*` -> `const char*` reinterpret out of the Swift call site, and
+ * Android would have owed the same for its ANativeWindow*. Nothing about the
+ * emscripten binding changes — cwrap's 'string' argument type marshals a JS
+ * string to a pointer regardless of how C spells the parameter. */
+TTP_ABI int ttp_display_create(const void* surface, uint32_t width, uint32_t height);
 TTP_ABI void ttp_display_resize(uint32_t width, uint32_t height);
 TTP_ABI void ttp_display_destroy(void);
 

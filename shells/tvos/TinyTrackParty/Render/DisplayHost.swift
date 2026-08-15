@@ -37,7 +37,7 @@ final class DisplayHost {
 
     // MARK: - State the ABI cannot be asked for
 
-    /// Whether `ttp_display_create_layer` has succeeded. A no-display ABI is a
+    /// Whether `ttp_display_create` has succeeded. A no-display ABI is a
     /// safe no-op everywhere (`ttp_abi.h`), so this is not a guard, it is how
     /// `attach` tells a create from a resize.
     private(set) var isAttached = false
@@ -98,7 +98,7 @@ final class DisplayHost {
     private var lastCardMask: UInt32 = 0
 
     /// Materials handed over before the surface existed. `ttp_display_asset`
-    /// answers 1 (failure) with no display, and boot order does not guarantee
+    /// answers 0 (refused) with no display, and boot order does not guarantee
     /// that the first SwiftUI layout beats `GameCoordinator.boot()`. Every
     /// `.filamat` blob but `vcolor` degrades SILENTLY when missing — no
     /// `voverlay` and the steer bar and dividers simply vanish — so dropping
@@ -143,12 +143,15 @@ final class DisplayHost {
             return
         }
         let w = pixelCount(size.width), h = pixelCount(size.height)
-        // `Unmanaged.passUnretained(...).toOpaque()` is the whole cast: the .mm
-        // side `__bridge`s it straight back to a `CAMetalLayer*` and class-checks
-        // it. The view owns the layer and outlives the display, so nothing here
-        // has to be retained.
-        guard ttp_display_create_layer(Unmanaged.passUnretained(layer).toOpaque(), w, h) != 0 else {
-            lastError = "ttp_display_create_layer failed (\(w)x\(h))"
+        // `Unmanaged.passUnretained(...).toOpaque()` is the whole cast: the ABI
+        // takes an opaque `const void*` surface, and the .mm side `__bridge`s it
+        // straight back to a `CAMetalLayer*` and class-checks it. The view owns
+        // the layer and outlives the display, so nothing here has to be
+        // retained — and there is no reinterpret to `UnsafePointer<CChar>`,
+        // which is what this call had to spell while the ABI typed its surface
+        // as the web's selector.
+        guard ttp_display_create(Unmanaged.passUnretained(layer).toOpaque(), w, h) != 0 else {
+            lastError = "ttp_display_create failed (\(w)x\(h))"
             return
         }
         isAttached = true

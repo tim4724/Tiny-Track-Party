@@ -1010,16 +1010,23 @@ void ttp_update(int h, double dtMs) {
   }
 }
 
-void ttp_process_input(int h, const char* idJson, int mask, double s, double b, double u) {
+int ttp_process_input(int h, const char* idJson, int mask, double s, double b, double u) {
   RuntimeSession* rs = get(h);
-  if (!rs) return;
+  if (!rs) return -1;
   if (!rs->eng) buildSession(rs);
-  if (!rs->eng) return;
+  if (!rs->eng) return -1;
+  // Looked up before the apply so an identity that matches nothing is a -1
+  // rather than a well-formed no-op. Game::processInput finds the car itself;
+  // this second scan is over at most FIELD_SIZE cars at CONTROL rate, which is
+  // two orders off anything that matters here.
+  const Id id = parse_scalar_id(idJson);
+  if (!rs->eng->hasCar(id)) return -1;
   Input in;
   if (mask & 1) { in.hasS = true; in.s = s; }
   if (mask & 2) { in.hasB = true; in.b = b; }
   if (mask & 4) { in.hasU = true; in.u = u; }
-  rs->eng->processInput(parse_scalar_id(idJson), in);
+  rs->eng->processInput(id, in);
+  return mask & 7;
 }
 
 const char* ttp_snapshot_json(int h) {

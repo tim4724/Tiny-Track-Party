@@ -33,8 +33,8 @@
 #import "ttp_error.h"
 // The GLB container reads: the ghost clone and the texture-URI scan.
 #import "ttp_glb.h"
-// The surface, the scene, the cameras and the frame.
+// The surface, the scene, the cameras and the frame. There is no tvOS-only
+// display header beside it: ttp_display_create takes an opaque `const void*`
+// surface, which is a CAMetalLayer here and a CSS selector on the web, so this
+// platform needs no entry point of its own.
 #import "ttp_display.h"
-// ...and this platform's only extra entry point: ttp_display_create typed for a
-// CAMetalLayer rather than a CSS selector.
-#import "ttp_display_tvos.h"

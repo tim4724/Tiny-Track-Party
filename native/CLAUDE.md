@@ -95,10 +95,16 @@ The display ABI is two files. `runtime/ttp_display_core.cc` holds every extern
 create/destroy — and is compiled by EVERY platform module.
 `runtime/ttp_display_web.cc` is the WEB surface (the WebGL2 context and the
 `TtpRenderer` construction); tvOS and Android TV get siblings of that file
-only, never of the core or the library. Both need the Filament SDK, so they
-compile on one machine configuration and **no ctest sees them** — keep any
-decision a ctest should pin (the camera maths, the roster parse, the re-roster
-plan) down in libttp-runtime.
+only, never of the core or the library. `ttp_display_create` takes the surface
+as an opaque `const void*` so no platform needs an entry point of its own; each
+surface file casts it back to whatever its window is. Both need the Filament
+SDK, so they compile on one machine configuration and **no ctest sees them** —
+keep any decision a ctest should pin (the camera maths, the roster parse, the
+re-roster plan) down in libttp-runtime. What DOES watch them is
+`tests/display-surface-split.test.js`, which holds each surface file to
+create/destroy and nothing else: a copied body is not a duplicate symbol here
+(one surface file links per platform), so nothing but that gate notices when a
+shell stops tracking the core.
 
 **If a line names no platform API it belongs in libttp-runtime**, where ctests
 compile and execute it on every leg. Anything that must not drift silently goes in
