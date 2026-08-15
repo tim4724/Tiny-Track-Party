@@ -1,0 +1,353 @@
+{
+  "generated": "scripts/capture-shots.mjs + capture-shots-tvos.mjs",
+  "shots": [
+    {
+      "scenario": "chain",
+      "platform": "web",
+      "file": "web/chain.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 51804,
+      "capturedAt": "2026-08-02T09:45:45.744Z",
+      "gitSha": "5c8fea19"
+    },
+    {
+      "scenario": "countdown",
+      "platform": "tvos-device",
+      "file": "tvos-device/countdown.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 66382,
+      "capturedAt": "2026-07-31T18:55:51.994Z",
+      "gitSha": "8fabc25",
+      "deviceName": "Spielzimmer",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
+    },
+    {
+      "scenario": "countdown",
+      "platform": "tvos-sim",
+      "file": "tvos-sim/countdown.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 54070,
+      "capturedAt": "2026-07-30T15:50:16.862Z",
+      "gitSha": "ee6fdee",
+      "deviceName": "Apple TV 4K (3rd generation)",
+      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+    },
+    {
+      "scenario": "countdown",
+      "platform": "web",
+      "file": "web/countdown.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 51208,
+      "capturedAt": "2026-08-02T09:44:56.938Z",
+      "gitSha": "5c8fea19"
+    },
+    {
+      "scenario": "finished",
+      "platform": "tvos-device",
+      "file": "tvos-device/finished.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 54048,
+      "capturedAt": "2026-07-31T18:55:52.509Z",
+      "gitSha": "8fabc25",
+      "deviceName": "Spielzimmer",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
+    },
+    {
+      "scenario": "finished",
+      "platform": "web",
+      "file": "web/finished.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 46820,
+      "capturedAt": "2026-08-02T09:45:32.750Z",
+      "gitSha": "5c8fea19"
+    },
+    {
+      "scenario": "intermission",
+      "platform": "tvos-device",
+      "file": "tvos-device/intermission.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 11624,
+      "capturedAt": "2026-07-31T18:55:52.664Z",
+      "gitSha": "8fabc25",
+      "deviceName": "Spielzimmer",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
+    },
+    {
+      "scenario": "intermission",
+      "platform": "web",
+      "file": "web/intermission.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 15072,
+      "capturedAt": "2026-08-02T09:45:39.908Z",
+      "gitSha": "5c8fea19"
+    },
+    {
+      "scenario": "lobby-empty",
+      "platform": "tvos-device",
+      "file": "tvos-device/lobby-empty.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 30970,
+      "capturedAt": "2026-08-14T21:29:59.817Z",
+      "gitSha": "dbf209d1",
+      "deviceName": "Spielzimmer",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
+    },
+    {
+      "scenario": "lobby-empty",
+      "platform": "web",
+      "file": "web/lobby-empty.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 36298,
+      "capturedAt": "2026-08-02T09:44:36.808Z",
+      "gitSha": "5c8fea19"
+    },
+    {
+      "scenario": "lobby-loading",
+      "platform": "web",
+      "file": "web/lobby-loading.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 14068,
+      "capturedAt": "2026-08-02T09:44:30.478Z",
+      "gitSha": "5c8fea19"
+    },
+    {
+      "scenario": "lobby-random",
+      "platform": "tvos-device",
+      "file": "tvos-device/lobby-random.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 38448,
+      "capturedAt": "2026-08-14T21:29:59.989Z",
+      "gitSha": "dbf209d1",
+      "deviceName": "Spielzimmer",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
+    },
+    {
+      "scenario": "lobby-random",
+      "platform": "web",
+      "file": "web/lobby-random.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 33214,
+      "capturedAt": "2026-08-02T09:44:52.925Z",
+      "gitSha": "5c8fea19"
+    },
+    {
+      "scenario": "lobby-tour",
+      "platform": "web",
+      "file": "web/lobby-tour.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 41994,
+      "capturedAt": "2026-08-02T09:44:47.535Z",
+      "gitSha": "5c8fea19"
+    },
+    {
+      "scenario": "lobby-track",
+      "platform": "tvos-device",
+      "file": "tvos-device/lobby-track.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 52628,
+      "capturedAt": "2026-08-14T21:29:59.909Z",
+      "gitSha": "dbf209d1",
+      "deviceName": "Spielzimmer",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
+    },
+    {
+      "scenario": "lobby-track",
+      "platform": "web",
+      "file": "web/lobby-track.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 40102,
+      "capturedAt": "2026-08-02T09:44:42.165Z",
+      "gitSha": "5c8fea19"
+    },
+    {
+      "scenario": "monster",
+      "platform": "tvos-device",
+      "file": "tvos-device/monster.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 54670,
+      "capturedAt": "2026-07-31T18:55:52.257Z",
+      "gitSha": "8fabc25",
+      "deviceName": "Spielzimmer",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
+    },
+    {
+      "scenario": "monster",
+      "platform": "web",
+      "file": "web/monster.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 47432,
+      "capturedAt": "2026-08-02T09:45:21.589Z",
+      "gitSha": "5c8fea19"
+    },
+    {
+      "scenario": "paused",
+      "platform": "tvos-device",
+      "file": "tvos-device/paused.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 8808,
+      "capturedAt": "2026-07-31T18:55:52.330Z",
+      "gitSha": "8fabc25",
+      "deviceName": "Spielzimmer",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
+    },
+    {
+      "scenario": "paused",
+      "platform": "web",
+      "file": "web/paused.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 13364,
+      "capturedAt": "2026-08-02T09:45:25.117Z",
+      "gitSha": "5c8fea19"
+    },
+    {
+      "scenario": "podium",
+      "platform": "tvos-device",
+      "file": "tvos-device/podium.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 11928,
+      "capturedAt": "2026-07-31T18:55:52.739Z",
+      "gitSha": "8fabc25",
+      "deviceName": "Spielzimmer",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
+    },
+    {
+      "scenario": "podium",
+      "platform": "web",
+      "file": "web/podium.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 14902,
+      "capturedAt": "2026-08-02T09:45:49.331Z",
+      "gitSha": "5c8fea19"
+    },
+    {
+      "scenario": "racing",
+      "platform": "tvos-device",
+      "file": "tvos-device/racing.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 54700,
+      "capturedAt": "2026-07-31T18:55:52.081Z",
+      "gitSha": "8fabc25",
+      "deviceName": "Spielzimmer",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
+    },
+    {
+      "scenario": "racing",
+      "platform": "web",
+      "file": "web/racing.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 47448,
+      "capturedAt": "2026-08-02T09:45:03.054Z",
+      "gitSha": "5c8fea19"
+    },
+    {
+      "scenario": "racing-sidewinder",
+      "platform": "web",
+      "file": "web/racing-sidewinder.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 38502,
+      "capturedAt": "2026-08-02T09:45:09.413Z",
+      "gitSha": "5c8fea19"
+    },
+    {
+      "scenario": "reconnect",
+      "platform": "tvos-device",
+      "file": "tvos-device/reconnect.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 54794,
+      "capturedAt": "2026-07-31T18:55:52.420Z",
+      "gitSha": "8fabc25",
+      "deviceName": "Spielzimmer",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
+    },
+    {
+      "scenario": "reconnect",
+      "platform": "web",
+      "file": "web/reconnect.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 45384,
+      "capturedAt": "2026-08-02T09:45:28.978Z",
+      "gitSha": "5c8fea19"
+    },
+    {
+      "scenario": "results",
+      "platform": "tvos-device",
+      "file": "tvos-device/results.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 11926,
+      "capturedAt": "2026-07-31T18:55:52.589Z",
+      "gitSha": "8fabc25",
+      "deviceName": "Spielzimmer",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
+    },
+    {
+      "scenario": "results",
+      "platform": "web",
+      "file": "web/results.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 12344,
+      "capturedAt": "2026-08-02T09:45:36.138Z",
+      "gitSha": "5c8fea19"
+    },
+    {
+      "scenario": "rocket",
+      "platform": "tvos-device",
+      "file": "tvos-device/rocket.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 52150,
+      "capturedAt": "2026-07-31T18:55:52.169Z",
+      "gitSha": "8fabc25",
+      "deviceName": "Spielzimmer",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
+    },
+    {
+      "scenario": "rocket",
+      "platform": "web",
+      "file": "web/rocket.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 47286,
+      "capturedAt": "2026-08-02T09:45:15.540Z",
+      "gitSha": "5c8fea19"
+    },
+    {
+      "scenario": "welcome",
+      "platform": "web",
+      "file": "web/welcome.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 18458,
+      "capturedAt": "2026-08-02T09:44:26.953Z",
+      "gitSha": "5c8fea19"
+    }
+  ]
+}

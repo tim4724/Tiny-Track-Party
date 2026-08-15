@@ -83,10 +83,15 @@ test('the two masks produce genuinely different cars', async () => {
 test('every shell DERIVES the mask from the fields, and reads no `mask` key', () => {
   // The web derives it in NativeRaceSession; tvOS derives it in the CONTROL
   // branch. Neither may read a `mask` off the message — there is none to read.
-  // The web shell today; each TV shell adds its own file here as it lands.
+  // Every shell that derives a mask. The tvOS entry is why the source half of
+  // this test exists at all: that shell read a `mask` key off the CONTROL
+  // message, got nil on every sample, and steered no car for the life of the
+  // port — with every packet arriving and nothing erroring.
   const sources = {
     'public/display/NativeRaceSession.js': readFileSync(
-      path.join(ROOT, 'public/display/NativeRaceSession.js'), 'utf8')
+      path.join(ROOT, 'public/display/NativeRaceSession.js'), 'utf8'),
+    'shells/tvos/TinyTrackParty/App/GameCoordinator+Lobby.swift': readFileSync(
+      path.join(ROOT, 'shells/tvos/TinyTrackParty/App/GameCoordinator+Lobby.swift'), 'utf8')
   };
 
   // Whole-file scope on purpose: `mask` appears in exactly one place in each of

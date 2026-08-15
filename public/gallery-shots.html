@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>Screens Gallery — Tiny Track Party</title>
+<!-- The build being served, for the staleness chip. Substituted by
+     server/index.js; empty in a production image, where there is no SHA to
+     compare against and the chip is simply omitted. -->
+<meta name="ttp-git-sha" content="__GIT_SHA__">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/gallery.css?v=__APP_V__">
+<style>
+  /* Only the frame's CONTENTS differ from the other galleries — two <img>s where
+     they have one <iframe> — so everything else is reused from gallery.css. */
+  .shot-frame { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #14131c; overflow: hidden; }
+  .shot-frame img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
+  .shot-frame .missing {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    color: #6b6880; font: 600 13px/1.4 system-ui, sans-serif; text-align: center; padding: 1rem;
+  }
+
+  /* SIDE BY SIDE IS TWO WHOLE PICTURES, which is what the name promises and
+     what comparing two platforms' takes on one screen actually needs. It used
+     to clip each image to half of a single frame — the left half of the web
+     shot beside the right half of the TV's — which is a WIPE: useful for
+     checking that a chip lands on the same pixel, useless for "do these two
+     screens agree", because you never see either of them whole. That gesture
+     is still here, as `swipe`, where it belongs.
+
+     Each pane then gets half the width instead of the card getting all of it,
+     so a scenario is ~500px tall and three fit on screen rather than one. */
+  .shot-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .shot-pane { min-width: 0; }
+  .shot-pane > .cap {
+    font: 600 10px/1.6 system-ui, sans-serif; letter-spacing: .08em;
+    text-transform: uppercase; color: #8b88a0; padding-bottom: 3px;
+  }
+
+  /* swipe: a draggable wipe, driven by --x. */
+  .mode-swipe .shot-b { clip-path: inset(0 0 0 calc(var(--x, 50%))); }
+  .mode-swipe::after {
+    content: ''; position: absolute; top: 0; bottom: 0; left: var(--x, 50%);
+    width: 2px; background: #ffb703; pointer-events: none;
+  }
+
+  /* difference: the honest answer to "has the TV drifted?", with no image
+     library — anything identical goes black. */
+  .mode-diff { background: #000; }
+  .mode-diff .shot-b { mix-blend-mode: difference; }
+
+  .mode-a .shot-b, .mode-b .shot-a { display: none; }
+
+  .shot-meta { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; font-size: 11px; color: #8b88a0; }
+  .shot-meta .stale { color: #14131c; background: #ffb703; border-radius: 4px; padding: 1px 6px; font-weight: 700; }
+  .shot-meta .fresh { color: #7ee08a; }
+
+  /* `.legend` is absolutely positioned in gallery.css for the tracks gallery's
+     side panel. Here it is one sentence, and pinned to the top-right it landed
+     underneath the nav. */
+  .legend {
+    position: static; width: auto; max-height: none;
+    margin: 10px 20px 0; padding: 8px 12px;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>TINY TRACK · SCREENS</h1>
+
+  <div class="group">
+    <select id="left-platform"></select>
+  </div>
+  <div class="group">
+    <select id="right-platform"></select>
+  </div>
+  <div class="group">
+    <select id="compare-mode">
+      <option value="split" selected>Side by side</option>
+      <option value="swipe">Swipe</option>
+      <option value="diff">Difference</option>
+      <option value="a">Left only</option>
+      <option value="b">Right only</option>
+    </select>
+  </div>
+  <nav>
+    <a href="/gallery.html">Display</a>
+    <a href="/gallery-controller.html">Phone</a>
+    <a href="/gallery-tracks.html">Tracks</a>
+    <a href="/gallery-assets.html">Assets</a>
+    <a href="/gallery-sounds.html">Sounds</a>
+    <a href="/gallery-music.html">Music</a>
+    <a href="/gallery-shots.html" class="active">Screens</a>
+  </nav>
+</header>
+
+<p class="legend" id="legend"></p>
+<main id="rails"></main>
+
+<script type="module" src="/gallery-shots.js?v=__APP_V__"></script>
+</body>
+</html>

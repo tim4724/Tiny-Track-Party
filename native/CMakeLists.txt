@@ -993,6 +993,66 @@ set(TTP_APP_SOURCES
   libttp-runtime/ttp/glb.cc
   runtime/ttp_glb.cc)
 
+# ---- tvOS module: the whole game, as a static library ----------------------
+# The Apple TV sibling of the browser module below. Same sources, same libraries,
+# same strict-FP contract; the ONLY difference is the shell file and the shape of
+# the artifact — a .a the Xcode app target links, where the web emits a .mjs the
+# page imports. `shells/tvos/` holds the app around it (XcodeGen project, Swift,
+# SwiftUI), and `native/scripts/build-runtime-tvos.sh` drives both halves.
+#
+# TWO SLICES, NOT A FAT BINARY. Apple TV device and simulator are BOTH arm64, so
+# lipo cannot combine them — this target is configured twice, once per SDK, into
+# build/tvos-appletvos and build/tvos-appletvsimulator, and the Xcode project
+# picks by $(PLATFORM_NAME). That is also why FILAMENT_SDK must name a per-SDK
+# install tree (filament-appletvos / filament-appletvsimulator) and never the
+# xcframework root: FilamentSdk.cmake globs lib/*/*.a, which under that root
+# matches both slices and puts them on one link line, both arm64, with nothing to
+# notice.
+#
+# Defined HERE rather than under shells/tvos/ for a reason that already bit a
+# probe: C++17 is set at this directory's scope, not per target, so a target in
+# another CMakeLists silently falls back to the compiler default and every
+# inline variable in libttp-runtime becomes an error. ccache's wiring is
+# directory-scoped too.
+if(CMAKE_SYSTEM_NAME STREQUAL "tvOS")
+  # project() at the top of this file is LANGUAGES C CXX; without this a .mm is
+  # compiled as C++ (or refused outright). Inside the branch so no other leg pays
+  # for the compiler probe.
+  enable_language(OBJCXX)
+
+  # The shared list plus this platform's shell — the same two lines as the web
+  # target, and for the same reason. If a second file ever has to be appended
+  # here, check first whether it names a platform API; if it does not, it belongs
+  # in TTP_APP_SOURCES.
+  set(TTP_TVOS_SOURCES ${TTP_APP_SOURCES})
+  if(TARGET ttp_renderer)
+    list(APPEND TTP_TVOS_SOURCES runtime/ttp_display_core.cc runtime/ttp_display_tvos.mm)
+  endif()
+  add_library(ttp_runtime_tvos STATIC ${TTP_TVOS_SOURCES})
+  target_include_directories(ttp_runtime_tvos PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime
+    ${CMAKE_CURRENT_SOURCE_DIR}/libttp-runtime
+    ${CMAKE_CURRENT_SOURCE_DIR}/renderer/include)
+  # ttp_strict_fp is named explicitly, exactly as ttp_runtime_web names it. It
+  # would arrive transitively through sim/party, but its own header calls this
+  # platform out by name: Apple clang defaults -ffp-contract to 'fast', and arm64
+  # FMA contraction is precisely the determinism the bit-exact traces exist to
+  # catch. A future refactor of the link graph must not be able to drop it
+  # silently.
+  target_link_libraries(ttp_runtime_tvos PRIVATE libttp_sim libttp_party
+    ttp_strict_fp ttp_warnings)
+  if(TARGET ttp_renderer)
+    target_link_libraries(ttp_runtime_tvos PRIVATE ttp_renderer)
+    # -fno-objc-exceptions is not optional and not obvious. ttp_renderer is built
+    # -fno-rtti -fno-exceptions (like Filament); an ObjC++ translation unit
+    # defines __EXCEPTIONS anyway, and robin-map's `throw` then becomes a hard
+    # error. On the source file rather than an interface, because it is the only
+    # ObjC++ in the tree.
+    set_source_files_properties(runtime/ttp_display_tvos.mm PROPERTIES
+      COMPILE_OPTIONS "-fno-rtti;-fno-exceptions;-fno-objc-exceptions")
+  endif()
+endif()
+
 # ---- Browser module: the whole game --------------------------------------
 # Emscripten-only. ONE module: libttp-sim + libttp-party behind their extern "C"
 # ABIs (runtime/ttp_runtime.h, runtime/ttp_party.h) AND libttp-renderer behind

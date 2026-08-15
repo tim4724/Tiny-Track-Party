@@ -7,6 +7,9 @@ API"); this says what that leaves you holding, and which parts are a decision
 rather than a task.
 
 Nothing here is Android- or tvOS-specific work. It is the state of the base.
+The tvOS shell is the shipped worked example: `shells/tvos/` (built by
+`shells/tvos/scripts/build.sh`), driven end to end by
+`scripts/tvos-party-check.mjs`, photographed by `npm run shots:tvos`.
 
 ## The shell set
 
@@ -85,9 +88,10 @@ Three properties of that surface matter more than the list:
    `ttp::rt::displayCore()` (`ttp_display_core.h`). Every other display ABI
    body is shared in `runtime/ttp_display_core.cc`, which your module compiles
    as-is — a shell porting from a revision where those bodies lived in the web
-   file deletes its copies. The platform-free half below both is in
-   `libttp-runtime` and must stay there. If a line names no platform API, it
-   is in the wrong file.
+   file deletes its copies. `ttp_display_tvos.mm` is the Metal one — ObjC++,
+   because the `CAMetalLayer` must be produced ObjC-side. The platform-free
+   half below both is in `libttp-runtime` and must stay there. If a line names
+   no platform API, it is in the wrong file.
 2. **A module target.** Add it beside `ttp_runtime_web` in
    `native/CMakeLists.txt` and compile `${TTP_APP_SOURCES}` plus
    `runtime/ttp_display_core.cc` plus your surface file. Do not retype the
@@ -95,12 +99,20 @@ Three properties of that surface matter more than the list:
    ABI added and fails as a link error on one platform only.
 3. **Materials.** `native/scripts/build-materials.sh <matc> <outdir> [api] [platform]`,
    using the FORK'S matc. `opengl mobile` (the default) is what the web ships
-   and what Android TV wants; tvOS needs `-a metal`.
+   and what Android TV wants; tvOS needs `-a metal`. Every material the web
+   shell lists (`render/Display.js`'s `MATERIALS`) is required for a correct
+   picture, and only `vcolor` fails loudly — the rest degrade silently (no
+   `vroad` quietly reverts every road decal to the lifted fallback meshes; no
+   `voverlay` and the steer bar and dividers vanish). A shell loading from its
+   own bundle should assert on every blob, not copy the web's `if (res.ok)`
+   skip.
 4. **The 2D UI**, in the platform's own toolkit, rendered from `ttp_ui.h`.
    Bind the effect-op vocabularies at boot and assert your performer tables
    against them (see The shell set above) before anything else.
-   Sizing: `public/display/main.js` (1755 lines) + `lobbySeats.js` + roughly
-   1165 lines of CSS, of which the decisions are already gone. Consume
+   The web's rendering half is `public/display/main.js` + `lobbySeats.js` +
+   the display CSS (the decisions are already gone from all three); the
+   SwiftUI screens under `shells/tvos/TinyTrackParty/Screens/` are the second
+   implementation to crib from. Consume
    `public/shared/design-tokens.json` rather than re-authoring the sticker
    palette.
    The couch's PROGRESSION is part of this surface: read the persisted blob at
@@ -142,10 +154,14 @@ Three properties of that surface matter more than the list:
    effects. When your shell gains a SEND path, add a case to
    `scripts/wire-mutations.mjs` — that was the suite's one historical blind
    spot.
-6. **The audio device.** A sample player over the command stream. There is no
-   DSP to port: `public/assets/audio/cues/` holds 28 pre-baked WAVs plus a
-   manifest carrying each cue's detune spread (see `scripts/bake-cues.mjs` for
-   why the jitter is the player's job).
+6. **The audio device.** A player over the command stream. The cue palette is
+   pre-baked (`public/assets/audio/cues/` — WAVs plus a manifest carrying each
+   cue's detune spread; see `scripts/bake-cues.mjs` for why the jitter is the
+   player's job), but the device is more than a sampler: the engine voice is a
+   live passthrough (rate/gain steered per command) and the master-bus
+   compressor is part of the mix contract. `public/display/Audio.js` and
+   `shells/tvos/TinyTrackParty/Audio/AudioDevice.swift` are the two
+   implementations to compare.
 7. **A QR encoder.** Settled in [shared-cpp-plan.md](shared-cpp-plan.md) (§QR):
    there is deliberately no C++ encoder, because the URL composition is shared
    and only the module bitmap is per-platform. `CIQRCodeGenerator` on tvOS,
@@ -209,6 +225,20 @@ Three properties of that surface matter more than the list:
     that header also carries the reasoning, including why a dropped-frame count
     is not a signal. Web reference: `Stage._adaptScale`.
 
+14. **An attribution surface.** The build ships CC-BY music, OFL fonts and
+    several notice-tier libraries, so a shell that shows nobody is in breach —
+    this is an obligation, not an About page. What it owes is a reachable list
+    of every credited work, and the license TEXT for the ones whose license
+    demands the notice travel with the build. Do NOT type that list: bake it
+    from `public/shared/credits.js` plus the live music catalogue (the same two
+    modules /licenses.html renders), applying only the delta between what a
+    browser ships and what your package does — `shells/tvos/scripts/gen-legal.mjs`
+    is the reference, and `tests/tvos-legal.test.js` is the shape of gate that
+    keeps a delta honest. Privacy and imprint are couchpad.games pages for every
+    game on the launcher: link them, never restate them, and on a box with no
+    browser show the URL as a QR for the phone already in the room. Read those
+    two URLs out of the display's own footer rather than typing them.
+
 ## The asymmetries worth knowing before you start
 
 - **C interop is not equal across platforms.** Swift consumes a C header
@@ -224,12 +254,22 @@ Three properties of that surface matter more than the list:
   LIVENESS windows as one JSON object. A C++ layer can include
   `ttp/protocol.h` instead. Nothing else is a legitimate source, and
   `tests/config-drift.test.js` pins the export to `public/shared/protocol.js`.
-- **Asset delivery is unsolved.** `public/assets/` is ~170 MB, 164 MB of it
-  race music. The web streams it off an origin; a store build needs an asset
-  pack, a download-on-first-run, or a smaller shipped pool. Nobody has decided
-  which, and `ttp_audio_song_json`'s index has to resolve to whatever you pick.
-- **Only three legs execute the fixtures.** The Android NDK leg in
-  `.github/workflows/native.yml` compiles and does not run. `fp-profile.md`
+- **Asset delivery: the music is the whole problem, and it is corpus-locked.**
+  `public/assets/` is ~87 MB, ~81 MB of it race music (the high-bitrate
+  masters left the tree; `SOURCES.json` holds their URLs and `npm run
+  fetch:music` rebuilds the shipped files). Everything else bundles trivially,
+  which is what tvOS does: `shells/tvos/scripts/stage-assets.sh` bundles the
+  GLBs, cues and materials and streams the music off the web origin one song
+  at a time — an origin every TV app already depends on for the join URL. Before
+  planning anything smaller: `audio.cc`'s SONG table bakes each path
+  INCLUDING the `.mp3` extension and `audio-corpus.jsonl` froze those strings
+  (its JS oracle is deleted), so re-encoding the catalogue to another
+  container — or trimming the pool, which shifts every index — is an ABI +
+  corpus change (`Song::file` would have to become a stem), not an encode. And
+  `ttp_audio_song_json`'s index has to resolve to whatever you pick.
+- **The Android NDK leg is the one leg that compiles but does not run the
+  fixtures** (`.github/workflows/native.yml` — every other leg runs the full
+  ctest suite). `fp-profile.md`
   §NDK flags the contraction risk specifically, so the first Android work
   should be an emulator ctest leg modelled on
   `native/scripts/tvos-sim-spawn.sh` (a `CMAKE_CROSSCOMPILING_EMULATOR` shim),
@@ -301,11 +341,13 @@ second instance on its first run.
 **The only detector for this class is an end-to-end test with a real peer.** A
 headless phone driven through a real party — join, HELLO, pick, ready, start,
 race, leave — against the real app over the real relay found four of the six,
-and no corpus, screenshot or unit test found any of them. That harness lands
-with the first TV shell (`scripts/lib/phone.mjs` is the platform-free half); a
-new shell should point it at itself before it trusts anything else.
+and no corpus, screenshot or unit test found any of them. That harness is
+`scripts/tvos-party-check.mjs` (`scripts/lib/phone.mjs` is the platform-free
+half); a new shell should point it at itself before it trusts anything else.
 
 **And a screenshot harness must not bypass the real entry points.** The first
 shell's shots reached `ttp_race_launch_json` directly, so fifteen race screens
 photographed perfectly for a build whose Start button had never worked once. A
-harness may fabricate its INPUTS; it must not own a second copy of the road.
+harness may fabricate its INPUTS; it must not own a second copy of the road
+(`scripts/capture-shots-tvos.mjs`, `npm run shots:tvos`, is the corrected
+one).
