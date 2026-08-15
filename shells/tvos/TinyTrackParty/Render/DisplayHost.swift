@@ -262,9 +262,16 @@ final class DisplayHost {
         // means the surface still holds a frame the compositor has not shown.
         // The web ignores it because rAF already paces. A shell that logs,
         // retries or reinitialises on 0 will thrash.
-        _ = ttp_display_frame(dt)
+        //
+        // It is also the ONLY thing here that knows what the television showed.
+        // The link ticks at the panel's rate whether or not a frame was drawn,
+        // so a readout counting ticks reads a flat 60 straight through a skip
+        // storm — the failure `TtpRendererFrame.cpp`'s pacing note describes for
+        // rAF, arrived at by a different road. Hence the verdict goes to the
+        // monitor rather than the floor.
+        let presented = ttp_display_frame(dt) != 0
 
-        perf.record(now: link.timestamp, interval: elapsed,
+        perf.record(now: link.timestamp, interval: elapsed, presented: presented,
                     cells: cellCount, pixels: surfacePixels)
     }
 
