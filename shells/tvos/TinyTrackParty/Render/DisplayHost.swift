@@ -244,6 +244,28 @@ final class DisplayHost {
         lastSlowTick = CACurrentMediaTime()
     }
 
+    /// Idle the frame loop while the app is not on screen, and wake it when it
+    /// is back.
+    ///
+    /// **A BACKGROUNDED APP MUST NOT DRIVE METAL**, and this shell did: the link
+    /// was started once and ran for the life of the process, straight through
+    /// every Menu press. What that cost is a permanently dead surface — Filament's
+    /// `beginFrame` paces on a fence from two frames back, the frame in flight
+    /// when tvOS took the screen away never completes, and the skipper then
+    /// refuses EVERY frame for the rest of the process. Photographed on the
+    /// device it reads `0/60 fps, 60 skips`: the link ticking normally, nothing
+    /// reaching the panel, and no recovery — starting a race does not help,
+    /// because nothing renders again at all.
+    ///
+    /// Paused rather than invalidated, so the link keeps its target and its
+    /// `.common` mode registration; `lastTimestamp` is cleared on the way back so
+    /// the first frame after a wake is handed one cadence rather than the whole
+    /// time the app spent away.
+    func setPaused(_ paused: Bool) {
+        link?.isPaused = paused
+        if !paused { lastTimestamp = 0 }
+    }
+
     fileprivate func step(_ link: CADisplayLink) {
         inFrame = true
         defer { inFrame = false }

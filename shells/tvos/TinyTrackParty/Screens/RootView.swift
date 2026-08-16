@@ -50,14 +50,31 @@ struct TinyTrackPartyApp: App {
     var body: some Scene {
         WindowGroup { RootView(game: game) }
             .onChange(of: scenePhase) { _, phase in
-                // `.inactive` is deliberately not acted on: it is the transient
-                // state tvOS passes through in BOTH directions (and while a
-                // system overlay is up), so ending a party on it would tear the
-                // room down every time a dialog appeared.
+                // TWO LIFETIMES, and they end on different phases.
+                //
+                // THE PARTY ends on `.background` only. `.inactive` is the
+                // transient state tvOS passes through in BOTH directions (and
+                // while a system overlay is up), so tearing the room down there
+                // would end a party every time a dialog appeared.
+                //
+                // THE FRAME LOOP idles on `.inactive`, which is EARLIER on
+                // purpose: a backgrounded app may not drive Metal, and by the
+                // time `.background` arrives the screen is already gone. Running
+                // through the handover is what killed the surface permanently —
+                // see `DisplayHost.setPaused`. Waking it is the mirror, after
+                // `resume()` has restaged the lobby so the first frame drawn is
+                // of the fresh room rather than the dead one.
                 switch phase {
-                case .background: game.suspend()
-                case .active: game.resume()
-                default: break
+                case .background:
+                    game.display.setPaused(true)
+                    game.suspend()
+                case .inactive:
+                    game.display.setPaused(true)
+                case .active:
+                    game.resume()
+                    game.display.setPaused(false)
+                @unknown default:
+                    break
                 }
             }
     }
