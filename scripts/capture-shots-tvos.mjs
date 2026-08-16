@@ -40,6 +40,7 @@ import { fileURLToPath } from 'node:url';
 import { GALLERY_SCENARIOS } from '../public/shared/galleryScenarios.js';
 import { readManifest, writeManifest, shotDir } from './lib/shots.mjs';
 import { shotTestMethod } from '../shells/tvos/scripts/gen-scenarios.mjs';
+import { sh, resolveDestination, resolveDevicectlId, signingArgs, assertAwake } from './lib/tvos-device.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TVOS = path.join(ROOT, 'shells/tvos');
@@ -69,68 +70,8 @@ if (only) {
 }
 const scenarios = GALLERY_SCENARIOS.filter((s) => !only || only.has(s.id));
 
-function sh(cmd, argv, opts = {}) {
-  const r = spawnSync(cmd, argv, { encoding: 'utf8', ...opts });
-  if (r.status !== 0) {
-    throw new Error(`${cmd} ${argv.join(' ')} failed (${r.status})\n${r.stderr || r.stdout}`);
-  }
-  return r.stdout;
-}
 
-// The first available tvOS simulator, or the first paired Apple TV. Explicit
-// --device wins.
-function resolveDestination() {
-  if (typeof args.device === 'string') {
-    return SIM ? `platform=tvOS Simulator,id=${args.device}` : `platform=tvOS,id=${args.device}`;
-  }
-  if (SIM) {
-    const devices = JSON.parse(sh('xcrun', ['simctl', 'list', 'devices', 'available', '-j'])).devices;
-    for (const [runtime, list] of Object.entries(devices)) {
-      if (!runtime.includes('tvOS')) continue;
-      const pick = list.find((d) => d.name.includes('Apple TV 4K')) || list[0];
-      if (pick) return `platform=tvOS Simulator,id=${pick.udid}`;
-    }
-    throw new Error('no tvOS simulator available');
-  }
-  const out = sh('xcrun', ['devicectl', 'list', 'devices']);
-  // The State column moves between `available (paired)` and `connected`
-  // depending on whether a tunnel is currently up, and both are usable. Matching
-  // only one of them makes the script fail with "no paired Apple TV" while the
-  // TV is sitting right there.
-  const line = out.split('\n').find((l) => /Apple TV/.test(l) && /available|connected/.test(l));
-  if (!line) throw new Error('no paired Apple TV — pair one in Xcode, or pass --device <udid>');
-  // The 40-hex identifier xcodebuild wants is the last column of `xctrace list
-  // devices`; devicectl prints its own UUID, which xcodebuild does NOT accept.
-  const trace = sh('xcrun', ['xctrace', 'list', 'devices']);
-  const m = trace.split('\n').find((l) => /Apple TV|Spielzimmer/.test(l) && /\([0-9a-f]{40}\)/.test(l));
-  const udid = m && m.match(/\(([0-9a-f]{40})\)/)?.[1];
-  if (!udid) throw new Error('could not read a device UDID from xctrace');
-  return `platform=tvOS,id=${udid}`;
-}
 
-// A sleeping Apple TV composites a black screen and every shot comes back
-// identical. Refuse instead of shipping a gallery of black rectangles.
-function assertAwake(destination) {
-  if (SIM) return;
-  const udid = destination.split('id=')[1];
-  const tmp = path.join(os.tmpdir(), `ttp-displays-${process.pid}.json`);
-  let asleep = false;
-  try {
-    spawnSync('xcrun', ['devicectl', 'device', 'info', 'displays',
-      '--device', udid, '--json-output', tmp], { encoding: 'utf8' });
-    const info = JSON.parse(fs.readFileSync(tmp, 'utf8'));
-    const text = JSON.stringify(info);
-    asleep = /"backlightState"\s*:\s*"(?!activeOn)/.test(text);
-  } catch {
-    // Failing to READ the display state is not evidence of sleep, and not a
-    // reason to refuse to capture; only a confirmed off backlight is.
-  } finally {
-    fs.rmSync(tmp, { force: true });
-  }
-  if (asleep) {
-    throw new Error('the Apple TV reports its backlight is off — wake it first, or every shot comes back black');
-  }
-}
 
 function gitSha() {
   try {
@@ -177,31 +118,11 @@ function toWebp(src, dest, width) {
     'no WebP encoder worked. Install one:  brew install webp\n  ' + errors.join('\n  '));
 }
 
-// The Apple Developer team a DEVICE build signs with.
-//
-// Not in `project.yml`, deliberately: a team ID is a property of whoever is
-// building, not of the project, and a checked-in one makes the repo unbuildable
-// for anyone else while looking like it works. The simulator needs none of this
-// (it runs unsigned), so this is only consulted for a device run.
-//
-// Derived from the installed signing certificate rather than asked for: the team
-// is the OU field of any Apple Development cert in the keychain, so a machine
-// that can sign at all can answer this itself. `TTP_DEVELOPMENT_TEAM` overrides,
-// for the case of several teams in one keychain.
-function developmentTeam() {
-  if (process.env.TTP_DEVELOPMENT_TEAM) return process.env.TTP_DEVELOPMENT_TEAM;
-  try {
-    const identities = sh('security', ['find-identity', '-v', '-p', 'codesigning']);
-    const name = identities.match(/"(Apple Development: [^"]+)"/)?.[1];
-    if (!name) return null;
-    const pem = sh('security', ['find-certificate', '-c', name, '-p']);
-    const subject = execFileSync('openssl', ['x509', '-noout', '-subject'], { input: pem })
-      .toString();
-    return subject.match(/OU\s*=\s*([A-Z0-9]+)/)?.[1] ?? null;
-  } catch {
-    return null;
-  }
-}
+// The signing identity and the device lookup both live in `lib/tvos-device.mjs`
+// now, shared with the lifecycle gate. A team ID is deliberately NOT in
+// `project.yml`: it belongs to whoever is building, not to the project, and a
+// checked-in one makes the repo unbuildable for everyone else while looking like
+// it works.
 
 async function main() {
   // UNCONDITIONALLY, as `shells/tvos/scripts/build.sh` does. Regenerating only
@@ -212,8 +133,8 @@ async function main() {
   sh('xcodegen', ['generate', '--spec', path.join(TVOS, 'project.yml'),
                   '--project', TVOS, '--quiet'], { cwd: TVOS });
 
-  const destination = resolveDestination();
-  assertAwake(destination);
+  const destination = resolveDestination({ sim: SIM, device: args.device });
+  if (!SIM) assertAwake(resolveDevicectlId());
   console.log(`==> ${PLATFORM}: ${destination}`);
 
   const bundle = path.join(os.tmpdir(), `ttp-shots-${PLATFORM}.xcresult`);
@@ -240,20 +161,7 @@ async function main() {
   // ~10 minutes wall for a job that is a couple of minutes. SkidShotTests' own
   // header already claims it is "reached only by an explicit -only-testing" —
   // this is the line that finally makes that true.
-  const signing = [];
-  if (SIM) {
-    // The simulator runs unsigned, and asking it to sign only invents a reason
-    // to fail on a machine with no certificate.
-    signing.push('CODE_SIGNING_ALLOWED=NO');
-  } else {
-    const team = developmentTeam();
-    if (!team) {
-      throw new Error(
-        'no Apple Development certificate found — a device run has to sign.\n' +
-        '  Set TTP_DEVELOPMENT_TEAM=<team id>, or run with --sim.');
-    }
-    signing.push(`DEVELOPMENT_TEAM=${team}`, 'CODE_SIGNING_ALLOWED=YES');
-  }
+  const signing = signingArgs({ sim: SIM });
 
   sh('xcodebuild', [
     'test',

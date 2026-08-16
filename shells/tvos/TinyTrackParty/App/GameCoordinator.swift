@@ -155,6 +155,10 @@ final class GameCoordinator: ObservableObject {
         // record above. A fresh couch is five zero-star rows and a locked
         // Playroom, which is a shelf worth drawing — it states the goal.
         refreshCupShelf(catalogue)
+        // The mini-map field tints, off the same rows. Still authored values, but
+        // the catalogue is where they are authoritative — see `Schematic.cupColor`,
+        // which used to keep a hand-copied second spelling of the five.
+        Schematic.installCupColors(catalogue["cups"] as? [[String: Any]] ?? [])
 
         // No `personas` key: absent asks for libttp-sim's own table (the single
         // source), so boot hands over nothing it read back.

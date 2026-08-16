@@ -23,6 +23,7 @@
     "probe:laptime": "node scripts/build-probe.mjs && native/build/probe_cli laptime",
     "revive:js-oracle": "node scripts/revive-js-oracle.mjs",
     "setup": "node scripts/setup.mjs",
+    "check:tvos-lifecycle": "node scripts/check-tvos-lifecycle.mjs",
     "shots:tvos": "node scripts/capture-shots-tvos.mjs",
     "shots:tvos-sim": "node scripts/capture-shots-tvos.mjs --sim",
     "shots:web": "node scripts/capture-shots.mjs",

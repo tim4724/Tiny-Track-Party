@@ -136,6 +136,28 @@ Three properties of that surface matter more than the list:
    one — the reward arc then exists only on the phones, which is where nobody
    is looking. Refresh it where the record can MOVE and nowhere else: boot, and
    the `persist-progression` performer.
+
+   **The frame loop is a LIFETIME, and it is not the party's.** A shell must stop
+   driving its GPU the moment the app leaves the screen and start again when it
+   returns. tvOS learned this the expensive way: the display link ran for the
+   life of the process, so the frame in flight when the system took the screen
+   never completed, Filament's pacing fence never signalled again, and the
+   surface was dead for good — `0/60 fps, 60 skips`, a race startable and
+   nothing ever drawn. Idle on the EARLIER phase (tvOS: `.inactive`, not
+   `.background`); by the time a platform says "backgrounded" the screen is
+   already gone. The party's own lifetime stays separate, because the transient
+   phase is also what a system dialog produces.
+
+   **Boot must not hold the first frame hostage.** Whatever the shell's boot does
+   — configure, stage assets, build the preview track, dial the relay — it runs
+   somewhere, and if that somewhere is the UI thread then the first layout pass
+   is what the room stares at for the whole of it. Put suspension points in.
+
+   `npm run check:tvos-lifecycle` is the gate for the first of those, on a real
+   Apple TV: it launches, waits for the lobby, presses Menu, comes back, and
+   fails if the picture has not changed. It cannot use a test-launched app — that
+   provably does not reproduce the fault — so it starts the app itself. No CI
+   runner has a television, so this one is run by hand.
    **The results board on a cup is TWO PHASES**, and a shell that paints only
    one of them has dropped the cup's whole story. `ttp_ui_results_view_json`
    answers `raceRows` (the race that just ended, finishing order, lap time +
@@ -237,6 +259,14 @@ Three properties of that surface matter more than the list:
     measurement before passing it, it belongs in `ttp/render_scale.h` instead —
     that header also carries the reasoning, including why a dropped-frame count
     is not a signal. Web reference: `Stage._adaptScale`.
+
+    **STILL OWED BY tvOS, deliberately (2026-08-16).** `Stage.js` is the rule's
+    only caller in the tree, so the Apple TV renders at the panel's full buffer
+    with no relief — which on an A10X at 3840×2160 is four times the fragments
+    of 1080p and nothing to give. Deferred with eyes open rather than missed:
+    the readout can now tell a held 60 from a skipping one (`fps` counts
+    presents, `hz` counts ticks), so the measurement this owes is cheap to take
+    whenever the appetite arrives.
 
 14. **An attribution surface.** The build ships CC-BY music, OFL fonts and
     several notice-tier libraries, so a shell that shows nobody is in breach —

@@ -171,9 +171,9 @@
       "file": "tvos-device/lobby-track.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 53072,
-      "capturedAt": "2026-08-16T04:52:39.684Z",
-      "gitSha": "ab95c4ef",
+      "bytes": 53176,
+      "capturedAt": "2026-08-16T06:42:53.132Z",
+      "gitSha": "5d037a49",
       "deviceName": "Spielzimmer",
       "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
     },

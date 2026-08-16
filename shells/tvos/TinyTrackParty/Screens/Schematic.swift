@@ -152,28 +152,39 @@ extension Schematic {
     /// The field colour behind a mini-map: the cup's own colour, mostly washed
     /// out to white.
     ///
-    /// THIS TABLE IS A SECOND SPELLING, and it is worth being honest about it.
-    /// The five colours live in `public/shared/trackPicker.js` (`CUP_COLOR`) and
-    /// are not design tokens — they never entered `theme.css`'s `:root`, so
-    /// `design-tokens.json` does not carry them and `Tokens` cannot answer for
-    /// them. Ledger 3.6 lists "cup tint" among the things a shell owns and will
-    /// not find in `ttp_ui.h`, so this is sanctioned rather than accidental; but
-    /// nothing in the tree watches these two lists, and if a third shell wants
-    /// them the right fix is a token group, not a third copy.
+    /// INSTALLED FROM THE CATALOGUE, not authored here.
+    /// `ttp_ui_catalogue_json` carries `color` on every cup row as packed
+    /// 0xRRGGBB, and says in its own comment that it is there so "every shell
+    /// turns it into its own colour type".
     ///
-    /// They are AUTHORED, not derived, and `trackPicker.js` records why at
-    /// length: they started as each biome's first horizon-hill colour on the
+    /// This used to be a hand-copied table of the five values, defended by a note
+    /// saying a shell "will not find [cup tint] in `ttp_ui.h`". That stopped
+    /// being true when the catalogue grew the field. The two lists agreed to the
+    /// byte when they were reconciled, so nothing about the picture changed —
+    /// what changed is that there is one source again, and a sixth cup or a
+    /// retuned colour now arrives here on its own.
+    ///
+    /// They are still AUTHORED rather than derived, and `trackPicker.js` records
+    /// why at length: they began as each biome's first horizon-hill colour on the
     /// theory that the 3D world and the paper UI then could not drift, and that
     /// broke on two of five (snow's is white in all but name; playroom's washes
     /// out to chrome pink, which the theme vetoes). Do not re-derive them from
-    /// `ttp_theme.h`.
-    private static let cupColor: [String: UInt32] = [
-        "beach": 0xE0C070,      // wet sand
-        "snow": 0x7FB2DC,       // ice blue
-        "backyard": 0x7FBF63,   // lawn green
-        "canyon": 0xC4713F,     // terracotta
-        "rooftop": 0xF5842B     // orange plastic deck
-    ]
+    /// `ttp_theme.h` — read the catalogue.
+    @MainActor private static var cupColor: [String: UInt32] = [:]
+
+    /// Boot hands the catalogue's `cups` over once, before any board draws.
+    @MainActor
+    static func installCupColors(_ cups: [[String: Any]]) {
+        cupColor = cups.reduce(into: [:]) { out, c in
+            guard let id = c["id"] as? String, let rgb = c["color"] as? Double else { return }
+            out[id] = UInt32(rgb)
+        }
+        // Not a guard, a tripwire: an empty install paints every field the
+        // fallback green, which reads as a theming choice rather than as boot
+        // having skipped a step.
+        assert(!cupColor.isEmpty, "no cup colours in the catalogue — was ttp_ui_configure called?")
+    }
+
     /// A cup-less catalogue keeps the old default green.
     private static let cupColorFallback: UInt32 = 0x7FBF63
 
@@ -186,6 +197,7 @@ extension Schematic {
     /// straight component lerp on the ENCODED values, which is what
     /// `color-mix(in srgb, …)` does and what makes this reproduce the browser's
     /// answer — mixing the same pair in linear light comes out visibly darker.
+    @MainActor
     static func fieldTint(cupId: String?) -> Color {
         wash(cupId.flatMap { cupColor[$0] } ?? cupColorFallback)
     }
