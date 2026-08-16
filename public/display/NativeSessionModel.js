@@ -13,7 +13,9 @@
 // No rule may live here. The fine-grained one-rule exports this file once
 // wrapped are gone from the ABI: the walks are the only spelling, the frozen
 // session corpus replays the rules at the C++ level (session_check), and
-// abi_check holds each walk to the same rules composed in-test.
+// abi_check holds each walk to the same rules composed in-test. The tvOS
+// shell (PartyNet.swift) walks the same entry points over the C header
+// directly.
 //
 // public/display/sessionModel.js is GONE — it was the ORACLE, now retired:
 // tests/fixtures/session-corpus.jsonl was recorded off it, native/partytest/

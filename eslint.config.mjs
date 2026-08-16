@@ -101,7 +101,7 @@ export default [
 
   // ── Node ES module scripts (scripts/*.mjs) ────────────────────────────────
   {
-    files: ['scripts/**/*.mjs'],
+    files: ['scripts/**/*.mjs', 'shells/**/*.mjs'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
@@ -114,6 +114,20 @@ export default [
   // Node, but its page.evaluate() closures run in Chromium and reference window.
   // (scripts/lib/bake-harness.js is browser-only and is covered by the
   // scripts/**/*.js block, which already carries browser globals.)
+  // ── ESM that drives a browser ──────────────────────────────────────────────
+  // Same situation as the CommonJS capture scripts above: the FILE is Node, but
+  // it ships page.evaluate() closures that run in the page and reference browser
+  // globals. Split out rather than widening the Node block, so a stray `window`
+  // in an ordinary script is still an error.
+  {
+    files: ['scripts/capture-shots.mjs'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: { ...globals.node, ...globals.browser },
+    },
+  },
+
   {
     files: ['scripts/bake-cues.mjs', 'scripts/perf-features.mjs'],
     languageOptions: {

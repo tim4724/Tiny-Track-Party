@@ -134,3 +134,38 @@ test('a SUCCESSFUL call leaves the slot empty', async () => {
   assert.ok(a.gpCreate(JSON.stringify({ id: 'x', name: 'X', tracks: ['a'] }), 0) > 0);
   assert.equal(a.lastError(), '');
 });
+
+test('every shell surfaces the reason instead of composing its own', () => {
+  // The point of the export. A shell that discards the return of a call that
+  // can refuse, or invents a message for one that did, has all of this and uses
+  // none of it — which is what the first TV shell did with all three configures.
+  const fs = require('node:fs');
+  const shells = {
+    'public/display/nativeRuntime.js': /ttp_last_error/,
+    'shells/tvos/TinyTrackParty/App/GameCoordinator.swift': /ttp_last_error/
+  };
+  for (const [file, needs] of Object.entries(shells)) {
+    const full = path.join(ROOT, file);
+    if (!fs.existsSync(full)) {
+      assert.ok(file.startsWith('shells/'), `${file} is missing and is not an optional shell`);
+      continue;
+    }
+    const code = fs.readFileSync(full, 'utf8')
+      .split('\n').filter((l) => !/^\s*(\/\/|\/\/\/|\*|\/\*)/.test(l)).join('\n');
+    assert.match(code, needs, `${file}: never reads the engine's reason`);
+  }
+});
+
+test('no shell DISCARDS the return of a call that can refuse', () => {
+  // `_ = ttp_ui_configure(…)` compiles, runs, and carries a malformed boot
+  // straight into a game with no catalogue — every symptom of which shows up
+  // somewhere else entirely.
+  const fs = require('node:fs');
+  const file = 'shells/tvos/TinyTrackParty/App/GameCoordinator.swift';
+  const full = path.join(ROOT, file);
+  if (!fs.existsSync(full)) return;
+  const code = fs.readFileSync(full, 'utf8')
+    .split('\n').filter((l) => !/^\s*(\/\/|\/\/\/)/.test(l)).join('\n');
+  assert.doesNotMatch(code, /_\s*=\s*ttp_\w*_configure\(/,
+    `${file}: discards a configure return — a refused boot then looks like a bug elsewhere`);
+});

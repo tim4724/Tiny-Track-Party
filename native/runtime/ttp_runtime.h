@@ -64,7 +64,34 @@ TTP_ABI void ttp_update(int h, double dtMs);
 
 // Inject a (possibly partial) CONTROL message for a car. mask bit 1 = s present,
 // 2 = b present, 4 = u present; absent fields are left untouched on the car.
-TTP_ABI void ttp_process_input(int h, const char* idJson, int mask, double s, double b, double u);
+//
+// THE MASK IS THE SHELL'S TO DERIVE, and it is never on the wire: the phone
+// sends {s, b, u} and the receiving shell reads off which of them arrived.
+// Leaving an absent field untouched is what makes a partial message SAFE —
+// defaulting `u` to 0 instead would look like a fresh use-counter and fire the
+// car's held item — so the mask is not going away.
+//
+// It is, however, the quietest thing in this ABI to get wrong, because a wrong
+// one is well-formed: pass 0 and every field is skipped, the call succeeds, and
+// the car simply never answers its phone (the first tvOS shell read a `mask`
+// key off the message, got 0 on every sample, and steered nothing for the life
+// of the port). Which is why this ANSWERS rather than returning void:
+//
+//   -1  no such car — the identity did not match any car in this session,
+//       which is the other silent way to steer nothing (ttp_car_finished uses
+//       -1 for the same "unknown car" and for the same reason).
+//    0  the car exists and the call carried nothing to apply.
+//   >0  the presence mask actually consumed (mask & 7, so a caller passing
+//       stray high bits is told which ones counted).
+//
+// A FINISHED car answers its mask: it exists and the call was well formed, the
+// sim simply ignores input past the flag. Nothing is obliged to read any of
+// this — the hot path deliberately has no error handling — but a shell bringing
+// up its input path can assert on it once instead of discovering the answer on
+// a television. `ttp_last_error` is deliberately NOT populated here: it clears
+// on entry by contract (ttp_error.h), and a call at sensor rate would wipe
+// every other refusal in the tree within a frame.
+TTP_ABI int ttp_process_input(int h, const char* idJson, int mask, double s, double b, double u);
 
 // ---- readback (canonical JSON; see buffer-lifetime note above) --------------
 

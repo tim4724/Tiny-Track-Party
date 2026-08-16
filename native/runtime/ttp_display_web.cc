@@ -28,8 +28,14 @@ struct WebDisplay : ttp::rt::DisplayCore {
 
 extern "C" {
 
-int ttp_display_create(const char* surface, uint32_t width, uint32_t height) {
+int ttp_display_create(const void* surface, uint32_t width, uint32_t height) {
     if (ttp::rt::displayCore()) return 1;
+
+    // The web is the one platform whose surface IS a string: a CSS selector for
+    // the target <canvas>. The ABI types it opaquely because the other two pass
+    // a window handle (ttp_display.h), so the cast back lives here, in the file
+    // that knows what this platform meant.
+    const char* selector = static_cast<const char*>(surface);
 
     EmscriptenWebGLContextAttributes attrs;
     emscripten_webgl_init_context_attributes(&attrs);
@@ -49,7 +55,7 @@ int ttp_display_create(const char* surface, uint32_t width, uint32_t height) {
 
     // The context must exist and be current BEFORE the Filament engine does —
     // PlatformWebGL assumes a current context and createSwapChain(nullptr).
-    const EMSCRIPTEN_WEBGL_CONTEXT_HANDLE ctx = emscripten_webgl_create_context(surface, &attrs);
+    const EMSCRIPTEN_WEBGL_CONTEXT_HANDLE ctx = emscripten_webgl_create_context(selector, &attrs);
     if (ctx <= 0) return 0;
     if (emscripten_webgl_make_context_current(ctx) != EMSCRIPTEN_RESULT_SUCCESS) {
         emscripten_webgl_destroy_context(ctx);

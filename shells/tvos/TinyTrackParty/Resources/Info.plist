@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Tiny Track Party</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>This app does not use the camera. A networking library references the API.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Connects directly to the phones on your network for lower-latency steering, and lets phones nearby find this room without scanning the code. Without it, both still work over the internet relay.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>This app does not use the microphone. A networking library references the API.</string>
+	<key>TTPBaseURL</key>
+	<string>https://tinytrack.couchpad.games</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>Fredoka-Light.ttf</string>
+		<string>Fredoka-SemiBold.ttf</string>
+		<string>Fredoka-Bold.ttf</string>
+		<string>Nunito-ExtraLight.ttf</string>
+		<string>Nunito-Light.ttf</string>
+		<string>Nunito-SemiBold.ttf</string>
+		<string>Nunito-Bold.ttf</string>
+		<string>Nunito-ExtraBold.ttf</string>
+	</array>
+</dict>
+</plist>

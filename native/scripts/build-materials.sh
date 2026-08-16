@@ -59,4 +59,20 @@ for mat in "$MATDIR"/*.mat; do
         kept=$((kept + 1))
     fi
 done
-echo "==> materials -> $OUTDIR ($API/$PLATFORM): $built compiled, $kept up to date"
+
+# A blob whose .mat is gone is a STALE TWIN, and nothing else prunes it: the
+# tvOS outdir is gitignored and stage-assets.sh bundles the whole directory, so
+# a retired material ships forever (vskid did, for a day after the rubber layer
+# stopped using a render target). Harmless only while no shell names it — a
+# RENAMED material ships as both blobs, and the dead one loads without
+# complaint. The outdir is per backend and holds nothing but these, so the .mat
+# set is the whole truth about what belongs here.
+pruned=0
+for blob in "$OUTDIR"/*.filamat; do
+    [ -f "$blob" ] || continue
+    name="$(basename "${blob%.filamat}")"
+    [ -f "$MATDIR/$name.mat" ] && continue
+    rm "$blob"
+    pruned=$((pruned + 1))
+done
+echo "==> materials -> $OUTDIR ($API/$PLATFORM): $built compiled, $kept up to date, $pruned orphans pruned"

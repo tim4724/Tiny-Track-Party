@@ -245,6 +245,11 @@ const server = http.createServer((req, res) => {
       text = text.replace(/__APP_VERSION__/g, VERSION_LABEL)
                  .replace(/__VERSION_BADGE__/g, VERSION_BADGE)
                  .replace(/__APP_V__/g, APP_VERSION)
+                 // The bare short SHA of the build being served. /gallery-shots.html
+                 // reads it to say whether a frozen screenshot was taken at this
+                 // commit — a gallery of silently stale captures reads as evidence
+                 // while being a photograph of a build nobody is running.
+                 .replace(/__GIT_SHA__/g, getShortSha(GIT_SHA) || '')
                  .replace(/__RELAY_URL__/g, RELAY_URL_OVERRIDE);
       data = Buffer.from(text);
       const iframeable = urlPath === '/display/index.html' || urlPath === '/controller/index.html';
