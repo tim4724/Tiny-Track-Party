@@ -39,6 +39,7 @@ import { fileURLToPath } from 'node:url';
 
 import { GALLERY_SCENARIOS } from '../public/shared/galleryScenarios.js';
 import { readManifest, writeManifest, shotDir } from './lib/shots.mjs';
+import { shotTestMethod } from '../shells/tvos/scripts/gen-scenarios.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TVOS = path.join(ROOT, 'shells/tvos');
@@ -54,6 +55,18 @@ const PLATFORM = SIM ? 'tvos-sim' : 'tvos-device';
 const OUT_W = parseInt(args.outWidth, 10) || 1280;
 
 const only = typeof args.only === 'string' ? new Set(args.only.split(',')) : null;
+// A typo used to capture NOTHING and say so only by writing no files. Now it
+// would reach xcodebuild as a selector for a test that does not exist, whose
+// error names Xcode rather than the flag you got wrong — so it is caught here.
+if (only) {
+  const known = new Set(GALLERY_SCENARIOS.map((s) => s.id));
+  const unknown = [...only].filter((id) => !known.has(id));
+  if (unknown.length) {
+    throw new Error(
+      `--only names no such scenario: ${unknown.join(', ')}\n` +
+      `  known: ${[...known].join(', ')}`);
+  }
+}
 const scenarios = GALLERY_SCENARIOS.filter((s) => !only || only.has(s.id));
 
 function sh(cmd, argv, opts = {}) {
@@ -206,12 +219,17 @@ async function main() {
   const bundle = path.join(os.tmpdir(), `ttp-shots-${PLATFORM}.xcresult`);
   fs.rmSync(bundle, { recursive: true, force: true });
 
-  // ONE `xcodebuild test` for the whole table: the build, sign and install
-  // dominate the wall clock. The scenario list is COMPILED IN —
-  // Generated/ShotScenarios.swift, baked by shells/tvos/scripts/gen-scenarios.mjs,
-  // because a device run never receives a TEST_RUNNER_ environment variable (see
-  // that generator's header) — so the device shoots every scenario and `--only`
-  // filters on the HOST, at the attachment lookup after export.
+  // ONE `xcodebuild test`: the build, sign and install dominate the wall clock,
+  // so there is nothing to gain by splitting the run.
+  //
+  // `--only` REACHES THE DEVICE, via one `-only-testing:` per scenario. The
+  // scenario table is compiled in (Generated/ShotScenarios.swift, baked by
+  // shells/tvos/scripts/gen-scenarios.mjs) because a device run never receives a
+  // TEST_RUNNER_ environment variable — see that generator's header — but it
+  // bakes a METHOD PER SCENARIO, and a method is what `-only-testing:` selects.
+  // Before that the device shot all eighteen boards however few you asked for
+  // and this script threw the extras away after export, so looking at one
+  // changed screen cost a full-table capture.
   //
   // `-only-testing` IS NOT AN OPTIMISATION, it is the difference between this
   // script doing its job and running two unrelated harnesses every time. The
@@ -244,7 +262,9 @@ async function main() {
     '-destination', destination,
     '-resultBundlePath', bundle,
     '-derivedDataPath', path.join(os.tmpdir(), `ttp-dd-${PLATFORM}`),
-    '-only-testing:TinyTrackPartyShots/ShotTests',
+    ...(only
+      ? scenarios.map((s) => `-only-testing:TinyTrackPartyShots/ShotTests/${shotTestMethod(s.id)}`)
+      : ['-only-testing:TinyTrackPartyShots/ShotTests']),
     '-allowProvisioningUpdates',
     ...signing
   ], { stdio: ['ignore', args.verbose ? 'inherit' : 'ignore', 'inherit'], cwd: TVOS });

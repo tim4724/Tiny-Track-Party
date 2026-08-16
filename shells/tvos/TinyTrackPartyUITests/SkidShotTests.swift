@@ -9,9 +9,15 @@ import XCTest
 /// (web-skid-verify: shots at ~8/30/60/90 s of `?scenario=racing`), so a
 /// device shot and a web shot at the same beat are directly comparable.
 ///
-/// Not part of the gallery run — `scripts/capture-shots-tvos.mjs` iterates
-/// `ShotScenarios.all` in ShotTests; this file is reached only by an explicit
-/// `-only-testing:TinyTrackPartyUITests/SkidShotTests`.
+/// Not part of the gallery run: `scripts/capture-shots-tvos.mjs` passes
+/// `-only-testing:TinyTrackPartyShots/ShotTests`, so this is reached only by an
+/// explicit `-only-testing:TinyTrackPartyShots/SkidShotTests`.
+///
+/// That flag is what makes the sentence true, and it was missing until
+/// 2026-08-15 — `xcodebuild test` ran the whole target, so every gallery capture
+/// paid this file's 90 s of sleeps and `RealRaceShotTests`' five minutes. The
+/// TARGET is `TinyTrackPartyShots` (project.yml); `TinyTrackPartyUITests` is the
+/// source directory, and a selector spelled that way silently matches nothing.
 final class SkidShotTests: XCTestCase {
 
     func testSkidAccumulation() throws {
