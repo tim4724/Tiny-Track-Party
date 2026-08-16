@@ -232,6 +232,26 @@ final class GameCoordinator: ObservableObject {
         // it off for release is this one line.
         display.perf.show()
 
+        // LET THE BOARD PAINT BEFORE THE HEAVY WORK, which is the only thing in
+        // this function that is not a call into the engine.
+        //
+        // This method is `async` and, until here, never suspended once: every
+        // line above and below runs to completion on the MAIN ACTOR. SwiftUI
+        // therefore cannot lay out or draw anything between `.task` starting and
+        // `boot()` returning — so whatever the FIRST layout pass produced is what
+        // stands on the television for the whole of staging, the track build and
+        // the relay dial. `PaperStage` places its sky, hills and grass band as
+        // fractions of `geo.size`, so an unsettled first box puts the horizon at
+        // the wrong height and then holds it there, which is what "the initial
+        // background is the wrong shape" is.
+        //
+        // A suspension point is all it takes: the main actor drains, layout and
+        // the CoreAnimation commit run, and the board on screen is the settled
+        // one. It does NOT make the work below cheaper or move it off the main
+        // thread — the engine calls have to stay here — it only stops the first
+        // frame being held hostage by them.
+        await Task.yield()
+
         do {
             try SceneStaging.materials(into: display, from: assets)
         } catch {
@@ -259,6 +279,11 @@ final class GameCoordinator: ObservableObject {
         // lobby is the current screen — previewing before `show` left the
         // backdrop lifted and NO scene ever built behind it.
         show(.lobby)
+        // The second paint barrier, for the reason the first one states: the
+        // lobby has just become the current screen and `previewLastCircuit` runs
+        // the whole track build behind it, so without a suspension here the board
+        // a viewer waits on is the one drawn before `show`, not the one it names.
+        await Task.yield()
         previewLastCircuit()
         // NO RELAY UNDER A SCENARIO — the web's gallery pages are no-relay
         // surfaces for the same reason. The screenshot scenarios fabricate

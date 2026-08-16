@@ -144,6 +144,71 @@ final class LifecycleTests: XCTestCase {
         }
     }
 
+    /// The BOOT, frame by frame: what stands on screen from the first moment to
+    /// the settled lobby, and what the paper-to-3D handover actually looks like.
+    ///
+    /// Two reports this is chasing, neither of which a settled screenshot can
+    /// show. The initial background reads as the wrong shape ("21:9 or
+    /// something") — `PaperStage` lays every element out as a fraction of
+    /// `geo.size`, so a first pass with the wrong box puts the horizon at the
+    /// wrong height and `RootView`'s boot task can hold that pass on screen for
+    /// as long as it runs. And the handover itself reads as off, which it may
+    /// well be: the reveal now waits for `hasPainted`, so the scene arrives
+    /// finished and the paper dissolves OFF it rather than one crossfading into
+    /// the other.
+    ///
+    /// Launched through XCUITest deliberately, unlike the resume tests: the boot
+    /// path does not depend on who started the process, and only the RESUME did.
+    func testBootBurst() {
+        let app = XCUIApplication()
+        app.launch()
+        var elapsed: TimeInterval = 0
+        for ms in [200, 600, 1200, 2000, 3500, 6000, 10000, 16000, 24000] {
+            let at = TimeInterval(ms) / 1000
+            Thread.sleep(forTimeInterval: max(0, at - elapsed))
+            elapsed = at
+            shoot(String(format: "ttp-boot-t%05d", ms))
+        }
+    }
+
+    /// A REAL cold boot, photographed from the first moment.
+    ///
+    /// `XCUIApplication.launch()` cannot take this picture: it returns only once
+    /// the app has gone idle, so a burst started after it is already looking at a
+    /// settled lobby (measured — the frame 200 ms "after launch" had the attract
+    /// scene up and a room code on it). The remote does not wait, so the launch
+    /// goes through the Home screen's own tile instead and the burst starts
+    /// while the app is genuinely coming up.
+    func testColdBootFromHome() {
+        let app = XCUIApplication()
+        app.launch()          // ensure installed and settled...
+        app.terminate()       // ...then gone, so the next launch is cold
+        Thread.sleep(forTimeInterval: 2)
+
+        XCUIRemote.shared.press(.menu)   // the runner steps aside to Home
+        Thread.sleep(forTimeInterval: 3)
+
+        // WALK TO OUR TILE. Menu lands on the top shelf's first tile, not on the
+        // app that was last used — the first run of this test photographed ten
+        // frames of the Home screen because Select was pressed on a placeholder.
+        // The grid is stable on this box: our tile is the fourth of the third
+        // row. Fragile by nature, which is why the frame below proves what was
+        // focused before anything is concluded from the burst.
+        for _ in 0..<2 { XCUIRemote.shared.press(.down); Thread.sleep(forTimeInterval: 0.6) }
+        for _ in 0..<3 { XCUIRemote.shared.press(.right); Thread.sleep(forTimeInterval: 0.6) }
+        Thread.sleep(forTimeInterval: 1)
+        shoot("ttp-cold-t00000-home")
+
+        XCUIRemote.shared.press(.select)
+        var elapsed: TimeInterval = 0
+        for ms in [300, 700, 1200, 2000, 3000, 4500, 6500, 9000, 13000, 20000] {
+            let at = TimeInterval(ms) / 1000
+            Thread.sleep(forTimeInterval: max(0, at - elapsed))
+            elapsed = at
+            shoot(String(format: "ttp-cold-t%05d", ms))
+        }
+    }
+
     private func shoot(_ name: String) {
         let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         shot.name = name
