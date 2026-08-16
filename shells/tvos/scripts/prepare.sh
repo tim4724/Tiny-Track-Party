@@ -23,10 +23,11 @@
 #
 # None of that is worth a freshness CHECK of the kind the web leg needs, because
 # every step here is already incremental: ninja no-ops the runtime build, the
-# staged bundle is a few MB of copy, and xcodegen rewrites one project. Doing all
-# four unconditionally measures well under a second on a warm tree — cheaper than
-# the machinery that would detect one being skipped, and it removes the failure
-# mode instead of reporting it. Time it yourself before trading that away.
+# staged bundle is a few MB of copy, and xcodegen rewrites one project. On a warm
+# tree all four together stay small against the xcodebuild that follows, so doing
+# them unconditionally costs less than the machinery that would detect one being
+# skipped — and it removes the failure mode instead of reporting it. Time it
+# yourself before trading that away.
 #
 # It is NOT a build of the app: callers do their own xcodebuild, because they
 # want different verbs (`build` for shells/tvos/scripts/build.sh, `test` for
