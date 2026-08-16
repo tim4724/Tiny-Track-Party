@@ -34,7 +34,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import { GALLERY_SCENARIOS } from '../public/shared/galleryScenarios.js';
@@ -125,13 +125,17 @@ function toWebp(src, dest, width) {
 // it works.
 
 async function main() {
-  // UNCONDITIONALLY, as `shells/tvos/scripts/build.sh` does. Regenerating only
-  // when the .xcodeproj is absent means an edited project.yml — a new source
-  // file, a changed bundle resource — is silently ignored, and the shots then
-  // photograph a build made from a stale project with no error anywhere. It
-  // costs about a second.
-  sh('xcodegen', ['generate', '--spec', path.join(TVOS, 'project.yml'),
-                  '--project', TVOS, '--quiet'], { cwd: TVOS });
+  // The whole prepare chain, UNCONDITIONALLY — engine, bundle, Filament path,
+  // project — in the order it requires. This used to be the `xcodegen` line
+  // alone, on the reasoning that an edited project.yml would otherwise be
+  // ignored and the shots would photograph a build made from a stale project.
+  // Exactly right, and it stopped one step short: an edited native/ or an
+  // edited .mat was ignored the same way, and a gallery of stale screens is
+  // worse than a stale build, because a picture is what you then believe. Every
+  // step is incremental, so a warm tree pays almost nothing for it; the capture
+  // itself dominates by orders of magnitude either way.
+  sh(path.join(TVOS, 'scripts/prepare.sh'), [SIM ? 'simulator' : 'device'],
+     { cwd: TVOS, stdio: ['ignore', 'inherit', 'inherit'] });
 
   const destination = resolveDestination({ sim: SIM, device: args.device });
   if (!SIM) assertAwake(resolveDevicectlId());

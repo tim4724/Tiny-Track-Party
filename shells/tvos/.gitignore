@@ -1,6 +1,8 @@
-# Build output. Everything here is reproduced by
+# Build output, all of it reproduced by shells/tvos/scripts/prepare.sh — which
+# runs the three writers in the order they require:
 #   native/scripts/build-runtime-tvos.sh   (the Metal .filamat blobs)
 #   shells/tvos/scripts/stage-assets.sh    (the bundle tree + ShotScenarios.swift)
+#   prepare.sh itself                      (filament.xcconfig, from the pin)
 #
 # Generated/assets is a COPY of bytes that already live in public/assets (the
 # license notices included), so committing it would double 4 MB of models and

@@ -99,14 +99,19 @@ const ctestCount = (() => {
   }
 })();
 
+// Orders of magnitude, not measurements — the point is which of these you can
+// put in a tight loop and which one you go and do something else during. A
+// figure precise enough to be checked is a figure that rots: the e2e line here
+// read "~90 s" against a suite that measures over two minutes.
 console.log('\nReady:');
-console.log('  npm test                        unit + wire-compat  (~5 s)');
-console.log(`  npm run test:native             native conformance, ${ctestCount}  (~2 s, build included)`);
-console.log('  npm run test:e2e                Playwright  (~90 s)');
+console.log('  npm test                        unit + wire-compat  (seconds)');
+console.log(`  npm run test:native             native conformance, ${ctestCount}  (seconds, build included)`);
+console.log('  npm run test:e2e                Playwright  (a few minutes)');
 console.log('  npm run dev                     the server, watching');
+console.log('  npm run build:tvos [device|simulator]   the Apple TV app, engine + bundle included');
 console.log('\nEngine changes (native/) additionally need the Filament fork + emsdk (both fetched automatically, pinned by native/filament.pin):');
 console.log('  native/scripts/build-runtime-web.sh   then commit the artifacts');
-console.log('  npm run check:artifact                is the checked-in wasm current?  (~0.2 s)');
+console.log('  npm run check:artifact                is the checked-in wasm current?  (instant)');
 
 if (notes.length) {
   console.log('\nNotes:');

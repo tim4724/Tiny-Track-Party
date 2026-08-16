@@ -29,6 +29,8 @@ npx playwright test tests/e2e/flow.spec.js   # A single E2E spec
 npm run check:artifact            # Is the checked-in wasm current?
 npm start / npm run dev           # Serve (with --watch)
 native/scripts/build-runtime-web.sh   # Rebuild the engine wasm → public/display/engine/native/
+npm run build:tvos [device|simulator] # The Apple TV app: engine, bundle and project included
+npm run shots:tvos / shots:tvos-sim   # Photograph the Apple TV, one shot per gallery scenario
 ```
 
 `npm run setup` is the only command a fresh worktree needs, and it prints the

@@ -17,9 +17,9 @@ five. Adding a weight to the CSS means adding it here.
 
 The OUTPUT IS COMMITTED, under TinyTrackParty/Resources/Fonts/. It is generated
 build output like the .filamat blobs, but unlike those it needs fontTools +
-brotli, which are not repo dependencies — a checked-in TTF keeps `xcodegen &&
-xcodebuild` the whole build, and this script is what you run on the rare day the
-woff2 files are refreshed.
+brotli, which are not repo dependencies — a checked-in TTF keeps them out of the
+ordinary build (`shells/tvos/scripts/build.sh`), and this script is what you run
+on the rare day the woff2 files are refreshed.
 
     pip install fonttools brotli
     shells/tvos/scripts/gen-fonts.py

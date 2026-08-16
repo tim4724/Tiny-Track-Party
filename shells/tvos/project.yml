@@ -1,8 +1,13 @@
 # XcodeGen spec for the Apple TV shell. Checked in as TEXT rather than a
 # hand-maintained .xcodeproj, so the project stays reviewable in a diff:
 #
-#   shells/tvos/scripts/build.sh            (regenerates, then builds)
-#   xcodegen generate --spec shells/tvos/project.yml
+#   shells/tvos/scripts/build.sh            (prepares, regenerates, then builds)
+#   shells/tvos/scripts/prepare.sh          (everything but the xcodebuild)
+#
+# `xcodegen generate` ALONE NO LONGER WORKS, on purpose: the Filament path below
+# comes from Generated/filament.xcconfig, which prepare.sh derives from
+# native/filament.pin. A spec that could be generated without it would be a spec
+# that can name the wrong Filament tree (it did — see the configFiles note).
 #
 # WHAT THIS TARGET IS: SwiftUI + a CAMetalLayer over one static library. It
 # contains no game logic — the sim, the party layer, the cameras, the race
@@ -15,25 +20,46 @@ options:
   deploymentTarget:
     tvOS: "17.0"
 
+# FILAMENT_TVOS_OUT — WHICH FILAMENT TREE THIS APP LINKS — is deliberately NOT
+# set here. It lives in Generated/filament.xcconfig, written by prepare.sh from
+# the commit in native/filament.pin, because a literal path in this file is a
+# second source for the pin and drifted into a real defect: it read
+# $(HOME)/Projects/filament/out/tvos-release, the SHARED MUTABLE checkout that
+# native/scripts/filament-checkout.sh exists to stop anyone using. The engine
+# archive compiled against the pinned version-addressed tree while the app
+# linked Filament from whatever the shared one had been rebased to — the exact
+# mixed-toolchain hazard `npm run check:artifact` gates on the web leg, on a leg
+# that has no such gate and where the symptom is a material-load failure on the
+# television with no build error anywhere.
+#
+# An xcconfig rather than an xcodebuild argument so an Xcode.app build gets it
+# too; a project-level `settings` entry would OVERRIDE the xcconfig and put the
+# second source straight back.
+configFiles:
+  Debug: Generated/filament.xcconfig
+  Release: Generated/filament.xcconfig
+
 # Filament is linked with -l flags against the PER-SDK install trees, never as
 # xcframework file references: XcodeGen writes a file reference into the
 # .pbxproj as a path RELATIVE to the project, so a reference outside the repo
 # only resolves from a checkout at the exact directory depth it was generated
-# in (a different worktree broke it). Build settings expand $(HOME) and
-# $(PLATFORM_NAME) at build time, so everything below survives any checkout
-# location and needs no lipo — device and simulator each get their own tree.
+# in (a different worktree broke it). Build settings expand $(PLATFORM_NAME) at
+# build time, so everything below survives any checkout location and needs no
+# lipo — device and simulator each get their own tree.
 settings:
   base:
     CLANG_CXX_LANGUAGE_STANDARD: c++20
     SWIFT_VERSION: "5.0"
     ENABLE_BITCODE: NO
-    # The tvOS Filament install, built from the fork's tvos-v1.74.0 branch. The
-    # same tag the web renderer compiles against, on purpose: one Filament
-    # version means one set of material and shader semantics across both
-    # platforms, and one moment to bump them together. Override with
-    # FILAMENT_TVOS_OUT=… on the xcodebuild command line if the fork lives
-    # elsewhere (build-runtime-tvos.sh's FILAMENT_SRC is the same knob).
-    FILAMENT_TVOS_OUT: $(HOME)/Projects/filament/out/tvos-release
+    # ARM64 ONLY, on both SDKs. Apple TV hardware is arm64, both Filament tvOS
+    # slices are arm64, libttp_runtime_tvos.a is arm64, and LiveKitWebRTC ships
+    # an arm64-only simulator slice. Left unset, a GENERIC simulator destination
+    # takes ARCHS_STANDARD and adds x86_64 — which nothing in the link line has,
+    # so `build.sh simulator` failed with "symbol(s) not found for architecture
+    # x86_64" for every C ABI symbol in the app. It went unnoticed because the
+    # screenshot runner resolves a CONCRETE simulator id, and a concrete
+    # destination pins the arch to that device's.
+    ARCHS: arm64
 
 # The item icons ship as the SHARED SVGs (public/assets/items/, staged by
 # stage-assets.sh), and UIKit cannot rasterize an SVG file at runtime —

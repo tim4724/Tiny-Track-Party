@@ -6,6 +6,7 @@
   "scripts": {
     "artwork": "node scripts/capture-artwork.js",
     "bake:cues": "node scripts/bake-cues.mjs",
+    "build:tvos": "shells/tvos/scripts/build.sh",
     "check:artifact": "node --test tests/native-artifact.test.js",
     "check:music-loudness": "node scripts/check-music-loudness.mjs",
     "check:tvos-party": "node scripts/tvos-party-check.mjs",

@@ -93,13 +93,13 @@ const DERIVED = [
     then: 'node --test tests/design-tokens.test.js',
   },
   // Also not a C++ input: the baked waypoints + auto-placed furniture for the 16
-  // seeded tracks. Slow (~12 s) and it earns it — every other entry re-derives in
-  // milliseconds because it just re-reads a JS file, while this one re-runs the
-  // whole search: 16 elevation solves and grid-anchor shortlists, each building
-  // real geometry through the native builder. That IS the check. A cheaper
-  // version (one track per profile, say) would prove the pipeline executes and
-  // then read like it proved the bake, which is the failure this file's header
-  // is about.
+  // seeded tracks. It dominates this file's runtime and it earns it — every other
+  // entry re-derives in milliseconds because it just re-reads a JS file, while
+  // this one re-runs the whole search: 16 elevation solves and grid-anchor
+  // shortlists, each building real geometry through the native builder. That IS
+  // the check. A cheaper version (one track per profile, say) would prove the
+  // pipeline executes and then read like it proved the bake, which is the
+  // failure this file's header is about.
   {
     what: 'public/shared/genTracks.js',
     from: 'scripts/track-gen.mjs + the native builder',

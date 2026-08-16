@@ -193,9 +193,18 @@ test('gym: the authored range races, and its authored bananas respawn', { skip }
 // a car centre at lat 0.40 grabs, at 0.50 does not, and a monster truck's larger
 // footprint does NOT extend its reach (the trigger ignores the body box, so every
 // car has identical reach — no footprint creep).
-// BLOCKED ON: the ABI has no car teleport and no single-trigger poll, so the probe
-// cannot park a car at a chosen (s, lat) and fire one box test in isolation.
-// Unblocked by a debug ABI entry point that sets a car's (s, lat, heading) and one
-// that evaluates the box trigger.
+// NOT A JS TEST. Parking a car at a chosen (s, lat) and firing one box test in
+// isolation is unreachable from here, and the answer is NOT the debug ABI entry
+// points this comment used to ask for: the ABI is walks-only by decision, the
+// JSON-taking forms were deleted rather than added to, and native/CLAUDE.md is
+// explicit that a scenario needing the internal mutators "cannot be driven from
+// JS or wasm — write it in C++ rather than hunting for the export". Anyone who
+// took the old note at its word would have spent the day adding exports that
+// review would refuse.
+//
+// In C++ there is nothing to unblock: native/simtest/hazard_check.cc parks cars
+// by assigning `c.totalS` / `c.lat` outright, which is the whole of what this
+// needs. So this belongs beside it as a ctest, and is left unwritten rather than
+// mis-aimed.
 test('box pickup is point-based with the tuned 0.45 radius — same reach for every car',
-  { skip: 'needs an ABI car-teleport + single-trigger poll (neither exists in ttp_runtime.h)' }, () => {});
+  { skip: 'belongs in native/simtest as a ctest (see the note above), not in JS' }, () => {});

@@ -123,7 +123,9 @@ case "$WHICH" in
   *) echo "usage: build-runtime-tvos.sh [device|simulator|both]" >&2; exit 2 ;;
 esac
 
-# stage-assets.sh copies the materials this script just wrote, so it runs AFTER
-# it or the app bundles the previous set — the stale twin that looks like a
-# clean build.
-say "done — now: shells/tvos/scripts/stage-assets.sh, then scripts/build.sh [device|simulator] (or npm run shots:tvos)"
+# This is one step of three, and the order matters — stage-assets.sh copies the
+# materials this script just wrote, so running it FIRST bundles the previous set
+# (the stale twin that looks like a clean build). That order is
+# shells/tvos/scripts/prepare.sh's job now, not a thing to remember, so building
+# the app is one command and this script is rarely run on its own.
+say "done — the app is \`shells/tvos/scripts/build.sh [device|simulator]\` (npm run build:tvos), which runs this itself"
