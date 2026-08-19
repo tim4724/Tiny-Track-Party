@@ -1,4 +1,5 @@
-// The road deck: vlit's shading exactly, plus TRACK-SPACE coordinates and the
+// The road deck: vlit's matte light, BAKED per vertex at track build
+// (TtpRenderer::fillRoadLight), plus TRACK-SPACE coordinates and the
 // flat decals that used to be laid over the road as separate geometry.
 //
 // WHY THE ROAD NEEDS ITS OWN MATERIAL. Every deck decal — the boost aura, a car's
@@ -27,12 +28,21 @@
 // crest, dip and bank without anything being conformed to anything.
 material {
     name : TtpVroad,
+    // The per-vertex fog factor (ttp_fog.inc); .yzw unused.
+    variables : [ fog ],
     requires : [
         color,
-        // the world normal the Lambert term needs (getWorldGeometricNormalVector)
-        tangents,
         // (s, lat) in world units — see above
-        uv0
+        uv0,
+        // The matte light — ambient + sun + the baked ESM's visibility — BAKED
+        // per road vertex at track build (TtpRenderer::fillRoadLight, the CPU
+        // twin of ttpMatteLight): every input is static per track, so
+        // re-evaluating it per vertex PER FRAME bought nothing. Baking it also
+        // retired `tangents` — nothing in either stage reads the normal now,
+        // which drops a 16-byte qtangent fetch per vertex on the scene's
+        // biggest mesh (buildMesh feeds CUSTOM0 instead of TANGENTS when this
+        // attribute is required).
+        custom0
     ],
     shadingModel : unlit,
     culling : none,
@@ -44,17 +54,48 @@ material {
     // 1 - lat equals the decal's lat, i.e. over by the far kerb. Off.
     flipUV : false,
     parameters : [
-        // — shading, identical to vlit's and filled by the same bindShadowMap —
-        { type : sampler2d, name : shadowMap, precision : high },
-        { type : mat4, name : shadowFromWorld, precision : high },
-        { type : float, name : shadowTexel },
-        { type : float, name : shadowK },
-        { type : float, name : shadowDepthScale },
+        // (No shadow parameters here any more: the ESM decode this material
+        // shared with vlit runs ONCE per track now, on the CPU, into the
+        // custom0 vertex light — see fillRoadLight. That also unbinds a
+        // sampler from every road chunk's draw, the same per-draw descriptor
+        // cost vlitns.mat exists to avoid.)
 
-        // — deck decals —
-        // How many of the arrays below are live. 0 makes this material identical
-        // to vlit, which is how it ships until the decal pass is wired up.
-        { type : int, name : decalCount },
+        // — deck decals: ONE typed uniform list (profiles) + ONE texture tap
+        //   (the car shadows) —
+        //
+        // A dynamically-indexed uniform array costs whether or not the loop
+        // runs, and it costs by DECLARED SIZE: measured on a PowerVR GE9215
+        // over a frozen single-player race at 1280x720, one mixed list of 32
+        // entries carrying all seven arrays (3584 bytes) put the frame at
+        // 25.9 ms; the same seven arrays at 8 entries put it at 17.6, and at
+        // 16 at 18.9. And under a REAL pack the ITERATIONS dominate too: the
+        // 2026-08-18 spectate-7 ablation put the decal channel at 4-6 ms of a
+        // 22.6 ms 720p frame, almost all of it the 8-car masked loop, after
+        // every arithmetic-level cut inside that loop measured zero.
+        //
+        // So the car shadows left the uniform path entirely: they are now a
+        // per-frame CPU-rasterized TRACK-SPACE R8 layer (the rubber layer's
+        // exact idiom — TtpRenderer::rasterCarShadowStamp) and this material
+        // pays ONE bilinear tap for all eight, at the uv the rubber tap
+        // already computes. What remains a uniform list is the PROFILE kind:
+        // a shape the shader evaluates (rect/ellipse, a two-segment falloff,
+        // an optional chevron grid), three vec4s per entry.
+        //
+        // THE CAP IS PER CHUNK, and a chunk is tens of metres of deck. Eight
+        // profile is item-box shadows, oil slicks and boost auras near one
+        // chunk; buildStatics orders them so an overflow drops decoration
+        // rather than a marker. Raising it is measurable in the frame — the
+        // spectate-7 arm that raised profile to 16 with nothing else changed
+        // cost +1.1 ms p50. TtpRenderer::kMaxProfileDeckDecals must agree
+        // with the [8]s below; tests/road-decal-caps.test.js holds them to it.
+
+        // How many NEAR-car masked entries are live (the hybrid shadow LOD:
+        // cars near an active camera keep the true baked silhouette; far cars
+        // ride the carShadow texture tap below). Zero disables the loop.
+        { type : int, name : maskCount },
+        // How many profile entries are live. Zero makes the loop free, which
+        // is what the ablation switch uses.
+        { type : int, name : profCount },
         // Lap length, for the wrap: s is periodic, so a decal near the lap line
         // must still reach fragments on the other side of it.
         // PRECISION IS LOAD-BEARING on every decal parameter that carries
@@ -73,23 +114,28 @@ material {
         // fragment, which is the single most expensive thing that loop did.
         { type : float, name : invTrackLength, precision : high },
         { type : float, name : chunkMid, precision : high },
-        // Per decal, in track space:
+        // ONE BOUNDING BOX FOR THE PROFILE LIST, in the chunk-local s frame:
+        // the union of that list's own reject windows, as (sMin, sMax, latMin,
+        // latMax). A pure early-out — a fragment outside it would have
+        // rejected each entry in turn — and it is here because the decals on a
+        // chunk CLUSTER while the chunk is tens of metres of deck, so without
+        // it the road's biggest, nearest fragments each pay N rejects to draw
+        // nothing. (The car shadows carried a second box while they were a
+        // uniform list; as a texture tap they need none.)
+        //
+        // Written by uploadDeckDecals beside the count; a list with no entries
+        // leaves its box collapsed, which the count > 0 guard already covers.
+        { type : float4, name : profBounds, precision : high },
+        { type : float4, name : maskBounds, precision : high },
+
+        // PROFILE stamps — statics (item-box shadows, oil slicks) and boost
+        // auras. In track space:
         //   xy = centre (s, lat), zw = half-extents — ALL world units, matching
         // uv0 exactly, EXCEPT that x arrives relative to this chunk's centre
         // (see chunkMid) so the loop needs no per-decal lap wrap.
-        // THE WHOLE LOOP'S BOUNDING BOX, in the same chunk-local frame: the
-        // union of every live entry's own reject window, as (sMin, sMax, latMin,
-        // latMax). It is a pure early-out — a fragment outside it would have
-        // rejected all N entries one at a time — and it is here because the
-        // decals on a chunk CLUSTER (they are the cars, and the cars are in a
-        // pack) while the chunk is tens of metres of deck. Without it the road's
-        // biggest, nearest fragments each pay N rejects to draw nothing.
-        // Written by uploadDeckDecals beside decalCount; a chunk with none
-        // leaves it collapsed, which the decalCount > 0 guard already covers.
-        { type : float4, name : decalBounds, precision : high },
-        { type : float4[32], name : decalRect, precision : high },
+        { type : float4[8], name : profRect, precision : high },
         //   rgb = colour, a = peak alpha
-        { type : float4[32], name : decalColor },
+        { type : float4[8], name : profColor },
         //   x = inner radius fraction held at full alpha, beyond which it
         //       feathers to nothing at 1.0 (the boost aura's 0.72 profile)
         //   y = SHAPE: 0 rectangle, 1 ellipse
@@ -98,43 +144,89 @@ material {
         //   w = CHEVRON grid — see paintShape below. No decal packs one today
         //       (the pads that did are paint now); the field is here because
         //       paintStamp reads one layout for both channels.
-        { type : float4[32], name : decalShape },
-        // MASKED decals — the car ground shadows, whose shape is a baked
-        // silhouette rather than a profile the shader could evaluate:
-        //   x = sin, y = cos of the car's heading against the track tangent
-        //       (kept for the packed-float readback; the mask itself samples
-        //       the world-plane projection below)
-        //   z = decalMask layer holding this car's silhouette
-        //   w = 1 marks the decal masked; 0 is every profile decal above
-        { type : float4[32], name : decalTexRot },
-        // The masked decal's WORLD anchor: the DECK point under the car and
-        // the deck-plane axes at the car's in-plane heading. The mask samples
-        // a RIGID PLANAR projection of the fragment's world position onto
-        // these; track space only bounds the stamp. Painted in curvilinear
-        // (s, lat) instead, the silhouette bends around every corner and the
-        // per-triangle kinks of the interpolated field ripple through its
-        // sharp edge as the car crosses rings — edge shimmer on bends, gone
-        // flat. It read the CAR's own axes until 2026-08-02 — equivalent, the
-        // sim never lets the car leave the deck plane — and the deck spelling
-        // is the clearer one, not a fix. Zero on profile decals.
-        { type : float4[32], name : decalWPos, precision : high },
-        { type : float4[32], name : decalWFwd, precision : high },
-        { type : float4[32], name : decalWRight, precision : high },
+        { type : float4[8], name : profShape },
+
+        // — the car shadows: ONE tap of a per-frame CPU-rasterized layer —
+        //
+        // The eight contact shadows used to be a MASKED uniform list here (a
+        // baked silhouette through a rigid world-plane projection, five vec4s
+        // per entry and a per-fragment reject loop). Under a real pack that
+        // loop was the single biggest item in the 720p frame (~5 ms on the
+        // spectate-7 view), and every arithmetic-level cut inside it measured
+        // zero on the reference GPU — only structure moves it. So the stamps
+        // moved to the CPU: TtpRenderer rasterizes each car's pre-blurred
+        // silhouette as a WARPED QUAD into a small track-space R8 texture
+        // every frame (deckFoot projects the stamp's corners — the same
+        // probes the old cull window already paid for), and this material
+        // pays one bilinear tap at the rubber tap's own uv. The layer is
+        // TRANSIENT (erased and re-laid per frame) and PING-PONGED so the
+        // upload never lands on the texture the driver is reading — see
+        // TtpRenderer::uploadCarShadow.
+        //
+        // The curvilinear objection that created the masked path — painting
+        // in (s, lat) bends the silhouette around corners, and uv0's
+        // per-triangle kinks ripple through a SHARP edge — is answered by
+        // structure, not ignored: the silhouette is pre-blurred, the layer is
+        // coarse (a texel is ~0.1-0.2 u), and the warp lives INSIDE one stamp
+        // (three deckFoot-projected slices), so the residual bending error is
+        // second-order and sub-texel against the penumbra. The old shimmer
+        // was an edge phenomenon and the edge is gone.
+        //
+        // rgb = the blob ink, in linear (kCarBlobInk — one colour for every
+        // car shadow). w = the ENABLE and the CAP on summed coverage: 0 while
+        // no layer exists (no track, torn down, or the ablation arm), else
+        // the darkest two stacked shadows may go (the mix-of-mixes the old
+        // loop produced for two overlapped stamps).
+        // MASKED stamps — the NEAR cars' contact shadows, whose shape is the
+        // baked silhouette. FOUR, not FIELD_SIZE: only cars within the shadow
+        // LOD's near band of some active camera enter this list (renderCars),
+        // the rest ride the carShadow texture — near is where the silhouette's
+        // car-shape reads, and where the texture layer's ~8 texels/u cannot.
+        // Half the old declared bytes; the declared-size law (re-proven
+        // 2026-08-18: profile 8->16 alone cost +1.1 ms) is why this is 4 and
+        // why the far path adds no arrays at all.
+        //   xy = centre (s, lat); zw = the MEASURED track-space reaches (the
+        //        one-vec4 reject read — see the fold comment in Decals.cpp)
+        { type : float4[4], name : maskRect, precision : high },
+        //   maskWPos.w   = the decalMask LAYER holding this car's silhouette
+        //   maskWFwd.w   = the stamp's peak alpha (deepened by wheel load,
+        //                  faded by the LOD crossfade)
+        //   maskWRight.w = unused
+        // Axes premultiplied by their reciprocal stamp halves: two dots, no
+        // divides (the invSkidLatSpan trade).
+        { type : float4[4], name : maskWPos, precision : high },
+        { type : float4[4], name : maskWFwd, precision : high },
+        { type : float4[4], name : maskWRight, precision : high },
+        { type : float4, name : maskInk },
         // One 2D-array texture, one silhouette per layer: 0..7 the cars in
         // slot order, 8 the monster rig, 9 the generic superellipse. Baked
-        // and pre-blurred by bakeSilhouette, so this samples ONCE.
+        // and pre-blurred by bakeSilhouette. RGBA8, coverage in ALPHA — R8
+        // was tried (a quarter of the tap bytes) and the TRANSLUCENT bake
+        // pass into an R8 array layer renders ZERO coverage on the PowerVR
+        // driver: every silhouette sampled as nothing while the bake logged
+        // success. The generic layer (an upload, not a bake) still worked,
+        // which is what made the failure read as "shadows became ovals".
         { type : sampler2dArray, name : decalMask },
+        // The layer: u = s / trackLength (REPEAT carries the lap wrap),
+        // v = lat across ±skidLatHalf (CLAMP; the outer rows stay empty, so
+        // kerbs' and underside's out-of-band v reads zero) — the rubber
+        // layer's exact mapping, so the tap reuses its uv. The channel is
+        // silhouette coverage × the stamp's peak alpha, folded at raster
+        // time. Single level, LINEAR — the masked loop sampled its
+        // silhouette at LOD 0 with no mips too, so minification behaves as
+        // it did.
+        { type : sampler2d, name : carShadow },
 
         // — the paint channel: the deck's OWN surface (repairs, boost pads) —
         // Identical entry layout to the decal arrays above and painted by the
         // same function; the ONLY difference is which side of the rubber tap it
         // composites on (buildDeckPaint has the why). Static per track, so the
         // renderer writes these once at build, per chunk, in the same
-        // chunk-local s frame as decalRect.
+        // chunk-local s frame as profRect.
         { type : int, name : paintCount },
         { type : float4[8], name : paintRect, precision : high },
         { type : float4[8], name : paintColor },
-        //   xyz as decalShape; w = CHEVRON grid, packed as cols*10 + rows (cols
+        //   xyz as profShape; w = CHEVRON grid, packed as cols*10 + rows (cols
         //       ACROSS the lane, rows ALONG travel). 0 for a plain stamp;
         //       anything else overlays that grid in cream, which is what makes a
         //       boost pad or launch strip expressible without a texture: a
@@ -153,16 +245,22 @@ material {
         // Half the lat span the texture covers. 0 disables the tap entirely,
         // which is the no-track / torn-down state.
         { type : float, name : skidLatHalf },
+        // 0.5 / skidLatHalf, premultiplied C++-side: the v mapping is then a
+        // MAD instead of a per-fragment divide, which rides the narrow SFU
+        // pipe this GPU has fewest of. Kept beside skidLatHalf by the two
+        // writers (bindSkidLayer and the debug restore).
+        { type : float, name : invSkidLatSpan },
         // rgb = SKID_COLOR in linear (srgbToLinear stays C++-side, one source),
         // a = the cap on summed ink, so crossing trails darken but a donut spot
         // cannot go pure black.
-        { type : float4, name : skidColor }
+        { type : float4, name : skidColor },
+        { type : sampler2d, name : gradeLut }
     ]
 }
 
 fragment {
-    #include "ttp_shade.inc"
     #include "ttp_grade.inc"
+    #include "ttp_fog.inc"
 
     // Distance from p to the segment ab. Four instructions, and it is what lets
     // a boost pad's chevrons be drawn without a texture: the art the mesh used to
@@ -282,80 +380,58 @@ fragment {
         return base;
     }
 
-    // Everything a deck decal contributes at this fragment, composited in the
-    // order the array is given — which is the order the shell packs them:
-    // statics, then boost auras, then the contact shadows and blobs over both.
-    // A mix REPLACES what is under it, so that order is the shell's business
-    // and this loop just honours it (TtpRendererFrame's auraDecals has the why).
+    // PROFILE stamps: statics (item-box shadows, oil slicks) then boost auras,
+    // composited in the order the shell packs them. A mix REPLACES what is under
+    // it, so that order is the shell's business and this loop just honours it
+    // (TtpRendererFrame's auraDecals has the why).
     //
-    // The loop is bounded by decalCount, a uniform, so it is uniform-coherent,
+    // The loop is bounded by profCount, a uniform, so it is uniform-coherent,
     // and the first thing each iteration does is reject on |ds| — most decals on
     // a track are nowhere near any given fragment, so the common path is one
     // subtract and one compare.
-    vec3 deckDecals(vec3 base, highp float sLocal, float lat) {
-        int n = min(materialParams.decalCount, 32);
+    vec3 deckProfiles(vec3 base, highp float sLocal, float lat) {
+        int n = min(materialParams.profCount, 8);
         for (int i = 0; i < n; i++) {
-            highp vec4 r = materialParams.decalRect[i];
-            vec4 trot = materialParams.decalTexRot[i];
-            bool masked = trot.w > 0.5;
-            // A masked decal is ROTATED in track space (rect.zw are the halves
-            // in the CAR's frame), so its axis-aligned reach here is neither
-            // r.z nor its half-diagonal: this test is in TRACK SPACE, where the
-            // s axis is an ARCLENGTH and the stamp's halves are WORLD lengths.
-            // The deck's iso-arclength lines fan on a bend, so the same world
-            // reach spans R/(R−lat) more arclength off the centreline — a
-            // constant cannot express it at all, and the one that used to stand
-            // here closed inside the stamp and sheared its nose off through
-            // every corner. The shell MEASURES the reach per frame instead (see
-            // TtpRendererFrame's shadow block) and rides it in the w slots of
-            // the two axis vectors. foldToChunk reads the same slot — keep the
-            // two in step.
-            float boundS = masked ? materialParams.decalWFwd[i].w : r.z;
-            float boundL = masked ? materialParams.decalWRight[i].w : r.w;
+            highp vec4 r = materialParams.profRect[i];
             highp float ds = sLocal - r.x;
-            if (abs(ds) >= boundS) continue;            // cheap reject
+            if (abs(ds) >= r.z) continue;               // cheap reject
             float dl = lat - r.y;
-            if (abs(dl) >= boundL) continue;
-            if (masked) {
-                // Into the car's frame via the WORLD plane, not track space:
-                // (s, lat) here only ran the bounds reject above. The user
-                // world position, NOT getWorldPosition() — Filament renders
-                // camera-relative, and the camera-offset flavour slides the
-                // stamp with the chase cam (ttp_shade.inc, same trap).
-                highp vec3 rel = getUserWorldPosition()
-                        - materialParams.decalWPos[i].xyz;
-                float pf = dot(rel, materialParams.decalWFwd[i].xyz);
-                float pr = dot(rel, materialParams.decalWRight[i].xyz);
-                vec2 q = vec2(pf / r.z, pr / r.w);
-                if (max(abs(q.x), abs(q.y)) >= 1.0) continue;
-                // u runs ACROSS the car (+right), v ALONG it (+forward) —
-                // the handedness bakeSilhouette's up-looking camera bakes.
-                vec2 uv = q.yx * 0.5 + 0.5;
-                // textureLod, NOT texture: this sample sits in NON-UNIFORM
-                // control flow (the rejects above `continue` per fragment), so
-                // an implicit-derivative sample is undefined behaviour — and on
-                // ANGLE's Metal backend it came out as the stamp intermittently
-                // rendering nothing for a few frames at a time, which read as
-                // the car's shadow flickering. It vanished under every debug
-                // variant of this shader, because any reshape of the code moved
-                // the UB. The mask has one mip level, so LOD 0 is the same
-                // texels.
-                float m = textureLod(materialParams_decalMask,
-                        vec3(uv, trot.z), 0.0).a;
-                // FEATHER THE WINDOW. The bake's penumbra is not zero at the
-                // quad edge, so the |q| >= 1 cutoff above prints as a HARD
-                // line wherever the tail crosses bright paint — invisible on
-                // bare asphalt, a visible bite on a dash or an edge line, and
-                // it slides and kinks with the car. The silhouette proper ends
-                // at |q| = 1/1.45 (the bake overscan), so a ramp from 0.72
-                // touches only the tail.
-                m *= 1.0 - smoothstep(0.72, 0.98, max(abs(q.x), abs(q.y)));
-                vec4 mcol = materialParams.decalColor[i];
-                base = mix(base, mcol.rgb, clamp(mcol.a * m, 0.0, 1.0));
-                continue;
-            }
-            base = paintStamp(base, r, materialParams.decalColor[i],
-                    materialParams.decalShape[i], ds, dl);
+            if (abs(dl) >= r.w) continue;
+            base = paintStamp(base, r, materialParams.profColor[i],
+                    materialParams.profShape[i], ds, dl);
+        }
+        return base;
+    }
+
+    // MASKED stamps: the NEAR cars' contact shadows, OVER the profiles and
+    // OVER the carShadow tap — a mix replaces, and in the LOD crossfade band
+    // a car carries BOTH representations with complementary alphas, so the
+    // masked one must land last. See maskRect for why this loop is only ever
+    // 0-4 entries now.
+    vec3 deckMasked(vec3 base, highp float sLocal, float lat) {
+        int n = min(materialParams.maskCount, 4);
+        highp vec3 uwp = getUserWorldPosition();
+        for (int i = 0; i < n; i++) {
+            highp vec4 r = materialParams.maskRect[i];
+            highp float ds = sLocal - r.x;
+            if (abs(ds) >= r.z) continue;
+            float dl = lat - r.y;
+            if (abs(dl) >= r.w) continue;
+            highp vec4 wp = materialParams.maskWPos[i];
+            highp vec4 wf = materialParams.maskWFwd[i];
+            highp vec4 wr = materialParams.maskWRight[i];
+            highp vec3 rel = uwp - wp.xyz;
+            vec2 q = vec2(dot(rel, wf.xyz), dot(rel, wr.xyz));
+            float d = max(abs(q.x), abs(q.y));
+            if (d >= 0.98) continue;
+            vec2 uv = q.yx * 0.5 + 0.5;
+            // textureLod, NOT texture: non-uniform flow (the continues above)
+            // makes an implicit-derivative sample UB — the ANGLE-Metal
+            // flicker taught this once already. One level, so LOD 0 is exact.
+            // .a: the RGBA8 array stores coverage in alpha (see the sampler).
+            float m = textureLod(materialParams_decalMask, vec3(uv, wp.w), 0.0).a;
+            m *= 1.0 - smoothstep(0.72, 0.98, d);
+            base = mix(base, materialParams.maskInk.rgb, clamp(wf.w * m, 0.0, 1.0));
         }
         return base;
     }
@@ -366,7 +442,8 @@ fragment {
         // former so nothing else in the pipeline touches it.
         material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
 
-        highp vec3 n = getWorldGeometricNormalVector();
+        // The light is variable_fog.yzw, BAKED per vertex at track build — see
+        // the vertex block. Nothing in either stage reads the normal any more.
         vec3 base = getColor().rgb;
 
         // THE DECK MASK IS A PER-VERTEX FLAG, NOT A THRESHOLD. One was in this
@@ -400,14 +477,18 @@ fragment {
         // asphalt itself. The out-of-band v of kerbs and underside lands past
         // the ink texture's lat span, clamps to an edge row the stamper never
         // writes, and reads zero ink — the deck flag for free.
+        //
+        // suv serves BOTH track-space layers (rubber, and the car-shadow tap
+        // below) — the shadow layer is deliberately built on the rubber
+        // layer's exact lat span so no second mapping exists to drift. highp
+        // for the same Metal-fp16 reason as the decal uniforms: u = s/L near
+        // 1.0 at half precision steps by ~0.0005 — half a texel of an 8k-wide
+        // layer — and mediump would smear the marks.
+        highp vec2 suv = vec2(tc.x * materialParams.invTrackLength,
+                tc.y * materialParams.invSkidLatSpan + 0.5);
         if (materialParams.paintCount > 0) base = deckPaint(base, sLocal, tc.y);
         float lh = materialParams.skidLatHalf;
         if (lh > 0.0) {
-            // highp for the same Metal-fp16 reason as the decal uniforms:
-            // u = s/L near 1.0 at half precision steps by ~0.0005 — half a
-            // texel of a 16k-wide layer — and mediump would smear the marks.
-            highp vec2 suv = vec2(tc.x * materialParams.invTrackLength,
-                    (tc.y + lh) / (2.0 * lh));
             // The layer is a CPU-rasterized UPLOAD (row 0 = -latHalf), not a
             // render target, so the read is raw — uploads have no
             // per-backend flip. See tests/render-target-uv.test.js.
@@ -415,17 +496,60 @@ fragment {
             vec4 sc = materialParams.skidColor;
             base = mix(base, sc.rgb, min(ink, sc.a));
         }
-        if (materialParams.decalCount > 0) {
-            // One box in front of the loop — see decalBounds. Exact, not
-            // conservative: the box IS the union of the per-entry windows the
-            // loop tests, so a fragment it rejects had nothing to draw.
-            highp vec4 db = materialParams.decalBounds;
-            if (sLocal >= db.x && sLocal <= db.y && tc.y >= db.z && tc.y <= db.w) {
-                base = deckDecals(base, sLocal, tc.y);
+        // A box in front of the loop — see profBounds. Exact, not conservative:
+        // a box IS the union of the per-entry windows its loop tests, so a
+        // fragment it rejects had nothing to draw.
+        if (materialParams.profCount > 0) {
+            highp vec4 pb = materialParams.profBounds;
+            if (sLocal >= pb.x && sLocal <= pb.y && tc.y >= pb.z && tc.y <= pb.w) {
+                base = deckProfiles(base, sLocal, tc.y);
+            }
+        }
+        // The car shadows, OVER the profiles — a shadow stays visible through
+        // an aura it crosses, and a mix replaces, so the order is structural.
+        // ONE tap for the whole field, in UNIFORM control flow (the guard is
+        // a uniform), so texture() is sound here like the rubber tap above.
+        // min() against maskInk.w caps two stacked shadows at the depth the
+        // old loop's mix-of-mixes reached instead of letting saturating-add
+        // run darker.
+        float csw = materialParams.maskInk.w;
+        if (csw > 0.0) {
+            float cs = texture(materialParams_carShadow, suv).r;
+            base = mix(base, materialParams.maskInk.rgb, min(cs, csw));
+        }
+        // The NEAR cars' true silhouettes, last of all (the hybrid LOD).
+        if (materialParams.maskCount > 0) {
+            highp vec4 mb = materialParams.maskBounds;
+            if (sLocal >= mb.x && sLocal <= mb.y && tc.y >= mb.z && tc.y <= mb.w) {
+                base = deckMasked(base, sLocal, tc.y);
             }
         }
 
         // emissive.w = 0 → no second exposure; both terms are pre-exposed.
-        material.emissive = vec4(ttpGrade(ttpMatteShade(base, n)), 0.0);
+        material.emissive = vec4(
+                ttpFogMix(ttpGrade(base * variable_fog.yzw), variable_fog.x), 0.0);
+    }
+}
+
+vertex {
+    #include "ttp_fog.inc"
+
+    // TWO smooth terms, in ONE varying. The fog factor is .x — camera-dependent,
+    // so it must stay LIVE per vertex — and the matte light is .yzw, which is
+    // now a baked ATTRIBUTE rather than an evaluation. The varying layout is
+    // unchanged, so the fragment stage did not change at all.
+    //
+    // WHY THE LIGHT IS BAKED. It moved here from the fragment stage first
+    // (worth 7.5 ms of a 720p frame on a PowerVR GE9215 — the same trade the
+    // fog made). But per vertex it was still a mat4 multiply, a VERTEX texture
+    // tap, a log, a sqrt and two smoothsteps, per road vertex PER FRAME, and
+    // every input is static per track: the sun is fixed, the deck never moves,
+    // and the cars cast blob decals rather than ESM shadows.
+    // TtpRenderer::fillRoadLight evaluates the identical ttpMatteLight (minus
+    // the fwidth AA floor, which vvis.mat's bake drops for the same reason)
+    // once per track, after bakeShadowMap, and this stage is left with a move.
+    void materialVertex(inout MaterialVertexInputs material) {
+        material.fog = vec4(ttpFogFactor(material.worldPosition.xyz),
+                getCustom0().xyz);
     }
 }

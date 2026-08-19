@@ -73,6 +73,10 @@ namespace {
 // Bare-asphalt margin either side of a launch strip, so the road's dashes and
 // edge lines stop clear of the chevrons rather than grazing them.
 constexpr float kStripMargin = 0.12f;
+// The key light's axis — theme.key sits at (2, 12, 1.5), as the JS placed it.
+// ONE spelling for the sun entity (buildTrackScene), the shadow camera
+// (bakeShadowMap) and the road's baked vertex light (fillRoadLight).
+const float3 kToSun = normalize(float3{ 2.0f, 12.0f, 1.5f });
 // Cones per oil slick. Fixed: no shipped track authors a coned oil, and the
 // codegen refuses one rather than dropping the field silently.
 constexpr uint32_t kOilCones = 4;
@@ -103,7 +107,7 @@ inline float3 srgbToLinear(uint32_t rgb) {
 
 // Bind the silhouette array to a vroad instance, clamped bilinear. Every
 // instance of the road material needs this: a declared sampler must be bound
-// even while decalCount is 0.
+// even while maskCount is 0.
 inline void bindDecalMask(MaterialInstance* mi, Texture* arr) {
     TextureSampler ms(TextureSampler::MinFilter::LINEAR,
             TextureSampler::MagFilter::LINEAR);
@@ -721,3 +725,23 @@ constexpr float kBlobShadowAlpha = 0.4f;
 inline const float3 kCarBlobInk = srgbToLinear(0x171513);
 
 constexpr float kCarBlobAO = 0.35f;
+
+// The hybrid shadow LOD's band, in world units of distance to the closest
+// ACTIVE camera (renderCars). Inside kShadowLodNear a car's contact shadow is
+// the true MASKED baked silhouette — near is where its car-shape reads, and
+// where the carShadow layer's ~8 texels/u visibly cannot carry it (the blob
+// under the player's own car was the tell). Past kShadowLodFar the shadow is
+// the texture raster alone; between, the two crossfade with complementary
+// alphas. 14u keeps the own car (~2u) and adjacent rivals silhouetted while
+// bounding the masked list at [4].
+constexpr float kShadowLodNear = 10.0f;
+constexpr float kShadowLodFar = 14.0f;
+
+// The carShadow layer's cap on summed coverage (maskInk.w — also the tap's
+// enable). The raster accumulates with saturating ADD (the rubber's idiom),
+// where the old masked loop composited two overlapped stamps as a mix-of-mixes
+// — at full wheel load, 1-(1-0.402)² = 0.642 (0.402 = kCarBlobAO deepened by
+// the 0.08/0.55 load term). Capping the tap there keeps a loaded pile-up as
+// dark as it used to be instead of letting addition run it toward black;
+// three-deep pile-ups still read a shade lighter than the loop's 0.78.
+constexpr float kCarShadowCap = 0.642f;

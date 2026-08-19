@@ -13,6 +13,13 @@ Texture* TtpRenderer::ensureDecalMaskArray() {
     if (mDecalMaskArray || !mEngine) return mDecalMaskArray;
     mDecalMaskArray = Texture::Builder()
             .width(kMaskCellW).height(kMaskCellH).depth(kMaskLayers).levels(1)
+            // RGBA8, deliberately NOT R8: the R8 version (a quarter of the
+            // tap bytes) was tried and the TRANSLUCENT silhouette bake into
+            // an R8 array layer renders ZERO coverage on the PowerVR driver
+            // — bake logs success, sample reads nothing, and the generic
+            // UPLOADED layer keeps working, so every car shadow silently
+            // became the fallback oval. vvis's R8 is not a counter-example:
+            // that bake is an OPAQUE view. Coverage rides ALPHA.
             .format(Texture::InternalFormat::RGBA8)
             .sampler(Texture::Sampler::SAMPLER_2D_ARRAY)
             // UPLOADABLE for the generic layer's setImage, COLOR_ATTACHMENT for
@@ -49,6 +56,10 @@ void TtpRenderer::clearSkidLayer() {
     if (!mSkidTex || mSkidPix.empty()) return;
     std::fill(mSkidPix.begin(), mSkidPix.end(), (uint8_t) 0);
     mSkidDirty.clear();
+    // The CPU mip truth zeroes with it — generateMipmaps below zeroes the
+    // GPU chain, and the two must agree before the next incremental refresh.
+    for (auto& level : mSkidMips) std::fill(level.begin(), level.end(), (uint8_t) 0);
+    mSkidMipDirty.clear();
     const size_t bytes = mSkidPix.size();
     auto* zeros = new uint8_t[bytes]();
     mSkidTex->setImage(*mEngine, 0,
@@ -151,6 +162,9 @@ void TtpRenderer::uploadSkidRects() {
             const int sx0 = spans[s][0], sx1 = spans[s][1];
             const int sw = sx1 - sx0, sh = y1 - y0;
             if (sw <= 0 || sh <= 0) continue;
+            // The same PHYSICAL rect feeds the throttled mip refresh — one
+            // wrap-split, owned here, so the two paths cannot disagree on it.
+            mSkidMipDirty.push_back({ sx0, y0, sx1, y1 });
             auto* buf = new uint8_t[(size_t) sw * sh];
             for (int y = 0; y < sh; y++) {
                 std::memcpy(buf + (size_t) y * sw,
@@ -166,6 +180,299 @@ void TtpRenderer::uploadSkidRects() {
         }
     }
     mSkidDirty.clear();
+}
+
+// The rubber layer's mip refresh: box-filter the accumulated dirty rects down
+// the CPU chain and upload only those sub-rects, level by level. This REPLACED
+// the throttled generateMipmaps, and the difference is not the filtering — the
+// 2x2 average below is what the blit computed — it is what the driver was
+// asked to do: a full-chain generateMipmaps on the 8192-wide layer is a dozen
+// render passes re-filtering megatexels to update a few hundred, issued
+// mid-frame, and on the reference Android box it measured as ~10 dropped
+// frames per second on its own (live A/B, rubber gated whole vs on — the GPU
+// MEDIAN did not move, which is why no frozen bench ever saw it). Rects are
+// merged per level (a car's four wheels collapse to one rect within a couple
+// of levels), so the deep chain is a handful of texel-sized uploads.
+//
+// Reads at a rect's edge reach one texel OUTSIDE it on odd boundaries; those
+// neighbours did not change this round, and the CPU chain is kept globally
+// consistent by construction, so what they hold is exactly what the filter
+// wants. The seam is deliberately NOT wrapped — generateMipmaps never wrapped
+// either, and the marks the stamper lays keep clear of the clamp rows.
+void TtpRenderer::refreshSkidMips() {
+    if (!mSkidTex || mSkidMips.empty()) { mSkidMipDirty.clear(); return; }
+    const int W0 = (int) mSkidTexW, H0 = (int) mSkidTexH;
+    std::vector<SkidRect> rects = mSkidMipDirty;
+    mSkidMipDirty.clear();
+    for (size_t li = 0; li < mSkidMips.size() && !rects.empty(); li++) {
+        const int l = (int) li + 1;
+        const int sw = std::max(1, W0 >> (l - 1)), sh = std::max(1, H0 >> (l - 1));
+        const int dw = std::max(1, W0 >> l), dh = std::max(1, H0 >> l);
+        const uint8_t* src = li == 0 ? mSkidPix.data() : mSkidMips[li - 1].data();
+        uint8_t* dst = mSkidMips[li].data();
+        // Halve every rect, then merge overlaps — O(n²) over a handful.
+        std::vector<SkidRect> next;
+        for (const SkidRect& r : rects) {
+            SkidRect d{ std::max(0, r.x0 >> 1), std::max(0, r.y0 >> 1),
+                        std::min(dw, (r.x1 + 1) >> 1), std::min(dh, (r.y1 + 1) >> 1) };
+            if (d.x0 >= d.x1 || d.y0 >= d.y1) continue;
+            bool merged = false;
+            for (SkidRect& m : next) {
+                if (d.x0 <= m.x1 && m.x0 <= d.x1 && d.y0 <= m.y1 && m.y0 <= d.y1) {
+                    m.x0 = std::min(m.x0, d.x0); m.y0 = std::min(m.y0, d.y0);
+                    m.x1 = std::max(m.x1, d.x1); m.y1 = std::max(m.y1, d.y1);
+                    merged = true;
+                    break;
+                }
+            }
+            if (!merged) next.push_back(d);
+        }
+        for (const SkidRect& d : next) {
+            for (int y = d.y0; y < d.y1; y++) {
+                const uint8_t* row0 = src + (size_t) std::min(2 * y, sh - 1) * sw;
+                const uint8_t* row1 = src + (size_t) std::min(2 * y + 1, sh - 1) * sw;
+                uint8_t* drow = dst + (size_t) y * dw;
+                for (int x = d.x0; x < d.x1; x++) {
+                    const int sx0 = std::min(2 * x, sw - 1);
+                    const int sx1 = std::min(2 * x + 1, sw - 1);
+                    drow[x] = (uint8_t) (((int) row0[sx0] + row0[sx1]
+                            + row1[sx0] + row1[sx1] + 2) >> 2);
+                }
+            }
+            const int uw = d.x1 - d.x0, uh = d.y1 - d.y0;
+            auto* buf = new uint8_t[(size_t) uw * uh];
+            for (int y = 0; y < uh; y++) {
+                std::memcpy(buf + (size_t) y * uw,
+                        dst + (size_t) (d.y0 + y) * dw + d.x0, (size_t) uw);
+            }
+            mSkidTex->setImage(*mEngine, (size_t) l,
+                    (uint32_t) d.x0, (uint32_t) d.y0, (uint32_t) uw, (uint32_t) uh,
+                    Texture::PixelBufferDescriptor(buf, (size_t) uw * uh,
+                            Texture::Format::R, Texture::Type::UBYTE,
+                            [](void* b, size_t, void*) { delete[] (uint8_t*) b; },
+                            nullptr));
+        }
+        rects = std::move(next);
+    }
+}
+
+// Which vroad arrived? Two INDEPENDENT capability probes: the current blob
+// carries BOTH — the hybrid shadow LOD's masked arrays (near cars) and the
+// carShadow tap (everyone else) — and each path keys on its own probe, so a
+// blob with only one half still draws that half. hasParameter is a name
+// lookup — called at build, at debug switches, and once per uploadDeckDecals,
+// so it is not worth a cached bool that could go stale across provideAsset.
+bool TtpRenderer::roadHasMaskLoop() const {
+    return mRoadMaterial && mRoadMaterial->hasParameter("maskRect");
+}
+bool TtpRenderer::roadHasCarShadow() const {
+    return mRoadMaterial && mRoadMaterial->hasParameter("carShadow");
+}
+
+// The carShadow sampler must be bound on every vroad instance from creation
+// (Filament draws with every sampler resolved); the 1x1 zero the skid layer
+// keeps is the right null here too. maskInk.w = 0 is what actually disables
+// the tap.
+void TtpRenderer::bindCarShadow(MaterialInstance* mi, Texture* t) {
+    if (!mi) return;
+    if (!t) t = mSkidNullTex;   // bindSkidLayer has made it by the time any
+    if (!t) return;             // road instance exists (see roadInstance)
+    // LINEAR both ways, single level — the masked loop's silhouette was a
+    // no-mip LOD-0 sample too, so minification behaves exactly as it did.
+    TextureSampler smp(TextureSampler::MinFilter::LINEAR,
+            TextureSampler::MagFilter::LINEAR);
+    // REPEAT along s carries the lap wrap; CLAMP across lat parks the kerbs'
+    // and underside's out-of-band v on edge rows the raster never writes —
+    // the rubber layer's exact contract, on the rubber layer's exact span.
+    smp.setWrapModeS(TextureSampler::WrapMode::REPEAT);
+    smp.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+    mi->setParameter("carShadow", t, smp);
+}
+
+// Zero the rects the last raster touched. The layer is TRANSIENT — the cars
+// re-stamp every frame — so this runs at the top of renderCars whether or not
+// any car will stamp again (a car that vanished must leave nothing behind).
+// x is unwrapped (a stamp near the seam runs past W); the memset wraps.
+void TtpRenderer::eraseCarShadow() {
+    if (mCarShadowPix.empty()) { mCarShadowDirty.clear(); return; }
+    const int W = (int) mCarShadowW, H = (int) mCarShadowH;
+    for (const SkidRect& r : mCarShadowDirty) {
+        const int y0 = std::max(0, r.y0), y1 = std::min(H, r.y1);
+        const int span = std::min(W, r.x1 - r.x0);
+        if (y0 >= y1 || span <= 0) continue;
+        const int wx0 = ((r.x0 % W) + W) % W;
+        const int first = std::min(span, W - wx0);
+        for (int y = y0; y < y1; y++) {
+            uint8_t* row = mCarShadowPix.data() + (size_t) y * W;
+            std::memset(row + wx0, 0, (size_t) first);
+            if (first < span) std::memset(row, 0, (size_t) (span - first));
+        }
+        mCarShadowUpload = true;
+    }
+    mCarShadowDirty.clear();
+}
+
+// One triangle of a car-shadow stamp: texel space, the same top-left rule and
+// per-row x wrap as rasterSkidTri, but instead of a flat interpolated ink it
+// carries the silhouette's (u, v) per vertex — linear per triangle, exactly
+// what the GPU would interpolate — and samples the CPU superellipse bilinearly
+// at each covered texel. Saturating ADD like the rubber; the cap on the summed
+// result is the shader's (kCarShadowCap via maskInk.w), not the raster's.
+// y clamps to [1, H-2]: the outer rows are the CLAMP rows the shader's
+// out-of-band v relies on staying empty.
+void TtpRenderer::rasterCarShadowTri(const float2* p, const float2* uv, float alpha) {
+    const int W = (int) mCarShadowW, H = (int) mCarShadowH;
+    if (W <= 0 || H <= 0 || mCarShadowMask.empty()) return;
+    const float area = (p[1].x - p[0].x) * (p[2].y - p[0].y)
+                     - (p[2].x - p[0].x) * (p[1].y - p[0].y);
+    if (area == 0.0f) return;
+    const float2 a = p[0];
+    const float2 b = area > 0 ? p[1] : p[2];
+    const float2 c = area > 0 ? p[2] : p[1];
+    const float2 ua = uv[0];
+    const float2 ub = area > 0 ? uv[1] : uv[2];
+    const float2 uc = area > 0 ? uv[2] : uv[1];
+    const float inv = 1.0f / std::fabs(area);
+    const int y0 = std::max(1, (int) std::ceil(
+            std::min(a.y, std::min(b.y, c.y)) - 0.5f));
+    const int y1 = std::min(H - 2, (int) std::floor(
+            std::max(a.y, std::max(b.y, c.y)) - 0.5f + 1.0f));
+    const int x0 = (int) std::ceil(std::min(a.x, std::min(b.x, c.x)) - 0.5f);
+    const int x1 = (int) std::floor(std::max(a.x, std::max(b.x, c.x)) - 0.5f + 1.0f);
+    const auto edge = [](const float2& e0, const float2& e1, float px, float py) {
+        return (e1.x - e0.x) * (py - e0.y) - (e1.y - e0.y) * (px - e0.x);
+    };
+    const auto topLeft = [](const float2& e0, const float2& e1) {
+        return (e0.y == e1.y && e1.x < e0.x) || e1.y > e0.y;
+    };
+    // Clamped bilinear over the CPU silhouette — the sampler's CLAMP_TO_EDGE,
+    // in floats (the mask's own border is already ~0 from the bake blur).
+    const auto mask = [&](float u, float v) {
+        const float fx = u * (float) kCarShadowMaskW - 0.5f;
+        const float fy = v * (float) kCarShadowMaskH - 0.5f;
+        const int mx0 = (int) std::floor(fx), my0 = (int) std::floor(fy);
+        const float tx = fx - (float) mx0, ty = fy - (float) my0;
+        const auto at = [&](int x, int y) {
+            x = std::min(kCarShadowMaskW - 1, std::max(0, x));
+            y = std::min(kCarShadowMaskH - 1, std::max(0, y));
+            return mCarShadowMask[(size_t) y * kCarShadowMaskW + x];
+        };
+        const float t0 = at(mx0, my0) + (at(mx0 + 1, my0) - at(mx0, my0)) * tx;
+        const float t1 = at(mx0, my0 + 1) + (at(mx0 + 1, my0 + 1) - at(mx0, my0 + 1)) * tx;
+        return t0 + (t1 - t0) * ty;
+    };
+    const bool tlAB = topLeft(a, b), tlBC = topLeft(b, c), tlCA = topLeft(c, a);
+    for (int y = y0; y <= y1; y++) {
+        uint8_t* row = mCarShadowPix.data() + (size_t) y * W;
+        const float py = (float) y + 0.5f;
+        for (int x = x0; x <= x1; x++) {
+            const float px = (float) x + 0.5f;
+            const float eAB = edge(a, b, px, py);
+            const float eBC = edge(b, c, px, py);
+            const float eCA = edge(c, a, px, py);
+            if ((eAB > 0 || (eAB == 0 && tlAB))
+                    && (eBC > 0 || (eBC == 0 && tlBC))
+                    && (eCA > 0 || (eCA == 0 && tlCA))) {
+                // Barycentric uv: eBC weighs vertex a, eCA weighs b, eAB c.
+                const float w0 = eBC * inv, w1 = eCA * inv, w2 = eAB * inv;
+                const float mu = ua.x * w0 + ub.x * w1 + uc.x * w2;
+                const float mv = ua.y * w0 + ub.y * w1 + uc.y * w2;
+                const int add = (int) std::lround(
+                        std::max(0.0f, mask(mu, mv) * alpha) * 255.0f);
+                if (add > 0) {
+                    const int wx = ((x % W) + W) % W;
+                    row[wx] = (uint8_t) std::min(255, (int) row[wx] + add);
+                }
+            }
+        }
+    }
+}
+
+// One car's stamp into the layer. `sl` is the SIX deckFoot-projected points
+// the cull-window measurement in renderCars already computes — the four
+// corners plus the two long-edge midpoints — as (s, lat), s ABSOLUTE (the
+// fold to unwrapped texel x happens here, against carS). Rasterized as TWO
+// warped quads (four triangles): the deck's bending of track space then
+// lives INSIDE each half-stamp, where it is second-order — the worst
+// catalogue corner bows a straight car edge by ~L²/8R ≈ 0.13 u over the full
+// stamp, and slicing once halves the sag to well under a texel. The
+// per-triangle diagonal is the same linearization the GPU applies to uv0
+// itself, so there is no finer truth to chase.
+void TtpRenderer::rasterCarShadowStamp(const float2* sl, float carS, float alpha) {
+    if (!mTrack || mCarShadowPix.empty() || mSkidLatHalf <= 0.0f) return;
+    const float L = mTrack->length;
+    if (L <= 0.0f) return;
+    const float texW = (float) mCarShadowW, texH = (float) mCarShadowH;
+    const float u0 = (carS - L * std::floor(carS / L)) / L;
+    float2 tp[6], tuv[6];
+    for (int k = 0; k < 6; k++) {
+        float ds = sl[k].x - carS;
+        ds -= L * std::round(ds / L);           // the short way round the lap
+        tp[k] = { (u0 + ds / L) * texW,
+                  (sl[k].y / mSkidLatHalf * 0.5f + 0.5f) * texH };
+        // The silhouette source frame: u across the car (left edge k<3, right
+        // k>=3), v along it (fk -1, 0, +1 → 0, 0.5, 1). The superellipse is
+        // symmetric in both axes, so orientation cannot mirror anything —
+        // which is half the reason the CPU shape beat a baked readback.
+        tuv[k] = { k < 3 ? 0.0f : 1.0f, (float) (k % 3) * 0.5f };
+    }
+    static const int quads[2][4] = { { 0, 1, 4, 3 }, { 1, 2, 5, 4 } };
+    for (const auto& q : quads) {
+        const float2 t1[3] = { tp[q[0]], tp[q[1]], tp[q[2]] };
+        const float2 u1[3] = { tuv[q[0]], tuv[q[1]], tuv[q[2]] };
+        rasterCarShadowTri(t1, u1, alpha);
+        const float2 t2[3] = { tp[q[0]], tp[q[2]], tp[q[3]] };
+        const float2 u2[3] = { tuv[q[0]], tuv[q[2]], tuv[q[3]] };
+        rasterCarShadowTri(t2, u2, alpha);
+    }
+    // The stamp's rect, one texel padded — next frame's erase, this frame's
+    // upload flag. Merged when touching (a pack overlaps constantly).
+    float xmin = tp[0].x, xmax = tp[0].x, ymin = tp[0].y, ymax = tp[0].y;
+    for (int k = 1; k < 6; k++) {
+        xmin = std::min(xmin, tp[k].x); xmax = std::max(xmax, tp[k].x);
+        ymin = std::min(ymin, tp[k].y); ymax = std::max(ymax, tp[k].y);
+    }
+    SkidRect r{ (int) std::floor(xmin) - 1, (int) std::floor(ymin) - 1,
+                (int) std::ceil(xmax) + 1, (int) std::ceil(ymax) + 1 };
+    mCarShadowUpload = true;
+    for (SkidRect& m : mCarShadowDirty) {
+        if (r.x0 <= m.x1 + 8 && m.x0 <= r.x1 + 8
+                && r.y0 <= m.y1 + 8 && m.y0 <= r.y1 + 8) {
+            m.x0 = std::min(m.x0, r.x0); m.y0 = std::min(m.y0, r.y0);
+            m.x1 = std::max(m.x1, r.x1); m.y1 = std::max(m.y1, r.y1);
+            return;
+        }
+    }
+    mCarShadowDirty.push_back(r);
+}
+
+// The frame's one upload: the WHOLE level 0 as ONE setImage, into the texture
+// of the pair the driver is NOT reading, then every road instance re-pointed
+// at it. The swap IS the ping-pong — by the time a texture takes its next
+// upload, the last frame that referenced it has left the queue, so the driver
+// never has to ghost or stall a respecified in-flight texture (the exact
+// mechanism the skid layer's ~30 Hz throttle dodges; shadows track cars and
+// cannot be throttled). One event of 256-512 KB per frame — the skid layer's
+// live A/B showed the driver bills these stalls per EVENT, not per byte, and
+// dirty-rect uploads here would be 16-24 events. The copy is mandatory: the
+// CPU buffer is mutated again next frame and native drivers read uploads
+// asynchronously.
+void TtpRenderer::uploadCarShadow() {
+    if (!mCarShadowTex[0] || !mCarShadowUpload || mCarShadowPix.empty()) return;
+    mCarShadowUpload = false;
+    const size_t bytes = mCarShadowPix.size();
+    auto* buf = new uint8_t[bytes];
+    std::memcpy(buf, mCarShadowPix.data(), bytes);
+    Texture* t = !mCarShadowTex[1]
+            ? mCarShadowTex[0] : mCarShadowTex[mCarShadowPing & 1];
+    t->setImage(*mEngine, 0,
+            Texture::PixelBufferDescriptor(buf, bytes,
+                    Texture::Format::R, Texture::Type::UBYTE,
+                    [](void* b, size_t, void*) { delete[] (uint8_t*) b; },
+                    nullptr));
+    for (RoadChunk& ch : mRoadChunks) bindCarShadow(ch.mi, t);
+    if (mRoadInst) bindCarShadow(mRoadInst, t);
+    mCarShadowPing ^= 1;
 }
 
 // Bound to every vroad instance, because a declared sampler must be bound even
@@ -215,6 +522,8 @@ void TtpRenderer::bindSkidLayer(MaterialInstance* mi) {
     smp.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
     mi->setParameter("skidLayer", t, smp);
     mi->setParameter("skidLatHalf", mSkidTex ? mSkidLatHalf : 0.0f);
+    mi->setParameter("invSkidLatSpan",
+            (mSkidTex && mSkidLatHalf > 0.0f) ? 0.5f / mSkidLatHalf : 0.0f);
     // rgb = the pool's SKID_COLOR, converted by the same srgbToLinear as
     // everything else; a = the cap on summed ink — two crossing trails darken
     // (1-(1-a)^2 composited to ~0.48 when they were meshes), a donut spot
@@ -232,14 +541,30 @@ MaterialInstance* TtpRenderer::roadInstance() {
     if (!mRoadMaterial) return litShadowInstance();  // no vroad served
     if (!mRoadInst) {
         mRoadInst = sceneInstance(mRoadMaterial);
-        mRoadInst->setParameter("shadowTexel", 0.0f);
-        mRoadInst->setParameter("decalCount", 0);
+        // Absent on the baked-light vroad (see fillRoadLight); an old blob
+        // still carries the live ESM decode.
+        if (mRoadMaterial->hasParameter("shadowTexel")) {
+            mRoadInst->setParameter("shadowTexel", 0.0f);
+        }
+        if (roadHasMaskLoop()) mRoadInst->setParameter("maskCount", 0);
+        mRoadInst->setParameter("profCount", 0);
         mRoadInst->setParameter("paintCount", 0);
         mRoadInst->setParameter("trackLength", 0.0f);
         mRoadInst->setParameter("invTrackLength", 0.0f);
         mRoadInst->setParameter("chunkMid", 0.0f);
-        if (Texture* arr = ensureDecalMaskArray()) bindDecalMask(mRoadInst, arr);
+        // The silhouette array feeds the masked loop's NEAR-car stamps; the
+        // far cars' carShadow tap stays off until a track builds the layer
+        // (maskInk.w = 0 is the tap's disable).
+        if (roadHasMaskLoop()) {
+            if (Texture* arr = ensureDecalMaskArray()) bindDecalMask(mRoadInst, arr);
+        }
         bindSkidLayer(mRoadInst);
+        if (roadHasCarShadow()) {
+            bindCarShadow(mRoadInst, mCarShadowTex[0]);
+            mRoadInst->setParameter("maskInk", math::float4{ kCarBlobInk.x,
+                    kCarBlobInk.y, kCarBlobInk.z,
+                    mCarShadowTex[0] ? kCarShadowCap : 0.0f });
+        }
     }
     return mRoadInst;
 }
@@ -318,15 +643,26 @@ void TtpRenderer::buildStaticDeckDecals(const TrackBin& tb) {
 // list order and returns how many landed — an overflowing chunk keeps the HEAD
 // of the list, which is why each caller orders its list by priority.
 int TtpRenderer::foldToChunk(const std::vector<DeckDecal>& src, float mid,
-        float halfSpan, float L, DeckDecal* out, int cap) {
+        float halfSpan, float L, DeckDecal* out, int cap, DecalKind kind) {
     int n = 0;
     for (const DeckDecal& d : src) {
         if (n >= cap) break;
+        // texrot.w is the masked flag on the gathered entry. It does not reach
+        // the GPU any more — the two lists ARE the distinction there — but it
+        // is still what tells the two folds apart, and what
+        // ttp_display_debug_decals reads.
+        const bool masked = d.texrot.w > 0.5f;
+        // 1 = fold-visible masked (a NEAR car under the hybrid LOD);
+        // 2 = texture-carried (far), pushed for the debug readback only —
+        // it must fold into NEITHER list.
+        const bool foldMasked = masked && d.texrot.w < 1.5f;
+        if (kind == DecalKind::Masked && !foldMasked) continue;
+        if (kind == DecalKind::Profile && masked) continue;
         float ds = d.rect.x - mid;
         if (L > 0.0f) ds -= L * std::floor(ds / L + 0.5f);
         // A MASKED stamp is rotated in track space (rect.zw are its halves in
         // the CAR's frame), so its arclength reach is measured per frame and
-        // ridden in wfwd.w — vroad.mat's masked `boundS`, and it must be THE
+        // ridden in wfwd.w — vroad.mat's maskRect.zw, and it must be THE
         // SAME NUMBER: a chunk that folds on a shorter reach than the shader
         // culls on drops a corner the fragments still want, which pops the
         // shape at chunk seams. Unmasked entries — pads, repairs, auras — keep
@@ -465,59 +801,125 @@ void TtpRenderer::uploadDeckDecals() {
     // (auras, item blobs) cross 1–2 chunks — so each chunk's folded list is
     // compared to what it was last handed, and an unchanged chunk (which in a
     // steady frame is every chunk) writes no uniforms at all.
+    //
+    // TWO FOLDS, TWO LISTS. A masked entry and a profile entry share no uniform
+    // array in vroad any more (see kMaxMaskedDeckDecals), so each channel gets
+    // its own fold, its own cap and its own "unchanged" comparison — a chunk can
+    // overflow one and not the other, and one concatenated compare would then
+    // rewrite both every frame.
+    //
+    // The BOXES in front of the loops (one per list — see below) are the union
+    // of the reject windows the loops actually test — r.zw for a profile
+    // stamp, the measured reach in the w slots for a masked one — so a
+    // fragment one rejects had nothing to draw. Build one from anything the
+    // folds DROPPED and it clips a stamp that is not there; build it from the
+    // wrong bound and it clips one that is.
+    // The masked fold is gated on the blob declaring the arrays, because a
+    // setParameter against a parameter the material does not declare would
+    // abort. The current vroad declares them: they carry the hybrid shadow
+    // LOD's NEAR cars, beside the far cars' carShadow layer (renderCars
+    // rasterizes, uploadCarShadow ships).
+    const bool maskLoop = roadHasMaskLoop();
     const auto uploadTo = [&](MaterialInstance* mi, float mid, float halfSpan,
-            std::vector<DeckDecal>& last) {
-        DeckDecal sel[kMaxDeckDecals];
-        const int n = foldToChunk(mDeckDecalsLast, mid, halfSpan, L, sel,
-                kMaxDeckDecals);
-        if ((size_t) n == last.size()
-                && (n == 0 || std::memcmp(sel, last.data(), n * sizeof(DeckDecal)) == 0)) {
-            return;
-        }
-        last.assign(sel, sel + n);
-        if (n > 0) {
-            float4 rect[kMaxDeckDecals], col[kMaxDeckDecals], shape[kMaxDeckDecals],
-                    trot[kMaxDeckDecals], wpos[kMaxDeckDecals], wfwd[kMaxDeckDecals],
-                    wright[kMaxDeckDecals];
-            // The union of the entries' own reject windows, for the one box the
-            // shader tests before entering the loop. It MUST be built from the
-            // same two bounds the loop rejects on — r.zw for a profile stamp,
-            // and the measured reach in decalWFwd/WRight's w for a masked one —
-            // or the box clips a stamp the loop would have drawn.
-            float4 bounds{ 1e9f, -1e9f, 1e9f, -1e9f };
-            for (int i = 0; i < n; i++) {
-                rect[i] = sel[i].rect; col[i] = sel[i].color; shape[i] = sel[i].shape;
-                trot[i] = sel[i].texrot;
-                wpos[i] = sel[i].wpos; wfwd[i] = sel[i].wfwd; wright[i] = sel[i].wright;
-                const bool masked = sel[i].texrot.w > 0.5f;
-                const float bS = masked ? sel[i].wfwd.w : sel[i].rect.z;
-                const float bL = masked ? sel[i].wright.w : sel[i].rect.w;
-                bounds.x = std::min(bounds.x, sel[i].rect.x - bS);
-                bounds.y = std::max(bounds.y, sel[i].rect.x + bS);
-                bounds.z = std::min(bounds.z, sel[i].rect.y - bL);
-                bounds.w = std::max(bounds.w, sel[i].rect.y + bL);
+            std::vector<DeckDecal>& lastMask, std::vector<DeckDecal>& lastProf) {
+        DeckDecal mask[kMaxMaskedDeckDecals], prof[kMaxProfileDeckDecals];
+        const int nm = maskLoop ? foldToChunk(mDeckDecalsLast, mid, halfSpan, L,
+                mask, kMaxMaskedDeckDecals, DecalKind::Masked) : 0;
+        const int np = foldToChunk(mDeckDecalsLast, mid, halfSpan, L, prof,
+                kMaxProfileDeckDecals, DecalKind::Profile);
+        const bool maskSame = (size_t) nm == lastMask.size()
+                && (nm == 0 || std::memcmp(mask, lastMask.data(),
+                        nm * sizeof(DeckDecal)) == 0);
+        const bool profSame = (size_t) np == lastProf.size()
+                && (np == 0 || std::memcmp(prof, lastProf.data(),
+                        np * sizeof(DeckDecal)) == 0);
+        if (maskSame && profSame) return;
+        lastMask.assign(mask, mask + nm);
+        lastProf.assign(prof, prof + np);
+
+        // ONE BOX PER LIST. They cluster in different places — the masked
+        // entries follow the pack, the profile ones are bolted to the track —
+        // so a single union spans the gap between the two clusters and every
+        // fragment in that gap walks both loops for nothing.
+        float4 pBounds{ 1e9f, -1e9f, 1e9f, -1e9f };
+        float4 mBounds{ 1e9f, -1e9f, 1e9f, -1e9f };
+        const auto widen = [](float4& b, const float4& rect, float bS, float bL) {
+            b.x = std::min(b.x, rect.x - bS);
+            b.y = std::max(b.y, rect.x + bS);
+            b.z = std::min(b.z, rect.y - bL);
+            b.w = std::max(b.w, rect.y + bL);
+        };
+
+        if (np > 0) {
+            float4 rect[kMaxProfileDeckDecals], col[kMaxProfileDeckDecals],
+                    shape[kMaxProfileDeckDecals];
+            for (int i = 0; i < np; i++) {
+                rect[i] = prof[i].rect; col[i] = prof[i].color; shape[i] = prof[i].shape;
+                widen(pBounds, prof[i].rect, prof[i].rect.z, prof[i].rect.w);
             }
-            mi->setParameter("decalBounds", bounds);
-            mi->setParameter("decalRect", rect, (size_t) n);
-            mi->setParameter("decalColor", col, (size_t) n);
-            mi->setParameter("decalShape", shape, (size_t) n);
-            mi->setParameter("decalTexRot", trot, (size_t) n);
-            mi->setParameter("decalWPos", wpos, (size_t) n);
-            mi->setParameter("decalWFwd", wfwd, (size_t) n);
-            mi->setParameter("decalWRight", wright, (size_t) n);
+            mi->setParameter("profRect", rect, (size_t) np);
+            mi->setParameter("profColor", col, (size_t) np);
+            mi->setParameter("profShape", shape, (size_t) np);
         }
-        mi->setParameter("decalCount", n);
+        if (nm > 0) {
+            float4 rect[kMaxMaskedDeckDecals], wpos[kMaxMaskedDeckDecals],
+                    wfwd[kMaxMaskedDeckDecals], wright[kMaxMaskedDeckDecals];
+            for (int i = 0; i < nm; i++) {
+                const DeckDecal& d = mask[i];
+                // THE REJECT WINDOW IS ONE vec4: centre in xy, the MEASURED
+                // track-space reaches in zw — the same wfwd.w / wright.w
+                // foldToChunk reads, packed here so the shader's cull and the
+                // fold cannot drift apart. The stamp's world halves stop
+                // crossing at all: each axis is premultiplied by its own
+                // reciprocal half instead, so the shader's projection is two
+                // dots and no divides (the invSkidLatSpan trade).
+                rect[i] = float4{ d.rect.x, d.rect.y, d.wfwd.w, d.wright.w };
+                // THE SILHOUETTE LAYER RIDES IN THE ANCHOR'S SPARE w. It was
+                // texrot.z while one mixed list carried both kinds; texrot is
+                // now readback-only (the debug accessor reads mDeckDecalsLast,
+                // not these uniforms) and does not cross to the GPU at all.
+                wpos[i] = float4{ d.wpos.x, d.wpos.y, d.wpos.z, d.texrot.z };
+                const float invF = 1.0f / std::max(d.rect.z, 1e-5f);
+                const float invR = 1.0f / std::max(d.rect.w, 1e-5f);
+                // The peak alpha rides the forward axis's freed w; the ink
+                // RGB is ONE colour for every car shadow (kCarBlobInk), so it
+                // crosses once as maskInk below rather than as a per-entry
+                // array the loop would pay for by DECLARED SIZE.
+                wfwd[i] = float4{ d.wfwd.x * invF, d.wfwd.y * invF,
+                                  d.wfwd.z * invF, d.color.w };
+                wright[i] = float4{ d.wright.x * invR, d.wright.y * invR,
+                                    d.wright.z * invR, 0.0f };
+                widen(mBounds, d.rect, d.wfwd.w, d.wright.w);
+            }
+            mi->setParameter("maskRect", rect, (size_t) nm);
+            mi->setParameter("maskWPos", wpos, (size_t) nm);
+            mi->setParameter("maskWFwd", wfwd, (size_t) nm);
+            mi->setParameter("maskWRight", wright, (size_t) nm);
+            // w = the carShadow TAP's enable+cap, NOT zero: this per-frame
+            // write predates the hybrid and used to be harmless — zeroing it
+            // here silently killed the far blobs on every chunk that carried
+            // a near car (the user's own chunk, always).
+            mi->setParameter("maskInk",
+                    float4{ kCarBlobInk.x, kCarBlobInk.y, kCarBlobInk.z,
+                            (roadHasCarShadow() && mCarShadowTex[0])
+                                    ? kCarShadowCap : 0.0f });
+        }
+        if (np > 0) mi->setParameter("profBounds", pBounds);
+        if (nm > 0) mi->setParameter("maskBounds", mBounds);
+        mi->setParameter("profCount", np);
+        if (maskLoop) mi->setParameter("maskCount", nm);
     };
     if (!mRoadChunks.empty()) {
         for (RoadChunk& ch : mRoadChunks) {
             uploadTo(ch.mi, (ch.sMin + ch.sMax) * 0.5f, (ch.sMax - ch.sMin) * 0.5f,
-                    ch.last);
+                    ch.lastMask, ch.lastProf);
         }
     } else if (mRoadInst) {
         // Degenerate: the deck material exists but the chunk pass produced
         // nothing. One "chunk" spanning the whole lap keeps the decals drawing
         // (its wrap constants are set at build, like the chunks').
-        uploadTo(mRoadInst, 0.0f, L > 0.0f ? L : 1.0e9f, mRoadInstLast);
+        uploadTo(mRoadInst, 0.0f, L > 0.0f ? L : 1.0e9f,
+                mRoadInstLastMask, mRoadInstLastProf);
     }
     applyRoadDebug();   // no-op unless a caller asked for an ablation
 }
@@ -547,6 +949,25 @@ void TtpRenderer::bindShadowMap(MaterialInstance* mi) {
     mi->setParameter("shadowTexel", mShadowMap ? mShadowTexel : 0.0f);
     mi->setParameter("shadowK", kShadowEsmK);
     mi->setParameter("shadowDepthScale", mShadowDepthScale);
+}
+
+// The ground's baked sun-visibility map (vvis.mat) — its uv is
+// shadowFromWorld's own output, so the matrix rides along with the texture.
+// White = fully lit, for a track that baked no map — the same no-branch
+// fallback the old shadowTexel-0 early-out provided. A shell still serving
+// the PRE-BAKE vground blob (the one carrying the ESM parameters) gets the
+// full bindShadowMap treatment instead, and draws exactly what it used to.
+void TtpRenderer::bindVisMap(MaterialInstance* mi) {
+    if (!mi) return;
+    if (!mi->getMaterial()->hasParameter("visMap")) { bindShadowMap(mi); return; }
+    Texture* tex = mVisMap ? mVisMap : whiteTexture();
+    if (!tex) return;
+    TextureSampler smp(TextureSampler::MinFilter::LINEAR,
+            TextureSampler::MagFilter::LINEAR);
+    smp.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+    smp.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+    mi->setParameter("visMap", tex, smp);
+    mi->setParameter("shadowFromWorld", mShadowFromWorld);
 }
 
 // Oil slicks + warning cones. The slick is TrackProps' dark translucent disc

@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+# The whole engine for Android TV: sim + party + runtime + the Filament renderer
+# + the generated JNI bridge, as the .so the Gradle app in shells/androidtv/
+# packages.
+#
+# The sibling of build-runtime-tvos.sh, and SHORTER by one whole layer, which is
+# worth stating because it looks like an omission:
+#
+#   NO MATERIALS STEP. build-materials.sh's default is `opengl mobile`, which is
+#   what the web ships AND what this wants — GLES3 is GLES3 — so the .filamat
+#   blobs already committed under public/display/engine/native/ are the bytes
+#   this app bundles, byte for byte. tvOS is the one leg that needs its own set
+#   (Metal). stage-assets.sh copies them; nothing here compiles one.
+#
+#   TWO ABIS, NOT TWO SDKS. The tvOS script configures once per SDK because
+#   device and simulator are both arm64 and lipo cannot combine them. Here the
+#   ABIs are genuinely different architectures, and both are wanted: armeabi-v7a
+#   is NOT a legacy fallback on this platform — a Google TV Streamer on Android
+#   14 reports ro.product.cpu.abilist=armeabi-v7a,armeabi and has no
+#   /system/bin/linker64 at all, so an arm64-only APK does not run on it.
+#
+# Like the tvOS script this commits NOTHING: the .so files are build output, not
+# checked-in artifacts, because no test in the tree replays them.
+#
+#   build-runtime-android.sh [armeabi-v7a|arm64-v8a|both]     (default: both)
+set -euo pipefail
+
+WHICH="${1:-both}"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+NATIVE="$(cd "$HERE/.." && pwd)"
+ROOT="$(cd "$NATIVE/.." && pwd)"
+
+# THE PIN BINDS THIS LEG TOO — the same sourced resolver as the web and tvOS
+# builds, into the same version-addressed checkout. It matters here for the
+# reason it matters on tvOS: the Filament Android SDK is built by hand and then
+# reused for months, so a fork that moved under a shared checkout would never be
+# recompiled and would say nothing until a .filamat failed to load on the box.
+# shellcheck disable=SC1091
+source "$NATIVE/scripts/filament-checkout.sh"   # sets FILAMENT_SRC at the pinned commit
+
+: "${ANDROID_HOME:=$HOME/Library/Android/sdk}"
+# The NDK the FORK pins (build/common/versions), not the newest installed one.
+# Filament and this tree must agree: two NDKs means two libc++ builds on one
+# link line, and the symptom is a link error with no obvious cause.
+NDK_VERSION="${NDK_VERSION:-$(grep GITHUB_NDK_VERSION "$FILAMENT_SRC/build/common/versions" | cut -d= -f2)}"
+NDK="$ANDROID_HOME/ndk/$NDK_VERSION"
+# android-24 matches the CI leg. Compose needs 21+, Filament's GLES3 path 18+,
+# so this floor is about what Android TV boxes actually run, not about either.
+API="${API:-24}"
+
+say() { printf '==> %s\n' "$*"; }
+
+if [ ! -d "$NDK" ]; then
+  echo "build-runtime-android.sh: no NDK $NDK_VERSION at $NDK" >&2
+  echo "  \$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager 'ndk;$NDK_VERSION'" >&2
+  exit 1
+fi
+
+SDK_ROOT="$FILAMENT_SRC/out/android-release/filament"
+if [ ! -f "$SDK_ROOT/include/filament/Engine.h" ]; then
+  echo "build-runtime-android.sh: no Filament Android SDK at $SDK_ROOT" >&2
+  echo "  Build it in the pinned checkout (~25 min per ABI):" >&2
+  echo "    cd $FILAMENT_SRC" >&2
+  echo "    ANDROID_HOME=$ANDROID_HOME ./build.sh -i -q armeabi-v7a -p android release" >&2
+  echo "    ANDROID_HOME=$ANDROID_HOME ./build.sh -i -q arm64-v8a   -p android release" >&2
+  echo "  Both install under ONE root; FilamentSdk.cmake picks lib/<abi>." >&2
+  exit 1
+fi
+
+# The bridge is generated from the ABI headers, and a stale one marshals the
+# wrong arguments into a live ABI with everything still compiling. Regenerate
+# before every build rather than trusting the committed copy — it costs
+# milliseconds, and tests/jni-generated.test.js is what catches a forgotten
+# commit of the result.
+say "regenerate the JNI bridge"
+node "$ROOT/scripts/gen-jni.mjs"
+
+JNILIBS="$ROOT/shells/androidtv/app/src/main/jniLibs"
+
+build_abi() {
+  local abi="$1"
+  local dir="$NATIVE/build/android-$abi"
+
+  say "configure $abi"
+  # -G Ninja for the same measured reason the rest of the tree prefers it; the
+  # generator is fixed for the life of the build dir, so it can only be chosen
+  # here. c++_static so the .so carries its own libc++ and the APK needs no
+  # second payload — the same reasoning as the ctest leg's, where a missing
+  # libc++_shared.so fails as a loader error that reads nothing like a
+  # conformance failure.
+  cmake -S "$NATIVE" -B "$dir" -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
+    -DANDROID_ABI="$abi" \
+    -DANDROID_PLATFORM="android-$API" \
+    -DANDROID_STL=c++_static \
+    -DFILAMENT_SDK="$SDK_ROOT" >/dev/null
+
+  say "build $abi"
+  cmake --build "$dir" --target ttp_runtime_android --parallel
+
+  # STRIPPED on the way in. Unstripped it is ~35 MB of Filament debug symbols
+  # per ABI, which Gradle would happily package into the APK.
+  mkdir -p "$JNILIBS/$abi"
+  "$NDK/toolchains/llvm/prebuilt/$(uname -s | tr '[:upper:]' '[:lower:]')-x86_64/bin/llvm-strip" \
+    -o "$JNILIBS/$abi/libttp_runtime_android.so" \
+    "$dir/libttp_runtime_android.so"
+  ls -l "$JNILIBS/$abi/libttp_runtime_android.so" | awk '{printf "    %s  %s\n", $5, $9}'
+}
+
+case "$WHICH" in
+  armeabi-v7a|arm64-v8a) build_abi "$WHICH" ;;
+  both) build_abi armeabi-v7a; build_abi arm64-v8a ;;
+  *) echo "usage: build-runtime-android.sh [armeabi-v7a|arm64-v8a|both]" >&2; exit 2 ;;
+esac
+
+# Staging and the APK are Gradle's now (app/build.gradle.kts stages on preBuild
+# and gates on an engine older than native/), so the follow-up is one command
+# rather than two in an order. shells/androidtv/scripts/build.sh runs THIS script
+# and then that, which is the way to invoke the pair.
+say "done — now: npm run build:androidtv -- release install"

@@ -94,9 +94,9 @@ enum SceneStaging {
     /// now, and demanding the retired blob aborted this loader halfway. `vskid`
     /// went the same way — the rubber layer rasterizes on the CPU and uploads,
     /// so there is no stamp material left to stage.
-    static let materialNames = ["vcolor", "vblend", "vlit", "vroad", "vglb",
-                                "vglbfade", "vpoint", "vcloud", "vground",
-                                "vpresent", "vesm", "vblur", "vburst",
+    static let materialNames = ["vcolor", "vblend", "vlit", "vlitns", "vroad",
+                                "vglb", "vglbfade", "vpoint", "vcloud", "vground",
+                                "vvis", "vpresent", "vesm", "vblur", "vburst",
                                 "voverlay"]
 
     /// The GLBs every scene needs whatever the track and the biome are: the

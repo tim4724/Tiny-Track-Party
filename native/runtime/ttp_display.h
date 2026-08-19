@@ -46,6 +46,12 @@ extern "C" {
  * string to a pointer regardless of how C spells the parameter. */
 TTP_ABI int ttp_display_create(const void* surface, uint32_t width, uint32_t height);
 TTP_ABI void ttp_display_resize(uint32_t width, uint32_t height);
+/* Block until the renderer's driver thread has executed everything recorded so
+ * far. A shell calls this ONCE before resizing the window's buffer queue
+ * underneath a threaded backend: a frame recorded at the old size whose buffer
+ * is dequeued after the resize lands mis-scaled on the glass for one frame —
+ * the Android shell's rare "scene shrinks for a frame" flicker. */
+TTP_ABI void ttp_display_drain(void);
 TTP_ABI void ttp_display_destroy(void);
 
 /* NO ttp_display_ui_scale. There was one — physical pixels per UI point, so the
@@ -398,12 +404,43 @@ TTP_ABI int ttp_display_frame(double dtSeconds);
  * for a whiff at (s, lat). */
 TTP_ABI void ttp_display_burst(const char* idJson, double s, double lat);
 
+/* The full-screen antialias pass, ON by default. Off is a QUALITY TRADE a weak
+ * GPU may take: the cells then draw straight onto the swap chain, so the frame
+ * loses both the offscreen buffer's store and vpresent's full-screen read, and
+ * the picture keeps its stair-steps.
+ *
+ * IT IS NOT A SMALL SAVING, which is why it is a switch rather than a constant.
+ * Measured on a PowerVR GE9215 (Google TV Streamer) at 1920x1080 with the
+ * backend's own GPU timer: an empty frame costs 25.2 ms with the pass and
+ * 15.3 ms without, and a full lobby 91.2 against 78.5. A whole 60 Hz budget is
+ * 16.7 ms, so on that device the antialiasing alone is most of a frame.
+ *
+ * The shell decides, because affordability is a fact about ITS device. */
+TTP_ABI void ttp_display_antialias(int on);
+
 /* ---- diagnostics -------------------------------------------------------- */
 
 /* Last frame's per-section wall clock (milliseconds), and the matching comma-
  * joined section names. The array is the renderer's own — read it, don't free. */
 TTP_ABI const double* ttp_display_profile(void);
 TTP_ABI const char* ttp_display_profile_names(void);
+
+/* The last resolved GPU duration for a frame, in milliseconds, straight off the
+ * backend's own timer. 0 means THERE IS NO NUMBER, and a caller must treat that
+ * as "no signal" rather than as a fast frame.
+ *
+ * WHERE IT IS REAL: the GL backend where EXT_disjoint_timer_query exists, which
+ * is every Android GL ES 3 device this ships to. WHERE IT IS 0: emscripten,
+ * because Filament's GL backend compiles the timer-query probe out there and
+ * lands on a fallback that measures CPU time and says so in its own comment —
+ * the web shell wraps its own WebGL timer query around the frame instead and
+ * this must not be mistaken for it.
+ *
+ * This is the ONE measurement that can see HEADROOM. A vsync-locked present
+ * cadence looks identical at 10 % and 95 % load, which is why the render scale
+ * rule (ttp/render_scale.h) may only step DOWN without this and can step both
+ * ways with it. */
+TTP_ABI double ttp_display_gpu_ms(void);
 
 /* DEBUG: the deck decals packed for the road material last frame, as JSON
  * [{s,lat,halfS,halfLat,r,g,b,a,inner,ellipse,knee}]. Exists because a wrong
@@ -451,8 +488,14 @@ TTP_ABI void ttp_display_debug_force_mask_layer(int layer);
 #define TTP_FEAT_ROAD_DECALS 0x0100  /* the per-fragment decal loop (shadows, auras, statics) */
 #define TTP_FEAT_ROAD_RUBBER 0x0200  /* the laid-rubber texture tap */
 #define TTP_FEAT_ROAD_PAINT  0x0400  /* the deck's own paint (repairs, boost pads) */
-#define TTP_FEAT_ROAD_SHADOW 0x0800  /* the sun map's one bilinear tap */
-#define TTP_FEAT_ALL      0xFFC
+#define TTP_FEAT_ROAD_SHADOW 0x0800  /* the GROUND's baked sun-vis tap (the road's
+                                        light is baked into its vertices at track
+                                        build, so this arm has no road half) */
+/* SCENE-WIDE channels: the same picture with one per-fragment term skipped on
+ * every surface. Filament's fog is composited INSIDE each surface shader, so it
+ * cannot be ablated by hiding a group — it needs a bit of its own. */
+#define TTP_FEAT_FOG      0x1000 /* the distance fog every surface composites */
+#define TTP_FEAT_ALL      0x1FFC
 TTP_ABI void ttp_display_debug_features(unsigned int mask);
 
 #ifdef __cplusplus

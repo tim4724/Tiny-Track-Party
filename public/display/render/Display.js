@@ -36,15 +36,16 @@ export const FEAT = {
   // The road shader's own channels — these shade the same deck one channel
   // shorter rather than hiding anything.
   ROAD_DECALS: 0x100, ROAD_RUBBER: 0x200, ROAD_PAINT: 0x400, ROAD_SHADOW: 0x800,
-  ALL: 0xFFC,
+  FOG: 0x1000,
+  ALL: 0x1FFC,
 };
 
 // `vskid` is GONE with `vdecal`, same story: the rubber layer is a CPU
 // raster + upload now (TtpRenderer::renderSkids), so there is no stamp
 // material to serve.
-const MATERIALS = ['vcolor', 'vblend', 'vlit', 'vroad', 'vglb', 'vglbfade', 'vpoint',
-                   'vcloud', 'vground', 'vpresent', 'vesm', 'vblur', 'vburst',
-                   'voverlay'];
+const MATERIALS = ['vcolor', 'vblend', 'vlit', 'vlitns', 'vroad', 'vglb', 'vglbfade',
+                   'vpoint', 'vcloud', 'vground', 'vvis', 'vpresent', 'vesm', 'vblur',
+                   'vburst', 'voverlay'];
 
 // The GLBs every scene needs whatever the track and the biome are: the track's
 // own furniture, and the truck a monster item turns a car into. Exported because

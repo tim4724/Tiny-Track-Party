@@ -1053,6 +1053,70 @@ if(CMAKE_SYSTEM_NAME STREQUAL "tvOS")
   endif()
 endif()
 
+# ---- Android TV module: the whole game, as a shared library ----------------
+# The third sibling. Same sources, same libraries, same strict-FP contract; the
+# only differences from the tvOS target are the shell file, the JNI bridge, and
+# the shape of the artifact — a .so Gradle packages into the APK, where tvOS
+# emits a .a Xcode links and the web a .mjs the page imports.
+#
+# SHARED, not STATIC, because that is what System.loadLibrary takes. It also
+# means JNI_OnLoad exists to be called, which is where the generated bridge
+# registers every generated native (runtime/ttp_jni.cc, from scripts/gen-jni.mjs).
+#
+# BOTH ABIS MATTER, and armeabi-v7a is not the legacy one. Android TV boxes ship
+# 32-bit userspace long past the point phones stopped: a Google TV Streamer on
+# Android 14 reports armeabi-v7a with no /system/bin/linker64 at all. Nothing
+# here selects an ABI — the NDK toolchain file does, and the build script
+# configures once per ABI, exactly as the tvOS script does once per SDK.
+#
+# Defined HERE rather than under shells/androidtv/ for the same reason the tvOS
+# target is: C++17 and the ccache wiring are set at THIS directory's scope, and
+# a target in another CMakeLists silently falls back to the compiler default,
+# turning every inline variable in libttp-runtime into an error.
+if(ANDROID)
+  set(TTP_ANDROID_SOURCES ${TTP_APP_SOURCES} runtime/ttp_jni.cc)
+  if(TARGET ttp_renderer)
+    list(APPEND TTP_ANDROID_SOURCES runtime/ttp_display_core.cc runtime/ttp_display_android.cc)
+    add_library(ttp_runtime_android SHARED ${TTP_ANDROID_SOURCES})
+  else()
+    # NO SDK, NO .so — an OBJECT library instead, and the difference is not
+    # cosmetic. The generated bridge takes the ADDRESS of every export in its
+    # RegisterNatives table, every ttp_display.h export included, so a SHARED
+    # target without the display bodies has an undefined symbol per display
+    # export — and the NDK links shared libraries with -Wl,--no-undefined, so
+    # it is a hard link error rather than a lazy symbol. The web target has no
+    # equivalent problem: its bridge is
+    # EMSCRIPTEN_KEEPALIVE on each declaration, so an absent body is simply not
+    # exported.
+    #
+    # CI is exactly this configure (.github/workflows/native.yml has no
+    # -DFILAMENT_SDK, because a runner has no Filament fork), and what that job
+    # exists to check is that the whole app COMPILES under NDK clang with the
+    # strict-FP flags. An object library checks precisely that and stops before
+    # the link that cannot succeed.
+    add_library(ttp_runtime_android OBJECT ${TTP_ANDROID_SOURCES})
+  endif()
+  target_include_directories(ttp_runtime_android PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime
+    ${CMAKE_CURRENT_SOURCE_DIR}/libttp-runtime
+    ${CMAKE_CURRENT_SOURCE_DIR}/renderer/include)
+  # ttp_strict_fp is named explicitly, exactly as the other two modules name it.
+  # It would arrive transitively through sim/party, but fp-profile.md §6 calls
+  # this platform out by name — NDK clang contracts within statements by default,
+  # and an FMA is the determinism the bit-exact traces exist to catch. A future
+  # refactor of the link graph must not be able to drop it silently. What proves
+  # it holds is native/scripts/android-device-spawn.sh: the whole ctest suite,
+  # on a real box, over adb.
+  target_link_libraries(ttp_runtime_android PRIVATE libttp_sim libttp_party
+    ttp_strict_fp ttp_warnings)
+  # log for __android_log (Filament's own logging sink), android for the
+  # ANativeWindow calls in the surface file. EGL/GLESv3 come with the renderer.
+  target_link_libraries(ttp_runtime_android PRIVATE android log)
+  if(TARGET ttp_renderer)
+    target_link_libraries(ttp_runtime_android PRIVATE ttp_renderer EGL GLESv3)
+  endif()
+endif()
+
 # ---- Browser module: the whole game --------------------------------------
 # Emscripten-only. ONE module: libttp-sim + libttp-party behind their extern "C"
 # ABIs (runtime/ttp_runtime.h, runtime/ttp_party.h) AND libttp-renderer behind

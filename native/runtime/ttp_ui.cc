@@ -312,6 +312,8 @@ uint32_t ttp_ui_cup_tint_rgb(const char* cupIdOrNull, double pct) {
   return ui::cupTintRgb(id, pct);
 }
 
+uint32_t ttp_ui_neutral_tint_rgb(double pct) { return ui::neutralTintRgb(pct); }
+
 int ttp_ui_cup_field_tint_pct(void) { return ui::cupFieldTintPct(); }
 
 const char* ttp_ui_catalogue_json(void) {

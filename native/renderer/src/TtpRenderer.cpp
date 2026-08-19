@@ -19,6 +19,13 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
     mEngine = Engine::Builder()
             .backend(backend)
             .config(&engineConfig)
+            // The gpu-complete metric costs a glFenceSync EVERY FRAME plus a
+            // dedicated thread blocked in fenceWait on it, and nothing reads
+            // it — readGpuTimer consumes gpuFrameDuration, which is the TIMER
+            // QUERY and survives this. A per-frame fence is exactly the kind
+            // of kick-boundary pin that stops a tiler overlapping frame N+1's
+            // vertex work with frame N's fill.
+            .feature("engine.frame_info.disable_gpu_complete_metric", true)
             .build();
     if (mEngine) {
         // The scenery is dozens of copies of a handful of GLBs — trees, boxes,
@@ -51,6 +58,10 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
     return true;
 }
 
+void TtpRenderer::drain() {
+    if (mEngine) mEngine->flushAndWait();
+}
+
 void TtpRenderer::resize(uint32_t width, uint32_t height) {
     mWidth = width;
     mHeight = height;
@@ -59,7 +70,11 @@ void TtpRenderer::resize(uint32_t width, uint32_t height) {
     // Called between frames, which is the only safe place to swap the scene
     // buffer: render() must never find a size mismatch, so rebuild it here.
     destroySceneTarget();
-    ensureSceneTarget();
+    // Only where the antialias pass will actually read it: with AA off (the
+    // Android shell) this allocated a full-surface RGBA8+depth on EVERY
+    // adaptive-scale move, for nothing — the frame path re-ensures it lazily
+    // whenever post-processing is on (renderCells).
+    if (mAntialias) ensureSceneTarget();
 }
 
 void TtpRenderer::updateCamera() {
@@ -85,12 +100,19 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
         MaterialInstance* materialInstance, uint8_t priority, uint32_t chunkTris) {
     if (m.verts.empty() || m.idx.empty() || m.idx.size() % 3) return false;
     static_assert(sizeof(Vertex) == 16, "unexpected vertex layout");
-    const bool lit = !m.normals.empty() && mLitMaterial != nullptr;
+    // BAKED per-vertex light (the road under the baked-light vroad): CUSTOM0
+    // replaces TANGENTS — the material reads no normal at draw time, and the
+    // qtangent was a 16-byte fetch per vertex on the scene's biggest mesh.
+    // m.normals stays populated; fillRoadLight reads it on the CPU instead.
+    const bool baked = !m.custom0.empty();
+    const bool lit = !baked && !m.normals.empty() && mLitMaterial != nullptr;
     const bool uv = !m.uvs.empty();
     const uint8_t uvSlot = lit ? 2 : 1;
+    const uint8_t customSlot = (uint8_t) (1 + (lit ? 1 : 0) + (uv ? 1 : 0));
     VertexBuffer::Builder vbb;
     vbb.vertexCount((uint32_t) m.verts.size())
-            .bufferCount((uint8_t) (1 + (lit ? 1 : 0) + (uv ? 1 : 0)))
+            .bufferCount((uint8_t)
+                    (1 + (lit ? 1 : 0) + (uv ? 1 : 0) + (baked ? 1 : 0)))
             .attribute(VertexAttribute::POSITION, 0,
                     VertexBuffer::AttributeType::FLOAT3, 0, sizeof(Vertex))
             .attribute(VertexAttribute::COLOR, 0,
@@ -106,6 +128,10 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
         vbb.attribute(VertexAttribute::TANGENTS, 1,
                 VertexBuffer::AttributeType::FLOAT4, 0, sizeof(math::quatf));
     }
+    if (baked) {
+        vbb.attribute(VertexAttribute::CUSTOM0, customSlot,
+                VertexBuffer::AttributeType::HALF4, 0, sizeof(math::half4));
+    }
     m.vb = vbb.build(*mEngine);
     m.vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
             m.verts.data(), m.verts.size() * sizeof(Vertex), nullptr));
@@ -113,6 +139,13 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
         m.uvs.resize(m.verts.size(), math::float2{ 0, 0 });
         m.vb->setBufferAt(*mEngine, uvSlot, VertexBuffer::BufferDescriptor(
                 m.uvs.data(), m.uvs.size() * sizeof(math::float2), nullptr));
+    }
+    if (baked) {
+        m.custom0.resize(m.verts.size(), math::half4{ 1.0f, 1.0f, 1.0f, 1.0f });
+        m.custom0Slot = customSlot;
+        m.vb->setBufferAt(*mEngine, customSlot, VertexBuffer::BufferDescriptor(
+                m.custom0.data(), m.custom0.size() * sizeof(math::half4),
+                nullptr));
     }
     if (lit) {
         m.normals.resize(m.verts.size(), float3{ 0, 1, 0 });
@@ -151,7 +184,8 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
         return filament::Box{ (lo + hi) * 0.5f, max((hi - lo) * 0.5f, float3{ 1e-3f }) };
     };
     MaterialInstance* const mi = materialInstance ? materialInstance
-            : lit ? mLitMaterial->getDefaultInstance()
+            : lit ? (mLitPlainMaterial ? mLitPlainMaterial : mLitMaterial)
+                            ->getDefaultInstance()
                   : mMaterial->getDefaultInstance();
     const size_t triCount = m.idx.size() / 3;
     // One renderable, or a chain of them over ranges of the SAME buffers. The
@@ -215,6 +249,8 @@ void TtpRenderer::destroyMesh(Mesh& m) {
     m.normals = {};
     m.quats = {};
     m.uvs = {};
+    m.custom0 = {};
+    m.custom0Slot = 0;
     m.local = {};
 }
 
@@ -761,18 +797,53 @@ void TtpRenderer::applyRoadDebug() {
     const float texel = mShadowMap ? mShadowTexel : 0.0f;
     const auto set = [&](MaterialInstance* mi) {
         if (!mi) return;
-        if (!(mRoadMask & kFeatRoadDecals)) mi->setParameter("decalCount", 0);
+        if (!(mRoadMask & kFeatRoadDecals)) {
+            // Both shadow halves ride this arm, each behind its own
+            // capability probe: the masked loop through maskCount, the
+            // carShadow tap through maskInk.w. The tap's raster + upload
+            // drop out on the same bit in renderCars.
+            if (mi->getMaterial()->hasParameter("maskCount")) {
+                mi->setParameter("maskCount", 0);
+            }
+            if (mi->getMaterial()->hasParameter("carShadow")) {
+                mi->setParameter("maskInk", math::float4{ kCarBlobInk.x,
+                        kCarBlobInk.y, kCarBlobInk.z, 0.0f });
+            }
+            mi->setParameter("profCount", 0);
+        }
         if (!(mRoadMask & kFeatRoadPaint)) mi->setParameter("paintCount", 0);
         if (!(mRoadMask & kFeatRoadRubber)) mi->setParameter("skidLatHalf", 0.0f);
-        mi->setParameter("shadowTexel", (mRoadMask & kFeatRoadShadow) ? texel : 0.0f);
+        // The baked-light vroad has no live sun channel left to ablate — the
+        // road's matte light became vertex data at track build (fillRoadLight),
+        // so this arm's ROAD half is structurally zero now; the ground's tap
+        // below still toggles. An OLD vroad blob keeps the knob.
+        if (mi->getMaterial()->hasParameter("shadowTexel")) {
+            mi->setParameter("shadowTexel",
+                    (mRoadMask & kFeatRoadShadow) ? texel : 0.0f);
+        }
     };
     for (RoadChunk& ch : mRoadChunks) set(ch.mi);
     set(mRoadInst);
+    // The GROUND's tap rides the same arm — and under the baked-light vroad it
+    // is the arm's only live half: the road's sun visibility became vertex
+    // data at track build (fillRoadLight), so nothing per-frame is left to
+    // toggle there. The ground's only knob IS the texture — white reads as
+    // fully lit.
+    if (mGroundInst && mGroundMaterial && mGroundMaterial->hasParameter("visMap")
+            && !(mRoadMask & kFeatRoadShadow)) {
+        Texture* w = whiteTexture();
+        if (w) {
+            TextureSampler smp(TextureSampler::MinFilter::LINEAR,
+                    TextureSampler::MagFilter::LINEAR);
+            mGroundInst->setParameter("visMap", w, smp);
+        }
+    }
 }
 
 void TtpRenderer::debugFeatureMask(uint32_t mask) {
     mFeatureMask = (uint8_t) (mask & kFeatAll);
     mRoadMask = mask & kFeatRoadAll;
+    mFogOn = (mask & kFeatFog) != 0;
     // Re-tag on every call rather than once: a scene built after the first call
     // (a Grand Prix's next track, a biome rebuild) arrives untagged, and an
     // ablation sweep that silently stopped ablating would read as "this feature
@@ -787,15 +858,32 @@ void TtpRenderer::debugFeatureMask(uint32_t mask) {
     // The whole-lap fallback instance goes through the same restore, because
     // applyRoadDebug already overrides it alongside the chunks: leaving it out
     // here would strand ITS channels off for good on the no-chunk path.
-    const auto restore = [&](MaterialInstance* mi, int paintN, std::vector<DeckDecal>& last) {
-        last.clear();
+    const auto restore = [&](MaterialInstance* mi, int paintN,
+            std::vector<DeckDecal>& lastMask, std::vector<DeckDecal>& lastProf) {
+        lastMask.clear();
+        lastProf.clear();
         if (!mi) return;
         mi->setParameter("skidLatHalf", mSkidTex ? mSkidLatHalf : 0.0f);
-        mi->setParameter("shadowTexel", mShadowMap ? mShadowTexel : 0.0f);
+        mi->setParameter("invSkidLatSpan",
+                (mSkidTex && mSkidLatHalf > 0.0f) ? 0.5f / mSkidLatHalf : 0.0f);
+        if (mi->getMaterial()->hasParameter("shadowTexel")) {
+            mi->setParameter("shadowTexel", mShadowMap ? mShadowTexel : 0.0f);
+        }
+        // The carShadow tap back on (the masked arrays restore themselves
+        // through the cleared lastMask on the next uploadDeckDecals; the tap
+        // has no per-frame writer, so its restore is here).
+        if (mi->getMaterial()->hasParameter("carShadow")) {
+            mi->setParameter("maskInk", math::float4{ kCarBlobInk.x,
+                    kCarBlobInk.y, kCarBlobInk.z,
+                    mCarShadowTex[0] ? kCarShadowCap : 0.0f });
+        }
         mi->setParameter("paintCount", paintN);   // written once per track
     };
-    for (RoadChunk& ch : mRoadChunks) restore(ch.mi, ch.paintN, ch.last);
-    restore(mRoadInst, mRoadInstPaintN, mRoadInstLast);
+    for (RoadChunk& ch : mRoadChunks) restore(ch.mi, ch.paintN, ch.lastMask, ch.lastProf);
+    restore(mRoadInst, mRoadInstPaintN, mRoadInstLastMask, mRoadInstLastProf);
+    // The ground's map is overridden by the same arm (applyRoadDebug), so a
+    // mask switched back on has to restore it here too or it stays lit.
+    if (mGroundInst) bindVisMap(mGroundInst);
 }
 
 // A MaterialInstance owned by the scene: recorded for releaseScene().
@@ -846,6 +934,8 @@ void TtpRenderer::releaseScene() {
     // (sized by lap length); the 1x1 null tap texture is engine-lifetime.
     if (mSkidTex) { mEngine->destroy(mSkidTex); mSkidTex = nullptr; }
     std::vector<uint8_t>().swap(mSkidPix); // megabytes — actually release
+    std::vector<std::vector<uint8_t>>().swap(mSkidMips); // likewise, ~a third more
+    mSkidMipDirty.clear();
     mSkidDirty.clear();
     mSkidTexW = mSkidTexH = 0;
     mSkidLatHalf = 0;
@@ -853,6 +943,18 @@ void TtpRenderer::releaseScene() {
     mSkidMipsDirty = false;
     mSkidMipsAt = 0; // mTime restarts at 0 per scene; a stale stamp here would
                      // hold the refresh gate shut for the whole next race
+    mSkidUpAt = 0;   // ditto for the level-0 upload throttle
+    // The car-shadow layer is per-track like the rubber (its width is the lap
+    // length); the CPU superellipse (mCarShadowMask) is engine-lifetime — the
+    // shape never changes.
+    for (auto*& t : mCarShadowTex) {
+        if (t) { mEngine->destroy(t); t = nullptr; }
+    }
+    std::vector<uint8_t>().swap(mCarShadowPix);
+    mCarShadowDirty.clear();
+    mCarShadowW = mCarShadowH = 0;
+    mCarShadowPing = 0;
+    mCarShadowUpload = false;
     for (auto& m : mBurstMeshes) destroyMesh(m);
     for (auto& m : mBurstBalls) destroyMesh(m);
     destroyMesh(mPollen);
@@ -879,9 +981,11 @@ void TtpRenderer::releaseScene() {
     mLitShadowInst = nullptr; // was one of those — never dangle into the next build
     mRoadInst = nullptr;      // ditto: the deck's own instance is scene-scoped too
     mRoadChunks.clear();      // and so is every per-chunk instance
-    mRoadInstLast.clear();
+    mRoadInstLastMask.clear();
+    mRoadInstLastProf.clear();
     mDeckDecals.clear();
     if (mShadowMap) { mEngine->destroy(mShadowMap); mShadowMap = nullptr; }
+    if (mVisMap) { mEngine->destroy(mVisMap); mVisMap = nullptr; }
     for (utils::Entity e : { mSun, mFill }) {
         if (!e.isNull()) {
             mScene->remove(e);
@@ -980,6 +1084,7 @@ TtpRenderer::~TtpRenderer() {
     if (mWhiteTex) mEngine->destroy(mWhiteTex);
     if (mDecalMaskArray) mEngine->destroy(mDecalMaskArray);
     if (mShadowMap) mEngine->destroy(mShadowMap);
+    if (mVisMap) mEngine->destroy(mVisMap);
     if (mGlbMaterial) mEngine->destroy(mGlbMaterial);
     if (mGlbFadeMaterial) mEngine->destroy(mGlbFadeMaterial);
     delete mResourceLoader;
@@ -1020,6 +1125,8 @@ TtpRenderer::~TtpRenderer() {
     if (mOverlayMaterial) mEngine->destroy(mOverlayMaterial);
     if (mMaterial) mEngine->destroy(mMaterial);
     if (mLitMaterial) mEngine->destroy(mLitMaterial);
+    if (mLitPlainMaterial) mEngine->destroy(mLitPlainMaterial);
+    if (mVisMaterial) mEngine->destroy(mVisMaterial);
     if (mRoadMaterial) mEngine->destroy(mRoadMaterial);
     for (size_t i = 0; i < mCellViews.size(); i++) {
         mEngine->destroy(mCellViews[i]);

@@ -691,13 +691,10 @@ std::vector<Cup> shippedCups() {
 
 int cupFieldTintPct() { return TTP_CUP_FIELD_TINT_PCT; }
 
-uint32_t cupTintRgb(const OptStr& cupId, double pct) {
-  uint32_t base = TTP_CUP_COLOR_FALLBACK;
-  if (cupId.has) {
-    for (int i = 0; i < TTP_CUP_COUNT; i++) {
-      if (cupId.v == TTP_CUPS[i].id) { base = TTP_CUPS[i].color; break; }
-    }
-  }
+namespace {
+// `towardWhite` in trackPicker.js: a straight per-channel lerp on the ENCODED
+// sRGB values, which is what CSS `color-mix(in srgb, …)` does.
+uint32_t towardWhite(uint32_t base, double pct) {
   // Clamped rather than trusted: `pct` comes from a shell, and a value outside
   // 0..100 would wrap the channel arithmetic into a colour nobody authored.
   const double k = (pct < 0 ? 0 : pct > 100 ? 100 : pct) / 100.0;
@@ -711,6 +708,19 @@ uint32_t cupTintRgb(const OptStr& cupId, double pct) {
   }
   return out;
 }
+}  // namespace
+
+uint32_t cupTintRgb(const OptStr& cupId, double pct) {
+  uint32_t base = TTP_CUP_COLOR_FALLBACK;
+  if (cupId.has) {
+    for (int i = 0; i < TTP_CUP_COUNT; i++) {
+      if (cupId.v == TTP_CUPS[i].id) { base = TTP_CUPS[i].color; break; }
+    }
+  }
+  return towardWhite(base, pct);
+}
+
+uint32_t neutralTintRgb(double pct) { return towardWhite(TTP_CUP_NEUTRAL_COLOR, pct); }
 
 std::vector<CatalogEntry> shippedCatalog() {
   // CUPS order, flattened — the catalogue's own arrangement, which every picker

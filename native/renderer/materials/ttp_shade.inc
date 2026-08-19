@@ -14,9 +14,12 @@
 // this file rebuilds all of them.
 //
 // Anything that reads materialParams must be declared by the INCLUDING material.
-// vlit.mat, vroad.mat and vground.mat declare the same five shadow parameters,
-// and TtpRenderer::bindShadowMap fills them by name on every instance of any of
-// them.
+// vlit.mat and vvis.mat declare the same five shadow parameters, and
+// TtpRenderer::bindShadowMap fills them by name on every instance of any of
+// them. (vroad no longer includes this file at all: its matte light is baked
+// per vertex at track build by TtpRenderer::fillRoadLight — a CPU TWIN of
+// ttpMatteLight and sunVisibility below, minus the fwidth floor. A fix in
+// either function here must reach that twin.)
 //
 // A material that defines TTP_NO_SUN_SHADOW before the #include declares NONE of
 // them and gets a sunVisibility that is the constant 1. That is vglb.mat, and it
@@ -43,6 +46,8 @@
 // contact rather than grey smudges. Watch for acne when changing it: biasN
 // below takes the max of the slope bias and this, so it doubles as the
 // acne guard on surfaces that face the sun (checked, and 0.6 is clean).
+// fillRoadLight (TtpRendererBakes.cpp) bakes the road with a C++ twin of
+// this constant — change both.
 const float kPenumbraWorld = 0.6;
 
 // ONE bilinear tap into the baked, pre-blurred exponential shadow map. The
@@ -69,8 +74,11 @@ float sunVisibility(highp vec3 wp, highp vec3 n, float NoL) {
     // No normal offset: ESM's bias is inherent (equal depths give exp(0) = 1),
     // and nudging the sample along the normal would only detach the shadow
     // from whatever cast it.
-    highp vec4 sp = materialParams.shadowFromWorld * vec4(wp, 1.0);
-    highp vec3 uv = sp.xyz / sp.w;
+    // NO PERSPECTIVE DIVIDE. The light is an ORTHO camera (bakeShadowMap), and
+    // the bias matrix folded into shadowFromWorld is a scale and a translate, so
+    // w is exactly 1 for every receiver. The divide was a highp reciprocal per
+    // fragment of every shadowed surface in the frame, for nothing.
+    highp vec3 uv = (materialParams.shadowFromWorld * vec4(wp, 1.0)).xyz;
     if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0
             || uv.z <= 0.0 || uv.z >= 1.0) return 1.0;
     // ONE bilinear tap. vesm.mat pre-blurred exp(-k·d) at bake time, so the
@@ -118,9 +126,26 @@ float sunVisibility(highp vec3 wp, highp vec3 n, float NoL) {
     // — the shadow frustum's own footprint, cut along the line where the flat
     // ground's mirrored depth crosses its real one. It reads as a texturing
     // mistake rather than as a shadow, which is what made it hard to place.
-    float occ = texture(materialParams_shadowMap, uvToRenderTargetUV(uv.xy)).r;
-    highp float dOcc = -log(max(occ, 1e-30)) / materialParams.shadowK;
-    highp float raw = uv.z - dOcc;
+    // textureLod, NEVER texture(), AND IT IS NOT A MICRO-OPTIMISATION. The two
+    // early returns above make this call site NON-UNIFORM control flow, where an
+    // implicit-derivative sample is undefined behaviour — the same rule the
+    // road's decal loop already carries, and this is where it was broken. The
+    // map is levels(1) bound with a non-mipmap filter, so the implicit LOD could
+    // only ever have been 0: this is byte-identical everywhere, and a bug fix
+    // rather than a trade.
+    //
+    // THE COST WAS MOST OF THE FRAME. On a PowerVR GE9215 at 1920x1080 the ground
+    // — one full-screen surface reading this once — went from 36 ms to about 7,
+    // and a fixed lobby from 63 ms to 32. Desktop GL and Metal hide it completely,
+    // which is why it shipped: undefined behaviour is allowed to be fast.
+    float occ = textureLod(materialParams_shadowMap, uvToRenderTargetUV(uv.xy), 0.0).r;
+    // COMPARED IN LOG SPACE, i.e. everything below is k times the depth it used
+    // to be. Identical decisions — the compare, the ramp and the bias all scale
+    // by the same positive k — and it turns a per-fragment divide by shadowK
+    // into a multiply. Divides are not cheap on the GPUs this has to hold 60 fps
+    // on; see this file's header for what one costs over a full-screen surface.
+    highp float k = materialParams.shadowK;
+    highp float raw = uv.z * k + log(max(occ, 1e-30));
     // Two floors on the transition width. The first is a fixed WORLD
     // distance, so an edge is equally soft on every track whatever the light
     // frustum ended up sized to. The second is analytic antialiasing —
@@ -129,8 +154,10 @@ float sunVisibility(highp vec3 wp, highp vec3 n, float NoL) {
     // or however steeply the occluder towers over the receiver. (The soft
     // edge's real WIDTH comes from the bake blur; this is the depth window
     // that reads it out, and the two multiply.)
-    highp float w = max(kPenumbraWorld * materialParams.shadowDepthScale,
-                        1.5 * fwidth(raw));
+    highp float w = kPenumbraWorld * materialParams.shadowDepthScale * k;
+#ifndef TTP_SHADE_VERTEX
+    w = max(w, 1.5 * fwidth(raw));
+#endif
     // The depth bias has to cover the ramp's lit-side reach, not just the
     // usual slope-scaled acne guard. A surface that meets its own depth in
     // the map sits at raw = 0; if the bias were smaller than w it would land
@@ -142,7 +169,7 @@ float sunVisibility(highp vec3 wp, highp vec3 n, float NoL) {
     // also acne-free, but it makes the shadow recede from its own outline by
     // the full penumbra; centring halves that, and on a track this bias is
     // usually the slope term anyway, so it costs nothing most of the time.
-    highp float biasN = max(biasW * materialParams.shadowDepthScale, w);
+    highp float biasN = max(biasW * materialParams.shadowDepthScale * k, w);
     float vis = smoothstep(-w, w, raw + biasN);
     // ...and fade the whole test out as the surface turns edge-on to the
     // sun. The bias above scales with 1/NoL, but the depth spread inside a
@@ -161,23 +188,57 @@ float sunVisibility(highp vec3 wp, highp vec3 n, float NoL) {
 }
 #endif
 
+// The LIGHT ALONE — ambient + sun + the baked map's visibility — as one vec3
+// multiplier over whatever colour the surface turns out to be.
+//
+// SPLIT OUT SO IT CAN RUN PER VERTEX. On a matte surface the light is the
+// smooth half of the shading and the colour is the detailed half: the deck's
+// asphalt, lane lines, dashes, paint, laid rubber and decals all vary per
+// fragment, while ambient + N·L + a shadow whose penumbra is 0.6 WORLD UNITS
+// wide vary over metres. Evaluating the light at the vertices and interpolating
+// costs one varying and moves a mat4 multiply, a texture tap, a log, a sqrt and
+// two smoothsteps off the per-fragment path — the same trade ttp_fog.inc
+// already made, for the same reason, on the same GPU.
+//
+// A CALLER MUST OWN THE SAMPLING RATE. This is only sound where the mesh is
+// finer than the shadow's own softness; the road's rings are 0.48 u apart
+// against a 0.6 u penumbra, so its interpolation is wider than the ramp it is
+// replacing. A coarse mesh (a four-corner ground sheet) would staircase, which
+// is the same trap the fog's ground-sheet note describes.
+// The light's two UNSHADOWED halves, split out for a surface whose sun
+// visibility arrives separately — vground taps a BAKED visibility map, so its
+// light is ambient + sunTerm × tap. They live here, not in a material, so
+// ttpMatteLight below composes the exact same terms and the two spellings
+// cannot drift.
+//
+// Ambient: the 2-band SH the C++ builds from theme.hemi, evaluated exactly as
+// Irradiance_SphericalHarmonics does (Fd_Lambert is already baked into the SH
+// coefficients, hence no 1/PI here).
+vec3 ttpMatteAmbient(highp vec3 n) {
+    return max(frameUniforms.iblSH[0]
+            + frameUniforms.iblSH[1] * n.y
+            + frameUniforms.iblSH[2] * n.z
+            + frameUniforms.iblSH[3] * n.x, vec3(0.0)) * frameUniforms.iblLuminance;
+}
+
+// The sun's contribution at FULL visibility; the caller multiplies its own
+// visibility in. lightDirection is the surface→light vector; .w the exposure.
+vec3 ttpMatteSunTerm(highp vec3 n, float NoL) {
+    return frameUniforms.lightColorIntensity.rgb
+            * (frameUniforms.lightColorIntensity.w * NoL * (1.0 / PI));
+}
+
+vec3 ttpMatteLight(highp vec3 uwp, highp vec3 n) {
+    float NoL = saturate(dot(n, frameUniforms.lightDirection));
+    return ttpMatteAmbient(n)
+            + ttpMatteSunTerm(n, NoL) * sunVisibility(uwp, n, NoL);
+}
+
+#ifndef TTP_SHADE_VERTEX
 // Ambient + sun for a matte surface of colour `base` with world normal `n`.
 // Returns the value that goes into material.emissive — unlit ADDS emissive to
 // baseColor, so all the shading rides here and nothing downstream touches it.
 vec3 ttpMatteShade(vec3 base, highp vec3 n) {
-    // Ambient: the 2-band SH the C++ builds from theme.hemi, evaluated
-    // exactly as Irradiance_SphericalHarmonics does (Fd_Lambert is already
-    // baked into the SH coefficients, hence no 1/PI here).
-    vec3 ambient = max(frameUniforms.iblSH[0]
-            + frameUniforms.iblSH[1] * n.y
-            + frameUniforms.iblSH[2] * n.z
-            + frameUniforms.iblSH[3] * n.x, vec3(0.0)) * frameUniforms.iblLuminance;
-
-    // lightDirection is the surface→light vector; .w carries the exposure.
-    float NoL = saturate(dot(n, frameUniforms.lightDirection));
-    float visibility = sunVisibility(getUserWorldPosition(), n, NoL);
-    vec3 sun = frameUniforms.lightColorIntensity.rgb
-            * (frameUniforms.lightColorIntensity.w * NoL * visibility * (1.0 / PI));
-
-    return base * (ambient + sun);
+    return base * ttpMatteLight(getUserWorldPosition(), n);
 }
+#endif  // TTP_SHADE_VERTEX

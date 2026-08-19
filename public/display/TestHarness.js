@@ -453,6 +453,14 @@ export function runDisplayScenario(opts, ctx) {
   function renderRoster(slots, hostPeerIndex) {
     renderSeats(el('players'), slots.map((s) => ({
       name: FAKE_NAMES[s], colorIndex: s, carIndex: s, host: s === hostPeerIndex,
+      // `connected: true`, and it is LOAD-BEARING. The seat grid TAKES a roster
+      // row and DERIVES the dimming from it, so an absent `connected` reads as
+      // falsy and every previewed seat comes back `off` — the whole dock at 50%
+      // opacity, in the gallery that exists to check the look. It was, in every
+      // populated lobby shot, until a TV column beside it made the difference
+      // obvious. (GameState.kt on Android carries the same warning; that shell
+      // hit this from the other direction.)
+      connected: true,
       // preview the readiness pill: everyone but the host has readied up
       ready: hostPeerIndex != null && s !== hostPeerIndex
     })));
@@ -501,6 +509,13 @@ export function runDisplayScenario(opts, ctx) {
     show('lobby');
     renderRoster([], null);
     showPick(null);
+    // The shelf is on the board from BOOT in live play (main.js calls
+    // refreshCupShelf at module scope, off the catalogue the engine already
+    // holds) — it is the couch's record, not something a pick reveals. Left out
+    // here, the two lobby cards that show no pick were the only ones in the
+    // gallery missing a card the live lobby always has, and every TV column
+    // compared against them looked like it had grown one.
+    renderCupShelf(el('cup-shelf'), PREVIEW_SHELF);
     return;
   }
 
@@ -513,6 +528,7 @@ export function runDisplayScenario(opts, ctx) {
     renderJoinUrl(el('joinurl'), (location.host || 'tinytrack.party'), null); // stamps the fade-in class
     showPick(null);   // no pick yet → empty slot
     renderQR(el('qr'), buildQRMatrix(location.origin || 'https://tinytrack.party'));
+    renderCupShelf(el('cup-shelf'), PREVIEW_SHELF);
     startAttractDemo([]);
     return;
   }

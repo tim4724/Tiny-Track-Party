@@ -27,6 +27,8 @@
 // what makes the blast die away instead of shrinking away.
 material {
     name : TtpVburst,
+    // The per-vertex fog factor (ttp_fog.inc); .yzw unused.
+    variables : [ fog ],
     requires : [
         color,
         uv0
@@ -42,22 +44,29 @@ material {
     flipUV : false,
     parameters : [
         { type : float2, name : ring },
-        { type : float4, name : tint }
+        { type : float4, name : tint },
+        { type : sampler2d, name : gradeLut }
     ]
 }
 
 vertex {
+    #include "ttp_fog.inc"
+
     void materialVertex(inout MaterialVertexInputs material) {
         // uv0 = (angle turns, side): side is -1 / +1 across the ring's width.
         float a = material.uv0.x * 6.283185307;
         float r = materialParams.ring.x + material.uv0.y * materialParams.ring.y;
         highp mat4 w = getWorldFromViewMatrix();
         material.worldPosition.xyz += (w[0].xyz * cos(a) + w[1].xyz * sin(a)) * r;
+        // LAST: this stage moves worldPosition, and the fog factor has to be
+        // measured from where the vertex actually ends up.
+        material.fog = vec4(ttpFogFactor(material.worldPosition.xyz), 0.0, 0.0, 0.0);
     }
 }
 
 fragment {
     #include "ttp_grade.inc"
+    #include "ttp_fog.inc"
 
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
@@ -69,6 +78,6 @@ fragment {
         // (ttp_grade.inc). Two half-bright flashes over each other reach white
         // here where in linear they reached about 0.7 — a blast blows out sooner
         // than it used to. That is the visible price of moving the grade.
-        material.baseColor.rgb = ttpGrade(material.baseColor.rgb) * material.baseColor.a;
+        material.baseColor.rgb = ttpFogMixAdd(ttpGrade(material.baseColor.rgb), variable_fog.x) * material.baseColor.a;
     }
 }

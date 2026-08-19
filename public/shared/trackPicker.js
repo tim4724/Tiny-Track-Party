@@ -53,7 +53,13 @@ export const CUP_COLOR = {
 export const CUP_COLOR_FALLBACK = CUP_COLOR.backyard;
 // Random belongs to no cup, so it has no colour to turn up — a warm grey stands in,
 // which is honest: "any biome" isn't one of them.
-const NEUTRAL_COLOR = '#8C8398';
+// EXPORTED for the same reason CUP_COLOR is: a native TV shell draws this tile
+// too, and it reads the wash back through `ttp_ui_neutral_tint_rgb` rather than
+// re-typing the hex. Note it is NOT `CUP_COLOR_FALLBACK` — that one stands in for
+// an UNKNOWN cup id and is a cup colour; this one is for a selection that belongs
+// to no cup at all. Painting Random with the fallback dressed it in the Backyard
+// cup's lawn green, which is the one thing "any biome" must not look like.
+export const NEUTRAL_COLOR = '#8C8398';
 
 // How LONG a Random run is, in tile order — the options in the panel Random
 // opens, mirroring the exact-track panel a cup opens. `randomRaces: 0` is
