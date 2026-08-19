@@ -802,10 +802,8 @@ void TtpRenderer::applyRoadDebug() {
             // capability probe: the masked loop through maskCount, the
             // carShadow tap through maskInk.w. The tap's raster + upload
             // drop out on the same bit in renderCars.
-            if (mi->getMaterial()->hasParameter("maskCount")) {
-                mi->setParameter("maskCount", 0);
-            }
-            if (mi->getMaterial()->hasParameter("carShadow")) {
+            if (roadHasMaskLoop()) mi->setParameter("maskCount", 0);
+            if (roadHasCarShadow()) {
                 mi->setParameter("maskInk", math::float4{ kCarBlobInk.x,
                         kCarBlobInk.y, kCarBlobInk.z, 0.0f });
             }
@@ -872,7 +870,7 @@ void TtpRenderer::debugFeatureMask(uint32_t mask) {
         // The carShadow tap back on (the masked arrays restore themselves
         // through the cleared lastMask on the next uploadDeckDecals; the tap
         // has no per-frame writer, so its restore is here).
-        if (mi->getMaterial()->hasParameter("carShadow")) {
+        if (roadHasCarShadow()) {
             mi->setParameter("maskInk", math::float4{ kCarBlobInk.x,
                     kCarBlobInk.y, kCarBlobInk.z,
                     mCarShadowTex[0] ? kCarShadowCap : 0.0f });

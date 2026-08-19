@@ -67,10 +67,10 @@ object Ttp {
     external fun ttp_display_release()
     external fun ttp_display_reroster(rosterJson: ByteArray?): Int
     external fun ttp_display_resize(width: Int, height: Int)
-    external fun ttp_display_scale_step(current: Double, gpuShareP95: Double, gpuFrames: Int, presentP95Ms: Double, presentFloorMs: Double, presentFrames: Int, sinceChangeSec: Double, minScale: Double, maxScale: Double): Double
     external fun ttp_display_shadows(enabled: Int)
     external fun ttp_display_showcase(on: Int)
     external fun ttp_display_slot_ids_json(): ByteArray?
+    external fun ttp_display_step(curScale: Double, curDivisor: Int, gpuP95Ms: Double, gpuFrames: Int, presentP95Ms: Double, presentFloorMs: Double, presentFrames: Int, sinceChangeSec: Double, sinceSceneSec: Double, prevScale: Double, prevCostMs: Double, minScale: Double, maxScale: Double, baseLines: Double, panelMs: Double, out2: DoubleArray): Int
     external fun ttp_dispose(h: Int)
     external fun ttp_events_json(h: Int): ByteArray?
     external fun ttp_fast_forward(h: Int)

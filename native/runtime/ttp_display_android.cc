@@ -68,7 +68,7 @@ int ttp_display_create(const void* surface, uint32_t width, uint32_t height) {
     if (!window) return 0;
 
     // NOT setting the buffer geometry here. The buffer size is the SHELL's,
-    // because it is the adaptive render scale's output: ttp_display_scale_step
+    // because it is the adaptive render scale's output: ttp_display_step
     // answers a scale, the shell calls SurfaceHolder.setFixedSize with it, and
     // the resulting surfaceChanged is what reaches ttp_display_resize. Writing a
     // geometry here as well would give the buffer two owners that disagree the

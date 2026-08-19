@@ -49,11 +49,14 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
         private const val TAG = "DisplayHost"
 
         /**
-         * The frame budget, declared ONCE for this shell — the render scale rule
-         * takes a SHARE of it rather than milliseconds precisely so it is not
-         * restated in C++, and [PerfMonitor] reads it from here for the same
-         * reason. A CONSTANT 60 Hz, deliberately not the panel's real rate: a
-         * share is cost over budget and a fixed denominator serves that as well.
+         * A 60 Hz frame budget, used ONLY as [PerfMonitor]'s opening default.
+         *
+         * IT IS NOT THE RULE'S BUDGET any more. `ttp_display_step` picks the
+         * present rate as half of the operating point it answers, so the budget
+         * is one present interval on THIS panel — `panelMs() * vsyncInterval` —
+         * and `applyVsyncInterval` writes that over this the moment the rate is
+         * known. A constant 60 here would otherwise price a 120 Hz panel's
+         * frames at half their real share.
          */
         const val BUDGET_MS = 1000.0 / 60.0
 
@@ -64,25 +67,19 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
         const val SCALE_POLL_NANOS = 1_000_000_000L
 
         /**
-         * The band, in BUFFER LINES. The ceiling is what a 4K panel is worth
-         * rendering; the floor the softest picture this game is willing to show.
-         * NOTHING IS REMEMBERED ACROSS SESSIONS, on purpose: one bad window (a
-         * thermal blip, a cold shader cache) would otherwise ratchet a device
-         * into the softest picture for the rest of the party.
+         * The CEILING, in buffer lines — what a panel is worth rendering at all.
+         * Only bites on a panel taller than 4K; every TV this ships to is capped
+         * by its own resolution first.
          *
-         * THE FLOOR IS LOWER THAN THE WEB'S 720, and it is a measurement rather
-         * than a preference. The reference box (PowerVR GE9215) costs
-         * `fixed + per-megapixel` and the FIXED half is about half the 16.7 ms
-         * budget on its own, so no buffer size reaches under it — which is what
-         * a floor above the device's reach would have made decorative. 360
-         * lines is the lowest line count the flat, high-contrast art still
-         * upscales cleanly from, and it leaves the rule somewhere to stand.
-         * `shells/androidtv/CLAUDE.md` carries the current curve; do not copy a
-         * number here, it will rot.
+         * THERE IS NO FLOOR CONSTANT HERE, and that is the point of the rungs
+         * being line counts: `ttp/render_scale.h`'s bottom rung IS the floor, so
+         * "the softest picture we will show" is one number in one place rather
+         * than a fraction that meant 360 lines on a 1080p surface and 720 on a
+         * 2160p one. NOTHING IS REMEMBERED ACROSS SESSIONS either, on purpose:
+         * one bad window (a thermal blip, a cold shader cache) would otherwise
+         * ratchet a device into the softest picture for the rest of the party.
          */
-
         const val MAX_BUFFER_H = 2160
-        const val MIN_BUFFER_H = 360
 
         /**
          * The measurement window, in PRESENTED frames. It is ROLLING — see
@@ -272,23 +269,46 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
     // -- the loop -----------------------------------------------------------
 
     /**
-     * How many vsyncs one rendered frame spans: 1 presents every vsync (60 fps
-     * on a 60 Hz panel), 2 every other — a LOCKED, evenly-paced 30. Only the
-     * render half is paced: the sim still ticks on EVERY vsync, so steering
-     * keeps its 60 Hz cadence and only the picture's latency doubles. The
-     * adaptive scaler judges its share against the doubled budget and climbs
-     * the ladder into the freed headroom — which is the point: this box's cost
-     * is ~fixed + per-pixel, so halving the rate more than doubles the pixels
-     * a budget buys. Driven by `debug.ttp.hz` (see [PerfDebug]); the deliberate
-     * parity skip shows up in [PerfMonitor] as ~50% `skip`, which is honest —
-     * those vsyncs really did not present.
+     * How many vsyncs one rendered frame spans: 1 presents every vsync, 2 every
+     * other — a LOCKED, evenly-paced half rate. On a 60 Hz TV that is 60 and 30;
+     * on a 120 Hz one it is 120 and 60, and 2 is what holds the desired 1080@60
+     * there.
+     *
+     * THE RULE OWNS THIS, not the shell: it is half of the operating point
+     * `ttp_display_step` answers, alongside the resolution, because the two are
+     * one decision — halving the rate doubles the budget, and on a box whose
+     * cost is ~fixed + per-pixel that more than doubles the pixels a budget
+     * buys. [pinVsyncInterval] overrides it for a measurement.
+     *
+     * Only the RENDER half is paced: the sim still ticks on EVERY vsync, so
+     * steering keeps the panel's full cadence and only the picture's latency
+     * doubles. The deliberate parity skip shows up in [PerfMonitor] as ~50%
+     * `skip`, which is honest — those vsyncs really did not present.
      */
     private var vsyncInterval = 1
     private var vsyncCount = 0L
     private var pendingDt = 0.0
 
-    fun setVsyncInterval(n: Int) {
-        val v = n.coerceIn(1, 2)
+    /**
+     * PIN the present divisor, overriding the rule ([PerfDebug]'s `debug.ttp.hz`).
+     * 0 hands it back.
+     *
+     * A PIN AND NOT A SETTER, because the rate is the rule's now: it is half of
+     * the operating point `ttp_display_step` answers, so a plain setter would be
+     * overwritten on the next poll a second later and the knob would look broken.
+     * Same shape as [pinScale] beside it.
+     */
+    fun pinVsyncInterval(n: Int) {
+        ratePin = n.coerceIn(0, 4)
+        if (ratePin != 0) applyVsyncInterval(ratePin)
+    }
+
+    private var ratePin = 0
+
+    private fun applyVsyncInterval(n: Int) {
+        // Up to 4: a 240 Hz panel's anchor divisor is 4, and the rule may answer
+        // any divisor its own operating points name.
+        val v = n.coerceIn(1, 4)
         if (v == vsyncInterval) return
         vsyncInterval = v
         // The old windows describe the old cadence: a 33 ms present judged
@@ -296,7 +316,8 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
         frameMs.clear()
         gpuMs.clear()
         lastSampleNanos = 0L
-        PerfMonitor.budgetMs = BUDGET_MS * v
+        // The REAL budget, not a fixed 60: one present interval on this panel.
+        PerfMonitor.budgetMs = panelMs() * v
     }
 
     private fun start() {
@@ -407,23 +428,28 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
             this.trackId = trackId
             rosterIds = roster.map { it.id }
             hasScene = true
-            // A NEW SCENE VOIDS THE SCALE'S HISTORY — the same argument as the
-            // clear on a scale move, one level up: the windows describe a scene
-            // that no longer exists, and so does the up-hold clock. Without
-            // this, a lobby that floored the scale (the attract behind the
-            // boards is one of the heaviest pictures) hands the race a 640x360
-            // buffer that kScaleUpHoldSec then thaws ONE RUNG PER 28 SECONDS —
-            // four rungs to the race's own settle, most of a three-lap race
-            // spent soft. The clock reset covers the FIRST climb;
-            // recoveryClimb (see adaptScale) keeps the tenure at zero while
-            // the climb is still finding THIS scene's level, so the whole
-            // recovery runs at one evidence window per rung. WHAT to do stays
-            // entirely the rule's.
+            // A NEW SCENE VOIDS THE SCALE'S MEASUREMENTS — the same argument as
+            // the clear on a scale move, one level up: the windows describe a
+            // scene that no longer exists.
+            //
+            // The scale's own TENURE is not voided here, and this shell no
+            // longer decides what a fresh scene is worth. It hands over WHEN the
+            // scene was built and the rule shortens the up-hold itself
+            // (kScaleUpRecoverHoldSec) — because the browser is exposed to the
+            // identical arithmetic (a floored lobby handing the race a scale it
+            // then thaws one rung per lap) and had no mitigation at all while
+            // this one lived in Kotlin.
             frameMs.clear()
             gpuMs.clear()
             lastSampleNanos = 0L
-            scaleMovedNanos = 0L
-            recoveryClimb = true
+            sceneBuiltNanos = System.nanoTime()
+            prevScale = 0.0
+            prevCostMs = 0.0
+            // EVERY BUILD, because a build resets the scale's tenure AND drops the
+            // cost model — so a shell rebuilding a scene nothing asked it to
+            // rebuild shows up as a scaler that will not settle, and the two are
+            // indistinguishable without this line.
+            Log.i(TAG, "scene build -> $trackId")
             true
         } catch (e: Exception) {
             Log.e(TAG, "scene build failed", e)
@@ -482,22 +508,46 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
     private var lastScalePollNanos = 0L
     private var scaleMovedNanos = 0L
 
+    /**
+     * When the current scene was built. A MEASUREMENT handed to the rule, not a
+     * decision: `ttp_display_step` shortens its own up-hold for a scene
+     * the scale has not settled in yet. This shell used to latch that itself,
+     * which left the browser — same rule, same ladder, same lap-sized hold —
+     * with no equivalent and a climb measured in minutes.
+     */
+    private var sceneBuiltNanos = 0L
+
+    /**
+     * The last observation at a DIFFERENT scale — what the rule fits its cost
+     * model from. Dropped on a scene build: a fit whose two points come from two
+     * different scenes measures a slope belonging to neither, which is worse
+     * than no fit at all, and the rule probes its way to a fresh one.
+     */
+    private var prevScale = 0.0
+    private var prevCostMs = 0.0
+
+    /** Reused, like [cellScratch]: {scale, divisor} back from `ttp_display_step`. */
+    private val stepOut = DoubleArray(2)
+
+    /**
+     * The panel's OWN present period in milliseconds — one vsync, not one frame.
+     *
+     * Read live rather than cached: an Android TV box changes HDMI mode under a
+     * running app (the manifest declares `screenSize|density|uiMode` in
+     * configChanges for exactly that), and a 60 Hz period remembered across a
+     * switch into a 120 Hz mode would price every rate decision wrong. Falls
+     * back to 60 Hz, which is what the rule assumes for a 0 anyway.
+     */
+    private fun panelMs(): Double {
+        val hz = view.display?.refreshRate ?: 0f
+        return if (hz > 1f) 1000.0 / hz else 1000.0 / 60.0
+    }
+
     /** `ttp_display_present_floor`'s running answer: the device's own fastest present. */
     private var presentFloorMs = 0.0
 
     /** The scale in force. 1.0 is the view's own size — this never supersamples. */
     private var renderScale = 1.0
-
-    /**
-     * True from a scene build until the scale finds THIS scene's level — the
-     * first down-step, or the first full-signal poll that answers "stay". The
-     * up-hold clock measures how long a scale has been stable IN ONE SCENE, so
-     * a scale inherited from a dead scene has no tenure, and keeps none while
-     * the post-build climb is still in progress; each recovery rung re-arms
-     * nothing. The moment the rule stops climbing, tenure starts counting and
-     * kScaleUpHoldSec guards mid-race moves exactly as before.
-     */
-    private var recoveryClimb = false
 
     /**
      * Records one PRESENTED frame's interval and hands it back, in milliseconds;
@@ -566,18 +616,21 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
         // resolution (never above it — a TV app has nothing to gain from
         // supersampling), the floor the softest picture worth showing.
         val max = minOf(1.0, MAX_BUFFER_H.toDouble() / viewH)
-        val min = minOf(max, MIN_BUFFER_H.toDouble() / viewH)
+        // 0, not a floor of our own: the LADDER owns the floor now, and a
+        // number here could only narrow the band further — never reach below
+        // the bottom rung, and never mean a different picture than it does on
+        // the other shell.
+        val min = 0.0
 
-        // SHARE OF BUDGET, not milliseconds: the frame budget is declared in the
-        // shell that measures it and the rule never restates it (render_scale.h).
-        // The interval multiplies it — at every-other-vsync pacing a frame has
-        // two periods to land in, and judging it against one would read every
-        // healthy 30 fps frame as over budget.
-        val gpuShareP95 = percentile(gpuMs.sorted(), 0.95) / (BUDGET_MS * vsyncInterval)
+        // RAW MILLISECONDS. The budget is no longer this shell's to declare: the
+        // rule picks a present divisor as part of the same decision that picks a
+        // resolution, so it owns the denominator. Handing over a share would be
+        // normalising the measurement against a rate nobody had chosen yet.
+        val gpuP95Ms = percentile(gpuMs.sorted(), 0.95)
 
-        val next = Ttp.ttp_display_scale_step(
-            renderScale,
-            gpuShareP95, gpuMs.size,
+        val ok = Ttp.ttp_display_step(
+            renderScale, vsyncInterval,
+            gpuP95Ms, gpuMs.size,
             // The floor is folded RAW (the panel's own fastest present); what
             // the rule must judge lateness against is the CADENCE WE CHOSE,
             // which is interval x floor — otherwise 30 fps pacing reads as a
@@ -585,29 +638,54 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
             // forever downward.
             p95, presentFloorMs * vsyncInterval, frameMs.size,
             (nowNanos - scaleMovedNanos) / 1_000_000_000.0,
-            min, max,
+            (nowNanos - sceneBuiltNanos) / 1_000_000_000.0,
+            prevScale, prevCostMs,
+            min, max, viewH.toDouble(), panelMs(),
+            stepOut,
         )
+        if (ok == 0) return
+        val next = stepOut[0]
+        val nextInterval = stepOut[1].toInt()
         // WHAT THE RULE WAS ASKED, every poll, not just when it answers a move.
         // The interesting case is the one that does NOT move: a box parked at the
         // floor tells you nothing about WHY unless you can see the share it was
         // judged on, and "the scale never climbed" was diagnosed here twice from
-        // guesswork before this line existed. Debug builds only, once a second.
-        if (BuildConfigIsDebug) {
-            Log.i(TAG, String.format(java.util.Locale.ROOT,
-                "scale %.2f -> %.2f | gpu p95 %.0f%% of budget over %d frames" +
-                    " | present p95 %.1f floor %.1f over %d",
-                renderScale, next, gpuShareP95 * 100, gpuMs.size,
-                p95, presentFloorMs, frameMs.size))
+        // guesswork before this line existed. Once a second, and in RELEASE too,
+        // for the reason the readout itself now shows there: the build with R8 is
+        // the one worth measuring, and a line that is absent from it explains
+        // nothing about the box you are holding. `prev` is here because the
+        // rule's answer is unreadable without it — a climb it refused and a climb
+        // it never considered look identical from the outside.
+        Log.i(TAG, String.format(java.util.Locale.ROOT,
+            "point %.2f/%d -> %.2f/%d | gpu p95 %.1f ms over %d frames" +
+                " | prev %.2f@%.1fms | scene %.1fs | present p95 %.1f floor %.1f | panel %.1f ms",
+            renderScale, vsyncInterval, next, nextInterval, gpuP95Ms, gpuMs.size,
+            prevScale, prevCostMs, (nowNanos - sceneBuiltNanos) / 1_000_000_000.0,
+            p95, presentFloorMs, panelMs()))
+        // A PINNED RATE IS NOT A MOVE THIS POLL MADE. `debug.ttp.hz` holds the
+        // divisor, so the rule's answer for that half is discarded — and if the
+        // scale half did not move either, this poll changed NOTHING and must
+        // take the early return. Comparing against the rule's `nextInterval`
+        // instead falls through on every poll for as long as the pinned rate
+        // disagrees with the rule's: `scaleMovedNanos` restamps and the window
+        // is cleared once a second, so no hold ever elapses (the down step wants
+        // 2.5 s) and no window ever reaches kMinSignalFrames. The scaler goes
+        // deaf AND frozen, silently, in the one configuration a sweep pins the
+        // rate without also pinning the scale.
+        val adopted = if (ratePin == 0) nextInterval else vsyncInterval
+        if (next == renderScale && adopted == vsyncInterval) return
+        // THE OBSERVATION THE MODEL IS BUILT FROM, recorded at the one moment it
+        // exists: the scale that was in force and what a frame COST at it. The
+        // rule solves `fixedMs + fillMs * s^2` from this and the next one, which
+        // is how a device that is half fixed cost climbs at all, and how one
+        // frame rate's measurement prices another's (ttp/render_scale.h).
+        if (next != renderScale) {
+            prevScale = renderScale
+            prevCostMs = gpuP95Ms
         }
-        if (next == renderScale) {
-            // Full signal and the rule chose to stay: the scale has found this
-            // scene's level, so its tenure starts now.
-            if (recoveryClimb && gpuMs.size >= 30) recoveryClimb = false
-            return
-        }
-        if (next < renderScale) recoveryClimb = false
+        if (adopted != vsyncInterval) applyVsyncInterval(adopted)
         renderScale = next
-        scaleMovedNanos = if (recoveryClimb) 0L else nowNanos
+        scaleMovedNanos = nowNanos
         // ONLY WHEN THE SCALE ACTUALLY MOVED. The window that just decided this
         // describes the OLD resolution, so keeping it would judge the new one on
         // the old one's frames — but clearing on EVERY poll caps the sample count

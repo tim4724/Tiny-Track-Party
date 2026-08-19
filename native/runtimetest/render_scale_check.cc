@@ -17,9 +17,16 @@ using ttp::rt::latePresentRatio;
 using ttp::rt::presentBaseline;
 using ttp::rt::RenderScaleCost;
 using ttp::rt::RenderScaleLimits;
+using ttp::rt::anchorDivisor;
+using ttp::rt::operatingPoints;
+using ttp::rt::pointBudgetMs;
+using ttp::rt::RenderScalePoint;
 using ttp::rt::renderScaleStep;
-using ttp::rt::rungHold;
-using ttp::rt::rungStep;
+using ttp::rt::fitCost;
+using ttp::rt::predictMs;
+using ttp::rt::RenderScaleSample;
+using ttp::rt::rungAtOrBelow;
+using ttp::rt::rungScales;
 
 namespace {
 
@@ -37,23 +44,58 @@ void nearly(double got, double want, const char* what) {
   check(got > want - 1e-9 && got < want + 1e-9, what);
 }
 
-// The band a 4K panel at devicePixelRatio 1 hands in: 2160 lines at the top,
-// 720 at the bottom. The shell's floor (MIN_BUFFER_H in Stage.js) is
-// deliberately below the commonest panel, so a third of the ceiling is what a
-// real 4K screen offers here, not a half.
-constexpr double kFloor = 720.0 / 2160.0;
-constexpr RenderScaleLimits k4K{kFloor, 1.0};
+// A 4K panel at devicePixelRatio 1: a scale of 1.0 is its own 2160 lines, and
+// no shell floor narrows it, so what it offers is the whole ladder — 540, 720,
+// 1080, 1620 and native. THE FLOOR IS THE LADDER'S BOTTOM RUNG and no longer a
+// shell constant, which is the point of line counts: 540 lines is 540 lines on
+// every panel, where a fraction-of-the-ceiling floor meant two different
+// pictures on a 1080p surface and a 2160p one.
+constexpr double kHz60 = 1000.0 / 60.0;
+constexpr double kHz120 = 1000.0 / 120.0;
+constexpr RenderScaleLimits k4K{0.0, 1.0, 2160.0, kHz60};
+constexpr double kFloor = 540.0 / 2160.0;
+// The same ladder seen by a 1080p TV, where only three rungs fit under native.
+constexpr RenderScaleLimits kHD{0.0, 1.0, 1080.0, kHz60};
+// A 4K panel that can present 120.
+constexpr RenderScaleLimits k4K120{0.0, 1.0, 2160.0, kHz120};
 constexpr double kLongHold = 60.0;
+// Seconds since the SCENE was built. Past kScaleRecoverSec, so every case
+// above the recovery block below is judged by the steady-state up-hold —
+// which is what they were all written against.
+constexpr double kSettled = 600.0;
+// "no previous observation at another scale" — the boot state, and what every
+// case that is not ABOUT the cost model passes.
+constexpr RenderScaleSample kNoFit{0.0, 0.0};
+constexpr RenderScalePoint kNative{1.0, 1};
 constexpr int kEnough = 120;  // a full stats window
 
-// A device whose GPU timer says `share` of the budget, presenting on cadence.
-RenderScaleCost gpuAt(double share, int frames = kEnough) {
-  return RenderScaleCost{share, frames, 16.7, 16.7, kEnough};
+// A device whose GPU timer says `ms` per frame, presenting on cadence.
+RenderScaleCost gpuAt(double ms, int frames = kEnough) {
+  return RenderScaleCost{ms, frames, 16.7, 16.7, kEnough};
 }
 // A device with NO timer, presenting `ratio` times slower than its own best.
 RenderScaleCost noTimerAt(double ratio, double floorMs = 16.7, int frames = kEnough) {
   return RenderScaleCost{0.0, 0, floorMs * ratio, floorMs, frames};
 }
+
+// A shell driving the rule, holding the one observation the model needs: the
+// scale that was in force and the share measured at it, recorded at the moment
+// the scale changes. Both real shells do exactly this.
+struct Shell {
+  RenderScalePoint at{1.0, 1};
+  RenderScaleSample prev{0.0, 0.0};
+  int moves = 0;
+  void poll(double ms, RenderScaleLimits b, double sinceScene = kSettled) {
+    const RenderScalePoint next =
+        renderScaleStep(at, gpuAt(ms), kLongHold, sinceScene, prev, b);
+    if (next.scale != at.scale || next.divisor != at.divisor) {
+      prev = RenderScaleSample{at.scale, ms};
+      at = next;
+      moves++;
+    }
+  }
+  double lines(RenderScaleLimits b) const { return at.scale * b.baseLines; }
+};
 
 }  // namespace
 
@@ -76,190 +118,278 @@ int main() {
   nearly(latePresentRatio(RenderScaleCost{0, 0, 33.4, 0.0, kEnough}), 0.0,
          "no baseline learned yet means no signal");
 
-  // ---- no signal --------------------------------------------------------------
-  const RenderScaleCost silent{0.0, 0, 0.0, 0.0, 0};
-  nearly(renderScaleStep(1.0, silent, kLongHold, k4K), 1.0,
-         "no signal holds the current scale");
-  nearly(renderScaleStep(2.0, silent, kLongHold, k4K), 1.0,
-         "a scale above the band is clamped even with nothing measured");
-  nearly(renderScaleStep(0.1, silent, kLongHold, k4K), kFloor,
-         "a scale below the band is clamped up to the floor");
-  nearly(renderScaleStep(0.8, gpuAt(0.99), kLongHold, RenderScaleLimits{0.8, 0.8}), 0.8,
-         "a degenerate band (min == max) pins the scale whatever the cost");
-  nearly(renderScaleStep(1.0, gpuAt(0.99, 10), kLongHold, k4K), 1.0,
-         "a GPU p95 over ten frames is ignored, like the present one");
-
-  // ---- the LADDER --------------------------------------------------------------
-  // Every answer is a rung, because a buffer that is not a simple fraction of
-  // the panel upscales unevenly and the unevenness CRAWLS. See kScaleLadder.
-  nearly(rungStep(1.0, -1, kFloor, 1.0), 9.0 / 10.0, "one rung down from native");
-  nearly(rungStep(0.5, +1, kFloor, 1.0), 11.0 / 20.0, "one rung up from a half");
-  nearly(rungStep(kFloor, -1, kFloor, 1.0), kFloor, "the bottom rung has none below it");
-  nearly(rungStep(1.0, +1, kFloor, 1.0), 1.0, "nor the top one above it");
-  nearly(rungHold(0.77, kFloor, 1.0), 3.0 / 4.0,
-         "a scale that is not on a rung snaps to the nearest one without moving");
-  // A step that would leave the band HOLDS rather than clamping onto the limit.
-  // Clamping a ladder onto an arbitrary floor puts the buffer straight back on a
-  // fraction the panel does not divide, which is the one thing this exists to
-  // prevent — so the bottom rung inside the band is as low as it goes.
-  nearly(rungStep(3.0 / 5.0, -1, 0.58, 1.0), 3.0 / 5.0,
-         "a step down that would leave the band holds, it does not clamp to the floor");
-  nearly(rungStep(0.5, -1, 0.58, 1.0), 3.0 / 5.0,
-         "and a scale already below the band comes UP to the lowest rung inside it");
-
-  // THE RUNGS ARE FRACTIONS OF THE CEILING, and a browser is why. A TV surface IS
-  // the panel, so its ceiling is 1.0 and a scale of 1 is native; a browser's scale
-  // multiplies CSS pixels, so its ceiling is the device pixel ratio and 1.0 on a
-  // Retina Mac is HALF the panel. Reading the ladder as absolute pinned every such
-  // display at DPR 1 — the first decision snapped a 3443x2160 buffer to 1721x1080
-  // and left no rung above it to climb back through.
-  nearly(rungStep(2.0, +1, kFloor * 2.0, 2.0), 2.0,
-         "a DPR-2 ceiling IS the top rung, not a scale above every rung");
-  nearly(rungHold(2.0, kFloor * 2.0, 2.0), 2.0,
-         "and holding at that ceiling does not snap it down to 1.0");
-  nearly(rungStep(2.0, -1, kFloor * 2.0, 2.0), 2.0 * 9.0 / 10.0,
-         "one rung down from a DPR-2 native is nine tenths OF IT");
-  nearly(rungStep(1.0, +1, kFloor * 2.0, 2.0), 2.0 * 11.0 / 20.0,
-         "and a scale of 1 there is mid-ladder, with rungs above it to climb");
-
-  // ---- the GPU signal, both directions ----------------------------------------
-  nearly(renderScaleStep(1.0, gpuAt(0.95), kLongHold, k4K), 9.0 / 10.0,
-         "over budget steps down one rung");
-  nearly(renderScaleStep(1.0, gpuAt(0.40), kLongHold, k4K), 1.0,
-         "spare headroom at the ceiling stays at the ceiling");
-  nearly(renderScaleStep(0.5, gpuAt(0.40), kLongHold, k4K), 11.0 / 20.0,
-         "spare headroom below the ceiling steps up one rung");
-  nearly(renderScaleStep(2.0 / 3.0, gpuAt(0.80), kLongHold, k4K), 2.0 / 3.0,
-         "between the thresholds nothing moves");
-  nearly(renderScaleStep(3.0 / 8.0, gpuAt(0.99), kLongHold, k4K), kFloor,
-         "a down step clamps at the floor rather than undershooting it");
-  nearly(renderScaleStep(0.95, gpuAt(0.40), kLongHold, k4K), 1.0,
-         "an up step clamps at the ceiling rather than overshooting it");
-
-  // ---- the holds ---------------------------------------------------------------
-  nearly(renderScaleStep(1.0, gpuAt(0.99), 0.5, k4K), 1.0,
-         "a device that is late is still left alone inside the down hold");
-  nearly(renderScaleStep(0.5, gpuAt(0.10), 3.0, k4K), 0.5,
-         "the up hold is longer than the down hold");
-  // Spelled off the constant, not a literal: the hold is LAP-SIZED now (the
-  // ~3 s evidence window taken on a cheap section never contained the vista
-  // it was about to climb into — see kScaleUpHoldSec), and this case's job
-  // is "past the hold it rises", wherever the hold sits.
-  nearly(renderScaleStep(0.5, gpuAt(0.10), ttp::rt::kScaleUpHoldSec + 1.0, k4K),
-         11.0 / 20.0, "past the up hold it rises");
-
-  // ---- the fallback: late presents, down only ---------------------------------
-  nearly(renderScaleStep(1.0, noTimerAt(2.0), kLongHold, k4K), 9.0 / 10.0,
-         "no timer + presents a whole period late steps down");
-  nearly(renderScaleStep(1.0, noTimerAt(1.02), kLongHold, k4K), 1.0,
-         "no timer + a steady cadence holds");
-  nearly(renderScaleStep(0.5, noTimerAt(1.0), kLongHold, k4K), 0.5,
-         "a steady cadence is NEVER evidence of headroom, so it cannot raise");
-  // A 50 Hz panel and a 30 Hz HDMI mode present at their own steady cadence, and
-  // the ratio is over the device's OWN fastest present — so both read as 1.0 and
-  // neither is punished for being a TV. That is the whole reason the fallback is
-  // a ratio rather than a count of missed 16.7 ms budgets.
-  nearly(renderScaleStep(1.0, noTimerAt(1.0, 20.0), kLongHold, k4K), 1.0,
-         "a 50 Hz panel presenting on ITS cadence is not a slow device");
-  nearly(renderScaleStep(1.0, noTimerAt(1.0, 33.4), kLongHold, k4K), 1.0,
-         "nor is a 30 Hz HDMI mode");
+  // ---- the RUNGS -----------------------------------------------------------
+  // Line counts, so the same rung is the same picture on any panel, and the
+  // bottom one is the floor everywhere rather than a fraction of the ceiling.
   {
-    // With a timer present the fallback is ignored, not merged: the same
-    // hopelessly late presents that would step a timer-less device down leave a
-    // device with headroom exactly where it is.
-    RenderScaleCost c = gpuAt(0.40);
-    c.presentP95Ms = 33.4;
-    nearly(renderScaleStep(1.0, c, kLongHold, k4K), 1.0, "the GPU signal wins outright");
+    double r[8];
+    check(rungScales(kHD, r) == 3, "a 1080p surface offers three rungs");
+    nearly(r[0], 540.0 / 1080.0, "…the lowest being 540 lines");
+    check(rungScales(k4K, r) == 5, "a 4K surface offers five");
+    nearly(r[0] * 2160.0, 540.0, "…and ITS lowest is also 540 lines");
+    // The ceiling is always the top rung, so a panel the ladder does not name
+    // still reaches its own native resolution.
+    const RenderScaleLimits qhd{0.0, 1.0, 1440.0, kHz60};
+    const int n = rungScales(qhd, r);
+    nearly(r[n - 1], 1.0, "native is offered on a panel the ladder does not name");
+    check(n == 4, "…above the three ladder rungs that fit under it");
+  }
+  // Placement is DOWNWARD, never to the nearest: rounding up would hand a
+  // struggling device more pixels on a poll that decided nothing.
+  {
+    double r[8];
+    const int n = rungScales(k4K, r);
+    nearly(r[rungAtOrBelow(0.70, r, n)], 1080.0 / 2160.0,
+           "a scale between rungs places on the one at or below it");
+    nearly(r[rungAtOrBelow(0.24, r, n)], 540.0 / 2160.0,
+           "and one under the bottom rung comes up to it");
   }
 
-  // ---- convergence -------------------------------------------------------------
-  // Walked as sequences rather than asserted as single steps, because
-  // oscillation is a property of the loop and not of any one decision.
+  // ---- the OPERATING POINTS ------------------------------------------------
+  // Rate and resolution are ONE ordered axis, built around 1080@60.
   {
-    // 1. A device pinned at the floor that keeps missing must stay put, not
-    //    grind against the clamp forever.
-    double s = kFloor;
-    for (int i = 0; i < 20; i++) s = renderScaleStep(s, gpuAt(0.99), kLongHold, k4K);
-    nearly(s, kFloor, "a floored device that keeps missing settles at the floor");
+    RenderScalePoint l[8];
+    const int n = operatingPoints(k4K, l);
+    check(n == 5, "a 60 Hz 4K panel offers five points — every rung, one rate");
+    for (int i = 0; i < n; i++) check(l[i].divisor == 1, "…all at the panel's own rate");
+    nearly(l[0].scale * 2160.0, 540.0, "worst is 540");
+    nearly(l[n - 1].scale * 2160.0, 2160.0, "best is native");
   }
   {
-    // 2. The ceiling is the other clamp, and an up step that lands a hair short
-    //    of it must SNAP (kScaleMinMove) rather than creep by a millipixel.
-    double s = kFloor;
-    for (int i = 0; i < 20; i++) s = renderScaleStep(s, gpuAt(0.10), kLongHold, k4K);
-    nearly(s, 1.0, "a device with headroom climbs to the ceiling and stops there");
+    RenderScalePoint l[8];
+    const int n = operatingPoints(k4K120, l);
+    // 540@60, 720@60, 1080@60, then the RATE step, then 1620@120, 2160@120.
+    check(n == 6, "a 120 Hz 4K panel offers six — the same rungs plus a rate step");
+    nearly(l[0].scale * 2160.0, 540.0, "540 first");
+    check(l[0].divisor == 2 && l[1].divisor == 2 && l[2].divisor == 2,
+          "everything at or below the anchor runs at 60 Hz, not 120");
+    nearly(l[2].scale * 2160.0, 1080.0, "the anchor is 1080 lines");
+    nearly(l[3].scale * 2160.0, 1080.0, "and the step ABOVE it is the SAME picture…");
+    check(l[3].divisor == 1, "…at twice the rate — rate before pixels");
+    nearly(l[4].scale * 2160.0, 1620.0, "only then does resolution climb again");
+    check(l[4].divisor == 1 && l[5].divisor == 1, "…at the faster rate");
   }
+  // BELOW the anchor the rate never gives way. A tilt-steered party game pays
+  // for a halved present rate in input latency, on every player.
   {
-    // 3. THE REAL ONE: cost is roughly linear in pixels above a fixed floor, so
-    //    stepping down by 0.8 in scale takes 0.64 of the pixel cost with it.
-    //    Model that and check the loop lands somewhere and STAYS: a scale whose
-    //    cost sits between the two thresholds is a fixed point, and the gap
-    //    between 0.5 and 0.9 is what guarantees one exists.
-    const double fixedShare = 0.12;   // the part that does not scale with pixels
-    const double fillAtOne = 1.20;    // 120% of budget at full scale: a weak TV
-    const auto shareAt = [&](double s) { return fixedShare + fillAtOne * s * s; };
-    double s = 1.0;
-    int changes = 0;
-    for (int i = 0; i < 40; i++) {
-      const double next = renderScaleStep(s, gpuAt(shareAt(s)), kLongHold, k4K);
-      if (next != s) { changes++; s = next; }
+    RenderScalePoint l[8];
+    const int n = operatingPoints(k4K120, l);
+    for (int i = 0; i < n; i++) {
+      if (l[i].scale * 2160.0 < 1080.0 - 1e-9) {
+        check(l[i].divisor == anchorDivisor(k4K120), "no point under the anchor halves the rate");
+      }
     }
-    check(changes <= 4, "a weak device converges in a handful of steps");
-    nearly(renderScaleStep(s, gpuAt(shareAt(s)), kLongHold, k4K), s,
-           "and the scale it lands on is a fixed point");
-    check(shareAt(s) <= ttp::rt::kScaleDownShare, "settling under the down threshold");
+  }
+  // The divisor nearest 60 on each panel, which is what the anchor means.
+  nearly((double) anchorDivisor(k4K), 1.0, "a 60 Hz panel presents every vsync");
+  nearly((double) anchorDivisor(k4K120), 2.0, "a 120 Hz panel presents every other one");
+  {
+    const RenderScaleLimits hz144{0.0, 1.0, 1440.0, 1000.0 / 144.0};
+    nearly((double) anchorDivisor(hz144), 2.0, "a 144 Hz panel takes 72, the closest it offers");
+    const RenderScaleLimits hz50{0.0, 1.0, 1080.0, 20.0};
+    nearly((double) anchorDivisor(hz50), 1.0,
+           "and a 50 Hz PAL box runs at 50 — a shell may not name a rate its panel lacks");
+  }
+  // A window too short to show the anchor is never "above the desired spot", so
+  // it never buys frames it has no pixels to fill.
+  {
+    RenderScalePoint l[8];
+    const RenderScaleLimits small{0.0, 1.0, 700.0, kHz120};
+    const int n = operatingPoints(small, l);
+    for (int i = 0; i < n; i++) check(l[i].divisor == 2, "a sub-1080 surface takes no rate step");
+  }
+  // The budget IS the present interval, which is what makes a rate step and a
+  // resolution step comparable at all.
+  nearly(pointBudgetMs(RenderScalePoint{1.0, 1}, k4K120), kHz120, "divisor 1 on 120 Hz is 8.3 ms");
+  nearly(pointBudgetMs(RenderScalePoint{1.0, 2}, k4K120), 2.0 * kHz120, "divisor 2 is 16.7");
+
+  // ---- the cost model ------------------------------------------------------
+  // MILLISECONDS, so one fit serves every rate: what a frame costs the GPU does
+  // not depend on how often it is presented.
+  {
+    const auto truth = [](double s) { return 4.0 + 9.0 * s * s; };
+    const ttp::rt::RenderScaleFit f =
+        fitCost(0.5, truth(0.5), RenderScaleSample{1.0, truth(1.0)});
+    check(f.ok, "two observations at two scales fit");
+    nearly(f.fixedMs, 4.0, "…and recover the resolution-independent half");
+    nearly(f.fillMs, 9.0, "…and the per-pixel half");
+    nearly(predictMs(f, 0.75), truth(0.75), "so a rung it has never visited is predictable");
+  }
+  check(!fitCost(0.5, 6.0, RenderScaleSample{0.0, 0.0}).ok, "one observation does not fit");
+  check(!fitCost(0.5, 6.0, RenderScaleSample{0.5, 6.0}).ok, "nor two at the SAME scale");
+  check(!fitCost(0.5, 12.0, RenderScaleSample{1.0, 3.0}).ok,
+        "nor one saying more pixels cost LESS, which is noise and not a device");
+  check(fitCost(0.5, 1.0, RenderScaleSample{1.0, 12.0}).fixedMs >= 0.0,
+        "a negative fixed half clamps to zero");
+
+  // ---- no signal -----------------------------------------------------------
+  {
+    const RenderScaleCost silent{0.0, 0, 0.0, 0.0, 0};
+    const RenderScalePoint p = renderScaleStep(kNative, silent, kLongHold, kSettled, kNoFit, k4K);
+    nearly(p.scale, 1.0, "no signal holds the current point");
+    check(p.divisor == 1, "…rate included");
+  }
+
+  // ---- convergence ---------------------------------------------------------
+  // Walked as sequences, because oscillation is a property of the loop and not
+  // of any one decision. `Shell` holds the one observation the model needs.
+  {
+    // A weak TV: fill-dominated, so the ladder has real work to do. It starts
+    // where every shell starts — native — and must land on the best point that
+    // actually fits, then stay there.
+    const auto cost = [](double s) { return 2.0 + 20.0 * s * s; };
+    Shell sh;
+    for (int i = 0; i < 40; i++) sh.poll(cost(sh.at.scale), k4K);
+    check(sh.moves <= 4, "a weak device converges in a handful of steps");
+    check(cost(sh.at.scale) <= ttp::rt::kScaleTargetShare * pointBudgetMs(sh.at, k4K),
+          "onto a point inside its own budget");
+    const int settled = sh.moves;
+    for (int i = 0; i < 20; i++) sh.poll(cost(sh.at.scale), k4K);
+    check(sh.moves == settled, "and stays there — a fixed point, not a limit cycle");
   }
   {
-    // 4. A device whose cost is MOSTLY FIXED, which is the shape a low-end
-    //    mobile GPU actually has: an Android TV box measured 8 ms of
-    //    resolution-independent cost against a 16.7 ms budget, so nearly half
-    //    the budget is gone before a pixel is shaded. Such a device can never
-    //    get its TOTAL share under half a budget at any resolution, and the
-    //    threshold that used to stand here therefore read "no headroom" at
-    //    every scale and pinned it to the floor for good — while it held a flat
-    //    60 Hz with the budget 40% spare. It must climb.
-    const double fixedShare = 0.48;
-    const double fillAtOne = 1.05;
-    const auto shareAt = [&](double s) { return fixedShare + fillAtOne * s * s; };
-    double s = kFloor;
-    for (int i = 0; i < 40; i++) s = renderScaleStep(s, gpuAt(shareAt(s)), kLongHold, k4K);
-    check(s > kFloor * 1.3, "a mostly-fixed-cost device climbs well off the floor");
-    check(shareAt(s) <= ttp::rt::kScaleDownShare, "and stops under the down threshold");
-    nearly(renderScaleStep(s, gpuAt(shareAt(s)), kLongHold, k4K), s,
-           "on a fixed point, not a limit cycle");
+    // A MOSTLY-FIXED-COST DEVICE, the shape a low-end mobile GPU actually has:
+    // the reference Android box measures ~8 ms of resolution-independent cost
+    // against a 16.7 ms budget. THIS IS THE CASE A THRESHOLD CANNOT SERVE — any
+    // climb threshold low enough to stop a pure-fill device oscillating sits
+    // below its fixed cost, so it would read "no headroom" at every resolution
+    // and pin to the floor for good. The model can see that 8 ms will not move.
+    const auto cost = [](double s) { return 8.0 + 17.5 * s * s; };
+    Shell sh;
+    for (int i = 0; i < 40; i++) sh.poll(cost(sh.at.scale), k4K);
+    check(sh.at.scale > kFloor + 1e-9, "a mostly-fixed-cost device is not pinned at the floor");
+    check(cost(sh.at.scale) <= ttp::rt::kScaleTargetShare * pointBudgetMs(sh.at, k4K),
+          "and settles inside budget");
   }
   {
-    // 5. THE ANTI-OSCILLATION BOUND ITSELF, as a property rather than a number:
-    //    a device sitting exactly at the up threshold must not be pushed past
-    //    the down threshold by the step it is about to take. The worst case is
-    //    a device with NO fixed cost, where the share scales with the pixels
-    //    outright — which is what pins kScaleUpShare to
-    //    kScaleDownShare / maxRungPixelRatio() — the widest rung step in
-    //    pixels. If someone widens the gap by moving either threshold or the
-    //    ladder's spacing, this is what says so.
-    const double afterUp = ttp::rt::kScaleUpShare * ttp::rt::maxRungPixelRatio();
-    check(afterUp <= ttp::rt::kScaleDownShare + 1e-9,
-          "an up step from the threshold cannot cross the down threshold");
-    // And the band has to be wide enough to HOLD something, or the rule has no
-    // fixed point to settle on and hunts between two rungs forever — which is
-    // exactly what a ladder with one wide step did on the reference box.
-    check(ttp::rt::kScaleUpShare < ttp::rt::kScaleDownShare - 0.1,
-          "the dead band between the thresholds is wide enough to settle in");
-    // And the other direction: a step DOWN from the down threshold may land
-    // below the up threshold (it usually will), but the climb back out is the
-    // case above and cannot overshoot, so the loop still converges.
-    // Share = k·pixels with NO fixed term, scaled so that 0.6 sits exactly on
-    // the down threshold — i.e. the device starts at the worst place for this.
-    const auto pureFill = [](double x) {
-      return ttp::rt::kScaleDownShare * (x * x) / (0.6 * 0.6);
-    };
-    double s = 0.6;
-    int moves = 0;
-    for (int i = 0; i < 60; i++) {
-      const double next = renderScaleStep(s, gpuAt(pureFill(s)), kLongHold, k4K);
-      if (next != s) { moves++; s = next; }
+    // THE OSCILLATION CASE, once an arithmetic bound on two thresholds and now a
+    // property of the loop: a device with NO fixed cost is the worst case for
+    // stepping up, because every pixel it takes back costs it.
+    const auto cost = [](double s) { return 46.0 * s * s; };
+    Shell sh;
+    for (int i = 0; i < 40; i++) sh.poll(cost(sh.at.scale), k4K);
+    const int settled = sh.moves;
+    for (int i = 0; i < 60; i++) sh.poll(cost(sh.at.scale), k4K);
+    check(sh.moves == settled, "a pure-fill device settles and never moves again");
+  }
+  {
+    // THE SCENE GETTING CHEAPER, which the recovery path exists for. The shell
+    // drops its previous observation (it belongs to a scene that no longer
+    // exists), so the rule PROBES its way back to a model and climbs on it.
+    const auto heavy = [](double s) { return 2.0 + 20.0 * s * s; };
+    const auto light = [](double s) { return 1.0 + 3.0 * s * s; };
+    Shell sh;
+    for (int i = 0; i < 40; i++) sh.poll(heavy(sh.at.scale), k4K);
+    check(sh.at.scale < 1.0, "the heavy scene really did soften it");
+    sh.prev = RenderScaleSample{0.0, 0.0};      // what a scene build does
+    for (int i = 0; i < 40; i++) sh.poll(light(sh.at.scale), k4K, 0.0);
+    nearly(sh.at.scale, 1.0, "a lighter scene climbs back to native from a probe");
+  }
+  {
+    // THE RECOVERY WINDOW HAS TO OUTLAST THE CLIMB, and this walks a real clock
+    // rather than pinning sinceScene at 0 — which is what let the window sit two
+    // steps short of the list without any case noticing.
+    //
+    // sinceChange is ONE evidence window, not kLongHold: that is what a climb
+    // actually looks like (a step, a second, the next step), and it is the only
+    // way the recovery hold is what decides. Handing over a long tenure would
+    // satisfy the 28 s hold too and the window would make no difference — which
+    // is exactly how the first version of this case passed against the bug.
+    //
+    // On the panel with the LONGEST list: a 120 Hz one, where the rate step adds
+    // an entry the ladder's own rung count cannot see.
+    const auto light = [](double x) { return 0.5 + 1.5 * x * x; };
+    RenderScalePoint at{540.0 / 2160.0, 2};   // as if a heavy scene floored it
+    RenderScaleSample prev{0.0, 0.0};
+    double t = 0.0;
+    for (int i = 0; i < ttp::rt::kScaleMaxPoints + 3; i++) {
+      const double ms = light(at.scale);
+      const RenderScalePoint next = renderScaleStep(
+          at, gpuAt(ms), ttp::rt::kScaleUpRecoverHoldSec, t, prev, k4K120);
+      if (next.scale != at.scale) prev = RenderScaleSample{at.scale, ms};
+      at = next;
+      t += ttp::rt::kScaleUpRecoverHoldSec;
     }
-    check(moves <= 6, "a pure-fill device settles rather than hunting forever");
+    nearly(at.scale * 2160.0, 2160.0, "the window outlasts a bottom-to-top climb");
+    check(at.divisor == 1, "…rate step included, which the rung count could not cover");
+  }
+
+  {
+    // A PANEL THE LADDER DOES NOT NAME still climbs to its OWN native
+    // resolution, not to the highest ladder value under it. A browser window is
+    // this case almost always: 909 CSS px at devicePixelRatio 2 is an 1818-line
+    // surface, whose rungs are 540/720/1080/1620 and then 1818 itself.
+    //
+    // Capping at 1620 would be the WORSE picture, not the stricter one: 1620
+    // displayed on 1818 lines is a 1.122 upscale, the uneven kind that blurs in
+    // bands and crawls as the camera moves — exactly what the ladder exists to
+    // avoid. At the ceiling nothing is upscaled at all.
+    const RenderScaleLimits web{0.0, 2.0, 909.0, kHz60};
+    double r[16];
+    const int n = rungScales(web, r);
+    nearly(r[n - 1] * 909.0, 1818.0, "the top rung on a browser window is its own native size");
+    nearly(r[n - 2] * 909.0, 1620.0, "with the highest ladder value below it");
+    const auto light = [](double x) { return 1.0 + 2.0 * x * x; };
+    Shell sh;
+    sh.at = RenderScalePoint{540.0 / 909.0, 1};
+    for (int i = 0; i < 40; i++) sh.poll(light(sh.at.scale), web, 0.0);
+    nearly(sh.lines(web), 1818.0, "and a device with the headroom climbs all the way to it");
+  }
+
+  {
+    // A DEVICE WHOSE COST DOES NOT SCALE WITH PIXELS MUST HOLD, not pump.
+    //
+    // The reference Android box at its floor is this: 1280x720 measured 17.1 ms
+    // and 960x540 measured 17.3, so the slope is NEGATIVE and fitCost refuses.
+    // Routing a refused FIT into the blind probe made it climb a rung, find it
+    // no cheaper, retreat one down-hold later and do it again — every excursion
+    // a surface resize, which is a visible flicker on the panel. Observed on the
+    // box as 0.67/0.50 round trips for as long as the lobby was up.
+    //
+    // Priced just UNDER the down threshold, because that is when it actually
+    // fires: over it the retreat branch takes the poll and the probe is never
+    // reached, which is why the pump on the box was minutes apart rather than
+    // every few seconds.
+    const RenderScaleSample flat{720.0 / 1080.0, 14.3};
+    const RenderScalePoint at{540.0 / 1080.0, 1};
+    nearly(renderScaleStep(at, gpuAt(14.5), kLongHold, kSettled, flat, kHD).scale,
+           at.scale, "a non-positive cost slope holds rather than probing");
+    // It is the OBSERVATION that stops it, not the hold and not lateness: the
+    // same poll with nothing measured at another scale is missing data, and
+    // probing is the only way to get any.
+    check(renderScaleStep(at, gpuAt(14.5), kLongHold, kSettled, kNoFit, kHD).scale > at.scale,
+          "…while having measured nothing probes");
+  }
+
+  // ---- 120 Hz --------------------------------------------------------------
+  {
+    // A DEVICE THAT CAN DRIVE 120 SHOULD. Cheap frames: 3 ms flat at native,
+    // which fits an 8.3 ms budget everywhere, so it should end at 2160@120.
+    const auto cost = [](double s) { return 1.0 + 2.0 * s * s; };
+    Shell sh;
+    for (int i = 0; i < 40; i++) sh.poll(cost(sh.at.scale), k4K120);
+    check(sh.at.divisor == 1, "a device with the headroom takes the panel's 120 Hz");
+    nearly(sh.lines(k4K120), 2160.0, "…at full resolution");
+  }
+  {
+    // AND ONE THAT CANNOT, MUST NOT. 12 ms at 1080 fits 16.7 but not 8.3, so the
+    // rate step is refused and it holds the anchor rather than shredding pixels
+    // to chase a rate. This is the case a naive `budget = panel period` gets
+    // wrong: it would drop to 540 to reach 120.
+    const auto cost = [](double s) { return 4.0 + 32.0 * s * s; };
+    Shell sh;
+    for (int i = 0; i < 40; i++) sh.poll(cost(sh.at.scale), k4K120);
+    check(sh.at.divisor == 2, "a device without it stays at 60 Hz");
+    check(sh.lines(k4K120) >= 1080.0 - 1e-9, "…and keeps the anchor's picture");
+  }
+  {
+    // A 120 Hz PANEL WITH A WEAK GPU falls DOWN the resolution rungs at 60 Hz,
+    // never below the anchor at 120 — the rate is not a rescue.
+    const auto cost = [](double s) { return 6.0 + 40.0 * s * s; };
+    Shell sh;
+    for (int i = 0; i < 40; i++) sh.poll(cost(sh.at.scale), k4K120);
+    check(sh.at.divisor == 2, "a struggling device on a 120 Hz panel runs 60, not 120");
+    check(sh.lines(k4K120) < 1080.0, "…and pays in resolution, which is the stated trade");
   }
 
   std::printf("render_scale: %d cases, %d failed\n", cases, failed);

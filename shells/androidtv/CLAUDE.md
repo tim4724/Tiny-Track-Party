@@ -44,7 +44,7 @@ incidental:
   not run at all — a valid ELF whose interpreter does not exist, which `execve`
   reports as "No such file or directory". Build both.
 - **PowerVR Rogue GE9215**, a low-end part driving a 4K-capable output. The
-  adaptive render scale (`ttp_display_scale_step`) is not a nicety here; it is
+  adaptive render scale (`ttp_display_step`) is not a nicety here; it is
   why the thing holds 60 fps.
 
 `native/scripts/android-device-spawn.sh` runs the whole ctest suite on a box over
@@ -254,7 +254,8 @@ not out of the slice durations — that is the same present-versus-callback
 distinction the trap below is about. **Hide the perf readout first** (`adb shell
 input keyevent 165`): it is four lines of Compose `BasicText` re-measured at 4 Hz,
 which is main-thread work of the same order as anything being hunted, and leaving
-it up will hand you its cost as the finding.
+it up will hand you its cost as the finding. It is on by DEFAULT (every build
+except a `Scenarios` run), so hiding it is a step you take, not one you forget.
 
 `scripts/androidtv-live.mjs` is the one in-race harness: it joins a phone and
 drives a REAL race — the realistic view via `--spectate`, the scaler free or
@@ -273,8 +274,8 @@ all while hidden, whose state outlives the script — so a sweep must probe for
 lines logged AFTER its keypress, never for lines in the log at large, or a
 previous run's samples read as success.
 
-**MEASURE THE BUILD THAT SHIPS.** `PerfDebug`'s knobs are deliberately NOT
-debug-gated. Gated (as they once were), they are inert AND SILENT in release: a
+**MEASURE THE BUILD THAT SHIPS.** `PerfDebug`'s knobs — and the perf readout
+itself, which now shows in RELEASE too — are deliberately NOT debug-gated. Gated (as they once were), they are inert AND SILENT in release: a
 sweep runs, logs nothing about it, and reports the free-running scaler's numbers
 as pinned arms — and the shipping configuration cannot be ablated at all.
 Checked once on release at a pinned scale: the GPU-bound half of this section
@@ -398,7 +399,21 @@ different game.
 
 At 60 Hz on that view the adaptive scale settles at the FLOOR with its p95
 already brushing the budget — the rule being right, not stuck. 720p60 was
-never near on the picture that matters.
+never near on the picture that matters. NOTE THE FLOOR MOVED: it was 360 lines
+when the rungs were fractions of the ceiling, and is 540 now that they are line
+counts, so a re-measurement on this view is owed and 60 Hz will look worse for
+it. That is the trade the ladder was chosen for — 540 lines is the softest
+picture the game is willing to show, and a box that cannot hold 60 Hz there is
+asking a frame-rate question, which is what the 30 Hz mode above answers.
+
+**THE PRESENT RATE IS THE RULE'S NOW, and `debug.ttp.hz` is a PIN over it**
+(`pinVsyncInterval`, not a setter — a setter would be overwritten a second
+later and the knob would look broken). `ttp_display_step` answers a resolution
+AND a divisor as one operating point, ordered around a desired 1080@60: below it
+resolution gives way and the rate does not, above it the rate goes first, so a
+120 Hz panel with the headroom to drive it will. This box has no such headroom
+and sits below the anchor, so on it the rate is still effectively fixed at the
+panel's own — which is what the paragraph below measured.
 
 **`debug.ttp.hz 30` presents every OTHER vsync instead** — a locked,
 evenly-paced 30 with the sim still ticking at 60 (only picture latency
@@ -409,12 +424,19 @@ trade should ever be AUTOMATIC is a product decision parked until a real
 phone drives it over the prod relay — until then it is an adb knob, not a
 shipped behaviour.
 
-A scene change VOIDS the scale's tenure (DisplayHost.build + recoveryClimb):
-the lobby legitimately floors the scale (the attract behind the boards is one
-of the heaviest pictures), and before this the race inherited that floor and
-kScaleUpHoldSec thawed it one rung per 28 s — most of a race spent soft when
-the race COULD afford more. The recovery climb runs at one evidence window
-per rung and re-arms the hold at the first down-step or full-signal stay.
+A scene change SHORTENS the up-hold, and that decision is the RULE's, not this
+shell's. The lobby legitimately floors the scale (the attract behind the boards
+is one of the heaviest pictures), and without it the race inherits that floor
+and `kScaleUpHoldSec` thaws it one rung per 28 s — most of a race spent soft
+when the race COULD afford more. What this file owes is one measurement:
+`DisplayHost.build` stamps `sceneBuiltNanos` and `adaptScale` passes
+`sinceSceneSec`; `kScaleUpRecoverHoldSec` in `ttp/render_scale.h` does the rest.
+
+It lived here as a `recoveryClimb` latch first, and that is the cautionary half.
+The browser reads the same rule off the same ladder with the same lap-sized
+hold, so it had the identical failure and no mitigation at all — a shell that
+solves a rule's problem in its own language solves it for one platform and hides
+it on the others. Root `CLAUDE.md` rule 2, from the shell side.
 
 ## The picture at a reduced resolution
 
@@ -425,8 +447,11 @@ is decided by HOW it is reduced as much as by how far.
 ladder). A scale that is not a simple ratio blurs UNEVENLY — at 2.02x some
 output rows take almost one source row and their neighbours take a blend of two
 — and the bands CRAWL as the camera moves, which on flat colour with thick ink
-outlines is the most visible artefact there is. The rungs are the fractions that
-come out whole on a TV panel.
+outlines is the most visible artefact there is. The rungs are LINE COUNTS (540,
+720, 1080, 1620, 2160) rather than fractions, which is what makes them come out
+whole on both TV panels at once — 1, 3/4, 1/2, 1/3, 1/4 against 2160 and 1, 2/3,
+1/2 against 1080 — and makes the bottom rung one floor for every shell instead
+of a fraction that meant a different picture on each.
 
 **The chrome is already at native resolution** and must stay there. Only the
 SurfaceView is scaled; Compose draws the HUD, the boards and the QR into the app
@@ -435,8 +460,19 @@ half-resolution 3D picture. Anything that moved a label into the renderer would
 lose that.
 
 **The settled rung moves over a lap**, because a lap's own cost varies by about
-4 ms — wider than the controller's dead band, so no rung sits inside it the
-whole way round. That is the mechanism working, not a fault.
+4 ms and a rung is chosen from a fit taken over one stretch of circuit. The
+lap-sized up-hold is what keeps that to a nudge rather than a rhythm; the rung
+never climbs into a cost the model has not predicted it can hold, so what moves
+is which rung fits, not whether the controller can make up its mind.
+
+**THE RULE SOLVES, IT DOES NOT COMPARE** (`ttp/render_scale.h`, RenderScaleFit).
+This box is the reason: nearly half its budget is resolution-INDEPENDENT, so its
+total GPU share never drops below ~0.48 however many pixels it gives back, and
+any "is there headroom?" threshold low enough to stop a fill-bound GPU
+oscillating on these rungs sits below that and would pin this box to the floor
+for good. What this shell owes is the pair of numbers the model is fitted from —
+`prevScale`/`prevCostMs`, the last observation at a different scale, dropped on a
+scene build because a slope measured across two scenes belongs to neither.
 
 ## Audio
 

@@ -1,4 +1,4 @@
-// The adaptive-render-scale shim: ttp_display_scale_step's body, and nothing
+// The adaptive-render-scale shim: ttp_display_step's body, and nothing
 // else.
 //
 // Its own file rather than ttp_display_core.cc's, for the reason that file's
@@ -15,15 +15,25 @@
 
 #include "ttp/render_scale.h"
 
-extern "C" double ttp_display_scale_step(double current,
-                                         double gpuShareP95, int gpuFrames,
-                                         double presentP95Ms, double presentFloorMs,
-                                         int presentFrames, double sinceChangeSec,
-                                         double minScale, double maxScale) {
-  const ttp::rt::RenderScaleCost cost{gpuShareP95, gpuFrames, presentP95Ms, presentFloorMs,
+extern "C" int ttp_display_step(double curScale, int curDivisor,
+                                double gpuP95Ms, int gpuFrames,
+                                double presentP95Ms, double presentFloorMs,
+                                int presentFrames, double sinceChangeSec,
+                                double sinceSceneSec,
+                                double prevScale, double prevCostMs,
+                                double minScale, double maxScale,
+                                double baseLines, double panelMs,
+                                double* out2) {
+  if (!out2) return 0;
+  const ttp::rt::RenderScaleCost cost{gpuP95Ms, gpuFrames, presentP95Ms, presentFloorMs,
                                       presentFrames};
-  return ttp::rt::renderScaleStep(current, cost, sinceChangeSec,
-                                  ttp::rt::RenderScaleLimits{minScale, maxScale});
+  const ttp::rt::RenderScalePoint p = ttp::rt::renderScaleStep(
+      ttp::rt::RenderScalePoint{curScale, curDivisor}, cost, sinceChangeSec, sinceSceneSec,
+      ttp::rt::RenderScaleSample{prevScale, prevCostMs},
+      ttp::rt::RenderScaleLimits{minScale, maxScale, baseLines, panelMs});
+  out2[0] = p.scale;
+  out2[1] = (double) p.divisor;
+  return 1;
 }
 
 extern "C" double ttp_display_present_floor(double prevFloorMs, double p05Ms) {
