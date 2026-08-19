@@ -19,6 +19,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 
 import { sh, resolveDestination, resolveDevicectlId, signingArgs, assertAwake } from './lib/tvos-device.mjs';
 
@@ -74,7 +75,13 @@ async function main() {
     '-project', path.join(TVOS, 'TinyTrackParty.xcodeproj'),
     '-scheme', 'TinyTrackParty',
     '-destination', destination,
-    '-derivedDataPath', path.join(process.env.TMPDIR || '/tmp', 'ttp-dd-tvos-device'),
+    // PER-WORKTREE, not per-machine. A bare `ttp-dd-tvos-device` under TMPDIR is
+    // shared by every worktree on the box — this tree is worked in many at once —
+    // and a run here then built against a SIBLING's products: the failure named a
+    // source file in a worktree this one has never seen. Keyed by the project's
+    // own path, which is what makes two checkouts two caches.
+    '-derivedDataPath', path.join(process.env.TMPDIR || '/tmp',
+      `ttp-dd-tvos-device-${createHash('sha256').update(TVOS).digest('hex').slice(0, 12)}`),
     '-only-testing:TinyTrackPartyShots/LifecycleTests',
     '-allowProvisioningUpdates',
     ...signingArgs()

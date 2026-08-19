@@ -45,6 +45,15 @@ final class ShotTests: XCTestCase {
     func capture(_ id: String) {
         let app = XCUIApplication()
         app.launchArguments = ["-ttpScenario", id]
+        // PHOTOGRAPH A NON-NATIVE BUFFER, when asked. The adaptive render scale
+        // moves the drawable under a chrome layer that is laid out in POINTS, and
+        // every shot in this gallery is taken at 1.0 — which is why a `uiScale`
+        // that had gone stale put the whole HUD at 3/4 of its right place with
+        // the suite entirely green. `TEST_RUNNER_TTP_RENDER_SCALE=0.5` on the
+        // xcodebuild environment reaches the runner as this variable.
+        if let k = ProcessInfo.processInfo.environment["TTP_RENDER_SCALE"], !k.isEmpty {
+            app.launchArguments += ["-ttpRenderScale", k]
+        }
         app.launch()
 
         // WAIT ON THE APP, NEVER ON A CLOCK. The harness sets this identifier
