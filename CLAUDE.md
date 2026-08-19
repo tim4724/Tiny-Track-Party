@@ -30,7 +30,10 @@ npm run check:artifact            # Is the checked-in wasm current?
 npm start / npm run dev           # Serve (with --watch)
 native/scripts/build-runtime-web.sh   # Rebuild the engine wasm → public/display/engine/native/
 npm run build:tvos [device|simulator] # The Apple TV app: engine, bundle and project included
+npm run build:androidtv -- [release|debug] [install]   # The Android TV app, likewise
+npm run shots:web                     # Freeze the reference column of /gallery-shots.html
 npm run shots:tvos / shots:tvos-sim   # Photograph the Apple TV, one shot per gallery scenario
+npm run shots:androidtv[-emu]         # …and the Android TV box, or the AVD
 ```
 
 `npm run setup` is the only command a fresh worktree needs, and it prints the
@@ -141,6 +144,7 @@ Fonts are self-hosted variable woff2 (SIL OFL) so the CSP keeps `font-src 'self'
 | `public/controller/CLAUDE.md` | the phone: why none of it becomes C++, what lives in which module, previews through the live renderer |
 | `public/shared/CLAUDE.md` | the protocol manifest, design tokens as data, the schematic codec |
 | `public/assets/audio/CLAUDE.md` | cues are generated, music is acquired; the MP3 and re-encode traps |
+| `shells/androidtv/CLAUDE.md` | the Android TV app: one thread, the generated JNI bridge, byte[] strings, the authored-pixel density override |
 | `docs/native-port/shells.md` | the audited ledger of what a new TV platform still owes |
 
 ## Dev loop

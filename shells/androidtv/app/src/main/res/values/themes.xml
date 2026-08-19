@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- A window, and nothing else. Every pixel inside it is either the Filament
+         surface or Compose drawing from design-tokens.json, so a platform theme
+         would only get a chance to be wrong: no action bar, no Material colours,
+         no system decoration.
+
+         windowBackground is the INK from theme.css rather than the default
+         white. It is what shows for the frames between the Activity appearing
+         and the first Filament present, and a white flash on a dark TV in a dark
+         room is the one moment of this app a player would call broken. -->
+    <style name="Theme.TinyTrackParty" parent="@android:style/Theme.Material.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">#2A2735</item>
+        <item name="android:windowContentTransitions">false</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
+</resources>

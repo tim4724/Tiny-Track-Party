@@ -1,0 +1,19 @@
+# Machine-specific SDK path. Gradle writes this itself if Android Studio opens
+# the project; the build scripts set ANDROID_HOME instead.
+local.properties
+
+# Gradle's own state.
+.gradle/
+build/
+app/build/
+
+# BUILD OUTPUT, not artifacts. native/scripts/build-runtime-android.sh writes
+# these, and unlike public/display/engine/native/ttp_runtime.wasm they are NOT
+# checked in: no test in the tree replays them, and two ABIs of a 5-7 MB .so per
+# commit would dwarf the repo. Same call the tvOS script makes for its .a.
+app/src/main/jniLibs/
+
+# Staged by shells/androidtv/scripts/stage-assets.sh from the one place each
+# thing is authored. Committing them would be a second copy of the kit, the
+# cues, the materials and design-tokens.json.
+app/src/main/assets/
