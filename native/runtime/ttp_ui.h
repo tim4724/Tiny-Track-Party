@@ -175,6 +175,18 @@ TTP_ABI const char* ttp_ui_progress_json(void);
  * Random wears. */
 TTP_ABI uint32_t ttp_ui_cup_tint_rgb(const char* cupIdOrNull, double pct);
 
+/* The wash for a selection that belongs to NO CUP: Random's tiles, and any
+ * undrawn chip whose own cup is unknown too.
+ *
+ * NOT the one above with a null id. That answers the FALLBACK, which is itself a
+ * cup colour standing in for a cup nobody recognised — so a Random card painted
+ * through it comes out in the Backyard cup's lawn green, dressed as a cup it has
+ * nothing to do with. "Any biome" has to look like none of them.
+ * `trackPicker.js` keeps the pair apart as `cupTint` and `neutralTint`; this is
+ * the second one, and there was no export for it until a TV shell drew the tile
+ * and had to choose between the wrong colour and re-typing the palette. */
+TTP_ABI uint32_t ttp_ui_neutral_tint_rgb(double pct);
+
 /* FIELD_TINT: how much colour a schematic's field keeps. Shared so the phone's
  * picker and every TV lobby wash the same map to the same shade. */
 TTP_ABI int ttp_ui_cup_field_tint_pct(void);

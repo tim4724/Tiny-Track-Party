@@ -185,13 +185,26 @@ std::vector<const RosterEntry*> connectedPlayers(const std::vector<RosterEntry>&
 int cupFieldTintPct();
 
 // A cup's colour mixed `pct` of the way toward white, packed 0xRRGGBB. An
-// unknown or absent cup gets the fallback (Random belongs to no cup).
+// unknown or absent cup gets the FALLBACK, which is itself a cup colour standing
+// in for a cup nobody recognised.
 //
 // THE MIX IS IN sRGB, on the ENCODED values — a straight per-channel lerp. That
 // is what CSS `color-mix(in srgb, …)` does, and it is the whole reason this is
 // shared rather than left to each shell: mixing the same pair in LINEAR light is
 // a one-line change that comes out visibly darker, and nothing would catch it.
 uint32_t cupTintRgb(const OptStr& cupId, double pct);
+
+// The wash for a selection that belongs to NO CUP — Random's tiles, and any
+// undrawn chip whose cup is not known either.
+//
+// NOT `cupTintRgb` with an absent id, and the distinction is a real one rather
+// than a naming preference: that answers the fallback, which is a CUP COLOUR
+// (the Backyard cup's lawn green), so a Random card painted with it is dressed
+// as a cup it has nothing to do with. "Any biome" has to look like none of them,
+// which is what the warm grey is for. `trackPicker.js` keeps the two apart as
+// `cupTint` and `neutralTint`; this is the second one, and it existed nowhere on
+// this side until a TV shell tried to draw the tile.
+uint32_t neutralTintRgb(double pct);
 
 // ---- the lobby's race card --------------------------------------------------
 struct Cup {

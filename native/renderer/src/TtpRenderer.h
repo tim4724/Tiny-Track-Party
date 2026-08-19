@@ -224,14 +224,43 @@ public:
 
     // Per-section wall clock of the last frame, in milliseconds. Diagnostic
     // only — the sections are cheap (a clock read each) and the array is what
-    // ttp_profile() hands the page. Order matches kProfileNames.
+    // ttp_profile() hands the page. Order matches kProfileNames. New slots go
+    // AFTER kProfTotal: every reader maps by name, but keeping the original
+    // indices stable is free and keeps an old APK readable by a new script.
+    //
+    // kProfDecalUp is a SUB-SPAN of kProfWorld (uploadDeckDecals runs inside
+    // renderWorld), so world keeps meaning what it always did; a world spike
+    // with a matching decalUp spike is the per-chunk uniform writes.
+    // kProfBuild is the frame-input build (ttp::rt::buildFrame), which runs in
+    // ttp_display_core BEFORE render() — inside the shell's per-frame span
+    // (the ttp:render atrace marker) but outside kProfTotal. The core posts it
+    // via noteBuildMs so the one profile array covers that whole span.
     enum ProfileSlot : uint32_t {
         kProfCars = 0, kProfWorld, kProfSkids, kProfAmbient, kProfBeginFrame,
         kProfCellSetup, kProfCellRender, kProfPresent, kProfEndFrame, kProfTotal,
+        kProfDecalUp, kProfBuild,
         kProfCount
     };
     const double* profile() const { return mProfile; }
+    void noteBuildMs(double ms) { mProfile[kProfBuild] = ms; }
     static const char* const* profileNames();
+
+    // The BACKEND's own GPU timer, in milliseconds, or 0 where there is none.
+    // See ttp_display_gpu_ms for which platforms answer and which do not.
+    double gpuMs() const { return mGpuMs; }
+
+    // The full-screen antialias pass, and with it the offscreen scene buffer it
+    // exists to filter. See ttp_display_antialias.
+    void setAntialias(bool on) {
+        if (mAntialias == on) return;
+        mAntialias = on;
+        if (!on) destroySceneTarget();   // ~8 MB at 1080p, and nothing reads it now
+    }
+
+    // Block until the driver thread has executed everything recorded so far —
+    // the one safe moment for a shell to resize the window's buffer queue
+    // underneath it (ttp_display_drain has the why).
+    void drain();
 
 private:
     // One interleaved vertex everywhere for now: position + sRGB colour, drawn
@@ -264,6 +293,14 @@ private:
         // field vcloud shapes them from). Most meshes are position + colour, so
         // UVs stay out of the shared vertex.
         std::vector<filament::math::float2> uvs;
+        // Optional BAKED per-vertex matte light (half4, rgb·1) — the road
+        // under the baked-light vroad, filled by fillRoadLight. Non-empty ⇒
+        // buildMesh feeds CUSTOM0 INSTEAD of TANGENTS (nothing at draw time
+        // reads the normal; m.normals stays populated for the CPU bake).
+        // Alive for the run like every CPU copy here, and bakeShadowMap
+        // re-uploads it in place once the ESM exists.
+        std::vector<filament::math::half4> custom0;
+        uint8_t custom0Slot = 0;
         // Flat-decal template in car-local (x, z) with its rest alpha: the
         // conform rewrites `verts` into world space from this every frame.
         struct Local { float x, z; uint8_t a; };
@@ -285,6 +322,11 @@ private:
     filament::Skybox* mSkybox = nullptr;
     filament::Material* mMaterial = nullptr;    // unlit vertex-colour
     filament::Material* mLitMaterial = nullptr; // cheap-matte lit (custom Lambert)
+    // vlit minus the sun-shadow sampler (vlitns.mat), for the dressing that
+    // never reads the map — a bound sampler is per-draw descriptor cost even
+    // when shadowTexel=0 early-outs every fragment. Null on a shell whose
+    // asset set predates it; buildMesh then falls back to vlit.
+    filament::Material* mLitPlainMaterial = nullptr;
     // The road deck only: mLitMaterial's shading (shared via ttp_shade.inc)
     // plus a uv0 channel carrying track space (s, lat), so flat deck decals are
     // SHADED INTO the road rather than laid over it — no lift, no z-fight,
@@ -292,11 +334,41 @@ private:
     // case the road falls back to vlit and stamps nothing.
     filament::Material* mRoadMaterial = nullptr;
     filament::MaterialInstance* mRoadInst = nullptr;
-    static constexpr int kMaxDeckDecals = 32;  // matches vroad.mat's float4[32]
-    // The STATIC list's own cap. The shader's 32 is a PER-CHUNK bound —
-    // uploadDeckDecals folds each ~35u chunk its own nearby subset — so the
-    // track-wide list may exceed it. This is only a guard: since the pads left
-    // for the paint channel the statics are the boxes plus the slicks, well
+    // THE PER-FRAME GATHER cap, and it is CPU-side only: this list is the whole
+    // scene's decals before any chunk sees them, so it costs a memcpy and
+    // nothing on the GPU. The two numbers that DO cost are below.
+    static constexpr int kMaxDeckDecals = 32;
+    // PER CHUNK, PER CHANNEL — and these are the expensive constants in the
+    // renderer. vroad declares one dynamically-indexed uniform array per field
+    // per channel, and a PowerVR pays for a declared array whether or not the
+    // loop runs: measured on a GE9215 over a frozen single-player race at
+    // 1280x720, one mixed 32-entry list (7 arrays, 3584 bytes) cost 25.9 ms of
+    // GPU, the same seven arrays at 16 cost 18.9 and at 8 cost 17.6. Splitting
+    // by kind buys the capacity back — a masked entry needs five fields and a
+    // profile entry three, so 8+8 is 1024 bytes for sixteen entries where one
+    // mixed list of eight spent 896 for eight.
+    //
+    // Eight profile is the item-box shadows, oil slicks and boost auras within
+    // one ~35u chunk; the fold takes them in the shell's priority order, so an
+    // overflow drops the last aura rather than a marker. RAISING IT IS
+    // MEASURABLE IN THE FRAME, and the parked-view reading that declared size
+    // had become free does NOT survive a real pack: the 2026-08-18 spectate-7
+    // arm that raised profile to 16 with nothing else changed cost +1.1 ms
+    // p50 / +1.5 p95 at 720p. vroad.mat's float4[8]s must agree;
+    // tests/road-decal-caps.test.js holds the two together.
+    //
+    // FOUR, not FIELD_SIZE, since the hybrid shadow LOD: only cars inside
+    // the near band of some active camera fold masked entries (renderCars);
+    // the rest ride the carShadow texture. Four covers a camera's own car
+    // plus adjacent rivals; a fifth near car in ONE chunk is a split-screen
+    // pile-up edge whose dropped entry falls back to the texture blob it
+    // already carries in the crossfade band.
+    static constexpr int kMaxMaskedDeckDecals = 4;
+    static constexpr int kMaxProfileDeckDecals = 8;
+    // The STATIC list's own cap. The per-chunk bounds above are what the shader
+    // sees — uploadDeckDecals folds each ~35u chunk its own nearby subset — so
+    // the track-wide list may exceed them. This is only a guard: since the pads
+    // left for the paint channel the statics are the boxes plus the slicks, well
     // under it on any catalogue track.
     static constexpr int kMaxStaticDeckDecals = 96;
     // Deck-paint entries per road chunk — matches vroad.mat's float4[8]. A
@@ -318,9 +390,10 @@ private:
         filament::math::float4 texrot;
         // Masked decals only (zero on profile decals): the DECK point under
         // the car and the deck-plane axes at its in-plane heading (NOT the
-        // car's own axes — vroad.mat's decalWPos comment has why the two are
-        // equivalent). The MASK samples a rigid planar projection of the
-        // fragment's world position onto these — track space only BOUNDS the
+        // car's own axes — these are the heading dropped into the plane the
+        // car sits on, see renderCars). The MASK samples a rigid planar
+        // projection of the fragment's world position onto these — track
+        // space only BOUNDS the
         // stamp (the |ds|/|dl| reject, which is what keeps a loop's other
         // deck out). Painting the silhouette itself in curvilinear (s, lat)
         // bent it around every bend, and the per-triangle kinks of the
@@ -353,6 +426,7 @@ private:
     void renderSkids(const TtpFrameInput& input, const TtpCarInput* cars, uint32_t nCars);
     void renderAmbient(const TtpFrameInput& input);
     void renderCells(const TtpFrameInput& input, double& tMark);
+    void readGpuTimer();
     // Decals that never move — boost pads, launch strips, oil slicks, item-box
     // contact shadows. Resolved once at track build and re-queued each frame,
     // which is cheaper than it sounds (a memcpy of a handful of float4s) and
@@ -367,15 +441,19 @@ private:
     struct RoadChunk {
         filament::MaterialInstance* mi;
         float sMin, sMax;   // arclength covered, before the decal margin
-        // What this chunk's instance was last handed (folded), so a chunk whose
-        // stretch nothing dynamic crossed skips its uniform writes entirely.
-        std::vector<DeckDecal> last;
+        // What this chunk's instance was last handed in each channel (folded),
+        // so a chunk whose stretch nothing dynamic crossed skips its uniform
+        // writes entirely. TWO lists because the two have separate caps: a
+        // chunk can overflow one and not the other, and comparing a
+        // concatenation would then rewrite both.
+        std::vector<DeckDecal> lastMask, lastProf;
         // The paint entries this chunk was built with. Written once per track,
         // so it is kept only so the ablation debug can put the channel back.
         int paintN = 0;
     };
     std::vector<RoadChunk> mRoadChunks;
-    std::vector<DeckDecal> mRoadInstLast;  // ditto for the whole-lap fallback chunk
+    // Ditto for the whole-lap fallback chunk.
+    std::vector<DeckDecal> mRoadInstLastMask, mRoadInstLastProf;
     int mRoadInstPaintN = 0;               // and its RoadChunk::paintN
     // The masked decals' silhouette store: one 2D-array texture, one layer per
     // car slot (0..7), one for the monster rig, one for the generic
@@ -403,6 +481,7 @@ private:
     void rasterSkidTri(const filament::math::float2* p, const float* ink);
     // Push this frame's dirty rects to the texture as sub-rect uploads.
     void uploadSkidRects();
+    void refreshSkidMips();
     filament::math::float3 mBoostDiskLin{};
     // The one vlit instance that SAMPLES the baked sun map. Three's receiver set
     // is the road, the structures and the berms and nothing else — the lawn,
@@ -437,6 +516,13 @@ private:
     // Size the scene buffer to the canvas (no-op when it already fits), and
     // stand up the present view on first use. Both no-op without vpresent.
     void ensureSceneTarget();
+    // The fullscreen triangle + present view, WITHOUT the scene target: the
+    // silhouette bakes' blur pass needs it too, and burying it inside
+    // ensureSceneTarget (AA-gated since the stale-handle fix) silently
+    // starved every car bake on the AA-off shell — the masked shadows all
+    // fell back to the generic superellipse and nobody's harness camera sat
+    // close enough to see the oval. Idempotent; engine-lifetime.
+    void ensurePresentQuad();
     void destroySceneTarget();
 
     // The 2D cell overlay — the split-screen dividers and the per-player steer
@@ -653,6 +739,7 @@ private:
     // load — the throb retints these instead of string-probing every material of
     // every instance per frame.
     std::vector<filament::MaterialInstance*> mBoxGlowMats;
+    float mBoxGlowPulse = -1; // last pulse written; -1 = force the first write
     Mesh mStructures;             // pillars / poles / loop shafts (matte concrete)
     Mesh mBerms;                  // grass lofted under a raised, non-pillared deck
     float mTime = 0; // idle-animation clock (accumulated FrameInput.dt)
@@ -685,6 +772,12 @@ private:
     // The frozen sun shadow map and the matrix that puts a world position in
     // its [0,1] texture space (see bakeShadowMap).
     filament::Texture* mShadowMap = nullptr;
+    // The GROUND's baked sun-visibility map (vvis.mat, rendered inside
+    // bakeShadowMap over the same light camera), and the material that bakes
+    // it. Per-scene like the ESM; vground taps it instead of running the ESM
+    // decode per fragment — bindVisMap is the one binder.
+    filament::Texture* mVisMap = nullptr;
+    filament::Material* mVisMaterial = nullptr;
     // See setShadowsEnabled. False leaves mShadowMap null, which is already the
     // "this track baked no map" path: bindShadowMap falls back to the 1×1 white
     // texture and passes shadowTexel 0, and vlit.mat reads that as fully lit.
@@ -759,6 +852,11 @@ private:
     // segment, merged when they touch.
     struct SkidRect { int x0, y0, x1, y1; };      // half-open [x0,x1)×[y0,y1)
     std::vector<SkidRect> mSkidDirty;
+    // The mip chain's CPU truth, levels 1.. (level 0 is mSkidPix), plus the
+    // PHYSICAL-x rects awaiting the throttled per-level refresh — see
+    // refreshSkidMips for why generateMipmaps could not stay.
+    std::vector<std::vector<uint8_t>> mSkidMips;
+    std::vector<SkidRect> mSkidMipDirty;
     float mSkidLatHalf = 0;                       // half the lat span the texture covers
     // Texel edges in world units per axis. The stamp feather is sized from
     // the texel footprint along the mark's own width direction, so straights
@@ -770,7 +868,17 @@ private:
     // At 16384 the skid texture reaches 80 texels/u along s on ordinary lap
     // lengths — the same density as lat, so the grid is isotropic and a
     // diagonal mark resolves exactly like a straight one.
+    //
+    // ONLY THE WEB SURFACE REPORTS ONE (`ttp_display_web.cc`), because only it
+    // makes its own GL context before handing Filament a null window and so has
+    // something to ask. tvOS and Android TV let Filament create the context
+    // inside init() and keep this default — so on those two the layer is 8192
+    // wide and the grid is 3-4x ANISOTROPIC, which is what the angle-aware
+    // feather in the stamp block is actually holding together. Any note that
+    // says "16k" is describing the web alone.
     uint32_t mMaxTextureDim = 8192;
+    // The grade's sRGB curve as a 1024-entry table — ttp_grade.inc has why.
+    filament::Texture* mGradeLut = nullptr;
     bool mSkidWipe = false;    // clear the layer on the next stamp pass (race restart)
     // The layer's mip refresh (see the stamp block): stamps land in mip 0; the
     // chain regenerates at most ~7 Hz so minified marks stop scintillating
@@ -778,6 +886,57 @@ private:
     // is on the mTime clock, which restarts at 0 with every scene build.
     bool mSkidMipsDirty = false;
     float mSkidMipsAt = 0;
+    float mSkidUpAt = 0; // level-0 upload throttle, same per-scene clock
+    // ── The car-shadow layer ────────────────────────────────────────────
+    // The eight contact shadows as a per-frame CPU-rasterized track-space R8
+    // texture (the rubber layer's idiom — same mapping, same lat span, so
+    // vroad's tap reuses the rubber uv), replacing vroad's masked uniform
+    // loop: under a real pack that loop was ~5 ms of the 720p frame and only
+    // structure moved it. TRANSIENT, unlike the rubber: renderCars erases
+    // last frame's stamps and lays this frame's, so unlike the rubber there
+    // is no throttle to hide behind — which is why the texture is a PAIR.
+    // Each frame uploads the WHOLE level 0 as ONE setImage into the texture
+    // the driver is NOT reading (the instances are re-pointed at it after
+    // the upload), so the respecify-while-in-flight stall the skid layer's
+    // ~30 Hz throttle exists to dodge has no texture to land on. One 256-512
+    // KB upload event per frame, against the 16-24 dirty-rect events an
+    // in-place scheme would cost — the skid layer proved the driver bills
+    // per EVENT on an in-flight texture, not per byte.
+    // No mips, deliberately: the masked loop sampled its silhouette at LOD 0
+    // with no chain either, so minification behaves exactly as it did.
+    filament::Texture* mCarShadowTex[2] = { nullptr, nullptr };
+    std::vector<uint8_t> mCarShadowPix;    // CPU raster truth, W×H, row 0 = -latHalf
+    uint32_t mCarShadowW = 0, mCarShadowH = 0;
+    uint32_t mCarShadowPing = 0;           // which of the pair takes the NEXT upload
+    std::vector<SkidRect> mCarShadowDirty; // last raster's rects (unwrapped x) — the erase list
+    bool mCarShadowUpload = false;         // the CPU buffer changed since the last upload
+    // The silhouette SOURCE the raster samples: the CPU superellipse
+    // (superellipseMaskPixels — the decalMask array's generic layer, i.e. the
+    // shipped fallback look), for EVERY car. At the layer's texel density the
+    // baked per-car silhouettes are indistinguishable from it, and evaluating
+    // it on the CPU retires the per-scene readback the bakes would need.
+    // Engine-lifetime: the shape never changes.
+    std::vector<float> mCarShadowMask;
+    static constexpr int kCarShadowMaskW = 64, kCarShadowMaskH = 128;
+    // 128 rows over the rubber layer's ±skidLatHalf (~20 texels/u across lat);
+    // width targets 8 texels/u of arclength, clamped — coarse next to the
+    // rubber's 80/u ON PURPOSE: the stamp is a pre-blurred blob, and the
+    // whole texture must be cheap to rebuild and upload every frame.
+    static constexpr int kCarShadowH = 128;
+    // Independent capability probes on the served vroad — the current blob
+    // carries both (the hybrid's near/far halves); see TtpRendererDecals.cpp.
+    bool roadHasMaskLoop() const;   // hasParameter("maskRect")
+    bool roadHasCarShadow() const;  // hasParameter("carShadow")
+    void bindCarShadow(filament::MaterialInstance* mi, filament::Texture* t);
+    void eraseCarShadow();          // zero last frame's rects in the CPU buffer
+    // One car's stamp: six deckFoot-projected points (the cull-window probes,
+    // now kept) rasterized as TWO warped quads with the silhouette sampled
+    // bilinearly across them — the bending of track space lives INSIDE the
+    // stamp, second-order per slice, instead of smearing it axis-aligned.
+    void rasterCarShadowStamp(const filament::math::float2* sl, float carS, float alpha);
+    void rasterCarShadowTri(const filament::math::float2* p,
+            const filament::math::float2* uv, float alpha);
+    void uploadCarShadow();         // the one setImage + the ping-pong rebind
     struct WheelTrail {
         filament::math::float2 last{}, dir{}, edgeL{}, edgeR{}; // all (s, lat)
         bool hasEdge = false, seeded = false;
@@ -951,6 +1110,8 @@ private:
     filament::IndirectLight* mAmbient = nullptr;
 
     double mProfile[kProfCount] = {};
+    double mGpuMs = 0.0;
+    bool mAntialias = true;
     uint32_t mWidth = 0;
     uint32_t mHeight = 0;
     bool mHasTrack = false;
@@ -1024,8 +1185,28 @@ private:
     // per VIEW per frame, which a 4-way split pays for four times over; the JS
     // renders one and freezes it (SceneRenderer.setTrack), and so do we.
     void bakeShadowMap(const TrackBin& tb);
+    // The matte light rig's NUMBERS — sun colour/lux and the hemisphere's
+    // 2-band SH, UNEXPOSED — one derivation for the scene's lights
+    // (buildTrackScene) and the road's baked vertex light (fillRoadLight),
+    // so the two cannot drift.
+    struct MatteRig {
+        filament::math::float3 sunColor;
+        float sunLux;
+        filament::math::float3 sh0, sh1;
+        float hemiLux;
+    };
+    MatteRig matteRig(const TrackBin& tb) const;
+    // Evaluate the road's matte light — ttpMatteLight's CPU twin, the fwidth
+    // AA floor dropped exactly as vvis.mat's bake drops it — into
+    // mRoad.custom0. `esm` is bakeShadowMap's blurred exponential map read
+    // back as RGBA floats (Renderer::readPixels convention: TOP row first on
+    // every backend); null means "no map baked" and answers fully lit, like
+    // the shader's shadowTexel-0 early-out did.
+    void fillRoadLight(const TrackBin& tb, const float* esm,
+            uint32_t esmW, uint32_t esmH);
     // Hand the baked map + its world→light matrix to a material instance.
     void bindShadowMap(filament::MaterialInstance* mi);
+    void bindVisMap(filament::MaterialInstance* mi);
     filament::MaterialInstance* litShadowInstance();
     // The fog colour to give Filament, pre-graded — see the definition for why
     // the grade cannot stay in the shader for this one.
@@ -1050,10 +1231,15 @@ private:
     static DeckDecal makeStamp(float s, float lat, float halfS, float halfLat,
             const filament::math::float3& col, float alpha, float inner, float knee,
             bool ellipse, int chevrons);
+    // Which entries a fold takes. The DECAL channel now runs two folds over one
+    // source list — masked and profile have separate uniform arrays and separate
+    // caps in vroad.mat — while the PAINT channel takes everything.
+    enum class DecalKind { All, Masked, Profile };
     // The lap-wrap fold both deck channels share — see the definition. Fills
     // `out` in list order up to `cap`, so an overflowing chunk keeps the head.
     static int foldToChunk(const std::vector<DeckDecal>& src, float mid,
-            float halfSpan, float L, DeckDecal* out, int cap);
+            float halfSpan, float L, DeckDecal* out, int cap,
+            DecalKind kind = DecalKind::All);
     void uploadDeckDecals();
     // Resolve the decals that never move — oil slicks and item-box contact
     // shadows — into mStaticDeckDecals, once per track.
@@ -1116,6 +1302,11 @@ public:
     static constexpr uint32_t kFeatRoadShadow = 0x0800;
     static constexpr uint32_t kFeatRoadAll = kFeatRoadDecals | kFeatRoadRubber
             | kFeatRoadPaint | kFeatRoadShadow;
+    // SCENE-WIDE channels, the same idea one level up: the same picture drawn
+    // with one per-fragment term skipped, on every surface at once rather than
+    // on the deck alone. Filament's fog is the first, because it is composited
+    // inside EVERY surface shader and so cannot be ablated by hiding anything.
+    static constexpr uint32_t kFeatFog = 0x1000;
     void debugFeatureMask(uint32_t mask);
 private:
     bool mHideCars = false;
@@ -1125,6 +1316,7 @@ private:
     // group's — until a caller asks, nothing here touches a shipped frame.
     uint8_t mFeatureMask = kFeatAll;
     uint32_t mRoadMask = kFeatRoadAll;
+    bool mFogOn = true;
     bool mFeatureTagged = false;
     void tagFeatures();
     void tagEntities(const utils::Entity* e, size_t n, uint8_t bit);

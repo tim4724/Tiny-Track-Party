@@ -45,6 +45,11 @@ const RENDER_TARGET_SAMPLERS = new Set([
   // The frozen sun map: baked to a depth RT, filtered through two more colour
   // RTs by vesm, then sampled per lit fragment (TtpRenderer::bakeShadowMap).
   'shadowMap',
+  // The ground's baked sun-visibility map (vvis.mat renders it once per track
+  // inside bakeShadowMap). Its flip is in vground's VERTEX stage — the uv is
+  // shadowFromWorld's affine output, so the varying carries it pre-flipped
+  // and the fragment samples raw, like the fullscreen passes.
+  'visMap',
   // vesm/vblur read the pass before them; vpresent reads the scene target.
   'src', 'scene'
 ]);
@@ -62,12 +67,23 @@ const UPLOADED_SAMPLERS = new Set([
   // vpoint's flake floor: the max-height grid, Texture::setImage in
   // buildScene's ambient block.
   'floorTex',
+  // The grade's sRGB curve as a 1024-entry table: filled and uploaded once in
+  // buildScene, then bound to every grading material as a MATERIAL default. A
+  // 1D table indexed by a colour channel, so it has no uv orientation to get
+  // wrong at all — but it still has to be classified, which is the point of
+  // the check.
+  'gradeLut',
   // The rubber layer: CPU-rasterized stamps uploaded as dirty rects
   // (TtpRenderer::renderSkids / uploadSkidRects), sampled by vroad's tap.
   // It WAS a render target; the A10X's below-the-API misbehaviour around
   // accumulating attachments is why it no longer is — see the mSkidPix
   // comment in TtpRenderer.h before ever moving it back.
-  'skidLayer'
+  'skidLayer',
+  // The car-shadow layer: the rubber's idiom, per frame — CPU-rasterized
+  // stamps, whole-level setImage into a ping-pong pair
+  // (TtpRenderer::rasterCarShadowStamp / uploadCarShadow). Never a render
+  // target, same A10X law as the rubber.
+  'carShadow'
 ]);
 
 const materials = () => readdirSync(MATERIALS).filter((f) => /\.(mat|inc)$/.test(f));

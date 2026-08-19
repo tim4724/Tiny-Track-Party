@@ -36,7 +36,7 @@ const RUNTIME = path.join(ROOT, 'native/runtime');
 
 // The surface files, one per platform. A new shell adds its own here — which is
 // the point at which someone reads the two rules above.
-const SURFACES = ['ttp_display_web.cc', 'ttp_display_tvos.mm'];
+const SURFACES = ['ttp_display_web.cc', 'ttp_display_tvos.mm', 'ttp_display_android.cc'];
 
 // The only two bodies a surface file may define.
 //

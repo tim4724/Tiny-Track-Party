@@ -3,6 +3,10 @@
 // motion — behaviour, member set and ABI are unchanged.
 #include "TtpRendererImpl.h"
 
+#include <atomic>
+
+#include <utils/Log.h>
+
 // The car's ground shadow, shaped like the CAR. SceneRenderer._bakeCarShadow
 // puts an orthographic camera over the model, renders a flat white mask on
 // transparent, and reads it back for the blur; the same picture here comes from
@@ -28,13 +32,27 @@ void TtpRenderer::bakeSilhouette(gltfio::FilamentAsset* asset,
 void TtpRenderer::bakeSilhouette(const utils::Entity* entities, size_t count,
         const float3& bbMin, const float3& bbMax, int maskLayer) {
     if (!entities || !count || !mRenderer || bbMax.x <= bbMin.x) return;
-    // The bake only has one consumer now — the road shader's masked decal —
-    // so a slot outside the array, a missing road material or a missing blur
-    // material all mean there is nothing to bake into: the decal rides the
-    // generic layer instead.
-    if (maskLayer < 0 || maskLayer >= kMaskLayers || !mRoadMaterial
+    // The bake feeds vroad's masked decal loop — since the hybrid shadow LOD,
+    // the NEAR cars' true silhouettes (far cars ride the CPU-rasterized
+    // carShadow layer, whose source is the CPU superellipse). The gate is a
+    // capability check: a vroad without the masked arrays has no reader, so
+    // the two render passes and the flushAndWait per car, per scene, are
+    // skipped. A slot outside the array or a missing blur material likewise
+    // means there is nothing to bake into.
+    ensurePresentQuad();
+    if (maskLayer < 0 || maskLayer >= kMaskLayers || !roadHasMaskLoop()
             || !mBlurMaterial || !mPresentVB || !mPresentIB
             || !ensureDecalMaskArray()) {
+        // LOGGED, because this starve is invisible: the generic-superellipse
+        // fallback draws a plausible oval and no automated gate can tell it
+        // from the baked silhouette — only a player two units from their own
+        // car can (it cost two rounds of that player's eye to find). Name the
+        // reason so the NEXT starve is one logcat read.
+        utils::slog.w << "bakeSilhouette skipped layer " << maskLayer
+                << " maskLoop=" << (int) roadHasMaskLoop()
+                << " blur=" << (mBlurMaterial != nullptr)
+                << " quad=" << (mPresentVB != nullptr)
+                << utils::io::endl;
         return;
     }
     // 128 was the pixelation: a hard-edged 128-px mask softened by a 25-tap
@@ -151,6 +169,9 @@ void TtpRenderer::bakeSilhouette(const utils::Entity* entities, size_t count,
         mRenderer->setClearOptions(bco);
         mRenderer->renderStandaloneView(bv);
         mMaskLayerBakedBits |= (uint16_t) (1u << maskLayer);
+        utils::slog.d << "bakeSilhouette layer " << maskLayer << " baked (bits 0x"
+                << utils::io::hex << mMaskLayerBakedBits << utils::io::dec
+                << ")" << utils::io::endl;
         mRenderer->setClearOptions(bprev);
         mEngine->flushAndWait(); // `tex` dies next; let the pass read it first
         mEngine->destroy(bv);
@@ -189,6 +210,10 @@ void TtpRenderer::bakeSilhouette(const utils::Entity* entities, size_t count,
 // ~2.5-texel normal bias.
 void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     if (mShadowMap) { mEngine->destroy(mShadowMap); mShadowMap = nullptr; }
+    // The ground's visibility bake rides this function (it needs the same
+    // camera and the finished ESM), so its output resets on the same early
+    // returns — a scene that bakes no map must not keep the last one's.
+    if (mVisMap) { mEngine->destroy(mVisMap); mVisMap = nullptr; }
     // Shadows off (headless automation — see setShadowsEnabled): leave the map
     // null and let the established no-map path carry it. Everything downstream
     // already handles this, because a track whose road has no verts reaches the
@@ -208,7 +233,7 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     lo -= float3{ 4.0f, 8.0f, 4.0f };
     hi += float3{ 4.0f, 8.0f, 4.0f };
     const float3 centre = (lo + hi) * 0.5f;
-    const float3 toSun = normalize(float3{ 2.0f, 12.0f, 1.5f }); // theme.key, as the JS places it
+    const float3 toSun = kToSun; // theme.key's axis — see TtpRendererImpl.h
     // Distance to stand the light off at: the bounding-sphere radius still
     // decides that (it has to clear the geometry from any angle), but it no
     // longer decides the ortho BOX — see below.
@@ -383,7 +408,11 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
         Texture* esm = Texture::Builder()
                 .width(ESM_SM).height(ESM_SM).levels(1)
                 .format(Texture::InternalFormat::R16F)
-                .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
+                // BLIT_SRC: the road's light bake reads this back with
+                // Renderer::readPixels, which requires (will assert, in a
+                // future Filament) that COLOR0 was created blit-readable.
+                .usage(Texture::Usage::COLOR_ATTACHMENT
+                        | Texture::Usage::SAMPLEABLE | Texture::Usage::BLIT_SRC)
                 .build(*mEngine);
         // Ping target for the horizontal pass. Its own filtering matters: pass
         // two samples it at whole-texel offsets, so NEAREST would be exact, but
@@ -512,8 +541,214 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
                       float4{ 0, 0, -0.5f, 0 }, float4{ 0.5f, 0.5f, 0.5f, 1 } };
     mShadowFromWorld = bias * lightViewProj;
 
+    // The GROUND's visibility map: the exact runtime ESM decode, evaluated
+    // ONCE over the light's own grid by rendering the real ground mesh
+    // through this same camera with vvis.mat. vground then pays one bilinear
+    // R8 tap per fragment instead of the whole chain — see both materials.
+    // The target texel grid is shadowFromWorld's own [0,1]² by construction
+    // (same camera, same bias), so no second transform exists to drift.
+    //
+    // 512²: the softness lives in the ESM (whose own floor measured at 512 —
+    // 256 scallops), and this map only re-samples it; 0.25 MB resident.
+    if (esmOk && mVisMaterial && mGround.vb && mGround.ib
+            && !mGround.idx.empty()) {
+        constexpr uint32_t VIS_SM = 512;
+        Texture* vis = Texture::Builder()
+                .width(VIS_SM).height(VIS_SM).levels(1)
+                .format(Texture::InternalFormat::R8)
+                .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
+                .build(*mEngine);
+        if (vis) {
+            MaterialInstance* vmi = mVisMaterial->createInstance();
+            // The five shadow parameters, by the names every receiver shares.
+            bindShadowMap(vmi);
+            // Explicit rather than read from a scene light: the throwaway
+            // scene below has none, and this is the vector the live scene's
+            // frameUniforms.lightDirection carries (Track's sun is built
+            // from the same constant).
+            vmi->setParameter("sunDir", toSun);
+            utils::Entity ge = utils::EntityManager::get().create();
+            RenderableManager::Builder(1)
+                    .boundingBox({ { 0, 0, 0 }, { 1, 1, 1 } })
+                    .material(0, vmi)
+                    .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
+                            mGround.vb, mGround.ib, 0, mGround.idx.size())
+                    .culling(false).castShadows(false).receiveShadows(false)
+                    .build(*mEngine, ge);
+            Scene* gs = mEngine->createScene();
+            gs->addEntity(ge);
+            RenderTarget* vrt = RenderTarget::Builder()
+                    .texture(RenderTarget::AttachmentPoint::COLOR, vis)
+                    .build(*mEngine);
+            View* vv = mEngine->createView();
+            vv->setScene(gs);
+            vv->setCamera(cam);
+            vv->setViewport({ 0, 0, VIS_SM, VIS_SM });
+            vv->setRenderTarget(vrt);
+            vv->setPostProcessingEnabled(false);
+            vv->setShadowingEnabled(false);
+            vv->setFrustumCullingEnabled(false);
+            const Renderer::ClearOptions vprev = mRenderer->getClearOptions();
+            Renderer::ClearOptions vco{};
+            vco.clear = true;
+            // Fully lit where the ground does not reach — the margin rows the
+            // ESM fit reserved are caster-free, so CLAMP_TO_EDGE extending
+            // the border outward answers what the old out-of-frustum
+            // early-out did.
+            vco.clearColor = { 1, 1, 1, 1 };
+            mRenderer->setClearOptions(vco);
+            mRenderer->renderStandaloneView(vv);
+            mRenderer->setClearOptions(vprev);
+            mEngine->flushAndWait();
+            mEngine->destroy(vv);
+            mEngine->destroy(vrt);
+            gs->remove(ge);
+            mEngine->destroy(ge);
+            utils::EntityManager::get().destroy(ge);
+            mEngine->destroy(gs);
+            mEngine->destroy(vmi);
+            mVisMap = vis;
+        }
+    }
+
+    // ── The ROAD's baked vertex light ────────────────────────────────────
+    // vroad's materialVertex used to run the whole matte-light split per road
+    // vertex PER FRAME (a mat4 multiply, a vertex texture tap, a log, a sqrt,
+    // two smoothsteps — on the scene's biggest mesh), and every input is
+    // static per track. Read the finished ESM back once and evaluate the
+    // identical function on the CPU into the road's CUSTOM0 attribute. The
+    // readback is asynchronous on every backend; this is track build, and the
+    // one hitch at load is already the documented price of the bakes.
+    if (esmOk && !mRoad.custom0.empty() && mRoad.vb && mShadowMap) {
+        const uint32_t W = mShadowMap->getWidth(0);
+        const uint32_t H = mShadowMap->getHeight(0);
+        if (RenderTarget* rrt = RenderTarget::Builder()
+                .texture(RenderTarget::AttachmentPoint::COLOR, mShadowMap)
+                .build(*mEngine)) {
+            // Heap-owned so a readback that somehow never lands cannot write
+            // through a dead stack frame; the never-done path leaks it on
+            // purpose, and the road keeps the unshadowed fill from build.
+            // `done` is atomic: the completion callback fires on a backend
+            // thread (Metal's completion queue, GL's driver thread) while
+            // this thread polls it across flushAndWait pumps.
+            struct EsmRead { std::vector<float> px; std::atomic<bool> done{ false }; };
+            auto* rd = new EsmRead;
+            rd->px.resize((size_t) W * H * 4);
+            // RGBA + FLOAT: the one float readback combo all three backends
+            // accept (WebGL2 guarantees exactly this pair for float targets;
+            // Metal maps it to RGBA32Float).
+            Texture::PixelBufferDescriptor pbd(rd->px.data(),
+                    rd->px.size() * sizeof(float),
+                    Texture::Format::RGBA, Texture::Type::FLOAT,
+                    [](void*, size_t, void* user) {
+                        static_cast<EsmRead*>(user)->done = true;
+                    }, rd);
+            mRenderer->readPixels(rrt, 0, 0, W, H, std::move(pbd));
+            // The GL backend completes the copy on a fence it checks a tick
+            // after the flush, and Metal's completion handler can land just
+            // as a wait returns — so pump a few times rather than once.
+            for (int t = 0; t < 8 && !rd->done; t++) mEngine->flushAndWait();
+            if (rd->done) {
+                fillRoadLight(tb, rd->px.data(), W, H);
+                mRoad.vb->setBufferAt(*mEngine, mRoad.custom0Slot,
+                        VertexBuffer::BufferDescriptor(mRoad.custom0.data(),
+                                mRoad.custom0.size() * sizeof(half4), nullptr));
+                delete rd;
+            }
+            mEngine->destroy(rrt);
+        }
+    }
+
     mEngine->destroy(view);
     mEngine->destroy(rt);
     mEngine->destroyCameraComponent(camEnt);
     utils::EntityManager::get().destroy(camEnt);
+}
+
+// ── The road's matte light, evaluated ONCE ──────────────────────────────────
+// The CPU twin of ttpMatteLight (ttp_shade.inc) for the ROAD's vertices: the
+// 2-band SH ambient, the sun's N·L term, and sunVisibility's ESM decode —
+// minus the fwidth AA floor, exactly the term vvis.mat's bake drops
+// (TTP_SHADE_VERTEX), because it guarded SCREEN-space aliasing and the road's
+// 0.48 u rings interpolate finer than the 0.6 u penumbra. A fix in
+// ttp_shade.inc must reach this function: same arithmetic, two languages.
+//
+// frameUniforms replication, verified against the pinned fork
+// (ColorPassDescriptorSet.cpp): iblSH is the IndirectLight builder's
+// coefficients copied UNSCALED; iblLuminance is ibl intensity × exposure;
+// lightColorIntensity is { colour, lux × exposure }; lightDirection is the
+// negated light direction, i.e. kToSun. No camera here ever calls
+// setExposure, so every view shares the default exposure read off mCamera —
+// if that ever changes, this bake must follow it.
+void TtpRenderer::fillRoadLight(const TrackBin& tb, const float* esm,
+        uint32_t esmW, uint32_t esmH) {
+    const size_t n = mRoad.custom0.size();
+    if (!n || mRoad.normals.size() < n || mRoad.verts.size() < n) return;
+    const MatteRig rig = matteRig(tb);
+    const float exposure = Exposure::exposure(*mCamera);
+    const float3 sunTint = rig.sunColor
+            * (rig.sunLux * exposure * (1.0f / (float) M_PI));
+    const float iblLum = rig.hemiLux * exposure;
+    const float k = kShadowEsmK;
+    // ttp_shade.inc's kPenumbraWorld — the C++ twin of the shader constant
+    // (named there as this function's twin; change both).
+    constexpr float kPenumbraWorld = 0.6f;
+    const float w = kPenumbraWorld * mShadowDepthScale * k;
+    const auto smoothstep = [](float a, float b, float x) {
+        const float t = std::min(1.0f, std::max(0.0f, (x - a) / (b - a)));
+        return t * t * (3.0f - 2.0f * t);
+    };
+    // One clamped bilinear R tap of the readback — the ESM sampler's
+    // CLAMP_TO_EDGE + LINEAR, in floats. ROW ORDER: Filament's readPixels
+    // hands rows back TOP row first on every backend (the GL driver flips
+    // glReadPixels' bottom-up rows "to match our API"; Metal's memory order
+    // is already top-down), while shadowFromWorld's uv is GL-style (v = 0 at
+    // the picture's bottom) — so v flips here, the same correction
+    // uvToRenderTargetUV applies for the shader on the non-GL backends.
+    // tests/render-target-uv.test.js audits .mat files only; the gate for
+    // THIS read is visual — a wrong flip moves every climbing track's deck
+    // shadow to the mirrored half of the light frustum on all backends.
+    const auto tap = [&](float u, float v) {
+        const float fx = u * (float) esmW - 0.5f;
+        const float fy = (1.0f - v) * (float) esmH - 0.5f;
+        const int x0 = (int) std::floor(fx), y0 = (int) std::floor(fy);
+        const float tx = fx - (float) x0, ty = fy - (float) y0;
+        const auto at = [&](int x, int y) {
+            x = std::min((int) esmW - 1, std::max(0, x));
+            y = std::min((int) esmH - 1, std::max(0, y));
+            return esm[((size_t) y * esmW + x) * 4]; // RGBA rows; R = exp(-k·d)
+        };
+        const float a = at(x0, y0) + (at(x0 + 1, y0) - at(x0, y0)) * tx;
+        const float b = at(x0, y0 + 1) + (at(x0 + 1, y0 + 1) - at(x0, y0 + 1)) * tx;
+        return a + (b - a) * ty;
+    };
+    for (size_t i = 0; i < n; i++) {
+        const float3 nrm = mRoad.normals[i];
+        const float3 wp{ mRoad.verts[i].px, mRoad.verts[i].py, mRoad.verts[i].pz };
+        const float NoL = std::min(1.0f, std::max(0.0f, dot(nrm, kToSun)));
+        // sunVisibility, line for line (minus the fwidth floor). esm == null
+        // is the shader's shadowTexel-0 early-out: fully lit.
+        float vis = 1.0f;
+        if (esm) {
+            const float4 uv = mShadowFromWorld * float4{ wp, 1.0f };
+            // No perspective divide: ortho light, w == 1 (see ttp_shade.inc).
+            if (!(uv.x < 0.0f || uv.x > 1.0f || uv.y < 0.0f || uv.y > 1.0f
+                    || uv.z <= 0.0f || uv.z >= 1.0f)) {
+                const float slope = std::min(12.0f, std::max(1.0f,
+                        std::sqrt(std::max(0.0f, 1.0f - NoL * NoL))
+                                / std::max(NoL, 0.12f)));
+                const float biasW = mShadowTexel * 2.0f * slope;
+                const float occ = tap(uv.x, uv.y);
+                const float raw = uv.z * k + std::log(std::max(occ, 1e-30f));
+                const float biasN = std::max(biasW * mShadowDepthScale * k, w);
+                const float v = smoothstep(-w, w, raw + biasN);
+                vis = 1.0f + (v - 1.0f) * smoothstep(0.05f, 0.40f, NoL);
+            }
+        }
+        // ttpMatteAmbient + ttpMatteSunTerm × vis (sh2/sh3 are zero — the
+        // hemisphere has no horizontal band).
+        const float3 amb = max(rig.sh0 + rig.sh1 * nrm.y, float3{ 0.0f }) * iblLum;
+        const float3 light = amb + sunTint * (NoL * vis);
+        mRoad.custom0[i] = half4{ light.x, light.y, light.z, 1.0f };
+    }
 }

@@ -67,6 +67,8 @@
 // nothing at all.
 material {
     name : TtpVglb,
+    // The per-vertex fog factor (ttp_fog.inc); .yzw unused.
+    variables : [ fog ],
     requires : [
         // the base colour atlas coordinate
         uv0,
@@ -97,7 +99,8 @@ material {
         { type : float, name : metallicFactor },
         { type : float, name : roughnessFactor },
         { type : float, name : normalScale },
-        { type : float, name : aoStrength }
+        { type : float, name : aoStrength },
+        { type : sampler2d, name : gradeLut }
     ]
 }
 
@@ -105,6 +108,7 @@ fragment {
     #define TTP_NO_SUN_SHADOW
     #include "ttp_shade.inc"
     #include "ttp_grade.inc"
+    #include "ttp_fog.inc"
     #include "ttp_glb.inc"
 
     void material(inout MaterialInputs material) {
@@ -113,7 +117,17 @@ fragment {
         // former so nothing else in the pipeline touches it.
         material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
         // emissive.w = 0 → no second exposure; both terms are pre-exposed.
-        material.emissive = vec4(ttpGrade(ttpMatteShade(
-                ttpGlbBaseColor().rgb, getWorldGeometricNormalVector())), 0.0);
+        material.emissive = vec4(ttpFogMix(ttpGrade(ttpMatteShade(
+                ttpGlbBaseColor().rgb, getWorldGeometricNormalVector())), variable_fog.x), 0.0);
+    }
+}
+
+vertex {
+    #include "ttp_fog.inc"
+
+    // The fog factor is the only thing this stage exists for: per vertex, so the
+    // fragment pays a mix instead of a sqrt and an exp. See ttp_fog.inc.
+    void materialVertex(inout MaterialVertexInputs material) {
+        material.fog = vec4(ttpFogFactor(material.worldPosition.xyz), 0.0, 0.0, 0.0);
     }
 }

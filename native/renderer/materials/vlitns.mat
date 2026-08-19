@@ -1,0 +1,59 @@
+// vlit minus the sun-shadow sampler — the same Lambert family (see vlit.mat's
+// header for the whole story) for the dressing that never reads the map.
+//
+// Only the structures and the berms are shadow RECEIVERS (they share
+// litShadowInstance, and bindShadowMap fills exactly them). Every OTHER lit
+// mesh — hills, boulders, the gantry, landmarks, clutter — carried the 1024²
+// ESM sampler and four dead shadow uniforms on every draw purely so a
+// shadowTexel of 0 could early-out. vglb.mat:30-35 measured dropping this ONE
+// sampler as worth more than its entire PBR→Lambert switch on the weak-CPU
+// box: a bound sampler is per-draw descriptor work whether or not a fragment
+// reads it. TTP_NO_SUN_SHADOW compiles sunVisibility to the constant 1, which
+// is byte-for-byte what the early-out produced.
+//
+// TtpRenderer::buildScene loads this beside vlit and routes the default lit
+// instance here; a shell whose asset set predates the blob falls back to
+// vlit's zeroed-sampler path and draws the identical picture.
+material {
+    name : TtpVlitNS,
+    // The per-vertex fog factor (ttp_fog.inc); .yzw unused.
+    variables : [ fog ],
+    requires : [
+        color,
+        // the world normal the Lambert term needs (getWorldGeometricNormalVector)
+        tangents
+    ],
+    shadingModel : unlit,
+    culling : none,
+    doubleSided : true,
+    parameters : [
+        { type : sampler2d, name : gradeLut }
+    ]
+}
+
+fragment {
+    #define TTP_NO_SUN_SHADOW
+    #include "ttp_shade.inc"
+    #include "ttp_grade.inc"
+    #include "ttp_fog.inc"
+
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        // Unlit adds `emissive` to `baseColor`; all the shading goes in the
+        // former so nothing else in the pipeline touches it.
+        material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
+        // emissive.w = 0 → no second exposure; both terms are pre-exposed.
+        material.emissive = vec4(ttpFogMix(ttpGrade(
+                ttpMatteShade(getColor().rgb, getWorldGeometricNormalVector())), variable_fog.x), 0.0);
+    }
+}
+
+vertex {
+    #include "ttp_fog.inc"
+
+    // The fog factor is the only thing this stage exists for: per vertex, so the
+    // fragment pays a mix instead of a sqrt and an exp. See ttp_fog.inc.
+    void materialVertex(inout MaterialVertexInputs material) {
+        material.fog = vec4(ttpFogFactor(material.worldPosition.xyz), 0.0, 0.0, 0.0);
+    }
+}

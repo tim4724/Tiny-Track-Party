@@ -18,6 +18,8 @@ using ttp::rt::presentBaseline;
 using ttp::rt::RenderScaleCost;
 using ttp::rt::RenderScaleLimits;
 using ttp::rt::renderScaleStep;
+using ttp::rt::rungHold;
+using ttp::rt::rungStep;
 
 namespace {
 
@@ -87,16 +89,49 @@ int main() {
   nearly(renderScaleStep(1.0, gpuAt(0.99, 10), kLongHold, k4K), 1.0,
          "a GPU p95 over ten frames is ignored, like the present one");
 
+  // ---- the LADDER --------------------------------------------------------------
+  // Every answer is a rung, because a buffer that is not a simple fraction of
+  // the panel upscales unevenly and the unevenness CRAWLS. See kScaleLadder.
+  nearly(rungStep(1.0, -1, kFloor, 1.0), 9.0 / 10.0, "one rung down from native");
+  nearly(rungStep(0.5, +1, kFloor, 1.0), 11.0 / 20.0, "one rung up from a half");
+  nearly(rungStep(kFloor, -1, kFloor, 1.0), kFloor, "the bottom rung has none below it");
+  nearly(rungStep(1.0, +1, kFloor, 1.0), 1.0, "nor the top one above it");
+  nearly(rungHold(0.77, kFloor, 1.0), 3.0 / 4.0,
+         "a scale that is not on a rung snaps to the nearest one without moving");
+  // A step that would leave the band HOLDS rather than clamping onto the limit.
+  // Clamping a ladder onto an arbitrary floor puts the buffer straight back on a
+  // fraction the panel does not divide, which is the one thing this exists to
+  // prevent — so the bottom rung inside the band is as low as it goes.
+  nearly(rungStep(3.0 / 5.0, -1, 0.58, 1.0), 3.0 / 5.0,
+         "a step down that would leave the band holds, it does not clamp to the floor");
+  nearly(rungStep(0.5, -1, 0.58, 1.0), 3.0 / 5.0,
+         "and a scale already below the band comes UP to the lowest rung inside it");
+
+  // THE RUNGS ARE FRACTIONS OF THE CEILING, and a browser is why. A TV surface IS
+  // the panel, so its ceiling is 1.0 and a scale of 1 is native; a browser's scale
+  // multiplies CSS pixels, so its ceiling is the device pixel ratio and 1.0 on a
+  // Retina Mac is HALF the panel. Reading the ladder as absolute pinned every such
+  // display at DPR 1 — the first decision snapped a 3443x2160 buffer to 1721x1080
+  // and left no rung above it to climb back through.
+  nearly(rungStep(2.0, +1, kFloor * 2.0, 2.0), 2.0,
+         "a DPR-2 ceiling IS the top rung, not a scale above every rung");
+  nearly(rungHold(2.0, kFloor * 2.0, 2.0), 2.0,
+         "and holding at that ceiling does not snap it down to 1.0");
+  nearly(rungStep(2.0, -1, kFloor * 2.0, 2.0), 2.0 * 9.0 / 10.0,
+         "one rung down from a DPR-2 native is nine tenths OF IT");
+  nearly(rungStep(1.0, +1, kFloor * 2.0, 2.0), 2.0 * 11.0 / 20.0,
+         "and a scale of 1 there is mid-ladder, with rungs above it to climb");
+
   // ---- the GPU signal, both directions ----------------------------------------
-  nearly(renderScaleStep(1.0, gpuAt(0.95), kLongHold, k4K), 0.8,
-         "over budget steps down");
+  nearly(renderScaleStep(1.0, gpuAt(0.95), kLongHold, k4K), 9.0 / 10.0,
+         "over budget steps down one rung");
   nearly(renderScaleStep(1.0, gpuAt(0.40), kLongHold, k4K), 1.0,
          "spare headroom at the ceiling stays at the ceiling");
-  nearly(renderScaleStep(0.8, gpuAt(0.40), kLongHold, k4K), 0.92,
-         "spare headroom below the ceiling steps up");
-  nearly(renderScaleStep(0.7, gpuAt(0.70), kLongHold, k4K), 0.7,
+  nearly(renderScaleStep(0.5, gpuAt(0.40), kLongHold, k4K), 11.0 / 20.0,
+         "spare headroom below the ceiling steps up one rung");
+  nearly(renderScaleStep(2.0 / 3.0, gpuAt(0.80), kLongHold, k4K), 2.0 / 3.0,
          "between the thresholds nothing moves");
-  nearly(renderScaleStep(0.4, gpuAt(0.99), kLongHold, k4K), kFloor,
+  nearly(renderScaleStep(3.0 / 8.0, gpuAt(0.99), kLongHold, k4K), kFloor,
          "a down step clamps at the floor rather than undershooting it");
   nearly(renderScaleStep(0.95, gpuAt(0.40), kLongHold, k4K), 1.0,
          "an up step clamps at the ceiling rather than overshooting it");
@@ -104,17 +139,21 @@ int main() {
   // ---- the holds ---------------------------------------------------------------
   nearly(renderScaleStep(1.0, gpuAt(0.99), 0.5, k4K), 1.0,
          "a device that is late is still left alone inside the down hold");
-  nearly(renderScaleStep(0.8, gpuAt(0.10), 3.0, k4K), 0.8,
+  nearly(renderScaleStep(0.5, gpuAt(0.10), 3.0, k4K), 0.5,
          "the up hold is longer than the down hold");
-  nearly(renderScaleStep(0.8, gpuAt(0.10), 9.0, k4K), 0.92,
-         "past the up hold it rises");
+  // Spelled off the constant, not a literal: the hold is LAP-SIZED now (the
+  // ~3 s evidence window taken on a cheap section never contained the vista
+  // it was about to climb into — see kScaleUpHoldSec), and this case's job
+  // is "past the hold it rises", wherever the hold sits.
+  nearly(renderScaleStep(0.5, gpuAt(0.10), ttp::rt::kScaleUpHoldSec + 1.0, k4K),
+         11.0 / 20.0, "past the up hold it rises");
 
   // ---- the fallback: late presents, down only ---------------------------------
-  nearly(renderScaleStep(1.0, noTimerAt(2.0), kLongHold, k4K), 0.8,
+  nearly(renderScaleStep(1.0, noTimerAt(2.0), kLongHold, k4K), 9.0 / 10.0,
          "no timer + presents a whole period late steps down");
   nearly(renderScaleStep(1.0, noTimerAt(1.02), kLongHold, k4K), 1.0,
          "no timer + a steady cadence holds");
-  nearly(renderScaleStep(0.8, noTimerAt(1.0), kLongHold, k4K), 0.8,
+  nearly(renderScaleStep(0.5, noTimerAt(1.0), kLongHold, k4K), 0.5,
          "a steady cadence is NEVER evidence of headroom, so it cannot raise");
   // A 50 Hz panel and a 30 Hz HDMI mode present at their own steady cadence, and
   // the ratio is over the device's OWN fastest present — so both read as 1.0 and
@@ -169,6 +208,58 @@ int main() {
     nearly(renderScaleStep(s, gpuAt(shareAt(s)), kLongHold, k4K), s,
            "and the scale it lands on is a fixed point");
     check(shareAt(s) <= ttp::rt::kScaleDownShare, "settling under the down threshold");
+  }
+  {
+    // 4. A device whose cost is MOSTLY FIXED, which is the shape a low-end
+    //    mobile GPU actually has: an Android TV box measured 8 ms of
+    //    resolution-independent cost against a 16.7 ms budget, so nearly half
+    //    the budget is gone before a pixel is shaded. Such a device can never
+    //    get its TOTAL share under half a budget at any resolution, and the
+    //    threshold that used to stand here therefore read "no headroom" at
+    //    every scale and pinned it to the floor for good — while it held a flat
+    //    60 Hz with the budget 40% spare. It must climb.
+    const double fixedShare = 0.48;
+    const double fillAtOne = 1.05;
+    const auto shareAt = [&](double s) { return fixedShare + fillAtOne * s * s; };
+    double s = kFloor;
+    for (int i = 0; i < 40; i++) s = renderScaleStep(s, gpuAt(shareAt(s)), kLongHold, k4K);
+    check(s > kFloor * 1.3, "a mostly-fixed-cost device climbs well off the floor");
+    check(shareAt(s) <= ttp::rt::kScaleDownShare, "and stops under the down threshold");
+    nearly(renderScaleStep(s, gpuAt(shareAt(s)), kLongHold, k4K), s,
+           "on a fixed point, not a limit cycle");
+  }
+  {
+    // 5. THE ANTI-OSCILLATION BOUND ITSELF, as a property rather than a number:
+    //    a device sitting exactly at the up threshold must not be pushed past
+    //    the down threshold by the step it is about to take. The worst case is
+    //    a device with NO fixed cost, where the share scales with the pixels
+    //    outright — which is what pins kScaleUpShare to
+    //    kScaleDownShare / maxRungPixelRatio() — the widest rung step in
+    //    pixels. If someone widens the gap by moving either threshold or the
+    //    ladder's spacing, this is what says so.
+    const double afterUp = ttp::rt::kScaleUpShare * ttp::rt::maxRungPixelRatio();
+    check(afterUp <= ttp::rt::kScaleDownShare + 1e-9,
+          "an up step from the threshold cannot cross the down threshold");
+    // And the band has to be wide enough to HOLD something, or the rule has no
+    // fixed point to settle on and hunts between two rungs forever — which is
+    // exactly what a ladder with one wide step did on the reference box.
+    check(ttp::rt::kScaleUpShare < ttp::rt::kScaleDownShare - 0.1,
+          "the dead band between the thresholds is wide enough to settle in");
+    // And the other direction: a step DOWN from the down threshold may land
+    // below the up threshold (it usually will), but the climb back out is the
+    // case above and cannot overshoot, so the loop still converges.
+    // Share = k·pixels with NO fixed term, scaled so that 0.6 sits exactly on
+    // the down threshold — i.e. the device starts at the worst place for this.
+    const auto pureFill = [](double x) {
+      return ttp::rt::kScaleDownShare * (x * x) / (0.6 * 0.6);
+    };
+    double s = 0.6;
+    int moves = 0;
+    for (int i = 0; i < 60; i++) {
+      const double next = renderScaleStep(s, gpuAt(pureFill(s)), kLongHold, k4K);
+      if (next != s) { moves++; s = next; }
+    }
+    check(moves <= 6, "a pure-fill device settles rather than hunting forever");
   }
 
   std::printf("render_scale: %d cases, %d failed\n", cases, failed);

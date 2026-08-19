@@ -253,9 +253,9 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     // kerbs, the outer skirts and the underside get an out-of-band v no decal's
     // half-extent can reach. DERIVED from the profile rather than tagged onto
     // STRIPS by hand, so it cannot drift when the section changes; and the sweep
-    // is unindexed soup, so it is a per-quad constant with nothing to interpolate
-    // across. A FULL-WIDTH decal is safe now too: a launch strip may fill the
-    // deck edge to edge without climbing a kerb.
+    // never shares a vert across quads, so it is a per-quad constant with
+    // nothing to interpolate across. A FULL-WIDTH decal is safe now too: a
+    // launch strip may fill the deck edge to edge without climbing a kerb.
     constexpr float OFF_DECK_LAT = 1000.0f;
 
     const auto pointAt = [&](uint32_t i, int j) {
@@ -306,20 +306,28 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     // the lane, while the pad stamp lays a 5×2 GRID of chevrons. It's now SDF
     // chevrons in vroad.mat.)
 
-    // ANALYTIC normals (the JS lesson: computing normals on unindexed soup
-    // flat-shades per face and bands every vertical curve): a strip's normal
-    // at ring i is across × tangent, smooth ALONG the road while duplicated
+    // ANALYTIC normals (the JS lesson: computing normals per face on the raw
+    // sweep flat-shades and bands every vertical curve): a strip's normal
+    // at ring i is across × tangent, smooth ALONG the road while per-quad
     // verts keep profile corners hard. doubleSided flips per fragment.
     std::vector<float3> tans(N);
     for (uint32_t i = 0; i < N; i++) {
         tans[i] = frames[(i + 1) % N].pos - frames[(i + N - 1) % N].pos;
     }
 
-    // Sweep: unindexed soup (each quad owns its verts → crisp paint bands),
-    // 6 verts per strip per ring pair, per-vert AO from its own profile point.
-    static const int VSEQ_PT[6] = { 0, 1, 1, 0, 1, 0 };   // a,b,b,a,b,a
-    mRoad.verts.reserve((size_t) N * 16 * 6);
-    mRoad.normals.reserve((size_t) N * 16 * 6);
+    // Sweep: indexed QUADS — 4 verts + 6 indices per strip per ring pair,
+    // per-vert AO from its own profile point. The old 6-vert soup's two
+    // diagonal verts were attribute-identical duplicates; they are shared by
+    // index now, INSIDE a quad only. Verts stay UNSHARED across quads (each
+    // quad still owns its corners → crisp paint bands, hard profile corners,
+    // per-quad colour and deck flag), and the triangles, winding and
+    // attributes are unchanged — byte-identical rasterization at 4
+    // vertex-shader invocations per quad instead of 6.
+    static const int VSEQ_PT[4] = { 0, 1, 1, 0 };   // a@i, b@i, b@ni, a@ni
+    mRoad.verts.reserve((size_t) N * 16 * 4);
+    mRoad.normals.reserve((size_t) N * 16 * 4);
+    mRoad.uvs.reserve((size_t) N * 16 * 4);
+    mRoad.idx.reserve((size_t) N * 16 * 6);
     for (uint32_t i = 0; i < N; i++) {
         const uint32_t ni = (i + 1) % N;
         const float3 colL = bandCol(kerbL, i), colR = bandCol(kerbR, i);
@@ -335,7 +343,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                 case K_GAP: cb = tb.edgeLines ? ASPHALT : SHOULDER; break;
                 default: cb = ASPHALT; break;
             }
-            const uint32_t ringIdx[6] = { i, i, ni, i, ni, ni };
+            const uint32_t ringIdx[4] = { i, i, ni, ni };
             // uv0's arclength must NOT wrap with the ring index. ringIdx uses
             // ni = (i+1) % N, so on the last strip it is 0 and u would sweep from
             // ~L back to 0 across one 0.48u band — which crosses EVERY decal's
@@ -343,7 +351,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
             // on every track. Carry the UNWRAPPED index for u instead: the last
             // strip runs to exactly L, and the shader's periodic distance already
             // treats L and 0 as the same place.
-            const uint32_t uIdx[6] = { i, i, i + 1, i, i + 1, i + 1 };
+            const uint32_t uIdx[4] = { i, i, i + 1, i + 1 };
             const auto stripNormal = [&](uint32_t ring) {
                 const float3 across = pointAt(ring, st.b) - pointAt(ring, st.a);
                 const float3 n = cross(across, tans[ring]);
@@ -351,7 +359,8 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                 return len > 1e-9f ? n / len : frames[ring].up;
             };
             const float3 nA = stripNormal(i), nB = stripNormal(ni);
-            for (int v = 0; v < 6; v++) {
+            const uint32_t base = (uint32_t) mRoad.verts.size();
+            for (int v = 0; v < 4; v++) {
                 const int pt = VSEQ_PT[v] ? st.b : st.a;
                 const uint32_t ri = ringIdx[v];
                 const float3 p = pointAt(ri, pt);
@@ -374,15 +383,37 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                         onDeck ? P[pt].sign * halfAt(ri) + P[pt].off
                                : OFF_DECK_LAT });
             }
+            // The soup's two triangles, verbatim: (a@i, b@i, b@ni) then
+            // (a@i, b@ni, a@ni) — the (i,a)-(i+1,b) diagonal project() splits
+            // by. Keep the order: same winding, same provoking vertex per
+            // triangle, so the rasterizer sees exactly what the soup drew.
+            const uint32_t quad[6] = { base, base + 1, base + 2,
+                                       base, base + 2, base + 3 };
+            mRoad.idx.insert(mRoad.idx.end(), quad, quad + 6);
         }
     }
-    mRoad.idx.resize(mRoad.verts.size());
-    for (uint32_t i = 0; i < mRoad.idx.size(); i++) mRoad.idx[i] = i;
+    // BAKED VERTEX LIGHT. When the served vroad wants CUSTOM0 (its requires
+    // block), the matte light is evaluated on the CPU instead of per vertex
+    // per frame. Filled UNSHADOWED here — identical to the live evaluation's
+    // shadowTexel-0 answer — so every path that never reaches the ESM
+    // (shadows disabled, no float-target support, an early bake return) draws
+    // what it always drew; bakeShadowMap re-fills it from the finished ESM
+    // and re-uploads in place. An OLD vroad.filamat (tangents + live ESM
+    // decode) leaves custom0 empty and keeps the old shape end to end.
+    const bool bakedLight = mRoadMaterial != nullptr
+            && mRoadMaterial->getRequiredAttributes()[VertexAttribute::CUSTOM0];
+    if (bakedLight) {
+        mRoad.custom0.resize(mRoad.verts.size(),
+                math::half4{ 1.0f, 1.0f, 1.0f, 1.0f });
+        fillRoadLight(tb, nullptr, 0, 0);
+    }
     // Chunked: ~2.5k triangles a piece, each with its own bounds, so a chase
     // camera pays for the stretch of circuit it can actually see instead of all
     // ~59k triangles of it — per cell, every frame. (Three's ribbon is chunked
-    // at 160 rings for exactly this.) The CPU-side soup in mRoad.verts is
-    // untouched: the ground-conform probes still read the whole ribbon.
+    // at 160 rings for exactly this.) mRoad.verts still carries every quad
+    // corner as a point set — its readers (the AMB_FLAKE floor raster, the
+    // shadow bake's fit) take a max/bound per point, which merging the
+    // diagonal's exact duplicates cannot change.
     constexpr uint32_t kRoadChunkTris = 2500;
     if (!buildMesh(mRoad, true, roadInstance(), 4, kRoadChunkTris)) return false;
 
@@ -406,16 +437,31 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
             const float sMin = (float) (t0 / trisPerRing) / N * L;
             const float sMax = (float) ((t0 + n) / trisPerRing + 1) / N * L;
             MaterialInstance* mi = sceneInstance(mRoadMaterial);
-            mi->setParameter("shadowTexel", 0.0f);
-            mi->setParameter("decalCount", 0);
+            // Absent on the baked-light vroad — its ESM decode ran at build
+            // (fillRoadLight); an old blob still carries the live one.
+            if (mRoadMaterial->hasParameter("shadowTexel")) {
+                mi->setParameter("shadowTexel", 0.0f);
+            }
+            if (roadHasMaskLoop()) mi->setParameter("maskCount", 0);
+            mi->setParameter("profCount", 0);
             mi->setParameter("paintCount", 0);
             // Build-time constants: the wrap and this chunk's own midpoint never
             // change again, so uploadDeckDecals only ever writes the decal set.
             mi->setParameter("trackLength", L);
             mi->setParameter("invTrackLength", L > 0.0f ? 1.0f / L : 0.0f);
             mi->setParameter("chunkMid", (sMin + sMax) * 0.5f);
-            if (Texture* arr = ensureDecalMaskArray()) bindDecalMask(mi, arr);
+            // The silhouette array serves the masked loop's NEAR cars; the
+            // far cars' carShadow layer is created after the rubber layer
+            // below (the two share a lat span) and re-bound there.
+            if (roadHasMaskLoop()) {
+                if (Texture* arr = ensureDecalMaskArray()) bindDecalMask(mi, arr);
+            }
             bindSkidLayer(mi);
+            if (roadHasCarShadow()) {
+                bindCarShadow(mi, mCarShadowTex[0]);
+                mi->setParameter("maskInk", math::float4{ kCarBlobInk.x,
+                        kCarBlobInk.y, kCarBlobInk.z, 0.0f });
+            }
             rcm.setMaterialInstanceAt(ri, 0, mi);
             mRoadChunks.push_back({ mi, sMin, sMax, {} });
         }
@@ -701,6 +747,21 @@ void TtpRenderer::buildGantry(const TrackBin& tb) {
     buildMesh(mGantry);
 }
 
+// The matte light rig, as NUMBERS: exactly what the scene's sun and
+// IndirectLight are built from in buildTrackScene, and exactly what
+// fillRoadLight bakes into the road's vertices — ONE derivation so the two
+// cannot drift. Intensities are UNEXPOSED; a consumer replicating
+// frameUniforms multiplies by the camera's exposure (Filament pre-exposes
+// both lights the same way — ColorPassDescriptorSet::prepare*Light).
+TtpRenderer::MatteRig TtpRenderer::matteRig(const TrackBin& tb) const {
+    const float3 skyC = srgbToLinear(tb.hemiSky);
+    const float3 gndC = srgbToLinear(tb.hemiGround);
+    return { srgbToLinear(tb.keyCol),
+             48000.0f * (tb.keyIntensity / 1.4f),
+             (skyC + gndC) * 0.5f, (skyC - gndC) * 0.5f,
+             28000.0f * (tb.hemiIntensity / 2.2f) };
+}
+
 bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         const ttp::RaceTrack& geo, const ttp::rt::Theme& theme,
         const ttp::rt::WearPlan& wear) {
@@ -938,29 +999,27 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     // Both intensities were calibrated against the JS pane at the grass rig
     // (key 1.4 / hemi 2.2), so a biome's own intensities ride in as a RATIO on
     // those calibration points rather than as absolute numbers.
+    const MatteRig rig = matteRig(tb);
     mSun = utils::EntityManager::get().create();
     // No engine shadows: the map is baked once by bakeShadowMap and sampled by
     // the lit materials themselves. Leaving Filament's on would re-render the
     // same static depth pass per view per frame.
     LightManager::Builder(LightManager::Type::DIRECTIONAL)
-            .color(srgbToLinear(tb.keyCol))
-            .intensity(48000.0f * (tb.keyIntensity / 1.4f))
-            .direction(normalize(float3{ -2.0f, -12.0f, -1.5f }))
+            .color(rig.sunColor)
+            .intensity(rig.sunLux)
+            .direction(-kToSun)
             .castShadows(false)
             .build(*mEngine, mSun);
     mScene->addEntity(mSun);
     {
-        const float3 skyC = srgbToLinear(tb.hemiSky);
-        const float3 gndC = srgbToLinear(tb.hemiGround);
         // The y band stays at three's HemisphereLight weighting (E = (sky+gnd)/2
         // + (sky−gnd)/2·n.y). Scaling it down by the SH convolution ratio
         // (0.866) was tried on the theory that Filament over-weights it — it
         // made every biome worse, so the two evaluations already agree.
-        const float3 sh[4] = { (skyC + gndC) * 0.5f, (skyC - gndC) * 0.5f,
-                               { 0, 0, 0 }, { 0, 0, 0 } };
+        const float3 sh[4] = { rig.sh0, rig.sh1, { 0, 0, 0 }, { 0, 0, 0 } };
         mAmbient = IndirectLight::Builder()
                 .irradiance(2, sh)
-                .intensity(28000.0f * (tb.hemiIntensity / 2.2f))
+                .intensity(rig.hemiLux)
                 .build(*mEngine);
         mScene->setIndirectLight(mAmbient);
     }
@@ -1006,6 +1065,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     // Resolve the emissive-bearing material instances once — the gold throb
     // retints these per frame instead of string-probing every material.
     mBoxGlowMats.clear();
+    mBoxGlowPulse = -1; // fresh instances hold defaults, not the last pulse
     const auto collectGlow = [&](gltfio::FilamentInstance* inst) {
         if (!inst) return;
         MaterialInstance* const* mats = inst->getMaterialInstances();
@@ -1172,15 +1232,42 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     {
         const float G = 400.0f, TILE = kGroundTile;
         const uint32_t white = packLinear(float3{ 1, 1, 1 }, 1.0f);
+        // A flat sheet, SUBDIVIDED. The step is not about shape — the sheet is
+        // flat — it is about the FOG, which is evaluated per VERTEX now
+        // (ttp_fog.inc) and therefore interpolates linearly between them. The
+        // ground used to be four corners spanning ±400, all of them past the
+        // fog's cut-off, so every fragment of it read "no fog" and a sand
+        // track's horizon stayed perfectly crisp while everything standing on
+        // it faded. 20 u is five samples across the 70→170 u ramp the race
+        // profile uses, which linear interpolation of that exponential carries
+        // with no visible kink — and it is a TRIANGLE budget as much as a
+        // vertex one: at 10 u the sheet measured 3 ms of extra setup on the
+        // reference Android GPU, at 20 u well under one.
+        constexpr float STEP = 20.0f;
+        const auto flatSheet = [&](float x0, float z0, float x1, float z1) {
+            if (!(x1 > x0) || !(z1 > z0)) return;
+            const int nx = std::max(1, (int) std::lround((x1 - x0) / STEP));
+            const int nz = std::max(1, (int) std::lround((z1 - z0) / STEP));
+            const uint32_t base = (uint32_t) mGround.verts.size();
+            for (int r = 0; r <= nz; r++) {
+                for (int c = 0; c <= nx; c++) {
+                    const float x = x0 + (x1 - x0) * ((float) c / nx);
+                    const float z = z0 + (z1 - z0) * ((float) r / nz);
+                    mGround.verts.push_back({ x, groundY, z, white });
+                    mGround.uvs.push_back({ x / TILE, z / TILE });
+                    mGround.normals.push_back(float3{ 0, 1, 0 });
+                }
+            }
+            for (int r = 0; r < nz; r++) {
+                for (int c = 0; c < nx; c++) {
+                    const uint32_t a = base + (uint32_t) (r * (nx + 1) + c);
+                    const uint32_t b = a + 1, d = a + (uint32_t) nx + 1, e = d + 1;
+                    mGround.idx.insert(mGround.idx.end(), { a, d, b, b, d, e });
+                }
+            }
+        };
         if (mTerrainAmp <= 0) {
-            mGround.verts.push_back({ -G, groundY, -G, white });
-            mGround.verts.push_back({ G, groundY, -G, white });
-            mGround.verts.push_back({ -G, groundY, G, white });
-            mGround.verts.push_back({ G, groundY, G, white });
-            mGround.uvs = { { -G / TILE, -G / TILE }, { G / TILE, -G / TILE },
-                            { -G / TILE, G / TILE }, { G / TILE, G / TILE } };
-            mGround.idx = { 0, 2, 1, 1, 2, 3 };
-            mGround.normals.assign(mGround.verts.size(), float3{ 0, 1, 0 });
+            flatSheet(-G, -G, G, G);
             kitFieldApron(mGround, groundY, TILE, white);
         } else {
             // Heightfield grid over the terrain region, flat sheet as a 4-strip
@@ -1216,20 +1303,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
                     mGround.idx.insert(mGround.idx.end(), { a, d, b, b, d, e });
                 }
             }
-            const auto flatQuad = [&](float qx0, float qz0, float qx1, float qz1) {
-                if (qx1 <= qx0 || qz1 <= qz0) return;
-                const uint32_t base = (uint32_t) mGround.verts.size();
-                mGround.verts.push_back({ qx0, groundY, qz0, white });
-                mGround.verts.push_back({ qx1, groundY, qz0, white });
-                mGround.verts.push_back({ qx0, groundY, qz1, white });
-                mGround.verts.push_back({ qx1, groundY, qz1, white });
-                mGround.uvs.insert(mGround.uvs.end(),
-                        { { qx0 / TILE, qz0 / TILE }, { qx1 / TILE, qz0 / TILE },
-                          { qx0 / TILE, qz1 / TILE }, { qx1 / TILE, qz1 / TILE } });
-                mGround.normals.insert(mGround.normals.end(), 4, float3{ 0, 1, 0 });
-                mGround.idx.insert(mGround.idx.end(),
-                        { base, base + 2, base + 1, base + 1, base + 2, base + 3 });
-            };
+            const auto flatQuad = flatSheet;
             flatQuad(-G, -G, mTerrainX0, G);            // west strip
             flatQuad(mTerrainX1, -G, G, G);             // east strip
             flatQuad(mTerrainX0, -G, mTerrainX1, mTerrainZ0); // north strip
@@ -1290,11 +1364,13 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         // 80 texels/u along s — the SAME density as lat's 512 rows (~80/u),
         // so on hardware whose real texture limit accommodates it the grid is
         // ISOTROPIC and a diagonal mark resolves exactly like a straight one.
-        // The cap is the device's reported GL_MAX_TEXTURE_SIZE (16384 on
-        // ordinary desktop/recent-mobile GPUs, so a ~200u lap fits at full
-        // density); where it clamps, the angle-aware feather in the render
-        // block widens instead, so a long lap gets SOFTER diagonals, never
-        // blockier ones.
+        // The cap is the device's reported GL_MAX_TEXTURE_SIZE, and ONLY THE
+        // WEB REPORTS ONE (mMaxTextureDim): tvOS and Android TV keep the 8192
+        // default, where every shipped track clamps and the grid comes out
+        // 3-4x anisotropic rather than isotropic. Where it clamps, the
+        // angle-aware feather in the render block widens instead, so a long
+        // lap gets SOFTER diagonals, never blockier ones — which is why the
+        // clamp is a quality trade and not a defect.
         const uint32_t W = (uint32_t) std::min((float) mMaxTextureDim,
                 std::max(512.0f, std::round(tb.length * 80.0f)));
         const uint32_t H = 512;
@@ -1316,6 +1392,15 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
             mSkidTexW = W;
             mSkidTexH = H;
             mSkidPix.assign((size_t) W * H, 0);
+            // The chain's CPU truth, one buffer per level below 0 — about a
+            // third of level 0 again. refreshSkidMips keeps them in step
+            // under the dirty rects.
+            mSkidMips.clear();
+            for (uint32_t w = W, h = H; w > 1 || h > 1;) {
+                w = std::max(1u, w >> 1);
+                h = std::max(1u, h >> 1);
+                mSkidMips.emplace_back((size_t) w * h, (uint8_t) 0);
+            }
             // Zero the texture NOW, not via mSkidWipe on the first frame: a
             // fresh texture holds garbage, and the frame loop's skid block
             // only runs when the scene has wheel trails — the LOBBY preview
@@ -1334,6 +1419,73 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         if (mRoadInst) bindSkidLayer(mRoadInst);
         for (RoadChunk& rc : mRoadChunks) {
             if (rc.mi) bindSkidLayer(rc.mi);
+        }
+
+        // The CAR-SHADOW layer — the texture path replacing vroad's masked
+        // uniform loop, only when the served blob carries the tap. It rides
+        // the rubber layer's lat span (mSkidLatHalf) so the shader's one uv
+        // serves both taps, which is why it is created here, inside the same
+        // guard. A PAIR, both zeroed now (a fresh texture holds garbage —
+        // the lobby-speckle lesson): the per-frame upload alternates between
+        // them so it never lands on the texture the driver is reading
+        // (uploadCarShadow has the whole argument). W targets 8 texels/u of
+        // arclength — coarse against the rubber's 80 on purpose: the stamp
+        // is a pre-blurred blob and the whole level re-uploads every frame,
+        // so W bounds that event's size (512 KB at the 4096 cap).
+        if (mSkidTex && roadHasCarShadow()) {
+            mCarShadowH = (uint32_t) kCarShadowH;
+            mCarShadowW = (uint32_t) std::min(4096.0f,
+                    std::max(1024.0f, std::round(tb.length * 8.0f)));
+            if (mCarShadowMask.empty()) {
+                mCarShadowMask = superellipseMaskPixels(kCarShadowMaskW, kCarShadowMaskH);
+            }
+            bool ok = true;
+            for (int t = 0; t < 2 && ok; t++) {
+                mCarShadowTex[t] = Texture::Builder()
+                        .width(mCarShadowW).height(mCarShadowH).levels(1)
+                        .format(Texture::InternalFormat::R8)
+                        // UPLOAD-ONLY, like the rubber: no COLOR_ATTACHMENT,
+                        // ever (the A10X RT law — see mSkidPix).
+                        .usage(Texture::Usage::SAMPLEABLE | Texture::Usage::UPLOADABLE)
+                        .build(*mEngine);
+                if (!mCarShadowTex[t]) { ok = false; break; }
+                const size_t bytes = (size_t) mCarShadowW * mCarShadowH;
+                auto* zeros = new uint8_t[bytes]();
+                mCarShadowTex[t]->setImage(*mEngine, 0,
+                        Texture::PixelBufferDescriptor(zeros, bytes,
+                                Texture::Format::R, Texture::Type::UBYTE,
+                                [](void* b, size_t, void*) { delete[] (uint8_t*) b; },
+                                nullptr));
+            }
+            if (ok) {
+                mCarShadowPix.assign((size_t) mCarShadowW * mCarShadowH, 0);
+                mCarShadowDirty.clear();
+                // 1, not 0: the instances below bind tex[0], so the FIRST
+                // upload must land on tex[1] — starting at 0 respecified the
+                // very texture the driver was reading, once per scene, which
+                // is the exact in-flight conflict the pair exists to avoid.
+                mCarShadowPing = 1;
+                mCarShadowUpload = false;
+                const math::float4 ink{ kCarBlobInk.x, kCarBlobInk.y,
+                        kCarBlobInk.z, kCarShadowCap };
+                if (mRoadInst) {
+                    bindCarShadow(mRoadInst, mCarShadowTex[0]);
+                    mRoadInst->setParameter("maskInk", ink);
+                }
+                for (RoadChunk& rc : mRoadChunks) {
+                    if (!rc.mi) continue;
+                    bindCarShadow(rc.mi, mCarShadowTex[0]);
+                    rc.mi->setParameter("maskInk", ink);
+                }
+            } else {
+                // No layer, no tap: maskInk.w stayed 0 at instance creation,
+                // so the deck simply draws no car shadows — the same benign
+                // state a shell with no vroad at all is already in.
+                for (auto*& t : mCarShadowTex) {
+                    if (t) { mEngine->destroy(t); t = nullptr; }
+                }
+                mCarShadowW = mCarShadowH = 0;
+            }
         }
     }
 
@@ -1798,12 +1950,17 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     // the materials that sample it.
     bakeShadowMap(tb);
     bindShadowMap(litShadowInstance());
-    // The deck is on its own instance now, and it is the main RECEIVER — without
-    // this the road alone would render unshadowed under every loop and overpass.
-    if (mRoadInst) bindShadowMap(mRoadInst);
-    for (const RoadChunk& ch : mRoadChunks) bindShadowMap(ch.mi);
-    // ...and the ground, so an elevated deck lays its shape on the floor below.
-    if (mGroundInst) bindShadowMap(mGroundInst);
+    // The deck is the main RECEIVER, but under the baked-light vroad there is
+    // nothing to bind: its ESM decode ran once inside bakeShadowMap
+    // (fillRoadLight) and the result is vertex data. Only an OLD vroad blob
+    // (live decode) still carries the five shadow parameters.
+    if (mRoadMaterial && mRoadMaterial->hasParameter("shadowTexel")) {
+        if (mRoadInst) bindShadowMap(mRoadInst);
+        for (const RoadChunk& ch : mRoadChunks) bindShadowMap(ch.mi);
+    }
+    // ...and the ground takes its BAKED visibility map instead — an elevated
+    // deck lays its shape on the floor below through vvis's one-time decode.
+    if (mGroundInst) bindVisMap(mGroundInst);
     // Every other vlit instance still needs its sampler resolved, but with
     // shadowTexel 0 so the lookup is skipped entirely.
     Texture* const map = mShadowMap;
@@ -1923,6 +2080,17 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
                 .package(vlit->second.data(), vlit->second.size())
                 .build(*mEngine);
     }
+    // vlit minus the shadow sampler, for every lit mesh that is not a shadow
+    // RECEIVER (only the structures and berms are — litShadowInstance). Those
+    // draws used to bind the ESM plus four dead uniforms purely so a
+    // shadowTexel of 0 could early-out. Optional the same way vroad is: an
+    // older asset set falls back to vlit and draws the identical picture.
+    const auto vlitns = mAssets.find("vlitns.filamat");
+    if (!mLitPlainMaterial && vlitns != mAssets.end()) {
+        mLitPlainMaterial = Material::Builder()
+                .package(vlitns->second.data(), vlitns->second.size())
+                .build(*mEngine);
+    }
     // The road deck's own material: vlit's shading (they share ttp_shade.inc)
     // plus a uv0 channel carrying track space, so deck decals can be shaded INTO
     // the road instead of laid over it. Optional — a shell whose asset set
@@ -1966,6 +2134,16 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
     if (!mGroundMaterial && vground != mAssets.end()) {
         mGroundMaterial = Material::Builder()
                 .package(vground->second.data(), vground->second.size())
+                .build(*mEngine);
+    }
+    // The ground's visibility BAKE material (vvis.mat) — used once per track
+    // inside bakeShadowMap, never in a frame. Optional like the rest: without
+    // it the bake is skipped and bindVisMap's white fallback leaves the
+    // ground fully lit (the same degradation a missing ESM already means).
+    const auto vvis = mAssets.find("vvis.filamat");
+    if (!mVisMaterial && vvis != mAssets.end()) {
+        mVisMaterial = Material::Builder()
+                .package(vvis->second.data(), vvis->second.size())
                 .build(*mEngine);
     }
     const auto vpoint = mAssets.find("vpoint.filamat");
@@ -2021,8 +2199,54 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
             mOverlayMaterial->compile(Material::CompilerPriorityQueue::HIGH);
         }
     }
+    // THE GRADE'S CURVE AS A TABLE — see ttp_grade.inc for why a texture beats a
+    // `pow` here. Built once, handed to every
+    // material that grades as a MATERIAL default, because the instances are made
+    // in a dozen places while the Materials are all built right here.
+    if (!mGradeLut) {
+        auto* px = new std::vector<uint8_t>(1024);
+        for (int i = 0; i < 1024; i++) {
+            const float c = (float) i / 1023.0f;
+            const float e = c <= 0.0031308f ? c * 12.92f
+                                            : 1.055f * std::pow(c, 1.0f / 2.4f) - 0.055f;
+            (*px)[(size_t) i] = (uint8_t) std::lround(
+                    std::min(1.0f, std::max(0.0f, e)) * 255.0f);
+        }
+        mGradeLut = Texture::Builder().width(1024).height(1).levels(1)
+                .format(Texture::InternalFormat::R8)
+                .usage(Texture::Usage::SAMPLEABLE | Texture::Usage::UPLOADABLE)
+                .build(*mEngine);
+        if (mGradeLut) {
+            mGradeLut->setImage(*mEngine, 0,
+                    Texture::PixelBufferDescriptor(px->data(), px->size(),
+                            Texture::Format::R, Texture::Type::UBYTE,
+                            [](void*, size_t, void* u) { delete (std::vector<uint8_t>*) u; },
+                            px));
+        } else {
+            delete px;
+        }
+    }
+    if (mGradeLut) {
+        TextureSampler gs(TextureSampler::MinFilter::LINEAR,
+                TextureSampler::MagFilter::LINEAR);
+        gs.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+        gs.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+        for (Material* m : { mMaterial, mBlendMaterial, mLitMaterial,
+                             mLitPlainMaterial, mRoadMaterial,
+                             mGlbMaterial, mGlbFadeMaterial, mGroundMaterial,
+                             mPointMaterial, mCloudMaterial, mBurstMaterial }) {
+            if (m && m->hasParameter("gradeLut")) {
+                m->setDefaultParameter("gradeLut", mGradeLut, gs);
+            }
+        }
+    }
     mEngine->flush(); // start any prewarm compiles queued above immediately
-    ensureSceneTarget(); // between frames — the material only lands now
+    // Between frames — the present material only lands now. Gated exactly
+    // like the resize path: with the antialias pass off nothing ever reads
+    // the target, and building it here was what left the present instance
+    // holding a texture the next gated resize would free (see
+    // destroySceneTarget). The frame path re-ensures lazily when AA is on.
+    if (mAntialias) ensureSceneTarget();
     // No "track.bin" gate here any more, and nothing replaces it: the scene is
     // a function of `geo` and `theme`, both of which the caller HAS (they are
     // C++ objects, not payloads that might be missing). An empty roster is a

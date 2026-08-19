@@ -60,8 +60,14 @@ fragment {
     // still goes through here, because what FXAA is allowed to blend is
     // DISPLAYED colour, and that constraint is the reason the encode is where
     // it is rather than a free choice.
+    // textureLod, because the contrast early-out below makes the four SPAN taps
+    // non-uniform control flow, where an implicit-derivative sample is undefined
+    // behaviour (see ttp_shade.inc's sunVisibility, where the same mistake cost
+    // half a frame on a mobile GPU). The scene buffer is a single-level render
+    // target bound with a non-mipmap filter, so LOD 0 is what an implicit sample
+    // would have picked anyway.
     vec3 graded(highp vec2 uv) {
-        return texture(materialParams_scene, uv).rgb;
+        return textureLod(materialParams_scene, uv, 0.0).rgb;
     }
 
     void material(inout MaterialInputs material) {

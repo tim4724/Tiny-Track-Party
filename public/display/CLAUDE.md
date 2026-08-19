@@ -94,6 +94,14 @@ second, from what the last window of frames cost. The decision itself is C++
 (`native/libttp-runtime/ttp/render_scale.h`); this side only measures and
 resizes.
 
+**A SCALE HERE IS A MULTIPLIER ON CSS PIXELS, NOT A FRACTION OF THE PANEL**, and
+the rule is shared with two shells for which it is the opposite. `_scaleBand`'s
+ceiling is `devicePixelRatio`, so on a Retina Mac native IS 2 and a scale of 1 is
+half the panel's linear resolution — while a TV surface is the panel and its
+ceiling is 1. The rule's ladder is therefore fractions of the CEILING the band
+hands in, never of 1.0. It was absolute once, for exactly one release, and every
+Retina display rendered a quarter of the pixels it had been rendering.
+
 **The floor is below the commonest panel, and nothing is persisted.** Both were
 tried the other way. A floor at 1080 collapses the band to a point on an ordinary
 1080p TV — the exact device this exists for could not drop a single pixel.

@@ -23,6 +23,7 @@
 #include "ttp_display_core.h"
 #include "ttp_error.h"
 
+#include <chrono>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -94,6 +95,10 @@ void ttp_display_resize(uint32_t width, uint32_t height) {
     g_disp->width = width ? width : 1;
     g_disp->height = height ? height : 1;
     g_disp->renderer->resize(g_disp->width, g_disp->height);
+}
+
+void ttp_display_drain(void) {
+    if (g_disp && g_disp->renderer) g_disp->renderer->drain();
 }
 
 // ---------------------------------------------------------------------------
@@ -369,8 +374,15 @@ int ttp_display_frame(double dtSeconds) {
     // rather than being worked out here: it is a function of the LETTERBOXED
     // grid, and a shell deriving it would be a copy of it that could drift.
     const uint32_t nCells = (uint32_t) d.cells.size();
+    // buildFrame is inside the shell's per-frame span (the ttp:render atrace
+    // marker) but outside the renderer's kProfTotal; posting it into the
+    // profile array is what lets a scripted sweep attribute a CPU spike to the
+    // input build without a second ABI call. Same steady_clock as ttpNowMs.
+    const auto tBuild = std::chrono::steady_clock::now();
     const TtpFrameInput* head =
             ttp::rt::buildFrame(d, eng, dt, d.renderer->cellAspect(nCells));
+    d.renderer->noteBuildMs(std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - tBuild).count());
     return d.renderer->render(*head) ? 1 : 0;
 }
 
@@ -379,6 +391,14 @@ int ttp_display_frame(double dtSeconds) {
 // ---------------------------------------------------------------------------
 const double* ttp_display_profile(void) {
     return g_disp ? g_disp->renderer->profile() : nullptr;
+}
+
+void ttp_display_antialias(int on) {
+    if (g_disp && g_disp->renderer) g_disp->renderer->setAntialias(on != 0);
+}
+
+double ttp_display_gpu_ms(void) {
+    return g_disp && g_disp->renderer ? g_disp->renderer->gpuMs() : 0.0;
 }
 
 const char* ttp_display_profile_names(void) {

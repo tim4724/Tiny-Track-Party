@@ -406,7 +406,7 @@ now — the JS gates that once sat here went with the engine they tested.
 | the `record_*` ctests | Every recorded answer re-emits byte-identically, its exact JSON spelling included — strictly more than the structural replay asserts. |
 | `replay_sequence` | Every trace in ONE process, so cross-race state leaking between races cannot hide behind one-race-per-process replays. |
 | `tests/schemas.test.js` | Snapshot/event/track/results field sets match the contract and the fixtures. |
-| `.github/workflows/native.yml`, on every push or PR touching `native/` | The whole ctest suite on FOUR legs — ubuntu, macOS, wasm/Node, tvOS-sim — so a platform-specific FP divergence cannot hide on the one machine that built it. The Android NDK leg cross-compiles only (no emulator on CI); its on-device replay is scripted-manual. |
+| `.github/workflows/native.yml`, on every push or PR touching `native/` | The whole ctest suite on FOUR legs — ubuntu, macOS, wasm/Node, tvOS-sim — so a platform-specific FP divergence cannot hide on the one machine that built it. The Android NDK leg cross-compiles BOTH ABIs (an Android TV box may have no 64-bit userspace at all) and runs nothing, having no TV; its on-device replay is `native/scripts/android-device-spawn.sh` as a ctest emulator shim, scripted-manual. |
 
 The traces are FROZEN: they were recorded from the JS engine, so the set can
 never grow — a scenario authored from C++ would only prove C++ matches itself.

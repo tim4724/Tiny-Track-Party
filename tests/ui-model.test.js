@@ -59,6 +59,7 @@ function ui_() {
       progressLoad: c('ttp_ui_progress_load', 'number', ['string', 'number']),
       progressJson: c('ttp_ui_progress_json', 'string', []),
       cupTintRgb: c('ttp_ui_cup_tint_rgb', 'number', ['string', 'number']),
+      neutralTintRgb: c('ttp_ui_neutral_tint_rgb', 'number', ['number']),
       cupFieldTintPct: c('ttp_ui_cup_field_tint_pct', 'number', []),
       // The walks a party is driven through. Same module, so the room, the race
       // and the series the board gathers off are the ones played here.
@@ -127,6 +128,7 @@ function ui_() {
       seatGrid: (seats) => JSON.parse(raw.seatGrid(J(seats))),
       resultsView: (board, o) => JSON.parse(raw.resultsView(J(board), o.intermissionMs)),
       cupTintRgb: (cupId, pct) => raw.cupTintRgb(cupId == null ? '' : cupId, pct) >>> 0,
+      neutralTintRgb: (pct) => raw.neutralTintRgb(pct) >>> 0,
       cupFieldTintPct: () => raw.cupFieldTintPct(),
 
       cup: (cup) => raw.gpCreate(J(cup), 0),
@@ -218,6 +220,20 @@ function ui_() {
     };
   })());
 }
+
+// `color-mix(in srgb, C pct%, #fff)`, as the cup-wash and neutral-tint tests
+// expect it. Re-derived here rather than read from the source under test: it is
+// a per-channel lerp on the ENCODED values. Doing it in linear light instead is
+// a one-line change that comes out visibly darker and would still pass a test
+// that only compared the C++ to itself.
+const mix = (hex, pct) => {
+  const k = pct / 100;
+  const ch = (i) => {
+    const c = parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
+    return Math.round(c * k + 255 * (1 - k));
+  };
+  return (ch(0) << 16) | (ch(1) << 8) | ch(2);
+};
 
 // THE DRIFT GATE FOR THE CODEGEN'D CATALOGUE, and the only place that can be
 // one: shared/tracks.js is the authored source and generated/track_defs.h is
@@ -574,29 +590,32 @@ test('the cup wash is an sRGB lerp toward white, and Random gets the fallback', 
   const u = await ui_();
   const { CUP_COLOR, CUP_COLOR_FALLBACK, FIELD_TINT } = await load('public/shared/trackPicker.js');
 
-  // Re-derived here rather than read from the source under test: `color-mix(in
-  // srgb, C pct%, #fff)` is a per-channel lerp on the ENCODED values. Doing it
-  // in linear light instead is a one-line change that comes out visibly darker
-  // and would still pass a test that only compared the C++ to itself.
-  const mix = (hex, pct) => {
-    const k = pct / 100;
-    const ch = (i) => {
-      const c = parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
-      return Math.round(c * k + 255 * (1 - k));
-    };
-    return (ch(0) << 16) | (ch(1) << 8) | ch(2);
-  };
-
   for (const [id, hex] of Object.entries(CUP_COLOR)) {
     for (const pct of [0, FIELD_TINT, 45, 72, 100]) {
       assert.equal(u.cupTintRgb(id, pct), mix(hex, pct) >>> 0,
         `${id} at ${pct}% disagrees with an sRGB lerp`);
     }
   }
-  // Random belongs to no cup, so it washes the fallback rather than black.
+  // An UNKNOWN cup id washes the fallback rather than black. Note that is a cup
+  // COLOUR — the tile a cup-less selection wears is the neutral below, and the
+  // two being different is the whole point of there being two exports.
   assert.equal(u.cupTintRgb(null, FIELD_TINT), mix(CUP_COLOR_FALLBACK, FIELD_TINT) >>> 0);
   assert.equal(u.cupTintRgb('', FIELD_TINT), mix(CUP_COLOR_FALLBACK, FIELD_TINT) >>> 0);
   assert.equal(u.cupTintRgb('no-such-cup', FIELD_TINT), mix(CUP_COLOR_FALLBACK, FIELD_TINT) >>> 0);
+});
+
+test('the neutral tint mirrors neutralTint, and is NOT the cup fallback', async () => {
+  const u = await ui_();
+  const { NEUTRAL_COLOR, CUP_COLOR_FALLBACK, FIELD_TINT } =
+    await load('public/shared/trackPicker.js');
+  for (const pct of [0, FIELD_TINT, 45, 72, 100]) {
+    assert.equal(u.neutralTintRgb(pct), mix(NEUTRAL_COLOR, pct) >>> 0,
+      `the neutral wash at ${pct}% disagrees with an sRGB lerp`);
+  }
+  // THE POINT OF THE SECOND EXPORT. A shell that reached for cupTintRgb(null)
+  // here would paint Random in the Backyard cup's lawn green — a real colour,
+  // on a real tile, standing for a cup the selection has nothing to do with.
+  assert.notEqual(u.neutralTintRgb(FIELD_TINT), mix(CUP_COLOR_FALLBACK, FIELD_TINT) >>> 0);
 });
 
 test('a pct outside 0..100 is clamped, not wrapped', async () => {

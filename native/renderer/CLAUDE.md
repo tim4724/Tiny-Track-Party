@@ -163,27 +163,32 @@ readback.
 5. A texture sample inside the decal loop must be `textureLod`, never
    `texture()`: the loop's per-fragment `continue` rejects make the flow
    NON-UNIFORM, where an implicit-derivative sample is undefined behaviour.
+   **The rule is not the loop's, it is the whole renderer's** — the same
+   mistake was live in `sunVisibility` (early returns, then a `texture()`) and
+   in vpresent's FXAA span taps (a contrast early-out, then four of them). Both
+   are `textureLod` now. Every map involved is single-level and bound with a
+   non-mipmap filter, so LOD 0 is exactly what an implicit sample would pick.
    On ANGLE's Metal backend the shipped `texture()` read as the car shadow
    intermittently rendering nothing for a few frames — a flicker that
    vanished under every instrumented variant of the shader, because any
    reshape moved the UB. Every CPU-side input was verified sane at the
    failing moment before the sample was suspected; start there next time.
 
-**One box gates the whole loop.** The entries a chunk carries CLUSTER — they are
+**One box gates each loop.** The entries a chunk carries CLUSTER — they are
 mostly the cars, and the cars are in a pack — while the chunk is tens of metres
 of deck, so without a gate the road's biggest, nearest fragments each ran every
-entry's reject to draw nothing. `decalBounds` is the union of the entries' own
-reject windows, so it is exact rather than conservative: a fragment it rejects
-would have rejected each entry in turn. **Build it from the same two bounds the
-loop tests** — `rect.zw` for a profile stamp, the MEASURED reach in
-`decalWFwd`/`decalWRight`'s w for a masked one — or the box clips a stamp the
-loop would have drawn.
+entry's reject to draw nothing. `profBounds` and `maskBounds` are each channel's
+union of its entries' own reject windows, so they are exact rather than
+conservative: a fragment one rejects would have rejected each entry in turn.
+**Build them from the same two bounds the loops test** — `rect.zw` for a
+profile stamp, the MEASURED reach in the CPU entry's `wfwd`/`wright` w slots
+for a masked one — or the box clips a stamp the loop would have drawn.
 
 **Chevrons are SDFs**, which let the pads move without a texture atlas. The apex
 must LEAD or every chevron reads as a brake marking. A pad is **flat paint** —
 reproducing the old mesh's radial gradient came out as an emissive saucer, the
 exact read this tree rejected before. The static list is capped by
-`kMaxStaticDeckDecals`, not the shader's per-chunk 32; the item boxes come
+`kMaxStaticDeckDecals`, not the shader's per-chunk 8; the item boxes come
 first in it, because the collect fade rewrites entry i's alpha in place.
 
 **The asphalt patches (ttp/wear.h) and the boost pads are NOT decals** — they
@@ -218,17 +223,61 @@ same expression gave a strip and a disc visibly different weights. The
 rectangle's box height is **derived** from that stroke rather than frozen, or a
 narrower strip clips its outer columns.
 
-The car's contact shadow is a **masked** decal: its shape is the baked
-silhouette, sampled from a small texture array (one layer per car slot, one for
-the monster, one generic). The mask samples a **rigid planar projection of the
-fragment's world position onto the plane the CAR IS SEATED ON** — the best fit
-through its four wheel contacts, spun to the in-plane heading. Track space only
-BOUNDS the stamp (that reject is what keeps a loop's other deck out). Painting
-the silhouette in curvilinear (s, lat) instead bends it around every corner, and
-the per-triangle kinks of the interpolated uv0 field ripple through its sharp
-edge as the car crosses rings — shadow-edge shimmer on bends, flat on straights.
-**An airborne-anchor theory is a dead end already walked.** A layer whose bake
-hasn't landed falls back to the generic superellipse — never to an unbaked layer.
+The car's contact shadow is a **HYBRID, by distance**: the nearest
+`kMaxMaskedDeckDecals` (4) cars within `kShadowLodFar` of an active camera draw
+true baked-silhouette MASKED stamps (the per-fragment uniform loop), and
+everyone else rides **one bilinear tap of the carShadow layer** — a small
+track-space R8 texture the renderer CPU-rasterizes per frame (the rubber
+layer's idiom — same (s, lat) mapping, same lat span, so vroad's tap reuses the
+rubber uv) and re-uploads WHOLE, as one `setImage`, into a **ping-pong pair**
+so the upload never respecifies the texture the driver is reading
+(`uploadCarShadow` has the argument; the skid layer's stall history is why).
+Between the bands the two representations crossfade with complementary alphas,
+statelessly, so it cannot pop; and the near pick is a RANK gate, so the masked
+cap can only downgrade a shadow to the texture blob, never delete it. The
+texture path is what retired the old ALL-masked loop's cost — ~5 ms of the
+realistic 720p frame under a pack, after every arithmetic-level cut inside it
+measured zero — and the masked near band is what the texture layer's
+~8 texels/u cannot carry: the silhouette's car-shape under your own car.
+
+**Why painting in curvilinear (s, lat) is safe NOW when it was the original
+sin:** the old objection — track space bends the stamp around corners, and the
+per-triangle kinks of the interpolated uv0 field ripple through a SHARP edge —
+was an edge phenomenon. The layer's stamp is the pre-blurred superellipse laid
+at ~8 texels/u of arclength, so a kink of a few cm is sub-texel against the
+penumbra; and each stamp is rasterized as a **warped quad in two slices**
+(six `deckFoot`-projected points — the cull-window probes, kept instead of
+folded to maxes), so the bending error lives inside a half-stamp, second
+order, not first-order axis-aligned smear. If the shimmer ever returns, the
+escalation is `project()`-projected corners (the settle-point the skids use),
+not a return to the uniform loop.
+
+**The TEXTURE path's silhouette source is the CPU superellipse for every car**
+— at the layer's density a baked per-car silhouette is indistinguishable from
+it, it needs no per-scene readback, and being symmetric it cannot be mirrored
+by a handedness mistake. `bakeSilhouette` RUNS on the shipping blob: it feeds
+the NEAR cars' masked stamps, where the true car-shape does read. **An
+airborne-anchor theory is a dead end already walked.**
+
+**`roadHasMaskLoop()` / `roadHasCarShadow()` are INDEPENDENT capability
+probes on the served blob, not a shipped-vs-fallback switch**: the current
+`vroad.filamat` declares BOTH halves, and each path keys on its own probe, so
+a blob carrying only one half still draws that half. Two cases go ALL-masked
+on a current blob, both without per-car LOD ranking: no carShadow texture (the
+pair only builds where the rubber layer does), and the forced debug mask layer
+(`renderCars` has the split — overviews and the no-views fallback stay on the
+texture path instead, so every car keeps a shadow under the masked [4] cap).
+The CPU-side masked entries are pushed EITHER WAY —
+`ttp_display_debug_decals`, the warp bench and the conform diagnostics read
+them off `mDeckDecalsLast`, texture path included.
+
+**Downgrading far cars into the PROFILE arrays is a dead end already
+MEASURED** (2026-08-18, spectate-7 view): profile-list ellipses for the far
+cars need the profile arrays widened past 8, and the widening alone cost
++1.1 ms p50 under a pack — more than the masked entries it saved. The
+declared-size law holds under load; the shipped hybrid is itself a distance
+LOD, and its far half — the carShadow layer — is the design that added NO
+declared bytes.
 
 > The anchor was the track frame's tangent plane at the car's spot until
 > 2026-08-02. On a flat or purely banked deck the two planes are identical; where
@@ -237,19 +286,21 @@ hasn't landed falls back to the generic superellipse — never to an unbaked lay
 > shearing on a twist. The seating above has already paid for the probes, so the
 > better plane is free.
 
-**The stamp's track-space cull window is MEASURED per frame, never a constant.**
-The shader rejects in track space before it projects, and the reach it needs
-there is an ARCLENGTH — which the stamp's world half-diagonal is not. The deck's
-iso-arclength lines FAN on a bend, so off the centreline a world step spans
-`R/(R−lat)` more arclength; the constant that stood here closed INSIDE the stamp
-and cut its nose or tail along a ring plane, with the cut sliding as the car
-swept the corner. Measured over real races: it cut on 2.2% of car-frames on
-cloverleaf and 1.7% on sidewinder, worst shortfall 2.4×, and **0% on skyline** —
-which is the tell, because skyline rolls rather than bends. The halves ride in
-the w slots of `decalWFwd`/`decalWRight`, read by the shader AND by
-`foldToChunk`; **keep those two in step**, or a chunk drops a corner its own
-fragments still want. Most of the deck it is TIGHTER than the old constant, so
-the per-fragment reject also got cheaper.
+**The stamp's track-space window is MEASURED per frame, never a constant.**
+The reach a stamp needs in track space is an ARCLENGTH — which the stamp's
+world half-diagonal is not. The deck's iso-arclength lines FAN on a bend, so
+off the centreline a world step spans `R/(R−lat)` more arclength; the constant
+that stood here closed INSIDE the stamp and cut its nose or tail along a ring
+plane, with the cut sliding as the car swept the corner. Measured over real
+races: it cut on 2.2% of car-frames on cloverleaf and 1.7% on sidewinder,
+worst shortfall 2.4×, and **0% on skyline** — which is the tell, because
+skyline rolls rather than bends. The measurement is six `deckFoot`-projected
+points per car per frame; the TEXTURE path rasterizes those points directly
+(they ARE the warped quad), while the MASKED path folds their maxes: the
+halves ride the w slots of the CPU entry's `wfwd`/`wright` (DeckDecal), read
+by `foldToChunk` and packed into the shader's `maskRect.zw` (the axes land in
+`maskWFwd`/`maskWRight`) by `uploadDeckDecals` — the one site that keeps the
+cull and the fold in step.
 
 **Reasoning shortcut worth keeping:** through a FLAT bend the deck is a plane and
 the stamp's world projection is rigid, so the cull is the only thing that can
@@ -304,7 +355,9 @@ permanence is also how a real toy track behaves; the racing line rubbers in
 over a race. Do not reintroduce a per-frame fullscreen pass here without
 measuring on the weakest shell — the **mip refresh is throttled to ~7 Hz**
 for exactly that reason. The layer needs that chain: the tap is trilinear
-because the deck ahead minifies a 16k-wide texture, and a no-mip LINEAR tap
+because the deck ahead minifies an 8k-to-16k-wide texture (the width is the
+shell-reported GL_MAX_TEXTURE_SIZE, and only the WEB surface reports one — see
+mMaxTextureDim), and a no-mip LINEAR tap
 scintillated every mark across the whole deck. Its throttle rides `mTime`,
 which restarts per scene, so its timestamp is per-scene state and is cleared
 with the texture. There is no pool, no budget and no lift; unbounded marks
@@ -359,6 +412,84 @@ enough to make most instincts wrong:
 
 So the deck's fragment shader is the budget, and the way to spend less of it is
 to shade fewer of its fragments — not to trim triangles elsewhere.
+
+**That ranking is the WEB's, and a weak mobile GPU adds a second term to it.**
+On a PowerVR GE9215 the same sweep splits the cost into `fixed + per-megapixel`
+rather than per-megapixel alone, and the fixed part is about half the 60 Hz
+budget on its own — no render scale reaches under it. Three things follow. The
+`ttp_display_gpu_ms` timer is REAL on that backend (the emscripten compiled-out
+case is the one this tree already documents), so an arm can be measured directly
+there instead of inferred from a vsync-quantised cadence; an arm must be run at a
+PINNED render scale, at TWO resolutions, or the fixed and fill halves cannot be
+told apart; and the fixed half is measured by pinning the scale near the floor,
+where fill is a fraction of a millisecond and every group's marginal is almost
+pure fixed cost. `shells/androidtv/CLAUDE.md` carries that device's numbers and
+the scripts that take them.
+
+**The fixed half is the scene being SUBMITTED, and it has no single hot spot.**
+On that device it is not the road's vertex count, not its draw-call count, not
+the cell overlay pass and not the present — each was ablated and each moved
+under half a millisecond. It is spread across the deck, the terrain and the set
+dressing, so the way to spend less of it is to submit less, not to find the one
+thing at fault. Do not go looking for that one thing again; the arms are in the
+shell's file.
+
+**The full-screen antialias pass is a switch** (`ttp_display_antialias`), and
+turning it off removes the offscreen scene buffer with it, so the saving is both
+that buffer's store and vpresent's read. It is on everywhere except Android TV.
+
+**THE FOG IS OURS, PER VERTEX** (`ttp_fog.inc`), and the view's fog is switched
+off. Filament's costs a SHADER VARIANT rather than an exponential — a cubemap
+sampler for the sky-colour option and a pow() for sun inscattering, both behind
+uniform branches this scene never takes — and it measured EIGHTEEN milliseconds
+of a 79 ms frame on the reference Android GPU. Filament's own cheap path
+(`linearFog : true`) recovers barely a third of that, which is what identifies
+the variant rather than the maths as the cost. Written per fragment ours still
+cost 11.5 ms; per vertex it costs about 3.
+> **A per-vertex term needs vertices.** The flat ground sheet was four corners
+> spanning ±400, all past the fog cut-off, so the whole ground read "no fog"
+> until it was subdivided. Anything large, flat and fogged has to carry enough
+> vertices to interpolate between — see the ground sheet's STEP.
+
+**One transcendental over a full-screen surface is about 3 ms on that GPU**, and
+that is the unit to think in when reading any of the numbers above. It is also
+why the sRGB encode cannot be made cheaper by approximation: a 2-sqrt fit
+accurate to one 8-bit code measured no faster than the `pow` it replaced.
+
+**A dynamically-indexed uniform ARRAY costs whether or not the loop runs**, and
+it costs by DECLARED SIZE. Over a frozen single-player race at 1280x720 on the
+reference Android GPU, vroad's one mixed 32-entry list (seven arrays, 3584
+bytes) put the frame at 25.9 ms; the same seven arrays at 16 put it at 18.9 and
+at 8 at 17.6. Ablating the LOOP with the arrays still declared was worth a
+fraction of that — it is the declaration, not the iterations.
+
+**Collected by SPLITTING the list by kind** (`kMaxMaskedDeckDecals` /
+`kMaxProfileDeckDecals`). A profile stamp is a shape the shader evaluates and
+needs three vec4s; a masked stamp is a baked silhouette through a rigid world
+projection and needs four — and since the hybrid shadow LOD the masked arrays
+hold only the NEAR cars, so the material declares 8 profile + 4 masked. The
+compositing order stays structural (profiles, then the shadow tap, then the
+masked stamps over both) rather than a packing convention. **Raising either
+cap is measurable in the frame**; `tests/road-decal-caps.test.js`
+holds the material's array sizes and each loop's clamp to the C++ constants.
+
+**MOVE THE SMOOTH HALF OF THE SHADING TO THE VERTEX STAGE.** The same trade the
+fog made, for the same reason, and worth 7.5 ms of a 720p frame on that GPU: the
+deck's light — ambient, N·L and the baked sun map's visibility — is smooth over
+metres, while its COLOUR (asphalt, lines, dashes, paint, rubber, decals) is the
+detailed half. `ttpMatteLight` is the split (`ttp_shade.inc`); for the ROAD every input to it
+is frame-invariant (static sun, static deck, cars cast blob decals), so
+`fillRoadLight` evaluates the identical function once per track — after
+`bakeShadowMap`, reading the ESM back through `Renderer::readPixels` — into a
+baked per-vertex attribute (custom0) that rides the fog varying's unused
+`.yzw`. The fragment keeps its multiply, the per-frame vertex stage is left
+with a move, and the road stopped emitting tangents: nothing reads its normal
+at draw time any more. **A caller must own the sampling rate**: this is only sound where
+the mesh is finer than the shadow's own softness, which the road's 0.48 u rings
+are against a 0.6 u penumbra. The ground sheet's 20 u step is NOT — so vground
+samples per fragment, but from `visMap`, the ground's own sun-visibility BAKE
+(vvis.mat renders the real ground through the ESM's light camera once per
+track, in `bakeShadowMap`): one R8 tap instead of the full ESM decode.
 
 `public/display/render/Display.js` is the browser's whole edge of this; for
 measuring frame cost see `public/display/CLAUDE.md`.
