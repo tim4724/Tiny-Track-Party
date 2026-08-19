@@ -296,6 +296,41 @@ Three properties of that surface matter more than the list:
 Each is a real item, not a simplification; the settled reasoning behind the two
 look items is in `shells/androidtv/CLAUDE.md` (Look).
 
+- **A demo race that DRIVES.** `Scenarios`' race screens seat four fake players
+  and launch them through the real start walk, and nothing drives them. Throttle
+  is automatic here — a car's input is steer/brake/use — so an undriven seat does
+  not sit on the grid: it accelerates away, never turns, and piles into the first
+  corner while the CPU field leaves. Every screenshot and every perf reading off
+  that race is of a picture the game cannot produce.
+  **THE WEB IS NOT THE ANSWER TO COPY.** Its harness passes bot specs over EVERY
+  id, which works only because it runs in BARE mode — `buildSession` returns
+  early on `bare`, so there is no `RaceSession` and nothing counts participants.
+  Do the same through the walk and `ttp_session_begin_field` files every spec'd
+  entry under `bots` and none under `humans`, the session has no players left,
+  and the race is torn down on the spot (measured: the box returns to the lobby
+  a second after `TtpShot: ready racing`). The real fix is in that constructor —
+  an entry that is a PLAYER and also carries a controller, one `seats` slot, in
+  `humans` for the queries and in `bots` for `driveBots` — behind an explicit
+  marker so no existing launch changes. It is a core-path change and wants its
+  own commit, with a gate that asserts the OUTCOME (the session still reports
+  human participants, the cars are still moving N seconds in) rather than the
+  shape of the create-session payload, which is what a first attempt asserted
+  while the feature was broken.
+
+- **A decision about the perf readout before a player sees one.** Both TV shells
+  boot with the frame-cost panel VISIBLE in release, and the web does not: its
+  `PerfHud` constructs hidden and the "P" key shows it. The argument for release
+  is real and is the render-scale commit's — two of that work's bugs were
+  invisible on a debug build, and a shell whose instrument is absent from the
+  build that ships cannot be measured. But "live in release" and "on by default"
+  are two choices, and only the first one needs making: `PerfDebug`'s knobs are
+  live in release and INERT until an `adb setprop` asks for them, which is the
+  shape this wants. As it stands a player who launches the app gets a black
+  diagnostic block over the corner of the television and no reason to guess that
+  `KEYCODE_INFO` removes it. Default it off and leave the key; the gallery's
+  Scenarios suppression then has nothing left to special-case, and the tvOS
+  column stops carrying four lines of green over every race shot it takes.
+
 - **The mute toggle** — the web's corner button and the host phone's Sound row
   have no counterpart, and the mix has no muted state to honour; a TV's own mute
   is the workaround.
