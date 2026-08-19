@@ -68,7 +68,16 @@ function launchApp(logPath) {
   // WAKE FIRST. A sleeping box never creates a surface, so the app boots, logs
   // its version and then sits there — which reads exactly like a hung room.
   adb('shell', 'input', 'keyevent', 'KEYCODE_WAKEUP');
-  adb('shell', 'am', 'start', '-n', ACTIVITY);
+  // `-S`, and ONLY on this launch. Without it `am start` brings an EXISTING
+  // task to the front instead of restarting the activity, so an app left up by
+  // something else — `perf-race --platform androidtv` leaves its box in the
+  // `bench` scenario on purpose — stays in that scenario, warms no room, and
+  // this check fails with "the app never logged a room code", which points
+  // nowhere near the cause.
+  //
+  // foregroundApp() below must NOT do this: bringing the existing task forward
+  // is precisely the come-back behaviour it asserts.
+  adb('shell', 'am', 'start', '-S', '-n', ACTIVITY);
 }
 
 /**

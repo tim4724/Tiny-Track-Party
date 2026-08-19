@@ -174,8 +174,16 @@ export function makeTvosBackend() {
         // `--console` is what makes the app's stdout arrive here at all;
         // `--terminate-existing` makes the launch cold, for the same reason as
         // the simulator's terminate above.
+        //
+        // `--` IS LOAD-BEARING, and its absence does not look like an argument
+        // bug. devicectl keeps parsing its OWN flags past the bundle id, so
+        // `-ttpScenario bench` is read as its `-t <seconds>` timeout and the
+        // launch dies with "The value 'bench' is invalid for '-t <seconds>'" —
+        // a message about a flag this script never passed. simctl has no such
+        // problem, so the simulator arm worked while the device arm had never
+        // run at all.
         argv = ['devicectl', 'device', 'process', 'launch', '--device', device,
-          '--console', '--terminate-existing', BUNDLE_ID, ...args];
+          '--console', '--terminate-existing', BUNDLE_ID, '--', ...args];
       }
       console.log(`# xcrun ${argv.join(' ')}`);
 

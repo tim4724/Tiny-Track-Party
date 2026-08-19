@@ -81,7 +81,17 @@ export function assertAwake(deviceId) {
     // reason to refuse; only a confirmed off backlight is.
   }
   if (asleep) {
-    throw new Error('the Apple TV reports its backlight is off — wake it first');
+    // NOT ACTIONABLE OVER devicectl, and saying so is the whole point of this
+    // message. Launching an app does not turn a television on: the process
+    // starts, the backlight stays off, and the run photographs black or
+    // measures a compositor with nothing to composite. There is no wake verb
+    // for a paired Apple TV, so the only fix is at the panel — which is a
+    // sentence, not a discovery someone should have to make twice.
+    throw new Error(
+      'the Apple TV reports its backlight is off, and nothing here can wake it '
+      + '(launching the app does not turn the television on). Switch the set on '
+      + '— and its input to the Apple TV — then re-run. Use --sim to measure '
+      + 'without a television at all.');
   }
 }
 

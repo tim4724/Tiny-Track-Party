@@ -39,6 +39,22 @@ esac
 
 say() { printf '\033[36m==> %s\033[0m\n' "$*"; }
 
+# THE SDK, if the environment did not name one. Gradle looks at ANDROID_HOME and
+# at shells/androidtv/local.properties, and that file is gitignored — so a fresh
+# worktree with Android Studio installed still fails on "SDK location not found",
+# which names neither of the two places it looked. Studio's own default install
+# is the fallback; naming it here costs nothing and is what the failure was
+# asking for anyway. An explicit ANDROID_HOME always wins.
+if [ -z "${ANDROID_HOME:-}" ] && [ -z "${ANDROID_SDK_ROOT:-}" ]; then
+    for candidate in "$HOME/Library/Android/sdk" "$HOME/Android/Sdk"; do
+        if [ -d "$candidate/platform-tools" ]; then
+            export ANDROID_HOME="$candidate"
+            say "ANDROID_HOME unset — using $candidate"
+            break
+        fi
+    done
+fi
+
 # BOTH ABIS BY DEFAULT, because armeabi-v7a is not a legacy fallback here — a
 # Google TV Streamer has no /system/bin/linker64 and cannot load an arm64 APK at
 # all. TTP_ABI cuts that in half for a measurement loop that only ever installs

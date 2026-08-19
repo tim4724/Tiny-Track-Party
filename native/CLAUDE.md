@@ -159,6 +159,18 @@ overhead. A ccache-populated build reproduces the committed wasm byte for byte,
 which is what makes `basedir` acceptable in a tree this conformance-bound. Ninja
 is chosen on a fresh build dir and is then fixed for that directory's life.
 
+**RESTORING A FILE CAN LEAVE THE BUILD STALE, silently.** Ninja decides what to
+recompile from MTIMES, and the usual ways of putting a file back — `mv
+foo.cc.bak foo.cc`, `git checkout -- foo.cc`, `git stash pop` — hand back the
+ORIGINAL timestamp, which is older than the `.o` built from the edited version.
+Ninja then reports "no work to do" and the next test run executes the code you
+just reverted. ccache cannot save you: the compiler is never invoked to consult
+it. It costs a debugging session because every symptom points at the source you
+are reading, which is correct, while the binary under test is not.
+`touch` anything you restore, or build with `ninja -B`. The artifact has a
+guard for its own version of this (`check:artifact` compares a stamped source
+hash); object files have none.
+
 Material compilation lives in `native/scripts/build-materials.sh`, **shared on
 purpose** so other platform legs inherit it. It is mtime-gated on the `.mat`
 sources and on `matc`, so editing a material and seeing nothing rebuild means the
