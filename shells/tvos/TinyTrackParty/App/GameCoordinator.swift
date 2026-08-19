@@ -230,10 +230,17 @@ final class GameCoordinator: ObservableObject {
         // was a photograph for the whole of the port.
         display.camera(TTP_CAM_BBOX)
 
-        // The frame-cost readout, ON during development exactly as the web's
-        // PerfHud is (`render/PerfHud.js` shows itself in its constructor; the
-        // "P" key hides it). It instruments nothing while hidden, so switching
-        // it off for release is this one line.
+        // The frame-cost readout, ON — and the THREE SHELLS DO NOT AGREE about
+        // that, which is worth knowing before copying any of them. The web's
+        // PerfHud constructs HIDDEN and is shown by the "P" key; Android shows
+        // it at boot in release too, and argues for that in the render-scale
+        // commit (a bug invisible on the shipping build is a bug you cannot
+        // find). This shell has always shown it, and every race shot in its
+        // gallery column carries the panel because of it.
+        //
+        // It instruments nothing while hidden, so switching it off is this one
+        // line — which is the decision to make before a build reaches a player,
+        // on this shell and on Android both.
         display.perf.show()
 
         // LET THE BOARD PAINT BEFORE THE HEAVY WORK, which is the only thing in
