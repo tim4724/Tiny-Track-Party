@@ -20,7 +20,7 @@
 //
 // REGISTERNATIVES, NOT SYMBOL MANGLING. Every method is registered from an
 // explicit table in JNI_OnLoad instead of being exported as
-// Java_com_couchgames_tinytrackparty_Ttp_ttp_1display_1build. Three reasons, in
+// Java_games_couchpad_tinytrack_Ttp_ttp_1display_1build. Three reasons, in
 // order of how much they matter: a name that does not match fails at LOAD, not
 // at first call (the ledger's "fails on the first launch instead of silently
 // dropping a step at a party"); the mangling of a name that already contains
@@ -36,7 +36,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const RUNTIME = join(ROOT, 'native/runtime');
-const PACKAGE = 'com.couchgames.tinytrackparty';
+const PACKAGE = 'games.couchpad.tinytrack';
 
 // Every public ABI header. ttp_display.h is here even though it only exists in a
 // Filament build: the Kotlin side declares the whole surface, and a shell built

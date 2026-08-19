@@ -18,7 +18,7 @@ import { tmpdir } from 'node:os';
 import { ADB, findTvDevice } from './lib/androidtv-device.mjs';
 import { Phone, loadProtocol } from './lib/phone.mjs';
 
-const PACKAGE = 'com.couchgames.tinytrackparty';
+const PACKAGE = 'games.couchpad.tinytrack';
 const ACTIVITY = `${PACKAGE}/.MainActivity`;
 
 const argv = process.argv.slice(2);

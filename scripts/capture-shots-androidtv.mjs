@@ -25,7 +25,7 @@ import { gitSha, mergeShots, shotDir, toWebp } from './lib/shots.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-const PACKAGE = 'com.couchgames.tinytrackparty';
+const PACKAGE = 'games.couchpad.tinytrack';
 const ACTIVITY = `${PACKAGE}/.MainActivity`;
 
 // The extras the app reads. Spelled in Scenarios.kt as EXTRA_SCENARIO/EXTRA_TRACK;

@@ -19,11 +19,11 @@ fun git(vararg args: String): String? = try {
 }
 
 android {
-    namespace = "com.couchgames.tinytrackparty"
+    namespace = "games.couchpad.tinytrack"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.couchgames.tinytrackparty"
+        applicationId = "games.couchpad.tinytrack"
         // 24 matches the CI leg and the ctest device build. Compose needs 21+
         // and Filament's GLES3 path 18+, so this floor is about what Android TV
         // boxes actually run rather than about either of those.

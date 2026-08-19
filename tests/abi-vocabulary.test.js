@@ -123,7 +123,7 @@ test('the back effect speaks swallow/end-party/return-to-lobby', () => {
   // The Kotlin twin: MainActivity's OnBackPressedCallback is ITS one dispatch
   // site, and auditing only the tvOS switch is what let a dead Kotlin arm drift.
   const kotlin = shell(
-    'shells/androidtv/app/src/main/kotlin/com/couchgames/tinytrackparty/MainActivity.kt');
+    'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/MainActivity.kt');
   if (kotlin !== null) {
     const cases = kotlinWhenStrings(kotlin, 'handleOnBackPressed');
     assert.ok(cases.length >= 2, 'MainActivity no longer switches on the back effect');
@@ -142,7 +142,7 @@ test('the race-flow entry points read `action`, and only its values', () => {
   // gap the back-effect case above already names: a second shell can spell a
   // word the ABI never says and its `else -> Unit` swallows the miss.
   const kotlin = shell(
-    'shells/androidtv/app/src/main/kotlin/com/couchgames/tinytrackparty/GameCoordinator.kt');
+    'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/GameCoordinator.kt');
   const header = read('native/runtime/ttp_race.h');
 
   for (const [fn, marker] of [['ttp_race_start_live_json', 'startRace'],
@@ -204,7 +204,7 @@ test('the auto-pause walk hands the effect walker EFFECTS, in one call', () => {
       'the one walk answers the effects the walker performs');
   }
   const kotlin = shell(
-    'shells/androidtv/app/src/main/kotlin/com/couchgames/tinytrackparty/GameCoordinator.kt');
+    'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/GameCoordinator.kt');
   if (kotlin !== null) {
     assert.match(kotlinBody(kotlin, 'fun refreshAutoPause('),
       /run\(TtpJson\.obj\(Ttp\.ttp_race_auto_pause_live_json/,

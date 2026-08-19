@@ -23,7 +23,7 @@ import XCTest
 /// running already, and `setUp` refuses rather than quietly passing against a
 /// process it started itself.
 ///
-///     xcrun devicectl device process launch --device <udid> com.couchgames.tinytrackparty
+///     xcrun devicectl device process launch --device <udid> games.couchpad.tinytrack
 ///     # wait for the lobby, then:
 ///     xcodebuild test -project shells/tvos/TinyTrackParty.xcodeproj -scheme TinyTrackParty \
 ///       -destination 'platform=tvOS,id=<xcodebuild-id>' \

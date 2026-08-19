@@ -57,7 +57,7 @@ test('Display.js FEAT mirrors the header, name for name and bit for bit', () => 
 test("PerfDebug.kt's TTP_FEAT_ALL matches the header", () => {
   // The value the knob restores when `debug.ttp.features` is cleared: stale, it
   // un-ablates a box into a picture that is still missing the new channel.
-  const m = read('shells/androidtv/app/src/main/kotlin/com/couchgames/tinytrackparty/PerfDebug.kt')
+  const m = read('shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/PerfDebug.kt')
     .match(/TTP_FEAT_ALL\s*=\s*0x([0-9A-Fa-f]+)/);
   assert.ok(m, 'PerfDebug.kt no longer declares TTP_FEAT_ALL');
   assert.equal(parseInt(m[1], 16), headerBits().get('ALL'),

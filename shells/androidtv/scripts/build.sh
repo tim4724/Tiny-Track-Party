@@ -59,7 +59,7 @@ APK="$SHELL_DIR/app/build/outputs/apk/$VARIANT/app-$VARIANT.apk"
 if [ -f "$APK" ]; then say "$APK"; fi
 
 # The same string app/build.gradle.kts stamps into versionName, so `adb shell
-# dumpsys package com.couchgames.tinytrackparty | grep versionName` answers
+# dumpsys package games.couchpad.tinytrack | grep versionName` answers
 # "which commit is on the box?" and can be compared against this by eye.
 DIRTY=""
 if [ -n "$(git -C "$ROOT" status --porcelain)" ]; then DIRTY="-dirty"; fi

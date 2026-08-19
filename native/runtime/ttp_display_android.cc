@@ -117,7 +117,7 @@ void ttp_display_destroy(void) {
 // which nothing draws at all.
 
 JNIEXPORT jboolean JNICALL
-Java_com_couchgames_tinytrackparty_TtpSurface_nativeCreate(
+Java_games_couchpad_tinytrack_TtpSurface_nativeCreate(
         JNIEnv* env, jclass, jobject surface, jint width, jint height) {
     if (!surface) return JNI_FALSE;
     // fromSurface RETURNS an acquired window; ttp_display_create acquires again
@@ -130,7 +130,7 @@ Java_com_couchgames_tinytrackparty_TtpSurface_nativeCreate(
 }
 
 JNIEXPORT void JNICALL
-Java_com_couchgames_tinytrackparty_TtpSurface_nativeDestroy(JNIEnv*, jclass) {
+Java_games_couchpad_tinytrack_TtpSurface_nativeDestroy(JNIEnv*, jclass) {
     ttp_display_destroy();
 }
 

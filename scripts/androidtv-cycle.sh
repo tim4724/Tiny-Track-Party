@@ -59,7 +59,7 @@ say install
 
 say launch
 "$ADB" -s "$SERIAL" shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
-"$ADB" -s "$SERIAL" shell am start -n com.couchgames.tinytrackparty/.MainActivity >/dev/null
+"$ADB" -s "$SERIAL" shell am start -n games.couchpad.tinytrack/.MainActivity >/dev/null
 # The attract demo needs a scene built and the adaptive scaler needs a window;
 # a reading taken before that is a reading of the boot.
 sleep 22

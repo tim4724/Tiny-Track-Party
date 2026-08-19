@@ -46,7 +46,7 @@ final class RoomAdvertiser {
     /// TXT key for the room code (§8). The whole record.
     private static let codeKey = "c"
 
-    private let log = Logger(subsystem: "com.couchgames.tinytrackparty", category: "advertise")
+    private let log = Logger(subsystem: "games.couchpad.tinytrack", category: "advertise")
 
     private var listener: NWListener?
     private var advertisedRoom: String?

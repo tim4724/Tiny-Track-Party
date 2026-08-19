@@ -27,7 +27,7 @@ import os
 /// lands.
 final class CueBank {
 
-    private let log = Logger(subsystem: "com.couchgames.tinytrackparty", category: "audio")
+    private let log = Logger(subsystem: "games.couchpad.tinytrack", category: "audio")
     private let bundled: (String) -> Data?
 
     /// Where the staged bundle keeps the bake (`shells/tvos/scripts/stage-assets.sh`

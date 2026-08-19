@@ -32,7 +32,7 @@ const { readFileSync, readdirSync, statSync, existsSync } = require('node:fs');
 const path = require('node:path');
 
 const ROOT = path.join(__dirname, '..');
-const SHELL = path.join(ROOT, 'shells/androidtv/app/src/main/kotlin/com/couchgames/tinytrackparty');
+const SHELL = path.join(ROOT, 'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack');
 
 function kotlinFiles(dir) {
   const out = [];

@@ -137,7 +137,7 @@ test('CAR_BODY_COLORS is spelled the same in JS, Swift and Kotlin', () => {
   }
 
   const kotlin = shell(
-    'shells/androidtv/app/src/main/kotlin/com/couchgames/tinytrackparty/ItemIcon.kt');
+    'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/ItemIcon.kt');
   if (kotlin !== null) {
     const decl = kotlin.slice(kotlin.indexOf('CAR_BODY_COLORS'));
     const open = decl.indexOf('intArrayOf(');

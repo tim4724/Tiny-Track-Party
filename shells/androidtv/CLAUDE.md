@@ -245,7 +245,7 @@ markers that make it work — `ttp:sim`, `ttp:render`, `ttp:slowTick` split the
 callback, and Compose emits `Recomposer:recompose` and `traversal` itself:
 
 ```
-adb shell atrace -b 16384 -a com.couchgames.tinytrackparty -t 30 \
+adb shell atrace -b 16384 -a games.couchpad.tinytrack -t 30 \
     -o /data/local/tmp/tr.txt gfx view sched am wm
 ```
 

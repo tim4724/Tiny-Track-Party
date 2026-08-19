@@ -15,7 +15,7 @@
 # libttp_runtime_tvos.a, reached through the C ABI (see the bridging header).
 name: TinyTrackParty
 options:
-  bundleIdPrefix: com.couchgames
+  bundleIdPrefix: games.couchpad
   createIntermediateGroups: true
   deploymentTarget:
     tvOS: "17.0"
@@ -151,7 +151,7 @@ targets:
           references the API.
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.couchgames.tinytrackparty
+        PRODUCT_BUNDLE_IDENTIFIER: games.couchpad.tinytrack
         SWIFT_OBJC_BRIDGING_HEADER: $(SRCROOT)/TinyTrackParty/Bridge/TinyTrackParty-Bridging-Header.h
         # The C ABI headers, the internal headers they include, and Filament's.
         HEADER_SEARCH_PATHS:
@@ -238,7 +238,7 @@ targets:
       - target: TinyTrackParty
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.couchgames.tinytrackparty.shots
+        PRODUCT_BUNDLE_IDENTIFIER: games.couchpad.tinytrack.shots
         TEST_TARGET_NAME: TinyTrackParty
         # A DEVICE run has to code sign, and code signing needs an Info.plist. A
         # test bundle has nothing to put in one, so let Xcode synthesize it

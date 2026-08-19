@@ -32,7 +32,7 @@ import { tmpdir } from 'node:os';
 
 import { Phone, loadProtocol } from './lib/phone.mjs';
 
-const BUNDLE_ID = 'com.couchgames.tinytrackparty';
+const BUNDLE_ID = 'games.couchpad.tinytrack';
 const args = process.argv.slice(2);
 const SIM = args.includes('--sim');
 const KEEP = args.includes('--keep');

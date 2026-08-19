@@ -33,7 +33,7 @@ final class AudioDevice {
 
     // MARK: - Construction
 
-    private let log = Logger(subsystem: "com.couchgames.tinytrackparty", category: "audio")
+    private let log = Logger(subsystem: "games.couchpad.tinytrack", category: "audio")
     private let baseURL: URL
     private let bank: CueBank
 

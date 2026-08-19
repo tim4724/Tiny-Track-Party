@@ -24,7 +24,7 @@ const { readdirSync, readFileSync } = require('node:fs');
 const { join } = require('node:path');
 
 const KOTLIN = join(
-  __dirname, '../shells/androidtv/app/src/main/kotlin/com/couchgames/tinytrackparty');
+  __dirname, '../shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack');
 const ABI_SOURCES = ['native/runtime', 'native/libttp-runtime/ttp', 'native/libttp-party/ttp'];
 
 // Tokens.kt reads the STAGED design-tokens.json, which is not an engine payload
