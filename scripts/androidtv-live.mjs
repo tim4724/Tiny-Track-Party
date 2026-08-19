@@ -3,7 +3,7 @@
 // A frozen-field bench draws one picture per arm; that is what makes two arms
 // comparable and it is exactly what makes it a poor answer to "does this hold
 // 60". A live race moves the camera through the whole circuit, rasterises and
-// uploads rubber, regenerates the skid mips, and lets `ttp_display_scale_step`
+// uploads rubber, regenerates the skid mips, and lets `ttp_display_step`
 // resize the buffer underneath all of it. So: drive, and read the readout back
 // over the whole lap.
 //

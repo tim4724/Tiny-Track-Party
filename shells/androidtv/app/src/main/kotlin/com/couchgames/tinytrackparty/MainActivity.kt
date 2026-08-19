@@ -82,12 +82,26 @@ class MainActivity : ComponentActivity() {
         // ON DURING DEVELOPMENT, exactly as the web's is: the frame budget is
         // something to keep under your eye, not something to remember to switch on.
         //
+        // ON IN RELEASE TOO, and that is the same argument PerfDebug's knobs make:
+        // gated to debug, the readout is absent from THE BUILD THAT SHIPS — the
+        // only one with R8, the proguard rules and the real optimisation level —
+        // so the configuration you can pin and ablate is the one you cannot see
+        // the numbers for. A keyevent toggle did not close that: it does not
+        // survive a force-stop, where `debug.ttp.*` does.
+        //
+        // IT PERTURBS WHAT IT MEASURES, mildly and knowably. The text republishes
+        // at 4 Hz (TEXT_INTERVAL_MS), and Compose shares this shell's one frame
+        // thread, so four recompositions a second land inside the budget being
+        // reported. Read the readout as the instrument it is, not as the frame a
+        // player gets; KEYCODE_INFO (`adb shell input keyevent 165`) hides it for
+        // a clean run.
+        //
         // OFF UNDER A SCENARIO, because a screenshot gallery is a picture of the UI
         // and the readout is not part of it. The tvOS column shows what the other
         // choice costs: four lines of green diagnostic sit in the corner of every
         // race shot it has ever taken, and the one board where a viewer would most
         // want to compare the HUD is the one with a debug panel over it.
-        if (BuildConfigIsDebug && !Scenarios.active) PerfMonitor.show()
+        if (!Scenarios.active) PerfMonitor.show()
         Tokens.assertLiveriesMatchEngine()
         // BOOT WHEN THERE IS A DISPLAY TO BOOT AGAINST, and re-provision on every
         // later surface: destroying one takes the renderer and its asset map with

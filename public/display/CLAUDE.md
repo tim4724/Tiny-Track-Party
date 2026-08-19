@@ -87,27 +87,58 @@ the canvas, the DOM HUD and the rAF loop.
 **Three.js is gone.** It survives only as a test-only devDependency for the offline
 capture scripts. Do not reintroduce it to the display page.
 
-**The drawing buffer's size is MEASURED, not chosen.** It lives between 720 and
-2160 lines (`Stage`'s `MIN_BUFFER_H`/`MAX_BUFFER_H`, on height alone so an
-ultrawide keeps its width) and `Stage._adaptScale` re-decides where, about once a
-second, from what the last window of frames cost. The decision itself is C++
-(`native/libttp-runtime/ttp/render_scale.h`); this side only measures and
-resizes.
+**The buffer's size AND the present rate are MEASURED, not chosen, and they are
+ONE decision.** `Stage._adaptScale` re-decides about once a second from what the
+last window of frames cost; `ttp_display_step` answers `[scale, divisor]`
+together, because frame rate and resolution are two ways of spending the same
+GPU milliseconds and a shell taking one answer and ignoring the other would be
+arbitrating between them itself. The desired spot is **1080 lines at 60 Hz**:
+below it resolution gives way and the rate does not, above it the rate goes
+first. The decision is C++ (`native/libttp-runtime/ttp/render_scale.h`); this
+side measures, resizes, and paces.
+
+**`_divisor` PACES THE PICTURE, NEVER THE SIM.** `_loop` runs `onFrame` on every
+rAF callback and gates only the draw, accumulating the skipped callbacks' dt into
+the frame that does draw — the renderer's clock (box bob, cloud drift, skid
+decay, camera damping) is cosmetic and would otherwise run at a fraction speed.
+So on a 120 Hz display holding 1080@60, steering keeps its full 120 Hz cadence
+and what doubles is picture latency, not input latency.
+
+**The panel's period is read off the device, not asked for.** There is no
+reliable web API for refresh rate, but `_presentFloor` already is the fastest
+present this device has produced. It is sticky, so the first unpaced frames learn
+8.3 ms on a 120 Hz display before pacing could hide it; and a machine that has
+never presented faster than 16.7 there reports 16.7 and gets treated as 60 Hz,
+which is what it was going to run at anyway.
 
 **A SCALE HERE IS A MULTIPLIER ON CSS PIXELS, NOT A FRACTION OF THE PANEL**, and
-the rule is shared with two shells for which it is the opposite. `_scaleBand`'s
+the rule is shared with a shell for which it is the opposite. `_scaleBand`'s
 ceiling is `devicePixelRatio`, so on a Retina Mac native IS 2 and a scale of 1 is
 half the panel's linear resolution — while a TV surface is the panel and its
-ceiling is 1. The rule's ladder is therefore fractions of the CEILING the band
-hands in, never of 1.0. It was absolute once, for exactly one release, and every
-Retina display rendered a quarter of the pixels it had been rendering.
+ceiling is 1. That is what `baseLines` reconciles: the rule's rungs are LINE
+COUNTS, and the band hands over how many lines a scale of 1.0 buys here, so
+"720p" means the same picture on both. The rungs were fractions once and the
+trap is worth remembering in both directions — read as absolute they quartered
+every Retina display, read as fractions of the ceiling they made a floor mean
+360 lines on one surface and 720 on another.
 
-**The floor is below the commonest panel, and nothing is persisted.** Both were
-tried the other way. A floor at 1080 collapses the band to a point on an ordinary
-1080p TV — the exact device this exists for could not drop a single pixel.
-Remembering the learned scale across sessions ratchets: the signal that a
-timer-less browser uses may only step DOWN, so one bad window would pin a device
-lower forever. Re-learning costs a few seconds per session and self-corrects.
+**THERE IS NO FLOOR ON THIS SIDE.** `_scaleBand` passes `min: 0` and the ladder's
+bottom rung is the floor, in one place, for every shell. `MAX_BUFFER_H` stays
+because a ceiling really is per-surface. Nothing is persisted across sessions
+either: the signal a timer-less browser uses may only step DOWN, so one bad
+window would pin a device lower forever. Re-learning costs a few seconds per
+session and self-corrects.
+
+**A SCENE BUILD IS TWO MEASUREMENTS THIS SIDE OWES.** `_rebuild` stamps
+`_sceneBuiltAt` after a full `setTrack` (never after a reroster — that is the
+same scene re-dressed), clears the perf window, and drops `_prevScale` /
+`_prevCostMs`. The first shortens the rule's up-hold while a scale is still
+finding a new scene's level. The last two are the rule's COST MODEL: it fits
+`fixed + fill * s²` from two observations at two scales and solves for the rung
+that fits the budget, and a fit whose two points straddle a scene change
+measures a slope belonging to neither, so it must not survive one. Both reached
+the tree as Kotlin-side latches that fixed one platform and left this one
+exposed.
 
 **There is no device probe, and there must not be one.** A UA string lies and
 `WEBGL_debug_renderer_info` is going away; what is measured is this device

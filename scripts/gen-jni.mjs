@@ -67,8 +67,12 @@ const OVERRIDES = {
   // A caller-owned out-array. JNI cannot alias a jdoubleArray, so the shim
   // writes into a stack triple and copies back only on success — a failed call
   // must leave the caller's array untouched, which is what the int return means.
-  ttp_car_world_pos: { kind: 'out3' },
-  ttp_track_point: { kind: 'out3' },
+  ttp_car_world_pos: { kind: 'outN', n: 3 },
+  ttp_track_point: { kind: 'outN', n: 3 },
+  // Two answers that are ONE decision — the buffer scale and the present
+  // divisor — so the ABI hands them back together rather than as two exports a
+  // shell could half-call. Same aliasing rule as the triples above.
+  ttp_display_step: { kind: 'outN', n: 2 },
   // (bytes, len) collapses to one ByteArray: the length is the array's own.
   // Passing them separately would let them disagree, which is a buffer overrun
   // spelled as two arguments.
@@ -264,20 +268,20 @@ function emitC(fns) {
       if (isStr(fn.ret)) { retC = 'jbyteArray'; sig += '[B'; call = `toBytes(env, ${call})`; }
       else if (fn.ret === 'void') { retC = 'void'; sig += 'V'; }
       else { retC = SCALAR[fn.ret].jni; sig += SCALAR[fn.ret].sig; call = `(${SCALAR[fn.ret].jni}) ${call}`; }
-    } else if (kind === 'out3') {
-      // (handle, idJson, double* out3) or (handle, s, lat, double* out3)
+    } else if (kind === 'outN') {
+      // (…leading args…, double* outN) — the out array is always LAST.
       const lead = fn.params.slice(0, -1);
       const ps = lead.map((p, i) => {
         if (isStr(p.type)) { args.push(`jbyteArray a${i}`); pre.push(`    CStr s${i}(env, a${i});`); return `s${i}.get()`; }
         args.push(`${SCALAR[p.type].jni} a${i}`); return `${SCALAR[p.type].cast} a${i}`;
       });
       args.push('jdoubleArray outArr');
-      pre.push(`    double out3[3] = { 0, 0, 0 };`);
-      call = `${fn.name}(${[...ps, 'out3'].join(', ')})`;
+      pre.push(`    double outv[${o.n}] = { 0 };`);
+      call = `${fn.name}(${[...ps, 'outv'].join(', ')})`;
       pre.push(`    const jint rc = (jint) ${call};`);
       // Copied back only on success: a refusal must leave the caller's array as
       // it was, which is what lets a caller keep a last-known-good position.
-      post.push(`    if (rc && outArr && env->GetArrayLength(outArr) >= 3) env->SetDoubleArrayRegion(outArr, 0, 3, out3);`);
+      post.push(`    if (rc && outArr && env->GetArrayLength(outArr) >= ${o.n}) env->SetDoubleArrayRegion(outArr, 0, ${o.n}, outv);`);
       post.push(`    return rc;`);
       call = null;
       retC = 'jint';
@@ -401,9 +405,10 @@ function emitKt(fns) {
     if (kind === 'plain') {
       ps = fn.params.map((p) => `${p.name}: ${isStr(p.type) ? 'ByteArray?' : SCALAR[p.type].kt}`);
       ret = isStr(fn.ret) ? 'ByteArray?' : fn.ret === 'void' ? 'Unit' : SCALAR[fn.ret].kt;
-    } else if (kind === 'out3') {
+    } else if (kind === 'outN') {
       const lead = fn.params.slice(0, -1);
-      ps = [...lead.map((p) => `${p.name}: ${isStr(p.type) ? 'ByteArray?' : SCALAR[p.type].kt}`), 'out3: DoubleArray'];
+      ps = [...lead.map((p) => `${p.name}: ${isStr(p.type) ? 'ByteArray?' : SCALAR[p.type].kt}`),
+            `${fn.params[fn.params.length - 1].name}: DoubleArray`];
       ret = 'Int';
     } else if (kind === 'floatOut') { ps = ['out: FloatArray', 'maxCells: Int']; ret = 'Int'; }
     else if (kind === 'namedBytes') { ps = ['name: ByteArray?', 'bytes: ByteArray?']; ret = 'Int'; }

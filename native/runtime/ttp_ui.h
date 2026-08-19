@@ -164,15 +164,16 @@ TTP_ABI const char* ttp_ui_progress_json(void);
  * A native TV shell reads these instead of hand-copying the table — the first
  * one copied it anyway, against a comment claiming no export existed. It does.
  *
- * The catalogue above carries each cup's `color` as packed 0xRRGGBB. These two
- * exist so that no shell re-implements the WASH:
+ * The catalogue above carries each cup's `color` as packed 0xRRGGBB. The three
+ * below exist so that no shell re-implements the WASH:
  *
  * `pct` is how much of the colour survives a mix with white. The mix is in sRGB
  * on the ENCODED values — a straight per-channel lerp, which is what CSS
  * `color-mix(in srgb, …)` does. Mixing the same pair in linear light is a
  * one-line difference that comes out visibly darker and would match nothing
- * else on screen. A null/empty cup id gets the cup-less fallback, which is what
- * Random wears. */
+ * else on screen. A null/empty cup id gets the cup-less FALLBACK, which is
+ * itself a cup colour standing in for a cup nobody recognised — NOT the wash a
+ * cup-less selection wants. Random takes ttp_ui_neutral_tint_rgb below. */
 TTP_ABI uint32_t ttp_ui_cup_tint_rgb(const char* cupIdOrNull, double pct);
 
 /* The wash for a selection that belongs to NO CUP: Random's tiles, and any

@@ -9,7 +9,7 @@ import android.util.Log
  * adb shell setprop debug.ttp.scale 1.0      # pin the render scale (0 = adaptive)
  * adb shell setprop debug.ttp.features 0x1FFC # TTP_FEAT_* mask (see ttp_display.h)
  * adb shell setprop debug.ttp.aa 1           # put the antialias pass back on
- * adb shell setprop debug.ttp.hz 30          # present every other vsync (0/60 = every)
+ * adb shell setprop debug.ttp.hz 30          # PIN every-other-vsync (0 = hand it back to the rule)
  * adb shell setprop debug.ttp.spectate 7     # camera follows the car that STARTED
  *                                            # in place N (0 = off; next race restores)
  * ```
@@ -91,8 +91,8 @@ object PerfDebug {
         val hz = getprop("debug.ttp.hz")?.toIntOrNull() ?: 0
         if (hz != lastHz) {
             lastHz = hz
-            display.setVsyncInterval(if (hz == 30) 2 else 1)
-            Log.i(TAG, "hz -> ${if (hz == 30) 30 else 60}")
+            display.pinVsyncInterval(if (hz == 30) 2 else 0)
+            Log.i(TAG, "hz -> ${if (hz == 30) "pinned 30" else "adaptive"}")
         }
 
         pollSpectate(display)

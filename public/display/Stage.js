@@ -63,12 +63,11 @@ const cardOwnsCell = (c) => !!(c.finished || c.reconnecting);
 //
 // So the number is DECIDED, per device, from what its frames actually cost —
 // _adaptScale below, over the rule in native/libttp-runtime/ttp/render_scale.h.
-// These two are only the band it may move in. The ceiling is 4K because past it
-// nobody is sitting close enough. The floor is 720 lines and is deliberately
-// BELOW the commonest panel: a floor equal to the screen collapses the band to a
-// point on an ordinary 1080p TV, which is the exact device this exists for — it
-// could not have dropped a single pixel, and the whole mechanism would have been
-// a sharpness feature for good screens wearing a weak-device justification.
+// This is only the CEILING it may move under, and it is 4K because past that
+// nobody is sitting close enough. THE FLOOR IS NOT HERE: render_scale.h's rungs
+// are line counts and its bottom rung is the softest picture this game will
+// show, so that decision lives in one place for every shell instead of being a
+// fraction that meant 360 lines on one surface and 720 on another.
 //
 // Lines, not pixel counts: height is the axis every display shares, so an
 // ultrawide keeps its full width rather than being letterboxed into a budget.
@@ -80,7 +79,6 @@ const cardOwnsCell = (c) => !!(c.finished || c.reconnecting);
 // BYPASSES the whole mechanism — that is how the trailer renders a true 4K
 // master, and how a fixed resolution is pinned for an A/B.
 const MAX_BUFFER_H = 2160;
-const MIN_BUFFER_H = 720;
 
 // How often the scale is re-decided. The C++ holds are seconds long, so this
 // only has to be fast enough to catch the load changing (a race starting behind
@@ -189,6 +187,28 @@ export class Stage {
     // rescued at once rather than 2.5 s in. Only a step DOWN can come of it —
     // the scale starts clamped at the ceiling, so there is nothing to rise into.
     this._scaleMovedAt = 0;
+    // When the current scene was built, for the up-hold the rule shortens while
+    // a scale is still finding a NEW scene's level (kScaleUpRecoverHoldSec). A
+    // measurement, like _scaleMovedAt beside it — this side does not decide what
+    // a fresh scene is worth. 0 until the first build, which reads as "long ago"
+    // and is right: there is no scene to have inherited a scale from yet.
+    this._sceneBuiltAt = 0;
+    // The last observation at a DIFFERENT scale, for the rule's cost model.
+    // Dropped on a scene build: a fit whose two points come from two different
+    // scenes measures a slope belonging to neither, which is worse than none.
+    this._prevScale = 0;
+    this._prevCostMs = 0;
+    // PRESENT PACING. `_divisor` is "render every Nth rAF callback" and is half
+    // of the operating point render_scale.h answers — 2 on a 120 Hz display
+    // holding the desired 1080@60, 1 once the device proves it can drive 120.
+    //
+    // The SIM still ticks on every callback: only the picture is paced, so
+    // steering keeps the display's full cadence and what doubles is picture
+    // latency, not input latency. (The Android shell paces the same way, for the
+    // same reason — see its vsyncInterval.)
+    this._divisor = 1;
+    this._vsyncCount = 0;
+    this._pendingDt = 0;
     this._presentFloor = 0;  // the running fastest present (ttp_display_present_floor)
     this._canvas = document.createElement('canvas');
     this._canvas.id = 'scene-canvas';
@@ -236,16 +256,34 @@ export class Stage {
   // A function of the box, so it is asked for rather than stored: the same tab
   // moved to a 4K screen, or a preview card that grows, moves both ends.
   //
-  // The floor is the softest picture this will show — but only where there is
-  // room for it to be a floor at all. Under the automation cap, or in a window
-  // shorter than MIN_BUFFER_H, the min() collapses the band onto the ceiling and
-  // nothing can adapt, which is exactly right: the E2E suite's 0.25 and a
-  // preview card's half scale are not budgets to be renegotiated.
+  // THERE IS NO FLOOR HERE ANY MORE. render_scale.h's rungs are LINE COUNTS and
+  // its bottom rung is the floor, so the softest picture this game will show is
+  // one number in one place instead of a fraction that meant something different
+  // on every window size. `min: 0` is "narrow me no further".
+  //
+  // The ceiling still collapses the band where it should: under the automation
+  // cap or a preview card's half scale, min === max and nothing adapts, which is
+  // exactly right — those are not budgets to be renegotiated.
   _scaleBand() {
     const ch = Math.max(1, this.container.clientHeight);
     const max = Math.min(window.devicePixelRatio || 1, this._autoCap, MAX_BUFFER_H / ch);
-    return { min: Math.min(max, MIN_BUFFER_H / ch), max };
+    return { min: 0, max, baseLines: ch };
   }
+
+  // The panel's own present period, one vsync — what a rate step is worth.
+  //
+  // READ OFF THE DEVICE rather than asked for: there is no reliable web API for
+  // refresh rate, but `_presentFloor` is already the fastest present this device
+  // has produced, which is the same number. It is STICKY (presentBaseline only
+  // ever lowers it), so the first frames — which run unpaced at divisor 1 —
+  // learn 8.3 on a 120 Hz display before any pacing could hide it, and pacing
+  // down to 60 afterwards cannot walk the estimate back up.
+  //
+  // Self-correcting in the honest direction too: a machine that has NEVER
+  // presented faster than 16.7 on a 120 Hz panel reports 16.7, the rule treats
+  // it as a 60 Hz panel, and it runs at 60 — which is what it was going to do.
+  // 0 until anything is learned, which the rule reads as "assume 60".
+  _panelMs() { return this._presentFloor; }
 
   // Size the drawing buffer to the container, and pick the scale it is sized by.
   // The scale is resolved HERE rather than at construction because the band is a
@@ -410,6 +448,16 @@ export class Stage {
             await this.display.setTrack(this._track.id, this._biome, roster, this._assets);
             this._sceneSig = sceneSig;
             this._rosterSig = rosterSig;
+            // A FULL BUILD ONLY. The reroster path above is an in-place re-dress
+            // of the same scene — same meshes, same cost — so it inherits its own
+            // scale legitimately and must not re-arm the recovery hold.
+            this._sceneBuiltAt = (typeof performance !== 'undefined' ? performance.now() : 0);
+            // …and the window describes the scene that just went away, exactly as
+            // it does after a resize. Left in place, the first decision about the
+            // NEW scene is made from the old one's frames.
+            this.perf.reset();
+            this._prevScale = 0;
+            this._prevCostMs = 0;
           } catch (e) {
             this._sceneSig = this._rosterSig = null; // let the next change retry
             console.error('[stage] scene build failed', e);
@@ -1010,16 +1058,36 @@ export class Stage {
     // happens here — but WHICH samples may become one is the rule's, not ours.
     this._presentFloor = this.display.presentFloor(this._presentFloor, s.frame.p05 || 0);
     const band = this._scaleBand();
-    const next = this.display.scaleStep(this._autoScale, {
-      // A missing GPU timer, and a percentile no frame has landed in yet, are
-      // both "nothing measured" — 0, which the rule reads as no signal.
-      gpuShareP95: s.gpuTimer === 'ext' ? s.gpuUsedP95 || 0 : 0,
+    // A missing GPU timer, and a percentile no frame has landed in yet, are both
+    // "nothing measured" — 0, which the rule reads as no signal. Named once
+    // because the cost model's stored observation is the SAME number.
+    //
+    // RAW MILLISECONDS, not a share: the rule picks the present rate as part of
+    // the same decision, so the budget is its to choose and a share handed over
+    // would already be normalised against a rate nobody had picked.
+    const costMs = s.gpuTimer === 'ext' ? s.gpu.p95 || 0 : 0;
+    const step = this.display.step(this._autoScale, this._divisor, {
+      gpuP95Ms: costMs,
       gpuFrames: s.gpu.n,
       presentP95Ms: s.frame.p95 || 0,
       presentFloorMs: this._presentFloor,
       presentFrames: s.frame.n,
-    }, (t - this._scaleMovedAt) / 1000, band.min, band.max);
-    if (next === this._autoScale) return;
+    }, (t - this._scaleMovedAt) / 1000, (t - this._sceneBuiltAt) / 1000,
+       this._prevScale, this._prevCostMs, band.min, band.max, band.baseLines,
+       this._panelMs());
+    if (!step) return;
+    const [next, divisor] = step;
+    if (next === this._autoScale && divisor === this._divisor) return;
+    // THE OBSERVATION THE COST MODEL IS BUILT FROM, recorded at the one moment it
+    // exists: the scale that was in force and what it cost. The rule fits
+    // `fixed + fill * s^2` from this and the next one and SOLVES for the rung
+    // that fits the budget, instead of comparing one number to a threshold that
+    // cannot serve a fill-bound GPU and a fixed-cost-bound one at once.
+    if (next !== this._autoScale) {
+      this._prevScale = this._autoScale;
+      this._prevCostMs = costMs;
+    }
+    this._divisor = divisor;
     this._autoScale = next;
     this._scaleMovedAt = t;
     this._onResize();
@@ -1094,15 +1162,29 @@ export class Stage {
         : this.orbit ? CAM.ORBIT : CAM.STILL;
     if (mode !== null && mode !== this._camMode) { this._camMode = mode; this.display.camera(mode); }
 
+    // THE PACING GATE. Everything above is the sim and the scene's bookkeeping
+    // and runs every callback; everything below draws. dt is ACCUMULATED across
+    // the skipped callbacks rather than dropped, because the renderer's own
+    // clock (box bob, cloud drift, skid decay, camera damping) is cosmetic and
+    // would otherwise run at a fraction speed whenever the divisor is above 1.
+    this._vsyncCount++;
+    this._pendingDt += dt;
+    if (this._divisor > 1 && this._vsyncCount % this._divisor !== 0) {
+      this._scheduleNext();
+      return;
+    }
+    const frameDt = this._pendingDt;
+    this._pendingDt = 0;
+
     if (ids.length === 0) {
       if (this._free) this._stepFreeCam(dt);
-      this._renderFrame(dt, 0);
+      this._renderFrame(frameDt, 0);
       this._hideCellHud();
       this._scheduleNext();
       return;
     }
 
-    this._renderFrame(dt, ids.length);
+    this._renderFrame(frameDt, ids.length);
 
     // Place this frame's HUD over the cells the renderer just drew — ASKING it
     // where they are (_cellRects) instead of scoring the same grid again here.

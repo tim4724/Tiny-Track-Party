@@ -160,9 +160,9 @@ jbyteArray n_ttp_car_ids_json(JNIEnv* env, jclass, jint a0) {
 
 jint n_ttp_car_world_pos(JNIEnv* env, jclass, jint a0, jbyteArray a1, jdoubleArray outArr) {
     CStr s1(env, a1);
-    double out3[3] = { 0, 0, 0 };
-    const jint rc = (jint) ttp_car_world_pos((int) a0, s1.get(), out3);
-    if (rc && outArr && env->GetArrayLength(outArr) >= 3) env->SetDoubleArrayRegion(outArr, 0, 3, out3);
+    double outv[3] = { 0 };
+    const jint rc = (jint) ttp_car_world_pos((int) a0, s1.get(), outv);
+    if (rc && outArr && env->GetArrayLength(outArr) >= 3) env->SetDoubleArrayRegion(outArr, 0, 3, outv);
     return rc;
 }
 
@@ -347,11 +347,6 @@ void n_ttp_display_resize(JNIEnv* env, jclass, jint a0, jint a1) {
     ttp_display_resize((uint32_t) a0, (uint32_t) a1);
 }
 
-jdouble n_ttp_display_scale_step(JNIEnv* env, jclass, jdouble a0, jdouble a1, jint a2, jdouble a3, jdouble a4, jint a5, jdouble a6, jdouble a7, jdouble a8) {
-    (void) env;
-    return (jdouble) ttp_display_scale_step((double) a0, (double) a1, (int) a2, (double) a3, (double) a4, (int) a5, (double) a6, (double) a7, (double) a8);
-}
-
 void n_ttp_display_shadows(JNIEnv* env, jclass, jint a0) {
     (void) env;
     ttp_display_shadows((int) a0);
@@ -365,6 +360,13 @@ void n_ttp_display_showcase(JNIEnv* env, jclass, jint a0) {
 jbyteArray n_ttp_display_slot_ids_json(JNIEnv* env, jclass) {
     (void) env;
     return toBytes(env, ttp_display_slot_ids_json());
+}
+
+jint n_ttp_display_step(JNIEnv* env, jclass, jdouble a0, jint a1, jdouble a2, jint a3, jdouble a4, jdouble a5, jint a6, jdouble a7, jdouble a8, jdouble a9, jdouble a10, jdouble a11, jdouble a12, jdouble a13, jdouble a14, jdoubleArray outArr) {
+    double outv[2] = { 0 };
+    const jint rc = (jint) ttp_display_step((double) a0, (int) a1, (double) a2, (int) a3, (double) a4, (double) a5, (int) a6, (double) a7, (double) a8, (double) a9, (double) a10, (double) a11, (double) a12, (double) a13, (double) a14, outv);
+    if (rc && outArr && env->GetArrayLength(outArr) >= 2) env->SetDoubleArrayRegion(outArr, 0, 2, outv);
+    return rc;
 }
 
 void n_ttp_dispose(JNIEnv* env, jclass, jint a0) {
@@ -999,9 +1001,9 @@ jbyteArray n_ttp_track_json(JNIEnv* env, jclass, jbyteArray a0, jint a1, jint a2
 }
 
 jint n_ttp_track_point(JNIEnv* env, jclass, jint a0, jdouble a1, jdouble a2, jdoubleArray outArr) {
-    double out3[3] = { 0, 0, 0 };
-    const jint rc = (jint) ttp_track_point((int) a0, (double) a1, (double) a2, out3);
-    if (rc && outArr && env->GetArrayLength(outArr) >= 3) env->SetDoubleArrayRegion(outArr, 0, 3, out3);
+    double outv[3] = { 0 };
+    const jint rc = (jint) ttp_track_point((int) a0, (double) a1, (double) a2, outv);
+    if (rc && outArr && env->GetArrayLength(outArr) >= 3) env->SetDoubleArrayRegion(outArr, 0, 3, outv);
     return rc;
 }
 
@@ -1191,10 +1193,10 @@ const JNINativeMethod kMethods[] = {
     { "ttp_display_release", "()V", (void*) n_ttp_display_release },
     { "ttp_display_reroster", "([B)I", (void*) n_ttp_display_reroster },
     { "ttp_display_resize", "(II)V", (void*) n_ttp_display_resize },
-    { "ttp_display_scale_step", "(DDIDDIDDD)D", (void*) n_ttp_display_scale_step },
     { "ttp_display_shadows", "(I)V", (void*) n_ttp_display_shadows },
     { "ttp_display_showcase", "(I)V", (void*) n_ttp_display_showcase },
     { "ttp_display_slot_ids_json", "()[B", (void*) n_ttp_display_slot_ids_json },
+    { "ttp_display_step", "(DIDIDDIDDDDDDDD[D)I", (void*) n_ttp_display_step },
     { "ttp_dispose", "(I)V", (void*) n_ttp_dispose },
     { "ttp_events_json", "(I)[B", (void*) n_ttp_events_json },
     { "ttp_fast_forward", "(I)V", (void*) n_ttp_fast_forward },

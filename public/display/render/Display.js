@@ -95,6 +95,7 @@ export class Display {
     this.built = false;
     this._rectPtr = 0;       // cellRects' heap scratch, grown on demand
     this._rectBytes = 0;
+    this._stepPtr = 0;       // step()'s two-double out array; allocated on first use
     this._showcase = false;  // the asset gallery's showroom; see showcase()
     this._kitModels = [];    // …and its kit field; see kitField()
     // No slot→car-id list here anymore: the HUD block is indexed by slot and
@@ -104,9 +105,10 @@ export class Display {
       create: mod.cwrap('ttp_display_create', 'number', ['string', 'number', 'number']),
       asset: mod.cwrap('ttp_display_asset', 'number', ['string', 'number', 'number']),
       resize: mod.cwrap('ttp_display_resize', null, ['number', 'number']),
-      scaleStep: mod.cwrap('ttp_display_scale_step', 'number',
-                           ['number', 'number', 'number', 'number', 'number', 'number',
-                            'number', 'number', 'number']),
+      step: mod.cwrap('ttp_display_step', 'number',
+                      ['number', 'number', 'number', 'number', 'number', 'number',
+                       'number', 'number', 'number', 'number', 'number', 'number',
+                       'number', 'number', 'number', 'number']),
       presentFloor: mod.cwrap('ttp_display_present_floor', 'number', ['number', 'number']),
       build: mod.cwrap('ttp_display_build', 'number', ['string', 'string']),
       reroster: mod.cwrap('ttp_display_reroster', 'number', ['string']),
@@ -235,9 +237,23 @@ export class Display {
   // the running fastest-present that feeds it. Both rules are C++'s
   // (ttp/render_scale.h) — this side measures and performs, and passes the
   // numbers over unjudged. See Stage._adaptScale.
-  scaleStep(current, cost, sinceChangeSec, min, max) {
-    return this._fn.scaleStep(current, cost.gpuShareP95, cost.gpuFrames, cost.presentP95Ms,
-                              cost.presentFloorMs, cost.presentFrames, sinceChangeSec, min, max);
+  // The next OPERATING POINT as `[scale, divisor]`, or null if the rule declined
+  // to answer. ONE call for both halves because they are one decision — the rule
+  // trades frame rate against resolution around a desired 1080@60, so a caller
+  // taking one answer and ignoring the other would be arbitrating between them
+  // itself. See ttp_display_step.
+  step(current, divisor, cost, sinceChangeSec, sinceSceneSec,
+       prevScale, prevCostMs, min, max, baseLines, panelMs) {
+    if (!this._stepPtr) this._stepPtr = this.m._malloc(16); // 2 doubles
+    const ok = this._fn.step(current, divisor, cost.gpuP95Ms, cost.gpuFrames,
+                             cost.presentP95Ms, cost.presentFloorMs, cost.presentFrames,
+                             sinceChangeSec, sinceSceneSec, prevScale, prevCostMs,
+                             min, max, baseLines, panelMs, this._stepPtr);
+    if (!ok) return null;
+    // HEAPF64 re-read every call: ALLOW_MEMORY_GROWTH swaps the buffer out from
+    // under any view held across an allocation (same rule as cellRects).
+    const i = this._stepPtr >> 3;
+    return [this.m.HEAPF64[i], this.m.HEAPF64[i + 1] | 0];
   }
 
   presentFloor(prevFloorMs, p05Ms) { return this._fn.presentFloor(prevFloorMs, p05Ms); }

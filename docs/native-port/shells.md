@@ -247,18 +247,27 @@ Three properties of that surface matter more than the list:
     connected humans, so the prepared scene is the one it wants. The web
     reference is `prepareNextTrack()` in `public/display/main.js` plus
     `Stage.prepare`/`rebuild`, and `tests/e2e/cup-series.spec.js` pins it.
-13. **The render scale, measured.** The buffer is not the panel: a shell polls
-    `ttp_display_scale_step` with what its last window of frames cost and
-    resizes to the answer, so the same build holds 60 fps on a weak TV and
-    stays sharp on a strong one. What a shell owes is the MEASUREMENT and the
-    band, and nothing else — percentiles of GPU time (as a share of the frame
-    budget) and of the frame interval, their sample counts, and the running
-    `ttp_display_present_floor`. Every judgement about those numbers is the
+13. **The operating point, measured.** Neither the buffer size nor the present
+    rate is the panel's: a shell polls `ttp_display_step` with what its last
+    window of frames cost and takes back BOTH — a resolution and a present
+    divisor, ordered around a desired 1080@60 (below it resolution gives way,
+    above it the rate goes first). One call for the pair, because they are two
+    ways of spending the same milliseconds and a shell honouring one and not the
+    other would be arbitrating the trade itself.
+
+    What a shell owes is MEASUREMENTS and the surface's own facts, nothing else:
+    p95 GPU time in RAW MILLISECONDS (never a share — the rule picks the budget
+    when it picks a rate) and its sample count, the same for the frame interval,
+    the running `ttp_display_present_floor`, how long the current point and the
+    current SCENE have each been in force, the last observation at a different
+    scale for the cost model, the band, how many buffer lines a scale of 1.0
+    buys, and the panel's own vsync period. Every judgement about those is the
     rule's: which signal decides, which way each may move, how many samples
-    count, the holds, the steps. If you find yourself writing an `if` around a
-    measurement before passing it, it belongs in `ttp/render_scale.h` instead —
-    that header also carries the reasoning, including why a dropped-frame count
-    is not a signal. Web reference: `Stage._adaptScale`.
+    count, the holds, and the order of the operating points. If you find
+    yourself writing an `if` around a measurement before passing it, it belongs
+    in `ttp/render_scale.h` instead — that header also carries the reasoning,
+    including why a dropped-frame count is not a signal. Web reference:
+    `Stage._adaptScale`, whose `_divisor` paces the PICTURE and never the sim.
 
     **STILL OWED BY tvOS, deliberately (2026-08-16).** `Stage.js` is the rule's
     only caller in the tree, so the Apple TV renders at the panel's full buffer
