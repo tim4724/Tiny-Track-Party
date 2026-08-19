@@ -31,7 +31,7 @@
 
 import { execFileSync, spawn } from 'node:child_process';
 
-import { GRID_MS } from './perf-race.mjs';
+import { GRID_MS, lineStream } from './perf-race.mjs';
 import { ADB, findTvDevice } from './lib/androidtv-device.mjs';
 
 const PACKAGE = 'games.couchpad.tinytrack';
@@ -85,10 +85,8 @@ export function makeAndroidBackend() {
   let logcat = null;
   let restored = false;
   let timer = null;
-  /** Readout lines not yet consumed, the consumer waiting for one, and the end. */
-  let pending = [];
-  let wake = null;
-  let ended = false;
+  /** Readout lines not yet consumed, and the consumer waiting for one. */
+  const lines = lineStream();
   let counting = false;
   let ready = null;
   /** The Android-only per-phase spike lines, folded by [report]. */
@@ -97,7 +95,6 @@ export function makeAndroidBackend() {
 
   const adb = (...args) => execFileSync(ADB, ['-s', serial, ...args], { encoding: 'utf8' });
   const setprop = (k, v) => adb('shell', 'setprop', k, String(v));
-  const nudge = () => { if (wake) { const w = wake; wake = null; w(); } };
 
   /**
    * Every knob back, and it is not optional tidying: `debug.ttp.*` survives a
@@ -156,8 +153,7 @@ export function makeAndroidBackend() {
     // shape only one platform has.
     if (text.startsWith('spike ')) { spikes.push(phases(text)); return; }
     if (text.startsWith('phasemax ')) { phasemax.push(phases(text)); return; }
-    pending.push(`${TAG} ${text}`);
-    nudge();
+    lines.push(`${TAG} ${text}`);
   };
 
   // READINESS IS A LOG LINE, and it is the same one the screenshot runner waits
@@ -169,13 +165,7 @@ export function makeAndroidBackend() {
     ready = (verdict) => { clearTimeout(t); ready = null; resolve(verdict); };
   });
 
-  async function* readouts() {
-    for (;;) {
-      while (pending.length) yield pending.shift();
-      if (ended) return;
-      await new Promise((r) => { wake = r; });
-    }
-  }
+
 
   return {
     async launch({ players, track, seconds }) {
@@ -222,8 +212,8 @@ export function makeAndroidBackend() {
 
       await sleep(GRID_MS);
       counting = true;
-      timer = setTimeout(() => { ended = true; nudge(); }, seconds * 1000);
-      return readouts();
+      timer = setTimeout(() => lines.end(), seconds * 1000);
+      return lines;
     },
 
     /**
@@ -238,8 +228,7 @@ export function makeAndroidBackend() {
         logcat.kill('SIGKILL');
         logcat = null;
       }
-      ended = true;
-      nudge();
+      lines.end();
       restoreKnobs();
       report(spikes, phasemax);
     },

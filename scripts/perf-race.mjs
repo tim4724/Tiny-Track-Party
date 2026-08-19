@@ -75,7 +75,12 @@ const TAG = 'TtpPerf ';
 
 // A log stream a backend fills and the shared half consumes. Lines that arrive
 // before anyone iterates are buffered, so nothing is lost to a slow start.
-function lineStream() {
+// The queue every backend hands its lines out through. A log arrives when the
+// platform feels like it and the shared half consumes at its own pace, so each
+// backend needs a buffer and a parked consumer — three hand-rolled copies of
+// this were the same four variables and the same iterator, which is exactly the
+// kind of copy this whole change exists to stop making.
+export function lineStream() {
   const buf = [];
   let wake = null;
   let ended = false;

@@ -40,7 +40,7 @@
 
 import { execFileSync, spawn } from 'node:child_process';
 
-import { GRID_MS } from './perf-race.mjs';
+import { GRID_MS, lineStream } from './perf-race.mjs';
 import { resolveDevicectlId, assertAwake } from './lib/tvos-device.mjs';
 
 const BUNDLE_ID = 'games.couchpad.tinytrack';
@@ -83,16 +83,13 @@ export function makeTvosBackend() {
   const sim = flag('sim');
   let child = null;
   let timer = null;
-  /** Readout lines not yet consumed, the consumer waiting for one, and the end. */
-  let pending = [];
-  let wake = null;
-  let ended = false;
+  /** Readout lines not yet consumed, and the consumer waiting for one. */
+  const lines = lineStream();
   let counting = false;
   let ready = null;
   /** The app's own `[ttp] …` complaints, so a timeout can say what it saw. */
   const complaints = [];
 
-  const nudge = () => { if (wake) { const w = wake; wake = null; w(); } };
 
   const onLine = (line) => {
     // NOT ANCHORED: `devicectl --console` decorates the process's output with
@@ -123,8 +120,7 @@ export function makeTvosBackend() {
       return;
     }
     if (!counting) return;
-    pending.push(text);
-    nudge();
+    lines.push(text);
   };
 
   const stream = (pipe) => {
@@ -190,17 +186,9 @@ export function makeTvosBackend() {
       await waitForWarmRace();
       await sleep(GRID_MS);
       counting = true;
-      timer = setTimeout(() => { ended = true; nudge(); }, seconds * 1000);
+      timer = setTimeout(() => lines.end(), seconds * 1000);
 
-      return {
-        async* [Symbol.asyncIterator]() {
-          for (;;) {
-            while (pending.length) yield pending.shift();
-            if (ended) return;
-            await new Promise((r) => { wake = r; });
-          }
-        }
-      };
+      return lines;
     },
 
     /**
@@ -214,14 +202,14 @@ export function makeTvosBackend() {
      */
     async stop() {
       clearTimeout(timer);
-      ended = true;
+
       if (child) {
         child.stdout?.destroy();
         child.stderr?.destroy();
         child.kill('SIGKILL');
         child = null;
       }
-      nudge();
+      lines.end();
     }
   };
 }
