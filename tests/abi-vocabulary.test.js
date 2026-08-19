@@ -78,6 +78,20 @@ function kotlinWhenStrings(src, afterMarker) {
   return [...body.matchAll(/"([a-z][a-z-]*)"/g)].map((m) => m[1]);
 }
 
+/**
+ * One Kotlin method's body. Bounded at the next member OR the next KDoc block,
+ * whichever comes first — a doc comment is prose and quotes the vocabulary
+ * freely, so letting one in would report a neighbour's sentences as arms.
+ */
+function kotlinBody(src, marker) {
+  const i = src.indexOf(marker);
+  assert.ok(i > 0, `${marker} has moved`);
+  const ends = ['\n    fun ', '\n    /**', '\n    private fun ']
+    .map((s) => src.indexOf(s, i + marker.length))
+    .filter((n) => n > 0);
+  return src.slice(i, ends.length ? Math.min(...ends) : src.length);
+}
+
 test('the freeze plan speaks its documented member ops', () => {
   // The plan answers the transition AND its ordered member ops
   // ("pause-session", "hold-cars", …). A shell arm spelling a word the header
@@ -123,8 +137,12 @@ test('the back effect speaks swallow/end-party/return-to-lobby', () => {
 test('the race-flow entry points read `action`, and only its values', () => {
   // The START bug: `{"action":"launch"}` read as a boolean `launch`. Nothing
   // errored — `verdict["launch"]` was nil and the guard rejected every start.
-  const src = shell('shells/tvos/TinyTrackParty/App/GameCoordinator.swift');
-  if (src === null) return;
+  const swift = shell('shells/tvos/TinyTrackParty/App/GameCoordinator.swift');
+  // The Kotlin twin hand-writes the same three reads. Auditing only tvOS is the
+  // gap the back-effect case above already names: a second shell can spell a
+  // word the ABI never says and its `else -> Unit` swallows the miss.
+  const kotlin = shell(
+    'shells/androidtv/app/src/main/kotlin/com/couchgames/tinytrackparty/GameCoordinator.kt');
   const header = read('native/runtime/ttp_race.h');
 
   for (const [fn, marker] of [['ttp_race_start_live_json', 'startRace'],
@@ -136,18 +154,38 @@ test('the race-flow entry points read `action`, and only its values', () => {
       .concat([...doc.matchAll(/\|"([a-z-]+)"/g)].map((m) => m[1])));
     assert.ok(actions.size > 0, `${fn}: could not read its actions from the header`);
 
-    const i = src.indexOf(`func ${marker}`);
-    assert.ok(i > 0, `${marker} has moved`);
-    // Bounded at the next declaration at the same indent — an unbounded slice
-    // reads the whole rest of the file and reports its neighbours' cases.
-    const body = src.slice(i, nextDecl(src, i));
-    for (const m of body.matchAll(/\["action"\]\s+as\?\s+String\s*==\s*"([^"]+)"/g)) {
-      assert.ok(actions.has(m[1]),
-        `${marker} compares action to "${m[1]}", which ${fn} never answers`);
+    if (swift !== null) {
+      const i = swift.indexOf(`func ${marker}`);
+      assert.ok(i > 0, `${marker} has moved`);
+      // Bounded at the next declaration at the same indent — an unbounded slice
+      // reads the whole rest of the file and reports its neighbours' cases.
+      const body = swift.slice(i, nextDecl(swift, i));
+      for (const m of body.matchAll(/\["action"\]\s+as\?\s+String\s*==\s*"([^"]+)"/g)) {
+        assert.ok(actions.has(m[1]),
+          `${marker} compares action to "${m[1]}", which ${fn} never answers`);
+      }
+      for (const m of body.matchAll(/case\s+"([a-z-]+)":/g)) {
+        assert.ok(actions.has(m[1]),
+          `${marker} matches action "${m[1]}", which ${fn} never answers`);
+      }
     }
-    for (const m of body.matchAll(/case\s+"([a-z-]+)":/g)) {
-      assert.ok(actions.has(m[1]),
-        `${marker} matches action "${m[1]}", which ${fn} never answers`);
+
+    if (kotlin !== null) {
+      const body = kotlinBody(kotlin, `fun ${marker}(`);
+      assert.match(body, /optString\("action"\)/,
+        `Kotlin ${marker} no longer reads \`action\` — has it started trusting a bool?`);
+      // Both spellings the shell uses: the guard (`!= "launch"`) and the `when`.
+      const words = [
+        ...[...body.matchAll(/optString\("action"\)\s*[!=]=\s*"([a-z-]+)"/g)].map((m) => m[1]),
+        ...(/when\s*\([^)]*optString\("action"\)\s*\)/.test(body)
+          ? [...body.matchAll(/"([a-z-]+)"\s*->/g)].map((m) => m[1])
+          : []),
+      ];
+      assert.ok(words.length > 0, `Kotlin ${marker}: could not read which actions it matches`);
+      for (const w of words) {
+        assert.ok(actions.has(w),
+          `Kotlin ${marker} matches action "${w}", which ${fn} never answers`);
+      }
     }
   }
 });
@@ -157,11 +195,19 @@ test('the auto-pause walk hands the effect walker EFFECTS, in one call', () => {
   // found no `effects` and did nothing, silently — the freeze never froze.
   // The live walk closed that hole structurally: the decision AND its effects
   // are one answer, so there is no decision object left to mis-route.
-  const src = shell('shells/tvos/TinyTrackParty/App/GameCoordinator.swift');
-  if (src === null) return;
-  const i = src.indexOf('func refreshAutoPause');
-  assert.ok(i > 0, 'refreshAutoPause has moved');
-  const body = src.slice(i, src.indexOf('\n    }', i));
-  assert.match(body, /run\(TTP\.obj\(ttp_race_auto_pause_live_json/,
-    'the one walk answers the effects the walker performs');
+  const swift = shell('shells/tvos/TinyTrackParty/App/GameCoordinator.swift');
+  if (swift !== null) {
+    const i = swift.indexOf('func refreshAutoPause');
+    assert.ok(i > 0, 'refreshAutoPause has moved');
+    const body = swift.slice(i, swift.indexOf('\n    }', i));
+    assert.match(body, /run\(TTP\.obj\(ttp_race_auto_pause_live_json/,
+      'the one walk answers the effects the walker performs');
+  }
+  const kotlin = shell(
+    'shells/androidtv/app/src/main/kotlin/com/couchgames/tinytrackparty/GameCoordinator.kt');
+  if (kotlin !== null) {
+    assert.match(kotlinBody(kotlin, 'fun refreshAutoPause('),
+      /run\(TtpJson\.obj\(Ttp\.ttp_race_auto_pause_live_json/,
+      'the Kotlin twin walks the same one answer, not a bare decision');
+  }
 });
