@@ -9,8 +9,8 @@
 //                    --icon-car (monster cab, CAR_BODY_COLORS) — consumed on
 //                    the web as CSS vars, substituted on tvOS before the
 //                    rasterizer sees the file
-//   THE BODY TONES   CAR_BODY_COLORS spelled twice (JS + Swift) on purpose,
-//                    and pinned here so the spellings cannot drift
+//   THE BODY TONES   CAR_BODY_COLORS spelled per shell (JS + Swift + Kotlin)
+//                    on purpose, and pinned here so the spellings cannot drift
 //
 // SOURCE CHECKS, because this is about what shells draw and there is no ABI in
 // between to ask.
@@ -114,10 +114,10 @@ test('tvOS stages the same files and substitutes the same two tokens', () => {
 
 // ---- the body tones -------------------------------------------------------
 
-test('CAR_BODY_COLORS is spelled the same in JS and Swift', () => {
-  // A sanctioned second spelling (like the cup tints): the values are authored
-  // in shared/itemIcons.js, and the Swift table must match it entry for entry,
-  // in CAR_MODELS order.
+test('CAR_BODY_COLORS is spelled the same in JS, Swift and Kotlin', () => {
+  // A sanctioned per-shell spelling (like the cup tints): the values are
+  // authored in shared/itemIcons.js, and each shell's table must match it entry
+  // for entry, in CAR_MODELS order.
   const js = read('public/shared/itemIcons.js');
   const jsList = js.slice(js.indexOf('CAR_BODY_COLORS'));
   const jsColors = [...jsList.slice(0, jsList.indexOf(']')).matchAll(/'#([0-9a-fA-F]{6})'/g)]
@@ -125,15 +125,27 @@ test('CAR_BODY_COLORS is spelled the same in JS and Swift', () => {
   assert.ok(jsColors.length > 0, 'CAR_BODY_COLORS has moved');
 
   const swift = shell('shells/tvos/TinyTrackParty/Screens/ItemIcon.swift');
-  if (swift === null) return;
-  // Slice from the literal's own `[` (the declaration's `[UInt32]` carries an
-  // earlier `]` that would end the slice before the first entry).
-  const decl = swift.slice(swift.indexOf('carBodyColors'));
-  const open = decl.indexOf('= [');
-  const swiftColors = [...decl.slice(open, decl.indexOf(']', open + 3)).matchAll(/0x([0-9a-fA-F]{6})/g)]
-    .map((m) => m[1].toLowerCase());
-  assert.deepEqual(swiftColors, jsColors,
-    'the Swift body-tone table drifted from shared/itemIcons.js');
+  if (swift !== null) {
+    // Slice from the literal's own `[` (the declaration's `[UInt32]` carries an
+    // earlier `]` that would end the slice before the first entry).
+    const decl = swift.slice(swift.indexOf('carBodyColors'));
+    const open = decl.indexOf('= [');
+    const swiftColors = [...decl.slice(open, decl.indexOf(']', open + 3)).matchAll(/0x([0-9a-fA-F]{6})/g)]
+      .map((m) => m[1].toLowerCase());
+    assert.deepEqual(swiftColors, jsColors,
+      'the Swift body-tone table drifted from shared/itemIcons.js');
+  }
+
+  const kotlin = shell(
+    'shells/androidtv/app/src/main/kotlin/com/couchgames/tinytrackparty/ItemIcon.kt');
+  if (kotlin !== null) {
+    const decl = kotlin.slice(kotlin.indexOf('CAR_BODY_COLORS'));
+    const open = decl.indexOf('intArrayOf(');
+    const kotlinColors = [...decl.slice(open, decl.indexOf(')', open)).matchAll(/0x([0-9a-fA-F]{6})/g)]
+      .map((m) => m[1].toLowerCase());
+    assert.deepEqual(kotlinColors, jsColors,
+      'the Kotlin body-tone table drifted from shared/itemIcons.js');
+  }
 });
 
 // ---- the slot -------------------------------------------------------------

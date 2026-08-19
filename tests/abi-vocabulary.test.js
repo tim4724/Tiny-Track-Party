@@ -70,6 +70,14 @@ function swiftCases(src, afterMarker) {
   return [...body.matchAll(/case\s+"([^"]+)"/g)].map((m) => m[1]);
 }
 
+/** Every string literal in the Kotlin `when` that starts at `afterMarker`. */
+function kotlinWhenStrings(src, afterMarker) {
+  const i = src.indexOf(afterMarker);
+  assert.ok(i > 0, `${afterMarker} has moved`);
+  const body = src.slice(i, src.indexOf('\n            }', i));
+  return [...body.matchAll(/"([a-z][a-z-]*)"/g)].map((m) => m[1]);
+}
+
 test('the freeze plan speaks its documented member ops', () => {
   // The plan answers the transition AND its ordered member ops
   // ("pause-session", "hold-cars", …). A shell arm spelling a word the header
@@ -92,10 +100,23 @@ test('the back effect speaks swallow/end-party/return-to-lobby', () => {
   const words = vocabulary('native/runtime/ttp_ui.h', 'ttp_ui_back_effect', '"swallow"');
   // The switch lives in RootView (the Menu button's one dispatch site), not in
   // the coordinator — there is deliberately no second walker of this table.
-  const src = shell('shells/tvos/TinyTrackParty/Screens/RootView.swift');
-  if (src === null) return;
-  for (const c of swiftCases(src, 'var backAction')) {
-    assert.ok(words.has(c), `backAction matches "${c}", which ttp_ui_back_effect never says`);
+  const swift = shell('shells/tvos/TinyTrackParty/Screens/RootView.swift');
+  if (swift !== null) {
+    for (const c of swiftCases(swift, 'var backAction')) {
+      assert.ok(words.has(c), `backAction matches "${c}", which ttp_ui_back_effect never says`);
+    }
+  }
+  // The Kotlin twin: MainActivity's OnBackPressedCallback is ITS one dispatch
+  // site, and auditing only the tvOS switch is what let a dead Kotlin arm drift.
+  const kotlin = shell(
+    'shells/androidtv/app/src/main/kotlin/com/couchgames/tinytrackparty/MainActivity.kt');
+  if (kotlin !== null) {
+    const cases = kotlinWhenStrings(kotlin, 'handleOnBackPressed');
+    assert.ok(cases.length >= 2, 'MainActivity no longer switches on the back effect');
+    for (const c of cases) {
+      assert.ok(words.has(c),
+        `MainActivity matches "${c}", which ttp_ui_back_effect never says`);
+    }
   }
 });
 

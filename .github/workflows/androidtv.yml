@@ -1,0 +1,70 @@
+name: Android TV app
+
+# The Kotlin half of shells/androidtv/, compiled on every change to it.
+#
+# COMPILE-ONLY, and without the engine, for the same reason native.yml's NDK leg
+# is compile-only: a GitHub runner has no TV. -PttpNoEngine tells the freshness
+# gate in app/build.gradle.kts that there are deliberately no .so here, so the
+# APK this produces is unloadable by design. Its job is the Kotlin, the Compose
+# compiler, the resources, the manifest merge and lintVital — everything between
+# the engine and the glass, which is most of the shell.
+#
+# It DOES run the asset staging, because that is a preBuild dependency now, so a
+# stage-assets.sh that reaches for a file nobody committed fails here too — which
+# is why the paths below are not just this shell's. Everything the script COPIES
+# is authored elsewhere (the kit, the cues, the item SVGs, the tokens, the tvOS
+# font bake, the committed .filamat), and a filter that named only
+# shells/androidtv/** would stay green on the one commit that deletes one of
+# them. The trigger has to be the staged INPUTS, or the claim above is false.
+
+on:
+  pull_request:
+    paths:
+      - 'shells/androidtv/**'
+      - '.github/workflows/androidtv.yml'
+      # Staged into the APK by shells/androidtv/scripts/stage-assets.sh.
+      - 'public/assets/toycar/**'
+      - 'public/assets/items/**'
+      - 'public/assets/audio/cues/**'
+      - 'public/assets/audio/engine_loop.*'
+      - 'public/assets/fonts/OFL-*'
+      - 'public/shared/design-tokens.json'
+      - 'public/display/engine/native/*.filamat'
+      - 'shells/tvos/TinyTrackParty/Resources/Fonts/**'
+  push:
+    branches: [main]
+    paths:
+      - 'shells/androidtv/**'
+      - '.github/workflows/androidtv.yml'
+      # Staged into the APK by shells/androidtv/scripts/stage-assets.sh.
+      - 'public/assets/toycar/**'
+      - 'public/assets/items/**'
+      - 'public/assets/audio/cues/**'
+      - 'public/assets/audio/engine_loop.*'
+      - 'public/assets/fonts/OFL-*'
+      - 'public/shared/design-tokens.json'
+      - 'public/display/engine/native/*.filamat'
+      - 'shells/tvos/TinyTrackParty/Resources/Fonts/**'
+
+concurrency:
+  group: androidtv-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          # 17 is what app/build.gradle.kts targets for both source and jvmTarget.
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      # RELEASE, not debug: it is the variant with R8, the proguard rules and the
+      # signing config, so it is the one where a keep rule going missing shows up.
+      # Debug would compile the same Kotlin and prove none of that.
+      - name: Assemble release (no engine)
+        working-directory: shells/androidtv
+        run: ./gradlew assembleRelease -PttpNoEngine --console=plain

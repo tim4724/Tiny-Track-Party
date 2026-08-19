@@ -282,6 +282,30 @@ Three properties of that surface matter more than the list:
     browser show the URL as a QR for the phone already in the room. Read those
     two URLs out of the display's own footer rather than typing them.
 
+## Still owed by the Android TV shell (audited 2026-08-18)
+
+Each is a real item, not a simplification; the settled reasoning behind the two
+look items is in `shells/androidtv/CLAUDE.md` (Look).
+
+- **The mute toggle** — the web's corner button and the host phone's Sound row
+  have no counterpart, and the mix has no muted state to honour; a TV's own mute
+  is the workaround.
+- **The room advertisement** (item 9, `_couchpad._tcp` over `NsdManager`) — the
+  launcher resolves the code through the relay anyway.
+- **Meshing the next circuit at the intermission** (item 12) — a cup's chained
+  start shows the outgoing circuit under the count and then hitches; on this GPU
+  a build is seconds, so it is the most visible item here.
+- **The info / licenses board** (item 14) — the .ipa's obligations are the .apk's.
+- **An app baseline profile** — the release APK carries only library-supplied
+  profiles, so this shell's own composables and boot path are not AOT-compiled;
+  the tail it would move is the half the GPU readout cannot see, and it costs a
+  macrobenchmark module plus a device run, which is why it is an investment and
+  not a build-file flag.
+- **Frosting behind the full-screen boards** — unreachable from Compose; the two
+  live routes are recorded in the shell's file.
+- **The scene's edge vignette** — belongs under the chrome, so it is a renderer
+  pass.
+
 ## The asymmetries worth knowing before you start
 
 - **C interop is not equal across platforms.** Swift consumes a C header
@@ -394,3 +418,22 @@ photographed perfectly for a build whose Start button had never worked once. A
 harness may fabricate its INPUTS; it must not own a second copy of the road
 (`scripts/capture-shots-tvos.mjs`, `npm run shots:tvos`, is the corrected
 one).
+
+**How MUCH harness a shell owes depends on what its platform can photograph.**
+tvOS needs a UI test on the device, because `devicectl` has no screenshot verb and
+`XCUIScreen.main.screenshot()` is the only thing that captures the CAMetalLayer
+composited with the chrome over it. Android has `adb exec-out screencap -p`, which
+photographs the SurfaceView under the Compose chrome from outside the process — so
+that shell owes a scenario applier and a readiness SIGNAL and nothing else: an
+intent extra in, a log line out, `scripts/capture-shots-androidtv.mjs` driving both
+from the far side. Read the two before writing a third; the second one is a third
+the size.
+
+**The columns are only comparable if the fixtures agree.** `/gallery-shots.html`
+puts any two platforms' shots of one screen side by side, and every difference in
+the FAKE DATA reads as a difference in the UI: player names, how many rows a board
+has, which circuit a race scenario races. Take the web harness's numbers
+(`public/display/TestHarness.js` — the names, the times, the banked points) rather
+than inventing a set, pin the raced circuit to something that does not depend on
+what a previous scenario left in preferences, and put a screen's own `settleMs` in
+`galleryScenarios.js` where a card is about a MOMENT rather than a state.

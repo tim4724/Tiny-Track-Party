@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- The relay, and the origin that serves the phone controller plus the
+         streamed race music. A TV app has no origin of its own, so the web
+         deployment is a runtime dependency (shells.md §8), not an optimisation. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- A TV, and only a TV. leanback REQUIRED is what keeps this off phones in
+         the Play listing; touchscreen NOT required is what lets it onto a TV at
+         all, since the default for that feature is `true`. -->
+    <uses-feature
+        android:name="android.software.leanback"
+        android:required="true" />
+    <uses-feature
+        android:name="android.hardware.touchscreen"
+        android:required="false" />
+    <!-- Filament's GLES3 path. Declared so the store filters boxes that cannot
+         run the renderer, rather than letting them install and show black. -->
+    <uses-feature
+        android:glEsVersion="0x00030000"
+        android:required="true" />
+
+    <application
+        android:label="@string/app_name"
+        android:banner="@drawable/banner"
+        android:icon="@drawable/banner"
+        android:supportsRtl="false"
+        android:theme="@style/Theme.TinyTrackParty">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:screenOrientation="landscape"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.TinyTrackParty"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density">
+            <!-- LEANBACK_LAUNCHER, not LAUNCHER: the TV home screen only shows
+                 the former, and an app with only the latter installs and then
+                 cannot be found. -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
