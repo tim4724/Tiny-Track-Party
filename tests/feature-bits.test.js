@@ -1,7 +1,7 @@
 // One source per shared number: the TTP_FEAT_* ablation bits are declared in
 // `native/runtime/ttp_display.h` and nowhere else, and every mirror is a
-// hand-typed copy — Display.js's FEAT map, PerfDebug.kt's TTP_FEAT_ALL, and
-// androidtv-live.mjs's default mask.
+// hand-typed copy — Display.js's FEAT map, PerfDebug.kt's TTP_FEAT_ALL, and the
+// bench backend's default mask.
 //
 // THE FAILURE DIRECTION IS SILENT. A new TTP_FEAT bit lands in the header, the
 // renderer gates a channel on it, and every stale ALL mirror masks that channel
@@ -64,12 +64,12 @@ test("PerfDebug.kt's TTP_FEAT_ALL matches the header", () => {
     `PerfDebug.kt's TTP_FEAT_ALL 0x${m[1]} disagrees with ttp_display.h`);
 });
 
-test("androidtv-live.mjs defaults its mask to the header's ALL", () => {
-  // The live harness's un-ablated arm: a stale default here measures every
+test("the bench's Android backend defaults its mask to the header's ALL", () => {
+  // The live bench's un-ablated arm: a stale default here measures every
   // "full picture" run one channel short.
-  const m = read('scripts/androidtv-live.mjs')
-    .match(/opt\('features',\s*'0x([0-9A-Fa-f]+)'\)/);
-  assert.ok(m, "androidtv-live.mjs's --features default has moved");
+  const m = read('scripts/perf-race.android.mjs')
+    .match(/TTP_FEAT_ALL\s*=\s*'0x([0-9A-Fa-f]+)'/);
+  assert.ok(m, "perf-race.android.mjs's TTP_FEAT_ALL has moved");
   assert.equal(parseInt(m[1], 16), headerBits().get('ALL'),
-    `androidtv-live.mjs defaults --features to 0x${m[1]}, which disagrees with ttp_display.h`);
+    `perf-race.android.mjs defaults the mask to 0x${m[1]}, which disagrees with ttp_display.h`);
 });

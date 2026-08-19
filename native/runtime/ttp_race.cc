@@ -49,6 +49,9 @@ namespace {
 // resolves no cup and the CPU fill seats nobody.
 race::FieldWorld g_world;
 std::vector<race::Cup> g_cups;
+// The bench latch (ttp_race_autopilot_players). Off is the shipping path and
+// the only path any recorded launch takes.
+bool g_autopilotPlayers = false;
 
 // ---- scratch buffers ---------------------------------------------------------
 // One per string-returning export rather than one shared: a shell reads the
@@ -58,7 +61,7 @@ std::vector<race::Cup> g_cups;
 std::string g_bufPersonas, g_bufOps, g_bufDemo, g_bufStart, g_bufLaunch,
     g_bufEvents, g_bufAdvance, g_bufReturn, g_bufEndParty,
     g_bufPause, g_bufResume,
-    g_bufForfeit, g_bufRekey, g_bufAutoPause;
+    g_bufForfeit, g_bufRekey, g_bufAutoPause, g_bufBench;
 
 const char* put(std::string& buf, const Value& v) {
   ordered_stringify_into(v, buf);
@@ -144,6 +147,7 @@ race::LaunchResult launchOff(int roomHandle, std::vector<race::Human> players,
   li.forceItem = optStrOfC(forceItemOrNull);
   li.world = worldWithCap(botCapJson);
   li.humansAtBack = true;
+  li.autopilotPlayers = g_autopilotPlayers;
   li.gridOrder = std::move(gridOrder);
   return race::launchRace(li);
 }
@@ -189,6 +193,10 @@ Value botVal(const race::BotSpec& b) {
   v.set("caution", Value::Num(b.caution));
   v.set("laneBias", Value::Num(b.laneBias));
   v.set("seed", Value::Num(b.seed));
+  // ONLY when set — key PRESENCE is contract here (this file's header), and an
+  // unconditional `player:false` would rewrite every recorded launch's bots
+  // array for a marker no shipping launch ever raises.
+  if (b.player) v.set("player", Value::Bool(true));
   return v;
 }
 Value demoVal(const race::DemoEntry& d) {
@@ -559,6 +567,35 @@ const char* ttp_race_personas_json(void) {
     a.push(v);
   }
   return put(g_bufPersonas, a);
+}
+
+// ---- the bench ---------------------------------------------------------------
+
+void ttp_race_autopilot_players(int on) { g_autopilotPlayers = on != 0; }
+
+const char* ttp_race_bench_field_json(const char* trackId, int players, double seed) {
+  race::LaunchInput li;
+  li.players = race::benchPlayers(players, g_world);
+  li.seed = seed;
+  li.trackId = trackId ? trackId : "";
+  li.world = g_world;
+  // The game's rule, both of them, unconditionally: this exists so a bench with
+  // no room draws what the walk would, and a bench that gridded differently
+  // would be measuring a different picture.
+  li.humansAtBack = true;
+  li.autopilotPlayers = true;
+  const race::LaunchResult r = race::launchRace(li);
+
+  // ONLY the two arrays ttp_session_begin_field takes. The effect list is the
+  // walk's business and there is no room here to perform it against.
+  Value out = Value::Obj();
+  Value field = Value::Arr();
+  for (const race::FieldEntry& f : r.field) field.push(fieldVal(f));
+  Value bots = Value::Arr();
+  for (const race::BotSpec& b : r.bots) bots.push(botVal(b));
+  out.set("field", field);
+  out.set("bots", bots);
+  return put(g_bufBench, out);
 }
 
 // ---- the vocabulary ----------------------------------------------------------

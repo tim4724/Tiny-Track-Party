@@ -1,7 +1,7 @@
 // Finding the Android TV box to drive.
 //
-// Extracted because there are now two callers — the live perf harness
-// (`androidtv-live.mjs`) and the party check (`androidtv-party-check.mjs`).
+// Extracted because there are now two callers — the bench's Android backend
+// (`perf-race.android.mjs`) and the party check (`androidtv-party-check.mjs`).
 // Matched on the PROPERTY rather than on a model name: a phone plugged in
 // beside the box is the ordinary case on a developer's desk, and installing a
 // leanback-only APK on it fails in a way that reads as an app bug. An AVD

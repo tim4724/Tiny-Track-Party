@@ -43,7 +43,8 @@ const PACKAGE = 'games.couchpad.tinytrack';
 // without a renderer would fail to REGISTER rather than fail mysteriously later.
 const HEADERS = [
   'ttp_runtime.h', 'ttp_party.h', 'ttp_net.h', 'ttp_race.h', 'ttp_ui.h',
-  'ttp_audio.h', 'ttp_display.h', 'ttp_theme.h', 'ttp_glb.h', 'ttp_error.h',
+  'ttp_audio.h', 'ttp_display.h', 'ttp_theme.h', 'ttp_glb.h', 'ttp_perf.h',
+  'ttp_error.h',
 ];
 
 // ---------------------------------------------------------------------------

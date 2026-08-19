@@ -42,10 +42,17 @@ TTP_ABI void ttp_add_bot(int h, const char* idJson, double caution, double laneB
 // with a spec becomes a bot, everything else a human, field order kept,
 // humans gridded before bots).
 //   fieldJson  [{"peerIndex":<scalar>,"stats":{..}|null, ...extra keys ignored}, ...]
-//   botsJson   [{"peerIndex":<scalar>,"caution":n?,"laneBias":n?,"seed":n?}, ...]
+//   botsJson   [{"peerIndex":<scalar>,"caution":n?,"laneBias":n?,"seed":n?,
+//               "player":true?}, ...]
 // Absent or null persona knobs take the engine defaults (caution 1, laneBias 0,
 // seed 1) — a spec spells only what it means. Same 0-on-failure contract as
 // ttp_session_begin.
+//
+// `player:true` is the AUTOPILOT MARKER: the seat gets its controller AND stays
+// a participant (it is not in ttp_session_ai_ids, it keeps its cell, the audio
+// still hears it, and the auto-pause rule still counts it). That is the one
+// arrangement a bench or an attract race needs and the one no combination of
+// the two buckets could express — see ttp/race_flow.h, BotSpec::player.
 TTP_ABI int ttp_session_begin_field(const char* trackId, uint32_t seed, int laps,
                             const char* forceItemOrNull,
                             const char* fieldJson, const char* botsJson);

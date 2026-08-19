@@ -35,7 +35,7 @@ function launch() {
       maxPlayers: manifest.MAX_PLAYERS, carCount: manifest.CAR_MODELS.length }));
     const cat = JSON.parse(c('ttp_ui_catalogue_json', 'string', [])());
     c('ttp_race_configure', 'number', ['string'])(JSON.stringify({
-      fieldSize: manifest.MAX_PLAYERS,
+      fieldSize: manifest.FIELD_SIZE,
       carCount: manifest.CAR_MODELS.length,
       colorCount: manifest.CAR_COLORS.length,
       aiPrefix: 'ai-',
@@ -43,11 +43,14 @@ function launch() {
       carStats: manifest.CAR_STATS,
       cups: cat.cups
     }));
-    // TWO humans seated in a live room and a field size of four, so the answer
-    // must invent bots. A full lobby would produce an empty `bots` array and
-    // this whole file would assert nothing. The launch is the executor's
-    // (`ttp_race_start_live_json`); the composed race rides its create-session
-    // effect.
+    // TWO humans seated in a live room, against the SHIPPED field size, so the
+    // answer must invent bots. A full lobby would produce an empty `bots` array
+    // and this whole file would assert nothing. `fieldSize` is FIELD_SIZE and
+    // not MAX_PLAYERS on purpose: this harness configured the phone cap for
+    // months, so nothing in the Node suite had ever launched the 8-car grid the
+    // game ships — the very mistake the tvOS check at the bottom of this file
+    // exists to catch. The launch is the executor's (`ttp_race_start_live_json`);
+    // the composed race rides its create-session effect.
     const room = c('ttp_room_create', 'number', ['string'])(JSON.stringify({
       liveness: { timeoutMs: 60000, graceMs: 60000 } }));
     const add = c('ttp_room_add_player', 'number', ['number', 'string', 'string']);
@@ -60,15 +63,18 @@ function launch() {
     const cs = (d.effects || []).find((e) => e.op === 'create-session');
     assert.ok(cs, 'the launch answers a create-session effect');
     const ai = (cs.field || []).filter((e) => e.ai).map((e) => e.peerIndex);
-    return { field: cs.field, bots: cs.bots, aiIds: ai };
+    return { field: cs.field, bots: cs.bots, aiIds: ai, fieldSize: manifest.FIELD_SIZE };
   })());
 }
 
+const HUMANS = 2; // Alice and Bob, seated above
+
 test('a part-full lobby is filled with bots (the premise)', async () => {
   const d = await launch();
-  assert.equal(d.field.length, 4, 'the field fills to the configured size');
-  assert.equal(d.bots.length, 2, 'so two of them are AI');
-  assert.deepEqual(d.aiIds, ['ai-0', 'ai-1']);
+  assert.equal(d.field.length, d.fieldSize, 'the field fills to the configured size');
+  assert.equal(d.bots.length, d.fieldSize - HUMANS, 'and the rest of the grid is AI');
+  assert.deepEqual(d.aiIds,
+    Array.from({ length: d.fieldSize - HUMANS }, (_, i) => `ai-${i}`));
 });
 
 test('a bot spec is keyed peerIndex, and carries NO stats', async () => {
@@ -91,7 +97,7 @@ test('the field entry is where a racer\'s stats and identity live', async () => 
   }
   // The field carries BOTH humans and AI, flagged — which is what lets one pass
   // over it build the whole session in grid order.
-  assert.equal(d.field.filter((e) => e.ai).length, 2);
+  assert.equal(d.field.filter((e) => e.ai).length, d.fieldSize - HUMANS);
 });
 
 // ---- and that each shell reads those keys ---------------------------------

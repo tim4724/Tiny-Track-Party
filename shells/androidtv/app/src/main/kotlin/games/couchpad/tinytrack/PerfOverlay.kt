@@ -17,78 +17,91 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.json.JSONObject
 import java.nio.ByteOrder
 import java.util.Locale
 
 /**
  * The frame-cost readout, and the Android half of `render/PerfHud.js` and
- * `Render/PerfOverlay.swift`. Read those two first — the reasoning about what a
- * clock here can and cannot mean is written down once, there.
+ * `Render/PerfOverlay.swift`.
  *
- * THREE CLOCKS, AND THEY DO NOT MEASURE THE SAME THING.
+ * WHAT A SHELL DOES HERE IS GATHER. The ring, the trim, the warm-up filter, the
+ * percentiles, the two rates, the drop and skip counts and the health verdict are
+ * all `ttp_perf.h`'s — read it and `ttp/perf_stats.h` for what the three clocks
+ * mean and why they do not sum. This file reads the platform's own instruments
+ * (the Choreographer's cadence, `ttp_display_profile`, `ttp_display_gpu_ms`),
+ * hands them over, and draws the one canonical readout that comes back. The three
+ * hand-written folds this replaces had already drifted apart while all three
+ * carried a comment saying they had not.
  *
- *  - The PRESENT interval, which is the cadence the TV actually showed. Under
- *    vsync it is a plateau, so it says nothing about headroom, but it is the only
- *    thing that says whether a budget was MISSED, which is the part a human
- *    feels. It counts PRESENTS, not Choreographer callbacks — see [DisplayHost],
- *    because the difference between those two is a readout saying 60 on a box
- *    showing 15, and this shell shipped that way.
- *  - CPU, from `ttp_display_profile`: the C++ building the frame's input from the
- *    live `Game` and issuing its draws. Under two milliseconds here, always.
- *  - GPU, from `ttp_display_gpu_ms` — the GL backend's own timer query, and the
- *    one number that can see headroom. It is REAL on this platform, unlike the
- *    two siblings, both of which say so in their own headers.
+ * WHAT THIS ONE ADDS OVER ITS TWO SIBLINGS is the per-section split and the spike
+ * table, and the reason is a measurement rather than taste: on the web the total
+ * is under a millisecond and the sections below it are quantization noise, while
+ * here the frame costs tens of milliseconds and WHICH section holds them is the
+ * question. There is no ABI for that — the profile buffer is this renderer's own —
+ * so the fold for it stays here.
  *
- * The costs do NOT sum: the CPU builds frame N's commands while the GPU is still
- * drawing N-1. Whichever is larger is the one to cut, and on this box it has
- * never once been the CPU.
+ * NOTE WHAT NEITHER HALF CAN SEE: `ttp_display_profile`'s `cpu` is the RENDERER's
+ * profile, and the main thread also carries the sim tick, the event drain, the HUD
+ * poll and every line of Compose after this callback returns. The instrument for
+ * that half is `atrace` (shells/androidtv/CLAUDE.md).
  *
- * WHAT THIS ONE ADDS OVER ITS TWO SIBLINGS is the per-section split, and the
- * reason is a measurement rather than taste: on the web the total is under a
- * millisecond and the sections below it are quantization noise, while here the
- * frame costs tens of milliseconds and WHICH section holds them is the question.
+ * ON BY DEFAULT (every build but a `Scenarios` run) and toggled with KEYCODE_INFO
+ * — which this box's remote does not carry, so in practice it is
+ * `adb shell input keyevent 165`. Everything is inert while hidden AND unbenched:
+ * [record] returns before it touches the profile ABI.
  *
- * ON IN DEBUG BUILDS, and toggled with KEYCODE_INFO — which this box's remote does
- * not carry, so in practice it is `adb shell input keyevent 165`. Everything is
- * inert while hidden: [record] returns before it touches the profile ABI.
- *
- * MAIN THREAD ONLY, like everything that touches a `ttp_display_*`.
+ * MAIN THREAD ONLY, like everything that touches a `ttp_*`.
  */
 object PerfMonitor {
 
     /**
-     * The bar, and the denominator of every percentage. Declared in
-     * [DisplayHost], which also OWNS this value: at every-other-vsync pacing
-     * (`debug.ttp.hz 30`) it doubles, or every healthy 33 ms frame would read
-     * as a drop and every percentage would lie by 2x.
+     * ONE LINE PER SECOND, prefixed with this tag, is the bench's whole wire —
+     * `console.log('TtpPerf ' + json)` on the web and `print` on tvOS say the same
+     * bytes, so one parser reads all three. A TV has no console, and a screenshot
+     * of this overlay cannot be diffed against another run.
      */
-    var budgetMs = DisplayHost.BUDGET_MS
+    private const val TAG = "TtpPerf"
+
+    /** The overlay's own refresh; the log's cadence is the bench contract's 1 Hz. */
+    private const val TEXT_INTERVAL_MS = 250.0
+    private const val LOG_INTERVAL_MS = 1000.0
+
     /**
-     * The cost stats fold at most this many frames, AND at most [WINDOW_MS] of
-     * them. The frame cap alone is a trap on a slow box, and it cost a whole
-     * ablation sweep: 120 frames at 12 fps is TEN SECONDS of history, so every
-     * arm of the sweep read as a blend of itself and the arm before it — which
-     * is exactly the situation the readout is for. The time bound is what makes
-     * a reading describe the last few seconds at any frame rate.
+     * The per-section rings hold at most this many frames, AND at most [WINDOW_MS]
+     * of them. The frame cap alone is a trap on a slow box, and it cost a whole
+     * ablation sweep: 120 frames at 12 fps is TEN SECONDS of history, so every arm
+     * of the sweep read as a blend of itself and the arm before it.
+     *
+     * THE SHARED FOLD DOES NOT DO THIS. `ttp/perf_stats.h` trims by frame count
+     * alone; its own `kRecentMs` bounds the rate and the drop/skip counts and
+     * never reaches the percentiles. So the readout's cpu/gpu/frame numbers can
+     * go stale on a slow box in exactly the way this ring cannot, and an
+     * ablation arm has to be given time to fill the window rather than trusted
+     * on its first line.
      */
     private const val WINDOW = 120
     private const val WINDOW_MS = 3000.0
-    private const val TEXT_INTERVAL_MS = 250.0
-    private const val LOG_INTERVAL_MS = 1000.0
+
+    /**
+     * `dpr` rides the readout so a logged number carries the pixels it was paid
+     * for. Here the surface IS its own pixels — the adaptive scaler sizes the
+     * buffer directly and `width`/`height` are that buffer — so there is no second
+     * unit to declare. (The browser's canvas is CSS pixels times its dpr, which is
+     * why the field exists at all.)
+     */
+    private const val DPR = 1.0
 
     /**
      * Sections named on the second line, in the order they are shown. A SUBSET of
      * `ttp_display_profile_names()`, picked because the rest are consistently
      * under a tenth of a millisecond here and a row nobody reads costs the same
-     * screen space as one they do. `total` is the first line's `cpu`. The spike
+     * screen space as one they do. `total` is the readout's own `cpu`. The spike
      * lines ([logSpikes]) are NOT limited to this list — a phase that is nothing
      * at the median is exactly what they exist to catch.
      */
     private val SHOWN = listOf("cars", "world", "skids", "decalUp", "build",
         "cellRender", "present", "endFrame")
-
-    /** The backend's own GPU milliseconds, over the same window. See `ttp_display_gpu_ms`. */
-    private val gpu = ArrayList<Double>(WINDOW)
 
     var visible by mutableStateOf(false)
         private set
@@ -97,25 +110,38 @@ object PerfMonitor {
     var tint by mutableStateOf(Color.Green)
         private set
 
-    /** Stale history is worse than none: a window straddling the toggle describes neither state. */
+    /** See [bench]. */
+    private var benching = false
+
     fun show() { visible = true; reset() }
     fun hide() { visible = false }
     fun toggle() { if (visible) hide() else show() }
 
-    private fun reset() {
-        stamps.clear(); intervals.clear(); sections.clear(); gpu.clear()
+    /**
+     * MEASURE WITHOUT DRAWING, for `Scenarios`' bench race.
+     *
+     * The readout is four lines of Compose `BasicText` re-measured at 4 Hz on the
+     * one frame thread, which is main-thread work of the same order as anything a
+     * bench is hunting — so a benched run logs and shows nothing. It also retires
+     * the trap the old harness carried: the panel is a TOGGLE whose state outlives
+     * a force-stop, so a script that pressed KEYCODE_INFO blind was a coin flip on
+     * whether it had just turned the numbers OFF.
+     */
+    fun bench() { benching = true; reset() }
+
+    /**
+     * Drop both windows. Stale history is worse than none, so this goes wherever
+     * what is being measured changes underneath.
+     */
+    fun reset() {
+        stamps.clear(); sections.clear()
         lastText = 0.0; lastLog = 0.0
-        ticks = 0; skipped = 0
+        Ttp.ttp_perf_reset()
     }
 
-    /** Callbacks and, of those, the ones Filament declined to draw. See [record]. */
-    private var ticks = 0
-    private var skipped = 0
-
-    /** Sample timestamps, parallel to [intervals] — the time bound reads these. */
+    /** Sample timestamps, parallel to every [sections] series — the age bound reads these. */
     private val stamps = ArrayList<Double>(WINDOW)
-    private val intervals = ArrayList<Double>(WINDOW)
-    /** Per shown section, the trailing window of per-frame milliseconds. */
+    /** Per section, the trailing window of per-frame milliseconds. */
     private val sections = HashMap<String, ArrayList<Double>>()
     private var lastText = 0.0
     private var lastLog = 0.0
@@ -124,33 +150,39 @@ object PerfMonitor {
     private var names: List<String>? = null
 
     /**
-     * One Choreographer callback. `presented` is whether it actually reached the
-     * screen — see the callback in [DisplayHost] for why the two are not the same
-     * thing here, and why counting callbacks reads 60 on a box showing 15.
+     * One Choreographer callback, drawn or not. `presented` is whether it actually
+     * reached the screen — see the callback in [DisplayHost] for why the two are
+     * not the same thing here, and why counting callbacks reads 60 on a box
+     * showing 15. The fold takes both: the tick rate is `hz`, the presents are
+     * `fps`, and the gap between them is how many the television never got.
+     *
+     * `intervalMs` is the CADENCE — since the previous CALLBACK, on every one of
+     * them (`ttp_perf.h`). Not the present-to-present interval the scale rule
+     * folds, which is a different question and made this box's numbers
+     * incomparable with the other two shells' for a while.
      */
     fun record(nowMs: Double, intervalMs: Double, presented: Boolean,
                cells: Int, width: Int, height: Int, track: String) {
-        if (!visible) return
-        ticks++
-        if (!presented) { skipped++; return }
-        if (intervalMs <= 0) return          // the first present has no interval
-        // EVERY SERIES GETS EXACTLY ONE SAMPLE PER PRESENTED FRAME, so they stay
-        // parallel to `stamps` and one trim is correct for all of them. A missing
-        // value is recorded as 0 and filtered where it is read, never skipped —
-        // skipping would slide one series against the others.
-        stamps.add(nowMs)
-        intervals.add(intervalMs)
-        gpu.add(Ttp.ttp_display_gpu_ms())    // 0 = the query has not come back yet
-        readProfile()
-        trim(nowMs)
-        if (nowMs - lastText < TEXT_INTERVAL_MS) return
-        lastText = nowMs
-        paint(cells, width, height, track)
-        if (nowMs - lastLog >= LOG_INTERVAL_MS) {
+        if (!visible && !benching) return
+        // MEASUREMENTS ONLY (ttp_perf.h). A skip contributes no cost sample at
+        // all: the renderer returns before writing its total, so the profile still
+        // holds the last DRAWN frame, and <= 0 means ABSENT rather than free.
+        val cpuMs = if (presented) readProfile() else -1.0
+        val gpuMs = if (presented) Ttp.ttp_display_gpu_ms() else -1.0
+        Ttp.ttp_perf_sample(nowMs, intervalMs, if (presented) 1 else 0, cpuMs, gpuMs)
+        if (presented) { stamps.add(nowMs); trim(nowMs) }
+
+        val wantText = visible && nowMs - lastText >= TEXT_INTERVAL_MS
+        val wantLog = nowMs - lastLog >= LOG_INTERVAL_MS
+        if (!wantText && !wantLog) return
+        // ONE readout, drawn AND logged, deliberately the same bytes so a
+        // screenshot and a logged number cannot disagree.
+        val out = Ttp.ttp_perf_readout_json(cells, width, height, DPR,
+            TtpJson.arg(track.ifEmpty { null }))
+        if (wantText) { lastText = nowMs; paint(TtpJson.obj(out)) }
+        if (wantLog) {
             lastLog = nowMs
-            // The ONLY channel a scripted sweep has. A TV has no console, and a
-            // screenshot of this overlay cannot be diffed against another run.
-            for (l in lines) Log.i("TtpPerf", l)
+            Log.i(TAG, TtpJson.strOrEmpty(out))
             logSpikes()
         }
     }
@@ -168,9 +200,10 @@ object PerfMonitor {
      *  - `phasemax name:ms ...` — each phase's own max over the window, for the
      *    second-worst culprit and for spikes that never top a frame.
      *
-     * `name:ms` with a COLON is the vocabulary `scripts/androidtv-live.mjs`
+     * `name:ms` with a COLON is the vocabulary `scripts/perf-race.android.mjs`
      * parses back out of the log — its per-phase spike attribution is keyed on
-     * exactly this spelling.
+     * exactly this spelling, and a JSON readout line is told from these by its
+     * leading brace.
      */
     private fun logSpikes() {
         val n = names ?: return
@@ -184,88 +217,94 @@ object PerfMonitor {
             if (v > wv) { wv = v; wi = i }
         }
         val cols = n.filter { !sections[it].isNullOrEmpty() }
-        Log.i("TtpPerf", "spike " + cols.joinToString(" ") {
+        Log.i(TAG, "spike " + cols.joinToString(" ") {
             "$it:${fmt(sections[it]?.getOrNull(wi) ?: 0.0)}" })
-        Log.i("TtpPerf", "phasemax " + cols.joinToString(" ") {
+        Log.i(TAG, "phasemax " + cols.joinToString(" ") {
             "$it:${fmt(sections[it]?.maxOrNull() ?: 0.0)}" })
     }
 
     /**
      * Drop what is older than the window, by count AND by age. Every series is cut
-     * to the same length so a percentile over one is over the same frames as a
-     * percentile over another.
+     * to the same length so a median over one is over the same frames as a median
+     * over another.
      */
     private fun trim(nowMs: Double) {
         var drop = maxOf(0, stamps.size - WINDOW)
         while (drop < stamps.size && nowMs - stamps[drop] > WINDOW_MS) drop++
         if (drop == 0) return
         stamps.subList(0, drop).clear()
-        intervals.subList(0, drop).clear()
-        gpu.subList(0, drop).clear()
         for (v in sections.values) v.subList(0, minOf(drop, v.size)).clear()
     }
 
-    private fun readProfile() {
+    /**
+     * The frame's per-section split into [sections], and its `total` back as the
+     * cpu millisecond the fold takes. -1 is ABSENT, which is not zero.
+     */
+    private fun readProfile(): Double {
         val buf = Ttp.ttp_display_profile()
         if (buf == null) {
             for (v in sections.values) v.add(0.0)   // keep the series parallel
-            return
+            return -1.0
         }
         buf.order(ByteOrder.nativeOrder())
         val n = names ?: TtpJson.strOrEmpty(Ttp.ttp_display_profile_names())
             .split(",").also { names = it }
+        var total = -1.0
         for (i in n.indices) {
             if ((i + 1) * 8 > buf.capacity()) break
+            val ms = buf.getDouble(i * 8)
+            if (n[i] == "total") total = ms
             // EVERY section, not just SHOWN: the spike table reads the whole
             // split of the window's worst frame, and the phase it needs is by
             // definition one the median display had no reason to show.
-            sections.getOrPut(n[i]) { ArrayList(WINDOW) }.add(buf.getDouble(i * 8))
+            sections.getOrPut(n[i]) { ArrayList(WINDOW) }.add(ms)
         }
+        return total
     }
 
-    /**
-     * Budgets missed by a frame that took `interval`. Rounded rather than floored,
-     * because presents land on vsyncs: a 25 ms interval is a frame that slipped
-     * one budget, not 1.5 of them.
-     */
-    private fun missed(interval: Double): Int =
-        if (interval > 0) maxOf(0, Math.round(interval / budgetMs).toInt() - 1) else 0
-
-    private fun paint(cells: Int, width: Int, height: Int, track: String) {
-        val recent = intervals.takeLast(60)
-        val meanMs = if (recent.isEmpty()) 0.0 else recent.average()
-        val fps = if (meanMs > 0) (1000.0 / meanMs) else 0.0
-        val drops = recent.sumOf { missed(it) }
-        val skipPct = if (ticks > 0) skipped * 100 / ticks else 0
-        ticks = 0; skipped = 0
-        val cpu = median(sections["total"]?.filter { it > 0 })
-        val sorted = intervals.sorted()
-        val p95 = if (sorted.isEmpty()) 0.0 else sorted[minOf(sorted.size - 1, (sorted.size * 0.95).toInt())]
-
-        // The surface and the cadence on one line, the cost on the next, the split
-        // under both. `cells` is here for the reason it is in the siblings: GPU
-        // cost scales with cells and pixels together, so a logged number without
-        // both is not comparable to any other logged number.
+    /** The surface and the cadence on one line, the cost on the next, the split under both. */
+    private fun paint(r: JSONObject) {
+        val budget = r.optDouble("budgetMs")
+        val drops = r.optInt("drops")
+        // `cells` and the buffer size are on the first line for the reason they are
+        // in the readout at all: GPU cost scales with cells and pixels together, so
+        // a number carrying neither is not comparable to any other number.
+        val head = "${r.optInt("width")}x${r.optInt("height")} · ${r.optInt("cells")}c"
+        // An unknown rate is not a bad one — the fold says when it has enough
+        // presents to mean anything, and until then this shows the tick rate alone.
+        val cadence = when {
+            r.optBoolean("warming") -> "warming"
+            !r.optBoolean("fpsReady") -> "${r.optInt("hz")} hz"
+            else -> "${r.optInt("fps")} fps · ${r.optInt("hz")} hz · " +
+                "$drops drop${if (drops == 1) "" else "s"}"
+        }
+        // optStr: `track` is a nullable engine key, and org.json reads an explicit
+        // JSON null back as the STRING "null".
+        val track = TtpJson.optStr(r, "track")?.let { " · $it" } ?: ""
         val split = SHOWN.mapNotNull { s ->
             median(sections[s]?.filter { it > 0 })?.let { "$s ${fmt(it)}" } }
         lines = listOf(
-            "${width}x$height · ${cells}c · ${"%.0f".format(Locale.ROOT, fps)} fps · " +
-                "$drops drop${if (drops == 1) "" else "s"}${if (track.isEmpty()) "" else " · $track"}",
-            "gpu ${share(median(gpu.filter { it > 0 }))} · cpu ${share(cpu)} · " +
-                "present ${fmt(p95)}ms p95 · skip $skipPct%",
+            "$head · $cadence$track",
+            "gpu ${share(stat(r, "gpu", "p50"), budget)}" +
+                " · cpu ${share(stat(r, "cpu", "p50"), budget)}" +
+                // `frame` is the TICK cadence, not present-to-present — the
+                // shared readout's own definition (ttp_perf.h). Labelled
+                // "present" it said something the fold does not, on the one
+                // number a developer reads first when diagnosing a starved
+                // panel; `skip` beside it is what counts late PRESENTS.
+                " · tick ${share(stat(r, "frame", "p95"), budget)} p95" +
+                " · skip ${r.optInt("skips")}",
         ) + split.chunked(3).map { it.joinToString("  ") }
-
-        // The web's thresholds, kept so the three readouts mean the same thing. With
-        // no GPU timer the overshoot term is the interval's p95 past one budget.
-        // DIAGNOSTIC colours: the sticker palette's veto on amber does not reach a
-        // debug overlay, and matching the siblings is worth more than matching theme.
-        val over = p95 / budgetMs - 1
-        tint = when {
-            drops > 2 || over > 1 || (fps > 0 && fps < 48) -> Color(0xFFFF6B6B)
-            drops > 0 || over > 0.7 || (fps > 0 && fps < 57) -> Color(0xFFFFD166)
+        tint = when (r.optString("verdict")) {
+            "bad" -> Color(0xFFFF6B6B)
+            "warn" -> Color(0xFFFFD166)
             else -> Color(0xFF7DFC8A)
         }
     }
+
+    /** One `{max,n,p05,p50,p95}` field, or null for a series this platform has none of. */
+    private fun stat(r: JSONObject, series: String, field: String): Double? =
+        r.optJSONObject(series)?.optDouble(field)
 
     private fun fmt(ms: Double) = String.format(Locale.ROOT, "%.1f", ms)
 
@@ -274,8 +313,8 @@ object PerfMonitor {
      * sense as the two sibling readouts. The two costs do NOT sum: the CPU builds
      * frame N's commands while the GPU is still drawing N-1.
      */
-    private fun share(ms: Double?) =
-        ms?.let { "${fmt(it)}ms ${(it / budgetMs * 100).toInt()}%" } ?: "n/a"
+    private fun share(ms: Double?, budgetMs: Double) =
+        ms?.let { "${fmt(it)}ms ${if (budgetMs > 0) (it / budgetMs * 100).toInt() else 0}%" } ?: "n/a"
 
     private fun median(xs: List<Double>?): Double? {
         if (xs.isNullOrEmpty()) return null
@@ -287,6 +326,10 @@ object PerfMonitor {
  * Drop this over everything. It renders nothing at all while the monitor is
  * hidden, and it is never focusable — a focusable debug panel would steal remote
  * presses from the pause overlay and the results button.
+ *
+ * DIAGNOSTIC colours, not chrome: the sticker palette's veto on amber does not
+ * reach a debug overlay, and the three readouts agreeing on what amber MEANS
+ * (`ttp/perf_stats.h`'s verdict) is worth more than matching the theme.
  */
 @Composable
 fun PerfOverlay() {

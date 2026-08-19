@@ -3,6 +3,18 @@
   "shots": [
     {
       "scenario": "chain",
+      "platform": "androidtv-device",
+      "file": "androidtv-device/chain.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 53630,
+      "capturedAt": "2026-08-19T14:13:38.807Z",
+      "gitSha": "34f1cb7e",
+      "deviceName": "google Google TV Streamer",
+      "deviceId": "192.168.1.150:5555"
+    },
+    {
+      "scenario": "chain",
       "platform": "androidtv-emu",
       "file": "androidtv-emu/chain.webp",
       "w": 1280,
@@ -19,9 +31,21 @@
       "file": "web/chain.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 60424,
-      "capturedAt": "2026-08-18T13:45:58.935Z",
-      "gitSha": "2b5be679"
+      "bytes": 59452,
+      "capturedAt": "2026-08-19T13:58:39.662Z",
+      "gitSha": "34f1cb7e"
+    },
+    {
+      "scenario": "countdown",
+      "platform": "androidtv-device",
+      "file": "androidtv-device/countdown.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 58462,
+      "capturedAt": "2026-08-19T14:12:06.227Z",
+      "gitSha": "34f1cb7e",
+      "deviceName": "google Google TV Streamer",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "countdown",
@@ -65,9 +89,21 @@
       "file": "web/countdown.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 59706,
-      "capturedAt": "2026-08-18T13:45:07.841Z",
-      "gitSha": "2b5be679"
+      "bytes": 59254,
+      "capturedAt": "2026-08-19T13:57:44.845Z",
+      "gitSha": "34f1cb7e"
+    },
+    {
+      "scenario": "finished",
+      "platform": "androidtv-device",
+      "file": "androidtv-device/finished.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 43338,
+      "capturedAt": "2026-08-19T14:13:05.609Z",
+      "gitSha": "34f1cb7e",
+      "deviceName": "google Google TV Streamer",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "finished",
@@ -99,9 +135,21 @@
       "file": "web/finished.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 42610,
-      "capturedAt": "2026-08-18T13:45:41.969Z",
-      "gitSha": "2b5be679"
+      "bytes": 42476,
+      "capturedAt": "2026-08-19T13:58:21.642Z",
+      "gitSha": "34f1cb7e"
+    },
+    {
+      "scenario": "intermission",
+      "platform": "androidtv-device",
+      "file": "androidtv-device/intermission.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 18974,
+      "capturedAt": "2026-08-19T14:13:25.234Z",
+      "gitSha": "34f1cb7e",
+      "deviceName": "google Google TV Streamer",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "intermission",
@@ -133,9 +181,21 @@
       "file": "web/intermission.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 18308,
-      "capturedAt": "2026-08-18T13:45:53.409Z",
-      "gitSha": "2b5be679"
+      "bytes": 18258,
+      "capturedAt": "2026-08-19T13:58:34.100Z",
+      "gitSha": "34f1cb7e"
+    },
+    {
+      "scenario": "lobby-empty",
+      "platform": "androidtv-device",
+      "file": "androidtv-device/lobby-empty.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 49088,
+      "capturedAt": "2026-08-19T14:11:34.766Z",
+      "gitSha": "34f1cb7e",
+      "deviceName": "google Google TV Streamer",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "lobby-empty",
@@ -167,9 +227,21 @@
       "file": "web/lobby-empty.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 40536,
-      "capturedAt": "2026-08-18T13:44:48.902Z",
-      "gitSha": "2b5be679"
+      "bytes": 39434,
+      "capturedAt": "2026-08-19T13:57:24.898Z",
+      "gitSha": "34f1cb7e"
+    },
+    {
+      "scenario": "lobby-loading",
+      "platform": "androidtv-device",
+      "file": "androidtv-device/lobby-loading.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 17130,
+      "capturedAt": "2026-08-19T14:11:28.202Z",
+      "gitSha": "34f1cb7e",
+      "deviceName": "google Google TV Streamer",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "lobby-loading",
@@ -202,8 +274,20 @@
       "w": 1280,
       "h": 720,
       "bytes": 18782,
-      "capturedAt": "2026-08-18T13:44:43.049Z",
-      "gitSha": "2b5be679"
+      "capturedAt": "2026-08-19T13:57:17.622Z",
+      "gitSha": "34f1cb7e"
+    },
+    {
+      "scenario": "lobby-random",
+      "platform": "androidtv-device",
+      "file": "androidtv-device/lobby-random.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 48836,
+      "capturedAt": "2026-08-19T14:11:57.453Z",
+      "gitSha": "34f1cb7e",
+      "deviceName": "google Google TV Streamer",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "lobby-random",
@@ -235,9 +319,21 @@
       "file": "web/lobby-random.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 38604,
-      "capturedAt": "2026-08-18T13:45:04.154Z",
-      "gitSha": "2b5be679"
+      "bytes": 37170,
+      "capturedAt": "2026-08-19T13:57:40.834Z",
+      "gitSha": "34f1cb7e"
+    },
+    {
+      "scenario": "lobby-tour",
+      "platform": "androidtv-device",
+      "file": "androidtv-device/lobby-tour.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 57096,
+      "capturedAt": "2026-08-19T14:11:50.021Z",
+      "gitSha": "34f1cb7e",
+      "deviceName": "google Google TV Streamer",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "lobby-tour",
@@ -257,9 +353,21 @@
       "file": "web/lobby-tour.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 47464,
-      "capturedAt": "2026-08-18T13:44:58.881Z",
-      "gitSha": "2b5be679"
+      "bytes": 46522,
+      "capturedAt": "2026-08-19T13:57:35.286Z",
+      "gitSha": "34f1cb7e"
+    },
+    {
+      "scenario": "lobby-track",
+      "platform": "androidtv-device",
+      "file": "androidtv-device/lobby-track.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 54598,
+      "capturedAt": "2026-08-19T14:11:42.287Z",
+      "gitSha": "34f1cb7e",
+      "deviceName": "google Google TV Streamer",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "lobby-track",
@@ -291,9 +399,21 @@
       "file": "web/lobby-track.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 45362,
-      "capturedAt": "2026-08-18T13:44:53.826Z",
-      "gitSha": "2b5be679"
+      "bytes": 44750,
+      "capturedAt": "2026-08-19T13:57:29.976Z",
+      "gitSha": "34f1cb7e"
+    },
+    {
+      "scenario": "monster",
+      "platform": "androidtv-device",
+      "file": "androidtv-device/monster.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 59970,
+      "capturedAt": "2026-08-19T14:12:33.969Z",
+      "gitSha": "34f1cb7e",
+      "deviceName": "google Google TV Streamer",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "monster",
@@ -325,9 +445,21 @@
       "file": "web/monster.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 48230,
-      "capturedAt": "2026-08-18T13:45:31.209Z",
-      "gitSha": "2b5be679"
+      "bytes": 48646,
+      "capturedAt": "2026-08-19T13:58:09.888Z",
+      "gitSha": "34f1cb7e"
+    },
+    {
+      "scenario": "paused",
+      "platform": "androidtv-device",
+      "file": "androidtv-device/paused.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 28132,
+      "capturedAt": "2026-08-19T14:12:43.852Z",
+      "gitSha": "34f1cb7e",
+      "deviceName": "google Google TV Streamer",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "paused",
@@ -359,9 +491,21 @@
       "file": "web/paused.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 13828,
-      "capturedAt": "2026-08-18T13:45:34.623Z",
-      "gitSha": "2b5be679"
+      "bytes": 13742,
+      "capturedAt": "2026-08-19T13:58:13.658Z",
+      "gitSha": "34f1cb7e"
+    },
+    {
+      "scenario": "podium",
+      "platform": "androidtv-device",
+      "file": "androidtv-device/podium.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 21000,
+      "capturedAt": "2026-08-19T14:13:51.861Z",
+      "gitSha": "34f1cb7e",
+      "deviceName": "google Google TV Streamer",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "podium",
@@ -393,9 +537,21 @@
       "file": "web/podium.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 19334,
-      "capturedAt": "2026-08-18T13:46:06.280Z",
-      "gitSha": "2b5be679"
+      "bytes": 19292,
+      "capturedAt": "2026-08-19T13:58:47.631Z",
+      "gitSha": "34f1cb7e"
+    },
+    {
+      "scenario": "racing",
+      "platform": "androidtv-device",
+      "file": "androidtv-device/racing.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 61218,
+      "capturedAt": "2026-08-19T14:12:13.105Z",
+      "gitSha": "34f1cb7e",
+      "deviceName": "google Google TV Streamer",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "racing",
@@ -427,9 +583,21 @@
       "file": "web/racing.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 49108,
-      "capturedAt": "2026-08-18T13:45:13.737Z",
-      "gitSha": "2b5be679"
+      "bytes": 48608,
+      "capturedAt": "2026-08-19T13:57:51.113Z",
+      "gitSha": "34f1cb7e"
+    },
+    {
+      "scenario": "racing-sidewinder",
+      "platform": "androidtv-device",
+      "file": "androidtv-device/racing-sidewinder.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 47758,
+      "capturedAt": "2026-08-19T14:12:20.132Z",
+      "gitSha": "34f1cb7e",
+      "deviceName": "google Google TV Streamer",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "racing-sidewinder",
@@ -449,9 +617,21 @@
       "file": "web/racing-sidewinder.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 38958,
-      "capturedAt": "2026-08-18T13:45:19.682Z",
-      "gitSha": "2b5be679"
+      "bytes": 38574,
+      "capturedAt": "2026-08-19T13:57:57.490Z",
+      "gitSha": "34f1cb7e"
+    },
+    {
+      "scenario": "reconnect",
+      "platform": "androidtv-device",
+      "file": "androidtv-device/reconnect.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 60748,
+      "capturedAt": "2026-08-19T14:12:53.924Z",
+      "gitSha": "34f1cb7e",
+      "deviceName": "google Google TV Streamer",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "reconnect",
@@ -483,9 +663,21 @@
       "file": "web/reconnect.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 48300,
-      "capturedAt": "2026-08-18T13:45:38.292Z",
-      "gitSha": "2b5be679"
+      "bytes": 47622,
+      "capturedAt": "2026-08-19T13:58:17.733Z",
+      "gitSha": "34f1cb7e"
+    },
+    {
+      "scenario": "results",
+      "platform": "androidtv-device",
+      "file": "androidtv-device/results.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 19002,
+      "capturedAt": "2026-08-19T14:13:12.268Z",
+      "gitSha": "34f1cb7e",
+      "deviceName": "google Google TV Streamer",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "results",
@@ -517,9 +709,21 @@
       "file": "web/results.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 16262,
-      "capturedAt": "2026-08-18T13:45:46.019Z",
-      "gitSha": "2b5be679"
+      "bytes": 16232,
+      "capturedAt": "2026-08-19T13:58:26.268Z",
+      "gitSha": "34f1cb7e"
+    },
+    {
+      "scenario": "rocket",
+      "platform": "androidtv-device",
+      "file": "androidtv-device/rocket.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 61038,
+      "capturedAt": "2026-08-19T14:12:27.067Z",
+      "gitSha": "34f1cb7e",
+      "deviceName": "google Google TV Streamer",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "rocket",
@@ -551,9 +755,9 @@
       "file": "web/rocket.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 48874,
-      "capturedAt": "2026-08-18T13:45:25.439Z",
-      "gitSha": "2b5be679"
+      "bytes": 48380,
+      "capturedAt": "2026-08-19T13:58:03.708Z",
+      "gitSha": "34f1cb7e"
     },
     {
       "scenario": "welcome",
@@ -561,9 +765,9 @@
       "file": "web/welcome.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 19188,
-      "capturedAt": "2026-08-18T13:44:40.016Z",
-      "gitSha": "2b5be679"
+      "bytes": 19180,
+      "capturedAt": "2026-08-19T13:57:14.262Z",
+      "gitSha": "34f1cb7e"
     }
   ]
 }

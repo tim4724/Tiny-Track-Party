@@ -114,6 +114,27 @@ wiring are each gated, but their ASSEMBLY inside the shipped wasm is not — the
 check that raced the artifact against a second live implementation went with the
 retired JS oracle. Do not claim coverage there that no longer exists.
 
+## Gating a feature on its OUTCOME
+
+Two checks in this tree assert what the code PRODUCES rather than what it hands
+over, and both exist because a payload assertion had already passed while the
+feature was broken.
+
+`abi_check.cc`'s `autopilotedPlayerSeats` is the worked example. The feature is
+"a race seat that is a participant and drives itself", and the thing that goes
+wrong is not the shape of the create-session arguments — it is that nothing
+moves. So the check RACES 900 frames and demands the marked cars covered a
+comparable distance to the AI they started behind, **beside an unmarked control
+arm** that must fail the same predicate. Without that second arm the assertion
+is unfalsifiable, which is the failure mode a shape assertion has by
+construction.
+
+`perf_check.cc` is the other shape: a NEW layer with no JS oracle, pinned by
+assertions rather than a corpus (as `render_scale_check` and
+`progression_check` are). What it holds beyond the thresholds is the two
+properties the bench rests on — that a platform with no GPU timer still gets a
+verdict, and that an ABSENT cost is never read as a free one.
+
 ## Wire-compat
 
 `tests/wire-compat.test.js` + `tests/wire-fastlane.test.js` are the only place two

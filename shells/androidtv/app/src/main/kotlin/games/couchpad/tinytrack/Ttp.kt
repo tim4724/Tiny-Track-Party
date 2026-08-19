@@ -15,7 +15,7 @@ import java.nio.ByteBuffer
 
 @Suppress("FunctionName", "unused")
 object Ttp {
-    /** Registers all 199 natives via JNI_OnLoad; a mismatch fails here. */
+    /** Registers all 205 natives via JNI_OnLoad; a mismatch fails here. */
     fun load() { System.loadLibrary("ttp_runtime_android") }
 
     external fun ttp_add_bot(h: Int, idJson: ByteArray?, caution: Double, laneBias: Double, aiSeed: Int, statsJsonOrNull: ByteArray?)
@@ -133,10 +133,16 @@ object Ttp {
     external fun ttp_party_version(): ByteArray?
     external fun ttp_pause(h: Int)
     external fun ttp_paused(h: Int): Int
+    external fun ttp_perf_pacing(panelMs: Double, divisor: Int)
+    external fun ttp_perf_readout_json(cells: Int, width: Int, height: Int, dpr: Double, trackOrNull: ByteArray?): ByteArray?
+    external fun ttp_perf_reset()
+    external fun ttp_perf_sample(tMs: Double, intervalMs: Double, presented: Int, cpuMs: Double, gpuMs: Double)
     external fun ttp_process_input(h: Int, idJson: ByteArray?, mask: Int, s: Double, b: Double, u: Double): Int
     external fun ttp_protocol_manifest_json(): ByteArray?
     external fun ttp_race_advance_live_json(roomHandle: Int, sceneReady: Int, seed: Double, countdownSeconds: Double, forceItemOrNull: ByteArray?, botCapJson: ByteArray?): ByteArray?
     external fun ttp_race_auto_pause_live_json(sessionHandle: Int, roomHandle: Int, raceEnded: Int): ByteArray?
+    external fun ttp_race_autopilot_players(on: Int)
+    external fun ttp_race_bench_field_json(trackId: ByteArray?, players: Int, seed: Double): ByteArray?
     external fun ttp_race_configure(json: ByteArray?): Int
     external fun ttp_race_demo_live_json(roomHandle: Int, trackId: ByteArray?, botCapJson: ByteArray?): ByteArray?
     external fun ttp_race_effect_ops_json(): ByteArray?

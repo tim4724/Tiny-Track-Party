@@ -4802,6 +4802,178 @@ void raceLiveWalks() {
 
 }  // namespace
 
+// ---------------------------------------------------------------------------
+// The AUTOPILOTED PLAYER SEAT (ttp/race_flow.h BotSpec::player, ttp_race.h's
+// bench pair), gated on the OUTCOME.
+//
+// The shape of the payload is not the gate and must never become it: a first
+// attempt at this feature asserted the create-session arguments and passed
+// green while nothing on the grid moved. Throttle is automatic, so an unsteered
+// seat does not sit still — it accelerates away, never turns, and piles into
+// the first corner. What is asserted here is therefore that the player cars
+// RACE: real distance covered, in the same band as the AI they share a track
+// with. The un-marked twin below is what proves the assertion can fail.
+// ---------------------------------------------------------------------------
+void autopilotedPlayerSeats() {
+  // Its own world: FIELD_SIZE is 8 and "the players are the last places" is a
+  // statement about an eight-car grid. The shared world (fieldSize 4) is
+  // restored at the end, exactly as the demo-persona case does.
+  Value carStats = Value::Arr();
+  for (int i = 0; i < 12; i++) {
+    Value row = Value::Obj();                 // opaque: the layer copies, never reads
+    row.set("accel", Value::Num(1.0 + i * 0.01));
+    carStats.push(std::move(row));
+  }
+  Value w = Value::Obj();
+  w.set("fieldSize", Value::Num(8));
+  w.set("carCount", Value::Num(12));
+  w.set("colorCount", Value::Num(12));
+  w.set("aiPrefix", Value::Str("ai-"));
+  w.set("carStats", carStats);
+  check(ttp_race_configure(canonical_stringify(w).c_str()) == 1, "bench: an 8-car world");
+
+  // The three benches the harnesses offer, and the only three.
+  for (const int players : {1, 2, 4}) {
+    const std::string label = std::to_string(players) + "-player bench";
+    const Value bench =
+        parseOrNull(ttp_race_bench_field_json("tidepool", players, 1), "bench field");
+    const Value& field = at(bench, "field");
+    const Value& bots = at(bench, "bots");
+    check(field.arr.size() == 8, label + ": eight seats");
+
+    // THE GRID RULE, read off the answer rather than restated: every AI is in
+    // front of every player. Index 0 is pole (game.cc seats by index), so the
+    // players hold the last `players` places.
+    size_t firstPlayer = field.arr.size();
+    bool aiAfterPlayer = false;
+    std::vector<std::string> playerIds;
+    for (size_t i = 0; i < field.arr.size(); i++) {
+      const bool ai = json::truthy(field.arr[i].find("ai"));
+      if (!ai && i < firstPlayer) firstPlayer = i;
+      if (ai && i > firstPlayer) aiAfterPlayer = true;
+      if (!ai) playerIds.push_back(canonical_stringify(at(field.arr[i], "peerIndex")));
+    }
+    check(!aiAfterPlayer && playerIds.size() == static_cast<size_t>(players)
+              && firstPlayer == 8 - static_cast<size_t>(players),
+          label + ": the players hold the last " + std::to_string(players) + " places");
+
+    // Every seat carries a controller; exactly the player seats are MARKED.
+    size_t marked = 0;
+    for (const Value& b : bots.arr) if (json::truthy(b.find("player"))) marked++;
+    check(bots.arr.size() == 8 && marked == static_cast<size_t>(players),
+          label + ": eight controllers, " + std::to_string(players) + " of them marked");
+
+    const std::string fieldJson = canonical_stringify(field);
+    const std::string botsJson = canonical_stringify(bots);
+    const int sess = ttp_session_begin_field("tidepool", 1u, 3, nullptr,
+                                             fieldJson.c_str(), botsJson.c_str());
+    if (sess <= 0) { fail(label + ": no session"); continue; }
+
+    // A marked seat is NOT AI. This is the read ui::autoPause counts human cars
+    // through, and reporting a player here is what returned the box to the
+    // lobby a second after "ready racing".
+    const Value ai = ttp_session_ai_ids(sess);
+    bool leaked = false;
+    for (const Value& id : ai.arr)
+      for (const std::string& p : playerIds) leaked = leaked || canonical_stringify(id) == p;
+    check(ai.arr.size() == 8 - static_cast<size_t>(players) && !leaked,
+          label + ": the marked seats are participants, not aiIds");
+
+    // The un-marked twin: the SAME field and the same bot specs with the marker
+    // stripped, so the players carry no controller. It is the control arm — if
+    // the distance check below cannot tell these two apart, it is asserting
+    // nothing.
+    Value bare = Value::Arr();
+    for (const Value& b : bots.arr) {
+      if (json::truthy(b.find("player"))) continue;   // a player with no spec = undriven
+      bare.push(b);
+    }
+    const std::string bareJson = canonical_stringify(bare);
+    const int idle = ttp_session_begin_field("tidepool", 1u, 3, nullptr,
+                                             fieldJson.c_str(), bareJson.c_str());
+    ttp_session_start(sess, -1);
+    ttp_session_start(idle, -1);
+    // Long enough to be round a corner and away: an undriven car reaches the
+    // first bend at full throttle and stops there, so the two arms only
+    // separate once the track stops being straight.
+    for (int i = 0; i < 900; i++) { ttp_update(sess, 16.6667); ttp_update(idle, 16.6667); }
+
+    const auto progress = [](int h, const std::vector<std::string>& ids, bool wantPlayers) {
+      double worst = 1e18;
+      const Value snap = parseOrNull(ttp_snapshot_json(h), "snapshot");
+      for (const Value& c : at(snap, "cars").arr) {
+        const std::string id = canonical_stringify(at(c, "id"));
+        const bool isPlayer =
+            std::find(ids.begin(), ids.end(), id) != ids.end();
+        if (isPlayer != wantPlayers) continue;
+        worst = std::fmin(worst, json::num_field(c, "totalS"));
+      }
+      return worst;
+    };
+
+    const double drivenPlayers = progress(sess, playerIds, true);
+    const double drivenAi = progress(sess, playerIds, false);
+    const double idlePlayers = progress(idle, playerIds, true);
+
+    // THE OUTCOME. The slowest autopiloted player is racing the AI it started
+    // behind — not merely moving, which a car wedged against a barrier at full
+    // throttle also does. Half the AI's distance is a wide band on purpose:
+    // this gates "it drives", not the AI's tuning.
+    check(drivenPlayers > 0.5 * drivenAi && drivenAi > 0,
+          label + ": the autopiloted players RACE (" + std::to_string(drivenPlayers)
+              + " vs the AI's " + std::to_string(drivenAi) + ")");
+    // …and the control arm proves the check above can fail.
+    check(idlePlayers < 0.5 * drivenPlayers,
+          label + ": …and an UNMARKED seat does not (" + std::to_string(idlePlayers)
+              + ") — if this fails the outcome check is vacuous");
+
+    ttp_dispose(sess);
+    ttp_dispose(idle);
+  }
+
+  // The latch is what a shell turns on, and OFF is the shipping path: a launch
+  // with it clear must produce no marked spec at all.
+  ttp_race_autopilot_players(0);
+  race::LaunchInput li;
+  li.players = race::benchPlayers(2, race::FieldWorld());
+  li.trackId = "tidepool";
+  li.world.fieldSize = 8;
+  li.world.carCount = 12;
+  li.world.colorCount = 12;
+  li.humansAtBack = true;
+  bool anyMarked = false;
+  for (const race::BotSpec& b : race::launchRace(li).bots) anyMarked = anyMarked || b.player;
+  check(!anyMarked, "bench: autopilotPlayers off marks nothing (the shipping path)");
+  li.autopilotPlayers = true;
+  size_t markedCount = 0;
+  std::vector<double> seeds;
+  for (const race::BotSpec& b : race::launchRace(li).bots) {
+    markedCount += b.player ? 1 : 0;
+    seeds.push_back(b.seed);
+  }
+  check(markedCount == 2, "bench: …and on, exactly the player seats are marked");
+  // The wander seeds must be DISTINCT across the whole field. A player seeded
+  // off its grid index collides with the fill's ordinals the moment a grid is
+  // not humans-at-back — a chained cup race grids on the previous finish — and
+  // two cars then drive an identical stream for the leg.
+  std::sort(seeds.begin(), seeds.end());
+  check(std::adjacent_find(seeds.begin(), seeds.end()) == seeds.end(),
+        "bench: every controller in the field wanders on its own seed");
+  race::LaunchInput chained = li;
+  chained.gridOrder = {race::Id::Num(0), race::Id::Num(1)};   // the players finished 1-2
+  std::vector<double> chainSeeds;
+  for (const race::BotSpec& b : race::launchRace(chained).bots) chainSeeds.push_back(b.seed);
+  std::sort(chainSeeds.begin(), chainSeeds.end());
+  check(std::adjacent_find(chainSeeds.begin(), chainSeeds.end()) == chainSeeds.end(),
+        "bench: …including on a chained grid, where the players start at the FRONT");
+
+  // UNCONFIGURED, not "back to the shared world" — this function built its own
+  // and cannot see the file's. An unset world seats nobody by design
+  // (ttp_race.h), so anything added after this fails loudly on an empty field
+  // instead of quietly inheriting an 8-car one and agreeing about nothing.
+  check(ttp_race_configure("{}") == 1, "bench: the world is left unset behind it");
+}
+
 int main(int argc, char** argv) {
   // Three corpora and the traces. The roomflow, session and raceflow fixtures
   // are NOT taken any more: the JSON-taking spellings they were replayed
@@ -4835,6 +5007,7 @@ int main(int argc, char** argv) {
   handlePathsMatchJsonPaths();
   uiLiveTwinsMatchJsonPaths();
   beginFieldMatchesManualPath();
+  autopilotedPlayerSeats();
   netWalksMatchMultiCallPath();
   raceLiveWalks();
 

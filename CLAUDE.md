@@ -27,6 +27,9 @@ node --test tests/wire-*.test.js  # Wire-compat only (C++ host vs the JS phone)
 npm run test:e2e                  # Playwright E2E (real pages + hermetic relay stub)
 npx playwright test tests/e2e/flow.spec.js   # A single E2E spec
 npm run check:artifact            # Is the checked-in wasm current?
+npm run perf:race -- --platform web|androidtv|tvos [--players 1|2|4] [--track id]
+                                  # THE BENCH: one live race, autopiloted players at the
+                                  # back of a full grid, one readout shape on all three
 npm start / npm run dev           # Serve (with --watch)
 native/scripts/build-runtime-web.sh   # Rebuild the engine wasm → public/display/engine/native/
 npm run build:tvos [device|simulator] # The Apple TV app: engine, bundle and project included

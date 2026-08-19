@@ -757,7 +757,7 @@ class PartyNet(
      * is gone on both shells, replaced by `previewLastCircuit`, which PREVIEWS a
      * circuit without picking one so Start stays gated until a phone picks; this
      * method sat here uncalled until the screenshot harness landed, and
-     * `tests/androidtv-deadcode.test.js` is what said so out loud.
+     * `tests/shell-deadcode.test.js` is what said so out loud.
      *
      * THE NULL SENDER IS THE WHOLE MECHANISM, and it is the walk's rule rather than
      * this shell's: `ttp_net_on_peer_message_json` admits a SELECT_MODE from nobody

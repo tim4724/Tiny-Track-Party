@@ -90,6 +90,36 @@ TTP_ABI int ttp_race_configure(const char* json);
  * this table when `personas` is absent, so a shipping shell never calls it. */
 TTP_ABI const char* ttp_race_personas_json(void);
 
+/* DEV/BENCH LATCH — off the shipping path, and a shell that races real people
+ * never calls it.
+ *
+ * On, every launch from here gives its PLAYER seats a controller as well: the
+ * field, the grid, the cells and the ids are a real launch's to the byte, and
+ * the sim supplies the steering a phone would. That is what makes a perf bench,
+ * a screenshot run and an attract race an AUTHENTIC race — an unsteered seat
+ * does not sit on the grid, because throttle is automatic: it accelerates away,
+ * never turns, and piles into the first corner.
+ *
+ * The seats stay PARTICIPANTS (ttp/race_flow.h, BotSpec::player): they are not
+ * in `aiIds`, they keep their split-screen cells, and the session still counts
+ * them, so the auto-pause rule does not tear the race down. Latched rather than
+ * passed per walk because it is a property of the RUN, not of one launch, and
+ * every walk that launches would otherwise grow a parameter no shipping caller
+ * would ever pass. */
+TTP_ABI void ttp_race_autopilot_players(int on);
+
+/* The bench field, WITHOUT a room: `players` player seats plus the CPU fill,
+ * gridded by the game's own rule (players at the back), every seat autopiloted.
+ * Answers {"field":[...],"bots":[...]} — the two arguments ttp_session_begin_field
+ * takes — so a harness with no relay draws the same picture the walk would.
+ *
+ * It is launchRace() itself behind this, not a second field builder: the whole
+ * point is that a bench on a browser and a bench on a television are measuring
+ * one arrangement. Names/liveries/cars for the player seats are the bench
+ * roster's, which is why they are decided here and not re-typed per platform. */
+TTP_ABI const char* ttp_race_bench_field_json(const char* trackId, int players,
+                                              double seed);
+
 /* The ops a walk's ANSWER can carry, as a JSON array of keys in a stable
  * order. A shell walks it at boot and asserts its performer switch covers
  * every op — the unperformable-op throw, moved from mid-race to startup. The

@@ -3,27 +3,14 @@ package games.couchpad.tinytrack
 import android.util.Log
 
 /**
- * Five knobs, driven from `adb setprop`, for measuring this box.
+ * Four knobs, driven from `adb setprop`, for measuring this box.
  *
  * ```
  * adb shell setprop debug.ttp.scale 1.0      # pin the render scale (0 = adaptive)
  * adb shell setprop debug.ttp.features 0x1FFC # TTP_FEAT_* mask (see ttp_display.h)
  * adb shell setprop debug.ttp.aa 1           # put the antialias pass back on
  * adb shell setprop debug.ttp.hz 30          # PIN every-other-vsync (0 = hand it back to the rule)
- * adb shell setprop debug.ttp.spectate 7     # camera follows the car that STARTED
- *                                            # in place N (0 = off; next race restores)
  * ```
- *
- * WHY SPECTATE EXISTS: the measurement harness's headless phone cannot steer,
- * so its human car scrapes a wall while the AI pack drives away — every frame
- * it measures is an EMPTYING road, and the fit built on those frames
- * under-read a real player's view by most of a millisecond per megapixel. A
- * real player starts LAST with seven cars, their shadows, items and auras in
- * frame. Following the car that started in place N measures that load with no
- * steering needed — 7, the last AI, is the realistic arm, since the harness's
- * own car (humans start last, place 8) is the wall-scraper itself. It follows
- * the CAR, not the place — a camera that hopped on every overtake would
- * measure cuts.
  *
  * WHY PROPERTIES AND NOT A KEY. An ablation sweep is a dozen arms, each needing a
  * mask AND a pinned resolution, and the answer is only worth anything if every arm
@@ -50,8 +37,6 @@ object PerfDebug {
     private var lastScale = -1.0
     private var lastAa = 0
     private var lastHz = -1
-    private var spectateId: EngineId? = null
-    private var spectateRoster: List<EngineId> = emptyList()
 
     /** Read the knobs and apply whatever moved. */
     fun poll(display: DisplayHost) {
@@ -88,52 +73,17 @@ object PerfDebug {
         // the picture's latency doubles; whether that trade should ever be
         // AUTOMATIC is a product call parked until a real-phone tilt drive
         // says what the added latency feels like. 0 or unset = every vsync.
+        //
+        // The readout FOLLOWS this knob: the divisor is declared to it
+        // (`ttp_perf_pacing`), so a pinned 30 on an idle box reads GOOD against a
+        // doubled budget rather than scoring its own pacing as damage. It once
+        // did the latter, and a permanently red panel is one nobody reads.
         val hz = getprop("debug.ttp.hz")?.toIntOrNull() ?: 0
         if (hz != lastHz) {
             lastHz = hz
             display.pinVsyncInterval(if (hz == 30) 2 else 0)
             Log.i(TAG, "hz -> ${if (hz == 30) "pinned 30" else "adaptive"}")
         }
-
-        pollSpectate(display)
-    }
-
-    /**
-     * Follow the car that started in place N. Resolved ONCE per scene (the
-     * roster list identity is the scene marker): at the first poll of a race
-     * the HUD's places are the grid order, so place N names the Nth grid slot,
-     * and the id then sticks for the scene's life. Re-asserted every poll
-     * while active — the coordinator re-cells on its own events (reroster,
-     * rekey) and would silently take the camera back. Clearing the knob leaves
-     * the cells alone; the next race's own setCells restores the human view.
-     */
-    private fun pollSpectate(display: DisplayHost) {
-        val place = getprop("debug.ttp.spectate")?.toIntOrNull() ?: 0
-        if (place <= 0) {
-            if (spectateId != null) {
-                spectateId = null
-                spectateRoster = emptyList()
-                Log.i(TAG, "spectate -> off (next race restores the human cells)")
-            }
-            return
-        }
-        if (!display.hasScene) return
-        // RACE CELLS ONLY. The lobby attract is a real bot race underneath —
-        // it has places — but its picture is the OVERVIEW camera (no cells),
-        // and hijacking that into a chase cam made the welcome screen look
-        // like a race (user-caught). The coordinator only assigns cells for
-        // real races, so an empty cell set means: leave the overview alone.
-        if (display.cellCount == 0) return
-        val roster = display.rosterIds
-        if (roster.isEmpty()) return
-        if (spectateId == null || roster != spectateRoster) {
-            val slot = display.hud().firstOrNull { it.place == place }?.slot ?: return
-            val id = display.roster.getOrNull(slot) ?: return
-            spectateId = id
-            spectateRoster = roster
-            Log.i(TAG, "spectate -> place $place, slot $slot")
-        }
-        spectateId?.let { display.setCells(listOf(it)) }
     }
 
     private fun parseInt(s: String): Int? =

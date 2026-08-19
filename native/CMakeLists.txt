@@ -623,6 +623,12 @@ add_library(libttp_runtime STATIC
   # are here for the same reason roster.cc is: no platform API, and the ghost's
   # padding rule is a trap that stays invisible until cgltf rejects a model.
   libttp-runtime/ttp/glb.cc
+  # The frame-cost readout's decisions — the percentile fold, the warm-up
+  # filter and the health ladder. Here rather than in each shell because three
+  # hand-written copies had already drifted while all three carried a comment
+  # saying they had not, and the bench's whole premise is that a browser, an
+  # Apple TV and an Android box can be compared on one race.
+  libttp-runtime/ttp/perf_stats.cc
 )
 target_include_directories(libttp_runtime PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/libttp-runtime
@@ -750,6 +756,16 @@ add_executable(render_scale_check runtimetest/render_scale_check.cc)
 target_link_libraries(render_scale_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(render_scale_check)
 add_test(NAME render_scale COMMAND render_scale_check)
+
+# ---- Behaviour: the frame-cost readout ---------------------------------------
+# Assertions, like render_scale above and for the same reason: ttp/perf_stats.h
+# is a NEW layer with no JS oracle to replay. What it pins beyond the ladder is
+# that the three platforms' readouts CANNOT drift again — the rule now exists
+# once, and this is where it is executed on every leg.
+add_executable(perf_check runtimetest/perf_check.cc)
+target_link_libraries(perf_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(perf_check)
+add_test(NAME perf COMMAND perf_check)
 
 # ---- Conformance: the per-player race HUD -----------------------------------
 # JS-RECORDED evidence, like the biome check below and unlike the two above: the
@@ -991,7 +1007,13 @@ set(TTP_APP_SOURCES
   # PREPARATION, which a shell does with or without a Filament SDK in the build,
   # and keeping them here is what lets abi_check cover them on every leg.
   libttp-runtime/ttp/glb.cc
-  runtime/ttp_glb.cc)
+  runtime/ttp_glb.cc
+  # The frame-cost readout and its ABI. Outside the renderer gate for the same
+  # reason ttp_render_scale.cc is: folding a window of measurements names no
+  # platform API, and the shell hands the measurements over rather than judging
+  # them.
+  libttp-runtime/ttp/perf_stats.cc
+  runtime/ttp_perf.cc)
 
 # ---- tvOS module: the whole game, as a static library ----------------------
 # The Apple TV sibling of the browser module below. Same sources, same libraries,

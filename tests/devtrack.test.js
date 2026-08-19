@@ -12,8 +12,12 @@
 //
 // So the portable half (the ?item= force hook, the monster transform, box respawn
 // cooldowns, and oil/banana spin-outs) is re-expressed below as REAL races on
-// catalogue tracks. One Gym-specific check is left explicitly skipped rather than
-// quietly dropped; see the comment on it.
+// catalogue tracks. The half that needs a parked car — the box trigger's 0.45
+// radius, and that a monster truck's larger body does NOT extend its reach —
+// belongs beside native/simtest/hazard_check.cc, which parks cars by assigning
+// `c.totalS`/`c.lat` outright. Do not go hunting for an ABI export for it: the
+// ABI is walks-only by decision and native/CLAUDE.md refuses the JSON-taking
+// mutator forms, so that scenario is written in C++ or not at all.
 //
 // The OTHER blocker is gone: gen-track-defs-header.mjs now carries DEV_TRACKS past
 // the shipped catalogue, so ttp_session_begin('gym') resolves and ?solo&track=gym
@@ -188,23 +192,3 @@ test('gym: the authored range races, and its authored bananas respawn', { skip }
     `the authored bananas are live (saw at most ${r.maxBananas}, expected >= ${authored.length})`);
   assert.ok(typesOf(r.events).has('lap'), 'the field completes laps on the dev range');
 });
-
-// Box pickup is a POINT test with the tuned 0.45 radius (9% of the 5-wide road):
-// a car centre at lat 0.40 grabs, at 0.50 does not, and a monster truck's larger
-// footprint does NOT extend its reach (the trigger ignores the body box, so every
-// car has identical reach — no footprint creep).
-// NOT A JS TEST. Parking a car at a chosen (s, lat) and firing one box test in
-// isolation is unreachable from here, and the answer is NOT the debug ABI entry
-// points this comment used to ask for: the ABI is walks-only by decision, the
-// JSON-taking forms were deleted rather than added to, and native/CLAUDE.md is
-// explicit that a scenario needing the internal mutators "cannot be driven from
-// JS or wasm — write it in C++ rather than hunting for the export". Anyone who
-// took the old note at its word would have spent the day adding exports that
-// review would refuse.
-//
-// In C++ there is nothing to unblock: native/simtest/hazard_check.cc parks cars
-// by assigning `c.totalS` / `c.lat` outright, which is the whole of what this
-// needs. So this belongs beside it as a ctest, and is left unwritten rather than
-// mis-aimed.
-test('box pickup is point-based with the tuned 0.45 radius — same reach for every car',
-  { skip: 'belongs in native/simtest as a ctest (see the note above), not in JS' }, () => {});

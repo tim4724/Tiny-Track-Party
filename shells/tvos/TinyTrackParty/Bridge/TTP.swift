@@ -53,7 +53,15 @@ enum TTP {
     /// C side was never called, and a shell that crashed on it would turn a
     /// no-op into a black screen.
     static func obj(_ p: UnsafePointer<CChar>?) -> [String: Any] {
-        guard let text = str(p), let data = text.data(using: .utf8),
+        obj(str(p) ?? "")
+    }
+
+    /// Same, for an answer that has already been copied out of the scratch
+    /// buffer. The perf readout is DRAWN and LOGGED from one call, so it crosses
+    /// as a String once — asking twice would fold two different windows and put
+    /// a screenshot and a benched line at odds.
+    static func obj(_ text: String) -> [String: Any] {
+        guard let data = text.data(using: .utf8),
               let v = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return [:] }
         return v

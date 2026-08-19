@@ -210,7 +210,7 @@ extension GameCoordinator {
     /// screenshot scenarios. It is the same session the real race uses — a
     /// harness that faked the field would photograph a screen the game cannot
     /// produce.
-    func startDemoRace(forceItem: String?, humans: Int = 4) {
+    func startDemoRace(forceItem: String?, humans: Int) {
         let catalogue = TTP.obj(ttp_ui_catalogue_json())
         if trackId.isEmpty {
             // No literal fallback: a hardcoded track id that the catalogue does
@@ -227,14 +227,20 @@ extension GameCoordinator {
         // CELL to human seats and none to the CPUs that top the grid up, so
         // launching with `players: []` produces a legal race that renders under
         // ONE overview camera — a pretty picture of the track, and not the
-        // screen the gallery is supposed to be showing. Four seats is the
-        // 2x2 grid the web's `racing` card photographs.
-        let players: [[String: Any]] = (0..<humans).map { i in
-            ["peerIndex": i + 1,
-             "name": ["Ann", "Bo", "Cy", "Di"][i % 4],
-             "colorIndex": i,
-             "carIndex": i]
-        }
+        // screen the gallery is supposed to be showing.
+        //
+        // WHO they are is the engine's BENCH ROSTER (race_flow.h benchPlayers),
+        // not this file's: three shells photograph these screens side by side,
+        // and the Ann/Bo/Cy/Di this used to spell made every comparison carry a
+        // rename about nothing under inspection. Only the seat NUMBERS stay
+        // here, because a screenshot party is seated in this room.
+        let players: [[String: Any]] = Scenarios.benchRoster(humans, track: trackId)
+            .enumerated().map { i, row in
+                ["peerIndex": i + 1,
+                 "name": row["name"] ?? "",
+                 "colorIndex": row["colorIndex"] ?? i,
+                 "carIndex": row["carIndex"] ?? i]
+            }
         // THE PICK GOES ON FIRST, seats after — the same order the lobby
         // scenarios document. `applyPick` rides the null-sender road, which
         // the walk only admits while the room has NO HOST; the first seated

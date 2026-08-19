@@ -247,6 +247,11 @@ struct BotEntry {
   double caution = 1, laneBias = 0;
   uint32_t aiSeed = 0;
   std::unique_ptr<AiController> ai;  // built at start
+  // The autopilot marker (ttp/race_flow.h, BotSpec::player). This bucket is
+  // "who has a controller", NOT "who is a bot" — an autopiloted PLAYER is in
+  // both `bots` and `humans`, and every question about who the RACE is for
+  // (aiIds, the audio's listeners) must ask this flag rather than the bucket.
+  bool player = false;
 };
 
 // Forward declarations of the audio bus's two taps (defined in the audio
@@ -349,7 +354,12 @@ Value ttp_session_ai_ids(int h) {
   Value a = Value::Arr();
   RuntimeSession* rs = get(h);
   if (rs)
-    for (const auto& b : rs->bots) a.push(b.id.toValue());
+    // `bots` is who carries a CONTROLLER; this answers who is not a player.
+    // An autopiloted seat drives itself and is still somebody's car — reporting
+    // it here would give it no cell, drop it from the audio's listeners, and
+    // (through ui::autoPause's humanCars count) return the whole race to the
+    // lobby a second after it started.
+    for (const auto& b : rs->bots) if (!b.player) a.push(b.id.toValue());
   return a;
 }
 
@@ -485,7 +495,7 @@ au::Point audioTrackPoint(Game* eng, double s, double lat) {
 // neither listeners nor voices.
 au::AiIds audioAiIds(const RuntimeSession& rs) {
   au::AiIds ai;
-  for (const auto& b : rs.bots) ai.add(b.id);
+  for (const auto& b : rs.bots) if (!b.player) ai.add(b.id);
   return ai;
 }
 
@@ -894,8 +904,17 @@ int ttp_session_begin_field(const char* trackId, uint32_t seed, int laps,
         b.caution = optNum(it->second, "caution", 1);
         b.laneBias = optNum(it->second, "laneBias", 0);
         b.aiSeed = jsToUint32(optNum(it->second, "seed", 1));
+        // THE THIRD BUCKET. `player` on a spec means this seat carries a
+        // controller AND is still a participant, so it is filed under `humans`
+        // as well — that is the whole of the autopilot marker, and the reason
+        // it cannot be spelled as "spec every seat as a bot": that arrangement
+        // leaves the session with no players and the race is torn down.
+        // See ttp/race_flow.h, BotSpec::player.
+        b.player = json::truthy(it->second->find("player"));
         if (st && st->type == Value::OBJ) { b.hasStats = true; b.stats = statsOf(*st); }
-        rs->seats.push_back(PlayerDesc{b.id, b.hasStats, b.stats});
+        const PlayerDesc pd{b.id, b.hasStats, b.stats};
+        rs->seats.push_back(pd);
+        if (b.player) rs->humans.push_back(pd);
         rs->bots.push_back(std::move(b));
       } else {
         PlayerDesc pd;

@@ -23,29 +23,42 @@ test('a reloaded phone rejoins straight into its still-running race', async ({ p
   await bob.waitForSelector(visible('#game'), { timeout: 15000 });
 });
 
-test('a mid-race peer_left holds the seat, the car and its cell (QR up)', async ({ page, browser }) => {
-  // The liveness test below covers SILENCE (socket open, no peer_left). This is
-  // the other arm of session.cc's presence_action fork — a REAL socket close —
-  // and no other spec drives it: mid-game the seat and the still-racing car must
-  // survive the drop, so the camera stays on the cell and its reconnect QR.
-  const roomCode = await openDisplay(page);
-  const alice = await joinController(browser, roomCode, 'Alice'); // host, peerIndex 1
-  const bob = await joinController(browser, roomCode, 'Bob');     // peerIndex 2
-  await startRace(alice, [bob]);
-  await waitForRacing(page);
+test('a mid-race drop holds the seat, the car and its cell — the lobby return frees it',
+  async ({ page, browser }) => {
+    // The liveness test below covers SILENCE (socket open, no peer_left). This is
+    // the other arm of session.cc's presence_action fork — a REAL socket close —
+    // and no other spec drives it: mid-game the seat and the still-racing car must
+    // survive the drop, so the camera stays on the cell and its reconnect QR.
+    //
+    // There is no give-up timer: a manual pause, a locked phone or a tab switch
+    // must never cost the slot. Which makes the RELEASE half a rule of its own —
+    // the reservation ends at the lobby, where the join QR covers coming back —
+    // and it is asserted here rather than in its own full-race spec.
+    const roomCode = await openDisplay(page);
+    const alice = await joinController(browser, roomCode, 'Alice'); // host, peerIndex 1
+    const bob = await joinController(browser, roomCode, 'Bob');     // peerIndex 2
+    await startRace(alice, [bob]);
+    await waitForRacing(page);
 
-  // Bob's phone goes away for real: context close → socket close → peer_left.
-  await bob.context().close();
-  await page.waitForFunction(() => window.__net.flow.isDisconnected(2), null, { timeout: 10000 });
+    // Bob's phone goes away for real: context close → socket close → peer_left.
+    await bob.context().close();
+    await page.waitForFunction(() => window.__net.flow.isDisconnected(2), null, { timeout: 10000 });
 
-  const after = await page.evaluate(() => ({
-    has: window.__net.flow.has(2),
-    cars: window.__session().carIds(),
-  }));
-  expect(after.has).toBe(true);        // seat kept for the whole race
-  expect(after.cars).toContain(2);     // car still racing — the split cell stays
-  await expect(page.locator('.cell-reconnect')).toBeVisible();
-});
+    const after = await page.evaluate(() => ({
+      has: window.__net.flow.has(2),
+      cars: window.__session().carIds(),
+    }));
+    expect(after.has).toBe(true);        // seat kept for the whole race
+    expect(after.cars).toContain(2);     // car still racing — the split cell stays
+    await expect(page.locator('.cell-reconnect')).toBeVisible();
+
+    // Quit to the lobby from a controller (robust vs the display's auto-hiding
+    // race chrome): the reserved seat is reclaimed there, its card gone with it.
+    await alice.evaluate(() => window.__net.send(window.MSG.RETURN_TO_LOBBY));
+    await page.waitForFunction(() => window.__net.roomState === 'lobby', null, { timeout: 15000 });
+    expect(await page.evaluate(() => window.__net.flow.has(2))).toBe(false);
+    await expect(page.locator('.cell-reconnect')).toHaveCount(0);
+  });
 
 test('a lobby peer_left frees the seat outright', async ({ page, browser }) => {
   const roomCode = await openDisplay(page);

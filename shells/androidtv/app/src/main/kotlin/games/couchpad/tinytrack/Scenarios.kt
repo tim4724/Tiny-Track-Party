@@ -20,6 +20,10 @@ import org.json.JSONObject
  * and not here shows up as a missing card, which is the failure mode you want
  * (visible) rather than the other one (silently stale).
  *
+ * `bench` is the one deliberate exception, and it is not a screen: it is a live
+ * race for the frame-cost bench to measure, with no picture anybody wants a
+ * photograph of. It has no gallery card for that reason.
+ *
  * DEV-ONLY, reached by nothing on the shipping path: [read] finds no extra in a
  * normal launch, so [requested] stays null and `GameCoordinator.boot` takes the
  * ordinary road. It is compiled into the app rather than kept behind a build flag
@@ -58,12 +62,15 @@ object Scenarios {
 
     /**
      * The intent extras, spelled once. The capture script passes them as
-     * `am start -n <activity> --es ttpScenario racing --es ttpTrack sidewinder`,
-     * which is this platform's answer to the web's `?scenario=` and tvOS's
-     * `-ttpScenario` launch argument.
+     * `am start -n <activity> --es ttpScenario racing --es ttpTrack sidewinder
+     * --ei ttpPlayers 2`, which is this platform's answer to the web's
+     * `?scenario=` and tvOS's `-ttpScenario` launch argument. Note `--ei` for the
+     * count: `--es` would hand `getIntExtra` a String and it would silently answer
+     * the default.
      */
     const val EXTRA_SCENARIO = "ttpScenario"
     const val EXTRA_TRACK = "ttpTrack"
+    const val EXTRA_PLAYERS = "ttpPlayers"
 
     /** The scenario this launch was asked for. Null in every normal launch. */
     var requested: String? = null
@@ -96,7 +103,22 @@ object Scenarios {
     /** `native/libttp-sim/ttp/grand_prix.cc`'s ladder, for the fabricated podium. */
     private val POINTS_BY_RANK = listOf(9, 6, 3, 1)
 
-    private const val PLAYERS = 4
+    /** The 2x2 grid the web's `racing` card photographs, and every gallery card here. */
+    private const val DEFAULT_PLAYERS = 4
+
+    /**
+     * How many PLAYER seats a race scenario fills, from [EXTRA_PLAYERS].
+     *
+     * [DEFAULT_PLAYERS] unless asked, so every gallery card is the picture it
+     * always was. The `bench` race takes it because a cell is a whole camera and a
+     * whole pass: one player and four are two different frames, and pricing either
+     * against the other is meaningless.
+     *
+     * Capped at the fake roster's own length; the launch tops the grid up to
+     * FIELD_SIZE with CPUs behind whatever this asks for.
+     */
+    private var players = DEFAULT_PLAYERS
+
     private const val ROOM_CODE = "TEST"
 
     // Timings. Every one of these is a FLOOR on something that has already been
@@ -138,6 +160,8 @@ object Scenarios {
     fun read(intent: Intent?) {
         requested = intent?.getStringExtra(EXTRA_SCENARIO)?.ifEmpty { null }
         trackOverride = intent?.getStringExtra(EXTRA_TRACK)?.ifEmpty { null }
+        players = (intent?.getIntExtra(EXTRA_PLAYERS, DEFAULT_PLAYERS) ?: DEFAULT_PLAYERS)
+            .coerceIn(1, NAMES.size)
     }
 
     /**
@@ -155,6 +179,17 @@ object Scenarios {
      */
     fun standUp(game: GameCoordinator) {
         val id = requested ?: return
+        // THE FAKE PLAYERS DRIVE, and the latch is the whole of it: every race
+        // below launches through the real walk, which hands each player seat an AI
+        // controller from here on (`ttp_race.h`). Without it the seats are not
+        // parked, they are UNSTEERED — throttle is automatic, so a scenario's cars
+        // accelerate away, never turn and pile into the first corner, and every
+        // screenshot and every perf reading taken on those races is of a picture
+        // the game cannot produce.
+        //
+        // HERE and nowhere else. It is a property of a harness RUN, and a real
+        // party must never reach a line that sets it.
+        Ttp.ttp_race_autopilot_players(1)
         val plan = try {
             apply(id, game)
         } catch (e: Throwable) {
@@ -237,13 +272,16 @@ object Scenarios {
                 fakeProgress(game)
                 game.show(GameState.Screen.LOBBY)
                 game.releaseScene()
-                // FOUR OPEN SEATS, not an empty dock. `display/index.html` ships the
-                // same four placeholders statically for its pre-JS paint, because
-                // the dock is part of the board from the first frame — and with no
-                // dock the rails have no floor to stop at, so the join ticket
-                // centred on the whole screen and sat 50 px low.
+                // A FULL DOCK OF OPEN SEATS, not an empty one. `display/index.html`
+                // ships the same placeholders statically for its pre-JS paint,
+                // because the dock is part of the board from the first frame — and
+                // with no dock the rails have no floor to stop at, so the join
+                // ticket centred on the whole screen and sat 50 px low.
+                //
+                // `maxPlayers`, which is what the seat grid pads to, NOT how many
+                // this launch seats: a two-player couch still shows a full dock.
                 state.seats.clear()
-                state.seats.addAll((0 until PLAYERS).map { GameState.Seat.open(it) })
+                state.seats.addAll((0 until game.proto.maxPlayers).map { GameState.Seat.open(it) })
                 state.cupSlot = null
                 return Plan(needsScene = false)
             }
@@ -252,7 +290,7 @@ object Scenarios {
                 fakeProgress(game)
                 game.show(GameState.Screen.LOBBY)
                 state.seats.clear()
-                state.seats.addAll((0 until PLAYERS).map { GameState.Seat.open(it) })
+                state.seats.addAll((0 until game.proto.maxPlayers).map { GameState.Seat.open(it) })
                 state.cupSlot = null
                 game.net.fakeRoom(ROOM_CODE)
             }
@@ -312,7 +350,7 @@ object Scenarios {
             "countdown", "racing", "racing-sidewinder", "rocket", "monster",
             "paused", "reconnect", "finished" -> {
                 game.show(GameState.Screen.RACE)
-                game.startDemoRace(trackPick(), forceItem(id))
+                game.startDemoRace(trackPick(), forceItem(id), players)
             }
 
             // The boards. Fabricated rather than raced, and both halves of that are
@@ -340,7 +378,7 @@ object Scenarios {
             // two-column split and the late-joiner row were never drawn at all.
             "results", "intermission", "podium" -> {
                 game.show(GameState.Screen.RACE)
-                game.startDemoRace(trackPick(), forceItem = null)
+                game.startDemoRace(trackPick(), forceItem = null, humans = players)
             }
 
             // THE ONE CARD THAT IS A BEHAVIOUR RATHER THAN A PICTURE: results
@@ -354,7 +392,27 @@ object Scenarios {
                 game.show(GameState.Screen.RACE)
                 val cupId = firstCupId()
                     ?: throw IllegalStateException("the shipped catalogue has no cups")
-                game.startDemoRace(JSONObject().put("mode", "cup").put("cupId", cupId), null)
+                game.startDemoRace(
+                    JSONObject().put("mode", "cup").put("cupId", cupId), null, players)
+            }
+
+            // THE PERF BENCH, and the one scenario that is NOT a gallery card:
+            // there is no picture to photograph, so it is absent from
+            // `galleryScenarios.js` on purpose. A live race — `players` autopiloted
+            // seats starting at the back of an 8-car grid — with the readout
+            // logging at 1 Hz and NO dressing at all: nothing freezes the field,
+            // covers it with a board or hides a cell, because what is being priced
+            // is a race being played. `debug.ttp.*` still pins the scale, the mask
+            // and the rate over the top of it.
+            //
+            // It is bounded by the race itself: at the last lap the board goes up
+            // and the numbers after that are a still. Measure inside it, and pin
+            // the circuit (`--es ttpTrack`) — a lap's own cost varies by about 4 ms
+            // here, so two runs on two tracks are two different questions.
+            "bench" -> {
+                PerfMonitor.bench()
+                game.show(GameState.Screen.RACE)
+                game.startDemoRace(trackPick(), forceItem = null, humans = players)
             }
 
             else -> return null
@@ -560,12 +618,12 @@ object Scenarios {
     }
 
     /** The scripted party's name for seat [i]. Read by [GameCoordinator.startDemoRace]
-     *  too, so the racing HUD and the lobby dock name the same four players. */
+     *  too, so the racing HUD and the lobby dock name the same players. */
     fun nameFor(i: Int): String = NAMES[i % NAMES.size]
 
-    /** Four scripted players, one per livery and one per car model, so a
-     *  photographed field shows four different cars rather than four of the same. */
-    private fun scriptedSeats(): List<GameState.Seat> = (0 until PLAYERS).map { i ->
+    /** One scripted player per seat, each on its own livery and car model, so a
+     *  photographed field shows different cars rather than several of the same. */
+    private fun scriptedSeats(): List<GameState.Seat> = (0 until players).map { i ->
         GameState.Seat(
             index = i, open = false, name = nameFor(i),
             colorIndex = i, carIndex = i, modelIndex = i,
@@ -647,8 +705,8 @@ object Scenarios {
         if (!cup) {
             order.put(JSONObject()
                 .put("playerId", field.size + 1)
-                .put("name", NAMES[PLAYERS % NAMES.size])
-                .put("colorIndex", PLAYERS)
+                .put("name", NAMES[players % NAMES.size])
+                .put("colorIndex", players)
                 .put("joining", true))
         }
 

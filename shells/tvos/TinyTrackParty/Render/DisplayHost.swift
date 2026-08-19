@@ -134,6 +134,8 @@ final class DisplayHost {
     private var lastSlowTick: CFTimeInterval = 0
     private var inFrame = false
     private var pendingSize: CGSize?
+    /// The panel period last declared to the readout, in ms. See `declarePacing`.
+    private var lastPanelMs: Double = 0
 
     /// `Stage.js`'s clamp, for its reason: a dt of several seconds (the app
     /// resumed, the link stalled) runs the camera damping far past the car, and
@@ -213,6 +215,11 @@ final class DisplayHost {
     private func applyResize(_ size: CGSize) {
         surfacePixels = size
         ttp_display_resize(pixelCount(size.width), pixelCount(size.height))
+        // A new buffer size is a different thing to measure, and the readout
+        // carries the size it was measured at — so the window goes with it
+        // (ttp_perf.h). Without this an output-mode switch leaves 4K frames
+        // folded into a 1080p reading for the next two seconds.
+        perf.reset()
         // The resize reallocated (and cleared) the render targets. A running
         // loop repaints on the next tick; a loop that has not started yet would
         // hold a blank surface, so repaint once — `dt` 0 re-presents the last
@@ -287,6 +294,7 @@ final class DisplayHost {
         let elapsed = lastTimestamp > 0 ? link.timestamp - lastTimestamp : cadence
         lastTimestamp = link.timestamp
         let dt = min(max(elapsed, 0), maxFrameSeconds)
+        declarePacing(link)
 
         onFrame?(dt)
 
@@ -323,7 +331,35 @@ final class DisplayHost {
         }
 
         perf.record(now: link.timestamp, interval: elapsed, presented: presented,
-                    cells: cellCount, pixels: surfacePixels)
+                    cells: cellCount, pixels: surfacePixels, dpr: uiScale)
+    }
+
+    /// Tell the readout what this loop is AIMING AT: ONE VSYNC of this panel,
+    /// and a divisor of 1.
+    ///
+    /// The period is a fact only the shell has, and undeclared the fold assumes
+    /// 60 Hz — so the 50 Hz PAL match mode `start()` describes is scored against
+    /// a budget the box can never meet and reads amber however idle it is. The
+    /// divisor is 1 because nothing here presents on anything but every tick:
+    /// `ttp_display_step`'s rate arm is unbound on this platform, which is a gap
+    /// the ledger carries (`docs/native-port/shells.md`) and not a cadence.
+    ///
+    /// `duration` AND NOT the `cadence` above, which is the wrong number for
+    /// this question: `duration` is the panel's NOMINAL period and holds still
+    /// through a stall, where the actual frame duration can come back a multiple
+    /// of it — and a budget that grows every time the box struggles hides
+    /// exactly the drops this is here to show. Undershooting is
+    /// harmless in the other direction (the fold's bar never tightens past
+    /// 60 Hz), so nominal is the safe end to be wrong on.
+    ///
+    /// Declared from the tick because that is the first moment the answer exists
+    /// — `duration` is undefined until the link has fired — and re-declared when
+    /// it MOVES, which is an output-mode switch.
+    private func declarePacing(_ link: CADisplayLink) {
+        let ms = link.duration * 1000
+        guard ms > 0, ms != lastPanelMs else { return }
+        lastPanelMs = ms
+        ttp_perf_pacing(ms, 1)
     }
 
     // MARK: - Assets
@@ -408,6 +444,11 @@ final class DisplayHost {
     /// geometry.
     @discardableResult
     func build(trackId: String, rosterJSON: String) -> Bool {
+        // The window describes the scene that just went away, exactly as it does
+        // after a resize: the lobby attract and a race are different pictures,
+        // so a percentile that straddles a build describes neither. Same line,
+        // same reason, in `Stage.js` and Android's `DisplayHost`.
+        perf.reset()
         hasScene = ttp_display_build(trackId, rosterJSON) != 0
         if !hasScene { lastError = "ttp_display_build(\(trackId)) failed" }
         return hasScene

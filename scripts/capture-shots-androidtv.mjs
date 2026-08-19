@@ -28,11 +28,12 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PACKAGE = 'games.couchpad.tinytrack';
 const ACTIVITY = `${PACKAGE}/.MainActivity`;
 
-// The extras the app reads. Spelled in Scenarios.kt as EXTRA_SCENARIO/EXTRA_TRACK;
-// there is no manifest to read them from, so this pair is the one place the two
-// sides meet and a rename has to touch both.
+// The extras the app reads. Spelled in Scenarios.kt as EXTRA_SCENARIO/EXTRA_TRACK/
+// EXTRA_PLAYERS; there is no manifest to read them from, so this list is the one
+// place the two sides meet and a rename has to touch both.
 const EXTRA_SCENARIO = 'ttpScenario';
 const EXTRA_TRACK = 'ttpTrack';
+const EXTRA_PLAYERS = 'ttpPlayers';
 
 const args = Object.fromEntries(
   process.argv.slice(2).flatMap((a, i, all) =>
@@ -144,8 +145,14 @@ function deviceName(serial) {
 async function stand(serial, scenario) {
   adb(serial, ['logcat', '-c']);
   const extras = ['--es', EXTRA_SCENARIO, scenario.id];
-  // The circuit each card names is the SHARED TABLE's, not this script's.
+  // The circuit each card names is the SHARED TABLE's, not this script's — and so
+  // is the seat count, which `scenarioQuery` puts on the web's URL from the same
+  // key. `--ei`, an INT extra: `--es` hands getIntExtra a String and it answers
+  // the default without a word.
   if (scenario.params?.track) extras.push('--es', EXTRA_TRACK, String(scenario.params.track));
+  if (scenario.params?.players) {
+    extras.push('--ei', EXTRA_PLAYERS, String(scenario.params.players));
+  }
   adb(serial, ['shell', 'am', 'start', '-S', '-n', ACTIVITY, ...extras]);
 
   const deadline = Date.now() + READY_TIMEOUT_MS;

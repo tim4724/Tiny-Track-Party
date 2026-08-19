@@ -48,18 +48,6 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
     companion object {
         private const val TAG = "DisplayHost"
 
-        /**
-         * A 60 Hz frame budget, used ONLY as [PerfMonitor]'s opening default.
-         *
-         * IT IS NOT THE RULE'S BUDGET any more. `ttp_display_step` picks the
-         * present rate as half of the operating point it answers, so the budget
-         * is one present interval on THIS panel — `panelMs() * vsyncInterval` —
-         * and `applyVsyncInterval` writes that over this the moment the rate is
-         * known. A constant 60 here would otherwise price a 120 Hz panel's
-         * frames at half their real share.
-         */
-        const val BUDGET_MS = 1000.0 / 60.0
-
         /** `Stage.js`'s HUD_TICK_MS. See [onSlowTick]. */
         const val HUD_TICK_NANOS = 160_000_000L
 
@@ -175,10 +163,6 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
     var surfaceHeight: Int by mutableIntStateOf(0)
         private set
 
-    /** Slot-ordered ids of the built scene, for mapping the HUD readback back. */
-    var rosterIds: List<EngineId> = emptyList()
-        private set
-
     /** The biome the last build resolved to — the boost icon's accent keys off it. */
     var biome: String = ""
         private set
@@ -250,6 +234,12 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
             surfaceWidth = width
             surfaceHeight = height
             Ttp.ttp_display_resize(width, height)
+            // `ttp_perf.h`'s resize case. The readout CARRIES the buffer size it
+            // was measured at, so a window that straddles a resize is labelled
+            // one size and priced at another — and with the scaler free that is
+            // once a second, which is exactly the comparison the size is on the
+            // line for.
+            PerfMonitor.reset()
         }
     }
 
@@ -282,8 +272,8 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
      *
      * Only the RENDER half is paced: the sim still ticks on EVERY vsync, so
      * steering keeps the panel's full cadence and only the picture's latency
-     * doubles. The deliberate parity skip shows up in [PerfMonitor] as ~50%
-     * `skip`, which is honest — those vsyncs really did not present.
+     * doubles. The divisor is DECLARED to the readout ([declarePacing]), so the
+     * deliberate parity skip is priced as the cadence it is and not as damage.
      */
     private var vsyncInterval = 1
     private var vsyncCount = 0L
@@ -312,21 +302,45 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
         if (v == vsyncInterval) return
         vsyncInterval = v
         // The old windows describe the old cadence: a 33 ms present judged
-        // against a 16.7 ms history reads as a drop on every frame.
+        // against a 16.7 ms history reads as a drop on every frame. The readout
+        // holds a window of the same frames and is dropped with it — and its
+        // budget follows the new divisor from here rather than 160 ms later at
+        // the HUD tick, so no run of frames is ever priced at a cadence nobody
+        // was aiming at.
         frameMs.clear()
         gpuMs.clear()
         lastSampleNanos = 0L
-        // The REAL budget, not a fixed 60: one present interval on this panel.
-        PerfMonitor.budgetMs = panelMs() * v
+        declarePacing()
+        PerfMonitor.reset()
     }
 
     private fun start() {
         if (frameCallback != null) return
         lastFrameNanos = 0L
+        declarePacing()   // before the first sample reaches the readout
         val cb = object : Choreographer.FrameCallback {
             override fun doFrame(frameTimeNanos: Long) {
                 Choreographer.getInstance().postFrameCallback(this)
                 if (!hasSurface) return
+                // THE READOUT'S CADENCE: elapsed since the PREVIOUS TICK, drawn
+                // or not (`ttp_perf.h`), unclamped — `dt` below is clamped, so a
+                // tick that spanned three budgets would report as one inside the
+                // clamp and the drop count would read zero exactly when it matters.
+                //
+                // NOT the present-to-present interval [samplePresent] folds, and
+                // not 0 on a skipped tick. Fed presents, `frame` and `drops`
+                // describe the PRESENTS — which is what `skips` already says — and
+                // one paced 60 Hz panel came out p50 16.7 over 120 samples on the
+                // web and 33.3 over 60 here: two incomparable columns of the one
+                // bench table this readout is shared for. The FIRST tick has no
+                // previous one to measure from and is dropped rather than sent as
+                // 0: budgetsMissed reads a 0 as "missed nothing" and it would
+                // count as a good frame towards the warm-up that exists to filter
+                // boot, leaving this shell warm two frames early where the other
+                // two need three (Stage.js gates on rawMs > 0; tvOS substitutes
+                // the link's own cadence).
+                val tickMs = if (lastFrameNanos == 0L) 0.0
+                    else (frameTimeNanos - lastFrameNanos) / 1_000_000.0
                 val dt = if (lastFrameNanos == 0L) 0.0
                     // CLAMPED, for the reason the demo's loop clamps: a suspended
                     // app must not resume by simulating the seconds it was away.
@@ -395,14 +409,16 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
                     onSlowTick?.invoke()
                     Trace.endSection()
                     PerfDebug.poll(this@DisplayHost)
+                    declarePacing()
                 }
-                // The RAW interval between PRESENTS, never `dt`: dt is clamped, so a
-                // frame that took three budgets would be reported as one that took
-                // three within the clamp and the drop count would read zero exactly
-                // when it matters.
-                val intervalMs = if (presented) samplePresent(frameTimeNanos) else 0.0
-                PerfMonitor.record(frameTimeNanos / 1_000_000.0, intervalMs, presented,
-                    cellCount, surfaceWidth, surfaceHeight, trackId)
+                // TWO QUESTIONS OFF ONE CALLBACK: the scale rule's windows want
+                // present-to-present ([samplePresent] says why), the readout wants
+                // the tick cadence, on every tick.
+                if (presented) samplePresent(frameTimeNanos)
+                if (tickMs > 0) {
+                    PerfMonitor.record(frameTimeNanos / 1_000_000.0, tickMs, presented,
+                        cellCount, surfaceWidth, surfaceHeight, trackId)
+                }
                 adaptScale(frameTimeNanos)
             }
         }
@@ -418,15 +434,13 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
     // -- scenes -------------------------------------------------------------
 
     /**
-     * Build a scene, and record what a HUD readback will need to map slots back
-     * to players. Returns false if the build was refused, which is a real
+     * Build a scene. Returns false if the build was refused, which is a real
      * possibility (an unknown track id) and not an assertion.
      */
     fun build(trackId: String, roster: List<RosterSlot>, store: AssetStore): Boolean {
         return try {
             biome = SceneStaging.build(trackId, roster, this, store)
             this.trackId = trackId
-            rosterIds = roster.map { it.id }
             hasScene = true
             // A NEW SCENE VOIDS THE SCALE'S MEASUREMENTS — the same argument as
             // the clear on a scale move, one level up: the windows describe a
@@ -442,6 +456,10 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
             frameMs.clear()
             gpuMs.clear()
             lastSampleNanos = 0L
+            // And the readout's window with them, for the reason `ttp_perf.h`
+            // names: the lobby attract and a race are different pictures, so a
+            // percentile that straddles a build describes neither.
+            PerfMonitor.reset()
             sceneBuiltNanos = System.nanoTime()
             prevScale = 0.0
             prevCostMs = 0.0
@@ -542,6 +560,18 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
         val hz = view.display?.refreshRate ?: 0f
         return if (hz > 1f) 1000.0 / hz else 1000.0 / 60.0
     }
+
+    /**
+     * Declare the OPERATING POINT to the readout: the panel's own present period
+     * and the divisor we present at. Both are facts only a shell has, and the
+     * budget every share on that readout is measured against follows them —
+     * without it a paced box reads red forever (`ttp_perf.h`).
+     *
+     * Re-declared at the HUD's tick because both halves move under a running app:
+     * the divisor from the rule or from `debug.ttp.hz`, the period from an HDMI
+     * mode change ([panelMs]).
+     */
+    private fun declarePacing() = Ttp.ttp_perf_pacing(panelMs(), vsyncInterval)
 
     /** `ttp_display_present_floor`'s running answer: the device's own fastest present. */
     private var presentFloorMs = 0.0
@@ -724,6 +754,10 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
         pendingW = w
         pendingH = h
         pendingSent = false
+        // Dropped where the move is ARMED as well as where surfaceChanged lands
+        // it: the window that decided this move describes the old buffer, and the
+        // ticks in between present nothing at all.
+        PerfMonitor.reset()
     }
 
     private fun percentile(sorted: List<Double>, q: Double): Double {
@@ -818,7 +852,6 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
     fun release() {
         Ttp.ttp_display_release()
         hasScene = false
-        rosterIds = emptyList()
     }
 
     fun camera(mode: Int) = Ttp.ttp_display_camera(mode)

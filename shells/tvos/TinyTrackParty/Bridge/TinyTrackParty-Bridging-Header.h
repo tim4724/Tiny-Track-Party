@@ -33,6 +33,9 @@
 #import "ttp_error.h"
 // The GLB container reads: the ghost clone and the texture-URI scan.
 #import "ttp_glb.h"
+// The frame-cost readout: samples in, one decided readout out. Shared so a
+// television, a browser and an Android box mean the same thing by "60 fps".
+#import "ttp_perf.h"
 // The surface, the scene, the cameras and the frame. There is no tvOS-only
 // display header beside it: ttp_display_create takes an opaque `const void*`
 // surface, which is a CAMetalLayer here and a CSS selector on the web, so this

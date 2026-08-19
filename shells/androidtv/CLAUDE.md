@@ -127,8 +127,14 @@ exposed to this (rAF is throttled by presentation, and so is a display link), so
 this is Android's alone, and it is not a small inaccuracy: the adaptive render
 scale's fallback signal is LATE PRESENTS, and fed vsync ticks it saw a perfect
 cadence and **never rescued anything** — the box sat at 11 fps with the
-mechanism reporting it was fine. Sample the interval only on frames
-`ttp_display_frame` says were drawn.
+mechanism reporting it was fine. So the SCALE's window samples only frames
+`ttp_display_frame` says were drawn. The readout is the other way round and must
+stay that way: it takes EVERY tick's cadence plus the `presented` flag
+(`ttp_perf.h`) and separates `hz` from `fps` itself. Filtering its input instead
+is the same mistake wearing the other hat — fed presents, its `frame` series and
+its drop count described the presents (60 samples at a p50 of 33 ms where the web
+logged 120 at 16.7), so the two shells' columns of the bench table stopped being
+the same measurement.
 
 **`SoundPool.play` IS A DEVICE CALL, AND A COLD ONE BLOCKS FOR 34-52 ms.** It is
 not a queue write: when the channel a play lands on does not already hold an
@@ -223,8 +229,12 @@ thing:
 **The STEADY frame is GPU-bound, and it is not close.** Measured with the
 backend's own timer (`ttp_display_gpu_ms`, real here — it is the GL timer query,
 unlike the two sibling shells): the renderer's CPU half is under 2 ms whatever is
-on screen, while the GPU is tens of milliseconds. `PerfMonitor` shows both, and
-logs a line a second under `TtpPerf` so a scripted sweep can read it; `PerfDebug`
+on screen, while the GPU is tens of milliseconds. `PerfMonitor` shows both — it
+GATHERS, and every judgement in it (the ring, the percentiles, the two rates, the
+drop count, the verdict) is `ttp_perf.h`'s, so a run this box calls amber is one
+the browser and the Apple TV call amber too. It logs that readout as one JSON
+object a second under `TtpPerf`, which is the bench's whole wire on all three
+platforms. `PerfDebug`
 pins the render scale and drives `ttp_display_debug_features` from `adb setprop`,
 which is the only way to get two comparable ablation arms (an unpinned sweep
 resizes the buffer underneath itself, and it will happily hand you a 3x swing
@@ -257,22 +267,24 @@ which is main-thread work of the same order as anything being hunted, and leavin
 it up will hand you its cost as the finding. It is on by DEFAULT (every build
 except a `Scenarios` run), so hiding it is a step you take, not one you forget.
 
-`scripts/androidtv-live.mjs` is the one in-race harness: it joins a phone and
-drives a REAL race — the realistic view via `--spectate`, the scaler free or
-pinned via `--pin`, a `TTP_FEAT_*` ablation mask via `--features` — and reads
-back where the scale settles plus the renderer-CPU spike attribution per phase.
-One run answers "where does it settle"; interleaved runs at a pinned scale
-answer "what does this feature cost".
+`scripts/perf-race.mjs` is the one in-race harness, and
+`scripts/perf-race.android.mjs` is this box's half of it: it launches the `bench`
+scenario — a REAL race whose player seats the engine drives — with the scaler
+free or pinned, a `TTP_FEAT_*` ablation mask, and the cell count set by how many
+players it seats. It reads back the readout the app logs, plus the renderer-CPU
+spike attribution per phase, which is Android's alone. One run answers "where
+does it settle"; interleaved runs at a pinned scale answer "what does this
+feature cost". It joins no phones and touches no relay: the bench seats its own
+players, so a measurement no longer depends on a service on the internet.
 
-**MEASURE AT A PINNED SCALE, AND SET THE MASK EVERY TIME.** Three traps have
-cost an experiment each. `debug.ttp.features` is a SYSTEM PROPERTY that survives
-a force-stop, so an arm that does not set it silently inherits the last one. The
-readout folds a window bounded in TIME as well as frames, because 120 frames at
-12 fps is ten seconds of history and every arm of a sweep read as a blend of
-itself and the arm before it. And the readout is a TOGGLE that logs nothing at
-all while hidden, whose state outlives the script — so a sweep must probe for
-lines logged AFTER its keypress, never for lines in the log at large, or a
-previous run's samples read as success.
+**MEASURE AT A PINNED SCALE, AND SET THE MASK EVERY TIME.** Two traps have cost
+an experiment each. `debug.ttp.features` is a SYSTEM PROPERTY that survives a
+force-stop, so an arm that does not set it silently inherits the last one. And
+the readout's percentiles fold a window of 120 FRAMES with no age bound
+(`ttp/perf_stats.h`), which at 12 fps is ten seconds of history — so an arm
+whose mask lands mid-run reads as a blend of itself and the arm before it. Each
+arm is therefore its own launch, and the first seconds of the race (the grid, the
+first corner, the scaler settling) are thrown away rather than folded.
 
 **MEASURE THE BUILD THAT SHIPS.** `PerfDebug`'s knobs — and the perf readout
 itself, which now shows in RELEASE too — are deliberately NOT debug-gated. Gated (as they once were), they are inert AND SILENT in release: a
@@ -280,9 +292,10 @@ sweep runs, logs nothing about it, and reports the free-running scaler's numbers
 as pinned arms — and the shipping configuration cannot be ablated at all.
 Checked once on release at a pinned scale: the GPU-bound half of this section
 does transfer between the variants, which was previously an assumption.
-`androidtv-live.mjs` restores every knob on each exit path, because a property
-outlives a force-stop and a reinstall, and a leftover mask reaches a RELEASE
-build too.
+`perf-race.android.mjs` restores ALL FOUR knobs on every exit path, because a
+property outlives a force-stop and a reinstall, and a leftover one reaches a
+RELEASE build too. It used to skip `debug.ttp.hz` — the one knob nothing else
+ever cleared — while this file claimed every knob was restored.
 
 **THE FIRST RUN AFTER AN INSTALL MEASURES THE INSTALL.** Same build, same track,
 scaler free: straight off a `androidtv-cycle.sh` it settles at 720x405 with 5.6
@@ -295,7 +308,7 @@ the warmup.
 
 **The lobby's attract demo is deterministic but it does NOT pick a fixed track**
 — it previews whatever the tour last resolved to, so two runs either side of a
-race are two different scenes. Pin the track: `androidtv-live.mjs` takes `--track`.
+race are two different scenes. Pin the track: the bench takes one.
 
 **THE COST IS `fixed + per-megapixel`**, and the fixed half is what the render
 scale cannot spend against — no buffer size reaches under it — so it is what
@@ -386,16 +399,19 @@ filter is. The measured cost lives beside the switch in `DisplayHost.kt`.
 
 ## Can it do 1280x720 at 60 fps? And the 30 fps mode
 
-**MEASURE ON THE VIEW A PLAYER SEES, and no earlier number applies.** The live
-harness's phone cannot steer — its car scrapes a wall while the AI pack drives
-away, so for two days every "live" figure priced an EMPTYING ROAD. A real
-player starts LAST with seven cars, their contact shadows, items and auras in
-frame, and `debug.ttp.spectate 7` (follow the car that started in place 7 —
-the last AI; PerfDebug.kt has the why, androidtv-live.mjs takes `--spectate`)
-is that view. It runs several milliseconds of GPU heavier than the
-wall-grinder at the same pinned scale — the difference between "nearly 60" and
-"not close" — so a fit or a verdict taken on any other view is about a
-different game.
+**MEASURE ON THE VIEW A PLAYER SEES, and no earlier number applies.** The old
+harness's phone could not steer — its car scraped a wall while the AI pack drove
+away, so for two days every "live" figure priced an EMPTYING ROAD. A real player
+starts LAST with seven cars, their contact shadows, items and auras in frame, and
+that view runs several milliseconds of GPU heavier than the wall-grinder at the
+same pinned scale — the difference between "nearly 60" and "not close". A fit or
+a verdict taken on any other view is about a different game.
+
+The bench IS that view now: its player seats are autopiloted, so they drive the
+racing line in the pack they started behind, in their own split-screen cells.
+(The camera knob that used to stand in for this — follow the car that started in
+place 7 — is deleted along with the reason for it. It also collapsed the cells to
+one, so it could never price a real 2- or 4-player split.)
 
 At 60 Hz on that view the adaptive scale settles at the FLOOR with its p95
 already brushing the budget — the rule being right, not stuck. 720p60 was
@@ -423,6 +439,16 @@ configuration on this box today. Whether the sharper-but-doubled-latency
 trade should ever be AUTOMATIC is a product decision parked until a real
 phone drives it over the prod relay — until then it is an adb knob, not a
 shipped behaviour.
+
+**THE READOUT FOLLOWS THAT PIN**, because the shell tells it to:
+`DisplayHost.declarePacing` hands `ttp_perf_pacing` the panel's own present
+period and the divisor in force, and the budget every share on that line is
+measured against follows the divisor. So a pinned 30 on an idle box reads GOOD
+against a doubled budget instead of scoring its own pacing as a dropped budget
+per frame, which is what it did before the readout was told — and a readout that
+stays red however healthy the run is stops being read. It is re-declared at the
+HUD tick, because both halves move under a running app: the divisor from the rule
+or the pin, the period from an HDMI mode change.
 
 A scene change SHORTENS the up-hold, and that decision is the RULE's, not this
 shell's. The lobby legitimately floors the scale (the attract behind the boards
@@ -589,8 +615,10 @@ which is `am start`, `logcat`, `screencap`.
 Three consequences of that:
 
 - **The scenario arrives as an INTENT EXTRA** (`--es ttpScenario <id>`, plus an
-  optional `--es ttpTrack <id>`), read once in `onCreate` and applied at the end
-  of `boot()` — nothing game-side exists before the surface does.
+  optional `--es ttpTrack <id>` and `--ei ttpPlayers <n>`), read once in `onCreate`
+  and applied at the end of `boot()` — nothing game-side exists before the surface
+  does. `--ei` for the count: `--es` hands `getIntExtra` a String and it answers
+  the default without a word.
 - **Readiness is a LOG LINE**, `TtpShot: ready|unsupported|failed <id>`, because a
   log line is what adb can observe. It is emitted once the scenario's own scene has
   landed AND the engine has PRESENTED a few more frames; never sleep instead, or
@@ -616,12 +644,20 @@ Three consequences of that:
   screen. It is safe here despite the shell's usual never-force-stop rule, because
   a scenario never opens the relay and so creates no room to recover.
 
+One scenario is not a screen: **`bench` is a live race for the frame-cost bench**,
+with no picture anybody wants a photograph of, so it has no gallery card. It is
+here because it needs exactly what the other scenarios need — a race with no
+relay, no phone and no party — and because the seats a harness fills now DRIVE:
+`Scenarios.standUp` latches `ttp_race_autopilot_players`, so every scenario races
+a real field instead of a row of cars that accelerate away, never turn, and pile
+into the first corner.
+
 The rule it lives under is the ledger's: **a harness may fabricate its INPUTS, but
 it must not own a second copy of the road.** Every screen goes through the walk the
 live game takes — `applyPick` for a pick, `ttp_room_add_player` for a party,
 `ttp_race_start_live_json` for a launch, `ttp_ui_results_view_json` for a board.
 `PartyNet.applyPick` and `PartyNet.setTrack` came back with it, which is what
-`tests/androidtv-deadcode.test.js` had been holding them out for.
+`tests/shell-deadcode.test.js` had been holding them out for.
 
 ## Build
 

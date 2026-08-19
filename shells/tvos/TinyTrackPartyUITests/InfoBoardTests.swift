@@ -24,7 +24,10 @@ final class InfoBoardTests: XCTestCase {
 
     func testInfoBoardIsRemoteOnlyAndUnfocusedAtRest() throws {
         let app = XCUIApplication()
-        app.launchArguments = ["-ttpScenario", "lobby"]
+        // A gallery id, not a web harness KEY: `lobby` was neither, and had
+        // silently become "no such screen here" the day the harness's cases were
+        // retargeted at the real table.
+        app.launchArguments = ["-ttpScenario", "lobby-empty"]
         app.launch()
 
         XCTAssertTrue(app.otherElements["ttp-ready"].waitForExistence(timeout: 90),

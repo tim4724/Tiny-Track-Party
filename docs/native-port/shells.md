@@ -27,7 +27,7 @@ audience:
   relay framing + fastlane kits, the net walks (`ttp_net_on_*`, liveness,
   stored pick), the race EXECUTOR walks (`ttp_race_*_live_json` +
   `configure` + `series_state`), the ui reads (`ttp_ui_*` — all of them),
-  audio, display, theme, glb. The cup series, the launched field and the
+  audio, display, theme, glb, and the frame-cost readout (`ttp_perf_*`). The cup series, the launched field and the
   random-track shuffle bag all live BEHIND THE ROOM HANDLE: the walks create,
   advance, bank, repair and draw internally, so a shell holds no series
   handle, curates no field rows and owns no draw protocol — a start, a cup
@@ -103,7 +103,20 @@ Three properties of that surface matter more than the list:
    `runtime/ttp_display_core.cc` plus your surface file. Do not retype the
    list; it is a variable precisely because a second copy drifts on the first
    ABI added and fails as a link error on one platform only.
-3. **Materials.** `native/scripts/build-materials.sh <matc> <outdir> [api] [platform]`,
+3. **The frame-cost readout, bound not written.** A shell hands
+   `ttp_perf_sample` its own clocks, `ttp_display_profile`'s `total` and
+   whatever GPU timer its backend has, declares what it is aiming at through
+   `ttp_perf_pacing`, and draws `ttp_perf_readout_json`. It may not fold a
+   percentile, count a drop or pick a colour: three shells that each did had
+   already drifted apart while all three carried a comment saying they had not,
+   and a bench comparing them is worth nothing if "60 fps" and "amber" are
+   three different statements. `ttp_perf_reset` on a resize or a scene change —
+   the readout carries the buffer size it was measured at.
+   `ttp_display_step` takes its p95s off the SAME readout rather than a second
+   window, so a shell cannot steer its resolution off numbers its own overlay
+   disagrees with.
+
+4. **Materials.** `native/scripts/build-materials.sh <matc> <outdir> [api] [platform]`,
    using the FORK'S matc. `opengl mobile` (the default) is what the web ships
    and what Android TV wants; tvOS needs `-a metal`. Every material the web
    shell lists (`render/Display.js`'s `MATERIALS`) is required for a correct
@@ -112,7 +125,7 @@ Three properties of that surface matter more than the list:
    `voverlay` and the steer bar and dividers vanish). A shell loading from its
    own bundle should assert on every blob, not copy the web's `if (res.ok)`
    skip.
-4. **The 2D UI**, in the platform's own toolkit, rendered from `ttp_ui.h`.
+5. **The 2D UI**, in the platform's own toolkit, rendered from `ttp_ui.h`.
    Bind the effect-op vocabularies at boot and assert your performer tables
    against them (see The shell set above) before anything else.
    The web's rendering half is `public/display/main.js` + `lobbySeats.js` +
@@ -175,7 +188,7 @@ Three properties of that surface matter more than the list:
    re-sort — which reads as a glitch, not as a ranking. The web reference is
    `raceOverlays.js`, and `tests/e2e/gallery-boards.spec.js` pins both phases
    plus the board's geometry across the transition.
-5. **Transport.** A WebSocket client, and optionally a WebRTC DataChannel. The
+6. **Transport.** A WebSocket client, and optionally a WebRTC DataChannel. The
    fastlane is an enhancement by design (CONTROL falls back to the relay), so
    relay-only is a legitimate launch. The framing and packet codecs are already
    C++, and so is the CHOREOGRAPHY: every inbound trigger (protocol frame, peer
@@ -189,7 +202,7 @@ Three properties of that surface matter more than the list:
    effects. When your shell gains a SEND path, add a case to
    `scripts/wire-mutations.mjs` — that was the suite's one historical blind
    spot.
-6. **The audio device.** A player over the command stream. The cue palette is
+7. **The audio device.** A player over the command stream. The cue palette is
    pre-baked (`public/assets/audio/cues/` — WAVs plus a manifest carrying each
    cue's detune spread; see `scripts/bake-cues.mjs` for why the jitter is the
    player's job), but the device is more than a sampler: the engine voice is a
@@ -197,13 +210,13 @@ Three properties of that surface matter more than the list:
    compressor is part of the mix contract. `public/display/Audio.js` and
    `shells/tvos/TinyTrackParty/Audio/AudioDevice.swift` are the two
    implementations to compare.
-7. **A QR encoder.** Settled in [shared-cpp-plan.md](shared-cpp-plan.md) (§QR):
+8. **A QR encoder.** Settled in [shared-cpp-plan.md](shared-cpp-plan.md) (§QR):
    there is deliberately no C++ encoder, because the URL composition is shared
    and only the module bitmap is per-platform. `CIQRCodeGenerator` on tvOS,
    ZXing on Android, `public/shared/qr.js` in the browser — copy its policy (EC
    level L, a 1-module quiet zone), not its library. Every shell encodes
    locally: no display asks its own origin to draw its own join code.
-8. **A base URL, and this shell's `cpp` value.** `session.h`'s `join_url` needs
+9. **A base URL, and this shell's `cpp` value.** `session.h`'s `join_url` needs
    an origin serving the phone controller, and a native app has none of its own.
    The web deployment is therefore a runtime dependency of every TV app.
    `baseUrlOverride` is the existing seam. Pass your platform — `"tvos"` or
@@ -211,7 +224,7 @@ Three properties of that surface matter more than the list:
    and `controller_url_template`: the join URL is the only place a display
    declares which box it is to the CouchPad launcher, and the two must agree
    because a player may arrive by either.
-9. **A room advertisement, if you are native** (CouchPad CONTRACT §8). Publish
+10. **A room advertisement, if you are native** (CouchPad CONTRACT §8). Publish
    `_couchpad._tcp` in `.local` at room create, withdraw it at close, with the
    TV's human label as the DNS-SD instance name and the room code as TXT `c` —
    nothing else, and never TXT `cpr`, which is a launcher-to-launcher marker. The
@@ -219,10 +232,10 @@ Three properties of that surface matter more than the list:
    it could already make: keep showing the QR and the code regardless. The web
    display cannot do this at all (browsers cannot advertise mDNS), which is why
    it has no counterpart here.
-10. **Back navigation.** The TABLE crossed (`ttp_ui_back_effect`); the walk did
+11. **Back navigation.** The TABLE crossed (`ttp_ui_back_effect`); the walk did
    not. popstate, the tvOS Menu button and Android's back stack are three
    different animals and the shell owns the traversal.
-11. **Asset bytes for the renderer.** The renderer asks for names; the shell
+12. **Asset bytes for the renderer.** The renderer asks for names; the shell
     fetches bytes and hands them over before the build (the web reference is
     `render/Display.js`). Cars and item props go over by their own file names;
     the biome's scenery goes over as `scenery<i>.glb` in the slot order
@@ -238,7 +251,7 @@ Three properties of that surface matter more than the list:
     livery, which never repaints a car body). A shell that cannot
     evaluate CSS vars substitutes those two tokens and rasterizes; the baked
     fallback colours are the pre-theme look.
-12. **WHEN the scene is built.** A build blocks the thread long enough to be
+13. **WHEN the scene is built.** A build blocks the thread long enough to be
     seen, and a cup's chained start (`advance`) performs `place-track` with the
     countdown already running — so a shell that meshes there shows the OUTGOING
     circuit under the count and then hitches. Mesh the next circuit when the
@@ -247,7 +260,7 @@ Three properties of that surface matter more than the list:
     connected humans, so the prepared scene is the one it wants. The web
     reference is `prepareNextTrack()` in `public/display/main.js` plus
     `Stage.prepare`/`rebuild`, and `tests/e2e/cup-series.spec.js` pins it.
-13. **The operating point, measured.** Neither the buffer size nor the present
+14. **The operating point, measured.** Neither the buffer size nor the present
     rate is the panel's: a shell polls `ttp_display_step` with what its last
     window of frames cost and takes back BOTH — a resolution and a present
     divisor, ordered around a desired 1080@60 (below it resolution gives way,
@@ -277,7 +290,7 @@ Three properties of that surface matter more than the list:
     presents, `hz` counts ticks), so the measurement this owes is cheap to take
     whenever the appetite arrives.
 
-14. **An attribution surface.** The build ships CC-BY music, OFL fonts and
+15. **An attribution surface.** The build ships CC-BY music, OFL fonts and
     several notice-tier libraries, so a shell that shows nobody is in breach —
     this is an obligation, not an About page. What it owes is a reachable list
     of every credited work, and the license TEXT for the ones whose license
@@ -295,27 +308,6 @@ Three properties of that surface matter more than the list:
 
 Each is a real item, not a simplification; the settled reasoning behind the two
 look items is in `shells/androidtv/CLAUDE.md` (Look).
-
-- **A demo race that DRIVES.** `Scenarios`' race screens seat four fake players
-  and launch them through the real start walk, and nothing drives them. Throttle
-  is automatic here — a car's input is steer/brake/use — so an undriven seat does
-  not sit on the grid: it accelerates away, never turns, and piles into the first
-  corner while the CPU field leaves. Every screenshot and every perf reading off
-  that race is of a picture the game cannot produce.
-  **THE WEB IS NOT THE ANSWER TO COPY.** Its harness passes bot specs over EVERY
-  id, which works only because it runs in BARE mode — `buildSession` returns
-  early on `bare`, so there is no `RaceSession` and nothing counts participants.
-  Do the same through the walk and `ttp_session_begin_field` files every spec'd
-  entry under `bots` and none under `humans`, the session has no players left,
-  and the race is torn down on the spot (measured: the box returns to the lobby
-  a second after `TtpShot: ready racing`). The real fix is in that constructor —
-  an entry that is a PLAYER and also carries a controller, one `seats` slot, in
-  `humans` for the queries and in `bots` for `driveBots` — behind an explicit
-  marker so no existing launch changes. It is a core-path change and wants its
-  own commit, with a gate that asserts the OUTCOME (the session still reports
-  human participants, the cars are still moving N seconds in) rather than the
-  shape of the create-session payload, which is what a first attempt asserted
-  while the feature was broken.
 
 - **A decision about the perf readout before a player sees one.** Both TV shells
   boot with the frame-cost panel VISIBLE in release, and the web does not: its
@@ -336,10 +328,10 @@ look items is in `shells/androidtv/CLAUDE.md` (Look).
   is the workaround.
 - **The room advertisement** (item 9, `_couchpad._tcp` over `NsdManager`) — the
   launcher resolves the code through the relay anyway.
-- **Meshing the next circuit at the intermission** (item 12) — a cup's chained
+- **Meshing the next circuit at the intermission** (item 13) — a cup's chained
   start shows the outgoing circuit under the count and then hitches; on this GPU
   a build is seconds, so it is the most visible item here.
-- **The info / licenses board** (item 14) — the .ipa's obligations are the .apk's.
+- **The info / licenses board** (item 15) — the .ipa's obligations are the .apk's.
 - **An app baseline profile** — the release APK carries only library-supplied
   profiles, so this shell's own composables and boot path are not AOT-compiled;
   the tail it would move is the half the GPU readout cannot see, and it costs a

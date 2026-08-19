@@ -197,10 +197,37 @@ real GPU ms from a timer query wrapped around the frame call. `window.__perf` is
 the live and scripted-sweep surface, and **switching the panel off for release is
 gating the `show()` in its constructor** — one line.
 
+**It measures and draws; it judges nothing.** The ring, the warm-up filter, the
+percentiles, the two rates, the drop and skip counts and the health verdict are
+`ttp_perf.h`, shared with both TV shells, so a number the three disagree about is
+a real disagreement rather than three hand-written folds drifting. `sample()` is
+that readout parsed, plus the facts only this side has — the buffer's pixels, the
+SCALE they were rendered at (`Stage._dpr`, never `devicePixelRatio`: they differ
+under `?dpr=` and under every adaptive step, and a readout that misstates its own
+operating point is not comparable to anything), and whether this backend HAS a
+timer extension at all.
+
+**The operating point is DECLARED, not inferred.** `Stage` hands the panel's own
+present period and the render scale's divisor to `perf.pacing` at boot and on
+every re-decide. A divisor above 1 is a chosen cadence, not damage — half the
+ticks deliberately do not draw — and a fold that has not been told reads a paced
+box as red forever.
+
+**The GPU timer resolves one or two frames late, so a frame is HELD** until its
+result lands (or the pool moves past it) and is handed over only then: the
+monitor takes a sample once and accepts no amendment afterwards. A script that
+pumps a burst of frames in one task holds the whole burst, so the hold is as deep
+as the query pool.
+
 **Showing and measuring are separate** (`instrument()`), because the adaptive
 render scale reads `sample()` on a shipped TV where the panel is off. Only the
 DRAWING is gated on visibility; a caller that has changed what a frame costs
-should `reset()` rather than reason about the ring.
+should `reset()` rather than reason about the window.
+
+**`?scenario=bench` is the bench** (`scripts/perf-race.mjs --platform web`): a
+live race on the launch's own field with 1, 2 or 4 autopiloted player seats,
+printing `TtpPerf <json>` once a second. The line is the readout's own bytes and
+the two TV shells log the same one, so a single parser folds all three.
 
 **Where the frame's cost actually is** — `scripts/perf-features.mjs`. It ablates
 one group of renderables at a time (`ttp_display_debug_features`) inside ONE page

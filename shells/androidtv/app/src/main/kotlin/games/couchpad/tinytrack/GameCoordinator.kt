@@ -597,8 +597,13 @@ class GameCoordinator(
      * FAKE HUMANS, NOT AN EMPTY ROSTER. The launch gives a split-screen CELL to
      * human seats and none to the CPUs that top the grid up, so launching with
      * nobody seated produces a legal race rendered under ONE overview camera — a
-     * pretty picture of the track, and not the screen the gallery is for. Four seats
-     * is the 2x2 grid the web's `racing` card photographs.
+     * pretty picture of the track, and not the screen the gallery is for. How many
+     * is the harness's ([Scenarios] takes it from an intent extra); four is the 2x2
+     * grid the web's `racing` card photographs.
+     *
+     * THE SEATS DRIVE THEMSELVES because [Scenarios] latches
+     * `ttp_race_autopilot_players` before any of this — the launch is a real
+     * launch, so an unsteered seat would pile into the first corner.
      *
      * THE PICK GOES ON FIRST, seats second, and the order is the walk's rule rather
      * than a preference: [PartyNet.applyPick] rides the null-sender road, which is
@@ -613,7 +618,7 @@ class GameCoordinator(
      * the post-GO auto-pause re-check walked straight past it, read an empty room as
      * a race with nobody in it, and returned every shot to the lobby.
      */
-    fun startDemoRace(pick: JSONObject, forceItem: String?, humans: Int = 4) {
+    fun startDemoRace(pick: JSONObject, forceItem: String?, humans: Int) {
         net.applyPick(pick)
         for (i in 0 until humans) {
             // A NUMERIC peer index, which is what a phone's seat really is —

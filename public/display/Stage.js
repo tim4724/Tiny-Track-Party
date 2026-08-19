@@ -215,15 +215,22 @@ export class Stage {
     this._canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
     // FIRST child: the HUD overlays are later siblings and paint over it.
     container.insertBefore(this._canvas, container.firstChild);
-    this._sizeCanvas();
-    this._initOverlay();
     // Frame-cost readout, on by default while the game is in development ("P"
     // hides it). Hiding stops the DRAWING; whether it keeps MEASURING is the
-    // next line's business.
+    // next line's business. BEFORE the first _sizeCanvas, which is the one place
+    // that tells it the scale the buffer was sized at — a resize is not
+    // guaranteed to follow boot, so a HUD built after it would report that
+    // scale as 1 for the whole session.
     this.perf = new PerfHud(this.container, this._canvas);
     // The scale is decided from the perf HUD's own measurements, so it has to
     // keep measuring with the panel hidden — which is the shipped state.
     if (this._dprRequest == null && !automation) this.perf.instrument(true);
+    // The operating point the readout judges against, declared at boot and again
+    // whenever either half moves (_adaptScale). Nothing is known about the panel
+    // yet, which ttp_perf.h reads as "assume 60".
+    this.perf.pacing(this._panelMs(), this._divisor);
+    this._sizeCanvas();
+    this._initOverlay();
     this._assets = assetCache();
     this._free = null;       // free-cam state, once enableUserCamera() runs
     this._cellSig = null;    // last pushed cell list / camera mode (see _loop)
@@ -301,12 +308,22 @@ export class Stage {
     const h = Math.max(1, Math.round(ch * this._dpr));
     this._canvas.width = w;
     this._canvas.height = h;
+    // The readout reports the scale its PIXELS were rendered at, which is this
+    // one and not devicePixelRatio — they differ under ?dpr= and under every
+    // adaptive step. Written here because this is the only place it is decided.
+    this.perf.dpr = this._dpr;
     return { w, h };
   }
 
   _onResize() {
     const { w, h } = this._sizeCanvas();
     if (this.display) this.display.resize(w, h);
+    // DROP THE WINDOW, every time — this is the one place the buffer changes
+    // size, and the readout is LABELLED with the size it was measured at. Held,
+    // a line reads "960x540" over percentiles half of which were drawn at
+    // 1280x720; worse, _adaptScale then fits its cost model from a point that
+    // belongs to neither scale and banks it as prevCostMs.
+    this.perf.reset();
     // The resize reallocated (and cleared) the drawing buffer. A running loop
     // repaints on the next rAF, but a preview idled by pauseAfterFrame would stay
     // blank forever (frozen cards have no play button) — repaint one frame, re-idle.
@@ -1057,6 +1074,10 @@ export class Stage {
     // The fastest present is the one number carried between windows, so the fold
     // happens here — but WHICH samples may become one is the rule's, not ours.
     this._presentFloor = this.display.presentFloor(this._presentFloor, s.frame.p05 || 0);
+    // …and the readout is judged against the same operating point the rule is
+    // steering, so it hears the floor as soon as it moves. The panel's period is
+    // still being learned here, which is why this is not a boot-time fact.
+    this.perf.pacing(this._panelMs(), this._divisor);
     const band = this._scaleBand();
     // A missing GPU timer, and a percentile no frame has landed in yet, are both
     // "nothing measured" — 0, which the rule reads as no signal. Named once
@@ -1090,11 +1111,16 @@ export class Stage {
     this._divisor = divisor;
     this._autoScale = next;
     this._scaleMovedAt = t;
+    // The new cadence, declared BEFORE the window below is thrown away: the
+    // frames that follow are paced by this divisor, and judging them against
+    // the old one's budget is exactly the "paced box reads red" the declaration
+    // exists to stop.
+    this.perf.pacing(this._panelMs(), this._divisor);
+    // …and _onResize drops the window that just decided this. Keeping it would
+    // judge the new resolution on the old one's frames for the next two
+    // seconds, which is how a controller talks itself into a second step it
+    // does not need.
     this._onResize();
-    // The window that just decided this describes the OLD resolution. Keeping it
-    // would judge the new one on the old one's frames for the next two seconds,
-    // which is how a controller talks itself into a second step it does not need.
-    this.perf.reset();
   }
 
   // DEBUG resolution scale: re-point the drawing buffer at n x the layout size,

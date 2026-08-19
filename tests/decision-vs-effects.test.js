@@ -30,7 +30,7 @@ function abi() {
       maxPlayers: manifest.MAX_PLAYERS, carCount: manifest.CAR_MODELS.length }));
     const cat = JSON.parse(c('ttp_ui_catalogue_json', 'string', [])());
     c('ttp_race_configure', 'number', ['string'])(JSON.stringify({
-      fieldSize: manifest.MAX_PLAYERS,
+      fieldSize: manifest.FIELD_SIZE,
       carCount: manifest.CAR_MODELS.length,
       colorCount: manifest.CAR_COLORS.length,
       aiPrefix: 'ai-',

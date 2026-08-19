@@ -29,7 +29,7 @@ test('wire: with WebRTC absent, both ends come up fastlane-less and CONTROL ride
   const { ControllerNet } = await H.controllerModules();
   delete globalThis.RTCPeerConnection;
 
-  const relay = H.setRelay(new Relay());
+  H.setRelay(new Relay());   // installed, not held: nothing here drives it directly
   globalThis.sessionStorage.clear();
   const display = { controller: [] };
   const net = H.trackDisplay(new DisplayNet({

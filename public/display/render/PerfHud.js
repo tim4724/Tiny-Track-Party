@@ -1,55 +1,32 @@
 // Perf HUD — the display's frame-cost readout (bottom-right; "P" hides it).
 //
+// WHAT IS HERE AND WHAT IS NOT. Nothing on this page judges a frame any more:
+// the ring, the warm-up filter, the percentiles, the two rates, the drop and
+// skip counts and the health verdict are C++ (native/runtime/ttp_perf.h over
+// libttp-runtime/ttp/perf_stats.{h,cc}, executed on every leg by the `perf`
+// ctest), so "60 fps", "2 drops" and "amber" are the same statements in this
+// browser, on an Apple TV and on an Android box. Read that header before
+// adding a number to this file. What is left here is the half a shell owes:
+// MEASURING (the GPU timer query, which is genuinely web-only) and DRAWING.
+//
 // ON BY DEFAULT while the game is in development: the frame budget is something
 // to keep under your eye, not something to remember to switch on. Turning the
 // PANEL off for release is a one-line change here — gate the show() below on
 // whatever release signal exists at that point.
 //
 // SHOWING AND MEASURING ARE SEPARATE (instrument()). The hide path stops every
-// canvas draw and DOM write, but a hidden HUD still keeps its ring and its timer
-// query for a caller that reads sample() rather than looking at it — which the
-// adaptive render scale (Stage) does on a shipped TV, where this panel is off.
-// So gating show() no longer makes the class inert, and must not: the release
-// build is exactly the case the scale controller has to keep working in.
+// canvas draw and DOM write, but a hidden HUD still samples and still runs its
+// timer query for a caller that reads sample() rather than looking at it —
+// which the adaptive render scale (Stage) does on a shipped TV, where this
+// panel is off. So gating show() no longer makes the class inert, and must not:
+// the release build is exactly the case the scale controller has to keep
+// working in.
 //
-// THE BAR IS 60 fps, FLAT. The budget is a CONSTANT 16.7 ms and the panel's
-// refresh rate is deliberately not detected, because nothing here needs it: a
-// percentage is cost ÷ budget, and a fixed denominator serves that (and the
-// missed-budget count) exactly as well as a measured one. An earlier version
-// did detect it — a snap table, a k>1 harmonic pass, a rank statistic over a
-// 4 s ring to survive the junk interval Stage.start() feeds in — and all of it
-// existed to print "/144" and to pick a denominator. It is gone. 60+ is good,
-// below is bad, and a 144 Hz monitor no longer scores a perfectly good 16.7 ms
-// frame as 240% of budget and turns the whole readout red.
-//
-// KNOWN AND ACCEPTED: a 50 Hz TV (or a 30 Hz HDMI mode) presents below 60 no
-// matter how idle the machine is, so it sits amber permanently. The cost and
-// drop numbers beside it still read healthy, so the picture stays legible —
-// and that is cheaper than the detector was.
-//
-// THREE CLOCKS, and they do not measure the same thing:
-//
-//   • the rAF interval — the CADENCE the browser presented at. Under vsync it
-//     is a plateau (16.7 ms and nothing between), so on its own it says nothing
-//     about headroom: 60 fps is equally true at 10% and 95% GPU load. What it
-//     does say is whether a budget was MISSED, which is the part a human feels.
-//     Reported here as fps + a drop count, never as a mean ms (a mean at vsync
-//     is just 1000/fps printed a second time).
-//
-//   • CPU — ttp_display_profile()'s total: the wasm building this frame's input
-//     from the live Game and issuing its GL. Measured ~0.9 ms for a 4-cell race
-//     at 1280×720, which is close enough to performance.now()'s 0.1 ms coarsening that
-//     the per-section split below it is mostly quantization noise — hence the
-//     total here, with the sections left to profile() for anyone chasing one.
-//
-//   • GPU — EXT_disjoint_timer_query_webgl2 wrapped around ttp_display_frame.
-//     This is the number nothing else in the page can see: the same frame that
-//     costs 0.8 ms of CPU costs 3.4 ms on the GPU.
-//
-// BOTH COSTS ARE SHOWN AS % OF BUDGET USED, low is good — the same sense as the
-// scope bars, where height IS share of budget. They do NOT sum: the CPU builds
-// frame N's commands while the GPU is still drawing N-1, so 30% + 30% is a
-// comfortable frame, not a 60% one. Whichever is larger is the one to cut.
+// THE GPU TIMER RESOLVES LATE, and the monitor behind ttp_perf_sample takes a
+// frame once and accepts no amendment afterwards. So a frame is HELD here until
+// its timer result has landed (or the pool has moved past it) and only then
+// pushed — see _flush. Holding is the whole reason this file still keeps frames
+// of its own at all.
 //
 // TWO SOURCES THAT LOOK RIGHT AND ARE NOT, so nobody re-derives them:
 //   • Filament's Renderer::getFrameInfoHistory().gpuFrameDuration. On emscripten
@@ -66,10 +43,10 @@
 // number is arrival → GPU complete → +1 vsync, and its ground truth is a 240 fps
 // camera pointed at the TV.
 
-const CAP = 240;            // frames kept in the ring (4 s at 60 Hz)
+import { loadNativeRuntime } from '../nativeRuntime.js';
+
 const STRIP = 180;          // columns drawn in the scope (3 s at 60 Hz)
 const STRIP_H = 34;         // scope height, CSS px
-const STAT_FRAMES = 120;    // frames folded into the percentiles
 const TEXT_MS = 250;        // text refresh cadence
 // How many GPU timer queries may be in flight. It is a SAMPLING pool, not a
 // stall guard (see gpuBegin): results come back at the driver's rate rather than
@@ -79,55 +56,48 @@ const TEXT_MS = 250;        // text refresh cadence
 // builds — at 60 Hz the GPU is idle four fifths of every frame, downclocks, and
 // identical builds then read across a wide band.
 const MAX_PENDING = 64;
+// How far the push may lag the frame. Normal running holds two or three; a
+// script that pumps a burst of frames in one task (scripts/perf-features.mjs)
+// holds the whole burst, because nothing can resolve until it yields — so the
+// hold has to be at least as deep as the query pool or that script's readings
+// lose most of their samples. Past this a result is not coming back at all (a
+// lost context, a stopped loop), and the frames go over with their GPU cost
+// ABSENT rather than stalling the readout behind them for good.
+const HOLD_MAX = MAX_PENDING + 16;
 
-// The bar, and the denominator of every percentage here.
-export const GOOD_HZ = 60;
-export const BUDGET_MS = 1000 / GOOD_HZ;
-// fps wobbles by a frame or so at a hard 60 Hz vsync, so "on the bar" has to be
-// a band rather than an equality, and it takes a few presents before a rate
-// means anything at all.
-const FPS_OK = GOOD_HZ - 3;
-const FPS_MIN_STAMPS = 10;
+// The diagnostic tint, keyed by the verdict the C++ decided. Amber and the rest
+// are deliberate here: the chrome palette's veto does not reach a debug overlay,
+// and the three shells agreeing is worth more than matching the theme.
+const TINT = { good: '#7CFC8A', warn: '#FFD166', bad: '#FF6B6B' };
 
-// Budgets missed by a frame that took `interval`. Rounding is right rather than
-// flooring: presents land on vsyncs, so a 25 ms interval is a frame that
-// slipped one budget, not 1.5 of them.
-export function budgetsMissed(interval, budget = BUDGET_MS) {
-  if (!(budget > 0) || !(interval > 0)) return 0;
-  return Math.max(0, Math.round(interval / budget) - 1);
-}
+// A series the window holds nothing for. The ABI answers null for that (absent
+// is not zero — a platform with no GPU timer has no signal, not a free frame),
+// while every reader of sample() wants the keys; the null is spread back out
+// once, at the boundary, rather than at each read.
+const NO_STAT = { p05: null, p50: null, p95: null, max: null, n: 0 };
 
-// BOOT IS NOT A FRAME RATE. Measured here, the first four presents of a run
-// cost 75.5, 17, 50 and 58 ms — shader compilation, pipeline warm-up, the first
-// texture uploads — and every frame after them is a clean 8.3. Those four miss
-// ~9 budgets between them, and since fps and the drop count are BOTH windowed
-// over the trailing second, they hold the readout amber for a full second after
-// the game is already running perfectly. Nobody can act on that, and a HUD that
-// cries wolf at every boot is one you stop reading.
-//
-// So a run is WARMING until it delivers WARMUP_RUN frames in a row that miss no
-// budget, and warming frames are discarded rather than recorded. It has to be a
-// RUN, not one frame: boot is bursty rather than monotonic — that 17 ms second
-// frame is already inside budget, and taking it as the all-clear would let the
-// 50 and 58 ms frames behind it straight into the window, which is the whole
-// problem again.
-//
-// The condition scales itself. It ends on frame 7 here, later on a slower
-// machine, and after exactly WARMUP_RUN frames on a 50 Hz TV (a 20 ms present
-// misses no 16.7 ms budget). WARMUP_MAX is the backstop — a machine that cannot
-// string three good frames together in 30 is not warming up, it is slow, and it
-// must be shown as slow.
-const WARMUP_RUN = 3;
-const WARMUP_MAX = 30;
-
-// Exported for tests: the updated count of consecutive frames that were fine.
-export function warmupRun(interval, run) {
-  return budgetsMissed(interval) === 0 ? run + 1 : 0;
-}
-
-function pct(sorted, p) {
-  if (!sorted.length) return null;
-  return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))];
+// ttp_perf.h, bound once: there is ONE monitor per process because there is one
+// display, so this is module state and takes no handle. Bound off the memoized
+// runtime loader, which boot.js has already resolved by the time a Stage exists.
+let perf = null;
+// The last pacing declared, REPLAYED once the module binds. The loader resolves
+// on a microtask, so the boot declaration is made before there is anything to
+// declare it to — and a dropped one leaves the monitor judging a paced loop
+// against an unpaced budget, which is the permanent red this exists to prevent.
+let paced = null;
+function bindPerf() {
+  if (perf) return;
+  loadNativeRuntime().then((M) => {
+    perf = {
+      reset: M.cwrap('ttp_perf_reset', null, []),
+      pacing: M.cwrap('ttp_perf_pacing', null, ['number', 'number']),
+      sample: M.cwrap('ttp_perf_sample', null,
+                      ['number', 'number', 'number', 'number', 'number']),
+      readout: M.cwrap('ttp_perf_readout_json', 'string',
+                       ['number', 'number', 'number', 'number', 'string'])
+    };
+    if (paced) perf.pacing(paced[0], paced[1]);
+  }).catch(() => { /* a failed load is fatal in boot.js; this side just stays dark */ });
 }
 
 export class PerfHud {
@@ -139,23 +109,31 @@ export class PerfHud {
   // context is acquired lazily on the first instrumented frame, which by
   // construction is after boot().
   constructor(container, canvas) {
+    bindPerf();
     this._canvas = canvas;
     this._visible = false;
     // MEASURING is not the same as SHOWING, and the difference is the whole of
     // what the adaptive render scale (Stage) needs: it decides from the GPU
-    // timer on a shipped TV, where this panel is off. Measuring costs a ring
-    // write and one timer query per frame; DRAWING (the DOM text and the scope)
+    // timer on a shipped TV, where this panel is off. Measuring costs a sample
+    // call and one timer query per frame; DRAWING (the DOM text and the scope)
     // is what stays gated on _visible, so a release build with the panel off
     // still pays nothing to look at.
     this._instrumenting = false;
     this._measuring = false;
-    this._frames = [];        // ring of { interval, cpu, gpu, drops }, slot = n % CAP
+    this._hold = [];          // frames measured but not yet pushed (see _flush)
+    this._ring = [];          // the last STRIP pushed frames, for the scope only
     this._n = 0;              // absolute frame counter (never wraps)
-    this._stamps = [];        // rAF timestamps in the trailing second
-    this._warming = true;     // discarding this run's warm-up frames
-    this._warmRun = 0;        // consecutive good frames seen
-    this._warmSeen = 0;
+    // What is being driven, for a bench that spans a catalogue — it rides the
+    // readout beside the buffer size and the cell count, and a logged number
+    // carrying none of them is not comparable to any other logged number.
+    this.track = null;
     this._cells = 0;
+    // The scale the drawing buffer was SIZED at — Stage's own _dpr, which is
+    // NOT window.devicePixelRatio: `?dpr=1` on a Retina Mac renders a 1280×720
+    // buffer, and a header line saying "@ dpr 2" beside it misstates the very
+    // operating point the numbers describe. Stage writes it wherever it sizes
+    // the canvas; 1 until then, which is what an unsized buffer would be.
+    this.dpr = 1;
     this._lastText = 0;
     this._disjoints = 0;
     // GPU timer state, all null until the first instrumented frame.
@@ -221,46 +199,39 @@ export class PerfHud {
     const on = this._visible || this._instrumenting;
     if (on === this._measuring) return;
     this._measuring = on;
-    if (!on) this._dropQueries();
+    if (!on) this._dropInflight();
     else this.reset();   // stale history is worse than none
   }
 
   // Throw the window away and start measuring again from cold. For a caller
   // that has CHANGED what a frame costs — the scale controller resizing the
   // buffer — where keeping the old frames would judge the new resolution partly
-  // on the old one's timings. warmUp() alone is not enough: it stops the next
-  // few frames being recorded, it does not forget the ones already in the ring.
-  // In-flight queries go too: they were opened against the frames just thrown
-  // away, so their results would land in the new window's slots.
+  // on the old one's timings. It re-arms the warm-up discard too: that is the
+  // monitor's, and ttp_perf_reset is how it is re-armed.
   reset() {
-    this._dropQueries();
-    this._frames = []; this._n = 0; this._stamps = []; this.warmUp();
+    this._dropInflight();
+    if (perf) perf.reset();
   }
 
-  // Re-arm the warm-up discard. Called when the rAF loop starts from cold: a
-  // stopped-then-restarted loop pays the same first-frame costs a boot does.
-  // Costs WARMUP_RUN frames when the renderer is already warm, which is the
-  // price of not having to know whether it is.
-  warmUp() { this._warming = true; this._warmRun = 0; this._warmSeen = 0; }
+  // What this shell is AIMING AT: the panel's own present period (one vsync)
+  // and the render-scale rule's divisor, "present every Nth vsync". Both are
+  // facts only Stage has and both are CHOICES rather than faults — a divisor of
+  // 2 on a 120 Hz screen is holding 60 deliberately, and a readout that cannot
+  // tell that from a missed frame scores every skipped tick as damage. See
+  // ttp_perf.h; the budget follows the divisor and never goes tighter than 60.
+  pacing(panelMs, divisor) {
+    paced = [panelMs, divisor];
+    if (perf) perf.pacing(panelMs, divisor);
+  }
 
   // ---- per-frame hooks --------------------------------------------------------
 
-  // One real frame's cadence (rawMs = the unclamped rAF delta).
+  // One tick of the frame loop, drawn or not (rawMs = the unclamped rAF delta).
   tick(t, rawMs) {
     if (!this._measuring) return;
-    // Discard the run's warm-up entirely — recording it would describe the
-    // shader compiler, not the game (see warmupRun). The frame that completes
-    // the run is itself a good one, so it is the first one kept.
-    if (this._warming) {
-      this._warmRun = warmupRun(rawMs, this._warmRun);
-      if (this._warmRun < WARMUP_RUN && ++this._warmSeen < WARMUP_MAX) return;
-      this._warming = false;
-    }
-    const drops = budgetsMissed(rawMs);
-    this._frames[this._n % CAP] = { interval: rawMs, cpu: null, gpu: null, drops };
-    this._n++;
-    this._stamps.push(t);
-    while (this._stamps.length && t - this._stamps[0] > 1000) this._stamps.shift();
+    this._hold.push({ n: this._n++, t, interval: rawMs, presented: false,
+                      cpu: -1, gpu: -1, waiting: false });
+    this._flush();
     if (this._visible && t - this._lastText >= TEXT_MS) { this._lastText = t; this._render(); }
   }
 
@@ -268,23 +239,28 @@ export class PerfHud {
   // display.frame() call: a query spanning anything else (a canvas readback, the
   // HUD's own DOM writes) stops being a measure of the renderer.
   gpuBegin() {
-    if (!this._measuring || this._n === 0) return; // nothing to attach a result to yet
+    if (!this._measuring || !this._hold.length) return;
+    // Stage calls this from exactly the frames that DRAW — a callback the
+    // present pacing skipped returns before it — so it is also this tick's
+    // PRESENTED flag, which is the one thing ttp_perf_sample wants to know
+    // about the pacing. Marked before the pool check below: a frame that draws
+    // presented a picture whether or not it also got a timer query.
+    const f = this._hold[this._hold.length - 1];
+    f.presented = true;
     // SAMPLE WHAT THE POOL CAN CARRY, rather than issuing a query per frame and
     // throwing the overflow away. Results come back at the driver's own rate,
     // not the frame's, and past a few hundred fps the frames win: measured
     // uncapped on an empty scene the pool sat pinned at MAX_PENDING and NOT ONE
     // result ever landed, so the readout was blank exactly where the frame was
     // cheapest. Skipping instead makes the query rate self-pacing — every query
-    // issued is one that resolves — and the ring simply samples fewer frames.
+    // issued is one that resolves — and the window simply samples fewer frames.
     const gl = this._acquire();   // before the pool check, so context loss is still seen
     if (!gl || this._open || this._pending.length >= MAX_PENDING) return;
     const query = gl.createQuery();
     if (!query) return;
     gl.beginQuery(this._ext.TIME_ELAPSED_EXT, query);
-    // tick() ALREADY recorded this frame and advanced the counter, so the frame
-    // being rendered is _n - 1. Getting this wrong shifts every GPU bar one
-    // column away from the interval and drop tick it belongs to.
-    this._open = { query, n: this._n - 1 };
+    this._open = { query, n: f.n };
+    f.waiting = true;             // held until this comes back (see _flush)
   }
 
   gpuEnd() {
@@ -300,21 +276,38 @@ export class PerfHud {
     // what came back, and gating this on _open deadlocks: the pool stays full,
     // so every later frame skips too, so nothing ever drains it.
     this._drain();
+    this._flush();
   }
 
   // This frame's CPU cost, from Display.profile(). Called after the frame so the
   // numbers are the ones the renderer just posted.
   cpu(ms) {
-    if (!this._measuring || ms == null || this._n === 0) return;
-    const f = this._frames[(this._n - 1) % CAP]; // the frame tick() just recorded
-    if (f) f.cpu = ms;
+    if (!this._measuring || ms == null || !this._hold.length) return;
+    this._hold[this._hold.length - 1].cpu = ms;   // the frame tick() just opened
   }
 
-  // Cell count. NOT in the readout — a human looking at the TV can already see
-  // how many cells are on it. It stays in sample() because a SCRIPTED sweep
-  // cannot: GPU cost scales with cells (and with pixels), so a logged number
-  // without both is not comparable to any other logged number.
+  // Cell count. NOT in the panel — a human looking at the TV can already see how
+  // many cells are on it. It rides the readout because a SCRIPTED sweep cannot:
+  // GPU cost scales with cells and pixels together.
   setCells(n) { this._cells = n | 0; }
+
+  // Hand the measured frames over, oldest first, and never out of order — the
+  // monitor folds a trailing second off the timestamps it is given.
+  //
+  // The NEWEST frame is never pushed: gpuBegin, gpuEnd and cpu() all land inside
+  // its own rAF callback, after tick() opened it, so it is only finished with
+  // once the next tick exists. Behind that, a frame waits for its timer result,
+  // and everything behind IT waits too rather than jumping the queue.
+  _flush() {
+    while (this._hold.length > 1) {
+      const f = this._hold[0];
+      if (f.waiting && this._hold.length <= HOLD_MAX) break;
+      this._hold.shift();
+      if (perf) perf.sample(f.t, f.interval, f.presented ? 1 : 0, f.cpu, f.gpu);
+      this._ring.push(f);
+      if (this._ring.length > STRIP) this._ring.shift();
+    }
+  }
 
   // ---- GPU timer --------------------------------------------------------------
 
@@ -332,9 +325,8 @@ export class PerfHud {
     return gl;
   }
 
-  // Results land one or two frames late, so they are written BACK into the frame
-  // they belong to — which is why the scope redraws from the ring instead of
-  // scrolling a blitted strip.
+  // Results land one or two frames late, so they are written back into the frame
+  // they belong to — which is the frame still being HELD for them.
   _drain() {
     const gl = this._gl;
     // Read GPU_DISJOINT ONCE per drain, before consuming any result: reading it
@@ -350,137 +342,132 @@ export class PerfHud {
       const ms = gl.getQueryParameter(p.query, gl.QUERY_RESULT) / 1e6;
       gl.deleteQuery(p.query);
       this._pending.splice(i, 1);
-      // >= : the oldest slot still holding a valid frame is _n - CAP. tick() has
-      // already written _n - 1 this frame, and _n % CAP is not overwritten until
-      // the NEXT one.
-      if (!disjoint && p.n >= this._n - CAP) {
-        const f = this._frames[p.n % CAP];
-        if (f) f.gpu = ms;
-      }
+      // The frame may have gone over already (HOLD_MAX), in which case the
+      // result has nowhere to land. A disjoint one has nowhere to land either:
+      // the cost stays ABSENT, which is not the same as zero.
+      const f = this._hold.find((x) => x.n === p.n);
+      if (!f) continue;
+      f.waiting = false;
+      if (!disjoint) f.gpu = ms;
     }
   }
 
-  _dropQueries() {
+  // Every query in flight, and the frames waiting on them, are thrown away
+  // together: the results would land in a window that no longer describes the
+  // same thing, and the frames would otherwise wait for results nobody is going
+  // to collect.
+  _dropInflight() {
     const gl = this._gl;
-    if (!gl) { this._pending = []; this._open = null; return; }
-    if (this._open) { gl.endQuery(this._ext.TIME_ELAPSED_EXT); this._pending.push(this._open); this._open = null; }
-    for (const p of this._pending) gl.deleteQuery(p.query);
-    this._pending = [];
-  }
-
-  // ---- stats + drawing --------------------------------------------------------
-
-  // The window of frames the readout describes, oldest first.
-  _window(count) {
-    const out = [];
-    const first = Math.max(0, this._n - count);
-    for (let i = first; i < this._n; i++) {
-      const f = this._frames[i % CAP];
-      if (f) out.push(f);
+    if (gl) {
+      if (this._open) { gl.endQuery(this._ext.TIME_ELAPSED_EXT); this._pending.push(this._open); }
+      for (const p of this._pending) gl.deleteQuery(p.query);
     }
-    return out;
+    this._open = null;
+    this._pending = [];
+    this._hold = [];
+    this._ring = [];
   }
 
-  // Everything the HUD shows, as data. Also the scripted-sweep surface
-  // (window.__perf.sample()) — a GPU budget probe across the catalogue is just
-  // this, once per track. The ms percentiles stay in here even though the
-  // readout prints only percentages: a sweep wants the resolution, a glance
-  // does not.
+  // ---- the readout ------------------------------------------------------------
+
+  // The canonical readout line — ttp_perf_readout_json's own bytes, which is
+  // what a bench logs (`TtpPerf <json>`, the same shape on all three shells) and
+  // what the panel below draws from. Null before the runtime module has bound.
+  readout() {
+    if (!perf) return null;
+    return perf.readout(this._cells, this._canvas.width, this._canvas.height,
+                        this.dpr, this.track);
+  }
+
+  // The same readout as data, plus the two facts only this side has. Also the
+  // scripted-sweep surface (window.__perf.sample()): a GPU budget probe across
+  // the catalogue is just this, once per track.
   sample() {
-    const w = this._window(STAT_FRAMES);
-    const stat = (key) => {
-      const a = w.map((f) => f[key]).filter((v) => v != null).sort((x, y) => x - y);
-      // p05 is here for ONE reader: the adaptive scale's fallback signal wants
-      // the device's own FASTEST present (its vsync period, whatever that panel's
-      // rate is) and the raw minimum is not it — a pair of rAFs inside one vsync,
-      // or one bad timestamp, and the minimum is half the period forever.
-      return a.length ? { p05: pct(a, 0.05), p50: pct(a, 0.5), p95: pct(a, 0.95),
-                          max: a[a.length - 1], n: a.length }
-                      : { p05: null, p50: null, p95: null, max: null, n: 0 };
-    };
-    const all = this._window(CAP);
-    const gpu = stat('gpu'), cpu = stat('cpu');
-    const share = (ms) => (ms == null ? null : ms / BUDGET_MS);
-    // A RATE over the span actually sampled, not a count of what is in the
-    // trailing second: during the first second the window is short, and a bare
-    // count reads as a collapsed frame rate for exactly as long as it takes a
-    // human to look at it.
-    const span = this._stamps.length > 1
-        ? this._stamps[this._stamps.length - 1] - this._stamps[0] : 0;
+    const line = this.readout();
+    const r = line ? JSON.parse(line) : {};
     return {
-      fps: span > 0 ? Math.round((this._stamps.length - 1) * 1000 / span) : 0,
-      // Whether fps is meaningful yet. Judging the bar off two presents would
-      // paint the HUD red for the first tenth of a second of every run.
-      fpsReady: this._stamps.length >= FPS_MIN_STAMPS && span > 0,
-      good: GOOD_HZ,
-      budgetMs: BUDGET_MS,
-      // The last second's worth of frames. _stamps IS that set (it is pruned to
-      // the trailing second every tick), so its length is the exact count.
-      // slice clamps on its own.
-      drops: all.slice(-Math.max(1, this._stamps.length))
-                .reduce((s, f) => s + f.drops, 0),
-      gpu, cpu, frame: stat('interval'),
-      // Share of the 16.7 ms budget CONSUMED, 0..1+ — low is good. Not additive:
-      // the CPU runs a frame ahead of the GPU.
-      gpuUsed: share(gpu.p50), gpuUsedP95: share(gpu.p95), cpuUsed: share(cpu.p50),
-      gpuTimer: this._gpuState,
-      disjoints: this._disjoints,
+      ...r,
+      // ADAPTED AT THE BOUNDARY: the ABI spells an empty series as null and the
+      // buffer as width/height, while this file, Stage._adaptScale and
+      // scripts/perf-features.mjs all read stat keys and one `pixels` pair.
+      cpu: r.cpu || NO_STAT, gpu: r.gpu || NO_STAT, frame: r.frame || NO_STAT,
       pixels: [this._canvas.width, this._canvas.height],
-      dpr: window.devicePixelRatio || 1,
-      cells: this._cells
+      // Web-only, and none of the ABI's business: whether this backend has a GPU
+      // timer at all, and how many readings a disjoint threw away.
+      gpuTimer: this._gpuState,
+      disjoints: this._disjoints
     };
   }
 
   _render() {
     const s = this.sample();
-    const p = (v) => (v == null ? '—' : Math.round(v * 100) + '%');
-    const gpuPart = s.gpuTimer === 'ext' ? `gpu ${p(s.gpuUsed)}`
+    if (!s.budgetMs) return;              // the runtime module has not bound yet
+    if (s.warming) {
+      // The monitor discards a run's warm-up frames (perf_stats.h says why), so
+      // the scope drops the columns it drew from them: a 75 ms boot spike
+      // sitting red in the strip for three seconds is the same false alarm the
+      // filter exists to stop. At most one poll's worth survives the switch.
+      this._ring = [];
+      this._text.textContent = 'perf: warming up';
+      return;
+    }
+    // BOTH COSTS ARE SHOWN AS % OF BUDGET USED, low is good — the same sense as
+    // the scope bars, where height IS share of budget. They do NOT sum: the CPU
+    // builds frame N's commands while the GPU is still drawing N-1, so 30% + 30%
+    // is a comfortable frame, not a 60% one. Whichever is larger is the one to
+    // cut.
+    const p = (ms) => (ms == null ? '—' : Math.round(100 * ms / s.budgetMs) + '%');
+    const gpuPart = s.gpuTimer === 'ext' ? `gpu ${p(s.gpu.p50)}`
         : `gpu ${s.gpuTimer === 'unavailable' ? 'no timer ext' : s.gpuTimer}`;
+    // TWO RATES, ALWAYS BOTH, as the two TV shells print them: `hz` is how often
+    // the loop ticked, `fps` counts only the ticks that DREW, and the gap is how
+    // many pictures the panel never got. They fold over the same numerator base,
+    // so a healthy machine shows them EQUAL — do not suppress one for looking
+    // redundant, the PAIR is the diagnosis and only C++ may decide the numbers.
+    const rate = `${s.fps}/${s.hz} fps`;
+    const skips = s.skips ? ` · ${s.skips} skip${s.skips === 1 ? '' : 's'}` : '';
     this._text.textContent = [
-      `${s.pixels[0]}×${s.pixels[1]} · ${s.fps} fps · ${s.drops} drop${s.drops === 1 ? '' : 's'}`,
-      `${gpuPart} · cpu ${p(s.cpuUsed)}`
+      `${s.width}×${s.height} · ${rate} · ${s.drops} drop${s.drops === 1 ? '' : 's'}${skips}`,
+      `${gpuPart} · cpu ${p(s.cpu.p50)}`
     ].join('\n');
-    // Health: the rate against the bar, dropped budgets, and the GPU's p95 —
-    // the p95 is what you feel, the p50 printed above is what you tune against.
-    // With no GPU timer the fallback is the rAF interval's overshoot past one
-    // budget, which lands on the same scale: 1.0 means the slow frames take two.
-    const over = s.gpuUsedP95 != null ? s.gpuUsedP95 : (s.frame.p95 / BUDGET_MS) - 1;
-    const rate = s.fpsReady ? s.fps : GOOD_HZ;  // an unknown rate is not a bad one
-    this._el.style.color = (s.drops > 2 || over > 1 || rate < GOOD_HZ * 0.8) ? '#FF6B6B'
-        : (s.drops > 0 || over > 0.7 || rate < FPS_OK) ? '#FFD166' : '#7CFC8A';
-    this._drawScope();
+    this._el.style.color = TINT[s.verdict] || TINT.good;
+    this._drawScope(s.budgetMs);
   }
 
   // The scope: one column per frame, newest at the right. GPU as a filled bar,
-  // CPU as a dot trace over it, and a tick on the baseline for every missed
-  // budget period.
+  // CPU as a dot trace over it, and a tick on the baseline for a tick that put
+  // no new picture up.
   //
   // FULL HEIGHT IS ONE FRAME BUDGET, so a bar's height IS the percentage on the
   // line above and the top edge is the cliff. (Scaling to 2× budget instead
   // draws a typical 40% frame as 4 px of 34 — measured, and unreadable. The
   // gradient is the thing being watched; the strip should spend its pixels on
-  // it.) An over-budget frame clamps at the top and turns red, which is where
-  // the drop ticks under it start appearing anyway.
-  _drawScope() {
+  // it.) An over-budget frame clamps at the top and turns red.
+  //
+  // The MISSED-BUDGET count is on the line above and is not drawn per column:
+  // it rounds (a 25 ms present is one slipped frame, 16.9 ms is none), and that
+  // rounding is one of the rules that moved into the wasm. Re-deriving it here
+  // to place a tick is exactly the drift the move was for.
+  _drawScope(budgetMs) {
     const ctx = this._ctx;
     const H = STRIP_H;
     ctx.clearRect(0, 0, STRIP, H);
-    const w = this._window(STRIP);
+    const w = this._ring;
     const x0 = STRIP - w.length;
-    const y = (ms) => H - Math.min(H, (ms / BUDGET_MS) * H);
+    const y = (ms) => H - Math.min(H, (ms / budgetMs) * H);
     ctx.fillStyle = 'rgba(255,255,255,0.22)';   // half-budget reference
-    ctx.fillRect(0, y(BUDGET_MS / 2), STRIP, 0.5);
+    ctx.fillRect(0, y(budgetMs / 2), STRIP, 0.5);
     for (let i = 0; i < w.length; i++) {
       const f = w[i], x = x0 + i;
-      if (f.gpu != null) {
-        ctx.fillStyle = f.gpu > BUDGET_MS ? 'rgba(255,107,107,0.9)' : 'rgba(79,163,247,0.85)';
+      if (f.gpu > 0) {
+        ctx.fillStyle = f.gpu > budgetMs ? 'rgba(255,107,107,0.9)' : 'rgba(79,163,247,0.85)';
         ctx.fillRect(x, y(f.gpu), 1, H - y(f.gpu));
       }
-      if (f.cpu != null) {
+      if (f.cpu > 0) {
         ctx.fillStyle = 'rgba(176,140,232,0.95)';
         ctx.fillRect(x, y(f.cpu) - 0.5, 1, 1);
       }
-      if (f.drops > 0) {
+      if (!f.presented) {
         ctx.fillStyle = '#FF6B6B';
         ctx.fillRect(x, H - 2, 1, 2);
       }

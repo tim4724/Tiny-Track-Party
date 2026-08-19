@@ -237,6 +237,29 @@ BuiltField buildField(const std::vector<Human>& humans, double seed, const Field
   return out;
 }
 
+// The bench roster's names. Eight, because FIELD_SIZE is eight and a bench that
+// seats every place must still name them all.
+static const char* const kBenchNames[] = {
+  "Mia", "Theo", "Ava", "Leo", "Zoe", "Max", "Ivy", "Sam",
+};
+
+std::vector<Human> benchPlayers(int n, const FieldWorld& w) {
+  const int names = static_cast<int>(sizeof(kBenchNames) / sizeof(kBenchNames[0]));
+  std::vector<Human> out;
+  for (int i = 0; i < n; i++) {
+    Human h;
+    h.peerIndex = Id::Num(i);
+    h.name = kBenchNames[i % names];
+    h.colorIndex = i;
+    // The livery's own model, exactly as an unpicked lobby seat resolves
+    // (buildDemoField's rule) — so a bench shows the spread of handling a real
+    // field has rather than eight of car 0.
+    h.carIndex = w.carCount > 0 ? OptNum::Of(i % w.carCount) : OptNum();
+    out.push_back(std::move(h));
+  }
+  return out;
+}
+
 std::vector<DemoEntry> buildDemoField(const std::vector<Human>& humans, const FieldWorld& w) {
   std::vector<DemoEntry> field;
   for (const Human& h : humans) {
@@ -425,6 +448,38 @@ LaunchResult launchRace(const LaunchInput& in) {
   // and shuffle the players' split cells by finish order.
   const std::vector<FieldEntry> sceneRoster = built.field;
   built.field = orderGrid(std::move(built.field), in);
+  // AUTOPILOT: every player seat gains a controller, and nothing else about the
+  // launch moves. Appended AFTER the grid is ordered so the persona comes off
+  // the FINAL grid index, which spreads the personas across the players
+  // (buildDemoField's rule, and for the same reason: a bench whose four cars
+  // all drive the same line measures one car four times).
+  //
+  // THE WANDER SEEDS SIT PAST THE FILL'S, deliberately. The fill seeds off its
+  // bot ORDINAL (`base + s.n`, 0-based) and a player off its grid index, and
+  // those two spaces overlap the moment a grid is not humans-at-back — a
+  // chained cup race grids on the previous finish, so a player who finished in
+  // the top four lands on an index a CPU seat already used and the two then
+  // drive an identical wander stream for the whole leg. `fieldSize` is the
+  // width of the fill's space, so starting past it cannot collide.
+  //
+  // `aiIds` is deliberately untouched: these seats are participants. See
+  // BotSpec::player.
+  if (in.autopilotPlayers) {
+    const double base = (in.seed != 0 && !std::isnan(in.seed)) ? in.seed : 1.0;
+    for (size_t i = 0; i < built.field.size(); i++) {
+      if (built.field[i].ai) continue;
+      BotSpec b;
+      b.peerIndex = built.field[i].peerIndex;
+      b.player = true;
+      if (!in.world.personas.empty()) {
+        const Persona& persona = in.world.personas[i % in.world.personas.size()];
+        b.caution = persona.caution;
+        b.laneBias = persona.laneBias;
+      }
+      b.seed = toUint32(base + static_cast<double>(in.world.fieldSize) + static_cast<double>(i));
+      built.bots.push_back(std::move(b));
+    }
+  }
   out.field = built.field;
   out.aiIds = built.aiIds;
   out.bots = built.bots;

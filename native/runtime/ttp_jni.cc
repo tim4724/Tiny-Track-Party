@@ -26,6 +26,7 @@
 #include "ttp_display.h"
 #include "ttp_theme.h"
 #include "ttp_glb.h"
+#include "ttp_perf.h"
 #include "ttp_error.h"
 #include "ttp_hud.h"
 
@@ -702,6 +703,26 @@ jint n_ttp_paused(JNIEnv* env, jclass, jint a0) {
     return (jint) ttp_paused((int) a0);
 }
 
+void n_ttp_perf_pacing(JNIEnv* env, jclass, jdouble a0, jint a1) {
+    (void) env;
+    ttp_perf_pacing((double) a0, (int) a1);
+}
+
+jbyteArray n_ttp_perf_readout_json(JNIEnv* env, jclass, jint a0, jint a1, jint a2, jdouble a3, jbyteArray a4) {
+    CStr s4(env, a4);
+    return toBytes(env, ttp_perf_readout_json((int) a0, (int) a1, (int) a2, (double) a3, s4.get()));
+}
+
+void n_ttp_perf_reset(JNIEnv* env, jclass) {
+    (void) env;
+    ttp_perf_reset();
+}
+
+void n_ttp_perf_sample(JNIEnv* env, jclass, jdouble a0, jdouble a1, jint a2, jdouble a3, jdouble a4) {
+    (void) env;
+    ttp_perf_sample((double) a0, (double) a1, (int) a2, (double) a3, (double) a4);
+}
+
 jint n_ttp_process_input(JNIEnv* env, jclass, jint a0, jbyteArray a1, jint a2, jdouble a3, jdouble a4, jdouble a5) {
     CStr s1(env, a1);
     return (jint) ttp_process_input((int) a0, s1.get(), (int) a2, (double) a3, (double) a4, (double) a5);
@@ -721,6 +742,16 @@ jbyteArray n_ttp_race_advance_live_json(JNIEnv* env, jclass, jint a0, jint a1, j
 jbyteArray n_ttp_race_auto_pause_live_json(JNIEnv* env, jclass, jint a0, jint a1, jint a2) {
     (void) env;
     return toBytes(env, ttp_race_auto_pause_live_json((int) a0, (int) a1, (int) a2));
+}
+
+void n_ttp_race_autopilot_players(JNIEnv* env, jclass, jint a0) {
+    (void) env;
+    ttp_race_autopilot_players((int) a0);
+}
+
+jbyteArray n_ttp_race_bench_field_json(JNIEnv* env, jclass, jbyteArray a0, jint a1, jdouble a2) {
+    CStr s0(env, a0);
+    return toBytes(env, ttp_race_bench_field_json(s0.get(), (int) a1, (double) a2));
 }
 
 jint n_ttp_race_configure(JNIEnv* env, jclass, jbyteArray a0) {
@@ -1259,10 +1290,16 @@ const JNINativeMethod kMethods[] = {
     { "ttp_party_version", "()[B", (void*) n_ttp_party_version },
     { "ttp_pause", "(I)V", (void*) n_ttp_pause },
     { "ttp_paused", "(I)I", (void*) n_ttp_paused },
+    { "ttp_perf_pacing", "(DI)V", (void*) n_ttp_perf_pacing },
+    { "ttp_perf_readout_json", "(IIID[B)[B", (void*) n_ttp_perf_readout_json },
+    { "ttp_perf_reset", "()V", (void*) n_ttp_perf_reset },
+    { "ttp_perf_sample", "(DDIDD)V", (void*) n_ttp_perf_sample },
     { "ttp_process_input", "(I[BIDDD)I", (void*) n_ttp_process_input },
     { "ttp_protocol_manifest_json", "()[B", (void*) n_ttp_protocol_manifest_json },
     { "ttp_race_advance_live_json", "(IIDD[B[B)[B", (void*) n_ttp_race_advance_live_json },
     { "ttp_race_auto_pause_live_json", "(III)[B", (void*) n_ttp_race_auto_pause_live_json },
+    { "ttp_race_autopilot_players", "(I)V", (void*) n_ttp_race_autopilot_players },
+    { "ttp_race_bench_field_json", "([BID)[B", (void*) n_ttp_race_bench_field_json },
     { "ttp_race_configure", "([B)I", (void*) n_ttp_race_configure },
     { "ttp_race_demo_live_json", "(I[B[B)[B", (void*) n_ttp_race_demo_live_json },
     { "ttp_race_effect_ops_json", "()[B", (void*) n_ttp_race_effect_ops_json },

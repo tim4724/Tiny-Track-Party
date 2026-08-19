@@ -109,6 +109,15 @@ async function main() {
         .waitForFunction(() => !window.__harnessNeedsScene || (window.__scene && window.__engine), null,
           { timeout: 20000 })
         .catch(() => console.warn(`  ${scenario.id}: scene wait timed out, shooting anyway`));
+      // HIDE THE FRAME-COST READOUT. It shows itself in its constructor, on
+      // purpose (a budget is something to keep under your eye, not to remember
+      // to switch on) — but this column is the REFERENCE the tvOS and Android
+      // columns are read against, and a green diagnostic block over the corner
+      // of every race shot is a difference that has nothing to do with the UI
+      // under inspection. It was in the committed column until this line.
+      // Hiding stops the drawing only; the measurement the adaptive scale reads
+      // keeps running (render/PerfHud.js).
+      await page.evaluate(() => window.__perf && window.__perf.hide());
       // Text renders in the self-hosted Fredoka face; without this the shot can
       // catch a system fallback and every label is subtly the wrong shape.
       await page.evaluate(() => document.fonts && document.fonts.ready);

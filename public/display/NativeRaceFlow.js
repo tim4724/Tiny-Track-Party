@@ -40,6 +40,7 @@ export async function init() {
     personas: c('ttp_race_personas_json', 'string', []),
     effectOps: c('ttp_race_effect_ops_json', 'string', []),
     demoLive: c('ttp_race_demo_live_json', 'string', ['number', 'string', 'string']),
+    benchField: c('ttp_race_bench_field_json', 'string', ['string', 'number', 'number']),
     start: c('ttp_race_start_live_json', 'string',
              ['number', 'number', 'number', 'number', 'string', 'string']),
     events: c('ttp_race_events_live_json', 'string',
@@ -85,6 +86,15 @@ export function configure({ fieldSize, carCount, colorCount, aiPrefix, personas:
 // The lobby attract grid + its render signature, off the live room.
 export function demoLive(roomHandle, trackId, botCap) {
   return P(fn.demoLive(roomHandle, trackId || '', id(botCap)));
+}
+
+// The BENCH field, without a room: `players` autopiloted player seats at the
+// back of the game's own grid, the CPU fill in front. Answers the two arrays
+// ttp_session_begin_field takes, so a surface with no relay — the gallery, the
+// perf bench — races the arrangement a real launch would build rather than a
+// hand-copy of it. See ttp_race.h.
+export function benchField(trackId, players, seed) {
+  return P(fn.benchField(trackId || '', players, seed));
 }
 
 export function startRace(roomHandle, sceneReady, { seed, countdownSeconds, forceItem, botCap }) {

@@ -133,11 +133,26 @@ struct FieldEntry {
 };
 
 // A bot as the wasm takes it.
+//
+// `player` is the AUTOPILOT MARKER, and it is the one field that does not
+// describe how the car drives. A spec carrying it names a seat that is still a
+// PLAYER — it counts as a participant, it grids with the humans, it keeps its
+// split-screen cell and it is not in `aiIds` — and that also carries a
+// controller, so the sim drives it instead of a phone. Default false, so no
+// existing launch changes and no recorded effect list gains a key
+// (ttp_race.cc's writer emits it only when set).
+//
+// It exists because a bench, a screenshot and an attract race all need a field
+// that DRIVES without a room full of phones, and the alternative every shell
+// reached for — spec every seat as a bot — files the players under `bots`, and
+// then the session has no participants left and tears the race down a second
+// after it starts.
 struct BotSpec {
   Id peerIndex;
   double caution = 1.0;
   double laneBias = 0.0;
   double seed = 0;   // already >>>0'd; double so it round-trips as a JS Number
+  bool player = false;
 };
 
 // A car as the renderer takes it.
@@ -234,6 +249,17 @@ struct BuiltField {
   std::vector<Id> aiIds;
 };
 BuiltField buildField(const std::vector<Human>& humans, double seed, const FieldWorld& w);
+
+// The BENCH ROSTER: `n` player seats for a field nobody joined — a perf run, a
+// screenshot, an attract race. Names, liveries and cars are decided HERE, once,
+// because three shells photographing the same screen side by side must differ
+// in the UI under inspection and in nothing else (the tvOS harness picked its
+// own names and every comparison since carried that as noise).
+//
+// peerIndex is the seat number, so a bench roster and a real lobby's first `n`
+// players are the same ids — which is what lets the bench exercise the scalar-id
+// path a shell actually ships.
+std::vector<Human> benchPlayers(int n, const FieldWorld& w);
 
 // The attract field. Same CPU fill, different ids, and one extra rule: persona
 // by FINAL GRID INDEX so they spread across the whole field, with each CPU
@@ -345,6 +371,13 @@ struct LaunchInput {
   // launches replay the recorded grid, and the live walks pass the game's rule.
   bool humansAtBack = false;
   std::vector<Id> gridOrder;
+  // Give every PLAYER seat a controller too (BotSpec::player) — the bench, the
+  // attract race and the screenshot harnesses, where nobody is holding a phone.
+  // The field is otherwise identical to a real launch's: same fill, same grid
+  // rule, same cells, same ids. Only the source of the steering changes.
+  //
+  // Default OFF for the corpus's sake, exactly like humansAtBack.
+  bool autopilotPlayers = false;
 };
 struct LaunchResult {
   Effects effects;

@@ -2,81 +2,104 @@ import SwiftUI
 
 /// The frame-cost readout, and the tvOS half of `render/PerfHud.js`.
 ///
-/// TWO CLOCKS AND A VERDICT, and they do not measure the same thing. The display
-/// link's INTERVAL is the cadence the TV ran at — under vsync it is a plateau, so
-/// on its own it says nothing about headroom, but it is the only thing that says
-/// whether a budget was MISSED, which is the part a human feels. CPU is
-/// `ttp_display_profile`'s `total`: the C++ building this frame's input from the
-/// live `Game` and issuing its draws.
+/// **IT MEASURES; IT DOES NOT JUDGE.** The ring, its trim, the warm-up filter,
+/// the two rates, the percentiles, the drop and skip counts and the health
+/// verdict are all `ttp_perf.h` (`libttp-runtime/ttp/perf_stats.h` carries the
+/// reasoning, and the `perf` ctest executes it on every leg). What is left here
+/// is what only this platform can do: read `CADisplayLink`'s clock and the
+/// renderer's profile buffer, hand them over, and draw the answer. Three
+/// hand-written folds used to sit in three shells, each with a comment claiming
+/// they agreed, and by the time they were replaced this one folded skipped
+/// presents into its verdict and the other two did not — so the same run was
+/// amber on a television and green in a browser.
 ///
-/// The verdict is `ttp_display_frame`'s return, and WITHOUT IT THE OTHER TWO LIE.
-/// The link ticks at the panel's rate whether or not a frame was drawn, so a
-/// tick-counting rate reads a flat 60 through any number of pacing skips, and
-/// the profile is worse than flat: the renderer returns before writing `total`
-/// on a skip, so a skipped tick re-reports the last DRAWN frame's cost. Both
-/// numbers therefore look healthy exactly when the GPU has stopped keeping up,
-/// which is the stutter-with-no-explanation `TtpRendererFrame.cpp`'s pacing note
-/// describes. That is why `fps` counts presents and `hz` counts ticks: when they
-/// separate, the GPU is the reason.
+/// NO GPU NUMBER CROSSES FROM HERE, and it is passed as ABSENT rather than as
+/// zero, because a platform with no timer has no signal and not a free frame.
+/// `ttp_display_gpu_ms()` is real "on the GL backend where
+/// EXT_disjoint_timer_query exists" (its own header) — Metal is not that
+/// backend, and whether Filament's Metal backend can be made to answer a frame
+/// duration at all is UNPROVEN on this box. Absent is the honest report until
+/// somebody proves otherwise on the hardware, and it is not a free choice: with
+/// no GPU stat the verdict's overshoot term falls back to the present
+/// interval's p95, so a plausible substitute would silently move the bar.
 ///
-/// THERE IS NO GPU NUMBER HERE, unlike the web. That one comes from a WebGL
-/// timer query the shell could wrap around `ttp_display_frame`; on Metal the
-/// command buffers are Filament's and the shell holds no handle to them, so
-/// there is nothing to bracket. Do NOT reach for
-/// `Renderer::getFrameInfoHistory()` to fill the gap — that is the trap the web
-/// HUD's header documents, and it would need an ABI it does not have.
-///
-/// ON DURING DEVELOPMENT, exactly as the web's is (`render/PerfHud.js` shows
-/// itself in its constructor; the "P" key hides it). `GameCoordinator.boot()`
+/// ON DURING DEVELOPMENT, exactly as the web's is. `GameCoordinator.boot()`
 /// calls `show()`, and that one line is what to delete for release — everything
-/// below is inert while hidden, `record` returning before it touches the profile
-/// ABI at all. It shipped switched OFF, which is a debug surface that exists in
-/// the tree and cannot be seen on the device it was built for.
+/// below is inert while hidden, `record` returning before it touches the perf
+/// ABI at all. There is deliberately no hide and no toggle: every button this
+/// shell can reach on the Siri Remote is already spoken for (Menu walks back,
+/// Play/Pause is the pause, select and the d-pad belong to the focus chain), so
+/// a debug toggle could only be built by taking one of them off a player. The
+/// web's "P" key and Android's KEYCODE_INFO cost their platforms nothing; here
+/// the switch is the boot line.
 @MainActor
 final class PerfMonitor: ObservableObject {
 
-    /// The bar, and the denominator of every percentage. A CONSTANT 60 Hz
-    /// budget, deliberately not the panel's real rate: a percentage is cost over
-    /// budget, and a fixed denominator serves that exactly as well. KNOWN AND
-    /// ACCEPTED: a 50 Hz TV (PAL match mode) presents below 60 however idle the
-    /// box is, so it sits amber permanently — the cost line beside it still
-    /// reads healthy, which keeps the picture legible.
-    private static let budget = 1.0 / 60.0
-    private static let window = 120     // frames folded into the stats
+    /// Published at 4 Hz, not 60: an `@Published` write per frame would redraw
+    /// the overlay as often as the scene it is measuring.
     private static let textInterval = 0.25
+    /// The bench contract's cadence — one `TtpPerf <json>` line a second, the
+    /// same on all three shells so one parser reads all three logs.
+    private static let logInterval = 1.0
 
     @Published private(set) var visible = false
     @Published private(set) var lines: [String] = []
     @Published private(set) var tint = Color.green
 
-    private var frames: [(t: Double, interval: Double, presented: Bool, cpu: Double?)] = []
     private var lastText: Double = 0
+    private var lastLog: Double = 0
+    private var benching = false
+    /// What is being driven, for a sweep that spans a catalogue. Only a bench
+    /// knows it (the driver names the circuit); a party run reports null.
+    private var track: String?
     private var totalIndex: Int?
     private var namesResolved = false
 
-    func show() { visible = true; frames = []; lastText = 0 }   // stale history is worse than none
-    func hide() { visible = false }
-    func toggle() { if visible { hide() } else { show() } }
+    /// Switch the readout on.
+    func show() {
+        visible = true
+        lastText = 0
+        reset()
+    }
+
+    /// Drop the shared window — stale history is worse than none. Called
+    /// whenever what is being measured changes underneath: the readout coming
+    /// on, a resize and a scene build (`DisplayHost.applyResize` and `build`).
+    func reset() { ttp_perf_reset() }
+
+    /// Start a BENCHED run on `track`: the same readout, additionally logged
+    /// once a second as `TtpPerf <json>` — one JSON object per line, the very
+    /// bytes the panel above is drawn from, so a screenshot and a logged number
+    /// cannot disagree. `Log.i("TtpPerf", …)` on Android and `console.log` on
+    /// the web emit the identical shape; `scripts/perf-race.tvos.mjs` reads this
+    /// one back off `devicectl --console`.
+    func bench(track: String) {
+        benching = true
+        self.track = track.isEmpty ? nil : track
+        lastLog = 0
+        show()
+    }
 
     /// One display-link TICK, drawn or not. `interval` is the elapsed time since
-    /// the previous tick (not the link's nominal cadence), because a missed vsync
-    /// is exactly what this is here to show; `presented` is whether that tick put
-    /// a new picture on the panel.
-    ///
-    /// The cpu sample is dropped on a skip rather than repeated. The renderer
-    /// returns before writing its `total`, so the profile still holds the last
-    /// DRAWN frame — folding it in again would weight the median with a frame
-    /// that was never built, and weight it hardest under exactly the load that
-    /// causes skips.
-    func record(now: Double, interval: Double, presented: Bool, cells: Int, pixels: CGSize) {
+    /// the previous tick (not the link's nominal cadence), because a missed
+    /// vsync is exactly what this is here to show; `presented` is whether that
+    /// tick put a new picture on the panel.
+    func record(now: Double, interval: Double, presented: Bool,
+                cells: Int, pixels: CGSize, dpr: CGFloat) {
         guard visible else { return }
-        frames.append((now, interval, presented, presented ? cpuTotalMs() : nil))
-        if frames.count > Self.window { frames.removeFirst(frames.count - Self.window) }
-        // Published at 4 Hz, not 60: an @Published write per frame would redraw
-        // the overlay as often as the scene it is measuring.
+        // SECONDS on this side, MILLISECONDS on that one: `CADisplayLink`
+        // timestamps are seconds and `ttp_perf_sample` takes ms.
+        //
+        // The cpu sample is dropped (0, i.e. absent) on a skip rather than
+        // repeated: the renderer returns before writing its `total`, so the
+        // profile still holds the last DRAWN frame, and folding it in again
+        // would weight the median hardest under exactly the load that causes
+        // skips. The gpu argument is absent always — see the header.
+        ttp_perf_sample(now * 1000, interval * 1000, presented ? 1 : 0,
+                        presented ? (cpuTotalMs() ?? 0) : 0, 0)
         guard now - lastText >= Self.textInterval else { return }
         lastText = now
-        paint(now: now, cells: cells, pixels: pixels)
+        publish(now: now, cells: cells, pixels: pixels, dpr: dpr)
     }
 
     /// Last frame's CPU total, out of the renderer's own strided profile array.
@@ -92,81 +115,62 @@ final class PerfMonitor: ObservableObject {
         return profile[i]
     }
 
-    /// Budgets missed by a frame that took `interval`. Rounded rather than
-    /// floored: presents land on vsyncs, so a 25 ms interval is a frame that
-    /// slipped one budget, not 1.5 of them.
-    private func missed(_ interval: Double) -> Int {
-        guard interval > 0 else { return 0 }
-        return max(0, Int((interval / Self.budget).rounded()) - 1)
-    }
-
-    private func paint(now: Double, cells: Int, pixels: CGSize) {
-        // fps and the drop count are both windowed over the trailing SECOND,
-        // which is the span a human can act on; the cost stats fold the whole
-        // ring, because a p50 over 16 frames is noise.
-        let recent = frames.filter { $0.t > now - 1.0 }
-        let span = (recent.last?.t ?? 0) - (recent.first?.t ?? 0)
-        // TWO RATES, because they diverge precisely when this overlay is worth
-        // looking at. `hz` is how often the link ticked, which is the panel's
-        // rate and stays flat under any load the CPU survives. `fps` counts only
-        // the ticks that DREW, which is what a human is actually watching. Equal
-        // means healthy; a gap is the GPU refusing frames, and the size of the
-        // gap is how many the television never got.
-        let hz = span > 0 ? Int((Double(recent.count - 1) / span).rounded()) : 0
-        let drawn = recent.filter(\.presented).count
-        let fps = span > 0 ? Int((Double(drawn) / span).rounded()) : 0
-        let skips = recent.count - drawn
-        let drops = recent.reduce(0) { $0 + missed($1.interval) }
-        let cpu = median(frames.compactMap(\.cpu))
-        let cpuUsed = cpu.map { $0 / 1000 / Self.budget }
-        let intervals = frames.map(\.interval).sorted()
-        let p95 = intervals.isEmpty ? 0 : intervals[min(intervals.count - 1, Int(Double(intervals.count) * 0.95))]
-
+    /// ONE readout, drawn and logged. The buffer size and the CELL COUNT ride it
+    /// because GPU cost scales with cells and pixels together: a logged number
+    /// carrying neither is not comparable to any other logged number. They are
+    /// not in the drawn rows — a human looking at the television can already see
+    /// how many cells are on it.
+    private func publish(now: Double, cells: Int, pixels: CGSize, dpr: CGFloat) {
+        let json = TTP.strOrEmpty(ttp_perf_readout_json(
+            Int32(cells), Int32(pixels.width), Int32(pixels.height), Double(dpr), track))
+        if benching && now - lastLog >= Self.logInterval {
+            lastLog = now
+            print("TtpPerf \(json)")
+        }
+        let r = TTP.obj(json)
+        let w = num(r["width"]), h = num(r["height"])
+        // WARMING IS NOT A FRAME RATE (perf_stats.h): the first presents of a run
+        // are shader compiles and first uploads, and the fold discards them
+        // rather than reporting them. Saying so beats drawing 0/0 fps, which a
+        // viewer reads as a stall in the one second where it never is.
+        guard !(r["warming"] as? Bool ?? false) else {
+            lines = ["\(w)×\(h)", "warming up"]
+            tint = Self.good
+            return
+        }
+        let fps = num(r["fps"]), hz = num(r["hz"])
+        let skips = num(r["skips"]), drops = num(r["drops"])
         // Cost as a SHARE OF BUDGET USED, low is good, the same sense as the
-        // web's readout. There is no GPU number to sum it against here, so this
-        // is a floor on the frame's cost and not the whole of it.
-        let cpuText = cpuUsed.map { "\(Int(($0 * 100).rounded()))%" } ?? "n/a"
-        // TWO ROWS, and the same two the web settled on: the surface and the
-        // cadence on one line, the cost on the other. The CELL COUNT is
-        // deliberately not among them — a human looking at the television can
-        // already see how many cells are on it, and the row it used to occupy
-        // was the one a viewer never read.
-        //
-        // `cells` stays in `record`'s signature for the same reason it stays in
-        // the web's `sample()`: a SCRIPTED sweep cannot see the screen, and GPU
-        // cost scales with cells and pixels together, so a logged number without
-        // both is not comparable to any other logged number.
-        // `fps/hz` rather than one rate: the pair is the diagnosis. 60/60 is a
-        // healthy panel, 41/60 is a GPU that cannot hold this resolution, and
-        // the old single number could not tell them apart at all.
+        // web's readout. With no GPU number to set beside it this is a FLOOR on
+        // the frame's cost and not the whole of it.
+        let budget = r["budgetMs"] as? Double ?? 0
+        let p50 = (r["cpu"] as? [String: Any])?["p50"] as? Double
+        let cpuText = (budget > 0 ? p50.map { "\(Int((100 * $0 / budget).rounded()))%" } : nil) ?? "n/a"
+        // TWO ROWS, the two the web settled on: the surface and the cadence on
+        // one line, the cost on the other. `fps/hz` rather than one rate because
+        // the PAIR is the diagnosis — 60/60 is a healthy panel, 41/60 is a GPU
+        // that cannot hold this resolution, and one number cannot tell them
+        // apart at all.
         lines = [
-            "\(Int(pixels.width))×\(Int(pixels.height)) · \(fps)/\(hz) fps · "
+            "\(w)×\(h) · \(fps)/\(hz) fps · "
                 + "\(skips) skip\(skips == 1 ? "" : "s") · \(drops) drop\(drops == 1 ? "" : "s")",
             "cpu \(cpuText)"
         ]
-        // The web's thresholds, kept so the two readouts mean the same thing.
-        // With no GPU timer the overshoot term is the interval's p95 past one
-        // budget, which lands on the same scale: 1.0 means the slow frames take
-        // two. These are DIAGNOSTIC colours, not chrome — the sticker palette's
-        // veto on amber does not reach a debug overlay, and matching PerfHud.js
-        // exactly is worth more here than matching the theme.
-        // Skips join the ladder on the same rungs as drops: both are a budget
-        // that went by with nothing new on the panel, and a viewer cannot tell
-        // which mechanism cost them the frame. The `fps` terms now bite for the
-        // first time — against a tick count they could only fire when the main
-        // thread itself stalled, which is the one case that was never the
-        // interesting one.
-        let over = p95 / Self.budget - 1
-        tint = (skips > 2 || drops > 2 || over > 1 || (fps > 0 && fps < 48)) ? Color(red: 1, green: 0.42, blue: 0.42)
-             : (skips > 0 || drops > 0 || over > 0.7 || (fps > 0 && fps < 57)) ? Color(red: 1, green: 0.82, blue: 0.4)
-             : Color(red: 0.49, green: 0.99, blue: 0.54)
+        // DIAGNOSTIC colours, not chrome: the sticker palette's veto on amber
+        // does not reach a debug overlay, and the three readouts agreeing is
+        // worth more here than any of them matching the theme.
+        switch r["verdict"] as? String {
+        case "bad": tint = Color(red: 1, green: 0.42, blue: 0.42)
+        case "warn": tint = Color(red: 1, green: 0.82, blue: 0.4)
+        default: tint = Self.good
+        }
     }
 
-    private func median(_ xs: [Double]) -> Double? {
-        guard !xs.isEmpty else { return nil }
-        let s = xs.sorted()
-        return s[s.count / 2]
-    }
+    private static let good = Color(red: 0.49, green: 0.99, blue: 0.54)
+
+    /// A count out of the readout. `JSONSerialization` hands every number back
+    /// as an `NSNumber`, and the readout's counts are whole by construction.
+    private func num(_ v: Any?) -> Int { (v as? NSNumber)?.intValue ?? 0 }
 }
 
 /// Drop this over the scene (`.overlay(alignment: .bottomTrailing)`); SwiftUI's
