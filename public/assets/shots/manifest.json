@@ -3,13 +3,37 @@
   "shots": [
     {
       "scenario": "chain",
+      "platform": "androidtv-emu",
+      "file": "androidtv-emu/chain.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 61460,
+      "capturedAt": "2026-08-17T09:17:24.456Z",
+      "gitSha": "e9f41b09",
+      "deviceName": "Television_4K_Android_TV",
+      "deviceId": "emulator-5554"
+    },
+    {
+      "scenario": "chain",
       "platform": "web",
       "file": "web/chain.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 51804,
-      "capturedAt": "2026-08-02T09:45:45.744Z",
-      "gitSha": "5c8fea19"
+      "bytes": 60424,
+      "capturedAt": "2026-08-18T13:45:58.935Z",
+      "gitSha": "2b5be679"
+    },
+    {
+      "scenario": "countdown",
+      "platform": "androidtv-emu",
+      "file": "androidtv-emu/countdown.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 63316,
+      "capturedAt": "2026-08-17T09:09:29.094Z",
+      "gitSha": "e9f41b09",
+      "deviceName": "Television_4K_Android_TV",
+      "deviceId": "emulator-5554"
     },
     {
       "scenario": "countdown",
@@ -41,9 +65,21 @@
       "file": "web/countdown.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 51208,
-      "capturedAt": "2026-08-02T09:44:56.938Z",
-      "gitSha": "5c8fea19"
+      "bytes": 59706,
+      "capturedAt": "2026-08-18T13:45:07.841Z",
+      "gitSha": "2b5be679"
+    },
+    {
+      "scenario": "finished",
+      "platform": "androidtv-emu",
+      "file": "androidtv-emu/finished.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 58756,
+      "capturedAt": "2026-08-17T09:14:59.826Z",
+      "gitSha": "e9f41b09",
+      "deviceName": "Television_4K_Android_TV",
+      "deviceId": "emulator-5554"
     },
     {
       "scenario": "finished",
@@ -63,9 +99,21 @@
       "file": "web/finished.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 46820,
-      "capturedAt": "2026-08-02T09:45:32.750Z",
-      "gitSha": "5c8fea19"
+      "bytes": 42610,
+      "capturedAt": "2026-08-18T13:45:41.969Z",
+      "gitSha": "2b5be679"
+    },
+    {
+      "scenario": "intermission",
+      "platform": "androidtv-emu",
+      "file": "androidtv-emu/intermission.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 21980,
+      "capturedAt": "2026-08-17T09:16:33.310Z",
+      "gitSha": "e9f41b09",
+      "deviceName": "Television_4K_Android_TV",
+      "deviceId": "emulator-5554"
     },
     {
       "scenario": "intermission",
@@ -85,9 +133,21 @@
       "file": "web/intermission.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 15072,
-      "capturedAt": "2026-08-02T09:45:39.908Z",
-      "gitSha": "5c8fea19"
+      "bytes": 18308,
+      "capturedAt": "2026-08-18T13:45:53.409Z",
+      "gitSha": "2b5be679"
+    },
+    {
+      "scenario": "lobby-empty",
+      "platform": "androidtv-emu",
+      "file": "androidtv-emu/lobby-empty.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 51740,
+      "capturedAt": "2026-08-17T09:06:35.289Z",
+      "gitSha": "e9f41b09",
+      "deviceName": "Television_4K_Android_TV",
+      "deviceId": "emulator-5554"
     },
     {
       "scenario": "lobby-empty",
@@ -107,9 +167,21 @@
       "file": "web/lobby-empty.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 36298,
-      "capturedAt": "2026-08-02T09:44:36.808Z",
-      "gitSha": "5c8fea19"
+      "bytes": 40536,
+      "capturedAt": "2026-08-18T13:44:48.902Z",
+      "gitSha": "2b5be679"
+    },
+    {
+      "scenario": "lobby-loading",
+      "platform": "androidtv-emu",
+      "file": "androidtv-emu/lobby-loading.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 17198,
+      "capturedAt": "2026-08-17T09:05:59.522Z",
+      "gitSha": "e9f41b09",
+      "deviceName": "Television_4K_Android_TV",
+      "deviceId": "emulator-5554"
     },
     {
       "scenario": "lobby-loading",
@@ -129,9 +201,21 @@
       "file": "web/lobby-loading.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 14068,
-      "capturedAt": "2026-08-02T09:44:30.478Z",
-      "gitSha": "5c8fea19"
+      "bytes": 18782,
+      "capturedAt": "2026-08-18T13:44:43.049Z",
+      "gitSha": "2b5be679"
+    },
+    {
+      "scenario": "lobby-random",
+      "platform": "androidtv-emu",
+      "file": "androidtv-emu/lobby-random.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 47542,
+      "capturedAt": "2026-08-17T09:08:38.286Z",
+      "gitSha": "e9f41b09",
+      "deviceName": "Television_4K_Android_TV",
+      "deviceId": "emulator-5554"
     },
     {
       "scenario": "lobby-random",
@@ -151,9 +235,21 @@
       "file": "web/lobby-random.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 33214,
-      "capturedAt": "2026-08-02T09:44:52.925Z",
-      "gitSha": "5c8fea19"
+      "bytes": 38604,
+      "capturedAt": "2026-08-18T13:45:04.154Z",
+      "gitSha": "2b5be679"
+    },
+    {
+      "scenario": "lobby-tour",
+      "platform": "androidtv-emu",
+      "file": "androidtv-emu/lobby-tour.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 58630,
+      "capturedAt": "2026-08-17T09:07:58.038Z",
+      "gitSha": "e9f41b09",
+      "deviceName": "Television_4K_Android_TV",
+      "deviceId": "emulator-5554"
     },
     {
       "scenario": "lobby-tour",
@@ -161,9 +257,21 @@
       "file": "web/lobby-tour.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 41994,
-      "capturedAt": "2026-08-02T09:44:47.535Z",
-      "gitSha": "5c8fea19"
+      "bytes": 47464,
+      "capturedAt": "2026-08-18T13:44:58.881Z",
+      "gitSha": "2b5be679"
+    },
+    {
+      "scenario": "lobby-track",
+      "platform": "androidtv-emu",
+      "file": "androidtv-emu/lobby-track.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 58466,
+      "capturedAt": "2026-08-17T09:07:20.916Z",
+      "gitSha": "e9f41b09",
+      "deviceName": "Television_4K_Android_TV",
+      "deviceId": "emulator-5554"
     },
     {
       "scenario": "lobby-track",
@@ -183,9 +291,21 @@
       "file": "web/lobby-track.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 40102,
-      "capturedAt": "2026-08-02T09:44:42.165Z",
-      "gitSha": "5c8fea19"
+      "bytes": 45362,
+      "capturedAt": "2026-08-18T13:44:53.826Z",
+      "gitSha": "2b5be679"
+    },
+    {
+      "scenario": "monster",
+      "platform": "androidtv-emu",
+      "file": "androidtv-emu/monster.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 63548,
+      "capturedAt": "2026-08-17T09:12:38.207Z",
+      "gitSha": "e9f41b09",
+      "deviceName": "Television_4K_Android_TV",
+      "deviceId": "emulator-5554"
     },
     {
       "scenario": "monster",
@@ -205,9 +325,21 @@
       "file": "web/monster.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 47432,
-      "capturedAt": "2026-08-02T09:45:21.589Z",
-      "gitSha": "5c8fea19"
+      "bytes": 48230,
+      "capturedAt": "2026-08-18T13:45:31.209Z",
+      "gitSha": "2b5be679"
+    },
+    {
+      "scenario": "paused",
+      "platform": "androidtv-emu",
+      "file": "androidtv-emu/paused.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 29416,
+      "capturedAt": "2026-08-17T09:13:22.834Z",
+      "gitSha": "e9f41b09",
+      "deviceName": "Television_4K_Android_TV",
+      "deviceId": "emulator-5554"
     },
     {
       "scenario": "paused",
@@ -227,9 +359,21 @@
       "file": "web/paused.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 13364,
-      "capturedAt": "2026-08-02T09:45:25.117Z",
-      "gitSha": "5c8fea19"
+      "bytes": 13828,
+      "capturedAt": "2026-08-18T13:45:34.623Z",
+      "gitSha": "2b5be679"
+    },
+    {
+      "scenario": "podium",
+      "platform": "androidtv-emu",
+      "file": "androidtv-emu/podium.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 23412,
+      "capturedAt": "2026-08-17T09:18:10.982Z",
+      "gitSha": "e9f41b09",
+      "deviceName": "Television_4K_Android_TV",
+      "deviceId": "emulator-5554"
     },
     {
       "scenario": "podium",
@@ -249,9 +393,21 @@
       "file": "web/podium.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 14902,
-      "capturedAt": "2026-08-02T09:45:49.331Z",
-      "gitSha": "5c8fea19"
+      "bytes": 19334,
+      "capturedAt": "2026-08-18T13:46:06.280Z",
+      "gitSha": "2b5be679"
+    },
+    {
+      "scenario": "racing",
+      "platform": "androidtv-emu",
+      "file": "androidtv-emu/racing.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 63404,
+      "capturedAt": "2026-08-17T09:10:17.835Z",
+      "gitSha": "e9f41b09",
+      "deviceName": "Television_4K_Android_TV",
+      "deviceId": "emulator-5554"
     },
     {
       "scenario": "racing",
@@ -271,9 +427,21 @@
       "file": "web/racing.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 47448,
-      "capturedAt": "2026-08-02T09:45:03.054Z",
-      "gitSha": "5c8fea19"
+      "bytes": 49108,
+      "capturedAt": "2026-08-18T13:45:13.737Z",
+      "gitSha": "2b5be679"
+    },
+    {
+      "scenario": "racing-sidewinder",
+      "platform": "androidtv-emu",
+      "file": "androidtv-emu/racing-sidewinder.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 62540,
+      "capturedAt": "2026-08-17T09:11:05.720Z",
+      "gitSha": "e9f41b09",
+      "deviceName": "Television_4K_Android_TV",
+      "deviceId": "emulator-5554"
     },
     {
       "scenario": "racing-sidewinder",
@@ -281,9 +449,21 @@
       "file": "web/racing-sidewinder.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 38502,
-      "capturedAt": "2026-08-02T09:45:09.413Z",
-      "gitSha": "5c8fea19"
+      "bytes": 38958,
+      "capturedAt": "2026-08-18T13:45:19.682Z",
+      "gitSha": "2b5be679"
+    },
+    {
+      "scenario": "reconnect",
+      "platform": "androidtv-emu",
+      "file": "androidtv-emu/reconnect.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 64546,
+      "capturedAt": "2026-08-17T09:14:13.482Z",
+      "gitSha": "e9f41b09",
+      "deviceName": "Television_4K_Android_TV",
+      "deviceId": "emulator-5554"
     },
     {
       "scenario": "reconnect",
@@ -303,9 +483,21 @@
       "file": "web/reconnect.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 45384,
-      "capturedAt": "2026-08-02T09:45:28.978Z",
-      "gitSha": "5c8fea19"
+      "bytes": 48300,
+      "capturedAt": "2026-08-18T13:45:38.292Z",
+      "gitSha": "2b5be679"
+    },
+    {
+      "scenario": "results",
+      "platform": "androidtv-emu",
+      "file": "androidtv-emu/results.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 19696,
+      "capturedAt": "2026-08-17T09:15:46.969Z",
+      "gitSha": "e9f41b09",
+      "deviceName": "Television_4K_Android_TV",
+      "deviceId": "emulator-5554"
     },
     {
       "scenario": "results",
@@ -325,9 +517,21 @@
       "file": "web/results.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 12344,
-      "capturedAt": "2026-08-02T09:45:36.138Z",
-      "gitSha": "5c8fea19"
+      "bytes": 16262,
+      "capturedAt": "2026-08-18T13:45:46.019Z",
+      "gitSha": "2b5be679"
+    },
+    {
+      "scenario": "rocket",
+      "platform": "androidtv-emu",
+      "file": "androidtv-emu/rocket.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 64898,
+      "capturedAt": "2026-08-17T09:11:52.071Z",
+      "gitSha": "e9f41b09",
+      "deviceName": "Television_4K_Android_TV",
+      "deviceId": "emulator-5554"
     },
     {
       "scenario": "rocket",
@@ -347,9 +551,9 @@
       "file": "web/rocket.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 47286,
-      "capturedAt": "2026-08-02T09:45:15.540Z",
-      "gitSha": "5c8fea19"
+      "bytes": 48874,
+      "capturedAt": "2026-08-18T13:45:25.439Z",
+      "gitSha": "2b5be679"
     },
     {
       "scenario": "welcome",
@@ -357,9 +561,9 @@
       "file": "web/welcome.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 18458,
-      "capturedAt": "2026-08-02T09:44:26.953Z",
-      "gitSha": "5c8fea19"
+      "bytes": 19188,
+      "capturedAt": "2026-08-18T13:44:40.016Z",
+      "gitSha": "2b5be679"
     }
   ]
 }

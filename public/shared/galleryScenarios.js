@@ -60,15 +60,37 @@ export const GALLERY_SCENARIOS = [
   { id: 'paused', key: 'paused', title: 'Paused' },
   { id: 'reconnect', key: 'reconnect', title: 'Reconnect' },
   { id: 'finished', key: 'finished', title: 'Player finished' },
-  { id: 'results', key: 'results', title: 'Results', replayable: true },
-  { id: 'intermission', key: 'intermission', title: 'Cup intermission', replayable: true },
+  // `settleMs` — WHICH MOMENT of a replayable card is the card. A capture waits
+  // this long after the screen stands up before it shoots, and the three board
+  // cards need it for the same reason: a cup board is TWO PHASES, and its second
+  // one (the re-sort, the points counting up, the champion crowned) is the thing
+  // the card is named after. Shot on arrival they photograph phase 1 — a "Cup
+  // podium" card that has not yet crowned anybody. The countdown is replayable too
+  // and wants the opposite, which is why this is per-entry rather than a rule about
+  // `replayable`.
+  { id: 'results', key: 'results', title: 'Results', replayable: true, settleMs: 1200 },
+  {
+    id: 'intermission', key: 'intermission', title: 'Cup intermission',
+    replayable: true, settleMs: 4500
+  },
   { id: 'chain', key: 'chain', title: 'Cup: race → next race', animated: true },
-  { id: 'podium', key: 'podium', title: 'Cup podium', replayable: true }
+  { id: 'podium', key: 'podium', title: 'Cup podium', replayable: true, settleMs: 4500 }
 ];
 
-// The platforms a shot can come from. `web` is the reference the other two are
-// read against, which is why it is first and why the manifest test requires it.
-export const SHOT_PLATFORMS = ['web', 'tvos-device', 'tvos-sim'];
+// The platforms a shot can come from. `web` is the reference the others are read
+// against, which is why it is first and why the manifest test requires it — every
+// other column is allowed to be partial, because a screen a platform deliberately
+// does not have (the welcome board on a TV) is a gap the gallery should SHOW.
+//
+// Each TV platform carries both of its legs, and the pair is not redundant: the
+// simulator/emulator is what a laptop can capture on demand, and the physical box
+// is the only thing that answers for the panel, the output mode and the GPU. A
+// column that silently mixed the two would make "has the TV drifted?" unanswerable.
+export const SHOT_PLATFORMS = [
+  'web',
+  'tvos-device', 'tvos-sim',
+  'androidtv-device', 'androidtv-emu'
+];
 
 // The display page's query string for a scenario, shared by the live gallery's
 // iframes and the capture script's page loads so a card and its screenshot can
