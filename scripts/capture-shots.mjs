@@ -28,12 +28,12 @@
 import http from 'node:http';
 import path from 'node:path';
 import fs from 'node:fs';
-import { spawn, execFileSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
 import { GALLERY_SCENARIOS, scenarioQuery } from '../public/shared/galleryScenarios.js';
-import { readManifest, writeManifest, shotDir } from './lib/shots.mjs';
+import { gitSha, mergeShots, shotDir } from './lib/shots.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -76,14 +76,6 @@ function waitForServer(port, timeoutMs = 15000) {
   });
 }
 
-function gitSha() {
-  try {
-    return execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: ROOT }).toString().trim();
-  } catch {
-    return 'unknown';
-  }
-}
-
 async function main() {
   const dir = shotDir(ROOT, 'web');
   fs.mkdirSync(dir, { recursive: true });
@@ -104,7 +96,7 @@ async function main() {
     const page = await browser.newPage({ viewport: { width: WIDTH, height: HEIGHT } });
     page.on('pageerror', (e) => console.error('[page error]', e.message));
 
-    const sha = gitSha();
+    const sha = gitSha(ROOT);
     for (const scenario of scenarios) {
       const q = scenarioQuery(scenario, { players: PLAYERS });
       await page.goto(`http://127.0.0.1:${PORT}/?test=1&${q}`, { waitUntil: 'networkidle' });
@@ -120,7 +112,9 @@ async function main() {
       // Text renders in the self-hosted Fredoka face; without this the shot can
       // catch a system fallback and every label is subtly the wrong shape.
       await page.evaluate(() => document.fonts && document.fonts.ready);
-      await page.waitForTimeout(scenario.animated ? SETTLE_MS : 400);
+      // A scenario's own `settleMs` wins: it names WHICH MOMENT of that screen the
+      // card is about, which for the two cup boards is after the re-sort has run.
+      await page.waitForTimeout(scenario.settleMs ?? (scenario.animated ? SETTLE_MS : 400));
 
       const png = await page.screenshot();
       const webp = await toWebp(page, png, OUT_W, OUT_H);
@@ -145,11 +139,7 @@ async function main() {
 
   // Merge rather than replace: --only must not wipe the platforms and scenarios
   // this run did not touch.
-  const manifest = readManifest(ROOT);
-  const keep = manifest.shots.filter(
-    (s) => !(s.platform === 'web' && entries.some((e) => e.scenario === s.scenario))
-  );
-  writeManifest(ROOT, { ...manifest, shots: [...keep, ...entries] });
+  mergeShots(ROOT, 'web', entries);
   console.log(`==> ${entries.length} web shots -> public/assets/shots/web/`);
 }
 

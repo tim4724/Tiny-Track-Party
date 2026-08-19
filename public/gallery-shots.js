@@ -1,11 +1,16 @@
-// The screens gallery: one card per scenario, the WEB shot next to the APPLE TV
-// shot of the same screen.
+// The screens gallery: one card per scenario, the WEB shot next to whichever TV
+// shot of the same screen you asked for.
 //
 // The other galleries render live — an iframe running the real display page. This
-// one cannot, and that is the whole reason it exists: a tvOS screen only ever
-// exists as a photograph of an Apple TV, so the comparison has to be
-// still-against-still. `/gallery.html` keeps its job (is the web display right?);
-// this one answers a different question (has the TV drifted from it?).
+// one cannot, and that is the whole reason it exists: a TV screen only ever exists
+// as a photograph of a television, so the comparison has to be still-against-still.
+// `/gallery.html` keeps its job (is the web display right?); this one answers a
+// different question (has a TV shell drifted from it?).
+//
+// EITHER COLUMN IS ANY PLATFORM, and that is not just symmetry for its own sake:
+// the useful comparison is often TV against TV. Two shells reading one `ttp_ui.h`
+// should agree with each other as closely as each agrees with the browser, and a
+// difference that shows up on both at once is a model bug rather than a shell bug.
 //
 // The scenario table is IMPORTED, not restated — public/shared/galleryScenarios.js
 // is the same module the capture scripts and the coverage test read. Two
@@ -21,11 +26,28 @@ import { GALLERY_SCENARIOS, SHOT_PLATFORMS } from '/shared/galleryScenarios.js';
 
 const SHOTS_BASE = '/assets/shots';
 
+// Human names for the ids in SHOT_PLATFORMS. Every read falls back to the raw id,
+// so a platform missing from here renders as "androidtv-emu" rather than breaking —
+// which is the failure mode you want, but it is still worth a name.
 const PLATFORM_LABEL = {
   web: 'Web',
   'tvos-device': 'Apple TV (device)',
-  'tvos-sim': 'Apple TV (simulator)'
+  'tvos-sim': 'Apple TV (simulator)',
+  'androidtv-device': 'Android TV (device)',
+  'androidtv-emu': 'Android TV (emulator)'
 };
+
+// The command that fills each column, said in full where a column is empty —
+// spelled out rather than derived from the id, because these are hand-authored
+// npm script names and string surgery over them would rot without failing.
+const CAPTURE_COMMAND = {
+  web: 'npm run shots:web',
+  'tvos-device': 'npm run shots:tvos',
+  'tvos-sim': 'npm run shots:tvos-sim',
+  'androidtv-device': 'npm run shots:androidtv',
+  'androidtv-emu': 'npm run shots:androidtv-emu'
+};
+const captureHint = (p) => CAPTURE_COMMAND[p] || `a capture for ${p}`;
 
 const state = {
   left: 'web',
@@ -47,6 +69,12 @@ function el(tag, className, text) {
   return n;
 }
 
+/** Two git abbreviations of possibly different lengths, same commit? */
+function sameCommit(a, b) {
+  const n = Math.min(a.length, b.length);
+  return n > 0 && a.slice(0, n) === b.slice(0, n);
+}
+
 function metaLine(shot) {
   const line = el('div', 'shot-meta');
   if (!shot) {
@@ -56,7 +84,13 @@ function metaLine(shot) {
   line.appendChild(el('span', null, `${shot.w}x${shot.h}`));
   line.appendChild(el('span', null, `${Math.round(shot.bytes / 1024)} KB`));
   if (shot.deviceName) line.appendChild(el('span', null, shot.deviceName));
-  const stale = servedSha && shot.gitSha && shot.gitSha !== servedSha;
+  // COMPARED AS A PREFIX, not for equality. Both sides are abbreviations of the
+  // same 40-char sha, and neither picked its own length: the server slices 7
+  // (`getShortSha`, shared with the version badge) while the capture scripts take
+  // whatever `git rev-parse --short` gives, which grew to 8 as this repo did. An
+  // `!==` therefore called EVERY card stale, including one captured a second ago —
+  // which is the exact failure the chip exists to prevent, wearing its own badge.
+  const stale = servedSha && shot.gitSha && !sameCommit(shot.gitSha, servedSha);
   line.appendChild(el('span', stale ? 'stale' : 'fresh', stale ? `stale @ ${shot.gitSha}` : shot.gitSha || ''));
   return line;
 }
@@ -125,7 +159,7 @@ function overlaid(scenario, a, b) {
   }
   if (!a && !b) {
     frame.appendChild(el('div', 'missing',
-      'no shots yet — run npm run shots:web and npm run shots:tvos'));
+      `no shots yet — run ${captureHint(state.left)} and ${captureHint(state.right)}`));
   } else if (!b) {
     frame.appendChild(el('div', 'missing',
       `no ${PLATFORM_LABEL[state.right]} shot for "${scenario.id}"`));
@@ -155,12 +189,17 @@ function render() {
   for (const scenario of GALLERY_SCENARIOS) strip.appendChild(makeCard(scenario));
   host.appendChild(strip);
 
+  // Counted for BOTH columns, because either one can now be a TV. Said only when
+  // there is a gap: a complete pair should not carry a sentence about absence.
   const captured = new Set(manifest.shots.map((s) => `${s.scenario}:${s.platform}`));
-  const missing = GALLERY_SCENARIOS.filter((s) => !captured.has(`${s.id}:${state.right}`)).length;
+  const gaps = [state.left, state.right]
+    .map((p) => [p, GALLERY_SCENARIOS.filter((s) => !captured.has(`${s.id}:${p}`)).length])
+    .filter(([, n]) => n > 0)
+    .map(([p, n]) => `${n} missing on ${PLATFORM_LABEL[p] || p}`);
   document.getElementById('legend').textContent =
     `${GALLERY_SCENARIOS.length} screens · ${manifest.shots.length} shots on file` +
-    (missing ? ` · ${missing} missing on ${PLATFORM_LABEL[state.right] || state.right}` : '') +
-    ' · frozen captures, not live pages (an Apple TV screen only exists as a photograph)';
+    (gaps.length ? ` · ${gaps.join(' · ')}` : '') +
+    ' · frozen captures, not live pages (a TV screen only exists as a photograph)';
 }
 
 function fillPlatformSelects() {

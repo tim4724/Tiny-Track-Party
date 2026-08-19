@@ -34,11 +34,10 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
-import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import { GALLERY_SCENARIOS } from '../public/shared/galleryScenarios.js';
-import { readManifest, writeManifest, shotDir } from './lib/shots.mjs';
+import { gitSha, mergeShots, shotDir, toWebp } from './lib/shots.mjs';
 import { shotTestMethod } from '../shells/tvos/scripts/gen-scenarios.mjs';
 import { sh, resolveDestination, resolveDevicectlId, signingArgs, assertAwake } from './lib/tvos-device.mjs';
 
@@ -73,50 +72,9 @@ const scenarios = GALLERY_SCENARIOS.filter((s) => !only || only.has(s.id));
 
 
 
-function gitSha() {
-  try {
-    return execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: ROOT }).toString().trim();
-  } catch { return 'unknown'; }
-}
-
-// Resize and encode one exported PNG to WebP.
-//
-// Two attempts in order, because none of the four candidates is reliably
-// present and the two obvious ones are both wrong on a stock machine:
-//   - `sips` ships with macOS and resizes fine, but CANNOT WRITE WebP
-//     ("Can't write format: org.webmproject.webp") — it is not in `sips
-//     --formats`' writable list at all.
-//   - Homebrew's `ffmpeg` is commonly built without the libwebp encoder
-//     ("Default encoder for format webp is probably disabled").
-//   - `cwebp` is Google's own encoder and does both jobs in one call; Pillow is
-//     the fallback for a machine that has Python imaging but not the webp
-//     package.
-// Falling back to PNG is deliberately NOT an option: it would put this gallery
-// back at the tens of megabytes the format choice exists to avoid.
-function toWebp(src, dest, width) {
-  const attempts = [
-    // -resize W 0 preserves the aspect ratio.
-    () => sh('cwebp', ['-quiet', '-q', '80', '-resize', String(width), '0', src, '-o', dest]),
-    () => sh('python3', ['-c',
-      'import sys;from PIL import Image;' +
-      'i=Image.open(sys.argv[1]);' +
-      'w=int(sys.argv[3]);' +
-      'i=i.resize((w,round(i.height*w/i.width)),Image.LANCZOS);' +
-      'i.save(sys.argv[2],"WEBP",quality=80)',
-      src, dest, String(width)])
-  ];
-  const errors = [];
-  for (const attempt of attempts) {
-    try {
-      attempt();
-      return;
-    } catch (e) {
-      errors.push(e.message.split('\n')[0]);
-    }
-  }
-  throw new Error(
-    'no WebP encoder worked. Install one:  brew install webp\n  ' + errors.join('\n  '));
-}
+// `gitSha` and `toWebp` are in `lib/shots.mjs` — every leg that photographs a real
+// device arrives holding a PNG and needs the same two, and the Android capture is
+// the third caller.
 
 // The signing identity and the device lookup both live in `lib/tvos-device.mjs`
 // now, shared with the lifecycle gate. A team ID is deliberately NOT in
@@ -194,7 +152,7 @@ async function main() {
 
   const dir = shotDir(ROOT, PLATFORM);
   fs.mkdirSync(dir, { recursive: true });
-  const sha = gitSha();
+  const sha = gitSha(ROOT);
   const entries = [];
 
   for (const scenario of scenarios) {
@@ -225,11 +183,7 @@ async function main() {
     console.log(`  ${scenario.id.padEnd(14)} ${String(size).padStart(7)} B  ${att.deviceName || ''}`);
   }
 
-  const manifest = readManifest(ROOT);
-  const keep = manifest.shots.filter(
-    (s) => !(s.platform === PLATFORM && entries.some((e) => e.scenario === s.scenario))
-  );
-  writeManifest(ROOT, { ...manifest, shots: [...keep, ...entries] });
+  mergeShots(ROOT, PLATFORM, entries);
   console.log(`==> ${entries.length} ${PLATFORM} shots -> public/assets/shots/${PLATFORM}/`);
 }
 
