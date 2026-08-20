@@ -114,7 +114,17 @@ Three properties of that surface matter more than the list:
    the readout carries the buffer size it was measured at.
    `ttp_display_step` takes its p95s off the SAME readout rather than a second
    window, so a shell cannot steer its resolution off numbers its own overlay
-   disagrees with.
+   disagrees with — WHERE THE TWO ARE ONE SERIES, which is a property of the
+   platform's frame loop and not a given. `intervalMs` is a TICK ("drawn or
+   not"), so the readout's `frame` block is tick intervals; a browser's rAF is
+   delayed by a late present, so there ticks and presents coincide and the
+   readout is the right source. A `CADisplayLink` is not delayed — it fires
+   every vsync whatever the last frame did — so on tvOS `frame.p95` is a flat
+   vsync period however badly the box is skipping, and a shell steering off it
+   never moves at all (measured: 4 players left at 40-55 fps, the rule never
+   firing). That divergence is exactly why the readout carries `fps` AND `hz`.
+   Check which case your loop is in before reusing the readout; if presents are
+   their own series, fold them.
 
 4. **Materials.** `native/scripts/build-materials.sh <matc> <outdir> [api] [platform]`,
    using the FORK'S matc. `opengl mobile` (the default) is what the web ships
@@ -282,13 +292,39 @@ Three properties of that surface matter more than the list:
     including why a dropped-frame count is not a signal. Web reference:
     `Stage._adaptScale`, whose `_divisor` paces the PICTURE and never the sim.
 
-    **STILL OWED BY tvOS, deliberately (2026-08-16).** `Stage.js` is the rule's
-    only caller in the tree, so the Apple TV renders at the panel's full buffer
-    with no relief — which on an A10X at 3840×2160 is four times the fragments
-    of 1080p and nothing to give. Deferred with eyes open rather than missed:
-    the readout can now tell a held 60 from a skipping one (`fps` counts
-    presents, `hz` counts ticks), so the measurement this owes is cheap to take
-    whenever the appetite arrives.
+    **BOUND ON tvOS (`DisplayHost.adaptScale`).** Before it, an A10X ran 4
+    players at 50-53 fps with no window of the run scoring anything but bad;
+    after, the rule settles on the 1620 rung and holds 60/60 with no skips. What
+    made the case was an A/B at fixed scales: the knee is ~0.85, and the ladder's
+    existing rung below native (1620 = 3/4 on a 2160-line panel) sits inside it,
+    so binding was the whole job and no constant moved.
+
+    Two platform facts a reader needs, both measured on the box:
+
+    - **NO GPU TERM BOUND, so the scale is a ONE-WAY RATCHET here — and that is
+      FILAMENT'S limit, not Metal's.** `MetalTimerQueryFence` records
+      `clock::now()` in a fence completion callback, so what it returns is host
+      wall-clock between two callbacks; it tracks the present cadence (16.0 ms at
+      one pass, 18.0 ms at four) and is passed as absent. The rule's fallback may
+      then only step DOWN, so a scale lost to a bad stretch never comes back —
+      measured at 1 player, which holds 60 at native but drops to 1620 off the
+      scene-build frames and stays. Accepted for now: 60 fps at 3/4 beats a
+      stutter at native.
+      **The rule now refuses to spend that one mistake on a scene's ASSEMBLY**
+      (`kScaleSceneGraceSec`): staging keeps costing after the build returns, and
+      a solo race presented at 7-25 fps for ~2.6 s before settling. The guard is
+      the FALLBACK's alone — an arm that can climb back out of a premature drop
+      does not need it. Measured after: solo holds the panel's own resolution for
+      a whole race and drops only on a genuine sustained slowdown, while 4
+      players is still rescued to 60/60.
+      **The hardware answers, probed on an A10X / tvOS 26.6:**
+      `MTLCommandBuffer.gpuStartTime`/`gpuEndTime` gave 0.30 ms for a 4 MB blit
+      over three stable runs, and `counterSets` carries "timestamp" with
+      `supportsCounterSampling(.atStageBoundary)`. Filament already installs an
+      `addCompletedHandler` in `getPendingCommandBuffer`, which is where the
+      timestamps belong. A fork patch there unlocks the rule's climb branch on
+      every Apple platform at once; nothing in the shell needs to change.
+    - **Presents are their own series** — see the readout note in item 3 above.
 
 15. **An attribution surface.** The build ships CC-BY music, OFL fonts and
     several notice-tier libraries, so a shell that shows nobody is in breach —

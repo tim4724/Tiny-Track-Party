@@ -86,13 +86,19 @@ final class DisplayHost {
     ///
     /// What survives is the conversion this side has always owed: `cellRects`
     /// answers in physical pixels and SwiftUI lays out in POINTS, so the chrome
-    /// still divides by this. It is read from the screen rather than pushed
-    /// anywhere.
-    /// `UIScreen.nativeScale`: 1.0 on Apple TV HD / 1080p output, 2.0 on Apple
-    /// TV 4K in 4K mode. Exactly the web's devicePixelRatio semantics, which is
-    /// why the renderer's 34 pt steer bar comes out right on both boxes with no
-    /// arithmetic here. **Deliberately NOT capped at 2** — the web's cap is a
-    /// hi-DPI-monitor guard and `nativeScale` is never above 2 anyway.
+    /// still divides by this.
+    ///
+    /// **THE BUFFER'S pixels per point, not the PANEL's** — `adoptSurface`
+    /// derives it from the drawable every time that moves, and nothing else
+    /// assigns it. The two are the same number only while the buffer is the
+    /// panel's own resolution; the adaptive render scale is precisely what makes
+    /// them differ, and a stored `UIScreen.nativeScale` put the whole HUD at
+    /// `renderScale` of its right place the first time the scale shipped.
+    ///
+    /// So on a 4K box it is 2.0 at the native buffer and 1.5 at the 1620 rung,
+    /// which is the web's devicePixelRatio semantics applied to the buffer the
+    /// web also steers. **Deliberately NOT capped at 2** — the web's cap is a
+    /// hi-DPI-monitor guard and nothing here ever exceeds it anyway.
     private(set) var uiScale: CGFloat = 1
 
     /// The surface's size in physical pixels, for the perf readout.
@@ -110,6 +116,98 @@ final class DisplayHost {
     /// is not touched before boot, and held HERE rather than by SwiftUI because
     /// Filament takes the layer as its native window (see `MetalSurfaceView`).
     lazy var surface = MetalSurfaceView(host: self)
+
+    // MARK: - The adaptive render scale
+
+    // THE BUFFER IS NOT THE PANEL. `ttp/render_scale.h` decides how big it
+    // should be from what the last window of frames cost. What a shell owes is
+    // the MEASUREMENT and the surface's own facts, nothing else; every
+    // judgement about those numbers — which signal decides, which way each may
+    // move, the holds, the rungs — is the rule's. An `if` around a measurement
+    // before passing it belongs in that header instead.
+    //
+    // ONLY THE FALLBACK IS BOUND, and the reason is FILAMENT'S, not the
+    // hardware's — do not read the absent GPU column as "Metal cannot do this".
+    // The good signal is GPU share of budget, the only one that can see
+    // HEADROOM, and `ttp_display_gpu_ms` cannot supply it here because
+    // `MetalTimerQueryFence` records `clock::now()` inside a fence COMPLETION
+    // CALLBACK: host wall-clock between two callbacks, which under vsync is
+    // dominated by the GPU waiting on the display. Measured on an A10X at 4
+    // cells: 16.0 ms at one pass and 18.0 ms at four — it tracks the PRESENT
+    // CADENCE, not the work. Passed over as 0 ("no signal") rather than as a
+    // plausible substitute; `perf_stats.h` names that trap and this is it.
+    //
+    // THE HARDWARE ANSWERS BOTH WAYS, probed on the device (Apple A10X GPU,
+    // tvOS 26.6): `MTLCommandBuffer.gpuStartTime`/`gpuEndTime` returned 0.30 ms
+    // for a 4 MB blit, three runs, stable — a real GPU duration and nowhere near
+    // the present interval; and `counterSets` carries "timestamp" with
+    // `supportsCounterSampling(.atStageBoundary)` true. Filament even installs
+    // an `addCompletedHandler` on its pending command buffer already
+    // (`getPendingCommandBuffer`), which is exactly where the timestamps would
+    // be read. So the missing GPU term is a FORK PATCH, not a platform limit.
+    //
+    // Until that lands the consequence is the rule's own, documented at its
+    // fallback: late presents may only ever step DOWN, so the scale here is a
+    // one-way ratchet for the life of the process.
+
+    /// Poll cadence — `SCALE_POLL_MS` in `Stage.js`, `SCALE_POLL_NANOS` on
+    /// Android. One decision a second on all three.
+    private let scalePollSeconds = 1.0
+
+    /// PRESENT intervals, in milliseconds, over a rolling window. A skip adds no
+    /// sample; the present that follows carries the doubled interval, which is
+    /// exactly the lateness the fallback reads.
+    ///
+    /// **A SECOND WINDOW, AND THIS PLATFORM HAS NO CHOICE.** `ttp_perf.h` asks a
+    /// shell to steer off the READOUT so the rule and the overlay cannot
+    /// disagree, and the web does. It does not work here, and the reason is the
+    /// ABI's own: `ttp_perf_sample` takes a TICK interval ("one tick of the frame
+    /// loop, drawn or not"). On the web a late present delays the next rAF, so
+    /// ticks and presents are one series; a `CADisplayLink` fires every vsync
+    /// whatever Filament did with the last frame, so here they are two — which is
+    /// precisely why this readout carries `fps` AND `hz`. Steering off the
+    /// readout's `frame` block was measured doing nothing at all: a flat 16.7 ms
+    /// p95, a `latePresentRatio` pinned at 1.0, and 4 players left at 40-55 fps
+    /// with the rule never firing. Android keeps its own for a different reason
+    /// (its monitor is conditional); both are on the ledger.
+    private var presentMs: [Double] = []
+    private let scaleWindow = 120
+
+    /// The timestamp of the last frame that actually reached the panel.
+    private var lastPresentAt: Double = 0
+    private var lastScalePollAt: Double = 0
+    private var scaleMovedAt: Double = 0
+
+    /// When the current scene was built. A MEASUREMENT handed to the rule, not a
+    /// decision: `ttp_display_step` shortens its own up-hold for a scene the
+    /// scale has not settled in yet.
+    private var sceneBuiltAt: Double = 0
+
+    /// The last observation at a DIFFERENT scale, which the cost model fits from.
+    /// Dropped on a scene build: a fit whose two points come from two scenes
+    /// measures a slope belonging to neither.
+    private var prevScale: Double = 0
+    private var prevCostMs: Double = 0
+
+    /// `ttp_display_present_floor`'s running answer — the device's own fastest
+    /// present, which outlives both the stats window and a resize.
+    private var presentFloorMs: Double = 0
+
+    /// `-ttpRenderScale <k>` holds the buffer at k x the panel and switches the
+    /// rule off — Android's `debug.ttp.scale` twin, and the same two jobs: sweep
+    /// a fixed operating point, and PHOTOGRAPH the chrome at a scale the rule
+    /// would otherwise have to be provoked into. The second is not optional
+    /// polish; a stale `uiScale` put the whole HUD at 3/4 of its right place and
+    /// nothing in the suite could see it, because every shot was taken at 1.0.
+    private static let scalePin =
+        max(0, min(1, UserDefaults.standard.double(forKey: "ttpRenderScale")))
+
+    /// The scale in force. 1.0 is the panel's own resolution; this never
+    /// supersamples. Read by `MetalSurfaceView` when it sizes the drawable.
+    private(set) var renderScale: Double = DisplayHost.scalePin > 0 ? DisplayHost.scalePin : 1.0
+
+    /// A scale move armed by `adaptScale`, performed at the top of a later tick.
+    private var pendingScaleMove = false
 
     // MARK: - Latched pushes
 
@@ -160,7 +258,10 @@ final class DisplayHost {
     /// shape for the thing they are presented into.
     func attach(layer: CAMetalLayer, size: CGSize, scale: CGFloat) {
         guard !isAttached else {
-            uiScale = scale    // an output-mode switch moves this under a live display
+            // An output-mode switch moves the panel's scale under a live display;
+            // `resize` -> `applyResize` re-derives `uiScale` from the new buffer,
+            // so nothing is assigned here. Assigning the PANEL's scale was the
+            // HUD-placement bug (see adoptSurface).
             resize(size: size)
             return
         }
@@ -177,8 +278,12 @@ final class DisplayHost {
             return
         }
         isAttached = true
-        surfacePixels = size
-        uiScale = scale
+        adoptSurface(size, fallback: scale)
+        // The scale's clock starts when there is a surface to scale. Left at 0
+        // it reports the SYSTEM's uptime as "how long this point has been in
+        // force", which is the same class of lie `sceneBuilt` used to tell and
+        // the rule is entitled to trust both.
+        scaleMovedAt = CACurrentMediaTime()
         flushPendingAssets()
         // Re-push every latched value that arrived before the surface existed.
         // The ABI is a safe no-op with no display (ttp_abi.h), which cuts both
@@ -213,18 +318,53 @@ final class DisplayHost {
     }
 
     private func applyResize(_ size: CGSize) {
-        surfacePixels = size
+        adoptSurface(size)
         ttp_display_resize(pixelCount(size.width), pixelCount(size.height))
         // A new buffer size is a different thing to measure, and the readout
         // carries the size it was measured at — so the window goes with it
         // (ttp_perf.h). Without this an output-mode switch leaves 4K frames
         // folded into a 1080p reading for the next two seconds.
         perf.reset()
+        // AND THE SCALE RULE'S WINDOW, HERE RATHER THAN WHERE THE MOVE WAS
+        // ARMED. `TtpRenderer::resize` destroys the scene target, which
+        // `flushAndWait`s and blocks — so the resize ITSELF produces one very
+        // late present. Cleared at arm time, that stall lands in the window that
+        // decides the NEXT step: the rule reads it as the box still being late
+        // and steps down again, each step stalling again. Measured as a visible
+        // cascade down the ladder in a solo race, which is the whole of "it
+        // hangs and keeps dropping resolution".
+        presentMs.removeAll(keepingCapacity: true)
+        lastPresentAt = 0
         // The resize reallocated (and cleared) the render targets. A running
         // loop repaints on the next tick; a loop that has not started yet would
         // hold a blank surface, so repaint once — `dt` 0 re-presents the last
         // frame unchanged. Same fix, same reason, as `Stage.js`'s `_onResize`.
         if link == nil { _ = ttp_display_frame(0) }
+    }
+
+    /// Take a new buffer size, and DERIVE the chrome's scale from it.
+    ///
+    /// **`uiScale` is buffer pixels per POINT, and it is not the panel's scale.**
+    /// The two agree only while the buffer is the panel's own resolution, and the
+    /// adaptive render scale is exactly the thing that makes them differ.
+    /// `cellRects` divides by this, so a stale value puts every chrome element at
+    /// `renderScale` of its correct position — the HUD walking in from the corner,
+    /// which is what a stored copy of `nativeScale` did the first time this
+    /// shipped. Its own doc had predicted it: "a different one is exactly how
+    /// every label ends up at 1/scale of its cell."
+    ///
+    /// DERIVED from the two numbers that define it rather than tracked beside
+    /// them, so there is nothing to keep in sync. The passed scale is the fallback
+    /// for the one moment the view has no box yet — before the first layout, where
+    /// `surfacePixels(scale:)` seeds from the screen for the same reason.
+    private func adoptSurface(_ size: CGSize, fallback: CGFloat? = nil) {
+        surfacePixels = size
+        let boxHeight = surface.bounds.height
+        if boxHeight > 0, size.height > 0 {
+            uiScale = size.height / boxHeight
+        } else if let fallback {
+            uiScale = fallback
+        }
     }
 
     private func pixelCount(_ v: CGFloat) -> UInt32 {
@@ -278,8 +418,15 @@ final class DisplayHost {
         defer { inFrame = false }
 
         // A resize that arrived mid-frame, applied where it is safe: at the top
-        // of a tick, with no frame in flight.
-        if let size = pendingSize {
+        // of a tick, with no frame in flight. The render scale's own move takes
+        // the same seat and OUTRANKS a pending layout size, because it recomputes
+        // from the view's current box: honouring both would resize twice in one
+        // tick to land on the number the second one already carried.
+        if pendingScaleMove {
+            pendingScaleMove = false
+            pendingSize = nil
+            applyResize(surface.resyncDrawable())
+        } else if let size = pendingSize {
             pendingSize = nil
             applyResize(size)
         }
@@ -332,7 +479,111 @@ final class DisplayHost {
 
         perf.record(now: link.timestamp, interval: elapsed, presented: presented,
                     cells: cellCount, pixels: surfacePixels, dpr: uiScale)
+
+        if presented {
+            // Since the last frame that REACHED THE PANEL, which is not
+            // `elapsed`: that is tick to tick, and the link ticks whether or not
+            // anything was drawn.
+            if lastPresentAt > 0 {
+                let ms = (link.timestamp - lastPresentAt) * 1000
+                if ms > 0 {
+                    presentMs.append(ms)
+                    if presentMs.count > scaleWindow {
+                        presentMs.removeFirst(presentMs.count - scaleWindow)
+                    }
+                }
+            }
+            lastPresentAt = link.timestamp
+        }
+        adaptScale(link)
     }
+
+    /// One render-scale decision, at most once a second.
+    ///
+    /// Everything here is a measurement or a fact about this surface. The two
+    /// that look like choices are not: the ceiling is 1.0 because a television
+    /// app has nothing to gain from supersampling its own panel, and the floor is
+    /// 0 because THE LADDER OWNS THE FLOOR — a number here could only narrow the
+    /// band, never reach below the bottom rung, and never mean a different
+    /// picture than it does on the other two shells.
+    private func adaptScale(_ link: CADisplayLink) {
+        guard Self.scalePin == 0 else { return }
+        guard isAttached, link.timestamp - lastScalePollAt >= scalePollSeconds else { return }
+        lastScalePollAt = link.timestamp
+        guard !presentMs.isEmpty else { return }
+        let sorted = presentMs.sorted()
+
+        // The fastest present is the ONE number carried between windows, so the
+        // fold happens here — but WHICH samples may become one is the rule's.
+        presentFloorMs = ttp_display_present_floor(presentFloorMs, percentile(sorted, 0.05))
+
+        var out = [Double](repeating: 0, count: 2)
+        // GPU 0 over 0 frames: no signal, for the reason at the top of this
+        // section. The floor goes over multiplied by the divisor — what lateness
+        // is judged against is the CADENCE WE CHOSE, not the panel's raw period —
+        // and the divisor is 1 here, so it is the panel's period either way.
+        let divisor: Int32 = 1
+        let ok = ttp_display_step(renderScale, divisor,
+                                  0, 0,
+                                  percentile(sorted, 0.95),
+                                  presentFloorMs * Double(divisor), Int32(presentMs.count),
+                                  link.timestamp - scaleMovedAt,
+                                  link.timestamp - sceneBuiltAt,
+                                  prevScale, prevCostMs,
+                                  0, 1, surface.baseLines, link.duration * 1000,
+                                  &out)
+        guard ok != 0 else { return }
+        let next = out[0]
+        // WHAT THE RULE WAS ASKED, every poll, not only when it answers a move —
+        // and in RELEASE, which is Android's argument for the same line and it
+        // holds here: the interesting case is the one that does NOT move, and a
+        // box parked at a rung says nothing about why unless the numbers it was
+        // judged on are visible. A `racing` scenario logs no readout at all, so
+        // without this there is no way to watch the scale through a REAL race —
+        // which is exactly the path whose defects the bench never showed.
+        print(String(format: "[ttp] scale %.3f -> %.3f | present p95 %.1f floor %.1f n %d"
+                     + " | scene %.1fs | since move %.1fs",
+                     renderScale, next, percentile(sorted, 0.95), presentFloorMs, presentMs.count,
+                     link.timestamp - sceneBuiltAt, link.timestamp - scaleMovedAt))
+        // THE RATE ARM IS UNREACHABLE HERE and this asserts it rather than
+        // assuming it: both branches that may change a divisor sit inside the
+        // rule's `gpuMs > 0` arm, and the fallback guards its step to points at
+        // the SAME divisor. If that ever stops being true the honest failure is a
+        // recorded complaint, not a shell that quietly performs half an answer —
+        // the pair is one decision (`ttp_display_step`), and honouring one half
+        // would be arbitrating the trade this shell is not entitled to make.
+        if out[1] != Double(divisor) { lastError = "ttp_display_step asked for divisor \(out[1]); tvOS presents every tick" }
+        guard next != renderScale else { return }
+        // THE OBSERVATION THE MODEL IS BUILT FROM, recorded at the one moment it
+        // exists. It is 0 on this platform (no GPU milliseconds to fit from), and
+        // recorded anyway so the seam is right the day a real timer lands.
+        prevScale = renderScale
+        prevCostMs = 0
+        renderScale = next
+        scaleMovedAt = link.timestamp
+        // The window that just decided this describes the OLD buffer, so it goes
+        // — but only on a MOVE. Clearing every poll would cap the sample count at
+        // the frame rate, and the rule ignores a window under `kMinSignalFrames`,
+        // so a box at 20 fps would be told it had no signal and never step down:
+        // deaf in exactly the case the mechanism exists for.
+        // The window is dropped by `applyResize`, NOT here: it has to outlive the
+        // arm and die with the stall the resize itself causes. Clearing every poll
+        // would be wrong for a third reason — it caps the sample count at the
+        // frame rate, and the rule ignores a window under `kMinSignalFrames`, so a
+        // box at 20 fps would be told it had no signal and never step down.
+        // ARMED HERE, PERFORMED AT THE TOP OF THE NEXT TICK. This runs from
+        // inside the frame callback, and `TtpRenderer::resize` destroys the scene
+        // target — which `flushAndWait`s, blocking on the Metal driver thread —
+        // so the same deferral a mid-frame layout resize takes applies to this.
+        pendingScaleMove = true
+    }
+
+    private func percentile(_ sorted: [Double], _ q: Double) -> Double {
+        guard !sorted.isEmpty else { return 0 }
+        let i = min(max(Int(Double(sorted.count - 1) * q), 0), sorted.count - 1)
+        return sorted[i]
+    }
+
 
     /// Tell the readout what this loop is AIMING AT: ONE VSYNC of this panel,
     /// and a divisor of 1.
@@ -340,9 +591,12 @@ final class DisplayHost {
     /// The period is a fact only the shell has, and undeclared the fold assumes
     /// 60 Hz — so the 50 Hz PAL match mode `start()` describes is scored against
     /// a budget the box can never meet and reads amber however idle it is. The
-    /// divisor is 1 because nothing here presents on anything but every tick:
-    /// `ttp_display_step`'s rate arm is unbound on this platform, which is a gap
-    /// the ledger carries (`docs/native-port/shells.md`) and not a cadence.
+    /// divisor is 1 because nothing here presents on anything but every tick.
+    /// `adaptScale` binds the RESOLUTION arm of `ttp_display_step`; the rate arm
+    /// is unreachable rather than unbound, and by the rule's own construction —
+    /// both branches that may move a divisor sit inside its `gpuMs > 0` arm, and
+    /// this platform has no usable GPU term. `adaptScale` complains if an answer
+    /// ever carries one anyway.
     ///
     /// `duration` AND NOT the `cadence` above, which is the wrong number for
     /// this question: `duration` is the panel's NOMINAL period and holds still
@@ -414,6 +668,24 @@ final class DisplayHost {
         hasScene = true
         roster = rosterIds
         biomeName = biome
+        // THE SCENE CLOCK THE SCALE RULE IS HANDED, stamped where a scene
+        // actually becomes true. `SceneStaging` calls `ttp_display_build` itself
+        // and then reports here; `build(trackId:rosterJSON:)` below has no
+        // callers at all, so a hook there is stamped by nothing. Left unstamped
+        // this reported the PROCESS UPTIME as the scene's age (30971 s into a
+        // fresh race), which is a measurement the rule is entitled to trust.
+        //
+        // The window goes for the reason `applyResize` drops it: the lobby
+        // attract and a race are different pictures, and a percentile that
+        // straddles the two describes neither. The cost-model observation is
+        // DROPPED rather than carried — a fit whose two points come from two
+        // scenes measures a slope belonging to neither.
+        perf.reset()
+        presentMs.removeAll(keepingCapacity: true)
+        lastPresentAt = 0
+        sceneBuiltAt = CACurrentMediaTime()
+        prevScale = 0
+        prevCostMs = 0
     }
 
     /// The biome the current scene RESOLVED to — the track's cup, or the

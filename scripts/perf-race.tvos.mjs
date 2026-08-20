@@ -26,13 +26,15 @@
 // the whole circuit, rubber accumulates, and the scene is the one the game
 // builds. Pin the track — two runs on two circuits are two different questions.
 //
-// `--dpr` DOES NOTHING HERE, and the reason has to travel with every number this
-// produces: tvOS links `ttp_display_step` and calls it nowhere, so an Apple TV
-// renders its panel's whole buffer (3840x2160 on a 4K box) with no adaptive
-// render scale and no way to pin one, where the web and Android both steer
-// theirs. A tvOS reading is therefore not yet comparable with the other two
-// columns — it is a different operating point, not a slower box. See
-// docs/native-port/shells.md, item 14.
+// `--dpr` DOES NOTHING HERE, and what that now means has to travel with every
+// number this produces. tvOS DOES steer its buffer (`DisplayHost.adaptScale`
+// binds `ttp_display_step`), but nothing on this platform PINS one: there is no
+// equivalent of the web's `?dpr=`, so a run reports whichever rung the rule
+// settled on rather than a resolution the caller asked for. READ THE BUFFER SIZE
+// OFF THE HEADER, which is the last readout's — two runs that ended on different
+// rungs are two different questions, and on a box with no GPU timer the scale is
+// a one-way ratchet, so a run that stumbled early reports the softer rung for
+// the whole of its length. See docs/native-port/shells.md, item 14.
 //
 // IT MEASURES WHATEVER IS INSTALLED. Nothing here builds or installs
 // (`npm run build:tvos [device|simulator]` does), so a stale install measures a

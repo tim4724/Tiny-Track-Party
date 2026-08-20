@@ -90,6 +90,28 @@ inline constexpr double kMinPresentMs = 4.0;
 // Seconds a scale must hold before it may move again. Falling is a rescue;
 // rising is a luxury, and the picture changing under a player is the cost of it.
 inline constexpr double kScaleDownHoldSec = 2.5;
+// A SCENE'S FIRST SECONDS ARE NOT ITS COST, and on the FALLBACK path that
+// distinction is permanent rather than merely wasteful.
+//
+// Staging a scene keeps costing after the build returns: shader compiles, first
+// uploads, the shadow bake. Measured on an A10X, a SOLO race — which holds 60
+// at the panel's own resolution all day — presented at 7-25 fps for the first
+// ~2.6 s and was clean by 3.6 s. The late-present fallback read that as a device
+// that could not hold its rung, dropped one, and then had no way back: it may
+// only ever step DOWN (see the signals note at the top), so a scene's assembly
+// cost became the resolution for the rest of the process.
+//
+// FALLBACK ONLY, and the asymmetry is the whole point. A device with a GPU timer
+// that drops here climbs back out as soon as the fit says the rung fits, so the
+// mistake costs it one hold; a device without one pays for the life of the
+// process. What may not be undone must not be decided on frames that describe a
+// scene still assembling itself.
+//
+// Longer than the measured tail, because the failure modes are not symmetric:
+// too short is a permanent unnecessary downgrade, too long is a few seconds of
+// stutter at a race start that is already the most expensive stretch of the run
+// (perf-race.mjs discards its own opening GRID_MS for the same reason).
+inline constexpr double kScaleSceneGraceSec = 5.0;
 // LAP-SIZED, because a race frame's cost swings ~4 ms around a lap and a fit
 // taken over one stretch of circuit describes that stretch. The cost model
 // stops the rule climbing into a rung it cannot hold; this hold is what stops it
@@ -537,11 +559,17 @@ inline RenderScalePoint renderScaleStep(RenderScalePoint current,
         to = at + 1;
       }
     }
-  } else if (latePresentRatio(cost) >= kLatePresentDown && sinceChangeSec >= kScaleDownHoldSec) {
+  } else if (latePresentRatio(cost) >= kLatePresentDown && sinceChangeSec >= kScaleDownHoldSec
+             && sinceSceneSec >= kScaleSceneGraceSec) {
     // DOWN ONLY on the fallback: a steady cadence is not evidence of headroom,
     // and a device with no GPU timer has no milliseconds to fit a model from
     // either, so there is no branch that raises. It also may not change the
     // rate, for the probe's reason — this path cannot predict what that buys.
+    //
+    // AND NOT WHILE THE SCENE IS STILL ASSEMBLING (kScaleSceneGraceSec): a step
+    // taken here is one this path can never take back, so it may not be taken on
+    // shader compiles and first uploads. The GPU-timer arm above has no such
+    // guard because it can climb back out.
     if (at > 0 && list[at - 1].divisor == list[at].divisor) to = at - 1;
   }
 

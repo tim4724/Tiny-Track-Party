@@ -118,6 +118,31 @@ int main() {
   nearly(latePresentRatio(RenderScaleCost{0, 0, 33.4, 0.0, kEnough}), 0.0,
          "no baseline learned yet means no signal");
 
+  // ---- the fallback does not step down off a scene's ASSEMBLY ---------------
+  // A step this path takes is one it can never take back, and a scene keeps
+  // costing after its build returns (shader compiles, first uploads, the shadow
+  // bake). A solo race that holds 60 at the panel's own resolution presented at
+  // 7-25 fps for its first seconds and was permanently downgraded for it.
+  {
+    const RenderScalePoint top{1.0, 1};
+    const RenderScaleLimits k4K{0.0, 1.0, 2160.0, 16.7};
+    const RenderScaleSample none{0.0, 0.0};
+    const RenderScaleCost late = noTimerAt(2.0);
+
+    check(renderScaleStep(top, late, kLongHold, 1.0, none, k4K).scale == top.scale,
+          "a whole period late one second into a scene does NOT drop a rung");
+    check(renderScaleStep(top, late, kLongHold,
+                          ttp::rt::kScaleSceneGraceSec - 0.1, none, k4K).scale == top.scale,
+          "…nor a tick before the grace is up");
+    check(renderScaleStep(top, late, kLongHold,
+                          ttp::rt::kScaleSceneGraceSec, none, k4K).scale < top.scale,
+          "…and DOES once the scene has had time to settle");
+    // The guard is the fallback's alone: a device with a timer climbs back out
+    // of a premature drop, so it is not made to wait for a rescue.
+    check(renderScaleStep(top, gpuAt(30.0), kLongHold, 1.0, none, k4K).scale < top.scale,
+          "a GPU timer still rescues inside the grace, because it can climb back");
+  }
+
   // ---- the RUNGS -----------------------------------------------------------
   // Line counts, so the same rung is the same picture on any panel, and the
   // bottom one is the floor everywhere rather than a fraction of the ceiling.

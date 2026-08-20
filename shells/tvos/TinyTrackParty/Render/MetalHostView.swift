@@ -101,11 +101,46 @@ final class MetalSurfaceView: UIView {
     /// is full screen (which it is), but a drawable larger than the layer it
     /// composites into would be scaled down by Core Animation, and every cell
     /// rect would then describe a picture that is not where the chrome is.
+    ///
+    /// **HEIGHT FIRST, width derived from the box's aspect**, because the
+    /// adaptive rung is a LINE COUNT (`kScaleLadder`). Rounding the two axes
+    /// independently lets a scale land off-grid — 0.75 of 3840x2160 rounded per
+    /// axis is 2880x1620 either way, but a rung whose factor does not divide
+    /// cleanly would not be, and 1620 lines IS 2880 wide. Same derivation, same
+    /// reason, as Android's `applyScale`.
     private func surfacePixels(scale: CGFloat) -> CGSize {
         let box = bounds.size
         guard box.width > 0, box.height > 0 else { return screen.nativeBounds.size }
-        return CGSize(width: (box.width * scale).rounded(),
-                      height: (box.height * scale).rounded())
+        let k = CGFloat(host?.renderScale ?? 1.0)
+        let h = max(1, (box.height * scale * k).rounded())
+        return CGSize(width: max(1, (h * box.width / box.height).rounded()), height: h)
+    }
+
+    /// Buffer lines a scale of 1.0 means on this surface — `ttp_display_step`'s
+    /// `baseLines`, and the number its LINE-COUNT rungs are resolved against.
+    /// The panel's own height, never the current buffer's: the whole point is
+    /// what a scale of 1 would buy.
+    var baseLines: Double {
+        let box = bounds.size
+        guard box.height > 0 else { return Double(screen.nativeBounds.height) }
+        return Double((box.height * screen.nativeScale).rounded())
+    }
+
+    /// Re-point the drawable after `DisplayHost.renderScale` moved, and hand
+    /// back the new size. The view stays the ONE owner of the buffer size — a
+    /// host that computed one itself would be a second owner, and the two would
+    /// disagree on the first layout pass.
+    ///
+    /// It does NOT call `attach`, which is the difference from `syncSurface`:
+    /// the caller is the frame loop at the top of a tick, where it may resize the
+    /// renderer directly because it knows no frame is in flight. Going through
+    /// `attach` would take `resize`'s mid-frame deferral and land the buffer a
+    /// tick before the targets that have to match it.
+    @discardableResult
+    func resyncDrawable() -> CGSize {
+        let size = surfacePixels(scale: screen.nativeScale)
+        if metalLayer.drawableSize != size { metalLayer.drawableSize = size }
+        return size
     }
 
     private func syncSurface() {

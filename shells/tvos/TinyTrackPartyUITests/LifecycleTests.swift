@@ -80,7 +80,24 @@ final class LifecycleTests: XCTestCase {
         // which Menu leaves focused.
         XCUIRemote.shared.press(.menu)
         Thread.sleep(forTimeInterval: dwell)
+
+        // COMING BACK. Select is the viewer's own road — Menu leaves the app's
+        // tile focused — and it is pressed first for that reason. But the focus
+        // it depends on is the SYSTEM's, not ours: the Home screen does not
+        // always leave that tile focused (a top-shelf row, a rearranged Home,
+        // whatever tvOS did last), and when it does not, Select opens something
+        // else or nothing and this test failed with "did not come back to the
+        // foreground" while the surface it exists to guard was never examined.
+        // Observed failing that way on tvOS 26.6 with the app healthy.
+        //
+        // `activate()` is the fallback and NOT a weakening: the guard above has
+        // already established the app is running, and activate on a running app
+        // RESUMES it — the same background-to-foreground handover the tile
+        // performs, which is the transition the frozen surface came from. What
+        // the precondition forbids is LAUNCHING one, and this cannot.
         XCUIRemote.shared.press(.select)
+        Thread.sleep(forTimeInterval: dwell)
+        if app.state != .runningForeground { app.activate() }
         Thread.sleep(forTimeInterval: settle)
 
         let first = shot()
