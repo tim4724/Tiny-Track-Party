@@ -23,8 +23,44 @@ static const double WALL_DECEL = 20.0;
 static const double WALL_RASH_T = 0.5;
 static const double LAT_MARGIN = 0.3;
 static const double STEER_SCRUB = 0.35;
-static const double COLLIDE_SHRINK = 0.9;
+// ---- contact ----
+// The collider's rectangle IS the Kenney mesh AABB — CAR_STATS halfLen/halfWid,
+// measured off the meshes — so the shrink is pure tolerance: every centimetre
+// of it is interpenetration the sim cannot see. It buys the rounded corners of
+// a body that is not really a rectangle, and nothing else.
+static const double COLLIDE_SHRINK = 0.98;
+// Contact is resolved by sequential impulses: each pass re-runs SAT on the
+// positions the last one left, and the `vrel < 0` guard means only the first
+// pass that finds a pair closing applies an impulse, so passes cost geometry,
+// never energy. Passes are what let a shove travel down a queue and what stop
+// a scrum resolving one pair by burying another: one sweep left cars visibly
+// buried, and the depth that survives keeps falling until about here. The
+// price is ~0.8 us of a ~10 us sim frame per pass, measured at 8 cars.
+static const int COLLIDE_PASSES = 4;
+static const double COLLIDE_SLOP = 0.01;     // resting overlap: no jitter about zero
 static const double RESTITUTION = 0.12;
+// Below this closing speed a contact is DEAD: no bounce at all. Restitution is
+// what breaks a contact every frame, and a broken contact cannot push — the
+// pusher re-accelerates faster than the leader sheds the gift, which reads as
+// chatter. Real hits (a T-bone, a boost into a stopped car) still bounce.
+static const double RESTITUTION_MIN_CLOSE = 1.5;
+// A shove can carry a car above its own targetV. At BRAKE_DECEL the whole gift
+// was gone in ~3 frames; this bleeds it off gently instead, which is the
+// difference between being nudged and being pushed. Off the brake only.
+static const double SHOVE_GRACE = 0.6;
+static const double SHOVE_DECEL = 1.2;
+// applyImpulse divides the track-frame impulse by cos(heading); at the heading
+// cap that divisor is 0.315 and every nudge in an angled scrum came back
+// tripled. Floor the gain at 1/0.7 and drop the momentum past it.
+static const double IMPULSE_COS_FLOOR = 0.7;
+// Ground metres per metre of centreline arc at lateral offset `lat` is
+// (1 - lat*k). The collider measures in world metres and only needs this to
+// convert a separation back into a totalS step; it is clamped because the
+// tightest corners in the catalogue turn inside the road's own half-width,
+// where the ribbon folds over itself and the ratio would invert.
+static const double RIBBON_SCALE_MIN = 0.35;
+static const double RIBBON_SCALE_MAX = 1.65;
+static const double CURV_PROBE = 0.6;        // metres, as TWIST_PROBE in recomputePoses
 static const double KNOCK_DAMP = 6.0;
 static const double POLE_MIN_KEEP = 0.3;
 static const double OIL_RADIUS = 0.7;
@@ -327,17 +363,30 @@ Game::FP Game::footprint(const Car& c) const {
   return {hl * ch + hw * sh, hl * sh + hw * ch, hw};
 }
 
-void Game::clampCurb(Car& c, double dt) {
-  double cap = c.vmax * WALL_SPEED_FRAC;
+// The curb as a POSITION constraint: pin the car inside it and say whether it
+// had to. Split out of clampCurb because the collision passes have to re-pin
+// between sweeps (see resolveCollisions) and must not bill the wall each time.
+bool Game::pinCurb(Car& c) {
   double base = c.curbLimSet ? c.curbLim : maxLat_;
   FP fpt = footprint(c);
   double lim = js_max(0.05, base - (fpt.side - fpt.restSide));
-  if (c.lat > lim || c.lat < -lim) {
-    c.lat = c.lat > 0 ? lim : -lim;
-    c.onWall = true;
-    c.wallRashT = WALL_RASH_T;
-    if (c.v > cap) c.v = js_max(cap, c.v - WALL_DECEL * dt);
-  }
+  if (c.lat <= lim && c.lat >= -lim) return false;
+  c.lat = c.lat > 0 ? lim : -lim;
+  c.onWall = true;
+  return true;
+}
+
+// What touching the curb COSTS: the rash timer, the speed cap, and the end of
+// any shove (a car scraping a barrier must not keep coasting on a gift).
+void Game::billCurb(Car& c, double dt) {
+  double cap = c.vmax * WALL_SPEED_FRAC;
+  c.wallRashT = WALL_RASH_T;
+  c.shoveT = 0;
+  if (c.v > cap) c.v = js_max(cap, c.v - WALL_DECEL * dt);
+}
+
+void Game::clampCurb(Car& c, double dt) {
+  if (pinCurb(c)) billCurb(c, dt);
 }
 
 bool Game::inStrip(const Car& c, const PadRt& z) const {
@@ -558,93 +607,117 @@ void Game::stepRockets(double dt) {
 }
 
 // ---- collisions --------------------------------------------------------------
+// Add a track-frame impulse to a car that stores its velocity as (speed along
+// heading, lateral rate). The decomposition is exact and unique — v gains
+// dS/cos(heading) — so the divisor is not a bug, it is what a body constrained
+// to travel along its heading must gain to match a given longitudinal push.
+// It is still bad contact: at the heading cap the gain is 3.2x and an angled
+// scrum pings. IMPULSE_COS_FLOOR caps it, and the momentum past the cap is
+// dropped rather than redirected, which is the damping an angled hit wants.
 void Game::applyImpulse(Car& c, double dS, double dL) {
-  double ch = dmath::cos(c.heading), sh = dmath::sin(c.heading);
-  double wS = c.v * ch + dS;
-  double wL = -c.v * sh + c.vlat + dL;
-  double v = js_max(0.0, wS / ch);
+  double sh = dmath::sin(c.heading);
+  double gain = 1.0 / js_max(IMPULSE_COS_FLOOR, dmath::cos(c.heading));
+  double v = js_max(0.0, c.v + dS * gain);
+  c.vlat = c.vlat + dL + (v - c.v) * sh;   // before c.v moves: the term reads the OLD speed
   c.v = v;
-  c.vlat = wL + v * sh;
 }
 
-Game::Hit Game::satRects(const Car& a, const Car& b, double ds, double dl) const {
+// ---- the collision frame -----------------------------------------------------
+// The collider works in WORLD metres, not in (s, lat).
+//
+// (s, lat) is not a Cartesian plane and treating it as one was wrong three ways
+// at once: a metre of arc is (1 - lat*k) metres of ground, two cars a car-length
+// apart sit in track frames rotated by k*ds, and the line between them bows off
+// the tangent by the corner's sagitta. On cloverleaf, whose centreline turns
+// inside its own half-width, all three are first-order. Correcting them one at a
+// time traded misses for phantom contacts — an invisible bump reaching a
+// half-car past touching — because a half-corrected frame is not any geometry.
+// Measuring in the world costs nothing extra: the track frame is cached once per
+// car per step from the frame the integration already sampled, and the pair loop
+// that used to spend eight sin/cos on footprint() and yaw now spends none.
+void Game::cacheColFrame(Car& c, const Frame& f) {
+  c.colPos = f.pos;
+  c.colTan = f.tangent;
+  c.colLat = f.lateral;
+  c.colS = c.totalS;
+  c.colFwd = f.tangent.clone().applyAxisAngle(f.up, colYaw(c));
+  c.colRight = c.colFwd.clone().cross(f.up);
+  // Curvature IN THE ROAD PLANE — the only component that stretches a lateral
+  // offset. d(lateral)/ds . tangent is -k by construction; a loop's vertical
+  // curvature falls out of it, which is correct, since a barrel roll does not
+  // change how far apart two cars beside each other are.
+  Frame probe = centerline_->sampleAt(c.totalS + CURV_PROBE);
+  double curv = -probe.lateral.sub(f.lateral).dot(f.tangent) / CURV_PROBE;
+  c.colRib = js_max(RIBBON_SCALE_MIN, js_min(RIBBON_SCALE_MAX, 1 - c.lat * curv));
+}
+
+// Where the car is right now. The cached frame is the one sampled at colS, so
+// any totalS the collision passes have since added is walked off along the
+// tangent — a correction of a few centimetres, where that is exact enough.
+Vec3 Game::colWorld(const Car& c) const {
+  return c.colPos.clone()
+      .addScaledVector(c.colLat, c.lat)
+      .addScaledVector(c.colTan, (c.totalS - c.colS) * c.colRib);
+}
+
+// SAT between the two bodies, run in A's ground plane: four axes, because two
+// rectangles have two distinct normals each. Returns a WORLD normal pointing
+// from a to b, and the depth along it.
+Game::Hit Game::satRects(const Car& a, const Car& b) const {
   double ma = footprintMul(a) * COLLIDE_SHRINK, mb = footprintMul(b) * COLLIDE_SHRINK;
   double hla = a.halfLen * ma, hwa = a.halfWid * ma;
   double hlb = b.halfLen * mb, hwb = b.halfWid * mb;
-  double ya = colYaw(a), yb = colYaw(b);
-  double ca = dmath::cos(ya), sa = dmath::sin(ya), cb = dmath::cos(yb), sb = dmath::sin(yb);
-  double uaS = ca, uaL = -sa, waS = sa, waL = ca;
-  double ubS = cb, ubL = -sb, wbS = sb, wbL = cb;
-  double pen = INF, nS = 0, nL = 0;
-  double axes[8] = {uaS, uaL, waS, waL, ubS, ubL, wbS, wbL};
+  // b's body axes as seen in a's plane. Normalized because the two cars' ground
+  // planes tilt apart on a bank or a crest, which shortens the projection.
+  Vec3 d = colWorld(b).sub(colWorld(a));
+  double dx = d.dot(a.colFwd), dy = d.dot(a.colRight);
+  double ubx = b.colFwd.dot(a.colFwd), uby = b.colFwd.dot(a.colRight);
+  double ul = std::sqrt(ubx * ubx + uby * uby);
+  if (ul < 1e-9) return {false, Vec3(), 0};   // b stands on end relative to a
+  ubx /= ul; uby /= ul;
+  double wbx = -uby, wby = ubx;               // +90 degrees, matching fwd x up
+  double axes[8] = {1, 0, 0, 1, ubx, uby, wbx, wby};
+  double pen = INF, nx = 0, ny = 0;
   for (int i = 0; i < 8; i += 2) {
     double xS = axes[i], xL = axes[i + 1];
-    double ra = hla * std::fabs(uaS * xS + uaL * xL) + hwa * std::fabs(waS * xS + waL * xL);
-    double rb = hlb * std::fabs(ubS * xS + ubL * xL) + hwb * std::fabs(wbS * xS + wbL * xL);
-    double d = ds * xS + dl * xL;
-    double overlap = ra + rb - std::fabs(d);
-    if (overlap <= 0) return {false, 0, 0, 0};
+    double ra = hla * std::fabs(xS) + hwa * std::fabs(xL);
+    double rb = hlb * std::fabs(ubx * xS + uby * xL) + hwb * std::fabs(wbx * xS + wby * xL);
+    double sep = dx * xS + dy * xL;
+    double overlap = ra + rb - std::fabs(sep);
+    if (overlap <= 0) return {false, Vec3(), 0};
     if (overlap < pen) {
       pen = overlap;
-      if (d >= 0) { nS = xS; nL = xL; }
-      else { nS = -xS; nL = -xL; }
+      if (sep >= 0) { nx = xS; ny = xL; }
+      else { nx = -xS; ny = -xL; }
     }
   }
-  return {true, nS, nL, pen};
+  Vec3 n = a.colFwd.clone().multiplyScalar(nx).addScaledVector(a.colRight, ny);
+  return {true, n, pen};
 }
 
-void Game::collidePole(Car& c, const PoleRt& p) {
-  double ds = wrap_delta(c.totalS - p.s, length_);
-  double dl = c.lat - p.lat;
-  double mul = footprintMul(c);
-  double hl = c.halfLen * mul, hw = c.halfWid * mul;
-  double reach = hl + hw + p.radius;
-  if (ds * ds + dl * dl >= reach * reach) return;
-  double yaw = colYaw(c);
-  double cy = dmath::cos(yaw), sy = dmath::sin(yaw);
-  double lx = -ds * cy + dl * sy;
-  double ly = -ds * sy - dl * cy;
-  double qx = js_max(-hl, js_min(hl, lx));
-  double qy = js_max(-hw, js_min(hw, ly));
-  double ex = lx - qx, ey = ly - qy;
-  double d2 = ex * ex + ey * ey;
-  if (d2 >= p.radius * p.radius) return;
-  double nS, nL, pen;
-  if (d2 > 1e-6) {
-    double dist = std::sqrt(d2);
-    double nlx = -ex / dist, nly = -ey / dist;
-    nS = nlx * cy + nly * sy;
-    nL = -nlx * sy + nly * cy;
-    pen = p.radius - dist;
-  } else {
-    double dx = hl - std::fabs(lx), dy = hw - std::fabs(ly);
-    double nlx = 0, nly = 0;
-    if (dx <= dy) { nlx = lx > 0 ? -1 : 1; pen = p.radius + dx; }
-    else { nly = ly > 0 ? -1 : 1; pen = p.radius + dy; }
-    nS = nlx * cy + nly * sy;
-    nL = -nlx * sy + nly * cy;
-  }
-  c.totalS += nS * pen;
-  c.lat += nL * pen;
-  double vS = c.v * dmath::cos(c.heading);
-  double vL = -c.v * dmath::sin(c.heading) + c.vlat;
-  double vn = vS * nS + vL * nL;
-  if (vn < 0) {
-    applyImpulse(c, -vn * nS, -vn * nL);
-    if (c.v < POLE_MIN_KEEP * c.vmax) c.v = POLE_MIN_KEEP * c.vmax;
-  }
-  c.vlat = 0;
-  if (std::fabs(nS) > 0.6) { c.boostT = 0; c.boostMul = 1; }
-  c.onWall = true;
+// A world displacement, written back into the car's own (totalS, lat). The
+// arc step divides the ribbon out again: `push` is ground metres, totalS is
+// centreline metres.
+void Game::separate(Car& c, const Vec3& push) {
+  c.totalS += push.dot(c.colTan) / c.colRib;
+  c.lat += push.dot(c.colLat);
+}
+
+// A world impulse, resolved into the track components applyImpulse speaks.
+void Game::applyWorldImpulse(Car& c, const Vec3& imp) {
+  applyImpulse(c, imp.dot(c.colTan), imp.dot(c.colLat));
 }
 
 void Game::collidePair(Car& a, Car& b) {
-  double ds = wrap_delta(b.totalS - a.totalS, length_);
-  double dl = b.lat - a.lat;
-  FP fpa = footprint(a), fpb = footprint(b);
-  if (std::fabs(ds) >= (fpa.along + fpb.along) * COLLIDE_SHRINK) return;
-  if (std::fabs(dl) >= (fpa.side + fpb.side) * COLLIDE_SHRINK) return;
-  Hit hit = satRects(a, b, ds, dl);
+  // Broadphase in world metres: one subtraction and a length, no trigonometry.
+  // Each car contributes its own longer half-extent, and the sum is doubled —
+  // comfortably past the diagonals it stands in for, which is the only property
+  // a reject needs.
+  double reach = (js_max(a.halfLen, a.halfWid) * footprintMul(a)
+                  + js_max(b.halfLen, b.halfWid) * footprintMul(b)) * 2;
+  Vec3 d = colWorld(b).sub(colWorld(a));
+  if (d.lengthSq() >= reach * reach) return;
+  Hit hit = satRects(a, b);
   if (!hit.hit) return;
 
   if (a.monsterT > 0 && b.monsterT <= 0 && b.spinT <= 0) spinOut(b, "monster");
@@ -656,17 +729,79 @@ void Game::collidePair(Car& a, Car& b) {
   double aShare = invA / invSum;
   double bShare = invB / invSum;
 
-  double nS = hit.nS, nL = hit.nL, pen = hit.pen;
-  a.totalS -= nS * pen * aShare; a.lat -= nL * pen * aShare;
-  b.totalS += nS * pen * bShare; b.lat += nL * pen * bShare;
-  double vSa = a.v * dmath::cos(a.heading), vLa = -a.v * dmath::sin(a.heading) + a.vlat;
-  double vSb = b.v * dmath::cos(b.heading), vLb = -b.v * dmath::sin(b.heading) + b.vlat;
-  double vrel = (vSb - vSa) * nS + (vLb - vLa) * nL;
+  // Solid is solid: the whole remaining overlap, every pass. Under-relaxing it
+  // only leaves depth for the next frame to inherit; the passes are what carry
+  // convergence when a third car is in the way.
+  double push = js_max(0.0, hit.pen - COLLIDE_SLOP);
+  separate(a, hit.n.clone().multiplyScalar(-push * aShare));
+  separate(b, hit.n.clone().multiplyScalar(push * bShare));
+
+  // World velocities, so a pair whose track frames have turned apart still
+  // exchanges momentum along the real contact normal.
+  Vec3 va = a.colTan.clone().multiplyScalar(a.v * dmath::cos(a.heading))
+                .addScaledVector(a.colLat, -a.v * dmath::sin(a.heading) + a.vlat);
+  Vec3 vb = b.colTan.clone().multiplyScalar(b.v * dmath::cos(b.heading))
+                .addScaledVector(b.colLat, -b.v * dmath::sin(b.heading) + b.vlat);
+  double vrel = vb.sub(va).dot(hit.n);
   if (vrel < 0) {
-    double j = -(1 + RESTITUTION) * vrel / invSum;
-    applyImpulse(a, -j * invA * nS, -j * invA * nL);
-    applyImpulse(b, j * invB * nS, j * invB * nL);
+    // Dead below RESTITUTION_MIN_CLOSE: queueing traffic must hold contact.
+    double e = -vrel >= RESTITUTION_MIN_CLOSE ? RESTITUTION : 0.0;
+    double j = -(1 + e) * vrel / invSum;
+    double va0 = a.v, vb0 = b.v;
+    applyWorldImpulse(a, hit.n.clone().multiplyScalar(-j * invA));
+    applyWorldImpulse(b, hit.n.clone().multiplyScalar(j * invB));
+    // Whoever the contact SPED UP holds the gift on the gentle bleed.
+    if (a.v > va0) a.shoveT = SHOVE_GRACE;
+    if (b.v > vb0) b.shoveT = SHOVE_GRACE;
   }
+}
+
+// A pole is a static circle standing on the road. Same world frame as the pair
+// collider: the pole's centre is expressed in the car's own body axes, clamped
+// to the rectangle, and the residual is the contact.
+void Game::collidePole(Car& c, const PoleRt& p) {
+  double mul = footprintMul(c);
+  double hl = c.halfLen * mul, hw = c.halfWid * mul;
+  // The pole's world position. Its frame never moves, so this is the car's
+  // cached frame walked to the pole's arclength — near enough over the metre or
+  // so a contact spans, and it costs no sample.
+  Vec3 poleW = c.colPos.clone()
+                   .addScaledVector(c.colTan, wrap_delta(p.s - c.colS, length_) * c.colRib)
+                   .addScaledVector(c.colLat, p.lat);
+  Vec3 d = poleW.sub(colWorld(c));
+  double reach = hl + hw + p.radius;
+  if (d.lengthSq() >= reach * reach) return;
+  double lx = d.dot(c.colFwd), ly = d.dot(c.colRight);
+  double qx = js_max(-hl, js_min(hl, lx));
+  double qy = js_max(-hw, js_min(hw, ly));
+  double ex = lx - qx, ey = ly - qy;
+  double d2 = ex * ex + ey * ey;
+  if (d2 >= p.radius * p.radius) return;
+  double nx, ny, pen;
+  if (d2 > 1e-6) {
+    double dist = std::sqrt(d2);
+    nx = -ex / dist; ny = -ey / dist;
+    pen = p.radius - dist;
+  } else {
+    // The pole's centre is INSIDE the rectangle: push out the nearest face.
+    double bx = hl - std::fabs(lx), by = hw - std::fabs(ly);
+    nx = 0; ny = 0;
+    if (bx <= by) { nx = lx > 0 ? -1 : 1; pen = p.radius + bx; }
+    else { ny = ly > 0 ? -1 : 1; pen = p.radius + by; }
+  }
+  Vec3 n = c.colFwd.clone().multiplyScalar(nx).addScaledVector(c.colRight, ny);
+  separate(c, n.clone().multiplyScalar(pen));
+  Vec3 v = c.colTan.clone().multiplyScalar(c.v * dmath::cos(c.heading))
+               .addScaledVector(c.colLat, -c.v * dmath::sin(c.heading) + c.vlat);
+  double vn = v.dot(n);
+  if (vn < 0) {
+    applyWorldImpulse(c, n.clone().multiplyScalar(-vn));
+    if (c.v < POLE_MIN_KEEP * c.vmax) c.v = POLE_MIN_KEEP * c.vmax;
+  }
+  c.vlat = 0;
+  // A head-on hit kills a boost; a graze down the flank does not.
+  if (std::fabs(n.dot(c.colTan)) > 0.6) { c.boostT = 0; c.boostMul = 1; }
+  c.onWall = true;
 }
 
 void Game::resolveCollisions(double dt) {
@@ -678,14 +813,29 @@ void Game::resolveCollisions(double dt) {
   std::vector<Car*>& list = carScratch_;
   list.clear();
   for (const auto& c : cars_) list.push_back(c.get());
-  for (size_t i = 0; i < list.size(); i++)
-    for (size_t j = i + 1; j < list.size(); j++)
-      if (list[i]->finished == list[j]->finished) collidePair(*list[i], *list[j]);
-  if (!poles_.empty())
-    for (Car* c : list)
-      if (!c->finished)
-        for (const PoleRt& p : poles_) collidePole(*c, p);
-  for (Car* c : list) clampCurb(*c, dt);
+  // Relaxation: one sweep resolved pair (0,1) by burying car 0 in car 2 and
+  // nothing looked again, so a start-line scrum stayed interpenetrated for
+  // whole frames. Each pass re-tests against what the last one left. The
+  // impulse is self-limiting (see COLLIDE_PASSES), so this converges the
+  // geometry without pumping the velocities.
+  for (Car* c : list) c->curbHit = false;
+  for (int pass = 0; pass < COLLIDE_PASSES; pass++) {
+    for (size_t i = 0; i < list.size(); i++)
+      for (size_t j = i + 1; j < list.size(); j++)
+        if (list[i]->finished == list[j]->finished) collidePair(*list[i], *list[j]);
+    if (!poles_.empty())
+      for (Car* c : list)
+        if (!c->finished)
+          for (const PoleRt& p : poles_) collidePole(*c, p);
+    // The curb is a constraint like any other and belongs INSIDE the loop.
+    // Clamped only at the end, two cars pinned on the same wall stayed buried
+    // in each other: the sweep separated them laterally, the clamp put them
+    // straight back, and no pass was left to find the escape along the road.
+    // That was every worst overlap on the catalogue.
+    for (Car* c : list) if (pinCurb(*c)) c->curbHit = true;
+  }
+  // Billed once, however many passes had to pin: the wall costs what it costs.
+  for (Car* c : list) if (c->curbHit) billCurb(*c, dt);
 }
 
 void Game::recomputePoses() {
@@ -766,6 +916,7 @@ void Game::update(double dtMs) {
     if (c.boostT > 0) { c.boostT -= dt; if (c.boostT < 0) c.boostT = 0; }
     else if (c.boostMul > 1) c.boostMul = js_max(1.0, c.boostMul - BOOST_FADE * dt);
     if (c.monsterT > 0) { c.monsterT -= dt; if (c.monsterT <= 0) { c.monsterT = 0; Event e; e.type = "monster_end"; e.id = c.id; emit(e); } }
+    if (c.shoveT > 0) { c.shoveT -= dt; if (c.shoveT < 0) c.shoveT = 0; }
     bool boosting = c.boostMul > 1;
     double brakeEff = boosting ? 0 : c.brake;
     double steerEff = spinning ? 0 : c.steer;
@@ -782,7 +933,11 @@ void Game::update(double dtMs) {
     }
     if (spinning) c.v *= dmath::exp(-SPIN_DRAG_RATE * dt);
     else if (c.v < targetV) c.v = js_min(targetV, c.v + (boosting ? BOOST_ACCEL : c.accel) * dt);
-    else c.v = js_max(targetV, c.v - BRAKE_DECEL * dt);
+    // A car carried above its targetV by a shove bleeds it off gently, so a
+    // rear-end reads as a push rather than as chatter. Off the brake ONLY:
+    // contact must never blunt the brakes.
+    else c.v = js_max(targetV,
+                      c.v - (c.shoveT > 0 && brakeEff <= 0 ? SHOVE_DECEL : BRAKE_DECEL) * dt);
 
     double authority = 0.4 + 0.6 * js_min(1.0, c.v / (c.vmax * 0.5));
     double steerHeading = c.heading + STEER_SIGN * steerIn * c.turn * authority * dt;
@@ -806,6 +961,9 @@ void Game::update(double dtMs) {
     else if (c.heading < -MAX_HEADING) c.heading = -MAX_HEADING;
 
     clampCurb(c, dt);
+    // The collision passes run in world space off this frame — cached here
+    // because the integration has already paid for it.
+    cacheColFrame(c, hit.frame);
 
     if (c.finished) continue;
 

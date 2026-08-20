@@ -337,6 +337,15 @@ target_link_libraries(hazard_check PRIVATE libttp_sim ttp_strict_fp ttp_warnings
 ttp_emscripten_cli(hazard_check)
 add_test(NAME hazards COMMAND hazard_check)
 
+# ---- Behaviour: car-to-car contact ------------------------------------------
+# The traces PIN contact, they do not judge it — corner clipping and rear-end
+# chatter both lived under a green corpus. Judged against an oracle built from
+# Car::pose (what the renderer draws), which shares no code with the collider.
+add_executable(contact_check simtest/contact_check.cc)
+target_link_libraries(contact_check PRIVATE libttp_sim ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(contact_check)
+add_test(NAME contact COMMAND contact_check)
+
 # ---- Conformance: the golden-trace replay CLI -------------------------------
 # Replays a committed trace against libttp-sim: rebuilds the race,
 # replays recorded inputs (+ ai-live re-run, session driver, dt jitter, schedule

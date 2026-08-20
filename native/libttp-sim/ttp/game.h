@@ -50,6 +50,19 @@ struct Car {
   std::set<int> boxIn;
   std::map<int, int> rowIn;
   double boostT = 0, boostMul = 1, monsterT = 0;
+  // Contact state, all sim-internal: none of it crosses the wire.
+  //   shoveT  — time left on a hit that is still carrying the car above targetV
+  //   curbHit — the curb had to pin this car during the collision passes
+  //   col*    — the track frame under the car at the end of its integration,
+  //             cached because the collision passes work in WORLD space and
+  //             re-sampling per pair per pass would cost the frame all over
+  //             again. colRib is ground metres per metre of centreline arc at
+  //             this car's lateral offset, which is how a world separation
+  //             converts back into a totalS correction.
+  double shoveT = 0;
+  bool curbHit = false;
+  Vec3 colPos, colTan, colLat, colFwd, colRight;
+  double colS = 0, colRib = 1;
   std::string item;          // "" = null slot
   double pickupAge = 999;
   double useSeq = 0;
@@ -236,6 +249,10 @@ class Game {
   double colYaw(const Car& c) const;
   struct FP { double along, side, restSide; };
   FP footprint(const Car& c) const;
+  void cacheColFrame(Car& c, const Frame& f);
+  Vec3 colWorld(const Car& c) const;
+  bool pinCurb(Car& c);
+  void billCurb(Car& c, double dt);
   void clampCurb(Car& c, double dt);
   bool enterZonesOil(Car& c);
   bool enterZonesPads(Car& c);
@@ -249,9 +266,12 @@ class Game {
   bool enterBanana(Car& c);
   void collidePole(Car& c, const PoleRt& p);
   void collidePair(Car& a, Car& b);
-  struct Hit { bool hit; double nS, nL, pen; };
-  Hit satRects(const Car& a, const Car& b, double ds, double dl) const;
+  // A contact normal in WORLD units, plus how deep the pair is along it.
+  struct Hit { bool hit; Vec3 n; double pen; };
+  Hit satRects(const Car& a, const Car& b) const;
   void applyImpulse(Car& c, double dS, double dL);
+  void applyWorldImpulse(Car& c, const Vec3& imp);
+  void separate(Car& c, const Vec3& push);
   void spinOut(Car& c, const std::string& cause);
 
   Centerline* centerline_;

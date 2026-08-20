@@ -34,6 +34,21 @@ racing pack — `Game::resolveCollisions`). Only skysnake races to all-finished,
 so only it drifted and was re-emitted: the divergence starts after the second
 car finishes, and every finish time is byte-identical to the previous recording.
 
+On 2026-08-20 the car-to-car collider moved into a WORLD frame. It had been
+testing `(s, lat)` as though it were Cartesian, which on a corner is wrong three
+ways at once (see the collision frame in `native/libttp-sim/ttp/game.cc`), and
+contact was resolved in one pass with restitution and nothing holding it. Every
+trace with a car-to-car contact in it drifted; each diverges at the frame of its
+FIRST contact and is byte-identical before it. Human inputs are preserved
+verbatim — the inputs that moved are bots', whose AI reacts to the new positions.
+`tidepool-session-beats-3bots-450f-seed21.jsonl` never makes contact and did not
+move. The audio corpus followed, as it always must.
+
+What now watches the behaviour these bytes no longer judge is `contact_check`
+(the `contact` ctest): the traces pin that the sim still does what it does, and
+that check asserts it is right, against an oracle built from `Car::pose` rather
+than from the collider.
+
 The replay contract is unchanged: EXACT float equality (same operation order, same
 vendored math), compared per frame as an FNV-1a of the canonical snapshot plus the
 event list, with periodic full snapshots.
