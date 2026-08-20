@@ -40,6 +40,12 @@ export const FEAT = {
   ALL: 0x1FFC,
 };
 
+// TTP_DEBUG_NO_MERGE (ttp_display.h) — an INVERTED knob outside FEAT on
+// purpose: SET takes the merged draw groups apart and restores the per-copy
+// gltfio renderables, so `FEAT.ALL | DEBUG_NO_MERGE` is the unmerged arm of a
+// sweep.
+export const DEBUG_NO_MERGE = 0x2000;
+
 // `vskid` is GONE with `vdecal`, same story: the rubber layer is a CPU
 // raster + upload now (TtpRenderer::renderSkids), so there is no stamp
 // material to serve.

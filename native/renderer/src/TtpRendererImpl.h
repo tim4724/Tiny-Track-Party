@@ -7,6 +7,7 @@
 #include <filament/IndirectLight.h>
 #include <filament/LightManager.h>
 #include <filament/IndexBuffer.h>
+#include <filament/InstanceBuffer.h>
 #include <filament/Material.h>
 #include <filament/MaterialInstance.h>
 #include <filament/RenderableManager.h>
@@ -31,6 +32,7 @@
 #include <gltfio/AssetLoader.h>
 #include <gltfio/FilamentAsset.h>
 #include <gltfio/MaterialProvider.h>
+#include <gltfio/FilamentInstance.h>
 #include <gltfio/ResourceLoader.h>
 #include <gltfio/TextureProvider.h>
 #include <gltfio/materials/uberarchive.h>

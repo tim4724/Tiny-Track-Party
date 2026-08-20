@@ -501,6 +501,42 @@ shell's file.
 > mode rather than anything it drew. The `BlendMode::TRANSLUCENT` note above is
 > the one place that law is written.
 
+**THE KIT'S COPIES ARE MERGED DRAWS** (TtpRenderer.h, "Merged draw groups").
+The car field and the per-copy dressing are re-issued as one renderable per
+distinct MESH with an explicit `InstanceBuffer` — automatic instancing cannot
+batch them (depth-bucketed and winding-split), and on the submission-bound TV
+frame the draw count IS the cost. The rules that keep it honest:
+
+- **The gltfio originals stay the source of truth.** Their entities remain,
+  transforms and all; the groups MIRROR node world transforms per frame
+  (`updateMergedTransforms`), so the wheel spin/steer/travel, the monster
+  park, the ghost swap and `debugHideCars` are inherited, never
+  re-implemented. The monster swap is PER CELL, so `renderCells` re-mirrors
+  while one is on.
+- **Geometry comes from the same GLB bytes the shell provided**, through
+  `ttp/glb_mesh.h` (header-inline; the `glbmesh` ctest executes it on every
+  leg), and materials are SHARED from the originals'. A model the reader
+  cannot fully decode keeps drawing exactly as gltfio loaded it — the
+  fallback is whole-model, never a partial merge.
+- **A merged group culls as ONE box**, trading per-copy frustum culling for
+  the draw count — the right trade on a submission-bound frame. Teardown
+  order matters twice: `destroyCarSlot` kills the groups BEFORE the asset
+  whose material instances they share, and `releaseScene` destroys them
+  while the source entities are still alive to be handed back.
+
+The item-box fade twins stay unmerged on purpose: they hold PER-INSTANCE
+materials, the one thing a shared instanced draw cannot express.
+
+**WHAT THE MERGE IS WORTH, measured honestly** (interleaved via
+`TTP_DEBUG_NO_MERGE` on one launch, Google TV Streamer, 4P at pinned 540):
+−104 draws/frame moved the GPU **median** not at all — the median frame is
+fill/vertex-bound there, and the "per-draw submission cost" earlier group
+ablations suggested was mostly those groups' own fill. What it does buy, in
+every interleaved pair: the WORST frame (−2 to −3.5 ms of GPU), the delivered
+rate (+1–2 fps — on a vsync display the tail is what quantizes into fps), and
+~0.25 ms of renderer CPU. Do not expect draw-count cuts alone to move a GPU
+median on this class of box again; expect them to steady it.
+
 **The full-screen antialias pass is a switch** (`ttp_display_antialias`), and
 turning it off removes the offscreen scene buffer with it, so the saving is both
 that buffer's store and vpresent's read. It is on everywhere except Android TV.

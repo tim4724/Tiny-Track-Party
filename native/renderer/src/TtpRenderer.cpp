@@ -3,6 +3,8 @@
 // motion — behaviour, member set and ABI are unchanged.
 #include "TtpRendererImpl.h"
 
+#include <utils/Log.h>
+
 TtpRenderer::TtpRenderer() = default;
 
 bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
@@ -708,6 +710,240 @@ void TtpRenderer::setShadows(const utils::Entity* e, size_t n, bool cast, bool r
 }
 
 // ---------------------------------------------------------------------------
+// Merged draw groups — the design note is in TtpRenderer.h. This file holds
+// the shared machinery; what to merge is decided beside what it merges
+// (rebuildCarMerge in TtpRendererCars.cpp, buildDressingMerge in
+// TtpRendererDressing.cpp).
+// ---------------------------------------------------------------------------
+
+uint64_t TtpRenderer::glbBytesKey(const std::vector<uint8_t>& glb) {
+    // FNV-1a over the bytes: the same bytes are the same model, which is the
+    // whole grouping rule. Never 0 — every caller reserves 0 for "none".
+    uint64_t key = 14695981039346656037ull;
+    for (const uint8_t b : glb) { key ^= b; key *= 1099511628211ull; }
+    return key ? key : 1;
+}
+
+const std::vector<ttp::rt::GlbMeshNode>* TtpRenderer::glbMeshes(uint64_t key,
+        const std::vector<uint8_t>& glb) {
+    auto it = mGlbMeshCache.find(key);
+    if (it == mGlbMeshCache.end()) {
+        it = mGlbMeshCache.emplace(key,
+                ttp::rt::read_glb_meshes(glb.data(), glb.size())).first;
+        if (it->second.empty()) {
+            // The fallback is silent on the glass (the originals keep drawing),
+            // so say it here: a kit model this reader cannot decode is a model
+            // whose copies stay one draw each.
+            utils::slog.w << "glbMeshes: undecodable GLB (" << glb.size()
+                    << " bytes) — its copies stay unmerged" << utils::io::endl;
+        }
+    }
+    return it->second.empty() ? nullptr : &it->second;
+}
+
+bool TtpRenderer::buildMergedGroup(std::vector<MergedGroup>& out,
+        const std::vector<utils::Entity>& sources,
+        const std::vector<ttp::rt::GlbMeshPrim>& prims, bool dynamic,
+        uint8_t feat) {
+    if (sources.size() < 2 || prims.empty() || !mScene) return false;
+    auto& rcm = mEngine->getRenderableManager();
+    auto& tcm = mEngine->getTransformManager();
+    const auto ri0 = rcm.getInstance(sources[0]);
+    // The parsed geometry and the loaded renderable must agree about the
+    // primitive count, every primitive needs normals for vglb's TANGENTS, and
+    // every slot needs a material to share — any miss keeps the originals.
+    if (!ri0 || rcm.getPrimitiveCount(ri0) != prims.size()) return false;
+    for (const auto& p : prims) {
+        if (p.pos.empty() || p.normal.size() != p.pos.size()
+                || p.idx.empty() || p.idx.size() % 3) {
+            return false;
+        }
+    }
+    for (size_t p = 0; p < prims.size(); p++) {
+        if (!rcm.getMaterialInstanceAt(ri0, p)) return false;
+    }
+
+    const size_t maxInst =
+            std::min<size_t>(64, mEngine->getMaxAutomaticInstances());
+    for (size_t first = 0; first < sources.size(); first += maxInst) {
+        const size_t n = std::min(maxInst, sources.size() - first);
+        if (n < 2) break;   // a straggler of one keeps its original draw
+        MergedGroup g;
+        g.dynamic = dynamic;
+        g.feat = feat;
+        g.sources.assign(sources.begin() + first, sources.begin() + first + n);
+        g.xf.assign(n, mat4f{});
+        float r2 = 0;
+        for (const auto& sp : prims) {
+            MergedPrim mp;
+            const size_t nv = sp.pos.size() / 3;
+            mp.pos.resize(nv);
+            for (size_t i = 0; i < nv; i++) {
+                mp.pos[i] = { sp.pos[i * 3], sp.pos[i * 3 + 1], sp.pos[i * 3 + 2] };
+                r2 = std::max(r2, dot(mp.pos[i], mp.pos[i]));
+            }
+            std::vector<float3> normals(nv);
+            for (size_t i = 0; i < nv; i++) {
+                normals[i] = { sp.normal[i * 3], sp.normal[i * 3 + 1],
+                               sp.normal[i * 3 + 2] };
+            }
+            mp.quats.resize(nv);
+            geometry::SurfaceOrientation* so = geometry::SurfaceOrientation::Builder()
+                    .vertexCount(nv).normals(normals.data()).build();
+            if (so) {
+                so->getQuats(mp.quats.data(), nv);
+                delete so;
+            }
+            // UV0 is required by vglb; an untextured model rides its
+            // baseColorFactor over the provider's white 1x1, so zeros are
+            // exactly what gltfio's own dummy buffer would sample.
+            mp.uvs.assign(nv, math::float2{ 0, 0 });
+            if (sp.uv.size() == nv * 2) {
+                for (size_t i = 0; i < nv; i++) {
+                    mp.uvs[i] = { sp.uv[i * 2], sp.uv[i * 2 + 1] };
+                }
+            }
+            mp.idx = sp.idx;
+            mp.vb = VertexBuffer::Builder()
+                    .vertexCount((uint32_t) nv)
+                    .bufferCount(3)
+                    .attribute(VertexAttribute::POSITION, 0,
+                            VertexBuffer::AttributeType::FLOAT3)
+                    .attribute(VertexAttribute::TANGENTS, 1,
+                            VertexBuffer::AttributeType::FLOAT4)
+                    .attribute(VertexAttribute::UV0, 2,
+                            VertexBuffer::AttributeType::FLOAT2)
+                    .build(*mEngine);
+            mp.ib = IndexBuffer::Builder()
+                    .indexCount((uint32_t) mp.idx.size())
+                    .bufferType(IndexBuffer::IndexType::UINT)
+                    .build(*mEngine);
+            g.prims.push_back(std::move(mp));
+            // Descriptors AFTER the move: they point into the vectors' heap
+            // storage, which the move carried over intact.
+            MergedPrim& fp = g.prims.back();
+            fp.vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
+                    fp.pos.data(), fp.pos.size() * sizeof(float3), nullptr));
+            fp.vb->setBufferAt(*mEngine, 1, VertexBuffer::BufferDescriptor(
+                    fp.quats.data(), fp.quats.size() * sizeof(math::quatf), nullptr));
+            fp.vb->setBufferAt(*mEngine, 2, VertexBuffer::BufferDescriptor(
+                    fp.uvs.data(), fp.uvs.size() * sizeof(math::float2), nullptr));
+            fp.ib->setBuffer(*mEngine, IndexBuffer::BufferDescriptor(
+                    fp.idx.data(), fp.idx.size() * sizeof(uint32_t), nullptr));
+        }
+        g.radius = std::sqrt(r2);
+        // Initial transforms and box off the sources' CURRENT world transforms
+        // — final for the dressing, re-mirrored every frame for the cars.
+        float3 mn, mx;
+        mirrorMergedGroup(g, mn, mx);
+        g.ibuf = InstanceBuffer::Builder(n)
+                .localTransforms(g.xf.data())
+                .build(*mEngine);
+        g.ent = utils::EntityManager::get().create();
+        // Identity transform on the renderable itself: the instance transforms
+        // ARE world transforms, so the box below is world space too.
+        tcm.create(g.ent);
+        Box box;
+        box.set(mn, mx);
+        RenderableManager::Builder b(g.prims.size());
+        b.boundingBox(box)
+                .culling(true)
+                // Neither the cars nor the per-copy dressing are shadow casters
+                // (each carries its own baked ground blob; see setShadows at
+                // their load sites).
+                .castShadows(false)
+                .receiveShadows(false)
+                // Whatever layer the originals sit on — bit 0, or their
+                // feature-group bit when a sweep already tagged the scene.
+                .layerMask(0xFF, rcm.getLayerMask(ri0))
+                .instances(n, g.ibuf);
+        for (size_t p = 0; p < g.prims.size(); p++) {
+            b.geometry(p, RenderableManager::PrimitiveType::TRIANGLES,
+                    g.prims[p].vb, g.prims[p].ib);
+            b.material(p, rcm.getMaterialInstanceAt(ri0, p));
+        }
+        b.build(*mEngine, g.ent);
+        mScene->addEntity(g.ent);
+        // The originals leave the scene; their entities (and every transform
+        // behaviour riding them) stay.
+        for (size_t i = 0; i < n; i++) mScene->remove(g.sources[i]);
+        out.push_back(std::move(g));
+    }
+    return true;
+}
+
+// Mirror the sources' current world transforms into g.xf and fold the union
+// world box of the instances (each bounded by g.radius under its own scale).
+// A source mid-teardown keeps its last mirrored transform; the rebuild that
+// follows a roster change replaces the group.
+void TtpRenderer::mirrorMergedGroup(MergedGroup& g, float3& mn, float3& mx) {
+    auto& tcm = mEngine->getTransformManager();
+    mn = float3{ 1e30f, 1e30f, 1e30f };
+    mx = -mn;
+    for (size_t i = 0; i < g.sources.size(); i++) {
+        const auto ti = tcm.getInstance(g.sources[i]);
+        if (ti) g.xf[i] = tcm.getWorldTransform(ti);
+        const float3 t = g.xf[i][3].xyz;
+        const float s = std::sqrt(std::max({ dot(g.xf[i][0].xyz, g.xf[i][0].xyz),
+                dot(g.xf[i][1].xyz, g.xf[i][1].xyz),
+                dot(g.xf[i][2].xyz, g.xf[i][2].xyz) }));
+        const float r = g.radius * s;
+        mn = min(mn, t - float3{ r });
+        mx = max(mx, t + float3{ r });
+    }
+}
+
+void TtpRenderer::destroyMergedGroups(std::vector<MergedGroup>& groups) {
+    if (!mEngine) {
+        groups.clear();
+        return;
+    }
+    auto& em = utils::EntityManager::get();
+    for (MergedGroup& g : groups) {
+        if (!g.ent.isNull()) {
+            mScene->remove(g.ent);
+            mEngine->destroy(g.ent);
+            em.destroy(g.ent);
+        }
+        for (MergedPrim& p : g.prims) {
+            if (p.vb) mEngine->destroy(p.vb);
+            if (p.ib) mEngine->destroy(p.ib);
+        }
+        // After the renderable — the buffer must outlive it.
+        if (g.ibuf) mEngine->destroy(g.ibuf);
+        // The originals come back: a REBUILD decides afresh what to merge, and
+        // whatever it leaves unmerged has to draw again.
+        for (utils::Entity e : g.sources) {
+            if (em.isAlive(e)) mScene->addEntity(e);
+        }
+    }
+    groups.clear();
+}
+
+// Mirror the gltfio nodes' world transforms into the instance buffers, and
+// keep each dynamic group's cull box honest. Runs once per frame after the
+// car seating, and again per CELL while a monster is on (the ghost swap parks
+// transforms per cell — renderCells).
+void TtpRenderer::updateMergedTransforms() {
+    if (mMergedCars.empty() && mMergedDress.empty()) return;
+    auto& rcm = mEngine->getRenderableManager();
+    for (auto* vec : { &mMergedCars, &mMergedDress }) {
+        for (MergedGroup& g : *vec) {
+            if (!g.dynamic || !g.ibuf) continue;
+            float3 mn, mx;
+            mirrorMergedGroup(g, mn, mx);
+            g.ibuf->setLocalTransforms(g.xf.data(), g.xf.size(), 0);
+            const auto ri = rcm.getInstance(g.ent);
+            if (ri && mx.x >= mn.x) {
+                Box box;
+                box.set(mn, mx);
+                rcm.setAxisAlignedBoundingBox(ri, box);
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Feature ablation (debugFeatureMask — see the header for why it is layers).
 // ---------------------------------------------------------------------------
 
@@ -778,6 +1014,15 @@ void TtpRenderer::tagFeatures() {
     instVec(mMonsterInstances, kFeatCars);
     instVec(mMonsterGhostInstances, kFeatCars);
 
+    // The merged draw groups carry their family's bit — each replaced a set of
+    // renderables that would have been tagged with exactly it.
+    for (const MergedGroup& g : mMergedCars) {
+        if (!g.ent.isNull()) tagEntities(&g.ent, 1, g.feat);
+    }
+    for (const MergedGroup& g : mMergedDress) {
+        if (!g.ent.isNull()) tagEntities(&g.ent, 1, g.feat);
+    }
+
     // Items and the transient pools.
     tagMesh(mPollen, kFeatEffects);
     meshVec(mRockets, kFeatEffects);
@@ -842,6 +1087,14 @@ void TtpRenderer::debugFeatureMask(uint32_t mask) {
     mFeatureMask = (uint8_t) (mask & kFeatAll);
     mRoadMask = mask & kFeatRoadAll;
     mFogOn = (mask & kFeatFog) != 0;
+    // The merge ablation: flipping it marks both families dirty and the lazy
+    // sites take the groups apart (restoring the originals) or regroup.
+    const bool mergeOff = (mask & kFeatNoMerge) != 0;
+    if (mergeOff != mMergeOff) {
+        mMergeOff = mergeOff;
+        mCarMergeDirty = true;
+        mDressMergeDirty = true;
+    }
     // Re-tag on every call rather than once: a scene built after the first call
     // (a Grand Prix's next track, a biome rebuild) arrives untagged, and an
     // ablation sweep that silently stopped ablating would read as "this feature
@@ -903,6 +1156,16 @@ void TtpRenderer::releaseScene() {
     // them below, and the driver must not still be reading a BufferDescriptor
     // that points into one.
     mEngine->flushAndWait();
+    // Merged groups first, while their source entities are still alive to be
+    // handed back to the scene (the asset drops below take them out again,
+    // properly, on their own path). The parsed-geometry cache stays — it is
+    // keyed by the kit's bytes, which do not change between scenes.
+    destroyMergedGroups(mMergedCars);
+    destroyMergedGroups(mMergedDress);
+    mCarMergeDirty = false;
+    mDressMergeDirty = false;
+    mCarModelKey.clear();
+    mAssetMeshKey.clear();
     destroyMesh(mRoad);
     destroyMesh(mGround);
     destroyMesh(mGroundProxy);

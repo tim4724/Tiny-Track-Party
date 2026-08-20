@@ -380,7 +380,7 @@ re-derive them:
 | skipping the ~7 Hz skid mip regeneration | ~0.6 ms, and the far field scintillates without it |
 | skipping the cell overlay pass | free |
 | an sRGB SWAP CHAIN (`CONFIG_SRGB_COLORSPACE`) so the ROP does the encode | **a 3.5 ms LOSS** — see below |
-| sharing one `MaterialInstance` across every copy of an instanced scenery model, so automatic instancing can merge their draws | 0.2 ms — and it is the change the Engine::init comment about "111 draws where three issues 42" points at, so **it is the draw COUNT that does not matter here**, not the merging |
+| sharing one `MaterialInstance` across every copy of an instanced scenery model, so automatic instancing can merge their draws | 0.2 ms — and it is the change the Engine::init comment about "111 draws where three issues 42" points at, so **it is the draw COUNT that does not matter here**, not the merging. Settled properly by the merged draw groups (`native/renderer/CLAUDE.md`): −104 draws/frame at 4P moves the GPU MEDIAN zero, and buys the tail (−2..−3.5 ms worst), +1–2 fps and ~0.25 ms of CPU |
 | rebooting the box and measuring cold | 3% against warm, so this device is NOT thermally throttled and a long session's readings are trustworthy |
 
 **THE sRGB SWAP CHAIN IS A LOSS ON THIS DRIVER, and it is the most surprising

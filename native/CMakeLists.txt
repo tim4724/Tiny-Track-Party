@@ -895,6 +895,14 @@ target_link_libraries(wear_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnin
 ttp_emscripten_cli(wear_check)
 add_test(NAME wear COMMAND wear_check)
 
+# The GLB mesh reader behind the renderer's merged draw groups. Header-inline in
+# libttp-runtime (ttp/glb_mesh.h) so the SDK-less legs can execute it — the
+# renderer that consumes it is compiled by no ctest at all.
+add_executable(glbmesh_check runtimetest/glbmesh_check.cc)
+target_link_libraries(glbmesh_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(glbmesh_check)
+add_test(NAME glbmesh COMMAND glbmesh_check)
+
 # ---- Behavioural: the asset gallery's world ---------------------------------
 # NOT conformance evidence and no corpus — showcase_theme stages a scene that
 # has never existed in play, so there is no oracle to record against. What this

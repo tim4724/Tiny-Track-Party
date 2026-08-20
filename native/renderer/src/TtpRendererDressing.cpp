@@ -1519,6 +1519,14 @@ gltfio::FilamentAsset* TtpRenderer::loadInstancedProp(const char* assetName,
         // floating prop carries its own baked contact blob instead).
         setShadows(inst->getEntities(), inst->getEntityCount(), false, false);
     }
+    // The merged draw groups: decode this model's meshes once (keyed by its
+    // bytes) and let the next frame regroup the dressing. Pools this covers
+    // that buildDressingMerge does NOT merge (the item boxes and their fade
+    // twins) just carry an unused cache entry.
+    const uint64_t meshKey = glbBytesKey(it->second);
+    mAssetMeshKey[asset] = meshKey;
+    glbMeshes(meshKey, it->second);
+    mDressMergeDirty = true;
     // Point every instance at instance 0's materials. gltfio hands each
     // FilamentInstance its own MaterialInstance so they can be tinted apart —
     // we tint per MODEL, not per instance (the box fade pool is the one
@@ -1901,4 +1909,80 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
         accumulateNormals(mBerms);
         buildMesh(mBerms, true, litShadowInstance());
     }
+}
+
+// One instanced-asset family (a scenery model, a prop model, the cone pool)
+// into merged draw groups: per distinct MESH, one instanced renderable over
+// every copy. Entity slots are consistent across gltfio instances — the
+// material sharing in loadInstancedProp already relies on exactly that — and
+// slots map to parsed geometry by the NODE NAME, refusing a model whose names
+// are ambiguous across meshes (nothing in the kit is; the refusal keeps a
+// future asset honest rather than half-merged).
+void TtpRenderer::mergeInstancedSet(const gltfio::FilamentAsset* asset,
+        const std::vector<gltfio::FilamentInstance*>& insts, bool dynamic) {
+    if (!asset || insts.size() < 2 || !mEngine) return;
+    const auto keyIt = mAssetMeshKey.find(asset);
+    if (keyIt == mAssetMeshKey.end()) return;
+    const auto meshIt = mGlbMeshCache.find(keyIt->second);
+    if (meshIt == mGlbMeshCache.end() || meshIt->second.empty()) return;
+    // A model with an animated "spin" node (the toy train) moves under a
+    // static merge; mirror it per frame instead. The node itself may carry no
+    // mesh, so ask the ASSET, not the parse.
+    if (!const_cast<gltfio::FilamentAsset*>(asset)
+                ->getFirstEntityByName("spin").isNull()) {
+        dynamic = true;
+    }
+    auto& rcm = mEngine->getRenderableManager();
+    const size_t nEnt = insts[0] ? insts[0]->getEntityCount() : 0;
+    if (!nEnt) return;
+    for (auto* in : insts) {
+        if (!in || in->getEntityCount() != nEnt) return;
+    }
+    std::unordered_map<int, std::vector<size_t>> slotsByMesh;
+    for (size_t e = 0; e < nEnt; e++) {
+        const utils::Entity ent = insts[0]->getEntities()[e];
+        if (!rcm.getInstance(ent)) continue;
+        const char* nm = asset->getName(ent);
+        if (!nm) return;
+        const ttp::rt::GlbMeshNode* found = nullptr;
+        for (const auto& n : meshIt->second) {
+            if (n.name == nm) {
+                if (found && found->mesh != n.mesh) return;
+                found = &n;
+            }
+        }
+        if (!found) return;
+        slotsByMesh[found->mesh].push_back(e);
+    }
+    for (const auto& [mesh, slots] : slotsByMesh) {
+        const ttp::rt::GlbMeshNode* node = nullptr;
+        for (const auto& n : meshIt->second) {
+            if (n.mesh == mesh) { node = &n; break; }
+        }
+        std::vector<utils::Entity> sources;
+        for (auto* in : insts) {
+            for (const size_t e : slots) sources.push_back(in->getEntities()[e]);
+        }
+        buildMergedGroup(mMergedDress, sources, node->prims, dynamic,
+                kFeatDressing);
+    }
+}
+
+// The per-copy dressing, regrouped: the instanced scenery and prop models
+// (static — their placements are the scene's), and the cone pool (dynamic — a
+// kicked cone tumbles through its root transform, which the mirror follows).
+// The merged boulder/landmark/clutter sheets are already one renderable each
+// and stay as they are; the item-box pools stay unmerged too — the fade twins
+// deliberately hold PER-INSTANCE materials, which is the one thing a shared
+// instanced draw cannot express.
+void TtpRenderer::buildDressingMerge() {
+    destroyMergedGroups(mMergedDress);
+    if (!mScene) return;
+    for (size_t m = 0; m < mSceneryAssets.size() && m < mSceneryInstances.size(); m++) {
+        mergeInstancedSet(mSceneryAssets[m], mSceneryInstances[m], false);
+    }
+    for (size_t m = 0; m < mPropAssets.size() && m < mPropInstances.size(); m++) {
+        mergeInstancedSet(mPropAssets[m], mPropInstances[m], false);
+    }
+    mergeInstancedSet(mConeAsset, mConeInstances, true);
 }

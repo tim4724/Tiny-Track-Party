@@ -221,6 +221,13 @@ bool TtpRenderer::loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb) 
     // gltfio opts renderables in by default, the JS opts them out.
     setShadows(asset->getEntities(), asset->getEntityCount(), false, false);
     mCarAssets[index] = asset;
+    // The merged draw groups: remember which MODEL this slot wears (the bytes
+    // are the identity — same rule as the silhouette layers), decode its
+    // meshes once per model, and let the next frame regroup the field.
+    if (mCarModelKey.size() <= index) mCarModelKey.resize(index + 1, 0);
+    mCarModelKey[index] = glbBytesKey(glb);
+    glbMeshes(mCarModelKey[index], glb);
+    mCarMergeDirty = true;
 
     // Wheel handles for the per-frame steer/roll cosmetics. Original local
     // translations are kept so the animation rotates each wheel IN PLACE.
@@ -383,9 +390,7 @@ void TtpRenderer::pumpTextures() {
 // to bake, and it is also the honest state if the bake then fails.
 int TtpRenderer::claimMaskLayer(uint32_t c, const std::vector<uint8_t>& glb) {
     if (glb.empty()) return kMaskLayerGeneric;
-    uint64_t key = 14695981039346656037ull;         // FNV-1a
-    for (const uint8_t b : glb) { key ^= b; key *= 1099511628211ull; }
-    if (!key) key = 1;                              // 0 marks "never claimed"
+    const uint64_t key = glbBytesKey(glb);  // never 0 — 0 marks "never claimed"
     if (mMaskLayerOfSlot.size() <= c) {
         mMaskLayerOfSlot.resize(c + 1, kMaskLayerGeneric);
     }
@@ -446,6 +451,13 @@ bool TtpRenderer::buildCarSlot(const TrackBin& tb, uint32_t c) {
 // for one slot of a LIVE scene (reroster). Sizes are left alone — the field's
 // shape is the scene's, and a re-roster never changes it.
 void TtpRenderer::destroyCarSlot(uint32_t c) {
+    // The merged car groups may share this asset's material instances and hold
+    // its node entities as instance sources, so they go FIRST — the drop below
+    // would leave them referencing destroyed objects. The other cars' original
+    // renderables come back with the teardown and the next frame regroups.
+    destroyMergedGroups(mMergedCars);
+    mCarMergeDirty = true;
+    if (mCarModelKey.size() > c) mCarModelKey[c] = 0;
     if (mCarAssets.size() > c) dropAsset(mCarAssets[c]);
     if (mCarGhostAssets.size() > c) dropAsset(mCarGhostAssets[c]);
     if (mCarGhostIn.size() > c) mCarGhostIn[c] = 0;
@@ -520,5 +532,47 @@ void TtpRenderer::buildCarGhost(uint32_t c) {
     if (mStbProvider) {
         mStbProvider->waitForCompletion();
         mResourceLoader->asyncUpdateLoad();
+    }
+}
+
+// Regroup the whole field into merged draws: per MODEL (the bytes are the
+// identity), per distinct MESH (the per-side wheel pairs share one, so all
+// four wheels of every car of a model land in two groups), one instanced
+// renderable whose transforms mirror the gltfio nodes every frame
+// (updateMergedTransforms). Runs lazily off mCarMergeDirty — addCar fires per
+// slot, and grouping mid-roster would rebuild eight times for one launch.
+//
+// The GHOST twins stay out: they are four assets on a different material
+// (vglbfade), parked at -1000 except while a monster is occluding someone.
+void TtpRenderer::rebuildCarMerge() {
+    destroyMergedGroups(mMergedCars);
+    if (!mScene || !mEngine) return;
+    auto& rcm = mEngine->getRenderableManager();
+    // Slots by model.
+    std::unordered_map<uint64_t, std::vector<uint32_t>> byModel;
+    for (uint32_t c = 0; c < mCarAssets.size(); c++) {
+        if (!mCarAssets[c] || c >= mCarModelKey.size() || !mCarModelKey[c]) continue;
+        byModel[mCarModelKey[c]].push_back(c);
+    }
+    for (const auto& [key, slots] : byModel) {
+        const auto it = mGlbMeshCache.find(key);
+        if (it == mGlbMeshCache.end() || it->second.empty()) continue;
+        // Node names by mesh, so shared-mesh nodes join one group.
+        std::unordered_map<int, std::vector<const ttp::rt::GlbMeshNode*>> byMesh;
+        for (const auto& n : it->second) {
+            if (!n.name.empty()) byMesh[n.mesh].push_back(&n);
+        }
+        for (const auto& [mesh, nodes] : byMesh) {
+            std::vector<utils::Entity> sources;
+            for (const uint32_t c : slots) {
+                for (const auto* n : nodes) {
+                    const utils::Entity e =
+                            mCarAssets[c]->getFirstEntityByName(n->name.c_str());
+                    if (!e.isNull() && rcm.getInstance(e)) sources.push_back(e);
+                }
+            }
+            buildMergedGroup(mMergedCars, sources, nodes[0]->prims,
+                    /*dynamic=*/true, kFeatCars);
+        }
     }
 }

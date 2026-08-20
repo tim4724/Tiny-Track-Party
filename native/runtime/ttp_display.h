@@ -565,6 +565,14 @@ TTP_ABI void ttp_display_debug_force_mask_layer(int layer);
  * cannot be ablated by hiding a group — it needs a bit of its own. */
 #define TTP_FEAT_FOG      0x1000 /* the distance fog every surface composites */
 #define TTP_FEAT_ALL      0x1FFC
+/* An INVERTED ablation knob, deliberately outside the TTP_FEAT_ namespace
+ * (TTP_FEAT_ALL is gated to be the OR of every TTP_FEAT_* bit, and a bit that
+ * DISABLES something would poison every restore): setting it takes the merged
+ * draw groups apart and puts the per-copy gltfio renderables back, so a sweep
+ * can price the merging itself on one launch (TTP_FEAT_ALL |
+ * TTP_DEBUG_NO_MERGE is the unmerged arm). The shipped picture keeps the
+ * merge. */
+#define TTP_DEBUG_NO_MERGE 0x2000
 TTP_ABI void ttp_display_debug_features(unsigned int mask);
 
 #ifdef __cplusplus

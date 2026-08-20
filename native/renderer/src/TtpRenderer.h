@@ -26,6 +26,9 @@
 // Filament SDK.
 #include "ttp/theme.h"
 #include "ttp/wear.h"
+// The GLB mesh reader behind the merged draw groups — header-only for the same
+// no-link-edge reason as theme.h above; ctests execute it on every leg.
+#include "ttp/glb_mesh.h"
 
 #include <backend/DriverEnums.h>
 #include <math/mat4.h>
@@ -54,6 +57,7 @@ class Material;
 class VertexBuffer;
 class IndexBuffer;
 class MaterialInstance;
+class InstanceBuffer;
 namespace gltfio {
 class AssetLoader;
 class FilamentAsset;
@@ -1222,6 +1226,71 @@ private:
     filament::gltfio::FilamentAsset* loadInstancedProp(const char* assetName,
             size_t count, std::vector<filament::gltfio::FilamentInstance*>& out,
             bool shareMaterials = true);
+
+    // ---- Merged draw groups (explicit instancing) --------------------------
+    // The 4-player frame on the TV boxes is bound by SUBMISSION — ~30 µs per
+    // draw on the Android box, and the world is submitted once per cell —
+    // while Filament's automatic instancing cannot batch most of the kit (it
+    // is depth-bucketed and winding-split; see the shell docs). So the two
+    // families that are many-copies-of-one-mesh — the car field and the
+    // per-copy dressing — are re-issued as ONE renderable per distinct MESH
+    // with an explicit InstanceBuffer: geometry decoded from the same GLB
+    // bytes the shell already provided (ttp/glb_mesh.h), materials SHARED from
+    // the gltfio-loaded originals, and the original renderables taken out of
+    // the scene. The gltfio node entities STAY, transforms and all: every
+    // behaviour that rides a transform — wheel spin/steer/travel, the monster
+    // park, the ghost swap, debugHideCars — is inherited by mirroring node
+    // world transforms into the instance buffer (updateMergedTransforms),
+    // never re-implemented. A model this machinery cannot fully decode keeps
+    // drawing exactly as gltfio loaded it — merging is an optimisation with a
+    // whole-model fallback, not a second code path to keep correct.
+    struct MergedPrim {
+        filament::VertexBuffer* vb = nullptr;
+        filament::IndexBuffer* ib = nullptr;
+        // CPU copies stay alive for the group's life — BufferDescriptors carry
+        // no release callback (the Mesh rule).
+        std::vector<filament::math::float3> pos;
+        std::vector<filament::math::quatf> quats;
+        std::vector<filament::math::float2> uvs;
+        std::vector<uint32_t> idx;
+    };
+    struct MergedGroup {
+        utils::Entity ent;
+        std::vector<MergedPrim> prims;
+        filament::InstanceBuffer* ibuf = nullptr;
+        std::vector<utils::Entity> sources;      // one gltfio node per instance
+        std::vector<filament::math::mat4f> xf;   // mirror scratch
+        float radius = 0;                        // mesh-local bound, world AABB
+        bool dynamic = false;                    // mirror world transforms per frame
+        uint8_t feat = 0;                        // kFeat* bit for tagFeatures
+    };
+    std::vector<MergedGroup> mMergedCars;   // rebuilt whenever the roster moves
+    std::vector<MergedGroup> mMergedDress;  // built once per scene's dressing
+    bool mCarMergeDirty = false;
+    bool mDressMergeDirty = false;
+    bool mMergeOff = false;                 // kFeatNoMerge (ablation only)
+    std::vector<uint64_t> mCarModelKey;     // per slot: FNV of its GLB bytes
+    // Parsed kit geometry, keyed by the bytes' FNV. Engine-lifetime — the kit's
+    // bytes never change, so a cup's four scenes parse each model once.
+    std::unordered_map<uint64_t, std::vector<ttp::rt::GlbMeshNode>> mGlbMeshCache;
+    // Which parse an instanced dressing asset was loaded from (scene scope).
+    std::unordered_map<const filament::gltfio::FilamentAsset*, uint64_t> mAssetMeshKey;
+    static uint64_t glbBytesKey(const std::vector<uint8_t>& glb);
+    const std::vector<ttp::rt::GlbMeshNode>* glbMeshes(uint64_t key,
+            const std::vector<uint8_t>& glb);
+    bool buildMergedGroup(std::vector<MergedGroup>& out,
+            const std::vector<utils::Entity>& sources,
+            const std::vector<ttp::rt::GlbMeshPrim>& prims, bool dynamic,
+            uint8_t feat);
+    void destroyMergedGroups(std::vector<MergedGroup>& groups);
+    void mirrorMergedGroup(MergedGroup& g,
+            filament::math::float3& mn, filament::math::float3& mx);
+    void rebuildCarMerge();
+    void buildDressingMerge();
+    void mergeInstancedSet(const filament::gltfio::FilamentAsset* asset,
+            const std::vector<filament::gltfio::FilamentInstance*>& insts,
+            bool dynamic);
+    void updateMergedTransforms();
     void buildWater(const TrackBin& tb);
     void buildFliers(const TrackBin& tb);
     void buildGantry(const TrackBin& tb);
@@ -1365,6 +1434,9 @@ public:
     // on the deck alone. Filament's fog is the first, because it is composited
     // inside EVERY surface shader and so cannot be ablated by hiding anything.
     static constexpr uint32_t kFeatFog = 0x1000;
+    // TTP_DEBUG_NO_MERGE — SET takes the merged draw groups apart, so a sweep
+    // prices the merging itself as interleaved arms on one launch.
+    static constexpr uint32_t kFeatNoMerge = 0x2000;
     void debugFeatureMask(uint32_t mask);
 private:
     bool mHideCars = false;

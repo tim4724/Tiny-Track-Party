@@ -2371,6 +2371,13 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
                             useGhost ? mv.body : GPARK);
                 }
             }
+            // The ghost swap above parks transforms PER CELL, so the mirrored
+            // car instances must follow it into each cell's submission. Only
+            // while a monster is on — every other frame the once-per-frame
+            // mirror in render() already holds.
+            for (const MonsterView& mv : mMonsterViews) {
+                if (mv.on) { updateMergedTransforms(); break; }
+            }
             // Fliers ride the same per-cell billboard trick as the clouds.
             // Birds circle their roosts with a wing-beat that squashes the
             // glyph's height (SceneRenderer's flap); kites bob around their
@@ -2526,6 +2533,21 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
     mProfile[kProfSkids] = ttpNowMs() - tMark; tMark += mProfile[kProfSkids];
     renderAmbient(input);
     mProfile[kProfAmbient] = ttpNowMs() - tMark; tMark += mProfile[kProfAmbient];
+    // Merged draw groups: regroup lazily — a roster lands one slot at a time
+    // and the dressing stages model by model, so grouping at each call site
+    // would rebuild many times for one launch — then mirror this frame's node
+    // transforms into the instance buffers. After every transform writer above
+    // (the car seating, the cone kicks); the per-CELL monster swap re-mirrors
+    // in renderCells.
+    if (mCarMergeDirty) {
+        mCarMergeDirty = false;
+        if (mMergeOff) destroyMergedGroups(mMergedCars); else rebuildCarMerge();
+    }
+    if (mDressMergeDirty) {
+        mDressMergeDirty = false;
+        if (mMergeOff) destroyMergedGroups(mMergedDress); else buildDressingMerge();
+    }
+    updateMergedTransforms();
     const bool pace = mRenderer->beginFrame(mSwapChain);
     mProfile[kProfBeginFrame] = ttpNowMs() - tMark; tMark += mProfile[kProfBeginFrame];
 #if defined(__EMSCRIPTEN__)
