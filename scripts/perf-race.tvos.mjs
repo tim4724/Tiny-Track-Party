@@ -26,15 +26,16 @@
 // the whole circuit, rubber accumulates, and the scene is the one the game
 // builds. Pin the track — two runs on two circuits are two different questions.
 //
-// `--dpr` DOES NOTHING HERE, and what that now means has to travel with every
-// number this produces. tvOS DOES steer its buffer (`DisplayHost.adaptScale`
-// binds `ttp_display_scale_poll`), but nothing on this platform PINS one: there is
-// no equivalent of the web's `?dpr=`, so a run reports whichever rung the rule
-// settled on rather than a resolution the caller asked for. READ THE BUFFER SIZE
-// OFF THE HEADER, which is the last readout's — two runs that ended on different
-// rungs are two different questions, and on a box with no GPU timer the scale is
-// a one-way ratchet, so a run that stumbled early reports the softer rung for
-// the whole of its length. See docs/native-port/shells.md, item 14.
+// `--dpr` PINS THE BUFFER, exactly as the web's `?dpr=` does: it arrives as
+// `-ttpRenderScale`, which holds the drawable at that fraction of the panel and
+// switches `DisplayHost.adaptScale` off. `--dpr 0` asks the opposite question —
+// let the rule steer, and report where it settled.
+//
+// PIN EVERY ARM OF A COMPARISON. Free-running, a run reports whichever rung the
+// rule ended on, and on a box with no GPU timer the scale is a one-way ratchet:
+// a run that stumbled early reports the softer rung for the whole of its length.
+// Two runs that ended on different rungs are two different questions, so READ
+// THE BUFFER SIZE OFF THE HEADER either way.
 //
 // IT MEASURES WHATEVER IS INSTALLED. Nothing here builds or installs
 // (`npm run build:tvos [device|simulator]` does), so a stale install measures a
@@ -74,15 +75,26 @@ const flag = (name) => process.argv.includes(`--${name}`);
  *                              the shared GRID_MS settle is on top of it).
  *                              Ask for more than a race lasts and the tail of
  *                              the run is a results board over a still picture.
- *   dpr                        ignored — see the header; there is nothing on
- *                              this platform to pin a buffer with
+ *   dpr                        the buffer as a fraction of the panel; 0 hands
+ *                              the buffer back to the adaptive rule
  *
  * tvOS-only flags, read off argv:
  *   --sim            drive the booted tvOS simulator instead of the paired box
  *   --device <udid>  an explicit devicectl device
+ *   --features 0x…   TTP_FEAT_* ablation mask (ttp_display.h); absent = the
+ *                    shipped picture
+ *   --aa 0|1         force the full-screen antialias pass off or on; absent
+ *                    leaves the renderer's own default
+ *
+ * The two ablation flags are the Android backend's by the same names. They ride
+ * the LAUNCH here rather than a live property, which is what that shell needs
+ * and this one does not: every arm is its own cold launch already
+ * (`--terminate-existing`), so an arm cannot inherit the one before it.
  */
 export function makeTvosBackend() {
   const sim = flag('sim');
+  const features = arg('features', null);
+  const aa = arg('aa', null);
   let child = null;
   let timer = null;
   /** Readout lines not yet consumed, and the consumer waiting for one. */
@@ -153,10 +165,16 @@ export function makeTvosBackend() {
   };
 
   return {
-    async launch({ players, track, seconds }) {
+    async launch({ players, track, seconds, dpr }) {
       const args = ['-ttpScenario', SCENARIO,
         ...(track ? ['-ttpTrack', String(track)] : []),
-        ...(players ? ['-ttpPlayers', String(players)] : [])];
+        ...(players ? ['-ttpPlayers', String(players)] : []),
+        // The shell reads this with `double(forKey:)`, which COERCES: the
+        // argument domain holds it as a string, and `object(forKey:) as? Double`
+        // would read nil through it and leave the drawable full size.
+        ...(dpr > 0 ? ['-ttpRenderScale', String(dpr)] : []),
+        ...(features ? ['-ttpFeatures', String(parseInt(features, 0))] : []),
+        ...(aa != null ? ['-ttpAntialias', String(parseInt(aa, 10))] : [])];
 
       let argv;
       if (sim) {

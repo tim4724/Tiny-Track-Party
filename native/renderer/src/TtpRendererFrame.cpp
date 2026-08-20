@@ -368,9 +368,24 @@ void TtpRenderer::ensureOverlay() {
     mOverlayView = mEngine->createView();
     mOverlayView->setScene(mOverlayScene);
     mOverlayView->setCamera(mOverlayCamera);
-    // TRANSLUCENT is what makes this an OVERLAY: the view blends onto whatever
-    // the present pass already put on the canvas instead of replacing it.
-    mOverlayView->setBlendMode(View::BlendMode::TRANSLUCENT);
+    // OPAQUE, and the quads' own `blending : transparent` is what makes this an
+    // overlay. NOT `BlendMode::TRANSLUCENT`, which is a different question than
+    // it looks: it does not mean "these quads blend", it means "composite this
+    // whole VIEW over the destination" — so Filament renders the view into a
+    // full-surface intermediate buffer and blends the lot on. Measured on the
+    // Apple TV (A10X) at 3840x2160: **4.2-4.5 ms of a 16.68 ms budget**, to
+    // deliver a few thousand pixels of divider and steer bar. It was the single
+    // largest item in a 4-player frame — larger than the entire game world —
+    // and dropping it is what puts a 4-way split back inside 60 Hz at native
+    // 4K. Removing the quads instead measured the SAME as this, i.e. the
+    // drawing was never the cost.
+    //
+    // Nothing is wiped by going opaque: this is the LAST view of the frame, and
+    // Filament clears colour only for the first view rendered into a given
+    // target (details/Renderer.cpp drops COLOR from both the clear and the
+    // discard flags after it). So the quads blend against what the present pass
+    // left there, which is exactly what the old blend mode was asked for.
+    mOverlayView->setBlendMode(View::BlendMode::OPAQUE);
     mOverlayView->setPostProcessingEnabled(false); // we are past the grade
     mOverlayView->setShadowingEnabled(false);
     mOverlayView->setFrustumCullingEnabled(false);

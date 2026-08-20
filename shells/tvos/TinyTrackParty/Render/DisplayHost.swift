@@ -172,11 +172,41 @@ final class DisplayHost {
     /// would otherwise have to be provoked into. The second is not optional
     /// polish; a stale `uiScale` put the whole HUD at 3/4 of its right place and
     /// nothing in the suite could see it, because every shot was taken at 1.0.
+    ///
+    /// The PIN's ceiling is 2, not 1. The RULE never supersamples (a television
+    /// app has nothing to gain from it), but a measurement does: above 1 the
+    /// frame rate is observable, and a cost model fitted only where the box
+    /// holds 60 is fitted where its own cadence hides the answer.
     private static let scalePin =
-        max(0, min(1, UserDefaults.standard.double(forKey: "ttpRenderScale")))
+        max(0, min(2, UserDefaults.standard.double(forKey: "ttpRenderScale")))
 
-    /// The scale in force. 1.0 is the panel's own resolution; this never
-    /// supersamples. Read by `MetalSurfaceView` when it sizes the drawable.
+    /// `-ttpFeatures <mask>` ablates renderable groups and road channels — the
+    /// `TTP_FEAT_*` bits in `ttp_display.h`, and Android's `debug.ttp.features`
+    /// twin. 0 (unset) means "the shipped picture", never "hide everything": a
+    /// sweep that dies mid-run must not leave the next launch ablated.
+    ///
+    /// Re-applied per scene rather than once, for the reason
+    /// `debugFeatureMask` re-tags per call: a scene built after the first call
+    /// arrives untagged, and an arm that silently stopped ablating reads as
+    /// "this feature is free".
+    private static let featurePin =
+        UInt32(max(0, UserDefaults.standard.integer(forKey: "ttpFeatures")))
+
+    /// `-ttpAntialias <0|1>` takes the full-screen filter out of the frame, and
+    /// the offscreen scene buffer with it — so the arm prices BOTH halves, the
+    /// buffer's store and vpresent's read. Absent, the renderer's own default
+    /// stands (on here, off on Android TV).
+    ///
+    /// Presence is `object(forKey:)`, not a sentinel value: the argument domain
+    /// holds `0` and "unset" as different things and 0 is a meaningful arm.
+    private static let antialiasPin: Int? =
+        UserDefaults.standard.object(forKey: "ttpAntialias").map {
+            _ in UserDefaults.standard.integer(forKey: "ttpAntialias")
+        }
+
+    /// The scale in force. 1.0 is the panel's own resolution, and the only way
+    /// past it is the measurement pin above — the RULE's ceiling is 1. Read by
+    /// `MetalSurfaceView` when it sizes the drawable.
     private(set) var renderScale: Double = DisplayHost.scalePin > 0 ? DisplayHost.scalePin : 1.0
 
     /// A scale move armed by `adaptScale`, performed at the top of a later tick.
@@ -264,6 +294,14 @@ final class DisplayHost {
         if boundSession != 0 { ttp_display_bind(boundSession) }
         if lastCardMask != 0 { ttp_display_cell_cards(lastCardMask) }
         if let mode = lastCamMode { ttp_display_camera(mode) }
+        if let aa = Self.antialiasPin { ttp_display_antialias(Int32(aa)) }
+        applyFeaturePin()
+    }
+
+    /// The ablation mask, where a scene can be sure to exist. See `featurePin`.
+    private func applyFeaturePin() {
+        guard Self.featurePin != 0 else { return }
+        ttp_display_debug_features(Self.featurePin)
     }
 
     /// Tell the renderer the surface changed size. The caller sets
@@ -591,6 +629,7 @@ final class DisplayHost {
         // scenes measures a slope belonging to neither.
         perf.reset()
         ttp_display_scale_scene(CACurrentMediaTime() * 1000)
+        applyFeaturePin()
     }
 
     /// The biome the current scene RESOLVED to — the track's cup, or the
