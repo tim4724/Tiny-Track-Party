@@ -591,15 +591,27 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
     const TtpViewInput* lodViews = ((input.flags & TTP_FRAME_OVERVIEW) == 0u
             && input.viewCount > 0 && mForceMaskLayer < 0 && mCarShadowTex[0])
             ? ttp_frame_views(&input) : nullptr;
-    // RANK the near band. A pack can put more cars inside kShadowLodNear than
-    // the masked list holds ([4]), and a car whose entry the fold dropped had
-    // NO shadow at all — near cars skip the texture raster, so the cap's
-    // overflow deleted the shadow outright (user-caught: "close cars without
-    // a shadow next to far cars with one"). Only the kMaxMaskedDeckDecals
-    // NEAREST cars are masked-eligible; everyone else rides the texture blob
-    // regardless of distance, so every car always carries a shadow and the
-    // fold can never overflow. Contract positions are plenty for a 10u
-    // threshold; the seating below moves a car millimetres.
+    // RANK the near band, PER VIEW. A pack can put more cars inside
+    // kShadowLodNear than the masked list holds, and a car whose entry the
+    // fold dropped had NO shadow at all — near cars skip the texture raster,
+    // so the cap's overflow deleted the shadow outright (user-caught: "close
+    // cars without a shadow next to far cars with one"). So the pick is a RANK
+    // gate: everyone it does not reach rides the texture blob regardless of
+    // distance, the fold can never overflow, and every car always carries a
+    // shadow.
+    //
+    // Each camera ranks its OWN nearest and they take turns, rather than one
+    // global pool ranked by distance to whichever camera happens to be
+    // closest. A global pool is starvable the moment the screen splits — see
+    // kMaxMaskedDeckDecals for the bug it produced — and taking turns cannot
+    // be: whatever the other cameras are looking at, this one still gets its
+    // pick.
+    //
+    // Note the two distances do different jobs. The PICK is against the view
+    // doing the picking; the CROSSFADE below rides lodCamD, the distance to
+    // the nearest camera of any, because that is the camera the fade has to
+    // look right from. Contract positions are plenty at a 10u threshold; the
+    // seating below moves a car millimetres.
     float lodCamD[16];
     bool lodEligible[16];
     if (lodViews) {
@@ -615,15 +627,48 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
             lodCamD[i] = std::sqrt(d2);
             lodEligible[i] = false;
         }
-        // The nearest kMaxMaskedDeckDecals become masked-eligible.
-        for (int pick = 0; pick < kMaxMaskedDeckDecals; pick++) {
-            int best = -1;
-            for (uint32_t i = 0; i < nCars && i < 16; i++) {
-                if (lodEligible[i]) continue;
-                if (best < 0 || lodCamD[i] < lodCamD[best]) best = (int) i;
+        int budget = kMaxMaskedDeckDecals;
+        // FIRST, EVERY VIEW'S OWN CAR — the one it FOLLOWS (TtpViewInput.car),
+        // not the one nearest its eye. Those are different questions and the
+        // difference is the whole bug: the chase rig sits CHASE_DIST behind
+        // the player, so a car DRAFTING them is nearer to their eye than their
+        // own car is, and a nearest-first pick therefore hands the player's
+        // own slot to the bot on their tail. That is the blob-under-your-own-
+        // car this budget exists to prevent, and picking by proximity only
+        // moved it from "some player" to "the drafted player" — user-caught
+        // both times. No distance gate here on purpose: the subject is ~2u
+        // away by construction, and a gate could only ever strand them.
+        for (uint32_t vi = 0; vi < input.viewCount && budget > 0; vi++) {
+            const int own = lodViews[vi].car;
+            if (own < 0 || own >= (int) nCars || own >= 16 || lodEligible[own]) continue;
+            lodEligible[own] = true;
+            budget--;
+        }
+        // THEN whatever is left, round-robin over the views by proximity, so
+        // adjacent rivals get dressed too and solo still spends its whole
+        // budget. Round-robin and not view-by-view: draining one view's
+        // allowance before starting the next spends everything on cameras 0
+        // and 1 in a four-way split and leaves 2 and 3 with nothing.
+        //
+        // A view with nothing left in range CONTINUES rather than breaks: it
+        // is out of candidates, the other cameras are not.
+        for (int round = 0; round < kMaxMaskedDeckDecals && budget > 0; round++) {
+            for (uint32_t vi = 0; vi < input.viewCount && budget > 0; vi++) {
+                const float3 eye{ lodViews[vi].world[12], lodViews[vi].world[13],
+                        lodViews[vi].world[14] };
+                int best = -1;
+                float bestD2 = 0;
+                for (uint32_t i = 0; i < nCars && i < 16; i++) {
+                    if (lodEligible[i]) continue;
+                    const float3 dc = float3{ cars[i].pos.x, cars[i].pos.y,
+                            cars[i].pos.z } - eye;
+                    const float d2 = dot(dc, dc);
+                    if (best < 0 || d2 < bestD2) { best = (int) i; bestD2 = d2; }
+                }
+                if (best < 0 || bestD2 >= kShadowLodFar * kShadowLodFar) continue;
+                lodEligible[best] = true;
+                budget--;
             }
-            if (best < 0 || lodCamD[best] >= kShadowLodFar) break;
-            lodEligible[best] = true;
         }
     }
     for (uint32_t i = 0; i < nCars; i++) {
@@ -1104,13 +1149,19 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                 float cs = dot(f0.tangent(), fwdW), sn = dot(f0.lat, fwdW);
                 const float nl = std::sqrt(cs * cs + sn * sn);
                 if (nl > 1e-5f) { cs /= nl; sn /= nl; } else { cs = 1; sn = 0; }
+                // The layer is the MODEL's, not the slot's — claimMaskLayer
+                // resolved it at build time. Generic whenever the bake it
+                // needs did not land, which is now a state the bake itself
+                // reports rather than one that goes unnoticed.
+                const int slotLayer = mMaskLayerOfSlot.size() > i
+                        ? mMaskLayerOfSlot[i] : kMaskLayerGeneric;
                 const int layer = mForceMaskLayer >= 0 ? mForceMaskLayer
                         : (monsterBlob
                         ? (((mMaskLayerBakedBits >> kMaskLayerMonster) & 1u)
                                 ? kMaskLayerMonster : kMaskLayerGeneric)
-                        : ((i < (uint32_t) kMaskLayerMonster
-                                && ((mMaskLayerBakedBits >> i) & 1u))
-                                ? (int) i : kMaskLayerGeneric));
+                        : ((slotLayer >= 0 && slotLayer < kMaskLayerMonster
+                                && ((mMaskLayerBakedBits >> slotLayer) & 1u))
+                                ? slotLayer : kMaskLayerGeneric));
                 // THE PLANE THE MASK PROJECTS ONTO IS THE ONE THE CAR SITS ON:
                 // the best fit through its own four wheel contacts, not the
                 // track frame's tangent plane at the centreline. On a flat or
@@ -1191,9 +1242,11 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                 // which is what lets it declare [4] instead of FIELD_SIZE.
                 float lodT = 1.0f;
                 if (lodViews) {
-                    // Rank-gated: past the nearest kMaxMaskedDeckDecals a car
+                    // Rank-gated: a car no camera's own allowance reached
                     // rides the blob however close it is — a full blob beats
                     // the deleted shadow the fold overflow used to produce.
+                    // The gate can no longer strand a PLAYER's car, because
+                    // round one of the pick is every view's own (see above).
                     lodT = (i < 16 && lodEligible[i])
                             ? std::min(1.0f, std::max(0.0f,
                                     (lodCamD[i] - kShadowLodNear)

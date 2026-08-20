@@ -734,6 +734,12 @@ constexpr float kCarBlobAO = 0.35f;
 // the texture raster alone; between, the two crossfade with complementary
 // alphas. 14u keeps the own car (~2u) and adjacent rivals silhouetted while
 // bounding the masked list at [4].
+//
+// Note the two distances answer different questions and both are needed. The
+// band above is against the CLOSEST camera, because that is who the fade has
+// to look right to. WHICH cars get a masked entry at all is decided against
+// the camera doing the picking, taking turns — see TtpRenderer.h's
+// kMaxMaskedDeckDecals for why a single global rank is starvable.
 constexpr float kShadowLodNear = 10.0f;
 constexpr float kShadowLodFar = 14.0f;
 

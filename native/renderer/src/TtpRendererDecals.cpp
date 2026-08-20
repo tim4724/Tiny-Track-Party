@@ -5,10 +5,12 @@
 
 
 // The silhouette store for the road-shader shadow decals: one array layer per
-// car slot, one for the monster, one generic. Engine-lifetime (layers are
-// rebaked per scene — mMaskLayerBakedBits says which hold the current scene's
-// bake); created on first use and bound to every vroad instance, because a
-// declared sampler must be bound even while no masked decal references it.
+// car MODEL (claimMaskLayer keys them by the GLB's bytes, so the eight-car
+// grid's four models cost four layers), one for the monster, one generic.
+// Engine-lifetime (layers are rebaked per scene — mMaskLayerBakedBits says
+// which hold the current scene's bake); created on first use and bound to
+// every vroad instance, because a declared sampler must be bound even while no
+// masked decal references it.
 Texture* TtpRenderer::ensureDecalMaskArray() {
     if (mDecalMaskArray || !mEngine) return mDecalMaskArray;
     mDecalMaskArray = Texture::Builder()

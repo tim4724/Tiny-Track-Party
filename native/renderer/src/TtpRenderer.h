@@ -357,12 +357,44 @@ private:
     // p50 / +1.5 p95 at 720p. vroad.mat's float4[8]s must agree;
     // tests/road-decal-caps.test.js holds the two together.
     //
-    // FOUR, not FIELD_SIZE, since the hybrid shadow LOD: only cars inside
-    // the near band of some active camera fold masked entries (renderCars);
-    // the rest ride the carShadow texture. Four covers a camera's own car
-    // plus adjacent rivals; a fifth near car in ONE chunk is a split-screen
-    // pile-up edge whose dropped entry falls back to the texture blob it
-    // already carries in the crossfade band.
+    // THE MASKED BUDGET IS PER VIEW, and this constant is that rule.
+    //
+    // The budget is what the active cameras may dress in true silhouettes
+    // between them — a camera's own car plus adjacent rivals — and it is also
+    // the declared array size.
+    //
+    // It was a single GLOBAL pool of four, ranked by distance to the NEAREST
+    // camera, and that is a bug the moment the screen splits: four cameras
+    // competing for four slots have no headroom at all, so one bot drafting
+    // any player (a drafting car sits within a metre of that player's eye,
+    // nearer than the player's own car at CHASE_DIST) evicted the
+    // fourth-ranked car — which is some other player's own car — straight to
+    // the texture blob, with no crossfade because the rank gate jumps lodT to
+    // 1. User-caught: "with 4 players one of them has an oval blob".
+    //
+    // FOUR, spent ROUND ROBIN over the active views: every camera takes its
+    // first choice before any takes its second, so a four-way split spends the
+    // whole budget on round one — each player's own car — while solo spends
+    // all four rounds on its single view, exactly as it always did. One
+    // number, not a total plus a per-view allowance: round-robin already says
+    // "fair", and a single view must be able to take the lot.
+    //
+    // The live entry count is therefore four at EVERY player count, which is
+    // why the rule costs nothing — only WHICH four changes.
+    //
+    // FOUR AND NOT EIGHT IS MEASURED, and the measurement is worth keeping
+    // because the intuition it killed was reasonable. Ablating the whole decal
+    // channel at 4 players / 720p saves only ~0.55 ms (interleaved ABAB,
+    // inside this box's noise), which reads like an invitation to dress all
+    // eight cars. It is not: a build that raised this cap to 8 cost +4.96 ms
+    // p50 (30.98 -> 35.93, fps 28 -> 25, three interleaved reps, no overlap),
+    // while the same build at 1 player measured ZERO against [4] (17.47 vs
+    // 17.28). So the cost is NOT linear in live entries and NOT the declared
+    // size — it is the per-chunk BOUNDS BOX: four masked cars in a split sit
+    // in four different chunks with a tight box each, and eight put two in a
+    // chunk with a union spanning both, so the fragments that enter the loop
+    // multiply as well as the iterations they then run. Raising this cap
+    // needs a per-entry reject, not a bigger budget.
     static constexpr int kMaxMaskedDeckDecals = 4;
     static constexpr int kMaxProfileDeckDecals = 8;
     // The STATIC list's own cap. The per-chunk bounds above are what the shader
@@ -456,18 +488,39 @@ private:
     std::vector<DeckDecal> mRoadInstLastMask, mRoadInstLastProf;
     int mRoadInstPaintN = 0;               // and its RoadChunk::paintN
     // The masked decals' silhouette store: one 2D-array texture, one layer per
-    // car slot (0..7), one for the monster rig, one for the generic
+    // distinct car MODEL, one for the monster rig, one for the generic
     // superellipse. Engine-lifetime — layers are REBAKED per scene, the flags
     // below say which ones currently hold this scene's bake.
-    static constexpr int kMaskLayerMonster = 8;
-    static constexpr int kMaskLayerGeneric = 9;
-    static constexpr int kMaskLayers = 10;
+    //
+    // MODEL, NOT SLOT. Eight cars race but the kit holds four models, so a
+    // per-slot store baked the same silhouette up to twice over and spent
+    // 512 KB a layer doing it. A slot claims its layer by the BYTES of its
+    // GLB (claimMaskLayer), so two players in one model at different liveries
+    // share one bake — coverage rides ALPHA, which carries no colour.
+    // protocol.js's CAR_MODELS is the source for the count and
+    // tests/mask-layer-models.test.js holds this constant to it; a fifth model
+    // added without raising it would silently fall back to the generic oval.
+    static constexpr int kMaskLayerModels = 4;
+    static constexpr int kMaskLayerMonster = kMaskLayerModels;
+    static constexpr int kMaskLayerGeneric = kMaskLayerModels + 1;
+    static constexpr int kMaskLayers = kMaskLayerModels + 2;
     // Cell size: 256 wide for the same banding reason bakeSilhouette gives, and
     // 2:1 because a kit car's footprint is ~2:1 — the stretch onto the decal
     // rect is then near-isotropic, so the baked blur stays round.
     static constexpr int kMaskCellW = 256, kMaskCellH = 512;
     filament::Texture* mDecalMaskArray = nullptr;
     uint16_t mMaskLayerBakedBits = 0;
+    // What each MODEL layer currently holds, as an FNV-1a of the GLB that was
+    // baked into it — the claim key. It deliberately outlives a re-roster: a
+    // slot re-dressed into a model another slot already baked reuses that
+    // layer and skips the bake entirely, which is what closes the old "generic
+    // oval until the re-dress rebakes" window.
+    uint64_t mMaskLayerKey[kMaskLayerModels] = {};
+    std::vector<int> mMaskLayerOfSlot;   // slot -> layer, from claimMaskLayer
+    // Resolve slot `c`'s silhouette layer, baking into it only if no layer
+    // already holds that GLB. Returns kMaskLayerGeneric when the roster holds
+    // more distinct models than there are layers.
+    int claimMaskLayer(uint32_t c, const std::vector<uint8_t>& glb);
     filament::Texture* ensureDecalMaskArray();
     // The rubber layer's tap binding (the 1x1 null texture is the
     // engine-lifetime half). The per-track texture + CPU buffer are made in
@@ -1263,10 +1316,15 @@ public:
     void debugHideCars(bool on) { mHideCars = on; }
     void debugWipeSkids() { mSkidWipe = true; }
     // Force every masked stamp onto ONE mask layer, or −1 to leave each car on
-    // its own. Layer 9 is the generic superellipse, a shape correct by
-    // construction, so it separates "the bake is wrong" from "everything
+    // its own. kMaskLayerGeneric is the generic superellipse, a shape correct
+    // by construction, so it separates "the bake is wrong" from "everything
     // downstream of the bake is wrong" without reading the texture back.
-    void debugForceMaskLayer(int layer) { mForceMaskLayer = layer; }
+    // Clamped: the layer count shrank when the store went per-model, and an
+    // out-of-range index would sample past the array rather than fail.
+    void debugForceMaskLayer(int layer) {
+        mForceMaskLayer = layer < 0 ? -1
+                : (layer >= kMaskLayers ? kMaskLayers - 1 : layer);
+    }
 
     // FEATURE ABLATION — the per-feature cost map's only instrument.
     //

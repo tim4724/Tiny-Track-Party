@@ -1031,6 +1031,9 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     mCarGhostAssets.assign(carCount, nullptr);
     mCarGhostIn.assign(carCount, 1); // loadCarAsset adds them; frame 1 removes them
     mMonsterViews.assign(carCount, {});
+    // Cleared before the slots build: claimMaskLayer reads it to see which
+    // layers are still spoken for.
+    mMaskLayerOfSlot.assign(carCount, kMaskLayerGeneric);
     for (uint32_t c = 0; c < carCount; c++) {
         if (!buildCarSlot(tb, c)) return false;
     }
@@ -1132,7 +1135,12 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
             // sits at rest (loadInstancedProp adds them un-posed; the first
             // frame is what takes them out of the scene). One bake serves every
             // car — the truck under them all is the same truck.
-            if (!mMonsterInstances.empty() && mMonsterInstances[0]) {
+            // ...and one bake serves every SCENE, for the same reason it
+            // serves every car: the truck never changes. The layer is
+            // engine-lifetime and releaseScene no longer clears its bit, so
+            // this runs on the first scene of a session and never again.
+            if (!mMonsterInstances.empty() && mMonsterInstances[0]
+                    && !((mMaskLayerBakedBits >> kMaskLayerMonster) & 1u)) {
                 bakeSilhouette(mMonsterInstances[0]->getEntities(),
                         mMonsterInstances[0]->getEntityCount(), mbb.min, mbb.max,
                         kMaskLayerMonster);

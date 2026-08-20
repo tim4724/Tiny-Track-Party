@@ -194,11 +194,20 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
         for (size_t i = 0; i < d.cells.size(); i++) {
             ChaseCam& cam = d.chase[d.cells[i].key()];
             const Car* c = nullptr;
+            int32_t subject = -1;
             for (size_t j = 0; j < d.roster.size(); j++) {
-                if (d.roster[j] == d.cells[i]) { c = cars[j]; break; }
+                if (d.roster[j] == d.cells[i]) {
+                    c = cars[j];
+                    // The slot index, not the roster position it was found at:
+                    // outCars is indexed by slot, and a slot with no car in
+                    // this scene stays zeroed rather than shifting the rest.
+                    if (c) subject = (int32_t) j;
+                    break;
+                }
             }
             if (c) cam.update(c->pose, c->vmax != 0 ? (float) (c->v / c->vmax) : 0, dt);
             TtpViewInput& v = outViews[i];
+            v.car = subject;
             lookAtWorld(v.world, cam.pos, cam.target, c ? v3(c->pose.up) : V3{ 0, 1, 0 });
             // The rig's own authored vertical fov, whatever the layout. A cell
             // is a SMALL SCREEN, not a crop — see the note on buildFrame.
@@ -229,6 +238,7 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
             eye = f.center + f.ovOffset;  // the fitted whole-track iso view, held still
         }
         TtpViewInput& v = outViews[0];
+        v.car = -1;   // an overview follows nobody
         lookAtWorld(v.world, eye, target, V3{ 0, 1, 0 });
         v.fov = OVERVIEW_FOV;
         v.aspect = aspect;

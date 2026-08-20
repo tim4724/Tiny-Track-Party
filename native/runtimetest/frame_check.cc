@@ -645,6 +645,13 @@ void testRaceViews(const GameTrack& track) {
               d.framing.raceFogNear, d.framing.raceFogFar, "cell 0");
     checkView(views[1], wantC, refC.fov, cellAspect, rt::CAM_NEAR, rt::CAM_FAR,
               d.framing.raceFogNear, d.framing.raceFogFar, "cell 1");
+    // WHOSE camera it is, and it is a SLOT index, not the cell's position:
+    // the roster here is deliberately scrambled ({P2, P0, GHOST, P1} against
+    // cells {P0, P2}), so a builder that handed back the cell index would
+    // pass every other check in this function and still point the renderer at
+    // the wrong car. Anything budgeting a per-player resource reads this.
+    check(views[0].car == 1, "cell 0 follows P0, whose SLOT is 1");
+    check(views[1].car == 0, "cell 1 follows P2, whose SLOT is 0");
   }
   check(refA.pos.x != 0 || refA.pos.z != 0, "premise: the chase rig actually moved off the origin");
   check(d.framing.raceFogNear == rt::RACE_FOG_NEAR,
@@ -660,6 +667,7 @@ void testRaceViews(const GameTrack& track) {
     float wantC[16];
     rt::lookAtWorld(wantC, refC.pos, refC.target, rt::v3(c2.pose.up));
     checkMat(ttp_frame_views(h)[0].world, wantC, "swapped cells put cpu-bolt in cell 0");
+    check(ttp_frame_views(h)[0].car == 0, "…and cell 0 now follows P2's slot");
     check(d.chase.size() == 2, "one spring per cell car, keyed by id");
   }
 
@@ -677,6 +685,8 @@ void testRaceViews(const GameTrack& track) {
     rt::lookAtWorld(want, unseeded.pos, unseeded.target, V3{0, 1, 0});
     checkMat(ttp_frame_views(f)[1].world, want, "an unknown cell gets the unseeded rig");
     checkF(ttp_frame_views(f)[1].fov, rt::BASE_FOV, "…at the base FOV");
+    check(ttp_frame_views(f)[1].car == -1, "…and follows nobody");
+    check(ttp_frame_views(f)[0].car == 0, "while the racing cell still names its car");
   }
 
   // …but if NO cell has a car in this scene, fall back to the overview
@@ -690,6 +700,7 @@ void testRaceViews(const GameTrack& track) {
     checkU(f->viewCount, 1, "a cell list with no car in the field falls back to the overview");
     checkF(ttp_frame_views(f)[0].fov, rt::OVERVIEW_FOV, "…which is the overview rig");
     checkF(ttp_frame_views(f)[0].fogNear, m.framing.ovFogNear, "…on the overview fog band");
+    check(ttp_frame_views(f)[0].car == -1, "…and an overview follows nobody");
   }
 }
 

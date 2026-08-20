@@ -92,6 +92,11 @@ material {
         // How many NEAR-car masked entries are live (the hybrid shadow LOD:
         // cars near an active camera keep the true baked silhouette; far cars
         // ride the carShadow texture tap below). Zero disables the loop.
+        // FOUR is the whole budget, spent round-robin over the active views
+        // (TtpRenderer.h's kMaxMaskedDeckDecals): solo dresses its four
+        // nearest, a four-way split dresses each player's own car. Eight was
+        // measured at ~5 ms on the 4-player frame — read that comment before
+        // raising this.
         { type : int, name : maskCount },
         // How many profile entries are live. Zero makes the loop free, which
         // is what the ablation switch uses.
@@ -407,7 +412,7 @@ fragment {
     // OVER the carShadow tap — a mix replaces, and in the LOD crossfade band
     // a car carries BOTH representations with complementary alphas, so the
     // masked one must land last. See maskRect for why this loop is only ever
-    // 0-4 entries now.
+    // 0-4 entries: the budget is four, handed out per view.
     vec3 deckMasked(vec3 base, highp float sLocal, float lat) {
         int n = min(materialParams.maskCount, 4);
         highp vec3 uwp = getUserWorldPosition();

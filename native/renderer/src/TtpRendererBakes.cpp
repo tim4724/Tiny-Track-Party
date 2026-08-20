@@ -10,8 +10,9 @@
 // The car's ground shadow, shaped like the CAR. SceneRenderer._bakeCarShadow
 // puts an orthographic camera over the model, renders a flat white mask on
 // transparent, and reads it back for the blur; the same picture here comes from
-// an offscreen RenderTarget rendered with renderStandaloneView (no readback on
-// this side, so the blur is a second render pass instead).
+// an offscreen RenderTarget rendered with renderStandaloneView — the blur is a
+// second render pass rather than a CPU convolution, and the only readback is
+// the small coverage probe that decides whether the bake landed at all.
 //
 // The framing is the JS's: footprint × SHADOW_OVERSCAN, so the silhouette lands
 // at footprint scale inside a quad with room for the penumbra tail. The camera
@@ -68,7 +69,11 @@ void TtpRenderer::bakeSilhouette(const utils::Entity* entities, size_t count,
     Texture* tex = Texture::Builder()
             .width((uint32_t) TW).height((uint32_t) TH).levels(1)
             .format(Texture::InternalFormat::RGBA8)
-            .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
+            // BLIT_SRC: the coverage probe below reads this back, which
+            // requires (and in a future Filament will assert) that COLOR0 was
+            // created blit-readable — the ESM bake's note applies here too.
+            .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE
+                    | Texture::Usage::BLIT_SRC)
             .build(*mEngine);
     if (!tex) return;
     RenderTarget* rt = RenderTarget::Builder()
@@ -97,12 +102,67 @@ void TtpRenderer::bakeSilhouette(const utils::Entity* entities, size_t count,
     mRenderer->setClearOptions(co);
     mRenderer->renderStandaloneView(view);
     mRenderer->setClearOptions(prev);
+    // DID ANY COVERAGE ACTUALLY LAND? This starve is silent by construction:
+    // an EMPTY layer whose baked bit is set draws nothing at all under that
+    // car, while a CLEAR bit draws a plausible generic oval — so after the
+    // fact no screenshot gate and no success log can tell the three states
+    // apart. It is not hypothetical either: the R8 experiment recorded in
+    // ensureDecalMaskArray put every car into exactly this state on the
+    // PowerVR driver while the bake logged success.
+    //
+    // One central patch is the whole test. The ortho camera frames the model's
+    // OWN aabb with 1.45 overscan, so the body covers the middle of the target
+    // for every car in the kit; anything that renders nothing there rendered
+    // nothing anywhere.
+    bool covered = false;
+    {
+        struct CoverRead { std::vector<uint8_t> px; bool done = false; };
+        constexpr int CW = 16;
+        auto* rd = new CoverRead{
+                std::vector<uint8_t>((size_t) CW * CW * 4, 0), false };
+        Texture::PixelBufferDescriptor pbd(rd->px.data(), rd->px.size(),
+                Texture::Format::RGBA, Texture::Type::UBYTE,
+                [](void*, size_t, void* user) {
+                    static_cast<CoverRead*>(user)->done = true;
+                }, rd);
+        mRenderer->readPixels(rt, (uint32_t) ((TW - CW) / 2),
+                (uint32_t) ((TH - CW) / 2), CW, CW, std::move(pbd));
+        // The ESM readback's pump, for its reasons: the GL backend completes
+        // the copy on a fence it checks a tick after the flush, and Metal's
+        // completion handler can land just as a wait returns.
+        for (int t = 0; t < 8 && !rd->done; t++) mEngine->flushAndWait();
+        if (rd->done) {
+            // Coverage rides ALPHA (the sampler's note) — opaque glTF
+            // materials write 1.0 there and the clear leaves 0.
+            for (size_t i = 3; i < rd->px.size(); i += 4) {
+                if (rd->px[i] > 8) { covered = true; break; }
+            }
+            delete rd;
+        } else {
+            // The read never landed, so the probe knows nothing. Trust the
+            // bake over the probe: a false EMPTY would cost every car its
+            // silhouette, which is worse than the starve this is hunting.
+            covered = true;
+        }
+    }
     for (size_t i = 0; i < count; i++) scene->remove(entities[i]);
     mEngine->destroy(view);
     mEngine->destroy(rt);
+    // The camera and scene go back BEFORE the coverage verdict, not after: an
+    // early return between the two leaks exactly the case the probe exists to
+    // catch, which would make a driver that renders nothing also a slow leak.
     mEngine->destroyCameraComponent(camEnt);
     utils::EntityManager::get().destroy(camEnt);
     mEngine->destroy(scene);
+    if (!covered) {
+        // Bit left CLEAR on purpose: the generic oval is the honest fallback,
+        // and a reload (or the next scene's rebake) is the cure.
+        utils::slog.w << "bakeSilhouette layer " << maskLayer
+                << " rendered EMPTY — bit left clear, this shape falls back to"
+                   " the generic oval" << utils::io::endl;
+        mEngine->destroy(tex);
+        return;
+    }
 
     // Blur it ONCE, here, instead of rebuilding the penumbra with a 25-tap
     // gaussian in every fragment of every frame (see vblur.mat) — straight

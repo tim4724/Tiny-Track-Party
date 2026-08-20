@@ -959,10 +959,15 @@ void TtpRenderer::releaseScene() {
     for (auto& m : mRockets) destroyMesh(m);
     for (auto& m : mRocketFlames) destroyMesh(m);
     for (auto*& a : mCarAssets) dropAsset(a);
-    // The decalMask layers die with the roster that produced them: they keep
-    // their stale images but lose their baked bits, so the next scene's shadow
-    // decals ride the generic layer until they rebake.
-    mMaskLayerBakedBits &= (uint16_t) (1u << kMaskLayerGeneric);
+    // THE BAKED BITS SURVIVE THE SCENE. They used to die with the roster,
+    // because a layer belonged to a grid SLOT and the next race could put a
+    // different model in it. Layers belong to a MODEL now and are keyed by the
+    // GLB's own bytes, so a bake is a fact about the kit rather than about
+    // this race: claimMaskLayer re-checks the key and rebakes only what
+    // genuinely changed. A cup's four races therefore pay the silhouette
+    // bakes once — two render passes and a flushAndWait each — instead of
+    // once per race, and no car spends the opening of race 2 on the generic
+    // oval waiting for its rebake.
     for (auto*& a : mCarGhostAssets) dropAsset(a);
     for (auto*& a : mSceneryAssets) dropAsset(a);
     for (auto*& a : mPropAssets) dropAsset(a);

@@ -223,22 +223,50 @@ same expression gave a strip and a disc visibly different weights. The
 rectangle's box height is **derived** from that stroke rather than frozen, or a
 narrower strip clips its outer columns.
 
-The car's contact shadow is a **HYBRID, by distance**: the nearest
-`kMaxMaskedDeckDecals` (4) cars within `kShadowLodFar` of an active camera draw
-true baked-silhouette MASKED stamps (the per-fragment uniform loop), and
-everyone else rides **one bilinear tap of the carShadow layer** — a small
-track-space R8 texture the renderer CPU-rasterizes per frame (the rubber
-layer's idiom — same (s, lat) mapping, same lat span, so vroad's tap reuses the
-rubber uv) and re-uploads WHOLE, as one `setImage`, into a **ping-pong pair**
-so the upload never respecifies the texture the driver is reading
-(`uploadCarShadow` has the argument; the skid layer's stall history is why).
-Between the bands the two representations crossfade with complementary alphas,
-statelessly, so it cannot pop; and the near pick is a RANK gate, so the masked
-cap can only downgrade a shadow to the texture blob, never delete it. The
-texture path is what retired the old ALL-masked loop's cost — ~5 ms of the
-realistic 720p frame under a pack, after every arithmetic-level cut inside it
-measured zero — and the masked near band is what the texture layer's
-~8 texels/u cannot carry: the silhouette's car-shape under your own car.
+The car's contact shadow is a **HYBRID, by distance**: `kMaxMaskedDeckDecals`
+(4) cars within `kShadowLodFar` of an active camera draw true baked-silhouette
+MASKED stamps (the per-fragment uniform loop), and everyone else rides **one
+bilinear tap of the carShadow layer** — a small track-space R8 texture the
+renderer CPU-rasterizes per frame (the rubber layer's idiom — same (s, lat)
+mapping, same lat span, so vroad's tap reuses the rubber uv) and re-uploads
+WHOLE, as one `setImage`, into a **ping-pong pair** so the upload never
+respecifies the texture the driver is reading (`uploadCarShadow` has the
+argument; the skid layer's stall history is why). Between the bands the two
+representations crossfade with complementary alphas, statelessly, so it cannot
+pop; and the near pick is a RANK gate, so the masked cap can only downgrade a
+shadow to the texture blob, never delete it. The texture path is what retired
+the old ALL-masked loop's cost — ~5 ms of the realistic 720p frame under a
+pack, after every arithmetic-level cut inside it measured zero — and the masked
+near band is what the texture layer's ~8 texels/u cannot carry: the
+silhouette's car-shape under your own car.
+
+**WHICH four is a PER-VIEW round robin, and that is a correctness rule, not a
+tuning knob.** Each camera takes its first choice before any camera takes its
+second, so round one is every player's own car. One global pool ranked by
+distance to the nearest camera is starvable the moment the screen splits: four
+cameras competing for four slots have no headroom, and a bot drafting any
+player sits closer to that player's eye than the player's own car does at
+`CHASE_DIST` — so it took the slot and some *other* player's own car fell to
+the blob, with no crossfade, because the rank gate jumps `lodT` straight to 1.
+Draining one view's whole allowance before starting the next has the same
+disease with a different victim (cameras 0 and 1 eat everything). The invariant
+worth keeping: **no camera may be starved by another's picks.**
+
+**Eight masked entries are NOT affordable in a split, and the ablation that
+suggests otherwise is a trap.** Ablating the whole decal channel at 4 players /
+720p saves only ~0.55 ms, which reads like room to dress the whole field.
+Measured instead (2026-08-20, three interleaved reps, no overlap between arms):
+raising the cap to 8 cost **+4.96 ms p50** (30.98 -> 35.93, fps 28 -> 25, and
+it crosses a vsync slot so the rate steps rather than slides), while the same
+build at 1 player measured **zero** against [4] (17.47 vs 17.28). So the cost
+is neither linear in live entries nor about DECLARED size — it is the per-chunk
+**bounds box**: four masked cars in a split sit in four separate chunks with a
+tight box each, while eight put two in one chunk with a union spanning both, so
+the fragments that ENTER the loop multiply as well as the iterations each then
+runs. Raising the cap needs a tighter per-entry reject first, not a bigger
+budget. (Untested and the only honest open question: whether it fits at the
+real 4-player operating point of 540p + hz30, where the budget doubles and the
+fill is ~56% — do not assume it from the 720p number.)
 
 **Why painting in curvilinear (s, lat) is safe NOW when it was the original
 sin:** the old objection — track space bends the stamp around corners, and the
@@ -258,6 +286,29 @@ it, it needs no per-scene readback, and being symmetric it cannot be mirrored
 by a handedness mistake. `bakeSilhouette` RUNS on the shipping blob: it feeds
 the NEAR cars' masked stamps, where the true car-shape does read. **An
 airborne-anchor theory is a dead end already walked.**
+
+**The silhouette store is keyed by MODEL, and a bake outlives the scene.** A
+layer belongs to the GLB's bytes (`claimMaskLayer` hashes them), not to a grid
+slot: the field is eight cars over the kit's four models, so a per-slot store
+baked the same outline twice and spent a layer on each copy. Two players in one
+model at different liveries share correctly because coverage rides ALPHA, which
+carries no colour. Since a bake is then a fact about the kit rather than about
+this race, `releaseScene` keeps the baked bits and a cup's races pay the bakes
+once — which also deletes the window where a re-dressed slot showed the generic
+oval until its rebake landed. `kMaskLayerModels` re-types a count `protocol.js`
+owns, so `tests/mask-layer-models.test.js` holds it to `CAR_MODELS`; a fifth
+model added without raising it would fall back to the oval in silence.
+
+**A bake that renders nothing now SAYS so.** Setting the baked bit
+unconditionally made the one failure mode invisible: an empty layer with its
+bit set draws no shadow at all, and a CLEAR bit draws a plausible oval, so
+neither a screenshot gate nor a success log separates the three states. The
+R8 experiment in `ensureDecalMaskArray` put every car there on the PowerVR
+driver while logging success. `bakeSilhouette` reads back a central patch of
+its own target — the ortho camera frames the model's aabb with overscan, so the
+body always covers the middle — and leaves the bit clear when no coverage
+landed. **When a decal channel draws nothing, suspect the TEXTURE CONTENT
+first**: stage tints cannot reach inside a sample.
 
 **`roadHasMaskLoop()` / `roadHasCarShadow()` are INDEPENDENT capability
 probes on the served blob, not a shipped-vs-fallback switch**: the current
