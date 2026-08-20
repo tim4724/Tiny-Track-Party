@@ -36,7 +36,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
-import { GALLERY_SCENARIOS } from '../public/shared/galleryScenarios.js';
+import { CAPTURED_SCENARIOS } from '../public/shared/galleryScenarios.js';
 import { gitSha, mergeShots, shotDir, toWebp } from './lib/shots.mjs';
 import { shotTestMethod } from '../shells/tvos/scripts/gen-scenarios.mjs';
 import { sh, resolveDestination, resolveDevicectlId, signingArgs, assertAwake } from './lib/tvos-device.mjs';
@@ -59,7 +59,7 @@ const only = typeof args.only === 'string' ? new Set(args.only.split(',')) : nul
 // would reach xcodebuild as a selector for a test that does not exist, whose
 // error names Xcode rather than the flag you got wrong — so it is caught here.
 if (only) {
-  const known = new Set(GALLERY_SCENARIOS.map((s) => s.id));
+  const known = new Set(CAPTURED_SCENARIOS.map((s) => s.id));
   const unknown = [...only].filter((id) => !known.has(id));
   if (unknown.length) {
     throw new Error(
@@ -67,7 +67,7 @@ if (only) {
       `  known: ${[...known].join(', ')}`);
   }
 }
-const scenarios = GALLERY_SCENARIOS.filter((s) => !only || only.has(s.id));
+const scenarios = CAPTURED_SCENARIOS.filter((s) => !only || only.has(s.id));
 
 
 

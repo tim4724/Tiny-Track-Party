@@ -46,6 +46,7 @@ const ctx = async () => (_ctx ??= await (async () => {
   const manifest = sh.readManifest(ROOT);
   return {
     GALLERY_SCENARIOS: g.GALLERY_SCENARIOS,
+    CAPTURED_SCENARIOS: g.CAPTURED_SCENARIOS,
     SHOT_PLATFORMS: g.SHOT_PLATFORMS,
     manifest,
     captured: manifest.shots.length > 0
@@ -91,15 +92,45 @@ test('every manifest entry names a real file of the size it claims', async () =>
   }
 });
 
-test('every scenario has a web reference shot', async () => {
-  const { GALLERY_SCENARIOS, manifest, captured } = await ctx();
+test('every CAPTURED scenario has a web reference shot', async () => {
+  const { CAPTURED_SCENARIOS, manifest, captured } = await ctx();
   // Nothing has been captured yet — the coverage claims below would be vacuous.
   if (!captured) return;
   // The web column is the reference the other two are read against, so a gap
   // there makes the whole card meaningless rather than half-full.
   const web = new Set(manifest.shots.filter((s) => s.platform === 'web').map((s) => s.scenario));
-  const missing = GALLERY_SCENARIOS.filter((s) => !web.has(s.id)).map((s) => s.id);
+  const missing = CAPTURED_SCENARIOS.filter((s) => !web.has(s.id)).map((s) => s.id);
   assert.deepEqual(missing, [], `no web shot for: ${missing.join(', ')} — run npm run shots:web`);
+});
+
+test('a liveOnly scenario is on the live page and out of every camera', async () => {
+  // THE FLAG HAS TO KEEP WORKING, and the way it stops is silent: a capture
+  // script re-imports the full table, starts shooting an instrument, and the
+  // coverage gate above then DEMANDS the shot it just took. So what is pinned is
+  // both halves — the derivation, and that every consumer with a camera reads the
+  // derived list rather than the table.
+  const { GALLERY_SCENARIOS, CAPTURED_SCENARIOS } = await ctx();
+  const live = GALLERY_SCENARIOS.filter((s) => s.liveOnly).map((s) => s.id);
+  assert.ok(live.length, 'no liveOnly scenario — delete this gate rather than leaving it vacuous');
+  assert.deepEqual(
+    CAPTURED_SCENARIOS.filter((s) => s.liveOnly).map((s) => s.id), [],
+    'CAPTURED_SCENARIOS is no longer filtering liveOnly out');
+  assert.equal(CAPTURED_SCENARIOS.length, GALLERY_SCENARIOS.length - live.length);
+
+  for (const f of ['scripts/capture-shots.mjs', 'scripts/capture-shots-tvos.mjs',
+                   'scripts/capture-shots-androidtv.mjs', 'public/gallery-shots.js']) {
+    const src = readFileSync(path.join(ROOT, f), 'utf8');
+    assert.doesNotMatch(src, /\bGALLERY_SCENARIOS\b/,
+      `${f} reads the full table — it would photograph the instruments, and the web`
+      + '-reference gate would then require a shot for each. Import CAPTURED_SCENARIOS.');
+    assert.match(src, /\bCAPTURED_SCENARIOS\b/, `${f} reads neither list any more`);
+  }
+
+  // …and the live gallery reads the FULL table, which is the other half of the
+  // flag meaning anything: an instrument is still a card you can look at.
+  const live_src = readFileSync(path.join(ROOT, 'public/gallery-display.js'), 'utf8');
+  assert.match(live_src, /\bGALLERY_SCENARIOS\b/,
+    'gallery-display.js stopped reading the full table — the liveOnly cards would vanish');
 });
 
 test('no shot names a scenario that no longer exists', async () => {

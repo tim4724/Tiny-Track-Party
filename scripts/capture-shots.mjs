@@ -32,7 +32,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
-import { GALLERY_SCENARIOS, scenarioQuery } from '../public/shared/galleryScenarios.js';
+import { CAPTURED_SCENARIOS, scenarioQuery } from '../public/shared/galleryScenarios.js';
 import { gitSha, mergeShots, shotDir } from './lib/shots.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -61,7 +61,7 @@ const PLAYERS = parseInt(args.players, 10) || 4;
 const SETTLE_MS = parseInt(args.settle, 10) || 2500;
 
 const only = typeof args.only === 'string' ? new Set(args.only.split(',')) : null;
-const scenarios = GALLERY_SCENARIOS.filter((s) => !only || only.has(s.id));
+const scenarios = CAPTURED_SCENARIOS.filter((s) => !only || only.has(s.id));
 
 function waitForServer(port, timeoutMs = 15000) {
   const deadline = Date.now() + timeoutMs;

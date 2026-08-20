@@ -22,7 +22,7 @@
 // photograph of a build nobody is running. Each card carries the short SHA it was
 // captured at, and says so plainly when that is not the SHA being served.
 
-import { GALLERY_SCENARIOS, SHOT_PLATFORMS } from '/shared/galleryScenarios.js';
+import { CAPTURED_SCENARIOS, SHOT_PLATFORMS } from '/shared/galleryScenarios.js';
 
 const SHOTS_BASE = '/assets/shots';
 
@@ -186,18 +186,18 @@ function render() {
   // `.scenario-strip { --row-cols }` in gallery.css — a different variable on a
   // different class. It had never done anything.
   const strip = el('div', 'rail');
-  for (const scenario of GALLERY_SCENARIOS) strip.appendChild(makeCard(scenario));
+  for (const scenario of CAPTURED_SCENARIOS) strip.appendChild(makeCard(scenario));
   host.appendChild(strip);
 
   // Counted for BOTH columns, because either one can now be a TV. Said only when
   // there is a gap: a complete pair should not carry a sentence about absence.
   const captured = new Set(manifest.shots.map((s) => `${s.scenario}:${s.platform}`));
   const gaps = [state.left, state.right]
-    .map((p) => [p, GALLERY_SCENARIOS.filter((s) => !captured.has(`${s.id}:${p}`)).length])
+    .map((p) => [p, CAPTURED_SCENARIOS.filter((s) => !captured.has(`${s.id}:${p}`)).length])
     .filter(([, n]) => n > 0)
     .map(([p, n]) => `${n} missing on ${PLATFORM_LABEL[p] || p}`);
   document.getElementById('legend').textContent =
-    `${GALLERY_SCENARIOS.length} screens · ${manifest.shots.length} shots on file` +
+    `${CAPTURED_SCENARIOS.length} screens · ${manifest.shots.length} shots on file` +
     (gaps.length ? ` · ${gaps.join(' · ')}` : '') +
     ' · frozen captures, not live pages (a TV screen only exists as a photograph)';
 }

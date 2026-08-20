@@ -20,7 +20,7 @@ import os from 'node:os';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-import { GALLERY_SCENARIOS } from '../public/shared/galleryScenarios.js';
+import { CAPTURED_SCENARIOS } from '../public/shared/galleryScenarios.js';
 import { gitSha, mergeShots, shotDir, toWebp } from './lib/shots.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -57,14 +57,14 @@ const only = typeof args.only === 'string' ? new Set(args.only.split(',')) : nul
 // where the message can name the flag rather than leaving adb to launch a scenario
 // the app will call unsupported.
 if (only) {
-  const known = new Set(GALLERY_SCENARIOS.map((s) => s.id));
+  const known = new Set(CAPTURED_SCENARIOS.map((s) => s.id));
   const unknown = [...only].filter((id) => !known.has(id));
   if (unknown.length) {
     throw new Error(
       `--only names no such scenario: ${unknown.join(', ')}\n  known: ${[...known].join(', ')}`);
   }
 }
-const scenarios = GALLERY_SCENARIOS.filter((s) => !only || only.has(s.id));
+const scenarios = CAPTURED_SCENARIOS.filter((s) => !only || only.has(s.id));
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
