@@ -245,6 +245,16 @@ for a reason that has nothing to do with what it is measuring). It prints each
 arm's median beside a paired reading; **the two disagreeing means the machine was
 busy**, not that a feature is free.
 
+It also **counts what each arm issues** — draws, program switches, texture binds,
+buffer uploads — off a patched `WebGL2RenderingContext.prototype`, and that count
+is not a browser fact. The command stream is decided in shared C++ (the scene,
+the per-cell cull, Filament's sort and its automatic instancing) before any
+backend sees it, so the backends differ in what a command COSTS and never in how
+many there are: **the count transfers to the TV shells, the milliseconds do
+not.** It is there because a split-screen frame on a weak box is bound by
+submission rather than by pixels, and a millisecond column alone cannot tell a
+few expensive objects from very many cheap ones.
+
 **Three ways of getting this number that do not work:** Filament's
 `getFrameInfoHistory()` (on emscripten the timer-query path is compiled out, so it
 reports CPU submit time wearing a GPU label); a `fenceSync`/`clientWaitSync` poll

@@ -15,10 +15,22 @@
 //
 // ONE PER SIDE, NOT ONE. The wheels are MIRRORED: the pale hubcap is on the
 // outer face only, so a left wheel standing in for a right one turns its blank
-// face outwards. Folding all four into one is the obvious move, it measures
-// better still, and it is wrong — the thumbnails lose their hubcaps and so do
-// the cars. Left and right therefore keep a mesh each, and the gate below is
-// what makes that a rule rather than a thing someone remembered.
+// face outwards. Folding all four into one is the obvious move, and it is
+// wrong — the thumbnails lose their hubcaps and so do the cars. Left and right
+// therefore keep a mesh each, and the gate below is what makes that a rule
+// rather than a thing someone remembered.
+//
+// AND FOLDING ACROSS THE MIRROR BUYS NO FRAMES — built, measured on a Google TV
+// Streamer, and thrown away (2026-08-20). Baking a reflection into the losing
+// side's nodes keeps the hubcaps and does fold the meshes, but the draw count
+// does not move and neither does the frame: Filament derives
+// `reversedWindingOrder` from the transform determinant (Scene.cpp) into
+// `rasterState`, and its automatic instancing compares rasterState — so a
+// MIRRORED instance can never batch with its unmirrored twin, and the four
+// wheels stay two runs exactly as they are now. Device A/B was 22.0 vs 22.0 ms
+// pinned at a quarter scale and 32.7 vs 32.7 at 720p. What is left is file
+// size, and re-baking the thumbnails gives ~40% of that straight back (PNG
+// compresses the new edge antialiasing worse). Do not re-derive this.
 //
 // WHAT THE GATE PROVES. Two wheels may share a mesh only when one is the other
 // turned about its own axle: same vertex and index counts, same material, and an

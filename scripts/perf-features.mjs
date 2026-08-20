@@ -1,9 +1,25 @@
-// Per-feature GPU cost map for the display renderer.
+// Per-feature GPU cost map for the display renderer, and the COMMAND COUNT
+// behind it.
 //
 // Drives one real display page and ablates one group of renderables at a time
 // (ttp_display_debug_features / TTP_FEAT_*), reading the GPU timer the perf HUD
 // already wraps around ttp_display_frame. What comes out is "what does the sky
 // cost", per cell count and per resolution.
+//
+// IT ALSO COUNTS WHAT THE FRAME ISSUES — draws, instanced draws, program
+// switches, texture binds and buffer uploads, per arm — because on the TV
+// shells the milliseconds and the commands are not the same question. The
+// Android box's split-screen frame is bound by command submission on Filament's
+// backend thread, so a group's cost there tracks its DRAW COUNT and not its
+// pixels, and a millisecond column alone cannot tell "eight expensive objects"
+// from "eight hundred cheap ones".
+//
+// WHY THE COUNT IS TAKEN IN A BROWSER AND STILL MEANS SOMETHING ON A TELEVISION.
+// The command stream is decided in shared C++ — the scene, the per-cell culling,
+// Filament's sort and its automatic instancing — before any backend sees it. The
+// backends differ in what a command COSTS, never in how many there are. So the
+// count transfers to the Apple TV and the Android box even though the timings do
+// not, and it is the one number that can be had without a device.
 //
 // WHY IT IS SHAPED LIKE THIS — every line is a trap already paid for once here
 // (see public/display/CLAUDE.md, "Measuring frame cost"):
@@ -81,6 +97,47 @@ const main = async () => {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
   await ctx.addInitScript(() => {
     Object.defineProperty(navigator, 'webdriver', { get: () => false });
+    // THE COMMAND COUNTER, patched onto the prototype BEFORE the page runs, so
+    // it catches Filament's context whenever and however that gets created —
+    // there is no handle to the backend's context from out here.
+    //
+    // Monotonic, never reset: an arm reads a snapshot either side of its own
+    // bursts (see `measure`), which is what keeps the conditioning pass and the
+    // drain tail out of the number.
+    const gl = (window.__glCount = {
+      draws: 0, instanced: 0, instances: 0, programs: 0, textures: 0, uploads: 0,
+      // Draws that carried more than one object, i.e. where Filament's
+      // automatic instancing actually fired. `instances - draws` says how many
+      // objects were saved; this says whether ANY run was found at all, which is
+      // the difference between "the geometry does not match" and "matching
+      // draws were not adjacent after the sort".
+      merged: 0,
+    });
+    const proto = WebGL2RenderingContext.prototype;
+    const wrap = (name, bump) => {
+      const orig = proto[name];
+      if (!orig) return;                       // not in this browser's WebGL2
+      proto[name] = function (...args) { bump(args); return orig.apply(this, args); };
+    };
+    // `instances` counts the objects DRAWN, `draws` the calls it took. The two
+    // diverging is Filament's automatic instancing working: fifty trees that
+    // batch are one draw and fifty instances.
+    wrap('drawElements', () => { gl.draws++; gl.instances++; });
+    wrap('drawArrays', () => { gl.draws++; gl.instances++; });
+    wrap('drawRangeElements', () => { gl.draws++; gl.instances++; });
+    wrap('drawElementsInstanced', (a) => {
+      gl.draws++; gl.instanced++; gl.instances += a[4]; if (a[4] > 1) gl.merged++;
+    });
+    wrap('drawArraysInstanced', (a) => {
+      gl.draws++; gl.instanced++; gl.instances += a[3]; if (a[3] > 1) gl.merged++;
+    });
+    // The state changes that decide what a draw COSTS a driver, and the uploads,
+    // which are the one per-frame cost that no draw count would show (the car
+    // shadow layer re-rasterises and re-uploads a whole texture level a frame).
+    wrap('useProgram', () => { gl.programs++; });
+    wrap('bindTexture', () => { gl.textures++; });
+    wrap('bufferSubData', () => { gl.uploads++; });
+    wrap('texSubImage2D', () => { gl.uploads++; });
     // Boot itself needs frames — the scene promise is not settled by fetches
     // alone — and under the gate nothing runs unless something pumps. So pump
     // from the moment the gate exists, and stop once the sweep takes over.
@@ -205,20 +262,29 @@ const main = async () => {
     await new Promise((res) => setTimeout(res, cfg.drain));
     window.__scene.display.debugFeatures(m);
     window.__perf.reset();   // the previous arm's frames are not this one's
+    // SNAPSHOT INSIDE THE ARM, and the tail is deliberately outside it: those
+    // frames exist to drain the GPU timer's results and they draw this arm's
+    // picture too, so counting them would inflate every arm by the same 20
+    // frames and quietly change every per-frame figure.
+    const before = { ...window.__glCount };
     for (let b = 0; b < cfg.bursts; b++) {
       for (let i = 0; i < cfg.frames; i++) window.__pump(cfg.step);
       await new Promise((res) => setTimeout(res, cfg.drain));
     }
+    const after = { ...window.__glCount };
     for (let i = 0; i < cfg.tail; i++) {
       window.__pump(cfg.step);                       // drains the last burst's results
       await new Promise((res) => setTimeout(res, 8));
     }
-    return window.__perf.sample();
+    const drawnFrames = cfg.bursts * cfg.frames;
+    const gl = {};
+    for (const k of Object.keys(after)) gl[k] = (after[k] - before[k]) / drawnFrames;
+    return { ...window.__perf.sample(), gl };
   }, [mask, condition, { bursts: BURSTS, frames: BURST_FRAMES, step: STEP_MS,
                          drain: DRAIN_MS, tail: TAIL_FRAMES }]);
 
   const record = (name, s) =>
-      samples.get(name).push({ gpu: s.gpu.p50, cpu: s.cpu.p50, n: s.gpu.n });
+      samples.get(name).push({ gpu: s.gpu.p50, cpu: s.cpu.p50, n: s.gpu.n, gl: s.gl });
   const ALL = arms[0];
   for (let r = 0; r < ROUNDS; r++) {
     // ROTATE the order every round, so no arm always follows the same one.
@@ -240,12 +306,15 @@ const main = async () => {
     window.__scene.display.debugFeatures(m.FEAT.ALL);
   });
 
+  const GL_KEYS = ['draws', 'instanced', 'instances', 'programs', 'textures', 'uploads', 'merged'];
   const rows = arms.map((a) => {
     const xs = samples.get(a.name);
     return {
       arm: a.name,
       gpuMs: median(xs.map((x) => x.gpu)),
       cpuMs: median(xs.map((x) => x.cpu)),
+      gl: Object.fromEntries(
+          GL_KEYS.map((k) => [k, median(xs.map((x) => x.gl && x.gl[k]))])),
       // The paired saving against the reference beside it — this, not the
       // difference of two medians, is what the tables below quote.
       saved: median(deltas.get(a.name)),
@@ -264,18 +333,39 @@ const main = async () => {
   const ms = (v) => (v == null ? '   —  ' : v.toFixed(3));
   console.log(`\nfull frame ${ms(base)} ms   empty-scene floor ${ms(floor)} ms`
       + `   → ${drawn.toFixed(3)} ms of drawing`);
-  console.log('\ngroup       marginal (drop)      standalone (alone)');
+  // THE COMMAND COUNT OF THE FULL FRAME, which is what the TV shells are bound
+  // by. Per cell as well as per frame: every one of these is issued once per
+  // split-screen cell, and that multiplication is the whole of why four players
+  // costs four times one.
+  const g = by('all').gl;
+  const cells = probe.cells || 1;
+  const per = (v) => (v == null ? '  — ' : v.toFixed(0));
+  console.log(`\nper frame: ${per(g.draws)} draws (${per(g.instanced)} instanced,`
+      + ` ${per(g.instances)} objects, ${per(g.merged)} of the draws batched)`
+      + `   ${per(g.programs)} program switches`
+      + `   ${per(g.textures)} texture binds   ${per(g.uploads)} buffer uploads`);
+  console.log(`per cell:  ${per(g.draws / cells)} draws`
+      + `   ${per(g.instances / cells)} objects   (${cells} cell${cells === 1 ? '' : 's'})`);
+  console.log('\ngroup       marginal (drop)      standalone (alone)        draws');
   let sum = 0;
   for (const n of ARM_NAMES) {
     if (!by(`-${n.toLowerCase()}`) || !by(`only ${n.toLowerCase()}`)) continue;
     const marg = base - by(`-${n.toLowerCase()}`).gpuMs;
     const alone = by(`only ${n.toLowerCase()}`).gpuMs - floor;
+    // The group's draws are what DROPPING it removes, on the same paired
+    // reasoning the milliseconds use — except this one is exact. A hidden group
+    // issues no commands, and nothing behind it takes any over.
+    const dropped = g.draws - by(`-${n.toLowerCase()}`).gl.draws;
+    const objs = g.instances - by(`-${n.toLowerCase()}`).gl.instances;
     if (marg != null) sum += marg;
     console.log(`${n.toLowerCase().padEnd(10)} `
         + `${marg == null ? '   —  ' : marg.toFixed(3)} ms `
         + `${marg == null ? '      ' : (100 * marg / drawn).toFixed(1).padStart(5) + '%'}`
         + `      ${alone == null ? '   —  ' : alone.toFixed(3)} ms `
-        + `${alone == null ? '      ' : (100 * alone / drawn).toFixed(1).padStart(5) + '%'}`);
+        + `${alone == null ? '      ' : (100 * alone / drawn).toFixed(1).padStart(5) + '%'}`
+        + `     ${per(dropped).padStart(4)} `
+        + `${dropped == null ? '     ' : (100 * dropped / g.draws).toFixed(0).padStart(3) + '%'}`
+        + `  (${per(objs)} obj)`);
   }
   console.log('\nroad shader channel   marginal (drop)');
   for (const n of [...ROAD_CHANNELS, 'road channels']) {
@@ -291,7 +381,9 @@ const main = async () => {
   console.log('\nraw arms (absolute median, and the paired saving vs `all`):');
   for (const row of rows) {
     console.log(`  ${row.arm.padEnd(14)} ${ms(row.gpuMs)} ms   saved ${ms(row.saved)} ms`
-        + `   cpu ${ms(row.cpuMs)} ms   n=${row.n}`);
+        + `   cpu ${ms(row.cpuMs)} ms   n=${row.n}`
+        + `   draws ${per(row.gl.draws).padStart(4)}`
+        + `   batched ${per(row.gl.merged).padStart(3)}`);
   }
 
   if (OUT) {
