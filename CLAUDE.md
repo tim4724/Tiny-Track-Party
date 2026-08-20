@@ -30,6 +30,8 @@ npm run check:artifact            # Is the checked-in wasm current?
 npm run perf:race -- --platform web|androidtv|tvos [--players 1|2|4] [--track id]
                                   # THE BENCH: one live race, autopiloted players at the
                                   # back of a full grid, one readout shape on all three
+npm run probe:cost                # what a SIM frame costs in CPU us. The bench above
+                                  # cannot see it: the sim is ~10us inside ~8000.
 npm start / npm run dev           # Serve (with --watch)
 native/scripts/build-runtime-web.sh   # Rebuild the engine wasm → public/display/engine/native/
 npm run build:tvos [device|simulator] # The Apple TV app: engine, bundle and project included

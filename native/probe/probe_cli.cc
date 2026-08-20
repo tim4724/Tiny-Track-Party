@@ -23,6 +23,7 @@
 //   probe_cli laptime            per-track lap time, one benchmark car
 //   probe_cli matrix             car x track steady-state lap matrix + summary
 //   probe_cli packed             all four cars together, every grid rotation
+//   probe_cli cost               CPU cost of a sim frame (see runCost)
 //   probe_cli <mode> --track=ID  restrict to one track (quick iteration)
 //   probe_cli <mode> --seed=N    item-roll RNG seed (default 1)
 //   probe_cli <mode> --nobrake   force b=0: humans hold flat-out, so this is the
@@ -37,6 +38,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <ctime>
 #include <memory>
 #include <string>
 #include <vector>
@@ -354,11 +356,93 @@ int runPacked(const std::string& only, uint32_t seed, bool noBrake) {
   return 0;
 }
 
+// ---- cost --------------------------------------------------------------------
+// What a sim frame COSTS, in CPU microseconds. Nothing else in the tree can see
+// this: `perf:race` measures the RENDERED frame, where the whole sim is ~10 us
+// inside ~8000, three orders of magnitude under the noise, and the balance modes
+// above report seconds of race time rather than seconds of CPU.
+//
+// So this exists to answer "what did that cost?" for a sim change — the
+// collision passes are the worked example, at about 0.8 us each.
+//
+// It measures CPU time (std::clock), not wall-clock, because this tree is worked
+// in many worktrees at once and a wall-clock reading taken while another build
+// runs is noise. Min of three, for the same reason.
+//
+// The AI and the step are timed SEPARATELY: both run every frame in a real race,
+// but they are different code owned by different changes, and a single total
+// hides which one moved.
+int runCost(const std::string& only, uint32_t seed, int cars) {
+  const int LAPS = 3;
+  const int FRAMES = 2400;          // 40 s of race at 60 Hz, well past the opening scrum
+  const int REPS = 3;
+  if (cars < 1) cars = 1;
+
+  const std::vector<std::string> ids = trackIds(only);
+  if (ids.empty()) { std::fprintf(stderr, "no such track\n"); return 2; }
+
+  // Built once and reused: track building is not what is being measured.
+  std::vector<BuiltRaceTrack> built;
+  for (const std::string& id : ids) {
+    BuiltRaceTrack bt; std::string err;
+    if (build_race_track_by_id(id, LAPS, seed, bt, err)) built.push_back(std::move(bt));
+  }
+  if (built.empty()) { std::fprintf(stderr, "no track built\n"); return 2; }
+
+  double bestAi = 1e18, bestStep = 1e18;
+  long frames = 0;
+  for (int rep = 0; rep < REPS; rep++) {
+    double aiTicks = 0, stepTicks = 0;
+    frames = 0;
+    for (const BuiltRaceTrack& bt : built) {
+      std::vector<PlayerDesc> players;
+      for (int i = 0; i < cars; i++) {
+        const protocol::CarStat& cs = protocol::CAR_STATS[(size_t)i % protocol::CAR_STATS.size()];
+        Stats st;
+        st.accel = cs.accel; st.vmax = cs.vmax; st.turn = cs.turn;
+        st.mass = cs.mass; st.halfLen = cs.halfLen; st.halfWid = cs.halfWid;
+        players.push_back(PlayerDesc{Id::Num((double)i), true, st});
+      }
+      Game game(players, bt.game, [](const Event&) {});
+      std::vector<std::unique_ptr<AiController>> ais;
+      for (int i = 0; i < cars; i++) {
+        const Persona& p = AI_PERSONALITIES[(size_t)i % 7];
+        ais.push_back(std::make_unique<AiController>(p.caution, LOOKAHEAD, STEER_GAIN,
+                                                     p.laneBias, DEFAULT_AI_SEED));
+      }
+      for (int f = 0; f < FRAMES; f++) {
+        std::clock_t t0 = std::clock();
+        for (int i = 0; i < cars; i++) game.driveBot(Id::Num((double)i), *ais[(size_t)i], nullptr);
+        std::clock_t t1 = std::clock();
+        game.update(DT_MS);
+        std::clock_t t2 = std::clock();
+        aiTicks += (double)(t1 - t0);
+        stepTicks += (double)(t2 - t1);
+        frames++;
+      }
+    }
+    const double us = 1e6 / (double)CLOCKS_PER_SEC;
+    if (aiTicks * us / frames < bestAi) bestAi = aiTicks * us / frames;
+    if (stepTicks * us / frames < bestStep) bestStep = stepTicks * us / frames;
+  }
+
+  const double budget = 1e6 / 60.0;   // one 60 Hz frame, in the same microseconds
+  std::printf("\n# sim cost - %d cars - %zu track(s) - %d frames each - min of %d (CPU time)\n\n",
+              cars, built.size(), FRAMES, REPS);
+  std::printf("%-16s %10s %12s\n", "", "us/frame", "% of 60Hz");
+  std::printf("%-16s %10.2f %11.3f%%\n", "bots (AI)", bestAi, 100 * bestAi / budget);
+  std::printf("%-16s %10.2f %11.3f%%\n", "step (sim)", bestStep, 100 * bestStep / budget);
+  std::printf("%-16s %10.2f %11.3f%%\n", "total", bestAi + bestStep,
+              100 * (bestAi + bestStep) / budget);
+  return 0;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
   std::string mode, only;
   uint32_t seed = 1;
+  int cars = protocol::FIELD_SIZE;
   bool json = false, noBrake = false;
   for (int i = 1; i < argc; i++) {
     std::string a = argv[i];
@@ -366,6 +450,7 @@ int main(int argc, char** argv) {
     else if (a.compare(0, 7, "--seed=") == 0) seed = (uint32_t)std::strtoul(a.substr(7).c_str(), nullptr, 10);
     else if (a == "--json") json = true;
     else if (a == "--nobrake") noBrake = true;
+    else if (a.compare(0, 7, "--cars=") == 0) cars = (int)std::strtol(a.substr(7).c_str(), nullptr, 10);
     else if (a.compare(0, 2, "--") == 0) { std::fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }
     else if (mode.empty()) mode = a;
     else { std::fprintf(stderr, "unexpected argument %s\n", a.c_str()); return 2; }
@@ -373,6 +458,9 @@ int main(int argc, char** argv) {
   if (mode == "laptime") return runLaptime(only, seed, json, noBrake);
   if (mode == "matrix") return runMatrix(only, seed, noBrake);
   if (mode == "packed") return runPacked(only, seed, noBrake);
-  std::fprintf(stderr, "usage: probe_cli <laptime|matrix|packed> [--track=ID] [--seed=N] [--nobrake] [--json]\n");
+  if (mode == "cost") return runCost(only, seed, cars);
+  std::fprintf(stderr,
+               "usage: probe_cli <laptime|matrix|packed|cost> [--track=ID] [--seed=N] "
+               "[--cars=N] [--nobrake] [--json]\n");
   return 2;
 }

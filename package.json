@@ -24,6 +24,7 @@
     "perf:race": "node scripts/perf-race.mjs",
     "pretest:e2e": "node scripts/require-e2e-deps.mjs",
     "probe:cars": "node scripts/build-probe.mjs && native/build/probe_cli matrix && native/build/probe_cli packed",
+    "probe:cost": "node scripts/build-probe.mjs && native/build/probe_cli cost",
     "probe:difficulty": "node scripts/build-probe.mjs && node scripts/probe-difficulty.mjs",
     "probe:laptime": "node scripts/build-probe.mjs && native/build/probe_cli laptime",
     "revive:js-oracle": "node scripts/revive-js-oracle.mjs",
