@@ -69,22 +69,24 @@ TTP_ABI void ttp_perf_sample(double tMs, double intervalMs, int presented,
  * logged number cannot disagree.
  *
  *   {"budgetMs","cells","cpu","dpr","drops","fps","fpsReady","frame","gpu",
- *    "height","hz","skips","track","verdict","warming","width"}
+ *    "height","hz","present","skips","track","verdict","warming","width"}
  *
- * THE SCALE RULE CAN READ THIS TOO, and where it does there is one window
- * rather than two: `ttp_display_step` wants the same p95s over the same frames,
- * and a shell that folds its own steers its resolution off numbers its own
- * overlay disagrees with. `public/display/Stage.js` takes them straight off the
- * readout. Android does NOT — its monitor only runs while the overlay is up or
- * a bench is running, so its scale rule has to keep a window of its own; that
- * is a real second copy and it is on the ledger, not a design.
+ * THE SCALE RULE READS THIS, and there is ONE window rather than four: the
+ * render-scale controller folds its percentiles off this same monitor, so a
+ * shell cannot steer its resolution off numbers its own overlay disagrees with.
+ * That is why `ttp_perf_sample` must be fed on EVERY tick and not only while an
+ * overlay is up — the readout is drawn on demand, but the window behind it is
+ * always being kept.
  *
  * `budgetMs` is what ONE PRESENT was allowed — the operating point's, per
  * ttp_perf_pacing, never tighter than 60 Hz — and every share on the line is
  * against it. `drops` counts budgets the LOOP missed, `skips` budgets a PRESENT
  * missed; a clean loop with late presents is the GPU refusing frames.
  *
- * `cpu`/`gpu`/`frame` are each {"max","n","p05","p50","p95"} or null. `verdict`
+ * `cpu`/`gpu`/`frame`/`present` are each {"max","n","p05","p50","p95"} or null.
+ * `frame` is the LOOP's tick cadence and `present` the gaps between frames that
+ * actually reached the panel; they are one series on rAF and two on a display
+ * link, which is the same split `hz` and `fps` carry. `verdict`
  * is "good" | "warn" | "bad". `cells` and the buffer size ride along because
  * GPU cost scales with cells and pixels TOGETHER: a logged number carrying
  * neither is not comparable to any other logged number.

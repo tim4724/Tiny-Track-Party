@@ -144,6 +144,22 @@ struct Readout {
   // paints the readout red for the first tenth of a second of every run.
   bool fpsReady = false;
   Stat cpu, gpu, frame;
+  // PRESENT-TO-PRESENT, and it is NOT `frame` beside it. `frame` folds the
+  // LOOP's cadence — `intervalMs`, recorded on every tick whether it drew or
+  // not — and the two coincide only where a late present delays the next
+  // callback, which is a property of rAF and of nothing else. A CADisplayLink
+  // and a Choreographer fire every vsync whatever the last frame did, so there
+  // `frame.p95` is a flat vsync period however badly the box is skipping, and
+  // this is the only series that can see it. That divergence is also why the
+  // readout carries `fps` AND `hz`.
+  //
+  // THE RENDER-SCALE RULE STEERS OFF THIS ONE (ttp/render_scale.h). It is
+  // folded here rather than in each shell because two of the three kept a ring
+  // of their own for exactly this question, with a percentile formula of their
+  // own — and by the time this was written that formula had drifted from the
+  // one above, so the p95 a television judged its resolution on was over
+  // different frames than the p95 its own overlay drew.
+  Stat present;
   Verdict verdict = Verdict::GOOD;
   // What ONE PRESENT was allowed, which is the operating point's budget and not
   // the panel's: `pacing`'s divisor doubles it, and it is never tighter than
@@ -181,6 +197,14 @@ class Monitor {
   double panelMs_ = 0;
   int divisor_ = 1;
 };
+
+// THE PROCESS'S ONE MONITOR, because there is one display and therefore one
+// window of frames — with TWO readers: the readout a human looks at, and the
+// render-scale rule steering off the same numbers. A second ring is how the two
+// come to disagree about what the last second cost, and every shell had one
+// until this existed. "One monitor per process" was a sentence in ttp_perf.h;
+// this is the mechanism.
+Monitor& monitor();
 
 // The readout as ONE canonical JSON line — the bench's whole wire. A browser
 // hands it back from a page hook, a television logs it, and one parser reads

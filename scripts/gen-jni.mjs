@@ -73,7 +73,7 @@ const OVERRIDES = {
   // Two answers that are ONE decision — the buffer scale and the present
   // divisor — so the ABI hands them back together rather than as two exports a
   // shell could half-call. Same aliasing rule as the triples above.
-  ttp_display_step: { kind: 'outN', n: 2 },
+  ttp_display_scale_poll: { kind: 'outN', n: 2 },
   // (bytes, len) collapses to one ByteArray: the length is the array's own.
   // Passing them separately would let them disagree, which is a buffer overrun
   // spelled as two arguments.

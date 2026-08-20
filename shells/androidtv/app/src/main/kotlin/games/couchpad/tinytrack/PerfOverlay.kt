@@ -163,17 +163,34 @@ object PerfMonitor {
      */
     fun record(nowMs: Double, intervalMs: Double, presented: Boolean,
                cells: Int, width: Int, height: Int, track: String) {
-        if (!visible && !benching) return
         // MEASUREMENTS ONLY (ttp_perf.h). A skip contributes no cost sample at
         // all: the renderer returns before writing its total, so the profile still
         // holds the last DRAWN frame, and <= 0 means ABSENT rather than free.
-        val cpuMs = if (presented) readProfile() else -1.0
+        //
+        // The PROFILE is read only when something will draw or log it: it is a
+        // ByteBuffer walk plus an append per phase on the frame thread, and it
+        // feeds this object's spike table alone — no reader of the readout's
+        // `cpu` term exists while the panel is hidden, and the scale rule does
+        // not use one at all. Both `show()` and `bench()` drop the window, so a
+        // panel switched on mid-run never displays a stretch missing the term.
+        val watching = visible || benching
+        val cpuMs = if (presented && watching) readProfile() else -1.0
         val gpuMs = if (presented) Ttp.ttp_display_gpu_ms() else -1.0
         Ttp.ttp_perf_sample(nowMs, intervalMs, if (presented) 1 else 0, cpuMs, gpuMs)
-        if (presented) { stamps.add(nowMs); trim(nowMs) }
+        if (presented && watching) { stamps.add(nowMs); trim(nowMs) }
 
+        // THE WINDOW IS ALWAYS KEPT; ONLY THE READOUT IS ON DEMAND. The sample
+        // above is a push into a 120-frame ring — the cost of this object is
+        // `readout_json` plus four Compose `BasicText` re-measures on the one
+        // frame thread, and both are behind the rate limits below.
+        //
+        // It used to return here when nothing was watching, and that is what
+        // forced the render scale to keep a second window of its own: the rule
+        // steers off `ttp_display_scale_poll`, which folds off this monitor, so
+        // a box with the overlay hidden would have been deciding its resolution
+        // on an empty ring. A benched run still draws nothing (see [bench]).
         val wantText = visible && nowMs - lastText >= TEXT_INTERVAL_MS
-        val wantLog = nowMs - lastLog >= LOG_INTERVAL_MS
+        val wantLog = watching && nowMs - lastLog >= LOG_INTERVAL_MS
         if (!wantText && !wantLog) return
         // ONE readout, drawn AND logged, deliberately the same bytes so a
         // screenshot and a logged number cannot disagree.

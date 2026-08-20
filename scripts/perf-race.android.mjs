@@ -21,7 +21,7 @@
 //
 // WHAT A LIVE RACE MEASURES that a frozen bench cannot: the camera moves through
 // the whole circuit, rubber is rasterised and uploaded, the skid mips refresh,
-// and `ttp_display_step` resizes the buffer underneath all of it. A lap's own
+// and `ttp_display_scale_poll` resizes the buffer underneath all of it. A lap's own
 // cost varies by about 4 ms on this box, so pin the track — two runs on two
 // circuits are two different questions.
 //

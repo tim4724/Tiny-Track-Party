@@ -51,9 +51,6 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
         /** `Stage.js`'s HUD_TICK_MS. See [onSlowTick]. */
         const val HUD_TICK_NANOS = 160_000_000L
 
-        /** `Stage.js`'s SCALE_POLL_MS — one window per second. */
-        const val SCALE_POLL_NANOS = 1_000_000_000L
-
         /**
          * The CEILING, in buffer lines — what a panel is worth rendering at all.
          * Only bites on a panel taller than 4K; every TV this ships to is capped
@@ -68,28 +65,6 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
          * ratchet a device into the softest picture for the rest of the party.
          */
         const val MAX_BUFFER_H = 2160
-
-        /**
-         * The measurement window, in PRESENTED frames. It is ROLLING — see
-         * [samplePresent] — and that is the whole point: a percentile is only a
-         * statement about a stretch of time, and this one has to describe the
-         * stretch the scale is about to be decided for.
-         *
-         * IT USED TO GROW UNBOUNDED between scale changes, and on a device that
-         * settles the scale never changes — so after a minute of racing the p95 was
-         * the 95th percentile of several laps, i.e. the most expensive corner on
-         * the circuit, and the rule was asked to size the buffer for that corner
-         * forever. Cost varies well over 1.5x around a lap here, so the difference
-         * is not academic: it is why a box with 40% headroom in the median sat at
-         * the softest picture the band allows and never climbed out of it.
-         *
-         * 120 is [PerfMonitor]'s window and means the same thing — about two
-         * seconds at 60 fps and about six at 20, so a slow device still gets a
-         * percentile worth the name. The poll runs once a second, so consecutive
-         * decisions overlap rather than tile, which is what damps a single
-         * expensive corner into a nudge instead of a verdict.
-         */
-        const val SCALE_WINDOW = 120
 
         // ttp_hud.h's layout, which the block itself carries (version + stride)
         // so a reader need not have compiled the struct. These are the offsets
@@ -265,8 +240,8 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
      * there.
      *
      * THE RULE OWNS THIS, not the shell: it is half of the operating point
-     * `ttp_display_step` answers, alongside the resolution, because the two are
-     * one decision — halving the rate doubles the budget, and on a box whose
+     * `ttp_display_scale_poll` answers, alongside the resolution, because the
+     * two are one decision — halving the rate doubles the budget, and on a box whose
      * cost is ~fixed + per-pixel that more than doubles the pixels a budget
      * buys. [pinVsyncInterval] overrides it for a measurement.
      *
@@ -284,8 +259,9 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
      * 0 hands it back.
      *
      * A PIN AND NOT A SETTER, because the rate is the rule's now: it is half of
-     * the operating point `ttp_display_step` answers, so a plain setter would be
-     * overwritten on the next poll a second later and the knob would look broken.
+     * the operating point `ttp_display_scale_poll` answers, so a plain setter
+     * would be overwritten on the next poll a second later and the knob would
+     * look broken.
      * Same shape as [pinScale] beside it.
      */
     fun pinVsyncInterval(n: Int) {
@@ -301,15 +277,10 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
         val v = n.coerceIn(1, 4)
         if (v == vsyncInterval) return
         vsyncInterval = v
-        // The old windows describe the old cadence: a 33 ms present judged
-        // against a 16.7 ms history reads as a drop on every frame. The readout
-        // holds a window of the same frames and is dropped with it — and its
-        // budget follows the new divisor from here rather than 160 ms later at
-        // the HUD tick, so no run of frames is ever priced at a cadence nobody
-        // was aiming at.
-        frameMs.clear()
-        gpuMs.clear()
-        lastSampleNanos = 0L
+        // The window describes the old cadence: a 33 ms present judged against a
+        // 16.7 ms history reads as a drop on every frame. Its budget follows the
+        // new divisor from here rather than 160 ms later at the HUD tick, so no
+        // run of frames is ever priced at a cadence nobody was aiming at.
         declarePacing()
         PerfMonitor.reset()
     }
@@ -327,8 +298,8 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
                 // tick that spanned three budgets would report as one inside the
                 // clamp and the drop count would read zero exactly when it matters.
                 //
-                // NOT the present-to-present interval [samplePresent] folds, and
-                // not 0 on a skipped tick. Fed presents, `frame` and `drops`
+                // NOT the present-to-present interval the fold derives from
+                // `presented`, and not 0 on a skipped tick. Fed presents, `frame` and `drops`
                 // describe the PRESENTS — which is what `skips` already says — and
                 // one paced 60 Hz panel came out p50 16.7 over 120 samples on the
                 // web and 33.3 over 60 here: two incomparable columns of the one
@@ -381,19 +352,45 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
                 pendingDt += dt
                 var presented = false
                 if (pendingW != 0) {
-                    // A resize is armed: render nothing this vsync. Drain once
-                    // so no recorded frame is still in flight, resize, and keep
-                    // holding until surfaceChanged reports the new size back
-                    // (setFixedSize is idempotent while we wait). The cost is a
-                    // repeated frame per scale move — invisible next to the
-                    // mis-scaled frame this replaces.
+                    // A resize is armed. PERFORM IT AT THE TOP OF THIS CALLBACK
+                    // and render in the same one — the latch below clears here so
+                    // the frame goes out with it.
+                    //
+                    // That pairing is the whole point. `setBuffersGeometry` frees
+                    // the queue's buffers, so between the call and our next
+                    // submission the compositor has NOTHING to show: a gap here is
+                    // a black frame, not a stale one. Performing it where a render
+                    // immediately follows is what keeps the gap under a vsync.
+                    //
+                    // WHAT IS LEFT IS ACCEPTED. An occasional small glitch still
+                    // shows at a step, and the two ways to remove it both cost
+                    // frame rate on the box that needs the render scale most: a
+                    // fixed-size swapchain with internal scaling measured ~+3 ms
+                    // at 540p output and would take the upscale off the display's
+                    // free hardware scaler, and putting the drain back on this
+                    // path halved the frame rate through a move (median 23 fps
+                    // against 40). DECIDED: the glitch is cheaper than either
+                    // cure. Do not trade performance for it.
                     if (pendingW != surfaceWidth || pendingH != surfaceHeight) {
-                        if (!pendingSent) { Ttp.ttp_display_drain(); pendingSent = true }
-                        view.holder.setFixedSize(pendingW, pendingH)
-                    } else {
+                        if (TtpSurface.nativeSetBufferSize(pendingW, pendingH)) {
+                            surfaceWidth = pendingW
+                            surfaceHeight = pendingH
+                        } else {
+                            // No window, or a driver that will not take the
+                            // geometry. `setFixedSize` still gets there, at one
+                            // mis-scaled frame per move — and it keeps the drain,
+                            // which stops a frame recorded at the old viewport
+                            // dequeuing a buffer at the new size. `surfaceChanged`
+                            // lands inline from it on the reference box.
+                            if (!pendingSent) { Ttp.ttp_display_drain(); pendingSent = true }
+                            view.holder.setFixedSize(pendingW, pendingH)
+                        }
+                    }
+                    if (pendingW == surfaceWidth && pendingH == surfaceHeight) {
                         pendingW = 0; pendingH = 0; pendingSent = false
                     }
-                } else if (vsyncCount % vsyncInterval == 0L) {
+                }
+                if (pendingW == 0 && vsyncCount % vsyncInterval == 0L) {
                     Trace.beginSection("ttp:render")
                     presented = Ttp.ttp_display_frame(pendingDt) != 0
                     Trace.endSection()
@@ -411,10 +408,9 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
                     PerfDebug.poll(this@DisplayHost)
                     declarePacing()
                 }
-                // TWO QUESTIONS OFF ONE CALLBACK: the scale rule's windows want
-                // present-to-present ([samplePresent] says why), the readout wants
-                // the tick cadence, on every tick.
-                if (presented) samplePresent(frameTimeNanos)
+                // ONE WINDOW, TWO READERS: the readout draws it and the scale
+                // rule steers off it. The fold answers both series, so the tick
+                // cadence below is all this callback owes either of them.
                 if (tickMs > 0) {
                     PerfMonitor.record(frameTimeNanos / 1_000_000.0, tickMs, presented,
                         cellCount, surfaceWidth, surfaceHeight, trackId)
@@ -453,16 +449,11 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
             // identical arithmetic (a floored lobby handing the race a scale it
             // then thaws one rung per lap) and had no mitigation at all while
             // this one lived in Kotlin.
-            frameMs.clear()
-            gpuMs.clear()
-            lastSampleNanos = 0L
-            // And the readout's window with them, for the reason `ttp_perf.h`
-            // names: the lobby attract and a race are different pictures, so a
-            // percentile that straddles a build describes neither.
+            // The window goes for the reason `ttp_perf.h` names: the lobby
+            // attract and a race are different pictures, so a percentile that
+            // straddles a build describes neither.
             PerfMonitor.reset()
-            sceneBuiltNanos = System.nanoTime()
-            prevScale = 0.0
-            prevCostMs = 0.0
+            Ttp.ttp_display_scale_scene(System.nanoTime() / 1_000_000.0)
             // EVERY BUILD, because a build resets the scale's tenure AND drops the
             // cost model — so a shell rebuilding a scene nothing asked it to
             // rebuild shows up as a scaler that will not settle, and the two are
@@ -500,51 +491,28 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
     //
     // THE BUFFER IS NOT THE PANEL. `ttp/render_scale.h` decides how big it should
     // be from what the last window of frames cost, so the same build holds 60 fps
-    // on a weak TV and stays sharp on a strong one. What a shell owes is the
-    // MEASUREMENT and the BAND, and nothing else — every judgement about those
-    // numbers is the rule's. If you find yourself writing an `if` around a
+    // on a weak TV and stays sharp on a strong one. What a shell owes is the BAND
+    // and the panel's period, and nothing else — the window, the percentiles, the
+    // fastest present, the cost model and the clocks are all
+    // `ttp/render_scale_controller.h`'s, folded off the same monitor
+    // [PerfMonitor] feeds. If you find yourself writing an `if` around a
     // measurement before passing it, it belongs in that header instead.
     //
-    // THIS PLATFORM HAS BOTH SIGNALS. The good one is GPU share of budget, and it
-    // is the only measurement that can see HEADROOM — a vsync plateau looks
-    // identical at 10% and 95% load, so without it the rule may only ever step
-    // DOWN and a box that is running fine can never climb back. It comes from
-    // `ttp_display_gpu_ms`, which is the GL backend's own EXT_disjoint_timer_query
-    // and is REAL here (the CPU-time trap the web documents is emscripten's, and
-    // that platform is compiled out of the accessor for exactly this reason).
+    // THIS PLATFORM HAS BOTH SIGNALS, and the rule picks. The good one is GPU
+    // milliseconds, the only measurement that can see HEADROOM — a vsync plateau
+    // looks identical at 10% and 95% load, so without it the rule may only ever
+    // step DOWN and a box that is running fine can never climb back. It comes
+    // from `ttp_display_gpu_ms`, which is the GL backend's own
+    // EXT_disjoint_timer_query and is REAL here (the CPU-time trap the web
+    // documents is emscripten's, and that platform is compiled out of the
+    // accessor for exactly this reason). [PerfMonitor] hands it over per frame.
     //
-    // Late presents stay as the fallback for a device whose driver has no timer:
-    // 0 ms goes over, and the rule reads that as "no signal".
+    // IT USED TO KEEP TWO WINDOWS OF ITS OWN, present intervals and GPU
+    // milliseconds, with a percentile function of its own that had drifted from
+    // the one behind the readout beside it — and it had to, because this shell
+    // only fed the monitor while the overlay was up. Both are gone.
 
-
-    /** Intervals between PRESENTED frames, in milliseconds. Skips are not frames. */
-    private val frameMs = ArrayList<Double>(SCALE_WINDOW)
-
-    /** The backend's GPU milliseconds, one per presented frame, over the same window. */
-    private val gpuMs = ArrayList<Double>(SCALE_WINDOW)
-    private var lastSampleNanos = 0L
-    private var lastScalePollNanos = 0L
-    private var scaleMovedNanos = 0L
-
-    /**
-     * When the current scene was built. A MEASUREMENT handed to the rule, not a
-     * decision: `ttp_display_step` shortens its own up-hold for a scene
-     * the scale has not settled in yet. This shell used to latch that itself,
-     * which left the browser — same rule, same ladder, same lap-sized hold —
-     * with no equivalent and a climb measured in minutes.
-     */
-    private var sceneBuiltNanos = 0L
-
-    /**
-     * The last observation at a DIFFERENT scale — what the rule fits its cost
-     * model from. Dropped on a scene build: a fit whose two points come from two
-     * different scenes measures a slope belonging to neither, which is worse
-     * than no fit at all, and the rule probes its way to a fresh one.
-     */
-    private var prevScale = 0.0
-    private var prevCostMs = 0.0
-
-    /** Reused, like [cellScratch]: {scale, divisor} back from `ttp_display_step`. */
+    /** Reused, like [cellScratch]: {scale, divisor} back from the poll. */
     private val stepOut = DoubleArray(2)
 
     /**
@@ -573,47 +541,39 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
      */
     private fun declarePacing() = Ttp.ttp_perf_pacing(panelMs(), vsyncInterval)
 
-    /** `ttp_display_present_floor`'s running answer: the device's own fastest present. */
-    private var presentFloorMs = 0.0
+    /**
+     * The panel period AS THE RULE MUST SEE IT — one vsync, times the pin.
+     *
+     * ONE VSYNC IS THE CONTRACT (`ttp_display.h`), because the rule multiplies by
+     * the divisor IT chose when it prices a budget. Folding `vsyncInterval` in
+     * would therefore double-count the moment the rule picks a divisor of its
+     * own: it would pass 16.7 for a 120 Hz panel already running at 2 and then
+     * budget 33.4 for a 8.3 ms frame.
+     *
+     * THE PIN IS THE EXCEPTION, and it is the only one: `debug.ttp.hz` overrides
+     * half of a decision the rule made, and the rule cannot see it. Left
+     * undeclared, a pinned 30 Hz box would be priced against a 16.7 ms budget and
+     * shredded down the ladder to hold a rate nobody asked for. Declared, it says
+     * the true thing — this box presents at 30 Hz — and the rule spends the
+     * doubled budget on pixels, which is what pinning a rate is FOR
+     * (`perf_stats.h`).
+     */
+    private fun rulePanelMs(): Double = panelMs() * (if (ratePin > 0) ratePin else 1)
 
     /** The scale in force. 1.0 is the view's own size — this never supersamples. */
     private var renderScale = 1.0
-
-    /**
-     * Records one PRESENTED frame's interval and hands it back, in milliseconds;
-     * 0 for the first. Skipped frames never reach here — see the callback.
-     */
-    private fun samplePresent(nowNanos: Long): Double {
-        val ms = if (lastSampleNanos == 0L) 0.0 else (nowNanos - lastSampleNanos) / 1_000_000.0
-        if (ms > 0) frameMs.add(ms)
-        lastSampleNanos = nowNanos
-        // 0 is "the query has not come back", not "a free frame", so it is dropped
-        // rather than folded into a percentile that would then read as headroom.
-        val gpu = Ttp.ttp_display_gpu_ms()
-        if (gpu > 0) gpuMs.add(gpu)
-        // ROLLING, and the two series are trimmed independently BECAUSE they are
-        // not parallel: a frame whose timer result has not come back adds an
-        // interval and no GPU sample. (PerfMonitor's series ARE parallel — it
-        // records a 0 and filters at the read — because it prints them side by
-        // side; nothing here compares one to the other.)
-        if (frameMs.size > SCALE_WINDOW) frameMs.subList(0, frameMs.size - SCALE_WINDOW).clear()
-        if (gpuMs.size > SCALE_WINDOW) gpuMs.subList(0, gpuMs.size - SCALE_WINDOW).clear()
-        return ms
-    }
 
     /** 0 restores the adaptive rule; anything else holds the buffer there. See [PerfDebug]. */
     private var scalePin = 0.0
 
     /**
-     * A buffer resize armed by [applyScale], performed by a LATER doFrame — never
-     * in the callback that just submitted a frame at the old size. Filament's
-     * driver thread executes and DEQUEUES asynchronously, up to a frame behind,
-     * so a setFixedSize issued while a frame is in flight can hand that frame a
-     * buffer at the NEW size with its viewport still at the OLD one — the scene
-     * shrinks into a corner (or crops) for exactly one frame, SurfaceFlinger
-     * stretches it, and the glass flickers. The performing doFrame first DRAINS
-     * the driver thread (once — ttp_display_drain), then resizes, and submits
-     * nothing until surfaceChanged has delivered the new size back.
+     * A buffer resize armed by [applyScale] and performed at the TOP of a later
+     * doFrame, with the frame rendered in that same callback — the frame callback
+     * carries the why, and [TtpSurface.nativeSetBufferSize] the mechanism.
+     *
+     * `pendingSent` belongs to the FALLBACK alone: `setFixedSize` may not be
+     * issued from the callback that just recorded a frame, and it wants the drain
+     * once rather than per tick while it waits for `surfaceChanged`.
      */
     private var pendingW = 0
     private var pendingH = 0
@@ -624,110 +584,45 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
         // Unpinning puts the ADAPTIVE scale back on the buffer, not the pin: the
         // rule's own value is the one it will keep deciding from.
         applyScale(if (scale > 0) scale else renderScale)
-        frameMs.clear()
-        gpuMs.clear()
+        PerfMonitor.reset()
     }
 
     private fun adaptScale(nowNanos: Long) {
         if (scalePin > 0) return
-        if (nowNanos - lastScalePollNanos < SCALE_POLL_NANOS) return
-        lastScalePollNanos = nowNanos
-        if (frameMs.isEmpty()) return
-
-        val sorted = frameMs.sorted()
-        val p05 = percentile(sorted, 0.05)
-        val p95 = percentile(sorted, 0.95)
-        // The fastest present is the ONE number carried between windows, so the
-        // fold happens here — but WHICH samples may become one is the rule's.
-        presentFloorMs = Ttp.ttp_display_present_floor(presentFloorMs, p05)
-
-        val viewH = maxOf(1, view.height)
         // The band is a fact about THIS surface: the ceiling is the panel's own
         // resolution (never above it — a TV app has nothing to gain from
-        // supersampling), the floor the softest picture worth showing.
-        val max = minOf(1.0, MAX_BUFFER_H.toDouble() / viewH)
-        // 0, not a floor of our own: the LADDER owns the floor now, and a
-        // number here could only narrow the band further — never reach below
+        // supersampling), and 0 is the floor because the LADDER owns the floor.
+        // A number there could only narrow the band further, never reach below
         // the bottom rung, and never mean a different picture than it does on
-        // the other shell.
-        val min = 0.0
-
-        // RAW MILLISECONDS. The budget is no longer this shell's to declare: the
-        // rule picks a present divisor as part of the same decision that picks a
-        // resolution, so it owns the denominator. Handing over a share would be
-        // normalising the measurement against a rate nobody had chosen yet.
-        val gpuP95Ms = percentile(gpuMs.sorted(), 0.95)
-
-        val ok = Ttp.ttp_display_step(
-            renderScale, vsyncInterval,
-            gpuP95Ms, gpuMs.size,
-            // The floor is folded RAW (the panel's own fastest present); what
-            // the rule must judge lateness against is the CADENCE WE CHOSE,
-            // which is interval x floor — otherwise 30 fps pacing reads as a
-            // ratio of 2.0 and the fallback path rescues a healthy device
-            // forever downward.
-            p95, presentFloorMs * vsyncInterval, frameMs.size,
-            (nowNanos - scaleMovedNanos) / 1_000_000_000.0,
-            (nowNanos - sceneBuiltNanos) / 1_000_000_000.0,
-            prevScale, prevCostMs,
-            min, max, viewH.toDouble(), panelMs(),
+        // the other two shells.
+        val viewH = maxOf(1, view.height)
+        val moved = Ttp.ttp_display_scale_poll(
+            nowNanos / 1_000_000.0,
+            0.0, minOf(1.0, MAX_BUFFER_H.toDouble() / viewH), viewH.toDouble(),
+            rulePanelMs(),
             stepOut,
         )
-        if (ok == 0) return
+        if (moved == 0) return
         val next = stepOut[0]
-        val nextInterval = stepOut[1].toInt()
-        // WHAT THE RULE WAS ASKED, every poll, not just when it answers a move.
-        // The interesting case is the one that does NOT move: a box parked at the
-        // floor tells you nothing about WHY unless you can see the share it was
-        // judged on, and "the scale never climbed" was diagnosed here twice from
-        // guesswork before this line existed. Once a second, and in RELEASE too,
-        // for the reason the readout itself now shows there: the build with R8 is
-        // the one worth measuring, and a line that is absent from it explains
-        // nothing about the box you are holding. `prev` is here because the
-        // rule's answer is unreadable without it — a climb it refused and a climb
-        // it never considered look identical from the outside.
-        Log.i(TAG, String.format(java.util.Locale.ROOT,
-            "point %.2f/%d -> %.2f/%d | gpu p95 %.1f ms over %d frames" +
-                " | prev %.2f@%.1fms | scene %.1fs | present p95 %.1f floor %.1f | panel %.1f ms",
-            renderScale, vsyncInterval, next, nextInterval, gpuP95Ms, gpuMs.size,
-            prevScale, prevCostMs, (nowNanos - sceneBuiltNanos) / 1_000_000_000.0,
-            p95, presentFloorMs, panelMs()))
-        // A PINNED RATE IS NOT A MOVE THIS POLL MADE. `debug.ttp.hz` holds the
-        // divisor, so the rule's answer for that half is discarded — and if the
-        // scale half did not move either, this poll changed NOTHING and must
-        // take the early return. Comparing against the rule's `nextInterval`
-        // instead falls through on every poll for as long as the pinned rate
-        // disagrees with the rule's: `scaleMovedNanos` restamps and the window
-        // is cleared once a second, so no hold ever elapses (the down step wants
-        // 2.5 s) and no window ever reaches kMinSignalFrames. The scaler goes
-        // deaf AND frozen, silently, in the one configuration a sweep pins the
-        // rate without also pinning the scale.
-        val adopted = if (ratePin == 0) nextInterval else vsyncInterval
-        if (next == renderScale && adopted == vsyncInterval) return
-        // THE OBSERVATION THE MODEL IS BUILT FROM, recorded at the one moment it
-        // exists: the scale that was in force and what a frame COST at it. The
-        // rule solves `fixedMs + fillMs * s^2` from this and the next one, which
-        // is how a device that is half fixed cost climbs at all, and how one
-        // frame rate's measurement prices another's (ttp/render_scale.h).
-        if (next != renderScale) {
-            prevScale = renderScale
-            prevCostMs = gpuP95Ms
+        val was = vsyncInterval
+        // A PINNED RATE IS NOT THE RULE'S TO MOVE. `debug.ttp.hz` holds the
+        // divisor, and [rulePanelMs] is what keeps the rule's budget honest
+        // about it — so the answer's rate half is discarded here rather than
+        // arbitrated. On a 60 Hz panel it can only ever be 1 anyway: the
+        // operating-point list holds no other divisor there.
+        if (ratePin == 0 && stepOut[1].toInt() != vsyncInterval) {
+            applyVsyncInterval(stepOut[1].toInt())
         }
-        if (adopted != vsyncInterval) applyVsyncInterval(adopted)
+        // WHAT THE RULE ANSWERED, and in RELEASE too, for the reason the readout
+        // itself now shows there: the build with R8 is the one worth measuring,
+        // and a line that is absent from it explains nothing about the box you
+        // are holding. The numbers it was judged on are on the readout's own
+        // line, at the same 1 Hz, which is why they are not repeated here.
+        Log.i(TAG, String.format(java.util.Locale.ROOT,
+            "point %.2f/%d -> %.2f/%d | panel %.1f ms",
+            renderScale, was, next, stepOut[1].toInt(), rulePanelMs()))
+        if (next == renderScale) return
         renderScale = next
-        scaleMovedNanos = nowNanos
-        // ONLY WHEN THE SCALE ACTUALLY MOVED. The window that just decided this
-        // describes the OLD resolution, so keeping it would judge the new one on
-        // the old one's frames — but clearing on EVERY poll caps the sample count
-        // at "frames drawn in the last second", which is the framerate. The rule
-        // ignores a window under kMinSignalFrames (30) because a percentile over a
-        // handful of frames is not a percentile, so a box at 20 fps produced 20
-        // samples, was told it had no signal, and never stepped down — going deaf
-        // in exactly the case the mechanism exists for. The web's `perf.sample()`
-        // reads a ROLLING window and resets only after a change, which is what
-        // this matches.
-        frameMs.clear()
-        gpuMs.clear()
         applyScale(next)
     }
 
@@ -751,19 +646,22 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
         // Locale.ROOT: a German box prints "0,80" otherwise, which is the same
         // trap Copy.seconds carries.
         Log.i(TAG, "render scale -> ${String.format(java.util.Locale.ROOT, "%.2f", scale)} (${w}x$h)")
+        // ARMED, NOT PERFORMED, and it must stay that way whichever mechanism
+        // does the moving.
+        //
+        // `adaptScale` calls this at the END of a doFrame, after that tick's
+        // frame has already gone. Moving the buffer here leaves the queue
+        // reconfigured with nothing submitted until the NEXT callback — and
+        // `setBuffersGeometry` frees the old buffers, so what the compositor has
+        // to show in that gap is not a stale picture but NO picture. Tried, and
+        // it reads as a single BLACK frame at every step. The deferred form
+        // performs the move at the TOP of a callback and renders in the same one,
+        // so the new buffer is submitted before the gap can be composited.
         pendingW = w
         pendingH = h
         pendingSent = false
-        // Dropped where the move is ARMED as well as where surfaceChanged lands
-        // it: the window that decided this move describes the old buffer, and the
-        // ticks in between present nothing at all.
+        // The window that decided this describes the old buffer.
         PerfMonitor.reset()
-    }
-
-    private fun percentile(sorted: List<Double>, q: Double): Double {
-        if (sorted.isEmpty()) return 0.0
-        val i = ((sorted.size - 1) * q).toInt().coerceIn(0, sorted.size - 1)
-        return sorted[i]
     }
 
     // -- assets --------------------------------------------------------------

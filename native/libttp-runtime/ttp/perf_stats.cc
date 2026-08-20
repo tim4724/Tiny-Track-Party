@@ -56,10 +56,7 @@ double at(const std::vector<double>& sorted, double p) {
   return sorted[std::min(sorted.size() - 1, i)];
 }
 
-Stat foldOne(const std::vector<Sample>& ring, double Sample::*field) {
-  std::vector<double> xs;
-  for (const Sample& s : ring)
-    if (s.*field > 0) xs.push_back(s.*field);
+Stat foldVals(std::vector<double>& xs) {
   Stat st;
   if (xs.empty()) return st;
   std::sort(xs.begin(), xs.end());
@@ -75,6 +72,28 @@ Stat foldOne(const std::vector<Sample>& ring, double Sample::*field) {
   return st;
 }
 
+Stat foldOne(const std::vector<Sample>& ring, double Sample::*field) {
+  std::vector<double> xs;
+  for (const Sample& s : ring)
+    if (s.*field > 0) xs.push_back(s.*field);
+  return foldVals(xs);
+}
+
+// The gaps BETWEEN presented ticks — Readout::present says why they are their
+// own series. A gap needs two presents, so n presents yield n-1 samples and a
+// window holding one yields none: absent, which is the honest answer and the
+// one the scale rule reads as "no signal" rather than as a fast frame.
+Stat foldPresents(const std::vector<Sample>& ring) {
+  std::vector<double> xs;
+  double last = -1;
+  for (const Sample& s : ring) {
+    if (!s.presented) continue;
+    if (last >= 0 && s.tMs > last) xs.push_back(s.tMs - last);
+    last = s.tMs;
+  }
+  return foldVals(xs);
+}
+
 }  // namespace
 
 Readout Monitor::fold() const {
@@ -85,6 +104,7 @@ Readout Monitor::fold() const {
   r.cpu = foldOne(ring_, &Sample::cpuMs);
   r.gpu = foldOne(ring_, &Sample::gpuMs);
   r.frame = foldOne(ring_, &Sample::intervalMs);
+  r.present = foldPresents(ring_);
 
   // The trailing second, by TIMESTAMP rather than by count: during the first
   // second the window is short, and a bare count reads as a collapsed frame
@@ -180,6 +200,11 @@ void Monitor::pacing(double panelMs, int divisor) {
   divisor_ = divisor > 0 ? divisor : 1;
 }
 
+Monitor& monitor() {
+  static Monitor m;
+  return m;
+}
+
 namespace {
 
 Value statVal(const Stat& s) {
@@ -208,6 +233,7 @@ std::string readoutJson(const Readout& r, const Dims& d) {
   v.set("gpu", statVal(r.gpu));
   v.set("height", Value::Num(d.height));
   v.set("hz", Value::Num(r.hz));
+  v.set("present", statVal(r.present));
   v.set("skips", Value::Num(r.skips));
   v.set("track", d.track.empty() ? Value::Null() : Value::Str(d.track));
   v.set("verdict", Value::Str(key(r.verdict)));

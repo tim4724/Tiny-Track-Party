@@ -629,6 +629,12 @@ add_library(libttp_runtime STATIC
   # saying they had not, and the bench's whole premise is that a browser, an
   # Apple TV and an Android box can be compared on one race.
   libttp-runtime/ttp/perf_stats.cc
+  # The adaptive render scale's STATE — the window it folds off the readout, the
+  # running present floor, the cost model's observation and the tenure clocks.
+  # The RULE beside it (ttp/render_scale.h) is header-only and pure; this is
+  # what three shells used to hold by hand, in three languages, with a
+  # percentile formula each.
+  libttp-runtime/ttp/render_scale_controller.cc
 )
 target_include_directories(libttp_runtime PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/libttp-runtime
@@ -751,7 +757,8 @@ add_test(NAME progression COMMAND progression_check)
 # with no JS oracle. What it pins beyond the thresholds is CONVERGENCE — the
 # controller is a feedback loop, and a loop that chases its own tail shows up as
 # a picture that softens and sharpens forever rather than as a failing frame.
-# Header-only, so nothing new is linked; libttp_runtime carries the include path.
+# The RULE is header-only; the controller beside it is in libttp_runtime, which
+# also carries the include path.
 add_executable(render_scale_check runtimetest/render_scale_check.cc)
 target_link_libraries(render_scale_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(render_scale_check)
@@ -963,9 +970,12 @@ set(TTP_APP_SOURCES
   # not rendering, and CI's Filament-less wasm leg is where the browser's link
   # to it gets checked.
   runtime/ttp_theme.cc
-  # The adaptive render scale's shim. Deciding how big the buffer should be
-  # names neither a platform API nor the renderer, so it is here rather than
-  # beside ttp_display_core.cc — same argument as the biome ABI above.
+  # The adaptive render scale: the rule's STATE (the window it folds, the
+  # running present floor, the cost model's observation, the tenure clocks) and
+  # the shim over it. Deciding how big the buffer should be names neither a
+  # platform API nor the renderer, so both are here rather than beside
+  # ttp_display_core.cc — same argument as the biome ABI above.
+  libttp-runtime/ttp/render_scale_controller.cc
   runtime/ttp_render_scale.cc
   libttp-runtime/ttp/camera.cc
   libttp-runtime/ttp/framing.cc

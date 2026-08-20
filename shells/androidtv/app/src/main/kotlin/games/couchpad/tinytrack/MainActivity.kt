@@ -9,7 +9,6 @@ import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.ComposeView
@@ -115,10 +114,10 @@ class MainActivity : ComponentActivity() {
                 // Keyed on the CONFIGURATION so an HDMI mode change re-reads it.
                 // The manifest declares screenSize|density|uiMode in configChanges
                 // (so the engine survives one), which means no Activity recreation
-                // and nothing else to invalidate a plain field read — and the
-                // surfaceWidth read below cannot stand in, because the scaler's
-                // setFixedSize pins the buffer, so a view resize need not change it.
-                // Density and buffer would go stale together.
+                // and nothing else to invalidate a plain field read. Nothing
+                // below reads the surface any more — the cell rects cross the
+                // ABI as fractions and are scaled by the AUTHORED canvas, so the
+                // buffer size never enters this tree.
                 //
                 // ABOVE the density provider on purpose: LocalConfiguration is the
                 // real 960 dp, and reading it BELOW is the one way this arrangement
@@ -126,11 +125,12 @@ class MainActivity : ComponentActivity() {
                 val cfg = LocalConfiguration.current
                 val widthPx = remember(cfg) { resources.displayMetrics.widthPixels }
                 TtpTheme(windowWidthPx = widthPx) {
-                    CompositionLocalProvider(
-                        LocalSurfaceWidth provides game.display.surfaceWidth
-                    ) {
-                        RootScreen(game)
-                    }
+                    // NO SURFACE WIDTH PROVIDED. It used to be, off a plain field
+                    // through a staticCompositionLocalOf — which Compose cannot
+                    // see change, so a scale move left the HUD dividing fresh
+                    // rects by a stale width. The rects are authored units now,
+                    // converted where they are read.
+                    RootScreen(game)
                 }
             }
         }

@@ -2,10 +2,8 @@ package games.couchpad.tinytrack
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
@@ -44,7 +42,7 @@ import androidx.compose.ui.unit.dp
  * - **Never read `LocalConfiguration.screenWidthDp` below here.** It still
  *   answers the real 960, not the virtual 1920, and mixing the two spaces is the
  *   one way this arrangement goes quietly wrong.
- * - **Engine rectangles need the OTHER conversion** — [surfaceToAuthored] —
+ * - **Engine rectangles need the OTHER conversion** — [toAuthored] —
  *   because `ttp_display_cell_rects` answers in the SURFACE's physical pixels,
  *   and the surface is not the window: the adaptive render scale resizes the
  *   buffer underneath while the view keeps its bounds.
@@ -65,19 +63,24 @@ fun TtpTheme(windowWidthPx: Int, content: @Composable () -> Unit) {
 const val AUTHORED_WIDTH = 1920f
 
 /**
- * Engine surface pixels to authored pixels (which under [TtpTheme] are `dp`).
- *
- * @param surfaceWidthPx what the shell last passed to `ttp_display_create` or
- *   `ttp_display_resize` — NOT the view's width. The two differ whenever the
- *   adaptive render scale has stepped, and dividing by the view is how a HUD
- *   drifts off its cells the moment the picture softens.
+ * The other axis of that same space. Only the cell rects need it — everything
+ * else this tree lays out is width-relative under the density override — but a
+ * rect's y and h are fractions of the surface's HEIGHT and 16:9 is not a thing
+ * to re-derive at the one call site.
  */
-fun Float.surfaceToAuthored(surfaceWidthPx: Int): Dp =
-    if (surfaceWidthPx <= 0) 0.dp else (this * AUTHORED_WIDTH / surfaceWidthPx).dp
+const val AUTHORED_HEIGHT = 1080f
 
 /**
- * The live render surface's width in physical pixels, published so a HUD can
- * convert the rects it is handed. Supplied by the composition root off
- * [DisplayHost]; 0 until a surface exists, which reads as "nothing to place yet".
+ * A cell rectangle as the ABI answers it — FRACTIONS of the surface — scaled to
+ * the authored canvas this tree lays out in.
+ *
+ * NOTHING ABOUT THE BUFFER IS NEEDED, which is the point. The rects used to come
+ * back in surface pixels and be divided by the buffer width, and that width
+ * reached Compose as a plain field through a `staticCompositionLocalOf` —
+ * invisible to it. On a scale move the rects updated and the width did not, and
+ * a 1920-wide layout landed at half size in a corner until something unrelated
+ * recomposed. There is no second value here to go stale.
  */
-val LocalSurfaceWidth = staticCompositionLocalOf { 0 }
+fun CellRect.toAuthored(): CellRect = CellRect(
+    x * AUTHORED_WIDTH, y * AUTHORED_HEIGHT, w * AUTHORED_WIDTH, h * AUTHORED_HEIGHT,
+)

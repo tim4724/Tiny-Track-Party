@@ -81,8 +81,10 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
     }
     const px = (el, p) => parseFloat(el.style[p]);
     return {
-      dpr: s._dpr,
       canvas: { w: s._canvas.width, h: s._canvas.height },
+      // What the fractions are multiplied BY, and the buffer is deliberately not
+      // it: the container does not move when the render scale steps.
+      container: { w: s.container.clientWidth, h: s.container.clientHeight },
       view: { w: window.innerWidth, h: window.innerHeight },
       cells,
       labels: [...document.querySelectorAll('.cell-label')].map((el) => [px(el, 'left'), px(el, 'top')]),
@@ -103,18 +105,23 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
   const barL = Math.min(...layout.cells.map((c) => c.x));
   const spanX = Math.max(...layout.cells.map((c) => c.x + c.w));
   const spanY = Math.max(...layout.cells.map((c) => c.y + c.h));
-  expect(spanX).toBeLessThanOrEqual(layout.canvas.w);
-  expect(spanY).toBeLessThanOrEqual(layout.canvas.h);
+  // FRACTIONS OF THE SURFACE, 0..1 (ttp_display_cell_rects) — so the grid is
+  // measured against 1 rather than against the buffer, and the tolerances below
+  // are the old whole-pixel ones expressed in that unit.
+  expect(spanX).toBeLessThanOrEqual(1 + 1e-6);
+  expect(spanY).toBeLessThanOrEqual(1 + 1e-6);
   // cols-1 px at most either side of centre, cols <= 2 here
-  expect(Math.abs(layout.canvas.w - spanX - barL)).toBeLessThan(2);
-  expect(layout.canvas.h - spanY).toBeLessThan(2);
+  expect(Math.abs(1 - spanX - barL)).toBeLessThan(2 / layout.canvas.w);
+  expect(1 - spanY).toBeLessThan(2 / layout.canvas.h);
   // …and every label is at its cell's top-left corner IN CSS PIXELS, with the
   // place/lap readout on the same cell's top-RIGHT (so the width is scaled too,
   // not just the origin). Compared as a set, since DOM order is creation order
   // rather than cell order, and with Stage.js's own arithmetic (scale first,
   // then offset) so this compares the layout, not two roundings.
-  const k = 1 / layout.dpr;
-  const css = layout.cells.map((c) => ({ x: c.x * k, y: c.y * k, w: c.w * k, h: c.h * k }));
+  const css = layout.cells.map((c) => ({
+    x: c.x * layout.container.w, y: c.y * layout.container.h,
+    w: c.w * layout.container.w, h: c.h * layout.container.h,
+  }));
   const corners = css.map((r) => `${r.x},${r.y}`).sort();
   const rights = css.map((r) => `${r.x + r.w - 12},${r.y + 11}`).sort();
   expect(layout.labels.map((p) => p.join(',')).sort()).toEqual(corners);
@@ -123,8 +130,8 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
   // in the corner of a quarter-sized grid (the un-scaled failure). Height is
   // never capped, so it is the exact check; across the width it is the grid PLUS
   // the two letterbox bars that reaches both edges.
-  expect(spanY * k).toBeGreaterThan(layout.view.h - 4);
-  expect((spanX + barL) * k).toBeGreaterThan(layout.view.w - 4);
+  expect(spanY * layout.container.h).toBeGreaterThan(layout.view.h - 4);
+  expect((spanX + barL) * layout.container.w).toBeGreaterThan(layout.view.w - 4);
 
   // The steer bar and the cell dividers are no longer DOM: they are drawn by the
   // renderer (cell-anchored and textless, so they need no UI toolkit), which
@@ -161,7 +168,11 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
     const packed = s.display.cellRects(8);
     const cells = [];
     for (let i = 0; i + 3 < packed.length; i += 4) {
-      cells.push({ x: packed[i], y: packed[i + 1], w: packed[i + 2], h: packed[i + 3] });
+      // FRACTIONS of the surface (ttp_display_cell_rects) scaled to the BUFFER,
+      // which is the space this probe works in: it samples getImageData, and
+      // drawOverlay's own geometry below is a share of the buffer's height.
+      cells.push({ x: packed[i] * W, y: packed[i + 1] * H,
+                   w: packed[i + 2] * W, h: packed[i + 3] * H });
     }
     // drawOverlay's own geometry: the authored 270 x 34 shape sitting 20 clear
     // of the bottom edge, scaled by the geometric mean of the CELL's height and

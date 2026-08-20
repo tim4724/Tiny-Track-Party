@@ -112,19 +112,24 @@ Three properties of that surface matter more than the list:
    and a bench comparing them is worth nothing if "60 fps" and "amber" are
    three different statements. `ttp_perf_reset` on a resize or a scene change —
    the readout carries the buffer size it was measured at.
-   `ttp_display_step` takes its p95s off the SAME readout rather than a second
-   window, so a shell cannot steer its resolution off numbers its own overlay
-   disagrees with — WHERE THE TWO ARE ONE SERIES, which is a property of the
-   platform's frame loop and not a given. `intervalMs` is a TICK ("drawn or
-   not"), so the readout's `frame` block is tick intervals; a browser's rAF is
-   delayed by a late present, so there ticks and presents coincide and the
-   readout is the right source. A `CADisplayLink` is not delayed — it fires
-   every vsync whatever the last frame did — so on tvOS `frame.p95` is a flat
-   vsync period however badly the box is skipping, and a shell steering off it
-   never moves at all (measured: 4 players left at 40-55 fps, the rule never
-   firing). That divergence is exactly why the readout carries `fps` AND `hz`.
-   Check which case your loop is in before reusing the readout; if presents are
-   their own series, fold them.
+   **FEED IT ON EVERY TICK, whether or not anything is drawing the readout.**
+   The render scale folds off this same monitor, so a window kept only while a
+   panel is up leaves the rule deciding a television's resolution off an empty
+   ring the moment someone presses the toggle. Both TV shells had that bug, and
+   it is what made them keep windows of their own. Gate the DRAWING and the
+   per-phase profile read; never the sample.
+
+   `intervalMs` is a TICK ("drawn or not"), so the readout's `frame` block is
+   tick intervals and `present` is the gaps between the ticks that actually
+   reached the panel. They are ONE series on a browser's rAF — a late present
+   delays the next callback — and TWO on a display link or a Choreographer, which
+   fire every vsync whatever the last frame did. That is why `hz` and `fps` are
+   both on the line, and why the scale rule reads `present` while the panel
+   period is learned off `frame`: on tvOS `frame.p95` is a flat vsync period
+   however badly the box is skipping, and a shell steering off it never moves at
+   all (measured: 4 players left at 40-55 fps, the rule never firing). Both
+   series are folded in C++, so this is a property to understand rather than one
+   to reimplement.
 
 4. **Materials.** `native/scripts/build-materials.sh <matc> <outdir> [api] [platform]`,
    using the FORK'S matc. `opengl mobile` (the default) is what the web ships
@@ -270,27 +275,53 @@ Three properties of that surface matter more than the list:
     connected humans, so the prepared scene is the one it wants. The web
     reference is `prepareNextTrack()` in `public/display/main.js` plus
     `Stage.prepare`/`rebuild`, and `tests/e2e/cup-series.spec.js` pins it.
-14. **The operating point, measured.** Neither the buffer size nor the present
-    rate is the panel's: a shell polls `ttp_display_step` with what its last
-    window of frames cost and takes back BOTH — a resolution and a present
-    divisor, ordered around a desired 1080@60 (below it resolution gives way,
-    above it the rate goes first). One call for the pair, because they are two
-    ways of spending the same milliseconds and a shell honouring one and not the
-    other would be arbitrating the trade itself.
+14. **Cell rects are FRACTIONS.** `ttp_display_cell_rects` answers 0..1 of the
+    surface, and a shell multiplies by whatever it lays out in — CSS pixels,
+    points, authored dp. Do NOT convert through the buffer size: it answered
+    physical pixels once, and pairing a rect with a surface size the adaptive
+    render scale moves underneath cost a bug on two of the three shells (tvOS
+    placed its whole HUD off a stale `uiScale`; Android divided fresh rects by a
+    width its UI framework could not see change). A fraction has no partner to
+    disagree with.
 
-    What a shell owes is MEASUREMENTS and the surface's own facts, nothing else:
-    p95 GPU time in RAW MILLISECONDS (never a share — the rule picks the budget
-    when it picks a rate) and its sample count, the same for the frame interval,
-    the running `ttp_display_present_floor`, how long the current point and the
-    current SCENE have each been in force, the last observation at a different
-    scale for the cost model, the band, how many buffer lines a scale of 1.0
-    buys, and the panel's own vsync period. Every judgement about those is the
-    rule's: which signal decides, which way each may move, how many samples
-    count, the holds, and the order of the operating points. If you find
-    yourself writing an `if` around a measurement before passing it, it belongs
-    in `ttp/render_scale.h` instead — that header also carries the reasoning,
-    including why a dropped-frame count is not a signal. Web reference:
-    `Stage._adaptScale`, whose `_divisor` paces the PICTURE and never the sim.
+15. **The operating point, measured.** Neither the buffer size nor the present
+    rate is the panel's: a shell polls `ttp_display_scale_poll` every frame and
+    takes back BOTH — a resolution and a present divisor, ordered around a
+    desired 1080@60 (below it resolution gives way, above it the rate goes
+    first). One call for the pair, because they are two ways of spending the
+    same milliseconds and a shell honouring one and not the other would be
+    arbitrating the trade itself.
+
+    **THE STATE IS NOT YOURS EITHER.** The window, the percentiles, the running
+    fastest present, the cost model's observation and the clocks the holds are
+    judged against all live in `ttp/render_scale_controller.h`, folded off the
+    same monitor item 3 describes. Three shells held that by hand once, in three
+    languages, and two of them had drifted to a different percentile formula than
+    the readout they were drawn beside. What a shell owes now is FOUR things:
+
+    - `ttp_perf_sample` on every tick, per item 3 — which it already owed;
+    - `ttp_display_scale_scene(tMs)` when a scene is built, plus `ttp_perf_reset`
+      beside it;
+    - `ttp_display_scale_poll(tMs, min, max, baseLines, panelMs)` every frame,
+      and PERFORM what it answers. `min` is 0 — the LADDER owns the floor — `max`
+      and `baseLines` are the surface's own, and `panelMs` is ONE VSYNC of the
+      panel, or 0 where the platform has no honest answer (a browser) and it is
+      learned off the tick series instead;
+    - `ttp_perf_pacing(ttp_display_scale_panel_ms(), divisor)`, so the readout's
+      budget is the operating point's.
+
+    If you find yourself writing an `if` around a measurement before passing it,
+    or holding a clock the rule could hold, it belongs in that header instead —
+    which also carries the reasoning, including why a dropped-frame count is not
+    a signal. Web reference: `Stage._adaptScale`, whose `_divisor` paces the
+    PICTURE and never the sim.
+
+    **OVERRIDING THE RATE? DECLARE A PERIOD, NOT A DIVISOR.** A sweep that pins a
+    present rate (Android's `debug.ttp.hz`) is overriding half of a decision the
+    rule made, so it must tell the rule what it actually presents at — `panelMs`
+    times the pinned divisor — or the rule prices a 33 ms budget as 16.7 and
+    shreds resolution to hold a rate nobody asked for. Android's
+    `rulePanelMs` is the reference.
 
     **BOUND ON tvOS (`DisplayHost.adaptScale`).** Before it, an A10X ran 4
     players at 50-53 fps with no window of the run scoring anything but bad;
@@ -326,7 +357,7 @@ Three properties of that surface matter more than the list:
       every Apple platform at once; nothing in the shell needs to change.
     - **Presents are their own series** — see the readout note in item 3 above.
 
-15. **An attribution surface.** The build ships CC-BY music, OFL fonts and
+16. **An attribution surface.** The build ships CC-BY music, OFL fonts and
     several notice-tier libraries, so a shell that shows nobody is in breach —
     this is an obligation, not an About page. What it owes is a reachable list
     of every credited work, and the license TEXT for the ones whose license
@@ -358,6 +389,10 @@ look items is in `shells/androidtv/CLAUDE.md` (Look).
   `KEYCODE_INFO` removes it. Default it off and leave the key; the gallery's
   Scenarios suppression then has nothing left to special-case, and the tvOS
   column stops carrying four lines of green over every race shot it takes.
+  **This is now SAFE to do**, which it was not while both TV shells fed the
+  monitor only when the panel was up: turning the readout off would have taken
+  the render scale's window with it. The sample is unconditional on all three
+  now, and only the drawing is gated.
 
 - **The mute toggle** — the web's corner button and the host phone's Sound row
   have no counterpart, and the mix has no muted state to honour; a TV's own mute
@@ -367,7 +402,7 @@ look items is in `shells/androidtv/CLAUDE.md` (Look).
 - **Meshing the next circuit at the intermission** (item 13) — a cup's chained
   start shows the outgoing circuit under the count and then hitches; on this GPU
   a build is seconds, so it is the most visible item here.
-- **The info / licenses board** (item 15) — the .ipa's obligations are the .apk's.
+- **The info / licenses board** (item 16) — the .ipa's obligations are the .apk's.
 - **An app baseline profile** — the release APK carries only library-supplied
   profiles, so this shell's own composables and boot path are not AOT-compiled;
   the tail it would move is the half the GPU readout cannot see, and it costs a

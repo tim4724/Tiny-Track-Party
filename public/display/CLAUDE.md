@@ -88,14 +88,15 @@ the canvas, the DOM HUD and the rAF loop.
 capture scripts. Do not reintroduce it to the display page.
 
 **The buffer's size AND the present rate are MEASURED, not chosen, and they are
-ONE decision.** `Stage._adaptScale` re-decides about once a second from what the
-last window of frames cost; `ttp_display_step` answers `[scale, divisor]`
-together, because frame rate and resolution are two ways of spending the same
-GPU milliseconds and a shell taking one answer and ignoring the other would be
-arbitrating between them itself. The desired spot is **1080 lines at 60 Hz**:
-below it resolution gives way and the rate does not, above it the rate goes
-first. The decision is C++ (`native/libttp-runtime/ttp/render_scale.h`); this
-side measures, resizes, and paces.
+ONE decision.** `Stage._adaptScale` polls `ttp_display_scale_poll` every frame
+and gets `[scale, divisor]` back when the point moves, because frame rate and
+resolution are two ways of spending the same GPU milliseconds and a shell taking
+one answer and ignoring the other would be arbitrating between them itself. The
+desired spot is **1080 lines at 60 Hz**: below it resolution gives way and the
+rate does not, above it the rate goes first. The rule is
+`native/libttp-runtime/ttp/render_scale.h` and the state around it —
+the window, the percentiles, the fastest present, the cost model, the clocks —
+is `render_scale_controller.h`; this side names the band, resizes, and paces.
 
 **`_divisor` PACES THE PICTURE, NEVER THE SIM.** `_loop` runs `onFrame` on every
 rAF callback and gates only the draw, accumulating the skipped callbacks' dt into
@@ -147,11 +148,13 @@ one all arrive as the same fact. It therefore adapts in the lobby too, where the
 load is a quarter of a race's — handled by the asymmetric holds, not by a special
 case.
 
-**This side may not judge its own measurements.** Which of the two signals
-decides, which way each may move, how many samples a percentile needs: all of it
-is in the header, and the shell passes percentiles and counts over raw. The one
-number it stores is the running fastest present, and even the fold is a call
-(`ttp_display_present_floor`).
+**This side no longer holds any of it.** The window is the READOUT's — `PerfHud`
+feeds `ttp_perf_sample` every callback and the rule folds off that same monitor,
+so a resolution can never be steered off numbers the overlay disagrees with. All
+this file still owns is the two things only a browser knows: the band
+(`_scaleBand`), and that a hidden tab is not a device. There is no panel period
+to declare either — no web API answers it — so 0 goes over and the rule learns
+one off the tick series; `scalePanelMs()` reads it back for `perf.pacing`.
 
 An explicit `?dpr=` — or `setRenderScale` — is a caller naming a buffer scale and
 switches the whole mechanism off; that is how the trailer renders a 4K master and

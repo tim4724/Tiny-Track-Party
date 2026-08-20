@@ -271,6 +271,11 @@ int ttp_display_cell_rects(float* out, int maxCells) {
     const uint32_t n = (uint32_t) g_disp->cells.size();
     if (!n) return 0;
     const uint32_t want = n < (uint32_t) maxCells ? n : (uint32_t) maxCells;
+    // The surface the renderer laid the grid out on, which is what the fractions
+    // below are fractions OF. Guarded because ttp_display_resize floors both at
+    // 1, and a divide by zero here would answer inf to every shell at once.
+    const double sw = g_disp->width > 0 ? (double) g_disp->width : 1.0;
+    const double sh = g_disp->height > 0 ? (double) g_disp->height : 1.0;
     for (uint32_t i = 0; i < want; i++) {
         // The RENDERER owns the rect: it letterboxes the grid as ONE piece, so a
         // cell is a tile of the capped picture and not of the raw surface. Asking
@@ -279,10 +284,17 @@ int ttp_display_cell_rects(float* out, int maxCells) {
         // renderer's own steer bar and dividers ask the same function, so the
         // shell's chrome and the renderer's cannot land on different grids.
         const TtpCellRect r = g_disp->renderer->cellRectTopLeft(n, i);
-        out[i * 4 + 0] = (float) r.x;
-        out[i * 4 + 1] = (float) r.y;
-        out[i * 4 + 2] = (float) r.w;
-        out[i * 4 + 3] = (float) r.h;
+        // NORMALISED, because a rect in surface pixels only means anything
+        // ALONGSIDE the surface size — and the render scale moves that under the
+        // shell. Handing the two out separately made every HUD a two-value read
+        // that had to be taken in one breath, and two of the three shells had
+        // already failed it: tvOS placed the whole HUD off a stale `uiScale`, and
+        // Android divided fresh rects by a `surfaceWidth` Compose could not see
+        // change. A fraction needs no partner, so neither bug can be written.
+        out[i * 4 + 0] = (float) (r.x / sw);
+        out[i * 4 + 1] = (float) (r.y / sh);
+        out[i * 4 + 2] = (float) (r.w / sw);
+        out[i * 4 + 3] = (float) (r.h / sh);
     }
     return (int) want;
 }

@@ -34,4 +34,18 @@ internal object TtpSurface {
      * the swap chain goes is a native crash rather than a dropped frame.
      */
     external fun nativeDestroy()
+
+    /**
+     * Resize the BUFFER, leaving the SurfaceView's requested size — and therefore
+     * the layer's scale transform — alone, so the new dimensions travel with the
+     * buffer instead of arriving a transaction ahead of it. This is how the
+     * adaptive render scale moves; the body's header has the mechanism and what
+     * it replaced.
+     *
+     * `false` means no window, or a driver that will not take the geometry, and
+     * the caller falls back to `setFixedSize` — which works, at one mis-scaled
+     * frame per move. Proven on a Google TV Streamer only, so the fallback is
+     * not decoration.
+     */
+    external fun nativeSetBufferSize(width: Int, height: Int): Boolean
 }

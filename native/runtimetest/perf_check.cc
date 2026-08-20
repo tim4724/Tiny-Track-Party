@@ -29,6 +29,11 @@ namespace {
 
 int cases = 0, failed = 0;
 
+// Timestamps ACCUMULATE, so a gap between two of them is never bit-identical to
+// the step that built them. Every comparison against a nominal period is
+// therefore a near one; a tenth of a microsecond is far under anything measured.
+bool near(double a, double b) { return (a > b ? a - b : b - a) < 1e-7; }
+
 void check(bool ok, const std::string& what) {
   cases++;
   if (!ok) {
@@ -305,6 +310,56 @@ void percentiles() {
   check(r.frame.n == 98, "the interval series is folded over the same window");
 }
 
+// ---- the present series ------------------------------------------------------
+//
+// THE ONE THE SCALE RULE STEERS OFF, and the whole reason it is not `frame`: on
+// a display link the tick series is a flat vsync period however badly the box is
+// skipping, so a shell reading `frame` there never moves at all. What is pinned
+// here is that the two series SEPARATE under exactly that load.
+void presents() {
+  // A loop ticking cleanly at 60 Hz that only presents every third tick — a box
+  // running 20 fps behind a link that fires at 60.
+  Monitor m;
+  for (int i = 1; i <= 120; i++) {
+    Sample s;
+    s.tMs = i * kBudgetMs;
+    s.intervalMs = kBudgetMs;      // the LINK's cadence, unaffected by the skips
+    s.presented = (i % 3) == 0;
+    s.cpuMs = 4;
+    s.gpuMs = -1;
+    m.record(s);
+  }
+  const Readout r = m.fold();
+  check(r.frame.has && r.frame.p95 == kBudgetMs,
+        "the tick series is a flat vsync period through a skip storm");
+  check(r.present.has && near(r.present.p95, 3 * kBudgetMs),
+        "…and the present series is the only one that can see it");
+  // The warm-up eats the first two ticks, so 3..120 are folded: 118 ticks, 40
+  // of them presented, and a gap needs two presents.
+  check(r.frame.n == 118 && r.present.n == 39,
+        "a gap needs two presents, so n presents fold to n-1 samples");
+
+  // ONE PRESENT IS NO CADENCE. Absent, not a fast frame — the scale rule reads
+  // an absent series as "no signal" and holds, which is the safe answer.
+  Monitor one;
+  for (int i = 1; i <= 40; i++) {
+    Sample s;
+    s.tMs = i * kBudgetMs;
+    s.intervalMs = kBudgetMs;
+    s.presented = i == 40;
+    s.cpuMs = -1;
+    s.gpuMs = -1;
+    one.record(s);
+  }
+  check(!one.fold().present.has, "one present is no cadence at all");
+
+  // Where the loop presents every tick — a browser's rAF — the two series are
+  // the same measurement, which is why the web could read `frame` and be right.
+  const Readout clean = run(60, kBudgetMs, 4, 3).fold();
+  check(clean.present.has && near(clean.present.p50, clean.frame.p50),
+        "presenting every tick makes the two series one");
+}
+
 // ---- the line a bench reads back ---------------------------------------------
 void json() {
   Monitor m = run(60, kBudgetMs, 4, 3);
@@ -323,6 +378,7 @@ void json() {
             && has("\"warming\":false"),
         "the verdict and the two readiness flags are on the line");
   check(has("\"gpu\":{") && has("\"p95\":"), "the folded series are on the line");
+  check(has("\"present\":{"), "…including the one the scale rule steers off");
 
   // No GPU timer: the key is present and NULL, so a parser can tell "no signal"
   // from "a fast frame" without knowing which platform wrote the line.
@@ -342,6 +398,7 @@ int main() {
   pacing();
   ladder();
   percentiles();
+  presents();
   json();
   std::printf("  %d cases, %d failures\n", cases, failed);
   return failed == 0 ? 0 : 1;

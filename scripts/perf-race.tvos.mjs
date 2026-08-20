@@ -28,8 +28,8 @@
 //
 // `--dpr` DOES NOTHING HERE, and what that now means has to travel with every
 // number this produces. tvOS DOES steer its buffer (`DisplayHost.adaptScale`
-// binds `ttp_display_step`), but nothing on this platform PINS one: there is no
-// equivalent of the web's `?dpr=`, so a run reports whichever rung the rule
+// binds `ttp_display_scale_poll`), but nothing on this platform PINS one: there is
+// no equivalent of the web's `?dpr=`, so a run reports whichever rung the rule
 // settled on rather than a resolution the caller asked for. READ THE BUFFER SIZE
 // OFF THE HEADER, which is the last readout's — two runs that ended on different
 // rungs are two different questions, and on a box with no GPU timer the scale is

@@ -67,17 +67,19 @@ import kotlinx.coroutines.delay
  */
 @Composable
 fun RaceHud(state: GameState) {
-    val surfaceWidth = LocalSurfaceWidth.current
-    if (surfaceWidth <= 0) return
+    // NO SURFACE WIDTH HERE. The rects arrive in AUTHORED units already, converted
+    // where they were read against the width current at that instant
+    // (`GameCoordinator.paintHUD`). Taking the width separately is what let the
+    // two disagree across an adaptive-scale move.
     Box(Modifier.fillMaxSize()) {
         for (cell in state.cells) {
-            CellChrome(cell, state, surfaceWidth)
+            CellChrome(cell, state)
         }
     }
 }
 
 @Composable
-private fun CellChrome(cell: GameState.CellHUD, state: GameState, surfaceWidth: Int) {
+private fun CellChrome(cell: GameState.CellHUD, state: GameState) {
     // FINISHED wins the cell if a car is somehow both finished and dropped. The
     // coordinator already resolves that when it builds the row; this is the rule
     // stated a second time where the card is actually drawn.
@@ -86,14 +88,8 @@ private fun CellChrome(cell: GameState.CellHUD, state: GameState, surfaceWidth: 
 
     Box(
         Modifier
-            .offset(
-                cell.rect.x.surfaceToAuthored(surfaceWidth),
-                cell.rect.y.surfaceToAuthored(surfaceWidth),
-            )
-            .size(
-                cell.rect.w.surfaceToAuthored(surfaceWidth),
-                cell.rect.h.surfaceToAuthored(surfaceWidth),
-            )
+            .offset(cell.rect.x.dp, cell.rect.y.dp)
+            .size(cell.rect.w.dp, cell.rect.h.dp)
     ) {
         // `.cell-label`'s margin. In AUTHORED pixels, which is what the whole tree
         // is in under the root density override.

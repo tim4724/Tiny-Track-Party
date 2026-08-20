@@ -24,7 +24,10 @@
 // constant forever. Measured against the device's own fastest present rather
 // than against 60 Hz, it costs nothing on a 50 Hz panel or a 30 Hz HDMI mode:
 // those present at their own steady cadence, and a ratio of 1 is a ratio of 1
-// whatever that cadence is. What it CANNOT do is prove headroom — a plateau
+// whatever that cadence is. ABOVE the anchor rate that same arithmetic inverts,
+// which is why the reference is floored at 60 (latePresentRatio) — a 120 Hz
+// laptop holding a solid 60 is not a device that is late twice over. What it
+// CANNOT do is prove headroom — a plateau
 // looks identical at 10% and 95% load — so it may only ever step DOWN. A device
 // with no timer that is running fine stays exactly where the shell started it.
 //
@@ -480,7 +483,35 @@ inline double presentBaseline(double prevFloorMs, double p05Ms) {
 inline double latePresentRatio(const RenderScaleCost& cost) {
   if (cost.presentFrames < kMinSignalFrames) return 0.0;
   if (!(cost.presentFloorMs >= kMinPresentMs) || !(cost.presentP95Ms > 0.0)) return 0.0;
-  return cost.presentP95Ms / cost.presentFloorMs;
+  // …AND NEVER TIGHTER THAN THE ANCHOR RATE. This is the 144 Hz trap, and it is
+  // the exact one perf_stats.cc closed for the readout ("a fast panel does not
+  // make a perfectly good 16.7 ms frame cost 240% of budget") while the rule
+  // beside it kept dividing by the raw floor.
+  //
+  // The note at the top of this file argues the fastest present is the right
+  // reference because it costs nothing on a 50 Hz panel or a 30 Hz HDMI mode.
+  // That is true and it only covers panels SLOWER than the anchor; above it the
+  // same arithmetic inverts. A 120 Hz laptop holding a solid 60 has a floor of
+  // 8.3 and a p95 of 16.7, which is a ratio of 2.0 — "a whole period late", every
+  // window, forever. Measured on the artifact: 2160 lines to 1080 in nine
+  // seconds, on a machine doing nothing wrong. And this is the arm that may only
+  // step DOWN, so it never comes back.
+  //
+  // 60 fps IS the bar, so a device presenting at it is not late whatever its
+  // glass could theoretically do. Only the FALLBACK reads this; a device with a
+  // GPU timer prices the anchor properly through pointBudgetMs and never comes
+  // here.
+  //
+  // kAnchorHz AND NOT perf_stats.h's kGoodHz, which is the same 60 — deliberately,
+  // and the two are worth keeping apart until something forces the question. This
+  // header is the pure rule: it includes <algorithm> and nothing else, which is
+  // what lets every leg's ctest execute it as arithmetic, and perf_stats.h drags
+  // in <string>, <vector> and canonical.h. The rate the LADDER is anchored on and
+  // the bar a READOUT scores against are also two questions, even where one
+  // number answers both. If they ever have to move together, extract the 60 —
+  // do not make the rule depend on the readout to get it.
+  const double bar = std::max(cost.presentFloorMs, 1000.0 / kAnchorHz);
+  return cost.presentP95Ms / bar;
 }
 
 // The next OPERATING POINT — resolution and present divisor together — given

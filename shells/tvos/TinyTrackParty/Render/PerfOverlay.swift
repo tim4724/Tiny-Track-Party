@@ -86,7 +86,13 @@ final class PerfMonitor: ObservableObject {
     /// tick put a new picture on the panel.
     func record(now: Double, interval: Double, presented: Bool,
                 cells: Int, pixels: CGSize, dpr: CGFloat) {
-        guard visible else { return }
+        // FED WHETHER OR NOT ANYONE IS WATCHING. The render scale folds off this
+        // same monitor (`ttp_perf.h`), so a window kept only while the panel is
+        // up would leave the rule deciding a television's resolution off an
+        // empty ring the moment someone pressed the toggle. The cost of the
+        // sample is a push into a 120-frame ring; the cost of this object is
+        // `publish`, which is behind the interval below.
+        //
         // SECONDS on this side, MILLISECONDS on that one: `CADisplayLink`
         // timestamps are seconds and `ttp_perf_sample` takes ms.
         //
@@ -94,10 +100,12 @@ final class PerfMonitor: ObservableObject {
         // repeated: the renderer returns before writing its `total`, so the
         // profile still holds the last DRAWN frame, and folding it in again
         // would weight the median hardest under exactly the load that causes
-        // skips. The gpu argument is absent always — see the header.
+        // skips. It is also absent while nothing is drawing the readout, since
+        // it feeds no other reader and the scale rule has no use for it. The gpu
+        // argument is absent always — see the header.
         ttp_perf_sample(now * 1000, interval * 1000, presented ? 1 : 0,
-                        presented ? (cpuTotalMs() ?? 0) : 0, 0)
-        guard now - lastText >= Self.textInterval else { return }
+                        presented && visible ? (cpuTotalMs() ?? 0) : 0, 0)
+        guard visible, now - lastText >= Self.textInterval else { return }
         lastText = now
         publish(now: now, cells: cells, pixels: pixels, dpr: dpr)
     }

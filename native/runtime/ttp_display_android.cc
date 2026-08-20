@@ -68,7 +68,7 @@ int ttp_display_create(const void* surface, uint32_t width, uint32_t height) {
     if (!window) return 0;
 
     // NOT setting the buffer geometry here. The buffer size is the SHELL's,
-    // because it is the adaptive render scale's output: ttp_display_step
+    // because it is the adaptive render scale's output: ttp_display_scale_poll
     // answers a scale, the shell calls SurfaceHolder.setFixedSize with it, and
     // the resulting surfaceChanged is what reaches ttp_display_resize. Writing a
     // geometry here as well would give the buffer two owners that disagree the
@@ -132,6 +132,57 @@ Java_games_couchpad_tinytrack_TtpSurface_nativeCreate(
 JNIEXPORT void JNICALL
 Java_games_couchpad_tinytrack_TtpSurface_nativeDestroy(JNIEnv*, jclass) {
     ttp_display_destroy();
+}
+
+// Resize the BUFFER without touching the VIEW's requested size — the adaptive
+// render scale's move, done in one place instead of two that can disagree.
+//
+// `SurfaceHolder.setFixedSize` changes what the SurfaceView asks for, and the
+// relayout that follows writes a SCALE onto the layer in a transaction that
+// applies at once, while the buffer it describes arrives a frame later. Read off
+// the running box, that is layer `tr=[2.00,0.00][0.00,2.00]` against a source
+// crop still 960x540 — one composited frame of the picture at the wrong size.
+// Rendering sooner cannot close it: at four cells a frame costs more than a
+// vsync, so we always miss the next latch.
+//
+// setBuffersGeometry changes only what the PRODUCER dequeues. No relayout, no
+// transaction, the layer transform stays identity, and SurfaceFlinger derives
+// the scale from each buffer's own source crop against an unchanged display
+// frame. The dimensions travel WITH the buffer, so there is nothing left to be
+// out of step.
+//
+// Answers 0 if there is no window or the driver refuses, and the caller falls
+// back to setFixedSize. Kept because this is proven on one box: the EGL surface
+// underneath is Filament's, and whether a driver re-reads the geometry of a
+// window it has already wrapped is the driver's business, not this file's.
+JNIEXPORT jboolean JNICALL
+Java_games_couchpad_tinytrack_TtpSurface_nativeSetBufferSize(
+        JNIEnv*, jclass, jint width, jint height) {
+    ttp::rt::DisplayCore* core = ttp::rt::displayCore();
+    if (!core || width <= 0 || height <= 0) return JNI_FALSE;
+    auto* d = static_cast<AndroidDisplay*>(core);  // ttp_display_create made it
+    if (!d->window) return JNI_FALSE;
+    // THE FORMAT IS NOT OPTIONAL AND NEITHER CANDIDATE FOR "leave it alone"
+    // works. 0 means "reset to the window's default", which on this box is
+    // RGB_565 — measured, one resize took the buffer from RGBA_8888 to
+    // `[960x540:2816, RGB_565]`, dropping the whole game to 16-bit colour, which
+    // on flat sky-and-sand gradients is banding nobody could miss. And
+    // ANativeWindow_getFormat is no better: it answers the window's own default
+    // (565 again) rather than the RGBA_8888 the SurfaceView negotiated, so
+    // reading it back and handing it in reproduces the bug exactly.
+    //
+    // So the format the SurfaceView actually uses is named. It is a shell fact
+    // and this is the shell's file; `dumpsys SurfaceFlinger` on the setFixedSize
+    // path is where it was read.
+    if (ANativeWindow_setBuffersGeometry(d->window, width, height,
+                                         WINDOW_FORMAT_RGBA_8888) != 0) {
+        return JNI_FALSE;
+    }
+    // The renderer's viewport follows in the same call, so no frame can be
+    // recorded against the old one — this is what `surfaceChanged` did on the
+    // other path, and there is no surfaceChanged on this one.
+    ttp_display_resize((uint32_t) width, (uint32_t) height);
+    return JNI_TRUE;
 }
 
 }  // extern "C"

@@ -63,94 +63,100 @@ TTP_ABI void ttp_display_destroy(void);
  * (TtpRenderer::drawOverlay), and every number crossing this ABI is back in the
  * surface's own physical pixels. */
 
-/* THE NEXT OPERATING POINT — how big the surface should be AND how often to
- * present it — decided from what the last window of frames cost. Writes
- * {scale, presentDivisor} into `out2` and returns 1; returns 0 and touches
- * nothing if `out2` is null.
+/* THE ADAPTIVE RENDER SCALE — how big the surface should be AND how often to
+ * present it, decided from what the last window of frames cost.
  *
- * ONE CALL FOR BOTH, because they are one decision. Frame rate and resolution
- * are two ways of spending the same GPU milliseconds, and ttp/render_scale.h
- * lays them out as a single ordered list of operating points around a desired
- * spot of 1080 lines at 60 Hz: below it resolution gives way and the rate does
- * not, above it the rate goes first. A shell that could take one answer and
- * skip the other would be arbitrating between them itself, which is the whole
- * thing this layer exists to prevent.
+ * ONE DECISION FOR BOTH. Frame rate and resolution are two ways of spending the
+ * same GPU milliseconds, and ttp/render_scale.h lays them out as a single
+ * ordered list of operating points around a desired spot of 1080 lines at
+ * 60 Hz: below it resolution gives way and the rate does not, above it the rate
+ * goes first. A shell that could take one answer and skip the other would be
+ * arbitrating between them itself, which is the whole thing this layer exists
+ * to prevent.
  *
- *   curScale / curDivisor          the operating point in force. The divisor is
- *                                  "present every Nth vsync"; 1 is the panel's
- *                                  own rate.
- *   gpuP95Ms / gpuFrames           p95 GPU MILLISECONDS from a timer query
- *                                  around the frame, and how many frames carried
- *                                  a result. Pass 0 where there is no timer.
- *                                  RAW ms and not a share of budget: the budget
- *                                  is what this call decides when it picks a
- *                                  rate, and it is also what lets the cost model
- *                                  survive a rate change, since what a frame
- *                                  costs does not depend on how often it shows.
- *   presentP95Ms / presentFrames   p95 frame interval, and its sample count.
- *   presentFloorMs                 ttp_display_present_floor's running answer.
- *   sinceChangeSec                 seconds the CURRENT POINT has been in force.
- *   sinceSceneSec                  seconds the CURRENT SCENE has been in force —
- *                                  since the build, not since the last resize.
- *                                  A point inherited from a scene that no longer
- *                                  exists has no tenure in this one, so the rule
- *                                  lets the climb back to this scene's level run
- *                                  at one evidence window per step instead of one
- *                                  lap. Pass a large value where there is no such
- *                                  thing as a scene.
- *   prevScale / prevCostMs         the last observation at a DIFFERENT scale.
- *                                  Pass 0/0 until there has been one, and DROP IT
- *                                  on a scene build — a fit whose two points
- *                                  straddle a scene change measures a slope
- *                                  belonging to neither. The rule SOLVES for the
- *                                  point that fits the budget rather than
- *                                  comparing one number to a threshold, and two
- *                                  observations at two scales are what let it
- *                                  separate the resolution-independent half of
- *                                  frame cost from the per-pixel half.
- *   minScale / maxScale            the band, as scale factors on the surface's
- *                                  layout size. Pass minScale 0 for no extra
- *                                  narrowing: the LADDER owns the floor, and a
- *                                  shell may not reach below its bottom rung.
- *   baseLines                      buffer lines a scale of 1.0 means on this
- *                                  surface — the view's height in physical
- *                                  pixels on a TV, the container's CSS height in
- *                                  a browser. The rungs are LINE COUNTS (720,
- *                                  1080, …), so this is what makes one mean the
- *                                  same picture on every platform.
- *   panelMs                        the panel's own present period, ONE VSYNC:
- *                                  16.7 on a 60 Hz TV, 8.3 on a 120 Hz one. 0
- *                                  means "assume 60". Without it the rule cannot
- *                                  know what a rate step is worth, and a fixed
- *                                  60 Hz budget spends a 120 Hz panel's headroom
- *                                  on pixels every time.
+ * THE STATE IS NOT THE SHELL'S EITHER, and that is what these three calls are.
+ * The window the percentiles come from, the running fastest present, the
+ * observation the cost model fits from, when the point last moved and when the
+ * scene was built: all of it lives in ttp/render_scale_controller.h, where the
+ * `render_scale` ctest executes it on every leg. Three shells held it by hand
+ * once, in three languages, and their percentile formulas had already drifted
+ * from the one behind the readout they were drawn beside.
  *
- * Everything JUDGED about those numbers — which signal decides, which
- * directions each may move in, how many samples a percentile needs, the holds
- * and the order of the operating points — is in ttp/render_scale.h, where every
- * leg's ctest executes it. Hand over measurements, not opinions, and honour the
- * answer; a shell that has measured nothing gets its current point back.
+ * WHAT A SHELL OWES, and it is now only this:
  *
- * Pure arithmetic, no display state: both of these answer before
- * ttp_display_create and after ttp_display_destroy. */
-TTP_ABI int ttp_display_step(double curScale, int curDivisor,
-                             double gpuP95Ms, int gpuFrames,
-                             double presentP95Ms, double presentFloorMs,
-                             int presentFrames, double sinceChangeSec,
-                             double sinceSceneSec,
-                             double prevScale, double prevCostMs,
-                             double minScale, double maxScale,
-                             double baseLines, double panelMs,
-                             double* out2);
+ *   1. ttp_perf_sample on EVERY tick, drawn or not — which it already did for
+ *      the readout. The rule folds off that same window, so a resolution can
+ *      never be steered off numbers the overlay disagrees with. Feed it whether
+ *      or not anything is watching.
+ *   2. ttp_display_scale_scene when a scene is built.
+ *   3. ttp_display_scale_poll every frame, and PERFORM what it answers.
+ *   4. ttp_perf_pacing with ttp_display_scale_panel_ms and the divisor below,
+ *      so the readout's budget is the operating point's.
+ *
+ * A shell writing an `if` around a measurement before passing it, or holding a
+ * clock the rule could hold, has taken a decision that must not differ between
+ * platforms. */
 
-/* The device's own fastest present, folded one window at a time: pass the value
- * this returned last time (0 to begin) and the window's p05 frame interval, keep
- * what comes back, and hand it to ttp_display_step as presentFloorMs.
+/* A NEW SCENE was built, on the shell's own monotonic clock in milliseconds.
  *
- * The shell holds it because it is a MEASUREMENT — but WHICH samples may become
- * one, and the fact that it must outlive both the stats window and a resize, are
- * rules, and they are in ttp/render_scale.h with the rest. */
-TTP_ABI double ttp_display_present_floor(double prevFloorMs, double p05Ms);
+ * Two things follow, and neither is the shell's to judge. The cost model's
+ * previous observation is dropped, because a fit whose two points straddle a
+ * scene change measures a slope belonging to neither. And the scale's TENURE
+ * restarts, which is what lets the rule shorten its own up-hold for a scene the
+ * scale has not settled in yet — without it a race inherits the lobby's floor
+ * and thaws one rung per lap. Drop the readout's window with ttp_perf_reset
+ * alongside: the lobby attract and a race are different pictures. */
+TTP_ABI void ttp_display_scale_scene(double tMs);
+
+/* Re-decide the operating point. Returns 1 and writes {scale, presentDivisor}
+ * into `out2` when the point MOVED; 0 (touching nothing) otherwise, which is
+ * also the answer while the poll cadence or one of the rule's holds is still
+ * running. Call it every frame; the cadence is the controller's.
+ *
+ *   tMs                    any monotonic clock, milliseconds. Only differences
+ *                          are read, and it must be the same clock
+ *                          ttp_perf_sample is fed.
+ *   minScale / maxScale    the band, as scale factors on the surface's layout
+ *                          size. The ceiling is the panel's own resolution and
+ *                          whatever pixel budget the shell caps it at. Pass
+ *                          minScale 0 for no extra narrowing: THE LADDER OWNS
+ *                          THE FLOOR, and a shell may not reach below its
+ *                          bottom rung — a fraction here would mean 360 lines
+ *                          on one surface and 720 on another, which is not one
+ *                          decision.
+ *   baseLines              buffer lines a scale of 1.0 means on this surface —
+ *                          the view's height in physical pixels on a TV, the
+ *                          container's CSS height in a browser. The rungs are
+ *                          LINE COUNTS (720, 1080, …), so this is what makes
+ *                          one mean the same picture on every platform.
+ *   panelMs                the panel's own present period, ONE VSYNC: 16.7 on a
+ *                          60 Hz TV, 8.3 on a 120 Hz one. Without it the rule
+ *                          cannot know what a rate step is worth, and a fixed
+ *                          60 Hz budget spends a 120 Hz panel's headroom on
+ *                          pixels every time. Pass 0 where the platform has no
+ *                          honest answer (a browser has no refresh-rate API)
+ *                          and it is learned from the tick series instead.
+ *
+ * A shell that has measured nothing gets 0 and keeps what it has. THE POINT IN
+ * FORCE IS THE SHELL'S OWN COPY — it starts at {1.0, 1} and changes only when
+ * this answers, so there is no reader here: what a shell holds is the buffer it
+ * actually sized and the cadence it actually paced, which is a record of what
+ * it PERFORMED rather than a second opinion about what to do.
+ *
+ * A shell may override the divisor half (a sweep pinning a present rate) and
+ * still let the resolution adapt. The rule then prices lateness against the
+ * cadence IT chose rather than the pinned one — which on a 60 Hz panel is no
+ * divergence at all, because anchorDivisor is 1 there and the operating-point
+ * list holds no other. Above 60 Hz, pin both or neither. */
+TTP_ABI int ttp_display_scale_poll(double tMs, double minScale, double maxScale,
+                                   double baseLines, double panelMs, double* out2);
+
+/* The panel period the rule is judging against: what was last passed to
+ * ttp_display_scale_poll, or what has been learned from the frames where a
+ * shell passed 0. For ttp_perf_pacing, so the readout's budget and the rule's
+ * budget are one number. 0 before anything is known, which the readout reads as
+ * "assume 60". */
+TTP_ABI double ttp_display_scale_panel_ms(void);
 
 /* ---- scene -------------------------------------------------------------- */
 
@@ -323,10 +329,20 @@ TTP_ABI void ttp_display_cells(const char* idsJson);
  * nor an OUTCOME (ttp_abi.h): a COUNT, like ttp_room_size and
  * ttp_room_connected_count.
  *
- * Units are the surface's PHYSICAL pixels, the same ones ttp_display_create and
- * ttp_display_resize take. A shell drawing its overlay in scaled units divides
- * by its own scale factor — the browser by devicePixelRatio, the one number the
- * C side is never told (CSS pixels are not a concept tvOS or Android shares).
+ * UNITS ARE FRACTIONS OF THE SURFACE, 0..1 — x and w of its width, y and h of
+ * its height. A shell multiplies by whatever it lays out in: CSS pixels in a
+ * browser, points on tvOS, authored dp on Android. None of those is a concept
+ * the C side shares, and none of them has to be.
+ *
+ * NOT PIXELS, and the difference is a bug class rather than a unit. A rect in
+ * surface pixels means nothing without the surface SIZE beside it, and the
+ * adaptive render scale moves that size underneath the shell — so every HUD
+ * became a two-value read that had to be taken in one breath, from two values
+ * that travelled by different roads. Two of the three shells failed it: tvOS
+ * placed its whole HUD off a stale `uiScale`, and Android divided fresh rects by
+ * a `surfaceWidth` its UI framework could not see change, which parks a
+ * full-width layout at a fraction of its size in a corner. A fraction has no
+ * partner to disagree with, so the mistake cannot be spelled.
  *
  * Answers whether or not a scene is built: the layout is a function of the
  * surface and the cell list alone, so the HUD stays put while a Grand Prix

@@ -469,6 +469,73 @@ const MUTATIONS = [
     replace: 'STEER_GAIN, 0.0,',
     expect: 'abi',
   },
+
+  // ---- the adaptive render scale's STATE. The RULE beside it was assertion-
+  // gated from the day it was written; this half was three shells' hand-written
+  // bookkeeping until it moved into C++, and nothing anywhere could execute it.
+  // Every mutation below is a bug one of those shells actually had.
+  {
+    // The ceiling is the BAND's. Left at a baked-in 1.0, a HiDPI browser prices
+    // frames drawn at 2.0 as though they cost that at 1.0 — poisoning the cost
+    // model's first observation — and halves a canvas nobody asked it to touch.
+    name: 'render-scale/ceiling-not-adopted',
+    file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
+    find: 'if (limits.max > 0.0) point_.scale = limits.max;',
+    replace: '',
+    expect: 'render_scale',
+  },
+  {
+    // The panel period is learned off the TICK series, which runs at the panel's
+    // rate whether or not a frame drew. Learned off presents, a box skipping two
+    // ticks in three reports a 20 Hz panel and is judged against a budget three
+    // times too generous.
+    name: 'render-scale/floor-learned-from-presents',
+    file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
+    find: 'floorMs_ = presentBaseline(floorMs_, r.frame.p05);',
+    replace: 'floorMs_ = presentBaseline(floorMs_, r.present.p05);',
+    expect: 'render_scale',
+  },
+  {
+    // The window that decided a move describes the OLD buffer. Kept, it judges
+    // the new resolution on the old one's frames for the next two seconds, which
+    // is how a controller talks itself into a second step it does not need.
+    name: 'render-scale/window-kept-across-a-move',
+    file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
+    find: '  mon.reset();',
+    replace: '',
+    expect: 'render_scale',
+  },
+  {
+    // A scene build drops the cost model's observation: a fit whose two points
+    // straddle a scene change measures a slope belonging to neither, and the
+    // rule then refuses to probe (a refused FIT is evidence, not missing data).
+    name: 'render-scale/scene-keeps-the-fit',
+    file: 'native/libttp-runtime/ttp/render_scale_controller.cc',
+    find: '  prev_ = RenderScaleSample{0.0, 0.0};\n}',
+    replace: '}',
+    expect: 'render_scale',
+  },
+  {
+    // 60 fps IS the bar. Dividing by the raw fastest present instead reads a
+    // 120 Hz laptop holding a solid 60 as "a whole period late" every window —
+    // and this is the arm that may only step DOWN, so it walks a machine doing
+    // nothing wrong from 2160 lines to 1080 and never gives them back.
+    name: 'render-scale/late-ratio-vs-raw-floor',
+    file: 'native/libttp-runtime/ttp/render_scale.h',
+    find: 'const double bar = std::max(cost.presentFloorMs, 1000.0 / kAnchorHz);',
+    replace: 'const double bar = cost.presentFloorMs;',
+    expect: 'render_scale',
+  },
+  {
+    // The present series is what a skip storm shows up in; the tick series is a
+    // flat vsync period straight through one. Folding presents as ticks is the
+    // shape both TV shells' readouts had before the split.
+    name: 'perf/present-series-folded-as-ticks',
+    file: 'native/libttp-runtime/ttp/perf_stats.cc',
+    find: '  r.present = foldPresents(ring_);',
+    replace: '  r.present = foldOne(ring_, &Sample::intervalMs);',
+    expect: 'perf',
+  },
 ];
 
 // ---------------------------------------------------------------------------

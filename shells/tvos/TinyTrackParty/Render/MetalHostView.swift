@@ -116,8 +116,8 @@ final class MetalSurfaceView: UIView {
         return CGSize(width: max(1, (h * box.width / box.height).rounded()), height: h)
     }
 
-    /// Buffer lines a scale of 1.0 means on this surface — `ttp_display_step`'s
-    /// `baseLines`, and the number its LINE-COUNT rungs are resolved against.
+    /// Buffer lines a scale of 1.0 means on this surface — the `baseLines` of
+    /// `ttp_display_scale_poll`, and what its LINE-COUNT rungs resolve against.
     /// The panel's own height, never the current buffer's: the whole point is
     /// what a scale of 1 would buy.
     var baseLines: Double {

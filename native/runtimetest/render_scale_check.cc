@@ -1,4 +1,5 @@
-// Behaviour check for ttp/render_scale.h — the adaptive render scale.
+// Behaviour check for the adaptive render scale: ttp/render_scale.h, the pure
+// rule, and ttp/render_scale_controller.h, the state around it.
 //
 // Assertions rather than a corpus, like progression_check and frame_check: the
 // layer has no JS oracle, so this file is where its rules are pinned — which
@@ -12,7 +13,9 @@
 #include <cstdio>
 
 #include "ttp/render_scale.h"
+#include "ttp/render_scale_controller.h"
 
+using ttp::rt::RenderScaleController;
 using ttp::rt::latePresentRatio;
 using ttp::rt::presentBaseline;
 using ttp::rt::RenderScaleCost;
@@ -415,6 +418,237 @@ int main() {
     for (int i = 0; i < 40; i++) sh.poll(cost(sh.at.scale), k4K120);
     check(sh.at.divisor == 2, "a struggling device on a 120 Hz panel runs 60, not 120");
     check(sh.lines(k4K120) < 1080.0, "…and pays in resolution, which is the stated trade");
+  }
+
+  // ---- the controller ------------------------------------------------------
+  //
+  // The state the three shells used to hold by hand. What is pinned here is
+  // everything that was theirs to get wrong: which series the floor is learned
+  // from, what lateness is measured against once a rate has been chosen, when
+  // the window is dropped, and what a scene build does to the climb.
+  {
+    // A loop that ticks at the panel's rate and presents every Nth tick.
+    // `everyNth` above 1 with a divisor of 1 is a SKIP STORM; equal to the
+    // divisor it is the cadence the rule itself chose.
+    struct Box {
+      ttp::rt::perf::Monitor mon;
+      RenderScaleController ctl;
+      double t = 0;
+      int everyNth = 1;
+      int tick = 0;
+      double gpuMs = -1;   // <= 0: no timer, like tvOS
+
+      void ticks(int n, double panel = kHz60) {
+        for (int i = 0; i < n; i++) {
+          t += panel;
+          const bool drew = (++tick % everyNth) == 0;
+          ttp::rt::perf::Sample s;
+          s.tMs = t;
+          s.intervalMs = panel;   // the LOOP's cadence, unaffected by a skip
+          s.presented = drew;
+          s.cpuMs = -1;
+          s.gpuMs = drew ? gpuMs : -1;
+          mon.record(s);
+        }
+      }
+      bool poll(RenderScaleLimits b, RenderScalePoint* out = nullptr) {
+        RenderScalePoint p{0, 0};
+        const bool moved = ctl.poll(t, b, mon, &p);
+        if (out) *out = p;
+        return moved;
+      }
+      double lines(RenderScaleLimits b) const { return ctl.point().scale * b.baseLines; }
+    };
+
+    {
+      // THE PANEL PERIOD IS LEARNED FROM THE TICKS where a shell has none to
+      // declare — a browser has no refresh-rate API. Off the PRESENT series it
+      // would read a chosen divisor as a slower panel.
+      Box b;
+      b.everyNth = 3;
+      b.ticks(180);
+      b.poll(RenderScaleLimits{0.0, 1.0, 2160.0, 0.0});
+      nearly(b.ctl.panelMs(), kHz60, "no declared period: learned from the tick series");
+    }
+    {
+      // THE CEILING IS THE BAND'S, ADOPTED ON THE FIRST POLL. A browser on a
+      // HiDPI screen sizes its buffer from the ceiling before a frame exists,
+      // so a controller that started at a baked-in 1.0 would be pricing frames
+      // drawn at 2.0 as though they cost that at 1.0 — and would halve a canvas
+      // nobody asked it to touch on its first move.
+      const RenderScaleLimits retina{0.0, 2.0, 1080.0, kHz60};
+      Box b;
+      b.gpuMs = 1.0;
+      b.ticks(180);
+      check(!b.poll(retina), "adopting the ceiling is not a move: the shell is already there");
+      nearly(b.ctl.point().scale, 2.0, "…and the point in force IS the ceiling");
+      // …and it is the CEILING, not the top ladder rung: 2160 lines on a
+      // 1080-line surface is not on the ladder at all, and native is a rung on
+      // every panel (see kScaleLadder).
+      nearly(b.lines(retina), 2160.0, "the ceiling is a rung whatever the surface");
+    }
+    {
+      // ONCE, and the band still moves afterwards — a window dragged to another
+      // screen lowers the ceiling, and the rule clamps into it every poll.
+      const RenderScaleLimits retina{0.0, 2.0, 1080.0, kHz60};
+      const RenderScaleLimits plain{0.0, 1.0, 1080.0, kHz60};
+      Box b;
+      b.gpuMs = 1.0;
+      b.ticks(180);
+      b.poll(retina);
+      b.ticks(180);
+      b.poll(plain);
+      check(b.ctl.point().scale <= 1.0 + 1e-9, "a lowered ceiling is honoured, not re-adopted");
+    }
+    {
+      // THE 144 Hz TRAP, on the arm that cannot take a mistake back.
+      //
+      // A 120 Hz panel with no GPU timer, holding a SOLID 60: the loop ticks at
+      // the panel's rate and presents every other tick, so the floor learns 8.3
+      // and the p95 is 16.7. Judged against the raw floor that is a ratio of
+      // 2.0 — "a whole period late", every window, forever — and this arm may
+      // only step DOWN, so a machine doing nothing wrong loses half its
+      // resolution and never gets it back. Measured on the artifact before the
+      // fix: 2160 lines to 1080 in nine seconds.
+      //
+      // 60 fps is the bar; a faster panel does not make a good frame a bad one.
+      // perf_stats.cc closed exactly this hole for the readout, under exactly
+      // this name, while the rule beside it kept dividing by the raw floor.
+      Box b;
+      b.ticks(240, kHz120);          // a cheap screen: every tick presents at 120
+      b.everyNth = 2;                // …then a race the box holds at a solid 60
+      for (int i = 0; i < 12; i++) { b.ticks(240, kHz120); b.poll(k4K120); }
+      nearly(b.lines(k4K120), 2160.0,
+             "a 120 Hz panel holding 60 is not late, and keeps its resolution");
+    }
+    {
+      // …AND THE FLOOR IS NOT A BLINDFOLD, which is the arm that makes the check
+      // above falsifiable. Where the panel IS the anchor the bar and the floor
+      // are one number and nothing changed: a 60 Hz box presenting every other
+      // vsync is 30 fps, a ratio of 2.0, and is rescued exactly as before.
+      //
+      // (Deliberately on a 60 Hz panel. The same demonstration at 120 Hz cannot
+      // be made: the ring holds 120 TICKS, so a box slow enough to be judged
+      // late there leaves under kMinSignalFrames present-gaps in it and the rule
+      // answers "no signal" — a real blind spot of the fallback on a
+      // high-refresh panel whose loop ticks regardless of what drew, and one
+      // this file is not the place to fix.)
+      Box b;
+      b.ticks(180);
+      b.everyNth = 2;
+      for (int i = 0; i < 8; i++) { b.ticks(180); b.poll(k4K); }
+      check(b.lines(k4K) < 2160.0, "a box that really is late still steps down");
+    }
+    {
+      // THE SKIP STORM THE TICK SERIES HIDES, which is the whole reason the
+      // present series exists. The loop ticks a clean 60 and presents 20: a
+      // shell steering off tick intervals sees a flat 16.7 and never moves,
+      // which is a television left at 40-55 fps with the rule never firing.
+      Box b;
+      b.everyNth = 3;
+      b.ticks(360);   // 6 s: past kScaleSceneGraceSec, which this arm honours
+      RenderScalePoint p{0, 0};
+      check(b.poll(k4K, &p) && p.scale < 1.0,
+            "a box presenting one tick in three is rescued, not read as 60 fps");
+      check(b.mon.size() == 0, "…and the window that decided it goes with the buffer");
+    }
+    {
+      // A CHOSEN CADENCE IS NOT A LATE ONE. On a 120 Hz panel the rule anchors
+      // at divisor 2 to hold 60, so presents are deliberately two vsyncs apart.
+      // Lateness is judged against the cadence CHOSEN — the floor times the
+      // divisor — and without that multiply this box retreats every hold, all
+      // the way to the bottom rung, while presenting perfectly.
+      Box b;
+      for (int i = 0; i < 10; i++) {
+        const double sc = b.ctl.point().scale;
+        b.gpuMs = 4.0 + 32.0 * sc * sc;         // fits 16.7 ms, never 8.3
+        b.everyNth = b.ctl.point().divisor;     // present at the cadence chosen
+        b.ticks(360, kHz120);                   // 3 s, past the down hold
+        b.poll(k4K120);
+      }
+      check(b.ctl.point().divisor == 2, "a 120 Hz box without the headroom runs 60");
+      check(b.lines(k4K120) >= 1080.0 - 1e-9,
+            "…at the anchor's picture, not shredded to the floor by its own pacing");
+    }
+    {
+      // A CHOSEN CADENCE IS NOT A LATE ONE, on the arm that cannot take it back.
+      //
+      // The fallback (no GPU timer) may only step DOWN, so a rescue it should
+      // not have made is permanent for the life of the scene. Lateness is
+      // therefore judged against the cadence the rule CHOSE — the device's own
+      // fastest present times the divisor — and not against one raw vsync.
+      //
+      // REACHABLE, though it takes both halves: the divisor only ever moves on
+      // the GPU arm, and `ttp_display_gpu_ms` answers 0 whenever a query has not
+      // come back. So a box settles at 120 Hz/divisor 2 with a timer, the timer
+      // goes quiet, and the fallback inherits a point it did not pick. Without
+      // the multiply it reads its own deliberate 60 fps as a ratio of 2.0 and
+      // walks the ladder to the floor while presenting perfectly.
+      Box b;
+      for (int i = 0; i < 10; i++) {
+        const double sc = b.ctl.point().scale;
+        b.gpuMs = 4.0 + 32.0 * sc * sc;
+        b.everyNth = b.ctl.point().divisor;
+        b.ticks(360, kHz120);
+        b.poll(k4K120);
+      }
+      check(b.ctl.point().divisor == 2 && b.everyNth == 2, "settled at the anchor rate");
+      const double settled = b.lines(k4K120);
+      b.gpuMs = -1;   // the timer goes quiet; the point stays where it was
+      for (int i = 0; i < 8; i++) { b.ticks(360, kHz120); b.poll(k4K120); }
+      nearly(b.lines(k4K120), settled,
+             "a box presenting at the cadence the rule chose is never late for it");
+    }
+    {
+      // THE POLL CADENCE IS A COST GUARD, AND WHAT PINS IT IS THAT NOTHING
+      // DEPENDS ON IT. It stops a 120-sample sort-and-fold running once a frame;
+      // it decides nothing, because the rule's own holds and kMinSignalFrames
+      // already pace every decision. So the property worth gating is not "the
+      // second poll inside a second is refused" — that answers "no move" either
+      // way, and passes for the wrong reason — but that a controller polled on
+      // EVERY FRAME converges on the same operating point as one polled at the
+      // cadence. If a decision ever starts depending on how often it is asked,
+      // this is what notices.
+      const auto cost = [](double sc) { return 4.0 + 32.0 * sc * sc; };
+      Box slow, fast;
+      for (int i = 0; i < 24; i++) {
+        slow.gpuMs = cost(slow.ctl.point().scale);
+        slow.ticks(180);
+        slow.poll(k4K);                       // once per window
+        for (int f = 0; f < 180; f++) {
+          fast.gpuMs = cost(fast.ctl.point().scale);
+          fast.ticks(1);
+          fast.poll(k4K);                     // …and once per frame
+        }
+      }
+      check(slow.ctl.point().scale > 0 && slow.ctl.point().scale < 1.0,
+            "the box settles somewhere below native, so there is something to agree on");
+      nearly(fast.lines(k4K), slow.lines(k4K),
+             "how often the rule is ASKED does not change where it lands");
+      check(fast.ctl.point().divisor == slow.ctl.point().divisor, "…nor the rate it picks");
+    }
+    {
+      // A SCENE HAS NO TENURE IT DID NOT EARN. A box driven to a low rung by a
+      // load that then lifts sits behind the LAP-sized up-hold — correct
+      // mid-race, and wrong for a race that inherited a lobby's floor. The
+      // build restarts the tenure, and the climb runs at one evidence window a
+      // step instead of one lap.
+      Box b;
+      b.gpuMs = 30.0;                          // hopeless at 60 Hz
+      for (int i = 0; i < 6; i++) { b.ticks(180); b.poll(k4K); }
+      const double floored = b.lines(k4K);
+      check(floored < 2160.0, "an expensive scene falls off native");
+
+      b.gpuMs = 1.0;                           // …and the load lifts
+      for (int i = 0; i < 6; i++) { b.ticks(180); b.poll(k4K); }
+      nearly(b.lines(k4K), floored,
+             "past the recovery window a climb waits out the lap-sized hold");
+
+      b.ctl.scene(b.t);
+      for (int i = 0; i < 5; i++) { b.ticks(180); b.poll(k4K); }
+      check(b.lines(k4K) > floored,
+            "a new scene climbs back at one evidence window a step");
+    }
   }
 
   std::printf("render_scale: %d cases, %d failed\n", cases, failed);

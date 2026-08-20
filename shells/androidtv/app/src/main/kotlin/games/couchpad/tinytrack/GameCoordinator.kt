@@ -869,7 +869,11 @@ class GameCoordinator(
         // `ttp_display_cells` — so index i here is cell i there, and there is no
         // per-car cell NUMBER to look up because the model never sends one.
         val viewed = sceneCars.filter { it.cell }
-        val rects = display.cellRects()
+        // The ABI answers FRACTIONS of the surface, so these scale by the
+        // AUTHORED canvas and by nothing the render scale can move. The buffer
+        // width used to be the divisor, and it reached Compose by a road Compose
+        // could not watch — see TtpTheme.toAuthored for what that cost.
+        val rects = display.cellRects().map { it.toAuthored() }
         val roster = display.roster
         val cells = ArrayList<GameState.CellHUD>()
         var cardMask = 0

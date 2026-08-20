@@ -80,10 +80,26 @@ const cardOwnsCell = (c) => !!(c.finished || c.reconnecting);
 // master, and how a fixed resolution is pinned for an A/B.
 const MAX_BUFFER_H = 2160;
 
-// How often the scale is re-decided. The C++ holds are seconds long, so this
-// only has to be fast enough to catch the load changing (a race starting behind
-// a lobby, a fourth player joining) within about a second of it happening.
-const SCALE_POLL_MS = 1000;
+// The most `?supersample=` may ask for. A ceiling on the debug ceiling: this is
+// the one path allowed past MAX_BUFFER_H, and a fat-fingered 30 in a URL is a
+// buffer allocation that takes the tab down rather than a slow frame.
+const MAX_SUPERSAMPLE = 8;
+
+// …and it ARMS this long after boot, rather than applying from the first frame.
+//
+// THE LOAD MUST ARRIVE AFTER THE PANEL PERIOD IS KNOWN, or the demo lands
+// exactly on the one case the fallback cannot see. `presentBaseline` learns the
+// device's own FASTEST present and only ever lowers it, so a page that is
+// heavy from frame one has a p05 equal to its p95, reads as a perfectly steady
+// cadence however slow it is, and never adapts — render_scale.h says so at the
+// fallback, and names cheap screens (a welcome board, a lobby) as where an
+// honest period gets learned. Measured here before this existed: 4200x2700 at
+// 1.5 fps, floor learned as 642 ms, ratio 1.09, no step, forever.
+//
+// So the scene runs at the ordinary ceiling first — which is the real boot
+// sequence, where a welcome board precedes a race — and the load lands on a
+// rule that knows what this panel can do.
+const SUPERSAMPLE_ARM_MS = 3000;
 
 // NOTHING IS REMEMBERED ACROSS SESSIONS, on purpose. Persisting the learned
 // scale looks like free value — a weak TV would skip the seconds it spends
@@ -171,36 +187,52 @@ export class Stage {
     // resize.
     const automation = this._automation =
         typeof navigator !== 'undefined' && !!navigator.webdriver;
-    const dprCap = parseFloat(new URLSearchParams(location.search).get('dpr'));
+    const params = new URLSearchParams(location.search);
+    const dprCap = parseFloat(params.get('dpr'));
     this._dprRequest = Number.isFinite(dprCap) && dprCap > 0 ? dprCap : null;
     this._autoCap = automation ? 0.25 : 2;
+    // DEBUG: ?supersample=N raises the band's CEILING to N x the layout size,
+    // above the panel's own resolution and past MAX_BUFFER_H.
+    //
+    // It exists because the mechanism is otherwise unwatchable on a good
+    // machine: the rule only steps down when frames genuinely cost too much, and
+    // four cells at a laptop's own resolution do not. Every other way of
+    // provoking it lies to something — a fabricated GPU cost, a fake panel
+    // period — and a rule whose whole contract is "hand over measurements, not
+    // opinions" is not worth demonstrating on invented ones. This makes the
+    // frames ACTUALLY expensive (at 3 it is nine times the fill), so everything
+    // downstream is real: real cost, real percentiles, real cost model, real
+    // resize. Where it settles is the honest answer to "what rung does this
+    // machine hold four cells at".
+    //
+    // The three terms it overrides are each deliberate — the panel's own
+    // resolution (this never supersamples), the 2x cap, and MAX_BUFFER_H — so
+    // this is the one place allowed past them, and only ever from a URL nobody
+    // reaches by accident.
+    //
+    // NOT UNDER AUTOMATION, whatever the URL says: the E2E cap exists to keep
+    // the suite fast, and a stray parameter must not be able to hand it a
+    // 20-megapixel buffer per cell.
+    const ss = parseFloat(params.get('supersample'));
+    this._superSample = !automation && Number.isFinite(ss) && ss > 0
+        ? Math.min(ss, MAX_SUPERSAMPLE) : 0;
+    this._superArmed = false;
+    this._superReached = false;
     this._dpr = 1;           // real value comes from the _sizeCanvas below
-    // The adaptive scale's state: the scale in force, when it last moved, and
-    // when it was last re-decided. Infinity rather than a number, so the band's
-    // ceiling is the only place that knows what "as sharp as this screen allows"
-    // means (_sizeCanvas clamps it before the first frame).
+    // THE OPERATING POINT THIS SIDE PERFORMS — the buffer scale it sized and the
+    // cadence it paced. Not a second opinion about what to do: everything the
+    // decision is MADE from (the window, the percentiles, the fastest present,
+    // the cost model, the clocks) lives in ttp/render_scale_controller.h and
+    // folds off the same monitor `perf` feeds. This is the record of the answer.
+    //
+    // Infinity rather than a number, so the band's ceiling is the only place
+    // that knows what "as sharp as this screen allows" means (_sizeCanvas clamps
+    // it before the first frame, and the rule adopts the same ceiling on its
+    // first poll).
     this._autoScale = Infinity;
-    this._scaleAt = 0;
-    // Left at 0 deliberately, so the first decision is not held back: `t` is a
-    // rAF timestamp measured from page load, which means the first poll already
-    // satisfies both holds and a device that cannot hold its opening frames is
-    // rescued at once rather than 2.5 s in. Only a step DOWN can come of it —
-    // the scale starts clamped at the ceiling, so there is nothing to rise into.
-    this._scaleMovedAt = 0;
-    // When the current scene was built, for the up-hold the rule shortens while
-    // a scale is still finding a NEW scene's level (kScaleUpRecoverHoldSec). A
-    // measurement, like _scaleMovedAt beside it — this side does not decide what
-    // a fresh scene is worth. 0 until the first build, which reads as "long ago"
-    // and is right: there is no scene to have inherited a scale from yet.
-    this._sceneBuiltAt = 0;
-    // The last observation at a DIFFERENT scale, for the rule's cost model.
-    // Dropped on a scene build: a fit whose two points come from two different
-    // scenes measures a slope belonging to neither, which is worse than none.
-    this._prevScale = 0;
-    this._prevCostMs = 0;
-    // PRESENT PACING. `_divisor` is "render every Nth rAF callback" and is half
-    // of the operating point render_scale.h answers — 2 on a 120 Hz display
-    // holding the desired 1080@60, 1 once the device proves it can drive 120.
+    // `_divisor` is "render every Nth rAF callback" and is the other half of the
+    // point — 2 on a 120 Hz display holding the desired 1080@60, 1 once the
+    // device proves it can drive 120.
     //
     // The SIM still ticks on every callback: only the picture is paced, so
     // steering keeps the display's full cadence and what doubles is picture
@@ -209,7 +241,6 @@ export class Stage {
     this._divisor = 1;
     this._vsyncCount = 0;
     this._pendingDt = 0;
-    this._presentFloor = 0;  // the running fastest present (ttp_display_present_floor)
     this._canvas = document.createElement('canvas');
     this._canvas.id = 'scene-canvas';
     this._canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
@@ -228,7 +259,9 @@ export class Stage {
     // The operating point the readout judges against, declared at boot and again
     // whenever either half moves (_adaptScale). Nothing is known about the panel
     // yet, which ttp_perf.h reads as "assume 60".
-    this.perf.pacing(this._panelMs(), this._divisor);
+    this._pacedMs = 0;
+    this._pacedDivisor = this._divisor;
+    this.perf.pacing(this._pacedMs, this._pacedDivisor);
     this._sizeCanvas();
     this._initOverlay();
     this._assets = assetCache();
@@ -273,24 +306,24 @@ export class Stage {
   // exactly right — those are not budgets to be renegotiated.
   _scaleBand() {
     const ch = Math.max(1, this.container.clientHeight);
+    if (this._superArmed) {
+      // Held AT the debug ceiling until the point has been there once
+      // (`_superReached`, latched in _adaptScale); released after, so the rescue
+      // this exists to show is not fought by its own floor.
+      return {
+        min: this._superReached ? 0 : this._superSample,
+        max: this._superSample,
+        baseLines: ch
+      };
+    }
     const max = Math.min(window.devicePixelRatio || 1, this._autoCap, MAX_BUFFER_H / ch);
     return { min: 0, max, baseLines: ch };
   }
 
-  // The panel's own present period, one vsync — what a rate step is worth.
-  //
-  // READ OFF THE DEVICE rather than asked for: there is no reliable web API for
-  // refresh rate, but `_presentFloor` is already the fastest present this device
-  // has produced, which is the same number. It is STICKY (presentBaseline only
-  // ever lowers it), so the first frames — which run unpaced at divisor 1 —
-  // learn 8.3 on a 120 Hz display before any pacing could hide it, and pacing
-  // down to 60 afterwards cannot walk the estimate back up.
-  //
-  // Self-correcting in the honest direction too: a machine that has NEVER
-  // presented faster than 16.7 on a 120 Hz panel reports 16.7, the rule treats
-  // it as a 60 Hz panel, and it runs at 60 — which is what it was going to do.
-  // 0 until anything is learned, which the rule reads as "assume 60".
-  _panelMs() { return this._presentFloor; }
+  // NO PANEL PERIOD TO DECLARE. There is no reliable web API for refresh rate,
+  // so this shell passes 0 and the rule learns one off the tick series — see
+  // RenderScaleController::panelMs, and `scalePanelMs()` for reading it back.
+  // The two TV shells have a real answer and pass it.
 
   // Size the drawing buffer to the container, and pick the scale it is sized by.
   // The scale is resolved HERE rather than at construction because the band is a
@@ -468,13 +501,12 @@ export class Stage {
             // A FULL BUILD ONLY. The reroster path above is an in-place re-dress
             // of the same scene — same meshes, same cost — so it inherits its own
             // scale legitimately and must not re-arm the recovery hold.
-            this._sceneBuiltAt = (typeof performance !== 'undefined' ? performance.now() : 0);
+            this.display.scaleScene(
+                typeof performance !== 'undefined' ? performance.now() : 0);
             // …and the window describes the scene that just went away, exactly as
             // it does after a resize. Left in place, the first decision about the
             // NEW scene is made from the old one's frames.
             this.perf.reset();
-            this._prevScale = 0;
-            this._prevCostMs = 0;
           } catch (e) {
             this._sceneSig = this._rosterSig = null; // let the next change retry
             console.error('[stage] scene build failed', e);
@@ -807,13 +839,20 @@ export class Stage {
   // The rects are truncated to whole DEVICE pixels C++-side, so a cell edge can
   // land on a half CSS pixel at dpr 2. That is deliberate: the label follows the
   // edge the player actually sees, which is where the renderer put its viewport.
+  // The cell grid in CSS pixels, for placing the DOM chrome over it.
+  //
+  // The ABI answers FRACTIONS of the surface, so what they are multiplied by is
+  // the container — never the buffer, and therefore never anything the adaptive
+  // render scale can move. `_dpr` used to be the divisor here and its only job
+  // was to undo a scaling the ABI had no reason to apply.
   _cellRects(n) {
     const packed = this.display.cellRects(n);
-    const k = 1 / this._dpr;
+    const cw = Math.max(1, this.container.clientWidth);
+    const ch = Math.max(1, this.container.clientHeight);
     const out = [];
     for (let i = 0; i + 3 < packed.length; i += 4) {
-      out.push({ x: packed[i] * k, y: packed[i + 1] * k,
-                 w: packed[i + 2] * k, h: packed[i + 3] * k });
+      out.push({ x: packed[i] * cw, y: packed[i + 1] * ch,
+                 w: packed[i + 2] * cw, h: packed[i + 3] * ch });
     }
     return out;
   }
@@ -1045,11 +1084,14 @@ export class Stage {
   // 60fps; the held frame renders fully, so resuming picks up seamlessly.
   pauseAfterFrame() { if (this._running) this._idleAfterFrame = true; }
 
-  // ADAPTIVE resolution: re-decide the render scale about once a second from
-  // what the last window of frames cost. Everything JUDGED about those numbers
-  // is C++'s (native/libttp-runtime/ttp/render_scale.h, which carries the whole
-  // argument); this half measures, hands the measurements over unjudged, and
-  // performs the resize.
+  // ADAPTIVE resolution: ask, and perform the answer.
+  //
+  // NOTHING IS DECIDED HERE and nothing is even measured here any more. The
+  // window is the readout's (PerfHud feeds ttp_perf_sample every callback), the
+  // percentiles, the fastest present, the cost model and the clocks are all
+  // ttp/render_scale_controller.h's, and the rule is ttp/render_scale.h's. What
+  // is left on this side is the two things only a browser knows — the band, and
+  // that a hidden tab is not a device — plus the resize.
   //
   // WHAT "low hardware" MEANS here: not a device probe. There is no honest one
   // in a browser — a UA string lies and WEBGL_debug_renderer_info is being taken
@@ -1063,63 +1105,79 @@ export class Stage {
   // problem to be special-cased: a lobby that has climbed then meets a race that
   // has not, notices inside a second and gives the pixels back, because the
   // holds are asymmetric.
+  // DEBUG (?supersample=): arm the raised ceiling, and get there THROUGH THE
+  // BAND rather than by writing the scale.
+  //
+  // THE SHELL MAY NOT MOVE THE OPERATING POINT. It tried, in the first draft of
+  // this, and the bug is the exact one the whole layer exists to prevent: the
+  // shell set `_autoScale` to the new ceiling, the rule went on deciding from
+  // the point IT still held, and the "rescue" that followed was arithmetic on a
+  // scale nobody was drawing at. It happened to land on the floor, which is
+  // what made it look like it had worked.
+  //
+  // So the band does it. `min` means "narrow me no further" — a shell saying
+  // the floor is 3x is using a documented input for its documented meaning, and
+  // the rule moves the point itself and stays the only thing that ever has. The
+  // floor is released the moment the point reaches it (`_superReached` latches,
+  // so a rescue afterwards is not forced back up), and from there the rule steps
+  // down the ladder normally.
+  //
+  // WHY NOT JUST RAISE THE CEILING AND LET IT CLIMB: a climb needs the cost
+  // model, which needs a GPU timer, so on WebKit it would never arrive at all.
+  _armSuperSample(t) {
+    if (!this._superSample || this._superArmed || t < SUPERSAMPLE_ARM_MS) return;
+    this._superArmed = true;
+    console.info(`[stage] supersample armed: ceiling -> ${this._superSample}x`
+        + ` (${Math.round(this._superSample * this.container.clientHeight)} lines)`);
+  }
+
   _adaptScale(t) {
     if (this._dprRequest != null || this._automation) return;   // a named scale is not ours to move
-    if (t - this._scaleAt < SCALE_POLL_MS) return;
-    // A throttled tab presents at whatever rate the browser feels like, and none
-    // of it describes the device. Nothing is measured or decided while hidden.
-    if (typeof document !== 'undefined' && document.hidden) { this._scaleAt = t; return; }
-    this._scaleAt = t;
-    const s = this.perf.sample();
-    // The fastest present is the one number carried between windows, so the fold
-    // happens here — but WHICH samples may become one is the rule's, not ours.
-    this._presentFloor = this.display.presentFloor(this._presentFloor, s.frame.p05 || 0);
-    // …and the readout is judged against the same operating point the rule is
-    // steering, so it hears the floor as soon as it moves. The panel's period is
-    // still being learned here, which is why this is not a boot-time fact.
-    this.perf.pacing(this._panelMs(), this._divisor);
-    const band = this._scaleBand();
-    // A missing GPU timer, and a percentile no frame has landed in yet, are both
-    // "nothing measured" — 0, which the rule reads as no signal. Named once
-    // because the cost model's stored observation is the SAME number.
-    //
-    // RAW MILLISECONDS, not a share: the rule picks the present rate as part of
-    // the same decision, so the budget is its to choose and a share handed over
-    // would already be normalised against a rate nobody had picked.
-    const costMs = s.gpuTimer === 'ext' ? s.gpu.p95 || 0 : 0;
-    const step = this.display.step(this._autoScale, this._divisor, {
-      gpuP95Ms: costMs,
-      gpuFrames: s.gpu.n,
-      presentP95Ms: s.frame.p95 || 0,
-      presentFloorMs: this._presentFloor,
-      presentFrames: s.frame.n,
-    }, (t - this._scaleMovedAt) / 1000, (t - this._sceneBuiltAt) / 1000,
-       this._prevScale, this._prevCostMs, band.min, band.max, band.baseLines,
-       this._panelMs());
-    if (!step) return;
-    const [next, divisor] = step;
-    if (next === this._autoScale && divisor === this._divisor) return;
-    // THE OBSERVATION THE COST MODEL IS BUILT FROM, recorded at the one moment it
-    // exists: the scale that was in force and what it cost. The rule fits
-    // `fixed + fill * s^2` from this and the next one and SOLVES for the rung
-    // that fits the budget, instead of comparing one number to a threshold that
-    // cannot serve a fill-bound GPU and a fixed-cost-bound one at once.
-    if (next !== this._autoScale) {
-      this._prevScale = this._autoScale;
-      this._prevCostMs = costMs;
+    // A THROTTLED TAB IS NOT THIS DEVICE. A hidden tab presents at whatever rate
+    // the browser feels like, so the window fills with frames that describe
+    // nothing — drop it rather than decide on it, which is the readout's own
+    // rule (stale history is worse than none) applied to the same monitor.
+    if (typeof document !== 'undefined' && document.hidden) { this.perf.reset(); return; }
+    this._armSuperSample(t);
+    // …and release its floor once the point has actually reached it. Latched
+    // here rather than inside _scaleBand, which _sizeCanvas also calls and which
+    // has no business having a side effect.
+    if (this._superArmed && this._autoScale >= this._superSample - 1e-9) {
+      this._superReached = true;
     }
-    this._divisor = divisor;
-    this._autoScale = next;
-    this._scaleMovedAt = t;
-    // The new cadence, declared BEFORE the window below is thrown away: the
-    // frames that follow are paced by this divisor, and judging them against
-    // the old one's budget is exactly the "paced box reads red" the declaration
-    // exists to stop.
-    this.perf.pacing(this._panelMs(), this._divisor);
-    // …and _onResize drops the window that just decided this. Keeping it would
-    // judge the new resolution on the old one's frames for the next two
-    // seconds, which is how a controller talks itself into a second step it
-    // does not need.
+    const band = this._scaleBand();
+    // 0 for the panel period: no web API answers it, so the rule learns one.
+    const was = this._autoScale;
+    const step = this.display.scalePoll(t, band.min, band.max, band.baseLines, 0);
+    if (step) [this._autoScale, this._divisor] = step;
+    // THE READOUT IS JUDGED AGAINST THE POINT THE RULE IS STEERING, so it hears
+    // both halves whenever either moves — and the panel period is one of them
+    // here, because this shell has none to declare and the rule LEARNS it (it
+    // only ever falls, as the box turns out to be capable of a faster present
+    // than anything seen yet). Declared on change rather than every frame: a
+    // budget still quoting the first estimate paints an honest box red, and a
+    // per-frame setter is a boundary crossing for a value that moves a handful
+    // of times a session.
+    const panelMs = this.display.scalePanelMs();
+    if (panelMs !== this._pacedMs || this._divisor !== this._pacedDivisor) {
+      this._pacedMs = panelMs;
+      this._pacedDivisor = this._divisor;
+      this.perf.pacing(panelMs, this._divisor);
+    }
+    if (!step) return;
+    // WHAT THE RULE ANSWERED, on the console, because a move is an EVENT and the
+    // readout only ever shows the current size. Both TV shells print this and
+    // the browser did not, so the one platform you can actually sit in front of
+    // was the one where a step left no trace — you had to catch the corner
+    // changing. Only on a MOVE (the poll is silent), so a settled session says
+    // nothing at all.
+    console.info(`[stage] scale ${was.toFixed(3)} -> ${this._autoScale.toFixed(3)}`
+        + ` (${Math.round(this._autoScale * band.baseLines)} lines)`
+        + ` | ${Math.round(1000 / (panelMs || 1000 / 60))}Hz / divisor ${this._divisor}`);
+    // …and _onResize drops the window a second time, once the buffer has
+    // actually changed size. The rule dropped it at the decision; this catches
+    // the reallocation's own stall, which would otherwise be the first thing the
+    // next decision sees.
     this._onResize();
   }
 

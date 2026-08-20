@@ -1,6 +1,10 @@
 // ttp_perf.cc — MARSHALLING ONLY. Every judgement is in
 // libttp-runtime/ttp/perf_stats.{h,cc}, where the `perf` ctest executes it on
-// every leg; this file owns the process's one monitor and its scratch buffer.
+// every leg; this file owns the scratch buffer and nothing else.
+//
+// THE MONITOR IS NOT THIS FILE'S. It is `perf::monitor()`, because the
+// render-scale controller folds off the same window — see its header. A static
+// here would have been a second one the moment that shim needed the first.
 #include "ttp_perf.h"
 
 #include <string>
@@ -10,14 +14,13 @@
 namespace perf = ttp::rt::perf;
 
 namespace {
-perf::Monitor g_monitor;
 std::string g_buf;
 }  // namespace
 
-void ttp_perf_reset(void) { g_monitor.reset(); }
+void ttp_perf_reset(void) { perf::monitor().reset(); }
 
 void ttp_perf_pacing(double panelMs, int divisor) {
-  g_monitor.pacing(panelMs, divisor);
+  perf::monitor().pacing(panelMs, divisor);
 }
 
 void ttp_perf_sample(double tMs, double intervalMs, int presented,
@@ -28,7 +31,7 @@ void ttp_perf_sample(double tMs, double intervalMs, int presented,
   s.presented = presented != 0;
   s.cpuMs = cpuMs;
   s.gpuMs = gpuMs;
-  g_monitor.record(s);
+  perf::monitor().record(s);
 }
 
 const char* ttp_perf_readout_json(int cells, int width, int height, double dpr,
@@ -39,6 +42,6 @@ const char* ttp_perf_readout_json(int cells, int width, int height, double dpr,
   d.height = height;
   d.dpr = dpr;
   d.track = trackOrNull ? trackOrNull : "";
-  g_buf = perf::readoutJson(g_monitor.fold(), d);
+  g_buf = perf::readoutJson(perf::monitor().fold(), d);
   return g_buf.c_str();
 }

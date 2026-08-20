@@ -95,7 +95,7 @@ export class Display {
     this.built = false;
     this._rectPtr = 0;       // cellRects' heap scratch, grown on demand
     this._rectBytes = 0;
-    this._stepPtr = 0;       // step()'s two-double out array; allocated on first use
+    this._pollPtr = 0;       // step()'s two-double out array; allocated on first use
     this._showcase = false;  // the asset gallery's showroom; see showcase()
     this._kitModels = [];    // …and its kit field; see kitField()
     // No slot→car-id list here anymore: the HUD block is indexed by slot and
@@ -105,11 +105,10 @@ export class Display {
       create: mod.cwrap('ttp_display_create', 'number', ['string', 'number', 'number']),
       asset: mod.cwrap('ttp_display_asset', 'number', ['string', 'number', 'number']),
       resize: mod.cwrap('ttp_display_resize', null, ['number', 'number']),
-      step: mod.cwrap('ttp_display_step', 'number',
-                      ['number', 'number', 'number', 'number', 'number', 'number',
-                       'number', 'number', 'number', 'number', 'number', 'number',
-                       'number', 'number', 'number', 'number']),
-      presentFloor: mod.cwrap('ttp_display_present_floor', 'number', ['number', 'number']),
+      scaleScene: mod.cwrap('ttp_display_scale_scene', null, ['number']),
+      scalePoll: mod.cwrap('ttp_display_scale_poll', 'number',
+                           ['number', 'number', 'number', 'number', 'number', 'number']),
+      scalePanelMs: mod.cwrap('ttp_display_scale_panel_ms', 'number', []),
       build: mod.cwrap('ttp_display_build', 'number', ['string', 'string']),
       reroster: mod.cwrap('ttp_display_reroster', 'number', ['string']),
       debugDecals: mod.cwrap('ttp_display_debug_decals', 'string', []),
@@ -233,30 +232,31 @@ export class Display {
     this._fn.resize(w, h);
   }
 
-  // What scale to render at next, given what the last window of frames cost, and
-  // the running fastest-present that feeds it. Both rules are C++'s
-  // (ttp/render_scale.h) — this side measures and performs, and passes the
-  // numbers over unjudged. See Stage._adaptScale.
-  // The next OPERATING POINT as `[scale, divisor]`, or null if the rule declined
-  // to answer. ONE call for both halves because they are one decision — the rule
-  // trades frame rate against resolution around a desired 1080@60, so a caller
-  // taking one answer and ignoring the other would be arbitrating between them
-  // itself. See ttp_display_step.
-  step(current, divisor, cost, sinceChangeSec, sinceSceneSec,
-       prevScale, prevCostMs, min, max, baseLines, panelMs) {
-    if (!this._stepPtr) this._stepPtr = this.m._malloc(16); // 2 doubles
-    const ok = this._fn.step(current, divisor, cost.gpuP95Ms, cost.gpuFrames,
-                             cost.presentP95Ms, cost.presentFloorMs, cost.presentFrames,
-                             sinceChangeSec, sinceSceneSec, prevScale, prevCostMs,
-                             min, max, baseLines, panelMs, this._stepPtr);
-    if (!ok) return null;
+  // A NEW SCENE, on the same clock the perf samples carry. The rule drops its
+  // cost model and restarts the scale's tenure; neither is ours to judge.
+  scaleScene(tMs) { this._fn.scaleScene(tMs); }
+
+  // Re-decide the operating point. `[scale, divisor]` when it MOVED, else null —
+  // which is also the answer while a hold or the poll cadence is running.
+  //
+  // ONE call for both halves because they are one decision: the rule trades
+  // frame rate against resolution around a desired 1080@60, so a caller taking
+  // one answer and ignoring the other would be arbitrating between them itself.
+  // Everything it decides FROM — the window, the percentiles, the fastest
+  // present, the cost model's observation, the clocks — is C++'s and folds off
+  // the same monitor PerfHud feeds. See ttp_display_scale_poll.
+  scalePoll(tMs, min, max, baseLines, panelMs) {
+    if (!this._pollPtr) this._pollPtr = this.m._malloc(16); // 2 doubles
+    if (!this._fn.scalePoll(tMs, min, max, baseLines, panelMs, this._pollPtr)) return null;
     // HEAPF64 re-read every call: ALLOW_MEMORY_GROWTH swaps the buffer out from
     // under any view held across an allocation (same rule as cellRects).
-    const i = this._stepPtr >> 3;
+    const i = this._pollPtr >> 3;
     return [this.m.HEAPF64[i], this.m.HEAPF64[i + 1] | 0];
   }
 
-  presentFloor(prevFloorMs, p05Ms) { return this._fn.presentFloor(prevFloorMs, p05Ms); }
+  // The panel period the rule is judging against — declared or learned. For
+  // perf.pacing, so the readout's budget and the rule's are one number.
+  scalePanelMs() { return this._fn.scalePanelMs(); }
 
   // Build every scene from here on as the ASSET GALLERY's showroom: the picked
   // biome's palette carrying every biome's vocabulary (ttp_display_showcase).

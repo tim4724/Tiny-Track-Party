@@ -17,8 +17,12 @@ catch.
 
 `render_scale` is here for a different reason: it decides how big the drawing
 buffer should be from what the last window of frames cost, and every platform
-meets the same spread of devices. A shell hands over MEASUREMENTS — it may not
-judge them, and the header says which judgements are the rule's.
+meets the same spread of devices. It is TWO files — `render_scale.h`, the pure
+rule, and `render_scale_controller.{h,cc}`, the state around it: the window it
+folds off the readout's monitor, the running fastest present, the cost model's
+observation and the tenure clocks. A shell names its BAND and its panel period
+and performs the answer; it holds nothing else, because three shells that held
+that state by hand had already drifted to three different percentile formulas.
 
 ## The UI model
 
@@ -115,8 +119,11 @@ warm-up filter, the percentile formula, the two rates (`hz` counts ticks, `fps`
 counts presents), the drop and skip counts and the health verdict. A shell hands
 over MEASUREMENTS — its own clocks, its profile buffer, whatever GPU timer its
 backend has — and may not judge them. Same contract as `render_scale`, and the
-readout hands that rule its statistics over the same window, so a shell cannot
-steer its resolution off numbers its overlay disagrees with.
+same WINDOW: `perf::monitor()` is the process's one ring and the scale
+controller folds off it, so a shell cannot steer its resolution off numbers its
+overlay disagrees with. It carries two present series for that — `frame` is the
+tick cadence and `present` the gaps between frames that reached the panel, which
+are one measurement on rAF and two on a display link.
 
 It is here because the three shells had already drifted while **all three
 carried a comment saying they had not**: each said "the web's thresholds, kept so
