@@ -380,6 +380,17 @@ preservation comes from `Renderer::ClearOptions` (clear=false,
 discard=false) at the render call, never from the blend mode.
 bakeSilhouette keeps TRANSLUCENT because alpha-compositing is exactly what
 a mask bake wants.
+> **AND IT IS PRICED IN WHOLE SURFACES.** Compositing a view means Filament
+> renders it into a full-surface intermediate and blends the lot on, however
+> few pixels the view actually draws. The 2D cell overlay asked for it and paid
+> **4.2-4.5 ms of a 16.68 ms budget at 3840x2160** for a few thousand pixels of
+> divider and steer bar: the largest single item in a 4-player Apple TV frame,
+> larger than the entire game world. Ablating the quads instead measured the
+> same, so the drawing was never the cost. A view that is LAST in its frame
+> needs no compositing mode at all — Filament clears colour only for the first
+> view into a target, so an OPAQUE view blends its own transparent materials
+> onto what is already there. Read a view's blend mode before pricing anything
+> inside it.
 
 **Skid marks are the same road-shader paint, accumulated — on the CPU.** The
 transient decals above are re-packed every frame; rubber instead lands in a
@@ -480,26 +491,15 @@ the scripts that take them.
 **The fixed half is the scene being SUBMITTED, and it has no single hot spot.**
 On that device it is not the road's vertex count, not its draw-call count, not
 the cell overlay pass and not the present — each was ablated and each moved
-under half a millisecond. **A pass priced at one panel size says nothing about
-another**: that same overlay pass, at the Apple TV's nine times the pixels, was
-the whole reason a 4-way split missed 60 Hz (see the blend-mode note below). It is spread across the deck, the terrain and the set
+under half a millisecond. It is spread across the deck, the terrain and the set
 dressing, so the way to spend less of it is to submit less, not to find the one
 thing at fault. Do not go looking for that one thing again; the arms are in the
 shell's file.
-
-**A `View`'s BLEND MODE is a compositing decision, not a blending one, and it
-is priced in WHOLE SURFACES.** `BlendMode::TRANSLUCENT` does not mean "the
-things in this view blend" — a material's own `blending` says that. It means
-"composite this entire view over the destination", so Filament renders the view
-into a full-surface intermediate and blends the lot on. The 2D cell overlay
-asked for it and paid **4.2-4.5 ms of a 16.68 ms budget at 3840x2160** to
-deliver a few thousand pixels of divider and steer bar — the largest single item
-in a 4-player Apple TV frame, larger than the entire game world, and removing
-the quads instead measured the same, so the drawing was never the cost. A view
-that is genuinely LAST in its frame does not need the mode at all: Filament
-clears colour only for the first view rendered into a target, so an OPAQUE view
-blends its own transparent materials straight onto what is already there. Read
-the blend mode of any view before pricing what is inside it.
+> **A PASS PRICED AT ONE PANEL SIZE SAYS NOTHING ABOUT ANOTHER.** That same
+> cell overlay pass, at the Apple TV's nine times the pixels, was the whole
+> reason a 4-way split missed 60 Hz — and what it cost was its VIEW's blend
+> mode rather than anything it drew. The `BlendMode::TRANSLUCENT` note above is
+> the one place that law is written.
 
 **The full-screen antialias pass is a switch** (`ttp_display_antialias`), and
 turning it off removes the offscreen scene buffer with it, so the saving is both
