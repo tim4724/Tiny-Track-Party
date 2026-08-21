@@ -83,6 +83,18 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
         private set
 
     /**
+     * Which backend the live engine runs — [SceneStaging] hands over the blob
+     * set that matches (a GL blob does not parse on a Vulkan engine). Valid
+     * only while [hasSurface]; decided in `surfaceChanged`, [VulkanPolicy] has
+     * the gates.
+     */
+    var usingVulkan: Boolean = false
+        private set
+
+    /** A Vulkan boot has marked its canary and not yet presented a frame. */
+    private var vkCanaryArmed = false
+
+    /**
      * Fired EVERY time a surface comes into existence, not just the first.
      *
      * The first fire is why it exists at all: the coordinator's whole boot —
@@ -201,10 +213,26 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
         if (!hasSurface) {
-            if (!TtpSurface.nativeCreate(holder.surface, width, height)) {
+            // The backend, decided HERE and nowhere else (VulkanPolicy has the
+            // gates). A Vulkan engine that refuses to create falls straight
+            // back to GL in the same call — the player sees a picture either
+            // way — and the refusal keeps its canary count, so a driver that
+            // refuses twice stops being asked.
+            var vulkan = VulkanPolicy.useVulkan(view.context)
+            if (vulkan) {
+                VulkanPolicy.markAttempt(view.context)
+                vkCanaryArmed = true
+                if (!TtpSurface.nativeCreate(holder.surface, width, height, true)) {
+                    Log.e(TAG, "Vulkan engine refused ${width}x$height — retrying on GL")
+                    vulkan = false
+                    vkCanaryArmed = false
+                }
+            }
+            if (!vulkan && !TtpSurface.nativeCreate(holder.surface, width, height, false)) {
                 Log.e(TAG, "ttp_display_create failed for ${width}x$height")
                 return
             }
+            usingVulkan = vulkan
             hasSurface = true
             surfaceWidth = width
             surfaceHeight = height
@@ -447,6 +475,14 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
                     // the idle animations on the next call.
                     pendingDt = 0.0
                     if (presented) framesPresented++
+                    // A Vulkan boot that gets a frame onto the glass clears its
+                    // canary — the failure the canary exists for (the EHABI
+                    // unwinder hang, VulkanPolicy) happens under the cover,
+                    // BEFORE any present.
+                    if (presented && vkCanaryArmed) {
+                        vkCanaryArmed = false
+                        VulkanPolicy.markGood(view.context)
+                    }
                     // THE FIRST PAINTED FRAME OF A BUILT SCENE, which is what the
                     // boot cover waits on. Both halves matter and neither alone
                     // is it: a present with no scene is the renderer clearing an

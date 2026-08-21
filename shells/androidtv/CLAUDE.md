@@ -758,17 +758,23 @@ Per-cell FOG is the one that looks like a blocker and is not: it is a `View`
 option, but every cell of a RACE runs the same ramp, so one view's fog serves
 them. The lobby orbit and the overview are single-cell and never take this path.
 
-## Vulkan (experimental)
+## Vulkan
 
-`adb shell setprop debug.ttp.vk 1` flips the WHOLE ENGINE onto Filament's
-Vulkan backend at the next surface create. It is a boot-time choice read in two
-places off one property — `ttp_display_android.cc` picks the backend (and drops
-stereo to 0: multiview is a GL arrangement), `SceneStaging.materials` hands over
-the SPIR-V blob set (`assets/materials-vk/`, compiled by
-`build-runtime-android.sh` beside the multiview set; a GL blob does not parse on
-a Vulkan engine). `perf-race` arms take it as `--vk 1`, pin GL when unflagged,
-and restore the property on every exit path — a leftover `1` would flip a
-shipping install's backend.
+**VULKAN IS THE DEFAULT BACKEND on this shell, decided once per launch in
+`VulkanPolicy`** (property override `debug.ttp.vk`: 1 forces Vulkan, -1 forces
+GL; then the SPIR-V blob set must be in the APK; then the boot canary — two
+Vulkan boots that never presented a frame and every later launch runs GL until
+a reinstall). The decision is made at surface create and carried into
+`nativeCreate` as a parameter — the shared `ttp_display_create` ABI cannot grow
+a platform-private argument — and `DisplayHost` retries the create on GL in the
+same call when the Vulkan engine refuses, so a refusing driver still shows a
+picture. A Vulkan engine runs stereo-free (multiview is a GL arrangement) and
+reads the SPIR-V twins from `assets/materials-vk/` (compiled by
+`build-runtime-android.sh` beside the multiview set; a GL blob does not parse
+on a Vulkan engine, so `SceneStaging` follows `DisplayHost.usingVulkan`, never
+the property). `perf-race` arms take `--vk 1`, PIN GL when unflagged (the
+GL-era ledgers stay comparable), and restore the property to unset on every
+exit path.
 
 **Why it exists: the GL driver was nearly half the 4-player frame.** On this
 box's PowerVR GL driver the 4P/540 GPU median reads ~27 ms; the same race on
@@ -796,12 +802,11 @@ re-price before citing either.
   `run-as`, a raw gdb-remote PC sampler, offline symbolization against the
   unstripped `.so`) is in the session notes, since `debuggerd` wants root.
 
-Still owed before it can be more than a knob: soak beyond bench races (cups,
-monster, rockets, surface destroy/recreate, HDMI mode changes), scene-build
-cost under Vulkan's slow `readPixels` path, and a driver-quality story for the
-wider box population — PowerVR Vulkan drivers vary. The readout, the scale
-rule and hz30 all behave identically on it; `OpenGLTimerQuer`'s thread simply
-does not exist under Vulkan.
+The readout, the scale rule and hz30 all behave identically on it;
+`OpenGLTimerQuer`'s thread simply does not exist under Vulkan. The wider-box
+driver story is what the canary + GL retry exist for: PowerVR Vulkan drivers
+vary, and the observed failure shape (the silent unwinder hang above) is
+invisible to a crash-loop detector.
 
 ## Audio
 

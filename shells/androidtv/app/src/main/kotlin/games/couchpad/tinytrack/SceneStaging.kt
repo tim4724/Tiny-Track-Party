@@ -133,10 +133,11 @@ object SceneStaging {
         // The asset map is fresh (see [providedCarModels]): nothing the renderer
         // holds survived, so nothing this remembers may either.
         providedCarModels.clear()
-        // The Vulkan experiment reads the SPIR-V twins: a GL blob does not
-        // parse on a Vulkan engine, and the backend choice was already made at
-        // surface create off the same property (ttp_display_android.cc).
-        val dir = if (PerfDebug.vulkanRequested()) "materials-vk" else "materials"
+        // A Vulkan engine reads the SPIR-V twins: a GL blob does not parse on
+        // a Vulkan engine. The choice is the surface's, made at create
+        // (VulkanPolicy) — never re-derived here, where a disagreement would
+        // fail as a parse abort mid-boot.
+        val dir = if (display.usingVulkan) "materials-vk" else "materials"
         for (name in MATERIAL_NAMES) {
             val file = "$name.filamat"
             val bytes = store.bundled("$dir/$file")

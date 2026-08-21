@@ -30,11 +30,18 @@
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
 #include <jni.h>
-#include <sys/system_properties.h>
 
 #include "TtpRenderer.h"
 
 namespace {
+
+// WHICH BACKEND the next ttp_display_create builds. Decided in KOTLIN
+// (VulkanPolicy — the property override, the canary and the blob-set check all
+// need a Context), carried here by the JNI entry point below because
+// ttp_display_create's signature is the shared ABI and the backend is this
+// platform's private business. Vulkan runs stereo-free: multiview is a
+// GL_OVR_multiview2 arrangement.
+static bool gUseVulkan = false;
 
 // The platform sliver over the shared core: just the window.
 struct AndroidDisplay : ttp::rt::DisplayCore {
@@ -83,27 +90,16 @@ int ttp_display_create(const void* surface, uint32_t width, uint32_t height) {
     // init(), so there is nothing current to ask yet. The renderer's conservative
     // default stands, exactly as it does on tvOS.
     //
-    // stereoEyes = 2: the engine is configured for OVR_multiview at creation
-    // (Filament allows no later switch) and costs the same as a NONE engine
-    // while no stereo view draws — the actual render path is the live
-    // ttp_display_multiview switch. Android-only, because only this backend
+    // stereoEyes = 2 on the GL arm: the engine is configured for OVR_multiview
+    // at creation (Filament allows no later switch) and costs the same as a
+    // NONE engine while no stereo view draws — the actual render path is the
+    // live ttp_display_multiview switch. GL-only, because only that backend
     // compiles glFramebufferTextureMultiviewOVR, and it needs the SDK built
     // with -S multiview (build-runtime-android.sh aborts with the story).
-    //
-    // `debug.ttp.vk 1` is the VULKAN EXPERIMENT: the whole engine on Filament's
-    // Vulkan backend, priced against the GL arm one launch apart. Read HERE and
-    // not in PerfDebug's poll because a backend exists only at engine creation;
-    // SceneStaging reads the same property to hand over the SPIR-V blob set
-    // (assets/materials-vk/ — a GL blob does not parse on a Vulkan engine, and
-    // vice versa). stereoEyes drops to 0 on that arm: multiview is a
-    // GL_OVR_multiview2 arrangement and the experiment prices the classic path.
-    char vkProp[PROP_VALUE_MAX];
-    const bool vulkan = __system_property_get("debug.ttp.vk", vkProp) > 0
-            && vkProp[0] == '1';
-    if (!renderer->init(vulkan ? filament::backend::Backend::VULKAN
-                               : filament::backend::Backend::OPENGL,
+    if (!renderer->init(gUseVulkan ? filament::backend::Backend::VULKAN
+                                   : filament::backend::Backend::OPENGL,
                         window, width, height,
-                        /*stereoEyes=*/vulkan ? 0 : 2)) {
+                        /*stereoEyes=*/gUseVulkan ? 0 : 2)) {
         delete renderer;
         ANativeWindow_release(window);
         return 0;
@@ -140,8 +136,10 @@ void ttp_display_destroy(void) {
 
 JNIEXPORT jboolean JNICALL
 Java_games_couchpad_tinytrack_TtpSurface_nativeCreate(
-        JNIEnv* env, jclass, jobject surface, jint width, jint height) {
+        JNIEnv* env, jclass, jobject surface, jint width, jint height,
+        jboolean vulkan) {
     if (!surface) return JNI_FALSE;
+    gUseVulkan = vulkan == JNI_TRUE;
     // fromSurface RETURNS an acquired window; ttp_display_create acquires again
     // for its own reference, so this one is released either way below.
     ANativeWindow* window = ANativeWindow_fromSurface(env, surface);

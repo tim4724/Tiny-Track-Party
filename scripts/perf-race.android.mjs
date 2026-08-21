@@ -193,11 +193,12 @@ export function makeAndroidBackend() {
       // default): the bench's readings predate multiview, and an arm that
       // silently rode the default would not be comparable to any of them.
       setprop('debug.ttp.mv', arg('mv', -1));
-      // The EXPERIMENTAL Vulkan backend (`debug.ttp.vk`, read at engine
-      // creation — ttp_display_android.cc). Explicit per arm for the same
-      // comparability reason as --mv, and BEFORE the launch below because a
+      // The backend (`debug.ttp.vk`: 1 Vulkan, -1 GL, unset = VulkanPolicy,
+      // which defaults to VULKAN). Explicit per arm for the same comparability
+      // reason as --mv — an unflagged arm PINS GL so readings stay comparable
+      // to the GL-era ledgers — and set BEFORE the launch below because a
       // backend cannot be switched on a running engine.
-      setprop('debug.ttp.vk', arg('vk', 0));
+      setprop('debug.ttp.vk', arg('vk', -1));
 
       adb('logcat', '-c');
       startLogcat();
