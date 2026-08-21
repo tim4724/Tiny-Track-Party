@@ -218,6 +218,15 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
             flushPendingAssets()
             start()
             onSurfaceReady?.invoke()
+            // A RECREATED surface comes back at the VIEW's size, not the size
+            // the scale rule last decided. The rule's state is process-lifetime
+            // C++ and it answers only MOVES — it believes its settled point is
+            // in force, so nothing downstream ever corrects the buffer, and a
+            // home-and-back lobby silently ran 1920x1080 at 26 ms of GPU and
+            // 33 fps while the readout's own scaler said 0.50. Re-arm whatever
+            // is in force; on the FIRST surface renderScale is 1.0 and this is
+            // the no-op branch of applyScale.
+            applyScale(if (scalePin > 0) scalePin else renderScale)
         } else if (width != surfaceWidth || height != surfaceHeight) {
             surfaceWidth = width
             surfaceHeight = height
