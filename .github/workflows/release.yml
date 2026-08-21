@@ -115,9 +115,15 @@ jobs:
       # ~111 MB installed for both ABIs, plus the host matc. That matc is the one
       # `build.sh -p android` builds for itself, under out/prebuilt-tools-release
       # — NOT a desktop build's out/cmake-release, which nothing here produces.
+      # RESTORE AND SAVE AS SEPARATE STEPS, not one actions/cache. The combined
+      # action only writes the cache in its post step WHEN THE JOB SUCCEEDS, and
+      # this job has six steps after the build that can fail for reasons that
+      # have nothing to do with Filament — a missing secret is enough. That threw
+      # away a completed hour-long build once already. The save sits directly
+      # after the build instead, so the artifact survives whatever happens later.
       - name: Restore the Filament Android SDK
         id: filament-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: |
             ${{ runner.temp }}/filament/out/android-release
@@ -149,6 +155,17 @@ jobs:
             mesa-common-dev
           ./build.sh -i -q armeabi-v7a -S multiview -p android release
           ./build.sh -i -q arm64-v8a   -S multiview -p android release
+
+      # Keyed and pathed identically to the restore above, or the next run's
+      # restore misses and rebuilds what this just saved.
+      - name: Save the Filament Android SDK
+        if: steps.filament-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ runner.temp }}/filament/out/android-release
+            ${{ runner.temp }}/filament/out/prebuilt-tools-release/tools/matc/matc
+          key: filament-android-${{ steps.pin.outputs.commit }}
 
       # app/build.gradle.kts reads this file and falls back to DEBUG SIGNING when
       # it is absent, which would produce a bundle Play rejects. The verify step
