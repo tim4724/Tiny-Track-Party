@@ -141,8 +141,20 @@ struct RootView: View {
                     .transition(.opacity)
             }
 
+            // OVER THE SCREEN SWITCH AND NOT INSIDE A BOARD, which is the whole
+            // reason it is here rather than in `raceChrome` where it began. The
+            // boot cover's job is the LOBBY — that is the board this shell
+            // starts on, and `ttp_ui_cover` names both — so a cover nested in
+            // the race chrome is a cover that is never in the tree when it is
+            // wanted. It cost five seconds of bare paper diorama on every cold
+            // launch, invisible in review because the comment about z-order was
+            // true of the ZStack it was in.
+            CoverView(cover: state.cover)
+
             // Inert while hidden — it instruments nothing and draws nothing
-            // until `game.display.perf.show()` is called.
+            // until `game.display.perf.show()` is called. ABOVE the cover on
+            // purpose: it is an instrument, and a boot it cannot see is the boot
+            // most worth measuring.
             PerfOverlay(monitor: game.display.perf)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
         }
@@ -296,12 +308,6 @@ struct RootView: View {
                              onNewGame: { game.returnToLobby() })
                     .transition(.opacity)
             }
-
-            // LAST, so it is over everything: a cover with a results board or a
-            // countdown showing through is a half-drawn screen rather than a
-            // cover. It can only be up at boot (`hasPainted` latches once), so
-            // it never actually competes with either.
-            CoverView(cover: state.cover)
         }
         // Each overlay fades on its OWN value. `GameState.ResultsView` is not
         // Equatable (it holds the model's rows verbatim), so the trigger is

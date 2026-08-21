@@ -31,6 +31,10 @@ final class GameState: ObservableObject {
     /// whichever screen is up, and deliberately NOT a screen of its own: it is
     /// not navigable, pushes nothing and has no Menu behaviour. See
     /// `ttp/ui_model.h`, and `CoverView` for why it never animates.
+    ///
+    /// The literal here is never the one a viewer sees: `GameCoordinator.init`
+    /// asks the model for the real answer before the first body is drawn, which
+    /// it has to because SwiftUI draws that body before `boot()` runs.
     @Published var cover: String = "none"
 
     /// What the 3D surface is doing behind the chrome. The welcome board is

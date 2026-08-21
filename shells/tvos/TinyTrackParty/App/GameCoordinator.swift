@@ -104,6 +104,18 @@ final class GameCoordinator: ObservableObject {
         net = PartyNet(proto: proto, socket: RelaySocket())
         audio = AudioDevice(baseURL: baseURL) { [weak assets] path in assets?.bundled(path) }
         lobbyDemo = LobbyDemo()
+        // THE COVER, BEFORE THE FIRST BODY. SwiftUI evaluates a body before the
+        // `.task` that runs `boot()`, so a splash raised by `boot()`'s own
+        // `show(.lobby)` arrives a beat after the system launch image has gone —
+        // and the lobby it is meant to hide is what fills that beat.
+        //
+        // NAMED, not `refreshCover()`. That reads `state.screen`, which is still
+        // the model's root here — and WELCOME is exactly the board `coverFor`
+        // exempts, so asking through it answers "none" and the splash never
+        // raises. The board these frames actually show is the lobby (`boot()`
+        // goes straight there, and `RootView` renders it for `.welcome` too), so
+        // that is what gets asked about. The answer is still the model's.
+        state.cover = TTP.strOrEmpty(ttp_ui_cover(GameState.Screen.lobby.rawValue, 0))
     }
 
     /// A `ttp_*` call that reported failure, with the ENGINE's reason.
