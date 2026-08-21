@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Overlay for the `phoneTest` build type ONLY (see app/build.gradle.kts). It
+  exists to get the app installable on the phones Play's closed testers actually
+  own, and it needs BOTH changes below: leanback-optional on its own installs an
+  app with no launcher icon, which is worse than not installing at all.
+
+  Never merge these into src/main. The shipping TV build stays leanback-only —
+  that requirement is what keeps this off phones in the Play listing, and the
+  whole point of the game is that the phones are the CONTROLLERS.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Play filters the app off every non-TV device while this is required. -->
+    <uses-feature
+        android:name="android.software.leanback"
+        android:required="false"
+        tools:replace="android:required" />
+
+    <application>
+        <!-- MERGED ALONGSIDE main's LEANBACK_LAUNCHER filter, not instead of it,
+             so one build stays launchable from the TV home row as well.
+
+             screenOrientation is deliberately NOT relaxed here: the race view is
+             landscape on every platform this ships to, and a phone standing in
+             for the television is not the exception. -->
+        <activity android:name=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>

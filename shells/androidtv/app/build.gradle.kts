@@ -124,6 +124,32 @@ android {
             )
         }
 
+        // THE RELEASE BUILD, PLUS A PHONE MANIFEST (src/phoneTest/
+        // AndroidManifest.xml). Play's closed testing wants a dozen testers for
+        // fourteen continuous days, and a tester who owns no television cannot
+        // install a leanback-required app at all — so this variant is what goes
+        // on the ordinary closed track while the TV bundle goes on tv:Alpha.
+        // Same applicationId, so both are the same app to Play and each upload
+        // still needs a versionCode nothing has used.
+        //
+        // NOTHING BUILDS THIS AUTOMATICALLY, on purpose. release.yml builds
+        // `release` only: testers are onboarded once, not re-recruited per
+        // release, so a phone build is an occasional hand upload rather than
+        // part of every tag. Build it with `./gradlew bundlePhoneTest
+        // -PttpVersionCode=<n>` and take the code from the band below 100 that
+        // release.yml's versionCode comment reserves for hand uploads.
+        //
+        // DELIBERATELY A BUILD TYPE AND NOT A FLAG ON `release`: release is what
+        // the tag builds, so no flag can be left set and ship the
+        // phone-installable manifest to the TV listing by accident.
+        //
+        // initWith carries R8, the proguard rules and the signing config over,
+        // which is the point — a phone tester should be running the same
+        // shrunk, upload-signed app the TV testers get, not a second
+        // configuration whose crashes prove nothing about the one that ships.
+        create("phoneTest") {
+            initWith(getByName("release"))
+        }
     }
 
     // The engine .so files are BUILD OUTPUT of native/scripts/build-runtime-
