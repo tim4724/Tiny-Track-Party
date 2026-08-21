@@ -130,6 +130,14 @@ object PerfDebug {
         }
     }
 
+    /**
+     * `debug.ttp.vk 1` — the Vulkan backend experiment. Not a knob this poll
+     * can act on: a backend exists only at engine creation, so the native
+     * surface half reads the property itself (ttp_display_android.cc) and this
+     * accessor exists for [SceneStaging] to stage the matching SPIR-V blob set.
+     */
+    fun vulkanRequested(): Boolean = getprop("debug.ttp.vk") == "1"
+
     private fun parseInt(s: String): Int? =
         if (s.startsWith("0x")) s.drop(2).toIntOrNull(16) else s.toIntOrNull()
 

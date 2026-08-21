@@ -55,6 +55,16 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
         mEngine->setAutomaticInstancingEnabled(true);
     }
     if (!mEngine) return false;
+    // The driver's texture ceiling can sit UNDER the conservative default:
+    // this box's GL driver reports 8192 while its Vulkan driver caps 2D
+    // images at 4096, and a skid layer built past the cap is a
+    // Texture::build PreconditionPanic in the middle of a scene build (which
+    // the ARM EHABI unwinder then turns into a silent 100%-CPU hang rather
+    // than an abort). Clamp rather than assign: the web surface hands in its
+    // own measured GL_MAX_TEXTURE_SIZE before init, and a driver answering
+    // more than the default must not raise it.
+    mMaxTextureDim = (uint32_t) std::min<size_t>(mMaxTextureDim,
+            Texture::getMaxTextureSize(*mEngine, Texture::Sampler::SAMPLER_2D));
     // THE DRIVER'S ANSWER, which the config above only asked for. A box without
     // GL_OVR_multiview2 leaves Filament's View::hasStereo() false, so it picks
     // the NON-stereo shader variants — while this renderer would still run its

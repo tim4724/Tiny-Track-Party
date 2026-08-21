@@ -133,6 +133,13 @@ MATC="$FILAMENT_SRC/out/cmake-release/tools/matc/matc"
 if [ -x "$MATC" ]; then
   "$NATIVE/scripts/build-materials.sh" "$MATC" "$NATIVE/build/materials-android-mv" \
       opengl mobile multiview
+  # THE VULKAN EXPERIMENT SET — the same materials as SPIR-V, staged as
+  # assets/materials-vk/ and read only when `debug.ttp.vk 1` flips the shell
+  # onto Filament's Vulkan backend (ttp_display_android.cc has the switch,
+  # SceneStaging.materials the matching blob pick). Non-stereo on purpose: the
+  # experiment prices the classic path, and multiview is a GL arrangement.
+  "$NATIVE/scripts/build-materials.sh" "$MATC" "$NATIVE/build/materials-android-vk" \
+      vulkan mobile
 else
   echo "==> no host matc at $MATC — skipping the multiview material set" >&2
   echo "    (the APK will stage the committed non-stereo blobs; the multiview" >&2

@@ -758,6 +758,51 @@ Per-cell FOG is the one that looks like a blocker and is not: it is a `View`
 option, but every cell of a RACE runs the same ramp, so one view's fog serves
 them. The lobby orbit and the overview are single-cell and never take this path.
 
+## Vulkan (experimental)
+
+`adb shell setprop debug.ttp.vk 1` flips the WHOLE ENGINE onto Filament's
+Vulkan backend at the next surface create. It is a boot-time choice read in two
+places off one property — `ttp_display_android.cc` picks the backend (and drops
+stereo to 0: multiview is a GL arrangement), `SceneStaging.materials` hands over
+the SPIR-V blob set (`assets/materials-vk/`, compiled by
+`build-runtime-android.sh` beside the multiview set; a GL blob does not parse on
+a Vulkan engine). `perf-race` arms take it as `--vk 1`, pin GL when unflagged,
+and restore the property on every exit path — a leftover `1` would flip a
+shipping install's backend.
+
+**Why it exists: the GL driver was nearly half the 4-player frame.** On this
+box's PowerVR GL driver the 4P/540 GPU median reads ~27 ms; the same race on
+the same box's Vulkan driver reads ~17, and the delivered rate follows (32 →
+48 fps; 2P and 3P land on ~60 typical; solo's median drops too). The per-cell
+"fixed term" every GL-era note calls uncollectable is therefore a large part
+GL DRIVER OVERHEAD, not per-eye geometry — the `gpu ms` timer reads a
+first-to-last-command span, and the GL backend thread was stretching it. The
+GL-era cost model and its refuted-lever list DO NOT TRANSFER to this backend;
+re-price before citing either.
+
+**Two traps already sprung, one fix shipped:**
+
+- **The Vulkan driver caps 2D images at 4096 where GL reports 8192**, on the
+  same GPU. The skid layer asked for 8192 and `Texture::Builder::build`'s
+  precondition panicked. `TtpRenderer::init` now clamps `mMaxTextureDim` to
+  `Texture::getMaxTextureSize` on every backend — the rubber grid just clamps
+  one step earlier here, the quality trade the skid comment already documents.
+- **A Filament panic on this shell is a silent 100% CPU hang, not a crash.**
+  The ARM EHABI unwinder livelocks walking our apk-mapped `.so` (main thread
+  pegged, PC bouncing between the lib and the linker's `dl_unwind_find_exidx`,
+  nothing in logcat — the panic text never prints). When boot sticks under the
+  cover with one thread at 100%, suspect a thrown `TPanic` BEFORE suspecting a
+  loop; the debugging route that cracked it (lldb-server in the app sandbox via
+  `run-as`, a raw gdb-remote PC sampler, offline symbolization against the
+  unstripped `.so`) is in the session notes, since `debuggerd` wants root.
+
+Still owed before it can be more than a knob: soak beyond bench races (cups,
+monster, rockets, surface destroy/recreate, HDMI mode changes), scene-build
+cost under Vulkan's slow `readPixels` path, and a driver-quality story for the
+wider box population — PowerVR Vulkan drivers vary. The readout, the scale
+rule and hz30 all behave identically on it; `OpenGLTimerQuer`'s thread simply
+does not exist under Vulkan.
+
 ## Audio
 
 **Every cue is mixed here, in Kotlin, into one always-open `AudioTrack`.**

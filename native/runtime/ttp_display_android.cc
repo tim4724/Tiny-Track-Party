@@ -30,6 +30,7 @@
 #include <android/native_window.h>
 #include <android/native_window_jni.h>
 #include <jni.h>
+#include <sys/system_properties.h>
 
 #include "TtpRenderer.h"
 
@@ -88,8 +89,21 @@ int ttp_display_create(const void* surface, uint32_t width, uint32_t height) {
     // ttp_display_multiview switch. Android-only, because only this backend
     // compiles glFramebufferTextureMultiviewOVR, and it needs the SDK built
     // with -S multiview (build-runtime-android.sh aborts with the story).
-    if (!renderer->init(filament::backend::Backend::OPENGL, window, width, height,
-                        /*stereoEyes=*/2)) {
+    //
+    // `debug.ttp.vk 1` is the VULKAN EXPERIMENT: the whole engine on Filament's
+    // Vulkan backend, priced against the GL arm one launch apart. Read HERE and
+    // not in PerfDebug's poll because a backend exists only at engine creation;
+    // SceneStaging reads the same property to hand over the SPIR-V blob set
+    // (assets/materials-vk/ — a GL blob does not parse on a Vulkan engine, and
+    // vice versa). stereoEyes drops to 0 on that arm: multiview is a
+    // GL_OVR_multiview2 arrangement and the experiment prices the classic path.
+    char vkProp[PROP_VALUE_MAX];
+    const bool vulkan = __system_property_get("debug.ttp.vk", vkProp) > 0
+            && vkProp[0] == '1';
+    if (!renderer->init(vulkan ? filament::backend::Backend::VULKAN
+                               : filament::backend::Backend::OPENGL,
+                        window, width, height,
+                        /*stereoEyes=*/vulkan ? 0 : 2)) {
         delete renderer;
         ANativeWindow_release(window);
         return 0;

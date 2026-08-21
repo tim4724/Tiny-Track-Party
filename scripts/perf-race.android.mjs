@@ -69,6 +69,9 @@ const TAG = 'TtpPerf';
  *                    every arm is explicit and readings stay comparable to
  *                    the pre-multiview ledgers. 2 forces ANY split (a
  *                    measured 2P/3P regression — experiments only).
+ *   --vk 1           the EXPERIMENTAL Vulkan backend (classic path, stereo off).
+ *                    An unflagged arm pins GL, so readings stay comparable to
+ *                    every GL-era ledger; see shells/androidtv/CLAUDE.md.
  *   --serial <id>    an explicit adb device
  */
 export function makeAndroidBackend() {
@@ -105,6 +108,7 @@ export function makeAndroidBackend() {
       setprop('debug.ttp.hz', 0);
       setprop('debug.ttp.mv', 0);
       setprop('debug.ttp.perf', 0);
+      setprop('debug.ttp.vk', 0);         // a leftover 1 flips the ENGINE's backend
     } catch { /* the box went away; nothing to restore it on */ }
   };
 
@@ -189,6 +193,11 @@ export function makeAndroidBackend() {
       // default): the bench's readings predate multiview, and an arm that
       // silently rode the default would not be comparable to any of them.
       setprop('debug.ttp.mv', arg('mv', -1));
+      // The EXPERIMENTAL Vulkan backend (`debug.ttp.vk`, read at engine
+      // creation — ttp_display_android.cc). Explicit per arm for the same
+      // comparability reason as --mv, and BEFORE the launch below because a
+      // backend cannot be switched on a running engine.
+      setprop('debug.ttp.vk', arg('vk', 0));
 
       adb('logcat', '-c');
       startLogcat();

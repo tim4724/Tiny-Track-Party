@@ -108,6 +108,17 @@ else
   cp "$MATERIALS"/*.filamat "$OUT/materials/"
 fi
 
+# The Vulkan experiment's SPIR-V twins (build-runtime-android.sh compiles them
+# beside the multiview set). Staged only when built; the shell reads them only
+# under `debug.ttp.vk 1`, so an APK without this directory simply cannot run
+# the Vulkan arm — SceneStaging says so instead of aborting on a parse.
+MATERIALS_VK="$ROOT/native/build/materials-android-vk"
+if [ -n "$(ls "$MATERIALS_VK"/*.filamat 2>/dev/null)" ]; then
+  say "materials: VULKAN experiment set ($MATERIALS_VK)"
+  mkdir -p "$OUT/materials-vk"
+  cp "$MATERIALS_VK"/*.filamat "$OUT/materials-vk/"
+fi
+
 # The design tokens, as DATA — the same file the web's CSS is baked to, so the
 # sticker palette has ONE source across all three shells rather than three
 # hand-typed copies. Tokens.kt reads this; no colour in it may be spelled again
