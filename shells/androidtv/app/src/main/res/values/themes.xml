@@ -5,12 +5,14 @@
          would only get a chance to be wrong: no action bar, no Material colours,
          no system decoration.
 
-         windowBackground is the INK from theme.css rather than the default
-         white. It is what shows for the frames between the Activity appearing
-         and the first Filament present, and a white flash on a dark TV in a dark
-         room is the one moment of this app a player would call broken. -->
+         windowBackground is the SPLASH (drawable/splash.xml): the paper this
+         app's first painted frame actually is, with the wordmark on it. It shows
+         for the frames between the Activity appearing and the first Filament
+         present. It used to be a flat ink #2A2735, guarding against "a white
+         flash on a dark TV" — but this app is not dark, so that was a dark step
+         in front of a light app. See splash.xml. -->
     <style name="Theme.TinyTrackParty" parent="@android:style/Theme.Material.NoActionBar.Fullscreen">
-        <item name="android:windowBackground">#2A2735</item>
+        <item name="android:windowBackground">@drawable/splash</item>
         <item name="android:windowContentTransitions">false</item>
         <item name="android:windowAnimationStyle">@null</item>
     </style>

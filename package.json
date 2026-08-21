@@ -34,6 +34,7 @@
     "shots:tvos": "node scripts/capture-shots-tvos.mjs",
     "shots:tvos-sim": "node scripts/capture-shots-tvos.mjs --sim",
     "shots:web": "node scripts/capture-shots.mjs",
+    "bake:wordmark": "node scripts/bake-wordmark.mjs",
     "start": "node server/index.js",
     "test": "npm run lint && node --test tests/*.test.js partyplug/tests/*.test.js",
     "test:e2e": "playwright test",

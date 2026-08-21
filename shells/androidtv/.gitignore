@@ -17,3 +17,8 @@ app/src/main/jniLibs/
 # thing is authored. Committing them would be a second copy of the kit, the
 # cues, the materials and design-tokens.json.
 app/src/main/assets/
+
+# Likewise, and for the same reason — but these two must be RESOURCES rather
+# than assets: the window background and the launcher tile are both read before
+# any app code runs. scripts/bake-wordmark.mjs is where they come from.
+app/src/main/res/drawable-nodpi/
