@@ -6,13 +6,13 @@
 // already wraps around ttp_display_frame. What comes out is "what does the sky
 // cost", per cell count and per resolution.
 //
-// IT ALSO COUNTS WHAT THE FRAME ISSUES — draws, instanced draws, program
-// switches, texture binds and buffer uploads, per arm — because on the TV
-// shells the milliseconds and the commands are not the same question. The
-// Android box's split-screen frame is bound by command submission on Filament's
-// backend thread, so a group's cost there tracks its DRAW COUNT and not its
-// pixels, and a millisecond column alone cannot tell "eight expensive objects"
-// from "eight hundred cheap ones".
+// IT ALSO COUNTS WHAT THE FRAME ISSUES — draws, the geometry they carry,
+// program switches, texture binds and buffer uploads, per arm — because on the
+// TV shells the milliseconds and the commands are not the same question. A
+// split-screen frame on a weak box is bound by what it SUBMITS rather than by
+// what it fills, and a millisecond column alone cannot tell "eight expensive
+// objects" from "eight hundred cheap ones", nor either of those from one object
+// carrying sixty thousand vertices.
 //
 // WHY THE COUNT IS TAKEN IN A BROWSER AND STILL MEANS SOMETHING ON A TELEVISION.
 // The command stream is decided in shared C++ — the scene, the per-cell culling,
@@ -106,6 +106,18 @@ const main = async () => {
     // drain tail out of the number.
     const gl = (window.__glCount = {
       draws: 0, instanced: 0, instances: 0, programs: 0, textures: 0, uploads: 0,
+      // GEOMETRY SUBMITTED — indices for the indexed forms, so a vertex shared
+      // by six triangles counts six times. That is the stream handed over, which
+      // is the question here, and not a count of unique vertices.
+      //
+      // It is a different question from how many calls it took and from how many
+      // objects rode them. On a tile-based mobile GPU the geometry of every
+      // renderable is transformed and binned ONCE PER RENDER PASS, so in a split
+      // screen it is paid per cell and does not care how big the cell is — the
+      // shape of the per-cell cost the Android box is bound by. Without it a
+      // draw of six vertices and a draw of sixty thousand are one row in every
+      // column here.
+      verts: 0,
       // Draws that carried more than one object, i.e. where Filament's
       // automatic instancing actually fired. `instances - draws` says how many
       // objects were saved; this says whether ANY run was found at all, which is
@@ -122,14 +134,19 @@ const main = async () => {
     // `instances` counts the objects DRAWN, `draws` the calls it took. The two
     // diverging is Filament's automatic instancing working: fifty trees that
     // batch are one draw and fifty instances.
-    wrap('drawElements', () => { gl.draws++; gl.instances++; });
-    wrap('drawArrays', () => { gl.draws++; gl.instances++; });
-    wrap('drawRangeElements', () => { gl.draws++; gl.instances++; });
+    // `count` is at a DIFFERENT ARGUMENT INDEX in nearly every one of these
+    // signatures, which is the whole trap; times the instance count where there
+    // is one.
+    wrap('drawElements', (a) => { gl.draws++; gl.instances++; gl.verts += a[1]; });
+    wrap('drawArrays', (a) => { gl.draws++; gl.instances++; gl.verts += a[2]; });
+    wrap('drawRangeElements', (a) => { gl.draws++; gl.instances++; gl.verts += a[3]; });
     wrap('drawElementsInstanced', (a) => {
-      gl.draws++; gl.instanced++; gl.instances += a[4]; if (a[4] > 1) gl.merged++;
+      gl.draws++; gl.instanced++; gl.instances += a[4]; gl.verts += a[1] * a[4];
+      if (a[4] > 1) gl.merged++;
     });
     wrap('drawArraysInstanced', (a) => {
-      gl.draws++; gl.instanced++; gl.instances += a[3]; if (a[3] > 1) gl.merged++;
+      gl.draws++; gl.instanced++; gl.instances += a[3]; gl.verts += a[2] * a[3];
+      if (a[3] > 1) gl.merged++;
     });
     // The state changes that decide what a draw COSTS a driver, and the uploads,
     // which are the one per-frame cost that no draw count would show (the car
@@ -306,7 +323,11 @@ const main = async () => {
     window.__scene.display.debugFeatures(m.FEAT.ALL);
   });
 
-  const GL_KEYS = ['draws', 'instanced', 'instances', 'programs', 'textures', 'uploads', 'merged'];
+  // Every counter the page keeps. A key missing here reads as NaN in the tables
+  // rather than as an error, which is how a new counter looks exactly like a
+  // broken one.
+  const GL_KEYS = ['draws', 'instanced', 'instances', 'verts', 'programs',
+    'textures', 'uploads', 'merged'];
   const rows = arms.map((a) => {
     const xs = samples.get(a.name);
     return {
@@ -345,8 +366,13 @@ const main = async () => {
       + `   ${per(g.programs)} program switches`
       + `   ${per(g.textures)} texture binds   ${per(g.uploads)} buffer uploads`);
   console.log(`per cell:  ${per(g.draws / cells)} draws`
-      + `   ${per(g.instances / cells)} objects   (${cells} cell${cells === 1 ? '' : 's'})`);
-  console.log('\ngroup       marginal (drop)      standalone (alone)        draws');
+      + `   ${per(g.instances / cells)} objects`
+      + `   ${per(g.verts / cells / 1000)}k verts`
+      + `   (${cells} cell${cells === 1 ? '' : 's'})`);
+  // The two `verts` in this readout are NOT the same unit — per CELL on the line
+  // above, per FRAME in the column below — so both say which.
+  console.log('\ngroup       marginal (drop)      standalone (alone)'
+      + '        draws            verts/frame');
   let sum = 0;
   for (const n of ARM_NAMES) {
     if (!by(`-${n.toLowerCase()}`) || !by(`only ${n.toLowerCase()}`)) continue;
@@ -357,6 +383,10 @@ const main = async () => {
     // issues no commands, and nothing behind it takes any over.
     const dropped = g.draws - by(`-${n.toLowerCase()}`).gl.draws;
     const objs = g.instances - by(`-${n.toLowerCase()}`).gl.instances;
+    // The vertices the group submits per FRAME, i.e. already multiplied by the
+    // cells it is drawn into. On a tile-based GPU that is the geometry the
+    // tiler chews whatever the cell's resolution is.
+    const verts = g.verts - by(`-${n.toLowerCase()}`).gl.verts;
     if (marg != null) sum += marg;
     console.log(`${n.toLowerCase().padEnd(10)} `
         + `${marg == null ? '   —  ' : marg.toFixed(3)} ms `
@@ -365,7 +395,9 @@ const main = async () => {
         + `${alone == null ? '      ' : (100 * alone / drawn).toFixed(1).padStart(5) + '%'}`
         + `     ${per(dropped).padStart(4)} `
         + `${dropped == null ? '     ' : (100 * dropped / g.draws).toFixed(0).padStart(3) + '%'}`
-        + `  (${per(objs)} obj)`);
+        + `  (${per(objs).padStart(5)} obj)`
+        + `  ${per(verts / 1000).padStart(6)}k`
+        + `${(100 * verts / g.verts).toFixed(0).padStart(4)}%`);
   }
   console.log('\nroad shader channel   marginal (drop)');
   for (const n of [...ROAD_CHANNELS, 'road channels']) {
