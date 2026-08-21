@@ -81,8 +81,12 @@ export function motionHelpCopy(state) {
 }
 
 export function renderReadyFoot(btnEl, noteEl, { amHost, amReady, tab, canStart, host, others, backEl }) {
-  // A new node for a new face (see the note above). Same id, same classes, so
-  // the next el('ready-btn') finds it and nothing else has to know.
+  // A new NODE for a new face, so the relabelled button can never inherit an
+  // in-flight press from the face before it — its release, its :active, or a
+  // phone's sticky :hover. Timing fixes all failed here: on a touch tap the
+  // release lands AFTER this handler, so nothing it does can catch one. Same
+  // id and classes, so the next el('ready-btn') finds it; main.js delegates
+  // from .lobby-go so the listener survives the swap.
   const face = amHost ? tab : 'ready';
   if (btnEl.dataset.face && btnEl.dataset.face !== face) {
     const fresh = btnEl.cloneNode(false);

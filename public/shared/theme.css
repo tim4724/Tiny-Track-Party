@@ -197,11 +197,7 @@ body {
   border-radius: var(--r-sm);
   box-shadow: var(--shadow-pop);
   cursor: pointer;
-  /* SHORT, and short for a reason. The press once read as missing entirely, and
-     the cause was a re-render destroying the element mid-animation, not the
-     duration — so this stayed at 60ms rather than being cut to zero, which felt
-     harsh. Long enough to be a movement, short enough that the shortest real
-     tap still arrives. */
+  /* same press, and the same reasoning as .btn's transition above */
   transition: transform 0.06s ease, box-shadow 0.06s ease, filter 0.06s ease;
 }
 .icon-btn:hover:not(:disabled) { filter: brightness(1.03); }

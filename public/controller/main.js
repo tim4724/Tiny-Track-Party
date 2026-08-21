@@ -431,12 +431,7 @@ function renderLobbyPage() {
   if (!canPickRace) lobbyTab = 'car';
   el('lobby').classList.toggle('lobby--race', lobbyTab === 'race');
 }
-// DELEGATED from the corner, not bound to the buttons: renderReadyFoot replaces
-// the primary button's node whenever its face changes, and a listener bound to
-// the old node would go with it.
-el('lobby-back').closest('.lobby-go').addEventListener('click', (e) => {
-  if (e.target.closest('#lobby-back')) setLobbyPage('car');
-});
+el('lobby-back').addEventListener('click', () => setLobbyPage('car'));
 
 // Mode picker — host only: one tile per cup then 🎲 Random (a cup pick runs its
 // 4-race Grand Prix and its open panel offers exact single-track picks; Random's
@@ -661,8 +656,12 @@ el('name-form').addEventListener('submit', (e) => {
 // Lobby footer button — for the host it's "Start race" (enabled only once
 // everyone else is ready — see renderReadyFoot); for everyone else it's the
 // ready toggle. The display validates both messages.
+// DELEGATED from the corner rather than bound to the button: renderReadyFoot
+// swaps the primary button's NODE whenever its face changes, and a listener
+// bound to the old node would go with it. (#lobby-back needs none of this — it
+// is static markup, only ever shown and hidden.)
 el('ready-btn').closest('.lobby-go').addEventListener('click', (e) => {
-  if (!e.target.closest('#ready-btn')) return;   // delegated: see #lobby-back above
+  if (!e.target.closest('#ready-btn')) return;
   if (amHost) {
     // The stepper: on the CAR page the button ADVANCES to the race page; on
     // the RACE page it starts. Two taps from a fresh lobby, matching the two

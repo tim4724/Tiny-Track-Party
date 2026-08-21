@@ -13,6 +13,7 @@
 // load by id from the web host (carThumbs.js), never over the relay.
 
 import { carThumbNode } from './carThumbs.js';
+import { detailHeader } from './trackPicker.js';
 
 // Resolve the car list from the window globals (gallery / no-snapshot fallback).
 function carsFromWindow() {
@@ -68,20 +69,6 @@ function statBarsNode(stats, dom) {
   return wrap;
 }
 
-// The cup card's header markup, reused verbatim (see .raceinfo in
-// controller.css) so both lobby pages head their card the same way. The car's
-// head is the NAME only: the cup's meta line says something the tiles below it
-// don't ("Grand Prix · 4 races"), where a car's says nothing the stat bars
-// right there don't already say better.
-function headNode(name) {
-  const head = document.createElement('div'); head.className = 'raceinfo';
-  const title = document.createElement('div'); title.className = 'raceinfo__title';
-  const nm = document.createElement('span'); nm.className = 'raceinfo__name'; nm.textContent = name;
-  title.appendChild(nm);
-  head.appendChild(title);
-  return head;
-}
-
 // Render the picker into the given elements. heroEl gets the big selected-car
 // preview + stats; stripEl gets the tap-to-pick thumbnails. Tapping a strip tile
 // calls onPick(i). Either element may be omitted. `canPick: false` renders the
@@ -105,10 +92,13 @@ export function buildCarPicker({ heroEl, stripEl, selected, onPick, canPick = tr
   if (heroEl && heroEl.dataset.sig !== heroSig) {
     heroEl.dataset.sig = heroSig;
     heroEl.innerHTML = '';
-    // Head first, in the trackPicker's own .raceinfo markup: the car card and
-    // the cup card are the same object on the two lobby pages, and sharing the
-    // markup is what stops their titles drifting apart.
-    heroEl.appendChild(headNode(nameOf(sel)));
+    // Head first, from the trackPicker's OWN builder: the car card and the cup
+    // card are the same object on the two lobby pages, and sharing the builder
+    // is what stops their titles drifting apart. No meta line — the cup's says
+    // something its tiles don't ("Grand Prix · 4 races"), where a car's would
+    // say nothing the stat bars right there don't say better.
+    heroEl.appendChild(detailHeader({ title: nameOf(sel) }));
+
     const view = document.createElement('div'); view.className = 'car-hero__view';
     view.appendChild(carThumbNode(idOf(sel), { spin: true })); // only the chosen car spins
     const info = document.createElement('div'); info.className = 'car-hero__info';

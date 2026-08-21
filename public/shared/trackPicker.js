@@ -309,7 +309,11 @@ const subSpan = (text) => {
 // The detail panel's header: name (+stars), the cup meter far right, and one
 // small meta line. Both the cup and the random panels wear one, at the same
 // height, so switching families moves nothing below it.
-function detailHeader({ title, starsEl, meter, meta }) {
+// The detail card's head. EXPORTED: the car page's card wears the same head
+// (shared/carPicker.js), and the two pages' titles are meant to be unable to
+// drift — which is only true if they are the same builder rather than two
+// hand-matched copies of the same class names.
+export function detailHeader({ title, starsEl, meter, meta }) {
   const head = document.createElement('div');
   head.className = 'raceinfo';
   const row = document.createElement('div');
@@ -321,10 +325,17 @@ function detailHeader({ title, starsEl, meter, meta }) {
   if (starsEl) row.appendChild(starsEl);
   if (meter) row.appendChild(meter);
   head.appendChild(row);
-  const m = document.createElement('div');
-  m.className = 'raceinfo__meta';
-  m.textContent = meta || '';
-  head.appendChild(m);
+  // Only when there is one. The head is a flex column with a gap, so an empty
+  // meta node is not free — it costs the gap. Every cup and random caller
+  // passes a line (which is what keeps their heads the same height, so
+  // switching rows moves nothing); the car card is the one head with nothing
+  // to say below its name.
+  if (meta) {
+    const m = document.createElement('div');
+    m.className = 'raceinfo__meta';
+    m.textContent = meta;
+    head.appendChild(m);
+  }
   return head;
 }
 
