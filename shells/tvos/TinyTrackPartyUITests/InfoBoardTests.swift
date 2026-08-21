@@ -62,12 +62,9 @@ final class InfoBoardTests: XCTestCase {
         // Down past the end of the list lands on the LAST row, which is the last
         // Software credit — a notice-bearing one, because the tvOS-only packages
         // are appended there (gen-legal.mjs). Walking to it rather than indexing
-        // a row keeps this from rotting every time a song joins a biome pool;
-        // the music rows it walks through are the ones with no text behind them,
-        // so this also proves Select on those does not push anything.
+        // a row keeps this from rotting every time a song joins a biome pool.
         for _ in 0..<(Self.pressesPastTheEnd) { XCUIRemote.shared.press(.down) }
-        XCTAssertTrue(app.staticTexts["Licenses"].exists,
-                      "a row with no license text pushed a page anyway")
+        XCTAssertTrue(app.staticTexts["Licenses"].exists, "a d-pad move pushed a page")
         // A focused NOTICE row, which is a different view from a focused music
         // row (a link, not a plain focusable) and therefore a second focus
         // dressing to look at. The first cut of this screen shipped the system's
@@ -89,6 +86,29 @@ final class InfoBoardTests: XCTestCase {
         XCUIRemote.shared.press(.menu)
         XCTAssertTrue(app.staticTexts["Licenses"].waitForExistence(timeout: 10),
                       "Menu did not come back to the licenses board")
+
+        // EVERY ROW OPENS, and a MUSIC row is what proves it: those owe no
+        // notice, so what they open is the licence's own text rather than a
+        // notice of their own (`shells/licenses/`, resolved by
+        // scripts/shell-credits.mjs). This board used to leave them inert, which
+        // meant the majority of the list named a licence the room could not
+        // read — a browser gets a link on every chip and a television gets
+        // nothing. Walking back up rather than indexing a row, for the same
+        // reason the walk down does.
+        for _ in 0..<(Self.pressesPastTheEnd) { XCUIRemote.shared.press(.up) }
+        XCUIRemote.shared.press(.select)
+        // The first line of the CC-BY 4.0 legal code. Matching the TEXT rather
+        // than the row's title is what proves the staged file was found and read
+        // out of the bundle.
+        let ccby = app.staticTexts.containing(NSPredicate(
+            format: "label CONTAINS 'Attribution 4.0 International'")).firstMatch
+        XCTAssertTrue(ccby.waitForExistence(timeout: 10),
+                      "a CC-BY row did not open the licence text")
+        shoot("ttp-info-license-text-cc-by")
+
+        XCUIRemote.shared.press(.menu)
+        XCTAssertTrue(app.staticTexts["Licenses"].waitForExistence(timeout: 10),
+                      "Menu did not come back from the licence text")
         XCUIRemote.shared.press(.menu)
         XCTAssertTrue(licenses.waitForExistence(timeout: 10),
                       "Menu did not come back to the info board")

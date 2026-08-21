@@ -21,9 +21,9 @@ const PROJECT = path.join(ROOT, 'shells/tvos/project.yml');
 const DERIVED = path.join(process.env.HOME || '', 'Library/Developer/Xcode/DerivedData');
 
 let WEB_ONLY, TVOS_ONLY, SHARED_NOTICES, TVOS_NOTICE_UPSTREAM;
-let entries, notices, legalLinks, LICENSES;
+let entries, texts, legalLinks, LICENSES;
 test.before(async () => {
-  ({ WEB_ONLY, TVOS_ONLY, SHARED_NOTICES, TVOS_NOTICE_UPSTREAM, entries, notices, legalLinks } =
+  ({ WEB_ONLY, TVOS_ONLY, SHARED_NOTICES, TVOS_NOTICE_UPSTREAM, entries, texts, legalLinks } =
     await import('../shells/tvos/scripts/gen-legal.mjs'));
   ({ LICENSES } = await import('../public/shared/credits.js'));
 });
@@ -44,19 +44,31 @@ test('every SPM package the app links is credited', () => {
   }
 });
 
-test('every notice the list names has a source file, and it is intact', () => {
-  const staged = notices();
-  assert.ok(Object.keys(staged).length > 0, 'no notices at all — the bundle would ship none');
+test('every text the list names has a source file, and it is intact', () => {
+  const staged = texts();
+  assert.ok(Object.keys(staged).length > 0, 'no texts at all — the bundle would ship none');
 
   for (const [name, rel] of Object.entries(staged)) {
     const file = path.join(ROOT, rel);
-    assert.ok(fs.existsSync(file), `notice '${name}' points at ${rel}, which is not in the tree`);
+    assert.ok(fs.existsSync(file), `'${name}' points at ${rel}, which is not in the tree`);
     const text = fs.readFileSync(file, 'utf8');
     // A license text is only a notice while it is whole. This is the same shape
     // of check credits.test.js makes on the served copies.
     assert.ok(text.length > 500, `${rel} is too short to be a whole license text`);
     assert.match(text, /copyright|permission|licen[cs]e/i,
       `${rel} no longer reads as a license text`);
+  }
+});
+
+// A television cannot follow the link a browser gets on the licence chip, so a
+// row with no text behind it is terms the room cannot read. Every row has one,
+// and the generator throws rather than baking one that does not — this states
+// the property the board is built on.
+test('every row on the board opens a text', () => {
+  const staged = texts();
+  for (const e of entries()) {
+    assert.ok(e.text, `'${e.title}' has no text for its row to open`);
+    assert.ok(staged[e.text], `'${e.title}' opens '${e.text}', which nothing stages`);
   }
 });
 

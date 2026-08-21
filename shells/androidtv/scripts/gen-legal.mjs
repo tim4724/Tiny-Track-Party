@@ -31,9 +31,9 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import * as shared from '../../../scripts/shell-credits.mjs';
+import { ROOT } from '../../../scripts/shell-credits.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.join(HERE, '..', '..', '..');
 const OUT = path.join(HERE, '..', 'app', 'src', 'main', 'assets', 'legal');
 
 // Re-exported so the gate reads one module: what a browser ships and this does
@@ -114,9 +114,9 @@ export const ANDROID_NOTICES = Object.fromEntries(
 /// The list the Licenses board renders.
 export const entries = () => shared.entries(ANDROID_ONLY);
 
-/// Every notice file that list names, as asset-name -> source path in the tree.
+/// Every file that list's rows open, as asset-name -> source path in the tree.
 /// The stage below copies exactly this set into assets/legal/.
-export const notices = () => shared.notices(entries(), ANDROID_NOTICES);
+export const texts = () => shared.texts(entries(), ANDROID_NOTICES);
 
 /// Every Gradle coordinate `app/build.gradle.kts` declares, as `group:artifact`.
 ///
@@ -139,10 +139,10 @@ export function document() {
   return {
     privacyUrl: links.privacy,
     imprintUrl: links.imprint,
-    // `notice` is the license text this build SHIPS for an entry, as a file name
-    // under assets/legal; entries without one are under a license that demands
-    // no notice travel (CC0, CC-BY), and their row states its terms rather than
-    // drilling into a text.
+    // `text` is what a row opens, as a file name under assets/legal: the notice
+    // this build SHIPS for the work where its license demands one travel, else
+    // the text of the license itself. EVERY row has one, and it is never null —
+    // a television cannot follow the link a browser gets.
     entries: entries().map((e) => ({
       section: e.section,
       title: e.title,
@@ -150,26 +150,26 @@ export function document() {
       license: e.license,
       licenseUrl: e.licenseURL,
       url: e.url,
-      notice: e.notice,
+      text: e.text,
     })),
   };
 }
 
 // Importable (tests/androidtv-legal.test.js reads the same data) and runnable.
 //
-// It copies the notice texts itself rather than leaving a list for
-// stage-assets.sh to repeat: the set is exactly what `notices()` derives from
-// the entries, so a credit that gains or loses a notice cannot leave the APK
-// carrying the wrong files. `pathToFileURL` rather than a `file://` template,
+// It copies the texts itself rather than leaving a list for stage-assets.sh to
+// repeat: the set is exactly what `texts()` derives from the entries, so a
+// credit that gains or loses a notice cannot leave the APK carrying the wrong
+// files. `pathToFileURL` rather than a `file://` template,
 // for the reason the tvOS twin gives — a worktree path with a space in it.
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   fs.rmSync(OUT, { recursive: true, force: true });
   fs.mkdirSync(OUT, { recursive: true });
   fs.writeFileSync(path.join(OUT, 'credits.json'), `${JSON.stringify(document(), null, 2)}\n`);
-  const staged = notices();
+  const staged = texts();
   for (const [name, src] of Object.entries(staged)) {
     fs.copyFileSync(path.join(ROOT, src), path.join(OUT, name));
   }
-  console.log(`==> ${entries().length} credits, ${Object.keys(staged).length} notices`
+  console.log(`==> ${entries().length} credits, ${Object.keys(staged).length} texts`
     + ' -> assets/legal');
 }

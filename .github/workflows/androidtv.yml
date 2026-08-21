@@ -44,6 +44,7 @@ on:
       - 'public/display/audio/musicCatalogue.js'
       - 'public/display/index.html'
       - 'public/assets/licenses/**'
+      - 'shells/licenses/**'
       - 'scripts/shell-credits.mjs'
   push:
     branches: [main]
@@ -67,6 +68,7 @@ on:
       - 'public/display/audio/musicCatalogue.js'
       - 'public/display/index.html'
       - 'public/assets/licenses/**'
+      - 'shells/licenses/**'
       - 'scripts/shell-credits.mjs'
 
 concurrency:

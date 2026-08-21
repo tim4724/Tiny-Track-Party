@@ -35,10 +35,10 @@ object Legal {
     private const val DIR = "legal"
 
     /**
-     * One credited work. [notice] is the license text this build SHIPS for it, as
-     * a file name under `assets/legal`; entries without one are under a license
-     * that demands no notice travel (CC0, CC-BY), and their row states its terms
-     * rather than drilling into a text.
+     * One credited work. [text] is what its row OPENS, as a file name under
+     * `assets/legal`: the notice this build ships for the work where its license
+     * demands one travel, else the text of the license itself. Every row has one
+     * — a television cannot follow the link a browser gets on the licence chip.
      */
     data class Entry(
         val section: String,
@@ -47,7 +47,7 @@ object Legal {
         val license: String,
         val licenseUrl: String,
         val url: String,
-        val notice: String?,
+        val text: String,
     )
 
     /**
@@ -92,25 +92,26 @@ object Legal {
                 license = e.optString("license"),
                 licenseUrl = e.optString("licenseUrl"),
                 url = e.optString("url"),
-                // `optStr`, not `optString`: a CC0 row's notice is an explicit
-                // JSON null, which this platform's org.json reads as the string
-                // "null" — see TtpJson.optStr. Every row would have claimed to
-                // ship a license text called "null".
-                notice = TtpJson.optStr(e, "notice"),
+                // NO NULLABLE KEY IN THIS DOCUMENT, deliberately: `text` is
+                // always a file name. Should one ever become nullable, read it
+                // with `TtpJson.optStr` and NOT `optString` — this platform's
+                // org.json answers the four-character string "null" for an
+                // explicit JSON null, and every row would claim to ship a
+                // license text called "null".
+                text = e.optString("text"),
             )
         }
     }
 
     /**
-     * The notice text for [entry], as staged, or null when this build ships none
-     * for it.
+     * The text [entry]'s row opens, as staged.
      *
-     * A missing FILE for an entry that names one is a build fault (the generator
-     * copies exactly the set the entries name), so the screen says so rather than
-     * showing an empty page that reads as "no licence".
+     * Null only when the staged file is MISSING, which is a build fault — the
+     * generator copies exactly the set the entries name — so the screen says so
+     * rather than showing an empty page that reads as "no licence".
      */
-    fun notice(entry: Entry): String? {
-        val name = entry.notice ?: return null
+    fun text(entry: Entry): String? {
+        val name = entry.text
         return try {
             assets.open("$DIR/$name").use { it.readBytes() }.toString(Charsets.UTF_8)
         } catch (t: Throwable) {

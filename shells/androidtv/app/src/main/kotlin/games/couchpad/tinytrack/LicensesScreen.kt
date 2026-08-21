@@ -53,6 +53,12 @@ import kotlinx.coroutines.launch
  * **This board is an obligation, not a courtesy** — see [Legal] for who demands
  * what, and for why not one row of it is typed.
  *
+ * **EVERY ROW OPENS.** A browser gets a link on each licence chip — the served
+ * notice where one is shipped, else the canonical URL (`public/licenses.js`) —
+ * and a television can follow neither, so a CC-BY or CC0 row used to name its
+ * licence and give the room no way to read it. Which of the two texts a row has
+ * behind it is the generator's business, not this file's.
+ *
  * The rows are grouped exactly as the web page groups them (`SECTION_ORDER`),
  * and the ORDER inside a section is the shared data's own.
  */
@@ -121,10 +127,10 @@ fun LicensesScreen(state: GameState) {
  * like across this whole info branch, it is a chrome colour the theme allows, and
  * it needs no room the row does not already have.
  *
- * A row DRILLS IN only when this build actually SHIPS the text (the notice-tier
- * licenses). A CC0 or CC-BY row has no page behind it, and one that opened onto a
- * repeat of its own three facts would be a door to nowhere — so those rows are
- * focusable, readable, and do nothing on Select.
+ * Every row opens, because every entry has a text behind it. It used to branch
+ * on `notice`, leaving CC0 and CC-BY rows focusable but inert; what that cost was
+ * not the press, it was that the majority of this list was terms the room could
+ * not read.
  */
 @Composable
 private fun LicenseRow(
@@ -133,7 +139,6 @@ private fun LicenseRow(
     onOpen: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
-    val drillsIn = entry.notice != null
     val shape = RoundedCornerShape(Sticker.radius)
 
     Row(
@@ -145,15 +150,13 @@ private fun LicenseRow(
             .background(if (focused) Tokens.blue else Tokens.surface, shape)
             .stickerOutline(if (focused) Sticker.border else Sticker.hairlineBorder, shape)
             .onFocusChanged { focused = it.isFocused }
-            .then(
-                // `clickable` IS focusable, so a drilling row must not also be
-                // `focusable()` — two focus targets in one row, and the d-pad stops
-                // on each of them.
-                if (drillsIn) Modifier.clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = onOpen,
-                ) else Modifier.focusable()
+            // `clickable` IS focusable, so the row must not ALSO be
+            // `focusable()` — that is two focus targets in one row, and the
+            // d-pad stops on each of them.
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onOpen,
             )
             .padding(horizontal = 22.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -181,16 +184,15 @@ private fun LicenseRow(
         // the focus would read as part of the highlight.
         StickerPill(entry.license, tint = Tokens.ink, size = 17.dp)
 
-        // The chevron is the whole of the affordance: it says which rows have a
-        // page behind them, so a row that does nothing on Select never looked like
-        // it should have.
-        Box(Modifier.width(18.dp)) {
-            if (drillsIn) StickerText(
-                "›",
-                size = 28.dp,
-                color = if (focused) Color.White else Tokens.ink3,
-            )
-        }
+        // The chevron says the row opens, which every row now does. Kept rather
+        // than dropped: it is the only mark on the row that says a press does
+        // anything at all.
+        StickerText(
+            "›",
+            modifier = Modifier.width(18.dp),
+            size = 28.dp,
+            color = if (focused) Color.White else Tokens.ink3,
+        )
     }
 }
 
@@ -205,7 +207,7 @@ private fun LicenseRow(
 fun LicenseTextScreen(index: Int) {
     val entry = Legal.entries.getOrNull(index) ?: return
     LegalBoard(entry.title) {
-        val text = remember(index) { Legal.notice(entry) }
+        val text = remember(index) { Legal.text(entry) }
         if (text == null) {
             // The staged file is missing, which is a build fault (the generator
             // names only files it copied). Say so on the screen rather than showing

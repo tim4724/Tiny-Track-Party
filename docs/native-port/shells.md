@@ -393,6 +393,12 @@ Three properties of that surface matter more than the list:
     that keeps a delta honest: the registry your platform declares dependencies
     in — `project.yml`'s packages block, `build.gradle.kts`'s dependencies block —
     is what a gate reads, so nothing can ship uncredited.
+    **Every row on a TV must OPEN**, which is more than the web owes: there each
+    licence chip is a link to the entry's terms, and a television can follow no
+    link at all. Rows under a notice-tier licence open the notice; the rest open
+    the licence's own text, one shared copy per id under `shells/licenses/`. The
+    shared module resolves both and throws on a row with neither, so this costs a
+    new shell nothing.
     Privacy and imprint are couchpad.games pages for every game on the launcher: link them, never restate them, and on a box with no
     browser show the URL as a QR for the phone already in the room. Read those
     two URLs out of the display's own footer rather than typing them.

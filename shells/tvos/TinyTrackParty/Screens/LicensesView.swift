@@ -9,6 +9,14 @@ import UIKit
 /// notice travel with the build. A shell that ships those and shows nobody is
 /// in breach, which is why this exists on a TV at all.
 ///
+/// **EVERY ROW OPENS.** A browser gets a link on each licence chip — the served
+/// notice where one is shipped, else the canonical URL (`public/licenses.js`) —
+/// and a television cannot follow either, so a CC-BY or CC0 row used to name its
+/// licence and give the room no way to read it. Rows under a notice-tier licence
+/// open the notice this build ships; the rest open the licence's own text, one
+/// shared copy per id (`shells/licenses/`). Which of the two a row has is the
+/// generator's business, not this file's.
+///
 /// **NOTHING HERE IS TYPED.** `Legal.entries` is baked from
 /// `public/shared/credits.js` plus the live music catalogue by
 /// `shells/tvos/scripts/gen-legal.mjs` — the same two modules the web's
@@ -53,25 +61,17 @@ struct LicensesView: View {
         .onAppear { focusedRow = Legal.entries.first?.id }
     }
 
-    /// A row drills in only when this build actually SHIPS the text (the
-    /// notice-tier licenses). A CC0 or CC-BY row has no page behind it, and one
-    /// that opened onto a repeat of its own three facts would be a door to
-    /// nowhere — so those rows are focusable, readable, and do nothing on Select.
-    @ViewBuilder
+    /// Every row is a link, because every entry has a text behind it — see the
+    /// board's own header. It used to branch on `notice`, leaving CC0 and CC-BY
+    /// rows focusable but inert; what that cost was not the press, it was that
+    /// the majority of this list was terms the room could not read.
     private func row(_ entry: Legal.Entry, index: Int) -> some View {
-        if entry.notice != nil {
-            NavigationLink(value: GameState.InfoRoute.license(index)) {
-                LicenseRow(entry: entry, drillsIn: true, focused: focusedRow == entry.id)
-            }
-            .buttonStyle(BareRowStyle())
-            .focusEffectDisabled()
-            .focused($focusedRow, equals: entry.id)
-        } else {
-            LicenseRow(entry: entry, drillsIn: false, focused: focusedRow == entry.id)
-                .focusable()
-                .focusEffectDisabled()
-                .focused($focusedRow, equals: entry.id)
+        NavigationLink(value: GameState.InfoRoute.license(index)) {
+            LicenseRow(entry: entry, focused: focusedRow == entry.id)
         }
+        .buttonStyle(BareRowStyle())
+        .focusEffectDisabled()
+        .focused($focusedRow, equals: entry.id)
     }
 }
 
@@ -107,7 +107,6 @@ private struct BareRowStyle: ButtonStyle {
 @MainActor
 private struct LicenseRow: View {
     let entry: Legal.Entry
-    let drillsIn: Bool
     let focused: Bool
 
     var body: some View {
@@ -131,10 +130,10 @@ private struct LicenseRow: View {
             // that means something specific (the licence), and a pill that
             // recoloured with the focus would read as part of the highlight.
             StickerPill(entry.license, tint: Tokens.ink, size: 17)
-            // The chevron is the whole of the affordance: it says which rows
-            // have a page behind them, so a row that does nothing on Select
-            // never looked like it should have.
-            Text(drillsIn ? "›" : " ")
+            // The chevron says the row opens, which every row now does. It is
+            // kept rather than dropped: it is the only mark on the row that
+            // says a press does anything at all.
+            Text("›")
                 .font(Fonts.display(28, weight: .bold))
                 .foregroundStyle(focused ? .white : Tokens.ink3)
                 .frame(width: 18)
@@ -164,7 +163,7 @@ struct LicenseTextView: View {
     var body: some View {
         let entry = Legal.entries[min(max(index, 0), Legal.entries.count - 1)]
         LegalBoard(title: entry.title) { height in
-            if let text = Self.notice(entry) {
+            if let text = Self.text(entry) {
                 LicenseText(text: text, viewportHeight: height)
             } else {
                 // The staged file is missing, which is a build fault (the
@@ -177,10 +176,11 @@ struct LicenseTextView: View {
         }
     }
 
-    /// The notice as staged into the bundle by `gen-legal.mjs`, under the name
-    /// the generated entry carries.
-    private static func notice(_ entry: Legal.Entry) -> String? {
-        guard let name = entry.notice else { return nil }
+    /// The text as staged into the bundle by `gen-legal.mjs`, under the name the
+    /// generated entry carries. Nil only when the staged file is missing, which
+    /// is a build fault — the generator copies exactly the set the entries name.
+    private static func text(_ entry: Legal.Entry) -> String? {
+        let name = entry.text
         let stem = (name as NSString).deletingPathExtension
         let ext = (name as NSString).pathExtension
         guard let url = Bundle.main.url(forResource: stem, withExtension: ext,

@@ -875,6 +875,15 @@ ships that a browser does not, and the reverse — is this shell's. **This is th
 one reason `stage-assets.sh` needs node**, and it says so by name if there is
 none.
 
+**Every row opens, and that is more than the web page does.** On /licenses.html
+each licence chip is a LINK to the entry's terms — the served notice, else the
+canonical URL — and a television can follow neither, so a CC-BY or CC0 row named
+its licence and gave the room no way to read it. Notice-tier rows open the notice
+this build ships; the rest open the licence's own text, one shared copy per id in
+`shells/licenses/` (both TV shells read it; the web still links out). The
+distinction between the two is the GENERATOR's, never a board's: `notice` still
+means the copy that discharges an obligation, and the gates still key on it.
+
 **The branch is the SHELL's navigation, and the model knows nothing about it.**
 `ttp_ui.h` owns the screens a party moves through; this stack is reachable only
 by the remote, pushes nothing on the wire, and no phone can open or close it —
@@ -897,8 +906,10 @@ the WINDOW takes focus, which here is the moment the cover lifts and
 `FLAG_NOT_FOCUSABLE` drops. So a board with one control opens with that control
 lit up — the first build of the ⓘ came up already blue, in the corner of a screen
 the room is reading a join code off. The park is an empty focusable strip along
-the bottom edge, FIRST in the Box so the initial grant lands on it, exactly as
-`LobbyView.focusPark` is on tvOS.
+the bottom edge, and it REQUESTS focus when the cover lifts. Declaring it first
+in the Box is NOT what makes the grant land on it — that was tried, measured, and
+the badge still came up blue; tree order only decides where the strip sits.
+tvOS needs the same park (`LobbyView.focusPark`) for the same reason.
 
 **The license text scrolls by handling the d-pad itself.** `verticalScroll` is
 driven by drags and by the focus system bringing a child into view, and a page of

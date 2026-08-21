@@ -20,6 +20,9 @@ import { fileURLToPath } from 'node:url';
 import { RACE_MUSIC } from '../public/display/audio/musicCatalogue.js';
 import { creditsFor, licenseInfo } from '../public/shared/credits.js';
 
+/// The repo root. Exported because the generators copy files out of the tree
+/// and would otherwise each re-derive it from their own depth — one path,
+/// spelled once.
 export const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 // Credits for code the BROWSER runs and no packaged app does: the wasm
@@ -28,6 +31,25 @@ export const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..'
 // prefix that matches nothing is an error rather than a silent no-op, so
 // renaming a credit cannot quietly re-add it to a TV.
 export const WEB_ONLY = ['Emscripten', 'qrcode-generator'];
+
+// The canonical text of a licence that obliges NO notice, one copy per licence
+// id, so that every row on a TV board can be opened and read.
+//
+// **A TELEVISION CANNOT FOLLOW A LINK, and that is the whole reason these
+// exist.** On /licenses.html each licence chip IS a link — to the entry's served
+// notice where one is shipped, else to the canonical URL (`public/licenses.js`)
+// — so a browser can always reach the terms. A TV has no browser, so a CC-BY or
+// CC0 row named its licence and gave the room no way to read it. These are what
+// that link becomes on a television.
+//
+// They are NOT notices in the sense credits.js means. A notice DISCHARGES a
+// permissive licence and belongs to the WORK; these belong to the LICENCE and
+// are shown as a courtesy. Nothing here dilutes that: the notice-tier gates in
+// tests/credits.test.js and tests/androidtv-legal.test.js still key on `notice`.
+const LICENSE_TEXTS = {
+  'CC-BY 4.0': 'shells/licenses/CC-BY-4.0.txt',
+  'CC0 1.0': 'shells/licenses/CC0-1.0.txt',
+};
 
 // Where each shared notice comes from in this tree, keyed by the file name a
 // bundle will carry. credits.js states the notice as a SERVED URL (the web
@@ -81,24 +103,43 @@ export function entries(platformOnly) {
         license: e.license,
         licenseURL: licenseURL(e.license, platformOnly),
         url: e.url,
-        // credits.js spells a shared notice as a served URL; a bundle carries
-        // the file itself, under its own name.
-        notice: e.notice ? path.basename(new URL(e.notice, 'https://x/').pathname) : null,
+        // WHAT THE ROW OPENS, as a file name in the bundle, and every row has
+        // one. The notice where this build ships one — credits.js spells a
+        // shared notice as a served URL, and a bundle carries the file itself
+        // under its own name — else the licence's own text.
+        text: textFor(e),
       });
     }
   }
   return out;
 }
 
-/// Every notice file a list names, as bundle-name -> source path in the tree.
-/// The staging step copies exactly this set; a shell's own notices are its
-/// [platformNotices], and the shared ones resolve out of [SHARED_NOTICES].
-export function notices(list, platformNotices) {
-  const wanted = new Set(list.map((e) => e.notice).filter(Boolean));
-  const map = { ...SHARED_NOTICES, ...platformNotices };
+/// The file one credit's row opens: its notice where this build ships one, else
+/// the text of the licence itself.
+///
+/// A credit that reaches the board with NEITHER is a row that cannot be opened,
+/// which on these boards is a row that looks broken — so it throws here, at bake
+/// time, rather than reaching a television.
+function textFor(e) {
+  if (e.notice) return path.basename(new URL(e.notice, 'https://x/').pathname);
+  const own = LICENSE_TEXTS[e.license];
+  if (own) return path.basename(own);
+  throw new Error(`'${e.title}' is ${e.license}, which ships no notice and has no `
+    + 'text in LICENSE_TEXTS — a row on the board with nothing behind it');
+}
+
+/// Every file a list's rows open, as bundle-name -> source path in the tree.
+/// The staging step copies exactly this set: a shell's own notices are its
+/// [platformNotices], the shared ones resolve out of [SHARED_NOTICES], and the
+/// licence texts out of [LICENSE_TEXTS].
+export function texts(list, platformNotices) {
+  const wanted = new Set(list.map((e) => e.text));
+  const byName = Object.fromEntries(
+    Object.values(LICENSE_TEXTS).map((rel) => [path.basename(rel), rel]));
+  const map = { ...SHARED_NOTICES, ...byName, ...platformNotices };
   const out = {};
   for (const name of wanted) {
-    if (!map[name]) throw new Error(`no source for notice '${name}' — add it to SHARED_NOTICES`);
+    if (!map[name]) throw new Error(`no source for '${name}' — add it to SHARED_NOTICES`);
     out[name] = map[name];
   }
   return out;
@@ -110,7 +151,7 @@ export function notices(list, platformNotices) {
 /// invented license has no obligation attached to it — so the only ids that
 /// resolve outside `credits.js` LICENSES are the ones a platform entry declares
 /// itself, with `licenseURL` on the entry that uses it.
-export function licenseURL(id, platformOnly = []) {
+function licenseURL(id, platformOnly = []) {
   const own = platformOnly.find((e) => e.license === id && e.licenseURL);
   if (own) return own.licenseURL;
   return licenseInfo(id).url;

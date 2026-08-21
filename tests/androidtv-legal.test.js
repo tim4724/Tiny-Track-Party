@@ -22,9 +22,9 @@ const ROOT = path.join(__dirname, '..');
 const KOTLIN = path.join(ROOT, 'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack');
 
 let WEB_ONLY, ANDROID_ONLY, SHARED_NOTICES;
-let entries, notices, legalLinks, document, gradleDependencies, LICENSES;
+let entries, texts, legalLinks, document, gradleDependencies, LICENSES;
 test.before(async () => {
-  ({ WEB_ONLY, ANDROID_ONLY, SHARED_NOTICES, entries, notices, legalLinks, document,
+  ({ WEB_ONLY, ANDROID_ONLY, SHARED_NOTICES, entries, texts, legalLinks, document,
     gradleDependencies } = await import('../shells/androidtv/scripts/gen-legal.mjs'));
   ({ LICENSES } = await import('../public/shared/credits.js'));
 });
@@ -43,13 +43,13 @@ test('every Gradle dependency the APK packages is credited', () => {
   }
 });
 
-test('every notice the list names has a source file, and it is intact', () => {
-  const staged = notices();
-  assert.ok(Object.keys(staged).length > 0, 'no notices at all — the APK would ship none');
+test('every text the list names has a source file, and it is intact', () => {
+  const staged = texts();
+  assert.ok(Object.keys(staged).length > 0, 'no texts at all — the APK would ship none');
 
   for (const [name, rel] of Object.entries(staged)) {
     const file = path.join(ROOT, rel);
-    assert.ok(fs.existsSync(file), `notice '${name}' points at ${rel}, which is not in the tree`);
+    assert.ok(fs.existsSync(file), `'${name}' points at ${rel}, which is not in the tree`);
     const text = fs.readFileSync(file, 'utf8');
     // A license text is only a notice while it is whole. This is the same shape
     // of check credits.test.js makes on the served copies.
@@ -120,16 +120,22 @@ test('the staged document carries the keys Legal.kt reads', () => {
   }
 });
 
-test("a row's notice is null rather than absent, so this platform cannot read it as \"null\"", () => {
-  // org.json's optString answers the four-character string "null" for an EXPLICIT
-  // JSON null and the fallback only for an ABSENT key, so the two spellings are
-  // not interchangeable here — and this document has 30-odd rows that ship no
-  // license text. Legal.kt reads the key through TtpJson.optStr, which handles
-  // both; this pins the shape it was written against.
-  const rows = document().entries;
-  assert.ok(rows.some((e) => e.notice === null), 'no row spells its missing notice as null');
-  assert.ok(rows.every((e) => 'notice' in e), 'a row omits `notice` rather than spelling it null');
-  const kotlin = fs.readFileSync(path.join(KOTLIN, 'Legal.kt'), 'utf8');
-  assert.match(kotlin, /TtpJson\.optStr\(e, "notice"\)/,
-    'Legal.kt no longer reads `notice` through TtpJson.optStr — see its own header');
+// A television cannot follow the link a browser gets on the licence chip, so a
+// row with no text behind it is terms the room cannot read. Every row has one,
+// and the generator throws rather than baking one that does not.
+test('every row on the board opens a text, and nothing in the document is null', () => {
+  const staged = texts();
+  for (const e of document().entries) {
+    assert.ok(e.text, `'${e.title}' has no text for its row to open`);
+    assert.ok(staged[e.text], `'${e.title}' opens '${e.text}', which nothing stages`);
+  }
+  // NO NULLABLE KEY, and that is what lets Legal.kt read this file with plain
+  // `optString`. This platform's org.json answers the four-character string
+  // "null" for an EXPLICIT JSON null and the fallback only for an ABSENT key
+  // (see TtpJson.optStr), so a key that starts coming back null has to change
+  // the Kotlin at the same time. This fails first if one does.
+  const nulls = document().entries.flatMap(
+    (e) => Object.entries(e).filter(([, v]) => v == null).map(([k]) => `${e.title}.${k}`));
+  assert.deepEqual(nulls, [],
+    'a row carries a null — read it with TtpJson.optStr in Legal.kt, not optString');
 });
