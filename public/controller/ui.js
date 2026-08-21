@@ -80,16 +80,33 @@ export function motionHelpCopy(state) {
   }
 }
 
-export function renderReadyFoot(btnEl, noteEl, { amHost, amReady, tab, canStart, host, others }) {
+export function renderReadyFoot(btnEl, noteEl, { amHost, amReady, tab, canStart, host, others, backEl }) {
+  // A new node for a new face (see the note above). Same id, same classes, so
+  // the next el('ready-btn') finds it and nothing else has to know.
+  const face = amHost ? tab : 'ready';
+  if (btnEl.dataset.face && btnEl.dataset.face !== face) {
+    const fresh = btnEl.cloneNode(false);
+    btnEl.replaceWith(fresh);
+    btnEl = fresh;
+  }
+  btnEl.dataset.face = face;
+
   btnEl.classList.remove('hidden');
+  // The back chip is the other half of the stepper, and only the host has a
+  // page to go back FROM — so it lives and dies with the forward button rather
+  // than in its own renderer, which is what let the old tab strip drift out of
+  // step with the bar below it.
+  if (backEl) backEl.classList.toggle('hidden', !(amHost && tab === 'race'));
   // The note is a floating chip OUT OF FLOW above the button (controller.css),
   // hidden by :empty — so it's cleared, never display:none'd, and toggling
   // ready never moves the button.
   const allReady = others.every((p) => p.ready);
   if (amHost) {
-    // The host's bar is a STEPPER between the two lobby pages: on CAR it
+    // The host's button is a STEPPER between the two lobby pages: on CAR it
     // advances ("Select race", always enabled — picking needs no permission),
-    // on RACE it launches. Blue for the step, brand green stays "go".
+    // on RACE it launches. Blue for the step, brand green stays "go". There is
+    // no tab strip above it: this button and the chip beside it ARE the
+    // navigation, so the label has to name the destination, not the action.
     const onCar = tab === 'car';
     btnEl.textContent = onCar ? 'Select race' : 'Start race';
     btnEl.classList.toggle('btn--step', onCar);

@@ -74,13 +74,16 @@ export function runControllerScenario(opts) {
     ]
   };
 
-  // The CAR | RACE tab strip + page state — mirrors main.js renderLobbyTabs.
+  // Which lobby page this scenario shows — mirrors main.js renderLobbyPage.
+  // The back chip is NOT set here: renderReadyFoot owns it, exactly as on the
+  // live page, so a scenario can't show a corner the real phone wouldn't.
   function setLobbyPage(tab, isHost) {
-    el('lobby-tabs').classList.toggle('hidden', !isHost);
     el('lobby').classList.toggle('lobby--race', isHost && tab === 'race');
-    el('tab-car').setAttribute('aria-selected', String(tab === 'car'));
-    el('tab-race').setAttribute('aria-selected', String(tab === 'race'));
   }
+  // The chip has to actually step back, or the gallery is showing a dead
+  // control — the same reason a locked car tile stops taking pointer events
+  // instead of sitting there looking pressable.
+  el('lobby-back').onclick = () => runControllerScenario({ scenario: 'lobby-host', color: color });
 
   // Mode picker — mirrors main.js renderModePicker: host only (non-host lobby
   // has no picker at all), on the RACE page. Taps re-render so the gallery
@@ -104,7 +107,8 @@ export function runControllerScenario(opts) {
   // picker locked while ready (mirrors main.js renderLobby); the host's "Start
   // race" button just renders (no race to start here).
   function renderReadyPreview(amHost, amReady, host, others, tab = 'car') {
-    renderReadyFoot(el('ready-btn'), el('ready-note'), { amHost, amReady, tab, canStart: true, host, others });
+    renderReadyFoot(el('ready-btn'), el('ready-note'),
+      { amHost, amReady, tab, canStart: true, host, others, backEl: el('lobby-back') });
     if (!amHost) {
       renderCarPicker(carSel, !amReady);
       el('ready-btn').onclick = () => renderReadyPreview(amHost, !amReady, host, others, tab);
@@ -185,8 +189,8 @@ export function runControllerScenario(opts) {
       break;
 
     case 'lobby-host':
-      // The host's CAR page: tabs up top, the picker waiting on the RACE tab,
-      // the stepper saying "Select race".
+      // The host's CAR page: the picker waiting one step on, the stepper's
+      // forward face saying "Select race", no back chip (nothing behind it).
       show('lobby');
       el('me-name').textContent = FAKE_NAMES[color];
       setLobbyPage('car', true);
@@ -199,8 +203,9 @@ export function runControllerScenario(opts) {
       break;
 
     case 'lobby-race':
-      // The host's RACE page: the pick list with its stars, the auto-picked
-      // first cup's detail open, everyone ready so Start is live.
+      // The host's RACE page: the pick grid with its stars, the auto-picked
+      // first cup's detail open, everyone ready so Start is live — and the
+      // corner's back chip, which is the only way home now the tabs are gone.
       show('lobby');
       el('me-name').textContent = FAKE_NAMES[color];
       setLobbyPage('race', true);

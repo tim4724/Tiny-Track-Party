@@ -129,7 +129,10 @@ export default [
   },
 
   {
-    files: ['scripts/bake-cues.mjs', 'scripts/perf-features.mjs', 'scripts/perf-race.mjs'],
+    files: [
+      'scripts/bake-cues.mjs', 'scripts/perf-features.mjs', 'scripts/perf-race.mjs',
+      'scripts/lobby-fit-check.mjs',
+    ],
     languageOptions: {
       globals: { ...globals.node, ...globals.browser },
     },

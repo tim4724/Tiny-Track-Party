@@ -376,7 +376,7 @@ function applyLivery() {
 function renderLobby() {
   maybeAutoSelectMode();    // host: leave the display's plain diorama for the 3D preview right away
   el('me-name').textContent = myName || 'Racer'; // who you are, up top (livery dot is var(--car))
-  renderLobbyTabs();
+  renderLobbyPage();
   buildCarPicker({ heroEl: el('car-hero'), stripEl: el('carpick'), selected: myCarIndex, onPick: chooseCar, canPick: !amReady, cars: carCatalog });
   renderModePicker();
   const hostP = roster.find((p) => p.peerIndex === hostPeerIndex);
@@ -392,6 +392,7 @@ function renderLobby() {
   }
   renderReadyFoot(el('ready-btn'), el('ready-note'), {
     amHost, amReady,
+    backEl: el('lobby-back'),     // the corner's other half: shown on the race page only
     tab: lobbyTab,                // the stepper: CAR says "Select race", RACE "Start race"
     canStart: !!selectedMode,     // host can't start without a pick (auto-picked, so ~always true)
     host: hostP && { name: hostP.name, color: liveryOf(hostP.colorIndex) },
@@ -401,25 +402,41 @@ function renderLobby() {
   });
 }
 
-// The CAR | RACE tab strip — host only (a non-host lobby IS the car page, so
-// the strip would be a one-tab strip saying nothing). The bottom bar steps
-// forward; these step anywhere, including back.
-function setLobbyTab(tab) {
+// Which lobby page we're on. There is no tab strip: the action corner's two
+// buttons ARE the stepper (forward is renderReadyFoot's, back is the chip
+// below). Both steps come through here, so the buzz and the transition live
+// here too rather than at the call sites — the forward step used to buzz and
+// the back chip didn't, which is exactly the drift a shared path prevents.
+function setLobbyPage(tab) {
   if (tab === lobbyTab) return;
   lobbyTab = tab;
   renderLobby();
+  // Without a page change to explain it, the corner's label simply mutates
+  // under the thumb that pressed it. The content fades; the button itself
+  // deliberately does NOT move, animate or fade — it is the fixed point the
+  // finger is already on. (Its node is swapped for a fresh one on a face
+  // change; see renderReadyFoot.)
+  const lobby = el('lobby');
+  lobby.classList.remove('lobby--step');
+  void lobby.offsetWidth;             // restart it when stepping twice quickly
+  lobby.classList.add('lobby--step');
+  buzz(15);
 }
-function renderLobbyTabs() {
-  const tabs = el('lobby-tabs');
-  const showTabs = amHost && trackCatalog.length > 0 && !waitingForNextRace;
-  tabs.classList.toggle('hidden', !showTabs);
-  if (!showTabs) { lobbyTab = 'car'; }
-  el('lobby').classList.toggle('lobby--race', showTabs && lobbyTab === 'race');
-  el('tab-car').setAttribute('aria-selected', String(lobbyTab === 'car'));
-  el('tab-race').setAttribute('aria-selected', String(lobbyTab === 'race'));
+// A race page exists only for a host with a catalogue to pick from. Anyone
+// else's lobby IS the car page, so we pin them there rather than leaving a
+// stale 'race' behind a vanished picker (host handover mid-lobby does exactly
+// that).
+function renderLobbyPage() {
+  const canPickRace = amHost && trackCatalog.length > 0 && !waitingForNextRace;
+  if (!canPickRace) lobbyTab = 'car';
+  el('lobby').classList.toggle('lobby--race', lobbyTab === 'race');
 }
-el('tab-car').addEventListener('click', () => setLobbyTab('car'));
-el('tab-race').addEventListener('click', () => setLobbyTab('race'));
+// DELEGATED from the corner, not bound to the buttons: renderReadyFoot replaces
+// the primary button's node whenever its face changes, and a listener bound to
+// the old node would go with it.
+el('lobby-back').closest('.lobby-go').addEventListener('click', (e) => {
+  if (e.target.closest('#lobby-back')) setLobbyPage('car');
+});
 
 // Mode picker — host only: one tile per cup then 🎲 Random (a cup pick runs its
 // 4-race Grand Prix and its open panel offers exact single-track picks; Random's
@@ -644,12 +661,13 @@ el('name-form').addEventListener('submit', (e) => {
 // Lobby footer button — for the host it's "Start race" (enabled only once
 // everyone else is ready — see renderReadyFoot); for everyone else it's the
 // ready toggle. The display validates both messages.
-el('ready-btn').addEventListener('click', () => {
+el('ready-btn').closest('.lobby-go').addEventListener('click', (e) => {
+  if (!e.target.closest('#ready-btn')) return;   // delegated: see #lobby-back above
   if (amHost) {
     // The stepper: on the CAR page the button ADVANCES to the race page; on
     // the RACE page it starts. Two taps from a fresh lobby, matching the two
     // decisions a host actually makes.
-    if (lobbyTab !== 'race') { setLobbyTab('race'); buzz(15); return; }
+    if (lobbyTab !== 'race') { setLobbyPage('race'); return; }   // setLobbyPage buzzes
     net.send(MSG.START_GAME);
   } else {
     amReady = !amReady;   // optimistic; LOBBY_UPDATE is the source of truth

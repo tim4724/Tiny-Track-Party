@@ -120,8 +120,12 @@ const TOUR_LABEL = 'World Tour';
 
 // How much colour a surface wears; `pct` is how much survives a mix with white.
 const PANEL_TINT = 45;  // the open cup's track panel: a surface behind cards, so deeper than they are
-const PICK_TINT  = 72;  // the pick — the only tile that takes a fill at all
-export const FIELD_TINT = 26;  // the schematic's field. Exported: the display's cup slot paints the same minis
+const PICK_TINT  = 72;  // the pick, worn loud
+const REST_TINT  = 20;  // every OTHER cup tile: enough colour to name the cup, quiet enough that the pick still shouts
+// The schematic's field. Exported, and the one tint here that leaves JS: the
+// display's cup slot paints the same minis, and the C++ ui model serves it as
+// cupFieldTintPct() — tests/ui-model.test.js pins the two equal.
+export const FIELD_TINT = 26;
 
 const towardWhite = (color, pct) => `color-mix(in srgb, ${color} ${pct}%, #fff)`;
 
@@ -247,28 +251,52 @@ export function lockGlyph() {
 }
 
 // One row of the pick LIST (left column): the name leading, the trail (stars /
-// run hint / lock progress) trailing. `mine` marks the current pick's row with
-// its own colour; `cursor` marks whose detail the right panel is showing — the
-// two usually coincide, but a locked row can be examined without being picked.
-function listRow({ label, trail, locked, mine, cursor, pickTint, canPick, onTap }) {
+// run hint / lock progress) trailing.
+//
+// Split into BUILD and DRESS on purpose. The whole picker used to be rebuilt
+// from scratch on every render, which meant the tile you were pressing was
+// destroyed by its own tap — the :active press never got to play, so the cups
+// were the one control on the page that did not answer a touch. Now the six
+// rows are built once per catalogue and re-dressed in place, exactly as the car
+// strip does it (shared/carPicker.js), so the element you press outlives the
+// press. Only the detail panel is still rebuilt wholesale: it changes entirely,
+// and it is not the thing under your thumb.
+function buildRow(label, locked) {
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = 'mode-opt' + (mine ? ' mode-opt--mine' : '')
-    + (cursor ? ' mode-opt--cursor' : '') + (locked ? ' mode-opt--locked' : '');
-  if (mine) {
-    btn.setAttribute('aria-current', 'true');
-    if (pickTint) btn.style.background = pickTint;
-  }
+  btn.className = 'mode-opt';
   btn.setAttribute('aria-label', label);
-  btn.disabled = !canPick;
   if (locked) btn.appendChild(lockGlyph());
   const lab = document.createElement('span');
   lab.className = 'mode-opt__name';
   lab.textContent = label;
   btn.appendChild(lab);
-  if (trail) btn.appendChild(trail);
-  if (canPick && onTap) btn.addEventListener('click', onTap);
   return btn;
+}
+
+// Everything that changes without changing the row's SHAPE: which mark it
+// wears, what its trail says, and what a tap does. `mine` marks the current
+// pick's row with its own colour; `cursor` marks whose detail the right panel is
+// showing — the two usually coincide, but a locked row can be examined without
+// being picked.
+function dressRow(btn, { trail, locked, mine, cursor, tint, pickTint, canPick, onTap }) {
+  btn.classList.toggle('mode-opt--mine', !!mine);
+  btn.classList.toggle('mode-opt--cursor', !!cursor);
+  btn.classList.toggle('mode-opt--locked', !!locked);
+  // EVERY tile wears its cup's colour, so the grid reads as the ladder it is
+  // rather than six identical white cards. That means the fill can no longer BE
+  // the pick mark the way it was when only one tile had one — the mark is now
+  // the STEP UP in the same hue, PICK_TINT against REST_TINT, which is a
+  // stronger signal than a colour/no-colour split and keeps a cup one colour
+  // wherever it appears. A locked cup takes no fill at all: it is not a choice.
+  btn.style.background = locked ? '' : (mine ? pickTint : tint) || '';
+  if (mine) btn.setAttribute('aria-current', 'true');
+  else btn.removeAttribute('aria-current');
+  btn.disabled = !canPick;
+  const old = btn.querySelector('.starrow, .mode-opt__sub');
+  if (old) old.remove();
+  if (trail) btn.appendChild(trail);
+  btn.onclick = (canPick && onTap) ? onTap : null;
 }
 
 const subSpan = (text) => {
@@ -325,15 +353,25 @@ function detailHeader({ title, starsEl, meter, meta }) {
 export function buildModePicker({ stripEl, catalog, progress, selection, highlight,
                                   canPick, onPickMode, onHighlight }) {
   if (!stripEl) return;
-  // Rebuilt from scratch below, but this runs on EVERY room snapshot push (any
-  // player's car pick or ready toggle re-renders the host's lobby) — so skip
-  // when nothing it renders changed. By value: the snapshot re-sends the
-  // catalogue as a fresh object each push. Same signature-guard idiom as
-  // buildCarPicker (coarser: the list and detail panel are one rendered unit).
+  // This runs on EVERY room snapshot push (any player's car pick or ready
+  // toggle re-renders the host's lobby), so skip when nothing it renders
+  // changed. By value: the snapshot re-sends the catalogue as a fresh object
+  // each push. Same signature-guard idiom as buildCarPicker.
   const sig = JSON.stringify([catalog, progress, selection, highlight, !!canPick]);
   if (stripEl.dataset.sig === sig) return;
   stripEl.dataset.sig = sig;
-  stripEl.innerHTML = '';
+  // NOTHING here is torn down and rebuilt. Keeping the pressed ELEMENT alive was
+  // not enough: the list used to be carried across a `stripEl.innerHTML = ''`,
+  // and that momentary DETACH cancels the running :active transition outright —
+  // measurably, the tile emitted transitionstart then transitioncancel and never
+  // restarted, so a tap on a cup was the one tap on this page that answered
+  // nothing. The list and the column that holds it now stay attached across
+  // every render; only the detail panel is swapped, and it is swapped in place.
+  //
+  // The general rule this is an instance of: a re-render is driven by a room
+  // snapshot arriving, which is to say by the network, at a moment the player's
+  // finger is on the glass. So a render may only ever DRESS what is already
+  // there. Rebuilding is a visible interruption of the player's own input.
   const list = catalog || [];
   const sel = selection || {};
   const pick = (m) => onPickMode && onPickMode(m);
@@ -348,12 +386,15 @@ export function buildModePicker({ stripEl, catalog, progress, selection, highlig
     g.items.push(t);
   }
 
-  // Cup-less catalog (older display / gallery): no modes to offer — flat exact picks.
+  // Cup-less catalog (older display / gallery): no modes to offer — flat exact
+  // picks. Swapped in place like everything else here, so a re-render neither
+  // stacks a second grid nor detaches the tile under the player's finger.
   if (!groups.length) {
     const grid = document.createElement('div');
     grid.className = 'trackpick__grid';
     for (const t of list) grid.appendChild(trackTile(t, t.id === sel.trackId, canPick, (id) => pick({ mode: 'track', trackId: id })));
-    stripEl.appendChild(grid);
+    const prev = stripEl.firstElementChild;
+    if (prev) stripEl.replaceChild(grid, prev); else stripEl.appendChild(grid);
     return;
   }
 
@@ -386,44 +427,50 @@ export function buildModePicker({ stripEl, catalog, progress, selection, highlig
   const cursor = highlight || rowOfSel || (firstOpen ? firstOpen.id : 'random');
   const focus = (id) => { if (onHighlight && id !== cursor) onHighlight(id); };
 
-  const cols = document.createElement('div');
-  cols.className = 'racecols';
+  // The column pair persists across renders (see the note at the top of this
+  // function); only its detail half is replaced.
+  let cols = stripEl.querySelector('.racecols');
+  if (!cols) {
+    cols = document.createElement('div');
+    cols.className = 'racecols';
+    stripEl.appendChild(cols);
+  }
 
   // ---- the pick list ----------------------------------------------------------
-  const listEl = document.createElement('div');
-  listEl.className = 'racelist';
-  for (const g of groups) {
+  // Descriptors first, DOM second: the rows' shape (how many, what they are
+  // called, which is locked) is what decides whether the list can be reused,
+  // and everything else is dressing applied to whatever is already there.
+  const rows = groups.map((g) => {
     const locked = lockedOf(g.id);
     const p = progressOf(g.id);
-    listEl.appendChild(listRow({
-      label: g.name,
+    return {
+      key: g.id, label: g.name, locked,
       // A locked row trails its unlock progress; an open one its stars.
-      trail: locked ? subSpan(`${(p && p.unlockDone) || 0}/${(p && p.unlockNeed) || 0}`)
-        : starRow(starsOf(g.id)),
-      locked,
+      trail: () => (locked ? subSpan(`${(p && p.unlockDone) || 0}/${(p && p.unlockNeed) || 0}`)
+        : starRow(starsOf(g.id))),
       // Picked only when the cup (or one of its tracks) IS the pick.
       mine: !locked && rowOfSel === g.id,
       cursor: cursor === g.id,
+      tint: cupTint(g.id, REST_TINT),
       pickTint: cupTint(g.id, PICK_TINT),
-      canPick,
       // A locked row can be EXAMINED (the detail panel becomes the unlock
       // pitch) but never picked — the display would refuse it anyway.
       onTap: () => { focus(g.id); if (!locked) pick({ mode: 'cup', cupId: g.id }); }
-    }));
-  }
+    };
+  });
   // Random sits AFTER the cups: the cups are the game's own ladder and read in
   // difficulty order, so a row in front of them cut that order in half. Last, it
   // reads as what it is — the thing you reach for once the named cups aren't
   // what you want.
-  listEl.appendChild(listRow({
-    label: '🎲 Random',
-    trail: subSpan(sel.mode === 'random' ? randomSub(randomRaces) : TOUR_LABEL.toLowerCase()),
+  rows.push({
+    key: 'random', label: '🎲 Random', locked: false,
+    trail: () => subSpan(sel.mode === 'random' ? randomSub(randomRaces) : TOUR_LABEL.toLowerCase()),
     mine: randomFamily,
     cursor: cursor === 'random',
     // Belonging to no cup, it has no colour of its own — a neutral grey stands
     // in so it still wears the same fill-and-drop mark the cups do.
+    tint: towardWhite(NEUTRAL_COLOR, REST_TINT),
     pickTint: towardWhite(NEUTRAL_COLOR, PICK_TINT),
-    canPick,
     // From outside the family the row lands on its DEFAULT, the World Tour.
     // Inside it, it re-sends the current pick — which, like every family tap,
     // deals fresh track(s) on the display.
@@ -431,8 +478,22 @@ export function buildModePicker({ stripEl, catalog, progress, selection, highlig
       focus('random');
       pick(sel.mode === 'random' ? { mode: 'random', randomRaces } : { mode: 'tour' });
     }
-  }));
-  cols.appendChild(listEl);
+  });
+
+  // Reuse the existing rows whenever their shape is unchanged — which is every
+  // render that is only a pick or cursor move, i.e. every render a TAP causes.
+  // That is what lets the pressed tile outlive its own press.
+  const listSig = JSON.stringify(rows.map((r) => [r.key, r.label, r.locked]));
+  let listEl = cols.querySelector('.racelist');
+  if (!listEl || listEl.dataset.sig !== listSig) {
+    const fresh = document.createElement('div');
+    fresh.className = 'racelist';
+    fresh.dataset.sig = listSig;
+    for (const r of rows) fresh.appendChild(buildRow(r.label, r.locked));
+    if (listEl) cols.replaceChild(fresh, listEl); else cols.insertBefore(fresh, cols.firstChild);
+    listEl = fresh;
+  }
+  rows.forEach((r, i) => dressRow(listEl.children[i], { ...r, trail: r.trail(), canPick }));
 
   // ---- the detail panel -------------------------------------------------------
   // ONE surface (.modepick__tracks) whatever the cursor rests on, with the same
@@ -536,14 +597,21 @@ export function buildModePicker({ stripEl, catalog, progress, selection, highlig
     panel.appendChild(rules);
   } else {
     const g = byCup.get(cursor);
-    // The cup's colour washes the panel — the one place it shows when the pick
-    // is one of the TRACKS (that hands the mark down, leaving the row white).
+    // The cup's colour washes the panel, deeper than the tiles in front of it.
     panel.style.background = cupTint(cursor, PANEL_TINT);
+    // The meta line says WHAT TAPPING START WILL RUN, which is not always the
+    // cup: picking one of the four tiles below drops out of the Grand Prix and
+    // races that track alone. The line was still promising four races, which is
+    // the one place the panel could contradict the pick right above the button
+    // that acts on it.
+    const soloTrack = sel.mode === 'track'
+      && (g ? g.items : []).find((t) => t.id === sel.trackId);
     panel.appendChild(detailHeader({
       title: g ? g.name : cursor,
       starsEl: starRow(starsOf(cursor)),
       meter: g && g.diff != null ? cupMeter(g.diff) : null,
-      meta: `Grand Prix · ${g ? g.items.length : 0} races`
+      meta: soloTrack ? `Single race · ${soloTrack.name}`
+        : `Grand Prix · ${g ? g.items.length : 0} races`
     }));
     const tgrid = document.createElement('div');
     tgrid.className = 'trackpick__grid';
@@ -571,6 +639,16 @@ export function buildModePicker({ stripEl, catalog, progress, selection, highlig
     legend.appendChild(item);
   }
   detail.appendChild(legend);
-  cols.appendChild(detail);
-  stripEl.appendChild(cols);
+  // Swapped IN PLACE: appending to a cleared parent would take the list with it.
+  //
+  // And only when it would actually LOOK different. One tap on a cup renders
+  // this three times — the cursor moving, the pick landing, then the display's
+  // echo of that pick a beat later — and each replacement restarted the
+  // panel's fade from nothing, so a single tap blinked the panel three times.
+  // Comparing the rendered markup is the one test that cannot drift from what
+  // the panel shows: any signature assembled by hand is a list of inputs
+  // somebody has to remember to extend.
+  const oldDetail = cols.querySelector('.racedetail');
+  if (oldDetail && oldDetail.outerHTML === detail.outerHTML) return;
+  if (oldDetail) cols.replaceChild(detail, oldDetail); else cols.appendChild(detail);
 }

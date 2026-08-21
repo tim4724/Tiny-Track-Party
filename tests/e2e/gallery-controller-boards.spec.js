@@ -122,15 +122,15 @@ test('phone race page: the pick list carries stars; the first cup detail is open
   // The locked row trails its unlock progress, not stars.
   await expect(page.locator('.mode-opt--locked')).toContainText('3/4');
   // The auto-picked first cup's detail: header name + its four named maps.
-  await expect(page.locator('.raceinfo__name')).toHaveText('Beach Cup');
+  await expect(page.locator('.racedetail .raceinfo__name')).toHaveText('Beach Cup');
   await expect(page.locator('.modepick__tracks .track-opt')).toHaveCount(4);
 });
 
 test('phone race page: examining the locked cup swaps the detail for the unlock pitch', async ({ page }) => {
   await page.goto(`${CONTROLLER}lobby-race-locked&color=1`);
   await page.waitForSelector('.modepick__tracks--locked');
-  await expect(page.locator('.raceinfo__name')).toHaveText('Playroom Cup');
-  await expect(page.locator('.raceinfo__meta')).toContainText('Finish every cup');
+  await expect(page.locator('.racedetail .raceinfo__name')).toHaveText('Playroom Cup');
+  await expect(page.locator('.racedetail .raceinfo__meta')).toContainText('Finish every cup');
   // Per-cup checks: three done, one to go — only the payload knows which.
   await expect(page.locator('.unlock-rules__row')).toHaveCount(4);
   await expect(page.locator('.unlock-rules__row--todo')).toHaveCount(1);
