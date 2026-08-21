@@ -1,0 +1,250 @@
+name: Release
+
+# The signed store build of the Android TV app: a .aab kept as a workflow
+# artifact, and on a release tag published to Play's Android TV closed testing
+# track.
+#
+# WHY THIS IS NOT androidtv.yml WITH A KEYSTORE. That leg is compile-only and
+# passes -PttpNoEngine, so its APK carries no engine and is unloadable by
+# design. A store build has to produce the real thing, which means the whole
+# native chain on a runner that has none of it: the pinned Filament fork built
+# as an Android SDK for BOTH ABIs, the NDK that fork pins, and a host matc for
+# the Android-only multiview material set. That is hours of build, so it is
+# CACHED ON THE PIN — see the two steps that do it.
+#
+# Triggers: a bare-semver release tag (the repo's tag convention) or manual
+# dispatch. Never pull_request, so the signing secrets are only reachable by
+# people who can push.
+#
+# A DISPATCH IS THE CACHE WARMER as well as the end-to-end test. It builds and
+# uploads the bundle but never publishes, so after a filament.pin bump the way
+# to avoid a tag that sits in a Filament build for hours is to dispatch this
+# once on main first. Caches written on the default branch are what tag runs
+# restore.
+#
+# Secrets (repo Settings > Secrets and variables > Actions):
+#   ANDROID_KEYSTORE_B64       base64 of the upload keystore .jks
+#   ANDROID_KEYSTORE_PASSWORD  keystore store password
+#   ANDROID_KEY_ALIAS          key alias (tinytrack-tv)
+#   ANDROID_KEY_PASSWORD       key password. The keystore is PKCS12, which has
+#                              no separate key password, so this is the STORE
+#                              password again — not empty.
+#   PLAY_SERVICE_ACCOUNT_JSON  JSON key of the Play API service account, granted
+#                              "Release to testing tracks" on the app in Play
+#                              Console (Users and permissions, not Cloud IAM)
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+
+permissions:
+  contents: read
+
+jobs:
+  androidtv:
+    runs-on: ubuntu-latest
+    # A cache miss means building Filament for two ABIs plus the host tools.
+    # The cap is the job limit, not an estimate: a hit finishes in minutes.
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Read the Filament pin
+        id: pin
+        run: |
+          set -eu
+          . native/filament.pin
+          echo "commit=$FILAMENT_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "remote=$FILAMENT_REMOTE" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v5
+        with:
+          # 17 is what app/build.gradle.kts targets for both source and jvmTarget.
+          java-version: 17
+          distribution: temurin
+      - uses: actions/setup-node@v6
+        with:
+          # Only native/scripts/build-runtime-android.sh's JNI codegen needs Node,
+          # and it imports node: builtins only — there is no npm ci here.
+          node-version: 26
+      - uses: gradle/actions/setup-gradle@v4
+
+      # OUTSIDE THE WORKSPACE, unlike actions/checkout's path:, which refuses to
+      # leave it. A 1.6 GB tree inside the repo would also make every
+      # `git status --porcelain` dirty, and that string ends up in versionName.
+      #
+      # FILAMENT_SRC is an allowed override of filament-checkout.sh's
+      # version-addressed default, but only AT the pinned commit — which is why
+      # this fetches the commit itself rather than a branch.
+      - name: Fetch the pinned Filament fork
+        run: |
+          set -eu
+          SRC="$RUNNER_TEMP/filament"
+          mkdir -p "$SRC"
+          git -C "$SRC" init -q
+          git -C "$SRC" remote add origin "${{ steps.pin.outputs.remote }}"
+          git -C "$SRC" fetch -q --depth 1 origin "${{ steps.pin.outputs.commit }}"
+          git -C "$SRC" checkout -q --detach FETCH_HEAD
+          echo "FILAMENT_SRC=$SRC" >> "$GITHUB_ENV"
+
+      # The NDK the FORK pins, not the runner's newest: Filament and this tree
+      # must agree, and two NDKs means two libc++ builds on one link line.
+      - name: Install the NDK the fork pins
+        run: |
+          set -eu
+          NDK_VERSION=$(grep GITHUB_NDK_VERSION "$FILAMENT_SRC/build/common/versions" | cut -d= -f2)
+          echo "installing NDK $NDK_VERSION"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$NDK_VERSION" > /dev/null
+          echo "NDK_VERSION=$NDK_VERSION" >> "$GITHUB_ENV"
+
+      # KEYED ON THE PIN AND NOTHING ELSE, because nothing else changes what is
+      # in here: the pin names one fork commit, and the SDK is wholly derived
+      # from it. No restore-keys — a near-miss would restore a DIFFERENT
+      # Filament's headers and libs, and MATERIAL_VERSION mismatches surface as
+      # a material that fails to parse on the box, not as a build error.
+      #
+      # ~111 MB installed for both ABIs, plus the host matc.
+      - name: Restore the Filament Android SDK
+        id: filament-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ runner.temp }}/filament/out/android-release
+            ${{ runner.temp }}/filament/out/cmake-release/tools/matc/matc
+          key: filament-android-${{ steps.pin.outputs.commit }}
+
+      # -S multiview IS NOT OPTIONAL and it is not about the samples: it is the
+      # only way to set FILAMENT_ENABLE_MULTIVIEW, and without it Filament never
+      # compiles the _multiview variants of its own built-in materials, which a
+      # MULTIVIEW engine then fails to parse at runtime. Both ABIs install under
+      # ONE root. The android target also builds the host tools, which is where
+      # the matc the multiview material set needs comes from.
+      - name: Build the Filament Android SDK
+        if: steps.filament-cache.outputs.cache-hit != 'true'
+        working-directory: ${{ runner.temp }}/filament
+        run: |
+          set -eu
+          sudo apt-get update
+          sudo apt-get install -y ninja-build clang libc++-dev libc++abi-dev \
+            libglu1-mesa-dev libxi-dev libxcomposite-dev mesa-common-dev
+          ./build.sh -i -q armeabi-v7a -S multiview -p android release
+          ./build.sh -i -q arm64-v8a   -S multiview -p android release
+
+      # app/build.gradle.kts reads this file and falls back to DEBUG SIGNING when
+      # it is absent, which would produce a bundle Play rejects. The verify step
+      # after the build is what makes that fallback safe to have.
+      - name: Materialize the upload keystore from secrets
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -eu
+          for v in ANDROID_KEYSTORE_B64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "$(eval "echo \"\$$v\"")" ]; then
+              echo "::error::secret $v is not set"
+              exit 1
+            fi
+          done
+          echo "$ANDROID_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/upload-keystore.jks"
+          cat > shells/androidtv/keystore.properties <<EOF
+          storeFile=$RUNNER_TEMP/upload-keystore.jks
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          keyPassword=$ANDROID_KEY_PASSWORD
+          EOF
+
+      # Both ABIs: armeabi-v7a is not a legacy fallback here, a Google TV
+      # Streamer has no /system/bin/linker64 and cannot load an arm64 build.
+      - name: Build the engine
+        run: native/scripts/build-runtime-android.sh both
+
+      # Play rejects a reused versionCode, so stamp a unique one. The +100
+      # reserves a band below it for bundles built and uploaded BY HAND, of which
+      # there is already one (code 1, the bundle that opened the tv:Alpha track);
+      # raw run numbers would eventually collide with that band. Tag builds take
+      # their versionName from the tag; a
+      # dispatch keeps build.gradle.kts's commit-stamped default. Both are
+      # command-line overrides: the static values in the build file stay put.
+      - name: Build release bundle (.aab)
+        working-directory: shells/androidtv
+        run: |
+          set -eu
+          VERSION_ARGS=("-PttpVersionCode=$((GITHUB_RUN_NUMBER + 100))")
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            VERSION_ARGS+=("-PttpVersionName=$GITHUB_REF_NAME")
+          fi
+          ./gradlew bundleRelease --console=plain --stacktrace "${VERSION_ARGS[@]}"
+
+      # THE FALLBACK'S GUARD RAIL. app/build.gradle.kts signs with the debug key
+      # when keystore.properties is absent or unreadable, which is what keeps the
+      # compile-only leg and a fresh worktree building a release APK with no
+      # secret. Here that same fallback would hand Play an artifact signed by the
+      # wrong key, so prove the upload key was actually picked up.
+      #
+      # An EQUALITY against the keystore's own certificate, not a search for
+      # "Android Debug" in the output: a negative grep also passes when keytool
+      # prints nothing at all, which is the one case worth catching. Both sides
+      # go through -printcert so the labels match whatever locale the runner is
+      # in — the other subcommands translate theirs.
+      - name: Verify release signature
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -eu
+          AAB=shells/androidtv/app/build/outputs/bundle/release/app-release.aab
+          want=$(keytool -exportcert -keystore "$RUNNER_TEMP/upload-keystore.jks" \
+              -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" -rfc |
+            keytool -printcert | grep -m1 'SHA256:' | tr -d ' ')
+          got=$(keytool -printcert -jarfile "$AAB" | grep -m1 'SHA256:' | tr -d ' ')
+          echo "keystore $want"
+          echo "bundle   $got"
+          if [ -z "$got" ] || [ "$want" != "$got" ]; then
+            echo "::error::the bundle is not signed with the upload key"
+            exit 1
+          fi
+
+      # Before publishing, so a Play-side rejection still leaves the bundle
+      # downloadable from the run.
+      - name: Upload .aab artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tinytrack-androidtv-aab
+          path: shells/androidtv/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+
+      # TAGS ONLY, unlike the artifact above. A dispatch is a build — the
+      # end-to-end test and the cache warmer — and a build is not a release, so
+      # it must not be able to put anything in front of a tester. Dispatch means
+      # "build it and hand me the artifact"; the tag is the only thing that
+      # publishes.
+      #
+      # "tv:" is the Android TV form factor prefix, and the form factor is the
+      # one part of this that has NO API: androidpublisher v3 has no form-factor
+      # resource, and TrackConfig.formFactor enumerates DEFAULT, WEAR and
+      # AUTOMOTIVE only. A tv: track cannot be created here, only published to,
+      # so the console declaration comes first. tv:Alpha is confirmed live
+      # (edits.tracks.list also lists tv, tv:internal, tv:beta, tv:production);
+      # the suffix is the console's name verbatim, capital A included.
+      #
+      # Closed testing goes out completed, not draft: testers opted in, and Play
+      # still reviews the release. Point this at tv:production and the draft gate
+      # has to come back. mapping.txt goes with it or every crash report from an
+      # R8 build is unreadable.
+      - name: Publish to Play (Android TV closed testing)
+        if: github.ref_type == 'tag'
+        uses: r0adkll/upload-google-play@v1.1.5
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: games.couchpad.tinytrack
+          releaseFiles: shells/androidtv/app/build/outputs/bundle/release/app-release.aab
+          mappingFile: shells/androidtv/app/build/outputs/mapping/release/mapping.txt
+          track: tv:Alpha
+          status: completed

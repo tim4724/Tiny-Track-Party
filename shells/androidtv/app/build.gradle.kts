@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // Kotlin itself is AGP's since 9.0; only the Compose compiler is a plugin.
@@ -18,6 +20,16 @@ fun git(vararg args: String): String? = try {
     null
 }
 
+/**
+ * `keystore.properties` beside this shell's Gradle root, or null when it is
+ * absent — a fresh worktree, and the compile-only CI leg. The release workflow
+ * is the one place CI writes it. The `release` build type below is where that
+ * null is answered.
+ */
+val keystoreProps = file("$rootDir/keystore.properties").takeIf { it.exists() }?.let { f ->
+    Properties().apply { f.inputStream().use { load(it) } }
+}
+
 android {
     namespace = "games.couchpad.tinytrack"
     compileSdk = 37
@@ -29,18 +41,29 @@ android {
         // boxes actually run rather than about either of those.
         minSdk = 24
         targetSdk = 36
-        // versionCode stays PINNED at 1 on purpose. Deriving it from the commit
-        // count is the usual trick and it is wrong for this tree: Android refuses
-        // an install whose versionCode is lower than the installed one, and this
-        // tree is worked in many worktrees at once, so hopping branches would
-        // start answering INSTALL_FAILED_VERSION_DOWNGRADE on a sideload.
-        versionCode = 1
+        // versionCode stays PINNED at 1 for every build made here. Deriving it
+        // from the commit count is the usual trick and it is wrong for this tree:
+        // Android refuses an install whose versionCode is lower than the
+        // installed one, and this tree is worked in many worktrees at once, so
+        // hopping branches would start answering INSTALL_FAILED_VERSION_DOWNGRADE
+        // on a sideload.
+        //
+        // A STORE BUILD IS THE EXCEPTION and passes -PttpVersionCode: Play
+        // rejects a versionCode it has already seen, so every upload needs a
+        // fresh one. .github/workflows/release.yml owns which number that is.
+        versionCode = (findProperty("ttpVersionCode") as String?)?.toInt() ?: 1
         // WHICH COMMIT IS ON THE BOX — the question a stale install otherwise
         // answers identically to a fresh one, and `dumpsys package | grep
         // versionName` is how adb asks it. The tvOS twin writes the same string
         // into Generated/assets/version.txt for its debug lobby to show.
-        versionName = "1.0-" + (git("rev-parse", "--short", "HEAD") ?: "nogit") +
-            (if (git("status", "--porcelain") != null) "-dirty" else "")
+        //
+        // -PttpVersionName replaces it for a store build, where the version a
+        // user sees is the release tag and the commit behind it is nobody's
+        // business. Both overrides are command-line only: the values here are
+        // what a development build gets and are never edited to cut a release.
+        versionName = (findProperty("ttpVersionName") as String?)
+            ?: ("1.0-" + (git("rev-parse", "--short", "HEAD") ?: "nogit") +
+                (if (git("status", "--porcelain") != null) "-dirty" else ""))
 
         ndk {
             // BOTH, and armeabi-v7a is not the legacy one here. A Google TV
@@ -52,21 +75,39 @@ android {
         }
     }
 
+    signingConfigs {
+        keystoreProps?.let { props ->
+            create("release") {
+                storeFile = file(props.getProperty("storeFile"))
+                storePassword = props.getProperty("storePassword")
+                keyAlias = props.getProperty("keyAlias")
+                keyPassword = props.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // SIGNED WITH THE DEBUG KEY, which is what makes a release APK
-            // installable at all. Without a signingConfig here AGP emits
-            // app-release-UNSIGNED.apk, which no device takes. (The install
-            // itself is `adb -s "$SERIAL" install`, never gradlew installRelease
-            // — see shells/androidtv/scripts/android-device.sh for why.)
+            // SIGNED, which is what makes a release APK installable at all:
+            // without a signingConfig here AGP emits app-release-UNSIGNED.apk,
+            // which no device takes. WHICH KEY depends on the machine.
             //
-            // signingConfigs.debug rather than a keystore of our own on purpose:
-            // AGP GENERATES ~/.android/debug.keystore on demand, so this needs no
-            // secret, no local.properties entry and nothing on a CI runner. It
-            // also keeps release and debug on ONE key, so the two variants upgrade
-            // over each other instead of needing an uninstall between them. A real
-            // distribution key replaces this one line and nothing else.
-            signingConfig = signingConfigs.getByName("debug")
+            // keystore.properties present → the distribution key it names. That
+            // file and the .jks it points at are gitignored and are the only
+            // things that can ever publish an UPDATE to an already-published app,
+            // so they are backed up off this machine or the app is orphaned.
+            //
+            // Absent → signingConfigs.debug, and that fallback is load-bearing
+            // rather than lazy: AGP GENERATES ~/.android/debug.keystore on
+            // demand, so the CI leg and a fresh worktree build a real installable
+            // release APK with no secret anywhere. It also keeps release and
+            // debug on ONE key there, so the two variants upgrade over each other
+            // instead of needing an uninstall between them.
+            //
+            // (The install itself is `adb -s "$SERIAL" install`, never gradlew
+            // installRelease — see shells/androidtv/scripts/android-device.sh.)
+            signingConfig = signingConfigs.findByName("release")
+                ?: signingConfigs.getByName("debug")
 
             // R8 ON. Off, the dex was 20.1 MB of a 22.8 MB APK — bigger than both
             // ABIs of the engine together, and over the multidex threshold — for
@@ -82,6 +123,7 @@ android {
                 "proguard-rules.pro",
             )
         }
+
     }
 
     // The engine .so files are BUILD OUTPUT of native/scripts/build-runtime-

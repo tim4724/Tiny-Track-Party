@@ -22,3 +22,4 @@ app/src/main/assets/
 # than assets: the window background and the launcher tile are both read before
 # any app code runs. scripts/bake-wordmark.mjs is where they come from.
 app/src/main/res/drawable-nodpi/
+/keystore.properties

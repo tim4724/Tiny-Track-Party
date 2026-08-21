@@ -1017,9 +1017,14 @@ someone else's. `shells/androidtv/scripts/android-device.sh` is the one device
 rule (`ro.build.characteristics` says `tv`, `TTP_SERIAL` overrides, an AVD only
 ever by name) and both shell entry points source it.
 
-**The release variant is signed with the debug key** (`signingConfigs.debug`,
-which AGP generates on demand), so release and debug upgrade over each other. It
-built `app-release-unsigned.apk` before that, which no device would take.
+**The release variant is signed, and which key depends on the machine.** With
+`keystore.properties` present (gitignored, `keystore.properties.example` is the
+shape) it is the Play upload key; without it, `signingConfigs.debug`, which AGP
+generates on demand — so a fresh worktree and CI still build an installable APK
+with no secret, and release and debug upgrade over each other there. Unsigned is
+the one thing it is never: `app-release-unsigned.apk` is what no device takes.
+That fallback is also why the release workflow verifies the shipped bundle's
+certificate against the keystore instead of trusting the build to have failed.
 
 **R8 is ON in release**, and `app/proguard-rules.pro` is worth reading before
 touching either: the bridge is bound by NAME from `JNI_OnLoad`, so a rename is an
@@ -1033,3 +1038,14 @@ R8 nor memory ("Gradle build daemon has been stopped").
 **CI compiles the Kotlin half** (`.github/workflows/androidtv.yml`), release
 variant, without an engine. It is compile-only for the reason `native.yml`'s NDK
 leg is: a runner has no TV. Nothing built the app at all before it.
+
+**A release tag ships a store bundle** (`.github/workflows/release.yml`): signed
+`.aab`, published to Play's Android TV closed testing track. It is a separate
+workflow rather than that one with a keystore because a store build needs the
+REAL engine, so it carries the whole native chain a runner lacks — the pinned
+Filament fork built for both ABIs with `-S multiview`, the NDK that fork pins,
+and the host `matc` for the multiview material set. That is cached on
+`filament.pin`, and a manual dispatch (which builds but never publishes) is how
+the cache gets warmed after a pin bump. `versionCode` is pinned at 1 here and
+overridden per upload with `-PttpVersionCode`, because Play refuses a code it has
+already seen while a sideload refuses one lower than what is installed.
