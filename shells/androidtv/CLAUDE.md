@@ -621,6 +621,115 @@ for good. What this shell owes is the pair of numbers the model is fitted from �
 `prevScale`/`prevCostMs`, the last observation at a different scale, dropped on a
 scene build because a slope measured across two scenes belongs to neither.
 
+## Multiview
+
+**THE BLOCKER WAS A BUILD FLAG, not a bad blob and not a semantic stereo check.**
+`FILAMENT_ENABLE_MULTIVIEW` defaults OFF, and with it off Filament never compiles
+the `_multiview` variants of its OWN built-in materials (`clearDepth`,
+`defaultMaterial`, `skybox`). A `StereoscopicType::MULTIVIEW` engine then reaches
+`assert_invariant(false)` — which is INERT in a release build — and hands its
+default-material builder a null package. What comes back is
+`PostconditionPanic ... could not parse the material package for material` with an
+EMPTY name, which reads exactly like a rejected blob. Three attempts died there,
+the last one correctly locating the failure inside `MaterialParser::parse()` and
+then looking for what a stereo engine demands of a package. Nothing; the package
+was never built. The SDK build command in `build-runtime-android.sh` carries
+`-S multiview` for this, and its error message says why.
+
+**Verified on the box:** a MULTIVIEW + FEATURE_LEVEL_2 engine with multiview
+blobs boots, renders the lobby correctly, and costs the same as a NONE engine
+while no View has stereo options set. So the SDK flag, the engine config and the
+blobs can land BEFORE any renderer change — none of them is a behaviour change on
+its own.
+
+**THE PATH IS BUILT AND MEASURED, and it is a TAIL win, not the 60 Hz lever.**
+The 2-eye multiview split ships in the renderer and is ON BY DEFAULT FOR
+FOUR-CELL SPLITS ONLY (`setMultiview` mode 1; `debug.ttp.mv` -1 = off, 2 =
+any split; `perf:race` pins the classic path unless `--mv` is passed, so
+bench arms stay comparable to the pre-multiview ledgers): cells render as
+2-eye stereo passes into one 2D-array target (`ensureMultiviewTargets` /
+`renderCellsMultiview`), resolved onto the swap chain by `vpresentmv.mat`.
+Measured live (tidepool, pinned, interleaved arms):
+
+    4P/540 free   classic 33-34 fps, GPU p50 26.5, worst 39-40
+                  multiview 35-37 fps,   p50 ~25,  worst 33-35
+    4P hz30 adaptive (the SHIPPED point, both settle 540):
+                  classic locked 30, 0-2 skips/s, worst 37.6
+                  multiview locked 30, 0 skips,   worst 29.4   <- the win
+    3P/540        classic 44 fps p50 20.1 | multiview 42, p50 21.2  REGRESSION
+    2P/720        classic 49 fps p50 17.3 | multiview 42, p50 21.5  REGRESSION
+
+So the 4-cell default is a measured POLICY, not caution: 4P collapses two
+whole pass floors and buys ~7 ms of worst-frame margin at the hz30 point —
+robustness that keeps the locked 30 clean and should hold the floor on weaker
+boxes. 2P collapses ONE ~1 ms floor and pays a bigger full-canvas resolve for
+it; 3P renders its odd cell TWICE (a two-eye pass has no one-eye form), a
+whole extra per-eye scene render for one saved floor. Neither route reaches
+4P60: the median is per-eye geometry work (below). The 30 Hz mode remains the
+4P answer.
+
+**Why the prize was small, decomposed on an empty scene** (all feature groups
+masked, so fill ≈ 0): the classic 4-pass frame floors at **4.2 ms** and the
+multiview arrangement at **5.8 ms** — a pass floor of ~1 ms/cell, LESS than
+the array target's extra load/stores plus the full-canvas resolve (~1.6 ms).
+So the ~5-6 ms/cell fixed term in the cost model is NOT pass/draw/state
+overhead that multiview can collect: it is the scene being vertex-processed,
+binned and rasterised PER EYE, which `OVR_multiview2` re-runs per view by
+design ("it never collects the GEOMETRY"). What multiview does collect — the
+driver-side submission — was already shown by the merged-draw experiment to
+move this GPU's median zero. Reaching 60 at 4P needs the per-eye geometry cut
+(content/LOD), not a pass arrangement.
+
+**How the per-cell effects were handled** — the seven per-cell scene mutations
+(billboards toward that cell's camera, the monster ghost swap) did NOT move
+into view-id shaders; they became per-PASS approximations shared with the
+classic path (`orientCellBillboards` takes the pair's camera midpoint,
+`applyMonsterGhosts` a cell-mask union). Visually fine for the far sprites;
+the boost streaks and a ghosting monster are the two a pair's neighbour can
+notice, and with the 4-cell default ON these approximations ARE the shipped
+4P picture — the accepted side of the frame-rate-over-rare-artifact rule.
+The measurement says the view-id shader re-architecture that would make them
+exact is not worth doing.
+
+**The shared cull is real and lands at the tail, as priced.** Each pass culls
+against a fitted union frustum of its two eyes (`fitUnionFrustum` — exact over
+the 16 frustum corners); when no union exists (a corner behind the head plane,
+or fov past ~170°) culling is DISABLED for the pass and everything submits.
+Live on tidepool that fallback runs ~45% of passes. Pairing cells by camera
+direction would raise the cull rate and could shave more tail (the resolve
+would need a per-cell layer-index uniform — today layer i is cell i) — an open
+lever, but it cannot move the median for the geometry reason above.
+
+**Mechanics worth keeping even though the lever is dead:**
+
+- **The blobs.** `stereoscopicType : multiview` is a `.mat` key, injected by
+  `build-materials.sh`'s `stereo` argument into a SEPARATE Android-only set
+  (`native/build/materials-android-mv`, build output; `stage-assets.sh`
+  prefers it when present). A multiview blob's stereo variants declare
+  `layout(num_views)`, which only this backend accepts — the committed shared
+  set stays non-stereo. Its NON-stereo variants are unchanged, so the same APK
+  renders identically with the path off.
+- **The engine.** `Config::stereoscopicType = MULTIVIEW` + FEATURE_LEVEL_2 is
+  set at creation (`ttp_display_android.cc` passes `stereoEyes = 2`,
+  Android-only) and costs nothing while no stereo view draws — which is what
+  makes `ttp_display_multiview` a LIVE switch and an A/B one launch.
+- **Per-eye cameras.** Head space is eye A's frame: `setModelMatrix(A)`,
+  `setEyeModelMatrix(1, inverse(A) * B)`, per-eye `Camera::projection(...)`
+  through `setCustomEyeProjection` (its static helper is `setProjection`'s
+  exact maths, so the lens matches the classic path to the bit).
+- **`stereoscopicEyeCount` is still not a `.mat` key** — every blob bakes
+  `num_views = 2`; FOUR eyes need a fork patch in
+  `libs/filament-matp/src/ParametersProcessor.cpp` plus a pin bump. Measured
+  2-eye result says don't: it would collect one more ~1 ms pass floor and
+  worsen the union cull.
+- **It is ANDROID ONLY.** `glFramebufferTextureMultiviewOVR` is compiled out
+  under `__EMSCRIPTEN__` and `FILAMENT_IOS`, and Metal implements INSTANCED
+  rather than MULTIVIEW.
+
+Per-cell FOG is the one that looks like a blocker and is not: it is a `View`
+option, but every cell of a RACE runs the same ramp, so one view's fog serves
+them. The lobby orbit and the overview are single-cell and never take this path.
+
 ## Audio
 
 **Every cue is mixed here, in Kotlin, into one always-open `AudioTrack`.**

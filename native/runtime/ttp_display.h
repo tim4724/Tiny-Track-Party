@@ -487,6 +487,21 @@ TTP_ABI void ttp_display_burst(const char* idJson, double s, double lat);
  * The shell decides, because affordability is a fact about ITS device. */
 TTP_ABI void ttp_display_antialias(int on);
 
+/* Route split-screen cells through OVR_multiview stereo passes — two-eye
+ * renders into an array target plus one resolve, instead of one render() per
+ * cell. `mode` 0 = never, 1 = FOUR-cell splits only (the DEFAULT, unset), 2 =
+ * any split. The default is a measured policy, not caution: 4P collapses two
+ * whole pass floors and steadies the tail (~7 ms of worst-frame margin at the
+ * hz30 point), while 2P pays the full-canvas resolve for one ~1 ms floor and
+ * 3P renders its odd cell twice — both measured REGRESSIONS. A LIVE switch so
+ * an A/B interleaves on one launch, but only effective where the surface
+ * configured a stereo engine at creation and the staged materials carry the
+ * multiview variants (today: the Android shell, and only when its build
+ * compiled the multiview blob set) — everywhere else every mode is a no-op
+ * and the classic path runs. shells/androidtv/CLAUDE.md's Multiview section
+ * is the ledger of what the trade buys and gives up. */
+TTP_ABI void ttp_display_multiview(int mode);
+
 /* ---- diagnostics -------------------------------------------------------- */
 
 /* Last frame's per-section wall clock (milliseconds), and the matching comma-

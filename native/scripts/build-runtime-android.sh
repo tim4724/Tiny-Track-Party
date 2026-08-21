@@ -6,11 +6,14 @@
 # The sibling of build-runtime-tvos.sh, and SHORTER by one whole layer, which is
 # worth stating because it looks like an omission:
 #
-#   NO MATERIALS STEP. build-materials.sh's default is `opengl mobile`, which is
-#   what the web ships AND what this wants — GLES3 is GLES3 — so the .filamat
-#   blobs already committed under public/display/engine/native/ are the bytes
-#   this app bundles, byte for byte. tvOS is the one leg that needs its own set
-#   (Metal). stage-assets.sh copies them; nothing here compiles one.
+#   NO MATERIALS STEP FOR THE SHARED SET. build-materials.sh's default is
+#   `opengl mobile`, which is what the web ships AND what this wants — GLES3 is
+#   GLES3 — so the .filamat blobs already committed under
+#   public/display/engine/native/ are the bytes this app bundles, byte for
+#   byte; tvOS is the one leg that needs its own compile of THOSE (Metal). The
+#   one set this script does compile is the Android-only MULTIVIEW twin of the
+#   shared materials — see the step below for why it can never be the
+#   committed set.
 #
 #   TWO ABIS, NOT TWO SDKS. The tvOS script configures once per SDK because
 #   device and simulator are both arm64 and lipo cannot combine them. Here the
@@ -61,10 +64,37 @@ if [ ! -f "$SDK_ROOT/include/filament/Engine.h" ]; then
   echo "build-runtime-android.sh: no Filament Android SDK at $SDK_ROOT" >&2
   echo "  Build it in the pinned checkout (~25 min per ABI):" >&2
   echo "    cd $FILAMENT_SRC" >&2
-  echo "    ANDROID_HOME=$ANDROID_HOME ./build.sh -i -q armeabi-v7a -p android release" >&2
-  echo "    ANDROID_HOME=$ANDROID_HOME ./build.sh -i -q arm64-v8a   -p android release" >&2
+  echo "    ANDROID_HOME=$ANDROID_HOME ./build.sh -i -q armeabi-v7a -S multiview -p android release" >&2
+  echo "    ANDROID_HOME=$ANDROID_HOME ./build.sh -i -q arm64-v8a   -S multiview -p android release" >&2
   echo "  Both install under ONE root; FilamentSdk.cmake picks lib/<abi>." >&2
+  echo "" >&2
+  echo "  -S multiview IS NOT OPTIONAL and it is not about the samples: it is the" >&2
+  echo "  only way to set FILAMENT_ENABLE_MULTIVIEW, and without it Filament never" >&2
+  echo "  compiles the _multiview variants of its OWN built-in materials. A" >&2
+  echo "  MULTIVIEW engine then reaches assert_invariant(false) — INERT in release" >&2
+  echo "  — and builds its default material from a null package, which fails as" >&2
+  echo "  'could not parse the material package for material <empty name>'. That" >&2
+  echo "  reads like a bad blob and is a missing file; it blocked three attempts." >&2
   exit 1
+fi
+
+# THE MULTIVIEW MATERIALS STEP — the one set this leg compiles (the header has
+# the shared set's story), and Android-only for the reason
+# shells/androidtv/CLAUDE.md's Multiview section gives: a multiview blob's
+# stereo variants declare
+# `layout(num_views)` in their vertex shaders, which the web and Metal backends
+# reject, so this set can never be the committed shared one. It is BUILD OUTPUT
+# (like the .so), staged into the APK by stage-assets.sh when present. The
+# non-stereo variants inside are byte-for-byte the shared set's shaders, so an
+# APK carrying these renders identically until a stereo view draws.
+MATC="$FILAMENT_SRC/out/cmake-release/tools/matc/matc"
+if [ -x "$MATC" ]; then
+  "$NATIVE/scripts/build-materials.sh" "$MATC" "$NATIVE/build/materials-android-mv" \
+      opengl mobile multiview
+else
+  echo "==> no host matc at $MATC — skipping the multiview material set" >&2
+  echo "    (the APK will stage the committed non-stereo blobs; the multiview" >&2
+  echo "    render path needs this set and will stay off without it)" >&2
 fi
 
 # The bridge is generated from the ABI headers, and a stale one marshals the

@@ -8,7 +8,7 @@
 TtpRenderer::TtpRenderer() = default;
 
 bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
-        uint32_t width, uint32_t height) {
+        uint32_t width, uint32_t height, uint8_t stereoEyes) {
     // The skid stamp pass only runs on frames that commit a trail segment, so
     // its FrameGraph depth transient (a deck-sized ~16 MB texture) sits unused
     // for a frame or two between passes. The texture cache's default max age
@@ -18,8 +18,18 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
     // later.
     Engine::Config engineConfig{};
     engineConfig.resourceAllocatorCacheMaxAge = 4;
-    mEngine = Engine::Builder()
-            .backend(backend)
+    mStereoEyes = stereoEyes;
+    if (stereoEyes) {
+        // OVR_multiview stereo, decided at engine creation (Filament allows no
+        // later switch). Costs nothing while no View sets stereo options —
+        // measured on the box — but it does demand an SDK built with
+        // FILAMENT_ENABLE_MULTIVIEW (build-runtime-android.sh's error text has
+        // the whole story) and FEATURE_LEVEL_2, which the GLES 3.2 boxes have.
+        engineConfig.stereoscopicType = backend::StereoscopicType::MULTIVIEW;
+        engineConfig.stereoscopicEyeCount = stereoEyes;
+    }
+    Engine::Builder builder;
+    builder.backend(backend)
             .config(&engineConfig)
             // The gpu-complete metric costs a glFenceSync EVERY FRAME plus a
             // dedicated thread blocked in fenceWait on it, and nothing reads
@@ -27,8 +37,9 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
             // QUERY and survives this. A per-frame fence is exactly the kind
             // of kick-boundary pin that stops a tiler overlapping frame N+1's
             // vertex work with frame N's fill.
-            .feature("engine.frame_info.disable_gpu_complete_metric", true)
-            .build();
+            .feature("engine.frame_info.disable_gpu_complete_metric", true);
+    if (stereoEyes) builder.featureLevel(backend::FeatureLevel::FEATURE_LEVEL_2);
+    mEngine = builder.build();
     if (mEngine) {
         // The scenery is dozens of copies of a handful of GLBs — trees, boxes,
         // cones — and each instance was its own draw call. Filament can merge
@@ -72,6 +83,9 @@ void TtpRenderer::resize(uint32_t width, uint32_t height) {
     // Called between frames, which is the only safe place to swap the scene
     // buffer: render() must never find a size mismatch, so rebuild it here.
     destroySceneTarget();
+    // The multiview array target follows the CELL size, which follows the
+    // surface — same between-frames rule, rebuilt lazily by the frame path.
+    destroyMultiviewTargets();
     // Only where the antialias pass will actually read it: with AA off (the
     // Android shell) this allocated a full-surface RGBA8+depth on EVERY
     // adaptive-scale move, for nothing — the frame path re-ensures it lazily
@@ -1360,6 +1374,23 @@ TtpRenderer::~TtpRenderer() {
     mNames = nullptr;
     if (mMatProvider) { mMatProvider->destroyMaterials(); delete mMatProvider; }
     destroySceneTarget();
+    destroyMultiviewTargets();
+    if (mMvPresentView) mEngine->destroy(mMvPresentView);
+    if (mMvPresentScene) mEngine->destroy(mMvPresentScene);
+    if (mMvPresentQuad) {
+        mEngine->destroy(mMvPresentQuad);
+        utils::EntityManager::get().destroy(mMvPresentQuad);
+    }
+    if (mPresentMvInstance) mEngine->destroy(mPresentMvInstance);
+    if (mPresentMvMaterial) mEngine->destroy(mPresentMvMaterial);
+    for (int p = 0; p < 2; p++) {
+        if (mMvCameras[p]) {
+            mEngine->destroyCameraComponent(mMvCameraEntities[p]);
+            utils::EntityManager::get().destroy(mMvCameraEntities[p]);
+            mMvCameras[p] = nullptr;
+        }
+        if (mMvViews[p]) { mEngine->destroy(mMvViews[p]); mMvViews[p] = nullptr; }
+    }
     if (mPresentView) mEngine->destroy(mPresentView);
     if (mPresentScene) mEngine->destroy(mPresentScene);
     if (mPresentCamera) {

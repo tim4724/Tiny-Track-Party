@@ -89,11 +89,23 @@ cp "$ROOT/public/assets/audio/cues/manifest.json" "$OUT/audio/cues/"
 cp "$ROOT/public/assets/audio/engine_loop.ogg" "$OUT/audio/"
 cp "$ROOT/public/assets/audio/engine_loop.LICENSE.txt" "$OUT/audio/"
 
-# The compiled materials — the web's own bytes. Ten of the fourteen degrade
-# SILENTLY if absent (no voverlay = the steer bar and cell dividers simply
-# vanish, with nothing logged), so the shell asserts on the whole set at load
-# rather than skipping like the web's `if (res.ok)` does.
-cp "$MATERIALS"/*.filamat "$OUT/materials/"
+# The compiled materials — the web's own bytes, UNLESS the multiview set has
+# been built (native/scripts/build-runtime-android.sh compiles it beside the
+# .so). That set is the same materials with the OVR_multiview stereo variants
+# added — identical shaders for every non-stereo draw — and it is what the
+# multiview split-screen path needs; it stays build output because its blobs
+# cannot be the committed shared set (shells/androidtv/CLAUDE.md, Multiview).
+# Ten of the fourteen degrade SILENTLY if absent (no voverlay = the steer bar
+# and cell dividers simply vanish, with nothing logged), so the shell asserts
+# on the whole set at load rather than skipping like the web's `if (res.ok)`.
+MATERIALS_MV="$ROOT/native/build/materials-android-mv"
+if [ -n "$(ls "$MATERIALS_MV"/*.filamat 2>/dev/null)" ]; then
+  say "materials: MULTIVIEW set ($MATERIALS_MV)"
+  cp "$MATERIALS_MV"/*.filamat "$OUT/materials/"
+else
+  say "materials: committed shared set (no multiview build present)"
+  cp "$MATERIALS"/*.filamat "$OUT/materials/"
+fi
 
 # The design tokens, as DATA — the same file the web's CSS is baked to, so the
 # sticker palette has ONE source across all three shells rather than three

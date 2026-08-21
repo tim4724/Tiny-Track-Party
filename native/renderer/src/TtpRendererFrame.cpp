@@ -3,6 +3,8 @@
 // motion — behaviour, member set and ABI are unchanged.
 #include "TtpRendererImpl.h"
 
+#include <utils/Log.h>
+
 #include "TtpRendererKit.h"
 
 
@@ -2287,7 +2289,6 @@ void TtpRenderer::renderAmbient(const TtpFrameInput& input) {
 }
 
 void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
-    auto& tcm = mEngine->getTransformManager();
     const TtpViewInput* views = ttp_frame_views(&input);
     // Feature ablation, off until a caller asks for it: the tag pass has moved
     // every renderable off bit 0 onto its group's, so from here the view's
@@ -2296,6 +2297,14 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
     if (mFeatureTagged) mView->setVisibleLayers(kFeatAll, mFeatureMask);
     if (input.viewCount == 0) {
         mRenderer->render(mView);
+    } else if (multiviewWants(input.viewCount, input.flags)
+            && renderCellsMultiview(input, tMark)) {
+        // The stereo route: ceil(n/2) two-eye passes instead of n, resolved by
+        // one vpresentmv pass. multiviewWants carries the measured policy for
+        // WHICH splits take it (4 cells by default — see setMultiview);
+        // renderCellsMultiview answers false WITHOUT rendering when its
+        // targets cannot stand up (no multiview blobs served), which falls
+        // through to the classic path.
     } else {
         // Split-screen: same cell grid as the display (bestGrid ≈ square-ish,
         // row 0 on top — flipped here because GL viewports are bottom-left).
@@ -2345,147 +2354,11 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
             // car swaps to its 50%-alpha ghost (chassis + grafted body), while
             // every other cell — including the monster driver's own — keeps it
             // solid. Same between-render() trick as the cloud billboards.
-            for (size_t mi = 0; mi < mMonsterViews.size(); mi++) {
-                const MonsterView& mv = mMonsterViews[mi];
-                if (!mv.on) continue;
-                const bool ghost = (mv.mask >> i) & 1u;
-                static const mat4f GPARK = mat4f::translation(float3{ 0, -1000, 0 });
-                const bool haveRigGhost = mMonsterGhostInstances.size() > mi
-                        && mMonsterGhostInstances[mi];
-                const bool haveBodyGhost = mCarGhostAssets.size() > mi && mCarGhostAssets[mi];
-                const bool useGhost = ghost && haveRigGhost && haveBodyGhost;
-                if (mMonsterInstances.size() > mi && mMonsterInstances[mi]) {
-                    tcm.setTransform(tcm.getInstance(mMonsterInstances[mi]->getRoot()),
-                            useGhost ? GPARK : mv.rig);
-                }
-                if (haveRigGhost) {
-                    tcm.setTransform(tcm.getInstance(mMonsterGhostInstances[mi]->getRoot()),
-                            useGhost ? mv.rig : GPARK);
-                }
-                if (mCarAssets.size() > mi && mCarAssets[mi]) {
-                    tcm.setTransform(tcm.getInstance(mCarAssets[mi]->getRoot()),
-                            useGhost ? GPARK : mv.body);
-                }
-                if (haveBodyGhost) {
-                    tcm.setTransform(tcm.getInstance(mCarGhostAssets[mi]->getRoot()),
-                            useGhost ? mv.body : GPARK);
-                }
-            }
-            // The ghost swap above parks transforms PER CELL, so the mirrored
-            // car instances must follow it into each cell's submission. Only
-            // while a monster is on — every other frame the once-per-frame
-            // mirror in render() already holds.
-            for (const MonsterView& mv : mMonsterViews) {
-                if (mv.on) { updateMergedTransforms(); break; }
-            }
-            // Fliers ride the same per-cell billboard trick as the clouds.
-            // Birds circle their roosts with a wing-beat that squashes the
-            // glyph's height (SceneRenderer's flap); kites bob around their
-            // anchors and sway on the string.
-            if (mTrack && !mBirds.empty()) {
-                const TrackBin& t = *mTrack;
-                for (size_t bi = 0; bi < mBirds.size(); bi++) {
-                    if (mBirds[bi].entity.isNull()) continue;
-                    const float a0 = ((float) bi / 4) * 2.0f * (float) M_PI + (bi % 3) * 0.8f;
-                    const float dy = (bi % 3) * 2.5f;
-                    const float ph0 = bi * 2.1f, sp = 0.82f + (bi % 4) * 0.12f;
-                    const float ph = ph0 + mTime * t.birdSpeed * sp;
-                    const float3 p{
-                        std::cos(a0) * t.birdRc * mHillSf + std::cos(ph) * t.birdRb,
-                        t.birdY + dy * t.birdDys + std::sin(ph * 2.3f) * 0.9f,
-                        std::sin(a0) * t.birdRc * mHillSf + std::sin(ph) * t.birdRb };
-                    const float beat = 0.5f + 0.5f * std::sin(
-                            (mTime * sp * t.birdFlapHz + ph0) * 2.0f * (float) M_PI);
-                    const float yaw = std::atan2(world[3].x - p.x, world[3].z - p.z);
-                    tcm.setTransform(tcm.getInstance(mBirds[bi].entity),
-                            mat4f::translation(p) * mat4f::rotation(yaw, float3{ 0, 1, 0 })
-                            * mat4f::scaling(float3{ t.birdSize,
-                                    t.birdSize * 0.5f * (1 - t.birdFlap * 0.48f * beat), 1 }));
-                }
-            }
-            if (mTrack && !mKites.empty()) {
-                const TrackBin& t = *mTrack;
-                for (size_t ki = 0; ki < mKites.size(); ki++) {
-                    if (mKites[ki].entity.isNull()) continue;
-                    const float a0 = 0.9f + ki * 2.6f, r = 105.0f + ki * 18.0f;
-                    const float ph = ki * 1.7f;
-                    const float3 p{
-                        std::cos(a0) * r * mHillSf + std::sin(mTime * 0.55f + ph) * 2.2f,
-                        t.kiteY + std::sin(mTime * 0.85f + ph * 2) * 1.6f
-                                + std::sin(mTime * 2.1f + ph) * 0.35f,
-                        std::sin(a0) * r * mHillSf + std::cos(mTime * 0.5f + ph) * 2.2f };
-                    const float yaw = std::atan2(world[3].x - p.x, world[3].z - p.z);
-                    const float roll = std::sin(mTime * 0.9f + ph) * 0.14f;
-                    tcm.setTransform(tcm.getInstance(mKites[ki].entity),
-                            mat4f::translation(p) * mat4f::rotation(yaw, float3{ 0, 1, 0 })
-                            * mat4f::rotation(roll, float3{ 0, 0, 1 })
-                            * mat4f::scaling(float3{ t.kiteSize }));
-                }
-            }
-            // Dust banks drift faster than the clouds above them (wind shear
-            // sells "dust", not "low cloud"), wrapping outside the hill ring.
-            for (size_t hi = 0; hi < mHaze.size(); hi++) {
-                if (mHaze[hi].entity.isNull()) continue;
-                const float wrap = 300.0f * mHillSf;
-                float3 p = mHazePos[hi];
-                p.x = std::fmod(std::fmod(p.x + 2.2f * mTime + wrap, 2 * wrap)
-                        + 2 * wrap, 2 * wrap) - wrap;
-                p.x *= 1.0f; p.z *= mHillSf;
-                const float yaw = std::atan2(world[3].x - p.x, world[3].z - p.z);
-                tcm.setTransform(tcm.getInstance(mHaze[hi].entity),
-                        mat4f::translation(p) * mat4f::rotation(yaw, float3{ 0, 1, 0 }));
-            }
-            // Per-view cloud billboards: single-threaded rendering executes
-            // each render() immediately, so re-aiming the sprites between
-            // cells gives every camera its own facing (the JS sprite way).
-            for (size_t ci = 0; ci < mClouds.size(); ci++) {
-                if (mClouds[ci].entity.isNull()) continue;
-                // Push the AUTHORED position out to the SKY_BAND unfogged
-                // band along its current direction (drift moves it in
-                // authored space, like the JS). Size keeps the k^0.55
-                // softening CALIBRATED AT THE 405 BAND, rescaled to the
-                // farther SKY_BAND so the angular look is unchanged.
-                float3 p0 = mCloudPos[ci];
-                p0.x = std::fmod(std::fmod(p0.x + 0.7f * mTime + 300.0f, 600.0f)
-                        + 600.0f, 600.0f) - 300.0f; // JS drift, closed-form
-                const float len = std::max(1.0f, length(p0));
-                const float k = SKY_BAND / len;
-                const float3 p = p0 * k;
-                const float sk = std::pow(405.0f / len, 0.55f) * (SKY_BAND / 405.0f);
-                const float yaw = std::atan2(world[3].x - p.x, world[3].z - p.z);
-                mEngine->getTransformManager().setTransform(
-                        mEngine->getTransformManager().getInstance(mClouds[ci].entity),
-                        mat4f::translation(p) * mat4f::rotation(yaw, float3{ 0, 1, 0 })
-                        * mat4f::scaling(float3{ sk }));
-            }
-            // Boost streaks: AXIAL billboards (streakBillboard) — spin each
-            // about its length axis (local Z) so the face (+Y) turns toward
-            // THIS cell's camera; a fixed quad is edge-on from dead astern.
-            for (size_t si = 0; si < mStreakMeshes.size(); si++) {
-                Mesh& sm = mStreakMeshes[si];
-                if (sm.entity.isNull()) continue;
-                auto& tcmV = mEngine->getTransformManager();
-                auto sInst = tcmV.getInstance(sm.entity);
-                const Streak& st = mStreaks[si];
-                const size_t car = si / 4;
-                // A dead streak was already removed from the scene by the
-                // update pass — nothing to park, nothing to write.
-                if (!sm.inScene || mCarBasis.size() <= car
-                        || mCarBasisInv.size() <= car) {
-                    continue;
-                }
-                const mat4f& P = mCarBasis[car];
-                // The inverse is the car's, not the cell's — cached per car per
-                // frame above rather than recomputed for each of the four cells.
-                const float3 camL = (mCarBasisInv[car]
-                        * float4{ world[3].x, world[3].y, world[3].z, 1 }).xyz;
-                const float3 vv = camL - float3{ st.x, st.y, st.z };
-                const float beta = std::atan2(-vv.x, vv.y);
-                tcmV.setTransform(sInst,
-                        P * mat4f::translation(float3{ st.x, st.y, st.z })
-                          * mat4f::rotation(beta, float3{ 0, 0, 1 })
-                          * mat4f::scaling(float3{ 0.07f, 1.0f, st.len }));
-            }
+            applyMonsterGhosts(1u << i);
+            // Fliers, haze, clouds and boost streaks all turn toward THIS
+            // cell's camera between render() calls (single-threaded rendering
+            // executes each render() immediately, the JS sprite way).
+            orientCellBillboards(world[3].xyz);
             mProfile[kProfCellSetup] += ttpNowMs() - tMark; tMark = ttpNowMs();
             mRenderer->render(v);
             mProfile[kProfCellRender] += ttpNowMs() - tMark; tMark = ttpNowMs();
@@ -2496,6 +2369,408 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
     // The cell overlay goes on LAST, over the graded canvas — see voverlay.mat
     // for why it is past the grade and not inside it.
     if (mOverlayUsed && mOverlayView) mRenderer->render(mOverlayView);
+}
+
+// ---------------------------------------------------------------------------
+// The per-cell scene mutations, shared by the classic loop (one cell at a
+// time) and the multiview passes (one PAIR at a time — both eyes render one
+// scene state, so a pass gets the pair's midpoint / mask union instead).
+// ---------------------------------------------------------------------------
+
+// The monster ghost swap for every cell in cellMask: a truck looming in front
+// of a masked cell's car swaps to its 50%-alpha ghost (chassis + grafted
+// body) while everyone else keeps it solid. Under multiview the mask is the
+// PAIR's union, so the truck ghosts for a pass if EITHER of its cells wants it
+// — the neighbour sees a see-through truck for those frames, which is the
+// cheap side of the trade (the alternative renders the pass twice).
+void TtpRenderer::applyMonsterGhosts(uint32_t cellMask) {
+    auto& tcm = mEngine->getTransformManager();
+    bool anyOn = false;
+    for (size_t mi = 0; mi < mMonsterViews.size(); mi++) {
+        const MonsterView& mv = mMonsterViews[mi];
+        if (!mv.on) continue;
+        anyOn = true;
+        const bool ghost = (mv.mask & cellMask) != 0;
+        static const mat4f GPARK = mat4f::translation(float3{ 0, -1000, 0 });
+        const bool haveRigGhost = mMonsterGhostInstances.size() > mi
+                && mMonsterGhostInstances[mi];
+        const bool haveBodyGhost = mCarGhostAssets.size() > mi && mCarGhostAssets[mi];
+        const bool useGhost = ghost && haveRigGhost && haveBodyGhost;
+        if (mMonsterInstances.size() > mi && mMonsterInstances[mi]) {
+            tcm.setTransform(tcm.getInstance(mMonsterInstances[mi]->getRoot()),
+                    useGhost ? GPARK : mv.rig);
+        }
+        if (haveRigGhost) {
+            tcm.setTransform(tcm.getInstance(mMonsterGhostInstances[mi]->getRoot()),
+                    useGhost ? mv.rig : GPARK);
+        }
+        if (mCarAssets.size() > mi && mCarAssets[mi]) {
+            tcm.setTransform(tcm.getInstance(mCarAssets[mi]->getRoot()),
+                    useGhost ? GPARK : mv.body);
+        }
+        if (haveBodyGhost) {
+            tcm.setTransform(tcm.getInstance(mCarGhostAssets[mi]->getRoot()),
+                    useGhost ? mv.body : GPARK);
+        }
+    }
+    // The ghost swap parks transforms PER CELL (per pass), so the mirrored car
+    // instances must follow it into each submission. Only while a monster is
+    // on — every other frame the once-per-frame mirror in render() holds.
+    if (anyOn) updateMergedTransforms();
+}
+
+// Everything that turns toward the active camera between render() calls:
+// bird / kite / haze / cloud billboards yaw toward camPos, boost streaks spin
+// about their length axis toward it. camPos is the CELL camera classically and
+// the pair's midpoint under multiview — the sprites sit tens to hundreds of
+// units out, where the two chase cams subtend a few degrees, except the
+// streaks, whose error rides the pair's spacing (accepted; they live for
+// fractions of a second).
+void TtpRenderer::orientCellBillboards(const float3& camPos) {
+    auto& tcm = mEngine->getTransformManager();
+    // Fliers ride the same per-cell billboard trick as the clouds. Birds
+    // circle their roosts with a wing-beat that squashes the glyph's height
+    // (SceneRenderer's flap); kites bob around their anchors and sway on the
+    // string.
+    if (mTrack && !mBirds.empty()) {
+        const TrackBin& t = *mTrack;
+        for (size_t bi = 0; bi < mBirds.size(); bi++) {
+            if (mBirds[bi].entity.isNull()) continue;
+            const float a0 = ((float) bi / 4) * 2.0f * (float) M_PI + (bi % 3) * 0.8f;
+            const float dy = (bi % 3) * 2.5f;
+            const float ph0 = bi * 2.1f, sp = 0.82f + (bi % 4) * 0.12f;
+            const float ph = ph0 + mTime * t.birdSpeed * sp;
+            const float3 p{
+                std::cos(a0) * t.birdRc * mHillSf + std::cos(ph) * t.birdRb,
+                t.birdY + dy * t.birdDys + std::sin(ph * 2.3f) * 0.9f,
+                std::sin(a0) * t.birdRc * mHillSf + std::sin(ph) * t.birdRb };
+            const float beat = 0.5f + 0.5f * std::sin(
+                    (mTime * sp * t.birdFlapHz + ph0) * 2.0f * (float) M_PI);
+            const float yaw = std::atan2(camPos.x - p.x, camPos.z - p.z);
+            tcm.setTransform(tcm.getInstance(mBirds[bi].entity),
+                    mat4f::translation(p) * mat4f::rotation(yaw, float3{ 0, 1, 0 })
+                    * mat4f::scaling(float3{ t.birdSize,
+                            t.birdSize * 0.5f * (1 - t.birdFlap * 0.48f * beat), 1 }));
+        }
+    }
+    if (mTrack && !mKites.empty()) {
+        const TrackBin& t = *mTrack;
+        for (size_t ki = 0; ki < mKites.size(); ki++) {
+            if (mKites[ki].entity.isNull()) continue;
+            const float a0 = 0.9f + ki * 2.6f, r = 105.0f + ki * 18.0f;
+            const float ph = ki * 1.7f;
+            const float3 p{
+                std::cos(a0) * r * mHillSf + std::sin(mTime * 0.55f + ph) * 2.2f,
+                t.kiteY + std::sin(mTime * 0.85f + ph * 2) * 1.6f
+                        + std::sin(mTime * 2.1f + ph) * 0.35f,
+                std::sin(a0) * r * mHillSf + std::cos(mTime * 0.5f + ph) * 2.2f };
+            const float yaw = std::atan2(camPos.x - p.x, camPos.z - p.z);
+            const float roll = std::sin(mTime * 0.9f + ph) * 0.14f;
+            tcm.setTransform(tcm.getInstance(mKites[ki].entity),
+                    mat4f::translation(p) * mat4f::rotation(yaw, float3{ 0, 1, 0 })
+                    * mat4f::rotation(roll, float3{ 0, 0, 1 })
+                    * mat4f::scaling(float3{ t.kiteSize }));
+        }
+    }
+    // Dust banks drift faster than the clouds above them (wind shear sells
+    // "dust", not "low cloud"), wrapping outside the hill ring.
+    for (size_t hi = 0; hi < mHaze.size(); hi++) {
+        if (mHaze[hi].entity.isNull()) continue;
+        const float wrap = 300.0f * mHillSf;
+        float3 p = mHazePos[hi];
+        p.x = std::fmod(std::fmod(p.x + 2.2f * mTime + wrap, 2 * wrap)
+                + 2 * wrap, 2 * wrap) - wrap;
+        p.x *= 1.0f; p.z *= mHillSf;
+        const float yaw = std::atan2(camPos.x - p.x, camPos.z - p.z);
+        tcm.setTransform(tcm.getInstance(mHaze[hi].entity),
+                mat4f::translation(p) * mat4f::rotation(yaw, float3{ 0, 1, 0 }));
+    }
+    for (size_t ci = 0; ci < mClouds.size(); ci++) {
+        if (mClouds[ci].entity.isNull()) continue;
+        // Push the AUTHORED position out to the SKY_BAND unfogged band along
+        // its current direction (drift moves it in authored space, like the
+        // JS). Size keeps the k^0.55 softening CALIBRATED AT THE 405 BAND,
+        // rescaled to the farther SKY_BAND so the angular look is unchanged.
+        float3 p0 = mCloudPos[ci];
+        p0.x = std::fmod(std::fmod(p0.x + 0.7f * mTime + 300.0f, 600.0f)
+                + 600.0f, 600.0f) - 300.0f; // JS drift, closed-form
+        const float len = std::max(1.0f, length(p0));
+        const float k = SKY_BAND / len;
+        const float3 p = p0 * k;
+        const float sk = std::pow(405.0f / len, 0.55f) * (SKY_BAND / 405.0f);
+        const float yaw = std::atan2(camPos.x - p.x, camPos.z - p.z);
+        tcm.setTransform(tcm.getInstance(mClouds[ci].entity),
+                mat4f::translation(p) * mat4f::rotation(yaw, float3{ 0, 1, 0 })
+                * mat4f::scaling(float3{ sk }));
+    }
+    // Boost streaks: AXIAL billboards (streakBillboard) — spin each about its
+    // length axis (local Z) so the face (+Y) turns toward the camera; a fixed
+    // quad is edge-on from dead astern.
+    for (size_t si = 0; si < mStreakMeshes.size(); si++) {
+        Mesh& sm = mStreakMeshes[si];
+        if (sm.entity.isNull()) continue;
+        auto sInst = tcm.getInstance(sm.entity);
+        const Streak& st = mStreaks[si];
+        const size_t car = si / 4;
+        // A dead streak was already removed from the scene by the update pass
+        // — nothing to park, nothing to write.
+        if (!sm.inScene || mCarBasis.size() <= car
+                || mCarBasisInv.size() <= car) {
+            continue;
+        }
+        const mat4f& P = mCarBasis[car];
+        // The inverse is the car's, not the cell's — cached per car per frame
+        // rather than recomputed for each of the four cells.
+        const float3 camL = (mCarBasisInv[car]
+                * float4{ camPos.x, camPos.y, camPos.z, 1 }).xyz;
+        const float3 vv = camL - float3{ st.x, st.y, st.z };
+        const float beta = std::atan2(-vv.x, vv.y);
+        tcm.setTransform(sInst,
+                P * mat4f::translation(float3{ st.x, st.y, st.z })
+                  * mat4f::rotation(beta, float3{ 0, 0, 1 })
+                  * mat4f::scaling(float3{ 0.07f, 1.0f, st.len }));
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Multiview split-screen (Android only — shells/androidtv/CLAUDE.md has the
+// whole ledger: what the shared submission buys, what the shared cull gives
+// up, and why the per-cell effects above had to become per-PASS).
+// ---------------------------------------------------------------------------
+
+// The tightest symmetric frustum in HEAD space (eye a's frame) containing both
+// eyes' view volumes — multiview culls ONCE for the pair, so the culling
+// frustum must bound both. Fitted over the 16 frustum corners; the minimum and
+// maximum of a linear function over a convex hull sit on vertices, so corner
+// bounds ARE hull bounds and the fit is exact, not conservative. Answers false
+// when the union has no such frustum (a corner behind the head plane, or a
+// fitted fov past ~170 degrees) — the caller then disables frustum culling for
+// the pass, which submits everything and is the honest fallback: wrong culling
+// is missing geometry, and the pack spreading that wide is exactly the tail
+// the CLAUDE.md pricing note says to budget for.
+static bool fitUnionFrustum(const TtpViewInput& va, const TtpViewInput& vb,
+        const mat4& Ha, const mat4& Wb, mat4& proj, double& nearOut, double& farOut) {
+    const mat4 headFromB = inverse(Ha) * Wb;
+    const mat4* headFrom[2] = { nullptr, &headFromB };   // eye a IS head space
+    const TtpViewInput* vv[2] = { &va, &vb };
+    double maxTanX = 0.0, maxTanY = 0.0, zMin = 1e30, zMax = 0.0;
+    for (int e = 0; e < 2; e++) {
+        const double tanV = std::tan((double) vv[e]->fov * M_PI / 360.0);
+        const double tanH = tanV * (double) vv[e]->aspect;
+        for (int d = 0; d < 2; d++) {
+            const double z = d ? (double) vv[e]->farZ : (double) vv[e]->nearZ;
+            for (int sx = -1; sx <= 1; sx += 2) {
+                for (int sy = -1; sy <= 1; sy += 2) {
+                    double4 c{ sx * tanH * z, sy * tanV * z, -z, 1.0 };
+                    if (headFrom[e]) c = *headFrom[e] * c;
+                    if (c.z > -0.05) return false;
+                    maxTanX = std::max(maxTanX, std::abs(c.x) / -c.z);
+                    maxTanY = std::max(maxTanY, std::abs(c.y) / -c.z);
+                    zMin = std::min(zMin, -c.z);
+                    zMax = std::max(zMax, -c.z);
+                }
+            }
+        }
+    }
+    if (maxTanX > 11.0 || maxTanY > 11.0) return false;  // fov past ~170 deg
+    nearOut = std::max(zMin * 0.99, 0.01);
+    farOut = zMax * 1.01;
+    proj = mat4::frustum(-maxTanX * nearOut, maxTanX * nearOut,
+            -maxTanY * nearOut, maxTanY * nearOut, nearOut, farOut);
+    return true;
+}
+
+void TtpRenderer::destroyMultiviewTargets() {
+    if (!mMvColor && !mMvRT[0]) return;
+    // The composite instance holds mMvColor as its sampler, and a parameter
+    // OUTLIVES a destroy (the stale-handle panic destroySceneTarget documents)
+    // — park it on the one engine-lifetime ARRAY texture before the free.
+    if (mPresentMvInstance) {
+        if (Texture* park = ensureDecalMaskArray()) {
+            TextureSampler smp(TextureSampler::MinFilter::NEAREST,
+                    TextureSampler::MagFilter::NEAREST);
+            mPresentMvInstance->setParameter("scene", park, smp);
+        }
+    }
+    for (int p = 0; p < 2; p++) {
+        if (mMvViews[p]) mMvViews[p]->setRenderTarget(nullptr);
+    }
+    mEngine->flushAndWait();
+    for (int p = 0; p < 2; p++) {
+        if (mMvRT[p]) { mEngine->destroy(mMvRT[p]); mMvRT[p] = nullptr; }
+    }
+    if (mMvColor) { mEngine->destroy(mMvColor); mMvColor = nullptr; }
+    if (mMvDepth) { mEngine->destroy(mMvDepth); mMvDepth = nullptr; }
+    mMvW = mMvH = 0;
+}
+
+bool TtpRenderer::ensureMultiviewTargets(uint32_t cellW, uint32_t cellH) {
+    if (!mStereoEyes || !mPresentMvMaterial || !cellW || !cellH) return false;
+    if (mMvColor && mMvW == cellW && mMvH == cellH) return true;
+    // A size mismatch here means the split changed since the last teardown;
+    // render() rebuilds BEFORE beginFrame (same between-frames rule as the
+    // scene target), so finding one mid-frame answers false for this frame.
+    if (mMvColor) return false;
+    mMvColor = Texture::Builder()
+            .width(cellW).height(cellH).depth(kMvLayers).levels(1)
+            .sampler(Texture::Sampler::SAMPLER_2D_ARRAY)
+            .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
+            .format(Texture::InternalFormat::RGBA8)
+            .build(*mEngine);
+    mMvDepth = Texture::Builder()
+            .width(cellW).height(cellH).depth(kMvLayers).levels(1)
+            .sampler(Texture::Sampler::SAMPLER_2D_ARRAY)
+            .usage(Texture::Usage::DEPTH_ATTACHMENT)
+            .format(Texture::InternalFormat::DEPTH32F)
+            .build(*mEngine);
+    if (!mMvColor || !mMvDepth) { destroyMultiviewTargets(); return false; }
+    for (int p = 0; p < 2; p++) {
+        mMvRT[p] = RenderTarget::Builder()
+                .texture(RenderTarget::AttachmentPoint::COLOR, mMvColor)
+                .texture(RenderTarget::AttachmentPoint::DEPTH, mMvDepth)
+                .multiview(RenderTarget::AttachmentPoint::COLOR, 2, (uint8_t) (2 * p))
+                .multiview(RenderTarget::AttachmentPoint::DEPTH, 2, (uint8_t) (2 * p))
+                .build(*mEngine);
+        if (!mMvRT[p]) { destroyMultiviewTargets(); return false; }
+        if (!mMvViews[p]) {
+            View* v = mEngine->createView();
+            utils::Entity camEnt = utils::EntityManager::get().create();
+            Camera* cam = mEngine->createCamera(camEnt);
+            v->setCamera(cam);
+            v->setScene(mScene);
+            // Same "say no once" defaults as ensureCells.
+            v->setShadowingEnabled(false);
+            v->setScreenSpaceRefractionEnabled(false);
+            v->setPostProcessingEnabled(false);
+            View::StereoscopicOptions stereo;
+            stereo.enabled = true;
+            v->setStereoscopicOptions(stereo);
+            mMvViews[p] = v;
+            mMvCameras[p] = cam;
+            mMvCameraEntities[p] = camEnt;
+        }
+        mMvViews[p]->setRenderTarget(mMvRT[p]);
+        mMvViews[p]->setViewport({ 0, 0, cellW, cellH });
+    }
+    // The composite: the shared fullscreen triangle through vpresentmv, onto
+    // the swap chain. Engine-lifetime like the present view; only the sampler
+    // binding and viewport move with the target.
+    ensurePresentQuad();
+    if (!mPresentVB || !mPresentCamera) { destroyMultiviewTargets(); return false; }
+    if (!mPresentMvInstance) mPresentMvInstance = mPresentMvMaterial->createInstance();
+    if (!mMvPresentView) {
+        mMvPresentQuad = utils::EntityManager::get().create();
+        RenderableManager::Builder(1)
+                .boundingBox({ { 0, 0, 0 }, { 1, 1, 1 } })
+                .material(0, mPresentMvInstance)
+                .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
+                        mPresentVB, mPresentIB, 0, 3)
+                .culling(false)
+                .castShadows(false).receiveShadows(false)
+                .build(*mEngine, mMvPresentQuad);
+        mMvPresentScene = mEngine->createScene();
+        mMvPresentScene->addEntity(mMvPresentQuad);
+        mMvPresentView = mEngine->createView();
+        mMvPresentView->setScene(mMvPresentScene);
+        mMvPresentView->setCamera(mPresentCamera);
+        mMvPresentView->setPostProcessingEnabled(false);
+        mMvPresentView->setShadowingEnabled(false);
+        mMvPresentView->setFrustumCullingEnabled(false);
+    }
+    mMvPresentView->setViewport({ 0, 0, mWidth, mHeight });
+    TextureSampler smp(TextureSampler::MinFilter::NEAREST,
+            TextureSampler::MagFilter::NEAREST);
+    smp.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+    smp.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+    mPresentMvInstance->setParameter("scene", mMvColor, smp);
+    mMvW = cellW;
+    mMvH = cellH;
+    return true;
+}
+
+bool TtpRenderer::renderCellsMultiview(const TtpFrameInput& input, double& tMark) {
+    const TtpViewInput* views = ttp_frame_views(&input);
+    const uint32_t n = input.viewCount;
+    const CellRect r0 = cellRect(n, 0);
+    if (!mMvColor || mMvW != r0.w || mMvH != r0.h || !mMvPresentView) return false;
+    // One line the first time the stereo path actually runs — a fallback is
+    // silent by design, so a measurement needs this to prove its arm.
+    static bool sAnnounced = false;
+    if (!sAnnounced) {
+        sAnnounced = true;
+        utils::slog.i << "ttp multiview: stereo cell path ACTIVE ("
+                << mMvW << "x" << mMvH << " x" << kMvLayers << ")" << utils::io::endl;
+    }
+    mProfile[kProfCellSetup] = 0;
+    mProfile[kProfCellRender] = 0;
+    const uint32_t passes = (n + 1) / 2;
+    for (uint32_t p = 0; p < passes; p++) {
+        // An odd count's last pass renders its lone cell into BOTH layers (a
+        // two-eye shader in a two-layer target is a hard pairing — see the
+        // .mat's num_views); the composite reads the even one.
+        const uint32_t a = 2 * p, b = std::min(2 * p + 1, n - 1);
+        View* v = mMvViews[p];
+        Camera* cam = mMvCameras[p];
+        if (mFeatureTagged) v->setVisibleLayers(kFeatAll, mFeatureMask);
+        mat4f wa, wb;
+        std::memcpy(&wa, views[a].world, sizeof(wa));
+        std::memcpy(&wb, views[b].world, sizeof(wb));
+        // Head space IS eye a's frame: eye 0 rides identity, eye 1 is b's pose
+        // relative to a. Filament wants the culling frustum in head space and
+        // the eye poses head-relative (Camera.h "Stereoscopic rendering").
+        cam->setModelMatrix(wa);
+        const mat4 Ha(wa), Wb(wb);
+        cam->setEyeModelMatrix(0, mat4{});
+        cam->setEyeModelMatrix(1, inverse(Ha) * Wb);
+        // The rig's authored lens per eye, exactly the classic path's
+        // setProjection (the static helper is its maths).
+        const mat4 projs[2] = {
+            Camera::projection(Camera::Fov::VERTICAL, views[a].fov,
+                    views[a].aspect, views[a].nearZ, views[a].farZ),
+            Camera::projection(Camera::Fov::VERTICAL, views[b].fov,
+                    views[b].aspect, views[b].nearZ, views[b].farZ),
+        };
+        mat4 cullProj;
+        double nearU = views[a].nearZ, farU = views[a].farZ;
+        const bool cullOk = fitUnionFrustum(views[a], views[b], Ha, Wb,
+                cullProj, nearU, farU);
+        v->setFrustumCullingEnabled(cullOk);
+        // Spike instrumentation: how often the pair's union frustum exists at
+        // all. Culling-off passes submit the whole track per eye, which is the
+        // failure mode that would eat the multiview gain silently.
+        static uint32_t sPasses = 0, sCulled = 0;
+        sPasses++; if (cullOk) sCulled++;
+        if (sPasses % 600 == 0) {
+            utils::slog.i << "ttp multiview: " << sCulled << "/" << sPasses
+                    << " passes union-culled" << utils::io::endl;
+        }
+        if (!cullOk) cullProj = projs[0];   // unused: culling is off
+        cam->setCustomEyeProjection(projs, 2, cullProj, nearU, farU);
+        // Fog rides the VIEW, but every cell of a race runs the same ramp, so
+        // eye a's serves the pair (the one per-cell View option that is NOT a
+        // blocker — shells/androidtv/CLAUDE.md).
+        v->setFogOptions(mFogOn
+                ? fogFor(views[a].fogNear, views[a].fogFar, fogColorGraded(cam))
+                : fogFor(1.0f, 0.0f, fogColorGraded(cam)));
+        applyMonsterGhosts((1u << a) | (1u << b));
+        orientCellBillboards((wa[3].xyz + wb[3].xyz) * 0.5f);
+        mProfile[kProfCellSetup] += ttpNowMs() - tMark; tMark = ttpNowMs();
+        mRenderer->render(v);
+        mProfile[kProfCellRender] += ttpNowMs() - tMark; tMark = ttpNowMs();
+    }
+    // The resolve: layer i into cell i's fitted rect. The grid uniforms are
+    // cellRect's own numbers (origin = the bottom row's first cell), never a
+    // re-derivation.
+    const GridDims g = gridDims(n);
+    const CellRect rBL = cellRect(n, (g.rows - 1) * g.cols);
+    mPresentMvInstance->setParameter("grid", float4{
+            (float) rBL.x, (float) rBL.y, (float) r0.w, (float) r0.h });
+    mPresentMvInstance->setParameter("lay", float3{
+            (float) g.cols, (float) g.rows, (float) n });
+    mPresentMvInstance->setParameter("surf", float2{
+            (float) mWidth, (float) mHeight });
+    mRenderer->render(mMvPresentView);
+    return true;
 }
 
 bool TtpRenderer::render(const TtpFrameInput& input) {
@@ -2548,6 +2823,15 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
         if (mMergeOff) destroyMergedGroups(mMergedDress); else buildDressingMerge();
     }
     updateMergedTransforms();
+    // The multiview array target follows the CELL size, which moves with the
+    // split — (re)built HERE, before beginFrame, because swapping a render
+    // target mid-frame aborts the module (the scene target's rule). A frame
+    // whose targets aren't ready falls back to the classic path for one frame.
+    if (multiviewWants(input.viewCount, input.flags)) {
+        const CellRect r0 = cellRect(input.viewCount, 0);
+        if (mMvColor && (mMvW != r0.w || mMvH != r0.h)) destroyMultiviewTargets();
+        ensureMultiviewTargets(r0.w, r0.h);
+    }
     const bool pace = mRenderer->beginFrame(mSwapChain);
     mProfile[kProfBeginFrame] = ttpNowMs() - tMark; tMark += mProfile[kProfBeginFrame];
 #if defined(__EMSCRIPTEN__)

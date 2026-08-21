@@ -83,8 +83,26 @@ public:
 
     // nativeWindow: what the platform's createSwapChain wants (nullptr on web —
     // the shell already made the WebGL2 context current).
+    //
+    // stereoEyes > 0 configures the ENGINE for OVR_multiview stereo (2 eyes is
+    // what the blobs bake — matc has no eye-count key). Engine-creation-time
+    // only, which is why it rides init rather than a setter; a MULTIVIEW engine
+    // with no stereo view set costs the same as a NONE one (measured on the
+    // box), so the Android surface passes 2 unconditionally and
+    // setMultiview() switches the actual render path live. Android-only:
+    // glFramebufferTextureMultiviewOVR is compiled out everywhere else.
     bool init(filament::backend::Backend backend, void* nativeWindow,
-            uint32_t width, uint32_t height);
+            uint32_t width, uint32_t height, uint8_t stereoEyes = 0);
+    // The live half of the multiview switch: route split-screen cells through
+    // the stereo passes (renderCellsMultiview) instead of one render() per
+    // cell. A no-op unless init() configured stereo and the served blobs carry
+    // the multiview variants (mPresentMvMaterial is the probe for that).
+    //
+    // mode 0 = never; 1 = FOUR cells only (the default — the measured policy:
+    // 4P collapses two whole pass floors and wins the tail, while 2P pays the
+    // resolve for one floor and 3P renders its odd cell twice, both measured
+    // REGRESSIONS — shells/androidtv/CLAUDE.md); 2 = any split (experiments).
+    void setMultiview(int mode) { mMultiviewMode = mode; }
     // The platform surface reports the device's GL_MAX_TEXTURE_SIZE here
     // before init; unreported keeps the conservative 8192 floor. See
     // mMaxTextureDim for what it buys the skid layer.
@@ -581,6 +599,49 @@ private:
     // close enough to see the oval. Idempotent; engine-lifetime.
     void ensurePresentQuad();
     void destroySceneTarget();
+
+    // Multiview split-screen (Android only — see shells/androidtv/CLAUDE.md).
+    // The cells render as ceil(n/2) two-eye stereo passes into one 2D-array
+    // texture (layer i = cell i), resolved onto the swap chain by one
+    // vpresentmv pass. Engine config comes from init(stereoEyes); the path
+    // itself is a live switch (setMultiview) so an A/B runs on one launch.
+    uint8_t mStereoEyes = 0;             // init()'s request; 0 = engine is NONE
+    int mMultiviewMode = 1;              // setMultiview; 1 = 4-cell splits only
+    // Does this frame take the stereo route? The mode's cell policy, plus the
+    // hard constraints (a stereo engine, no overview — its full-surface rect
+    // fits no cell-sized layer).
+    bool multiviewWants(uint32_t viewCount, uint32_t flags) const {
+        if (!mStereoEyes || mMultiviewMode <= 0) return false;
+        if (flags & TTP_FRAME_OVERVIEW) return false;
+        return mMultiviewMode == 1 ? viewCount == kMvLayers
+                                   : viewCount >= 2 && viewCount <= kMvLayers;
+    }
+    filament::Texture* mMvColor = nullptr;      // RGBA8 array, kMvLayers deep
+    filament::Texture* mMvDepth = nullptr;
+    uint32_t mMvW = 0, mMvH = 0;                // the layer (== cell) size
+    static constexpr uint32_t kMvLayers = 4;    // 2 passes x 2 eyes
+    filament::RenderTarget* mMvRT[2] = {};      // pass p -> layers 2p, 2p+1
+    filament::View* mMvViews[2] = {};
+    filament::Camera* mMvCameras[2] = {};
+    utils::Entity mMvCameraEntities[2];
+    filament::Material* mPresentMvMaterial = nullptr;   // vpresentmv.filamat
+    filament::MaterialInstance* mPresentMvInstance = nullptr;
+    filament::View* mMvPresentView = nullptr;
+    filament::Scene* mMvPresentScene = nullptr;
+    utils::Entity mMvPresentQuad;
+    // True when the targets exist at the given cell size — (re)builds on a
+    // size change, which resize() forces by tearing down (same rule as the
+    // scene target: swap between frames only).
+    bool ensureMultiviewTargets(uint32_t cellW, uint32_t cellH);
+    void destroyMultiviewTargets();
+    // False (without having rendered anything) when the stereo targets cannot
+    // stand up — the caller then runs the classic per-cell path instead.
+    bool renderCellsMultiview(const TtpFrameInput& input, double& tMark);
+    // The per-cell scene mutations, factored so the stereo path can run them
+    // per PASS (both eyes see one scene state): billboards turn toward camPos,
+    // the monster ghost swap keys on "any cell in cellMask wants the ghost".
+    void orientCellBillboards(const filament::math::float3& camPos);
+    void applyMonsterGhosts(uint32_t cellMask);
 
     // The 2D cell overlay — the split-screen dividers and the per-player steer
     // bar (voverlay.mat carries the whole argument for why these two, and only

@@ -69,6 +69,11 @@ object SceneStaging {
     val MATERIAL_NAMES = listOf(
         "vcolor", "vblend", "vlit", "vlitns", "vroad", "vglb", "vglbfade", "vpoint",
         "vcloud", "vground", "vvis", "vpresent", "vesm", "vblur", "vburst", "voverlay",
+        // The multiview resolve — this shell is the one leg that draws it, and
+        // only when the staged set is the multiview one (stage-assets.sh). It
+        // is in the throw-on-missing list like the rest: the APK either ships
+        // a whole set or it does not.
+        "vpresentmv",
     )
 
     /**

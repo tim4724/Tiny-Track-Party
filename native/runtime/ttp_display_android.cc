@@ -81,7 +81,15 @@ int ttp_display_create(const void* surface, uint32_t width, uint32_t height) {
     // null window; here Filament owns the EGL context and creates it inside
     // init(), so there is nothing current to ask yet. The renderer's conservative
     // default stands, exactly as it does on tvOS.
-    if (!renderer->init(filament::backend::Backend::OPENGL, window, width, height)) {
+    //
+    // stereoEyes = 2: the engine is configured for OVR_multiview at creation
+    // (Filament allows no later switch) and costs the same as a NONE engine
+    // while no stereo view draws — the actual render path is the live
+    // ttp_display_multiview switch. Android-only, because only this backend
+    // compiles glFramebufferTextureMultiviewOVR, and it needs the SDK built
+    // with -S multiview (build-runtime-android.sh aborts with the story).
+    if (!renderer->init(filament::backend::Backend::OPENGL, window, width, height,
+                        /*stereoEyes=*/2)) {
         delete renderer;
         ANativeWindow_release(window);
         return 0;

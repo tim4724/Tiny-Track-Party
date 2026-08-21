@@ -62,6 +62,13 @@ const TAG = 'TtpPerf';
  *                    `budgetMs` doubles and every share on the line is against
  *                    that, which is what makes a paced arm comparable to a free
  *                    one.
+ *   --mv 1           multiview split-screen: cells as two-eye stereo passes
+ *                    (shells/androidtv/CLAUDE.md's Multiview section). The
+ *                    SHIPPED default is mode 1 (4-cell splits only), but a
+ *                    bench arm without --mv pins the CLASSIC path (-1), so
+ *                    every arm is explicit and readings stay comparable to
+ *                    the pre-multiview ledgers. 2 forces ANY split (a
+ *                    measured 2P/3P regression — experiments only).
  *   --serial <id>    an explicit adb device
  */
 export function makeAndroidBackend() {
@@ -96,6 +103,7 @@ export function makeAndroidBackend() {
       setprop('debug.ttp.features', 0);   // 0 = "not set", i.e. draw everything
       setprop('debug.ttp.aa', 0);
       setprop('debug.ttp.hz', 0);
+      setprop('debug.ttp.mv', 0);
     } catch { /* the box went away; nothing to restore it on */ }
   };
 
@@ -169,6 +177,12 @@ export function makeAndroidBackend() {
       setprop('debug.ttp.scale', arg('pin', 0));
       setprop('debug.ttp.aa', arg('aa', 0));
       setprop('debug.ttp.hz', arg('hz', 0));
+      // Multiview split-screen (`shells/androidtv/CLAUDE.md`). A live path
+      // switch, so unlike the feature mask it needs no scene up first. An
+      // unflagged arm PINS the classic path (-1, not the shipped 4-cell
+      // default): the bench's readings predate multiview, and an arm that
+      // silently rode the default would not be comparable to any of them.
+      setprop('debug.ttp.mv', arg('mv', -1));
 
       adb('logcat', '-c');
       startLogcat();

@@ -1,22 +1,31 @@
 #!/usr/bin/env bash
 # Compile native/renderer/materials/*.mat to .filamat blobs for one backend.
 #
-#   build-materials.sh <matc> <outdir> [api] [platform]
+#   build-materials.sh <matc> <outdir> [api] [platform] [stereo]
 #
 # api/platform default to `opengl mobile`, which is what the web build ships AND
 # what an Android TV build wants — GLES3 is GLES3, so those two legs share these
 # bytes. tvOS is the one that differs (`metal`), and it is the reason this is a
 # script with arguments rather than three lines inside build-runtime-web.sh.
 #
+# stereo=multiview compiles a SEPARATE set with `stereoscopicType : multiview`
+# injected into every material block — each blob then also carries the OVR_
+# multiview stereo variants. Those declare `layout(num_views)` in their vertex
+# shaders, which only the Android GL backend accepts, so a multiview set is
+# staged for that shell alone and never becomes the committed shared set (see
+# shells/androidtv/CLAUDE.md "Multiview"). The non-stereo variants inside a
+# multiview blob are the same shaders as the plain set's.
+#
 # THE matc MUST BE THE FORK'S OWN, never a system install: .filamat blobs are
 # MATERIAL_VERSION-locked to the Filament tree they will be loaded by, and a
 # mismatch fails at material-load time in the shell, not here.
 set -euo pipefail
 
-MATC="${1:?usage: build-materials.sh <matc> <outdir> [api] [platform]}"
-OUTDIR="${2:?usage: build-materials.sh <matc> <outdir> [api] [platform]}"
+MATC="${1:?usage: build-materials.sh <matc> <outdir> [api] [platform] [stereo]}"
+OUTDIR="${2:?usage: build-materials.sh <matc> <outdir> [api] [platform] [stereo]}"
 API="${3:-opengl}"
 PLATFORM="${4:-mobile}"
+STEREO="${5:-}"
 
 MATDIR="$(cd "$(dirname "$0")/../renderer/materials" && pwd)"
 
@@ -42,6 +51,30 @@ fi
 # three of them, they change rarely, and the failure this prevents (editing the
 # shared shading and rendering with the old one) is silent.
 mkdir -p "$OUTDIR"
+
+# The stereo set compiles from a staged twin of the source dir: the key is a
+# MATERIAL-BLOCK key (matc has no CLI flag for it), and matc resolves #include
+# relative to the .mat, so the .inc files travel with the injected copies. The
+# mtime gate below still reads the ORIGINALS — the staging is re-done per run
+# and costs nothing.
+SRCDIR="$MATDIR"
+if [ -n "$STEREO" ]; then
+    if [ "$STEREO" != "multiview" ]; then
+        echo "build-materials.sh: unknown stereo type '$STEREO' (only multiview)" >&2
+        exit 2
+    fi
+    SRCDIR="$OUTDIR/.mat-stereo"
+    rm -rf "$SRCDIR"; mkdir -p "$SRCDIR"
+    cp "$MATDIR"/*.inc "$SRCDIR/" 2>/dev/null || true
+    for mat in "$MATDIR"/*.mat; do
+        # Inject right after the opening `material {`, which every .mat has
+        # exactly once and first.
+        awk 'done || !/^material \{/ { print; next }
+             { print; print "    stereoscopicType : multiview,"; done = 1 }' \
+            "$mat" > "$SRCDIR/$(basename "$mat")"
+    done
+fi
+
 newest_inc=""
 for inc in "$MATDIR"/*.inc; do
     [ -f "$inc" ] || continue
@@ -76,7 +109,7 @@ for mat in "$MATDIR"/*.mat; do
         # NOTE the `$0 -nt` gate above: the flags live in this script and are NOT
         # part of runtime-source-hash, so without it an edit here leaves every
         # blob looking current and changes nothing.
-        "$MATC" -a "$API" -p "$PLATFORM" -Os -o "$out" "$mat"
+        "$MATC" -a "$API" -p "$PLATFORM" -Os -o "$out" "$SRCDIR/$(basename "$mat")"
         built=$((built + 1))
     else
         kept=$((kept + 1))

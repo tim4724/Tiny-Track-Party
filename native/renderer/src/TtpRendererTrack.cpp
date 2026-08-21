@@ -2186,6 +2186,15 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
                 .package(voverlay->second.data(), voverlay->second.size())
                 .build(*mEngine);
     }
+    // The multiview resolve — only the Android shell stages it, and only a
+    // stereo-configured engine ever draws it; everyone else never finds the
+    // asset and the multiview path stays off (renderCellsMultiview's probe).
+    const auto vpresentmv = mAssets.find("vpresentmv.filamat");
+    if (!mPresentMvMaterial && mStereoEyes && vpresentmv != mAssets.end()) {
+        mPresentMvMaterial = Material::Builder()
+                .package(vpresentmv->second.data(), vpresentmv->second.size())
+                .build(*mEngine);
+    }
     // THE GRADE'S CURVE AS A TABLE — see ttp_grade.inc for why a texture beats a
     // `pow` here. Built once, handed to every
     // material that grades as a MATERIAL default, because the instances are made
@@ -2246,7 +2255,8 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
                          mRoadMaterial, mGlbMaterial, mGlbFadeMaterial,
                          mGroundMaterial, mPointMaterial, mCloudMaterial,
                          mBurstMaterial, mBlurMaterial, mEsmMaterial,
-                         mPresentMaterial, mOverlayMaterial, mVisMaterial }) {
+                         mPresentMaterial, mPresentMvMaterial, mOverlayMaterial,
+                         mVisMaterial }) {
         if (m) m->compile(Material::CompilerPriorityQueue::HIGH);
     }
     mEngine->flush(); // start any prewarm compiles queued above immediately
