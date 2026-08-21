@@ -33,8 +33,7 @@ import kotlin.random.Random
  * **THE FASTLANE IS [Fastlane]** — the WebRTC transport over the C++ Link. So
  * the `__rtc` envelopes play their web double role here: the fastlane consumes
  * them (offer/ICE to answer) AND they stay this shell's SIGNAL for the walk,
- * which stamps liveness (any traffic is proof of life) and stops. The
- * `close-fastlane` performer closes something.
+ * which stamps liveness (any traffic is proof of life) and stops.
  *
  * It remains an ENHANCEMENT: CONTROL falls back to the relay per-message, so a
  * phone with no WebRTC, or a symmetric NAT with no TURN to escape it, plays

@@ -80,6 +80,17 @@ class Fastlane(
     /** Signals that arrived before the factory landed. See the class comment. */
     private val queued = ArrayList<Pair<Int, JSONObject>>()
 
+    /**
+     * [dispose] has run. Checked by the factory's own completion, which is the
+     * one thing here that can outlive it: the build is off-thread, so a teardown
+     * inside that window would otherwise find `factory` still null, dispose
+     * NOTHING, and then be handed a freshly built native factory by a post that
+     * also drains [queued] — building peers on an object nothing will ever
+     * release. The Swift twin needs no such flag: it builds its factory
+     * synchronously, so the window does not exist there.
+     */
+    private var disposed = false
+
     /** Per-controller state: the connection, the adopted channel, the C++ Link handle. */
     private class Peer(val pc: PeerConnection) {
         var channel: DataChannel? = null
@@ -98,6 +109,10 @@ class Fastlane(
             ensureFactoryInit(appContext)
             val f = PeerConnectionFactory.builder().createPeerConnectionFactory()
             main.post {
+                if (disposed) {
+                    runCatching { f.dispose() }
+                    return@post
+                }
                 factory = f
                 Log.i(TAG, "factory ready, iceServers=$iceServers")
                 val drain = queued.toList()
@@ -236,6 +251,7 @@ class Fastlane(
 
     /** Release the factory too (the Activity is going away for good). */
     fun dispose() {
+        disposed = true
         closeAll()
         factory?.let { runCatching { it.dispose() } }
         factory = null

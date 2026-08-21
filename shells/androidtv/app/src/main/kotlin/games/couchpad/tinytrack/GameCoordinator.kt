@@ -59,7 +59,11 @@ class GameCoordinator(
     val audio: AudioDevice
     val assets: AssetStore
 
-    /** The CouchPad LAN room record (CONTRACT §8). Driven only by [syncAdvertisement]. */
+    /**
+     * The CouchPad LAN room record (CONTRACT §8). Driven by [syncAdvertisement],
+     * plus the direct withdraw in [release] — which may run without a [suspend]
+     * before it, so it cannot go through the sync.
+     */
     private val advertiser: RoomAdvertiser
     val lobbyDemo = LobbyDemo()
     private val prefs: SharedPreferences =

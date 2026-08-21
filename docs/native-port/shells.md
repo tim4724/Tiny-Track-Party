@@ -212,9 +212,10 @@ Three properties of that surface matter more than the list:
    prebuilt libwebrtc (`LiveKitWebRTC` on tvOS, `io.github.webrtc-sdk:android`
    on Android — the same upstream build). `shells/tvos/.../Net/Fastlane.swift`
    and `shells/androidtv/.../Fastlane.kt` are the two ports to compare, pinned
-   by `tests/tvos-fastlane.test.js` and `tests/androidtv-fastlane.test.js`. The framing and packet codecs are already
-   C++, and so is the CHOREOGRAPHY: every inbound trigger (protocol frame, peer
-   message, close, the liveness tick, a drained room event) is one call into
+   by `tests/tvos-fastlane.test.js` and `tests/androidtv-fastlane.test.js`.
+   The framing and packet codecs are already C++, and so is the CHOREOGRAPHY:
+   every inbound trigger (protocol frame, peer message, close, the liveness
+   tick, a drained room event) is one call into
    `ttp_net.h`'s walk entry points, which mutate the room in C++ and answer an
    ordered effect list. What you write is the socket, three timers, a small
    storage read/write, and the effect switch that performs the ops — never the

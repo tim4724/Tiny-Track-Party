@@ -46,13 +46,17 @@ import java.net.ServerSocket
  * stops with nothing but the warning below to say so. The fastlane's ICE host
  * candidates sit behind the same gate.
  *
- * Threading: unlike the tvOS twin, whose caller is `@MainActor` throughout, this
- * one is reachable from the game thread as well as Main, so both entry points
- * are `@Synchronized`. A `withdraw()` racing an `advertise()` could otherwise
- * interleave so the registration lands AFTER the unregister — leaving a record
- * (and its socket) alive for a room the display has already left, with
- * `advertisedRoom` then making the next `advertise()` a no-op so nothing ever
- * takes it down.
+ * MAIN THREAD ONLY, like everything else in this shell. Both entry points are
+ * reached through `GameCoordinator.syncAdvertisement`, whose callers are the
+ * Activity's lifecycle hooks and `PartyNet` — and `RelaySocket` posts every
+ * OkHttp callback onto Main before `PartyNet` sees it. The `NsdManager`
+ * callbacks below arrive on a binder thread and deliberately touch nothing but
+ * the log.
+ *
+ * (HexStacker's twin synchronizes both entry points, because ITS netcode really
+ * does run on a second thread. Transcribing that guard to here would document
+ * an architecture this shell does not have — the same trap the `optString` note
+ * in `shells/androidtv/CLAUDE.md` describes, one layer up.)
  */
 class RoomAdvertiser(context: Context) {
 
@@ -67,7 +71,6 @@ class RoomAdvertiser(context: Context) {
      * this rides every roster movement, and re-registering the same code on each
      * one would churn the network for nothing.
      */
-    @Synchronized
     fun advertise(room: String) {
         if (room == advertisedRoom && listener != null) return
         withdraw()
@@ -111,7 +114,6 @@ class RoomAdvertiser(context: Context) {
      * and no card appears — but it costs a player a wasted tap, so there is no
      * reason to leave one up.
      */
-    @Synchronized
     fun withdraw() {
         listener?.let { runCatching { nsd?.unregisterService(it) } }
         listener = null
