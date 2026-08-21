@@ -46,6 +46,8 @@ let currentScreen = null;
 function show(name) {
   const prev = currentScreen;
   currentScreen = name;
+  // A held Start belongs to the lobby: landing anywhere else IS the answer to it.
+  if (name !== 'lobby') clearStartPending();
   for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name);
   // Push history only when stepping UP a level (name → lobby). Same-level and
   // back transitions don't push, so there's exactly one entry to pop: pressing
@@ -99,6 +101,12 @@ let progressData = null;   // snapshot.progress — the couch's stars/locks (lob
 let lobbyTab = 'car';      // the host's lobby page: 'car' | 'race' (non-hosts only ever see 'car')
 let raceCursor = null;     // which race-list row the detail panel describes; null follows the pick
 let amReady = false;       // my lobby ready flag (optimistic; LOBBY_UPDATE confirms)
+// The host's Start press, held until the display answers it. Unlike every other
+// optimistic flag here it needs a way OUT on its own: the display validates
+// START_GAME and a refusal (no track, no scene) publishes nothing at all, so
+// there is no snapshot coming to clear this one. See armStartGiveUp.
+let startPending = false;
+let startGiveUpTimer = null;
 let inResults = false;     // showing the results overlay (my car finished / race over)
 // Joined while a race was already running (WELCOME said inRace:false): we have
 // no car out there, so we wait on the lobby screen — car picker live, no ready
@@ -395,6 +403,7 @@ function renderLobby() {
     backEl: el('lobby-back'),     // the corner's other half: shown on the race page only
     tab: lobbyTab,                // the stepper: CAR says "Select race", RACE "Start race"
     canStart: !!selectedMode,     // host can't start without a pick (auto-picked, so ~always true)
+    starting: startPending,       // the press owns the button until the display answers
     host: hostP && { name: hostP.name, color: liveryOf(hostP.colorIndex) },
     others: roster   // every non-host racer but me (for the host that's everyone else)
       .filter((p) => p.peerIndex !== net.peerIndex && p.peerIndex !== hostPeerIndex && p.connected !== false)
@@ -653,6 +662,34 @@ el('name-form').addEventListener('submit', (e) => {
   joinRace(el('name-input').value, { persist: true });
 });
 
+// Let go of a held Start that nothing answered, and say so rather than silently
+// re-enabling: the display logs its refusal to a console this phone cannot see,
+// so "nothing happened" is the whole of what the host would otherwise get.
+//
+// The wait is generous ON PURPOSE. What it has to outlast is the display's launch
+// build — a track mesh plus a shadow bake, which on the Android TV shell runs on
+// the main thread BEFORE the launch publishes anything — and giving up early
+// would flip the button back to "Start race" while the race it started is still
+// assembling. Only a genuine refusal ever reaches the end of it.
+const START_GIVE_UP_MS = 8000;
+
+function armStartGiveUp() {
+  clearTimeout(startGiveUpTimer);
+  startGiveUpTimer = setTimeout(() => {
+    if (!startPending) return;
+    clearStartPending();
+    // renderLobby FIRST: it owns the note and would overwrite this line.
+    renderLobby();
+    el('ready-note').textContent = 'The TV didn’t start the race. Try again.';
+  }, START_GIVE_UP_MS);
+}
+
+function clearStartPending() {
+  clearTimeout(startGiveUpTimer);
+  startGiveUpTimer = null;
+  startPending = false;
+}
+
 // Lobby footer button — for the host it's "Start race" (enabled only once
 // everyone else is ready — see renderReadyFoot); for everyone else it's the
 // ready toggle. The display validates both messages.
@@ -667,6 +704,9 @@ el('ready-btn').closest('.lobby-go').addEventListener('click', (e) => {
     // the RACE page it starts. Two taps from a fresh lobby, matching the two
     // decisions a host actually makes.
     if (lobbyTab !== 'race') { setLobbyPage('race'); return; }   // setLobbyPage buzzes
+    startPending = true;  // optimistic; the snapshot that moves us off the lobby confirms it
+    renderLobby();
+    armStartGiveUp();
     net.send(MSG.START_GAME);
   } else {
     amReady = !amReady;   // optimistic; LOBBY_UPDATE is the source of truth

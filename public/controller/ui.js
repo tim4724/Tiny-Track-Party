@@ -80,7 +80,7 @@ export function motionHelpCopy(state) {
   }
 }
 
-export function renderReadyFoot(btnEl, noteEl, { amHost, amReady, tab, canStart, host, others, backEl }) {
+export function renderReadyFoot(btnEl, noteEl, { amHost, amReady, tab, canStart, host, others, backEl, starting }) {
   // A new NODE for a new face, so the relabelled button can never inherit an
   // in-flight press from the face before it — its release, its :active, or a
   // phone's sticky :hover. Timing fixes all failed here: on a touch tap the
@@ -112,10 +112,16 @@ export function renderReadyFoot(btnEl, noteEl, { amHost, amReady, tab, canStart,
     // no tab strip above it: this button and the chip beside it ARE the
     // navigation, so the label has to name the destination, not the action.
     const onCar = tab === 'car';
-    btnEl.textContent = onCar ? 'Select race' : 'Start race';
+    // START IS THE ONE TAP WITH NOTHING BEHIND IT. Every other lobby control
+    // moves this phone's own UI on the press and lets the next LOBBY_UPDATE
+    // confirm it; START moves nothing here, and what it waits for is the display
+    // building a whole scene before it publishes the snapshot that changes our
+    // screen. Left bare, the button reads as dead for the whole of that. So the
+    // press owns the button until the snapshot arrives (or main.js gives up).
+    btnEl.textContent = onCar ? 'Select race' : (starting ? 'Starting…' : 'Start race');
     btnEl.classList.toggle('btn--step', onCar);
-    btnEl.disabled = onCar ? false : (!canStart || !allReady);
-    btnEl.classList.remove('is-pressed');
+    btnEl.disabled = onCar ? false : (starting || !canStart || !allReady);
+    btnEl.classList.toggle('is-pressed', !onCar && !!starting);
     noteEl.textContent = (!onCar && !allReady) ? 'Waiting for all players to get ready…' : '';
   } else {
     btnEl.disabled = false;
