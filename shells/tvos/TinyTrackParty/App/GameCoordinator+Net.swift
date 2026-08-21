@@ -140,8 +140,20 @@ extension GameCoordinator {
         // ever asks the backdrop question again and the paper would stay up for
         // the whole lobby (the mirror of the flash it exists to stop).
         display.onFirstPaint = { [weak self] in
+            // THE ORDER AND THE DELAY ARE BOTH THE POINT. The backdrop reveal is
+            // a 0.45 s fade of the lobby's paper off the live scene, so doing
+            // both at once uncovers that fade half-run: the opening then reads
+            // as THREE steps — title, wallpaper, track — where it should be two.
+            //
+            // So the paper starts getting out of the way immediately, UNDER the
+            // splash, and the splash is held until it has gone. The wait is free:
+            // it is spent on an animation nobody can see, and what the viewer
+            // gets is the title handing straight over to the circuit.
             self?.refreshBackdrop()
-            self?.refreshCover()   // the cover's other trigger; see refreshCover
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(for: .seconds(LobbyView.backdropFade))
+                self?.refreshCover()
+            }
         }
     }
 
