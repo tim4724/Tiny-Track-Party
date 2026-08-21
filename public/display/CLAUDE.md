@@ -130,6 +130,17 @@ either: the signal a timer-less browser uses may only step DOWN, so one bad
 window would pin a device lower forever. Re-learning costs a few seconds per
 session and self-corrects.
 
+**THE BUFFER AND THE VIEWPORT MOVE TOGETHER, AND BOOT IS THE HOLE.** `_onResize`
+is the only place the buffer changes size and it can only tell the renderer once
+`display` exists, which it is not for the whole of `Display.create`'s fetches —
+so `boot()` re-pushes the size that is actually on the canvas once it has one.
+Skipping that does not degrade, it sticks: the viewport stays where
+`ttp_display_create` left it and the picture draws at the BOTTOM of the buffer
+under a black bar, because the only thing that would resize again is an adaptive
+step this machine may never take. NEW GAME's click carries the fullscreen unlock,
+which is what makes a mid-boot window change ordinary rather than exotic;
+`tests/e2e/boot-resize.spec.js` holds that window open on purpose.
+
 **A SCENE BUILD IS TWO MEASUREMENTS THIS SIDE OWES.** `_rebuild` stamps
 `_sceneBuiltAt` after a full `setTrack` (never after a reroster — that is the
 same scene re-dressed), clears the perf window, and drops `_prevScale` /

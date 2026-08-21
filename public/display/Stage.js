@@ -285,6 +285,17 @@ export class Stage {
   // second renderer to fall back to.
   async boot() {
     this.display = await Display.create(this._canvas);
+    // RECONCILE THE SIZE THE RENDERER WAS BORN AT. ttp_display_create is handed
+    // the buffer's dimensions and Display.create THEN fetches the .filamat
+    // blobs, so `display` is null for a network round trip — and _onResize drops
+    // its half of a resize for exactly as long. A window change landing in there
+    // moves the canvas and leaves the viewport short, which draws the picture at
+    // the BOTTOM of a taller buffer (GL's origin) under a bar of the black clear.
+    // It does not heal: the only other caller of _onResize is _adaptScale, and a
+    // machine sitting at the band's ceiling never steps. NEW GAME is the change
+    // most likely to land here — its click carries the fullscreen unlock, and
+    // the transition is slow enough to reach mid-boot. A no-op when they agree.
+    this.display.resize(this._canvas.width, this._canvas.height);
     // The other half of the automation budget (see the DPR cap in the ctor):
     // drop the per-track shadow bake. Must be set before any setTrack, since
     // the map is baked into the scene at build time.
