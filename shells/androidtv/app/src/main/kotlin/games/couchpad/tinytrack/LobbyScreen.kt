@@ -101,9 +101,15 @@ fun LobbyScreen(state: GameState) {
         // the badge, and there is nothing else to reach. Select on it does nothing,
         // deliberately — the board has no default action. tvOS needs the identical
         // trick for the identical reason (`LobbyView.focusPark`).
+        //
+        // AND AGAIN WHEN THE INFO BOARD CLOSES, for the same reason: the button
+        // that had focus went with the board, so without this the next d-pad
+        // press seats focus wherever Compose finds it — which is the ⓘ lighting
+        // up on a board the room is reading a join code off.
         val park = remember { FocusRequester() }
-        LaunchedEffect(state.cover) {
-            if (state.cover != "boot") park.requestFocus()
+        val boardOnTop = state.infoPath.isNotEmpty()
+        LaunchedEffect(state.cover, boardOnTop) {
+            if (state.cover != "boot" && !boardOnTop) park.requestFocus()
         }
         Box(
             Modifier
@@ -175,12 +181,11 @@ fun LobbyScreen(state: GameState) {
         // reading the lobby, and putting a black diagnostic block over the only
         // control on the board is worst exactly then.
         //
-        // NO FOCUS PARK TWIN. tvOS needs a second, invisible focus stop because its
-        // focus engine always seats focus somewhere, so a board with one control
-        // opens with that control lit up. Compose seats focus on nothing until a
-        // d-pad press arrives, which is the behaviour that park exists to fake —
-        // so the ⓘ lights up the moment a viewer actually asks for it, and the
-        // room reads the join code off an unlit board until then.
+        // UNLIT UNTIL ASKED FOR, which is the park above's whole job: Compose
+        // seats focus somewhere the moment the window takes it, so without a
+        // second stop to absorb that this badge is what opens lit. It brightens
+        // when a viewer actually presses Up, and the room reads the join code off
+        // an unlit board until then.
         InfoBadge(Modifier.align(Alignment.TopStart).padding(start = 16.dp, top = 12.dp)) {
             state.infoPath = listOf(GameState.InfoRoute.Info)
         }

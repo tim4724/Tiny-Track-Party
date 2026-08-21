@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -19,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -55,12 +57,32 @@ fun RootScreen(game: GameCoordinator) {
     val state = game.state
 
     Box(Modifier.fillMaxSize()) {
-        when (state.screen) {
-            // Unreachable on this platform, and kept only because the screen enum
-            // mirrors the model's rather than this shell's. Rendering the lobby
-            // here too keeps the switch total without inventing a board.
-            GameState.Screen.WELCOME, GameState.Screen.LOBBY -> LobbyScreen(state)
-            GameState.Screen.RACE -> RaceHud(state)
+        // A COVERED BOARD KEEPS ITS FOCUS TARGETS, and on a TV that is a press
+        // that goes nowhere: the lobby's focus park is an INVISIBLE strip along
+        // the foot of the board (LobbyScreen), so Down from the info board's one
+        // button landed on it and the button quietly went dark — focus on
+        // nothing, over a board that has nothing else to offer.
+        //
+        // CANCEL THE ENTRY, don't hide the subtree. `canFocus = false` is what
+        // `focusGroup` itself already sets: it deactivates the GROUP and leaves
+        // its children reachable, which is the opposite of what is wanted here.
+        // Refusing entry leaves the search with nowhere to go, so focus stays
+        // where the viewer can see it.
+        Box(
+            Modifier
+                .fillMaxSize()
+                .focusProperties {
+                    onEnter = { if (state.infoPath.isNotEmpty()) cancelFocusChange() }
+                }
+                .focusGroup()
+        ) {
+            when (state.screen) {
+                // Unreachable on this platform, and kept only because the screen
+                // enum mirrors the model's rather than this shell's. Rendering the
+                // lobby here too keeps the switch total without inventing a board.
+                GameState.Screen.WELCOME, GameState.Screen.LOBBY -> LobbyScreen(state)
+                GameState.Screen.RACE -> RaceHud(state)
+            }
         }
 
         // THE RACE OUTRANKS THE BOARD. The ⓘ is reachable only from the lobby, but

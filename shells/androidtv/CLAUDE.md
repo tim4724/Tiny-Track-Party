@@ -911,6 +911,13 @@ in the Box is NOT what makes the grant land on it — that was tried, measured, 
 the badge still came up blue; tree order only decides where the strip sits.
 tvOS needs the same park (`LobbyView.focusPark`) for the same reason.
 
+**A COVERED BOARD MUST REFUSE FOCUS, and being covered is not refusing.** The
+board under an info page keeps every focus target it had, park included — so the
+symptom is focus on NOTHING, not focus somewhere wrong. `RootScreen` cancels the
+ENTRY and the park reclaims focus when the page closes; both sites carry the why.
+The trap is reaching for `canFocus = false`, which is what `focusGroup` already
+sets: it deactivates the group and leaves its children reachable.
+
 **The license text scrolls by handling the d-pad itself.** `verticalScroll` is
 driven by drags and by the focus system bringing a child into view, and a page of
 unbroken text on a box with no pointer has neither — so the container is
