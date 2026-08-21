@@ -104,6 +104,11 @@ targets:
       - path: Generated/assets
         type: folder
         buildPhase: resources
+      # The LAUNCH IMAGE, and it has to be an asset catalog: tvOS reads one out
+      # of a compiled Assets.car before any app code runs, which is exactly why
+      # the in-app boot cover cannot reach that window. Staged by
+      # stage-assets.sh from the same bake Android's splash uses.
+      - path: Generated/Assets.xcassets
     info:
       path: TinyTrackParty/Resources/Info.plist
       properties:
@@ -152,6 +157,9 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: games.couchpad.tinytrack
+        # Names the set inside Generated/Assets.xcassets. Without it actool
+        # compiles the catalogue and nothing points at the image.
+        ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME: LaunchImage
         SWIFT_OBJC_BRIDGING_HEADER: $(SRCROOT)/TinyTrackParty/Bridge/TinyTrackParty-Bridging-Header.h
         # The C ABI headers, the internal headers they include, and Filament's.
         HEADER_SEARCH_PATHS:

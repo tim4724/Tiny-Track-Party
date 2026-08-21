@@ -136,4 +136,43 @@ node "$HERE/gen-scenarios.mjs"
 # comes from public/assets/fonts, where credits.js points.
 node "$HERE/gen-legal.mjs"
 
+# THE LAUNCH IMAGE, and it goes into an ASSET CATALOG rather than the bundle
+# tree above: tvOS reads a launch image out of a compiled Assets.car, before a
+# line of app code runs, so it cannot be an ordinary resource and it cannot be
+# drawn by SwiftUI. The picture is a bake of the real `.wordmark` rule
+# (scripts/bake-wordmark.mjs), the same one Android's windowBackground uses, so
+# the two boxes open on one app rather than two.
+#
+# Staged here rather than committed for the reason the rest of Generated/ is:
+# public/assets/brand/ holds the one copy.
+CAT="$TVOS/Generated/Assets.xcassets/LaunchImage.launchimage"
+mkdir -p "$CAT"
+cp "$ROOT/public/assets/brand/launch-tv.png" "$CAT/launch.png"
+cat > "$CAT/Contents.json" <<'JSON'
+{
+  "images" : [
+    {
+      "extent" : "full-screen",
+      "idiom" : "tv",
+      "filename" : "launch.png",
+      "minimum-system-version" : "9.0",
+      "orientation" : "landscape",
+      "scale" : "1x"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}
+JSON
+cat > "$TVOS/Generated/Assets.xcassets/Contents.json" <<'JSON'
+{
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}
+JSON
+
 say "$(find "$OUT" -type f | wc -l | tr -d ' ') files, $(du -sh "$OUT" | cut -f1) -> Generated/assets"

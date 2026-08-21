@@ -78,6 +78,12 @@ const PAGE = `<!doctype html>
 // welcome board are the same wordmark.
 const BANNER_W = 320;
 const BANNER_H = 180;
+
+// THE tvOS LAUNCH IMAGE, at 1920x1080 because tvOS lays out in those POINTS
+// whatever the box is outputting (the same fact CountdownView sizes its numeral
+// against). It is the Android splash's picture: paper, with the mark on it.
+const LAUNCH_W = 1920;
+const LAUNCH_H = 1080;
 const BANNER = `<!doctype html>
   <link rel="stylesheet" href="/shared/theme.css">
   <style>
@@ -100,12 +106,28 @@ const BANNER = `<!doctype html>
     <div class="wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></div>
   </div>`;
 
+const LAUNCH = `<!doctype html>
+  <link rel="stylesheet" href="/shared/theme.css">
+  <style>
+    html, body { margin: 0; }
+    body {
+      width: ${LAUNCH_W}px; height: ${LAUNCH_H}px;
+      background: var(--paper);
+      display: flex; align-items: center; justify-content: center;
+    }
+    /* The welcome board's own poster clamp, so the launch image and the first
+       board it hands over to are the same size of mark. */
+    .wordmark { font-size: 130px; }
+  </style>
+  <div class="wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></div>`;
+
 function serve() {
   const server = createServer((req, res) => {
     const rel = decodeURIComponent(req.url.split('?')[0]);
-    if (rel === '/' || rel === '/bake.html' || rel === '/banner.html') {
+    const pages = { '/banner.html': BANNER, '/launch.html': LAUNCH };
+    if (rel === '/' || rel === '/bake.html' || pages[rel]) {
       res.writeHead(200, { 'content-type': 'text/html' });
-      res.end(rel === '/banner.html' ? BANNER : PAGE);
+      res.end(pages[rel] || PAGE);
       return;
     }
     const file = join(ROOT, 'public', rel);
@@ -181,5 +203,20 @@ await tile.evaluate(async (px) => {
 const bannerPng = await tile.screenshot();
 writeFileSync(join(out, 'banner.png'), bannerPng);
 console.log(`banner   -> public/assets/brand/banner.png (${bannerPng.length} B, ${BANNER_W}x${BANNER_H})`);
+// The tvOS launch image. Same composition as Android's windowBackground —
+// deliberately, so a player switching between the two boxes sees one app.
+const launch = await browser2.newPage({
+  viewport: { width: LAUNCH_W, height: LAUNCH_H },
+  deviceScaleFactor: 1
+});
+await launch.goto(`http://127.0.0.1:${port}/launch.html`, { waitUntil: 'load' });
+await launch.evaluate(async () => {
+  await document.fonts.load('700 130px Fredoka');
+  await document.fonts.ready;
+});
+const launchPng = await launch.screenshot();
+writeFileSync(join(out, 'launch-tv.png'), launchPng);
+console.log(`launch   -> public/assets/brand/launch-tv.png (${launchPng.length} B, ${LAUNCH_W}x${LAUNCH_H})`);
+
 await browser2.close();
 server2.close();
