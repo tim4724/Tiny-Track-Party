@@ -43,7 +43,8 @@ object PerfDebug {
     private var lastScale = -1.0
     private var lastAa = 0
     private var lastHz = -1
-    private var lastMv = 0
+    /** 1, not 0: mode 0 is what -1 ("off") maps to; the engine's default is 1. */
+    private var lastMv = 1
 
     /** Read the knobs and apply whatever moved. */
     fun poll(display: DisplayHost) {
