@@ -475,7 +475,11 @@ Value applyOp(Shell& st, const std::string& op, const Value& in) {
     return out;
   }
   if (op == "back") {
-    out.set("effect", Value::Str(ui::key(ui::backEffect(st.screen))));
+    // The two race latches, absent in every recorded step: the corpus predates
+    // them and its `in` is null, which is exactly a live race.
+    out.set("effect", Value::Str(ui::key(ui::backEffect(
+        st.screen, json::truthy(in.find("paused")),
+        json::truthy(in.find("raceEnded"))))));
     return out;
   }
   if (op == "roster") {

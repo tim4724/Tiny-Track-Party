@@ -1396,7 +1396,8 @@ class GameCoordinator(
 
     /**
      * The manual overlay pause/resume, as walks. The verdicts are asked INSIDE, and
-     * the op order is the contract — both pause roads end here and neither decides.
+     * the op order is the contract — every pause road (the remote's Play/Pause,
+     * BACK on a live race, a phone's PAUSE_GAME) ends here and none of them decides.
      */
     fun pauseRace() = run(TtpJson.obj(Ttp.ttp_race_pause_live_json(
         sessionHandle, net.roomHandle, if (state.paused) 1 else 0,

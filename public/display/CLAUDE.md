@@ -72,12 +72,18 @@ mutation the class's own methods didn't make.
 
 Boot lands on the welcome board with the room warming eagerly behind it; NEW GAME
 reveals the lobby while carrying the user-gesture unlocks (fullscreen +
-AudioContext). Back walks `SCREEN_ORDER` (race → lobby → welcome): back from a race
-is the usual full reset, back from the lobby ends the party and warms a fresh room.
-Test, gallery and solo surfaces bypass the welcome and push no history.
+AudioContext). Back walks `SCREEN_ORDER` (race → lobby → welcome), except where
+the table says it does not navigate at all: a LIVE race freezes behind the pause
+overlay instead (whose "New game" is the way out) and the overlay thaws again, so
+no single gesture throws a race away; only a FINISHED race retreats. Back from
+the lobby ends the party and warms a fresh room. Test, gallery and solo surfaces
+bypass the welcome and push no history.
 
 The back-stack **table** is C++; the **traversal** is not — the History API is
-deliberately shell-side.
+deliberately shell-side. Which is why the two non-navigating answers push an
+entry back on: the browser has already popped by the time the table is asked, and
+a stack sitting one level under the board would leave the party on the next
+press.
 
 A launch's countdown is HELD until the scene it will be driven on has settled
 (`ttp_race.h`'s countdown gate): `startRace`/`advanceSeriesRace` walk `effects`

@@ -207,7 +207,7 @@ object Ttp {
     external fun ttp_track_schematic_json(trackId: ByteArray?, laps: Int, seed: Int): ByteArray?
     external fun ttp_track_supports_json(trackIdOrDescriptor: ByteArray?): ByteArray?
     external fun ttp_track_sweep_json(trackIdOrDescriptor: ByteArray?, step: Double): ByteArray?
-    external fun ttp_ui_back_effect(screen: ByteArray?): ByteArray?
+    external fun ttp_ui_back_effect(screen: ByteArray?, paused: Int, raceEnded: Int): ByteArray?
     external fun ttp_ui_catalogue_json(): ByteArray?
     external fun ttp_ui_configure(json: ByteArray?): Int
     external fun ttp_ui_cover(screen: ByteArray?, scenePainted: Int): ByteArray?

@@ -1429,18 +1429,32 @@ if (_scenario) {
   updateBackdrop();       // diorama until the host picks a track (then the 3D preview)
   startWhenDeviceChosen(() => net.start()); // warms the room BEHIND the welcome board, gated on the device chooser where it shows
 
-  // Browser back: one level up the SCREEN_ORDER stack. WHAT that means per
-  // screen is uiModel.BACK_EFFECT (race → the same reset as the pause overlay's
-  // "New game"; lobby → end the party, with a fresh room warming behind the
-  // title board; welcome is the root and swallows it). Only the History API
-  // traversal is here — the plan's non-goal, and the reason this handler owns
-  // the two show()-coordination flags: while it runs, show()'s backward steps
-  // must not history.back() again (the browser already popped), and our own
-  // compensating back() must be swallowed.
-  const BACK_ACTION = { 'return-to-lobby': returnToLobby, 'end-party': endParty };
+  // Browser back: one level up the SCREEN_ORDER stack. WHAT that means is
+  // uiModel's back table, which reads the two race latches as well as the
+  // screen (a live race freezes behind the pause overlay, whose own "New game"
+  // is the way out; the overlay thaws; a FINISHED race retreats; lobby → end
+  // the party, with a fresh room warming behind the title board; welcome is the
+  // root and swallows it). Only the History API traversal is here — the plan's
+  // non-goal, and the reason this handler owns the two show()-coordination
+  // flags: while it runs, show()'s backward steps must not history.back() again
+  // (the browser already popped), and our own compensating back() must be
+  // swallowed.
+  //
+  // FREEZING IS NOT NAVIGATING, and the browser has already popped the entry by
+  // the time we know that — so those two answers push one back. Without it the
+  // stack sits one level under the board, and the NEXT back would leave the
+  // party from a live race. (pushState fires no popstate, so nothing to
+  // suppress.)
+  const stay = (act) => () => { history.pushState({ screen: currentScreen }, ''); act(); };
+  const BACK_ACTION = {
+    'return-to-lobby': returnToLobby,
+    'end-party': endParty,
+    'pause-race': stay(pauseRace),
+    'resume-race': stay(resumeRace),
+  };
   window.addEventListener('popstate', (e) => {
     if (suppressPopstate) { suppressPopstate = false; return; }
-    const act = BACK_ACTION[ui.backEffect(currentScreen)];
+    const act = BACK_ACTION[ui.backEffect(currentScreen, paused, raceEnded)];
     if (!act) {
       // Forward-nav (or a stale reloaded entry) landed ahead of the UI — the
       // welcome board is the root, so swallow the entry instead of acting.

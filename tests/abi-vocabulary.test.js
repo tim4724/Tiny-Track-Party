@@ -110,7 +110,7 @@ test('the freeze plan speaks its documented member ops', () => {
   }
 });
 
-test('the back effect speaks swallow/end-party/return-to-lobby', () => {
+test('the back effect speaks swallow/end-party/pause/resume/return-to-lobby', () => {
   const words = vocabulary('native/runtime/ttp_ui.h', 'ttp_ui_back_effect', '"swallow"');
   // The switch lives in RootView (the Menu button's one dispatch site), not in
   // the coordinator — there is deliberately no second walker of this table.

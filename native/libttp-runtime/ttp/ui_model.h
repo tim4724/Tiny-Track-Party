@@ -121,8 +121,14 @@ int screenOrder(Screen s);
 // (pop one), 0 = same level.
 int screenStep(Screen prev, Screen next);
 
-enum class BackEffect { SWALLOW, END_PARTY, RETURN_TO_LOBBY };
-BackEffect backEffect(Screen s);
+// A RACE IS NOT ONE STATE, and back means a different thing in each of its
+// three: live, frozen behind the pause overlay, and finished behind the results
+// board. Back on a live race opens the overlay rather than navigating — the
+// overlay's own New game is the way out, so no single press can throw a race
+// away — and back on the overlay closes it again. Only the finished race, which
+// has nothing left to freeze, retreats a level.
+enum class BackEffect { SWALLOW, END_PARTY, PAUSE_RACE, RESUME_RACE, RETURN_TO_LOBBY };
+BackEffect backEffect(Screen s, bool paused, bool raceEnded);
 
 // ---- the cover ---------------------------------------------------------------
 //

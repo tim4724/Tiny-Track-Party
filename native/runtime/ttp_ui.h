@@ -202,10 +202,17 @@ TTP_ABI int ttp_ui_cup_field_tint_pct(void);
 TTP_ABI int ttp_ui_screen_step(const char* prevScreen, const char* nextScreen);
 
 /* What the back gesture MEANS on a screen — the part every shell shares.
- * "swallow" | "end-party" | "return-to-lobby". HOW the gesture arrives
- * (popstate, the tvOS Menu button, Android's back stack) and how the stack is
- * WALKED are each shell's; only the table is here. */
-TTP_ABI const char* ttp_ui_back_effect(const char* screen);
+ * "swallow" | "end-party" | "pause-race" | "resume-race" | "return-to-lobby".
+ * HOW the gesture arrives (popstate, the tvOS Menu button, Android's back
+ * stack) and how the stack is WALKED are each shell's; only the table is here.
+ *
+ * A RACE IS THREE STATES, so the two latches no handle knows come in with it:
+ * `paused` is the overlay's own and `raceEnded` the results board's, the same
+ * two `ttp_race_pause_live_json` takes. Two of the answers do not NAVIGATE, so
+ * a shell that only knows how to go up a level is not done; see ttp/ui_model.h
+ * for why each state answers as it does. */
+TTP_ABI const char* ttp_ui_back_effect(const char* screen, int paused,
+                                       int raceEnded);
 
 /* Is a full-bleed COVER owed over this board, and which one — "none" | "boot".
  *

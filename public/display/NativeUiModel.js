@@ -47,7 +47,7 @@ export async function init() {
     progressLoad: c('ttp_ui_progress_load', 'number', ['string', 'number']),
     progressJson: c('ttp_ui_progress_json', 'string', []),
     screenStep: c('ttp_ui_screen_step', 'number', ['string', 'string']),
-    backEffect: c('ttp_ui_back_effect', 'string', ['string']),
+    backEffect: c('ttp_ui_back_effect', 'string', ['string', 'number', 'number']),
     cover: c('ttp_ui_cover', 'string', ['string', 'number']),
     rosterSeatsFromRoom: c('ttp_ui_roster_seats_room_json', 'string', ['number', 'string']),
     seatGrid: c('ttp_ui_seat_grid_json', 'string', ['string']),
@@ -116,7 +116,12 @@ export function progressJson() { return fn.progressJson(); }
 // >0 = a forward step, <0 = a retreat, 0 = same level. WALKING the stack is the
 // shell's (the History API here, Menu on tvOS); only the table is native.
 export function screenStep(prev, next) { return fn.screenStep(prev || '', next || ''); }
-export function backEffect(screen) { return fn.backEffect(screen || ''); }
+// `paused` and `raceEnded` are the two latches no handle knows (the same two
+// pauseRace() hands in): a live race freezes on back, the overlay thaws, and
+// only a finished one retreats a level.
+export function backEffect(screen, paused, raceEnded) {
+  return fn.backEffect(screen || '', paused ? 1 : 0, raceEnded ? 1 : 0);
+}
 // Which full-bleed cover this board owes — 'none' | 'boot'. `scenePainted` is
 // the one fact only a shell has: a BUILT scene having reached the panel.
 export function cover(screen, scenePainted) {

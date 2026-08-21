@@ -2,9 +2,12 @@
 // Welcome board + back-stack navigation. Boot lands on the title board while
 // the room warms invisibly behind it (net.start() runs at boot); NEW GAME
 // reveals the lobby (and carries the fullscreen/audio unlock gesture). The
-// browser back button walks the SCREEN_ORDER stack: race → lobby (the usual
-// full reset), lobby → welcome (endParty: every phone bails terminally, the
-// display self-heals into a FRESH room with a CLEAN roster for the next party).
+// browser back button walks the SCREEN_ORDER stack, except where the model says
+// it does not navigate at all: a LIVE race freezes behind the pause overlay
+// (and thaws on the next press) rather than being thrown away by one gesture,
+// a FINISHED one retreats to the lobby, and lobby → welcome is endParty (every
+// phone bails terminally, the display self-heals into a FRESH room with a CLEAN
+// roster for the next party).
 const { test, expect, openDisplay, joinController, startRace, waitForRacing, visible } = require('./helpers');
 
 test('boot shows the welcome board with the room pre-warmed; NEW GAME reveals the lobby', async ({ page }) => {
@@ -64,16 +67,38 @@ test('back from the lobby ends the party: phones bail, a fresh room with a clean
   await bob.waitForSelector(visible('#lobby'));
 });
 
-test('back from a race returns to the lobby (same reset as "New game"), party intact', async ({ page, browser }) => {
+test('back from a live race FREEZES it; the overlay is the only way out, and the stack survives', async ({ page, browser }) => {
   const roomCode = await openDisplay(page);
   const alice = await joinController(browser, roomCode, 'Alice');
   await startRace(alice, []);
   await waitForRacing(page);
 
+  // BACK DOES NOT NAVIGATE HERE. A race is minutes of play and back is one
+  // press: it raises the pause overlay (on the phones too — the same freeze any
+  // pause takes) and the race is still there behind it.
   await page.goBack();
 
-  // The full race teardown ran: display back on the lobby, phone back in ITS
-  // lobby (GAME_END), seats intact — back here quits the race, not the party.
+  await page.waitForSelector(visible('#pause-overlay'));
+  await alice.waitForSelector(visible('#pause-overlay'));
+  await expect(page.locator('#race')).toBeVisible();
+  await expect(page.locator('#lobby')).toBeHidden();
+
+  // And back again thaws it, so no press on this board is a dead one.
+  await page.goBack();
+  await expect(page.locator('#pause-overlay')).toBeHidden();
+  await expect(alice.locator('#pause-overlay')).toBeHidden();
+  await expect(page.locator('#race')).toBeVisible();
+
+  // THE ENTRY IS PUT BACK BOTH TIMES. Freezing is not navigating, so the stack
+  // has to still sit at the race level — if it did not, this next back would
+  // leave the party from a running race instead of pausing it again.
+  await page.goBack();
+  await page.waitForSelector(visible('#pause-overlay'));
+
+  // Leaving is the overlay's own "New game": the full race teardown, display
+  // back on the lobby, phone back in ITS lobby (GAME_END), seats intact — it
+  // quits the race, not the party.
+  await page.click('#pause-newgame');
   await page.waitForSelector(visible('#lobby'));
   await expect(page.locator('#welcome')).toBeHidden();
   await alice.waitForSelector(visible('#lobby'));

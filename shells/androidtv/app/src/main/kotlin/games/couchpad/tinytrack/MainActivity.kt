@@ -195,13 +195,19 @@ class MainActivity : ComponentActivity() {
                     return
                 }
                 when (TtpJson.strOrEmpty(Ttp.ttp_ui_back_effect(
-                    TtpJson.arg(game.state.screen.name.lowercase())))) {
+                    TtpJson.arg(game.state.screen.name.lowercase()),
+                    if (game.state.paused) 1 else 0,
+                    if (game.raceEnded) 1 else 0))) {
                     // The lobby is this shell's root: the model declines, and the
                     // press belongs to the system (leave the app).
                     "swallow", "end-party" -> {
                         isEnabled = false
                         onBackPressedDispatcher.onBackPressed()
                     }
+                    // A live race freezes instead of navigating, and the overlay
+                    // thaws again — the walk each button in it already takes.
+                    "pause-race" -> game.pauseRace()
+                    "resume-race" -> game.resumeRace()
                     else -> game.returnToLobby()   // "return-to-lobby"
                 }
             }

@@ -69,8 +69,8 @@ extension GameCoordinator {
 
     /// The manual overlay pause/resume, as walks. The verdicts
     /// (`ttp_ui_can_pause` / `can_resume`) are asked INSIDE, and the op order is
-    /// the contract — both pause roads (the remote's Play/Pause and a phone's
-    /// PAUSE_GAME) end here and neither decides. These replaced three hand-kept
+    /// the contract — every pause road (the remote's Play/Pause, Menu on a live
+    /// race, and a phone's PAUSE_GAME) ends here and none of them decides. These replaced three hand-kept
     /// writes that existed twice, once per road, with a note naming the
     /// duplication as the failure to watch for.
     func pauseRace() {
@@ -85,8 +85,9 @@ extension GameCoordinator {
                                               raceEnded ? 1 : 0)))
     }
 
-    /// The ONE writer of the sim's clock. Both pause roads — the remote's
-    /// Play/Pause and a phone's PAUSE_GAME — end here, and neither decides:
+    /// The ONE writer of the sim's clock. Every pause road — the remote's
+    /// Play/Pause, Menu on a live race, a phone's PAUSE_GAME — ends here, and
+    /// none of them decides:
     /// `ttp_ui_freeze_plan_json` arbitrates, so a manual resume while every
     /// racer is still gone keeps the field frozen, and a reconnect during a
     /// manual pause keeps the overlay's authority.

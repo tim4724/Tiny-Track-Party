@@ -394,8 +394,9 @@ int ttp_ui_screen_step(const char* prevScreen, const char* nextScreen) {
                         ui::screenOf(nextScreen ? nextScreen : ""));
 }
 
-const char* ttp_ui_back_effect(const char* screen) {
-  return ui::key(ui::backEffect(ui::screenOf(screen ? screen : "")));
+const char* ttp_ui_back_effect(const char* screen, int paused, int raceEnded) {
+  return ui::key(ui::backEffect(ui::screenOf(screen ? screen : ""),
+                                paused != 0, raceEnded != 0));
 }
 
 const char* ttp_ui_cover(const char* screen, int scenePainted) {

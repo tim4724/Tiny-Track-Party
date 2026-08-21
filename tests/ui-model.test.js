@@ -47,7 +47,7 @@ function ui_() {
     const J = JSON.stringify;
     const raw = {
       configure: c('ttp_ui_configure', 'number', ['string']),
-      backEffect: c('ttp_ui_back_effect', 'string', ['string']),
+      backEffect: c('ttp_ui_back_effect', 'string', ['string', 'number', 'number']),
       screenStep: c('ttp_ui_screen_step', 'number', ['string', 'string']),
       cupSlot: c('ttp_ui_cup_slot_json', 'string', ['string']),
       seatGrid: c('ttp_ui_seat_grid_json', 'string', ['string']),
@@ -122,7 +122,7 @@ function ui_() {
       catalogue: () => JSON.parse(raw.catalogue()),
       progressLoad: (json, unlockAll) => raw.progressLoad(json || '', unlockAll ? 1 : 0),
       progressJson: () => raw.progressJson(),
-      backEffect: (s) => raw.backEffect(s),
+      backEffect: (s, paused, ended) => raw.backEffect(s, paused ? 1 : 0, ended ? 1 : 0),
       screenStep: (a, b) => raw.screenStep(a, b),
       cupSlot: (x) => JSON.parse(raw.cupSlot(J(x))),
       seatGrid: (seats) => JSON.parse(raw.seatGrid(J(seats))),
@@ -325,6 +325,21 @@ test('every board acts on back, and only the root swallows', async () => {
   for (const s of ['lobby', 'race']) {
     assert.notEqual(u.backEffect(s), 'swallow', `${s} must act on back`);
   }
+  // THE RACE IS THREE STATES, and no press on any of them may be a no-op: a
+  // live race freezes, the pause overlay thaws, and only a finished race (the
+  // results board, which has nothing left to freeze) retreats a level. A back
+  // that reached "return-to-lobby" while cars were still moving is the whole
+  // race thrown away on one press.
+  assert.equal(u.backEffect('race', false, false), 'pause-race');
+  assert.equal(u.backEffect('race', true, false), 'resume-race');
+  assert.equal(u.backEffect('race', false, true), 'return-to-lobby');
+  // Frozen AND finished is a real pair — the freeze survives into the results
+  // board — and the board wins, so Menu there is not an offer to thaw a race
+  // that is over.
+  assert.equal(u.backEffect('race', true, true), 'return-to-lobby');
+  // The latches belong to the race alone: neither moves the other two boards.
+  assert.equal(u.backEffect('lobby', true, true), 'end-party');
+  assert.equal(u.backEffect('welcome', true, true), 'swallow');
   // An unknown board counts as the root, which is what makes the first show() a
   // push rather than a replace.
   assert.equal(u.backEffect('nonsense'), 'swallow');

@@ -1091,9 +1091,9 @@ jbyteArray n_ttp_track_sweep_json(JNIEnv* env, jclass, jbyteArray a0, jdouble a1
     return toBytes(env, ttp_track_sweep_json(s0.get(), (double) a1));
 }
 
-jbyteArray n_ttp_ui_back_effect(JNIEnv* env, jclass, jbyteArray a0) {
+jbyteArray n_ttp_ui_back_effect(JNIEnv* env, jclass, jbyteArray a0, jint a1, jint a2) {
     CStr s0(env, a0);
-    return toBytes(env, ttp_ui_back_effect(s0.get()));
+    return toBytes(env, ttp_ui_back_effect(s0.get(), (int) a1, (int) a2));
 }
 
 jbyteArray n_ttp_ui_catalogue_json(JNIEnv* env, jclass) {
@@ -1407,7 +1407,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_track_schematic_json", "([BII)[B", (void*) n_ttp_track_schematic_json },
     { "ttp_track_supports_json", "([B)[B", (void*) n_ttp_track_supports_json },
     { "ttp_track_sweep_json", "([BD)[B", (void*) n_ttp_track_sweep_json },
-    { "ttp_ui_back_effect", "([B)[B", (void*) n_ttp_ui_back_effect },
+    { "ttp_ui_back_effect", "([BII)[B", (void*) n_ttp_ui_back_effect },
     { "ttp_ui_catalogue_json", "()[B", (void*) n_ttp_ui_catalogue_json },
     { "ttp_ui_configure", "([B)I", (void*) n_ttp_ui_configure },
     { "ttp_ui_cover", "([BI)[B", (void*) n_ttp_ui_cover },

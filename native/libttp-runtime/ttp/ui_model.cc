@@ -77,10 +77,16 @@ Cover coverFor(Screen screen, bool scenePainted) {
   return Cover::NONE;
 }
 
-BackEffect backEffect(Screen s) {
+BackEffect backEffect(Screen s, bool paused, bool raceEnded) {
   switch (s) {
     case Screen::LOBBY: return BackEffect::END_PARTY;
-    case Screen::RACE: return BackEffect::RETURN_TO_LOBBY;
+    // The race, in its three states. A FINISHED race is checked FIRST: the
+    // results board latches `raceEnded` while `paused` may still be set under
+    // it, and offering to thaw a race that has no cars left to move is a dead
+    // press on the one board a viewer sits longest on.
+    case Screen::RACE:
+      if (raceEnded) return BackEffect::RETURN_TO_LOBBY;
+      return paused ? BackEffect::RESUME_RACE : BackEffect::PAUSE_RACE;
     // welcome is the root: there is nothing above it, so back is swallowed —
     // and an unknown board answers the same way.
     case Screen::WELCOME:
@@ -92,6 +98,8 @@ BackEffect backEffect(Screen s) {
 const char* key(BackEffect e) {
   switch (e) {
     case BackEffect::END_PARTY: return "end-party";
+    case BackEffect::PAUSE_RACE: return "pause-race";
+    case BackEffect::RESUME_RACE: return "resume-race";
     case BackEffect::RETURN_TO_LOBBY: return "return-to-lobby";
     case BackEffect::SWALLOW: break;
   }

@@ -1774,7 +1774,9 @@ Value uiStep(UiShell& st, const std::string& op, const Value& in, const Value& w
     return out;
   }
   if (op == "back") {
-    out.set("effect", Value::Str(ttp_ui_back_effect(st.screen.c_str())));
+    out.set("effect", Value::Str(ttp_ui_back_effect(
+        st.screen.c_str(), json::truthy(in.find("paused")) ? 1 : 0,
+        json::truthy(in.find("raceEnded")) ? 1 : 0)));
     return out;
   }
   if (op == "roster") {

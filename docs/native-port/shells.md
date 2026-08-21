@@ -310,7 +310,10 @@ identically (both are commented where they bite, in `TtpRendererBakes.cpp`):
    into.
 11. **Back navigation.** The TABLE crossed (`ttp_ui_back_effect`); the walk did
    not. popstate, the tvOS Menu button and Android's back stack are three
-   different animals and the shell owns the traversal.
+   different animals and the shell owns the traversal. The table reads the two
+   race latches (`paused`, `raceEnded`) as well as the screen, and two of its
+   answers do not navigate at all — a live race freezes, the pause overlay thaws
+   — so a shell that only knows how to go UP a level is not done.
 12. **Asset bytes for the renderer.** The renderer asks for names; the shell
     fetches bytes and hands them over before the build (the web reference is
     `render/Display.js`). Cars and item props go over by their own file names;

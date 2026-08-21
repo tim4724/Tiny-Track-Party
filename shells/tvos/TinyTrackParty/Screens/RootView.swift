@@ -320,9 +320,10 @@ struct RootView: View {
 
     /// What Menu does here, or nil to let tvOS have it.
     ///
-    /// `ttp_ui_back_effect` answers `swallow` | `end-party` | `return-to-lobby`,
-    /// and the coordinator performs it. Two things are decided HERE, and the
-    /// ledger explicitly leaves both to the product:
+    /// `ttp_ui_back_effect` answers `swallow` | `end-party` | `pause-race` |
+    /// `resume-race` | `return-to-lobby`, and the coordinator performs it. Two
+    /// things are decided HERE, and the ledger explicitly leaves both to the
+    /// product:
     ///
     /// A swallowed Menu is handed back to the system rather than eaten, because
     /// a TV viewer pressing Menu at a root expects the Home screen.
@@ -336,7 +337,14 @@ struct RootView: View {
     /// pagehide. NOT on termination: tvOS suspends a backgrounded app and may
     /// kill it later without ever delivering one.
     private var backAction: (() -> Void)? {
-        switch TTP.strOrEmpty(ttp_ui_back_effect(state.screen.rawValue)) {
+        switch TTP.strOrEmpty(ttp_ui_back_effect(state.screen.rawValue,
+                                                 state.paused ? 1 : 0,
+                                                 game.raceEnded ? 1 : 0)) {
+        // A live race freezes rather than navigating: the overlay's own New
+        // game is the way out, so no single press throws a race away. Through
+        // setPaused, so Menu takes the same road as the Play/Pause button.
+        case "pause-race": return { setPaused(true) }
+        case "resume-race": return { setPaused(false) }
         case "return-to-lobby": return { game.returnToLobby() }
         default: return nil   // "swallow", and "end-party" at this shell's root
         }
@@ -345,10 +353,11 @@ struct RootView: View {
     /// Freeze or thaw from the remote.
     private func togglePause() { setPaused(!state.paused) }
 
-    /// One entry point, so the overlay's Continue button and the remote take
-    /// the same road as a phone's PAUSE_GAME: the pause/resume WALKS, whose
-    /// verdicts (`ttp_ui_can_pause` / `can_resume`) are asked inside and whose
-    /// op order is the contract.
+    /// One entry point, so the overlay's Continue button and BOTH remote
+    /// buttons (Play/Pause, and Menu on a live race) take the same road as a
+    /// phone's PAUSE_GAME: the pause/resume WALKS, whose verdicts
+    /// (`ttp_ui_can_pause` / `can_resume`) are asked inside and whose op order
+    /// is the contract.
     private func setPaused(_ on: Bool) {
         if on { game.pauseRace() } else { game.resumeRace() }
     }
