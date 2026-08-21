@@ -1,4 +1,4 @@
-# R8 keeps for the release build. Three rules and one deliberate ABSENCE.
+# R8 keeps for the release build. Four rules and one deliberate ABSENCE.
 #
 # THE BRIDGE IS RESOLVED BY NAME. native/runtime/ttp_jni.cc binds its exports in
 # JNI_OnLoad via RegisterNatives against FindClass("games/couchpad/tinytrack/Ttp")
@@ -24,6 +24,16 @@
 # reflection would then succeed and report DEBUG=true in a shrunk build. Two
 # earlier mechanisms already lost this shell's assertions silently (kotlin.assert
 # on ART, and AGP 8 generating no BuildConfig at all) — see the shell's CLAUDE.md.
+
+# THE WEBRTC AAR SHIPS NO CONSUMER RULES, and libjingle_peerconnection_so
+# FindClass()es these packages from its own JNI_OnLoad — references R8 cannot
+# see, so it strips them and the native load aborts (ClassNotFoundException:
+# org.jni_zero.JniInit, then SIGTRAP). Same failure shape as the bridge keep
+# above, and equally invisible until a release build runs on a box.
+-keep class org.webrtc.** { *; }
+-keep class org.jni_zero.** { *; }
+-dontwarn org.webrtc.**
+-dontwarn org.jni_zero.**
 
 # Hidden-API reflection in PerfDebug: android.os.SystemProperties is a platform
 # class, so R8 never touches it and its own catch covers a box that refuses.

@@ -253,6 +253,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        game.audio.release()
+        game.release()
     }
 }

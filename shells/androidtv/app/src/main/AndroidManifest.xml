@@ -7,6 +7,15 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- NOTHING IS DECLARED FOR THE LAN, and that is a targetSdk fact rather
+         than a permanent one. Two features here touch the local network — the
+         CouchPad room record over NsdManager (RoomAdvertiser.kt) and the
+         fastlane's ICE host candidates (Fastlane.kt) — and Local Network
+         Protections gate both behind ACCESS_LOCAL_NETWORK only for apps
+         targeting API 37. This one targets 36. When targetSdk moves, add the
+         permission: without it both features fail SILENTLY (the QR still works
+         and CONTROL still rides the relay), which is the shape nobody notices. -->
+
     <!-- A TV, and only a TV. leanback REQUIRED is what keeps this off phones in
          the Play listing; touchscreen NOT required is what lets it onto a TV at
          all, since the default for that feature is `true`. -->

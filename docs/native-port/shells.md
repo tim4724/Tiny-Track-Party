@@ -205,7 +205,14 @@ Three properties of that surface matter more than the list:
    plus the board's geometry across the transition.
 6. **Transport.** A WebSocket client, and optionally a WebRTC DataChannel. The
    fastlane is an enhancement by design (CONTROL falls back to the relay), so
-   relay-only is a legitimate launch. The framing and packet codecs are already
+   relay-only is a legitimate launch — though no shipped shell is one any more,
+   and the transport half is small because the NETCODE is C++: `ttp_link_*` is
+   the whole of it, and a shell that reads a `ps`/`pa`/`h` field has started a
+   second one. Neither TV platform ships a system WebRTC, so both link a
+   prebuilt libwebrtc (`LiveKitWebRTC` on tvOS, `io.github.webrtc-sdk:android`
+   on Android — the same upstream build). `shells/tvos/.../Net/Fastlane.swift`
+   and `shells/androidtv/.../Fastlane.kt` are the two ports to compare, pinned
+   by `tests/tvos-fastlane.test.js` and `tests/androidtv-fastlane.test.js`. The framing and packet codecs are already
    C++, and so is the CHOREOGRAPHY: every inbound trigger (protocol frame, peer
    message, close, the liveness tick, a drained room event) is one call into
    `ttp_net.h`'s walk entry points, which mutate the room in C++ and answer an
@@ -246,7 +253,12 @@ Three properties of that surface matter more than the list:
    launcher resolves the code through the relay, so this only accelerates a join
    it could already make: keep showing the QR and the code regardless. The web
    display cannot do this at all (browsers cannot advertise mDNS), which is why
-   it has no counterpart here.
+   it has no counterpart here. `NWListener` on tvOS, `NsdManager` on Android,
+   and the two things that make one silently useless are the same on both: the
+   record must track JOINABILITY (down when the room is full, backgrounded or
+   closed, not merely when the app dies), and the code must come from the net
+   layer rather than the display field a screenshot harness writes fixtures
+   into.
 11. **Back navigation.** The TABLE crossed (`ttp_ui_back_effect`); the walk did
    not. popstate, the tvOS Menu button and Android's back stack are three
    different animals and the shell owns the traversal.
@@ -397,12 +409,13 @@ look items is in `shells/androidtv/CLAUDE.md` (Look).
 - **The mute toggle** — the web's corner button and the host phone's Sound row
   have no counterpart, and the mix has no muted state to honour; a TV's own mute
   is the workaround.
-- **The room advertisement** (item 9, `_couchpad._tcp` over `NsdManager`) — the
-  launcher resolves the code through the relay anyway.
 - **Meshing the next circuit at the intermission** (item 13) — a cup's chained
   start shows the outgoing circuit under the count and then hitches; on this GPU
   a build is seconds, so it is the most visible item here.
-- **The info / licenses board** (item 16) — the .ipa's obligations are the .apk's.
+- **The info / licenses board** (item 16) — the .ipa's obligations are the
+  .apk's, and the fastlane added libwebrtc (BSD-3-Clause, a notice-tier license)
+  to what this package redistributes. `shells/tvos/scripts/gen-legal.mjs`
+  already bakes the tvOS delta; the Android one has no board to bake into.
 - **An app baseline profile** — the release APK carries only library-supplied
   profiles, so this shell's own composables and boot path are not AOT-compiled;
   the tail it would move is the half the GPU readout cannot see, and it costs a

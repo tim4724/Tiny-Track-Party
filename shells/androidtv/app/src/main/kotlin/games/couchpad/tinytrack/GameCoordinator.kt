@@ -58,6 +58,9 @@ class GameCoordinator(
     val net: PartyNet
     val audio: AudioDevice
     val assets: AssetStore
+
+    /** The CouchPad LAN room record (CONTRACT §8). Driven only by [syncAdvertisement]. */
+    private val advertiser: RoomAdvertiser
     val lobbyDemo = LobbyDemo()
     private val prefs: SharedPreferences =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -138,7 +141,8 @@ class GameCoordinator(
         assets = AssetStore(context.assets)
         proto = GameProtocol.load(baseUrl)
         display = DisplayHost(surfaceView)
-        net = PartyNet(proto, RelaySocket(), context.cacheDir)
+        net = PartyNet(proto, RelaySocket(), context)
+        advertiser = RoomAdvertiser(context)
         audio = AudioDevice(context.assets, baseUrl)
         ItemIcon.attach(context.assets)
         CarThumb.attach(context.assets)
@@ -570,12 +574,27 @@ class GameCoordinator(
     fun suspend() {
         if (suspended) return
         suspended = true
+        // THE LAN RECORD COMES DOWN FIRST. [net.shutdown] below closes the room,
+        // and a record that outlives it costs a player a tap into a room that is
+        // already gone.
+        syncAdvertisement()
         // The mix goes with the frame loop: nothing will update a voice's level once
         // the Choreographer callback is gone, so a held one sounds forever.
         audio.silence()
         lobbyDemo.stop()
         net.shutdown()
         clearJoinTicket()
+    }
+
+    /**
+     * The process is going away for good — [MainActivity.onDestroy]. [suspend]
+     * ends a PARTY and runs on every trip to the home screen; this releases what
+     * outlives one.
+     */
+    fun release() {
+        advertiser.withdraw()
+        net.release()
+        audio.release()
     }
 
     /**
@@ -589,6 +608,37 @@ class GameCoordinator(
         state.roomCode = ""
         state.joinUrl = ""
         state.joinQr = null
+        syncAdvertisement()
+    }
+
+    /**
+     * The LAN room record, resynced from the three roads that change whether this
+     * room can be joined: the room warming, a roster movement, the ticket coming
+     * down.
+     *
+     * THE ROOM CODE COMES FROM [net], NOT FROM [state]. `state.roomCode` is a
+     * display field, and the screenshot harness writes "TEST" straight into it to
+     * photograph a lobby — reading it here would put a fixture room on the air
+     * during every gallery capture. `net.roomCode` is only ever set by the walk
+     * that owns a real relay room, so the harness cannot reach it.
+     *
+     * A FULL ROOM IS WITHDRAWN, and republished when a slot frees. The launcher
+     * does hide a full room when it resolves the code (it compares `clients`
+     * against `maxClients`), but it only re-resolves when a record APPEARS — so
+     * going quiet is what takes the stale card down promptly.
+     *
+     * [suspended] covers the background: the room may survive the wake, but
+     * nothing is watching it until the rejoin, and a discovered join would land a
+     * player in front of a dead display.
+     */
+    private fun syncAdvertisement() {
+        val room = net.roomCode
+        val seated = state.seats.count { !it.open }
+        if (suspended || room.isNullOrEmpty() || seated >= proto.maxPlayers) {
+            advertiser.withdraw()
+            return
+        }
+        advertiser.advertise(room)
     }
 
     /**
@@ -797,6 +847,7 @@ class GameCoordinator(
             // everyone to ignore the one channel this app has for saying something
             // is actually wrong.
             state.clearError()
+            syncAdvertisement()
         }
         net.onRoomGone = { clearJoinTicket() }
         net.onRosterChanged = { refreshLobby() }
@@ -1100,6 +1151,10 @@ class GameCoordinator(
 
         // No publish here, deliberately: every road into this render is a walk that
         // already published.
+
+        // The LAN record rides the roster too: a room that just filled must go off
+        // the air, and one that just freed a slot must come back on.
+        syncAdvertisement()
 
         // THE SILENT AUTO-PAUSE RIDES THE ROSTER, exactly as on the web. Every
         // roster movement is a candidate: a disconnect, a reconnect, a rekey, a

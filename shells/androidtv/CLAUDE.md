@@ -19,6 +19,17 @@ rule, and the way it is kept is that nothing outside `DisplayHost` calls a
 `ttp_display_*` or `ttp_update`. A render thread is a later MEASURED decision,
 not a starting assumption.
 
+It is also why `Fastlane.kt` is not a transcription of HexStacker's Android
+fastlane: that one runs its whole peer/netcode state on a serial executor, which
+it can because its netcode is Kotlin. Ours is `ttp::fastlane::Link`, so every
+`ttp_link_*` call, every peer and every watchdog is on MAIN and libwebrtc's
+observers hop before they touch anything. The ONE thing that must not be on main
+is `PeerConnectionFactory` creation (it loads a ~100-300 ms native library during
+boot), so it runs on a one-shot thread and a signal that lands meanwhile is
+QUEUED — not dropped, because the phone re-offers only when a channel it already
+had closes, so an unanswered offer strands that seat on the relay for the whole
+session.
+
 **2. The bridge is generated. Do not hand-edit either half.**
 `scripts/gen-jni.mjs` reads the `TTP_ABI` declarations out of the ABI headers and
 emits `native/runtime/ttp_jni.cc` and `Ttp.kt` from one parse, so the two cannot
@@ -110,6 +121,14 @@ material with dynamic loops, over its 32 deck decals — never links and Filamen
 GL thread throws `PostconditionPanic` and aborts the process. `build-materials.sh`
 passes `-Os`, globally and for every platform, because a browser on this same box
 drives the same driver.
+
+**THE WEBRTC AAR SHIPS NO CONSUMER R8 RULES**, and `libjingle_peerconnection_so`
+`FindClass()`es `org.webrtc` and `org.jni_zero` from its own `JNI_OnLoad` —
+references the shrinker cannot see. Without the keeps in `proguard-rules.pro` the
+release APK aborts at library load, which is the same failure shape as the
+generated bridge's keep and equally invisible until a release build runs on a
+box. The dependency also carries four ABIs of `.so`; `abiFilters` keeps the two
+this platform needs, and `armeabi-v7a` is not the droppable one here.
 
 **Filament installs every Android ABI under one root**, so `lib/*/*.a` would put
 two architectures on one link line. `FilamentSdk.cmake` prefers `lib/${ANDROID_ABI}`

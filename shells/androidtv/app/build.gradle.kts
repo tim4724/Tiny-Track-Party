@@ -205,10 +205,24 @@ dependencies {
     // library would be fought at every step. What a TV needs from Compose is the
     // FOCUS system, and that is in foundation.
 
-    // The relay socket. The fastlane (WebRTC) is deliberately absent: it is an
-    // enhancement by design and CONTROL falls back to the relay, so relay-only
-    // is a legitimate launch (docs/native-port/shells.md §5).
+    // The relay socket.
     implementation("com.squareup.okhttp3:okhttp:5.4.0")
+
+    // The input fastlane's transport (Fastlane.kt). Android ships no system
+    // WebRTC, so this is a prebuilt libwebrtc (org.webrtc.*) — the same
+    // distribution the tvOS shell links as LiveKitWebRTC and HexStacker's TV
+    // shell device-proved. It carries armeabi-v7a, which is NOT optional here:
+    // see the abiFilters note above.
+    //
+    // IT IS BY FAR THE LARGEST THING IN THE APK — a prebuilt libwebrtc per
+    // ABI, stored uncompressed (useLegacyPackaging = false), and abiFilters is
+    // the only thing keeping it to two. A universal APK is the cost of not
+    // shipping an App Bundle; measure before assuming it is the engine.
+    //
+    // The netcode is NOT in this dependency — ttp::fastlane::Link is, behind
+    // the ttp_link_* walks — so what it buys is the PeerConnection and the
+    // DataChannel and nothing else.
+    implementation("io.github.webrtc-sdk:android:144.7559.12")
 
     // The join QR. Policy is copied from public/shared/qr.js — EC level L, a
     // one-module quiet zone — not the library.

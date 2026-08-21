@@ -1,5 +1,6 @@
 package games.couchpad.tinytrack
 
+import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -29,13 +30,15 @@ import kotlin.random.Random
  * (`ttp_framing_close_outcome` is the kit half `PartyConnection` keeps on the
  * web).
  *
- * **NO FASTLANE.** The WebRTC input path is an enhancement by design and CONTROL
- * falls back to the relay per-message, so relay-only is a legitimate launch
- * (`docs/native-port/shells.md` §5). Where the tvOS twin consumes `__rtc`
- * envelopes and answers them, this shell only stamps them as SIGNAL for the walk
- * — any traffic is proof of life — and drops them. A phone that offers gets no
- * answer and stays on the relay, which is the documented fallback and not a
- * failure. `tests/wire-no-webrtc.test.js` pins that this is allowed.
+ * **THE FASTLANE IS [Fastlane]** — the WebRTC transport over the C++ Link. So
+ * the `__rtc` envelopes play their web double role here: the fastlane consumes
+ * them (offer/ICE to answer) AND they stay this shell's SIGNAL for the walk,
+ * which stamps liveness (any traffic is proof of life) and stops. The
+ * `close-fastlane` performer closes something.
+ *
+ * It remains an ENHANCEMENT: CONTROL falls back to the relay per-message, so a
+ * phone with no WebRTC, or a symmetric NAT with no TURN to escape it, plays
+ * exactly as before (`tests/wire-no-webrtc.test.js` pins that this is allowed).
  *
  * THREE TIMERS, all here: the 1 Hz liveness tick, the create watchdog, the
  * reconnect backoff. The results failsafe and the cup intermission are the RACE
@@ -44,8 +47,11 @@ import kotlin.random.Random
 class PartyNet(
     private val proto: GameProtocol,
     private val socket: RelaySocket,
-    /** Where the crash-recovery blob lives. `context.cacheDir` — see [roomFile]. */
-    cacheDir: File,
+    /**
+     * For [roomFile] (the crash-recovery blob) and for the fastlane's
+     * `PeerConnectionFactory`, which is the one thing here that needs one.
+     */
+    context: Context,
 ) {
 
     // NOT private: PERFORMABLE below is the boot proof's input, and the coordinator
@@ -218,6 +224,17 @@ class PartyNet(
     private val reconnectSeats = ArrayList<Pair<EngineId, JSONObject>>()
 
     private val main = Handler(Looper.getMainLooper())
+
+    /**
+     * The input fastlane's transport half ([Fastlane]); its netcode is C++'s.
+     * Constructed here rather than injected because the only thing it needs from
+     * outside is the STUN pair, which is the manifest's.
+     */
+    private val fastlane = Fastlane(
+        context,
+        listOf(proto.stunUrl, proto.stunFallbackUrl),
+    ) { idx, data -> sendTo(EngineId.number(idx), data.toString()) }
+
     private var livenessTick: Runnable? = null
     private var createWatchdog: Runnable? = null
     private var reconnectRunnable: Runnable? = null
@@ -242,7 +259,7 @@ class PartyNet(
      * web's semantics exactly, and being purgeable is a feature: the blob is only
      * ever crash recovery.
      */
-    private val roomFile = File(cacheDir, "tinytrack_display_room.json")
+    private val roomFile = File(context.cacheDir, "tinytrack_display_room.json")
 
     // -- boot ---------------------------------------------------------------
 
@@ -283,6 +300,11 @@ class PartyNet(
         socket.onOpen = { handleOpen() }
         socket.onText = { handleText(it) }
         socket.onClose = { hasCode, code -> handleClose(hasCode, code) }
+
+        // Fastlane input joins the SAME funnel a relay game-message takes, so the
+        // dedup, the CONTROL short-circuit and the button verdict stay
+        // single-sourced in the coordinator.
+        fastlane.onInput = { idx, ev -> onControllerMessage?.invoke(EngineId.number(idx), ev) }
     }
 
     /**
@@ -371,10 +393,16 @@ class PartyNet(
     private fun handleMessage(from: Any?, data: Any?) {
         if (data == null || data === JSONObject.NULL) return
         val payload = data as? JSONObject
-        // The `__rtc` envelopes stay this shell's "signal" for the walk, which
-        // stamps liveness (any traffic is proof of life) and stops. With no
-        // fastlane there is nothing to hand them to.
-        val isSignal = payload?.has("__rtc") == true
+        // The `__rtc` envelopes play their web double role: the fastlane consumes
+        // them (offer/ICE to answer), AND they stay this shell's "signal" for the
+        // walk, which stamps liveness (any traffic is proof of life) and stops.
+        val isSignal = payload?.has(Fastlane.RTC_KEY) == true
+        if (isSignal) {
+            // The display is relay slot 0 and the signalling peer is a NUMBERED
+            // seat; a string-identified peer has no fastlane index to answer on.
+            val idx = (from as? Number)?.toInt()
+            if (idx != null) fastlane.handleSignal(idx, payload)
+        }
         // A payload that is not an object still crosses: JS reads `data.type` off
         // anything without throwing, so a peer sending a bare number stamps its
         // seat. Getting that wrong drops a live phone's seat three seconds later,
@@ -510,6 +538,9 @@ class PartyNet(
         cancel(livenessTick); livenessTick = null
         cancel(createWatchdog); createWatchdog = null
         cancel(reconnectRunnable); reconnectRunnable = null
+        // Backgrounded: close every RTC link promptly, so the phones' watchdogs
+        // notice and re-offer on the way back in.
+        fastlane.closeAll()
         if (!socket.isOpen) { socket.close(); return }
         socket.send(TtpJson.strOrEmpty(Ttp.ttp_framing_encode_close_room())) { sent ->
             if (sent) forgetRoomFile()
@@ -517,6 +548,16 @@ class PartyNet(
             // goes. `close()` would cancel it outright.
             socket.closeGracefully()
         }
+    }
+
+    /**
+     * The process is going away for good (the Activity's `onDestroy`), so the
+     * `PeerConnectionFactory` and its native peers go with it. Separate from
+     * [shutdown], which ends a PARTY and must leave the fastlane able to answer
+     * the next one — Android calls `onStop` on every trip to the home screen.
+     */
+    fun release() {
+        fastlane.dispose()
     }
 
     // -- the walk -----------------------------------------------------------
@@ -643,11 +684,13 @@ class PartyNet(
 
             "announce" -> announce()
 
-            // A seat left, was rekeyed or expired. With no fastlane there is no
-            // link to close; the op is still HANDLED rather than falling through to
-            // the unperformable branch, because the walk emits it regardless of
-            // whether this shell has a transport for it.
-            "close-fastlane" -> Unit
+            // A seat left, was rekeyed or expired: its link dies with it. Closing
+            // transport AND Link together is the point — a netcode-only close
+            // would strand a connection still in offer/ICE.
+            "close-fastlane" -> {
+                val idx = (e.opt("peerIndex") as? Number)?.toInt()
+                if (idx != null) fastlane.close(idx)
+            }
 
             "show-reconnect" -> {
                 val seat = e.optJSONObject("seat")
