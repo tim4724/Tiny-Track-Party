@@ -147,8 +147,7 @@ struct RootView: View {
             // starts on, and `ttp_ui_cover` names both — so a cover nested in
             // the race chrome is a cover that is never in the tree when it is
             // wanted. It cost five seconds of bare paper diorama on every cold
-            // launch, invisible in review because the comment about z-order was
-            // true of the ZStack it was in.
+            // launch.
             CoverView(cover: state.cover)
 
             // Inert while hidden — it instruments nothing and draws nothing
