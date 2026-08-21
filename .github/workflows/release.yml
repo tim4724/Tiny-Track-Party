@@ -112,14 +112,16 @@ jobs:
       # Filament's headers and libs, and MATERIAL_VERSION mismatches surface as
       # a material that fails to parse on the box, not as a build error.
       #
-      # ~111 MB installed for both ABIs, plus the host matc.
+      # ~111 MB installed for both ABIs, plus the host matc. That matc is the one
+      # `build.sh -p android` builds for itself, under out/prebuilt-tools-release
+      # — NOT a desktop build's out/cmake-release, which nothing here produces.
       - name: Restore the Filament Android SDK
         id: filament-cache
         uses: actions/cache@v4
         with:
           path: |
             ${{ runner.temp }}/filament/out/android-release
-            ${{ runner.temp }}/filament/out/cmake-release/tools/matc/matc
+            ${{ runner.temp }}/filament/out/prebuilt-tools-release/tools/matc/matc
           key: filament-android-${{ steps.pin.outputs.commit }}
 
       # -S multiview IS NOT OPTIONAL and it is not about the samples: it is the
@@ -128,14 +130,23 @@ jobs:
       # MULTIVIEW engine then fails to parse at runtime. Both ABIs install under
       # ONE root. The android target also builds the host tools, which is where
       # the matc the multiview material set needs comes from.
+      #
+      # CC/CXX ARE NOT OPTIONAL. Filament's CMakeLists rejects GCC outright
+      # ("Detected CXX compiler GNU is unsupported"), and an Ubuntu runner's
+      # /usr/bin/c++ is GCC, so without these the host-tools pass fails in the
+      # first fifteen seconds of what is otherwise an hours-long step.
       - name: Build the Filament Android SDK
         if: steps.filament-cache.outputs.cache-hit != 'true'
         working-directory: ${{ runner.temp }}/filament
+        env:
+          CC: clang
+          CXX: clang++
         run: |
           set -eu
           sudo apt-get update
           sudo apt-get install -y ninja-build clang libc++-dev libc++abi-dev \
-            libglu1-mesa-dev libxi-dev libxcomposite-dev mesa-common-dev
+            libglu1-mesa-dev libxi-dev libxcomposite-dev libxxf86vm-dev \
+            mesa-common-dev
           ./build.sh -i -q armeabi-v7a -S multiview -p android release
           ./build.sh -i -q arm64-v8a   -S multiview -p android release
 

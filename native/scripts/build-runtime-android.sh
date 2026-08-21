@@ -121,6 +121,15 @@ require_sdk_slice() {
 # non-stereo variants inside are byte-for-byte the shared set's shaders, so an
 # APK carrying these renders identically until a stereo view draws.
 MATC="$FILAMENT_SRC/out/cmake-release/tools/matc/matc"
+# TWO PLACES A HOST matc CAN BE, and only one of them is this leg's own doing. A
+# DESKTOP build puts it in out/cmake-release, which is where the web artifact
+# build leaves one; `build.sh -p android` runs its own host-tools pass first (it
+# says "Building tools for split build") and puts that one under
+# out/prebuilt-tools-release. A machine that has only ever built THIS leg — a CI
+# runner, most obviously — therefore has the second and not the first, and the
+# miss is silent: no matc means no multiview material set, and the APK renders
+# every split with the classic path instead.
+[ -x "$MATC" ] || MATC="$FILAMENT_SRC/out/prebuilt-tools-release/tools/matc/matc"
 if [ -x "$MATC" ]; then
   "$NATIVE/scripts/build-materials.sh" "$MATC" "$NATIVE/build/materials-android-mv" \
       opengl mobile multiview
