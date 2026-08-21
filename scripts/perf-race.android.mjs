@@ -104,6 +104,7 @@ export function makeAndroidBackend() {
       setprop('debug.ttp.aa', 0);
       setprop('debug.ttp.hz', 0);
       setprop('debug.ttp.mv', 0);
+      setprop('debug.ttp.perf', 0);
     } catch { /* the box went away; nothing to restore it on */ }
   };
 
@@ -177,6 +178,11 @@ export function makeAndroidBackend() {
       setprop('debug.ttp.scale', arg('pin', 0));
       setprop('debug.ttp.aa', arg('aa', 0));
       setprop('debug.ttp.hz', arg('hz', 0));
+      // The READOUT stays down whatever a previous session left behind. The
+      // scenario benches it (`PerfMonitor.bench`), which logs the line this
+      // parser reads without drawing anything — and drawing it is four Compose
+      // re-measures a second on the very thread being priced.
+      setprop('debug.ttp.perf', 0);
       // Multiview split-screen (`shells/androidtv/CLAUDE.md`). A live path
       // switch, so unlike the feature mask it needs no scene up first. An
       // unflagged arm PINS the classic path (-1, not the shipped 4-cell

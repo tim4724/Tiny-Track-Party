@@ -174,10 +174,9 @@ async function renderShot(page, shot, port) {
   }, shot.players, { timeout: 60000 });
   await page.evaluate(() => document.fonts && document.fonts.ready);
 
-  // Everything on the page that is not the GAME. The perf HUD is on by default in
-  // development; the corner buttons sit on top of the top-right cell's place chip.
+  // Everything on the page that is not the GAME: the corner buttons in particular
+  // sit on top of the top-right cell's place chip.
   await page.evaluate(() => {
-    window.__perf && window.__perf.hide();
     for (const sel of ['#corner-btns', '.dbg-fab', '#music-credit', '#sound-hint', '#toast', '.cam-hint']) {
       for (const node of document.querySelectorAll(sel)) node.style.display = 'none';
     }

@@ -213,10 +213,11 @@ cheap resolution.
 
 ## Measuring frame cost
 
-`render/PerfHud.js` is on by default in development ("P" toggles it) and reports
-real GPU ms from a timer query wrapped around the frame call. `window.__perf` is
-the live and scripted-sweep surface, and **switching the panel off for release is
-gating the `show()` in its constructor** — one line.
+`render/PerfHud.js` is **off until asked for** — `?perf=1` at boot, the "P" key
+at any point, or `window.__perf.show()` — and reports real GPU ms from a timer
+query wrapped around the frame call. `window.__perf` is the live and
+scripted-sweep surface. Both TV shells default the same way and each has its own
+switch (`-ttpPerf 1`, `setprop debug.ttp.perf 1`).
 
 **It measures and draws; it judges nothing.** The ring, the warm-up filter, the
 percentiles, the two rates, the drop and skip counts and the health verdict are
@@ -241,9 +242,15 @@ pumps a burst of frames in one task holds the whole burst, so the hold is as dee
 as the query pool.
 
 **Showing and measuring are separate** (`instrument()`), because the adaptive
-render scale reads `sample()` on a shipped TV where the panel is off. Only the
-DRAWING is gated on visibility; a caller that has changed what a frame costs
-should `reset()` rather than reason about the window.
+render scale reads `sample()` wherever the panel is off — which is the ordinary
+state. What the sample costs is a push into a ring and one timer query, and both
+stay unconditional: a window kept only while a panel is up leaves the scale rule
+deciding a screen's resolution off nothing. What a hidden panel does stop paying
+for is everything only a READER wants — the CPU profile read, the scope's ring,
+the DOM writes and the readout fold. The CPU term follows `watching`, not
+visibility, so `bench()` keeps it with the panel down (`?scenario=bench` below).
+A caller that has changed what a frame costs should `reset()` rather than reason
+about the window.
 
 **`?scenario=bench` is the bench** (`scripts/perf-race.mjs --platform web`): a
 live race on the launch's own field with 1, 2 or 4 autopiloted player seats,

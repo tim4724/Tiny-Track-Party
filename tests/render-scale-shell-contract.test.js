@@ -212,3 +212,48 @@ test('the debug supersample ceiling cannot be reached under automation', () => {
       + '  deciding a television\'s resolution off an empty ring.');
   }
 });
+
+test('no shell puts the panel up on its own, and every shell can be asked to', () => {
+  // TWO HALVES OF ONE DECISION, and the ledger (docs/native-port/shells.md) held
+  // it open for a release because only the first half was ever in doubt: the
+  // readout stays LIVE IN RELEASE — an instrument absent from the build that
+  // ships cannot measure the thing people run — but it is OFF until somebody
+  // asks. A player launching the game is not asking, and neither is a shot rig.
+  //
+  // The pair is what makes it safe. A default-off panel with no switch is the
+  // "built, wired and unreachable" bug; a switch with no default is a black
+  // diagnostic block over the corner of every television.
+  //
+  // Comments stripped, because all six anchors below are prose in these files as
+  // well as code — the argument is written out at each site.
+  const decomment = (src) => src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^[ \t]*(?:\/\/\/?|\*).*$/gm, '');
+
+  // shell -> [the boot file that must NOT switch it on, the switch that must exist]
+  const SWITCHES = {
+    web: [
+      ['public/display/render/PerfHud.js', /this\.show\(\)/],
+      ['public/display/Stage.js', /params\.get\('perf'\)/],       // ?perf=1
+    ],
+    tvos: [
+      ['shells/tvos/TinyTrackParty/App/GameCoordinator.swift', /^\s*display\.perf\.show\(\)/m],
+      ['shells/tvos/TinyTrackParty/Render/PerfOverlay.swift', /forKey: "ttpPerf"/],  // -ttpPerf 1
+    ],
+    androidtv: [
+      ['shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/MainActivity.kt',
+       /PerfMonitor\.show\(\)/],
+      ['shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/PerfDebug.kt',
+       /debug\.ttp\.perf/],                                       // setprop debug.ttp.perf 1
+    ],
+  };
+  for (const [name, [[bootFile, unconditional], [switchFile, asked]]] of Object.entries(SWITCHES)) {
+    assert.doesNotMatch(decomment(read(bootFile)), unconditional,
+      `the ${name} shell shows the perf panel at boot (${bootFile}).\n`
+      + '  Default it off: gate it on the switch this shell already has.');
+    assert.match(decomment(read(switchFile)), asked,
+      `the ${name} shell has no way to ask for the perf panel (${switchFile}).\n`
+      + '  A debug surface that cannot be reached on the device it was written for\n'
+      + '  is not a debug surface. See docs/native-port/shells.md item 3.');
+  }
+});

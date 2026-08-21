@@ -171,8 +171,12 @@ const main = async () => {
   const page = await ctx.newPage();
   page.on('console', (m) => { if (m.type() === 'error') console.error('  [page]', m.text()); });
 
+  // ?perf=1 PUTS THE HUD UP, and this sweep is nothing without it: the panel is
+  // off by default now, and with `?dpr=` pinned the render scale is off too — so
+  // nothing else in the page would ask the monitor to measure, and every arm
+  // would read as null cost.
   const url = `http://localhost:${PORT}/?scenario=${SCENARIO}&players=${PLAYERS}`
-      + `&track=${TRACK}&seed=1&dpr=${DPR}&gate=1`;
+      + `&track=${TRACK}&seed=1&dpr=${DPR}&gate=1&perf=1`;
   console.log(`# ${url}  rounds=${ROUNDS}`);
   await page.goto(url);
   await page.waitForFunction(() => window.__sceneReady, null, { timeout: 60000 });

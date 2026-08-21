@@ -3,9 +3,10 @@ package games.couchpad.tinytrack
 import android.util.Log
 
 /**
- * Four knobs, driven from `adb setprop`, for measuring this box.
+ * The knobs, driven from `adb setprop`, for measuring this box.
  *
  * ```
+ * adb shell setprop debug.ttp.perf 1         # put the frame-cost readout UP (0/unset = off)
  * adb shell setprop debug.ttp.scale 1.0      # pin the render scale (0 = adaptive)
  * adb shell setprop debug.ttp.features 0x1FFC # TTP_FEAT_* mask (see ttp_display.h)
  * adb shell setprop debug.ttp.aa 1           # put the antialias pass back on
@@ -36,6 +37,8 @@ object PerfDebug {
     /** `ttp_display.h`'s TTP_FEAT_ALL. One source; `tests/feature-bits.test.js` pins this mirror. */
     private const val TTP_FEAT_ALL = 0x1FFC
 
+    /** 0, not -1: the panel really is down at launch, so an unset property is a no-op. */
+    private var lastPerf = 0
     private var lastMask = -1
     private var lastScale = -1.0
     private var lastAa = 0
@@ -44,6 +47,21 @@ object PerfDebug {
 
     /** Read the knobs and apply whatever moved. */
     fun poll(display: DisplayHost) {
+        // THE READOUT ITSELF, which is off until this says otherwise (MainActivity
+        // says why). A property rather than only KEYCODE_INFO for the reason every
+        // knob here is one: it survives a force-stop, so a sweep that relaunches
+        // the app between arms does not have to press anything, and it cannot land
+        // on the wrong side of a toggle it could not read back.
+        //
+        // KEYCODE_INFO still works and is not fought over: this acts on a CHANGE,
+        // so a panel opened by the key stays open until the property itself moves.
+        val perf = getprop("debug.ttp.perf")?.toIntOrNull() ?: 0
+        if (perf != lastPerf) {
+            lastPerf = perf
+            if (perf != 0) PerfMonitor.show() else PerfMonitor.hide()
+            Log.i(TAG, "perf readout -> ${if (perf != 0) "on" else "off"}")
+        }
+
         val mask = getprop("debug.ttp.features")?.let { parseInt(it) } ?: 0
         if (mask != lastMask) {
             lastMask = mask

@@ -67,7 +67,6 @@ async function sweep(page, seed, port) {
     const s = window.__scene, e = window.__engine;
     return !!(s && e && s.cars.size >= n);
   }, SHOT.players, { timeout: 60000 });
-  await page.evaluate(() => window.__perf && window.__perf.hide());
   await page.evaluate((fps) => window.__scene.setFixedStep(1 / fps), FPS);
 
   const stepMs = 1000 / FPS;

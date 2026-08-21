@@ -246,15 +246,16 @@ export class Stage {
     this._canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
     // FIRST child: the HUD overlays are later siblings and paint over it.
     container.insertBefore(this._canvas, container.firstChild);
-    // Frame-cost readout, on by default while the game is in development ("P"
-    // hides it). Hiding stops the DRAWING; whether it keeps MEASURING is the
-    // next line's business. BEFORE the first _sizeCanvas, which is the one place
-    // that tells it the scale the buffer was sized at — a resize is not
-    // guaranteed to follow boot, so a HUD built after it would report that
-    // scale as 1 for the whole session.
+    // Frame-cost readout, OFF until asked for — `?perf=1` here, "P" at any
+    // point, or window.__perf.show(). Hiding stops the DRAWING; whether it keeps
+    // MEASURING is the next line's business. BEFORE the first _sizeCanvas, which
+    // is the one place that tells it the scale the buffer was sized at — a
+    // resize is not guaranteed to follow boot, so a HUD built after it would
+    // report that scale as 1 for the whole session.
     this.perf = new PerfHud(this.container, this._canvas);
+    if (params.get('perf') === '1') this.perf.show();
     // The scale is decided from the perf HUD's own measurements, so it has to
-    // keep measuring with the panel hidden — which is the shipped state.
+    // keep measuring with the panel hidden — which is the ordinary state.
     if (this._dprRequest == null && !automation) this.perf.instrument(true);
     // The operating point the readout judges against, declared at boot and again
     // whenever either half moves (_adaptScale). Nothing is known about the panel
@@ -1357,7 +1358,10 @@ export class Stage {
     this.perf.gpuBegin();
     this.display.frame(dt);
     this.perf.gpuEnd();
-    if (this.perf.visible) this.perf.cpu(this.display.profileTotal());
+    // ONLY WITH A READER. The CPU term feeds the panel and the benched log and
+    // nothing else — the scale rule does not use one — so an unwatched frame
+    // does not pay for the profile read (PerfHud's `watching`).
+    if (this.perf.watching) this.perf.cpu(this.display.profileTotal());
   }
 
   // Tail of every iteration: idle if asked, else queue the next frame.

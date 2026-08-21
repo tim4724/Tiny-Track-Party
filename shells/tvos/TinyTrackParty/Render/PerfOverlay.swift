@@ -35,15 +35,17 @@ import SwiftUI
 /// back to the present interval's p95, so a plausible substitute would silently
 /// move the bar.
 ///
-/// ON DURING DEVELOPMENT, exactly as the web's is. `GameCoordinator.boot()`
-/// calls `show()`, and that one line is what to delete for release — everything
-/// below is inert while hidden, `record` returning before it touches the perf
-/// ABI at all. There is deliberately no hide and no toggle: every button this
-/// shell can reach on the Siri Remote is already spoken for (Menu walks back,
-/// Play/Pause is the pause, select and the d-pad belong to the focus chain), so
-/// a debug toggle could only be built by taking one of them off a player. The
-/// web's "P" key and Android's KEYCODE_INFO cost their platforms nothing; here
-/// the switch is the boot line.
+/// OFF UNTIL ASKED FOR, as the web's and Android's are. `-ttpPerf 1` at launch
+/// is the switch ([enabledAtLaunch]) and `GameCoordinator.boot()` reads it;
+/// everything below is inert while hidden, and the CPU term is not even sampled.
+///
+/// A LAUNCH ARGUMENT AND NOT A BUTTON, which is this platform's constraint and
+/// not a preference: every button the Siri Remote can reach is already spoken
+/// for (Menu walks back, Play/Pause is the pause, select and the d-pad belong to
+/// the focus chain), so a toggle could only be built by taking one off a player.
+/// It is the same knob shape as `-ttpRenderScale` and `-ttpFeatures`
+/// (`DisplayHost`), it survives a force-stop the way a keypress would not, and
+/// the bench turns the panel on for itself ([bench]) without being asked.
 @MainActor
 final class PerfMonitor: ObservableObject {
 
@@ -53,6 +55,16 @@ final class PerfMonitor: ObservableObject {
     /// The bench contract's cadence — one `TtpPerf <json>` line a second, the
     /// same on all three shells so one parser reads all three logs.
     private static let logInterval = 1.0
+
+    /// `-ttpPerf 1`: put the readout up for this launch. Absent means off, which
+    /// is what a player gets — a television is not a browser with a console, and
+    /// a diagnostic block over the corner of the picture is the whole of what
+    /// they would see of it.
+    ///
+    /// LIVE IN RELEASE ON PURPOSE, exactly as Android's `debug.ttp.*` knobs are:
+    /// the build that ships is the only one with the real optimisation level, and
+    /// an instrument compiled out of it cannot measure the thing people run.
+    static let enabledAtLaunch = UserDefaults.standard.bool(forKey: "ttpPerf")
 
     @Published private(set) var visible = false
     @Published private(set) var lines: [String] = []

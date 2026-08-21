@@ -10,7 +10,7 @@
 //   THE START BUTTON     invented, because "a TV shell needs an affordance"
 //   THE CAR PICTURE      a hand-drawn silhouette, because the real ones are "3.5 MB"
 //   THE GHOST BUTTON     an ink-filled primary, because the kit had no white variant
-//   THE PERF READOUT     built, wired, and switched off
+//   THE PERF READOUT     built, wired, and unreachable
 //
 // SOURCE CHECKS, because all four are about what a shell draws and there is no
 // ABI in between to ask.
@@ -110,15 +110,21 @@ test('the pause card\'s second button is a GHOST, not an ink slab', () => {
 
 // ---- the perf readout -----------------------------------------------------
 
-test('the frame-cost overlay is on during development, as the web\'s is', () => {
-  const web = readFileSync(path.join(ROOT, 'public/display/render/PerfHud.js'), 'utf8');
-  assert.match(web, /this\.show\(\)/, 'premise: the web HUD shows itself at construction');
-
+test('the frame-cost overlay is reachable on the device it was written for', () => {
+  // The panel is OFF by default on all three shells (that contract is
+  // tests/render-scale-shell-contract.test.js's). What is tvOS-specific is that
+  // this shell has no key to press: the Siri Remote's buttons are all spoken
+  // for, so the switch is a LAUNCH ARGUMENT, and a debug surface with no way to
+  // ask for it is the "built, wired and inert" bug this file's fourth heading
+  // names.
   const src = shell('shells/tvos/TinyTrackParty/App/GameCoordinator.swift');
   if (src === null) return;
-  assert.match(src, /display\.perf\.show\(\)/,
-    'the overlay is built, wired and inert — a debug surface that cannot be seen '
-    + 'on the device it was written for is not a debug surface');
+  assert.match(src, /if PerfMonitor\.enabledAtLaunch \{ display\.perf\.show\(\) \}/,
+    'boot neither shows the overlay unconditionally nor leaves it unreachable');
+
+  const overlay = shell('shells/tvos/TinyTrackParty/Render/PerfOverlay.swift');
+  assert.match(overlay, /forKey: "ttpPerf"/,
+    '-ttpPerf is the switch; it is read the way -ttpRenderScale and -ttpFeatures are');
 });
 
 // ---- the QR ---------------------------------------------------------------

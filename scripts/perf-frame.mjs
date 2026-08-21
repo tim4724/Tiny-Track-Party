@@ -184,6 +184,10 @@ async function measure(dev, players) {
     setprop('debug.ttp.scale', PIN);
     setprop('debug.ttp.aa', 0);
     setprop('debug.ttp.hz', HZ);
+    // The readout stays DOWN whatever a previous session left set: the bench
+    // logs its line either way, and drawing the panel is Compose work on the one
+    // thread this script exists to map.
+    setprop('debug.ttp.perf', 0);
     adb('shell', 'am', 'start', '-S', '-n', ACTIVITY,
       '--es', EXTRA_SCENARIO, SCENARIO, '--es', EXTRA_TRACK, TRACK,
       '--ei', EXTRA_PLAYERS, String(players));
@@ -421,7 +425,7 @@ const main = async () => {
     // RELEASE — a leftover mask turns up in a shipping build's picture with
     // nothing to explain it.
     try {
-      for (const k of ['features', 'scale', 'aa', 'hz']) dev.setprop(`debug.ttp.${k}`, 0);
+      for (const k of ['features', 'scale', 'aa', 'hz', 'perf']) dev.setprop(`debug.ttp.${k}`, 0);
     } catch { /* the box went away; nothing to restore it on */ }
   };
   process.once('SIGINT', () => { restore(); process.exit(130); });

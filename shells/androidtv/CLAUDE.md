@@ -325,11 +325,12 @@ adb shell atrace -b 16384 -a games.couchpad.tinytrack -t 30 \
 
 Read the frame CADENCE out of the gaps between `Choreographer#doFrame` slices,
 not out of the slice durations — that is the same present-versus-callback
-distinction the trap below is about. **Hide the perf readout first** (`adb shell
-input keyevent 165`): it is four lines of Compose `BasicText` re-measured at 4 Hz,
-which is main-thread work of the same order as anything being hunted, and leaving
-it up will hand you its cost as the finding. It is on by DEFAULT (every build
-except a `Scenarios` run), so hiding it is a step you take, not one you forget.
+distinction the trap below is about. **Leave the perf readout DOWN** — it is off
+unless a previous session asked for it (`setprop debug.ttp.perf 1` or keyevent
+165), and it is four lines of Compose `BasicText` re-measured at 4 Hz, which is
+main-thread work of the same order as anything being hunted: up, it hands you its
+own cost as the finding. Clear the property between runs the way every other knob
+is cleared.
 
 `docs/perf/androidtv-frame-map.md` is the last full reading — dated, stamped with
 its build and its panel, and kept out of this file because a number here rots
@@ -392,7 +393,8 @@ meant logged; `perf-frame.mjs` does that, and gives every arm its own launch so
 no arm can straddle a finish line in the first place.
 
 **MEASURE THE BUILD THAT SHIPS.** `PerfDebug`'s knobs — and the perf readout
-itself, which now shows in RELEASE too — are deliberately NOT debug-gated. Gated (as they once were), they are inert AND SILENT in release: a
+itself, which is LIVE in release, though off until asked for — are deliberately
+NOT debug-gated. Gated (as they once were), they are inert AND SILENT in release: a
 sweep runs, logs nothing about it, and reports the free-running scaler's numbers
 as pinned arms — and the shipping configuration cannot be ablated at all.
 Checked once on release at a pinned scale: the GPU-bound half of this section

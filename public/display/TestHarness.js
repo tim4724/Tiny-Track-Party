@@ -115,8 +115,11 @@ function bareSession(field, track, opts) {
 // to be left running.
 function startBenchReadout(scene, track) {
   scene.perf.track = track.trackId;   // GPU cost is per track as well as per pixel
-  scene.perf.instrument(true);        // "P" may hide the panel; the bench still measures
-  scene.perf.reset();                 // the frames spent standing the scene up are not the bench's
+  // MEASURE WITHOUT DRAWING: the panel is off by default and stays off here, but
+  // the window has to keep the CPU term the line below prints — which follows a
+  // READER, not visibility (PerfHud.bench). It also drops the frames spent
+  // standing the scene up, which are not the bench's.
+  scene.perf.bench();
   setInterval(() => {
     const line = scene.perf.readout();
     if (line) console.log('TtpPerf ' + line);

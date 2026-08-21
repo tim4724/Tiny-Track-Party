@@ -119,6 +119,13 @@ Three properties of that surface matter more than the list:
    it is what made them keep windows of their own. Gate the DRAWING and the
    per-phase profile read; never the sample.
 
+   **THE PANEL ITSELF IS OFF UNTIL ASKED FOR, and the switch is a knob a
+   developer can reach on the shipped build** — `?perf=1` or "P" on the web,
+   `-ttpPerf 1` on tvOS, `setprop debug.ttp.perf 1` or `KEYCODE_INFO` on Android.
+   Live in release, off by default: those are two decisions and only the first
+   one is about being able to measure. A player gets no diagnostic block, and a
+   shot rig has nothing to remember to hide.
+
    `intervalMs` is a TICK ("drawn or not"), so the readout's `frame` block is
    tick intervals and `present` is the gaps between the ticks that actually
    reached the panel. They are ONE series on a browser's rAF — a late present
@@ -388,24 +395,6 @@ Three properties of that surface matter more than the list:
 
 Each is a real item, not a simplification; the settled reasoning behind the two
 look items is in `shells/androidtv/CLAUDE.md` (Look).
-
-- **A decision about the perf readout before a player sees one.** Both TV shells
-  boot with the frame-cost panel VISIBLE in release, and the web does not: its
-  `PerfHud` constructs hidden and the "P" key shows it. The argument for release
-  is real and is the render-scale commit's — two of that work's bugs were
-  invisible on a debug build, and a shell whose instrument is absent from the
-  build that ships cannot be measured. But "live in release" and "on by default"
-  are two choices, and only the first one needs making: `PerfDebug`'s knobs are
-  live in release and INERT until an `adb setprop` asks for them, which is the
-  shape this wants. As it stands a player who launches the app gets a black
-  diagnostic block over the corner of the television and no reason to guess that
-  `KEYCODE_INFO` removes it. Default it off and leave the key; the gallery's
-  Scenarios suppression then has nothing left to special-case, and the tvOS
-  column stops carrying four lines of green over every race shot it takes.
-  **This is now SAFE to do**, which it was not while both TV shells fed the
-  monitor only when the panel was up: turning the readout off would have taken
-  the render scale's window with it. The sample is unconditional on all three
-  now, and only the drawing is gated.
 
 - **The mute toggle** — the web's corner button and the host phone's Sound row
   have no counterpart, and the mix has no muted state to honour; a TV's own mute

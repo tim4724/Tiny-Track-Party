@@ -9,18 +9,25 @@
 // adding a number to this file. What is left here is the half a shell owes:
 // MEASURING (the GPU timer query, which is genuinely web-only) and DRAWING.
 //
-// ON BY DEFAULT while the game is in development: the frame budget is something
-// to keep under your eye, not something to remember to switch on. Turning the
-// PANEL off for release is a one-line change here — gate the show() below on
-// whatever release signal exists at that point.
+// OFF UNTIL ASKED FOR, on this shell and on both televisions: a player who
+// launches the game gets no diagnostic block over the corner of the picture,
+// and every capture rig stops having to remember to hide one. Three ways to ask
+// for it here, all equivalent — `?perf=1` at boot (Stage), the "P" key, and
+// window.__perf.show() from a console or a script.
 //
 // SHOWING AND MEASURING ARE SEPARATE (instrument()). The hide path stops every
 // canvas draw and DOM write, but a hidden HUD still samples and still runs its
 // timer query for a caller that reads sample() rather than looking at it —
-// which the adaptive render scale (Stage) does on a shipped TV, where this
-// panel is off. So gating show() no longer makes the class inert, and must not:
-// the release build is exactly the case the scale controller has to keep
-// working in.
+// which the adaptive render scale (Stage) does on every shipped surface, where
+// this panel is off. So the panel defaulting off does not make the class inert,
+// and must not: that IS the case the scale controller has to keep working in.
+//
+// WHAT A HIDDEN PANEL STOPS PAYING FOR is everything only a reader wants: the
+// CPU profile read (Stage gates it on `watching`), the scope's frame ring, the
+// DOM writes and the readout fold. What it keeps paying is the per-frame sample
+// and the timer query, because the scale rule reads both. `bench()` is the
+// third state — nobody is looking, but something is READING the readout — and
+// it is what the CPU term follows, not visibility.
 //
 // THE GPU TIMER RESOLVES LATE, and the monitor behind ttp_perf_sample takes a
 // frame once and accepts no amendment afterwards. So a frame is HELD here until
@@ -112,6 +119,11 @@ export class PerfHud {
     bindPerf();
     this._canvas = canvas;
     this._visible = false;
+    // Something is READING the readout without looking at the panel — the bench
+    // scenario (TestHarness), which logs the same bytes the panel draws. It is
+    // what the CPU term follows: with nobody watching there is no reader for it
+    // at all, and the scale rule does not use one.
+    this._benching = false;
     // MEASURING is not the same as SHOWING, and the difference is the whole of
     // what the adaptive render scale (Stage) needs: it decides from the GPU
     // timer on a shipped TV, where this panel is off. Measuring costs a sample
@@ -164,7 +176,6 @@ export class PerfHud {
     this._ctx = scope.getContext('2d');
     this._ctx.scale(2, 2);
 
-    this.show();
     window.addEventListener('keydown', (e) => {
       if (e.key === 'p' || e.key === 'P') this.toggle();
     });
@@ -176,6 +187,21 @@ export class PerfHud {
   hide() { this._setVisible(false); }
   toggle() { this._setVisible(!this._visible); }
   get visible() { return this._visible; }
+
+  // Is anyone reading the readout — by looking at it, or by logging it? The CPU
+  // sample is fed for exactly this, and for nothing else (Stage). The GPU one is
+  // NOT: the scale rule reads that whether or not a reader exists.
+  get watching() { return this._visible || this._benching; }
+
+  // A BENCHED run: keep the window fed and keep the CPU term in it, with the
+  // panel down. The panel is four DOM writes and a canvas at 4 Hz on the same
+  // thread the bench is pricing, so a run that drew it would be measuring the
+  // instrument (Android's PerfMonitor.bench makes the same trade).
+  bench() {
+    this._benching = true;
+    this.instrument(true);
+    this.reset();
+  }
 
   // Is the window actually being fed? A caller that READS the readout has to be
   // able to tell "no frames yet" from "no frames coming" — the countdown gate
@@ -310,6 +336,10 @@ export class PerfHud {
       if (f.waiting && this._hold.length <= HOLD_MAX) break;
       this._hold.shift();
       if (perf) perf.sample(f.t, f.interval, f.presented ? 1 : 0, f.cpu, f.gpu);
+      // The ring is the SCOPE's, and nothing else reads it: kept only while
+      // there is a scope being drawn. (The sample above is unconditional and
+      // must stay so — it is the rule's window, not the panel's.)
+      if (!this._visible) continue;
       this._ring.push(f);
       if (this._ring.length > STRIP) this._ring.shift();
     }

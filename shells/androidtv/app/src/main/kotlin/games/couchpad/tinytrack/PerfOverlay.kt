@@ -49,10 +49,28 @@ import java.util.Locale
  * and `atrace` remains the instrument for that half, and for anything sub-frame
  * (shells/androidtv/CLAUDE.md).
  *
- * ON BY DEFAULT (every build but a `Scenarios` run) and toggled with KEYCODE_INFO
- * — which this box's remote does not carry, so in practice it is
- * `adb shell input keyevent 165`. Everything is inert while hidden AND unbenched:
- * [record] returns before it touches the profile ABI.
+ * OFF UNTIL ASKED FOR, by either `adb shell setprop debug.ttp.perf 1` — polled
+ * live by [PerfDebug] — or KEYCODE_INFO, which this box's remote does not carry,
+ * so in practice `adb shell input keyevent 165`. A player launching the app was
+ * getting a black diagnostic block over the corner of the television with no
+ * reason to guess which button removes it, and a `Scenarios` run had to suppress
+ * it for every screenshot.
+ *
+ * LIVE IN RELEASE, STILL, which is a SEPARATE decision and the one that matters:
+ * gated to debug builds this would be absent from the only build with R8 and the
+ * real optimisation level, so the configuration you can pin and ablate would be
+ * the one you cannot see the numbers for (the same argument [PerfDebug]'s knobs
+ * make). "Live in release" and "on by default" were two choices; only the first
+ * had to be made.
+ *
+ * IT PERTURBS WHAT IT MEASURES, mildly and knowably, which is why it is a knob
+ * and not a fixture: the text republishes at 4 Hz ([TEXT_INTERVAL_MS]) and
+ * Compose shares this shell's one frame thread, so four recompositions a second
+ * land inside the budget being reported.
+ * Everything a READER wants is inert while hidden AND unbenched: [record] does
+ * not touch the profile ABI, keep a window of its own or fold a readout. What it
+ * still does unconditionally is `ttp_perf_sample`, because the render scale
+ * steers off that same window.
  *
  * MAIN THREAD ONLY, like everything that touches a `ttp_*`.
  */

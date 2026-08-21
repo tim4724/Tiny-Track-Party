@@ -157,10 +157,6 @@ async function main() {
     // isn't a fallback.
     await page.evaluate(() => document.fonts && document.fonts.ready);
 
-    // The perf HUD is ON by default in development (render/PerfHud.js), and this is
-    // a hero shot: hide it so the frame-cost readout doesn't end up in the README.
-    await page.evaluate(() => window.__perf && window.__perf.hide());
-
     // Page chrome that is not the GAME: the fullscreen/pause corner buttons (which
     // sit ON TOP of the top-right cell's place chip — in a 2x2 grid the expand icon
     // lands square on "1st"), the dev panel's gear FAB, and the two bottom-left
