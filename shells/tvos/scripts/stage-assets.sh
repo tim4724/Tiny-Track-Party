@@ -182,4 +182,109 @@ cat > "$TVOS/Generated/Assets.xcassets/Contents.json" <<'JSON'
 }
 JSON
 
+# THE BRAND ASSETS: the app icon and the two top-shelf banners. This shell had
+# none of it, so the home screen drew the platform placeholder.
+#
+# A tvOS app icon is not a picture, it is a STACK. The system separates the
+# layers as focus moves across the icon, and that parallax is the entire reason
+# the format exists — a one-layer stack is legal and looks dead next to every
+# other icon on the shelf. So the same composition the square icon shows flat is
+# baked as three: paper behind, grass between, car in front. It is also WIDE
+# (5:3), which is why it cannot be the square icon resized.
+#
+# `role` is what binds each entry to a slot; the sizes are the platform's and
+# are not ours to choose. Names carry spaces because that is what Xcode writes
+# and what every example in the documentation shows.
+BRAND="$TVOS/Generated/Assets.xcassets/Brand Assets.brandassets"
+TVSRC="$ROOT/public/assets/brand/tv"
+rm -rf "$BRAND"
+mkdir -p "$BRAND"
+cat > "$BRAND/Contents.json" <<'JSON'
+{
+  "assets" : [
+    { "filename" : "App Icon - App Store.imagestack", "idiom" : "tv",
+      "role" : "primary-app-icon", "size" : "1280x768" },
+    { "filename" : "App Icon.imagestack", "idiom" : "tv",
+      "role" : "primary-app-icon", "size" : "400x240" },
+    { "filename" : "Top Shelf Image Wide.imageset", "idiom" : "tv",
+      "role" : "top-shelf-image-wide", "size" : "2320x720" },
+    { "filename" : "Top Shelf Image.imageset", "idiom" : "tv",
+      "role" : "top-shelf-image", "size" : "1920x720" }
+  ],
+  "info" : { "author" : "xcode", "version" : 1 }
+}
+JSON
+
+# One layer of a stack: a .imagestacklayer wrapping a Content.imageset. $4 is
+# the @2x file and is optional — the App Store icon is 1x only.
+tv_layer() {  # $1 stack dir, $2 layer name, $3 1x png, $4 2x png (optional)
+  local dir="$1/$2.imagestacklayer"
+  mkdir -p "$dir/Content.imageset"
+  echo '{ "info" : { "author" : "xcode", "version" : 1 } }' > "$dir/Contents.json"
+  cp "$TVSRC/$3" "$dir/Content.imageset/$3"
+  if [ -n "${4:-}" ]; then
+    cp "$TVSRC/$4" "$dir/Content.imageset/$4"
+    cat > "$dir/Content.imageset/Contents.json" <<JSON
+{
+  "images" : [
+    { "filename" : "$3", "idiom" : "tv", "scale" : "1x" },
+    { "filename" : "$4", "idiom" : "tv", "scale" : "2x" }
+  ],
+  "info" : { "author" : "xcode", "version" : 1 }
+}
+JSON
+  else
+    cat > "$dir/Content.imageset/Contents.json" <<JSON
+{
+  "images" : [ { "filename" : "$3", "idiom" : "tv", "scale" : "1x" } ],
+  "info" : { "author" : "xcode", "version" : 1 }
+}
+JSON
+  fi
+}
+
+# FRONT FIRST. The layer order in this list is front-to-back, so a reversed one
+# buries the car behind the paper and the icon renders as an empty field.
+tv_stack() {  # $1 stack dir
+  mkdir -p "$1"
+  cat > "$1/Contents.json" <<'JSON'
+{
+  "layers" : [
+    { "filename" : "Front.imagestacklayer" },
+    { "filename" : "Middle.imagestacklayer" },
+    { "filename" : "Back.imagestacklayer" }
+  ],
+  "info" : { "author" : "xcode", "version" : 1 }
+}
+JSON
+}
+
+tv_stack "$BRAND/App Icon - App Store.imagestack"
+tv_layer "$BRAND/App Icon - App Store.imagestack" Back   icon-store-back.png
+tv_layer "$BRAND/App Icon - App Store.imagestack" Middle icon-store-middle.png
+tv_layer "$BRAND/App Icon - App Store.imagestack" Front  icon-store-front.png
+
+tv_stack "$BRAND/App Icon.imagestack"
+tv_layer "$BRAND/App Icon.imagestack" Back   icon-back.png   'icon-back@2x.png'
+tv_layer "$BRAND/App Icon.imagestack" Middle icon-middle.png 'icon-middle@2x.png'
+tv_layer "$BRAND/App Icon.imagestack" Front  icon-front.png  'icon-front@2x.png'
+
+tv_shelf() {  # $1 set name, $2 1x png, $3 2x png
+  local dir="$BRAND/$1.imageset"
+  mkdir -p "$dir"
+  cp "$TVSRC/$2" "$TVSRC/$3" "$dir/"
+  cat > "$dir/Contents.json" <<JSON
+{
+  "images" : [
+    { "filename" : "$2", "idiom" : "tv", "scale" : "1x" },
+    { "filename" : "$3", "idiom" : "tv", "scale" : "2x" }
+  ],
+  "info" : { "author" : "xcode", "version" : 1 }
+}
+JSON
+}
+
+tv_shelf "Top Shelf Image" topshelf.png 'topshelf@2x.png'
+tv_shelf "Top Shelf Image Wide" topshelf-wide.png 'topshelf-wide@2x.png'
+
 say "$(find "$OUT" -type f | wc -l | tr -d ' ') files, $(du -sh "$OUT" | cut -f1) -> Generated/assets"

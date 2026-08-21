@@ -144,6 +144,12 @@ RES="$SHELL_DIR/app/src/main/res/drawable-nodpi"
 mkdir -p "$RES"
 cp "$ROOT/public/assets/brand/wordmark.png" "$RES/"
 cp "$ROOT/public/assets/brand/banner.png" "$RES/"
+# The APP ICON, square, and separate from the banner on purpose: `android:icon`
+# pointed at the 320x180 tile, so every square slot the platform has — settings,
+# the app list, notifications — got a letterboxed banner. RENAMED to match the
+# manifest's `@drawable/app_icon`: `icon` alone is a legal resource name but says
+# nothing next to the four other bakes landing in this directory.
+cp "$ROOT/public/assets/brand/icon.png" "$RES/app_icon.png"
 # The system splash's icon. Square and laid out to survive the CIRCULAR MASK the
 # platform applies to it — see the bake, which sizes the mark to the inscribed
 # circle rather than to the canvas.

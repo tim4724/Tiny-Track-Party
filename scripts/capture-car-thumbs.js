@@ -31,7 +31,12 @@
 // Flags: --name (one GLB basename, else all roster), --frames (24), --size (256
 // final px/frame WIDTH), --aspect (1.25 = 5:4, w/h), --yaw/--pitch (deg),
 // --margin (sphere-fit slack), --bias (look-at nudge, frame heights up), --port,
-// --headed.
+// --headed, --out.
+//
+// --out writes the HERO STILL ALONE to one named path and skips the strip, which
+// is how the brand car is baked — a lobby thumbnail and a brand hero want the
+// same renderer at different angles, not two harnesses. See the command in
+// scripts/bake-wordmark.mjs, which consumes what it produces.
 
 const http = require('http');
 const path = require('path');
@@ -78,6 +83,16 @@ const PITCH = args.pitch !== undefined ? parseFloat(args.pitch) : 23; // look-do
 const MARGIN = args.margin !== undefined ? parseFloat(args.margin) : 1.0; // sphere-fit slack
 const PORT = parseInt(args.port, 10) || 4322;
 const OUTDIR = path.resolve(ROOT, 'public/assets/toycar/thumbs');
+// Set only by --out: one named file for the still, and no strip. Resolved against
+// the repo root so the caller can pass a repo-relative path.
+const OUT = args.out ? path.resolve(ROOT, args.out) : null;
+// --out names ONE file, so it can only mean one model. Without --name the loop
+// walks the whole roster and each car overwrites the last, leaving a file that
+// holds whichever one happened to render last and says nothing about it.
+if (OUT && MODELS.length > 1) {
+  console.error('capture-car-thumbs: --out writes one file, so it needs --name');
+  process.exit(1);
+}
 
 function waitForServer(port, timeoutMs = 15000) {
   const deadline = Date.now() + timeoutMs;
@@ -270,10 +285,16 @@ async function main() {
 
       const write = (dataUrl, file) => {
         const b64 = dataUrl.replace(/^data:image\/png;base64,/, '');
-        fs.writeFileSync(path.join(OUTDIR, file), Buffer.from(b64, 'base64'));
+        fs.writeFileSync(file, Buffer.from(b64, 'base64'));
       };
-      write(still, `${name}.png`);
-      write(strip, `${name}.strip.png`);
+      if (OUT) {
+        fs.mkdirSync(path.dirname(OUT), { recursive: true });
+        write(still, OUT);
+        console.log(`Baked ${name} -> ${args.out} (${SIZE}×${HEIGHT})`);
+        continue;
+      }
+      write(still, path.join(OUTDIR, `${name}.png`));
+      write(strip, path.join(OUTDIR, `${name}.strip.png`));
       console.log(`Baked ${name}: ${name}.png (${SIZE}×${HEIGHT}) + ${name}.strip.png (${SIZE * FRAMES}×${HEIGHT})`);
     }
   } finally {
