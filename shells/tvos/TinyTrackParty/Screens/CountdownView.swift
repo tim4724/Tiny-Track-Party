@@ -34,12 +34,23 @@ struct CountdownView: View {
     var body: some View {
         if let text {
             DieCutText(text: text, size: Self.size)
+                // FLATTEN BEFORE ANIMATING, and this line is worth more than it
+                // looks. DieCutText is 17 stacked glyph layers under a shadow
+                // filter, and animating over that re-rasterizes every one of
+                // them per frame — at 4K the compositing that costs lands
+                // OUTSIDE anything the renderer can see, so our GPU timer read
+                // 9 ms of a 16.7 ms budget while the box missed four presents in
+                // five. Measured on an A10X, solo at native 4K: the GO! beat
+                // cost 60 -> 7 fps for exactly the second the fade below ran.
+                // Rasterizing once turns the animation into a texture transform.
+                .drawingGroup()
                 // `#countdown.is-go`: GO! stays up the beat AFTER the start (the
-                // cars are already moving) and fades out over ~1s while growing.
-                // The digits carry no animation on the web and carry none here:
-                // a beat that moves reads as a beat that is still counting.
+                // cars are already moving) and fades out over that ~1s window.
+                // A PLAIN FADE, no grow — the scale was the expensive half and
+                // earned nothing the fade does not; the web dropped it in the
+                // same change. The digits carry no animation at all on any
+                // shell: a beat that moves reads as a beat still counting.
                 .opacity(isGo && goFaded ? 0 : 1)
-                .scaleEffect(isGo && goFaded ? 1.35 : 1)
                 .animation(isGo ? .easeOut(duration: 1) : nil, value: goFaded)
                 .task(id: text) {
                     goFaded = false

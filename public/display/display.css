@@ -508,11 +508,14 @@ html.cam-free #race { pointer-events: none; }
   pointer-events: none;
 }
 /* "GO!" stays up the beat after the start (cars are already moving) and fades
-   out over that ~1s window. Added/removed by onCountdownTick on the n=0 beat. */
+   out over that ~1s window. Added/removed by onCountdownTick on the n=0 beat.
+   A PLAIN FADE, no grow: the scale was the expensive half everywhere the stroke
+   is faked by stamping copies of the glyph (SwiftUI and Compose both do — see
+   CountdownView.swift), and it earned nothing the fade does not. */
 #countdown.is-go { animation: countdown-go 1s ease-out forwards; }
 @keyframes countdown-go {
-  from { opacity: 1; transform: scale(1); }
-  to   { opacity: 0; transform: scale(1.35); }
+  from { opacity: 1; }
+  to   { opacity: 0; }
 }
 
 /* per-viewport (split-screen) label, anchored at each cell's top-left: the
