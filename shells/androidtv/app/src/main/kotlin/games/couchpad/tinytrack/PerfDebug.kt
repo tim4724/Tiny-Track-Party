@@ -47,6 +47,12 @@ object PerfDebug {
             // has to restore the picture, or a sweep that dies mid-run leaves the
             // box showing an empty world with no way back but a reinstall.
             Ttp.ttp_display_debug_features(if (mask == 0) TTP_FEAT_ALL else mask)
+            // WHAT IS BEING MEASURED JUST CHANGED, so the window behind every
+            // number goes with it (`ttp_perf.h`). Without this an arm's first
+            // seconds are a blend of itself and the arm before it, and on a slow
+            // box that ring is three whole seconds deep — the trap
+            // [PerfMonitor.WINDOW_MS] exists for, one level up.
+            PerfMonitor.reset()
             Log.i(TAG, "features -> 0x${Integer.toHexString(if (mask == 0) TTP_FEAT_ALL else mask)}")
         }
 

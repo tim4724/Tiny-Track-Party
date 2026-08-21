@@ -33,33 +33,17 @@ import { execFileSync, spawn } from 'node:child_process';
 
 import { GRID_MS, lineStream } from './perf-race.mjs';
 import { ADB, findTvDevice } from './lib/androidtv-device.mjs';
+import {
+  arg, sleep, pct, phases, ACTIVITY, SCENARIO, EXTRA_SCENARIO, EXTRA_TRACK,
+  EXTRA_PLAYERS, READY_TIMEOUT_MS, FEAT, hex,
+} from './lib/androidtv-bench.mjs';
 
-const PACKAGE = 'games.couchpad.tinytrack';
-const ACTIVITY = `${PACKAGE}/.MainActivity`;
-
-// Scenarios.kt's EXTRA_SCENARIO/EXTRA_TRACK/EXTRA_PLAYERS, and the scenario that
-// is a race rather than a screen. There is no manifest to read them from.
-const SCENARIO = 'bench';
-const EXTRA_SCENARIO = 'ttpScenario';
-const EXTRA_TRACK = 'ttpTrack';
-const EXTRA_PLAYERS = 'ttpPlayers';
-
-/** `ttp_display.h`'s TTP_FEAT_ALL — the un-ablated arm. `tests/feature-bits.test.js` pins it. */
-const TTP_FEAT_ALL = '0x1FFC';
-
-/** A cold launch builds a scene and bakes a shadow map before it says so. */
-const READY_TIMEOUT_MS = 120_000;
+/** The un-ablated arm. `tests/feature-bits.test.js` pins the one mirror behind it. */
+const TTP_FEAT_ALL = hex(FEAT.ALL);
 
 /** The tag every shell prefixes its readout with, and what the shared half reads. */
 const TAG = 'TtpPerf';
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-/** This backend's own flags, exactly as the web one reads its `--port`. */
-const arg = (name, dflt) => {
-  const i = process.argv.indexOf(`--${name}`);
-  return i >= 0 ? process.argv[i + 1] : dflt;
-};
 
 /**
  * A run, with its own state.
@@ -92,6 +76,7 @@ export function makeAndroidBackend() {
   /** The Android-only per-phase spike lines, folded by [report]. */
   const spikes = [];
   const phasemax = [];
+  const phase50 = [];
 
   const adb = (...args) => execFileSync(ADB, ['-s', serial, ...args], { encoding: 'utf8' });
   const setprop = (k, v) => adb('shell', 'setprop', k, String(v));
@@ -153,6 +138,13 @@ export function makeAndroidBackend() {
     // shape only one platform has.
     if (text.startsWith('spike ')) { spikes.push(phases(text)); return; }
     if (text.startsWith('phasemax ')) { phasemax.push(phases(text)); return; }
+    if (text.startsWith('phase50 ')) { phase50.push(phases(text)); return; }
+    // `phase95` is logged too and is deliberately not folded here: this table is
+    // about the TAIL, and the p95 of a window whose worst frame is already on the
+    // line above says nothing a reader of this script came for. Named rather than
+    // left to fall through — `readoutOf` would discard it as prose either way,
+    // but a reader of this switch should not have to know that to be sure.
+    if (text.startsWith('phase95 ')) return;
     lines.push(`${TAG} ${text}`);
   };
 
@@ -230,17 +222,13 @@ export function makeAndroidBackend() {
       }
       lines.end();
       restoreKnobs();
-      report(spikes, phasemax);
+      report(spikes, phasemax, phase50);
     },
   };
 }
 
-/** `name:ms name:ms …` — a COLON, so a `name value` parser cannot read a max as a median. */
-const phases = (line) => Object.fromEntries(
-  [...line.matchAll(/([A-Za-z]+):([\d.]+)/g)].map((m) => [m[1], +m[2]]));
-
 /**
- * The renderer-CPU spike attribution, which has no shared half because it has no
+ * The frame-thread spike attribution, which has no shared half because it has no
  * counterpart in the other two shells: `ttp_display_profile`'s per-section split
  * is this renderer's own, and on this box the frame costs tens of milliseconds
  * and WHICH section holds them is the question. Each `spike` is ONE frame (the
@@ -248,35 +236,50 @@ const phases = (line) => Object.fromEntries(
  * so "top-of-worst" is the share of those frames a phase held; `phasemax` folds
  * each phase's own window maxima, which also catches the second culprit.
  *
- * NOTE WHAT NEITHER THIS NOR THE READOUT CAN SEE: the sim tick, the event drain,
- * the HUD poll and Compose all run on the same thread and are outside every
- * number here. `atrace` is the instrument for that half.
+ * The frame thread's own spans ride the same lines now — `sim`, `slow` and
+ * `other`, and `callback` over all of it (`PerfOverlay.kt`) — so the sim tick and
+ * the HUD poll are no longer outside every number here. COMPOSE still is: it runs
+ * after the callback returns, and `atrace` remains the only instrument for it.
+ * `scripts/perf-frame.mjs` is what maps these properly; this table is the tail.
  */
-function report(spikes, phasemax) {
+function report(spikes, phasemax, phase50) {
   if (!spikes.length) return;
-  const names = [...new Set(spikes.flatMap((o) => Object.keys(o)))].filter((n) => n !== 'total');
+  // THE AGGREGATES ARE NOT PHASES, and leaving them in makes this table say
+  // nothing. `callback` is by construction >= every column inside it, so the
+  // argmax below picks it on essentially every frame: `top-of-worst` reads 100%
+  // callback and 0% everywhere else, and the sort puts the total at the top of a
+  // table whose whole point is which PART held the frame. `total` was excluded
+  // for this reason already; `callback` arrived beside it and was not.
+  const AGGREGATE = new Set(['total', 'callback']);
+  const names = [...new Set(spikes.flatMap((o) => Object.keys(o)))]
+    .filter((n) => !AGGREGATE.has(n));
   const tops = spikes.map((o) => names.reduce((a, n) => ((o[n] ?? 0) > (o[a] ?? 0) ? n : a)));
   const worst = spikes.map((o) => (o.total ?? 0) + (o.build ?? 0));
   const rows = names.map((n) => {
     const xs = phasemax.map((o) => o[n]).filter((v) => v != null);
+    // WHAT A TYPICAL FRAME SPENT HERE, beside what the worst one did. Without it
+    // the table cannot tell a phase that is always expensive from one that spikes
+    // — and those two findings ask for opposite work.
+    const mid = phase50.map((o) => o[n]).filter((v) => v != null);
     return {
       n,
       max: xs.length ? Math.max(...xs) : 0,
       p50: pct(xs, 0.5) ?? 0,
+      typical: pct(mid, 0.5) ?? 0,
       top: Math.round((100 * tops.filter((t) => t === n).length) / tops.length),
     };
   }).sort((a, b) => b.max - a.max);
-  console.log(`\n# renderer-CPU worst-frame p50 ${pct(worst, 0.5)?.toFixed(1)}`
+  console.log(`\n# frame-thread worst-frame p50 ${pct(worst, 0.5)?.toFixed(1)}`
     + ` / max ${Math.max(...worst).toFixed(1)} ms — by phase:`);
   for (const r of rows) {
-    if (r.max < 0.5 && r.top === 0) continue;
-    console.log(`    ${r.n.padEnd(10)} worst ${r.max.toFixed(1).padStart(5)} ms`
+    if (r.max < 0.5 && r.top === 0 && r.typical < 0.5) continue;
+    console.log(`    ${r.n.padEnd(10)} typical ${r.typical.toFixed(1).padStart(5)} ms`
+      + `   worst ${r.max.toFixed(1).padStart(5)} ms`
       + `   p50-of-worst ${r.p50.toFixed(1).padStart(5)} ms`
       + `   top-of-worst ${String(r.top).padStart(3)}%`);
   }
+  console.log('    (`sim`, `slow` and `other` are the frame thread OUTSIDE the renderer.'
+    + ' `total` and `callback` are the two AGGREGATES and are left out of the'
+    + ' attribution above;\n     scripts/perf-frame.mjs is what maps a whole frame.)');
 }
 
-const pct = (xs, q) => {
-  const s = xs.filter((v) => v != null && Number.isFinite(v)).sort((a, b) => a - b);
-  return s.length ? s[Math.min(s.length - 1, Math.floor(s.length * q))] : null;
-};

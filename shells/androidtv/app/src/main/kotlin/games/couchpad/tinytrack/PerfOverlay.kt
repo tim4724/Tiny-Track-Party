@@ -41,10 +41,13 @@ import java.util.Locale
  * question. There is no ABI for that — the profile buffer is this renderer's own —
  * so the fold for it stays here.
  *
- * NOTE WHAT NEITHER HALF CAN SEE: `ttp_display_profile`'s `cpu` is the RENDERER's
- * profile, and the main thread also carries the sim tick, the event drain, the HUD
- * poll and every line of Compose after this callback returns. The instrument for
- * that half is `atrace` (shells/androidtv/CLAUDE.md).
+ * WHAT THIS SEES AND WHAT IT STILL CANNOT. `ttp_display_profile`'s `cpu` is the
+ * RENDERER's alone, so the rest of the frame thread used to fall outside every
+ * number here; [DisplayHost] now measures its own callback and hands the spans
+ * over ([SHELL]), which brings the sim tick and the HUD poll in. COMPOSE IS STILL
+ * OUTSIDE ALL OF IT — it runs after the callback returns and is nobody's span —
+ * and `atrace` remains the instrument for that half, and for anything sub-frame
+ * (shells/androidtv/CLAUDE.md).
  *
  * ON BY DEFAULT (every build but a `Scenarios` run) and toggled with KEYCODE_INFO
  * — which this box's remote does not carry, so in practice it is
@@ -102,6 +105,25 @@ object PerfMonitor {
      */
     private val SHOWN = listOf("cars", "world", "skids", "decalUp", "build",
         "cellRender", "present", "endFrame")
+
+    /**
+     * The FRAME THREAD's own sections, measured by [DisplayHost] and folded here
+     * beside the renderer's, in the order a callback runs them.
+     *
+     * The renderer's profile stops at `ttp_display_frame`, so the sim tick, the
+     * HUD poll and the knob poll — all on this one thread, all inside the same
+     * vsync — were outside every number printed here, and a frame lost in them
+     * read as a healthy renderer and a mystery. `other` is the callback's
+     * remainder (`callback - sim - slow - build - total`), kept as a real
+     * per-frame series rather than a subtraction of three percentiles, which is
+     * not a duration.
+     *
+     * `callback` and `total` are AGGREGATES over the columns beside them, not
+     * phases. Anything folding this table has to leave them out of an
+     * attribution or the total wins every frame — `perf-race.android.mjs` does,
+     * and did not, and the column it exists for read 100% `callback`.
+     */
+    private val SHELL = listOf("sim", "slow", "other", "callback")
 
     var visible by mutableStateOf(false)
         private set
@@ -162,7 +184,8 @@ object PerfMonitor {
      * incomparable with the other two shells' for a while.
      */
     fun record(nowMs: Double, intervalMs: Double, presented: Boolean,
-               cells: Int, width: Int, height: Int, track: String) {
+               cells: Int, width: Int, height: Int, track: String,
+               simMs: Double = 0.0, slowMs: Double = 0.0, callbackMs: Double = 0.0) {
         // MEASUREMENTS ONLY (ttp_perf.h). A skip contributes no cost sample at
         // all: the renderer returns before writing its total, so the profile still
         // holds the last DRAWN frame, and <= 0 means ABSENT rather than free.
@@ -174,7 +197,7 @@ object PerfMonitor {
         // not use one at all. Both `show()` and `bench()` drop the window, so a
         // panel switched on mid-run never displays a stretch missing the term.
         val watching = visible || benching
-        val cpuMs = if (presented && watching) readProfile() else -1.0
+        val cpuMs = if (presented && watching) readProfile(simMs, slowMs, callbackMs) else -1.0
         val gpuMs = if (presented) Ttp.ttp_display_gpu_ms() else -1.0
         Ttp.ttp_perf_sample(nowMs, intervalMs, if (presented) 1 else 0, cpuMs, gpuMs)
         if (presented && watching) { stamps.add(nowMs); trim(nowMs) }
@@ -205,9 +228,10 @@ object PerfMonitor {
     }
 
     /**
-     * The renderer-CPU spike table, LOG-ONLY and at the log's own cadence — the
+     * The frame-thread cost table, LOG-ONLY and at the log's own cadence — the
      * overlay keeps its median split, because a max painted at 4 Hz just
-     * flickers. Two lines per log tick:
+     * flickers. FOUR lines per log tick: two about the window's worst frame, two
+     * about a typical one.
      *
      *  - `spike name:ms ...` — the full per-phase split of the window's WORST
      *    frame, worst by total+build: the same span the `ttp:render` atrace
@@ -216,11 +240,14 @@ object PerfMonitor {
      *    frame", because the phases on it are from ONE frame and sum honestly.
      *  - `phasemax name:ms ...` — each phase's own max over the window, for the
      *    second-worst culprit and for spikes that never top a frame.
+     *  - `phase50` and `phase95 name:ms ...` — what a TYPICAL frame spends per
+     *    phase, which neither line above says and which a map of the frame
+     *    cannot be drawn from either.
      *
      * `name:ms` with a COLON is the vocabulary `scripts/perf-race.android.mjs`
-     * parses back out of the log — its per-phase spike attribution is keyed on
-     * exactly this spelling, and a JSON readout line is told from these by its
-     * leading brace.
+     * and `scripts/perf-frame.mjs` parse back out of the log — their per-phase
+     * folds are keyed on exactly this spelling, and a JSON readout line is told
+     * from these by its leading brace.
      */
     private fun logSpikes() {
         val n = names ?: return
@@ -233,11 +260,32 @@ object PerfMonitor {
             val v = tot[i] + (build?.getOrNull(i) ?: 0.0)
             if (v > wv) { wv = v; wi = i }
         }
-        val cols = n.filter { !sections[it].isNullOrEmpty() }
+        val cols = (n + SHELL).filter { !sections[it].isNullOrEmpty() }
         Log.i(TAG, "spike " + cols.joinToString(" ") {
             "$it:${fmt(sections[it]?.getOrNull(wi) ?: 0.0)}" })
         Log.i(TAG, "phasemax " + cols.joinToString(" ") {
             "$it:${fmt(sections[it]?.maxOrNull() ?: 0.0)}" })
+        // WHAT A TYPICAL FRAME SPENDS, which the two lines above deliberately do
+        // not say: they are the window's WORST frame and each phase's own worst,
+        // and a map of where a frame's time goes cannot be drawn from either.
+        // Same `name:ms` vocabulary, so one parser reads all four.
+        Log.i(TAG, "phase50 " + cols.joinToString(" ") {
+            "$it:${fmt(pct(sections[it], 0.5))}" })
+        Log.i(TAG, "phase95 " + cols.joinToString(" ") {
+            "$it:${fmt(pct(sections[it], 0.95))}" })
+    }
+
+    /**
+     * One column's percentile over the window, 0 for a series nothing filled.
+     *
+     * A percentile computed HERE, against this class's own "the percentiles are
+     * `ttp_perf.h`'s" — and for the same reason the split above is this file's:
+     * the per-section series has no ABI, so there is nothing shared to defer to.
+     */
+    private fun pct(xs: List<Double>?, q: Double): Double {
+        if (xs.isNullOrEmpty()) return 0.0
+        val s = xs.sorted()
+        return s[minOf(s.size - 1, (s.size * q).toInt())]
     }
 
     /**
@@ -257,7 +305,7 @@ object PerfMonitor {
      * The frame's per-section split into [sections], and its `total` back as the
      * cpu millisecond the fold takes. -1 is ABSENT, which is not zero.
      */
-    private fun readProfile(): Double {
+    private fun readProfile(simMs: Double, slowMs: Double, callbackMs: Double): Double {
         val buf = Ttp.ttp_display_profile()
         if (buf == null) {
             for (v in sections.values) v.add(0.0)   // keep the series parallel
@@ -276,6 +324,16 @@ object PerfMonitor {
             // definition one the median display had no reason to show.
             sections.getOrPut(n[i]) { ArrayList(WINDOW) }.add(ms)
         }
+        // The frame thread's own split, appended in the same pass so every series
+        // is over the same frames — [trim] cuts them all to one length and a
+        // median over one column has to mean the same frames as a median over
+        // the next.
+        val render = (if (total > 0) total else 0.0) + (sections["build"]?.lastOrNull() ?: 0.0)
+        sections.getOrPut("sim") { ArrayList(WINDOW) }.add(simMs)
+        sections.getOrPut("slow") { ArrayList(WINDOW) }.add(slowMs)
+        sections.getOrPut("other") { ArrayList(WINDOW) }
+            .add(maxOf(0.0, callbackMs - simMs - slowMs - render))
+        sections.getOrPut("callback") { ArrayList(WINDOW) }.add(callbackMs)
         return total
     }
 

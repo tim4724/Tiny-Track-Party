@@ -293,6 +293,12 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
             override fun doFrame(frameTimeNanos: Long) {
                 Choreographer.getInstance().postFrameCallback(this)
                 if (!hasSurface) return
+                // THE CALLBACK'S OWN CLOCK, beside the three `ttp:` markers below
+                // and for the same reason: the renderer's profile stops at
+                // `ttp_display_frame`, so every other step on this thread is
+                // outside it. atrace can see them in a capture; these three spans
+                // put the same split in the READOUT, where a sweep can fold it.
+                val tCallback = System.nanoTime()
                 // THE READOUT'S CADENCE: elapsed since the PREVIOUS TICK, drawn
                 // or not (`ttp_perf.h`), unclamped — `dt` below is clamped, so a
                 // tick that spanned three budgets would report as one inside the
@@ -321,20 +327,23 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
                 // the COSMETIC clock only (box bob, cloud drift, skid decay,
                 // camera damping), never the sim, which ttp_update owns.
                 //
-                // THE THREE `ttp:` MARKERS BELOW SPLIT THIS CALLBACK, and they are
-                // the instrument [PerfMonitor] cannot be. Its `cpu` is the
-                // RENDERER's own profile, so everything else on this thread — the
-                // sim tick, the event drain, the HUD poll, and every line of Compose
-                // that runs after we return — is outside every number it prints. A
-                // frame lost up here reads there as a healthy GPU and a mystery.
-                // With these, one `atrace ... -a <pkg> gfx view` capture attributes
-                // a dropped frame to a phase: `ttp:render` against `ttp:sim` against
-                // `ttp:slowTick` against Compose's own `Recomposer:*`/`traversal`.
-                // That is how the item-box stutter was found — a cold `SoundPool.play`
-                // inside `ttp:sim` — and nothing cheaper could have seen it.
+                // THE THREE `ttp:` MARKERS BELOW SPLIT THIS CALLBACK, and they do
+                // what the spans above cannot. The spans put this split in the
+                // READOUT, where a script folds it; the markers put it on a
+                // TIMELINE, where one `atrace ... -a <pkg> gfx view` capture places
+                // a dropped frame against Compose's own `Recomposer:*`/`traversal`
+                // — and Compose, which runs after we return, is the half no span
+                // here reaches. That is how the item-box stutter was found (a cold
+                // `SoundPool.play` inside `ttp:sim`), and nothing cheaper could
+                // have seen it.
+                val tSim = System.nanoTime()
                 Trace.beginSection("ttp:sim")
                 onFrame?.invoke(dt)
                 Trace.endSection()
+                // FROM THE MARKER, not from the top of the callback: the harness
+                // labels this row `ttp_update`, and the cadence arithmetic above is
+                // not that. It lands in `other`, which is where it belongs.
+                val simNs = System.nanoTime() - tSim
                 // A CHOREOGRAPHER CALLBACK IS NOT A PRESENT, and everything that
                 // measures this platform hangs off that distinction. Filament's
                 // beginFrame declines when the buffer queue is still full — the GPU
@@ -400,20 +409,32 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
                     pendingDt = 0.0
                     if (presented) framesPresented++
                 }
+                // The knob poll and the pacing declaration are inside the SPAN
+                // though outside the marker: they are binder traffic on the frame
+                // thread at the same rate as the HUD, and a map of the callback
+                // that leaves them out has to explain a gap.
+                var slowNs = 0L
                 if (frameTimeNanos - lastSlowTickNanos >= HUD_TICK_NANOS) {
                     lastSlowTickNanos = frameTimeNanos
+                    val tSlow = System.nanoTime()
                     Trace.beginSection("ttp:slowTick")
                     onSlowTick?.invoke()
                     Trace.endSection()
                     PerfDebug.poll(this@DisplayHost)
                     declarePacing()
+                    slowNs = System.nanoTime() - tSlow
                 }
                 // ONE WINDOW, TWO READERS: the readout draws it and the scale
                 // rule steers off it. The fold answers both series, so the tick
                 // cadence below is all this callback owes either of them.
                 if (tickMs > 0) {
+                    // `callback` stops HERE, so the monitor's own fold and
+                    // `adaptScale` are outside it — an instrument must not be in
+                    // its own measurement. Everything before it is in.
                     PerfMonitor.record(frameTimeNanos / 1_000_000.0, tickMs, presented,
-                        cellCount, surfaceWidth, surfaceHeight, trackId)
+                        cellCount, surfaceWidth, surfaceHeight, trackId,
+                        simNs / 1_000_000.0, slowNs / 1_000_000.0,
+                        (System.nanoTime() - tCallback) / 1_000_000.0)
                 }
                 adaptScale(frameTimeNanos)
             }

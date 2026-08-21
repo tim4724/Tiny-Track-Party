@@ -244,19 +244,27 @@ which is the only way to get two comparable ablation arms (an unpinned sweep
 resizes the buffer underneath itself, and it will happily hand you a 3x swing
 between arms that differ in nothing).
 
-**THE TAIL IS NOT GPU-BOUND, AND NO NUMBER IN THAT READOUT CAN SEE IT.**
-`ttp_display_profile`'s `cpu` is the RENDERER's own profile. The main thread also
-carries the sim tick, the per-frame race-event drain, the ~6 Hz HUD poll and every
-line of Compose that runs after the Choreographer callback returns — and all of
-that is outside every number `PerfMonitor` prints, so a frame lost up there reads
-as a healthy GPU and a mystery. A MEDIAN taken here once said nothing on the
-Kotlin side was worth optimising, and it was wrong about the tail: two
-Kotlin-side defects were each costing whole frames (a cold `SoundPool.play`, and
-an always-running Compose animation), and the readout showed neither.
+**THE TAIL IS NOT GPU-BOUND, AND `ttp_display_profile` ALONE CANNOT SEE IT.**
+That profile is the RENDERER's own, and the main thread also carries the sim
+tick, the per-frame race-event drain, the ~6 Hz HUD poll and every line of Compose
+that runs after the Choreographer callback returns — so a frame lost up there once
+read as a healthy GPU and a mystery. A MEDIAN taken here said nothing on the
+Kotlin side was worth optimising, and it was wrong about the tail: two Kotlin-side
+defects were each costing whole frames (a cold `SoundPool.play`, and an
+always-running Compose animation), and the readout showed neither.
 
-**The instrument for that half is `atrace`**, and `DisplayHost` emits the three
-markers that make it work — `ttp:sim`, `ttp:render`, `ttp:slowTick` split the
-callback, and Compose emits `Recomposer:recompose` and `traversal` itself:
+**Three of those four are now IN the readout.** `DisplayHost` times its own
+callback and hands `PerfMonitor` the spans beside the renderer's zones — `sim`,
+`slow` (the HUD and knob polls) and `other` (the remainder), summing to
+`callback` — and `PerfMonitor` logs a per-phase `phase50` / `phase95` line beside
+its worst-frame `spike` pair, so what a TYPICAL frame spends per step is on the
+wire and foldable. **What is still invisible is COMPOSE**, which runs after the
+callback returns and is nobody's span.
+
+**The instrument for that, and for anything sub-frame, is still `atrace`**, and
+`DisplayHost` emits the three markers that make it work — `ttp:sim`,
+`ttp:render`, `ttp:slowTick` split the callback, and Compose emits
+`Recomposer:recompose` and `traversal` itself:
 
 ```
 adb shell atrace -b 16384 -a games.couchpad.tinytrack -t 30 \
@@ -271,6 +279,17 @@ which is main-thread work of the same order as anything being hunted, and leavin
 it up will hand you its cost as the finding. It is on by DEFAULT (every build
 except a `Scenarios` run), so hiding it is a step you take, not one you forget.
 
+`docs/perf/androidtv-frame-map.md` is the last full reading — dated, stamped with
+its build and its panel, and kept out of this file because a number here rots
+into a phantom regression. What is durable about how it was taken is below.
+
+`scripts/perf-frame.mjs` is the FRAME MAP: one table per player count with every
+step of a frame in it, fusing the three instruments that no single one of them
+can replace — the main thread's split above, Filament's backend thread sampled
+from `/proc/<pid>/task/*/stat` (GL command EXECUTION, the largest consumer in
+this process and invisible to everything in-process), and the GPU timer with a
+per-group ablation sweep. Run it twice and keep the second; see below for why.
+
 `scripts/perf-race.mjs` is the one in-race harness, and
 `scripts/perf-race.android.mjs` is this box's half of it: it launches the `bench`
 scenario — a REAL race whose player seats the engine drives — with the scaler
@@ -284,11 +303,41 @@ players, so a measurement no longer depends on a service on the internet.
 **MEASURE AT A PINNED SCALE, AND SET THE MASK EVERY TIME.** Two traps have cost
 an experiment each. `debug.ttp.features` is a SYSTEM PROPERTY that survives a
 force-stop, so an arm that does not set it silently inherits the last one. And
-the readout's percentiles fold a window of 120 FRAMES with no age bound
-(`ttp/perf_stats.h`), which at 12 fps is ten seconds of history — so an arm
-whose mask lands mid-run reads as a blend of itself and the arm before it. Each
-arm is therefore its own launch, and the first seconds of the race (the grid, the
-first corner, the scaler settling) are thrown away rather than folded.
+the cost windows are DEEP — the readout's percentiles fold 120 frames with no age
+bound (`ttp/perf_stats.h`), which at 12 fps is ten seconds of history — so an arm
+whose mask lands mid-run reads as a blend of itself and the arm before it.
+`PerfDebug` drops both windows when the mask moves, which retires that one. Each
+arm is still ITS OWN RACE, and the first seconds of each (the grid, the first
+corner, the scaler settling) are thrown away rather than folded.
+
+**INTERLEAVING SHORT ARMS INSIDE ONE RACE WAS TRIED HERE AND IT DOES NOT WORK.**
+The reasoning is sound everywhere else — hold the process, the driver state and
+the shader cache still, and round-robin the arms — and it is what the web sweep
+does. On a LIVE race none of those is the confound: WHERE ON THE LAP the sample
+lands is, and a lap's own cost varies by about 4 ms here. Short arms taken seconds
+apart are priced at different corners, and the readings say so out loud — the
+unablated arm alone came back with a 7.4 ms spread across rounds, and one ablated
+arm read HIGHER than the full picture. Only a fold over a large slice of circuit
+averages it out. A whole-race arm either side of a sweep repeats to ~0.2 ms, which
+is the resolution to expect and the one to check before believing a row.
+
+**AN ARM THAT FITS THE BUDGET CANNOT BE PRICED AT ALL.** A frame that presents on
+every vsync leaves the GPU idle, the box downclocks into the gap, and this
+backend's timer reads the PACED span instead of the work — so every arm comes
+back at the same number whatever it dropped, and the differences between them are
+noise wearing the shape of a result. It is loud once you know to look (at one
+player and 540 lines, hiding the ROAD read 2.9 ms slower than drawing it) and
+invisible in a table of marginals. Pin the column up until it saturates and
+measure there; `perf-frame.mjs` names the columns this applies to rather than
+leaving it to be noticed.
+
+**THE BENCH RACE ENDS, AND A SWEEP OUTLIVES ONE.** It is a real race over a real
+number of laps; a multi-round sweep runs longer than that, and the rounds past the
+finish measure the RESULTS board — which is one cell whatever the race was, so a
+4-player split reads as costing what one player does. Nothing in the numbers looks
+wrong. Every readout carries its own `cells`, so fold only the lines the race you
+meant logged; `perf-frame.mjs` does that, and gives every arm its own launch so
+no arm can straddle a finish line in the first place.
 
 **MEASURE THE BUILD THAT SHIPS.** `PerfDebug`'s knobs — and the perf readout
 itself, which now shows in RELEASE too — are deliberately NOT debug-gated. Gated (as they once were), they are inert AND SILENT in release: a

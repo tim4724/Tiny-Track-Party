@@ -64,12 +64,31 @@ test("PerfDebug.kt's TTP_FEAT_ALL matches the header", () => {
     `PerfDebug.kt's TTP_FEAT_ALL 0x${m[1]} disagrees with ttp_display.h`);
 });
 
-test("the bench's Android backend defaults its mask to the header's ALL", () => {
-  // The live bench's un-ablated arm: a stale default here measures every
-  // "full picture" run one channel short.
-  const m = read('scripts/perf-race.android.mjs')
-    .match(/TTP_FEAT_ALL\s*=\s*'0x([0-9A-Fa-f]+)'/);
-  assert.ok(m, "perf-race.android.mjs's TTP_FEAT_ALL has moved");
-  assert.equal(parseInt(m[1], 16), headerBits().get('ALL'),
-    `perf-race.android.mjs defaults the mask to 0x${m[1]}, which disagrees with ttp_display.h`);
+test("the Android harnesses' one FEAT mirror matches the header", () => {
+  // The live bench's un-ablated arm and every sweep's group masks. A stale ALL
+  // here measures every "full picture" run one channel short; a stale group bit
+  // ablates the wrong thing and prices it as the right one.
+  //
+  // ONE mirror on this side, deliberately: it was two — the bench backend's
+  // default mask and the sweep's own table — and this test gated only the first.
+  const block = read('scripts/lib/androidtv-bench.mjs')
+    .match(/export const FEAT = \{([\s\S]*?)\};/);
+  assert.ok(block, "androidtv-bench.mjs's FEAT has moved");
+  const feat = {};
+  for (const m of block[1].matchAll(/([A-Z_]+):\s*0x([0-9A-Fa-f]+)/g)) {
+    feat[m[1]] = parseInt(m[2], 16);
+  }
+  const bits = headerBits();
+  // A SUBSET, name for name: the harnesses ablate the content GROUPS and need no
+  // entry for the road's fragment channels. Every name it does carry must agree,
+  // and ALL must be exact — that is the one whose staleness is silent.
+  for (const [name, v] of Object.entries(feat)) {
+    assert.ok(bits.has(name), `androidtv-bench.mjs names TTP_FEAT_${name}, the header does not`);
+    assert.equal(v, bits.get(name),
+      `androidtv-bench.mjs's ${name} 0x${v.toString(16)} disagrees with ttp_display.h`);
+  }
+  assert.equal(feat.ALL, bits.get('ALL'), 'the sweep would run its arms against a stale ALL');
+  for (const g of ['ROAD', 'TERRAIN', 'DRESSING', 'SKY', 'CARS', 'EFFECTS']) {
+    assert.ok(g in feat, `androidtv-bench.mjs lost its ${g} bit — a sweep arm would ablate nothing`);
+  }
 });
