@@ -12,6 +12,9 @@
 // either scale.
 #include <cstdio>
 
+#include <algorithm>
+#include <cmath>
+
 #include "ttp/render_scale.h"
 #include "ttp/render_scale_controller.h"
 
@@ -72,9 +75,21 @@ constexpr RenderScaleSample kNoFit{0.0, 0.0};
 constexpr RenderScalePoint kNative{1.0, 1};
 constexpr int kEnough = 120;  // a full stats window
 
-// A device whose GPU timer says `ms` per frame, presenting on cadence.
+// A device whose GPU timer says `ms` per frame, presenting as fast as that work
+// allows. The present half is DERIVED and not a free parameter: a frame costing
+// 30 ms of GPU cannot also be presenting every 16.7, and the retreat arm now
+// answers to the present record (presentsOnCadence), so a fixture that pairs an
+// impossible pair tests a device that cannot exist. Under a period's worth of
+// work the panel paces it; over, the work does.
 RenderScaleCost gpuAt(double ms, int frames = kEnough) {
-  return RenderScaleCost{ms, frames, 16.7, 16.7, kEnough};
+  // QUANTIZED TO VSYNC, because that is the only thing a present can do: work
+  // that overruns the period does not present a little late, it presents a
+  // whole period late. 15.5 ms of GPU still lands every 16.7; 20 ms lands every
+  // 33.4. That step is exactly what separates a device with headroom it cannot
+  // measure from one that is really missing.
+  const double period = 16.7;
+  const double presented = std::ceil(std::max(ms, 0.001) / period) * period;
+  return RenderScaleCost{ms, frames, presented, period, kEnough};
 }
 // A device with NO timer, presenting `ratio` times slower than its own best.
 RenderScaleCost noTimerAt(double ratio, double floorMs = 16.7, int frames = kEnough) {
@@ -122,6 +137,44 @@ int main() {
          "no baseline learned yet means no signal");
 
   // ---- the fallback does not step down off a scene's ASSEMBLY ---------------
+  // ---- the model may not retreat off a point the device is DELIVERING ------
+  //
+  // A GPU millisecond is not a fixed quantity. A governor that downclocks
+  // whenever a frame leaves idle makes the same work measure dearer the
+  // healthier the frame is, so a device holding its rate can price its own
+  // frame over the down threshold and be walked off a rung it never needed to
+  // give up. Measured on an Apple TV 4K: 4 players at native, GPU p95 past 90%
+  // of budget, presenting 60/60 with zero skips, and the rule taking a rung.
+  //
+  // The presents are the ground truth for "did we deliver"; the model is a
+  // prediction about it. Where they disagree at the CURRENT point, delivery
+  // wins — and only there: the climb is still the model's call, because a clean
+  // record says nothing about the rung above.
+  {
+    const RenderScalePoint top{1.0, 1};
+    const RenderScaleLimits k4K{0.0, 1.0, 2160.0, kHz60};
+    const RenderScaleSample none{0.0, 0.0};
+    // Over kScaleDownShare * 16.68 = 15.01, which on its own is a retreat.
+    const double overBudget = 15.5;
+
+    check(renderScaleStep(top, RenderScaleCost{overBudget, kEnough, 16.7, 16.7, kEnough},
+                          kLongHold, kSettled, none, k4K).scale == top.scale,
+          "a frame priced past the down threshold that is PRESENTING keeps its rung");
+    check(renderScaleStep(top, RenderScaleCost{overBudget, kEnough, 33.4, 16.7, kEnough},
+                          kLongHold, kSettled, none, k4K).scale < top.scale,
+          "…and the same price with the presents actually late does step down");
+    // Silence is not evidence: too few presents to judge is not a clean record.
+    check(renderScaleStep(top, RenderScaleCost{overBudget, kEnough, 16.7, 16.7, 10},
+                          kLongHold, kSettled, none, k4K).scale < top.scale,
+          "…nor is a window too short to say anything about");
+    // The veto is on the RETREAT, not on the whole arm: a point that fits still
+    // climbs, and nothing here made a clean record into a reason to move up.
+    check(renderScaleStep(RenderScalePoint{0.5, 1},
+                          RenderScaleCost{2.0, kEnough, 16.7, 16.7, kEnough},
+                          kLongHold, kSettled, RenderScaleSample{0.25, 1.0}, k4K).scale > 0.5,
+          "a clean record does not stop the model climbing");
+  }
+
   // A step this path takes is one it can never take back, and a scene keeps
   // costing after its build returns (shader compiles, first uploads, the shadow
   // bake). A solo race that holds 60 at the panel's own resolution presented at
@@ -439,9 +492,18 @@ int main() {
       double gpuMs = -1;   // <= 0: no timer, like tvOS
 
       void ticks(int n, double panel = kHz60) {
+        // WORK THAT OVERRUNS THE PERIOD MISSES THE VSYNC. A box whose GPU takes
+        // 30 ms cannot also present every 16.7, and the retreat arm now answers
+        // to the present record (presentsOnCadence), so a harness that presented
+        // regardless of its own cost would be driving a device that cannot
+        // exist — and would prove the rule holds a rung no real box could hold.
+        // `everyNth` still wins where a case declares a skip storm or the rate
+        // the rule itself chose; this only stops a cost being free.
+        const int forced = gpuMs > 0.0 ? (int) std::ceil(gpuMs / panel) : 1;
+        const int cadence = std::max(everyNth, std::max(forced, 1));
         for (int i = 0; i < n; i++) {
           t += panel;
-          const bool drew = (++tick % everyNth) == 0;
+          const bool drew = (++tick % cadence) == 0;
           ttp::rt::perf::Sample s;
           s.tMs = t;
           s.intervalMs = panel;   // the LOOP's cadence, unaffected by a skip
@@ -561,7 +623,7 @@ int main() {
       Box b;
       for (int i = 0; i < 10; i++) {
         const double sc = b.ctl.point().scale;
-        b.gpuMs = 4.0 + 32.0 * sc * sc;         // fits 16.7 ms, never 8.3
+        b.gpuMs = 8.0 + 8.0 * sc * sc;          // fits 16.7 ms, never 8.3
         b.everyNth = b.ctl.point().divisor;     // present at the cadence chosen
         b.ticks(360, kHz120);                   // 3 s, past the down hold
         b.poll(k4K120);
@@ -587,7 +649,7 @@ int main() {
       Box b;
       for (int i = 0; i < 10; i++) {
         const double sc = b.ctl.point().scale;
-        b.gpuMs = 4.0 + 32.0 * sc * sc;
+        b.gpuMs = 8.0 + 8.0 * sc * sc;          // fits 16.7 ms, never 8.3
         b.everyNth = b.ctl.point().divisor;
         b.ticks(360, kHz120);
         b.poll(k4K120);

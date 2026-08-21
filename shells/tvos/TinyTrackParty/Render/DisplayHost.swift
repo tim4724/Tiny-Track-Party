@@ -298,8 +298,9 @@ final class DisplayHost {
         // NO FULL-SCREEN ANTIALIAS PASS ON THIS PLATFORM, the same call Android
         // TV makes and a different balance of the same trade. Measured on
         // AppleTV6,2 at 4 players / native 4K with a real GPU timer: the switch
-        // is worth 2.3 ms of a 16.68 ms budget, and ablating vpresent's fragment
-        // to a passthrough puts only 0.3 ms of that in the FILTER — the rest is
+        // is worth 1.8 ms of a 16.68 ms budget (13.67 -> 11.83), and ablating
+        // vpresent's fragment to a passthrough puts only ~0.3 of that in the
+        // FILTER — the rest is
         // the offscreen 4K buffer's store and vpresent's read (see
         // vpresent.mat). So turning it off buys a whole frame's worth of
         // headroom and gives up very little: at native there is no upscale to

@@ -13,15 +13,27 @@ import SwiftUI
 /// presents into its verdict and the other two did not — so the same run was
 /// amber on a television and green in a browser.
 ///
-/// NO GPU NUMBER CROSSES FROM HERE, and it is passed as ABSENT rather than as
-/// zero, because a platform with no timer has no signal and not a free frame.
-/// `ttp_display_gpu_ms()` is real "on the GL backend where
-/// EXT_disjoint_timer_query exists" (its own header) — Metal is not that
-/// backend, and whether Filament's Metal backend can be made to answer a frame
-/// duration at all is UNPROVEN on this box. Absent is the honest report until
-/// somebody proves otherwise on the hardware, and it is not a free choice: with
-/// no GPU stat the verdict's overshoot term falls back to the present
-/// interval's p95, so a plausible substitute would silently move the bar.
+/// THE GPU NUMBER IS REAL HERE NOW, and it took a Filament fork commit to make
+/// it so. `MetalTimerQueryFence` measured the interval between two shared-event
+/// fence signals with `clock::now()` — CPU wall time between two points in the
+/// submission stream, which under vsync tracks the PRESENT CADENCE and not the
+/// work. It reported about 16.7 ms for every frame a 60 Hz panel delivered,
+/// idle or saturated, so feeding it in would have been worse than absent: a
+/// number that is always exactly the budget is a number that always says
+/// "late". The pinned fork takes GPUStartTime/GPUEndTime off the command
+/// buffers instead (native/filament.pin; upstream PR google/filament#10338).
+///
+/// IT IS NOT ONLY A READOUT. The render scale folds off this same monitor, so
+/// what is passed here steers the television's resolution — which is why this
+/// arrived WITH `render_scale.h`'s present-record veto and not before it. On
+/// this device the GPU p95 at 4 players sits past the down threshold while the
+/// box presents 60/60 with zero skips, and without that veto, wiring the timer
+/// in cost a whole rung of picture.
+///
+/// Absent (<= 0) is still the honest report for a platform with no timer, and
+/// it is not a free choice: with no GPU stat the verdict's overshoot term falls
+/// back to the present interval's p95, so a plausible substitute would silently
+/// move the bar.
 ///
 /// ON DURING DEVELOPMENT, exactly as the web's is. `GameCoordinator.boot()`
 /// calls `show()`, and that one line is what to delete for release — everything
@@ -101,10 +113,15 @@ final class PerfMonitor: ObservableObject {
         // profile still holds the last DRAWN frame, and folding it in again
         // would weight the median hardest under exactly the load that causes
         // skips. It is also absent while nothing is drawing the readout, since
-        // it feeds no other reader and the scale rule has no use for it. The gpu
-        // argument is absent always — see the header.
+        // it feeds no other reader.
+        //
+        // THE GPU SAMPLE IS FED WHENEVER A FRAME DREW, watched or not, because
+        // unlike the cpu one it has a second reader: the render scale. Gating it
+        // on the panel being up would hand the rule a different signal depending
+        // on whether anybody was looking at it.
         ttp_perf_sample(now * 1000, interval * 1000, presented ? 1 : 0,
-                        presented && visible ? (cpuTotalMs() ?? 0) : 0, 0)
+                        presented && visible ? (cpuTotalMs() ?? 0) : 0,
+                        presented ? ttp_display_gpu_ms() : 0)
         guard visible, now - lastText >= Self.textInterval else { return }
         lastText = now
         publish(now: now, cells: cells, pixels: pixels, dpr: dpr)
@@ -149,11 +166,25 @@ final class PerfMonitor: ObservableObject {
         let fps = num(r["fps"]), hz = num(r["hz"])
         let skips = num(r["skips"]), drops = num(r["drops"])
         // Cost as a SHARE OF BUDGET USED, low is good, the same sense as the
-        // web's readout. With no GPU number to set beside it this is a FLOOR on
-        // the frame's cost and not the whole of it.
+        // web's readout.
         let budget = r["budgetMs"] as? Double ?? 0
-        let p50 = (r["cpu"] as? [String: Any])?["p50"] as? Double
-        let cpuText = (budget > 0 ? p50.map { "\(Int((100 * $0 / budget).rounded()))%" } : nil) ?? "n/a"
+        let share = { (stat: String) -> Double? in
+            guard budget > 0, let s = (r[stat] as? [String: Any])?["p50"] as? Double,
+                  s > 0 else { return nil }
+            return s
+        }
+        let pct = { (ms: Double?) in ms.map { "\(Int((100 * $0 / budget).rounded()))%" } ?? "n/a" }
+        let cpuText = pct(share("cpu"))
+        // THE GPU COST CARRIES ITS MILLISECONDS TOO, which the web's readout does
+        // not. A browser has devtools a keypress away; a television has this
+        // panel and nothing else, and the share alone hides the thing this
+        // platform most needs to see — the A10X downclocks whenever a frame
+        // leaves idle, so the same picture prices differently at 60 fps than it
+        // does under load, and a percentage of a budget that also moved with the
+        // present rate cannot show that. Absent on a platform with no timer,
+        // which is what "n/a" means here and not "free".
+        let gpuMs = share("gpu")
+        let gpuText = gpuMs.map { "\(pct($0)) (\(String(format: "%.1f", $0)) ms)" } ?? "n/a"
         // TWO ROWS, the two the web settled on: the surface and the cadence on
         // one line, the cost on the other. `fps/hz` rather than one rate because
         // the PAIR is the diagnosis — 60/60 is a healthy panel, 41/60 is a GPU
@@ -162,7 +193,12 @@ final class PerfMonitor: ObservableObject {
         lines = [
             "\(w)×\(h) · \(fps)/\(hz) fps · "
                 + "\(skips) skip\(skips == 1 ? "" : "s") · \(drops) drop\(drops == 1 ? "" : "s")",
-            "cpu \(cpuText)"
+            // BOTH COSTS AS A SHARE OF BUDGET USED, low is good, and in the
+            // web's order (gpu first): they do NOT sum — the CPU builds frame
+            // N's commands while the GPU still draws N-1 — so the larger of the
+            // two is the one to cut, and reading them off two shells has to be
+            // the same motion.
+            "gpu \(gpuText) · cpu \(cpuText)"
         ]
         // DIAGNOSTIC colours, not chrome: the sticker palette's veto on amber
         // does not reach a debug overlay, and the three readouts agreeing is

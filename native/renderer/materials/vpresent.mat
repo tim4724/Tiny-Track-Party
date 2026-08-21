@@ -15,8 +15,8 @@
 //
 // AND THE MEASUREMENT THAT KEEPS IT. On the Apple TV (A10X) at 4 players /
 // native 4K, ablating this fragment to a straight passthrough — same offscreen
-// target, same full-screen pass, no FXAA taps — prices the FILTER at 0.3 ms and
-// the pass-plus-buffer around it at 2.0. So this shader's arithmetic is nearly
+// target, same full-screen pass, no FXAA taps — prices the FILTER at ~0.3 ms and
+// the pass-plus-buffer around it at the rest of a ~2 ms switch. So this shader's arithmetic is nearly
 // free and the PASS is the whole item, which is the argument above read back
 // from the other end: what earns the custom material is collapsing Filament's
 // per-view chain into one pass, not being a better FXAA. Do not "simplify" it
