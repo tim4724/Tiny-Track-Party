@@ -542,6 +542,37 @@ median on THAT class of box again; expect them to steady it.
 > frame whose cost is submission answers a draw cut; one whose cost is fill does
 > not. Price it per platform.
 
+**ON THE APPLE TV THE DECK IS THE FRAME TOO, and harder than anywhere.** At four
+players and native 4K the road's own fragment shader is the largest content item
+in the frame — ablating it moves the median about a fifth — and the channels
+inside it rank in the same order as the web's above. An older reading
+that the content there was noise came from comparing FULL against a mask of 0,
+which is not a floor (`ttp_display.h` says why); every group must be priced
+against whatever shades the pixels it hides.
+
+**And the deck's cost is the ONE OR TWO CHUNKS UNDER THE CAMERAS.** A per-chunk
+gate on the two full-width track-space taps was built, proven to disarm ~85% of
+chunks, and moved the median by nothing — so ~90% of a full-deck tap is paid by
+the near chunks, which are exactly where the pack always is and where rubber
+always is. **That refutes the whole family of "gate the deck by region"**:
+distance LOD, fog culling, a cheap material variant for far chunks. The far deck
+is already nearly free. Spend on the near deck's shader or spend nothing.
+
+**A PASS COSTS ITS ATTACHMENT, NOT THE AREA IT DRAWS — and that still does not
+buy anything.** One cell drawing the same pixels costs measurably more into a 4K
+attachment than into a quarter-size one, which makes per-cell quarter targets
+look like the answer to a 4-way split's extra passes. Measured end to end it is
+a **net loss**: pointing all four cell views at a quarter-size offscreen at
+identical fill wins ~0.4 ms, and the one full-surface composite needed to put
+the four images back on screen costs five times that — `--aa 1` is exactly that
+shape, and the antialias switch below is where it is priced. Do not
+rebuild this.
+
+> **PRICE A PASS BY RUNNING IT, NEVER BY FITTING ONE.** A per-pass "fixed cost"
+> term fitted over a resolution sweep predicted both of the above as wins. The
+> cell-overlay pass — full surface, almost nothing drawn, measurably free —
+> is the standing counter-example that there is no such term.
+
 **The full-screen antialias pass is a switch** (`ttp_display_antialias`), and
 turning it off removes the offscreen scene buffer with it, so the saving is both
 that buffer's store and vpresent's read. **Both TV shells turn it off**; the web
@@ -550,8 +581,12 @@ keeps it.
 **AND THE BUFFER IS THE COST, NOT THE FILTER.** Ablating vpresent's fragment to a
 straight passthrough — same target, same pass, no FXAA taps — splits the switch's
 saving on the Apple TV at 4 players / native 4K into **~0.3 ms of filter and the
-rest plumbing** (0.31 / 1.99 as measured; the total came down to 1.8 once merged
-draws landed, and the filter is the half that does not scale with the buffer). Two things follow, and both are the opposite of the instinct:
+rest plumbing** (0.31 / 1.99 as measured, and the filter is the half that does
+not scale with the buffer). The SWITCH's total was re-taken on the current tree
+as **~2.4 ms** (three interleaved pairs, 2.26 / 2.53 / 2.37); an earlier reading
+of 1.8 does not reproduce, and single pairs here are worth about +/-0.2 ms.
+
+Two things follow, and both are the opposite of the instinct:
 there is **no cheaper AA to write** here (a shorter span, a tighter early-out, a
 3-tap filter all chase that 0.3), so the decision is BINARY; and what the custom
 shader buys is the PASS COUNT rather than the arithmetic — see vpresent.mat.

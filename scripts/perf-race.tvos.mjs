@@ -37,6 +37,16 @@
 // Two runs that ended on different rungs are two different questions, so READ
 // THE BUFFER SIZE OFF THE HEADER either way.
 //
+// THE NOISE FLOOR IS WHAT DECIDES HOW MANY REPS AN ARM NEEDS, and one run is
+// almost never enough. On the paired Apple TV a repeated arm lands inside about
+// +/-0.2 ms, but excursions past 0.5 ms happen — a live race drives the camera
+// through a whole circuit, and where the pack sits when the window closes moves
+// the median more than most changes being tested do. So: DISTRUST ANY
+// SINGLE-RUN DELTA UNDER ~0.5 ms, and interleave arms (A B A B) rather than
+// running all of A then all of B, since the box's thermal and clock state drift
+// over a sweep. A 0.8 ms "win" that did not survive its own retest is what this
+// paragraph cost.
+//
 // IT MEASURES WHATEVER IS INSTALLED. Nothing here builds or installs
 // (`npm run build:tvos [device|simulator]` does), so a stale install measures a
 // stale engine and says nothing about it — the same trap the party check has.

@@ -556,7 +556,19 @@ TTP_ABI void ttp_display_debug_force_mask_layer(int layer);
  * TTP_FEAT_ALL restores the full picture but leaves the tags in place — which
  * is the intended way to run a sweep, since it keeps every arm on the same
  * code path. What it CANNOT measure is a hidden group's FScene::prepare, which
- * still runs: this is the draw half of a feature's cost. */
+ * still runs: this is the draw half of a feature's cost.
+ *
+ * PRICE A GROUP BY ABLATING THAT GROUP. A MASK OF 0 IS NOT A FLOOR, and reading
+ * it as one is how the deck's cost stayed invisible. Hiding every renderable
+ * does not empty the frame: the skybox is not a renderable and still fills
+ * every pixel the world was covering, so an all-off arm measures the sky where
+ * the reader thinks it measures nothing. On a fill-bound backend that lands
+ * within noise of the FULL picture, which reads as "the content is free" and is
+ * not — on the Apple TV the deck alone is a fifth of the frame, and it went
+ * unseen for a session because FULL-vs-zero was the control. What an arm
+ * actually reports is the difference between the group and WHATEVER SHADES THE
+ * PIXELS IT WAS HIDING, which is the honest question and the only one this
+ * knob can answer. */
 #define TTP_FEAT_ROAD     0x04  /* the deck ribbon — decals, rubber and paint ride its shader */
 #define TTP_FEAT_TERRAIN  0x08  /* ground, sky dome, hills, water, pillars, berms, gantry */
 #define TTP_FEAT_DRESSING 0x10  /* scenery, props, landmarks, clutter, cones, signs */
