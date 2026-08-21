@@ -123,6 +123,26 @@ int screenStep(Screen prev, Screen next);
 
 enum class BackEffect { SWALLOW, END_PARTY, RETURN_TO_LOBBY };
 BackEffect backEffect(Screen s);
+
+// ---- the cover ---------------------------------------------------------------
+//
+// A BOARD OVER A BOARD, and deliberately NOT a fourth Screen. The welcome board
+// is the only one that stands on its own: the lobby and the race are chrome over
+// a live 3D view, and until that view has put a frame on the panel they are
+// chrome over nothing — which is the "lobby appears, then the track fades in a
+// beat later" that this exists to remove.
+//
+// A cover is not navigable. It has no back gesture, pushes no history and cannot
+// be returned to, so giving it a Screen would put a rung in SCREEN_ORDER that
+// every step calculation then has to be told to ignore.
+//
+// `scenePainted` is A BUILT SCENE HAVING REACHED THE PANEL, not a build having
+// returned — the two are seconds apart on a television, and revealing on the
+// latter is the flash this removes. It latches once per process, so the cover is
+// a boot-time thing by construction and never blinks mid-party.
+enum class Cover { NONE, BOOT };
+const char* key(Cover c);
+Cover coverFor(Screen screen, bool scenePainted);
 const char* key(BackEffect e);
 
 // ---- the lobby --------------------------------------------------------------

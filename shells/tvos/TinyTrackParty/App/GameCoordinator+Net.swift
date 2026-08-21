@@ -139,7 +139,10 @@ extension GameCoordinator {
         // preview pick lands long before the pixels do, so without this nothing
         // ever asks the backdrop question again and the paper would stay up for
         // the whole lobby (the mirror of the flash it exists to stop).
-        display.onFirstPaint = { [weak self] in self?.refreshBackdrop() }
+        display.onFirstPaint = { [weak self] in
+            self?.refreshBackdrop()
+            self?.refreshCover()   // the cover's other trigger; see refreshCover
+        }
     }
 
     // MARK: - The two loops

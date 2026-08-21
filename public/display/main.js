@@ -66,6 +66,7 @@ function show(name) {
   currentScreen = name;
   for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name);
   el('mute-btn').classList.toggle('hidden', name === 'welcome');  // title board stays clean
+  updateCover();   // the cover follows the board: welcome owes none, the other two might
   updateSoundHint();
   if (_isTestMode || _isDebugSolo) return;
   const step = ui.screenStep(prev, name);
@@ -88,6 +89,11 @@ let newGameClick = () => {
   newGameClicked = true;
   screens.welcome.classList.add('hidden');
   screens.lobby.classList.remove('hidden');
+  // …under the boot cover, unconditionally: this runs BEFORE the engine is up,
+  // so there is no rule to ask and no scene that could have painted. The
+  // bootstrap tail re-runs the reveal through show(), and updateCover then puts
+  // the same answer behind the same element.
+  el('cover').classList.remove('hidden');
   el('mute-btn').classList.remove('hidden');   // mute joins the corner off-welcome
   enterFullscreen();
 };
@@ -223,6 +229,10 @@ scene.showDividers = _trackParams.get('dividers') !== '0';
 scene.orbit = true;
 scene.bboxOrbit = true; // lobby sweeps an ellipse around the track's bounding box (close, elongated like the track)
 let sceneReady = false;
+// A BUILT scene having reached the panel — the boot cover's one shell-side fact
+// (ttp_ui_cover). Distinct from sceneReady, which is the build resolving: the
+// two are a couple of frames apart here and seconds apart on a television.
+let scenePainted = false;
 // Lobby attract demo: AI driving the players' picked cars around the selected track,
 // rendered under the orbiting overview camera. Runs only in the lobby (no session).
 const lobbyDemo = new LobbyDemo(scene);
@@ -235,7 +245,15 @@ const scenePromise = sceneBooted.then(() => scene.setTrack(track)).then(() => {
   // The backdrop may already WANT the 3D (a mid-boot NEW GAME landed in the
   // lobby before the scene was up): reveal it only now, two frames into the
   // loop, so the fade starts from a drawn track rather than a black canvas.
-  requestAnimationFrame(() => requestAnimationFrame(updateBackdrop));
+  //
+  // SAME MOMENT IS "PAINTED" for the boot cover, and it has to be this one
+  // rather than the build resolving: a built scene is not a drawn one, and
+  // lifting the cover on the build is the flash it exists to remove.
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    scenePainted = true;
+    updateBackdrop();
+    updateCover();
+  }));
 });
 
 // Swap the lobby preview + race track to the host's pick. Lobby only — Net
@@ -277,6 +295,15 @@ function backdropShow3D() {
   if (!sceneReady) return false;
   if (currentScreen === 'welcome') return false;
   return !!selectedTrackId || (net && net.roomState !== ROOM_STATE.LOBBY);
+}
+
+// Whether the boot cover is up. The RULE is ttp_ui_cover's — which boards owe
+// one and that welcome never does — and all this side contributes is whether a
+// frame has been painted. Test surfaces are exempt for the same reason they own
+// the backdrop: they drive their own scene and would sit under a cover forever.
+function updateCover() {
+  if (_isTestMode) return;
+  el('cover').classList.toggle('hidden', ui.cover(currentScreen, scenePainted) !== 'boot');
 }
 
 // The reveal itself is backdrop.js's; what stays here is WHEN, and the test-mode

@@ -27,6 +27,12 @@ final class GameState: ObservableObject {
 
     @Published var screen: Screen = .welcome
 
+    /// `ttp_ui_cover`'s answer — "none" | "boot". A full-bleed board over
+    /// whichever screen is up, and deliberately NOT a screen of its own: it is
+    /// not navigable, pushes nothing and has no Menu behaviour. See
+    /// `ttp/ui_model.h`, and `CoverView` for why it never animates.
+    @Published var cover: String = "none"
+
     /// What the 3D surface is doing behind the chrome. The welcome board is
     /// always over the paper diorama; the lobby crossfades to the live track
     /// preview once a scene is built.

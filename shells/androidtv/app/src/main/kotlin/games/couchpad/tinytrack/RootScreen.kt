@@ -119,6 +119,27 @@ fun RootScreen(game: GameCoordinator) {
             PauseOverlay(game)
         }
 
+        // THE BOOT COVER, over every board: the lobby and the race are chrome
+        // over a live 3D view, and until that view has put a frame on the glass
+        // they are chrome over nothing. Which board owes one is `ttp_ui_cover`'s
+        // answer; welcome is exempt because it stands on the paper diorama.
+        //
+        // NOTHING HERE MOVES, and that is a rule rather than a preference. This
+        // is a full-screen overlay up at exactly the moment the renderer is
+        // busiest — standing a scene up — and an animated overlay of that shape
+        // is what cost the Apple TV 60 -> 7 fps through the GO beat. A spinner
+        // would compete for the very frames it is waiting on.
+        if (state.cover == "boot") {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    // Opaque, and the app's own paper: the whole job is to not
+                    // depend on whatever is behind it having drawn yet.
+                    .background(Tokens.paper),
+                contentAlignment = Alignment.Center,
+            ) { Wordmark() }
+        }
+
         // Over everything, including the results glass: a frame's cost is most
         // interesting exactly where a board is on top of the scene.
         Box(Modifier.align(Alignment.TopEnd)) { PerfOverlay() }

@@ -1078,6 +1078,11 @@ jint n_ttp_ui_configure(JNIEnv* env, jclass, jbyteArray a0) {
     return (jint) ttp_ui_configure(s0.get());
 }
 
+jbyteArray n_ttp_ui_cover(JNIEnv* env, jclass, jbyteArray a0, jint a1) {
+    CStr s0(env, a0);
+    return toBytes(env, ttp_ui_cover(s0.get(), (int) a1));
+}
+
 jint n_ttp_ui_cup_field_tint_pct(JNIEnv* env, jclass) {
     (void) env;
     return (jint) ttp_ui_cup_field_tint_pct();
@@ -1372,6 +1377,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_ui_back_effect", "([B)[B", (void*) n_ttp_ui_back_effect },
     { "ttp_ui_catalogue_json", "()[B", (void*) n_ttp_ui_catalogue_json },
     { "ttp_ui_configure", "([B)I", (void*) n_ttp_ui_configure },
+    { "ttp_ui_cover", "([BI)[B", (void*) n_ttp_ui_cover },
     { "ttp_ui_cup_field_tint_pct", "()I", (void*) n_ttp_ui_cup_field_tint_pct },
     { "ttp_ui_cup_slot_json", "([B)[B", (void*) n_ttp_ui_cup_slot_json },
     { "ttp_ui_cup_tint_rgb", "([BD)I", (void*) n_ttp_ui_cup_tint_rgb },

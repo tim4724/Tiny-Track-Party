@@ -120,6 +120,14 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
     var framesPresented: Long = 0L
         private set
 
+    /** Has a BUILT scene reached the glass — see the frame loop, which sets it. */
+    var hasPainted: Boolean = false
+        private set
+
+    /** Fired once, on that frame. At boot the pick lands long before the pixels
+     *  do, so without it nothing would ever re-ask what the cover should be. */
+    var onFirstPaint: (() -> Unit)? = null
+
     /**
      * The buffer size the engine was last told about, in PHYSICAL pixels.
      *
@@ -228,6 +236,7 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
             TtpSurface.nativeDestroy()
             hasSurface = false
             hasScene = false
+            hasPainted = false
         }
     }
 
@@ -408,6 +417,17 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
                     // the idle animations on the next call.
                     pendingDt = 0.0
                     if (presented) framesPresented++
+                    // THE FIRST PAINTED FRAME OF A BUILT SCENE, which is what the
+                    // boot cover waits on. Both halves matter and neither alone
+                    // is it: a present with no scene is the renderer clearing an
+                    // empty view, and a BUILT scene is not one that has reached
+                    // the glass. Fires once per process. The tvOS shell has
+                    // carried this latch since its own boot flash; this one had
+                    // only `framesPresented`, which counts the empty ones too.
+                    if (presented && hasScene && !hasPainted) {
+                        hasPainted = true
+                        onFirstPaint?.invoke()
+                    }
                 }
                 // The knob poll and the pacing declaration are inside the SPAN
                 // though outside the marker: they are binder traffic on the frame

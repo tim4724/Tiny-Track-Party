@@ -41,6 +41,14 @@ class GameState {
      */
     var sceneVisible by mutableStateOf(false)
 
+    /**
+     * `ttp_ui_cover`'s answer — "none" | "boot". A full-bleed board over whichever
+     * screen is up, and deliberately NOT a screen of its own: it is not navigable,
+     * pushes nothing and has no back behaviour. See `ttp/ui_model.h`, and
+     * [CoverScreen] for why it never animates.
+     */
+    var cover by mutableStateOf("none")
+
     // -- room (the join ticket) ---------------------------------------------
 
     var roomCode by mutableStateOf("")

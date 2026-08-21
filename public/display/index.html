@@ -77,6 +77,15 @@
        browser unlocks that need a user gesture: fullscreen + audio (the
        newgame-btn click handler in main.js). Back from the lobby returns
        here, ending the party (see the popstate handler in main.js). -->
+  <!-- Boot cover — the splash, and the ONE board that is not a screen. The
+       lobby and the race are chrome over a live 3D view; this holds over them
+       until that view has actually put a frame on the panel, so the track is
+       already there when the lobby is revealed instead of fading in a beat
+       later. Whether it is up is ttp_ui_cover's answer, never this page's. -->
+  <section id="cover" class="hidden" aria-hidden="true">
+    <div class="wordmark cover__wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></div>
+  </section>
+
   <section id="welcome">
     <div class="wordmark welcome__wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></div>
     <p class="welcome__tag">Race your friends! Everyone steers with their phone.</p>

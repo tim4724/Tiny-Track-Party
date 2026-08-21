@@ -48,6 +48,7 @@ export async function init() {
     progressJson: c('ttp_ui_progress_json', 'string', []),
     screenStep: c('ttp_ui_screen_step', 'number', ['string', 'string']),
     backEffect: c('ttp_ui_back_effect', 'string', ['string']),
+    cover: c('ttp_ui_cover', 'string', ['string', 'number']),
     rosterSeatsFromRoom: c('ttp_ui_roster_seats_room_json', 'string', ['number', 'string']),
     seatGrid: c('ttp_ui_seat_grid_json', 'string', ['string']),
     cupSlot: c('ttp_ui_cup_slot_json', 'string', ['string']),
@@ -116,6 +117,11 @@ export function progressJson() { return fn.progressJson(); }
 // shell's (the History API here, Menu on tvOS); only the table is native.
 export function screenStep(prev, next) { return fn.screenStep(prev || '', next || ''); }
 export function backEffect(screen) { return fn.backEffect(screen || ''); }
+// Which full-bleed cover this board owes — 'none' | 'boot'. `scenePainted` is
+// the one fact only a shell has: a BUILT scene having reached the panel.
+export function cover(screen, scenePainted) {
+  return fn.cover(screen || '', scenePainted ? 1 : 0);
+}
 
 // ---- the lobby -------------------------------------------------------------
 // The seat grid off a LIVE ROOM handle. A Seat carries name, colorIndex,

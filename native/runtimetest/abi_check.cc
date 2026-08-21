@@ -4273,6 +4273,34 @@ void raceLiveWalks() {
             "end_party effects");
   }
 
+  // ---- the boot cover ---------------------------------------------------------
+  // The ui corpus is frozen and predates this rule, so the table is asserted
+  // here instead. What matters is the ASYMMETRY: welcome is exempt because it
+  // stands on the paper diorama, while the two boards that are chrome over a
+  // live 3D view owe a cover until that view has painted.
+  {
+    const auto cover = [&](const char* screen, int painted) {
+      return std::string(ttp_ui_cover(screen, painted));
+    };
+    check(cover("lobby", 0) == "boot", "cover: the lobby waits for its first frame");
+    check(cover("race", 0) == "boot", "cover: so does a race");
+    check(cover("welcome", 0) == "none",
+          "cover: welcome is exempt — it stands on the diorama, not on the 3D");
+    for (const char* s : { "welcome", "lobby", "race", "", "nonsense" }) {
+      check(cover(s, 1) == "none",
+            std::string("cover: a painted scene owes nothing (") + s + ")");
+    }
+    check(cover("", 0) == "none" && cover("nonsense", 0) == "none",
+          "cover: an unknown board is the root and covers nothing");
+    // The ABI spells the same answer the rule does, for every pair.
+    for (const char* s : { "welcome", "lobby", "race", "nonsense" }) {
+      for (int p : { 0, 1 }) {
+        check(cover(s, p) == ui::key(ui::coverFor(ui::screenOf(s), p != 0)),
+              std::string("cover: the ABI is the rule's own answer (") + s + ")");
+      }
+    }
+  }
+
   // ---- the countdown gate -----------------------------------------------------
   // The export the deferred countdown hangs on. Two things are gated here and
   // neither is visible from the rule alone: that it reads the PRESENT series

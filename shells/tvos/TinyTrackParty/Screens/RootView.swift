@@ -296,6 +296,12 @@ struct RootView: View {
                              onNewGame: { game.returnToLobby() })
                     .transition(.opacity)
             }
+
+            // LAST, so it is over everything: a cover with a results board or a
+            // countdown showing through is a half-drawn screen rather than a
+            // cover. It can only be up at boot (`hasPainted` latches once), so
+            // it never actually competes with either.
+            CoverView(cover: state.cover)
         }
         // Each overlay fades on its OWN value. `GameState.ResultsView` is not
         // Equatable (it holds the model's rows verbatim), so the trigger is

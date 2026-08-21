@@ -207,6 +207,22 @@ TTP_ABI int ttp_ui_screen_step(const char* prevScreen, const char* nextScreen);
  * WALKED are each shell's; only the table is here. */
 TTP_ABI const char* ttp_ui_back_effect(const char* screen);
 
+/* Is a full-bleed COVER owed over this board, and which one — "none" | "boot".
+ *
+ * The lobby and the race are chrome over a live 3D view; until that view has put
+ * a frame on the panel they are chrome over nothing, and revealing them there is
+ * the "board first, track a beat later" flash. WELCOME is exempt by design: it
+ * stands on the paper diorama, so it is never waiting for anything.
+ *
+ *   scenePainted   has a BUILT scene reached the panel — not has a build
+ *                  returned, which on a television is seconds earlier. Only the
+ *                  shell knows it, and it latches once per process, so a cover
+ *                  is a boot-time thing by construction.
+ *
+ * A cover is deliberately not a fourth screen: it is not navigable, pushes no
+ * history and has no back gesture. See ttp/ui_model.h. */
+TTP_ABI const char* ttp_ui_cover(const char* screen, int scenePainted);
+
 /* ---- the lobby ----------------------------------------------------------- */
 
 

@@ -398,6 +398,10 @@ const char* ttp_ui_back_effect(const char* screen) {
   return ui::key(ui::backEffect(ui::screenOf(screen ? screen : "")));
 }
 
+const char* ttp_ui_cover(const char* screen, int scenePainted) {
+  return ui::key(ui::coverFor(ui::screenOf(screen ? screen : ""), scenePainted != 0));
+}
+
 // ---- the lobby ---------------------------------------------------------------
 
 // Shared by both spellings below, so the room-backed one cannot drift into a

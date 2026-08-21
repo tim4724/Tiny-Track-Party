@@ -492,6 +492,7 @@ class GameCoordinator(
         if (state.screen == screen) return
         state.screen = screen
         refreshBackdrop()
+        refreshCover()
     }
 
     /**
@@ -512,6 +513,28 @@ class GameCoordinator(
         val racing = net.roomState != "lobby"
         state.sceneVisible =
             state.screen != GameState.Screen.WELCOME && (trackId.isNotEmpty() || racing)
+    }
+
+    /**
+     * The boot cover, and a DIFFERENT rule from the backdrop above rather than a
+     * line inside it. This one is a function of the screen and of whether a frame
+     * has been painted, and of nothing else — a pick cannot move it, which is why
+     * it needs two triggers where the backdrop needs three.
+     * `tests/backdrop-rule.test.js` reads that function as ONE expression and
+     * fails on anything left over, which is how mixing the two was caught.
+     *
+     * `hasPainted` and not `hasScene`: a built scene is not a drawn one, and
+     * lifting on the build is the flash the cover exists to remove.
+     *
+     * SCENARIOS ARE EXEMPT, the same veto the web's `_isTestMode` applies to its
+     * own. A screenshot scenario dresses a board and deliberately has no scene
+     * behind it, so the honest answer for it is "boot" — and every reference shot
+     * in the gallery would become a picture of the splash.
+     */
+    fun refreshCover() {
+        state.cover = if (Scenarios.active) "none" else TtpJson.str(
+            Ttp.ttp_ui_cover(TtpJson.arg(state.screen.name.lowercase()),
+                             if (display.hasPainted) 1 else 0)) ?: "none"
     }
 
     /**
@@ -812,6 +835,11 @@ class GameCoordinator(
 
         display.onFrame = { dt -> frame(dt) }
         display.onSlowTick = { slowTick() }
+        // Fires once, when a built scene first reaches the glass. At boot the
+        // preview pick lands long before the pixels do, so without this nothing
+        // ever re-asks and the boot cover would stay up for the whole lobby —
+        // the mirror of the flash it exists to stop.
+        display.onFirstPaint = { refreshCover() }
     }
 
     /**

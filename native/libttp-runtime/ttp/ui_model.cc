@@ -62,6 +62,21 @@ int screenOrder(Screen s) {
 
 int screenStep(Screen prev, Screen next) { return screenOrder(next) - screenOrder(prev); }
 
+const char* key(Cover c) { return c == Cover::BOOT ? "boot" : "none"; }
+
+Cover coverFor(Screen screen, bool scenePainted) {
+  if (scenePainted) return Cover::NONE;
+  // WELCOME is exempt: it sits on the paper diorama by design (its copy is
+  // unreadable over a live track), so it is never waiting for the 3D.
+  switch (screen) {
+    case Screen::LOBBY:
+    case Screen::RACE: return Cover::BOOT;
+    case Screen::WELCOME:
+    case Screen::UNKNOWN: break;
+  }
+  return Cover::NONE;
+}
+
 BackEffect backEffect(Screen s) {
   switch (s) {
     case Screen::LOBBY: return BackEffect::END_PARTY;

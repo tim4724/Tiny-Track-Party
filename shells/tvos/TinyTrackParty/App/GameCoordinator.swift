@@ -472,6 +472,7 @@ final class GameCoordinator: ObservableObject {
         // live case: any phone can start one while the remote is reading.
         if screen != .lobby { state.infoPath = [] }
         refreshBackdrop()
+        refreshCover()
     }
 
     /// Paper, or the live 3D behind it.
@@ -499,6 +500,26 @@ final class GameCoordinator: ObservableObject {
         let racing = net.roomState != "lobby"
         state.sceneVisible = display.hasPainted
             && state.screen != .welcome && (!trackId.isEmpty || racing)
+    }
+
+    /// The boot cover, and a DIFFERENT rule from the backdrop above rather than a
+    /// line inside it. This one is a function of the screen and of whether a
+    /// frame has been painted, and of nothing else — a pick cannot move it,
+    /// which is why it needs two triggers where the backdrop needs three.
+    /// `tests/backdrop-rule.test.js` reads that function as ONE expression and
+    /// fails on anything left over, which is how mixing the two was caught.
+    ///
+    /// `hasPainted` and not `hasScene`: a built scene is not a drawn one, and
+    /// lifting on the build is the flash the cover exists to remove.
+    ///
+    /// SCENARIOS ARE EXEMPT, the same veto the web's `_isTestMode` applies to
+    /// its own. A screenshot scenario dresses a board and deliberately has no
+    /// scene behind it, so the honest answer for it is "boot" — and every
+    /// reference shot in the gallery would become a picture of the splash.
+    func refreshCover() {
+        state.cover = Scenarios.requested != nil ? "none"
+            : TTP.strOrEmpty(ttp_ui_cover(state.screen.rawValue,
+                                          display.hasPainted ? 1 : 0))
     }
 
     /// The landing after the room itself died under us — host `close_room`

@@ -399,6 +399,30 @@ html {
 }
 .version-badge:empty { display: none; }
 
+/* ---- Boot cover ---- */
+/* The splash. Above every board AND the corner chrome (the mute/fullscreen
+   buttons are 12, the toast 13) — a board with a mute button floating over it
+   reads as a half-drawn screen rather than a cover. Below the pause overlay (20)
+   and the modals, because it covers the game rather than interrupting it.
+   DELIBERATELY STATIC: no spinner, no pulse, nothing that animates. A
+   full-screen animated overlay over a live 3D surface is the exact shape that
+   cost an Apple TV 60 -> 7 fps through the GO beat, and this one is up while
+   the renderer is at its busiest. Paper rather than transparent so it does not
+   depend on whatever is behind it having drawn. */
+#cover {
+  position: fixed; inset: 0; z-index: 15;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--paper);
+  /* INERT, like the tvOS board's allowsHitTesting(false). It is a picture, not a
+     modal: a full-screen element that eats clicks while it is up would make the
+     boot window swallow input on whatever it happens to be covering. */
+  pointer-events: none;
+}
+.cover__wordmark {
+  font-size: clamp(56px, 9vw, 130px);
+  text-align: center;
+}
+
 /* ---- Welcome ---- */
 /* Title board at boot: the wordmark at poster scale + NEW GAME, centred over
    the paper diorama. Same stacking slot as #lobby (they swap via .hidden). */
