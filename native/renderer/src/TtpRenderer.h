@@ -115,7 +115,9 @@ public:
     // renderer this replaced did the same, via navigator.webdriver → key
     // .castShadow = false). Takes effect at the next buildScene; not a live
     // toggle, since the map is baked into the scene.
-    void setShadowsEnabled(bool on) { mShadowsEnabled = on; }
+    // Clears the bake's reuse key with it: shadows-off drops the resident maps,
+    // so the next build must re-bake rather than match a key against nothing.
+    void setShadowsEnabled(bool on) { mShadowsEnabled = on; mBakedKey.clear(); mRoadLight.clear(); }
 
     // ---- model variants (dev) ---------------------------------------------
     // Which take on a named prop ("rocket", "gnome", "train") this and every
@@ -164,6 +166,22 @@ public:
     // by the CALLER (the display shim links libttp-runtime; this class only
     // includes its headers): its patches become deck PAINT (buildDeckPaint),
     // not decals.
+    // What THIS build's static scene is, for the shadow bake's reuse test —
+    // see bakeShadowMap. The renderer is handed geometry and a theme, neither of
+    // which names anything; only the shim knows a scene is "cove under the beach
+    // biome". Latched before buildScene, like the biome one level up, and EMPTY
+    // means "never reuse" so a caller that has not thought about it cannot
+    // accidentally opt in.
+    void setBakeKey(const char* key) { mBakeKey = key ? key : ""; }
+
+    // The resident sun bake as bytes, and back. See the block comment above
+    // exportBake in TtpRendererBakes.cpp for why this crosses the ABI at all.
+    // export answers false when nothing is baked; import answers false for any
+    // blob it does not fully trust, and leaves a resident bake untouched when
+    // it does.
+    bool exportBake(std::vector<uint8_t>& out);
+    bool importBake(const uint8_t* bytes, uint32_t len);
+
     bool buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& theme,
             const std::vector<TtpRosterCar>& roster, const ttp::rt::WearPlan& wear);
     // Re-dress the BUILT scene's car slots in place — same track, same slot
@@ -896,6 +914,20 @@ private:
     // decode per fragment — bindVisMap is the one binder.
     filament::Texture* mVisMap = nullptr;
     filament::Material* mVisMaterial = nullptr;
+    // The bake's reuse test — see bakeShadowMap for the whole argument.
+    // mBakeKey is what the caller says the NEXT build's statics are; mBakedKey
+    // is what the resident maps were actually made from. They match exactly when
+    // a rebuild changed only the field.
+    std::string mBakeKey;
+    std::string mBakedKey;
+    // The ROAD's baked vertex light for mBakedKey's track, kept beside the maps
+    // it was derived from. The road MESH is rebuilt on every build, but for the
+    // same track it is rebuilt IDENTICALLY (build_race_track is a pure function
+    // of the descriptor), so its CUSTOM0 is too — and re-deriving it means
+    // reading the ESM back off the GPU (~30 ms) and evaluating the matte-light
+    // split per vertex (~15 ms) to arrive at bytes we already had. A few hundred
+    // KB against the 2 MB map next to it.
+    std::vector<filament::math::half4> mRoadLight;
     // See setShadowsEnabled. False leaves mShadowMap null, which is already the
     // "this track baked no map" path: bindShadowMap falls back to the 1×1 white
     // texture and passes shadowTexel 0, and vlit.mat reads that as fully lit.
@@ -1250,6 +1282,20 @@ private:
             // culling (the default every dynamic mesh wants).
             uint32_t chunkTris = 0);
     void destroyMesh(Mesh& m);
+    // fillRoadLight + the vertex upload that has to follow it.
+    void applyRoadLight(const TrackBin& tb, const float* esm,
+            uint32_t esmW, uint32_t esmH);
+
+    // Read the resident ESM back and refill the road's baked vertex light.
+    void refillRoadLight(const TrackBin& tb);
+
+    // One of the bake's targets back to the CPU, RGBA as every backend wants.
+    // `asFloat` picks the pixel type (the ESM is R16F and reads as FLOAT, the
+    // visibility map is R8 and reads as UBYTE); the enum itself cannot appear
+    // here, where filament::Texture is only forward-declared.
+    bool readBakeTexture(filament::Texture* tex, bool asFloat,
+            std::vector<uint8_t>& out);
+
     bool buildTrackScene(const std::vector<TtpRosterCar>& roster, const ttp::RaceTrack& geo,
             const ttp::rt::Theme& theme, const ttp::rt::WearPlan& wear);
     // The roster half of TrackBin — a copy now that the liveries arrive typed.

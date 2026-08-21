@@ -301,6 +301,33 @@ TTP_ABI int ttp_display_build(const char* trackId, const char* rosterJson);
  * the fallback: a full ttp_display_build. */
 TTP_ABI int ttp_display_reroster(const char* rosterJson);
 
+/* ---- the sun bake, as bytes -------------------------------------------------
+ *
+ * The bake is ~520 ms of GPU on the slowest shipping box and is RESOLUTION
+ * INDEPENDENT: its three sizes are compile-time constants and no viewport,
+ * window or render-scale value reaches it. So it is worth keeping between RUNS,
+ * not only between builds — and keeping it between runs means a file, which is
+ * the shell's job, not this layer's.
+ *
+ * ttp_display_bake_key names what the NEXT build's bake will be OF. Ask it
+ * AFTER ttp_display_biome and before ttp_display_build, which is where a shell
+ * already latches the biome; asked earlier it names the previous scene's world.
+ * Scratch, per ttp_abi.h.
+ *
+ * WHAT THE KEY DOES NOT COVER is the engine that produced the bytes. A shader
+ * edit reproduces the same key and would serve shadows baked by the old vesm,
+ * invisibly and across restarts. Storing a blob under a name that changes with
+ * the installed binary is therefore not an optimisation of the shell's file
+ * layout, it is the other half of the correctness argument.
+ *
+ * export answers NULL when nothing is baked. import answers 1 when the resident
+ * bake is now the blob's — including the case where it already was, which costs
+ * nothing — and 0 for any blob it does not fully trust, leaving a resident bake
+ * untouched. A rejected blob is a cache miss, never an error: bake and carry on. */
+TTP_ABI const char* ttp_display_bake_key(const char* trackId);
+TTP_ABI const uint8_t* ttp_display_bake_export(uint32_t* outLen);
+TTP_ABI int ttp_display_bake_import(const uint8_t* bytes, uint32_t len);
+
 /* Tear the scene down; the engine, views, materials and provided assets live
  * on, so the next ttp_display_build is cheap. */
 TTP_ABI void ttp_display_release(void);

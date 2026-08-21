@@ -1278,8 +1278,13 @@ void TtpRenderer::releaseScene() {
     mRoadInstLastMask.clear();
     mRoadInstLastProf.clear();
     mDeckDecals.clear();
-    if (mShadowMap) { mEngine->destroy(mShadowMap); mShadowMap = nullptr; }
-    if (mVisMap) { mEngine->destroy(mVisMap); mVisMap = nullptr; }
+    // THE SUN BAKE SURVIVES THE SCENE, on the same argument as the silhouette
+    // layers above and for a bigger prize: its casters are the STATIC scene and
+    // cars cast nothing, so a rebuild that changed only the field re-renders a
+    // bit-identical map. Dropping them here is what made every join and every
+    // launch pay the 81-tap blur again (520 ms of a 700 ms build on the Android
+    // box). bakeShadowMap owns them now: it reuses them when its key says the
+    // statics did not move, and destroys them itself when it says they did.
     for (utils::Entity e : { mSun, mFill }) {
         if (!e.isNull()) {
             mScene->remove(e);

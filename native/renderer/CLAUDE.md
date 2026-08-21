@@ -448,6 +448,32 @@ dropped a full-size TBDR load/store per stamp frame. The bakes stay
 transient-RT and are fine — they repaint whole layers, so an undefined start
 is harmless there.
 
+## The build budget: a bake is a fact about the TRACK
+
+A scene build is not a frame, and on the slowest shipping box it is worth more
+than a hundred of them. Measured on the Android reference device: a full
+`ttp_display_build` is ~700 ms, and **the sun bake is 520 ms of it** — the depth
+render, the 81-tap ESM blur and the ground's visibility decode, all of which end
+in `flushAndWait`. Everything else together (the shell's asset provisioning, the
+kit field, the world builders, the ground sheet, the gantry) is the remaining
+tenth. Split it before optimising it; `bakeShadowMap` and `buildTrackScene` each
+log their own phases.
+
+**The casters are the STATIC scene, and cars cast nothing** (`setVisibleLayers`
+0x02). So the bake is a function of the track and its biome, and a rebuild that
+changed only the FIELD — a phone joining, a launch dressing the grid it was
+already previewing — reproduces a bit-identical map. The maps therefore outlive
+`releaseScene`, keyed by what the shim says the scene is OF, and the same
+rebuild costs ~200 ms instead of ~700.
+
+This is the same argument the silhouette layers already won ("a bake is a fact
+about the kit rather than about this race"), one level up. If you add anything
+to the bake, ask what it varies on first: a caster that depends on the ROSTER
+would silently invalidate the whole scheme, and the failure mode is a scene lit
+by the last track's shadows. The key is CONSUMED per build, so a new
+`buildScene` caller that sets none falls through to a real bake rather than
+inheriting somebody else's claim.
+
 ## The per-frame budget
 
 A steady-state race frame is one `ttp_display_frame(dt)`, one

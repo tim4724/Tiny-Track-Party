@@ -574,6 +574,7 @@ add_test(NAME abi
 # RaceSession deliberately stays in libttp-sim: replay_cli has to keep linking
 # the sim alone.
 add_library(libttp_runtime STATIC
+  libttp-runtime/ttp/blobstore.cc
   libttp-runtime/ttp/camera.cc
   libttp-runtime/ttp/framing.cc
   libttp-runtime/ttp/frame_builder.cc
@@ -997,6 +998,7 @@ set(TTP_APP_SOURCES
   # ttp_display_core.cc — same argument as the biome ABI above.
   libttp-runtime/ttp/render_scale_controller.cc
   runtime/ttp_render_scale.cc
+  libttp-runtime/ttp/blobstore.cc
   libttp-runtime/ttp/camera.cc
   libttp-runtime/ttp/framing.cc
   libttp-runtime/ttp/frame_builder.cc

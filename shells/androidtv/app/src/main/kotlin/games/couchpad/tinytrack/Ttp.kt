@@ -15,7 +15,7 @@ import java.nio.ByteBuffer
 
 @Suppress("FunctionName", "unused")
 object Ttp {
-    /** Registers all 209 natives via JNI_OnLoad; a mismatch fails here. */
+    /** Registers all 213 natives via JNI_OnLoad; a mismatch fails here. */
     fun load() { System.loadLibrary("ttp_runtime_android") }
 
     external fun ttp_add_bot(h: Int, idJson: ByteArray?, caution: Double, laneBias: Double, aiSeed: Int, statsJsonOrNull: ByteArray?)
@@ -29,11 +29,15 @@ object Ttp {
     external fun ttp_audio_song_json(index: Int): ByteArray?
     external fun ttp_audio_stop_car(idJson: ByteArray?)
     external fun ttp_audio_stop_voices()
+    external fun ttp_blob_plan_json(requestJson: ByteArray?): ByteArray?
     external fun ttp_car_finished(h: Int, idJson: ByteArray?): Int
     external fun ttp_car_ids_json(h: Int): ByteArray?
     external fun ttp_car_world_pos(h: Int, idJson: ByteArray?, out3: DoubleArray): Int
     external fun ttp_display_antialias(on: Int)
     external fun ttp_display_asset(name: ByteArray?, bytes: ByteArray?): Int
+    external fun ttp_display_bake_export(): ByteArray?
+    external fun ttp_display_bake_import(bytes: ByteArray?): Int
+    external fun ttp_display_bake_key(trackId: ByteArray?): ByteArray?
     external fun ttp_display_bench(model: ByteArray?)
     external fun ttp_display_bind(session: Int)
     external fun ttp_display_biome(name: ByteArray?)

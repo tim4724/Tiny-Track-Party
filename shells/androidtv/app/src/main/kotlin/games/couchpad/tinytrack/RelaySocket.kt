@@ -2,6 +2,7 @@ package games.couchpad.tinytrack
 
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -43,14 +44,25 @@ import java.util.concurrent.TimeUnit
  * singleton with per-call scratch returns. The shell's one-thread rule
  * (`shells/androidtv/CLAUDE.md`) is enforced right here, at the only place in the
  * app where another thread would otherwise arrive.
+ *
+ * **THE HOP IS TIMED, because it is the one interval nothing else can see.** A
+ * frame arrives on the reader thread and then WAITS for whatever the main thread
+ * is doing — a scene build freezes it for the whole build — and the wait is spent
+ * before any `ttp_` call, so no engine readout, no `ttp:` trace marker and no
+ * frame-loop span covers it. Measured here and handed to [onText] rather than
+ * logged here, because the number is only meaningful next to what the walk that
+ * follows it then cost: see [PartyNet.handleText].
  */
 class RelaySocket {
 
     /** The socket reached OPEN. [PartyNet] sends its one first frame here. */
     var onOpen: (() -> Unit)? = null
 
-    /** One inbound text frame, unparsed. */
-    var onText: ((String) -> Unit)? = null
+    /**
+     * One inbound text frame, unparsed, plus the NANOSECONDS it spent waiting for
+     * the main thread (see the class header).
+     */
+    var onText: ((String, Long) -> Unit)? = null
 
     /** `(hasCode, code)` — straight into `ttp_framing_close_outcome`. */
     var onClose: ((Boolean, Double) -> Unit)? = null
@@ -104,7 +116,7 @@ class RelaySocket {
                 }
 
                 override fun onMessage(webSocket: WebSocket, text: String) {
-                    main.post { if (generation == gen) onText?.invoke(text) }
+                    deliver(gen, text)
                 }
 
                 override fun onMessage(webSocket: WebSocket, bytes: okio.ByteString) {
@@ -112,7 +124,7 @@ class RelaySocket {
                     // to be UTF-8 is handed on anyway rather than dropped, because
                     // `ttp_framing_classify` is what decides what is and is not a
                     // frame.
-                    main.post { if (generation == gen) onText?.invoke(bytes.utf8()) }
+                    deliver(gen, bytes.utf8())
                 }
 
                 override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
@@ -189,6 +201,21 @@ class RelaySocket {
         isOpen = false
         socket?.cancel()
         socket = null
+    }
+
+    /**
+     * Post one frame to the main thread, carrying how long the hop took.
+     *
+     * The stamp is taken on the READER thread, which is the only place the start
+     * of the wait exists — by the time the posted block runs, the wait is over and
+     * unrecoverable.
+     */
+    private fun deliver(gen: Int, text: String) {
+        val queuedNs = SystemClock.elapsedRealtimeNanos()
+        main.post {
+            if (generation != gen) return@post
+            onText?.invoke(text, SystemClock.elapsedRealtimeNanos() - queuedNs)
+        }
     }
 
     private fun opened(gen: Int) {

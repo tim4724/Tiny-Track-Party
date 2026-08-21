@@ -4,6 +4,8 @@
 #include "TtpRendererImpl.h"
 
 #include <atomic>
+#include <chrono>
+#include <utility>
 
 #include <utils/Log.h>
 
@@ -269,6 +271,76 @@ void TtpRenderer::bakeSilhouette(const utils::Entity* entities, size_t count,
 // bbox grown by the tallest structure, at the same 2048² and the same
 // ~2.5-texel normal bias.
 void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
+    // 80% OF A SCENE BUILD IS THIS FUNCTION on the Android reference box (570-607
+    // of 711-749 ms), so its own parts have to be separable before anything can
+    // be done about it. Same diagnostic-only deal as buildTrackScene's phases.
+    //
+    // AND THE SPLIT SAYS THE CPU IS DOING NOTHING. Recording each pass costs 0 ms;
+    // the two `flushAndWait` calls below cost ~290 and ~227. This function does
+    // not compute for half a second, it WAITS for the GPU to finish work it has
+    // already submitted — on the thread that also runs the frame loop and the
+    // relay's message pump, which is why a phone's tap queues behind it.
+    //
+    // It is written this way because each step reads the previous step's target
+    // (blur two reads blur one, the vis pass reads the ESM, the road readback
+    // reads it again), and draining the pipeline is the simplest way to order
+    // that. The price was accepted when a build was a LOAD-TIME event — see the
+    // road readback's own note, "the one hitch at load is already the documented
+    // price of the bakes". A live lobby rebuilds on joins, picks and launch, so
+    // that assumption no longer holds.
+    std::vector<std::pair<const char*, double>> bakePhases;
+    auto bakeAt = std::chrono::steady_clock::now();
+    const auto bakeMark = [&](const char* name) {
+        const auto now = std::chrono::steady_clock::now();
+        bakePhases.emplace_back(name,
+                std::chrono::duration<double, std::milli>(now - bakeAt).count());
+        bakeAt = now;
+    };
+    // THE CASTERS ARE THE STATIC SCENE, AND CARS CAST NOTHING (setVisibleLayers
+    // 0x02 below). So this whole bake is a function of the track and its biome:
+    // rebuild the same track with a different FIELD — a phone joining, a launch
+    // re-dressing the grid it was already previewing — and the depth render, the
+    // 81-tap ESM blur and the ground's visibility decode all reproduce, bit for
+    // bit, what is already resident. Measured on the Android reference box that
+    // is 520 of a 700 ms build, and the build blocks the main thread for all of
+    // it, inbound relay frames included.
+    //
+    // The same argument the silhouette layers already won one level up (see
+    // releaseScene: "a bake is a fact about the kit rather than about this
+    // race"), applied to the track. The KEY is the caller's — only the shim
+    // knows what a scene is OF — and an empty one means "do not reuse", which is
+    // what every caller that has not opted in gets.
+    //
+    // The road's vertex light is NOT skipped: the road MESH is new every build,
+    // so its CUSTOM0 has to be refilled. That is the cheap half (~45 ms), and it
+    // reads the ESM back out of the cached pixels rather than off the GPU again.
+    // The two guards below (shadows off, a road with no verts) both DROP the
+    // resident maps on purpose, so the reuse test has to clear them itself
+    // rather than sit after them.
+    if (!mBakeKey.empty() && mBakeKey == mBakedKey && mShadowMap
+            && mShadowsEnabled && !mRoad.verts.empty() && mRenderer) {
+        // THE ROAD'S LIGHT COMES WITH THE MAPS. Same track, so the road mesh was
+        // rebuilt identically and its CUSTOM0 is the same bytes; uploading them
+        // skips the ESM readback AND the per-vertex evaluation. The size test is
+        // the belt to that braces: a road of a different length is not this
+        // track's, whatever the key says, and the honest answer then is to
+        // re-derive rather than to upload a fill that does not fit.
+        if (mRoadLight.size() == mRoad.custom0.size() && !mRoadLight.empty() && mRoad.vb) {
+            mRoad.custom0 = mRoadLight;
+            mRoad.vb->setBufferAt(*mEngine, mRoad.custom0Slot,
+                    VertexBuffer::BufferDescriptor(mRoad.custom0.data(),
+                            mRoad.custom0.size() * sizeof(half4), nullptr));
+        } else {
+            refillRoadLight(tb);
+        }
+        mBakeKey.clear();   // CONSUMED — see the clear on the baking path below
+        bakeMark("reused");
+        utils::slog.i << "ttp shadow bake: REUSED " << mBakedKey.c_str()
+                << " (" << (int) (bakePhases.back().second + 0.5) << " ms)" << utils::io::endl;
+        return;
+    }
+    mBakedKey.clear();   // whatever is resident is about to stop being the truth
+    mRoadLight.clear();
     if (mShadowMap) { mEngine->destroy(mShadowMap); mShadowMap = nullptr; }
     // The ground's visibility bake rides this function (it needs the same
     // camera and the finished ESM), so its output resets on the same early
@@ -392,8 +464,10 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     Renderer::ClearOptions co{};
     co.clear = true;
     mRenderer->setClearOptions(co);
+    bakeMark("setup");
     mRenderer->renderStandaloneView(view);
     mRenderer->setClearOptions(prev);
+    bakeMark("depth");
 
     // World → shadow texture space. Read the matrices BEFORE the camera is
     // destroyed — doing it after is a use-after-free that shows up as a wasm
@@ -544,10 +618,15 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
                 qv->setShadowingEnabled(false);
                 qv->setFrustumCullingEnabled(false);
                 mRenderer->setClearOptions(eco);
+                // RECORDING is free; the WAIT below is where the time goes.
+                // Both halves are marked so the split cannot be misread as CPU
+                // work — see the note on flushAndWait above.
+                bakeMark("blurRecord");
                 mRenderer->renderStandaloneView(qv);
                 mRenderer->setClearOptions(eprev);
                 // Both passes read a texture the next step destroys or writes.
                 mEngine->flushAndWait();
+                bakeMark("blurWait");
                 mEngine->destroy(qv);
                 mEngine->destroy(ert);
                 qs->remove(q);
@@ -613,10 +692,17 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     if (esmOk && mVisMaterial && mGround.vb && mGround.ib
             && !mGround.idx.empty()) {
         constexpr uint32_t VIS_SM = 512;
+        // BLIT_SRC for the same reason the ESM carries it: exportBake reads this
+        // map back so it can be persisted, and Filament warns (and will later
+        // ASSERT) on a readPixels whose COLOR0 was not made blit-readable. The
+        // warning is not cosmetic — what a readback of a non-BLIT_SRC target
+        // returns is up to the driver, and this map is the ground's own sun
+        // shadow, so a wrong one is a wrongly-lit floor rather than a crash.
         Texture* vis = Texture::Builder()
                 .width(VIS_SM).height(VIS_SM).levels(1)
                 .format(Texture::InternalFormat::R8)
-                .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
+                .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE
+                        | Texture::Usage::BLIT_SRC)
                 .build(*mEngine);
         if (vis) {
             MaterialInstance* vmi = mVisMaterial->createInstance();
@@ -657,9 +743,11 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
             // early-out did.
             vco.clearColor = { 1, 1, 1, 1 };
             mRenderer->setClearOptions(vco);
+            bakeMark("visRecord");
             mRenderer->renderStandaloneView(vv);
             mRenderer->setClearOptions(vprev);
             mEngine->flushAndWait();
+            bakeMark("visWait");
             mEngine->destroy(vv);
             mEngine->destroy(vrt);
             gs->remove(ge);
@@ -679,7 +767,35 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     // identical function on the CPU into the road's CUSTOM0 attribute. The
     // readback is asynchronous on every backend; this is track build, and the
     // one hitch at load is already the documented price of the bakes.
-    if (esmOk && !mRoad.custom0.empty() && mRoad.vb && mShadowMap) {
+    if (esmOk) refillRoadLight(tb);
+    mRoadLight = mRoad.custom0;   // for the next build of this same track
+    bakeMark("roadLight");
+
+    mEngine->destroy(view);
+    mEngine->destroy(rt);
+    mEngine->destroyCameraComponent(camEnt);
+    utils::EntityManager::get().destroy(camEnt);
+    // CONSUMED, not merely read. The key is a statement about THIS build, so a
+    // caller that reaches buildScene without making one must fall through to a
+    // real bake rather than inherit the last caller's claim — there is one call
+    // site today and this is what keeps a second one from being a silent, wrong
+    // reuse of somebody else's shadows.
+    mBakedKey = mBakeKey;   // the resident maps are now this key's
+    mBakeKey.clear();
+    {
+        auto& line = utils::slog.i << "ttp shadow bake:";
+        for (const auto& p : bakePhases) line << " " << p.first << " " << (int) (p.second + 0.5);
+        line << utils::io::endl;
+    }
+}
+
+// Read the finished ESM back and refill the ROAD's baked vertex light.
+//
+// Split out because BOTH bake paths need it: the road MESH is rebuilt on every
+// build even when the map that lights it is the one already resident, so a
+// reused bake still has to refill CUSTOM0 on the new vertices.
+void TtpRenderer::refillRoadLight(const TrackBin& tb) {
+    if (!mRoad.custom0.empty() && mRoad.vb && mShadowMap && mRenderer) {
         const uint32_t W = mShadowMap->getWidth(0);
         const uint32_t H = mShadowMap->getHeight(0);
         if (RenderTarget* rrt = RenderTarget::Builder()
@@ -709,20 +825,12 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
             // as a wait returns — so pump a few times rather than once.
             for (int t = 0; t < 8 && !rd->done; t++) mEngine->flushAndWait();
             if (rd->done) {
-                fillRoadLight(tb, rd->px.data(), W, H);
-                mRoad.vb->setBufferAt(*mEngine, mRoad.custom0Slot,
-                        VertexBuffer::BufferDescriptor(mRoad.custom0.data(),
-                                mRoad.custom0.size() * sizeof(half4), nullptr));
+                applyRoadLight(tb, rd->px.data(), W, H);
                 delete rd;
             }
             mEngine->destroy(rrt);
         }
     }
-
-    mEngine->destroy(view);
-    mEngine->destroy(rt);
-    mEngine->destroyCameraComponent(camEnt);
-    utils::EntityManager::get().destroy(camEnt);
 }
 
 // ── The road's matte light, evaluated ONCE ──────────────────────────────────
@@ -740,6 +848,18 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
 // negated light direction, i.e. kToSun. No camera here ever calls
 // setExposure, so every view shares the default exposure read off mCamera —
 // if that ever changes, this bake must follow it.
+// fillRoadLight plus the upload it is useless without. Both bake paths end here
+// — the one that just read the ESM off the GPU, and the one reusing a cached
+// read — so the road can never be filled by one of them and uploaded by neither.
+void TtpRenderer::applyRoadLight(const TrackBin& tb, const float* esm,
+        uint32_t esmW, uint32_t esmH) {
+    if (mRoad.custom0.empty() || !mRoad.vb) return;
+    fillRoadLight(tb, esm, esmW, esmH);
+    mRoad.vb->setBufferAt(*mEngine, mRoad.custom0Slot,
+            VertexBuffer::BufferDescriptor(mRoad.custom0.data(),
+                    mRoad.custom0.size() * sizeof(half4), nullptr));
+}
+
 void TtpRenderer::fillRoadLight(const TrackBin& tb, const float* esm,
         uint32_t esmW, uint32_t esmH) {
     const size_t n = mRoad.custom0.size();
@@ -811,4 +931,228 @@ void TtpRenderer::fillRoadLight(const TrackBin& tb, const float* esm,
         const float3 light = amb + sunTint * (NoL * vis);
         mRoad.custom0[i] = half4{ light.x, light.y, light.z, 1.0f };
     }
+}
+
+// ── The bake, as bytes ──────────────────────────────────────────────────────
+//
+// WHY THIS CROSSES THE ABI AT ALL. The bake is 520 ms of GPU on the Android
+// reference box and it is resolution-independent — the three sizes are compile
+// -time constants (SM, ESM_SM, VIS_SM) and no viewport, window or render-scale
+// value reaches it — so it is worth keeping between RUNS, not just between
+// builds. Keeping it between runs means a file, and a file is the shell's job
+// (`ttp_abi.h`: the transport stays on the host side by design). So this hands
+// over bytes and takes them back, and decides nothing about where they live.
+//
+// THE BLOB CARRIES ITS OWN KEY, and that is what makes a stale file harmless
+// rather than invisible: import adopts the key it finds, and the next build's
+// own key has to match it before anything is reused. What the key CANNOT cover
+// is the engine that produced it — a shader edit reproduces the same
+// `track|biome|showcase` and would silently serve shadows baked by the old
+// vesm. That invalidation is the shell's, and it is why the file lives under a
+// directory named for the installed binary rather than beside the track id.
+namespace {
+constexpr uint32_t kBakeMagic = 0x42505454u;  // 'TTPB', little-endian
+constexpr uint32_t kBakeVersion = 1u;
+
+void putU32(std::vector<uint8_t>& out, uint32_t v) {
+    out.insert(out.end(), (const uint8_t*) &v, (const uint8_t*) &v + 4);
+}
+void putF32(std::vector<uint8_t>& out, float v) {
+    out.insert(out.end(), (const uint8_t*) &v, (const uint8_t*) &v + 4);
+}
+bool takeU32(const uint8_t*& p, const uint8_t* end, uint32_t& v) {
+    if ((size_t) (end - p) < 4) return false;
+    std::memcpy(&v, p, 4); p += 4; return true;
+}
+bool takeF32(const uint8_t*& p, const uint8_t* end, float& v) {
+    if ((size_t) (end - p) < 4) return false;
+    std::memcpy(&v, p, 4); p += 4; return true;
+}
+}  // namespace
+
+// Read one of the bake's own targets back to the CPU.
+//
+// RGBA is not a preference: it is the readback combo every backend accepts (the
+// road light's own read says the same thing about FLOAT). The caller takes the
+// channel it wants out of the four.
+bool TtpRenderer::readBakeTexture(Texture* tex, bool asFloat,
+        std::vector<uint8_t>& out) {
+    if (!tex || !mRenderer) return false;
+    const Texture::Type type = asFloat ? Texture::Type::FLOAT : Texture::Type::UBYTE;
+    const uint32_t bytesPerChannel = asFloat ? 4u : 1u;
+    const uint32_t W = tex->getWidth(0), H = tex->getHeight(0);
+    RenderTarget* rt = RenderTarget::Builder()
+            .texture(RenderTarget::AttachmentPoint::COLOR, tex)
+            .build(*mEngine);
+    if (!rt) return false;
+    struct Read { std::vector<uint8_t> px; std::atomic<bool> done{ false }; };
+    auto* rd = new Read;
+    rd->px.resize((size_t) W * H * 4 * bytesPerChannel);
+    Texture::PixelBufferDescriptor pbd(rd->px.data(), rd->px.size(),
+            Texture::Format::RGBA, type,
+            [](void*, size_t, void* user) { static_cast<Read*>(user)->done = true; }, rd);
+    mRenderer->readPixels(rt, 0, 0, W, H, std::move(pbd));
+    for (int t = 0; t < 8 && !rd->done; t++) mEngine->flushAndWait();
+    const bool ok = rd->done;
+    if (ok) out = std::move(rd->px);
+    if (ok) delete rd;   // the never-done path leaks it on purpose, as the road's read does
+    mEngine->destroy(rt);
+    return ok;
+}
+
+bool TtpRenderer::exportBake(std::vector<uint8_t>& out) {
+    if (mBakedKey.empty() || !mShadowMap) return false;
+    // The ESM is R16F and comes back as RGBA float, so the R channel is taken
+    // and re-narrowed to the half it is stored as — 2 MB rather than the 16 MB
+    // the readback itself needs, and the same bits the texture holds.
+    std::vector<uint8_t> esmRGBA;
+    if (!readBakeTexture(mShadowMap, /*asFloat=*/true, esmRGBA)) return false;
+    const uint32_t ew = mShadowMap->getWidth(0), eh = mShadowMap->getHeight(0);
+    const size_t texels = (size_t) ew * eh;
+    if (esmRGBA.size() < texels * 16) return false;
+    // ROWS GO BACK THE OTHER WAY, and this is a documented Filament fact rather
+    // than a guess (Renderer.h, readPixels): "OpenGL only: if issuing a readPixels
+    // on a RenderTarget backed by a Texture that had data uploaded to it via
+    // setImage, the data returned from readPixels will be y-flipped with respect
+    // to the setImage call." This blob is read one way and uploaded the other, so
+    // somebody has to flip; doing it here means the file is in setImage order and
+    // import stays a straight upload.
+    //
+    // It is invisible in every way that matters until you look: the map still
+    // covers the track, still has the right shape, and is simply upside down —
+    // which reads on screen as a shadow that has been rotated onto the wrong side
+    // of the circuit. fillRoadLight never hit this because it consumes the
+    // readback directly, in the readback's own orientation, and never round-trips.
+    std::vector<math::half> esm(texels);
+    const float* src = (const float*) esmRGBA.data();
+    for (uint32_t y = 0; y < eh; y++) {
+        const float* row = src + (size_t) (eh - 1 - y) * ew * 4;
+        math::half* dst = esm.data() + (size_t) y * ew;
+        for (uint32_t x = 0; x < ew; x++) dst[x] = math::half(row[x * 4]);
+    }
+
+    std::vector<uint8_t> visRGBA;
+    uint32_t vw = 0, vh = 0;
+    if (mVisMap && readBakeTexture(mVisMap, /*asFloat=*/false, visRGBA)) {
+        vw = mVisMap->getWidth(0);
+        vh = mVisMap->getHeight(0);
+    }
+
+    out.clear();
+    putU32(out, kBakeMagic);
+    putU32(out, kBakeVersion);
+    putU32(out, (uint32_t) mBakedKey.size());
+    out.insert(out.end(), mBakedKey.begin(), mBakedKey.end());
+    putF32(out, mShadowTexel);
+    putF32(out, mShadowDepthScale);
+    for (int c = 0; c < 4; c++) {
+        for (int r = 0; r < 4; r++) putF32(out, mShadowFromWorld[c][r]);
+    }
+    putU32(out, ew); putU32(out, eh);
+    out.insert(out.end(), (const uint8_t*) esm.data(),
+            (const uint8_t*) esm.data() + texels * sizeof(math::half));
+    putU32(out, vw); putU32(out, vh);
+    if (vw && vh) {
+        std::vector<uint8_t> vis((size_t) vw * vh);
+        for (uint32_t y = 0; y < vh; y++) {          // y-flipped, as above
+            const uint8_t* row = visRGBA.data() + (size_t) (vh - 1 - y) * vw * 4;
+            uint8_t* dst = vis.data() + (size_t) y * vw;
+            for (uint32_t x = 0; x < vw; x++) dst[x] = row[x * 4];
+        }
+        out.insert(out.end(), vis.begin(), vis.end());
+    }
+    putU32(out, (uint32_t) mRoadLight.size());
+    out.insert(out.end(), (const uint8_t*) mRoadLight.data(),
+            (const uint8_t*) mRoadLight.data() + mRoadLight.size() * sizeof(math::half4));
+    return true;
+}
+
+bool TtpRenderer::importBake(const uint8_t* bytes, uint32_t len) {
+    if (!bytes || len < 16 || !mEngine) return false;
+    const uint8_t* p = bytes;
+    const uint8_t* end = bytes + len;
+    uint32_t magic = 0, version = 0, keyLen = 0;
+    if (!takeU32(p, end, magic) || magic != kBakeMagic) return false;
+    if (!takeU32(p, end, version) || version != kBakeVersion) return false;
+    if (!takeU32(p, end, keyLen) || (size_t) (end - p) < keyLen) return false;
+    const std::string key((const char*) p, keyLen);
+    p += keyLen;
+    // ALREADY RESIDENT. Uploading two textures to arrive where we are costs the
+    // ~50 ms this whole path exists to avoid.
+    if (key == mBakedKey && mShadowMap) return true;
+
+    float texel = 0, depthScale = 0;
+    if (!takeF32(p, end, texel) || !takeF32(p, end, depthScale)) return false;
+    math::mat4f fromWorld;
+    for (int c = 0; c < 4; c++) {
+        for (int r = 0; r < 4; r++) {
+            if (!takeF32(p, end, fromWorld[c][r])) return false;
+        }
+    }
+    uint32_t ew = 0, eh = 0;
+    if (!takeU32(p, end, ew) || !takeU32(p, end, eh) || !ew || !eh) return false;
+    const size_t esmBytes = (size_t) ew * eh * sizeof(math::half);
+    if ((size_t) (end - p) < esmBytes) return false;
+    const uint8_t* esmSrc = p;
+    p += esmBytes;
+    uint32_t vw = 0, vh = 0;
+    if (!takeU32(p, end, vw) || !takeU32(p, end, vh)) return false;
+    const size_t visBytes = (size_t) vw * vh;
+    if ((size_t) (end - p) < visBytes) return false;
+    const uint8_t* visSrc = p;
+    p += visBytes;
+    uint32_t roadCount = 0;
+    if (!takeU32(p, end, roadCount)) return false;
+    const size_t roadBytes = (size_t) roadCount * sizeof(math::half4);
+    if ((size_t) (end - p) < roadBytes) return false;
+    const uint8_t* roadSrc = p;
+
+    // UPLOADABLE IS NOT OPTIONAL HERE, and its absence does not report: a
+    // setImage into a texture that lacks it hangs this driver outright, with no
+    // panic and no log — the bake's own ESM never needed the bit because it is
+    // RENDERED into, never uploaded. COLOR_ATTACHMENT stays because the road's
+    // fallback readback still builds a RenderTarget over this texture.
+    Texture* esm = Texture::Builder()
+            .width(ew).height(eh).levels(1)
+            .format(Texture::InternalFormat::R16F)
+            .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE
+                    | Texture::Usage::UPLOADABLE | Texture::Usage::BLIT_SRC)
+            .build(*mEngine);
+    if (!esm) return false;
+    {
+        Texture::PixelBufferDescriptor pbd(malloc(esmBytes), esmBytes,
+                Texture::Format::R, Texture::Type::HALF,
+                [](void* buf, size_t, void*) { free(buf); });
+        std::memcpy(pbd.buffer, esmSrc, esmBytes);
+        esm->setImage(*mEngine, 0, std::move(pbd));
+    }
+    Texture* vis = nullptr;
+    if (vw && vh) {
+        vis = Texture::Builder()
+                .width(vw).height(vh).levels(1)
+                .format(Texture::InternalFormat::R8)
+                .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE
+                        | Texture::Usage::UPLOADABLE | Texture::Usage::BLIT_SRC)
+                .build(*mEngine);
+        if (vis) {
+            Texture::PixelBufferDescriptor pbd(malloc(visBytes), visBytes,
+                    Texture::Format::R, Texture::Type::UBYTE,
+                    [](void* buf, size_t, void*) { free(buf); });
+            std::memcpy(pbd.buffer, visSrc, visBytes);
+            vis->setImage(*mEngine, 0, std::move(pbd));
+        }
+    }
+    // Only now is the old set replaced: a blob that failed any check above must
+    // leave a resident bake alone rather than half-destroy it.
+    if (mShadowMap) mEngine->destroy(mShadowMap);
+    if (mVisMap) mEngine->destroy(mVisMap);
+    mShadowMap = esm;
+    mVisMap = vis;
+    mShadowTexel = texel;
+    mShadowDepthScale = depthScale;
+    mShadowFromWorld = fromWorld;
+    mRoadLight.assign((const math::half4*) roadSrc,
+            (const math::half4*) roadSrc + roadCount);
+    mBakedKey = key;
+    return true;
 }

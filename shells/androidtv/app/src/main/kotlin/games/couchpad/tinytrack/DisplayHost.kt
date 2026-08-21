@@ -106,6 +106,13 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
      */
     var onSurfaceReady: (() -> Unit)? = null
 
+    /**
+     * The sun bake's disk tier, or null where there is none (a scenario harness,
+     * a device with no writable files dir). Set once at boot; [BakeCache] holds
+     * the whole argument for why it exists and what it must not get wrong.
+     */
+    var bakes: BakeCache? = null
+
     /** Set once a scene is built; `ttp_display_frame` on an empty scene is legal but blank. */
     var hasScene: Boolean = false
         private set
@@ -489,8 +496,16 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
      * possibility (an unknown track id) and not an assertion.
      */
     fun build(trackId: String, roster: List<RosterSlot>, store: AssetStore): Boolean {
+        // TIMED AND MARKED, because this is the longest thing this shell ever does
+        // on the main thread and nothing else can see it. `ttp_display_frame`'s
+        // profile stops at the frame; a build is not a frame. What it blocks is
+        // everything else on the looper, inbound relay frames included — so a
+        // phone's tap and the `set_state` confirming it both wait out whatever
+        // this number turns out to be (`PartyNet.handleText`).
+        val started = System.nanoTime()
+        Trace.beginSection("ttp:build")
         return try {
-            biome = SceneStaging.build(trackId, roster, this, store)
+            biome = SceneStaging.build(trackId, roster, this, store, bakes)
             this.trackId = trackId
             hasScene = true
             // A NEW SCENE VOIDS THE SCALE'S MEASUREMENTS — the same argument as
@@ -513,11 +528,14 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
             // cost model — so a shell rebuilding a scene nothing asked it to
             // rebuild shows up as a scaler that will not settle, and the two are
             // indistinguishable without this line.
-            Log.i(TAG, "scene build -> $trackId")
+            Log.i(TAG, String.format(java.util.Locale.ROOT,
+                "scene build -> %s (%.0f ms)", trackId, (System.nanoTime() - started) / 1_000_000.0))
             true
         } catch (e: Exception) {
             Log.e(TAG, "scene build failed", e)
             false
+        } finally {
+            Trace.endSection()
         }
     }
 

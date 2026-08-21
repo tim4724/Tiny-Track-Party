@@ -340,6 +340,43 @@ TTP_ABI const char* ttp_schematic_points_json(const char* pathD);
 // every call, unlike the per-handle scratch the JSON getters return.
 TTP_ABI const char* ttp_item_id(int code);
 
+/* ---- the blob store -----------------------------------------------------------
+ *
+ * Where a cached blob lives, and which cached blobs should stop living. The
+ * decision is `libttp-runtime/ttp/blobstore.h`'s and the whole argument for the
+ * split is in that header; this is the crossing.
+ *
+ * A shell keeps expensive DERIVED bytes between runs — the sun bake is the first
+ * caller (ttp_display_bake_export) — and owns four primitives it cannot avoid
+ * owning: list names with last-used times, read by name, write by name, delete by
+ * name. It owns nothing else. What a blob is CALLED, when it stops being valid
+ * and which ones to evict are rules, and three shells answering them
+ * independently is three chances to answer differently.
+ *
+ * Ask once per lookup, with everything currently held:
+ *
+ *   {"store":"bake","generation":"<binary id>","key":"cove|beach|0",
+ *    "entries":[{"name":"...","usedMs":123},…]}
+ *
+ * and perform the answer:
+ *
+ *   {"name":"<read and write this>","drop":["<delete these>",…]}
+ *
+ * GENERATION IS THE INVALIDATION and it is yours to supply, because only a shell
+ * knows what identifies its own binary — Android's install time, tvOS's bundle
+ * version, the web's BUILD_STAMP. It is folded into the NAME, so a new binary
+ * cannot name the old one's blob at all, and the old one's files come back in
+ * `drop` the first time a plan sees them. Do not invent a second validity check
+ * beside it; do not reuse a generation string across builds that could produce
+ * different bytes.
+ *
+ * `drop` may name entries this shell has already deleted, and a delete that
+ * fails is not an error: the store is a cache, and every road out of it — a
+ * miss, a short read, a corrupt blob, a full disk — is "compute it again".
+ *
+ * Scratch, per ttp_abi.h. */
+TTP_ABI const char* ttp_blob_plan_json(const char* requestJson);
+
 // {"contractVersion":N,"mathlib":"..."} — the adapter's sanity check.
 TTP_ABI const char* ttp_version(void);
 

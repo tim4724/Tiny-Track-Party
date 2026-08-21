@@ -1,6 +1,11 @@
 // Split from the original single-file TtpRenderer.cpp along its subsystem
 // seams; TtpRendererImpl.h carries what the topic files share. Pure code
 // motion — behaviour, member set and ABI are unchanged.
+#include <chrono>
+#include <utility>
+
+#include <utils/Log.h>
+
 #include "TtpRendererImpl.h"
 #include "TtpRendererKit.h"
 
@@ -765,6 +770,20 @@ TtpRenderer::MatteRig TtpRenderer::matteRig(const TrackBin& tb) const {
 bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         const ttp::RaceTrack& geo, const ttp::rt::Theme& theme,
         const ttp::rt::WearPlan& wear) {
+    // WHERE THE BUILD'S SECOND GOES. A scene build blocks the Android shell's
+    // main thread for ~750 ms, and that shell's own step timing proved 96% of it
+    // is inside THIS function — so the phases have to be nameable from in here or
+    // not at all. Diagnostic only: a handful of clock reads on a path that runs
+    // once per scene, against hundreds of milliseconds of work.
+    std::vector<std::pair<const char*, double>> phases;
+    auto phaseAt = std::chrono::steady_clock::now();
+    const auto phaseMark = [&](const char* name) {
+        const auto now = std::chrono::steady_clock::now();
+        phases.emplace_back(name,
+                std::chrono::duration<double, std::milli>(now - phaseAt).count());
+        phaseAt = now;
+    };
+
     TrackBin tb;
     applyRoster(tb, roster);
     applyTheme(tb, theme);
@@ -886,6 +905,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     // field does: the ring reads the bounds this leaves behind and stands no
     // hill inside them, so the field gets the clear horizon a browser needs
     // instead of a row of models parked behind a mountain.
+    phaseMark("prologue");
     buildKitField(tb);
 
     // Horizon hill ring (environment.js buildHillRingGeometry, 'dome' shape):
@@ -1222,6 +1242,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         recolourMonsterChassis(mMonsterAsset, mMonsterInstances,
                 math::float4{ chassis, 1.0f });
     }
+    phaseMark("kit+rig");
     buildWater(tb);
     buildFliers(tb);
     buildOils(tb);   // the cones and signs; the slick itself is a road stamp
@@ -1892,6 +1913,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         }
     }
 
+    phaseMark("world+ground");
     buildGantry(tb);
     // Sun shadows: who casts, who catches. AFTER the gantry — it's a caster.
     //
@@ -1956,7 +1978,9 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
 
     // The sun's map, rendered once now that every caster exists, and handed to
     // the materials that sample it.
+    phaseMark("gantry");
     bakeShadowMap(tb);
+    phaseMark("shadowBake");
     bindShadowMap(litShadowInstance());
     // The deck is the main RECEIVER, but under the baked-light vroad there is
     // nothing to bind: its ESM decode ran once inside bakeShadowMap
@@ -2059,6 +2083,14 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     pumpTextures();
     mTrack = std::make_unique<TrackBin>(std::move(tb));
     mDecalProjHint.clear(); // ring indices belong to the track just replaced
+    phaseMark("epilogue");
+    {
+        double total = 0;
+        for (const auto& p : phases) total += p.second;
+        auto& line = utils::slog.i << "ttp build phases:";
+        for (const auto& p : phases) line << " " << p.first << " " << (int) (p.second + 0.5);
+        line << " | total " << (int) (total + 0.5) << " ms" << utils::io::endl;
+    }
     return true;
 }
 

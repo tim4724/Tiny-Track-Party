@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.os.Trace
 import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
@@ -57,6 +58,9 @@ class PartyNet(
     // is what runs it. Everything else in here stays internal by being unreferenced.
     companion object {
         private const val TAG = "PartyNet"
+
+        /** See [reportInbound]. One 30 Hz frame is 33.3 ms; this clears it. */
+        private const val SLOW_INBOUND_MS = 50.0
 
         /**
          * This shell's CouchPad `cpp` value (CONTRACT §6). The join URL is the
@@ -297,7 +301,7 @@ class PartyNet(
         Ttp.ttp_net_init_pick(roomHandle, null, 1, Random.nextInt().toUInt().toDouble())
 
         socket.onOpen = { handleOpen() }
-        socket.onText = { handleText(it) }
+        socket.onText = { text, hopNs -> handleText(text, hopNs) }
         socket.onClose = { hasCode, code -> handleClose(hasCode, code) }
 
         // Fastlane input joins the SAME funnel a relay game-message takes, so the
@@ -346,22 +350,75 @@ class PartyNet(
         walk(TtpJson.strOrEmpty(Ttp.ttp_net_on_open_json(roomHandle)))
     }
 
-    private fun handleText(text: String) {
-        // The RAW text crosses, unparsed: whether it is even a JSON object is the
-        // ported code's call, not a Kotlin paraphrase of it.
-        val r = TtpJson.obj(Ttp.ttp_framing_classify(TtpJson.arg(text)))
-        when (r.optString("route")) {
-            "message" -> handleMessage(r.opt("from"), r.opt("data"))
-            // The display AUTHORS the retained snapshot; it does not consume its
-            // own replay.
-            "state" -> Unit
-            "protocol" -> handleProtocol(
-                r.optString("type"),
-                r.optJSONObject("msg") ?: JSONObject(),
-            )
-            // "none" — not a JSON object. Dropped, exactly as the kit does.
-            else -> Unit
+    /**
+     * One inbound frame, from the main thread. `hopNs` is what it spent waiting to
+     * get here (see [RelaySocket]).
+     *
+     * THE WHOLE ROUND TRIP A PHONE FEELS PASSES THROUGH THIS ONE CALL. A tap
+     * arrives, the walk applies it, and the walk's own `publish` puts the
+     * confirming `set_state` back on the socket — so the wait above and the walk
+     * below are, together, everything the display adds between a phone's tap and
+     * its echo. Timed as one number for that reason, and split in two because the
+     * halves have different cures: a long WAIT is something else holding the main
+     * thread (a scene build freezes it outright), a long WALK is this path's own
+     * cost.
+     */
+    private fun handleText(text: String, hopNs: Long) {
+        val started = System.nanoTime()
+        var route = "none"
+        // The marker pairs with the frame loop's `ttp:sim` / `ttp:render`: one
+        // atrace capture then shows an inbound frame against whatever it queued
+        // behind, which is the half a logged duration cannot show.
+        Trace.beginSection("ttp:net")
+        try {
+            // The RAW text crosses, unparsed: whether it is even a JSON object is the
+            // ported code's call, not a Kotlin paraphrase of it.
+            val r = TtpJson.obj(Ttp.ttp_framing_classify(TtpJson.arg(text)))
+            route = r.optString("route")
+            when (route) {
+                "message" -> handleMessage(r.opt("from"), r.opt("data"))
+                // The display AUTHORS the retained snapshot; it does not consume its
+                // own replay.
+                "state" -> Unit
+                "protocol" -> handleProtocol(
+                    r.optString("type"),
+                    r.optJSONObject("msg") ?: JSONObject(),
+                )
+                // "none" — not a JSON object. Dropped, exactly as the kit does.
+                else -> Unit
+            }
+        } finally {
+            Trace.endSection()
+            reportInbound(route, hopNs, System.nanoTime() - started)
         }
+    }
+
+    /**
+     * Say so when a frame took long enough that a player could feel it.
+     *
+     * ABOVE A THRESHOLD, NOT EVERY FRAME. `CONTROL` reaches the display over the
+     * relay whenever the fastlane is not up, and `protocol.js` bounds it at one
+     * message per `SEND_MIN_INTERVAL_MS` per phone — so a full grid puts a steady
+     * stream through here and a per-frame line would bury its own exceptions in
+     * repeats, exactly as the input path's once-per-session latch avoids.
+     *
+     * The threshold clears one 30 Hz frame with margin, because 30 Hz is this
+     * box's own 4P mode: a frame that waited out the tick it landed in is
+     * ORDINARY and must not log, and anything past that is not.
+     *
+     * IT DOES NOT COVER THE FASTLANE, and that is a gap rather than a decision.
+     * [Fastlane] hops its own inbound frames to the main thread (`main.post` in
+     * its DataChannel observer), so a channel packet waits out exactly the same
+     * scene build this measures for the relay — and steering is the traffic that
+     * wait is felt on most. Timing it wants the same two numbers this takes.
+     */
+    private fun reportInbound(route: String, hopNs: Long, walkNs: Long) {
+        val hopMs = hopNs / 1_000_000.0
+        val walkMs = walkNs / 1_000_000.0
+        if (hopMs + walkMs < SLOW_INBOUND_MS) return
+        Log.w(TAG, String.format(java.util.Locale.ROOT,
+            "slow inbound %s: %.1f ms waiting for the main thread + %.1f ms in the walk",
+            route, hopMs, walkMs))
     }
 
     /**

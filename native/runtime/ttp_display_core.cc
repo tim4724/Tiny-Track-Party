@@ -140,6 +140,16 @@ const char* ttp_display_kit_field_layout(void) {
     return (g_disp && g_disp->renderer) ? g_disp->renderer->kitFieldLayout() : "[]";
 }
 
+// What a scene IS, for the sun bake — the one rule, read by the build below and
+// by ttp_display_bake_key. The ROSTER is deliberately absent: the casters are
+// the static scene and cars cast nothing, which is the whole reason a bake
+// outlives a field change.
+static std::string bakeKeyFor(const char* trackId, const char* biome) {
+    return (trackId ? std::string(trackId) : std::string())
+            + "|" + (biome ? biome : "")
+            + "|" + (g_disp && g_disp->showcase ? "1" : "0");
+}
+
 int ttp_display_build(const char* trackId, const char* rosterJson) {
     ttp::clear_error();
     // The two ways this refuses are unrelated and read identically from outside:
@@ -191,6 +201,17 @@ int ttp_display_build(const char* trackId, const char* rosterJson) {
     // built track the sim races plus the deck the biome surfaces it with (a
     // moulded-plastic deck plans none), like the theme.
     const ttp::rt::WearPlan wear = ttp::rt::compute_wear_plan(geo, theme.road);
+    // WHAT THIS SCENE IS OF, for the shadow bake's reuse test (bakeShadowMap).
+    // ONE RULE, shared with ttp_display_bake_key so a shell naming a cache file
+    // and the build deciding whether to reuse cannot disagree about what a scene
+    // is.
+    // The casters are the static scene and cars cast nothing, so two builds that
+    // agree on these three agree on the bake — and a rebuild for a new FIELD is
+    // then 520 ms cheaper on the Android reference box. The ROSTER is
+    // deliberately absent: including it would be the bug this exists to fix.
+    // showcase is in because it swaps the whole palette, and therefore the
+    // scenery that casts.
+    g_disp->renderer->setBakeKey(bakeKeyFor(trackId, biome).c_str());
     if (!g_disp->renderer->buildScene(geo, theme, roster.cars, wear)) return 0;
     g_disp->built = true;
     g_disp->roster = roster.ids;
@@ -234,6 +255,33 @@ int ttp_display_reroster(const char* rosterJson) {
     // The scene never went away, so nothing about the cameras did either.
     g_disp->rosterCars = next.cars;
     return 1;
+}
+
+const char* ttp_display_bake_key(const char* trackId) {
+    // The biome must already be latched (ttp_display_biome), exactly as it must
+    // be before a build — the shell does both in the same step, and a key asked
+    // for before the latch names the PREVIOUS scene's world.
+    static std::string key;
+    const char* biome = (g_disp && !g_disp->biome.empty())
+            ? g_disp->biome.c_str() : ttp::rt::biome_for_track(trackId);
+    key = bakeKeyFor(trackId, biome);
+    return key.c_str();
+}
+
+const uint8_t* ttp_display_bake_export(uint32_t* outLen) {
+    static std::vector<uint8_t> blob;
+    blob.clear();
+    if (!g_disp || !g_disp->renderer || !g_disp->renderer->exportBake(blob)) {
+        if (outLen) *outLen = 0;
+        return nullptr;
+    }
+    if (outLen) *outLen = (uint32_t) blob.size();
+    return blob.data();
+}
+
+int ttp_display_bake_import(const uint8_t* bytes, uint32_t len) {
+    if (!g_disp || !g_disp->renderer) return 0;
+    return g_disp->renderer->importBake(bytes, len) ? 1 : 0;
 }
 
 void ttp_display_release(void) {

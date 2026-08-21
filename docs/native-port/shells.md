@@ -80,6 +80,47 @@ Three properties of that surface matter more than the list:
   cupName}`, never composed English, so your platform's own string resources
   are the copy table. Do not compose copy in C++ to save a shell some work.
 
+## Optional: caching expensive derived bytes between runs
+
+Not owed. Skip it until you have measured that you need it, and measure per
+platform — a bake that costs 520 ms of GPU on a PowerVR TV box may cost almost
+nothing on yours, and the `ttp shadow bake` line the renderer already logs tells
+you which you are.
+
+If you do want it, the engine has both halves already and neither is yours to
+invent:
+
+- **`ttp_blob_plan_json`** decides what a blob is CALLED, when it stops being
+  valid, and which ones to evict. You send the store name, your binary's
+  identity, the key, and the entries you currently hold; you get back one name
+  and a list to delete.
+- **`ttp_display_bake_export` / `_import` / `_bake_key`** are the first (and so
+  far only) thing worth storing: the sun bake, which is resolution-independent
+  and a pure function of track and biome.
+
+What you write is four primitives over your own storage — list names with
+last-used times, read by name, write by name, delete by name. Android's is
+`BlobStore.kt`, ~120 lines, and `BakeCache.kt` beside it is the bake-specific
+half that knows nothing about files. Copy that shape.
+
+**GENERATION IS THE INVALIDATION, and it is the one thing you supply.** Give it
+something that changes whenever your binary could produce different bytes —
+Android uses the APK's install time, deliberately NOT its versionName, because a
+`-dirty` build keeps one version string across many edits. The engine folds it
+into the name, so a new binary cannot name the old one's blob at all. Do not add
+a second validity check beside it, and do not reuse a generation string across
+builds.
+
+Two traps that are Filament's, not any platform's, and will bite every shell
+identically (both are commented where they bite, in `TtpRendererBakes.cpp`):
+
+- A texture you `setImage` into must carry `Usage::UPLOADABLE`. Without it the
+  driver can HANG with no panic and no log.
+- `readPixels` and `setImage` disagree about Y on OpenGL — Filament's own header
+  says so. A blob read one way and uploaded the other is upside down, which
+  renders as a shadow that has moved to the wrong side of the circuit, not as
+  anything that looks broken.
+
 ## What every shell owes
 
 1. **The surface file.** A sibling of `native/runtime/ttp_display_web.cc`:

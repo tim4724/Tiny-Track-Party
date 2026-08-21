@@ -96,6 +96,14 @@ const OVERRIDES = {
   // ttp_display_profile_names(). Capped rather than trusted: a wrong length here
   // is an out-of-bounds read of the renderer's scratch.
   ttp_display_profile: { kind: 'block', bytes: 'ttpProfileBytes()' },
+  // The sun bake as a blob. It hands its length back through an out-param the
+  // Kotlin side never sees — same deal as ttp_glb_ghost, minus the input — so a
+  // shell gets a right-sized ByteArray or null and cannot get the pair wrong.
+  ttp_display_bake_export: { kind: 'bytesOut' },
+  // ...and back, as (bytes, len) collapsed to one ByteArray for the reason
+  // ttp_display_asset's entry gives: separate arguments can disagree, and that
+  // disagreement is a buffer overrun. The int is a PREDICATE (ttp_display.h).
+  ttp_display_bake_import: { kind: 'bytesInInt' },
 };
 
 // ---------------------------------------------------------------------------
@@ -325,6 +333,20 @@ function emitC(fns) {
       call = `toBytes(env, p, outLen)`;
       retC = 'jbyteArray';
       sig = '([B)[B';
+    } else if (kind === 'bytesOut') {
+      pre.push(`    uint32_t outLen = 0;`);
+      pre.push(`    const uint8_t* p = ${fn.name}(&outLen);`);
+      call = `toBytes(env, p, outLen)`;
+      retC = 'jbyteArray';
+      sig = '()[B';
+    } else if (kind === 'bytesInInt') {
+      args.push('jbyteArray bytes');
+      pre.push(`    const jsize n = bytes ? env->GetArrayLength(bytes) : 0;`);
+      pre.push(`    std::vector<uint8_t> b((size_t) n);`);
+      pre.push(`    if (n) env->GetByteArrayRegion(bytes, 0, n, (jbyte*) b.data());`);
+      call = `(jint) ${fn.name}(b.data(), (uint32_t) n)`;
+      retC = 'jint';
+      sig = '([B)I';
     } else if (kind === 'block') {
       pre.push(`    const auto* p = ${fn.name}();`);
       pre.push(`    if (!p) return nullptr;`);
@@ -414,6 +436,8 @@ function emitKt(fns) {
     } else if (kind === 'floatOut') { ps = ['out: FloatArray', 'maxCells: Int']; ret = 'Int'; }
     else if (kind === 'namedBytes') { ps = ['name: ByteArray?', 'bytes: ByteArray?']; ret = 'Int'; }
     else if (kind === 'bytesIn' || kind === 'bytesInBytesOut') { ps = ['bytes: ByteArray?']; ret = 'ByteArray?'; }
+    else if (kind === 'bytesOut') { ps = []; ret = 'ByteArray?'; }
+    else if (kind === 'bytesInInt') { ps = ['bytes: ByteArray?']; ret = 'Int'; }
     else if (kind === 'block') { ps = []; ret = 'ByteBuffer?'; }
     L.push(`    external fun ${fn.name}(${ps.join(', ')})${ret === 'Unit' ? '' : ': ' + ret}`);
   }
