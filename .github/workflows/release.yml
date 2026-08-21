@@ -1,8 +1,12 @@
 name: Release
 
-# The signed store build of the Android TV app: a .aab kept as a workflow
-# artifact, and on a release tag published to Play's Android TV closed testing
-# track.
+# What a release needs, in one workflow:
+#
+#   - the signed store build of the Android TV app: a .aab kept as a workflow
+#     artifact, and on a release tag published to Play's Android TV closed
+#     testing track.
+#   - the store SCREENSHOTS, as a second artifact. Both jobs are independent;
+#     the pictures do not wait for the engine and cannot be lost to it failing.
 #
 # WHY THIS IS NOT androidtv.yml WITH A KEYSTORE. That leg is compile-only and
 # passes -PttpNoEngine, so its APK carries no engine and is unloadable by
@@ -248,3 +252,90 @@ jobs:
           mappingFile: shells/androidtv/app/build/outputs/mapping/release/mapping.txt
           track: tv:Alpha
           status: completed
+
+  # THE STORE PICTURES, and they come from the WEB display rather than from a
+  # television. That is not a shortcut around a hard problem, it is the only
+  # place a runner can render this at all: shells/androidtv's own harness
+  # photographs an installed app with `adb exec-out screencap`, and a runner has
+  # no box and no emulator that could run an arm64-only APK. What it renders is
+  # the same C++ engine and the same Filament renderer the TV runs, from the
+  # same scenario table (public/shared/galleryScenarios.js), so the pixels are
+  # the game rather than a mock-up of it.
+  #
+  # capture-artwork.js, NOT capture-shots.mjs. The gallery harness writes WebP at
+  # 1280 wide, which Play does not accept, and it shoots under
+  # navigator.webdriver, where Stage caps the render scale at 0.25 and Display
+  # skips the sun's shadow bake. capture-artwork spoofs that flag false, so these
+  # come out at full scale WITH shadows -- which is the difference between a
+  # store listing and a bug report.
+  #
+  # 1920x1080 PNG serves every Play screenshot slot: 16:9 is inside the aspect
+  # range phone and tablet accept and is exactly what the TV slot wants, so one
+  # set is uploaded to all of them.
+  screenshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      # Chromium only. The engine is the COMMITTED wasm under
+      # public/display/engine/native/, so nothing here builds native code and
+      # this job has no Filament dependency at all.
+      - run: npx playwright install --with-deps chromium
+
+      # One line per shot: scenario, track, players. The spread is deliberate --
+      # five cups means five looks, and a listing that shows one of them sells a
+      # much smaller game than this is. The last three leave the track unset and
+      # so land on capture-artwork's own default, `ribbon`: nothing scenario-side
+      # picks a track, so an unset one is the script's constant rather than a
+      # choice about the moment. A track id that is not in the catalogue is NOT
+      # an error either -- main.js falls back to the first one and would quietly
+      # shoot a different scene than the line asks for.
+      #
+      # --ss 1 (no supersampling): the renderer goes through SwiftShader here,
+      # and a 4K frame to downscale costs minutes rather than seconds. FXAA is
+      # on, so the edges hold up.
+      - name: Capture
+        run: |
+          set -eu
+          mkdir -p store-shots
+          # An ARRAY, not a ${3:+--track "$3"} conditional expansion. That
+          # shorthand is one word under zsh and two under bash, and
+          # capture-artwork.js parses argv positionally and IGNORES a flag it
+          # cannot read -- so the one-word form silently ate the --out that
+          # followed it and wrote the default path instead. It failed by
+          # producing the wrong FILE, never by exiting non-zero.
+          shoot() {
+            local name=$1 scenario=$2 track=$3 players=$4
+            local a=(--scenario "$scenario" --players "$players" --ss 1
+                     --out "store-shots/$name.png")
+            [ -n "$track" ] && a+=(--track "$track")
+            echo "::group::$name"
+            node scripts/capture-artwork.js "${a[@]}"
+            echo "::endgroup::"
+            # Same reason: prove the file the flag asked for actually exists.
+            [ -f "store-shots/$name.png" ] || {
+              echo "::error::$name did not write store-shots/$name.png"
+              exit 1
+            }
+          }
+          shoot 1-beach-4p     racing   tidepool 4
+          shoot 2-snow-2p      racing   glacier  2
+          shoot 3-backyard-4p  racing   pretzel  4
+          shoot 4-canyon-solo  racing   crag     1
+          shoot 5-rooftop-4p   racing   skyline  4
+          shoot 6-rocket       rocket   ""       4
+          shoot 7-countdown    countdown ""      4
+          shoot 8-monster      monster  ""       4
+          ls -l store-shots
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: tinytrack-store-screenshots
+          path: store-shots/*.png
+          if-no-files-found: error
