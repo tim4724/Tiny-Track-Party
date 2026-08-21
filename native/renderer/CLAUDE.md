@@ -535,11 +535,25 @@ ablations suggested was mostly those groups' own fill. What it does buy, in
 every interleaved pair: the WORST frame (−2 to −3.5 ms of GPU), the delivered
 rate (+1–2 fps — on a vsync display the tail is what quantizes into fps), and
 ~0.25 ms of renderer CPU. Do not expect draw-count cuts alone to move a GPU
-median on this class of box again; expect them to steady it.
+median on THAT class of box again; expect them to steady it.
+> **That is a fact about the device, not about draw cuts.** The same commit moves
+> the Apple TV's 4P native median **14.2 -> 13.67 ms** (three reps, spread 0.05,
+> against a pre-merge arm just as tight), and its worst window 18.3 -> ~17.0. A
+> frame whose cost is submission answers a draw cut; one whose cost is fill does
+> not. Price it per platform.
 
 **The full-screen antialias pass is a switch** (`ttp_display_antialias`), and
 turning it off removes the offscreen scene buffer with it, so the saving is both
-that buffer's store and vpresent's read. It is on everywhere except Android TV.
+that buffer's store and vpresent's read. **Both TV shells turn it off**; the web
+keeps it.
+
+**AND THE BUFFER IS THE COST, NOT THE FILTER.** Ablating vpresent's fragment to a
+straight passthrough — same target, same pass, no FXAA taps — splits the switch's
+saving on the Apple TV at 4 players / native 4K into **0.3 ms of filter and 2.0 ms
+of plumbing**. Two things follow, and both are the opposite of the instinct:
+there is **no cheaper AA to write** here (a shorter span, a tighter early-out, a
+3-tap filter all chase that 0.3), so the decision is BINARY; and what the custom
+shader buys is the PASS COUNT rather than the arithmetic — see vpresent.mat.
 
 **THE FOG IS OURS, PER VERTEX** (`ttp_fog.inc`), and the view's fog is switched
 off. Filament's costs a SHADER VARIANT rather than an exponential — a cubemap

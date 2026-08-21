@@ -194,8 +194,9 @@ final class DisplayHost {
 
     /// `-ttpAntialias <0|1>` takes the full-screen filter out of the frame, and
     /// the offscreen scene buffer with it — so the arm prices BOTH halves, the
-    /// buffer's store and vpresent's read. Absent, the renderer's own default
-    /// stands (on here, off on Android TV).
+    /// buffer's store and vpresent's read. Absent, this platform passes 0: the
+    /// pass is OFF here as it is on Android TV, and the measurement that decided
+    /// it sits beside the call in `attach`.
     ///
     /// Presence is `object(forKey:)`, not a sentinel value: the argument domain
     /// holds `0` and "unset" as different things and 0 is a meaningful arm.
@@ -294,7 +295,23 @@ final class DisplayHost {
         if boundSession != 0 { ttp_display_bind(boundSession) }
         if lastCardMask != 0 { ttp_display_cell_cards(lastCardMask) }
         if let mode = lastCamMode { ttp_display_camera(mode) }
-        if let aa = Self.antialiasPin { ttp_display_antialias(Int32(aa)) }
+        // NO FULL-SCREEN ANTIALIAS PASS ON THIS PLATFORM, the same call Android
+        // TV makes and a different balance of the same trade. Measured on
+        // AppleTV6,2 at 4 players / native 4K with a real GPU timer: the switch
+        // is worth 2.3 ms of a 16.68 ms budget, and ablating vpresent's fragment
+        // to a passthrough puts only 0.3 ms of that in the FILTER — the rest is
+        // the offscreen 4K buffer's store and vpresent's read (see
+        // vpresent.mat). So turning it off buys a whole frame's worth of
+        // headroom and gives up very little: at native there is no upscale to
+        // magnify a stair-step, and vpresent's span is tuned for buffers the
+        // compositor stretches. It also buys RUNGS, which is what this ladder
+        // converts into picture — the same reason Android takes it.
+        //
+        // UNCONDITIONAL, not gated on being near native. A gate would ship
+        // something nobody looked at: what was judged on the television is this,
+        // at every rung. The pin still overrides, so `--aa 1` measures it back
+        // on without a build.
+        ttp_display_antialias(Int32(Self.antialiasPin ?? 0))
         applyFeaturePin()
     }
 
