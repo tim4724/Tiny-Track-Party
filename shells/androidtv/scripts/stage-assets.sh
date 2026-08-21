@@ -117,12 +117,14 @@ cp "$ROOT/shells/tvos/TinyTrackParty/Resources/Fonts"/*.ttf "$OUT/fonts/"
 # The SIL OFL requires the licence to travel with the font.
 cp "$ROOT/public/assets/fonts"/OFL-*.txt "$OUT/fonts/"
 
-# THE BRAND PNGs, and these go to res/ rather than assets/ — the only two that
-# do. Both are consumed before a line of app code runs: `windowBackground` is
-# composited by the window manager at launch, and the launcher tile is read by
-# the home screen from the installed package. Neither can ask Compose to draw,
-# and a VectorDrawable has no text primitive, so the wordmark reaches them as a
-# BAKE of the real `.wordmark` rule (scripts/bake-wordmark.mjs).
+# THE BRAND PNGs, and these are the only staged files that go to res/ rather
+# than assets/. Three of the four are consumed before a line of app code runs —
+# the launcher tile is read by the home screen from the installed package, and
+# the two splash resources by the window manager from the theme — so none of
+# them can ask Compose to draw, and a VectorDrawable has no text primitive: the
+# wordmark reaches them as a BAKE of the real `.wordmark` rule
+# (scripts/bake-wordmark.mjs). res/ is also simply where a Compose
+# `painterResource` reads, which is what the fourth one is for.
 #
 # Staged, not committed, for the reason everything else here is: the bake in
 # public/assets/brand/ is the one copy.
@@ -138,6 +140,12 @@ cp "$ROOT/public/assets/brand/banner.png" "$RES/"
 # underscore, so the bake's hyphen would fail the resource merger rather than
 # just being ignored.
 cp "$ROOT/public/assets/brand/splash-icon.png" "$RES/splash_icon.png"
+# The boot cover's picture, and the SAME BAKE tvOS shows (its launch image and
+# its CoverView both come from this file). Android TV creates no starting window
+# for any app, so unlike the two above this one IS drawn by app code — see
+# RootScreen's cover — and a shell that drew live type instead would put a
+# second, subtly different mark on the same beat.
+cp "$ROOT/public/assets/brand/launch-tv.png" "$RES/launch_tv.png"
 
 # NOT staged: public/shared/trackSchematics.js, the web's prebaked mini-maps.
 # That bake exists so a browser need not run the projection; this app HAS the

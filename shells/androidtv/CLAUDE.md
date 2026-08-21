@@ -68,6 +68,39 @@ device's own extension string (`dumpsys SurfaceFlinger | grep GLES`):
 
 ## Traps already sprung
 
+**ANDROID TV CREATES NO STARTING WINDOW, so there is no system splash to hold.**
+On a phone, API 31+ shows one for every cold start whether the app asks or not,
+and `installSplashScreen().setKeepOnScreenCondition` keeps it until the app says
+it is ready. On a TV build `dumpsys window` lists no splash window for this app —
+and none for Settings either, which is how you tell it is the platform and not
+us. The hold therefore held nothing, and it was not harmless: it blocks the
+Activity's first draw, so the launcher stayed up until the app's own first frame
+and then the black SurfaceView hole stood in for the splash. The boot cover is a
+board this app DRAWS ([RootScreen]), from the same `ttp_ui_cover` answer the web
+and tvOS perform, over the same `launch-tv.png` bake tvOS uses. `installSplashScreen()`
+stays for one job only: swapping the launch theme for `postSplashScreenTheme`.
+
+**The surface joins the view tree ONE FRAME LATE, and the cover is why.** Attach
+it in the first traversal and the whole boot happens inside that traversal —
+`surfaceChanged` creates the engine and runs `displayReady` inline, one ~10 s
+frame on a cold box (HWUI: "Skipped 572 frames", `Davey! duration=9721ms`) before
+Compose has drawn a pixel. The Filament surface exists from the middle of it, and
+the window manager shows the app as soon as that layer has a buffer: an
+unrendered buffer is BLACK. `root.post { root.addView(surfaceView, 0) }` gives
+Compose a traversal of its own first, so the cover is on the glass in
+milliseconds and stays there — opaque, in the window layer, over the surface —
+for the whole boot. Index 0 keeps it under the ComposeView.
+
+**A visible window that blocks its main thread for 5 s is a killed activity.**
+The boot is one unbroken main-thread stretch by design (rule 1), and it used to
+get away with it by being invisible for the whole of it. Once the cover is up
+early the window is real, and the system dispatches it a FocusEvent that must be
+consumed within 5 s — otherwise `ANR in games.couchpad.tinytrack ... Waited
+5003ms for FocusEvent(hasFocus=true)` and `Force finishing activity`. So the
+window carries `FLAG_NOT_FOCUSABLE` while the cover is up and drops it the moment
+the cover lifts: while the cover is up there is nothing to respond to, and every
+button in this game is on a phone anyway.
+
 **`matc`'s default optimizer emits GLSL this GPU rejects.** It round-trips
 through SPIR-V and produces loops carrying a temporary through the increment
 expression (`for (int i=0; i<n; t0=t1,i++)`) where the temporary is assigned only

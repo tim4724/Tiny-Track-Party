@@ -142,6 +142,18 @@ class GameCoordinator(
         audio = AudioDevice(context.assets, baseUrl)
         ItemIcon.attach(context.assets)
         CarThumb.attach(context.assets)
+        // THE COVER, BEFORE THE FIRST COMPOSITION. Compose draws before `boot()`
+        // runs — boot() needs a surface, which is a posted turn and then seconds
+        // of engine away — so a cover raised by boot()'s own `show(LOBBY)` would
+        // arrive long after the frames it is meant to hide.
+        //
+        // NAMED, not [refreshCover]. That reads `state.screen`, which is still the
+        // model's root here — and WELCOME is exactly the board `coverFor` exempts,
+        // so asking through it answers "none" and the cover never raises. The
+        // board these frames actually show is the lobby (boot() goes straight
+        // there). The answer is still the model's; only the question is ours.
+        // tvOS asks the identical question in its own init, for the same reason.
+        state.cover = TtpJson.str(Ttp.ttp_ui_cover(TtpJson.arg("lobby"), 0)) ?: "boot"
     }
 
     /** Post to the main looper — the `deferred` arm of `refresh-auto-pause`. */
@@ -839,7 +851,15 @@ class GameCoordinator(
         // preview pick lands long before the pixels do, so without this nothing
         // ever re-asks and the boot cover would stay up for the whole lobby —
         // the mirror of the flash it exists to stop.
-        display.onFirstPaint = { refreshCover() }
+        //
+        // DELAYED BY THE FADE, and the delay is the point. Revealing the backdrop
+        // is a [BACKDROP_FADE_MS] fade of the lobby's paper off the live scene;
+        // lift the cover the moment the scene paints and it uncovers that fade
+        // half-run, so the opening reads as THREE steps — title, wallpaper,
+        // circuit — where it should be two. The fade runs UNDER the cover and the
+        // cover outlasts it. The wait is free: it is spent on an animation nobody
+        // was meant to watch. tvOS holds its cover the same way.
+        display.onFirstPaint = { main.postDelayed({ refreshCover() }, BACKDROP_FADE_MS.toLong()) }
     }
 
     /**

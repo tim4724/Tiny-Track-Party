@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,6 +19,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 
 /**
@@ -119,13 +122,48 @@ fun RootScreen(game: GameCoordinator) {
             PauseOverlay(game)
         }
 
-        // NO BOOT COVER HERE, and that is the platform difference rather than an
-        // omission. `ttp_ui_cover` still decides how long the splash is owed;
-        // this shell performs that answer by KEEPING THE SYSTEM SPLASH
-        // (MainActivity's setKeepOnScreenCondition) instead of drawing a board
-        // over itself. The web and tvOS have no way to hold their launch screen,
-        // so they render a cover; this one does not have to, and a board that
-        // merely imitates the splash is a second picture to keep in step.
+        // THE BOOT COVER, over every board: the lobby and the race are chrome
+        // over a live 3D view, and until that view has put a frame on the glass
+        // they are chrome over nothing. Which board owes one is `ttp_ui_cover`'s
+        // answer; welcome is exempt because it stands on the paper diorama.
+        //
+        // A RENDERED BOARD, exactly as the web and tvOS do it, because ANDROID TV
+        // SHOWS NO SYSTEM SPLASH TO HOLD. This shell tried that: API 31+ creates
+        // a starting window for every cold start on a phone, and
+        // `installSplashScreen().setKeepOnScreenCondition` would keep it until
+        // the game was ready. On a TV build no starting window is ever created —
+        // not for this app and not for Settings either, and `dumpsys window`
+        // lists none — so the hold had nothing to hold, and all it did was block
+        // this composition from drawing: the launcher stayed up until the app's
+        // first frame, and then a black SurfaceView hole stood in for the splash
+        // until the lobby painted. The theme's splash attributes stay (they cost
+        // nothing and are right if a box ever does show one); the cover is here.
+        //
+        // NOTHING HERE MOVES, and that is a rule rather than a preference. This
+        // is a full-screen overlay up at exactly the moment the renderer is
+        // busiest — standing a scene up — and an animated overlay of that shape
+        // is what cost the Apple TV 60 -> 7 fps through the GO beat. A spinner
+        // would compete for the very frames it is waiting on.
+        if (state.cover == "boot") {
+            // NO allowsHitTesting(false) TWIN HERE, and its absence is not an
+            // oversight: tvOS blocks input on the cover VIEW, this shell blocks it
+            // on the WINDOW (MainActivity's FLAG_NOT_FOCUSABLE, cleared when the
+            // cover lifts), because here the reason is an ANR rather than a stray
+            // tap and the whole window is what has to stop answering.
+            Box(Modifier.fillMaxSize().background(Tokens.paper)) {
+                // THE LAUNCH IMAGE ITSELF, not a live re-render of the wordmark:
+                // the same bake tvOS's CoverView draws and its launch image is
+                // cut from, so the three shells open on ONE picture. Opaque
+                // paper underneath it, so a missing file degrades to the right
+                // colour rather than to the black it is here to replace.
+                Image(
+                    painter = painterResource(R.drawable.launch_tv),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                )
+            }
+        }
 
         // Over everything, including the results glass: a frame's cost is most
         // interesting exactly where a board is on top of the scene.

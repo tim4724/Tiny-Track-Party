@@ -91,6 +91,11 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
      * `onCreate` returns. The tvOS twin gets that ordering for free by booting
      * from a `.task` that runs after the view appears.
      *
+     * LATER STILL THAN THAT, deliberately: [MainActivity] attaches the
+     * SurfaceView a posted turn after `setContentView`, so the traversal that
+     * runs this — and the seconds of boot hanging off it — is not the one that
+     * draws the boot cover. Do not "fix" the attach back into onCreate.
+     *
      * THE LATER FIRES MATTER JUST AS MUCH. `surfaceDestroyed` deletes the
      * TtpRenderer, and the renderer owns the asset map — so a box that went to the
      * home screen and came back has no materials, no models and no scene, and

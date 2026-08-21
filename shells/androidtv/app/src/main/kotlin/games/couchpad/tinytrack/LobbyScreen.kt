@@ -42,6 +42,17 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 
 /**
+ * How long the lobby's paper takes to get out of the way, in ms.
+ *
+ * NAMED because the boot cover has to outlast it: [GameCoordinator]'s first-paint
+ * handler holds the cover for exactly this long, so lifting it can never uncover
+ * a fade in progress — which is the opening reading as three steps (title,
+ * wallpaper, circuit) where it should be two. Two places, one number; tvOS spells
+ * the same pair `LobbyView.backdropFade`.
+ */
+const val BACKDROP_FADE_MS = 450
+
+/**
  * The lobby board: the join ticket on the left, the race card on the right, the
  * seat dock along the bottom, and the middle deliberately EMPTY — that gap is
  * where the track preview is meant to be seen, and it is the reason the two are
@@ -66,7 +77,7 @@ fun LobbyScreen(state: GameState) {
         // this has nothing to switch off — it gets out of the way. `sceneVisible`
         // is set by the coordinator, never derived here.
         val paper by animateFloatAsState(
-            if (state.sceneVisible) 0f else 1f, tween(450), label = "backdrop",
+            if (state.sceneVisible) 0f else 1f, tween(BACKDROP_FADE_MS), label = "backdrop",
         )
         if (paper > 0f) PaperStage(Modifier.alpha(paper))
 

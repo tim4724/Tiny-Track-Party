@@ -12,7 +12,14 @@
          the theme, and a dark Material parent gives near-black — in front of an
          app whose first painted frame is warm paper. It also cannot use a
          layer-list `windowBackground` as a splash background, so drawing the
-         mark that way was invisible on a modern box. -->
+         mark that way was invisible on a modern box.
+
+         THE TWO SPLASH ITEMS BELOW DRAW NOTHING ON THE BOX THIS SHIPS TO, and
+         they stay anyway. Android TV creates no starting window at all (see
+         shells/androidtv/CLAUDE.md's trap, and MainActivity), so what covers the
+         boot here is a board the app draws. These describe what the launch
+         window SHOULD look like on a platform that has one, they cost a colour
+         and a PNG, and the alternative is the near-black above. -->
     <style name="Theme.TinyTrackParty.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/paper</item>
         <!-- Masked to a CIRCLE by the platform. The bake lays the mark out to

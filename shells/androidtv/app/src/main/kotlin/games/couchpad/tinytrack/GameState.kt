@@ -45,7 +45,15 @@ class GameState {
      * `ttp_ui_cover`'s answer — "none" | "boot". A full-bleed board over whichever
      * screen is up, and deliberately NOT a screen of its own: it is not navigable,
      * pushes nothing and has no back behaviour. See `ttp/ui_model.h`, and
-     * [CoverScreen] for why it never animates.
+     * [RootScreen]'s cover for why it never animates.
+     *
+     * The literal here is never the one a viewer sees: [GameCoordinator]'s init
+     * asks the model for the real answer before the first composition, which it
+     * has to because Compose draws long before `boot()` runs. Left to this
+     * default the shell answered "no cover owed" for exactly the boot the cover
+     * exists to cover, and what a viewer got was BLACK — the SurfaceView punches
+     * through the paper windowBackground, so an undrawn surface is not paper, it
+     * is a hole.
      */
     var cover by mutableStateOf("none")
 

@@ -10,6 +10,7 @@ import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.OnBackPressedCallback
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.ComposeView
@@ -39,23 +40,22 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // BEFORE super.onCreate, which is the library's one hard requirement: it
-        // swaps the launch theme for `postSplashScreenTheme`, and after super
-        // the window has already been created with the wrong one.
+        // swaps the launch theme (Theme.TinyTrackParty.Splash) for
+        // `postSplashScreenTheme`, and after super the window has already been
+        // created with the wrong one. THAT HANDOVER IS ALL THIS CALL IS FOR here.
         //
-        // THE SPLASH IS HELD BY THE SAME RULE THE OTHER TWO SHELLS DRAW A BOARD
-        // FROM (`ttp_ui_cover`), so "how long is the splash up" cannot drift
-        // between platforms — only the mechanism differs. Android is the one box
-        // that can keep the SYSTEM splash rather than covering the app with a
-        // board of its own, so it does; the web and tvOS have no equivalent and
-        // render a cover instead.
-        //
-        // The condition is asked on every frame until it goes false, so it must
-        // stay cheap and must not assume `game` exists yet — the splash is up
-        // from before onCreate finishes.
-        installSplashScreen().setKeepOnScreenCondition {
-            val coordinator = if (::game.isInitialized) game else null
-            coordinator != null && coordinator.state.cover == "boot"
-        }
+        // NO setKeepOnScreenCondition, and that is a measured platform fact
+        // rather than a preference: ANDROID TV CREATES NO STARTING WINDOW. API
+        // 31+ gives a phone a system splash for every cold start whether the app
+        // asks or not, and holding it until the game was ready is what this shell
+        // used to do — but on a TV build `dumpsys window` lists no splash window
+        // for this app, and none for Settings either. So the hold held nothing.
+        // What it DID do was block this Activity's first draw, which is how a
+        // viewer got the launcher until the app's first frame and then a black
+        // SurfaceView hole (the surface punches through windowBackground) until
+        // the lobby painted. The cover is a board this app draws — RootScreen's,
+        // from `ttp_ui_cover`, the same answer the other two shells perform.
+        installSplashScreen()
         super.onCreate(savedInstanceState)
 
         // BEFORE anything reads it, and it only ever STORES the request: the screens
@@ -86,6 +86,17 @@ class MainActivity : ComponentActivity() {
         // mid-race.
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
+        // NO INPUT WHILE THE COVER IS UP, cleared the moment it lifts (the
+        // LaunchedEffect below). This is not about the remote, it is about the
+        // ANR: the boot is one unbroken main-thread stretch by design (rule 1,
+        // one thread) and on a cold box it is SECONDS, and a window that is
+        // focusable gets a FocusEvent it must consume within 5 s or the system
+        // kills the activity. It used to get away with it by being invisible for
+        // the whole boot — which is exactly the black this cover exists to
+        // replace. While the cover is up there is nothing to respond to, so the
+        // honest thing is to not accept input rather than to accept it and hang.
+        window.addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+
         // Deliberately NOT setZOrderMediaOverlay/OnTop: that would put the surface
         // ABOVE the window and the UI would vanish behind the race. Why a
         // SurfaceView and never a TextureView is DisplayHost's class header.
@@ -94,7 +105,6 @@ class MainActivity : ComponentActivity() {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         }
-        root.addView(surfaceView)
 
         game = GameCoordinator(this, surfaceView)
         // ON DURING DEVELOPMENT, exactly as the web's is: the frame budget is
@@ -151,10 +161,38 @@ class MainActivity : ComponentActivity() {
                     // converted where they are read.
                     RootScreen(game)
                 }
+                // The other half of the not-focusable flag above: the app takes
+                // input again the moment the cover is gone, which is also the
+                // moment its main thread is free to answer.
+                LaunchedEffect(game.state.cover) {
+                    if (game.state.cover != "boot") {
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+                    }
+                }
             }
         }
         root.addView(compose)
         setContentView(root)
+
+        // THE SURFACE JOINS ONE FRAME LATER, AND THAT IS THE WHOLE COVER.
+        //
+        // Attaching it here would put the entire boot inside the FIRST traversal:
+        // `surfaceChanged` creates the engine and runs `displayReady` inline, and
+        // on a cold TV that is one ~10 s frame (HWUI says so — "Skipped 572
+        // frames", one `Davey! duration=9721ms`) BEFORE Compose has drawn a single
+        // pixel. Meanwhile the Filament surface exists from halfway through it, so
+        // the window manager shows the app the moment that layer has a buffer —
+        // and an unrendered buffer is BLACK. The boot cover was composed and
+        // never got a frame to be drawn in; it appeared for the last half second,
+        // after the thing it exists to hide.
+        //
+        // Added at index 0, so it stays UNDER the ComposeView (`addView(compose)`
+        // above put that on top and the race depends on it). One posted turn is
+        // all it takes: the traversal that runs first has only Compose in it, so
+        // the cover reaches the glass in milliseconds and is still the window's
+        // content — opaque, over the surface's layer — for the whole of the boot
+        // that follows.
+        root.post { root.addView(surfaceView, 0) }
 
         // BACK. The TABLE crossed the ABI (`ttp_ui_back_effect`), the WALK did not
         // — popstate, the tvOS Menu button and Android's back stack are three
