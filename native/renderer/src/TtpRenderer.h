@@ -920,6 +920,63 @@ private:
     // a rebuild changed only the field.
     std::string mBakeKey;
     std::string mBakedKey;
+
+    // ---- the graveyard --------------------------------------------------
+    //
+    // A DEAD SCENE'S CPU BUFFERS, OUTLIVING THE MESHES THAT OWNED THEM.
+    //
+    // Every upload here hands Filament a raw pointer with a null release
+    // callback (see Mesh's own note), so the driver may still read `verts` when
+    // the Mesh is destroyed. `releaseScene` used to make that safe by draining
+    // the whole pipeline first — a `flushAndWait` measured at 24-205 ms on the
+    // Android box against 6-8 ms of teardown, i.e. almost entirely a wait, paid
+    // on EVERY rebuild including the ones the bake cache already made cheap.
+    //
+    // Outliving the destroy is the same guarantee for none of the wait: the
+    // bytes stay put until the frames that could still be reading them have
+    // gone by, and the main thread walks away immediately. Nothing here becomes
+    // concurrent — the GPU was always asynchronous; we simply stop standing
+    // still for it.
+    //
+    // WHY A DELAY AT ALL, when the uploads happened at build time: some meshes
+    // re-upload per frame (the decal conform rewrites `verts` into world space
+    // every frame) and some late (bakeShadowMap re-uploads CUSTOM0), so a
+    // teardown can land with uploads still in flight. That is precisely what
+    // the fence was for.
+    struct MeshGrave {
+        std::vector<Vertex> verts;
+        std::vector<uint32_t> idx;
+        std::vector<filament::math::float3> normals;
+        std::vector<filament::math::quatf> quats;
+        std::vector<filament::math::float2> uvs;
+        std::vector<filament::math::half4> custom0;
+        // Frames still to survive. Counted DOWN on presented frames only: a
+        // scene released while nothing is drawing (the lobby's fade, a
+        // surface gone) must not have its buffers freed by a clock that keeps
+        // running while the GPU does not.
+        //
+        // Graves therefore ACCUMULATE across a build, which renders no frames —
+        // four back-to-back releases were measured holding 296 at once — and go
+        // to zero within three frames of the picture coming back. The `graves`
+        // count on the release log is there to keep that honest: a number that
+        // does not return to 0 at rest is a leak, and this held CPU copies of a
+        // whole scene.
+        uint32_t grace = 0;
+    };
+    std::vector<MeshGrave> mGraves;
+
+    // Frames a buried buffer must outlive. Three presented frames is well past
+    // any upload the frame before the teardown could still have owed, and the
+    // cost of being generous is a few hundred KB held a few frames longer.
+    static constexpr uint32_t kGraveGraceFrames = 3;
+
+    // Bury one mesh's CPU buffers instead of freeing them.
+    void buryMeshBuffers(Mesh& m);
+    // Age the graves by one presented frame, freeing what has served its time.
+    void ageGraves();
+    // Free every grave NOW, fence first. For teardowns that cannot wait for
+    // frames because none are coming.
+    void drainGravesBlocking();
     // The ROAD's baked vertex light for mBakedKey's track, kept beside the maps
     // it was derived from. The road MESH is rebuilt on every build, but for the
     // same track it is rebuilt IDENTICALLY (build_race_track is a pure function

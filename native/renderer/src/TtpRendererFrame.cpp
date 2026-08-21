@@ -2843,6 +2843,11 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
     renderCells(input, tMark);
     mProfile[kProfPresent] = ttpNowMs() - tMark; tMark = ttpNowMs();
     mRenderer->endFrame();
+    // A PRESENTED frame is the only clock the graveyard may age on: buffers
+    // buried by a teardown are waiting for the frames that could still be
+    // reading them to go by, and a wall clock keeps running when the GPU does
+    // not (a released lobby, a gone surface). See MeshGrave.
+    ageGraves();
     mProfile[kProfEndFrame] = ttpNowMs() - tMark;
     mProfile[kProfTotal] = ttpNowMs() - tFrame0;
     readGpuTimer();

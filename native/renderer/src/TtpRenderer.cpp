@@ -1,6 +1,9 @@
 // Split from the original single-file TtpRenderer.cpp along its subsystem
 // seams; TtpRendererImpl.h carries what the topic files share. Pure code
 // motion — behaviour, member set and ABI are unchanged.
+#include <algorithm>
+#include <chrono>
+
 #include "TtpRendererImpl.h"
 
 #include <utils/Log.h>
@@ -274,14 +277,53 @@ void TtpRenderer::destroyMesh(Mesh& m) {
     if (m.vb) { mEngine->destroy(m.vb); m.vb = nullptr; }
     if (m.ib) { mEngine->destroy(m.ib); m.ib = nullptr; }
     m.inScene = false;
-    m.verts = {};
-    m.idx = {};
-    m.normals = {};
-    m.quats = {};
-    m.uvs = {};
-    m.custom0 = {};
+    // The CPU copies are BURIED, not dropped — the driver may still be reading
+    // them. See MeshGrave for the whole argument.
+    buryMeshBuffers(m);
     m.custom0Slot = 0;
     m.local = {};
+}
+
+void TtpRenderer::buryMeshBuffers(Mesh& m) {
+    // An empty mesh buries nothing: most of what releaseScene walks was never
+    // built for this scene, and a grave per never-used slot would age a hundred
+    // empty vectors every frame.
+    if (m.verts.empty() && m.idx.empty() && m.normals.empty()
+            && m.quats.empty() && m.uvs.empty() && m.custom0.empty()) {
+        return;
+    }
+    MeshGrave g;
+    g.verts = std::move(m.verts);
+    g.idx = std::move(m.idx);
+    g.normals = std::move(m.normals);
+    g.quats = std::move(m.quats);
+    g.uvs = std::move(m.uvs);
+    g.custom0 = std::move(m.custom0);
+    g.grace = kGraveGraceFrames;
+    mGraves.push_back(std::move(g));
+    // A moved-from vector is valid but unspecified; these are re-used by the
+    // next build, so they are put back to a known empty rather than trusted.
+    m.verts = {}; m.idx = {}; m.normals = {};
+    m.quats = {}; m.uvs = {}; m.custom0 = {};
+}
+
+void TtpRenderer::ageGraves() {
+    if (mGraves.empty()) return;
+    for (MeshGrave& g : mGraves) {
+        if (g.grace) g.grace--;
+    }
+    mGraves.erase(std::remove_if(mGraves.begin(), mGraves.end(),
+            [](const MeshGrave& g) { return g.grace == 0; }), mGraves.end());
+}
+
+void TtpRenderer::drainGravesBlocking() {
+    if (mGraves.empty()) return;
+    // The one place the old fence still belongs: nobody is going to present the
+    // frames these graves are waiting for, so waiting is the only way to know
+    // the driver is done with them. Called on engine teardown, where a stall
+    // costs nothing anyone can see.
+    if (mEngine) mEngine->flushAndWait();
+    mGraves.clear();
 }
 
 // The roster half of TrackBin, copied off the slots the shell handed over.
@@ -1180,10 +1222,14 @@ MaterialInstance* TtpRenderer::sceneInstance(Material* m) {
 // glTF loaders and mAssets all survive.
 void TtpRenderer::releaseScene() {
     if (!mEngine) return;
-    // Retire every in-flight command first: the meshes' CPU copies go with
-    // them below, and the driver must not still be reading a BufferDescriptor
-    // that points into one.
-    mEngine->flushAndWait();
+    const auto tRelease = std::chrono::steady_clock::now();
+    // NO FENCE HERE, and the danger it used to answer has not gone away: the
+    // meshes' CPU copies are handed to Filament as raw pointers, so the driver
+    // must not still be reading a BufferDescriptor into one when it is freed.
+    // This used to drain the whole pipeline to guarantee that — 24-205 ms on the
+    // Android box against 6-8 ms of actual teardown, paid on every rebuild.
+    // destroyMesh BURIES those buffers instead (see MeshGrave): same guarantee,
+    // and this returns immediately.
     // Merged groups first, while their source entities are still alive to be
     // handed back to the scene (the asset drops below take them out again,
     // properly, on their own path). The parsed-geometry cache stays — it is
@@ -1367,11 +1413,22 @@ void TtpRenderer::releaseScene() {
     mMonsterWheelRadius = 0;
     mMonsterSkidWidth = 0;
     mBoxScale = 1.0f;
+    // `graves` is the standing guard on the burial: it climbs during a build,
+    // which presents no frames, and must be back at 0 at rest. A number that
+    // stays up is CPU copies of whole scenes never being freed.
+    utils::slog.i << "ttp release: graves " << (int) mGraves.size() << " teardown "
+            << (int) (std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now() - tRelease).count() + 0.5)
+            << " ms" << utils::io::endl;
 }
 
 TtpRenderer::~TtpRenderer() {
     if (!mEngine) return;
     releaseScene();
+    // The engine is going away, so no frame will ever age these out. This is
+    // the one teardown that still has to pay the fence — and the only one where
+    // nobody can see it.
+    drainGravesBlocking();
     if (mBlendMaterial) mEngine->destroy(mBlendMaterial);
     if (mPointMaterial) mEngine->destroy(mPointMaterial);
     if (mCloudMaterial) mEngine->destroy(mCloudMaterial);
