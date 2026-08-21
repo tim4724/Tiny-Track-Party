@@ -808,6 +808,20 @@ driver story is what the canary + GL retry exist for: PowerVR Vulkan drivers
 vary, and the observed failure shape (the silent unwinder hang above) is
 invisible to a crash-loop detector.
 
+**The Vulkan frame has the web's shape, and its refuted-lever list is its
+own.** Re-swept at a pinned 4P/720 (arms must SATURATE — the DVFS trap):
+the road's fill is most of the frame, dressing and terrain are small, cars
+are near-zero NET (their GL-era cost was submission, and Vulkan ate it), and
+**the merged draw groups move this backend's median nothing** — the merge
+stays for tvOS, where it is load-bearing. Refuted here, so nobody re-derives
+them: a fork patch confining each pass's Vulkan `renderArea` to its viewport
+(built, verified ACTIVE in-log, measured ZERO at 720 — the driver already
+handles untouched tiles cheaply); the sRGB-swapchain ROP encode (the grade is
+a LUT, the prize is ~1 ms of fill, and it flips translucent blending
+gamma→linear — a look change); the engine's feature flags (nothing
+Vulkan-tunable exists). What remains above the road's own shader is
+RESOLUTION — the ladder — and nothing else on this GPU.
+
 ## Audio
 
 **Every cue is mixed here, in Kotlin, into one always-open `AudioTrack`.**
