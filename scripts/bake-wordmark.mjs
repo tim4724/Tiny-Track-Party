@@ -84,6 +84,15 @@ const BANNER_H = 180;
 // against). It is the Android splash's picture: paper, with the mark on it.
 const LAUNCH_W = 1920;
 const LAUNCH_H = 1080;
+
+// THE ANDROID 12 SPLASH ICON, and its constraint is the reason it is its own
+// output rather than a crop of the wordmark. That splash draws ONE icon, masked
+// to a CIRCLE, on a background colour — a wide two-line mark dropped in there
+// loses its ends. So the mark is laid out to fit the INSCRIBED CIRCLE of a
+// square canvas: 512 px square, the wordmark inside a centred circle of ~62% of
+// it, transparent everywhere else.
+const ICON = 512;
+const ICON_FIT = 0.62;
 const BANNER = `<!doctype html>
   <link rel="stylesheet" href="/shared/theme.css">
   <style>
@@ -121,10 +130,25 @@ const LAUNCH = `<!doctype html>
   </style>
   <div class="wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></div>`;
 
+const SPLASH_ICON = `<!doctype html>
+  <link rel="stylesheet" href="/shared/theme.css">
+  <style>
+    html, body { margin: 0; background: transparent; }
+    body {
+      width: ${ICON}px; height: ${ICON}px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    /* Sized so the two lines sit inside the circle the launcher masks to, with
+       the die-cut edge and the drop shadow still inside it. */
+    .wordmark { font-size: ${Math.round(ICON * ICON_FIT * 0.30)}px; text-align: center; }
+  </style>
+  <div class="wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></div>`;
+
 function serve() {
   const server = createServer((req, res) => {
     const rel = decodeURIComponent(req.url.split('?')[0]);
-    const pages = { '/banner.html': BANNER, '/launch.html': LAUNCH };
+    const pages = { '/banner.html': BANNER, '/launch.html': LAUNCH,
+                    '/splash-icon.html': SPLASH_ICON };
     if (rel === '/' || rel === '/bake.html' || pages[rel]) {
       res.writeHead(200, { 'content-type': 'text/html' });
       res.end(pages[rel] || PAGE);
@@ -217,6 +241,20 @@ await launch.evaluate(async () => {
 const launchPng = await launch.screenshot();
 writeFileSync(join(out, 'launch-tv.png'), launchPng);
 console.log(`launch   -> public/assets/brand/launch-tv.png (${launchPng.length} B, ${LAUNCH_W}x${LAUNCH_H})`);
+
+// The splash icon.
+const icon = await browser2.newPage({
+  viewport: { width: ICON, height: ICON },
+  deviceScaleFactor: 1
+});
+await icon.goto(`http://127.0.0.1:${port}/splash-icon.html`, { waitUntil: 'load' });
+await icon.evaluate(async () => {
+  await document.fonts.load('700 96px Fredoka');
+  await document.fonts.ready;
+});
+const iconPng = await icon.screenshot({ omitBackground: true });
+writeFileSync(join(out, 'splash-icon.png'), iconPng);
+console.log(`icon     -> public/assets/brand/splash-icon.png (${iconPng.length} B, ${ICON}x${ICON})`);
 
 await browser2.close();
 server2.close();

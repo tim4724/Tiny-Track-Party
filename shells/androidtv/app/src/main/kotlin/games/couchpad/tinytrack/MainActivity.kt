@@ -8,6 +8,7 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.OnBackPressedCallback
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalConfiguration
@@ -37,6 +38,24 @@ class MainActivity : ComponentActivity() {
     private lateinit var game: GameCoordinator
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // BEFORE super.onCreate, which is the library's one hard requirement: it
+        // swaps the launch theme for `postSplashScreenTheme`, and after super
+        // the window has already been created with the wrong one.
+        //
+        // THE SPLASH IS HELD BY THE SAME RULE THE OTHER TWO SHELLS DRAW A BOARD
+        // FROM (`ttp_ui_cover`), so "how long is the splash up" cannot drift
+        // between platforms — only the mechanism differs. Android is the one box
+        // that can keep the SYSTEM splash rather than covering the app with a
+        // board of its own, so it does; the web and tvOS have no equivalent and
+        // render a cover instead.
+        //
+        // The condition is asked on every frame until it goes false, so it must
+        // stay cheap and must not assume `game` exists yet — the splash is up
+        // from before onCreate finishes.
+        installSplashScreen().setKeepOnScreenCondition {
+            val coordinator = if (::game.isInitialized) game else null
+            coordinator != null && coordinator.state.cover == "boot"
+        }
         super.onCreate(savedInstanceState)
 
         // BEFORE anything reads it, and it only ever STORES the request: the screens

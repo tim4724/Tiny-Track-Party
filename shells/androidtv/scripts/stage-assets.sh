@@ -130,6 +130,14 @@ RES="$SHELL_DIR/app/src/main/res/drawable-nodpi"
 mkdir -p "$RES"
 cp "$ROOT/public/assets/brand/wordmark.png" "$RES/"
 cp "$ROOT/public/assets/brand/banner.png" "$RES/"
+# The system splash's icon. Square and laid out to survive the CIRCULAR MASK the
+# platform applies to it — see the bake, which sizes the mark to the inscribed
+# circle rather than to the canvas.
+#
+# RENAMED on the way in: an Android resource filename may only hold a-z, 0-9 and
+# underscore, so the bake's hyphen would fail the resource merger rather than
+# just being ignored.
+cp "$ROOT/public/assets/brand/splash-icon.png" "$RES/splash_icon.png"
 
 # NOT staged: public/shared/trackSchematics.js, the web's prebaked mini-maps.
 # That bake exists so a browser need not run the projection; this app HAS the

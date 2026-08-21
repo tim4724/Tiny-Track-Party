@@ -187,6 +187,14 @@ dependencies {
     implementation(composeBom)
 
     implementation("androidx.core:core-ktx:1.19.0")
+    // THE SYSTEM SPLASH, held until the game is ready. Not decoration: on API 31+
+    // the platform shows a splash for every cold start whether an app asks or
+    // not, and this library is the only way to (a) say what it looks like on
+    // every version this ships to, back to minSdk, and (b) KEEP it up past the
+    // first frame. Without it the launch window is whatever the system infers
+    // from the theme — which for a dark Material parent is near-black, in front
+    // of an app whose first frame is warm paper.
+    implementation("androidx.core:core-splashscreen:1.0.1")
     implementation("androidx.activity:activity-compose:1.13.0")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")

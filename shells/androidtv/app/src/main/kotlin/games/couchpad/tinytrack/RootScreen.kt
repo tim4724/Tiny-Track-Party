@@ -19,9 +19,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.Image
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.layout.ContentScale
 
 /**
  * The screen switcher: put whichever board the model names over the 3D surface.
@@ -122,31 +119,13 @@ fun RootScreen(game: GameCoordinator) {
             PauseOverlay(game)
         }
 
-        // THE BOOT COVER, over every board: the lobby and the race are chrome
-        // over a live 3D view, and until that view has put a frame on the glass
-        // they are chrome over nothing. Which board owes one is `ttp_ui_cover`'s
-        // answer; welcome is exempt because it stands on the paper diorama.
-        //
-        // NOTHING HERE MOVES, and that is a rule rather than a preference. This
-        // is a full-screen overlay up at exactly the moment the renderer is
-        // busiest — standing a scene up — and an animated overlay of that shape
-        // is what cost the Apple TV 60 -> 7 fps through the GO beat. A spinner
-        // would compete for the very frames it is waiting on.
-        if (state.cover == "boot") {
-            // THE WINDOW BACKGROUND ITSELF, drawn again — the same
-            // `@drawable/splash` the window manager composites from the moment
-            // the Activity appears until Compose covers it. Not a live Wordmark
-            // beside it: the drawable scales the mark into a fixed box and live
-            // type does not, so the two were the same mark at two sizes and the
-            // handover read as a jump halfway through the boot. One resource,
-            // one picture, held from tap until the game is ready.
-            Image(
-                painter = painterResource(R.drawable.splash),
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-            )
-        }
+        // NO BOOT COVER HERE, and that is the platform difference rather than an
+        // omission. `ttp_ui_cover` still decides how long the splash is owed;
+        // this shell performs that answer by KEEPING THE SYSTEM SPLASH
+        // (MainActivity's setKeepOnScreenCondition) instead of drawing a board
+        // over itself. The web and tvOS have no way to hold their launch screen,
+        // so they render a cover; this one does not have to, and a board that
+        // merely imitates the splash is a second picture to keep in step.
 
         // Over everything, including the results glass: a frame's cost is most
         // interesting exactly where a board is on top of the scene.

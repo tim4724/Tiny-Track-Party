@@ -1,18 +1,38 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- TWO THEMES, and the split is the platform's rather than a preference.
+
+         The LAUNCH theme is what the window manager reads before the app has
+         run; the app then swaps to the real one. androidx.core:core-splashscreen
+         is what makes that work the same way from minSdk up to the API 31+
+         system splash, which shows for every cold start whether an app asks for
+         it or not.
+
+         What it fixes: left to itself the system derives the launch window from
+         the theme, and a dark Material parent gives near-black — in front of an
+         app whose first painted frame is warm paper. It also cannot use a
+         layer-list `windowBackground` as a splash background, so drawing the
+         mark that way was invisible on a modern box. -->
+    <style name="Theme.TinyTrackParty.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/paper</item>
+        <!-- Masked to a CIRCLE by the platform. The bake lays the mark out to
+             fit the inscribed circle, so this is not cropped. -->
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_icon</item>
+        <!-- What the Activity switches to once the splash is done with. -->
+        <item name="postSplashScreenTheme">@style/Theme.TinyTrackParty</item>
+    </style>
+
     <!-- A window, and nothing else. Every pixel inside it is either the Filament
          surface or Compose drawing from design-tokens.json, so a platform theme
          would only get a chance to be wrong: no action bar, no Material colours,
          no system decoration.
 
-         windowBackground is the SPLASH (drawable/splash.xml): the paper this
-         app's first painted frame actually is, with the wordmark on it. It shows
-         for the frames between the Activity appearing and the first Filament
-         present. It used to be a flat ink #2A2735, guarding against "a white
-         flash on a dark TV" — but this app is not dark, so that was a dark step
-         in front of a light app. See splash.xml. -->
+         windowBackground is PAPER, matching the splash it is revealed from and
+         the app's own first painted frame (the warm paper diorama). It was ink
+         #2A2735 for years, guarding against "a white flash on a dark TV" — but
+         this app is not dark, so ink was a dark step in front of a light app. -->
     <style name="Theme.TinyTrackParty" parent="@android:style/Theme.Material.NoActionBar.Fullscreen">
-        <item name="android:windowBackground">@drawable/splash</item>
+        <item name="android:windowBackground">@color/paper</item>
         <item name="android:windowContentTransitions">false</item>
         <item name="android:windowAnimationStyle">@null</item>
     </style>

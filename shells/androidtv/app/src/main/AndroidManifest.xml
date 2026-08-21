@@ -34,7 +34,7 @@
             android:exported="true"
             android:screenOrientation="landscape"
             android:launchMode="singleTask"
-            android:theme="@style/Theme.TinyTrackParty"
+            android:theme="@style/Theme.TinyTrackParty.Splash"
             android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density">
             <!-- LEANBACK_LAUNCHER, not LAUNCHER: the TV home screen only shows
                  the former, and an app with only the latter installs and then
