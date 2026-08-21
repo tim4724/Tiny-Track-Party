@@ -544,7 +544,8 @@ median on THAT class of box again; expect them to steady it.
 
 **The full-screen antialias pass is a switch** (`ttp_display_antialias`), and
 turning it off removes the offscreen scene buffer with it, so the saving is both
-that buffer's store and vpresent's read. It is on everywhere except Android TV.
+that buffer's store and vpresent's read. **Both TV shells turn it off**; the web
+keeps it.
 
 **AND THE BUFFER IS THE COST, NOT THE FILTER.** Ablating vpresent's fragment to a
 straight passthrough — same target, same pass, no FXAA taps — splits the switch's
