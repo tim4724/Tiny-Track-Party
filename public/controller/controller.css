@@ -323,6 +323,27 @@ input[type=text]:disabled { opacity: 0.6; }
 .car-hero__view {
   grid-area: view; align-self: stretch;
   display: flex; align-items: center; justify-content: center;
+  /* what the outgoing car hangs off while it fades — see .carthumb--out */
+  position: relative;
+}
+/* Picking a car swaps this render for a different one, and that swap CROSS-FADES
+   on the same terms as the cup panel on the next page: the car you had lies over
+   the one you picked and fades off it, so the card never shows an empty frame
+   and the incoming still never has to arrive from blank. (It used to be a cut —
+   worse than a cut, since a rebuilt thumb re-ran its own still→spin handoff, so
+   a pick flashed a static hero before settling.)
+   Laid out exactly as the live render is (theme.css sizes .carthumb from its
+   HEIGHT here, the 5:4 ratio then setting its width), so the two sit on top of
+   each other rather than one jumping.
+   `swap-out` is declared with the cup panel's own retiring layer further down —
+   ONE keyframe, because both are the same event at the same speed. */
+.carthumb--out {
+  position: absolute; top: 0; bottom: 0; left: 50%; transform: translateX(-50%);
+  width: auto; pointer-events: none;
+  animation: swap-out 0.14s ease-out forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .carthumb--out { animation: none; opacity: 0; }
 }
 /* Sized from its HEIGHT, so the row decides how big the car is and the 5:4
    ratio decides how wide its column becomes — the reverse of the theme's
@@ -359,6 +380,16 @@ input[type=text]:disabled { opacity: 0.6; }
 .car-opt__stats .stat__bar > i {
   display: block; height: 100%; border-radius: 999px;
   background: var(--car);
+  /* The bars SLIDE between cars rather than cutting. They exist to be compared,
+     and a cut leaves the comparison to memory — where a bar visibly growing or
+     shrinking IS the comparison. Only possible now the block is dressed rather
+     than rebuilt (shared/carPicker.js); a fresh node has nothing to move from.
+     Slower than the render's cross-fade beside it on purpose: the fade is
+     covering a change, this one is the point. */
+  transition: width 0.22s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .car-opt__stats .stat__bar > i { transition: none; }
 }
 
 /* Every model as a still tap target, filling its cell of the left grid (sized
@@ -485,29 +516,40 @@ input[type=text]:disabled { opacity: 0.6; }
 @media (max-height: 360px), (max-width: 700px) {
   .mode-opt__name { font-size: 1.12rem; }
 }
-/* Swapping cups replaces this whole panel (buildModePicker rebuilds the detail
-   and nothing else), so without this the new cup's colour, name and four maps
-   simply cut in — the one abrupt moment left on the page now that the list
-   below the finger survives the tap. It fades UP FROM a part-opacity rather
-   than from nothing: at 0 the paper flashes through between the two cups,
-   which is more noticeable than the cut it was meant to soften.
-   Its CONTENT fades, never the panel. Fading the panel itself thinned its tint
-   toward the paper behind it, which read as a white flash between two cups —
-   worse than the cut it was meant to soften. The surface changes colour at
-   once (solid to solid, nothing to flicker through) and the header and maps
-   arrive over it.
-   The animation is on the elements rather than a class the caller adds because
-   they are new on every swap and only on a swap. */
-@keyframes racedetail-swap { from { opacity: 0; } to { opacity: 1; } }
-.racedetail .modepick__tracks > *,
-.racedetail .star-legend { animation: racedetail-swap 0.14s ease-out; }
+/* Moving the cursor to another row swaps this panel for a different one — a new
+   colour, name and four new maps — and that is the one abrupt moment left on
+   the page now that neither the list below the finger nor the panel's own tiles
+   are rebuilt by a pick (trackPicker.js). It CROSS-FADES: the outgoing panel is
+   lifted out of the flow, laid over its replacement and faded out, so what
+   shows through the fade is the new panel rather than the page.
+   Two ways this has been got wrong. Fading the panel itself thinned its tint
+   toward the paper behind it and read as a white flash between two cups. Fading
+   its CONTENT in instead left the card blank on its bare wash for a beat, which
+   on the pale cups reads as the same flash — and took the tile you had just
+   pressed out from under your thumb. Under a cross-fade there is an opaque
+   panel under the fade at every frame, and nothing arrives from nothing.
+   The incoming panel does not animate at all, so a pick that only re-dresses
+   what is there (which is most of them) moves exactly what it changed. */
+/* ONE fade for both lobby cards: the cup panel here and the car render on the
+   page before it are the same event — a pick swapping one surface for another —
+   so they retire at one speed (shared/trackPicker.js retireLayer). */
+@keyframes swap-out { from { opacity: 1; } to { opacity: 0; } }
+.modepick__tracks--out {
+  position: absolute; top: 0; left: 0; right: 0;
+  pointer-events: none;   /* it is on TOP for a beat, and it is already stale */
+  animation: swap-out 0.14s ease-out forwards;
+}
 @media (prefers-reduced-motion: reduce) {
-  .racedetail .modepick__tracks > *,
-  .racedetail .star-legend { animation: none; }
+  /* No fade to wait for: the swap is a cut, which is what the setting asks for.
+     (retireLayer's timer is what removes the node.) */
+  .modepick__tracks--out { animation: none; opacity: 0; }
 }
 
 /* the detail card: sized by its content, not by the column (see .racedetail in
-   the lobby block) — the panel used to run on past the last track tile */
+   the lobby block) — the panel used to run on past the last track tile.
+   `relative` is what the retiring panel above hangs off, so the card's height
+   is the INCOMING panel's from the first frame and the legend never moves. */
+.racedetail { position: relative; }
 .racedetail .modepick__tracks { flex: none; display: flex; flex-direction: column; gap: 0.6rem; }
 /* the panel's header: name (+stars), meter far right, one meta line — the SAME
    height for the cup and random families, so switching rows moves nothing */
@@ -581,8 +623,10 @@ input[type=text]:disabled { opacity: 0.6; }
 .track-opt:disabled { cursor: default; }
 /* picked tile — the identical fill a picked cup wears (and the same unchanged
    drop), so "picked" looks the same wherever it lands in the picker. The fill (its
-   cup's colour, loud) is painted inline by trackTile; here it only darkens the name
-   to full ink, since the tile is no longer white paper under the text. */
+   cup's colour, loud) is painted inline by dressTile — which is also what makes
+   the `background` transition above a real fade from the old fill to the new,
+   since the tile now outlives the pick that marks it. Here the class only darkens
+   the name to full ink, the tile no longer being white paper under the text. */
 .track-opt--mine .track-opt__name { color: var(--ink); }
 .track-opt__name {
   font-weight: 800; font-size: 0.74rem; color: var(--ink-2);

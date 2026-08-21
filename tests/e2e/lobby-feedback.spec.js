@@ -132,13 +132,19 @@ test('the way back buzzes like every other tap', async ({ page, browser }) => {
     .toContain('lobby--step');
 });
 
-test('a pick tile plays its press through, and the cup panel fades on a swap', async ({ page }) => {
+// The live panel: during a swap the outgoing one is still in the card for a
+// beat, laid over its replacement (trackPicker.js retireLayer), so anything
+// asking about "the panel" has to say which.
+const LIVE = '.modepick__tracks:not(.modepick__tracks--out)';
+
+test('a pick tile plays its press through, and a cup swap cross-fades', async ({ page }) => {
   // No room needed: a scenario plus CSS. Both halves are gated because both
   // have failed. The press read as missing for two rounds — not because of its
   // duration but because buildModePicker destroyed the tile mid-animation, so
   // what matters is that the transition REACHES ITS END rather than being
-  // cancelled and dropped. And the detail panel is replaced wholesale on every
-  // cup change, which cut rather than changed.
+  // cancelled and dropped. And the detail panel was rebuilt on every render
+  // with its CONTENTS fading in from nothing, so every pick blanked the card to
+  // its bare wash for a beat — a white flash on the pale cups.
   await page.setViewportSize({ width: 844, height: 390 });
   await page.goto('/controller/index.html?scenario=lobby-race&color=0');
   const tile = page.locator('.mode-opt', { hasText: 'Canyon' });
@@ -150,9 +156,8 @@ test('a pick tile plays its press through, and the cup panel fades on a swap', a
     for (const n of ['transitionstart', 'transitionend', 'transitioncancel']) {
       t.addEventListener(n, (e) => { if (e.propertyName === 'transform') window.__ev.push(n); });
     }
-    // a new .racedetail is a NEW element, so the listener has to be on the doc
-    // the fade is on the panel's CONTENT, not the panel — fading the panel
-    // itself thinned its tint toward the paper and flashed white
+    // the fading element is the OUTGOING panel, which is a new node each swap,
+    // so the listener has to be on the doc
     window.__fades = [];
     document.addEventListener('animationstart', (e) => {
       if (e.target.closest('.racedetail')) window.__fades.push(e.animationName);
@@ -175,20 +180,40 @@ test('a pick tile plays its press through, and the cup panel fades on a swap', a
   expect(ev, `the press must play through, not be dropped: ${ev}`).toMatch(/transitionend$/);
 
   await page.locator('.mode-opt', { hasText: 'Snow Cup' }).click();
-  await expect(page.locator('.racedetail .raceinfo__name')).toHaveText('Snow Cup');
+  await expect(page.locator(`${LIVE} .raceinfo__name`)).toHaveText('Snow Cup');
   expect(await page.evaluate(() => window.__fades.join(',')),
-    'the cup panel content should fade in rather than cut').toContain('racedetail-swap');
-  // and the panel itself must NOT fade: that is what flashed white between cups
-  expect(await page.evaluate(() => getComputedStyle(document.querySelector('.racedetail')).animationName),
-    'the tinted surface must not thin toward the paper').toBe('none');
+    'a cup swap should cross-fade rather than cut').toContain('swap-out');
+  // The ARRIVING panel does not animate at all: it is opaque from its first
+  // frame with the outgoing one fading off the top of it. Anything that fades
+  // the incoming side in is the blank card coming back — and fading the panel
+  // itself thins its tint toward the paper, which is the white flash that
+  // started all this.
+  expect(await page.evaluate((sel) => {
+    const p = document.querySelector(sel);
+    return [p, ...p.children].map((n) => getComputedStyle(n).animationName).filter((n) => n !== 'none');
+  }, LIVE), 'nothing on the arriving panel may fade in').toEqual([]);
+
+  // A pick that only re-MARKS the panel must not swap it at all. Picking a
+  // track changes one word of the meta line and one tile's fill; it used to
+  // rebuild the whole panel, taking the tile out from under the thumb that
+  // pressed it.
+  await page.evaluate(() => {
+    window.__swaps = 0;
+    new MutationObserver((ms) => {
+      for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1) window.__swaps++;
+    }).observe(document.querySelector('.racedetail'), { childList: true });
+  });
+  await page.locator(`${LIVE} .track-opt`).first().click();
+  await expect(page.locator(`${LIVE} .raceinfo__meta`)).toContainText('Single race');
+  expect(await page.evaluate(() => window.__swaps),
+    'picking a track must re-dress the panel, never replace it').toBe(0);
 });
 
-test('one cup tap rebuilds the panel once, not once per render', async ({ page, browser }) => {
+test('one cup tap swaps the panel once, not once per render', async ({ page, browser }) => {
   // A tap renders the picker three times — the cursor moving, the pick landing,
-  // and the display echoing that pick back — and each rebuild restarted the
-  // panel's fade from nothing, so one tap blinked the panel three times. Only
-  // reachable here: the gallery has no relay to echo, so it renders once and
-  // looks perfect.
+  // and the display echoing that pick back — and each swap restarted the fade
+  // mid-flight, so one tap blinked the panel three times. Only reachable here:
+  // the gallery has no relay to echo, so it renders once and looks perfect.
   const roomCode = await openDisplay(page);
   const alice = await joinController(browser, roomCode, 'Alice');
   await alice.locator('#ready-btn').click();
@@ -196,15 +221,80 @@ test('one cup tap rebuilds the panel once, not once per render', async ({ page, 
   await alice.waitForTimeout(400);
 
   await alice.evaluate(() => {
-    window.__rebuilds = 0;
+    window.__swaps = 0;
+    window.__cards = 0;
     new MutationObserver((ms) => {
-      for (const m of ms) for (const n of m.addedNodes)
-        if (n.classList && n.classList.contains('racedetail')) window.__rebuilds++;
+      for (const m of ms) for (const n of m.addedNodes) {
+        if (!n.classList) continue;
+        if (n.classList.contains('modepick__tracks')) window.__swaps++;
+        if (n.classList.contains('racedetail')) window.__cards++;
+      }
     }).observe(document.getElementById('track-strip'), { childList: true, subtree: true });
   });
   await alice.locator('.mode-opt', { hasText: 'Snow Cup' }).click();
-  await expect(alice.locator('.racedetail .raceinfo__name')).toHaveText('Snow Cup');
+  await expect(alice.locator(`${LIVE} .raceinfo__name`)).toHaveText('Snow Cup');
   await alice.waitForTimeout(600);        // long enough for the display's echo
-  expect(await alice.evaluate(() => window.__rebuilds),
-    'the panel may be replaced once per tap, or its fade restarts mid-flight').toBe(1);
+  expect(await alice.evaluate(() => window.__swaps),
+    'the panel may be swapped once per tap, or its fade restarts mid-flight').toBe(1);
+  expect(await alice.evaluate(() => window.__cards),
+    'the card holding it is permanent — only the tinted panel is ever swapped').toBe(0);
+});
+
+test('picking a car re-dresses its card and cross-fades the render', async ({ page }) => {
+  // The car page's half of the same rule. The card used to be rebuilt whenever
+  // the selection moved, so the name, the stat bars and the render all cut at
+  // once — and the fresh thumbnail re-ran its own still→spin handoff, flashing a
+  // static hero before settling. Everything here is the card NOT being rebuilt:
+  // the bars can only slide from one car's values to the next if they are the
+  // same four elements throughout.
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.goto('/controller/index.html?scenario=lobby-host&color=0');
+  await page.waitForSelector('#car-hero .carthumb');
+
+  const before = await page.evaluate(() => {
+    const hero = document.getElementById('car-hero');
+    window.__adds = 0;
+    new MutationObserver((ms) => {
+      for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1) window.__adds++;
+    }).observe(hero, { childList: true });
+    window.__fades = [];
+    document.addEventListener('animationstart', (e) => {
+      if (e.target.closest('#car-hero')) window.__fades.push(e.animationName);
+    }, true);
+    // held by reference: the bars have to be the SAME nodes afterwards
+    window.__bars = [...hero.querySelectorAll('.stat__bar > i')];
+    return { name: hero.querySelector('.raceinfo__name').textContent,
+      widths: window.__bars.map((i) => i.style.width) };
+  });
+
+  await page.locator('.car-opt').nth(3).click();
+  await expect(page.locator('#car-hero .raceinfo__name')).not.toHaveText(before.name);
+  // Two renders for a beat — the one you had, over the one you picked.
+  await expect(page.locator('#car-hero .carthumb')).toHaveCount(2);
+  await expect(page.locator('#car-hero .carthumb--out')).toHaveCount(1);
+
+  const after = await page.evaluate(() => {
+    const hero = document.getElementById('car-hero');
+    return {
+      adds: window.__adds,
+      fades: window.__fades.join(','),
+      sameBars: window.__bars.every((i, k) => i === hero.querySelectorAll('.stat__bar > i')[k]),
+      widths: window.__bars.map((i) => i.style.width),
+      // the bars carry a transition, which is what turns a new width into a slide
+      moves: getComputedStyle(window.__bars[0]).transitionProperty
+    };
+  });
+  expect(after.adds, 'the card is dressed, never rebuilt').toBe(0);
+  expect(after.fades, 'the outgoing car fades off the incoming one').toContain('swap-out');
+  expect(after.sameBars, 'the stat bars must survive the pick, or they cannot slide').toBe(true);
+  expect(after.widths, 'the new car\'s stats are dressed onto them').not.toEqual(before.widths);
+  expect(after.moves, 'a new width has to move rather than cut').toContain('width');
+
+  // The retired render leaves on its own, and re-picking the SAME car swaps
+  // nothing at all.
+  await expect(page.locator('#car-hero .carthumb')).toHaveCount(1);
+  await page.locator('.car-opt').nth(3).click();
+  await page.waitForTimeout(200);
+  await expect(page.locator('#car-hero .carthumb')).toHaveCount(1);
+  expect(await page.evaluate(() => window.__adds), 'a repick must not touch the card').toBe(0);
 });

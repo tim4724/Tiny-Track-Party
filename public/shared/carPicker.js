@@ -13,7 +13,7 @@
 // load by id from the web host (carThumbs.js), never over the relay.
 
 import { carThumbNode } from './carThumbs.js';
-import { detailHeader } from './trackPicker.js';
+import { detailHeader, dressHead, retireLayer } from './trackPicker.js';
 
 // Resolve the car list from the window globals (gallery / no-snapshot fallback).
 function carsFromWindow() {
@@ -51,22 +51,35 @@ function statDomain(cars) {
     return { lo, span: span + Math.max(0, 0.3 * span - gap) };
   });
 }
-function statBarsNode(stats, dom) {
+// STAT_BAR_FLOOR..100%: the weakest stat still reads as half-full, not empty.
+function statPct(stats, row, d) {
+  return Math.round((STAT_BAR_FLOOR + (1 - STAT_BAR_FLOOR) * (((stats[row.key] || d.lo) - d.lo) / d.span)) * 100);
+}
+// The bars' SHAPE — four labelled, empty rows. Every car has the same four, so
+// the block is built once per roster and only its fills move (dressStatBars).
+// That is what lets switching cars SLIDE each bar from the old car's value to
+// the new one (controller.css transitions the width): the comparison the block
+// exists to make, which a rebuilt bar could only cut to.
+function buildStatBars() {
   const wrap = document.createElement('div');
   wrap.className = 'car-opt__stats';
-  if (!stats) return wrap;
-  STAT_ROWS.forEach((row, k) => {
-    const d = dom[k];
-    // STAT_BAR_FLOOR..100%: the weakest stat still reads as half-full, not empty.
-    const pct = Math.round((STAT_BAR_FLOOR + (1 - STAT_BAR_FLOOR) * (((stats[row.key] || d.lo) - d.lo) / d.span)) * 100);
+  for (const row of STAT_ROWS) {
     const r = document.createElement('div'); r.className = 'stat';
     const lab = document.createElement('span'); lab.className = 'stat__lab'; lab.textContent = row.lab;
     const bar = document.createElement('span'); bar.className = 'stat__bar';
-    const fill = document.createElement('i'); fill.style.width = pct + '%';
-    bar.appendChild(fill); r.appendChild(lab); r.appendChild(bar);
+    bar.appendChild(document.createElement('i'));
+    r.appendChild(lab); r.appendChild(bar);
     wrap.appendChild(r);
-  });
+  }
   return wrap;
+}
+// A car with no stats at all (an older display's roster) empties the bars
+// rather than leaving the last car's showing.
+function dressStatBars(wrap, stats, dom) {
+  const fills = wrap.querySelectorAll('.stat__bar > i');
+  STAT_ROWS.forEach((row, k) => {
+    fills[k].style.width = stats ? statPct(stats, row, dom[k]) + '%' : '0%';
+  });
 }
 
 // Render the picker into the given elements. heroEl gets the big selected-car
@@ -88,9 +101,14 @@ export function buildCarPicker({ heroEl, stripEl, selected, onPick, canPick = tr
   // room touches anything.
   const listSig = JSON.stringify(list.map((c) => [c.id, c.name, c.stats]));
 
-  const heroSig = listSig + '|' + sel;
-  if (heroEl && heroEl.dataset.sig !== heroSig) {
-    heroEl.dataset.sig = heroSig;
+  // The card is BUILT per roster and DRESSED per pick — the same split the race
+  // page's detail panel uses (shared/trackPicker.js), and here for the same
+  // reason: picking a car rebuilt this whole card, so the name, the bars and the
+  // render all cut at once, and the fresh thumb re-ran its still→spin handoff
+  // from a blank frame. Every car has the same anatomy, so a pick only ever
+  // retitles it, slides the bars, and cross-fades the render.
+  if (heroEl && heroEl.dataset.sig !== listSig) {
+    heroEl.dataset.sig = listSig;
     heroEl.innerHTML = '';
     // Head first, from the trackPicker's OWN builder: the car card and the cup
     // card are the same object on the two lobby pages, and sharing the builder
@@ -98,12 +116,27 @@ export function buildCarPicker({ heroEl, stripEl, selected, onPick, canPick = tr
     // something its tiles don't ("Grand Prix · 4 races"), where a car's would
     // say nothing the stat bars right there don't say better.
     heroEl.appendChild(detailHeader({ title: nameOf(sel) }));
-
     const view = document.createElement('div'); view.className = 'car-hero__view';
-    view.appendChild(carThumbNode(idOf(sel), { spin: true })); // only the chosen car spins
     const info = document.createElement('div'); info.className = 'car-hero__info';
-    info.appendChild(statBarsNode(list[sel] && list[sel].stats, statDomain(list)));
+    info.appendChild(buildStatBars());
     heroEl.appendChild(view); heroEl.appendChild(info);
+  }
+  if (heroEl) {
+    dressHead(heroEl, nameOf(sel));
+    dressStatBars(heroEl.querySelector('.car-opt__stats'), list[sel] && list[sel].stats, statDomain(list));
+    // The render is the one part that cannot be re-dressed — it is a different
+    // car — so it is swapped, and the swap cross-fades: the outgoing car lies
+    // over the incoming one and fades off it. `data-car` is what makes that a
+    // change of CAR rather than of render mode; the live node is the one not on
+    // its way out.
+    const view = heroEl.querySelector('.car-hero__view');
+    const shown = view.querySelector('.carthumb:not(.carthumb--out)');
+    if (!shown || shown.dataset.car !== String(idOf(sel))) {
+      const fresh = carThumbNode(idOf(sel), { spin: true }); // only the chosen car spins
+      fresh.dataset.car = String(idOf(sel));
+      view.insertBefore(fresh, view.firstChild);
+      if (shown) retireLayer(shown, 'carthumb--out');
+    }
   }
 
   if (stripEl) {

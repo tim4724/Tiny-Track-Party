@@ -173,27 +173,68 @@ export function schematicSvg(svg, fieldTint) {
   return el;
 }
 
-// One exact-track tile (inside an open cup's panel): schematic + name. White at rest;
-// picked, it fills with its cup's colour turned up — the same mark a picked cup tile
-// wears, so "picked" looks identical wherever it lands in the picker. Difficulty is
-// never badged per track — only the cup's tendency meter (cupMeter) hints at it.
-function trackTile(t, mine, canPick, onPick) {
+// One exact-track tile (inside an open cup's panel): schematic + name, white at
+// rest. Difficulty is never badged per track — only the cup's tendency meter
+// (cupMeter) hints at it. The PICK MARK is not built in: it is dressed on
+// (dressTile), so picking a track re-dresses the tile under the thumb instead
+// of destroying it.
+function buildTrackTile(t) {
   const btn = document.createElement('button');
   btn.type = 'button';
-  btn.className = 'track-opt' + (mine ? ' track-opt--mine' : '');
-  if (mine) {
-    btn.setAttribute('aria-current', 'true');
-    btn.style.background = cupTint(t.cup, PICK_TINT);
-  }
+  btn.className = 'track-opt';
   btn.setAttribute('aria-label', t.name);
-  btn.disabled = !canPick;
   btn.appendChild(schematicSvg(t.svg || {}, cupTint(t.cup, FIELD_TINT)));
   const lab = document.createElement('span');
   lab.className = 'track-opt__name';
   lab.textContent = t.name;
   btn.appendChild(lab);
-  if (canPick && onPick) btn.addEventListener('click', () => onPick(t.id));
   return btn;
+}
+
+// Random's panel holds RUNS, not tracks, so its tiles carry a "?" (or the
+// tour's drawn ring) where a schematic would sit — the same anatomy otherwise,
+// which is what lets swapping a cup for Random move nothing below the picker.
+function buildQTile({ label, glyph }) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'track-opt';
+  btn.setAttribute('aria-label', label);
+  const box = document.createElement('span');
+  box.className = 'track-map track-map--q';
+  box.style.background = towardWhite(NEUTRAL_COLOR, FIELD_TINT);
+  if (glyph) {
+    const g = document.createElement('span');
+    g.textContent = glyph;
+    box.appendChild(g);
+  } else {
+    // No glyph = the tour's ring, DRAWN rather than typed: no circle
+    // codepoint matches the ∞'s ink weight across the fonts phones fall
+    // back to, so the theme draws one that does (.track-map--q > i).
+    box.appendChild(document.createElement('i'));
+  }
+  btn.appendChild(box);
+  const lab = document.createElement('span');
+  lab.className = 'track-opt__name';
+  lab.textContent = label;
+  btn.appendChild(lab);
+  return btn;
+}
+
+// A tile's whole mutable half: the mark it wears and what a tap does. Picked, it
+// fills with its cup's colour turned up (`pickBg`) — the same mark a picked cup
+// row wears, so "picked" looks identical wherever it lands in the picker.
+//
+// Split from the builders for the reason dressRow is split from buildRow: a
+// render arrives when the network says so, which is to say while a finger is on
+// the glass. `onclick` rather than addEventListener so re-dressing replaces the
+// handler instead of stacking another one.
+function dressTile(btn, { mine, pickBg, canPick, onTap }) {
+  btn.classList.toggle('track-opt--mine', !!mine);
+  if (mine) btn.setAttribute('aria-current', 'true');
+  else btn.removeAttribute('aria-current');
+  btn.style.background = mine ? pickBg : '';
+  btn.disabled = !canPick;
+  btn.onclick = (canPick && onTap) ? onTap : null;
 }
 
 // A cup's difficulty TENDENCY as a 4-pip meter (the first `level` pips filled, 1–4). A
@@ -259,8 +300,9 @@ export function lockGlyph() {
 // were the one control on the page that did not answer a touch. Now the six
 // rows are built once per catalogue and re-dressed in place, exactly as the car
 // strip does it (shared/carPicker.js), so the element you press outlives the
-// press. Only the detail panel is still rebuilt wholesale: it changes entirely,
-// and it is not the thing under your thumb.
+// press. The detail panel is built and dressed the same way (buildPanel /
+// dressPanel below) — it was the last thing here rebuilt wholesale, and being
+// rebuilt is what made a pick blink.
 function buildRow(label, locked) {
   const btn = document.createElement('button');
   btn.type = 'button';
@@ -339,6 +381,63 @@ export function detailHeader({ title, starsEl, meter, meta }) {
   return head;
 }
 
+// The head's mutable half, EXPORTED beside the builder and for the same reason:
+// the car card wears this head too (shared/carPicker.js), and a second copy of
+// "which node holds the title" is how the two pages drift apart.
+//
+// Both families retitle without changing shape — Random becomes the World Tour,
+// and a cup's meta line says whether Start runs the Grand Prix or the one track
+// you picked out of it — so a pick may only ever rewrite these two, never
+// rebuild the head that holds them. The car card has no meta line at all, hence
+// the null check rather than an assumption.
+export function dressHead(host, title, meta) {
+  host.querySelector('.raceinfo__name').textContent = title;
+  const m = host.querySelector('.raceinfo__meta');
+  if (m && meta != null) m.textContent = meta;
+}
+
+// What the badges mean, as a quiet key under the panel: one star for finishing
+// the cup, two for a top-3 human, three for a win. Built once and never
+// touched again — it says the same thing whatever the cursor rests on, and it
+// used to be thrown away and re-faded on every swap along with the panel.
+function starLegend() {
+  const legend = document.createElement('div');
+  legend.className = 'star-legend';
+  for (const [n, word] of [[1, 'finish'], [2, 'top 3'], [3, 'win']]) {
+    const item = document.createElement('span');
+    item.className = 'star-legend__item';
+    item.appendChild(starRow(n));
+    const t = document.createElement('span');
+    t.textContent = word;
+    item.appendChild(t);
+    legend.appendChild(item);
+  }
+  return legend;
+}
+
+// Retire a layer by fading it OVER its replacement instead of cutting to it.
+// NOT a fade toward the paper — that was tried on the cup panel, and a tinted
+// surface thinning toward the page read as a white flash between two cups. This
+// is a true cross-fade: the replacement is already underneath at full opacity,
+// so the pixel beneath the fade is never the page. `outClass` takes the layer
+// out of the flow (controller.css) so the incoming one owns the layout from its
+// first frame and nothing below either of them moves.
+//
+// EXPORTED: the car card retires its render the same way (shared/carPicker.js),
+// which is the same event on the other lobby page — a pick swapping one surface
+// for another.
+export function retireLayer(old, outClass) {
+  old.classList.add(outClass);
+  old.setAttribute('aria-hidden', 'true');
+  const done = () => old.remove();
+  // Its OWN fade ending, not a child's: animationend bubbles, so anything that
+  // animates inside a panel would otherwise cut the fade short.
+  old.addEventListener('animationend', (e) => { if (e.target === old) done(); });
+  // Reduced motion runs no animation, so there is no end to wait for — and a
+  // layer left lying over the live one would eat every tap.
+  setTimeout(done, 400);
+}
+
 // Render the picker into `stripEl` — a pick LIST on the left (the cups in
 // ladder order, the locked Playroom in place, Random last) and a DETAIL panel
 // on the right describing whatever the cursor rests on: a cup's stars,
@@ -403,7 +502,14 @@ export function buildModePicker({ stripEl, catalog, progress, selection, highlig
   if (!groups.length) {
     const grid = document.createElement('div');
     grid.className = 'trackpick__grid';
-    for (const t of list) grid.appendChild(trackTile(t, t.id === sel.trackId, canPick, (id) => pick({ mode: 'track', trackId: id })));
+    for (const t of list) {
+      const tile = buildTrackTile(t);
+      dressTile(tile, {
+        mine: t.id === sel.trackId, pickBg: cupTint(t.cup, PICK_TINT), canPick,
+        onTap: () => pick({ mode: 'track', trackId: t.id })
+      });
+      grid.appendChild(tile);
+    }
     const prev = stripEl.firstElementChild;
     if (prev) stripEl.replaceChild(grid, prev); else stripEl.appendChild(grid);
     return;
@@ -511,155 +617,157 @@ export function buildModePicker({ stripEl, catalog, progress, selection, highlig
   // header + four-tile anatomy for the cup and random families — so switching
   // rows moves nothing on the phone. The locked cup swaps the grid for the
   // unlock rules.
-  const detail = document.createElement('div');
-  detail.className = 'racedetail';
-  const panel = document.createElement('div');
-  panel.className = 'modepick__tracks';
+  //
+  // BUILT per ROW, DRESSED per PICK — the same split the list above it uses,
+  // and here for a reason you could see. The panel used to be rebuilt on every
+  // render and its contents faded in, so every pick blanked the card to its
+  // bare wash for a beat: on the pale cups that reads as a white flash, and
+  // picking a TRACK — which changes one word of the meta line and one tile's
+  // fill — took the tile out from under the thumb that pressed it. A pick now
+  // moves only what a pick changes. Only a change of ROW rebuilds, and that one
+  // CROSS-FADES (retireLayer), so there is never a frame with nothing on it.
+  //
+  // The card and the legend under it are permanent; only the tinted panel is
+  // ever swapped, and it is swapped in place — appending to a cleared parent
+  // would take the list with it.
+  let card = cols.querySelector('.racedetail');
+  if (!card) {
+    card = document.createElement('div');
+    card.className = 'racedetail';
+    card.appendChild(starLegend());
+    cols.appendChild(card);
+  }
 
-  const qTile = ({ label, glyph, mine, onTap }) => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'track-opt' + (mine ? ' track-opt--mine' : '');
-    if (mine) {
-      btn.setAttribute('aria-current', 'true');
-      btn.style.background = towardWhite(NEUTRAL_COLOR, PICK_TINT);
-    }
-    btn.setAttribute('aria-label', label);
-    btn.disabled = !canPick;
-    const box = document.createElement('span');
-    box.className = 'track-map track-map--q';
-    box.style.background = towardWhite(NEUTRAL_COLOR, FIELD_TINT);
-    if (glyph) {
-      const g = document.createElement('span');
-      g.textContent = glyph;
-      box.appendChild(g);
-    } else {
-      // No glyph = the tour's ring, DRAWN rather than typed: no circle
-      // codepoint matches the ∞'s ink weight across the fonts phones fall
-      // back to, so the theme draws one that does (.track-map--q > i).
-      box.appendChild(document.createElement('i'));
-    }
-    btn.appendChild(box);
-    const lab = document.createElement('span');
-    lab.className = 'track-opt__name';
-    lab.textContent = label;
-    btn.appendChild(lab);
-    if (canPick && onTap) btn.addEventListener('click', onTap);
-    return btn;
-  };
+  // Three panels, one anatomy. Each declares the SHAPE it is — what a rebuild
+  // is keyed on: the row, plus the couch progress drawn into it, which a pick
+  // cannot move — then how to build that shape once and how to dress a pick
+  // onto it every time. Nothing a TAP changes may appear in a shape, or the tap
+  // rebuilds the panel it is dressing.
+  let shape, buildPanel, dressPanel;
 
   if (cursor === 'random') {
-    panel.style.background = towardWhite(NEUTRAL_COLOR, PANEL_TINT);
-    panel.appendChild(detailHeader({
-      title: sel.mode === 'tour' ? TOUR_LABEL : 'Random',
-      // No stars on the random family — the badges are the cups' reward arc,
-      // and a run mode wearing one read as a sixth cup.
-      meta: sel.mode === 'tour' ? 'One track from every unlocked cup, in cup order'
-        : 'Any unlocked track, dealt by the dice'
-    }));
-    const tgrid = document.createElement('div');
-    tgrid.className = 'trackpick__grid';
-    tgrid.appendChild(qTile({
-      // No glyph: the tour wears the drawn ring — a plain circle in the same
-      // ink family as ? and ∞, where the globe emoji clashed with the sticker
-      // look and rendered differently on every phone.
-      label: TOUR_LABEL,
-      mine: sel.mode === 'tour',
-      onTap: () => pick({ mode: 'tour' })
-    }));
-    for (const o of randomLengths()) {
-      tgrid.appendChild(qTile({
-        label: o.label, glyph: o.glyph,
-        mine: sel.mode === 'random' && randomRaces === o.randomRaces,
+    const lengths = randomLengths();
+    const isTour = sel.mode === 'tour';
+    const title = isTour ? TOUR_LABEL : 'Random';
+    // No stars on the random family — the badges are the cups' reward arc,
+    // and a run mode wearing one read as a sixth cup.
+    const meta = isTour ? 'One track from every unlocked cup, in cup order'
+      : 'Any unlocked track, dealt by the dice';
+    const pickBg = towardWhite(NEUTRAL_COLOR, PICK_TINT);
+    shape = JSON.stringify(['random', lengths.map((o) => o.label)]);
+    buildPanel = () => {
+      const panel = document.createElement('div');
+      panel.className = 'modepick__tracks';
+      panel.style.background = towardWhite(NEUTRAL_COLOR, PANEL_TINT);
+      panel.appendChild(detailHeader({ title, meta }));
+      const tgrid = document.createElement('div');
+      tgrid.className = 'trackpick__grid';
+      // The tour LEADS the panel, being what the bare 🎲 tile lands on, and it
+      // wears the drawn ring rather than a glyph — the globe emoji clashed with
+      // the sticker look and rendered differently on every phone.
+      tgrid.appendChild(buildQTile({ label: TOUR_LABEL }));
+      for (const o of lengths) tgrid.appendChild(buildQTile(o));
+      panel.appendChild(tgrid);
+      return panel;
+    };
+    dressPanel = (panel) => {
+      dressHead(panel, title, meta);
+      const tiles = panel.querySelectorAll('.track-opt');
+      dressTile(tiles[0], { mine: isTour, pickBg, canPick, onTap: () => pick({ mode: 'tour' }) });
+      lengths.forEach((o, i) => dressTile(tiles[i + 1], {
+        mine: sel.mode === 'random' && randomRaces === o.randomRaces, pickBg, canPick,
         onTap: () => pick({ mode: 'random', randomRaces: o.randomRaces })
       }));
-    }
-    panel.appendChild(tgrid);
+    };
   } else if (lockedOf(cursor)) {
     const g = byCup.get(cursor);
     const p = progressOf(cursor) || {};
-    panel.classList.add('modepick__tracks--locked');
-    panel.appendChild(detailHeader({
-      title: g ? g.name : cursor,
-      meta: 'Finish every cup\'s Grand Prix to unlock the stunt cup.'
-    }));
-    const rules = document.createElement('div');
-    rules.className = 'unlock-rules';
-    for (const g2 of groups) {
-      if (g2.id === cursor) continue;
-      const row = document.createElement('div');
-      row.className = 'unlock-rules__row' + (starsOf(g2.id) > 0 ? '' : ' unlock-rules__row--todo');
-      const dot = document.createElement('i');
-      dot.className = 'dot';
-      dot.style.background = cupTint(g2.id, 100);
-      row.appendChild(dot);
-      const nm = document.createElement('span');
-      nm.textContent = g2.name;
-      row.appendChild(nm);
-      const mark = document.createElement('b');
-      mark.textContent = starsOf(g2.id) > 0 ? '✓' : '';
-      row.appendChild(mark);
-      rules.appendChild(row);
-    }
-    const foot = document.createElement('div');
-    foot.className = 'unlock-rules__foot';
-    foot.textContent = `${p.unlockDone || 0} of ${p.unlockNeed || 0} done`;
-    rules.appendChild(foot);
-    panel.appendChild(rules);
+    const title = g ? g.name : cursor;
+    const meta = 'Finish every cup\'s Grand Prix to unlock the stunt cup.';
+    const others = groups.filter((g2) => g2.id !== cursor)
+      .map((g2) => ({ id: g2.id, name: g2.name, done: starsOf(g2.id) > 0 }));
+    // The pitch is drawn entirely from the couch's progress, and a pick cannot
+    // move that — so it is ALL shape, and there is nothing here to dress.
+    shape = JSON.stringify(['locked', cursor, p.unlockDone || 0, p.unlockNeed || 0, others]);
+    buildPanel = () => {
+      const panel = document.createElement('div');
+      panel.className = 'modepick__tracks modepick__tracks--locked';
+      panel.appendChild(detailHeader({ title, meta }));
+      const rules = document.createElement('div');
+      rules.className = 'unlock-rules';
+      for (const o of others) {
+        const row = document.createElement('div');
+        row.className = 'unlock-rules__row' + (o.done ? '' : ' unlock-rules__row--todo');
+        const dot = document.createElement('i');
+        dot.className = 'dot';
+        dot.style.background = cupTint(o.id, 100);
+        row.appendChild(dot);
+        const nm = document.createElement('span');
+        nm.textContent = o.name;
+        row.appendChild(nm);
+        const mark = document.createElement('b');
+        mark.textContent = o.done ? '✓' : '';
+        row.appendChild(mark);
+        rules.appendChild(row);
+      }
+      const foot = document.createElement('div');
+      foot.className = 'unlock-rules__foot';
+      foot.textContent = `${p.unlockDone || 0} of ${p.unlockNeed || 0} done`;
+      rules.appendChild(foot);
+      panel.appendChild(rules);
+      return panel;
+    };
+    dressPanel = () => {};
   } else {
     const g = byCup.get(cursor);
-    // The cup's colour washes the panel, deeper than the tiles in front of it.
-    panel.style.background = cupTint(cursor, PANEL_TINT);
+    const items = g ? g.items : [];
+    const stars = starsOf(cursor);
     // The meta line says WHAT TAPPING START WILL RUN, which is not always the
     // cup: picking one of the four tiles below drops out of the Grand Prix and
     // races that track alone. The line was still promising four races, which is
     // the one place the panel could contradict the pick right above the button
     // that acts on it.
-    const soloTrack = sel.mode === 'track'
-      && (g ? g.items : []).find((t) => t.id === sel.trackId);
-    panel.appendChild(detailHeader({
-      title: g ? g.name : cursor,
-      starsEl: starRow(starsOf(cursor)),
-      meter: g && g.diff != null ? cupMeter(g.diff) : null,
-      meta: soloTrack ? `Single race · ${soloTrack.name}`
-        : `Grand Prix · ${g ? g.items.length : 0} races`
-    }));
-    const tgrid = document.createElement('div');
-    tgrid.className = 'trackpick__grid';
-    if (g) {
-      for (const t of g.items) {
-        tgrid.appendChild(trackTile(t, sel.mode === 'track' && t.id === sel.trackId, canPick,
-          (id) => pick({ mode: 'track', trackId: id })));
-      }
-    }
-    panel.appendChild(tgrid);
+    const soloTrack = sel.mode === 'track' && items.find((t) => t.id === sel.trackId);
+    const title = g ? g.name : cursor;
+    const meta = soloTrack ? `Single race · ${soloTrack.name}`
+      : `Grand Prix · ${items.length} races`;
+    shape = JSON.stringify(['cup', cursor, stars, g ? g.diff : null, items.map((t) => t.id)]);
+    buildPanel = () => {
+      const panel = document.createElement('div');
+      panel.className = 'modepick__tracks';
+      // The cup's colour washes the panel, deeper than the tiles in front of it.
+      panel.style.background = cupTint(cursor, PANEL_TINT);
+      panel.appendChild(detailHeader({
+        title, starsEl: starRow(stars),
+        meter: g && g.diff != null ? cupMeter(g.diff) : null, meta
+      }));
+      const tgrid = document.createElement('div');
+      tgrid.className = 'trackpick__grid';
+      for (const t of items) tgrid.appendChild(buildTrackTile(t));
+      panel.appendChild(tgrid);
+      return panel;
+    };
+    dressPanel = (panel) => {
+      dressHead(panel, title, meta);
+      const tiles = panel.querySelectorAll('.track-opt');
+      items.forEach((t, i) => dressTile(tiles[i], {
+        mine: sel.mode === 'track' && t.id === sel.trackId,
+        pickBg: cupTint(t.cup, PICK_TINT), canPick,
+        onTap: () => pick({ mode: 'track', trackId: t.id })
+      }));
+    };
   }
 
-  detail.appendChild(panel);
-  // What the badges mean, as a quiet key under the panel: one star for
-  // finishing the cup, two for a top-3 human, three for a win.
-  const legend = document.createElement('div');
-  legend.className = 'star-legend';
-  for (const [n, word] of [[1, 'finish'], [2, 'top 3'], [3, 'win']]) {
-    const item = document.createElement('span');
-    item.className = 'star-legend__item';
-    item.appendChild(starRow(n));
-    const t = document.createElement('span');
-    t.textContent = word;
-    item.appendChild(t);
-    legend.appendChild(item);
+  // A retiring panel is still in the card for a beat, so the live one is the
+  // one that is NOT on its way out. The fresh panel goes in FIRST so the one
+  // fading paints over it rather than under it.
+  let panel = card.querySelector('.modepick__tracks:not(.modepick__tracks--out)');
+  if (!panel || panel.dataset.shape !== shape) {
+    const fresh = buildPanel();
+    fresh.dataset.shape = shape;
+    card.insertBefore(fresh, card.firstChild);
+    if (panel) retireLayer(panel, 'modepick__tracks--out');
+    panel = fresh;
   }
-  detail.appendChild(legend);
-  // Swapped IN PLACE: appending to a cleared parent would take the list with it.
-  //
-  // And only when it would actually LOOK different. One tap on a cup renders
-  // this three times — the cursor moving, the pick landing, then the display's
-  // echo of that pick a beat later — and each replacement restarted the
-  // panel's fade from nothing, so a single tap blinked the panel three times.
-  // Comparing the rendered markup is the one test that cannot drift from what
-  // the panel shows: any signature assembled by hand is a list of inputs
-  // somebody has to remember to extend.
-  const oldDetail = cols.querySelector('.racedetail');
-  if (oldDetail && oldDetail.outerHTML === detail.outerHTML) return;
-  if (oldDetail) cols.replaceChild(detail, oldDetail); else cols.appendChild(detail);
+  dressPanel(panel);
 }
