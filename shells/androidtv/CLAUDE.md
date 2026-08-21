@@ -762,9 +762,12 @@ them. The lobby orbit and the overview are single-cell and never take this path.
 
 **VULKAN IS THE DEFAULT BACKEND on this shell, decided once per launch in
 `VulkanPolicy`** (property override `debug.ttp.vk`: 1 forces Vulkan, -1 forces
-GL; then the SPIR-V blob set must be in the APK; then the boot canary — two
-Vulkan boots that never presented a frame and every later launch runs GL until
-a reinstall). The decision is made at surface create and carried into
+GL; then the device must advertise Vulkan 1.1 via
+`FEATURE_VULKAN_HARDWARE_VERSION` — Filament's floor, and Vulkan is optional
+on Android, so no-ICD and 1.0-only boxes go GL from launch one instead of
+after two dead boots; then the SPIR-V blob set must be in the APK; then the
+boot canary — two Vulkan boots that never presented a frame and every later
+launch runs GL until a reinstall). The decision is made at surface create and carried into
 `nativeCreate` as a parameter — the shared `ttp_display_create` ABI cannot grow
 a platform-private argument — and `DisplayHost` retries the create on GL in the
 same call when the Vulkan engine refuses, so a refusing driver still shows a
@@ -821,6 +824,15 @@ a LUT, the prize is ~1 ms of fill, and it flips translucent blending
 gamma→linear — a look change); the engine's feature flags (nothing
 Vulkan-tunable exists). What remains above the road's own shader is
 RESOLUTION — the ladder — and nothing else on this GPU.
+
+**`readPixels` on this driver has no `HOST_CACHED` staging memory**, so
+Filament's per-texel reshape used to walk an UNCACHED mapping — every 2-4 byte
+load its own memory transaction, which is what made the Vulkan scene build's
+readbacks (the road-light ESM above all) several times their GL cost. The
+fork carries the fix (`vulkan: bounce readPixels staging through a cached copy
+before reshape`, in the pin): one bulk memcpy into cached heap before the
+reshape, which halved the bake's `roadLight` phase on this box. The residual
+gap to GL is the bounce copy itself plus GPU waits — not worth chasing.
 
 ## Audio
 
