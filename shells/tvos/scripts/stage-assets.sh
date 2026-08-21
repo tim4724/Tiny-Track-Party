@@ -145,6 +145,13 @@ node "$HERE/gen-legal.mjs"
 #
 # Staged here rather than committed for the reason the rest of Generated/ is:
 # public/assets/brand/ holds the one copy.
+# …and the same PNG as an ordinary bundled resource, because the COVER draws it
+# too: the launch image is dismissed by the system the moment the window is
+# presented, and there is no API to hold it, so the seamless splash is one
+# picture shown by two mechanisms rather than two pictures that nearly match.
+mkdir -p "$OUT/brand"
+cp "$ROOT/public/assets/brand/launch-tv.png" "$OUT/brand/"
+
 CAT="$TVOS/Generated/Assets.xcassets/LaunchImage.launchimage"
 mkdir -p "$CAT"
 cp "$ROOT/public/assets/brand/launch-tv.png" "$CAT/launch.png"

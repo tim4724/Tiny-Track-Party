@@ -19,6 +19,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
 
 /**
  * The screen switcher: put whichever board the model names over the 3D surface.
@@ -130,14 +133,19 @@ fun RootScreen(game: GameCoordinator) {
         // is what cost the Apple TV 60 -> 7 fps through the GO beat. A spinner
         // would compete for the very frames it is waiting on.
         if (state.cover == "boot") {
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    // Opaque, and the app's own paper: the whole job is to not
-                    // depend on whatever is behind it having drawn yet.
-                    .background(Tokens.paper),
-                contentAlignment = Alignment.Center,
-            ) { Wordmark() }
+            // THE WINDOW BACKGROUND ITSELF, drawn again — the same
+            // `@drawable/splash` the window manager composites from the moment
+            // the Activity appears until Compose covers it. Not a live Wordmark
+            // beside it: the drawable scales the mark into a fixed box and live
+            // type does not, so the two were the same mark at two sizes and the
+            // handover read as a jump halfway through the boot. One resource,
+            // one picture, held from tap until the game is ready.
+            Image(
+                painter = painterResource(R.drawable.splash),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
         }
 
         // Over everything, including the results glass: a frame's cost is most
