@@ -8,4 +8,4 @@
 # TOGETHER — materials are MATERIAL_VERSION-locked to the tree, so a half
 # upgrade fails at load time in the browser.
 FILAMENT_REMOTE=https://github.com/tim4724/filament.git
-FILAMENT_COMMIT=3489f2e894a2a15aa9fd49167f5074e5553dbbcd
+FILAMENT_COMMIT=58c5c75d8c0c8a42841f3ca27642657d32322415
