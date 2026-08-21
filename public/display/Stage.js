@@ -534,6 +534,16 @@ export class Stage {
     return this._rebuilding;
   }
 
+  // Has the scene the shell last asked for actually been meshed? The COUNTDOWN
+  // GATE's half of the question (ttp_race.h): one bit, and the frame evidence
+  // that goes with it is the rule's to read. `_rebuilding` covers a build still
+  // in flight AND one the queue has not started yet, which is why this is not
+  // `display.built` on its own — that flag describes the scene on screen, which
+  // during a swap is the one being replaced.
+  sceneBuilt() {
+    return !this._rebuilding && !!(this.display && this.display.built);
+  }
+
   // Mesh a track AHEAD of the race that will run on it, and promise the next
   // rebuild() that what comes out is already at its opening state — so the
   // launch does not immediately mesh it a second time. See prepareNextTrack()

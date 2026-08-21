@@ -88,6 +88,15 @@ class GameCoordinator(
     var autoPaused = false
     var raceEnded = false
 
+    /** Did the scene build a launch asked for land? The countdown gate's one
+     *  shell-side fact — see [rebuildScene], which owns it. */
+    private var sceneBuildOk = true
+
+    /** The launch effects a scene build stands between (`ttp_race.h`'s countdown
+     *  gate): the held-back `start-countdown` paired with the moment the walk
+     *  ran, which is what the rule's backstop is measured from. */
+    private var pendingCountdown: Pair<JSONArray, Double>? = null
+
     /**
      * True only inside the AI fast-forward burst. Read by the race-event dispatch,
      * which must not spawn visuals for a race that is being SKIPPED rather than
@@ -585,6 +594,7 @@ class GameCoordinator(
             return
         }
         run(d)
+        armCountdown(d)
     }
 
     /**
@@ -654,9 +664,41 @@ class GameCoordinator(
             proto.countdownSeconds.toDouble(), null, null))
         when (d.optString("action")) {
             "return-to-lobby" -> returnToLobby()   // everyone left mid-intermission
-            "advance" -> run(d)
+            "advance" -> { run(d); armCountdown(d) }
             else -> Unit                            // "none"
         }
+    }
+
+    /**
+     * Hold a launch's countdown until the scene it will be driven on has settled.
+     * Both launch paths arm through here, so a chained cup race waits exactly as
+     * a lobby start does.
+     */
+    private fun armCountdown(answer: JSONObject) {
+        val effects = answer.optJSONArray("countdownEffects")
+        pendingCountdown =
+            if (effects == null || effects.length() == 0) null else effects to nowMs()
+    }
+
+    /**
+     * Asked once a frame while a launch waits. True on the frame the countdown
+     * actually starts, so the caller can skip the rest of that tick.
+     *
+     * The rule and everything it weighs are `ttp_race.h`'s: this side reports only
+     * the fact it owns (did my build land) and its own clock. The frame evidence is
+     * read inside, off the window this shell is already feeding, so a countdown can
+     * never be gated on numbers the readout disagrees with.
+     */
+    private fun releaseCountdown(): Boolean {
+        val waiting = pendingCountdown ?: return true
+        // `measuring` is 1 unconditionally here: this shell feeds ttp_perf_sample
+        // on every frame, with no automation or pinned-scale path that turns it
+        // off (the web has both).
+        if (Ttp.ttp_race_countdown_ready(if (sceneBuildOk) 1 else 0, 1,
+                                         nowMs() - waiting.second) == 0) return false
+        pendingCountdown = null
+        run(JSONObject().put("effects", waiting.first))
+        return true
     }
 
     /**
@@ -792,6 +834,12 @@ class GameCoordinator(
      */
     private fun frame(dt: Double) {
         if (sessionHandle != 0) {
+            // THE COUNTDOWN GATE. The grid is dressed, framed and painted by now;
+            // "3, 2, 1" waits here until the scene has stopped assembling itself.
+            // Skipping the update while it waits costs nothing — the countdown
+            // holds the cars anyway, so this only extends the pose they were
+            // already in.
+            if (!releaseCountdown()) { audio.frame(nowMs()); return }
             Ttp.ttp_update(sessionHandle, dt * 1000)
             // Drained IMMEDIATELY after the update: the event queue is per-handle
             // and a second update would overwrite it.
@@ -1217,6 +1265,9 @@ class GameCoordinator(
     }
 
     fun disposeSession() {
+        // …and with it any countdown still waiting on that race's scene: an abort
+        // mid-gate would otherwise start one over the lobby a beat later.
+        pendingCountdown = null
         if (sessionHandle == 0) return
         // Unbind BOTH consumers before disposing: a disposed handle takes its queued
         // audio beats with it, and the display would otherwise read a dead Game for
@@ -1283,7 +1334,13 @@ class GameCoordinator(
         // The cells are the cars that own a split-screen view, in roster order —
         // which IS cell order, and is the only place that mapping exists.
         display.setCells(sceneCars.filter { it.cell }.map { it.id })
-        if (display.build(trackId, rosterSlots(), assets)) {
+        // THE COUNTDOWN GATE'S HALF OF THE QUESTION, and on this platform it is
+        // answered by the time this returns: `display.build` is synchronous here,
+        // unlike the web's promise and the tvOS Task. What is still worth
+        // carrying is whether it SUCCEEDED — a refused build leaves the previous
+        // scene up, and warm frames of that scene say nothing about this race.
+        sceneBuildOk = display.build(trackId, rosterSlots(), assets)
+        if (sceneBuildOk) {
             // The boost icon's chevrons are the BIOME's accent, chosen for contrast
             // with this track's deck rather than to match the scenery, so it can
             // only be read once the build has resolved which biome won.

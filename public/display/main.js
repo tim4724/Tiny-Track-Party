@@ -444,6 +444,11 @@ const pushHeldItems = () => {
     net.sendTo(id, { type: MSG.ITEM, item });
   }
 };
+// The launch effects a scene build stands between (race_flow.h's countdown
+// gate): { effects, at }, or null when no launch is waiting. `at` is the walk's
+// own moment, which is what the rule's backstop is measured from — a party may
+// never hang on a build that will not arrive.
+let pendingCountdown = null;
 let fastForwarding = false; // true only inside the AI-only fast-forward burst
 let raceEnded = false;      // race over → freeze the scene behind the (translucent) results overlay until the next race
 let debugSolo = null;       // DEBUG ?solo=1 keyboard player (null in normal play); see DebugSolo.js
@@ -451,6 +456,22 @@ let debugSolo = null;       // DEBUG ?solo=1 keyboard player (null in normal pla
 scene.onFrame = (dt) => {
   if (!session) { lobbyDemo.step(dt); return; } // no race → run the lobby attract demo
   if (paused || autoPaused || raceEnded) return; // frozen: cars hold their last pose
+  // THE COUNTDOWN GATE. A launch answers with two lists and this is where the
+  // second one lands: the grid is already dressed, framed and painted, and
+  // "3, 2, 1" waits here until the scene has stopped assembling itself. The
+  // rule and everything it weighs are ttp_race.h's — this side reports only the
+  // two facts it owns (has my build returned, am I measuring at all) and the
+  // clock. Held cars are free: the countdown holds them anyway, so a gate that
+  // skips the update simply extends the pose they were already in.
+  //
+  // AND IT SKIPS THE AUDIO FRAME WITH IT, where the two TV shells deliberately
+  // keep theirs ticking. That is each shell following its own structure rather
+  // than a disagreement: here the audio drain sits INSIDE this function below
+  // the early returns, so `paused` and "no session" already skip it and the gate
+  // reads as one more of those; on tvOS and Android it sits after the frame body
+  // and had to be called explicitly on the way out. Nothing is owed to it during
+  // the hold anyway — the cars are parked on the grid.
+  if (pendingCountdown && !releaseCountdown()) return;
   // During countdown the session exists but isn't racing yet: we still draw
   // the cars and let them react to steering so players can feel their tilt —
   // they just don't move until GO. session.update() advances the countdown
@@ -895,6 +916,9 @@ const RACE_PERFORMERS = {
   'refresh-lobby-demo': () => refreshLobbyDemo(),
   'update-backdrop': () => updateBackdrop(),
   'dispose-session': () => {
+    // …and with it any countdown still waiting on that race's scene: an abort
+    // mid-gate would otherwise start one over the lobby a moment later.
+    pendingCountdown = null;
     if (session) { scene.bindSession(0); audioDecide.bind(0); session.dispose(); session = null; }
   },
   // ALWAYS place the track, not only on the effect's `placeTrack`. That flag
@@ -973,12 +997,39 @@ function launchArgs() {
   };
 }
 
+// Hold a launch's countdown until the scene it will be driven on has settled,
+// and perform it when it has. Both launch paths (the lobby start, the cup chain)
+// arm through here, so a chained race waits exactly as a lobby start does.
+//
+// prepareNextTrack still earns its keep alongside this and is not superseded by
+// it: meshing under the intermission board leaves the gate with nothing to wait
+// for, where this only stops the wait being spent on the countdown.
+function armCountdown(effects) {
+  pendingCountdown = (effects && effects.length)
+      ? { effects, at: performance.now() } : null;
+}
+
+// Asked once a frame while a launch is waiting. True the frame the countdown
+// actually starts, so the caller can skip the rest of that tick.
+function releaseCountdown() {
+  if (!flow.countdownReady(scene.sceneBuilt(), scene.perf.measuring,
+                           performance.now() - pendingCountdown.at)) {
+    return false;
+  }
+  const effects = pendingCountdown.effects;
+  pendingCountdown = null;
+  perform(effects);
+  return true;
+}
+
 function startRace() {
   // ONE walk: the go/no-go (room phase, scene, pick, connected players — all
   // read off the room handle in C++), the bag draws a random pick needs, the
   // cup series stood up behind the room, and the launch effects.
   const d = flow.startRace(net.flow.handle, sceneReady, launchArgs());
-  if (d.action === 'launch') perform(d.effects);
+  if (d.action !== 'launch') return;
+  perform(d.effects);
+  armCountdown(d.countdownEffects);
 }
 
 // The 'create-session' effect, performed. The session is the one thing an effect
@@ -1017,7 +1068,9 @@ function advanceSeriesRace() {
   // here. Phones that sat out flip to the wheel off the COUNTDOWN republish.
   const d = flow.advanceSeriesRace(net.flow.handle, sceneReady, launchArgs());
   if (d.action === 'return-to-lobby') { returnToLobby(); return; } // everyone left mid-intermission
-  if (d.action === 'advance') perform(d.effects);
+  if (d.action !== 'advance') return;
+  perform(d.effects);
+  armCountdown(d.countdownEffects);
 }
 
 function clearSeriesTimers() {

@@ -764,6 +764,11 @@ jint n_ttp_race_configure(JNIEnv* env, jclass, jbyteArray a0) {
     return (jint) ttp_race_configure(s0.get());
 }
 
+jint n_ttp_race_countdown_ready(JNIEnv* env, jclass, jint a0, jint a1, jdouble a2) {
+    (void) env;
+    return (jint) ttp_race_countdown_ready((int) a0, (int) a1, (double) a2);
+}
+
 jbyteArray n_ttp_race_demo_live_json(JNIEnv* env, jclass, jint a0, jbyteArray a1, jbyteArray a2) {
     CStr s1(env, a1);
     CStr s2(env, a2);
@@ -1307,6 +1312,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_race_autopilot_players", "(I)V", (void*) n_ttp_race_autopilot_players },
     { "ttp_race_bench_field_json", "([BID)[B", (void*) n_ttp_race_bench_field_json },
     { "ttp_race_configure", "([B)I", (void*) n_ttp_race_configure },
+    { "ttp_race_countdown_ready", "(IID)I", (void*) n_ttp_race_countdown_ready },
     { "ttp_race_demo_live_json", "(I[B[B)[B", (void*) n_ttp_race_demo_live_json },
     { "ttp_race_effect_ops_json", "()[B", (void*) n_ttp_race_effect_ops_json },
     { "ttp_race_end_party_json", "()[B", (void*) n_ttp_race_end_party_json },

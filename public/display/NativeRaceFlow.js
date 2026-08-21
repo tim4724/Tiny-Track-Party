@@ -57,6 +57,7 @@ export async function init() {
                   ['number', 'number', 'number', 'number', 'number']),
     intermissionMs: c('ttp_race_intermission_ms', 'number', []),
     resultsFailsafeMs: c('ttp_race_results_failsafe_ms', 'number', []),
+    countdownReady: c('ttp_race_countdown_ready', 'number', ['number', 'number', 'number']),
     forfeit: c('ttp_race_forfeit_live_json', 'string', ['number', 'string']),
     rekey: c('ttp_race_rekey_live_json', 'string', ['number', 'number', 'string', 'string']),  // (session, room)
     autoPause: c('ttp_race_auto_pause_live_json', 'string', ['number', 'number', 'number'])
@@ -133,6 +134,15 @@ export function resumeRace(sessionHandle, roomHandle, { paused, autoPaused, race
 
 export function intermissionMs() { return fn.intermissionMs(); }
 export function resultsFailsafeMs() { return fn.resultsFailsafeMs(); }
+
+// May the launch's held-back countdown start? The facts only a shell has go in —
+// whether its scene build has returned, whether it is feeding the frame monitor
+// at all, and how long ago it walked the launch. The FRAME evidence does not,
+// because the rule reads the same window the readout keeps (ttp_race.h). Poll it
+// once a frame until it says yes.
+export function countdownReady(sceneBuilt, measuring, sinceLaunchMs) {
+  return fn.countdownReady(sceneBuilt ? 1 : 0, measuring ? 1 : 0, sinceLaunchMs) === 1;
+}
 
 export function forfeitCar(sessionHandle, peerIndex) {
   return P(fn.forfeit(sessionHandle, id(peerIndex)));

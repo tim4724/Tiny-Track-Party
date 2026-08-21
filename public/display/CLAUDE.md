@@ -79,6 +79,13 @@ Test, gallery and solo surfaces bypass the welcome and push no history.
 The back-stack **table** is C++; the **traversal** is not — the History API is
 deliberately shell-side.
 
+A launch's countdown is HELD until the scene it will be driven on has settled
+(`ttp_race.h`'s countdown gate): `startRace`/`advanceSeriesRace` walk `effects`
+and then arm `countdownEffects`, which `onFrame` releases once the rule agrees.
+The two facts this side owes are `Stage.sceneBuilt()` and `perf.measuring` —
+under automation and a pinned `?dpr=` nothing feeds the window, and an empty
+window must not be read as a scene that has not drawn yet.
+
 ## Rendering surface
 
 `render/Display.js` is the browser's whole edge of the renderer; `Stage.js` owns

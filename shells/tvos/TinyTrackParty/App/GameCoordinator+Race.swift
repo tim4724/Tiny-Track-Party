@@ -46,6 +46,9 @@ extension GameCoordinator {
     }
 
     func disposeSession() {
+        // …and with it any countdown still waiting on that race's scene: an
+        // abort mid-gate would otherwise start one over the lobby a beat later.
+        pendingCountdown = nil
         guard sessionHandle != 0 else { return }
         // Unbind BOTH consumers before disposing: a disposed handle takes its
         // queued audio beats with it, and the display would otherwise read a
@@ -129,7 +132,14 @@ extension GameCoordinator {
         // The cells are the cars that own a split-screen view, in roster order —
         // which IS cell order, and is the only place that mapping exists.
         display.setCells(sceneCars.filter(\.cell).map(\.id))
+        // THE COUNTDOWN GATE'S HALF OF THE QUESTION. `display.hasScene` cannot
+        // answer it: it goes true on the first build of the process and stays
+        // true through every one after, so during a launch's rebuild it is still
+        // describing the LOBBY's scene. What the gate needs is whether the build
+        // just asked for has returned.
+        sceneBuildPending = true
         Task { @MainActor in
+            defer { sceneBuildPending = false }
             do {
                 try await SceneStaging.build(trackId: trackId,
                                              biome: nil,

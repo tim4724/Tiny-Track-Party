@@ -378,9 +378,21 @@ struct LaunchInput {
   //
   // Default OFF for the corpus's sake, exactly like humansAtBack.
   bool autopilotPlayers = false;
+  // THE COUNTDOWN DOES NOT START ON A SCENE THAT IS STILL ASSEMBLING ITSELF.
+  // On, the launch stops one op short and the countdown rides `countdownEffects`
+  // instead, to be performed when countdownReady() says the picture has settled.
+  // See that function for what the wait is actually for.
+  //
+  // Default OFF for the corpus's sake, exactly like the two above.
+  bool deferCountdown = false;
 };
 struct LaunchResult {
   Effects effects;
+  // The launch's tail, EMPTY unless deferCountdown asked for it. A second list
+  // rather than a marker op in the first, because a walk is performed whole:
+  // a shell that had to suspend halfway through one would be sequencing the
+  // launch itself, which is the thing this layer exists to stop.
+  Effects countdownEffects;
   std::vector<FieldEntry> field;
   std::vector<Id> aiIds;
   std::vector<BotSpec> bots;
@@ -389,6 +401,62 @@ struct LaunchResult {
 // The actual race launch, shared by the lobby start and the series chain.
 // THE ORDER OF THE EFFECTS IS THE CONTRACT — read this file's header first.
 LaunchResult launchRace(const LaunchInput& in);
+
+// ---- the countdown gate ------------------------------------------------------
+//
+// A SCENE'S FIRST SECONDS ARE NOT ITS COST, and the countdown used to be spent
+// paying them. `reset-scene-cars` starts a full build and `start-countdown` is
+// eleven ops later in the same walk, so "3, 2, 1" ran while the thread was still
+// meshing — and a build RETURNING is not the end of it either. render_scale.h's
+// kScaleSceneGraceSec records the measurement: on an A10X a solo race presented
+// at 7-25 fps for the first ~2.6 s after the build returned, because staging
+// keeps costing in shader compiles, first uploads and the shadow bake, all of
+// which are paid by DRAWING the scene rather than by building it.
+//
+// So the wait is for FRAMES, not for the build, and the same seconds now buy
+// something: they are also what lets the render-scale rule reach a verdict on
+// the race's own cost (four cells, not the lobby's one) before anybody is
+// driving. What is on screen meanwhile is the grid, already dressed and framed
+// — the launch places the cars and paints the HUD before this gate.
+//
+// STEADINESS, NOT SPEED, is the test, and it has to be: a 4-cell race on the
+// reference Android box costs well over one budget per frame and always will, so
+// a rule that waited for frames INSIDE budget would wait forever there and mean
+// nothing. What separates assembly from racing is DISPERSION — a 300 ms compile
+// stall sits next to 20 ms frames, and once the scene is warm the spread
+// collapses. p95 over p50 is that, off the window ttp_perf.h is already keeping
+// (every shell resets it on a build, so the window IS this scene's).
+//
+// IT MUST BE THE PRESENT SERIES, never the loop's. perf_stats.h's Readout
+// carries both and says why they diverge: a CADisplayLink and a Choreographer
+// fire every vsync whatever the last frame did, so on the two TV shells `frame`
+// is a flat vsync period all the way through the worst of the assembly and would
+// report a stalling box as perfectly settled. The seam that feeds this passes
+// `present`, which is the same series the render-scale rule steers off.
+//
+// Cheap hardware therefore pays nothing: a Mac clears the gate on the first fold
+// and the launch looks exactly as it did.
+//
+// A SHELL THAT IS NOT MEASURING IS NOT A SLOW ONE, and `measuring` is the fact
+// that separates them. An empty window looks identical either way, and the two
+// answers are opposites: a scene whose first frames have not landed yet must
+// wait, while a surface that will never feed the monitor has no evidence coming
+// and must not sit out the backstop on every start. The web turns instrumenting
+// off under automation and under a pinned ?dpr= (the E2E suite, the trailer, an
+// A/B) precisely so the GPU timer cannot perturb what those runs measure.
+inline constexpr int kSceneWarmMinFrames = 12;      // under this a fold is noise
+inline constexpr double kSceneWarmSpread = 1.6;     // p95/p50 at or below this is settled
+// THE BACKSTOP, and it is not a tuning knob: a scene that never settles, or a
+// build that never returns (a hung asset fetch), must still start the race. Long
+// enough that a slow box gets its warm-up, short enough that a party never reads
+// it as a hang.
+inline constexpr double kSceneWarmCapMs = 4000.0;
+
+// May the deferred countdown start? `frames`, `p50Ms` and `p95Ms` are the frame
+// window's, `sinceLaunchMs` the shell's clock since the launch walk. Pure: the
+// facts arrive, nothing is reached for.
+bool countdownReady(bool sceneBuilt, bool measuring, int frames, double p50Ms,
+                    double p95Ms, double sinceLaunchMs);
 
 // One countdown beat. n > 0 is "3/2/1", n === 0 is "GO!", n < 0 is banner-gone.
 // The n<0 beat clears the LOCAL banner only and is never broadcast: the phones'

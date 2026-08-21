@@ -177,6 +177,12 @@ export class PerfHud {
   toggle() { this._setVisible(!this._visible); }
   get visible() { return this._visible; }
 
+  // Is the window actually being fed? A caller that READS the readout has to be
+  // able to tell "no frames yet" from "no frames coming" — the countdown gate
+  // does exactly that (ttp_race.h), and this is off under automation and under a
+  // pinned ?dpr=, where instrumenting would perturb what the run is measuring.
+  get measuring() { return this._measuring; }
+
   // Keep measuring with the panel hidden, for a caller that reads sample()
   // rather than looking at it. Independent of show/hide in both directions: "P"
   // during a race hides the panel without blinding the scale controller behind

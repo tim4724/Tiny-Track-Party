@@ -148,6 +148,12 @@ extension GameCoordinator {
     /// drain, and the audio frame. Nothing about a car is serialized out.
     func frame(_ dt: Double) {
         if sessionHandle != 0 {
+            // THE COUNTDOWN GATE. The grid is dressed, framed and painted by
+            // now; "3, 2, 1" waits here until the scene has stopped assembling
+            // itself. Skipping the update while it waits costs nothing — the
+            // countdown holds the cars anyway, so this only extends the pose
+            // they were already in.
+            guard releaseCountdown() else { audio.frame(nowMs: nowMs()); return }
             ttp_update(sessionHandle, dt * 1000)
             // Drained IMMEDIATELY after the update: the event queue is
             // per-handle and a second update would overwrite it.

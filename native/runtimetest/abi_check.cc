@@ -85,6 +85,7 @@
 #include "ttp_session.h"  // the session seam: the live Game, the cup series
 #include "ttp_net.h"
 #include "ttp_party.h"
+#include "ttp_perf.h"  // the frame window the countdown gate reads through its seam
 #include "ttp_runtime.h"
 #include "ttp_theme.h"
 #include "ttp_race.h"
@@ -3616,9 +3617,9 @@ void netWalksMatchMultiCallPath() {
 // The op sequence of a walk's answer, and of a rule's Effects — what a mismatch
 // prints. The rule's side lists the executor's ops too, which is why the two
 // strings are NOT compared directly (see sameOps).
-std::string opsOf(const Value& answer) {
+std::string opsOf(const Value& answer, const char* key = "effects") {
   std::string s;
-  for (const Value& e : at(answer, "effects").arr)
+  for (const Value& e : at(answer, key).arr)
     s += (s.empty() ? "" : ",") + json::str_field(e, "op");
   return s;
 }
@@ -3669,8 +3670,14 @@ bool netOp(const std::string& op) {
 // A walk's SHELL-FACING op sequence against the rule's own list: executor ops
 // stripped, and a set-track standing for the (possibly empty) run of net-
 // vocabulary ops the executor merged in its place.
-void sameOps(const Value& answer, const race::Effects& want, const std::string& where) {
-  const Value effects = at(answer, "effects");
+// One of the answer's effect lists against the rule's own. `key` names which:
+// the walks answer with TWO (see ttp_race.h's countdown gate), and they are
+// compared SEPARATELY rather than concatenated — an op that drifted from one
+// list to the other is exactly the mistake a shell would perform at the wrong
+// moment, and a concatenation cannot see it.
+void sameOpsIn(const Value& answer, const char* key, const race::Effects& want,
+               const std::string& where) {
+  const Value effects = at(answer, key);
   const size_t n = effects.type == Value::ARR ? effects.arr.size() : 0;
   const auto opAt = [&](size_t k) { return json::str_field(effects.arr[k], "op"); };
   size_t i = 0;
@@ -3687,7 +3694,11 @@ void sameOps(const Value& answer, const race::Effects& want, const std::string& 
     i++;
   }
   check(ok && i == n, where + "\n  rule (executor ops included) " + opsOf(want) +
-                          "\n  answer (shell-facing)          " + opsOf(answer));
+                          "\n  answer (shell-facing)          " + opsOf(answer, key));
+}
+
+void sameOps(const Value& answer, const race::Effects& want, const std::string& where) {
+  sameOpsIn(answer, "effects", want, where);
 }
 
 // One drained session event, as the finish rule reads it — the same parse the
@@ -3835,7 +3846,8 @@ void raceLiveWalks() {
     li.countdownSeconds = countdownSeconds;
     if (forceItem && *forceItem) li.forceItem = race::OptStr::Of(forceItem);
     li.world = W;
-    li.humansAtBack = true;  // the walks' standing grid rule
+    li.humansAtBack = true;     // the walks' standing grid rule
+    li.deferCountdown = true;   // …and their standing countdown rule
     return race::launchRace(li);
   };
 
@@ -3902,6 +3914,11 @@ void raceLiveWalks() {
     check(!got.has("series") && !got.has("drawsUsed"),
           "…and the answer is action + effects, nothing else");
     sameOps(got, lr.effects, "start_live effects == race::launchRace");
+    // THE SECOND LIST. start-countdown is held back for the shell to perform
+    // once ttp_race_countdown_ready says the scene has settled, so the answer
+    // carries it apart rather than at the tail of the walk above.
+    sameOpsIn(got, "countdownEffects", lr.countdownEffects,
+              "start_live countdownEffects == race::launchRace");
     check(std::string(ttp_race_series_state_json(room)) == "null",
           "a single race stores no series behind the room");
 
@@ -3968,7 +3985,11 @@ void raceLiveWalks() {
     li.world = W;
     li.world.botCap = race::OptNum::Of(1);
     li.humansAtBack = true;
-    sameOps(forced, race::launchRace(li).effects, "start_live with ?item and ?bots");
+    li.deferCountdown = true;
+    const race::LaunchResult lrForced = race::launchRace(li);
+    sameOps(forced, lrForced.effects, "start_live with ?item and ?bots");
+    sameOpsIn(forced, "countdownEffects", lrForced.countdownEffects,
+              "start_live/forced countdownEffects");
     for (const Value& e : at(forced, "effects").arr)
       if (json::str_field(e, "op") == "create-session")
         check(json::str_field(e, "forceItem") == "rocket", "the ?item override rides through");
@@ -4001,7 +4022,10 @@ void raceLiveWalks() {
     check(json::str_field(got, "action") == "launch", "start_live launches a random run");
     check(!got.has("series") && !got.has("drawsUsed"),
           "…with no plan and no draw count on the answer — both are the room's now");
-    sameOps(got, launchRule(7, 3, nullptr).effects, "start_live/random effects");
+    const race::LaunchResult lrRandom = launchRule(7, 3, nullptr);
+    sameOps(got, lrRandom.effects, "start_live/random effects");
+    sameOpsIn(got, "countdownEffects", lrRandom.countdownEffects,
+              "start_live/random countdownEffects");
     check(canonical_stringify(ttp_room_bag_value(room)) != bagBefore,
           "…and the walk spent its draws on the room's own bag");
 
@@ -4069,6 +4093,7 @@ void raceLiveWalks() {
       const std::string next = json::str_field(before, "nextTrack");
       const race::AdvanceResult want = advanceRule(sceneReady);
       race::Effects expected = want.effects;
+      race::Effects expectedTail;
       if (want.action == race::AdvanceAction::ADVANCE) {
         race::LaunchInput li;
         li.players = humansOf(true);
@@ -4077,12 +4102,15 @@ void raceLiveWalks() {
         li.countdownSeconds = 3;
         li.world = W;
         li.humansAtBack = true;
+        li.deferCountdown = true;
         // The chained grid: the previous race's finish order, read off the
         // stored series exactly as the walk reads it (advance() moves only
         // raceIndex, so either side of the call answers the same).
         if (const ttp::CupSeries* sp = ttp_gp_series(ttp_room_series(room)))
           li.gridOrder = sp->lastRaceOrder();
-        for (race::Effect& e : race::launchRace(li).effects) expected.push_back(std::move(e));
+        race::LaunchResult lrChain = race::launchRace(li);
+        for (race::Effect& e : lrChain.effects) expected.push_back(std::move(e));
+        expectedTail = std::move(lrChain.countdownEffects);
       }
       const Value got = parseOrNull(
           ttp_race_advance_live_json(room, sceneReady, 11, 3, nullptr, nullptr), where);
@@ -4090,6 +4118,8 @@ void raceLiveWalks() {
             std::string("advance_live's action is the rule's (") + where + "): " +
                 json::str_field(got, "action"));
       sameOps(got, expected, std::string("advance_live effects (") + where + ")");
+      sameOpsIn(got, "countdownEffects", expectedTail,
+                std::string("advance_live countdownEffects (") + where + ")");
       if (want.action != race::AdvanceAction::ADVANCE) return got;
       // What the executor did: the series moved on, the pick follows it, and
       // the launch that rode along names the circuit the series now sits on.
@@ -4241,6 +4271,60 @@ void raceLiveWalks() {
     // Ending the PARTY takes nothing and is a frozen order.
     sameOps(parseOrNull(ttp_race_end_party_json(), "end party"), race::endParty(),
             "end_party effects");
+  }
+
+  // ---- the countdown gate -----------------------------------------------------
+  // The export the deferred countdown hangs on. Two things are gated here and
+  // neither is visible from the rule alone: that it reads the PRESENT series
+  // rather than the loop's (on a display link the loop's cadence is a flat vsync
+  // period all through the assembly, so a shell gated on it would never wait),
+  // and that the backstop outranks everything else.
+  {
+    // THE PRESENT SERIES IS FOLDED FROM tMs, not from the interval argument
+    // (perf_stats.cc's foldPresents), so a feed whose clock does not actually
+    // advance by the gap it claims describes a perfectly steady box whatever it
+    // passes. Every tick here carries its own cost forward.
+    double clock = 1000.0;
+    const auto tick = [&](double ms) {
+      clock += ms;
+      ttp_perf_sample(clock, ms, 1, -1, -1);
+    };
+    const auto feed = [&](int n, double presentMs) {
+      // Warm-up is filtered inside the monitor, so a window needs more than a
+      // handful of ticks before it says anything.
+      for (int i = 0; i < n; ++i) tick(presentMs);
+    };
+    ttp_perf_reset();
+    check(ttp_race_countdown_ready(0, 1, 0) == 0, "gate: no build, no window, no go");
+    check(ttp_race_countdown_ready(1, 1, 0) == 0, "gate: a built scene with no frames waits");
+    check(ttp_race_countdown_ready(1, 0, 0) == 1,
+          "gate: a shell that never measures waits on the build alone");
+    check(ttp_race_countdown_ready(0, 1, race::kSceneWarmCapMs) == 1,
+          "gate: the backstop starts a race whose scene never arrived");
+
+    ttp_perf_reset();
+    feed(60, 16.7);
+    check(ttp_race_countdown_ready(1, 1, 100) == 1, "gate: a settled window goes");
+    check(ttp_race_countdown_ready(0, 1, 100) == 0,
+          "…but never before the build itself has returned");
+
+    // ASSEMBLY, as it actually arrives: steady frames with stalls among them.
+    // The spread is what separates it from racing, so this must NOT pass while a
+    // 60 Hz box is still paying compile and upload costs.
+    ttp_perf_reset();
+    for (int i = 0; i < 60; ++i) tick(i % 6 == 0 ? 300.0 : 16.7);
+    check(ttp_race_countdown_ready(1, 1, 100) == 0, "gate: an assembling scene waits");
+    check(ttp_race_countdown_ready(1, 1, race::kSceneWarmCapMs) == 1,
+          "…and is released by the backstop rather than held forever");
+
+    // A SLOW BOX IS NOT AN ASSEMBLING ONE. Four cells on the reference Android
+    // box cost well over a budget every frame; steadily over it is a race that
+    // should start, which is why the rule reads spread and not share.
+    ttp_perf_reset();
+    feed(60, 33.4);
+    check(ttp_race_countdown_ready(1, 1, 100) == 1,
+          "gate: steadily over budget still goes — the test is spread, not speed");
+    ttp_perf_reset();
   }
 
   // ---- pause / resume ---------------------------------------------------------

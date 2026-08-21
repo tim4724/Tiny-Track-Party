@@ -66,6 +66,16 @@ load-bearing AND silent when wrong. Four constraints live in the order alone:
 3. Cup points are banked BEFORE the final board goes out.
 4. The session is disposed BEFORE the flow flips to LOBBY.
 
+**The countdown is GATED on the scene, not on the build returning.** A launch
+answers with two effect lists: the walk, and `start-countdown` alone, held until
+`countdownReady` says the scene has stopped assembling. The wait is measured in
+FRAMES because that is what pays a scene's staging cost — `render_scale.h`'s
+scene grace records an A10X presenting at 7-25 fps for ~2.6 s *after* the build
+call came back — and the test is SPREAD (p95 over p50 of the present series), not
+speed, because a 4-cell race on the weakest box is steadily over budget and
+should still start. `LaunchInput::deferCountdown` is default-OFF for the corpus's
+sake, the same trick as `humansAtBack`.
+
 **A draw cannot be put back**, which is why the start/return walks ask the
 rules for the verdict BEFORE drawing: a refused start must not advance the
 shuffle bag, or "random" repeats sooner and silently skips a track nobody saw.

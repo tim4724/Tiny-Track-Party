@@ -25,6 +25,7 @@
 #include "ttp/grand_prix.h"
 #include "ttp/json_parse.h"
 #include "ttp/json_read.h"
+#include "ttp/perf_stats.h"
 #include "ttp/race_flow.h"
 #include "ttp/scalar_id.h"
 #include "ttp/ui_model.h"
@@ -149,6 +150,10 @@ race::LaunchResult launchOff(int roomHandle, std::vector<race::Human> players,
   li.humansAtBack = true;
   li.autopilotPlayers = g_autopilotPlayers;
   li.gridOrder = std::move(gridOrder);
+  // EVERY LIVE LAUNCH DEFERS. The flag exists for the corpus, whose recorded
+  // launches predate the gate; a shipping race always waits for the scene it is
+  // about to be driven on (race_flow.h, countdownReady).
+  li.deferCountdown = true;
   return race::launchRace(li);
 }
 
@@ -695,6 +700,9 @@ const char* ttp_race_start_live_json(int roomHandle, int sceneReady, double seed
   Value fx = Value::Arr();
   executeAndSpell(roomHandle, lr.effects, nullptr, fx);
   v.set("effects", std::move(fx));
+  Value tail = Value::Arr();
+  executeAndSpell(roomHandle, lr.countdownEffects, nullptr, tail);
+  v.set("countdownEffects", std::move(tail));
   return put(g_bufStart, v);
 }
 
@@ -776,6 +784,7 @@ const char* ttp_race_advance_live_json(int roomHandle, int sceneReady, double se
   Value v = Value::Obj();
   v.set("action", Value::Str(race::key(r.action)));
   Value fx = Value::Arr();
+  Value tail = Value::Arr();
   executeAndSpell(roomHandle, r.effects, nullptr, fx);
   if (r.action == race::AdvanceAction::ADVANCE) {
     // The advance re-aimed the pick at the cup's next circuit (executed
@@ -787,8 +796,10 @@ const char* ttp_race_advance_live_json(int roomHandle, int sceneReady, double se
                                       forceItemOrNull, botCapJson,
                                       s ? s->lastRaceOrder() : std::vector<race::Id>{});
     executeAndSpell(roomHandle, lr.effects, nullptr, fx);
+    executeAndSpell(roomHandle, lr.countdownEffects, nullptr, tail);
   }
   v.set("effects", std::move(fx));
+  v.set("countdownEffects", std::move(tail));
   return put(g_bufAdvance, v);
 }
 
@@ -876,6 +887,18 @@ const char* ttp_race_resume_live_json(int sessionHandle, int roomHandle,
 
 double ttp_race_intermission_ms(void) { return race::INTERMISSION_MS; }
 double ttp_race_results_failsafe_ms(void) { return race::RESULTS_FAILSAFE_MS; }
+
+// ---- the countdown gate ------------------------------------------------------
+
+int ttp_race_countdown_ready(int sceneBuilt, int measuring, double sinceLaunchMs) {
+  // THE SEAM (CLAUDE.md rule 3): the frame evidence is fetched here rather than
+  // pulled out of the readout by a shell and handed back in. `present` and not
+  // `frame` — perf_stats.h's Readout says why the loop's own cadence cannot see
+  // a stalling display link.
+  const ttp::rt::perf::Readout r = ttp::rt::perf::monitor().fold();
+  return race::countdownReady(sceneBuilt != 0, measuring != 0, r.present.n,
+                              r.present.p50, r.present.p95, sinceLaunchMs) ? 1 : 0;
+}
 
 // ---- the roster-driven repairs -----------------------------------------------
 

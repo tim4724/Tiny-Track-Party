@@ -521,9 +521,12 @@ add_test(NAME fastlane
 # declaration, and moving those definitions into a static archive risks the linker
 # dropping unreferenced objects. Recompiling two files costs nothing and leaves the
 # artifact the browser runs bit-for-bit untouched.
+# ttp_perf.cc rides along for the COUNTDOWN GATE: ttp_race_countdown_ready reads
+# the frame window through a seam (perf::monitor()), so the only way to gate it
+# is to feed that window the samples a shell would.
 add_executable(abi_check runtimetest/abi_check.cc runtime/ttp_runtime.cc runtime/ttp_party.cc
   runtime/ttp_theme.cc runtime/ttp_ui.cc runtime/ttp_race.cc runtime/ttp_net.cc
-  runtime/ttp_error.cc)
+  runtime/ttp_perf.cc runtime/ttp_error.cc)
 target_include_directories(abi_check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/runtime)
 # libttp_runtime carries libttp_sim PUBLICly (and brings the biome tables
 # ttp_theme.cc marshals), so naming libttp_sim again here only makes the

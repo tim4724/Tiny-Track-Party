@@ -55,6 +55,13 @@ final class GameCoordinator: ObservableObject {
     var sessionHandle: Int32 = 0
     var autoPaused = false
     var raceEnded = false
+    /// Is the scene build a launch just asked for still in flight? The countdown
+    /// gate's one shell-side fact — see `rebuildScene`, which owns both edges.
+    var sceneBuildPending = false
+    /// The launch effects a scene build stands between (`ttp_race.h`'s countdown
+    /// gate): the held-back `start-countdown` plus the moment the walk ran, which
+    /// is what the rule's backstop is measured from. Nil when nothing waits.
+    var pendingCountdown: (effects: [Any], at: Double)?
 
     /// True only inside the AI fast-forward burst. Read by the race-event
     /// dispatch, which must not spawn visuals for a race that is being SKIPPED
@@ -620,6 +627,7 @@ final class GameCoordinator: ObservableObject {
             return
         }
         run(d)
+        armCountdown(d)
     }
 
     /// The cup chain: RESULTS straight into the next COUNTDOWN, with no lobby
@@ -633,9 +641,46 @@ final class GameCoordinator: ObservableObject {
             Double(proto.countdownSeconds), nil, nil))
         switch d["action"] as? String {
         case "return-to-lobby": returnToLobby()   // everyone left mid-intermission
-        case "advance": run(d)
+        case "advance": run(d); armCountdown(d)
         default: break                            // "none"
         }
+    }
+
+    /// Hold a launch's countdown until the scene it will be driven on has
+    /// settled. Both launch paths arm through here, so a chained cup race waits
+    /// exactly as a lobby start does.
+    func armCountdown(_ answer: [String: Any]) {
+        let effects = answer["countdownEffects"] as? [Any] ?? []
+        pendingCountdown = effects.isEmpty ? nil : (effects, nowMs())
+    }
+
+    /// Asked once a frame while a launch waits. True on the frame the countdown
+    /// actually starts, so the caller can skip the rest of that tick.
+    ///
+    /// The rule and everything it weighs are `ttp_race.h`'s: this side reports
+    /// only the fact it owns (has my build returned) and its own clock. The
+    /// frame evidence is read inside, off the window this shell is already
+    /// feeding, so a countdown can never be gated on numbers the readout
+    /// disagrees with.
+    func releaseCountdown() -> Bool {
+        guard let waiting = pendingCountdown else { return true }
+        // `measuring` is 1 unconditionally here: this shell feeds
+        // `ttp_perf_sample` on every tick of the display link, with no
+        // automation or pinned-scale path that turns it off (the web has both).
+        guard ttp_race_countdown_ready(sceneBuildPending ? 0 : 1, 1,
+                                       nowMs() - waiting.at) != 0 else { return false }
+        pendingCountdown = nil
+        // WHAT THE GATE ACTUALLY DID, and in RELEASE — the same reason
+        // `adaptScale` prints, and tvOS-only for the same reason too: a shipped
+        // television has no console, the bench discards its own opening six
+        // seconds, and this is the one path whose behaviour cannot be seen from
+        // a screenshot or reproduced on a desk. The web has devtools and Android
+        // has logcat; this box has neither unless something says so out loud. A
+        // wait near the backstop means the rule never got a steady window; a
+        // short one means it did.
+        print(String(format: "[ttp] countdown held %.0f ms", nowMs() - waiting.at))
+        run(["effects": waiting.effects])
+        return true
     }
 
     /// Back to the lobby from anywhere. The executor cancels a running cup and

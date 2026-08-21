@@ -539,8 +539,21 @@ LaunchResult launchRace(const LaunchInput& in) {
   out.effects.push_back(mk(Op::BIND_SESSION));
   // chrome at final size through the countdown, no pop-in at GO
   out.effects.push_back(mk(Op::PAINT_INITIAL_HUD));
-  e = mk(Op::START_COUNTDOWN); e.num = in.countdownSeconds; out.effects.push_back(e);
+  // …and the last op is the one that may have to wait: see countdownReady.
+  // Deferred, it rides its own list, so the walk above stays whole either way.
+  e = mk(Op::START_COUNTDOWN); e.num = in.countdownSeconds;
+  (in.deferCountdown ? out.countdownEffects : out.effects).push_back(e);
   return out;
+}
+
+bool countdownReady(bool sceneBuilt, bool measuring, int frames, double p50Ms,
+                    double p95Ms, double sinceLaunchMs) {
+  if (sinceLaunchMs >= kSceneWarmCapMs) return true;   // the backstop, first
+  if (!sceneBuilt) return false;
+  if (!measuring) return true;      // no evidence is coming; the build is all there is
+  if (frames < kSceneWarmMinFrames) return false;
+  if (p50Ms <= 0) return false;                        // window not folded yet
+  return p95Ms <= p50Ms * kSceneWarmSpread;
 }
 
 Effects countdownTick(double n) {

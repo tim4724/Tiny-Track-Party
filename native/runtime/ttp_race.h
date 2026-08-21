@@ -243,6 +243,32 @@ TTP_ABI const char* ttp_race_resume_live_json(int sessionHandle, int roomHandle,
 TTP_ABI double ttp_race_intermission_ms(void);
 TTP_ABI double ttp_race_results_failsafe_ms(void);
 
+/* ---- the countdown gate --------------------------------------------------- */
+
+/* MAY THE DEFERRED COUNTDOWN START YET? Poll it once a frame after a launch,
+ * and perform the answer's `countdownEffects` the first time this says yes.
+ *
+ * The start and advance walks now answer with TWO lists: `effects`, walked at
+ * once as always, and `countdownEffects` — start-countdown alone — held back
+ * until the scene the race is about to be driven on has stopped assembling
+ * itself. race_flow.h's countdownReady says what the wait buys and why it is
+ * measured in frames rather than in the build returning.
+ *
+ *   sceneBuilt     the shell's "my scene build has returned" latch
+ *   measuring      is this surface feeding ttp_perf_sample at all? A shell that
+ *                  is not (the web under automation or a pinned ?dpr=) has no
+ *                  frame evidence coming, and an empty window must not be read
+ *                  as a scene that has not drawn yet — see race_flow.h.
+ *   sinceLaunchMs  the shell's clock since it walked `effects` (the backstop)
+ *
+ * THE FRAME EVIDENCE IS NOT PASSED IN. It is read here off perf::monitor() —
+ * the same window ttp_perf.h keeps and the render-scale rule steers off — so a
+ * shell cannot gate a countdown on numbers its own readout disagrees with, and
+ * three shells cannot pick three different series out of it. Every shell
+ * already resets that window on a scene build, so it is this scene's frames. */
+TTP_ABI int ttp_race_countdown_ready(int sceneBuilt, int measuring,
+                                     double sinceLaunchMs);
+
 /* ---- the roster-driven repairs ------------------------------------------- */
 
 /* Pull a player's car out of the live race (a clean LEAVE, or a dropped seat
