@@ -2127,16 +2127,6 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
         mGlbFadeMaterial = Material::Builder()
                 .package(vglbfade->second.data(), vglbfade->second.size())
                 .build(*mEngine);
-        // PREWARM. Every other material draws on the first frame after build,
-        // which compiles its programs while the lobby is still up. This one's
-        // first draw is the first item-box poof (the fade twin enters the
-        // scene only then), and on Metal that first-use compile was a felt
-        // hitch mid-race — once per run, on whichever car collected first.
-        // compile() is async on a driver-side queue, so build-time is all
-        // headroom; the flush below starts it immediately.
-        if (mGlbFadeMaterial) {
-            mGlbFadeMaterial->compile(Material::CompilerPriorityQueue::HIGH);
-        }
     }
     const auto vground = mAssets.find("vground.filamat");
     if (!mGroundMaterial && vground != mAssets.end()) {
@@ -2171,11 +2161,6 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
         mBurstMaterial = Material::Builder()
                 .package(vburst->second.data(), vburst->second.size())
                 .build(*mEngine);
-        // Same deferred-first-draw prewarm as vglbfade: this one's first draw
-        // is the first rocket blast.
-        if (mBurstMaterial) {
-            mBurstMaterial->compile(Material::CompilerPriorityQueue::HIGH);
-        }
     }
     const auto vblur = mAssets.find("vblur.filamat");
     if (!mBlurMaterial && vblur != mAssets.end()) {
@@ -2200,12 +2185,6 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
         mOverlayMaterial = Material::Builder()
                 .package(voverlay->second.data(), voverlay->second.size())
                 .build(*mEngine);
-        // Same deferred-first-draw prewarm: hudCount stays 0 until the race
-        // cams go live, so this one's first draw is the first race frame —
-        // the compile stall would land right on the countdown.
-        if (mOverlayMaterial) {
-            mOverlayMaterial->compile(Material::CompilerPriorityQueue::HIGH);
-        }
     }
     // THE GRADE'S CURVE AS A TABLE — see ttp_grade.inc for why a texture beats a
     // `pow` here. Built once, handed to every
@@ -2247,6 +2226,28 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
                 m->setDefaultParameter("gradeLut", mGradeLut, gs);
             }
         }
+    }
+    // EVERY MATERIAL, NOT THREE. vglbfade, vburst and voverlay each carried a
+    // prewarm of their own, added one at a time as someone felt its first-use
+    // compile as a hitch, on the theory that "every other material draws on the
+    // first frame after build, which compiles its programs while the lobby is
+    // still up". That theory is wrong: a Material compiles a PROGRAM PER
+    // VARIANT, and the lobby's single overview camera exercises a different
+    // variant set than a race does (chase cams, split cells, the depth and
+    // shadow passes). The rest of the set therefore compiles at GO, on
+    // Filament's BACKEND thread — which is why neither instrument could see it:
+    // the app thread records a frame in 1.5 ms and returns, the GPU timer
+    // measures only what executed, and the stall arrives as beginFrame refusing
+    // to hand out a drawable. Measured on an A10X solo at 4K: 7-40 fps for
+    // ~2.3 s from GO, with the GPU at 9 ms of a 16.7 ms budget throughout.
+    //
+    // compile() is async on a driver-side queue, so a build is all headroom.
+    for (Material* m : { mMaterial, mBlendMaterial, mLitMaterial, mLitPlainMaterial,
+                         mRoadMaterial, mGlbMaterial, mGlbFadeMaterial,
+                         mGroundMaterial, mPointMaterial, mCloudMaterial,
+                         mBurstMaterial, mBlurMaterial, mEsmMaterial,
+                         mPresentMaterial, mOverlayMaterial, mVisMaterial }) {
+        if (m) m->compile(Material::CompilerPriorityQueue::HIGH);
     }
     mEngine->flush(); // start any prewarm compiles queued above immediately
     // Between frames — the present material only lands now. Gated exactly
