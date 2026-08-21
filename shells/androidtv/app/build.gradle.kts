@@ -54,11 +54,11 @@ android {
 
     buildTypes {
         release {
-            // SIGNED WITH THE DEBUG KEY, which is what makes `installRelease` a
-            // command that works. Without a signingConfig here AGP emits
-            // app-release-UNSIGNED.apk, which no device installs — while both
-            // build-runtime-android.sh and this shell's CLAUDE.md told you to run
-            // installRelease, so the documented release path could not be walked.
+            // SIGNED WITH THE DEBUG KEY, which is what makes a release APK
+            // installable at all. Without a signingConfig here AGP emits
+            // app-release-UNSIGNED.apk, which no device takes. (The install
+            // itself is `adb -s "$SERIAL" install`, never gradlew installRelease
+            // — see shells/androidtv/scripts/android-device.sh for why.)
             //
             // signingConfigs.debug rather than a keystore of our own on purpose:
             // AGP GENERATES ~/.android/debug.keystore on demand, so this needs no

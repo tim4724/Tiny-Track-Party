@@ -52,14 +52,22 @@ say "engine (${TTP_ABI:-both})"
 # Staging is a preBuild dependency, so it runs inside this. Naming it anyway:
 # the point of the script is that the order is visible in one place.
 say "stage + assemble ($VARIANT)"
-if [ "$INSTALL" = install ]; then
-  ( cd "$SHELL_DIR" && ./gradlew "install$TASK_SUFFIX" )
-else
-  ( cd "$SHELL_DIR" && ./gradlew "assemble$TASK_SUFFIX" )
-fi
+( cd "$SHELL_DIR" && ./gradlew "assemble$TASK_SUFFIX" )
 
 APK="$SHELL_DIR/app/build/outputs/apk/$VARIANT/app-$VARIANT.apk"
 if [ -f "$APK" ]; then say "$APK"; fi
+
+# ASSEMBLE THEN adb, NEVER `gradlew install<Variant>`: that one installs on every
+# attached device, which in a tree worked in many worktrees at once means your
+# APK on someone else's box. android-device.sh has the whole story and picks the
+# one device.
+if [ "$INSTALL" = install ]; then
+  ADB="${ADB:-${ANDROID_HOME:-$HOME/Library/Android/sdk}/platform-tools/adb}"
+  # shellcheck disable=SC1091
+  source "$HERE/android-device.sh"
+  say "install → $SERIAL"
+  "$ADB" -s "$SERIAL" install -r "$APK"
+fi
 
 # The same string app/build.gradle.kts stamps into versionName, so `adb shell
 # dumpsys package games.couchpad.tinytrack | grep versionName` answers

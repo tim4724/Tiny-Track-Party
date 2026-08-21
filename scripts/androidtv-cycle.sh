@@ -25,17 +25,8 @@ source "$ROOT/shells/androidtv/scripts/android-sdk.sh"
 ADB="${ADB:-${ANDROID_HOME:-$HOME/Library/Android/sdk}/platform-tools/adb}"
 
 # The attached adb device whose build says it is a TV; TTP_SERIAL overrides.
-# (scripts/lib/androidtv-device.mjs is the same rule for the node harnesses.)
-SERIAL="${TTP_SERIAL:-}"
-if [ -z "$SERIAL" ]; then
-  for id in $("$ADB" devices | awk 'NR>1 && $2=="device" {print $1}'); do
-    if "$ADB" -s "$id" shell getprop ro.build.characteristics | grep -qw tv; then
-      [ -z "$SERIAL" ] || { echo "several Android TV devices attached — set TTP_SERIAL" >&2; exit 1; }
-      SERIAL="$id"
-    fi
-  done
-  [ -n "$SERIAL" ] || { echo "no Android TV device attached — adb devices, or set TTP_SERIAL" >&2; exit 1; }
-fi
+# shellcheck disable=SC1091
+source "$ROOT/shells/androidtv/scripts/android-device.sh"
 
 if [ "$WHAT" = all ] || [ "$WHAT" = mat ]; then
   say materials
@@ -58,8 +49,10 @@ fi
 # Gradle re-stages assets on preBuild and fails on an engine older than native/.
 # shells/androidtv/scripts/build.sh is the two-ABI release twin; this stays
 # one-ABI/debug because that is what the perf loop wants.
-say install
-( cd "$ROOT/shells/androidtv" && ./gradlew installDebug -q --console=plain 2>&1 | tail -3 )
+say "install → $SERIAL"
+( cd "$ROOT/shells/androidtv" && ./gradlew assembleDebug -q --console=plain 2>&1 | tail -3 )
+"$ADB" -s "$SERIAL" install -r "$ROOT/shells/androidtv/app/build/outputs/apk/debug/app-debug.apk" \
+    | tail -1
 
 say launch
 "$ADB" -s "$SERIAL" shell logcat -c >/dev/null 2>&1 || true

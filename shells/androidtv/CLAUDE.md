@@ -748,11 +748,18 @@ thing that needs to be remembered. What it wraps:
   (root rule 6). `-PttpNoEngine` is how the CI leg says it has no engine on
   purpose.
 
-**`installRelease` works, and did not before.** The release variant had no
-`signingConfig`, so it built `app-release-unsigned.apk` and no device would take
-it — while this file and `build-runtime-android.sh` both told you to run
-`installRelease`. It signs with `signingConfigs.debug`, which AGP generates on
-demand, so release and debug share one key and upgrade over each other.
+**NEVER `./gradlew install<Variant>`. Assemble, then `adb -s "$SERIAL" install`.**
+Gradle's install task installs on EVERY attached device, and this tree is worked
+in many worktrees at once — so one agent's install lands its APK on the box
+another is measuring, and on any emulator either has open. It does not read as an
+install: it reads as YOUR build crashing, because the process that starts is
+someone else's. `shells/androidtv/scripts/android-device.sh` is the one device
+rule (`ro.build.characteristics` says `tv`, `TTP_SERIAL` overrides, an AVD only
+ever by name) and both shell entry points source it.
+
+**The release variant is signed with the debug key** (`signingConfigs.debug`,
+which AGP generates on demand), so release and debug upgrade over each other. It
+built `app-release-unsigned.apk` before that, which no device would take.
 
 **R8 is ON in release**, and `app/proguard-rules.pro` is worth reading before
 touching either: the bridge is bound by NAME from `JNI_OnLoad`, so a rename is an
