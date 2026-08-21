@@ -13,6 +13,17 @@
 // VIEW: four players meant eight post passes over the canvas area, and now
 // means one.
 //
+// AND THE MEASUREMENT THAT KEEPS IT. On the Apple TV (A10X) at 4 players /
+// native 4K, ablating this fragment to a straight passthrough — same offscreen
+// target, same full-screen pass, no FXAA taps — prices the FILTER at 0.3 ms and
+// the pass-plus-buffer around it at 2.0. So this shader's arithmetic is nearly
+// free and the PASS is the whole item, which is the argument above read back
+// from the other end: what earns the custom material is collapsing Filament's
+// per-view chain into one pass, not being a better FXAA. Do not "simplify" it
+// for speed (0.3 ms is the ceiling on that), and do not delete it in favour of
+// Filament's chain without also undoing ttp_grade.inc — that chain would tonemap
+// a buffer the scene materials have already graded.
+//
 // It is a straight port of SceneRenderer's _matPresent (grade → sRGB → FXAA on
 // the graded values), which also removes a parity variable: the diff was
 // judging three's FXAA against Filament's, two different filters over two
