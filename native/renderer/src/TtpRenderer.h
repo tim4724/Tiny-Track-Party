@@ -605,7 +605,7 @@ private:
     // texture (layer i = cell i), resolved onto the swap chain by one
     // vpresentmv pass. Engine config comes from init(stereoEyes); the path
     // itself is a live switch (setMultiview) so an A/B runs on one launch.
-    uint8_t mStereoEyes = 0;             // init()'s request; 0 = engine is NONE
+    uint8_t mStereoEyes = 0;             // 0 = no working stereo (unasked, or the driver refused)
     int mMultiviewMode = 1;              // setMultiview; 1 = 4-cell splits only
     // Does this frame take the stereo route? The mode's cell policy, plus the
     // hard constraints (a stereo engine, no overview — its full-surface rect

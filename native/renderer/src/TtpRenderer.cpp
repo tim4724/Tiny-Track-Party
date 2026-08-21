@@ -24,7 +24,9 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
         // later switch). Costs nothing while no View sets stereo options —
         // measured on the box — but it does demand an SDK built with
         // FILAMENT_ENABLE_MULTIVIEW (build-runtime-android.sh's error text has
-        // the whole story) and FEATURE_LEVEL_2, which the GLES 3.2 boxes have.
+        // the whole story). The DRIVER side is a separate question, asked of
+        // the built engine below: what gates multiview there is the
+        // GL_OVR_multiview2 extension, not the feature level.
         engineConfig.stereoscopicType = backend::StereoscopicType::MULTIVIEW;
         engineConfig.stereoscopicEyeCount = stereoEyes;
     }
@@ -50,6 +52,18 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
         mEngine->setAutomaticInstancingEnabled(true);
     }
     if (!mEngine) return false;
+    // THE DRIVER'S ANSWER, which the config above only asked for. A box without
+    // GL_OVR_multiview2 leaves Filament's View::hasStereo() false, so it picks
+    // the NON-stereo shader variants — while this renderer would still run its
+    // two-eye passes into a 4-layer array and composite layers nothing wrote.
+    // That fails silently and totally: the split renders BLACK in every cell,
+    // HUD and all else intact. Clearing the request here is the whole fallback,
+    // because every other gate (multiviewWants, ensureMultiviewTargets, the
+    // vpresentmv build) already reads mStereoEyes.
+    if (mStereoEyes
+            && !mEngine->isStereoSupported(backend::StereoscopicType::MULTIVIEW)) {
+        mStereoEyes = 0;
+    }
     mSwapChain = mEngine->createSwapChain(nativeWindow);
     mRenderer = mEngine->createRenderer();
     // Clear the colour buffer at the start of a frame. It costs nothing (a load
