@@ -58,9 +58,17 @@ async function box() {
     divisor: 1,
     /** `n` ticks of a loop running at the panel's rate. */
     ticks(n, panel = HZ60) {
+      // WORK THAT OVERRUNS THE PERIOD MISSES THE VSYNC, the same coherence the
+      // C++ twin keeps (native/runtimetest/render_scale_check.cc). A box whose
+      // GPU takes 30 ms cannot also present every 16.7, and the retreat arm
+      // answers to the present record now — so a harness that presented
+      // regardless of its own cost would be driving a device that cannot exist.
+      // `everyNth` still wins where a case declares a skip storm.
+      const forced = b.gpuMs > 0 ? Math.ceil(b.gpuMs / panel) : 1;
+      const cadence = Math.max(b.everyNth, forced, 1);
       for (let i = 0; i < n; i++) {
         b.t += panel;
-        const drew = (++b.tick % b.everyNth) === 0;
+        const drew = (++b.tick % cadence) === 0;
         // The readout's own contract: a TICK interval, drawn or not, and an
         // ABSENT (<= 0) cost where there is no number rather than a zero.
         fn.sample(b.t, panel, drew ? 1 : 0, -1, drew ? b.gpuMs : -1);

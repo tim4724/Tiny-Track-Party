@@ -514,6 +514,36 @@ inline double latePresentRatio(const RenderScaleCost& cost) {
   return cost.presentP95Ms / bar;
 }
 
+// IS THE DEVICE ACTUALLY DELIVERING, at the rate this point asks for?
+//
+// This is the veto the GPU model answers to, and it exists because a GPU
+// millisecond is not a fixed quantity. A governor that downclocks whenever a
+// frame leaves idle makes the SAME work measure dearer the healthier the frame
+// is, and a p95 collects exactly the windows where the clock had not ramped —
+// so a device comfortably holding its rate can price its own frame at 90% of
+// budget and be asked to retreat from a rung it is demonstrably presenting at.
+// Measured on an Apple TV 4K: 4 players at native, GPU p95 over the down
+// threshold, presenting 60/60 with zero skips, and the rule stepping it down a
+// rung it did not need to give up.
+//
+// AGAINST THE POINT'S OWN BUDGET, never against latePresentRatio. That ratio is
+// the FALLBACK's signal and is measured against the panel's fastest present, so
+// it reads a perfectly healthy 30 Hz point as "a whole period late" — see its
+// own note on the 120 Hz trap, which is the same arithmetic one rung along. A
+// rule that has chosen a divisor has to judge cadence against the rate it chose.
+//
+// kLatePresentDown IS the bar, deliberately reused rather than given a
+// companion constant: it already means "on cadence, or a whole period late, and
+// nothing lands between them".
+//
+// Too few frames is NOT clean — that is "not enough to say", and silence is not
+// evidence.
+inline bool presentsOnCadence(const RenderScaleCost& cost, double budgetMs) {
+  if (cost.presentFrames < kMinSignalFrames) return false;
+  if (!(cost.presentP95Ms > 0.0) || !(budgetMs > 0.0)) return false;
+  return cost.presentP95Ms < kLatePresentDown * budgetMs;
+}
+
 // The next OPERATING POINT — resolution and present divisor together — given
 // where we are and what the last window of frames cost.
 //
@@ -552,11 +582,21 @@ inline RenderScalePoint renderScaleStep(RenderScalePoint current,
 
   if (gpuMs > 0.0) {
     const double budget = pointBudgetMs(list[at], limits);
-    if (gpuMs > kScaleDownShare * budget && sinceChangeSec >= kScaleDownHoldSec) {
+    if (gpuMs > kScaleDownShare * budget && sinceChangeSec >= kScaleDownHoldSec
+        && !presentsOnCadence(cost, budget)) {
       // LATE, so retreat — and the MEASUREMENT outranks the model. Without a fit
       // it is one step; with one it is straight to a point predicted to hold,
       // but never nowhere: a model that says the current point is fine while the
       // device is demonstrably late is a model that is wrong.
+      //
+      // AND THE SAME SENTENCE IN REVERSE (presentsOnCadence): a model that says
+      // this point is late while the device is demonstrably DELIVERING is also
+      // wrong, and it is wrong in the direction that costs a rung. The veto is
+      // on the retreat only — a clean record is evidence about the point we are
+      // AT, not about the one above, so the climb stays the model's decision.
+      // What it gives up is at most one evidence window of prediction: a device
+      // that really is about to miss shows it in the presents within a window,
+      // and this arm can climb back out of a retreat it takes late.
       to = fit.ok ? pointForBudget(at, fit, list, n, limits) : at - 1;
       if (to >= at) to = at - 1;
     } else if (!fit.ok && !hasPrevObservation(prev) && sinceChangeSec >= upHold) {

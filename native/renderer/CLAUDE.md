@@ -549,8 +549,9 @@ keeps it.
 
 **AND THE BUFFER IS THE COST, NOT THE FILTER.** Ablating vpresent's fragment to a
 straight passthrough — same target, same pass, no FXAA taps — splits the switch's
-saving on the Apple TV at 4 players / native 4K into **0.3 ms of filter and 2.0 ms
-of plumbing**. Two things follow, and both are the opposite of the instinct:
+saving on the Apple TV at 4 players / native 4K into **~0.3 ms of filter and the
+rest plumbing** (0.31 / 1.99 as measured; the total came down to 1.8 once merged
+draws landed, and the filter is the half that does not scale with the buffer). Two things follow, and both are the opposite of the instinct:
 there is **no cheaper AA to write** here (a shorter span, a tighter early-out, a
 3-tap filter all chase that 0.3), so the decision is BINARY; and what the custom
 shader buys is the PASS COUNT rather than the arithmetic — see vpresent.mat.
