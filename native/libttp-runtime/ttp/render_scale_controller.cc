@@ -24,6 +24,10 @@ bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
     if (limits.max > 0.0) point_.scale = limits.max;
   }
 
+  // The cell count is the frame builder's, not the shell's, so it reaches the
+  // rule from here rather than through the poll's arguments — see cells().
+  limits.cells = cells_;
+
   const perf::Readout r = mon.fold();
 
   // The device's own fastest present, folded one window at a time. It has to

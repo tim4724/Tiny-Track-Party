@@ -525,6 +525,33 @@ rule picks a divisor of its own; leave the pin out and a pinned 30 Hz box is
 priced against a 16.7 ms budget and shredded down the ladder to hold a rate
 nobody asked for.
 
+**THE FLOOR ESCAPE SHIPPED, 2026-08-21, and it is what makes a 4-way split
+watchable.** Four cells cost more to SUBMIT than a whole 60 Hz budget however few
+pixels each one gets, so at the bottom rung this box was not choosing between a
+locked 60 and a locked 30 — it was choosing between a locked 30 and a 34 fps
+missing a quarter of its slots. `ttp/render_scale.h`'s `kScaleEscapeCells` puts
+ONE point below the bottom rung, at that rung's own pixels and half the rate, and
+offers it only to a surface split three ways or more. Measured on the box,
+adaptive, tidepool, every arm at 960x540:
+
+| players | before | after |
+|---|---|---|
+| 1 | 60 fps, 0 skips/s | unchanged |
+| 2 | 59 fps, 1 skips/s | unchanged |
+| 3 | 44 fps, 14 skips/s | unchanged — see below |
+| 4 | 34 fps, 25 skips/s | **30.0 fps, 0 skips/s** |
+
+**Gated on CELLS and not on cost**, which is the whole design: solo at the floor
+reads a gpu p95 of ~21 ms against a 16.7 budget while presenting a clean 60 with
+zero skips, so the down-branch has always judged it "late" there and only the
+absence of anywhere lower kept it. The cost-gated version was built first and
+stole exactly that case.
+
+**Three players is offered the escape and does not take it**, because
+`presentsOnCadence` vetoes a retreat while the device is demonstrably
+delivering. That is the two rules composing, not a gap: the entry exists
+wherever the grid is 2x2, and the presents decide whether the box needs it.
+
 **`debug.ttp.hz 30` presents every OTHER vsync instead** — a locked,
 evenly-paced 30 with the sim still ticking at 60 (only picture latency
 doubles; see DisplayHost.setVsyncInterval). On the realistic view it holds a

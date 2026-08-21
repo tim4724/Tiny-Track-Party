@@ -76,6 +76,12 @@ class RenderScaleController {
   // ttp_perf_reset, for the reason ttp_perf.h names.
   void scene(double tMs);
 
+  // HOW MANY CELLS the surface is split into, which is what gates the floor
+  // escape (`kScaleEscapeCells`). It is not part of `limits` as a shell passes
+  // them because it is not a shell's fact: the grid belongs to the frame
+  // builder, so `ttp_display_frame` declares it here and the poll folds it in.
+  void cells(int n) { cells_ = n < 0 ? 0 : n; }
+
   // Re-decide, at most once per kScalePollMs. Answers whether the point MOVED,
   // and writes the new one to `out`.
   //
@@ -102,6 +108,7 @@ class RenderScaleController {
   // at 2.0 as though they cost that at 1.0 — poisoning the cost model's first
   // observation — and its first move would halve the canvas nobody asked it to
   // touch. Both TV shells have a ceiling of 1.0 and see no difference.
+  int cells_ = 0;
   bool adopted_ = false;
   RenderScalePoint point_{1.0, 1};
   RenderScaleSample prev_{0.0, 0.0};

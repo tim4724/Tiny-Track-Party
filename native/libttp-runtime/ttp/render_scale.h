@@ -72,6 +72,12 @@ struct RenderScaleLimits {
   // RATE against resolution at all; a hard-coded 60 could only ever spend a
   // 120 Hz panel's headroom on pixels. 0 or absent means "assume 60".
   double panelMs;
+  // HOW MANY CELLS the surface is split into. The rule reads it for one thing
+  // only: whether the FLOOR ESCAPE below the bottom rung exists (see
+  // kScaleEscapeCells). It is not a shell's opinion — the grid is the frame
+  // builder's — so it crosses inside C++ rather than over the ABI. 0 means
+  // "not a split", which is what every caller predating the escape says.
+  int cells;
 };
 
 // Above this the device is LATE and retreats. The only threshold left: where to
@@ -292,7 +298,9 @@ inline bool hasPrevObservation(RenderScaleSample prev) {
 // under the ceiling, the ceiling itself, and the rate step above the anchor.
 // Sizes the caller's array AND the recovery window below, so the two cannot
 // disagree about how long the ladder is.
-inline constexpr int kScaleMaxPoints = kScaleLadderCount + 2;
+// Rungs, plus the rate step above the anchor, plus the floor escape below the
+// bottom rung.
+inline constexpr int kScaleMaxPoints = kScaleLadderCount + 3;
 
 // How long after a scene build the up-hold stays short (kScaleUpRecoverHoldSec
 // has the why). DERIVED, because what it has to cover is the longest climb the
@@ -376,6 +384,33 @@ inline int rungAtOrBelow(double s, const double* r, int n) {
 inline constexpr double kAnchorLines = 1080.0;
 inline constexpr double kAnchorHz = 60.0;
 
+// THE FLOOR ESCAPE, and the cell count that gates it.
+//
+// Below the anchor the list buys pixels and never frames, for the reason above:
+// a phone-tilt party game pays for a halved present rate in input latency, on
+// every player. That holds right down to the bottom rung — and then stops,
+// because a split screen can want a frame the bottom rung cannot deliver. Four
+// cells cost more to SUBMIT than a whole 60 Hz budget however few pixels each
+// one gets, so at the floor the box is not choosing between a locked 60 and a
+// locked 30: it is choosing between a locked 30 and a 34 fps that misses a
+// quarter of its slots. So ONE entry exists below the floor at half rate, and
+// it is the only place in this ladder where the rate gives way first.
+//
+// GATED ON CELLS, NOT ON COST, and that is the whole design. Cost-gating was
+// built first and had to be reverted: solo at the floor measures a gpu p95 of
+// ~21 ms against a 16.7 ms budget while presenting a clean 60 with ZERO skips —
+// the rare expensive frame does not land often enough to cost a slot — so the
+// down-branch has ALWAYS judged solo "late" there, and only the absence of
+// anywhere lower kept it. Anything placed below the floor inherits that
+// misjudgement and steals the solo case. A cell count cannot: one cell never
+// gets the entry, so it cannot fall into it, and when a race ends the entry
+// stops existing and the controller returns to full rate with no special case.
+//
+// THREE rather than four, because a 3-way split is the same shape as a 4-way
+// one: the grid is 2x2 with a hole, so it opens the same four cells' worth of
+// per-cell cost.
+inline constexpr int kScaleEscapeCells = 3;
+
 struct RenderScalePoint {
   double scale;
   int divisor;    // present every Nth vsync; 1 is the panel's own rate
@@ -406,6 +441,12 @@ inline int operatingPoints(RenderScaleLimits b, RenderScalePoint* out) {
   const int fast = base > 1 ? base - 1 : 1;   // == base where there is no faster rate
   const double anchor = kAnchorLines / (b.baseLines > 0.0 ? b.baseLines : kAnchorLines);
   int m = 0;
+  // The escape sits below every rung, at the bottom rung's own pixels: what it
+  // trades is the RATE, and the picture there is already as soft as this game
+  // is willing to show.
+  if (b.cells >= kScaleEscapeCells && n > 0) {
+    out[m++] = RenderScalePoint{r[0], base * 2};
+  }
   for (int i = 0; i < n; i++) {
     if (r[i] <= anchor + 1e-9) out[m++] = RenderScalePoint{r[i], base};
   }

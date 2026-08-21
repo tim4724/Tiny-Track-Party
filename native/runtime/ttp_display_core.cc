@@ -32,6 +32,7 @@
 #include "ttp/canonical.h"
 #include "ttp/frame_builder.h"
 #include "ttp/framing.h"
+#include "ttp/render_scale_controller.h"
 #include "ttp/game.h"
 #include "ttp/hud.h"
 #include "ttp/race_track.h"
@@ -386,6 +387,12 @@ int ttp_display_frame(double dtSeconds) {
     // rather than being worked out here: it is a function of the LETTERBOXED
     // grid, and a shell deriving it would be a copy of it that could drift.
     const uint32_t nCells = (uint32_t) d.cells.size();
+    // THE GRID IS THIS SIDE'S FACT, and the render-scale rule needs it for one
+    // decision: whether the floor escape exists (ttp/render_scale.h,
+    // kScaleEscapeCells). Declared per frame rather than plumbed through
+    // ttp_display_scale_poll's arguments, because a shell asked for a cell count
+    // would be answering with a number it got from here.
+    ttp::rt::renderScale().cells((int) nCells);
     // buildFrame is inside the shell's per-frame span (the ttp:render atrace
     // marker) but outside the renderer's kProfTotal; posting it into the
     // profile array is what lets a scripted sweep attribute a CPU spike to the

@@ -28,6 +28,8 @@ using ttp::rt::operatingPoints;
 using ttp::rt::pointBudgetMs;
 using ttp::rt::RenderScalePoint;
 using ttp::rt::renderScaleStep;
+using ttp::rt::kScaleEscapeCells;
+using ttp::rt::kScaleMaxPoints;
 using ttp::rt::fitCost;
 using ttp::rt::predictMs;
 using ttp::rt::RenderScaleSample;
@@ -710,6 +712,69 @@ int main() {
       for (int i = 0; i < 5; i++) { b.ticks(180); b.poll(k4K); }
       check(b.lines(k4K) > floored,
             "a new scene climbs back at one evidence window a step");
+    }
+    {
+      // ---- THE FLOOR ESCAPE (kScaleEscapeCells) ------------------------
+      //
+      // What it is for: four cells cost more to SUBMIT than a whole 60 Hz
+      // budget however few pixels each one gets, so at the bottom rung the
+      // choice is a locked 30 against a 33 fps missing a quarter of its slots.
+      // What it must NOT do is reach the SOLO case, which reads "late" at the
+      // floor while presenting a clean 60 — that is the version that was built
+      // first and reverted, so both directions are gated.
+      RenderScalePoint list[kScaleMaxPoints];
+      RenderScalePoint soloList[kScaleMaxPoints];
+
+      RenderScaleLimits solo = kHD; solo.cells = 1;
+      const int nSolo = operatingPoints(solo, soloList);
+      for (int i = 0; i < nSolo; i++) {
+        check(soloList[i].divisor == 1, "solo is offered no half-rate point at all");
+      }
+
+      RenderScaleLimits split = kHD; split.cells = kScaleEscapeCells;
+      const int nSplit = operatingPoints(split, list);
+      check(nSplit == nSolo + 1, "a split gains exactly one point");
+      check(list[0].divisor == 2, "and it is the WORST one, below every rung");
+      nearly(list[0].scale, soloList[0].scale,
+             "at the bottom rung's own pixels: what it trades is the rate");
+      for (int i = 1; i < nSplit; i++) {
+        check(list[i].divisor == 1, "every other point keeps the panel's rate");
+      }
+
+      RenderScaleLimits two = kHD; two.cells = kScaleEscapeCells - 1;
+      check(operatingPoints(two, list) == nSolo,
+            "a 2-way split is not enough: its cells still fit a 60 Hz budget");
+
+      {
+        // A BOX THAT CANNOT HOLD 60 AT THE FLOOR falls into the escape and
+        // STAYS. Staying is the half that matters: at half rate it presents on
+        // a clean 33 ms cadence, so anything reading cadence alone would call
+        // it healthy and climb straight back into the skips it just left.
+        Box b;
+        b.gpuMs = 26.0;                      // a 4-way split at the floor
+        // Through the CONTROLLER, exactly as `ttp_display_frame` declares it:
+        // the cell count is the frame builder's fact, so `poll` overwrites
+        // whatever a caller put in the limits with what was declared here.
+        b.ctl.cells(4);
+        RenderScaleLimits four = kHD;
+        for (int i = 0; i < 8; i++) { b.ticks(180); b.poll(four); }
+        check(b.ctl.point().divisor == 2, "a hopeless split reaches the half-rate point");
+        nearly(b.ctl.point().scale, soloList[0].scale, "at the floor's own pixels");
+        for (int i = 0; i < 8; i++) { b.ticks(180); b.poll(four); }
+        check(b.ctl.point().divisor == 2, "and stays while the cost stands");
+      }
+      {
+        // THE SAME BOX AT ONE CELL keeps the full rate, because the entry it
+        // would fall into does not exist. The reverted design's failure, as a
+        // gate.
+        Box b;
+        b.gpuMs = 21.0;                      // solo's own p95 at the floor
+        b.ctl.cells(1);
+        RenderScaleLimits one = kHD;
+        for (int i = 0; i < 8; i++) { b.ticks(180); b.poll(one); }
+        check(b.ctl.point().divisor == 1,
+              "solo never halves its rate, however late it reads");
+      }
     }
   }
 
