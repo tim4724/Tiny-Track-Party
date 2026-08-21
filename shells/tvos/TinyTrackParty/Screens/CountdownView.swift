@@ -86,6 +86,9 @@ private struct DieCutText: View {
     /// screen), halved for the convention above.
     private var edge: CGFloat { size * 0.0427 / 2 }
 
+    /// The hard shadow's offset, `filter: drop-shadow(6px 6px 0 …)`.
+    private static let drop: CGFloat = 6
+
     /// Enough stamps that the edge round a chunky display face reads as one
     /// continuous cut rather than a ring of blobs.
     private static let samples = 16
@@ -112,7 +115,15 @@ private struct DieCutText: View {
         // `filter: drop-shadow(6px 6px 0 var(--shadow-ink))` — a filter follows
         // the rendered alpha, which is what `hardShadow` does, so the glyphs
         // cast rather than a box around them.
-        .hardShadow(CGSize(width: 6, height: 6))
+        .hardShadow(CGSize(width: Self.drop, height: Self.drop))
+        // ROOM FOR WHAT SPILLS PAST THE BOUNDS, and it is not cosmetic padding.
+        // Neither half of the die-cut grows the layout: the white cut is 16
+        // `.offset` copies and the shadow is drawn outside the frame. That was
+        // free while the banner composited live, and became a clipped numeral
+        // the moment `.drawingGroup()` started rasterizing it — a drawing group
+        // is exactly the layout bounds, so everything outside them was cut off.
+        // Symmetric, so the glyph stays where it was on screen.
+        .padding(edge + Self.drop)
     }
 
     private func glyphs(_ color: Color) -> some View {
