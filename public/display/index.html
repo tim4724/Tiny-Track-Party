@@ -191,16 +191,18 @@
     </div>
   </section>
 
-  <!-- Corner buttons — pinned top-right over every screen, outside the sections
+  <!-- Corner buttons — pinned to a top corner over every screen (the BOTTOM-right
+       during a race, see display.css), outside the sections
        so the mute and fullscreen toggles survive lobby → race. Order: mute,
        fullscreen, pause. The welcome board carries NONE of them (user call: the
        title board stays clean, and NEW GAME is already the click that claims
        fullscreen), so the row is empty there: mute ships hidden and is revealed
        from the lobby on by main.js show()/newGameClick, while fullscreen is
        dropped by a display.css rule instead — that rule says why. Pause joins
-       the row only during a race. All fade together while the race chrome is
-       idle (see display.css) so they stop covering each cell's place/lap
-       readout. -->
+       the row only during a race. While #race is on screen display.css moves the
+       whole row to the bottom-right, out of the corner each cell's place/lap
+       readout wants. All fade together while the race chrome is idle (see
+       display.css). -->
   <div id="corner-btns">
     <button id="mute-btn" class="icon-btn hidden" aria-label="Mute sound" aria-pressed="false">
       <!-- Two glyphs, one shown at a time (theme.css picks by aria-pressed):

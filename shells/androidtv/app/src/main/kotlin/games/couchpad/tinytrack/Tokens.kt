@@ -44,6 +44,7 @@ object Tokens {
     private val colors = HashMap<String, Color>()
     private val lengths = HashMap<String, Dp>()
     private val shadows = HashMap<String, Shadow>()
+    private val numbers = HashMap<String, Float>()
 
     /**
      * The `car-*` group **in file order**. That order is the `colorIndex` a seat
@@ -97,6 +98,13 @@ object Tokens {
                 // exactly the drift it removes.
                 "color" -> rgba(e.opt("rgba"))?.let { colors[name] = it }
                 "length" -> if (e.has("px")) lengths[name] = e.getDouble("px").toFloat().dp
+                // A bare number, which the bake cannot type as anything better:
+                // the safe-zone insets are FRACTIONS of a surface, and a fraction
+                // has no unit for `length` to have parsed. Anything raw that is
+                // not a number (a font stack, a keyword) simply does not land
+                // here, which is why this is a filter and not a cast.
+                "raw" -> e.optString("resolved", "").trim().toFloatOrNull()
+                    ?.let { numbers[name] = it }
                 "shadow" -> {
                     val s = e.optJSONObject("shadow") ?: continue
                     val c = rgba(s.opt("rgba")) ?: continue
@@ -148,6 +156,9 @@ object Tokens {
         for (n in listOf("shadow-pop", "shadow-card", "shadow-float")) {
             tokenRequire(shadows[n] != null) { "design-tokens.json is missing the shadow --$n" }
         }
+        for (n in listOf("safe-frac-x", "safe-frac-y", "steer-band-frac")) {
+            tokenRequire(numbers[n] != null) { "design-tokens.json is missing the number --$n" }
+        }
         // The one rule the CSS can only state in prose, and the reason
         // tests/design-tokens.test.js exists on the web side: press travel equal
         // to the ledge depth would punch the button through its own ledge and
@@ -181,6 +192,43 @@ object Tokens {
     }
 
     fun radius(name: String): Dp = length(name)
+
+    /**
+     * A unitless token as a number, or null when the bake does not carry it.
+     *
+     * NULL RATHER THAN A DEFAULT, unlike [color] and [length], because the one
+     * caller has a better fallback than this file could invent: the safe insets
+     * default to 2.5% in C++, and a zero pushed from here would replace that with
+     * no safe zone at all. The caller skips the push instead.
+     */
+    fun number(name: String): Float? = numbers[name]
+
+    /**
+     * The TV overscan margin a FULL-SCREEN board keeps clear of each edge, in
+     * authored px — so `dp` under the root density override, and 48 x 27 at the
+     * 2.5% the token declares. Google's TV guidance asks for double that (its
+     * 48 x 27 is against a 960 x 540 dp layout, which is 96 x 54 here); the
+     * token's own note in `theme.css` says why this tree does not follow it.
+     *
+     * **The per-cell HUD does not use these.** Its rects arrive already inset
+     * from `ttp_display_cell_rects`, because only C++ knows which of a cell's
+     * edges are screen edges — a stacked pair's shared divider is not one, and
+     * padding it would be a margin against nothing. These are for the boards
+     * that really do run to the bezel.
+     *
+     * Zero if the bake is missing them, which is [assertWhole]'s complaint to
+     * make and not this accessor's — same as [length].
+     */
+    val safeMarginX: Dp get() = ((number("safe-frac-x") ?: 0f) * AUTHORED_WIDTH).dp
+    val safeMarginY: Dp get() = ((number("safe-frac-y") ?: 0f) * AUTHORED_HEIGHT).dp
+
+    /**
+     * How far up from the bottom of a split-screen cell that cell's STEER BAR
+     * reaches, in authored px. The bar is the renderer's, so this is a token and
+     * not a number to re-measure here — see `--steer-band-frac` in `theme.css`
+     * for what composes it and which layouts it covers.
+     */
+    val steerBand: Dp get() = ((number("steer-band-frac") ?: 0f) * AUTHORED_HEIGHT).dp
 
     fun shadow(name: String): Shadow =
         shadows[name] ?: Shadow(0.dp, 0.dp, 0.dp, Color.Transparent).also {

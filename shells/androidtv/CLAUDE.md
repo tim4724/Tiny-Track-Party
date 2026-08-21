@@ -273,9 +273,16 @@ thing:
 - The steer bar and the cell dividers are the RENDERER's (`voverlay.mat`).
   Drawing them here doubles them. The line: **cell-anchored and textless goes to
   the renderer; anything carrying type or sticker chrome stays here.**
-- The HUD layer takes **no window insets**. The rects describe the surface, so an
-  overscan padding shifts every chip off the picture it labels. Full-screen
-  boards get a margin; the HUD does not.
+- The HUD layer takes **no window insets**, and does not need any: each cell
+  answers with TWO rects, and the second is already the first inset by the TV
+  overscan margin (`ttp_display_safe_insets`, pushed once at surface create).
+  Chrome anchored to a CORNER is laid out in the safe rect; a card CENTRED on
+  the cell keeps the picture rect. A `WindowInsets` padding on the layer would
+  shift every chip off the picture it labels, and it knows nothing about cells.
+- Full-screen boards DO take the margin themselves, from `Tokens.safeMarginX/Y`
+  — they are laid out by Compose against the whole window, so nothing has inset
+  them. Never re-spell it as `96.dp` / `54.dp`; `tests/safe-zone.test.js` fails
+  if you do.
 - Nothing in the HUD is focusable. The focus engine drives the pause overlay and
   the results button, and a focusable HUD element steals from them.
 - Poll `ttp_display_hud()` at ~6 Hz. Nothing in it moves faster than a place.

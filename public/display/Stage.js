@@ -24,7 +24,7 @@
 // size themselves off the cell, which is already a C++ answer.
 import { ordinal } from '../shared/format.js';
 import { cssHex, loadBiomes } from '../shared/biomes.js';
-import { CAM, Display, assetCache } from './render/Display.js';
+import { CAM, Display, RECT_STRIDE, assetCache } from './render/Display.js';
 import { PerfHud } from './render/PerfHud.js';
 import { ITEM_IDS } from './engine/contract.js';
 import { loadItemIcons, CAR_BODY_COLORS } from '../shared/itemIcons.js';
@@ -50,6 +50,16 @@ const ITEM_KEYS = [...ITEM_IDS];
 // layer down) and the DOM chrome around it — two consumers that must agree or
 // the bar shows under a card.
 const cardOwnsCell = (c) => !!(c.finished || c.reconnecting);
+
+// A unitless `:root` token as a number, or null when the stylesheet that
+// declares it did not load. NULL RATHER THAN A DEFAULT: the one fallback for a
+// missing safe inset is the C++ side's, and a second one spelled here would be
+// a second place to change it. The caller skips the push instead.
+function cssFraction(name) {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(name);
+  const v = Number.parseFloat(raw);
+  return Number.isFinite(v) ? v : null;
+}
 
 // The band the drawing buffer lives in, in lines, whatever the screen is.
 //
@@ -297,6 +307,11 @@ export class Stage {
     // most likely to land here — its click carries the fullscreen unlock, and
     // the transition is slow enough to reach mid-boot. A no-op when they agree.
     this.display.resize(this._canvas.width, this._canvas.height);
+    // The TV overscan margin the HUD gets placed inside, read from the ONE place
+    // it is authored (theme.css's :root) rather than spelled again here. Sticky
+    // in C++, so it belongs beside the boot resize and not in _onResize.
+    const safeX = cssFraction('--safe-frac-x'), safeY = cssFraction('--safe-frac-y');
+    if (safeX != null && safeY != null) this.display.safeInsets(safeX, safeY);
     // The other half of the automation budget (see the DPR cap in the ctor):
     // drop the per-track shadow bake. Must be set before any setTrack, since
     // the map is baked into the scene at build time.
@@ -872,9 +887,17 @@ export class Stage {
     const cw = Math.max(1, this.container.clientWidth);
     const ch = Math.max(1, this.container.clientHeight);
     const out = [];
-    for (let i = 0; i + 3 < packed.length; i += 4) {
-      out.push({ x: packed[i] * cw, y: packed[i + 1] * ch,
-                 w: packed[i + 2] * cw, h: packed[i + 3] * ch });
+    // TWO RECTS PER CELL, and which one a caller wants is a real choice: `safe`
+    // for anything anchored to an EDGE, since a television may be cropping that
+    // edge, and the outer rect for anything centred on the PICTURE. Both come
+    // out of one read so they cannot describe different cells.
+    for (let i = 0; i + RECT_STRIDE - 1 < packed.length; i += RECT_STRIDE) {
+      out.push({
+        x: packed[i] * cw, y: packed[i + 1] * ch,
+        w: packed[i + 2] * cw, h: packed[i + 3] * ch,
+        safe: { x: packed[i + 4] * cw, y: packed[i + 5] * ch,
+                w: packed[i + 6] * cw, h: packed[i + 7] * ch },
+      });
     }
     return out;
   }
@@ -1299,7 +1322,8 @@ export class Stage {
     // the steady-state frame writes no DOM (this file's own rule).
     const cells = this._cellRects(ids.length);
     const hudSig = cellSig + '|'
-        + cells.map((r) => r.x + ',' + r.y + ',' + r.w + ',' + r.h).join(';') + '|'
+        + cells.map((r) => [r.x, r.y, r.w, r.h,
+                            r.safe.x, r.safe.y, r.safe.w, r.safe.h].join(',')).join(';') + '|'
         + ids.map((id) => {
           const c = this.cars.get(id);
           return (c.finished ? 'f' : '') + (c.reconnecting ? 'r' : '');
@@ -1313,10 +1337,13 @@ export class Stage {
       // The corner label is hidden while the reconnect card owns the cell — that
       // card already shows the name, so the label would just duplicate it. (The
       // FINISHED card has no name, so it keeps the label.)
+      // EDGE-ANCHORED, so it measures from the SAFE rect: the corner it hangs
+      // in may be under a television's bezel, and a name nobody can read is the
+      // same as no name. The centred cards below keep the picture rect.
       if (c.label) {
         c.label.style.display = c.reconnecting ? 'none' : 'block';
-        c.label.style.left = r.x + 'px';
-        c.label.style.top = r.y + 'px';
+        c.label.style.left = r.safe.x + 'px';
+        c.label.style.top = r.safe.y + 'px';
       }
       // place/lap is hidden while a centred card owns the cell; the steer bar
       // goes with it, one layer down — cardOwnsCell is the one predicate both
@@ -1324,8 +1351,8 @@ export class Stage {
       const cardInCell = cardOwnsCell(c);
       if (c.placeEl) {
         c.placeEl.style.display = cardInCell ? 'none' : 'block';
-        c.placeEl.style.left = (r.x + r.w - 12) + 'px';
-        c.placeEl.style.top = (r.y + 11) + 'px';
+        c.placeEl.style.left = (r.safe.x + r.safe.w - 12) + 'px';
+        c.placeEl.style.top = (r.safe.y + 11) + 'px';
       }
       if (c.finishEl) {
         c.finishEl.style.display = c.finished ? 'flex' : 'none';

@@ -46,6 +46,34 @@ extern "C" {
  * string to a pointer regardless of how C spells the parameter. */
 TTP_ABI int ttp_display_create(const void* surface, uint32_t width, uint32_t height);
 TTP_ABI void ttp_display_resize(uint32_t width, uint32_t height);
+
+/* How much of each edge of this surface a TELEVISION may be cropping, as a
+ * FRACTION per side — fx of the width off the left AND the right, fy of the
+ * height off the top AND the bottom. Everything the shell then places from
+ * ttp_display_cell_rects lands this far inside its own cell.
+ *
+ * THE SHELL REPORTS IT, because only the shell can know it and the three do not
+ * agree. tvOS is handed a real safe area by the system (90 x 60 pt of a
+ * 1920 x 1080 screen, so not the same fraction on both axes) and passes that;
+ * the web and Android have nothing to ask and pass the authored `--safe-frac-x/y`
+ * from theme.css, whose note carries why 2.5% and not the 5% Google's TV guidance
+ * asks for. A platform that ever learns its true overscan reports it here and
+ * nothing else changes.
+ *
+ * Defaults to 2.5% per side, and that is deliberately not zero: a shell that
+ * forgets to call this gets the safe layout rather than the clipped one, which
+ * is the failure that can actually be seen from a sofa. tests/safe-zone.test.js
+ * pins the default to the token so the two cannot drift.
+ *
+ * Clamped to [0, 0.25): an inset of half the surface has no rect left to
+ * describe, and a negative one would push chrome off the picture entirely.
+ *
+ * NOT applied to the 3D, and NOT applied to the renderer's own steer bar. A
+ * background belongs edge to edge on every one of these platforms — Apple's HIG
+ * says so outright — so the camera keeps framing the whole surface. The bar's
+ * exemption is a judgement rather than a rule, and it is argued where the bar is
+ * placed (TtpRendererFrame.cpp). */
+TTP_ABI void ttp_display_safe_insets(float fx, float fy);
 /* Block until the renderer's driver thread has executed everything recorded so
  * far. A shell calls this ONCE before resizing the window's buffer queue
  * underneath a threaded backend: a frame recorded at the old size whose buffer
@@ -350,11 +378,34 @@ TTP_ABI void ttp_display_cells(const char* idsJson);
  * it is not ceil(sqrt(n)): a racing cell wants to be wider than tall, so two
  * players on a 16:9 screen are STACKED rather than side by side.
  *
- * Writes 4 floats per cell — x, y, width, height, TOP-LEFT origin — and returns
- * how many cells it wrote: min(cells, maxCells), or 0 when no car owns one
- * (out null, or ttp_display_cells empty/never called). Neither an int PREDICATE
- * nor an OUTCOME (ttp_abi.h): a COUNT, like ttp_room_size and
- * ttp_room_connected_count.
+ * TWO RECTS PER CELL: the PICTURE, then the same cell inset by the safe margin
+ * ttp_display_safe_insets describes. A shell needs both, and needs them to
+ * agree:
+ *
+ *   - THE PICTURE is where the 3D actually is. A centred element (the FINISHED
+ *     card, the reconnect QR) centres on it, and it is the only rect that can
+ *     show the grid tiles the surface — the stacked pair's equal letterbox bars
+ *     are a property of the picture and of nothing else.
+ *   - THE SAFE RECT is where anything anchored to an EDGE goes: the name chip,
+ *     the item slot, the place badge, the lap pill. On a television that crops,
+ *     the outer cells' share of it is the part the viewer can be promised.
+ *
+ * INSET ON ALL FOUR EDGES, not only on the ones a television can actually crop.
+ * The tighter rule was built first and rejected on sight: in a four-cell grid it
+ * puts two different margins in one row, because the badge left of a divider is
+ * not at risk and the one right of the screen's edge is. A uniform inset is what
+ * a split-screen racer's HUD does, and it is argued where it is applied
+ * (ttp_display_core.cc). Applied HERE and not in the shells because three copies
+ * of it is three chances to get it wrong three different ways.
+ *
+ * ONE CALL, not two exports, for the reason the fractions below already exist:
+ * two rects that must describe the same cell must not travel by different roads.
+ *
+ * Writes 8 floats per cell — x, y, width, height of the picture, then the same
+ * four of the safe rect, TOP-LEFT origin — and returns how many CELLS it wrote:
+ * min(cells, maxCells), or 0 when no car owns one (out null, or
+ * ttp_display_cells empty/never called). Neither an int PREDICATE nor an OUTCOME
+ * (ttp_abi.h): a COUNT, like ttp_room_size and ttp_room_connected_count.
  *
  * UNITS ARE FRACTIONS OF THE SURFACE, 0..1 — x and w of its width, y and h of
  * its height. A shell multiplies by whatever it lays out in: CSS pixels in a

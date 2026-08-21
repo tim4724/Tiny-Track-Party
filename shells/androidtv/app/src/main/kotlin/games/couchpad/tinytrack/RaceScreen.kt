@@ -86,10 +86,16 @@ private fun CellChrome(cell: GameState.CellHUD, state: GameState) {
     val showsReconnect = cell.reconnecting && !cell.finished
     val cardInCell = cell.finished || showsReconnect
 
+    // TWO BOXES, on the cell's two rects. The chips hang off a CORNER, and a
+    // corner is what a television that overscans crops, so they are laid out in
+    // the SAFE rect and their authored margins become margins from the safe edge.
+    // The cards are CENTRED on the picture: pulling them into the safe rect would
+    // shift them off the middle of the very thing they cover, in any cell with an
+    // outer edge. `CellRect` carries both because C++ answers both in one read.
     Box(
         Modifier
-            .offset(cell.rect.x.dp, cell.rect.y.dp)
-            .size(cell.rect.w.dp, cell.rect.h.dp)
+            .offset(cell.rect.sx.dp, cell.rect.sy.dp)
+            .size(cell.rect.sw.dp, cell.rect.sh.dp)
     ) {
         // `.cell-label`'s margin. In AUTHORED pixels, which is what the whole tree
         // is in under the root density override.
@@ -143,7 +149,13 @@ private fun CellChrome(cell: GameState.CellHUD, state: GameState) {
                 }
             }
         }
+    }
 
+    Box(
+        Modifier
+            .offset(cell.rect.x.dp, cell.rect.y.dp)
+            .size(cell.rect.w.dp, cell.rect.h.dp)
+    ) {
         if (cell.finished) {
             Box(Modifier.align(Alignment.Center)) { FinishedCard(cell) }
         } else if (showsReconnect) {

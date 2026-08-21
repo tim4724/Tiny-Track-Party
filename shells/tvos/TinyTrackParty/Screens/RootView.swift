@@ -289,6 +289,13 @@ struct RootView: View {
                 MusicCreditChip(credit: credit)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                     .padding(.leading, 16)
+                    // 16 INSIDE THE SAFE AREA, which is 76 pt off the screen and
+                    // therefore already clear of the split-screen steer bar band
+                    // (`--steer-band-frac`, ~66 pt of 1080). The web and Android
+                    // have to ask for that clearance; this shell is handed it by
+                    // the system. Do not "simplify" this to a screen-relative
+                    // offset without checking it against the band — a long title
+                    // sitting under the bar is the failure it avoids.
                     .padding(.bottom, 16)
             }
 

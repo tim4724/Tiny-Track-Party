@@ -62,6 +62,17 @@ struct DisplayState {
     // speaks. A uiScale lived here until frame ABI v11; see TtpFrameInput.
     uint32_t width = 1, height = 1;
 
+    // What a television may be cropping off each edge of that surface, as a
+    // fraction per side (ttp_display_safe_insets). The shell reports it; the
+    // only thing that reads it is the cell-rect intersection, which is what
+    // keeps the HUD's chrome out from under the bezel.
+    //
+    // 2.5% per side until a shell says otherwise, matching --safe-frac-x/y. The
+    // default is the SAFE one on purpose: an unreported inset is a shell that
+    // has not been taught about overscan, and a slightly inset HUD on a monitor
+    // costs nothing a clipped one on a TV does not cost more.
+    float safeFracX = 0.025f, safeFracY = 0.025f;
+
     int session = 0;                    // bound session handle (0 = draw an empty track)
     std::vector<ScalarId> roster;       // slot order, fixed at build
     // The same slots as the renderer dressed them — ttp_display_reroster's diff

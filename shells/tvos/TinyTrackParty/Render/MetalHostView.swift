@@ -157,6 +157,23 @@ final class MetalSurfaceView: UIView {
         // resize (plus a UI-scale re-push, which is what an output-mode switch
         // between 1080p and 4K actually needs).
         host?.attach(layer: metalLayer, size: size, scale: scale)
+        // The TV's overscan margin, which on this platform is not a guess: the
+        // system hands out a real safe area (90 x 60 pt) and we pass the ratio on.
+        //
+        // ASKED OF THE WINDOW, not of self. This view is the one thing on screen
+        // that deliberately `ignoresSafeArea()` — a background belongs edge to
+        // edge — and a view SwiftUI has expanded past the safe area is the last
+        // place to ask what that area was. The window is always the whole screen
+        // and always honours it.
+        //
+        // POINTS OVER POINTS, so the fraction is the same in both output modes
+        // and no scale enters it. Nil until the view is in a window, which the
+        // `didMoveToWindow` hook above is the other half of.
+        if let win = window, win.bounds.width > 0, win.bounds.height > 0 {
+            let insets = win.safeAreaInsets
+            host?.setSafeInsets(fx: insets.left / win.bounds.width,
+                                fy: insets.top / win.bounds.height)
+        }
     }
 }
 

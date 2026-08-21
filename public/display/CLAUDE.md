@@ -100,6 +100,20 @@ the canvas, the DOM HUD and the rAF loop.
 **Three.js is gone.** It survives only as a test-only devDependency for the offline
 capture scripts. Do not reintroduce it to the display page.
 
+**The TV overscan safe zone is C++'s answer, not this file's arithmetic.** A
+television may crop the edges of the picture and no browser API reports it —
+`env(safe-area-inset-*)` is a notch, and it is zero on every TV — so `Stage.boot`
+pushes the authored `--safe-frac-x/y` through `ttp_display_safe_insets` once, and
+`cellRects` then answers EIGHT floats a cell: the picture rect, and the same cell
+inset by that margin on all four edges. Place corner chrome from the safe rect
+and centred cards from the picture. Do not re-derive the margin here — it is
+uniform per cell rather than an intersection with the screen's own safe area, and
+that is a LOOK decision with a rejected alternative behind it (argued in
+`ttp_display_core.cc`), not arithmetic worth repeating.
+Page chrome that is NOT cell-anchored takes `--safe-x` / `--safe-y` from
+`display.css` instead. The renderer's steer bar is deliberately exempt from all
+of it; `TtpRendererFrame.cpp` argues why where it draws the bar.
+
 **The buffer's size AND the present rate are MEASURED, not chosen, and they are
 ONE decision.** `Stage._adaptScale` polls `ttp_display_scale_poll` every frame
 and gets `[scale, divisor]` back when the point moves, because frame rate and

@@ -287,7 +287,7 @@ extension GameCoordinator {
         var cells: [GameState.CellHUD] = []
         var cardMask: UInt32 = 0
 
-        for (i, rect) in rects.enumerated() {
+        for (i, pair) in rects.enumerated() {
             guard i < viewed.count else { break }
             let car = viewed[i]
             let slot = slots.first { display.roster.indices.contains($0.slot)
@@ -302,7 +302,8 @@ extension GameCoordinator {
             cells.append(GameState.CellHUD(
                 index: i,
                 car: car.id,
-                rect: rect,
+                rect: pair.picture,
+                safeRect: pair.safe,
                 name: car.name,
                 colorIndex: car.colorIndex,
                 carIndex: car.carIndex ?? 0,

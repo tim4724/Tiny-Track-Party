@@ -222,6 +222,15 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
             // is not this decision, and one taken on a cheap corner prices it at
             // half a millisecond and flatters it.
             Ttp.ttp_display_antialias(0)
+            // The overscan margin the per-cell HUD is placed inside. Android has
+            // nothing to ask — a TV does not tell an app what it crops — so this
+            // is the authored margin, taken from the token the web's CSS
+            // declares it in rather than spelled again in Kotlin.
+            // Same fraction whatever the buffer is, so it belongs on the CREATE
+            // branch and not beside the resize below.
+            val safeX = Tokens.number("safe-frac-x")
+            val safeY = Tokens.number("safe-frac-y")
+            if (safeX != null && safeY != null) Ttp.ttp_display_safe_insets(safeX, safeY)
             flushPendingAssets()
             start()
             onSurfaceReady?.invoke()
@@ -544,18 +553,24 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
      * only source for where HUD chrome goes.
      *
      * The array is reused across polls rather than allocated: this is read at
-     * the HUD's cadence, and 4 floats per cell is not worth a garbage-collected
-     * object six times a second.
+     * the HUD's cadence, and eight floats per cell is not worth a
+     * garbage-collected object six times a second.
+     *
+     * EIGHT, not four: each cell answers with its picture rect and then the same
+     * cell inset by the TV overscan margin (`ttp_display.h`). The
+     * stride is the generated shim's too — `scripts/gen-jni.mjs` declares it —
+     * so an array sized on the old one would read cells C++ never wrote.
      */
-    private val cellScratch = FloatArray(4 * 8)
+    private val cellScratch = FloatArray(MAX_CELLS * CELL_RECT_STRIDE)
 
     fun cellRects(): List<CellRect> {
-        val n = Ttp.ttp_display_cell_rects(cellScratch, 8)
+        val n = Ttp.ttp_display_cell_rects(cellScratch, MAX_CELLS)
         if (n <= 0) return emptyList()
         return (0 until n).map { i ->
+            val o = i * CELL_RECT_STRIDE
             CellRect(
-                cellScratch[i * 4], cellScratch[i * 4 + 1],
-                cellScratch[i * 4 + 2], cellScratch[i * 4 + 3],
+                cellScratch[o], cellScratch[o + 1], cellScratch[o + 2], cellScratch[o + 3],
+                cellScratch[o + 4], cellScratch[o + 5], cellScratch[o + 6], cellScratch[o + 7],
             )
         }
     }
@@ -907,5 +922,27 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
     }
 }
 
-/** A cell's rectangle in surface pixels, exactly as `ttp_display_cell_rects` wrote it. */
-data class CellRect(val x: Float, val y: Float, val w: Float, val h: Float)
+/**
+ * Floats per cell in `ttp_display_cell_rects`' answer: two rects, four each.
+ * NAMED because the array is sized in one place and indexed in another, and a
+ * stride that only half-moved would read cells C++ never wrote. The generator
+ * declares the same number on the C side (`scripts/gen-jni.mjs`).
+ */
+private const val CELL_RECT_STRIDE = 8
+
+/** Cells the scratch array is sized for — the field can never split further. */
+private const val MAX_CELLS = 8
+
+/**
+ * A cell's two rectangles as fractions of the surface, exactly as
+ * `ttp_display_cell_rects` wrote them.
+ *
+ * [x]/[y]/[w]/[h] are the PICTURE — where the renderer drew this cell, and so
+ * what anything centred on the cell centres on. [sx]/[sy]/[sw]/[sh] are the same
+ * cell inset by the TV overscan margin on all four edges, which is where every
+ * chip anchored to a corner goes instead.
+ */
+data class CellRect(
+    val x: Float, val y: Float, val w: Float, val h: Float,
+    val sx: Float, val sy: Float, val sw: Float, val sh: Float,
+)

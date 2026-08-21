@@ -10,12 +10,43 @@ html, body {
   overflow: hidden;
 }
 
+/* THE SAFE ZONE, in the units this file lays out in. A television may crop the
+   edges of what it is handed and cannot be asked how much, so every edge-anchored
+   thing on this page measures from here rather than from the viewport — see the
+   token's own note in theme.css for where the figure comes from.
+
+   `env(safe-area-inset-*)` is NOT this and never was: it reports a notch or a
+   home indicator, it is zero in every TV browser and inside the AirConsole frame,
+   and it stays in the sum only because a phone-shaped display window is still a
+   thing this page can end up in. Overscan is the term it cannot see.
+
+   Per-cell HUD chrome does NOT come through here: those rects arrive already
+   inset from ttp_display_cell_rects, because only C++ knows which cell edges are
+   screen edges (a stacked pair's divider is not one). */
+html {
+  --safe-x: calc(var(--safe-frac-x) * 100vw + env(safe-area-inset-left));
+  --safe-y: calc(var(--safe-frac-y) * 100vh + env(safe-area-inset-top));
+  /* The same margin measured from the BOTTOM, which is a separate value only
+     because of the env() term: a notch is on one edge and a home indicator on
+     the other, so a bottom-anchored thing that reached for `--safe-y` would
+     clear the wrong one. Both env() terms are zero on every television; this is
+     for the phone-shaped window the page can still end up in. */
+  --safe-y-b: calc(var(--safe-frac-y) * 100vh + env(safe-area-inset-bottom));
+}
+
 /* The corner button row's geometry, declared once: it is FIXED over every
    screen, so chrome that must not sit under it (the lobby's right rail) has to
-   derive its own clearance from these — see .race-rail. */
+   derive its own clearance from these — see .race-rail.
+
+   --corner-inset is the offset from the SAFE edge, and --corner-top is that
+   edge plus it. The rail needs the first and not the second: it lives inside
+   #lobby, whose padding has already stepped past the safe zone, so clearing the
+   full --corner-top would step past it a second time and drop the pick card by
+   5vh of nothing. */
 html {
-  --corner-top: calc(1.1rem + env(safe-area-inset-top));
-  --corner-edge: 1.1rem;
+  --corner-inset: 1.1rem;
+  --corner-top: calc(var(--safe-y) + var(--corner-inset));
+  --corner-edge: calc(var(--safe-x) + var(--corner-inset));
   --corner-btn: 3.4rem;
 }
 
@@ -48,9 +79,13 @@ html {
   row-gap: clamp(10px, 1.6vh, 20px);
   /* generous side gutters: the rails frame the centre without hugging the
      bezel (the middle stays open for the live track preview) */
+  /* The authored gutters, OUTSIDE the safe zone rather than instead of it: the
+     rails frame the centre without hugging the bezel, and on a set that crops
+     they still do. */
   padding:
-    clamp(14px, 2.4vh, 26px) clamp(28px, 3.6vw, 72px)
-    clamp(16px, 2.6vh, 30px);
+    calc(var(--safe-y) + clamp(14px, 2.4vh, 26px))
+    calc(var(--safe-x) + clamp(28px, 3.6vw, 72px))
+    calc(var(--safe-y-b) + clamp(16px, 2.6vh, 30px));
 }
 
 /* Left rail — the join ticket, which carries its own scan hint. The rail
@@ -142,7 +177,7 @@ html {
   gap: clamp(10px, 1.4vh, 18px);
   /* clear #corner-btns, which is FIXED over every screen — without this the
      pick card would sit under the mute/fullscreen row. */
-  padding-top: calc(var(--corner-top) + var(--corner-btn) + 0.5rem);
+  padding-top: calc(var(--corner-inset) + var(--corner-btn) + 0.5rem);
 }
 
 /* Cup slot — empty pre-pick, the race card post-pick (renderCupSlot fills it).
@@ -832,11 +867,36 @@ html.cam-free #race { pointer-events: none; }
 #corner-btns {
   position: fixed; z-index: 12;
   top: var(--corner-top);
-  right: calc(var(--corner-edge) + env(safe-area-inset-right));
+  right: var(--corner-edge);
   display: flex; gap: 0.6rem;
   transition: opacity 0.4s ease;
 }
 #corner-btns .icon-btn { width: var(--corner-btn); height: var(--corner-btn); }
+
+/* DURING A RACE THE TOP-RIGHT BELONGS TO THE PLACE/LAP READOUT, so the row gets
+   out of it. The two shared the corner and merely faded after a few idle seconds
+   (see .chrome-idle below), which left the ordinal — the one number a player
+   looks for — under a mute button for the first laps.
+
+   The signal is `#race` being on screen, which is `show()`'s own doing and the
+   same one the section itself runs on — NOT the pause button. The pause button is
+   the tempting one (it joins the row only during a race), but it is pushed by a
+   `set-pause-button` effect the gallery's `racing` scenario never sends, so a rule
+   keyed on it would put the buttons in one corner live and the other in every
+   reference shot. (`:has` is already how .ticket reads its own children; it is
+   needed here rather than `~` because #race comes AFTER this row in the markup.)
+
+   The bottom-right is the one corner no cell chrome uses: every steer bar is
+   centred in its OWN cell, and the music credit takes the bottom-left. On the
+   stacked 2-player layout it lands on the letterbox bar, which is the best place
+   on the screen for it — dead space, covering no picture at all.
+
+   The jump is not animated: it happens on the lobby -> race change, behind the
+   countdown, where the whole screen is changing anyway. */
+body:has(#race:not(.hidden)) #corner-btns {
+  top: auto;
+  bottom: calc(var(--safe-y-b) + var(--corner-inset));
+}
 
 /* The welcome board has no fullscreen toggle: NEW GAME is the gesture that
    claims fullscreen, so a second control beside it is only a way to spend the
@@ -949,7 +1009,12 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
 /* ---- Narrow / portrait (e.g. someone opens the display on a phone) ----
    The rail layout is designed for a wide screen; on a narrow viewport stack
    the chrome in one scrolling column instead. (The device chooser covers most
-   of these visits anyway.) */
+   of these visits anyway.)
+
+   The lobby's padding below DROPS the safe zone, deliberately: a viewport this
+   shape is a phone or a small window and never a television, and 5vw of overscan
+   margin on a 380px-wide column is a quarter of the column. The per-cell HUD
+   keeps its inset regardless — that one is C++'s and this file cannot reach it. */
 @media (max-width: 860px) {
   html, body { overflow-y: auto; }
   #lobby {
@@ -1000,7 +1065,18 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
    Shares the sound-hint's corner, but they never show together (the hint is up
    only while audio is locked; this only during a race). */
 .music-credit {
-  position: fixed; left: 1rem; bottom: 1rem; z-index: 9;
+  /* Inside the safe zone, unlike the 1rem it used to sit at flat. This one is a
+     LICENSING obligation (CC-BY on the whole music catalogue), so a TV that eats
+     the bottom of the picture must not be able to eat the attribution with it.
+
+     ABOVE THE STEER BAR, not merely inside the safe margin: in a split the
+     bottom-left cell's bar reaches back far enough to sit under a long title,
+     and the margin alone left the credit right in its band. Clearing it is what
+     lets the width cap below stay generous enough to keep the ARTIST readable,
+     which is the half of the attribution that matters. */
+  position: fixed; z-index: 9;
+  left: calc(var(--safe-x) + 1rem);
+  bottom: calc(var(--steer-band-frac) * 100vh + 0.6rem);
   max-width: min(46vw, 24rem);
   display: inline-block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   font: inherit; font-weight: 700; font-size: 0.85rem;

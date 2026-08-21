@@ -75,9 +75,15 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
   const layout = await page.evaluate(() => {
     const s = window.__scene;
     const cells = [];
+    // EIGHT floats a cell: the picture rect, then the same cell intersected with
+    // the TV overscan safe zone. Both are asserted below and they check
+    // different things — the picture is what must tile the surface, the safe
+    // rect is what the edge-anchored chrome has to sit inside.
     const packed = s.display.cellRects(8);
-    for (let i = 0; i < packed.length; i += 4) {
-      cells.push({ x: packed[i], y: packed[i + 1], w: packed[i + 2], h: packed[i + 3] });
+    for (let i = 0; i < packed.length; i += 8) {
+      cells.push({ x: packed[i], y: packed[i + 1], w: packed[i + 2], h: packed[i + 3],
+                   safe: { x: packed[i + 4], y: packed[i + 5],
+                           w: packed[i + 6], h: packed[i + 7] } });
     }
     const px = (el, p) => parseFloat(el.style[p]);
     return {
@@ -87,6 +93,14 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
       container: { w: s.container.clientWidth, h: s.container.clientHeight },
       view: { w: window.innerWidth, h: window.innerHeight },
       cells,
+      // The fraction the page itself declares, so this asserts the safe rect
+      // against the authored token rather than against a number retyped here.
+      safeFrac: {
+        x: parseFloat(getComputedStyle(document.documentElement)
+          .getPropertyValue('--safe-frac-x')),
+        y: parseFloat(getComputedStyle(document.documentElement)
+          .getPropertyValue('--safe-frac-y')),
+      },
       labels: [...document.querySelectorAll('.cell-label')].map((el) => [px(el, 'left'), px(el, 'top')]),
       ranks: [...document.querySelectorAll('.cell-rank')].map((el) => [px(el, 'left'), px(el, 'top')])
     };
@@ -113,19 +127,57 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
   // cols-1 px at most either side of centre, cols <= 2 here
   expect(Math.abs(1 - spanX - barL)).toBeLessThan(2 / layout.canvas.w);
   expect(1 - spanY).toBeLessThan(2 / layout.canvas.h);
+  // THE SAFE ZONE. Every cell is inset by the authored fraction on ALL FOUR
+  // edges — the same margin against the divider as against the screen, which is
+  // the whole point: insetting only the edges a television can actually crop
+  // puts two different margins in one row and reads as a bug. The fraction is of
+  // the SURFACE, so a stacked pair's two cells take the same ABSOLUTE margin
+  // even though the grid is letterboxed and neither touches the screen's sides.
+  const eps = 1e-6;
+  expect(layout.safeFrac.x).toBeGreaterThan(0);
+  expect(layout.safeFrac.y).toBeGreaterThan(0);
+  for (const c of layout.cells) {
+    expect(c.safe.x).toBeCloseTo(c.x + layout.safeFrac.x, 5);
+    expect(c.safe.y).toBeCloseTo(c.y + layout.safeFrac.y, 5);
+    expect(c.safe.w).toBeCloseTo(c.w - 2 * layout.safeFrac.x, 5);
+    expect(c.safe.h).toBeCloseTo(c.h - 2 * layout.safeFrac.y, 5);
+  }
+  // Not vacuous: the stacked pair really does have one cell on the screen's top
+  // edge and one on its bottom, and they are treated identically.
+  expect(layout.cells.some((c) => c.y <= eps)).toBe(true);
+  expect(layout.cells.some((c) => c.y + c.h >= 1 - eps)).toBe(true);
+
   // …and every label is at its cell's top-left corner IN CSS PIXELS, with the
   // place/lap readout on the same cell's top-RIGHT (so the width is scaled too,
   // not just the origin). Compared as a set, since DOM order is creation order
   // rather than cell order, and with Stage.js's own arithmetic (scale first,
   // then offset) so this compares the layout, not two roundings.
+  // THE SAFE RECT, because that is what the chips are placed from: a name chip
+  // at the picture's corner is a name chip a television can crop. The picture's
+  // own geometry is asserted above, where it belongs.
   const css = layout.cells.map((c) => ({
-    x: c.x * layout.container.w, y: c.y * layout.container.h,
-    w: c.w * layout.container.w, h: c.h * layout.container.h,
+    x: c.safe.x * layout.container.w, y: c.safe.y * layout.container.h,
+    w: c.safe.w * layout.container.w, h: c.safe.h * layout.container.h,
   }));
-  const corners = css.map((r) => `${r.x},${r.y}`).sort();
-  const rights = css.map((r) => `${r.x + r.w - 12},${r.y + 11}`).sort();
-  expect(layout.labels.map((p) => p.join(',')).sort()).toEqual(corners);
-  expect(layout.ranks.map((p) => p.join(',')).sort()).toEqual(rights);
+  // Sorted by x-then-y and compared NUMERICALLY, to a tolerance far below a
+  // pixel. It used to be string equality of the two computations, which was
+  // exact only while every cell origin was a fraction like 0 or 0.5: the safe
+  // inset makes them 0.05, and 0.05 is not representable in the float32 the ABI
+  // packs, so the same product reaches this line and the DOM through two
+  // different roundings of the same number. A tenth of a milli-pixel cannot be a
+  // layout bug, and a quarter-cell offset — the failure this guards, an un-scaled
+  // or double-scaled rect — is six orders of magnitude bigger.
+  const byPoint = (a, b) => (a[0] - b[0]) || (a[1] - b[1]);
+  const near = (got, want, what) => {
+    expect(got).toHaveLength(want.length);
+    got.slice().sort(byPoint).forEach((p, i) => {
+      const q = want.slice().sort(byPoint)[i];
+      expect(p[0], `${what} x`).toBeCloseTo(q[0], 3);
+      expect(p[1], `${what} y`).toBeCloseTo(q[1], 3);
+    });
+  };
+  near(layout.labels, css.map((r) => [r.x, r.y]), 'name chip');
+  near(layout.ranks, css.map((r) => [r.x + r.w - 12, r.y + 11]), 'place/lap');
   // The cells fill the screen the HUD lays out on, so a label is never stranded
   // in the corner of a quarter-sized grid (the un-scaled failure). Height is
   // never capped, so it is the exact check; across the width it is the grid PLUS
@@ -167,7 +219,11 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
     const k = s._dpr, W = s._canvas.width, H = s._canvas.height;
     const packed = s.display.cellRects(8);
     const cells = [];
-    for (let i = 0; i + 3 < packed.length; i += 4) {
+    // THE PICTURE RECT — the first four of the eight floats a cell answers with.
+    // The steer bar is the renderer's and is deliberately NOT inset by the safe
+    // zone (TtpRendererFrame.cpp argues why), so the safe rect would find it in
+    // the wrong place by exactly the inset.
+    for (let i = 0; i + 7 < packed.length; i += 8) {
       // FRACTIONS of the surface (ttp_display_cell_rects) scaled to the BUFFER,
       // which is the space this probe works in: it samples getImageData, and
       // drawOverlay's own geometry below is a share of the buffer's height.

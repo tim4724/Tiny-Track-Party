@@ -98,6 +98,17 @@ void ttp_display_resize(uint32_t width, uint32_t height) {
     g_disp->renderer->resize(g_disp->width, g_disp->height);
 }
 
+void ttp_display_safe_insets(float fx, float fy) {
+    if (!g_disp) return;
+    // Clamped, not validated: a shell computing these from a system inset and a
+    // surface size can hand over a NaN for one frame during a rotation or a
+    // teardown (0/0), and a NaN inset would propagate into every rect and take
+    // the whole HUD off screen. `!(x >= 0)` catches NaN where `x < 0` does not.
+    const float lo = 0.0f, hi = 0.25f;
+    g_disp->safeFracX = !(fx >= lo) ? lo : (fx > hi ? hi : fx);
+    g_disp->safeFracY = !(fy >= lo) ? lo : (fy > hi ? hi : fy);
+}
+
 void ttp_display_drain(void) {
     if (g_disp && g_disp->renderer) g_disp->renderer->drain();
 }
@@ -333,6 +344,41 @@ int ttp_display_cell_rects(float* out, int maxCells) {
         // renderer's own steer bar and dividers ask the same function, so the
         // shell's chrome and the renderer's cannot land on different grids.
         const TtpCellRect r = g_disp->renderer->cellRectTopLeft(n, i);
+        // THE SAFE RECT: the same cell inset on ALL FOUR EDGES, which is where
+        // this cell's CHROME may go as against where its picture is.
+        //
+        // UNIFORM, NOT AN INTERSECTION WITH THE SCREEN'S SAFE AREA, and that is
+        // a LOOK decision that overrode the tighter one. Insetting only the
+        // edges a television can actually crop is what a safe zone strictly
+        // needs, and it was built and rejected on sight: in a four-cell grid it
+        // puts two different margins in one row — the place badge left of the
+        // divider hugs it while its neighbour sits a full inset off the screen —
+        // and the pair reads as a bug rather than as a margin. A uniform inset
+        // costs a little space at the dividers that nothing else wants, and it
+        // is what a split-screen racer's HUD does: each player's chrome is inset
+        // from THEIR viewport, and overscan only ever eats the outer ones.
+        //
+        // A FRACTION OF THE SURFACE, not of the cell. The distance a set crops
+        // is a property of the screen, so the protection has to be measured
+        // against the screen — a cell-relative margin would shrink exactly where
+        // there are more cells and less room to lose.
+        //
+        // BOTH RECTS IN ONE READ, because a shell needs both and they must
+        // agree: the picture is what a centred card centres on and what proves
+        // the grid tiles the surface, the safe rect is what everything anchored
+        // to an edge measures from. Two exports would be two roads again, which
+        // is the failure the fractions below are already written against.
+        //
+        // In SURFACE PIXELS, before the normalise below. The insets cap at a
+        // quarter per side and the smallest cell is half the surface on each
+        // axis, so a rect can collapse to zero width but never invert; the
+        // max(0) below is what says so rather than a comment claiming it cannot.
+        const double insetX = g_disp->safeFracX * sw;
+        const double insetY = g_disp->safeFracY * sh;
+        const double x0 = (double) r.x + insetX;
+        const double y0 = (double) r.y + insetY;
+        const double x1 = (double) r.x + r.w - insetX;
+        const double y1 = (double) r.y + r.h - insetY;
         // NORMALISED, because a rect in surface pixels only means anything
         // ALONGSIDE the surface size — and the render scale moves that under the
         // shell. Handing the two out separately made every HUD a two-value read
@@ -340,10 +386,14 @@ int ttp_display_cell_rects(float* out, int maxCells) {
         // already failed it: tvOS placed the whole HUD off a stale `uiScale`, and
         // Android divided fresh rects by a `surfaceWidth` Compose could not see
         // change. A fraction needs no partner, so neither bug can be written.
-        out[i * 4 + 0] = (float) (r.x / sw);
-        out[i * 4 + 1] = (float) (r.y / sh);
-        out[i * 4 + 2] = (float) (r.w / sw);
-        out[i * 4 + 3] = (float) (r.h / sh);
+        out[i * 8 + 0] = (float) (r.x / sw);
+        out[i * 8 + 1] = (float) (r.y / sh);
+        out[i * 8 + 2] = (float) (r.w / sw);
+        out[i * 8 + 3] = (float) (r.h / sh);
+        out[i * 8 + 4] = (float) (x0 / sw);
+        out[i * 8 + 5] = (float) (y0 / sh);
+        out[i * 8 + 6] = (float) ((x1 > x0 ? x1 - x0 : 0.0) / sw);
+        out[i * 8 + 7] = (float) ((y1 > y0 ? y1 - y0 : 0.0) / sh);
     }
     return (int) want;
 }

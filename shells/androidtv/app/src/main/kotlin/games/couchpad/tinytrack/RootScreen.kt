@@ -131,13 +131,23 @@ fun RootScreen(game: GameCoordinator) {
         //
         // Paint order matches the web's z-indexes: the credit sits OVER the results
         // board and UNDER the pause scrim. Placement is the web's own 16 authored px
-        // from each edge, deliberately not the board overscan margin.
+        // in from the SAFE edge — the overscan margin and then the authored offset,
+        // which is what display.css now spells as `calc(var(--safe-x) + 1rem)`.
+        // It used to be 16 px from the true edge, which on a set that crops put a
+        // LICENSING obligation under the bezel: the whole music catalogue is
+        // CC-BY, and the credit is the attribution it is licensed on.
         state.musicCredit?.let { credit ->
             if (state.screen == GameState.Screen.RACE) {
                 Box(
                     Modifier
                         .align(Alignment.BottomStart)
-                        .padding(16.dp)
+                        // ABOVE THE STEER BAR, not merely inside the safe margin:
+                        // in a split the bottom-left cell's bar reaches back far
+                        // enough to sit under a long title, and the margin alone
+                        // left this right in its band. The band is wider than the
+                        // margin, so it subsumes it.
+                        .padding(start = Tokens.safeMarginX + 16.dp,
+                                 bottom = Tokens.steerBand + 10.dp)
                         // `max-width: min(46vw, 24rem)` with an ellipsis: a long
                         // title otherwise runs across the bottom of the screen and
                         // under the next cell's steer bar.
@@ -214,7 +224,22 @@ fun RootScreen(game: GameCoordinator) {
 
         // Over everything, including the results glass: a frame's cost is most
         // interesting exactly where a board is on top of the scene.
-        Box(Modifier.align(Alignment.TopEnd)) { PerfOverlay() }
+        //
+        // BOTTOM-RIGHT, which is where tvOS has always put it
+        // (`PerfOverlay.swift`). It held the TOP-right until the lobby's ⓘ took
+        // that corner to match tvOS's placement; a diagnostic block is the one
+        // thing on screen that can afford to move, and the only control on the
+        // lobby board is not. It shares the corner with the error box below —
+        // both are developer-facing, both are rare, and an error while the
+        // readout is up is a case worth seeing crowded rather than not at all.
+        //
+        // Inside the overscan margin: this is a fixed overlay over a full screen,
+        // so nothing else here is keeping it off the bezel.
+        Box(
+            Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = Tokens.safeMarginX, bottom = Tokens.safeMarginY)
+        ) { PerfOverlay() }
 
         // The one channel this app has for saying something went wrong. A TV has no
         // console and no devtools, and every failure path in this shell is silent by
@@ -224,7 +249,10 @@ fun RootScreen(game: GameCoordinator) {
             Box(
                 Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(24.dp)
+                    // The authored 24 outside the overscan margin: an error nobody
+                    // can read because the set cropped it is the same as no error.
+                    .padding(end = Tokens.safeMarginX + 24.dp,
+                             bottom = Tokens.safeMarginY + 24.dp)
                     .background(Tokens.danger, RoundedCornerShape(Sticker.radiusSmall))
                     .padding(horizontal = 14.dp, vertical = 8.dp)
             ) {

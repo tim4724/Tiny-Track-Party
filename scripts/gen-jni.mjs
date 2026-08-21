@@ -82,10 +82,13 @@ const OVERRIDES = {
   // ...and this one also hands back a length through an out-param, which the
   // Kotlin side never sees: it gets a right-sized ByteArray or null.
   ttp_glb_ghost: { kind: 'bytesInBytesOut' },
-  // A caller-owned float array, 4 floats per cell. Same aliasing rule as out3,
-  // and the int return is a COUNT here (ttp_display.h), neither predicate nor
-  // outcome, so nothing may test it for truthiness.
-  ttp_display_cell_rects: { kind: 'floatOut' },
+  // A caller-owned float array, `stride` floats per cell — two rects, the
+  // picture and the safe one (ttp_display.h). Same aliasing rule as out3, and
+  // the int return is a COUNT here, neither predicate nor outcome, so nothing
+  // may test it for truthiness. The stride is declared rather than assumed: the
+  // Kotlin side sizes its array by it, and a shim that kept an old one would
+  // read cells past the end of what C++ wrote.
+  ttp_display_cell_rects: { kind: 'floatOut', stride: 8 },
   // Self-describing packed blocks: version + count + STRIDE, designed so a
   // reader can decode without having compiled the struct (ttp_hud.h). A direct
   // ByteBuffer is therefore the intended read and costs no copy. Scratch
@@ -147,6 +150,7 @@ const SCALAR = {
   uint32_t: { jni: 'jint', kt: 'Int', sig: 'I', cast: '(uint32_t)' },
   'unsigned int': { jni: 'jint', kt: 'Int', sig: 'I', cast: '(unsigned int)' },
   double: { jni: 'jdouble', kt: 'Double', sig: 'D', cast: '(double)' },
+  float: { jni: 'jfloat', kt: 'Float', sig: 'F', cast: '(float)' },
 };
 const isStr = (t) => /^const char\s*\*$/.test(t.replace(/\s+/g, ' '));
 
@@ -296,13 +300,15 @@ function emitC(fns) {
       retC = 'jint';
       sig = `(${lead.map((p) => (isStr(p.type) ? '[B' : SCALAR[p.type].sig)).join('')}[D)I`;
     } else if (kind === 'floatOut') {
+      const stride = OVERRIDES[fn.name].stride;
+      if (!stride) throw new Error(`${fn.name}: floatOut needs a stride`);
       args.push('jfloatArray outArr', 'jint maxCells');
       pre.push(`    if (!outArr) return 0;`);
-      pre.push(`    const jint cap = env->GetArrayLength(outArr) / 4;`);
+      pre.push(`    const jint cap = env->GetArrayLength(outArr) / ${stride};`);
       pre.push(`    const jint want = maxCells < cap ? maxCells : cap;`);
-      pre.push(`    std::vector<float> tmp((size_t) (want > 0 ? want : 0) * 4, 0.0f);`);
+      pre.push(`    std::vector<float> tmp((size_t) (want > 0 ? want : 0) * ${stride}, 0.0f);`);
       pre.push(`    const jint n = (jint) ${fn.name}(tmp.data(), (int) want);`);
-      post.push(`    if (n > 0) env->SetFloatArrayRegion(outArr, 0, n * 4, tmp.data());`);
+      post.push(`    if (n > 0) env->SetFloatArrayRegion(outArr, 0, n * ${stride}, tmp.data());`);
       post.push(`    return n;`);
       retC = 'jint';
       sig = '([FI)I';

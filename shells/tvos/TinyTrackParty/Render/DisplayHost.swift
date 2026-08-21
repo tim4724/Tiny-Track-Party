@@ -104,6 +104,15 @@ final class DisplayHost {
     /// The surface's size in physical pixels, for the perf readout.
     private(set) var surfacePixels: CGSize = .zero
 
+    /// The safe-inset fractions last pushed across the ABI, so `setSafeInsets`
+    /// can be called from every layout pass and only speak when they change.
+    private var safeInsets: CGSize = .zero
+
+    /// Floats per cell in `ttp_display_cell_rects`' answer: two rects, four each.
+    /// Named because the buffer is sized in one place and indexed in another, and
+    /// a stride that only half-moved would read cells C++ never wrote.
+    private static let cellRectStride = 8
+
     /// A boot failure worth surfacing. A black screen with a recorded reason
     /// beats an abort on a TV, which is the same call `ttp_display_tvos.mm`
     /// makes when it class-checks the layer.
@@ -339,6 +348,29 @@ final class DisplayHost {
         guard size != surfacePixels else { return }
         guard !inFrame else { pendingSize = size; return }
         applyResize(size)
+    }
+
+    /// The safe area the SYSTEM handed this view, as the per-side fractions
+    /// `ttp_display_safe_insets` wants, so the per-cell HUD lands inside a
+    /// television's overscan.
+    ///
+    /// tvOS is the one platform of the three that does not have to guess: it
+    /// insets a full-screen view by 90 x 60 pt of a 1920 x 1080 screen, which is
+    /// 4.7% and 5.6% rather than the flat 2.5% the web and Android assume. Ratios,
+    /// so points against points and no scale involved — the same number in both
+    /// output modes.
+    ///
+    /// Latched: this is a fixed property of the screen, and pushing it from every
+    /// layout pass would be noise across the ABI for a value that never moves.
+    func setSafeInsets(fx: CGFloat, fy: CGFloat) {
+        guard isAttached else { return }
+        // A zero is a view that is not in a window yet, NOT a television without
+        // a bezel — tvOS never reports one. Leaving it alone keeps the C++
+        // default, which is the safe 2.5% and not nothing.
+        guard fx > 0, fy > 0 else { return }
+        guard safeInsets != CGSize(width: fx, height: fy) else { return }
+        safeInsets = CGSize(width: fx, height: fy)
+        ttp_display_safe_insets(Float(fx), Float(fy))
     }
 
     private func applyResize(_ size: CGSize) {
@@ -777,7 +809,8 @@ final class DisplayHost {
 
     /// Where the split-screen cells are, in POINTS, top-left origin, in cell
     /// order — the renderer's OWN split, read back rather than scored a second
-    /// time here.
+    /// time here. TWO rects each: the picture, and what a television that
+    /// overscans leaves of it (`ttp_display_safe_insets`).
     ///
     /// **These are the LETTERBOXED rects** (`cellRectTopLeft`, capped at
     /// `CELL_MAX_ASPECT` and centred as one piece), not a raw tiling of the
@@ -793,7 +826,7 @@ final class DisplayHost {
     /// moves. `uiScale` used to divide here, and a stale one put the whole HUD
     /// at 3/4 of its right place with nothing in the suite able to see it; there
     /// is no second value left to go stale.
-    func cellRects(count: Int) -> [CGRect] {
+    func cellRects(count: Int) -> [(picture: CGRect, safe: CGRect)] {
         guard count > 0 else { return [] }
         // The VIEW's own bounds, which are points and do not move with the
         // buffer — `adoptSurface` reads the same `surface.bounds` to derive
@@ -801,7 +834,12 @@ final class DisplayHost {
         let vw = surface.bounds.width
         let vh = surface.bounds.height
         guard vw > 0, vh > 0 else { return [] }
-        var packed = [Float](repeating: 0, count: count * 4)
+        // EIGHT floats a cell: the picture rect and then the same cell inset by
+        // the TV overscan margin. Both, because both are
+        // used — chrome anchored to an EDGE goes in the safe one, a card centred
+        // on the PICTURE goes in the other, and they arrive together so they
+        // cannot describe different cells.
+        var packed = [Float](repeating: 0, count: count * Self.cellRectStride)
         let got = packed.withUnsafeMutableBufferPointer { buf in
             Int(ttp_display_cell_rects(buf.baseAddress, Int32(count)))
         }
@@ -809,14 +847,20 @@ final class DisplayHost {
         // written as a `map` of four divisions is past the type checker's budget
         // and fails to compile with "unable to type-check in reasonable time".
         let n: Int = max(0, min(got, count))
-        var rects: [CGRect] = []
+        var rects: [(picture: CGRect, safe: CGRect)] = []
         rects.reserveCapacity(n)
         for i in 0..<n {
-            let x = CGFloat(packed[i * 4 + 0]) * vw
-            let y = CGFloat(packed[i * 4 + 1]) * vh
-            let w = CGFloat(packed[i * 4 + 2]) * vw
-            let h = CGFloat(packed[i * 4 + 3]) * vh
-            rects.append(CGRect(x: x, y: y, width: w, height: h))
+            let o = i * Self.cellRectStride
+            let x = CGFloat(packed[o + 0]) * vw
+            let y = CGFloat(packed[o + 1]) * vh
+            let w = CGFloat(packed[o + 2]) * vw
+            let h = CGFloat(packed[o + 3]) * vh
+            let sx = CGFloat(packed[o + 4]) * vw
+            let sy = CGFloat(packed[o + 5]) * vh
+            let sw2 = CGFloat(packed[o + 6]) * vw
+            let sh2 = CGFloat(packed[o + 7]) * vh
+            rects.append((picture: CGRect(x: x, y: y, width: w, height: h),
+                          safe: CGRect(x: sx, y: sy, width: sw2, height: sh2)))
         }
         return rects
     }

@@ -83,4 +83,5 @@ const val AUTHORED_HEIGHT = 1080f
  */
 fun CellRect.toAuthored(): CellRect = CellRect(
     x * AUTHORED_WIDTH, y * AUTHORED_HEIGHT, w * AUTHORED_WIDTH, h * AUTHORED_HEIGHT,
+    sx * AUTHORED_WIDTH, sy * AUTHORED_HEIGHT, sw * AUTHORED_WIDTH, sh * AUTHORED_HEIGHT,
 )

@@ -3,8 +3,10 @@ import SwiftUI
 /// The per-cell race chrome: name chip, item slot, place/lap readout, the
 /// FINISHED card and the reconnect card.
 ///
-/// **EVERYTHING IS PLACED FROM `GameState.CellHUD.rect`, and nothing else.**
-/// That rect is `ttp_display_cell_rects`' answer divided back to points by
+/// **EVERYTHING IS PLACED FROM `GameState.CellHUD`'s two rects, and nothing
+/// else** — `rect` for what is centred on the picture, `safeRect` for what hangs
+/// off an edge a television may be cropping (see `CellChrome`).
+/// The first is `ttp_display_cell_rects`' answer divided back to points by
 /// `DisplayHost` — the LETTERBOXED cell (`cellRectTopLeft`, capped at
 /// `CELL_MAX_ASPECT` and centred as one piece), which is where the camera
 /// actually rendered. A grid computed here, or the view's own bounds divided by
@@ -98,32 +100,44 @@ private struct CellChrome: View {
     private var showsReconnect: Bool { cell.reconnecting && !cell.finished }
     private var cardInCell: Bool { cell.finished || showsReconnect }
 
+    /// TWO BOXES, on the cell's two rects, because the chrome divides cleanly
+    /// into two kinds and they want different ones.
+    ///
+    /// The chips hang off a CORNER, and a corner is exactly what a television
+    /// that overscans crops — so they measure from `safeRect`, and their authored
+    /// margins are then margins from the safe edge. The cards are CENTRED, and
+    /// what they are centred on is the picture: pulling them into the safe rect
+    /// would shift them off the middle of the very thing they are covering, in
+    /// any cell with one outer edge.
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            if !cell.reconnecting {
-                // Hidden under the reconnect card because that card already
-                // shows the name, so the chip would just repeat it. The FINISHED
-                // card carries no name, so it keeps the chip.
-                cornerLabel.padding(Self.margin)
+        ZStack {
+            ZStack(alignment: .topLeading) {
+                if !cell.reconnecting {
+                    // Hidden under the reconnect card because that card already
+                    // shows the name, so the chip would just repeat it. The
+                    // FINISHED card carries no name, so it keeps the chip.
+                    cornerLabel.padding(Self.margin)
+                }
+                if !cardInCell {
+                    rankReadout
+                        .padding(.top, Self.margin)
+                        .padding(.trailing, 12)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                }
             }
-            if !cardInCell {
-                rankReadout
-                    .padding(.top, Self.margin)
-                    .padding(.trailing, 12)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-            }
+            .frame(width: cell.safeRect.width, height: cell.safeRect.height)
+            // `.position` centres its subject on the point, so the box lands
+            // exactly on the rect it was given.
+            .position(x: cell.safeRect.midX, y: cell.safeRect.midY)
+
             if cell.finished {
                 FinishedCard(cell: cell)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                    .position(x: cell.rect.midX, y: cell.rect.midY)
             } else if showsReconnect {
                 ReconnectCard(name: cell.name, url: cell.reconnectURL)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                    .position(x: cell.rect.midX, y: cell.rect.midY)
             }
         }
-        .frame(width: cell.rect.width, height: cell.rect.height)
-        // `.position` centres its subject on the point, so the cell box lands
-        // exactly on the rect the renderer drew into.
-        .position(x: cell.rect.midX, y: cell.rect.midY)
     }
 
     // MARK: Top-left — the name chip over the item slot

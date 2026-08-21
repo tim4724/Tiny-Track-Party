@@ -45,6 +45,7 @@ test('the shipped module exports the display ABI the shell binds to', async () =
   for (const name of ['create', 'asset', 'resize', 'build', 'reroster',
                       'release', 'bind',
                       'cells', 'cell_rects', 'cell_cards', 'dividers',
+                      'safe_insets',
                       'camera', 'look', 'fog', 'shadows',
                       'hold', 'frame', 'burst', 'hud', 'slot_ids_json',
                       'profile', 'profile_names',
@@ -119,14 +120,15 @@ test('ttp_display_cell_rects is a safe no-op with no display', async () => {
   // ttp_display_create can succeed without a canvas), which is the same state
   // the browser is in for the frames before boot() resolves.
   const cellRects = M.cwrap('ttp_display_cell_rects', 'number', ['number', 'number']);
-  const ptr = M._malloc(8 * 4 * 4);
+  // 8 cells x 8 floats (the picture rect and the safe one) x 4 bytes.
+  const ptr = M._malloc(8 * 8 * 4);
   try {
     const f32 = M.HEAPF32;
-    for (let i = 0; i < 8 * 4; i++) f32[(ptr >> 2) + i] = -1;
+    for (let i = 0; i < 8 * 8; i++) f32[(ptr >> 2) + i] = -1;
     assert.equal(cellRects(ptr, 8), 0, 'no display means no cells');
     assert.equal(cellRects(0, 8), 0, 'a null buffer is not written through');
     assert.equal(cellRects(ptr, 0), 0, 'room for nothing writes nothing');
-    for (let i = 0; i < 8 * 4; i++) {
+    for (let i = 0; i < 8 * 8; i++) {
       assert.equal(M.HEAPF32[(ptr >> 2) + i], -1, `slot ${i} was left alone`);
     }
   } finally {

@@ -62,6 +62,10 @@ export const PROP_MODELS = ['item-box', 'item-banana', 'item-cone', 'vehicle-mon
 
 // cellRects' "no cells" answer, so the caller's loop is the same shape either way.
 const EMPTY_RECTS = new Float32Array(0);
+// Floats per cell in that packed run: the picture rect and the safe rect, four
+// each. Declared once here because the allocation and the read-back must agree,
+// and they are twenty lines apart.
+export const RECT_STRIDE = 8;
 // hud()'s, for the same reason.
 const EMPTY_HUD = [];
 
@@ -111,6 +115,7 @@ export class Display {
       create: mod.cwrap('ttp_display_create', 'number', ['string', 'number', 'number']),
       asset: mod.cwrap('ttp_display_asset', 'number', ['string', 'number', 'number']),
       resize: mod.cwrap('ttp_display_resize', null, ['number', 'number']),
+      safeInsets: mod.cwrap('ttp_display_safe_insets', null, ['number', 'number']),
       scaleScene: mod.cwrap('ttp_display_scale_scene', null, ['number']),
       scalePoll: mod.cwrap('ttp_display_scale_poll', 'number',
                            ['number', 'number', 'number', 'number', 'number', 'number']),
@@ -237,6 +242,17 @@ export class Display {
     this.canvas.height = h;
     this._fn.resize(w, h);
   }
+
+  // What a TV may be cropping off each edge, per side, as a fraction of the
+  // surface. Sticky in C++, so this is a boot-time call and not a per-resize
+  // one: a fraction does not change when the surface does.
+  //
+  // The browser cannot ask, and this page can be on a laptop plugged into a
+  // television as easily as on the laptop's own screen, so it reports the
+  // authored margin rather than a zero it cannot justify. The cost
+  // when it IS a monitor is a slightly tighter HUD; the cost of the other guess
+  // on a TV is a name chip nobody can read.
+  safeInsets(fx, fy) { this._fn.safeInsets(fx, fy); }
 
   // A NEW SCENE, on the same clock the perf samples carry. The rule drops its
   // cost model and restarts the scale's tenure; neither is ours to judge.
@@ -437,9 +453,11 @@ export class Display {
   // camera over the whole surface.
   cells(ids) { this._fn.cells(JSON.stringify(ids || [])); }
 
-  // WHERE those cells are, as a flat [x, y, w, h, x, y, w, h, …] in cell order —
-  // the rects the renderer splits its own viewports into, read back rather than
-  // recomputed here (the shell has no opinion on split-screen layout any more).
+  // WHERE those cells are, as a flat run of EIGHT floats per cell in cell order:
+  // the picture rect (x, y, w, h) and then the same cell inset by the TV
+  // overscan margin. Read back rather than recomputed here — the shell has no
+  // opinion on split-screen layout, and none on how far in the chrome goes
+  // either (ttp_display.h).
   //
   // Values are DRAWING-BUFFER pixels, like every other number this class passes
   // (resize, create); the caller scales to CSS pixels, since the DPR is its own.
@@ -449,7 +467,7 @@ export class Display {
   cellRects(maxCells) {
     const n = Math.max(0, maxCells | 0);
     if (!n) return EMPTY_RECTS;
-    const bytes = n * 4 * 4; // 4 floats per cell
+    const bytes = n * RECT_STRIDE * 4; // two rects per cell, 4 bytes a float
     if (!this._rectPtr || this._rectBytes < bytes) {
       if (this._rectPtr) this.m._free(this._rectPtr);
       this._rectPtr = this.m._malloc(bytes);
@@ -458,7 +476,8 @@ export class Display {
     const got = this._fn.cellRects(this._rectPtr, n);
     // HEAPF32 is re-read every call: ALLOW_MEMORY_GROWTH swaps the buffer out
     // from under any view held across an allocation.
-    return this.m.HEAPF32.subarray(this._rectPtr >> 2, (this._rectPtr >> 2) + got * 4);
+    return this.m.HEAPF32.subarray(this._rectPtr >> 2,
+                                   (this._rectPtr >> 2) + got * RECT_STRIDE);
   }
 
   // WHAT the HUD says: place, lap, total laps, the held item, finished and the

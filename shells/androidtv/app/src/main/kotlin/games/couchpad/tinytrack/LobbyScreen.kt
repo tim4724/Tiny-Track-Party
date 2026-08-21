@@ -134,9 +134,12 @@ fun LobbyScreen(state: GameState) {
         Column(
             Modifier
                 .fillMaxSize()
-                // A TV's own overscan margin. The HUD deliberately takes none (it
-                // is anchored to engine rects); a full-screen board does.
-                .padding(horizontal = 96.dp, vertical = 54.dp),
+                // A TV's own overscan margin, from the token the web's CSS is
+                // authored in. The HUD deliberately takes none HERE — its rects
+                // arrive already inset from C++, which is the only side that
+                // knows which cell edges are screen edges — but a full-screen
+                // board runs to the bezel and has to keep clear of it itself.
+                .padding(horizontal = Tokens.safeMarginX, vertical = Tokens.safeMarginY),
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
             Row(
@@ -152,7 +155,18 @@ fun LobbyScreen(state: GameState) {
                 // lone shelf at the top pre-pick and then drop it when the pick
                 // arrived, which is the one movement the arrangement exists to stop.
                 Column(
-                    Modifier.width(RACE_RAIL_WIDTH).fillMaxHeight(),
+                    Modifier
+                        .width(RACE_RAIL_WIDTH)
+                        .fillMaxHeight()
+                        // CLEAR THE ⓘ, which is fixed over this board's top-right
+                        // corner and would otherwise sit on the pick card. Both
+                        // siblings measure from the same safe edge, so the rail
+                        // owes only the badge's own offset plus its size — the
+                        // overscan margin is already in the Column's padding above
+                        // and must not be counted twice. The web says the same
+                        // thing as `.race-rail { padding-top: ... }` and tvOS as
+                        // `.padding(.top, InfoGlyph.diameter + 10)`.
+                        .padding(top = RACE_RAIL_TOP_CLEAR),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     // HIDDEN ENTIRELY pre-pick — not an empty card, not a
@@ -173,20 +187,27 @@ fun LobbyScreen(state: GameState) {
         // Everything else here is still driven from the phones — see the note above
         // about the START button that is deliberately absent.
         //
-        // TOP-LEFT, where tvOS puts it top-right, and that is this shell's one
-        // deliberate difference: the perf readout takes the top-right corner here,
-        // over every board (RootScreen), where tvOS keeps it out of the way at the
-        // bottom. It is off until somebody asks for it now, so this is no longer a
-        // collision a player would see — but "somebody asks for it" is a developer
-        // reading the lobby, and putting a black diagnostic block over the only
-        // control on the board is worst exactly then.
+        // TOP-RIGHT, the same corner tvOS puts it in (`LobbyView`). It sat
+        // top-LEFT until the perf readout moved: that overlay held this corner
+        // over every board, and a black diagnostic block over the only control on
+        // the board is worst exactly when a developer is reading the lobby. The
+        // readout is bottom-right now, which is where tvOS always kept it, so the
+        // one deliberate difference between the two shells is gone.
         //
         // UNLIT UNTIL ASKED FOR, which is the park above's whole job: Compose
         // seats focus somewhere the moment the window takes it, so without a
         // second stop to absorb that this badge is what opens lit. It brightens
         // when a viewer actually presses Up, and the room reads the join code off
         // an unlit board until then.
-        InfoBadge(Modifier.align(Alignment.TopStart).padding(start = 16.dp, top = 12.dp)) {
+        // Inside the overscan margin, and then the authored offset — this badge is
+        // a sibling of the padded Column above, not a child of it, so it takes its
+        // own. tvOS gets the same for free from the system safe area.
+        InfoBadge(
+            Modifier
+                .align(Alignment.TopEnd)
+                .padding(end = Tokens.safeMarginX + 16.dp,
+                         top = Tokens.safeMarginY + INFO_BADGE_TOP)
+        ) {
             state.infoPath = listOf(GameState.InfoRoute.Info)
         }
     }
@@ -206,7 +227,7 @@ fun LobbyScreen(state: GameState) {
 @Composable
 private fun InfoBadge(modifier: Modifier = Modifier, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
-    val diameter = 54.dp
+    val diameter = INFO_BADGE_DIAMETER
     Box(
         modifier
             .size(diameter)
@@ -762,6 +783,24 @@ private fun HostStar(modifier: Modifier = Modifier) {
 
 private val TICKET_WIDTH = 410.dp
 private val RACE_RAIL_WIDTH = 346.dp
+
+/**
+ * The ⓘ's size, hoisted because the RACE RAIL has to clear it: the badge is a
+ * sibling of the board's column and floats over the rail's top card, so the rail
+ * derives its own headroom from this rather than from a number that would drift
+ * the first time the badge is resized. tvOS spells the same clearance the same
+ * way (`InfoGlyph.diameter`), and the web as `--corner-btn`.
+ */
+private val INFO_BADGE_DIAMETER = 54.dp
+
+/** The ⓘ's offset from the SAFE top edge — its own, and the rail's to clear. */
+private val INFO_BADGE_TOP = 12.dp
+
+/**
+ * What the rail keeps clear at the top so the ⓘ never lands on the pick card.
+ * The badge's own top offset, plus the badge, plus a gap.
+ */
+private val RACE_RAIL_TOP_CLEAR = INFO_BADGE_TOP + INFO_BADGE_DIAMETER + 10.dp
 
 /** `.ticket`'s `padding: 0.85rem` — a thin paper margin, so the QR fills the card. */
 private val TICKET_PAD = 14.dp

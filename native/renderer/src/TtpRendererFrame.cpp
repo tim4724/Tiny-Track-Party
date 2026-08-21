@@ -484,7 +484,13 @@ void TtpRenderer::drawOverlay(const TtpFrameInput& input) {
             // Weight off the CANVAS, like the span: the rule belongs to the
             // whole surface, not to one cell. The floor is rasterization — a
             // sub-pixel rule fades out rather than thinning.
-            const float ruleW = std::max(1.0f, (float) mHeight * (4.0f / 1080.0f));
+            //
+            // 7 authored px, up from 4. The cells' chrome moved off the divider
+            // when the HUD took a uniform margin, and a hairline with clear air
+            // either side of it stopped reading as the join between two pictures
+            // and started reading as a scratch on one. It is the only thing
+            // separating two players' views, so it is allowed to be a line.
+            const float ruleW = std::max(1.0f, (float) mHeight * (7.0f / 1080.0f));
             for (uint32_t k = 0; k < nx; k++) {
                 if (MaterialInstance* mi = overlayQuad(xs[k] - ruleW * 0.5f, 0,
                             ruleW, (float) mHeight)) {
@@ -511,6 +517,31 @@ void TtpRenderer::drawOverlay(const TtpFrameInput& input) {
         // 20 clear of the bottom) against a 1080-line panel, times BAR_SCALE.
         // BAR_SCALE is the only knob: scale the shape, never re-proportion the
         // numbers.
+        //
+        // NOT INSET BY THE SAFE ZONE, and that is a decision rather than an
+        // omission. Everything the SHELL places is inset — its rects come out of
+        // ttp_display_cell_rects already intersected with what a television
+        // leaves — and this bar deliberately keeps the authored clearance:
+        //
+        //   1. It is the ONE HUD element the player also has in their hand. The
+        //      phone draws the same bar off the same tilt eased by the same
+        //      STEER_BAR_TAU, so a cropped bar on the TV is the only readout in
+        //      this HUD with an uncropped copy two feet away. Nothing else here
+        //      — the name chip, the place badge, the lap pill, the item slot —
+        //      exists anywhere but the TV.
+        //   2. Insetting it costs the picture. `clear` is already 20 * unit, so
+        //      the move is only the difference (about 20 px at 1080p solo), but
+        //      the cell it moves INTO is the one the car is in: the rig's fixed
+        //      vertical fov puts the car's rear contact patch around 13% of a
+        //      cell's height above its bottom edge whatever the layout, and in a
+        //      STACKED cell 5% of the screen is 10% of the cell. Solo has the
+        //      room; the split does not, and one bar that moves in some layouts
+        //      and not others is worse than either.
+        //
+        // What is accepted: on a set that crops, the bar loses its bottom border
+        // and part of the fill, and reads as a broken shape rather than a smaller
+        // one. Weighed against (1) and taken. Do not "fix" the inconsistency with
+        // the chips without re-arguing both points.
         static constexpr float BAR_SCALE = 1.7f;
         const TtpCellHudInput* hud = ttp_frame_hud(&input);
         for (uint32_t i = 0; i < n; i++) {

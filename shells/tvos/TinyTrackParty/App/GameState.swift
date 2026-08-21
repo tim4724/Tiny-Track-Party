@@ -193,7 +193,15 @@ final class GameState: ObservableObject {
         let car: EngineIdentity
         /// Top-left origin, in POINTS (the raw ABI answer is physical pixels;
         /// divide by the screen's nativeScale — see `DisplayHost.uiScale`).
+        ///
+        /// The PICTURE: where the renderer drew this cell, and so what anything
+        /// CENTRED on the cell centres on.
         let rect: CGRect
+        /// The same cell inset by the TV overscan margin on all four edges
+        /// (`ttp_display_safe_insets`). Everything anchored to an EDGE is placed
+        /// in here instead — a name chip in a corner the set is cropping is a
+        /// name chip nobody reads.
+        let safeRect: CGRect
         let name: String
         let colorIndex: Int
         /// The car MODEL index — what `--icon-car` paints the monster chip's

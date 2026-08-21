@@ -241,11 +241,11 @@ void n_ttp_display_cell_cards(JNIEnv* env, jclass, jint a0) {
 
 jint n_ttp_display_cell_rects(JNIEnv* env, jclass, jfloatArray outArr, jint maxCells) {
     if (!outArr) return 0;
-    const jint cap = env->GetArrayLength(outArr) / 4;
+    const jint cap = env->GetArrayLength(outArr) / 8;
     const jint want = maxCells < cap ? maxCells : cap;
-    std::vector<float> tmp((size_t) (want > 0 ? want : 0) * 4, 0.0f);
+    std::vector<float> tmp((size_t) (want > 0 ? want : 0) * 8, 0.0f);
     const jint n = (jint) ttp_display_cell_rects(tmp.data(), (int) want);
-    if (n > 0) env->SetFloatArrayRegion(outArr, 0, n * 4, tmp.data());
+    if (n > 0) env->SetFloatArrayRegion(outArr, 0, n * 8, tmp.data());
     return n;
 }
 
@@ -369,6 +369,11 @@ jint n_ttp_display_reroster(JNIEnv* env, jclass, jbyteArray a0) {
 void n_ttp_display_resize(JNIEnv* env, jclass, jint a0, jint a1) {
     (void) env;
     ttp_display_resize((uint32_t) a0, (uint32_t) a1);
+}
+
+void n_ttp_display_safe_insets(JNIEnv* env, jclass, jfloat a0, jfloat a1) {
+    (void) env;
+    ttp_display_safe_insets((float) a0, (float) a1);
 }
 
 jdouble n_ttp_display_scale_panel_ms(JNIEnv* env, jclass) {
@@ -1271,6 +1276,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_display_release", "()V", (void*) n_ttp_display_release },
     { "ttp_display_reroster", "([B)I", (void*) n_ttp_display_reroster },
     { "ttp_display_resize", "(II)V", (void*) n_ttp_display_resize },
+    { "ttp_display_safe_insets", "(FF)V", (void*) n_ttp_display_safe_insets },
     { "ttp_display_scale_panel_ms", "()D", (void*) n_ttp_display_scale_panel_ms },
     { "ttp_display_scale_poll", "(DDDDD[D)I", (void*) n_ttp_display_scale_poll },
     { "ttp_display_scale_scene", "(D)V", (void*) n_ttp_display_scale_scene },

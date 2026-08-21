@@ -60,7 +60,8 @@ fun InfoScreen(state: GameState) {
         PaperStage()
 
         Column(
-            Modifier.fillMaxSize().padding(horizontal = 96.dp, vertical = 54.dp),
+            Modifier.fillMaxSize()
+                .padding(horizontal = Tokens.safeMarginX, vertical = Tokens.safeMarginY),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
