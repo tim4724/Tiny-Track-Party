@@ -13,9 +13,14 @@ name: Android TV app
 # stage-assets.sh that reaches for a file nobody committed fails here too — which
 # is why the paths below are not just this shell's. Everything the script COPIES
 # is authored elsewhere (the kit, the cues, the item SVGs, the tokens, the tvOS
-# font bake, the committed .filamat), and a filter that named only
-# shells/androidtv/** would stay green on the one commit that deletes one of
-# them. The trigger has to be the staged INPUTS, or the claim above is false.
+# font bake, the committed .filamat), and everything the legal board BAKES is
+# read out of the web tree; a filter that named only shells/androidtv/** would
+# stay green on the one commit that deletes one of them. The trigger has to be
+# the staged INPUTS, or the claim above is false.
+#
+# The staging also needs NODE, for that bake alone. Every GitHub runner image
+# ships one, so there is no setup step; if that ever stops being true, the
+# script says so by name rather than failing inside the generator.
 
 on:
   pull_request:
@@ -31,6 +36,15 @@ on:
       - 'public/shared/design-tokens.json'
       - 'public/display/engine/native/*.filamat'
       - 'shells/tvos/TinyTrackParty/Resources/Fonts/**'
+      # BAKED into the APK by shells/androidtv/scripts/gen-legal.mjs, which the
+      # staging step runs: the credit data, the music catalogue it derives the
+      # song rows from, the display footer the QR cards' URLs are read out of,
+      # and the notice texts it copies.
+      - 'public/shared/credits.js'
+      - 'public/display/audio/musicCatalogue.js'
+      - 'public/display/index.html'
+      - 'public/assets/licenses/**'
+      - 'scripts/shell-credits.mjs'
   push:
     branches: [main]
     paths:
@@ -45,6 +59,15 @@ on:
       - 'public/shared/design-tokens.json'
       - 'public/display/engine/native/*.filamat'
       - 'shells/tvos/TinyTrackParty/Resources/Fonts/**'
+      # BAKED into the APK by shells/androidtv/scripts/gen-legal.mjs, which the
+      # staging step runs: the credit data, the music catalogue it derives the
+      # song rows from, the display footer the QR cards' URLs are read out of,
+      # and the notice texts it copies.
+      - 'public/shared/credits.js'
+      - 'public/display/audio/musicCatalogue.js'
+      - 'public/display/index.html'
+      - 'public/assets/licenses/**'
+      - 'scripts/shell-credits.mjs'
 
 concurrency:
   group: androidtv-${{ github.ref }}

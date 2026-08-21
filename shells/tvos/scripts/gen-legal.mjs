@@ -3,18 +3,17 @@
 //
 //   node shells/tvos/scripts/gen-legal.mjs      (called by stage-assets.sh)
 //
-// SINGLE-SOURCED, like gen-scenarios.mjs beside it. The credits are
-// `public/shared/credits.js` + the live music catalogue — the same two modules
-// the web's /licenses.html page renders — and the privacy/imprint URLs are read
-// out of the display's own legal footer, which `tests/credits.test.js` already
-// holds identical to the licenses page's. Nothing here is a second copy of a
-// fact the web tree states.
+// SINGLE-SOURCED, like gen-scenarios.mjs beside it. The list itself is built by
+// `scripts/shell-credits.mjs` out of `public/shared/credits.js` + the live music
+// catalogue — the same two modules the web's /licenses.html page renders — and
+// the privacy/imprint URLs are read out of the display's own legal footer.
+// Nothing here is a second copy of a fact the web tree states.
 //
 // WHAT IS DECIDED HERE, and may not be anywhere else: the .ipa does not ship
-// what the browser ships. Two web credits are for code this app does not
-// contain, and two of its own packages have no web twin — that DELTA is the
-// only thing this file adds to the shared data, and `tests/tvos-legal.test.js`
-// fails if either half of it stops matching the tree.
+// what the browser ships. The shared module drops the two web-only credits; the
+// two packages that are this bundle's ALONE are below, and that half of the
+// DELTA is the only thing this file adds. `tests/tvos-legal.test.js` fails if
+// either stops matching the tree.
 //
 // The output is BUILD OUTPUT (Generated/ is gitignored) and stage-assets.sh
 // reruns it on every staging, so the Swift can never be staler than the last
@@ -25,19 +24,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { RACE_MUSIC } from '../../../public/display/audio/musicCatalogue.js';
-import { creditsFor, licenseInfo } from '../../../public/shared/credits.js';
+import * as shared from '../../../scripts/shell-credits.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(HERE, '..', '..', '..');
 const OUT = path.join(HERE, '..', 'Generated', 'Legal.swift');
 
-// Credits for code the browser runs and this app does not: the wasm toolchain
-// (tvOS compiles the same C++ natively, through Xcode's clang) and the in-page
-// QR encoder (Core Image draws the join code here — `Screens/QRCode.swift`).
-// Matched on the title PREFIX, and a prefix that matches nothing is an error
-// rather than a silent no-op, so renaming a credit cannot quietly re-add it.
-export const WEB_ONLY = ['Emscripten', 'qrcode-generator'];
+// Re-exported so the gate reads one module: what a browser ships and this does
+// not, and where a shared notice comes from, are both the shared module's.
+export const { WEB_ONLY, SHARED_NOTICES, legalLinks } = shared;
 
 // The .ipa's own third-party code, which no web page credits because the
 // browser provides both: WebRTC (tvOS ships none, and the fastlane needs one)
@@ -57,23 +52,14 @@ export const TVOS_ONLY = [
     title: 'SwiftDraw (draws the item icons)',
     author: 'Simon Whitty',
     license: 'zlib',
+    // zlib is the one license only this bundle uses, so it is the one id the
+    // shared table cannot answer for; anything else has to be added to
+    // credits.js LICENSES where the web can see it too.
+    licenseURL: 'https://zlib.net/zlib_license.html',
     url: 'https://github.com/swhitty/SwiftDraw',
     notice: 'SwiftDraw-LICENSE.txt',
   },
 ];
-
-// Where each shared notice comes from in this tree, keyed by the file name the
-// bundle will carry. credits.js states the notice as a SERVED URL (the web
-// serves them out of public/), and a bundle has no origin to serve from, so the
-// mapping from that name to a source path is here — one entry per notice the
-// shared credits carry, and the test fails on a notice with no source.
-export const SHARED_NOTICES = {
-  'OFL-Fredoka.txt': 'public/assets/fonts/OFL-Fredoka.txt',
-  'OFL-Nunito.txt': 'public/assets/fonts/OFL-Nunito.txt',
-  'filament-LICENSE.txt': 'public/assets/licenses/filament-LICENSE.txt',
-  'openlibm-LICENSE.md': 'public/assets/licenses/openlibm-LICENSE.md',
-  'double-conversion-LICENSE.txt': 'public/assets/licenses/double-conversion-LICENSE.txt',
-};
 
 export const TVOS_NOTICES = Object.fromEntries(
   TVOS_ONLY.filter((e) => e.notice)
@@ -94,74 +80,12 @@ export const TVOS_NOTICE_UPSTREAM = {
     'artifacts/webrtc-xcframework/LiveKitWebRTC/LiveKitWebRTC.xcframework/LICENSE',
 };
 
-/// The privacy and imprint pages, read out of the display's legal footer so the
-/// TV cannot link somewhere the web does not. Both are couchpad.games pages
-/// (legal is central for every game on the launcher), which is exactly why the
-/// TV shows a QR: a phone can open them, a television cannot.
-export function legalLinks() {
-  const html = fs.readFileSync(path.join(ROOT, 'public/display/index.html'), 'utf8');
-  const foot = /<footer class="site-foot[^"]*">([\s\S]*?)<\/footer>/.exec(html);
-  if (!foot) throw new Error('public/display/index.html has no .site-foot footer to read');
-  const href = (page) => {
-    const m = new RegExp(`href="(https://couchpad\\.games/[^"]*${page})"`).exec(foot[1]);
-    if (!m) throw new Error(`the display footer no longer links ${page}`);
-    return m[1];
-  };
-  return { privacy: href('privacy'), imprint: href('imprint') };
-}
+/// The list the Licenses board renders.
+export const entries = () => shared.entries(TVOS_ONLY);
 
-/// The list the Licenses board renders: the shared credits minus what only the
-/// browser ships, plus what only the .ipa does, grouped as the web page groups
-/// them. Each entry keeps its section's position in the shared order.
-export function entries() {
-  const groups = creditsFor(RACE_MUSIC);
-  for (const prefix of WEB_ONLY) {
-    if (!groups.some((g) => g.entries.some((e) => e.title.startsWith(prefix)))) {
-      throw new Error(`WEB_ONLY names '${prefix}', which no shared credit matches any more`);
-    }
-  }
-  const out = [];
-  for (const group of groups) {
-    const kept = group.entries.filter((e) => !WEB_ONLY.some((p) => e.title.startsWith(p)));
-    const mine = TVOS_ONLY.filter((e) => e.section === group.section);
-    for (const e of [...kept, ...mine]) {
-      out.push({
-        section: group.section,
-        title: e.title,
-        author: e.author,
-        license: e.license,
-        url: e.url,
-        // credits.js spells a shared notice as a served URL; the bundle carries
-        // the file itself, under its own name.
-        notice: e.notice ? path.basename(new URL(e.notice, 'https://x/').pathname) : null,
-      });
-    }
-  }
-  return out;
-}
-
-/// Every notice file the list names, as bundle-name -> source path in the tree.
+/// Every notice file that list names, as bundle-name -> source path in the tree.
 /// stage-assets.sh copies exactly this set into Generated/assets/licenses.
-export function notices() {
-  const wanted = new Set(entries().map((e) => e.notice).filter(Boolean));
-  const map = { ...SHARED_NOTICES, ...TVOS_NOTICES };
-  const out = {};
-  for (const name of wanted) {
-    if (!map[name]) throw new Error(`no source for notice '${name}' — add it to SHARED_NOTICES`);
-    out[name] = map[name];
-  }
-  return out;
-}
-
-/// A license id the shared table does not know is one this file invented, and
-/// an invented license has no obligation attached to it. zlib is the tvOS-only
-/// one; anything else has to be added to credits.js LICENSES where the web can
-/// see it too.
-const LICENSE_URLS = { zlib: 'https://zlib.net/zlib_license.html' };
-function licenseURL(id) {
-  if (LICENSE_URLS[id]) return LICENSE_URLS[id];
-  return licenseInfo(id).url;
-}
+export const notices = () => shared.notices(entries(), TVOS_NOTICES);
 
 const swiftString = (s) => `"${String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 
@@ -171,7 +95,7 @@ function source() {
     + ', title: ' + swiftString(e.title)
     + ', author: ' + swiftString(e.author)
     + ', license: ' + swiftString(e.license)
-    + ', licenseURL: ' + swiftString(licenseURL(e.license))
+    + ', licenseURL: ' + swiftString(e.licenseURL)
     + ', url: ' + swiftString(e.url)
     + ', notice: ' + (e.notice ? swiftString(e.notice) : 'nil') + ')').join(',\n');
 

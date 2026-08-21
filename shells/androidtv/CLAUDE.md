@@ -832,6 +832,15 @@ a shot beside the browser's:
   after `background`, it stamps the offset shape ON TOP of the face. Every sticker
   in the kit puts `hardShadow` first; the one place that did not rendered a whole
   results board as flat grey bars.
+- **`focusable()` ON A SCROLL CONTAINER IS AN ANR.** A focusable asks its nearest
+  scrollable ancestor to reveal its own bounds when it takes focus, so
+  `verticalScroll(state).focusable()` on ONE modifier chain asks a container to
+  scroll itself into view — content taller than the viewport and all — and it
+  never settles. Nothing is logged about scrolling and nothing crashes: the
+  process is killed with `ANR ... Force finishing activity` a beat after the
+  press, having drawn nothing. Focus goes on the VIEWPORT and the scroll on the
+  content inside it. This is the shape every d-pad-scrolled page wants (see
+  `LicensesScreen.LicenseText`), so it will come up again.
 
 Two web looks this shell still owes (`docs/native-port/shells.md` holds the
 ledger) whose HOW is already settled:
@@ -848,6 +857,56 @@ ledger) whose HOW is already settled:
   renderer pass, which is where the web's own blur effectively lives.
 - **The scene's edge vignette (`#scene::after`) belongs UNDER the chrome**, so a
   Compose overlay is the wrong place for it; it is a renderer pass.
+
+## The info board
+
+The legal branch behind the lobby's ⓘ: privacy and imprint as QR cards, the
+attribution list, and the license texts it drills into. `docs/native-port/shells.md`
+item 16 is the obligation and `Screens/InfoView.swift` + `LicensesView.swift` are
+the reference; what is decided HERE is below.
+
+**The list is STAGED DATA, not generated Kotlin.** tvOS bakes a `Legal.swift`
+because its bundle compiles out of the directory it stages into; here `assets/`
+is already how this shell reads everything it did not type (the tokens, the cue
+manifest, the fonts), so `scripts/gen-legal.mjs` writes `assets/legal/credits.json`
+and `Legal.kt` reads it. A generated source set in Gradle would buy nothing. Both
+generators share `scripts/shell-credits.mjs`, so only the DELTA — what an .apk
+ships that a browser does not, and the reverse — is this shell's. **This is the
+one reason `stage-assets.sh` needs node**, and it says so by name if there is
+none.
+
+**The branch is the SHELL's navigation, and the model knows nothing about it.**
+`ttp_ui.h` owns the screens a party moves through; this stack is reachable only
+by the remote, pushes nothing on the wire, and no phone can open or close it —
+so `GameState.infoPath` is shell state and `MainActivity`'s back callback unwinds
+it BEFORE asking `ttp_ui_back_effect`. Ask the model first and a viewer reading a
+license text gets dropped into the lobby, because what it answers is the lobby's
+answer.
+
+**The ⓘ is TOP-LEFT here and top-right on tvOS**, because `RootScreen` draws the
+perf readout over the top-right corner of every board, where tvOS keeps its own
+out of the way at the bottom. The readout is off until asked for, so this is not
+a collision a player would ever see — but the person who asks for it is reading
+the lobby, and a badge under a black diagnostic block is not an affordance
+exactly then.
+
+**The lobby's focus park ports, and do not delete it as tvOS ceremony.**
+Compose looks like it seats focus on nothing until a d-pad press arrives, and it
+does not: it grants focus to the first focusable in traversal order the moment
+the WINDOW takes focus, which here is the moment the cover lifts and
+`FLAG_NOT_FOCUSABLE` drops. So a board with one control opens with that control
+lit up — the first build of the ⓘ came up already blue, in the corner of a screen
+the room is reading a join code off. The park is an empty focusable strip along
+the bottom edge, FIRST in the Box so the initial grant lands on it, exactly as
+`LobbyView.focusPark` is on tvOS.
+
+**The license text scrolls by handling the d-pad itself.** `verticalScroll` is
+driven by drags and by the focus system bringing a child into view, and a page of
+unbroken text on a box with no pointer has neither — so the container is
+focusable and turns Up/Down into a half-page `animateScrollBy`. The tvOS twin
+slices its text into invisible focus stops instead, because a tvOS ScrollView
+moves ONLY to reveal a focused view; that mechanism is that platform's tax, not a
+design to copy.
 
 ## The screenshot harness
 

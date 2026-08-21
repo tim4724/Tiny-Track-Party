@@ -16,6 +16,7 @@
 #   items/      the four shared item SVGs
 #   materials/  the .filamat blobs, COMMITTED, not built here — see below
 #   design-tokens.json
+#   legal/      the attribution list + the license texts the build owes
 #
 # WHAT DOES NOT: the 81 MB race-music catalogue. It STREAMS from the origin one
 # song at a time, exactly as the web does and as the tvOS app does, and a TV app
@@ -128,6 +129,26 @@ mkdir -p "$OUT/fonts"
 cp "$ROOT/shells/tvos/TinyTrackParty/Resources/Fonts"/*.ttf "$OUT/fonts/"
 # The SIL OFL requires the licence to travel with the font.
 cp "$ROOT/public/assets/fonts"/OFL-*.txt "$OUT/fonts/"
+
+# THE ATTRIBUTION LIST AND THE LICENSE TEXTS IT NAMES.
+#
+# An obligation, not an About page: this APK ships CC-BY music, OFL fonts and
+# several notice-tier libraries, and a build that shows nobody is in breach.
+# GENERATED rather than staged, because the list is not a file in this tree —
+# it is public/shared/credits.js plus the live music catalogue, minus what only
+# a browser ships, plus this APK's own packages. The generator's header has the
+# whole story; it copies the texts it names itself, so the set can never be a
+# list two scripts have to agree on.
+#
+# THIS IS WHY THIS SCRIPT NEEDS node. Nothing else here does, so say so plainly
+# rather than failing inside the generator with a shell error.
+if ! command -v node >/dev/null 2>&1; then
+  echo "stage-assets.sh: node is not on PATH, and the legal board is baked from" >&2
+  echo "  the web's own credit data. Build through shells/androidtv/scripts/build.sh" >&2
+  echo "  (or any shell where \`npm run setup\` works) rather than from an IDE." >&2
+  exit 1
+fi
+node "$HERE/gen-legal.mjs"
 
 # THE BRAND PNGs, and these are the only staged files that go to res/ rather
 # than assets/. Three of the four are consumed before a line of app code runs —

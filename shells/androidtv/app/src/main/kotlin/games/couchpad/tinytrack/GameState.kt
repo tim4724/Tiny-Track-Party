@@ -2,6 +2,7 @@ package games.couchpad.tinytrack
 
 import android.graphics.Bitmap
 import android.util.Log
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -56,6 +57,50 @@ class GameState {
      * is a hole.
      */
     var cover by mutableStateOf("none")
+
+    // -- the info branch -----------------------------------------------------
+
+    /**
+     * The lobby's ⓘ stack, deepest page last, empty when no legal board is up.
+     *
+     * **SHELL STATE, and the only navigation this app has that the model knows
+     * nothing about.** `ttp_ui.h` owns the SCREENS a party moves through; this
+     * branch is reachable only by the remote, pushes nothing on the wire, and no
+     * phone can open or close it — so there is nothing here for the model to
+     * decide. tvOS spells the same thing as a `NavigationStack` path
+     * (`GameState.InfoRoute`); here it is a list because Compose has no stack of
+     * its own and [RootScreen] renders the last entry.
+     *
+     * A LIST, not a single route, because BACK has to unwind: the license text
+     * pops to the list, the list to the board, the board to the lobby, and only
+     * an empty stack lets the press reach `ttp_ui_back_effect` (see
+     * [MainActivity]).
+     */
+    var infoPath by mutableStateOf<List<InfoRoute>>(emptyList())
+
+    /** A page on that stack: the info board, its license list, then one license's
+     *  text (by index into [Legal.entries]). */
+    sealed interface InfoRoute {
+        data object Info : InfoRoute
+        data object Licenses : InfoRoute
+        data class License(val index: Int) : InfoRoute
+    }
+
+    /**
+     * Where the licenses list is scrolled to, held ACROSS a drill-in.
+     *
+     * [RootScreen] composes only the deepest page, so the list leaves the
+     * composition entirely while a license text is up and a `remember`ed state
+     * goes with it — which put a viewer who read the 33rd row's licence back at
+     * the 1st on the way out, thirty presses from where they were. tvOS gets this
+     * from `NavigationStack`, which keeps a popped page's state; here the state
+     * outlives the page by living on this object.
+     *
+     * A Compose type in the shell's state holder, which is what this class is:
+     * it already holds a `Bitmap` and a screenful of `mutableStateOf`. Nothing in
+     * the model knows the list exists.
+     */
+    val licensesList = LazyListState()
 
     // -- room (the join ticket) ---------------------------------------------
 

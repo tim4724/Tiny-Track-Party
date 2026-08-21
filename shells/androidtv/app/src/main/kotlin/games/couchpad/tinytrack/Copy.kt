@@ -205,6 +205,24 @@ object Copy {
      */
     const val worldTour = "World Tour"
 
+    // -- info board ---------------------------------------------------------
+
+    /** The lobby's ⓘ, which is icon-only on screen — this is what a screen reader
+     *  announces. */
+    const val info = "Info"
+
+    /**
+     * The two central legal pages, as their cards' labels. They are the web
+     * footer's own words (`site-foot`), and the URLs they point at are read out of
+     * that footer rather than typed here (see [Legal]).
+     */
+    const val privacy = "Privacy"
+    const val imprint = "Imprint"
+
+    /** The attribution board, and the button that opens it. The word matches the
+     *  web's /licenses.html title. */
+    const val licenses = "Licenses"
+
     // -- race ---------------------------------------------------------------
 
     /**

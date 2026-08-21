@@ -24,8 +24,18 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -70,6 +80,40 @@ const val BACKDROP_FADE_MS = 450
 @Composable
 fun LobbyScreen(state: GameState) {
     Box(Modifier.fillMaxSize()) {
+        // A FOCUS STOP THAT DRAWS NOTHING, holding the remote at the foot of the
+        // board while the lobby is just standing there.
+        //
+        // **THE ⓘ MUST NOT BE FOCUSED WHEN THE LOBBY APPEARS**, and it takes a
+        // second focusable to keep it that way: Compose grants focus to the first
+        // focusable in the tree the moment the WINDOW takes focus (which here is
+        // the moment the boot cover lifts and MainActivity drops
+        // FLAG_NOT_FOCUSABLE), so a board with exactly one control opens with that
+        // control lit up — a blue badge burning in the corner of a screen the room
+        // is looking at to read a join code. Measured on the box, not assumed: the
+        // first build of this board came up with the ⓘ already blue.
+        //
+        // IT ASKS FOR FOCUS RATHER THAN RELYING ON BEING FIRST, and that is the
+        // half that was measured wrong once: declaring it first in the Box is NOT
+        // enough — the badge still came up blue — so the park requests focus
+        // itself, when the cover lifts and the window is about to take focus.
+        //
+        // It sits along the BOTTOM EDGE so the geometry is honest: Up from here is
+        // the badge, and there is nothing else to reach. Select on it does nothing,
+        // deliberately — the board has no default action. tvOS needs the identical
+        // trick for the identical reason (`LobbyView.focusPark`).
+        val park = remember { FocusRequester() }
+        LaunchedEffect(state.cover) {
+            if (state.cover != "boot") park.requestFocus()
+        }
+        Box(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(40.dp)
+                .focusRequester(park)
+                .focusable()
+        )
+
         // Paper before a track is picked, the live 3D preview after.
         //
         // The crossfade is a fade of the PAPER, not of the scene: the surface is a
@@ -114,6 +158,78 @@ fun LobbyScreen(state: GameState) {
                 }
             }
             SeatDock(state)
+        }
+
+        // THE INFO CORNER, and the only control on this board.
+        //
+        // It opens the legal branch (privacy, imprint, licenses), which is the one
+        // thing a TV app owes its viewer that no phone in the room can show them.
+        // Everything else here is still driven from the phones — see the note above
+        // about the START button that is deliberately absent.
+        //
+        // TOP-LEFT, where tvOS puts it top-right, and that is this shell's one
+        // deliberate difference: the perf readout takes the top-right corner here,
+        // over every board (RootScreen), where tvOS keeps it out of the way at the
+        // bottom. It is off until somebody asks for it now, so this is no longer a
+        // collision a player would see — but "somebody asks for it" is a developer
+        // reading the lobby, and putting a black diagnostic block over the only
+        // control on the board is worst exactly then.
+        //
+        // NO FOCUS PARK TWIN. tvOS needs a second, invisible focus stop because its
+        // focus engine always seats focus somewhere, so a board with one control
+        // opens with that control lit up. Compose seats focus on nothing until a
+        // d-pad press arrives, which is the behaviour that park exists to fake —
+        // so the ⓘ lights up the moment a viewer actually asks for it, and the
+        // room reads the join code off an unlit board until then.
+        InfoBadge(Modifier.align(Alignment.TopStart).padding(start = 16.dp, top = 12.dp)) {
+            state.infoPath = listOf(GameState.InfoRoute.Info)
+        }
+    }
+}
+
+/**
+ * The ⓘ: a round sticker badge with a drawn "i" in it.
+ *
+ * DRAWN, not typed: the glyph is a dot over a stem, which is two primitives and
+ * no dependency on a font having a legible dotted lowercase i at badge size — the
+ * same call `StarRow` and `LockGlyph` make beside it.
+ *
+ * Focus is the kit's own: brighten, lift, deepen the drop. It is a small target
+ * in a corner, so it takes the FULL blue face when focused rather than only the
+ * lift — the same "you are here" blue every board in this branch wears.
+ */
+@Composable
+private fun InfoBadge(modifier: Modifier = Modifier, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    val diameter = 54.dp
+    Box(
+        modifier
+            .size(diameter)
+            .hardShadow(if (focused) Sticker.focusShadow else Sticker.popShadow, CircleShape)
+            .background(if (focused) Tokens.blue else Tokens.surface, CircleShape)
+            .stickerOutline(Sticker.border, CircleShape)
+            .onFocusChanged { focused = it.isFocused }
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        val ink = if (focused) Color.White else Tokens.ink
+        Canvas(Modifier.size(diameter)) {
+            // A DrawScope is in PHYSICAL pixels — the density override buys the
+            // layout tree its authored dp and buys a Canvas body nothing.
+            val px = 1.dp.toPx()
+            val cx = size.width / 2f
+            drawCircle(ink, radius = 3.2f * px, center = Offset(cx, size.height * 0.31f))
+            drawLine(
+                ink,
+                Offset(cx, size.height * 0.44f),
+                Offset(cx, size.height * 0.74f),
+                strokeWidth = 6.4f * px,
+                cap = StrokeCap.Round,
+            )
         }
     }
 }

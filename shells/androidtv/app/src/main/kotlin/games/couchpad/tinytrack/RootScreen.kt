@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -60,6 +61,30 @@ fun RootScreen(game: GameCoordinator) {
             // here too keeps the switch total without inventing a board.
             GameState.Screen.WELCOME, GameState.Screen.LOBBY -> LobbyScreen(state)
             GameState.Screen.RACE -> RaceHud(state)
+        }
+
+        // THE RACE OUTRANKS THE BOARD. The ⓘ is reachable only from the lobby, but
+        // a race does not start from the TV — a phone presses START — so a viewer
+        // reading a licence when the host starts is holding a legal board over a
+        // race nobody can see. The stack is dropped rather than kept for later:
+        // whatever they were reading, the room has moved on. (tvOS gets this for
+        // free — its NavigationStack lives INSIDE the lobby, which the switch
+        // replaces.)
+        LaunchedEffect(state.screen) {
+            if (state.screen == GameState.Screen.RACE) state.infoPath = emptyList()
+        }
+
+        // THE INFO BRANCH, over the board that pushed it. The lobby's ⓘ is the
+        // only way in and BACK is the only way out ([MainActivity]), so this is a
+        // stack rather than a screen: the deepest page is what shows, and popping
+        // it uncovers the one beneath. Only the LAST entry is composed — the pages
+        // under it are opaque paper boards anyway, and a composed-but-covered
+        // board keeps its focusable rows live behind the one on top.
+        when (val page = state.infoPath.lastOrNull()) {
+            null -> Unit
+            GameState.InfoRoute.Info -> InfoScreen(state)
+            GameState.InfoRoute.Licenses -> LicensesScreen(state)
+            is GameState.InfoRoute.License -> LicenseTextScreen(page.index)
         }
 
         // The overlays, in paint order. Each is a conditional insertion.

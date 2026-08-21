@@ -384,10 +384,16 @@ Three properties of that surface matter more than the list:
     demands the notice travel with the build. Do NOT type that list: bake it
     from `public/shared/credits.js` plus the live music catalogue (the same two
     modules /licenses.html renders), applying only the delta between what a
-    browser ships and what your package does — `shells/tvos/scripts/gen-legal.mjs`
-    is the reference, and `tests/tvos-legal.test.js` is the shape of gate that
-    keeps a delta honest. Privacy and imprint are couchpad.games pages for every
-    game on the launcher: link them, never restate them, and on a box with no
+    browser ships and what your package does. **`scripts/shell-credits.mjs`
+    already does all of that**: hand it your package's own third-party list and
+    it answers the rows and the notice files to stage, so a third shell writes
+    only its half of the delta and an output format. The two `gen-legal.mjs`
+    beside it are the worked examples (a Swift bake for tvOS, a staged JSON asset
+    for Android), and `tests/{tvos,androidtv}-legal.test.js` are the shape of gate
+    that keeps a delta honest: the registry your platform declares dependencies
+    in — `project.yml`'s packages block, `build.gradle.kts`'s dependencies block —
+    is what a gate reads, so nothing can ship uncredited.
+    Privacy and imprint are couchpad.games pages for every game on the launcher: link them, never restate them, and on a box with no
     browser show the URL as a QR for the phone already in the room. Read those
     two URLs out of the display's own footer rather than typing them.
 
@@ -402,10 +408,6 @@ look items is in `shells/androidtv/CLAUDE.md` (Look).
 - **Meshing the next circuit at the intermission** (item 13) — a cup's chained
   start shows the outgoing circuit under the count and then hitches; on this GPU
   a build is seconds, so it is the most visible item here.
-- **The info / licenses board** (item 16) — the .ipa's obligations are the
-  .apk's, and the fastlane added libwebrtc (BSD-3-Clause, a notice-tier license)
-  to what this package redistributes. `shells/tvos/scripts/gen-legal.mjs`
-  already bakes the tvOS delta; the Android one has no board to bake into.
 - **An app baseline profile** — the release APK carries only library-supplied
   profiles, so this shell's own composables and boot path are not AOT-compiled;
   the tail it would move is the half the GPU readout cannot see, and it costs a

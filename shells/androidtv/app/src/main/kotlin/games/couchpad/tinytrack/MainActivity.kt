@@ -80,6 +80,10 @@ class MainActivity : ComponentActivity() {
         // down on launch.
         Tokens.load(assets)
         Fonts.load(assets)
+        // Beside them, and for the same reason: the info board reads it, and
+        // parsing 12 KB of JSON the first time a viewer presses ⓘ is a stutter on
+        // the one board with nothing else to blame it on.
+        Legal.load(assets)
 
         // A race is minutes of no input at all from the TV's point of view — every
         // button is on a phone — so without this the box dims and then sleeps
@@ -181,6 +185,15 @@ class MainActivity : ComponentActivity() {
         // different animals, and the traversal is the shell's.
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
+                // THE INFO BRANCH UNWINDS FIRST, and the model is not asked about
+                // it. That stack is the shell's alone (see GameState.infoPath) —
+                // no phone can open or close a legal board, so `ttp_ui_back_effect`
+                // has no answer for one, and asking anyway would return the lobby's
+                // answer and drop the viewer out of a license text into the party.
+                if (game.state.infoPath.isNotEmpty()) {
+                    game.state.infoPath = game.state.infoPath.dropLast(1)
+                    return
+                }
                 when (TtpJson.strOrEmpty(Ttp.ttp_ui_back_effect(
                     TtpJson.arg(game.state.screen.name.lowercase())))) {
                     // The lobby is this shell's root: the model declines, and the

@@ -247,6 +247,8 @@ object Tokens {
     val ink3 get() = color("ink-3")
     val red get() = color("red")
     val green get() = color("green")
+    val blue get() = color("blue")
+    val purple get() = color("purple")
     val brand get() = color("brand")
     val accent get() = color("accent")
     val danger get() = color("danger")
