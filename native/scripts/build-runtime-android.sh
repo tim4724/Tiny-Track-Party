@@ -40,6 +40,7 @@ ROOT="$(cd "$NATIVE/.." && pwd)"
 # recompiled and would say nothing until a .filamat failed to load on the box.
 # shellcheck disable=SC1091
 source "$NATIVE/scripts/filament-checkout.sh"   # sets FILAMENT_SRC at the pinned commit
+require_local_install android-
 
 : "${ANDROID_HOME:=$HOME/Library/Android/sdk}"
 # The NDK the FORK pins (build/common/versions), not the newest installed one.
@@ -78,6 +79,38 @@ if [ ! -f "$SDK_ROOT/include/filament/Engine.h" ]; then
   exit 1
 fi
 
+# THE SLICE, NOT THE ROOT. The check above proves an SDK was installed here
+# once; it says nothing about the ABI this build is about to link. Both ABIs
+# install under ONE root, so a root that exists can still be missing arm64
+# entirely, or hold one built without -S multiview — the failure the -S text
+# above describes, reached from the other direction. It stays invisible until
+# it runs, and then only on arm64: the box this shell is developed against is
+# armeabi-v7a, so the whole loop stays green while every phone aborts on launch.
+#
+# The marker is the built-in materials' multiview vertex shaders, which declare
+# layout(num_views). A slice without them cannot serve a MULTIVIEW engine.
+require_sdk_slice() {
+  local abi="$1"
+  local lib="$SDK_ROOT/lib/$abi/libfilament.a"
+  if [ ! -f "$lib" ]; then
+    echo "build-runtime-android.sh: no $abi slice at $lib" >&2
+  elif ! LC_ALL=C grep -aq num_views "$lib"; then
+    echo "build-runtime-android.sh: the $abi slice was built without multiview" >&2
+    echo "  $lib" >&2
+  else
+    return 0
+  fi
+  echo "  Rebuild that ABI in the pinned checkout (~25 min):" >&2
+  echo "    cd $FILAMENT_SRC" >&2
+  echo "    ANDROID_HOME=$ANDROID_HOME ./build.sh -i -q $abi -S multiview -p android release" >&2
+  echo "  If that reports everything up-to-date and changes nothing, its cmake" >&2
+  echo "  directory is stale and must be deleted so the configure happens again." >&2
+  echo "  Filament names those by ITS arch codename, not by the ABI string:" >&2
+  echo "    arm64-v8a -> out/cmake-android-release-aarch64" >&2
+  echo "    armeabi-v7a -> out/cmake-android-release-arm7" >&2
+  exit 1
+}
+
 # THE MULTIVIEW MATERIALS STEP — the one set this leg compiles (the header has
 # the shared set's story), and Android-only for the reason
 # shells/androidtv/CLAUDE.md's Multiview section gives: a multiview blob's
@@ -110,6 +143,8 @@ JNILIBS="$ROOT/shells/androidtv/app/src/main/jniLibs"
 build_abi() {
   local abi="$1"
   local dir="$NATIVE/build/android-$abi"
+
+  require_sdk_slice "$abi"
 
   say "configure $abi"
   # -G Ninja for the same measured reason the rest of the tree prefers it; the

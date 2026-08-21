@@ -35,3 +35,36 @@ else
         exit 1
     fi
 fi
+
+# A COPIED out/ IS A SILENT MISBUILD, and the checkout being version-addressed
+# does not prevent it: carrying the previous pin's out/ across to skip a 25 min
+# rebuild is the obvious thing to do, and cmake build directories are not
+# relocatable. CMakeCache.txt hardcodes CMAKE_INSTALL_PREFIX, so a carried-over
+# dir keeps installing into the OLD tree — `-i` reports success, every file is
+# "Up-to-date", and the library this pin is supposed to link never changes.
+# Nothing downstream can see that; the first sign is a stale slice discovered on
+# a device. One arm64 Filament slice sat a pin behind that way for a week.
+#
+# CALLED BY LEG, not once for the whole checkout, because a leg can only answer
+# for its own directories: a poisoned tvos dir must not block an Android build.
+# The argument is the out/cmake- suffix that leg builds ("android-", "wasm-",
+# "tvos-"). The desktop out/cmake-release is exempt everywhere and has no call:
+# every script uses it in place, for out/cmake-release/tools/matc, and never
+# reads what it installed, so its prefix cannot mislead anyone.
+require_local_install() {
+    local cache prefix
+    for cache in "$FILAMENT_SRC"/out/cmake-"$1"*/CMakeCache.txt; do
+        [ -f "$cache" ] || continue
+        prefix=$(sed -n 's/^CMAKE_INSTALL_PREFIX:PATH=//p' "$cache")
+        case "$prefix" in
+            "$FILAMENT_SRC"/*|'') ;;
+            *)  echo "$(dirname "$cache") installs into" >&2
+                echo "  $prefix" >&2
+                echo "which is outside $FILAMENT_SRC — an out/ carried over" >&2
+                echo "from another checkout. Builds there succeed, report" >&2
+                echo "everything up-to-date, and change nothing here." >&2
+                echo "Delete that directory and rerun." >&2
+                exit 1 ;;
+        esac
+    done
+}
