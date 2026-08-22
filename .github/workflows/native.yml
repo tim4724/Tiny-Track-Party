@@ -16,10 +16,7 @@ on:
       - 'tests/fixtures/**'
       - '.github/workflows/native.yml'
   push:
-    # android-pixelated-fztcl is TEMPORARY, to prove the android-full leg's
-    # cold Filament build on a real runner before this merges — remove it once
-    # that job is green.
-    branches: [main, android-pixelated-fztcl]
+    branches: [main]
     paths:
       - 'native/**'
       - 'tests/fixtures/**'

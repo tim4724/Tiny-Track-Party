@@ -2801,7 +2801,64 @@ bool TtpRenderer::renderCellsMultiview(const TtpFrameInput& input, double& tMark
     mPresentMvInstance->setParameter("surf", float2{
             (float) mWidth, (float) mHeight });
     mRenderer->render(mMvPresentView);
+    mMvDrewThisFrame = true;
     return true;
+}
+
+// Trust the extension string, verify the pixels. The stereo route stands on
+// OVR_multiview2 doing what it advertises, and "advertised but broken" is a
+// real Android driver failure mode: the emulator's gfxstream GLES offers the
+// extension and renders the whole array BLACK — chrome and the 2D overlay
+// draw, every 3D cell is void. Nothing else can catch that: it is not a
+// crash, and the composite pass itself runs fine.
+//
+// So the stereo frames are probed: a small patch of the swap chain at cell
+// 0's centre (cellRect is already bottom-left, readPixels' own origin), one
+// probe in flight at a time, until one comes back LIT — a settled scene frame
+// is never black there (sky, fog, sand, road) — which retires the probing for
+// the renderer's life. A single black probe is NOT a verdict: the first
+// stereo frame of a real race reads back black on the reference box itself
+// (the race stands up mid-fade), and the first cut of this check parked that
+// healthy driver on the classic path for the session. Only kMvProbeLimit
+// consecutive black probes — seconds of stereo frames with nothing in them,
+// whichever half broke (the array draws or the array sampling) — set
+// mMvBroken and park this renderer on the classic per-cell path for good. A
+// broken driver shows black cells for those seconds and then heals. The
+// probe is 4 KB per frame while it lasts, on the one path that only exists
+// on Android GL — every other backend has mStereoEyes 0.
+void TtpRenderer::verifyMultiview(uint32_t viewCount) {
+    const CellRect r = cellRect(viewCount, 0);
+    constexpr uint32_t kProbe = 32;
+    if (r.w < kProbe || r.h < kProbe) return;
+    struct Probe { TtpRenderer* self; std::vector<uint8_t> px; };
+    auto* probe = new Probe{ this, std::vector<uint8_t>((size_t) kProbe * kProbe * 4) };
+    Texture::PixelBufferDescriptor pbd(probe->px.data(), probe->px.size(),
+            Texture::Format::RGBA, Texture::Type::UBYTE,
+            [](void*, size_t, void* user) {
+                auto* probe = static_cast<Probe*>(user);
+                bool lit = false;
+                for (size_t i = 0; i < probe->px.size() && !lit; i++) {
+                    // Alpha is 255 regardless of content; 8 is dither headroom.
+                    lit = (i & 3) != 3 && probe->px[i] > 8;
+                }
+                TtpRenderer* self = probe->self;
+                self->mMvVerifyPending = false;
+                if (lit) {
+                    self->mMvVerified = true;
+                    utils::slog.i << "ttp multiview: verified lit after "
+                            << self->mMvBlackProbes << " black probes" << utils::io::endl;
+                } else if (++self->mMvBlackProbes >= kMvProbeLimit) {
+                    self->mMvBroken = true;
+                    utils::slog.w << "ttp multiview: " << self->mMvBlackProbes
+                            << " consecutive stereo frames read back black — the driver "
+                            "advertises the extension and renders nothing; falling back "
+                            "to the classic per-cell path" << utils::io::endl;
+                }
+                delete probe;
+            }, probe);
+    mMvVerifyPending = true;
+    mRenderer->readPixels((uint32_t) r.x + (r.w - kProbe) / 2,
+            (uint32_t) r.y + (r.h - kProbe) / 2, kProbe, kProbe, std::move(pbd));
 }
 
 bool TtpRenderer::render(const TtpFrameInput& input) {
@@ -2858,6 +2915,10 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
     // split — (re)built HERE, before beginFrame, because swapping a render
     // target mid-frame aborts the module (the scene target's rule). A frame
     // whose targets aren't ready falls back to the classic path for one frame.
+    // A failed verify parks the route for good; the targets go here, between
+    // frames (the same rule the resize teardown follows), never from the
+    // probe's callback.
+    if (mMvBroken && mMvColor) destroyMultiviewTargets();
     if (multiviewWants(input.viewCount, input.flags)) {
         const CellRect r0 = cellRect(input.viewCount, 0);
         if (mMvColor && (mMvW != r0.w || mMvH != r0.h)) destroyMultiviewTargets();
@@ -2872,6 +2933,15 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
 #endif
 
     renderCells(input, tMark);
+    // The probe must sit between render() and endFrame() — the swap chain is
+    // only readable there (Renderer.h). !mMvBroken matters even though a
+    // broken route stops drawing: the deciding callback can land INSIDE the
+    // frame whose stereo draw already happened, and without the check that
+    // frame issues one more probe and the verdict logs twice.
+    if (mMvDrewThisFrame && !mMvVerified && !mMvBroken && !mMvVerifyPending) {
+        verifyMultiview(input.viewCount);
+    }
+    mMvDrewThisFrame = false;
     mProfile[kProfPresent] = ttpNowMs() - tMark; tMark = ttpNowMs();
     mRenderer->endFrame();
     // Arm settled()'s fence behind the scene's FIRST submitted frame — created
