@@ -284,7 +284,30 @@ tv_shelf() {  # $1 set name, $2 1x png, $3 2x png
 JSON
 }
 
-tv_shelf "Top Shelf Image" topshelf.png 'topshelf@2x.png'
-tv_shelf "Top Shelf Image Wide" topshelf-wide.png 'topshelf-wide@2x.png'
+# JPEG, not PNG: these are photographs of a 3D scene since the shelf became a
+# gameplay capture (scripts/bake-shelf.mjs), and an imageset takes either.
+tv_shelf "Top Shelf Image" topshelf.jpg 'topshelf@2x.jpg'
+tv_shelf "Top Shelf Image Wide" topshelf-wide.jpg 'topshelf-wide@2x.jpg'
+
+# ---- the Top Shelf CAROUSEL -------------------------------------------------
+# The extension's own bundle, and a plain directory copy rather than a catalogue:
+# TVTopShelfCarouselItem takes an image URL, so the frames stay files the provider
+# resolves by name (TopShelf/TopShelfProvider.swift). carousel.json travels with
+# them because it names the running order and the titles, and both come out of the
+# same capture (scripts/bake-shelf.mjs) — a running order retyped in Swift would
+# drift the first time a frame was renamed.
+SHELF_SRC="$ROOT/public/assets/brand/tv/shelf"
+SHELF_OUT="$TVOS/Generated/shelf"
+rm -rf "$SHELF_OUT"
+mkdir -p "$SHELF_OUT"
+if [ -d "$SHELF_SRC" ] && [ -f "$SHELF_SRC/carousel.json" ]; then
+  cp "$SHELF_SRC"/*.jpg "$SHELF_SRC/carousel.json" "$SHELF_OUT/"
+  say "$(ls "$SHELF_OUT"/*.jpg | wc -l | tr -d ' ') carousel frames -> Generated/shelf"
+else
+  # Not fatal, and deliberately so: the provider drops to nothing and the shelf
+  # falls back to the catalogue's static strip, which is staged above and always
+  # present. `npm run bake:shelf` is what fills this in.
+  echo "  no public/assets/brand/tv/shelf — run 'npm run bake:shelf' (shelf carousel will be empty)" >&2
+fi
 
 say "$(find "$OUT" -type f | wc -l | tr -d ' ') files, $(du -sh "$OUT" | cut -f1) -> Generated/assets"

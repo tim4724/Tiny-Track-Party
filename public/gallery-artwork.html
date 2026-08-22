@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>Artwork Gallery — Tiny Track Party</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/gallery.css?v=__APP_V__">
+<style>
+  /* The other galleries frame a LIVE page and the frame is the point. Here the
+     picture is the point, and the thing worth being careful about is how big it
+     is drawn: a favicon judged at 200px is not judged at all. Every card takes
+     its draw width from the manifest — the size the PLATFORM draws it at — and
+     there is deliberately no zoom control, because every other size is a way of
+     looking at the asset that nobody will ever see it at. */
+  .art-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); padding: 0 20px 8px; }
+  .art-card { display: flex; flex-direction: column; gap: 8px; }
+
+  /* The MAT. Baked artwork is warm paper, often with transparency, and both are
+     unjudgeable on the gallery's own near-black. A neutral cool mat separates
+     the asset's own ground from the page's, and the checker under it is what
+     makes a transparent splash icon obviously transparent. */
+  .art-plate {
+    display: grid; place-items: center; padding: 16px; border-radius: 6px;
+    background-color: #d9dae1;
+    background-image:
+      linear-gradient(45deg, #c6c8d1 25%, transparent 25%, transparent 75%, #c6c8d1 75%),
+      linear-gradient(45deg, #c6c8d1 25%, transparent 25%, transparent 75%, #c6c8d1 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 8px 8px;
+    overflow: auto;
+  }
+  .art-plate img { display: block; max-width: 100%; height: auto; box-shadow: 0 2px 10px rgba(0,0,0,.25); }
+
+  /* The tvOS stack. It CLIPS, and every layer is scaled past the frame by the
+     margin it is allowed to travel within — without that, sliding a full-bleed
+     layer exposes what is behind it at one edge. The movement itself follows the
+     pointer (see bindParallax), because that is what the platform does: it tracks
+     the remote's touch surface rather than nudging the icon to a corner. */
+  .art-stack { position: relative; display: block; overflow: hidden; border-radius: 4px;
+               box-shadow: 0 2px 10px rgba(0,0,0,.25); }
+  .art-stack img { position: absolute; inset: 0; width: 100%; height: 100%;
+                   transition: transform .12s ease-out; box-shadow: none;
+                   will-change: transform; }
+  .art-stack img:first-child { position: relative; }
+
+  .art-dims { font: 500 10px/1.6 ui-monospace, monospace; letter-spacing: .07em;
+              text-transform: uppercase; color: #6f6c86; }
+  .art-dims .bad { color: #ff6e5e; }
+  .art-note { font-size: 11.5px; color: #8b88a0; line-height: 1.55; }
+
+  .fam-blurb { font-size: 12px; color: #888; max-width: 78ch; line-height: 1.6;
+               margin: 2px 20px 12px; }
+  .fam-blurb .bake { font: 500 11px ui-monospace, monospace; color: #8899ff; }
+
+  /* Dark mat, for judging a transparent asset against the ground a TV launcher
+     actually composites it over. */
+  body.dark-mat .art-plate {
+    background-color: #16151c;
+    background-image:
+      linear-gradient(45deg, #22212b 25%, transparent 25%, transparent 75%, #22212b 75%),
+      linear-gradient(45deg, #22212b 25%, transparent 25%, transparent 75%, #22212b 75%);
+  }
+
+  /* The tvOS actions-carousel chrome, approximate: title block bottom-left and
+     two buttons under it. Off by default — it is a CHECK, not the picture. */
+  .art-chrome { position: absolute; inset: 16px; opacity: 0; transition: opacity .15s;
+                pointer-events: none; font-family: system-ui, sans-serif; }
+  body.show-chrome .art-chrome { opacity: 1; }
+  .art-chrome .ch-grad { position: absolute; left: 0; right: 0; bottom: 0; height: 46%;
+                         background: linear-gradient(to top, rgba(0,0,0,.78), rgba(0,0,0,0)); }
+  .art-chrome .ch-txt { position: absolute; left: 7%; bottom: 21%; color: #fff;
+                        text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+  .art-chrome .ch-ctx { font-size: 9px; letter-spacing: .14em; text-transform: uppercase; opacity: .82; }
+  .art-chrome .ch-ttl { font-size: 15px; font-weight: 600; line-height: 1.15; margin-top: 2px; }
+  .art-chrome .ch-btns { position: absolute; left: 7%; bottom: 7%; display: flex; gap: 6px; }
+  .art-chrome .ch-btns span { font-size: 9px; font-weight: 600; color: #1a1a1a;
+                              background: #f2f2f2; padding: 4px 10px; border-radius: 5px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>TINY TRACK · ARTWORK</h1>
+
+  <div class="group">
+    <label class="checkbox-label"><input type="checkbox" id="mat-dark"> Dark mat</label>
+  </div>
+  <div class="group">
+    <label class="checkbox-label"><input type="checkbox" id="tv-chrome"> tvOS carousel chrome</label>
+  </div>
+  <nav>
+    <a href="/gallery.html">Display</a>
+    <a href="/gallery-controller.html">Phone</a>
+    <a href="/gallery-tracks.html">Tracks</a>
+    <a href="/gallery-assets.html">Assets</a>
+    <a href="/gallery-artwork.html" class="active">Artwork</a>
+    <a href="/gallery-sounds.html">Sounds</a>
+    <a href="/gallery-music.html">Music</a>
+    <a href="/gallery-shots.html">Screens</a>
+  </nav>
+</header>
+
+<main id="families"></main>
+
+<script type="module" src="/gallery-artwork.js?v=__APP_V__"></script>
+</body>
+</html>

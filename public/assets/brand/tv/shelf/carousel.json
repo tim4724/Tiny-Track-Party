@@ -1,0 +1,49 @@
+{
+  "items": [
+    {
+      "id": "cup-beach",
+      "context": "Grand Prix",
+      "title": "Beach Cup"
+    },
+    {
+      "id": "cup-snow",
+      "context": "Grand Prix",
+      "title": "Snow Cup"
+    },
+    {
+      "id": "cup-backyard",
+      "context": "Grand Prix",
+      "title": "Backyard Cup"
+    },
+    {
+      "id": "cup-canyon",
+      "context": "Grand Prix",
+      "title": "Canyon Cup"
+    },
+    {
+      "id": "cup-playroom",
+      "context": "Grand Prix",
+      "title": "Playroom Cup"
+    },
+    {
+      "id": "split",
+      "context": "Up to four players",
+      "title": "Four phones, one screen"
+    },
+    {
+      "id": "countdown",
+      "context": "Race start",
+      "title": "Ready, set…"
+    },
+    {
+      "id": "monster",
+      "context": "Items",
+      "title": "Monster truck"
+    },
+    {
+      "id": "rocket",
+      "context": "Items",
+      "title": "Rocket strike"
+    }
+  ]
+}

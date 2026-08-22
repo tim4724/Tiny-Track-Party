@@ -28,15 +28,9 @@
 // TRANSPARENT, and cropped to the ink. The callers composite it over their own
 // background — paper on the splash, the banner's own art behind it — so a baked
 // background colour would be a second place the paper token lives.
-import { chromium } from 'playwright';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { createServer } from 'node:http';
-import { readFileSync, existsSync } from 'node:fs';
-import { extname } from 'node:path';
-
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+import { join } from 'node:path';
+import { ROOT, servePages, launchBrowser } from './lib/capture.mjs';
 
 // THE REAL SIZE, then supersampled by the device pixel ratio. The wordmark's
 // white cut is a FIXED `-webkit-text-stroke: 7px` against a font-size the web
@@ -46,11 +40,6 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 // more of them.
 const FONT_PX = 130;
 const SCALE = 4;
-
-const TYPES = {
-  '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript',
-  '.woff2': 'font/woff2', '.png': 'image/png', '.svg': 'image/svg+xml'
-};
 
 // The page is SERVED, not `setContent`, and that is not a detail: a font is a
 // CORS-restricted fetch, so a document left on `about:blank` is cross-origin to
@@ -70,7 +59,17 @@ const PAGE = `<!doctype html>
   </style>
   <div class="wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></div>`;
 
-// THE LAUNCHER TILE, 320x180 and the size Android TV requires. Built from the
+// THE LAUNCHER TILE. 320x180 is the size Android TV lays it out at — in dp, which
+// is the part that matters: the drawable is staged into `drawable-nodpi`, so the
+// platform never scales it for density and the LAUNCHER resamples it to whatever
+// its banner box is. On a 1080p TV that box is around 640x360 physical pixels, so
+// a 320x180 bitmap arrives UPSCALED, which is exactly what it looked like.
+//
+// So the layout stays 320x180 and the pixels come from BANNER_SCALE, the same
+// trade the wordmark makes above: a fixed 7px text stroke and a fixed car width
+// are proportions of the layout, and re-typing them larger would change the
+// composition rather than sharpen it. Downsampling a 4x master is strictly better
+// than upsampling a 1x one, which is what the previous comment here had backwards. Built from the
 // theme's own paper stage rather than drawn by hand: `banner.xml` shipped as a
 // vector of coloured rectangles precisely because a VectorDrawable cannot set
 // type, and said in its own comment that the honest fix was to render the real
@@ -78,6 +77,7 @@ const PAGE = `<!doctype html>
 // welcome board are the same wordmark.
 const BANNER_W = 320;
 const BANNER_H = 180;
+const BANNER_SCALE = 4;
 
 // THE tvOS LAUNCH IMAGE, at 1920x1080 because tvOS lays out in those POINTS
 // whatever the box is outputting (the same fact CountdownView sizes its numeral
@@ -93,6 +93,11 @@ const LAUNCH_H = 1080;
 // it, transparent everywhere else.
 const ICON = 512;
 const ICON_FIT = 0.62;
+// The favicon's corner, and the one rounded output here. 22% of the side is the
+// proportion the platform masks land on (iOS's squircle is about that), so the
+// tab reads as the same object the home screen does. It has to survive a browser
+// drawing it at 16, which is why it is a proportion and not a fixed 7px.
+const FAVICON_RADIUS = Math.round(32 * 0.22);
 // THE CAR, and why a PNG rather than more CSS. The subject of the icon and the
 // banner is one of the roster's own GLBs, rendered by the same offline harness
 // the lobby thumbnails use (scripts/capture-car-thumbs.js) so the car on the
@@ -141,8 +146,8 @@ const BANNER = `<!doctype html>
     html, body { margin: 0; }
     body { width: ${BANNER_W}px; height: ${BANNER_H}px; position: relative; overflow: hidden; }
     .scene { position: absolute; inset: 0; }
-    .car { position: absolute; left: -32px; bottom: -6px; width: 205px; }
-    .mark { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); }
+    .car { position: absolute; left: -46px; bottom: -16px; width: 240px; }
+    .mark { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); }
     /* 28px is what leaves the two lines, the die-cut edge and the shadow inside
        the frame once the car has taken the left half. */
     .wordmark { font-size: 28px; }
@@ -156,28 +161,71 @@ const BANNER = `<!doctype html>
     <div class="wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></div>
   </div>`;
 
+// WHERE THE CAR SITS is computed rather than eyeballed. Two aspect ratios are
+// left in this file — the square icon and the 5:3 tv icon, several pixel sizes
+// each — and a percentage hand-fitted to one is wrong on the other. The hero's
+// own content box, measured off the bake and identical at every size it is
+// rendered at:
+const CAR_BODY_W = 0.8906;      // body width as a fraction of the hero's square
+const CAR_BODY_BOTTOM = 0.8027; // where the wheels sit in that square
+
+// Place the hero so its BODY (not its transparent frame, and not its ground
+// shadow) is `bodyW` of the target width with the wheels at `bottom` of the
+// target height. Answers the two CSS lengths that position it.
+//
+// THE BODY IS 1.048x AS TALL AS IT IS WIDE in a 5:3 frame — its painted box runs
+// 0.2427 to 0.8027 down the hero's square against 0.8906 across — which is why
+// the tv icon below drops its wheel line as the car grows: holding `bottom` fixed
+// and raising `bodyW` past ~0.70 pushes the rear wing off the top edge.
+function carBox(w, h, bodyW, bottom) {
+  const size = (bodyW * w) / CAR_BODY_W;
+  return { size, top: bottom * h - CAR_BODY_BOTTOM * size };
+}
+
 // THE SQUARE ICON: app icon, apple-touch icon and favicon, one composition at
-// three sizes. FULL BLEED and un-rounded on purpose — every platform that shows
-// it masks it to its own shape, so a corner radius baked in here would sit
-// inside the launcher's own and read as a ring.
-const ICON_SQ = (px) => `<!doctype html>
+// four sizes.
+//
+// FULL BLEED AND UN-ROUNDED for everything a PLATFORM shows, because every one of
+// them masks it to its own shape: iOS applies the squircle to the apple-touch
+// icon, Android its adaptive mask, tvOS its own. A radius baked in there would sit
+// inside the launcher's and read as a ring.
+//
+// THE FAVICON IS THE EXCEPTION, and it is a real one rather than a taste call: a
+// browser tab masks nothing. It draws the 32px PNG exactly as given, so the only
+// way for it to have a shape is for the shape to be in the file. `radius` is
+// therefore set for the favicon alone, and the shot that carries it omits the
+// background so the corners come out TRANSPARENT — a baked-in paper corner would
+// be a light square on a dark tab strip, which is the thing being fixed.
+const ICON_SQ = (px, radius = 0) => `<!doctype html>
   <link rel="stylesheet" href="/shared/theme.css">
   <style>
-    html, body { margin: 0; }
-    body { width: ${px}px; height: ${px}px; position: relative; overflow: hidden;
-           background: var(--paper); }
+    /* THE TILE IS ITS OWN ELEMENT, and it has to be. A background set on <body>
+       PROPAGATES to the canvas whenever the root element has none, which paints
+       the whole viewport and leaves a border-radius on body with nothing to clip:
+       the first rounded favicon came out square with no alpha at all. Paper,
+       radius and clip therefore live on a child, and body stays transparent so
+       omitBackground can see through the corners. */
+    html, body { margin: 0; background: transparent; }
+    .tile { width: ${px}px; height: ${px}px; position: relative; overflow: hidden;
+            background: var(--paper);${radius ? `\n            border-radius: ${radius}px;` : ''} }
     .scene { position: absolute; inset: 0; }
     ${SCENE_SQ}
-    /* Sits ON the grass line rather than centred in the box: the hero is baked
-       with its ground shadow, and the shadow wants a floor under it. */
-    .car { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-           width: 86%; }
+    /* GROUNDED, on the same rule the tv assets use rather than centred in the
+       box: the wheels land on the grass line, which is what the hero's baked
+       ground shadow wants under it, and the car is sized by its BODY so the
+       transparent frame stops eating the tile. Centred-at-86% left a dead band
+       under the wheels and read small at 32. */
+    .car { position: absolute; left: 50%; transform: translateX(-50%);
+           top: ${carBox(px, px, 0.95, 0.80).top.toFixed(2)}px;
+           width: ${carBox(px, px, 0.95, 0.80).size.toFixed(2)}px; }
   </style>
-  <div class="scene">
-    <div class="scene__sky"></div>
-    <div class="scene__grass"></div>
-  </div>
-  <img class="car" src="${CAR}" alt="">`;
+  <div class="tile">
+    <div class="scene">
+      <div class="scene__sky"></div>
+      <div class="scene__grass"></div>
+    </div>
+    <img class="car" src="${CAR}" alt="">
+  </div>`;
 
 // ---------------------------------------------------------------------------
 // tvOS BRAND ASSETS
@@ -198,21 +246,6 @@ const ICON_SQ = (px) => `<!doctype html>
 // home row shows for the frontmost app — so they carry the wordmark, which the
 // icon deliberately does not (type in an app icon is Apple's own vetoed list).
 //
-// WHERE THE CAR SITS is computed rather than eyeballed, because these frames
-// have four different aspect ratios and a hand-fitted percentage that works on
-// one is wrong on the rest. The hero's own content box, measured off the bake
-// and identical at every size it is rendered at:
-const CAR_BODY_W = 0.8906;      // body width as a fraction of the hero's square
-const CAR_BODY_BOTTOM = 0.8027; // where the wheels sit in that square
-
-// Place the hero so its BODY (not its transparent frame, and not its ground
-// shadow) is `bodyW` of the target width with the wheels at `bottom` of the
-// target height. Answers the two CSS lengths that positions it.
-function carBox(w, h, bodyW, bottom) {
-  const size = (bodyW * w) / CAR_BODY_W;
-  return { size, top: bottom * h - CAR_BODY_BOTTOM * size };
-}
-
 // The paper stage at a wide-but-not-16:9 aspect. Same class of override as
 // SCENE_SQ and for the same reason: the grass band is placed in percentages of
 // the box, so its height has to be restated per aspect. The clouds go for the
@@ -228,7 +261,7 @@ const SCENE_TV = (grassPct, flat) => `
 // split is a split and not a redraw. The back layer takes the REAL `.scene__sky`
 // rather than a flat fill, so its warm glow matches the square icon's.
 const TV_ICON_LAYER = (w, h, layer) => {
-  const car = carBox(w, h, 0.60, 0.74);
+  const car = carBox(w, h, 0.76, 0.855);
   return `<!doctype html>
   <link rel="stylesheet" href="/shared/theme.css">
   <style>
@@ -236,7 +269,7 @@ const TV_ICON_LAYER = (w, h, layer) => {
     body { width: ${w}px; height: ${h}px; position: relative; overflow: hidden;
            background: ${layer === 'back' ? 'var(--paper)' : 'transparent'}; }
     .scene { position: absolute; inset: 0; }
-    ${SCENE_TV(28, true)}
+    ${SCENE_TV(32, true)}
     .scene__sky::before, .scene__sky::after { display: none; }
     .car { position: absolute; left: 50%; transform: translateX(-50%);
            top: ${car.top.toFixed(1)}px; width: ${car.size.toFixed(1)}px; }
@@ -246,39 +279,16 @@ const TV_ICON_LAYER = (w, h, layer) => {
   ${layer === 'front' ? `<img class="car" src="${CAR}" alt="">` : ''}`;
 };
 
-// THE TOP SHELF banner. Much wider than the launcher tile (8:3 and 3.2:1
-// against 16:9), so the car takes the left third and the wordmark the middle
-// rather than the two splitting the frame in half.
+// THE TOP SHELF IS NOT BAKED HERE ANY MORE. It used to be this same paper stage
+// at 8:3 with the wordmark beside the car, and it was the weakest asset the shell
+// shipped: the shelf is the one slot where a player sees what the game LOOKS LIKE
+// before they open it, and a drawing of one car cannot answer that. It is a
+// gameplay capture now — scripts/bake-shelf.mjs, which also captures the frames
+// for the Top Shelf carousel extension — and it writes the same four files into
+// public/assets/brand/tv/ that this script used to.
 //
-// The wordmark is sized as a FRACTION OF THE HEIGHT and the @2x variant is the
-// same page at deviceScaleFactor 2, never a bigger font on a bigger canvas:
-// `-webkit-text-stroke` is a fixed 7px, so the die-cut edge is a proportion of
-// the font-size and of nothing else, and re-typing it larger would thin the cut
-// on the very asset that shows it biggest. Same reasoning as FONT_PX above.
-const TV_TOPSHELF = (w, h) => {
-  const car = carBox(w, h, 0.29, 0.82);
-  return `<!doctype html>
-  <link rel="stylesheet" href="/shared/theme.css">
-  <style>
-    html, body { margin: 0; }
-    body { width: ${w}px; height: ${h}px; position: relative; overflow: hidden; }
-    .scene { position: absolute; inset: 0; }
-    ${SCENE_TV(26)}
-    .car { position: absolute; left: ${(0.09 * w - 0.043 * car.size).toFixed(1)}px;
-           top: ${car.top.toFixed(1)}px; width: ${car.size.toFixed(1)}px; }
-    .mark { position: absolute; left: ${(0.45 * w).toFixed(0)}px; top: 50%;
-            transform: translateY(-50%); }
-    .wordmark { font-size: ${Math.round(h * 0.155)}px; }
-  </style>
-  <div class="scene">
-    <div class="scene__sky"></div>
-    <div class="scene__grass"></div>
-  </div>
-  <img class="car" src="${CAR}" alt="">
-  <div class="mark">
-    <div class="wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></div>
-  </div>`;
-};
+// Nothing else moved: the app icon stack above is still type-free paper and grass
+// and the hero, because an APP ICON is a mark rather than a picture of the game.
 
 const LAUNCH = `<!doctype html>
   <link rel="stylesheet" href="/shared/theme.css">
@@ -309,42 +319,34 @@ const SPLASH_ICON = `<!doctype html>
   </style>
   <div class="wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></div>`;
 
-function serve() {
-  const server = createServer((req, res) => {
-    const rel = decodeURIComponent(req.url.split('?')[0]);
-    const pages = { '/banner.html': BANNER, '/launch.html': LAUNCH,
-                    '/splash-icon.html': SPLASH_ICON,
-                    '/icon-1024.html': ICON_SQ(1024), '/icon-512.html': ICON_SQ(512),
-                    '/icon-180.html': ICON_SQ(180), '/icon-32.html': ICON_SQ(32),
-                    '/tv-store-back.html': TV_ICON_LAYER(1280, 768, 'back'),
-                    '/tv-store-middle.html': TV_ICON_LAYER(1280, 768, 'middle'),
-                    '/tv-store-front.html': TV_ICON_LAYER(1280, 768, 'front'),
-                    '/tv-icon-back.html': TV_ICON_LAYER(400, 240, 'back'),
-                    '/tv-icon-middle.html': TV_ICON_LAYER(400, 240, 'middle'),
-                    '/tv-icon-front.html': TV_ICON_LAYER(400, 240, 'front'),
-                    '/tv-topshelf.html': TV_TOPSHELF(1920, 720),
-                    '/tv-topshelf-wide.html': TV_TOPSHELF(2320, 720) };
-    if (rel === '/' || rel === '/bake.html' || pages[rel]) {
-      res.writeHead(200, { 'content-type': 'text/html' });
-      res.end(pages[rel] || PAGE);
-      return;
-    }
-    const file = join(ROOT, 'public', rel);
-    if (!file.startsWith(join(ROOT, 'public')) || !existsSync(file)) {
-      res.writeHead(404).end();
-      return;
-    }
-    res.writeHead(200, { 'content-type': TYPES[extname(file)] || 'application/octet-stream' });
-    res.end(readFileSync(file));
-  });
-  return new Promise((resolve) => {
-    server.listen(0, '127.0.0.1', () => resolve({ server, port: server.address().port }));
-  });
-}
+// Every page this bake shoots, by the path it is fetched from. `/bake.html` is
+// the wordmark itself and is the default the crop shot below loads.
+const PAGES = {
+  '/bake.html': PAGE,
+  '/banner.html': BANNER,
+  '/launch.html': LAUNCH,
+  '/splash-icon.html': SPLASH_ICON,
+  '/icon-1024.html': ICON_SQ(1024),
+  '/icon-512.html': ICON_SQ(512),
+  '/icon-180.html': ICON_SQ(180),
+  '/icon-32.html': ICON_SQ(32, FAVICON_RADIUS),
+  '/tv-store-back.html': TV_ICON_LAYER(1280, 768, 'back'),
+  '/tv-store-middle.html': TV_ICON_LAYER(1280, 768, 'middle'),
+  '/tv-store-front.html': TV_ICON_LAYER(1280, 768, 'front'),
+  '/tv-icon-back.html': TV_ICON_LAYER(400, 240, 'back'),
+  '/tv-icon-middle.html': TV_ICON_LAYER(400, 240, 'middle'),
+  '/tv-icon-front.html': TV_ICON_LAYER(400, 240, 'front')
+};
 
-const { server, port } = await serve();
-const browser = await chromium.launch();
-const page = await browser.newPage({
+// SYNTHETIC PAGES over the real public/ tree: the document is ours, the
+// stylesheet, the fonts and the hero PNG are the shipping ones, and all of it is
+// same-origin — which is not a detail. A font is a CORS-restricted fetch, so a
+// document left cross-origin to the stylesheet never receives the woff2 and the
+// wordmark lays out, tilts and takes its colours in a fallback sans. That is
+// wrong in the one way a PNG cannot tell you about.
+const { port, close: closeServer } = await servePages(PAGES);
+const chrome = await launchBrowser();
+const page = await chrome.page({
   viewport: { width: 1600, height: 900 },
   deviceScaleFactor: SCALE
 });
@@ -366,8 +368,8 @@ await page.evaluate(async (px) => {
 }, FONT_PX);
 const usedFredoka = await page.evaluate(() => document.fonts.check('700 130px Fredoka'));
 if (!usedFredoka || failed.length) {
-  await browser.close();
-  server.close();
+  await chrome.close();
+  closeServer();
   console.error(`bake-wordmark: refusing to bake${usedFredoka ? '' : ' — Fredoka did not load'}`);
   for (const f of failed) console.error(`  ${f}`);
   process.exit(1);
@@ -380,19 +382,17 @@ const png = await page.locator('body').screenshot({ omitBackground: true });
 
 // Both shots come off the SAME browser and server; the names below just keep
 // the teardown at the end of the file where both are finished with.
-const browser2 = browser;
-const server2 = server;
+
 
 const out = join(ROOT, 'public/assets/brand');
 mkdirSync(out, { recursive: true });
 writeFileSync(join(out, 'wordmark.png'), png);
 console.log(`wordmark -> public/assets/brand/wordmark.png (${png.length} B)`);
 
-// The tile, at its exact required size — no supersampling, because Android TV
-// wants 320x180 and anything else is resampled by the launcher.
-const tile = await browser2.newPage({
+// The tile: authored at 320x180, delivered at 4x. See BANNER_SCALE.
+const tile = await chrome.page({
   viewport: { width: BANNER_W, height: BANNER_H },
-  deviceScaleFactor: 1
+  deviceScaleFactor: BANNER_SCALE
 });
 await tile.goto(`http://127.0.0.1:${port}/banner.html`, { waitUntil: 'load' });
 await tile.evaluate(async (px) => {
@@ -401,10 +401,11 @@ await tile.evaluate(async (px) => {
 }, 34);
 const bannerPng = await tile.screenshot();
 writeFileSync(join(out, 'banner.png'), bannerPng);
-console.log(`banner   -> public/assets/brand/banner.png (${bannerPng.length} B, ${BANNER_W}x${BANNER_H})`);
+console.log(`banner   -> public/assets/brand/banner.png (${bannerPng.length} B, `
+  + `${BANNER_W * BANNER_SCALE}x${BANNER_H * BANNER_SCALE})`);
 // The tvOS launch image. Same composition as Android's windowBackground —
 // deliberately, so a player switching between the two boxes sees one app.
-const launch = await browser2.newPage({
+const launch = await chrome.page({
   viewport: { width: LAUNCH_W, height: LAUNCH_H },
   deviceScaleFactor: 1
 });
@@ -418,7 +419,7 @@ writeFileSync(join(out, 'launch-tv.png'), launchPng);
 console.log(`launch   -> public/assets/brand/launch-tv.png (${launchPng.length} B, ${LAUNCH_W}x${LAUNCH_H})`);
 
 // The splash icon.
-const icon = await browser2.newPage({
+const icon = await chrome.page({
   viewport: { width: ICON, height: ICON },
   deviceScaleFactor: 1
 });
@@ -442,7 +443,7 @@ console.log(`icon     -> public/assets/brand/splash-icon.png (${iconPng.length} 
 // consumer keeps reading the directory it already reads.
 const webOut = join(ROOT, 'public/assets/icon');
 mkdirSync(webOut, { recursive: true });
-for (const [px, dest, label] of [
+for (const [px, dest, label, rounded] of [
   // 1024 is the MASTER and a store asset, not a shipped drawable: Play wants 512
   // and the App Store 1024, while the biggest slot either TV launcher draws is a
   // few hundred px. Putting 1024 in the APK would be four times the bytes for a
@@ -450,20 +451,20 @@ for (const [px, dest, label] of [
   [1024, join(out, 'icon-1024.png'), 'public/assets/brand/icon-1024.png'],
   [512, join(out, 'icon.png'), 'public/assets/brand/icon.png'],
   [180, join(webOut, 'apple-touch-icon.png'), 'public/assets/icon/apple-touch-icon.png'],
-  [32, join(webOut, 'favicon-32.png'), 'public/assets/icon/favicon-32.png']
+  // The FAVICON, and the only one of the four with a corner radius — see ICON_SQ.
+  [32, join(webOut, 'favicon-32.png'), 'public/assets/icon/favicon-32.png', true]
 ]) {
-  const page = await browser2.newPage({ viewport: { width: px, height: px }, deviceScaleFactor: 1 });
+  const page = await chrome.page({ viewport: { width: px, height: px }, deviceScaleFactor: 1 });
   await page.goto(`http://127.0.0.1:${port}/icon-${px}.html`, { waitUntil: 'load' });
-  const buf = await page.screenshot();
+  const buf = await page.screenshot({ omitBackground: rounded === true });
   writeFileSync(dest, buf);
   console.log(`icon${String(px).padStart(4)} -> ${label} (${buf.length} B, ${px}x${px})`);
   await page.close();
 }
 
-// THE tvOS BRAND ASSETS. Three layers per icon stack, two top-shelf crops, and
-// the @2x variants are the SAME PAGE at deviceScaleFactor 2 rather than a second
-// layout at twice the numbers — so a 1x and a 2x asset cannot drift apart, and
-// the wordmark's fixed text-stroke keeps its proportion (see TV_TOPSHELF).
+// THE tvOS APP ICON STACKS. Three layers each, and the @2x variants are the SAME
+// PAGE at deviceScaleFactor 2 rather than a second layout at twice the numbers,
+// so a 1x and a 2x asset cannot drift apart.
 //
 // Layers other than `back` are shot with omitBackground: the stack composites
 // them, so anything opaque behind the grass or the car would hide the layer
@@ -479,20 +480,16 @@ for (const [page, w, h, scale, file] of [
   ['tv-icon-front', 400, 240, 1, 'icon-front.png'],
   ['tv-icon-back', 400, 240, 2, 'icon-back@2x.png'],
   ['tv-icon-middle', 400, 240, 2, 'icon-middle@2x.png'],
-  ['tv-icon-front', 400, 240, 2, 'icon-front@2x.png'],
-  ['tv-topshelf', 1920, 720, 1, 'topshelf.png'],
-  ['tv-topshelf', 1920, 720, 2, 'topshelf@2x.png'],
-  ['tv-topshelf-wide', 2320, 720, 1, 'topshelf-wide.png'],
-  ['tv-topshelf-wide', 2320, 720, 2, 'topshelf-wide@2x.png']
+  ['tv-icon-front', 400, 240, 2, 'icon-front@2x.png']
 ]) {
-  const tp = await browser2.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: scale });
+  const tp = await chrome.page({ viewport: { width: w, height: h }, deviceScaleFactor: scale });
   await tp.goto(`http://127.0.0.1:${port}/${page}.html`, { waitUntil: 'load' });
   await tp.evaluate(async () => { await document.fonts.load('700 130px Fredoka'); await document.fonts.ready; });
-  const buf = await tp.screenshot({ omitBackground: !file.includes('back') && !file.includes('topshelf') });
+  const buf = await tp.screenshot({ omitBackground: !file.includes('back') });
   writeFileSync(join(tvOut, file), buf);
   console.log(`tv       -> public/assets/brand/tv/${file} (${buf.length} B, ${w * scale}x${h * scale})`);
   await tp.close();
 }
 
-await browser2.close();
-server2.close();
+await chrome.close();
+closeServer();

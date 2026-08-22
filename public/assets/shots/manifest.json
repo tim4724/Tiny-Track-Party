@@ -31,9 +31,9 @@
       "file": "web/chain.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 59452,
-      "capturedAt": "2026-08-19T13:58:39.662Z",
-      "gitSha": "34f1cb7e"
+      "bytes": 70006,
+      "capturedAt": "2026-08-22T16:04:08.238Z",
+      "gitSha": "9f87e1a7"
     },
     {
       "scenario": "countdown",
@@ -89,9 +89,9 @@
       "file": "web/countdown.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 59254,
-      "capturedAt": "2026-08-19T13:57:44.845Z",
-      "gitSha": "34f1cb7e"
+      "bytes": 70258,
+      "capturedAt": "2026-08-22T16:02:31.526Z",
+      "gitSha": "9f87e1a7"
     },
     {
       "scenario": "finished",
@@ -135,9 +135,9 @@
       "file": "web/finished.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 42476,
-      "capturedAt": "2026-08-19T13:58:21.642Z",
-      "gitSha": "34f1cb7e"
+      "bytes": 46352,
+      "capturedAt": "2026-08-22T16:03:39.673Z",
+      "gitSha": "9f87e1a7"
     },
     {
       "scenario": "intermission",
@@ -181,9 +181,9 @@
       "file": "web/intermission.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 18258,
-      "capturedAt": "2026-08-19T13:58:34.100Z",
-      "gitSha": "34f1cb7e"
+      "bytes": 18334,
+      "capturedAt": "2026-08-22T16:03:58.927Z",
+      "gitSha": "9f87e1a7"
     },
     {
       "scenario": "lobby-empty",
@@ -227,9 +227,9 @@
       "file": "web/lobby-empty.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 39434,
-      "capturedAt": "2026-08-19T13:57:24.898Z",
-      "gitSha": "34f1cb7e"
+      "bytes": 46398,
+      "capturedAt": "2026-08-22T16:02:01.380Z",
+      "gitSha": "9f87e1a7"
     },
     {
       "scenario": "lobby-loading",
@@ -273,9 +273,9 @@
       "file": "web/lobby-loading.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 18782,
-      "capturedAt": "2026-08-19T13:57:17.622Z",
-      "gitSha": "34f1cb7e"
+      "bytes": 18582,
+      "capturedAt": "2026-08-22T16:01:47.557Z",
+      "gitSha": "9f87e1a7"
     },
     {
       "scenario": "lobby-random",
@@ -319,9 +319,9 @@
       "file": "web/lobby-random.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 37170,
-      "capturedAt": "2026-08-19T13:57:40.834Z",
-      "gitSha": "34f1cb7e"
+      "bytes": 42202,
+      "capturedAt": "2026-08-22T16:02:24.479Z",
+      "gitSha": "9f87e1a7"
     },
     {
       "scenario": "lobby-tour",
@@ -353,9 +353,9 @@
       "file": "web/lobby-tour.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 46522,
-      "capturedAt": "2026-08-19T13:57:35.286Z",
-      "gitSha": "34f1cb7e"
+      "bytes": 51750,
+      "capturedAt": "2026-08-22T16:02:16.588Z",
+      "gitSha": "9f87e1a7"
     },
     {
       "scenario": "lobby-track",
@@ -399,9 +399,9 @@
       "file": "web/lobby-track.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 44750,
-      "capturedAt": "2026-08-19T13:57:29.976Z",
-      "gitSha": "34f1cb7e"
+      "bytes": 48562,
+      "capturedAt": "2026-08-22T16:02:09.025Z",
+      "gitSha": "9f87e1a7"
     },
     {
       "scenario": "monster",
@@ -445,9 +445,9 @@
       "file": "web/monster.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 48646,
-      "capturedAt": "2026-08-19T13:58:09.888Z",
-      "gitSha": "34f1cb7e"
+      "bytes": 56600,
+      "capturedAt": "2026-08-22T16:03:13.529Z",
+      "gitSha": "9f87e1a7"
     },
     {
       "scenario": "paused",
@@ -491,9 +491,9 @@
       "file": "web/paused.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 13742,
-      "capturedAt": "2026-08-19T13:58:13.658Z",
-      "gitSha": "34f1cb7e"
+      "bytes": 14120,
+      "capturedAt": "2026-08-22T16:03:24.019Z",
+      "gitSha": "9f87e1a7"
     },
     {
       "scenario": "podium",
@@ -537,9 +537,9 @@
       "file": "web/podium.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 19292,
-      "capturedAt": "2026-08-19T13:58:47.631Z",
-      "gitSha": "34f1cb7e"
+      "bytes": 19482,
+      "capturedAt": "2026-08-22T16:04:19.094Z",
+      "gitSha": "9f87e1a7"
     },
     {
       "scenario": "racing",
@@ -583,9 +583,9 @@
       "file": "web/racing.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 48608,
-      "capturedAt": "2026-08-19T13:57:51.113Z",
-      "gitSha": "34f1cb7e"
+      "bytes": 55328,
+      "capturedAt": "2026-08-22T16:02:41.042Z",
+      "gitSha": "9f87e1a7"
     },
     {
       "scenario": "racing-sidewinder",
@@ -617,9 +617,9 @@
       "file": "web/racing-sidewinder.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 38574,
-      "capturedAt": "2026-08-19T13:57:57.490Z",
-      "gitSha": "34f1cb7e"
+      "bytes": 46214,
+      "capturedAt": "2026-08-22T16:02:50.722Z",
+      "gitSha": "9f87e1a7"
     },
     {
       "scenario": "reconnect",
@@ -663,9 +663,9 @@
       "file": "web/reconnect.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 47622,
-      "capturedAt": "2026-08-19T13:58:17.733Z",
-      "gitSha": "34f1cb7e"
+      "bytes": 57504,
+      "capturedAt": "2026-08-22T16:03:31.683Z",
+      "gitSha": "9f87e1a7"
     },
     {
       "scenario": "results",
@@ -709,9 +709,9 @@
       "file": "web/results.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 16232,
-      "capturedAt": "2026-08-19T13:58:26.268Z",
-      "gitSha": "34f1cb7e"
+      "bytes": 16462,
+      "capturedAt": "2026-08-22T16:03:47.963Z",
+      "gitSha": "9f87e1a7"
     },
     {
       "scenario": "rocket",
@@ -755,9 +755,9 @@
       "file": "web/rocket.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 48380,
-      "capturedAt": "2026-08-19T13:58:03.708Z",
-      "gitSha": "34f1cb7e"
+      "bytes": 55466,
+      "capturedAt": "2026-08-22T16:03:01.209Z",
+      "gitSha": "9f87e1a7"
     },
     {
       "scenario": "welcome",
@@ -765,9 +765,9 @@
       "file": "web/welcome.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 19180,
-      "capturedAt": "2026-08-19T13:57:14.262Z",
-      "gitSha": "34f1cb7e"
+      "bytes": 19184,
+      "capturedAt": "2026-08-22T16:01:38.877Z",
+      "gitSha": "9f87e1a7"
     }
   ]
 }

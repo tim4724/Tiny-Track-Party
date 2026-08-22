@@ -120,7 +120,8 @@ export default [
   // globals. Split out rather than widening the Node block, so a stray `window`
   // in an ordinary script is still an error.
   {
-    files: ['scripts/capture-shots.mjs', 'scripts/bake-wordmark.mjs'],
+    files: ['scripts/capture-shots.mjs', 'scripts/bake-wordmark.mjs', 'scripts/bake-shelf.mjs',
+            'scripts/lib/capture.mjs'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',

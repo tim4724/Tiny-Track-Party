@@ -133,6 +133,13 @@ targets:
         # The relay is wss:// and the origin is https://, so no ATS exception is
         # needed for the shipping path. A local dev server over http:// is the
         # exception, and it is scoped to nothing but localhost.
+        # The Top Shelf carousel's items open the app through a URL, and a URL
+        # into an app that declares no scheme opens nothing. The app routes none
+        # of it — a bare tinytrack:// is "just launch", which is what every
+        # carousel item means today (TopShelf/TopShelfProvider.swift).
+        CFBundleURLTypes:
+          - CFBundleURLName: games.couchpad.tinytrack
+            CFBundleURLSchemes: [tinytrack]
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
         # Two uses trip tvOS's local-network prompt. The fastlane's ICE
@@ -216,6 +223,10 @@ targets:
           - -lmeshoptimizer
           - -lmikktspace
     dependencies:
+      # EMBEDS the Top Shelf extension. XcodeGen puts an app-extension dependency
+      # in the app's Embed App Extensions phase for us, which is the whole of what
+      # makes the shelf carousel reach the home screen.
+      - target: TopShelf
       - package: SwiftDraw
       - package: LiveKitWebRTC
       - sdk: Metal.framework
@@ -227,6 +238,52 @@ targets:
       - sdk: CoreVideo.framework
       - sdk: CoreImage.framework      # CIQRCodeGenerator — the join code
       - sdk: AVFoundation.framework   # the audio device + the music stream
+
+  # THE TOP SHELF CAROUSEL. The asset catalogue's `Top Shelf Image` is one flat
+  # picture; this extension is the only way tvOS shows a SET, and the set is one
+  # frame per cup plus the situations a cup frame cannot say (the four-way split
+  # above all). See TopShelf/TopShelfProvider.swift for the shape, and
+  # scripts/bake-shelf.mjs for where the frames come from.
+  #
+  # The catalogue's static image is NOT replaced by this and must stay current: it
+  # is what the shelf draws if the extension is absent, and it is the 8:3 strip
+  # rather than a full screen.
+  TopShelf:
+    type: app-extension
+    platform: tvOS
+    sources:
+      - path: TopShelf
+        excludes: ["Info.plist"]
+      # The frames and their running order, staged by stage-assets.sh out of
+      # public/assets/brand/tv/shelf. A FOLDER REFERENCE for the same reason the
+      # app's assets are one: the provider looks each frame up by name inside a
+      # `shelf` subdirectory, and Xcode's default resource copy would flatten it.
+      - path: Generated/shelf
+        type: folder
+        buildPhase: resources
+    # THE PLIST IS GENERATED FROM HERE, not hand-written beside the Swift.
+    # XcodeGen REWRITES the file at `info.path` from `properties` on every run, so
+    # a checked-in Info.plist carrying the NSExtension dict is silently replaced by
+    # one without it — the app then builds and signs clean and installd rejects it
+    # on the device with AppexBundleMissingNSExtensionDict, which is a long way
+    # from the cause.
+    info:
+      path: TopShelf/Info.plist
+      properties:
+        CFBundleDisplayName: Tiny Track Party Shelf
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        NSExtension:
+          # The Top Shelf extension point. TVTopShelfContentProvider is only
+          # consulted for a bundle carrying exactly this identifier; anything else
+          # and the shelf silently falls back to the catalogue's static strip.
+          NSExtensionPointIdentifier: com.apple.tv-top-shelf
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ContentProvider
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: games.couchpad.tinytrack.topshelf
+    dependencies:
+      - sdk: TVServices.framework
 
   # The screenshot harness. It launches the app with a scenario argument and
   # shoots the composited screen — which is the only way to photograph a real

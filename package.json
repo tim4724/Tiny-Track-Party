@@ -6,6 +6,7 @@
   "scripts": {
     "artwork": "node scripts/capture-artwork.js",
     "bake:cues": "node scripts/bake-cues.mjs",
+    "bake:shelf": "node scripts/bake-shelf.mjs",
     "build:androidtv": "shells/androidtv/scripts/build.sh",
     "build:tvos": "shells/tvos/scripts/build.sh",
     "check:androidtv-party": "node scripts/androidtv-party-check.mjs",
