@@ -459,6 +459,22 @@ kit field, the world builders, the ground sheet, the gantry) is the remaining
 tenth. Split it before optimising it; `bakeShadowMap` and `buildTrackScene` each
 log their own phases.
 
+**`cars` IS MOSTLY A ONE-TIME COST, AND THE SPLIT ONLY SHOWS IF YOU REBUILD.**
+On the Android reference box (Google TV Streamer, Vulkan) the `cars` phase is
+~405 ms on the FIRST build of a process and **~28 ms on every build after it**,
+with the same models both times. Whatever that 14x is — pipeline creation, the
+kit's shared texture decode — it is paid once per process, not per build, so
+reading it off a cold first build (which is what a launch log gives you) badly
+overstates what a rebuild costs. `props+rig` behaves the same way, 67 ms then 20.
+
+The consequence for anything tempted to KEEP parsed assets across a scene, the
+way the sun bake and the silhouette layers are kept: `releaseScene` does drop
+every gltfio asset while the layers keyed off those same models survive, and
+retaining them is a real asymmetry to close — but it would buy the ~28 ms, not
+the ~405. Price it against that. The one-time half is a process warm-up problem
+and belongs with `backend.vulkan.enable_pipeline_cache_prewarming`, not with a
+resource pool.
+
 **The casters are the STATIC scene, and cars cast nothing** (`setVisibleLayers`
 0x02). So the bake is a function of the track and its biome, and a rebuild that
 changed only the FIELD — a phone joining, a launch dressing the grid it was
@@ -473,6 +489,24 @@ would silently invalidate the whole scheme, and the failure mode is a scene lit
 by the last track's shadows. The key is CONSUMED per build, so a new
 `buildScene` caller that sets none falls through to a real bake rather than
 inheriting somebody else's claim.
+
+**A READBACK CANNOT BE WAITED ON INSIDE THE BUILD, and one backend enforces it.**
+A GL readback's completion is executed from `OpenGLDriver::tick()`, which
+`FRenderer::endFrame()` calls and `flushAndWait()` does not — so however many
+times a build flushes, the callback cannot land, and in a browser a task cannot
+wait on the GPU at all. Metal and Vulkan fire theirs from command-buffer
+completion and land on the first pass. `refillRoadLight` therefore keeps its
+synchronous pump AND parks an unfinished read for `collectRoadLight`, which the
+frame loop calls; a read is stamped with a build serial so one that lands after
+the track changed is dropped rather than written into the new road's CUSTOM0.
+
+That shape is not defensive: it is what the old code's silent failure cost. It
+dropped an unfinished read on the floor, so the WEB road kept the unshadowed fill
+from build — a deck lit but taking no cast shadow, for the whole session, with
+nothing to say so. It looked right because the GROUND was unaffected: its
+visibility map is a shader tap that never goes near a readback. **`exportBake` is
+still synchronous and so still answers nothing on GL** — which is why the browser
+has no bake blob to cache, and is a deliberate limit rather than an oversight.
 
 ## The per-frame budget
 

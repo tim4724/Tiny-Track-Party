@@ -85,26 +85,67 @@ Three properties of that surface matter more than the list:
 
 ## Optional: caching expensive derived bytes between runs
 
-Not owed. Skip it until you have measured that you need it, and measure per
-platform — a bake that costs 520 ms of GPU on a PowerVR TV box may cost almost
-nothing on yours, and the `ttp shadow bake` line the renderer already logs tells
-you which you are.
+Not owed. Skip it until you have measured that you need it, and **measure per
+platform** — the `ttp shadow bake` line the renderer already logs tells you which
+you are. The spread is wide enough that the same feature is obviously right on
+one box and obviously wrong on another:
 
-If you do want it, the engine has both halves already and neither is yours to
-invent:
+| | sun bake | of a build of |
+|---|---|---|
+| Android TV reference box (Google TV Streamer, Vulkan) | ~1250 ms | ~1870 ms |
+| Web (Chromium, desktop GPU) | 85–213 ms | 101–271 ms |
+| Apple TV 4K (A10X, Metal) | 64 ms | 199 ms |
 
-- **`ttp_blob_plan_json`** decides what a blob is CALLED, when it stops being
-  valid, and which ones to evict. You send the store name, your binary's
-  identity, the key, and the entries you currently hold; you get back one name
-  and a list to delete.
-- **`ttp_display_bake_export` / `_import` / `_bake_key`** are the first (and so
-  far only) thing worth storing: the sun bake, which is resolution-independent
-  and a pure function of track and biome.
+(The Android figure is a first build in a fresh process, which is what a launch
+actually pays. An older 520 ms is quoted elsewhere in the tree from a different
+box and backend — measure yours rather than inheriting either number.)
 
-What you write is four primitives over your own storage — list names with
-last-used times, read by name, write by name, delete by name. Android's is
-`BlobStore.kt`, ~120 lines, and `BakeCache.kt` beside it is the bake-specific
-half that knows nothing about files. Copy that shape.
+Android caches it. **tvOS deliberately does not**: 64 ms is the whole prize, and
+a multi-megabyte read plus two texture uploads would spend most of it — and a
+repeat build there is already free from the in-memory reuse. That is a measured
+refusal, not an omission; do not "finish" it without a number that disagrees.
+
+If your platform's number does justify it, **you write four primitives and no
+policy** — list names with last-used times, read by name, write by name, delete
+by name. Android's is `BlobStore.kt`. Everything else is a WALK in
+`ttp_display.h` (`ttp_display_bake_plan` / `_offer` / `_keep` / `_export`) that
+hands you names to act on:
+
+```
+after ttp_display_biome, before ttp_display_build:
+    plan(trackId, generation, entries) -> {"drop":[…], "read": name|null}
+    perform the drops; if `read`, read it and offer(bytes)
+after ttp_display_build:
+    keep() -> {"write": name|null}
+    if `write`, export() and write those bytes
+```
+
+**Do not re-derive any of the decisions behind those names.** Whether the engine
+already holds this bake, whether the build actually baked, whether the store
+already has the blob, and the one window a bake key is even defined over are all
+facts about the ENGINE — they were a `BakeCache.kt` in this shell once, and every
+line of it was engine knowledge living in a shell, with a residency mirror the
+shell had to invalidate whenever a destroyed surface took the renderer away.
+Three shells re-deriving that is three chances to get it wrong, which is the same
+argument `ttp_net.h`'s choreography walks make one layer down.
+
+### The other thing a shell is tempted to cache: its own provisioning
+
+Provided assets survive a `releaseScene`, so re-reading and re-handing the same
+GLBs and textures on every build is pure re-work — and every shell does it. Log a
+build split before deciding it is worth a memo, because **what that re-work costs
+is entirely a fact about your storage**, and the two TV shells disagree by an
+order of magnitude:
+
+- **Android caches it.** An APK is compressed, so each build re-inflates every
+  model and copies it across JNI into a map that already had it: measured on the
+  box, 39 ms of provisioning on the first build and 8 ms once the memo holds.
+- **tvOS does not.** An app bundle is not compressed and a re-read is barely a
+  read: measured on the device, provisioning is ~5 ms of a ~215 ms build for the
+  whole 15-asset set. A memo saving that is not worth mirroring engine state for.
+
+The web is with tvOS here — its bytes are already in memory, and the copy into
+the wasm heap does not show up in a profile.
 
 **GENERATION IS THE INVALIDATION, and it is the one thing you supply.** Give it
 something that changes whenever your binary could produce different bytes —

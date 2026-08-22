@@ -121,6 +121,7 @@ enum SceneStaging {
     /// overlapping builds is an ordinary lobby, not a pathological case.
     private static var generation = 0
 
+
     // MARK: - Materials
 
     /// Hand the renderer its `.filamat` blobs. Once, at boot, **before any
@@ -165,6 +166,19 @@ enum SceneStaging {
                       display: DisplayHost, store: AssetStore) async throws {
         generation += 1
         let mine = generation
+        // THE STEPS ARE TIMED SEPARATELY, and the REUSED count rides beside the
+        // handed-over one — Android's build split says why: provisioning is
+        // re-read-and-re-hand-over work, `ttp_display_build` is geometry only an
+        // unchanged track could reuse, and one total cannot tell them apart.
+        let t0 = CFAbsoluteTimeGetCurrent()
+        var handed = 0, handedBytes = 0
+        var mark = t0
+        var split = [Double](repeating: 0, count: 5)
+        func step(_ i: Int) {
+            let now = CFAbsoluteTimeGetCurrent()
+            split[i] = (now - mark) * 1000
+            mark = now
+        }
 
         // 1. SHOWCASE, first, because it is LATCHED and changes what step 7
         //    resolves — the asset gallery's showroom is the picked biome's
@@ -185,6 +199,7 @@ enum SceneStaging {
         //    it, so a fetch that runs first is a fetch of the wrong models.
         let resolved = resolveBiome(override: biome, trackId: trackId)
         ttp_display_biome(resolved)
+        step(0)
 
         // 4. Scenery, in the SLOT ORDER C++ named. The index is the contract, not
         //    a suggestion: the renderer binds its instanced props by it, and
@@ -197,12 +212,14 @@ enum SceneStaging {
             ? TTP.arr(ttp_theme_showcase_models()).compactMap { $0 as? String }
             : TTP.arr(ttp_theme_scenery_models(resolved)).compactMap { $0 as? String }
 
-        var sceneryBytes: [Data] = []
+        var textureURIs = Set<String>()
         for (slot, name) in sceneryModels.enumerated() {
             guard let bytes = await modelBytes(name, store) else { continue }
-            sceneryBytes.append(bytes)
             try display.provide("scenery\(slot).glb", bytes)
+            handed += 1; handedBytes += bytes.count
+            textureURIs.formUnion(imageURIs(of: bytes))
         }
+        step(1)
         guard generation == mine else { return }
 
         // 5. Textures, under their EXACT authored URI. There is no path
@@ -215,13 +232,13 @@ enum SceneStaging {
         //    unconditionally; the cars and props all reference that one file, and
         //    this mirrors what the web provides. `sorted()` only so the
         //    provisioning order is stable in a log.
-        var textureURIs = Set<String>()
-        for bytes in sceneryBytes { textureURIs.formUnion(imageURIs(of: bytes)) }
         textureURIs.insert("Textures/colormap.png")
         for uri in textureURIs.sorted() {
             guard let bytes = await textureBytes(uri, store) else { continue }
             try display.provide(uri, bytes)
+            handed += 1; handedBytes += bytes.count
         }
+        step(2)
         guard generation == mine else { return }
 
         // 6. Cars by slot, then the props. `ghost(of:)` copies each clone out of
@@ -232,15 +249,18 @@ enum SceneStaging {
         for (slot, car) in roster.enumerated() {
             guard !car.model.isEmpty, let bytes = await modelBytes(car.model, store) else { continue }
             try display.provide("car\(slot).glb", bytes)
+            handed += 1; handedBytes += bytes.count
             if let ghost = ghost(of: bytes) { try display.provide("car\(slot)-ghost.glb", ghost) }
         }
         for name in propModels {
             guard let bytes = await modelBytes(name, store) else { continue }
             try display.provide("\(name).glb", bytes)
+            handed += 1; handedBytes += bytes.count
             if let ghostName = propGhosts[name], let ghost = ghost(of: bytes) {
                 try display.provide(ghostName, ghost)
             }
         }
+        step(3)
         guard generation == mine else { return }
 
         // 7. Build. A track ID and a roster, and nothing else: the geometry is
@@ -261,6 +281,12 @@ enum SceneStaging {
         guard ttp_display_build(trackId, TTP.json(slots)) != 0 else {
             throw Failure.buildRejected(trackId)
         }
+        step(4)
+        print(String(format:
+            "[ttp] build split %@: biome %.0f scenery %.0f textures %.0f cars+props %.0f"
+            + " native %.0f ms (%d assets, %d KiB handed over)",
+            trackId, split[0], split[1], split[2], split[3], split[4],
+            handed, handedBytes / 1024))
         display.sceneBuilt(rosterIds: roster.map(\.id), biome: resolved)
     }
 

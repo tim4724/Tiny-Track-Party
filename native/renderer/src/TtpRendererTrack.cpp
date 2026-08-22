@@ -1054,9 +1054,18 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     // Cleared before the slots build: claimMaskLayer reads it to see which
     // layers are still spoken for.
     mMaskLayerOfSlot.assign(carCount, kMaskLayerGeneric);
+    // SPLIT OUT because it hid the biggest phase of a build. Measured with the
+    // sun bake reused: 57 ms of a 202 ms build on the Apple TV, 29-33 ms of a
+    // 50-55 ms build in the browser — more than the bake costs on either. Every
+    // one of those milliseconds is gltfio re-parsing and re-uploading car GLBs
+    // the previous build already parsed, because releaseScene drops every asset
+    // (the silhouette bakes keyed off them survive; the assets themselves do
+    // not). What is left in `props+rig` after this mark is the same story for
+    // the item box, banana, cone and monster truck.
     for (uint32_t c = 0; c < carCount; c++) {
         if (!buildCarSlot(tb, c)) return false;
     }
+    phaseMark("cars");
     // Furniture: item boxes at their authored anchors (availability reconciled
     // per frame from the snapshot), a banana pool for dropped hazards, and the
     // boost-pad overlays.
@@ -1242,7 +1251,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         recolourMonsterChassis(mMonsterAsset, mMonsterInstances,
                 math::float4{ chassis, 1.0f });
     }
-    phaseMark("kit+rig");
+    phaseMark("props+rig");
     buildWater(tb);
     buildFliers(tb);
     buildOils(tb);   // the cones and signs; the slick itself is a road stamp
@@ -2099,6 +2108,11 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
     // Re-entrant: the game calls this again for every race (releaseScene()
     // first). The three materials are RENDERER scope — compiled once from the
     // provided .filamat bytes and reused by every scene after.
+    //
+    // The serial is what makes a road-light readback still in flight from the
+    // LAST build identifiable as stale (see RoadLightRead): it would otherwise
+    // land on a road mesh that is not the one it was read for.
+    mBuildSerial++;
     const auto mat = mAssets.find("vcolor.filamat");
     if (mat == mAssets.end()) return false;
     if (!mMaterial) {
