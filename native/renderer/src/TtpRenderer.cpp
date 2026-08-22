@@ -1513,6 +1513,13 @@ TtpRenderer::~TtpRenderer() {
     // the one teardown that still has to pay the fence — and the only one where
     // nobody can see it.
     drainGravesBlocking();
+    // A road-light readback that never landed is LEAKED on purpose, exactly as
+    // the old inline version leaked its own: the driver may still hold a pointer
+    // into that buffer, and there is no tick left to complete it. The difference
+    // is the count — this is at most a couple of buffers once, at teardown,
+    // where it used to be one per build that outran its readback, forever.
+    for (auto& g : mRoadLightGraves) (void) g.release();
+    if (mRoadLightRead && !mRoadLightRead->done) (void) mRoadLightRead.release();
     if (mBlendMaterial) mEngine->destroy(mBlendMaterial);
     if (mPointMaterial) mEngine->destroy(mPointMaterial);
     if (mCloudMaterial) mEngine->destroy(mCloudMaterial);

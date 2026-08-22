@@ -795,42 +795,82 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
 // build even when the map that lights it is the one already resident, so a
 // reused bake still has to refill CUSTOM0 on the new vertices.
 void TtpRenderer::refillRoadLight(const TrackBin& tb) {
-    if (!mRoad.custom0.empty() && mRoad.vb && mShadowMap && mRenderer) {
-        const uint32_t W = mShadowMap->getWidth(0);
-        const uint32_t H = mShadowMap->getHeight(0);
-        if (RenderTarget* rrt = RenderTarget::Builder()
-                .texture(RenderTarget::AttachmentPoint::COLOR, mShadowMap)
-                .build(*mEngine)) {
-            // Heap-owned so a readback that somehow never lands cannot write
-            // through a dead stack frame; the never-done path leaks it on
-            // purpose, and the road keeps the unshadowed fill from build.
-            // `done` is atomic: the completion callback fires on a backend
-            // thread (Metal's completion queue, GL's driver thread) while
-            // this thread polls it across flushAndWait pumps.
-            struct EsmRead { std::vector<float> px; std::atomic<bool> done{ false }; };
-            auto* rd = new EsmRead;
-            rd->px.resize((size_t) W * H * 4);
-            // RGBA + FLOAT: the one float readback combo all three backends
-            // accept (WebGL2 guarantees exactly this pair for float targets;
-            // Metal maps it to RGBA32Float).
-            Texture::PixelBufferDescriptor pbd(rd->px.data(),
-                    rd->px.size() * sizeof(float),
-                    Texture::Format::RGBA, Texture::Type::FLOAT,
-                    [](void*, size_t, void* user) {
-                        static_cast<EsmRead*>(user)->done = true;
-                    }, rd);
-            mRenderer->readPixels(rrt, 0, 0, W, H, std::move(pbd));
-            // The GL backend completes the copy on a fence it checks a tick
-            // after the flush, and Metal's completion handler can land just
-            // as a wait returns — so pump a few times rather than once.
-            for (int t = 0; t < 8 && !rd->done; t++) mEngine->flushAndWait();
-            if (rd->done) {
-                applyRoadLight(tb, rd->px.data(), W, H);
-                delete rd;
-            }
-            mEngine->destroy(rrt);
-        }
+    if (mRoad.custom0.empty() || !mRoad.vb || !mShadowMap || !mRenderer) return;
+    // Whatever was in flight is the PREVIOUS road's, and this build has just
+    // replaced the mesh it would have been written into.
+    dropRoadLightRead();
+    const uint32_t W = mShadowMap->getWidth(0);
+    const uint32_t H = mShadowMap->getHeight(0);
+    RenderTarget* rrt = RenderTarget::Builder()
+            .texture(RenderTarget::AttachmentPoint::COLOR, mShadowMap)
+            .build(*mEngine);
+    if (!rrt) return;
+    // Heap-owned, because it may well outlive this function — see RoadLightRead
+    // for the backend where it always does. `done` is atomic: the completion
+    // callback fires on a backend thread (Metal's completion queue, GL's driver
+    // thread) while this one polls it.
+    auto rd = std::make_unique<RoadLightRead>();
+    rd->px.resize((size_t) W * H * 4);
+    rd->rt = rrt;
+    rd->w = W;
+    rd->h = H;
+    rd->serial = mBuildSerial;
+    // RGBA + FLOAT: the one float readback combo all three backends accept
+    // (WebGL2 guarantees exactly this pair for float targets; Metal maps it to
+    // RGBA32Float).
+    Texture::PixelBufferDescriptor pbd(rd->px.data(),
+            rd->px.size() * sizeof(float),
+            Texture::Format::RGBA, Texture::Type::FLOAT,
+            [](void*, size_t, void* user) {
+                static_cast<RoadLightRead*>(user)->done = true;
+            }, rd.get());
+    mRenderer->readPixels(rrt, 0, 0, W, H, std::move(pbd));
+    // THE FAST PATH IS STILL THE FAST PATH. Metal and Vulkan complete inside
+    // this pump, so they finish here with the road lit before the build returns
+    // and nothing is ever deferred on them.
+    for (int t = 0; t < 8 && !rd->done; t++) mEngine->flushAndWait();
+    if (rd->done) {
+        applyRoadLight(tb, rd->px.data(), W, H);
+        mRoadLight = mRoad.custom0;   // for the next build of this same track
+        mEngine->destroy(rrt);
+        return;
     }
+    // …and GL keeps it for the frame loop, where endFrame ticks the driver.
+    // mRoadLight is deliberately NOT stamped here: it is the reuse path's copy
+    // of a FINISHED fill, and an unshadowed one would be uploaded verbatim by
+    // the next build of this same track. Left empty, that path re-reads instead.
+    mRoadLightRead = std::move(rd);
+}
+
+// Apply a road-light readback that landed after its build had returned.
+void TtpRenderer::collectRoadLight() {
+    // Graves first: a parked read that has now completed can simply be freed.
+    for (size_t i = mRoadLightGraves.size(); i-- > 0;) {
+        if (mRoadLightGraves[i]->done) mRoadLightGraves.erase(mRoadLightGraves.begin() + (long) i);
+    }
+    if (!mRoadLightRead || !mRoadLightRead->done) return;
+    const std::unique_ptr<RoadLightRead> rd = std::move(mRoadLightRead);
+    if (rd->rt) mEngine->destroy(rd->rt);
+    // STALE IS DROPPED, NOT APPLIED. A build that started while this was in
+    // flight has a different road mesh, and CUSTOM0 sized for the old one would
+    // be written over the new one's — the size test is the belt to that brace.
+    if (rd->serial != mBuildSerial || !mTrack || !mRoad.vb) return;
+    if (mRoad.custom0.size() != (size_t) mRoad.verts.size()) return;
+    applyRoadLight(*mTrack, rd->px.data(), rd->w, rd->h);
+    mRoadLight = mRoad.custom0;   // now it IS a finished fill; the reuse path may have it
+}
+
+// Forget a read still in flight. The buffer it would write into is this
+// object's own, so it must outlive nothing — but the callback may still fire,
+// so the object is only released once it has (or with the engine).
+void TtpRenderer::dropRoadLightRead() {
+    if (!mRoadLightRead) return;
+    if (mRoadLightRead->rt) mEngine->destroy(mRoadLightRead->rt);
+    mRoadLightRead->rt = nullptr;
+    if (mRoadLightRead->done) { mRoadLightRead.reset(); return; }
+    // Never landed and never will be wanted: hand it to the graveyard rather
+    // than freeing a buffer the driver may yet write into.
+    mRoadLightGraves.push_back(std::move(mRoadLightRead));
 }
 
 // ── The road's matte light, evaluated ONCE ──────────────────────────────────

@@ -2924,6 +2924,11 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
         if (mMvColor && (mMvW != r0.w || mMvH != r0.h)) destroyMultiviewTargets();
         ensureMultiviewTargets(r0.w, r0.h);
     }
+    // A road-light readback that outran its own build lands HERE, because the
+    // driver tick that fires it rides endFrame — see RoadLightRead. Free on
+    // every backend but one, where it is the difference between a deck that
+    // takes the sun's shadow and one that never does.
+    collectRoadLight();
     const bool pace = mRenderer->beginFrame(mSwapChain);
     mProfile[kProfBeginFrame] = ttpNowMs() - tMark; tMark += mProfile[kProfBeginFrame];
 #if defined(__EMSCRIPTEN__)

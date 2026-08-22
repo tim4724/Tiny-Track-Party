@@ -35,6 +35,7 @@
 #include <math/vec3.h>
 #include <utils/Entity.h>
 
+#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -174,6 +175,12 @@ public:
     // means "never reuse" so a caller that has not thought about it cannot
     // accidentally opt in.
     void setBakeKey(const char* key) { mBakeKey = key ? key : ""; }
+
+    // What the RESIDENT maps are of, or empty when nothing is baked. This is the
+    // fact a shell used to mirror (and had to invalidate itself when a destroyed
+    // surface took the renderer with it): the bake walk reads it here instead,
+    // so "the engine already holds this one" is answered where it is known.
+    const std::string& bakedKey() const { return mBakedKey; }
 
     // Which backend the engine runs (filament::Backend as an int). Rides the
     // bake key: a bake blob's byte orientation is a fact about the writing
@@ -1381,6 +1388,46 @@ private:
 
     // Read the resident ESM back and refill the road's baked vertex light.
     void refillRoadLight(const TrackBin& tb);
+
+    // Apply a road-light readback that did not land inside the build it was
+    // issued in. Called once per frame; a no-op when nothing is in flight.
+    void collectRoadLight();
+
+    // A road-light readback still in flight, kept alive until it lands.
+    //
+    // ON ONE BACKEND IT NEVER LANDS IN TIME. A GL readback's completion is
+    // executed from OpenGLDriver::tick(), which FRenderer::endFrame() calls and
+    // flushAndWait() does not — so the build's own pump cannot see it, however
+    // many times it flushes, and in a browser a task cannot wait on the GPU
+    // anyway. Metal and Vulkan fire theirs from command-buffer completion and
+    // land on the first pass, where this is never allocated at all.
+    //
+    // It used to be dropped on the floor: the read leaked, the road kept the
+    // unshadowed fill from build, and the deck rendered lit but taking no cast
+    // shadow — for the whole session, on the web alone, with nothing to say so.
+    // (The GROUND was unaffected, which is why it looked right: its visibility
+    // map is a shader tap that never goes near a readback.)
+    struct RoadLightRead {
+        std::vector<float> px;
+        std::atomic<bool> done{ false };
+        filament::RenderTarget* rt = nullptr;   // outlives the issue; freed on collect
+        uint32_t w = 0, h = 0;
+        uint64_t serial = 0;                    // the build it belongs to
+    };
+    std::unique_ptr<RoadLightRead> mRoadLightRead;
+
+    // Reads abandoned by a rebuild before they landed. The driver may still
+    // write into their buffers, so they are held rather than freed — the same
+    // reason the old code leaked its read on purpose, made explicit and bounded
+    // (one per build that outran its own readback, freed when it completes).
+    std::vector<std::unique_ptr<RoadLightRead>> mRoadLightGraves;
+
+    // Release a read still in flight, or park it until it lands.
+    void dropRoadLightRead();
+
+    // Bumped per scene build, so a readback that lands after the track changed
+    // is dropped rather than applied to somebody else's road.
+    uint64_t mBuildSerial = 0;
 
     // One of the bake's targets back to the CPU, RGBA as every backend wants.
     // `asFloat` picks the pixel type (the ESM is R16F and reads as FLOAT, the
