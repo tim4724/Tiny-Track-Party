@@ -17,14 +17,15 @@ import java.io.File
  * visible when wrong. A bad eviction wastes disk. A bad INVALIDATION serves a
  * stale blob forever, across restarts, with nothing on screen to say so.
  *
- * It knows nothing about the SUN BAKE either, which is the point of the walk in
- * `ttp_display.h`: the engine decides what to read, what to keep and what to
- * drop, and hands this a name. There used to be a `BakeCache` beside this file
- * holding that choreography — the window a bake key is defined over, whether the
- * engine already had the bake, whether the build had actually baked — and every
- * line of it was knowledge about the ENGINE living in a shell, with a mirror
- * this side had to invalidate whenever a destroyed surface took the renderer
- * away. tvOS and the web would each have needed their own copy.
+ * It knows nothing about WHAT it is storing either — not that a sun bake exists,
+ * nor a silhouette layer, nor how many kinds there are. That is the point of the
+ * walk in `ttp_display.h`: the engine lists its stores, decides what to read,
+ * keep and drop, and hands this a name. There used to be a `BakeCache` beside
+ * this file holding that choreography — the window a bake key is defined over,
+ * whether the engine already had the bake, whether the build had actually baked
+ * — and every line of it was knowledge about the ENGINE living in a shell, with
+ * a mirror this side had to invalidate whenever a destroyed surface took the
+ * renderer away. It is also why the SECOND blob kind needed no Kotlin at all.
  *
  * **[generation] is this shell's one real contribution**, and it is the install
  * time rather than the versionName. A `-dirty` build keeps one version string
@@ -120,4 +121,27 @@ class BlobStore(context: Context, private val store: String) {
         val d = dir ?: return
         runCatching { File(d, name).delete() }
     }
+}
+
+/**
+ * One [BlobStore] per store the ENGINE says it has.
+ *
+ * The names are asked for rather than typed, which is the whole point: this
+ * shell does not know that a "bake" or a "mask" exists, only that the engine
+ * keeps some kinds of derived bytes and that each kind wants its own directory.
+ * A third kind needs no Kotlin at all.
+ */
+class BlobStores(context: Context) {
+
+    private val stores: Map<String, BlobStore> =
+        TtpJson.strings(Ttp.ttp_display_blob_stores())
+            .associateWith { BlobStore(context, it) }
+
+    /** Perform something for each store, with the name the engine calls it. */
+    inline fun forEach(action: (BlobStore, String) -> Unit) {
+        for ((name, store) in all) action(store, name)
+    }
+
+    /** Exposed for [forEach]'s inlining; not otherwise interesting. */
+    val all: Map<String, BlobStore> get() = stores
 }

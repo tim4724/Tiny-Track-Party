@@ -329,60 +329,67 @@ TTP_ABI int ttp_display_build(const char* trackId, const char* rosterJson);
  * the fallback: a full ttp_display_build. */
 TTP_ABI int ttp_display_reroster(const char* rosterJson);
 
-/* ---- the sun bake, kept between RUNS ----------------------------------------
+/* ---- derived bytes, kept between RUNS ---------------------------------------
  *
- * The bake is ~520 ms of GPU on the slowest shipping box and is RESOLUTION
- * INDEPENDENT: its three sizes are compile-time constants and no viewport,
- * window or render-scale value reaches it. So it is worth keeping between runs,
- * not only between builds — and keeping it between runs means a FILE, which is
- * the shell's job (ttp_abi.h puts transport on the host side, and wasm has no
- * filesystem at all).
+ * Two things a build makes are expensive to compute and small to store, which
+ * is the only profile that earns a file: the SUN BAKE (~1250 ms of GPU on the
+ * Android reference box) and the SILHOUETTE LAYERS (~330 ms for five of them,
+ * a render and a flushAndWait each). Both are already kept in memory across
+ * scenes; this is the tier below, across runs. Keeping something between runs
+ * means a FILE, and a file is the shell's job — ttp_abi.h puts transport on the
+ * host side, and wasm has no filesystem at all.
  *
- * A WALK, NOT THREE GETTERS, and that is the whole point of this section. This
- * used to be `bake_key` / `bake_import` / `bake_export`, which left every shell
- * to hand-write the same choreography: ask the key in the one window it is
- * defined over, decide whether the engine already holds that bake, read only if
- * it does not, and write back only on a build that actually baked and only for a
- * blob the store does not already have. NONE of that is platform knowledge —
- * it is all knowledge about the engine, held in the engine — and a shell that
- * mirrors it has to invalidate its mirror when a destroyed surface takes the
- * renderer with it. That is `ttp_net.h`'s argument for the choreography walks
- * one layer down, where all six of the first TV shell's launch bugs lived.
+ * A WALK, AND STORE-AGNOSTIC, which together are the point of this section. It
+ * was three getters per blob kind once, and every shell hand-wrote the same
+ * choreography: ask the key in the one window it is defined over, decide
+ * whether the engine already holds that thing, read only if it does not, write
+ * back only when the build actually made something the store lacks. None of
+ * that is platform knowledge — it is knowledge about the ENGINE, held in the
+ * engine — and a shell that mirrors it has to invalidate its mirror when a
+ * destroyed surface takes the renderer away. That is `ttp_net.h`'s argument for
+ * the choreography walks one layer down, where all six of the first TV shell's
+ * launch bugs lived.
  *
- * So the shell performs FOUR PRIMITIVES it cannot avoid owning — list names with
- * last-used times, read by name, write by name, delete by name — and decides
- * nothing:
+ * So a shell NAMES NO BLOB KIND. It asks which stores exist, and for each one
+ * performs four primitives it cannot avoid owning — list names with last-used
+ * times, read by name, write by name, delete by name:
  *
- *   plan   AFTER ttp_display_biome, BEFORE ttp_display_build (the only window a
- *          bake key is defined over — the biome is half of it). Hand over the
- *          store's contents and your binary's identity; get back
- *              {"drop":["…"],"read":"<name>"|null}
- *          `read` is null when nothing is held OR when the engine is already
- *          holding this very bake, which is the commonest build of all (the same
- *          track, a new field) and costs no read at all.
- *   offer  the bytes `read` named. A blob the engine does not fully trust is a
- *          cache MISS, not an error: it is dropped and the scene rebakes.
- *   keep   AFTER ttp_display_build. Answers {"write":"<name>"} only when this
- *          build actually baked something the store does not already hold;
- *          {} every other time. When it names one, ttp_display_bake_export has
- *          the bytes.
+ *   for each store in ttp_display_blob_stores():
+ *       plan(store, trackId, generation, entries)
+ *                                -> {"drop":["…"], "read":"<name>"|null}
+ *       perform the drops; if `read`, read those bytes and offer(store, them)
+ *   ttp_display_build(...)
+ *   for each store:
+ *       keep(store)              -> {"write":"<name>"|null}
+ *       if `write`, export(store) and write those bytes under that name
+ *
+ * `read` is null when the engine is already holding this one, which is the
+ * commonest build of all and costs no read at all. A blob the engine does not
+ * fully trust is a cache MISS, not an error: it is dropped and the scene makes
+ * the thing again.
+ *
+ * THE WINDOW IS AFTER PROVISIONING AND BEFORE THE BUILD, for both stores. The
+ * bake's key needs the biome latched; the masks' key is derived from the car
+ * GLBs the shell has already handed over, so it does not exist until they have
+ * been. One call site satisfies both.
  *
  * GENERATION IS THE INVALIDATION and it stays yours, because only a shell knows
  * what identifies its own binary — Android's install time, tvOS's bundle
  * version, the web's BUILD_STAMP hash. It is folded into the NAME, so a new
  * binary cannot name the old one's blob at all: a shader edit reproduces the
- * same bake key and would otherwise serve shadows baked by the old vesm,
- * invisibly and across restarts. (The BACKEND the engine runs is in the key
- * already — a blob's byte orientation is the writer's, so a device flipping
- * between Vulkan and GL keeps a blob per backend.)
+ * same key and would otherwise serve bytes baked by the old material,
+ * invisibly and across restarts. (The BACKEND is in the key already — a blob's
+ * byte orientation is the writer's, so a device flipping between Vulkan and GL
+ * keeps a blob per backend.)
  *
- * Both JSON answers are scratch, per ttp_abi.h. export answers NULL when
- * nothing is baked. */
-TTP_ABI const char* ttp_display_bake_plan(const char* trackId, const char* generation,
-                                          const char* entriesJson);
-TTP_ABI void ttp_display_bake_offer(const uint8_t* bytes, uint32_t len);
-TTP_ABI const char* ttp_display_bake_keep(void);
-TTP_ABI const uint8_t* ttp_display_bake_export(uint32_t* outLen);
+ * Every JSON answer is scratch, per ttp_abi.h. export answers NULL when there
+ * is nothing to keep. */
+TTP_ABI const char* ttp_display_blob_stores(void);
+TTP_ABI const char* ttp_display_blob_plan(const char* store, const char* trackId,
+                                          const char* generation, const char* entriesJson);
+TTP_ABI void ttp_display_blob_offer(const char* store, const uint8_t* bytes, uint32_t len);
+TTP_ABI const char* ttp_display_blob_keep(const char* store);
+TTP_ABI const uint8_t* ttp_display_blob_export(const char* store, uint32_t* outLen);
 
 /* Tear the scene down; the engine, views, materials and provided assets live
  * on, so the next ttp_display_build is cheap. */

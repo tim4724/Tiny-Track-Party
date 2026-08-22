@@ -195,6 +195,21 @@ public:
     bool exportBake(std::vector<uint8_t>& out);
     bool importBake(const uint8_t* bytes, uint32_t len);
 
+    // The SILHOUETTE layers as bytes, on the same argument as the sun bake and
+    // measured on the same box: five of them cost ~330 ms of a launch's first
+    // build (a GPU render and a flushAndWait each), they are small, and they
+    // are a pure function of the GLB bytes baked into them. The renderer
+    // already keeps them across scenes for exactly that reason; this is the
+    // tier below, across RUNS.
+    //
+    // The key is the SET of models this build will use, read out of the car
+    // GLBs the shell has already provided — so masksKey must be asked after
+    // provisioning and before the build, which is where the bake's window also
+    // happens to be legal.
+    std::string masksKey() const;
+    bool exportMasks(std::vector<uint8_t>& out);
+    bool importMasks(const uint8_t* bytes, uint32_t len);
+
     // Has a frame of the CURRENT scene FINISHED on the GPU — not merely been
     // submitted, which is all render()'s true says. The two part company on a
     // queueing backend: Vulkan's first frames after a build sit behind the
@@ -1447,8 +1462,9 @@ private:
     // `asFloat` picks the pixel type (the ESM is R16F and reads as FLOAT, the
     // visibility map is R8 and reads as UBYTE); the enum itself cannot appear
     // here, where filament::Texture is only forward-declared.
+    // `layer` is the array slice to read, or -1 for a plain 2D texture.
     bool readBakeTexture(filament::Texture* tex, bool asFloat,
-            std::vector<uint8_t>& out);
+            std::vector<uint8_t>& out, int layer = -1);
 
     bool buildTrackScene(const std::vector<TtpRosterCar>& roster, const ttp::RaceTrack& geo,
             const ttp::rt::Theme& theme, const ttp::rt::WearPlan& wear);

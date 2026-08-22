@@ -28,6 +28,10 @@ final class GameCoordinator: ObservableObject {
     let net: PartyNet
     let audio: AudioDevice
     let assets: AssetStore
+    /// Where blobs kept between runs live — one directory per store the engine
+    /// lists. Nil under a scenario: a screenshot harness must photograph what a
+    /// build produces, not what a previous run left on disk.
+    let blobs: BlobStores?
     let proto: GameProtocol
     let lobbyDemo: LobbyDemo
     let advertiser = RoomAdvertiser()
@@ -99,6 +103,7 @@ final class GameCoordinator: ObservableObject {
 
     init(baseURL: URL) {
         assets = AssetStore(baseURL: baseURL)
+        blobs = Scenarios.requested == nil ? BlobStores() : nil
         proto = GameProtocol.load(baseURL: baseURL)
         display = DisplayHost()
         net = PartyNet(proto: proto, socket: RelaySocket())

@@ -192,7 +192,7 @@ object SceneStaging {
         roster: List<RosterSlot>,
         display: DisplayHost,
         store: AssetStore,
-        blobs: BlobStore? = null,
+        blobs: BlobStores? = null,
     ): String {
         // THE SIX STEPS ARE TIMED SEPARATELY. A build measures 737-1323 ms on the
         // reference box and blocks the main thread for all of it, inbound relay
@@ -223,28 +223,6 @@ object SceneStaging {
         //    it, so a fetch that runs first is a fetch of the wrong models.
         val resolved = TtpJson.strOrEmpty(Ttp.ttp_theme_biome_for_track(TtpJson.arg(trackId)))
         Ttp.ttp_display_biome(TtpJson.arg(resolved))
-        // 2b. THE SUN BAKE'S WALK, first half. Between the biome latch and the
-        //     build is the only window a bake key is defined over, and that is
-        //     the engine's rule, not this file's — everything below performs an
-        //     answer. Nothing here knows what a bake IS.
-        blobs?.let { store ->
-            val plan = TtpJson.obj(Ttp.ttp_display_bake_plan(
-                TtpJson.arg(trackId), TtpJson.arg(store.generation),
-                TtpJson.arg(store.entriesJson())))
-            val drop = plan.optJSONArray("drop") ?: JSONArray()
-            // Plain strings, never JSON null — unlike `read` below, which is why
-            // only that one needs the optStr guard.
-            for (i in 0 until drop.length()) {
-                drop.optString(i).takeIf { it.isNotEmpty() }?.let { store.delete(it) }
-            }
-            // optStr, not optString: `read` is a key the ABI spells JSON null,
-            // and org.json's optString would hand back the STRING "null" — a
-            // read of a file called "null" (tests/androidtv-nullable-json.test.js
-            // keeps everyone honest about it).
-            TtpJson.optStr(plan, "read")?.let { name ->
-                store.read(name)?.let { Ttp.ttp_display_bake_offer(it) }
-            }
-        }
         step(1)
 
         // 3. Scenery, in the SLOT ORDER C++ named. The index IS the contract:
@@ -332,6 +310,30 @@ object SceneStaging {
         Trace.endSection()
         step(4)
 
+        // 5b. THE BLOB WALKS, first half — AFTER provisioning and before the
+        //     build, which is the one window that suits every store: the bake's
+        //     key needs the biome (latched at step 2), the masks' is derived
+        //     from the car GLBs handed over at step 5. NOTHING HERE NAMES A BLOB
+        //     KIND; the engine lists its stores and this performs the answers.
+        blobs?.forEach { store, name ->
+            val plan = TtpJson.obj(Ttp.ttp_display_blob_plan(
+                TtpJson.arg(name), TtpJson.arg(trackId), TtpJson.arg(store.generation),
+                TtpJson.arg(store.entriesJson())))
+            val drop = plan.optJSONArray("drop") ?: JSONArray()
+            // Plain strings, never JSON null — unlike `read`, which is why only
+            // that one needs the optStr guard.
+            for (i in 0 until drop.length()) {
+                drop.optString(i).takeIf { it.isNotEmpty() }?.let { store.delete(it) }
+            }
+            // optStr, not optString: `read` is a key the ABI spells JSON null,
+            // and org.json's optString would hand back the STRING "null" — a
+            // read of a file called "null" (tests/androidtv-nullable-json.test.js
+            // keeps everyone honest about it).
+            TtpJson.optStr(plan, "read")?.let { blobName ->
+                store.read(blobName)?.let { Ttp.ttp_display_blob_offer(TtpJson.arg(name), it) }
+            }
+        }
+
         // 6. Build. A track ID and a roster, and nothing else: the geometry is
         //    the native TrackBuilder's (the same ttp::RaceTrack a session on
         //    this track races on, so the road drawn and the road driven are one
@@ -359,15 +361,16 @@ object SceneStaging {
             throw Failure("ttp_display_build($trackId) rejected the track: " +
                 TtpJson.strOrEmpty(Ttp.ttp_last_error()))
         }
-        // THE WALK'S second half. Whether this build baked anything worth
-        // keeping — and whether the store already has it — is the engine's to
-        // know; the export costs a readback of both maps, so it is asked for
-        // only when a name comes back.
-        blobs?.let { store ->
-            TtpJson.optStr(TtpJson.obj(Ttp.ttp_display_bake_keep()), "write")?.let { name ->
-                Ttp.ttp_display_bake_export()?.let { blob ->
-                    store.write(name, blob)
-                    Log.i(TAG, "bake stored as $name (${blob.size / 1024} KiB)")
+        // THE WALKS' second half. Whether this build made anything worth keeping
+        // — and whether the store already has it — is the engine's to know; an
+        // export costs a readback per texture, so it is asked for only when a
+        // name comes back.
+        blobs?.forEach { store, name ->
+            TtpJson.optStr(TtpJson.obj(Ttp.ttp_display_blob_keep(TtpJson.arg(name))),
+                    "write")?.let { blobName ->
+                Ttp.ttp_display_blob_export(TtpJson.arg(name))?.let { blob ->
+                    store.write(blobName, blob)
+                    Log.i(TAG, "$name stored as $blobName (${blob.size / 1024} KiB)")
                 }
             }
         }

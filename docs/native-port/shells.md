@@ -96,14 +96,25 @@ one box and obviously wrong on another:
 | Web (Chromium, desktop GPU) | 85–213 ms | 101–271 ms |
 | Apple TV 4K (A10X, Metal) | 64 ms | 199 ms |
 
+…and the silhouettes beside them, which are the other half of what a launch pays:
+
+| | five silhouette bakes | warm launch, both stores |
+|---|---|---|
+| Android TV reference box | ~330 ms | 1870 → **181 ms** |
+| Apple TV 4K | (inside `cars`) | 197 → **49 ms** |
+
 (The Android figure is a first build in a fresh process, which is what a launch
 actually pays. An older 520 ms is quoted elsewhere in the tree from a different
 box and backend — measure yours rather than inheriting either number.)
 
-Android caches it. **tvOS deliberately does not**: 64 ms is the whole prize, and
-a multi-megabyte read plus two texture uploads would spend most of it — and a
-repeat build there is already free from the in-memory reuse. That is a measured
-refusal, not an omission; do not "finish" it without a number that disagrees.
+**tvOS refused this once, on those numbers, and the refusal did not survive a
+second blob kind.** 64 ms alone did not pay for a storage layer. Adding the
+SILHOUETTE layers — five GPU bakes, ~330 ms on the Android box and the bulk of a
+cold `cars` phase everywhere — changed the sum, and the Apple TV's warm launch
+went 197 ms to 49 ms. The lesson is about arithmetic rather than about tvOS: a
+store is worth writing when the STORES TOGETHER pay for it, so judge the shell
+half against every kind the engine lists, not against whichever one you are
+adding today.
 
 If your platform's number does justify it, **you write four primitives and no
 policy** — list names with last-used times, read by name, write by name, delete

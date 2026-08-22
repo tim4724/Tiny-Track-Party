@@ -122,10 +122,11 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
      * Where blobs kept between runs live, or null where there is none (a
      * scenario harness, a device with no writable files dir). Set once at boot.
      *
-     * It is a STORE, not a bake cache: what to read, keep and drop is the bake
-     * walk's answer in `ttp_display.h`, and this side only performs it.
+     * They are STORES, not caches of anything in particular: what to read, keep
+     * and drop is the blob walk's answer in `ttp_display.h`, and which stores
+     * exist is the engine's list too. This side only performs.
      */
-    var blobs: BlobStore? = null
+    var blobs: BlobStores? = null
 
     /** Set once a scene is built; `ttp_display_frame` on an empty scene is legal but blank. */
     var hasScene: Boolean = false

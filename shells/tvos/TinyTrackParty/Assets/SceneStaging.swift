@@ -163,7 +163,8 @@ enum SceneStaging {
     /// prop for an absent texture, both deliberately. Failing the whole build
     /// over one would turn a cosmetic gap into a race that cannot start.
     static func build(trackId: String, biome: String?, roster: [RosterSlot], showcase: Bool,
-                      display: DisplayHost, store: AssetStore) async throws {
+                      display: DisplayHost, store: AssetStore,
+                      blobs: BlobStores? = nil) async throws {
         generation += 1
         let mine = generation
         // THE STEPS ARE TIMED SEPARATELY, and the REUSED count rides beside the
@@ -263,6 +264,28 @@ enum SceneStaging {
         step(3)
         guard generation == mine else { return }
 
+        // 6b. THE BLOB WALKS, first half — AFTER provisioning and before the
+        //     build, which is the one window that suits every store: the bake's
+        //     key needs the biome (latched at step 3), the masks' is derived
+        //     from the car GLBs handed over at step 6. NOTHING HERE NAMES A BLOB
+        //     KIND; the engine lists its stores and this performs the answers.
+        blobs?.forEach { blobStore, name in
+            let plan = TTP.obj(ttp_display_blob_plan(
+                name, trackId, blobStore.generation, blobStore.entriesJSON()))
+            for case let dropped as String in (plan["drop"] as? [Any]) ?? [] {
+                blobStore.delete(dropped)
+            }
+            // `read` is JSON null on a miss, which Swift's `as? String` gives
+            // back as nil — the trap Android's org.json needs a guard for.
+            if let blobName = plan["read"] as? String, let bytes = blobStore.read(blobName) {
+                bytes.withUnsafeBytes { raw in
+                    ttp_display_blob_offer(name, raw.bindMemory(to: UInt8.self).baseAddress,
+                                           UInt32(bytes.count))
+                }
+            }
+        }
+        guard generation == mine else { return }
+
         // 7. Build. A track ID and a roster, and nothing else: the geometry is
         //    the native TrackBuilder's (the same `ttp::RaceTrack` a session on
         //    this track races on, so the road drawn and the road driven are one
@@ -282,6 +305,18 @@ enum SceneStaging {
             throw Failure.buildRejected(trackId)
         }
         step(4)
+        // THE WALKS' second half. Whether this build made anything worth keeping
+        // — and whether the store already has it — is the engine's to know; an
+        // export costs a readback per texture, so it is asked for only when a
+        // name comes back.
+        blobs?.forEach { blobStore, name in
+            guard let blobName = TTP.obj(ttp_display_blob_keep(name))["write"] as? String
+            else { return }
+            var outLen: UInt32 = 0
+            guard let p = ttp_display_blob_export(name, &outLen), outLen > 0 else { return }
+            blobStore.write(blobName, Data(bytes: p, count: Int(outLen)))
+            print("[ttp] \(name) stored as \(blobName) (\(outLen / 1024) KiB)")
+        }
         print(String(format:
             "[ttp] build split %@: biome %.0f scenery %.0f textures %.0f cars+props %.0f"
             + " native %.0f ms (%d assets, %d KiB handed over)",

@@ -147,7 +147,8 @@ extension GameCoordinator {
                                              roster: roster,
                                              showcase: false,
                                              display: display,
-                                             store: assets)
+                                             store: assets,
+                                             blobs: blobs)
                 // The boost icon's chevrons are the BIOME's accent, chosen for
                 // contrast with this track's deck rather than to match the
                 // scenery, so it can only be read once the build has resolved

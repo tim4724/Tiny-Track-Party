@@ -27,13 +27,17 @@ struct DisplayCore : DisplayState {
     TtpRenderer* renderer = nullptr;
     bool built = false;
 
-    // The bake walk's state between its two crossings (ttp_display.h). It spans
+    // One blob walk's state between its crossings (ttp_display.h). It spans
     // `plan` → `offer` → `build` → `keep`, which is one scene build and never
-    // outlives it: `plan` resets all three, so a shell that skips a step gets a
-    // walk that declines to write rather than one that writes the wrong blob.
-    std::string bakePlanName;  // what this key reads and writes under
-    bool bakePlanHeld = false; // …and whether the store already had it
-    bool bakePrimed = false;   // the engine took the blob the shell offered
+    // outlives it: `plan` resets it, so a shell that skips a step gets a walk
+    // that declines to write rather than one that writes the wrong blob.
+    struct BlobWalk {
+        std::string name;   // what this key reads and writes under
+        bool held = false;  // …and whether the store already had it
+        bool primed = false;// the engine took the blob the shell offered
+    };
+    // One per store, indexed as ttp_display_blob_stores lists them.
+    BlobWalk blobWalk[2];
 };
 
 // The process-wide display slot — the ABI is a deliberate singleton (see

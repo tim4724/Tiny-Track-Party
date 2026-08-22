@@ -102,12 +102,12 @@ const OVERRIDES = {
   // The sun bake as a blob. It hands its length back through an out-param the
   // Kotlin side never sees — same deal as ttp_glb_ghost, minus the input — so a
   // shell gets a right-sized ByteArray or null and cannot get the pair wrong.
-  ttp_display_bake_export: { kind: 'bytesOut' },
+  ttp_display_blob_export: { kind: 'strBytesOut' },
   // ...and back, as (bytes, len) collapsed to one ByteArray for the reason
   // ttp_display_asset's entry gives: separate arguments can disagree, and that
   // disagreement is a buffer overrun. It answers nothing: whether the engine
   // took the blob is the WALK's business, not the shell's (ttp_display.h).
-  ttp_display_bake_offer: { kind: 'bytesInVoid' },
+  ttp_display_blob_offer: { kind: 'strBytesInVoid' },
 };
 
 // ---------------------------------------------------------------------------
@@ -346,6 +346,25 @@ function emitC(fns) {
       call = `toBytes(env, p, outLen)`;
       retC = 'jbyteArray';
       sig = '()[B';
+    } else if (kind === 'strBytesOut') {
+      // …the same, behind a leading string argument (the store's name).
+      args.push('jbyteArray a0');
+      pre.push(`    CStr s0(env, a0);`);
+      pre.push(`    uint32_t outLen = 0;`);
+      pre.push(`    const uint8_t* p = ${fn.name}(s0.get(), &outLen);`);
+      call = `toBytes(env, p, outLen)`;
+      retC = 'jbyteArray';
+      sig = '([B)[B';
+    } else if (kind === 'strBytesInVoid') {
+      args.push('jbyteArray a0');
+      args.push('jbyteArray bytes');
+      pre.push(`    CStr s0(env, a0);`);
+      pre.push(`    const jsize n = bytes ? env->GetArrayLength(bytes) : 0;`);
+      pre.push(`    std::vector<uint8_t> b((size_t) n);`);
+      pre.push(`    if (n) env->GetByteArrayRegion(bytes, 0, n, (jbyte*) b.data());`);
+      call = `${fn.name}(s0.get(), b.data(), (uint32_t) n)`;
+      retC = 'void';
+      sig = '([B[B)V';
     } else if (kind === 'bytesInInt' || kind === 'bytesInVoid') {
       const answers = kind === 'bytesInInt';
       args.push('jbyteArray bytes');
@@ -447,6 +466,8 @@ function emitKt(fns) {
     else if (kind === 'bytesOut') { ps = []; ret = 'ByteArray?'; }
     else if (kind === 'bytesInInt') { ps = ['bytes: ByteArray?']; ret = 'Int'; }
     else if (kind === 'bytesInVoid') { ps = ['bytes: ByteArray?']; ret = 'Unit'; }
+    else if (kind === 'strBytesOut') { ps = ['store: ByteArray?']; ret = 'ByteArray?'; }
+    else if (kind === 'strBytesInVoid') { ps = ['store: ByteArray?', 'bytes: ByteArray?']; ret = 'Unit'; }
     else if (kind === 'block') { ps = []; ret = 'ByteBuffer?'; }
     L.push(`    external fun ${fn.name}(${ps.join(', ')})${ret === 'Unit' ? '' : ': ' + ret}`);
   }

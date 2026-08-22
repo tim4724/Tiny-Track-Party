@@ -3,6 +3,8 @@
 // motion — behaviour, member set and ABI are unchanged.
 #include "TtpRendererImpl.h"
 
+#include <algorithm>
+#include <cstdio>
 #include <atomic>
 #include <chrono>
 #include <utility>
@@ -1019,14 +1021,16 @@ bool takeF32(const uint8_t*& p, const uint8_t* end, float& v) {
 // road light's own read says the same thing about FLOAT). The caller takes the
 // channel it wants out of the four.
 bool TtpRenderer::readBakeTexture(Texture* tex, bool asFloat,
-        std::vector<uint8_t>& out) {
+        std::vector<uint8_t>& out, int layer) {
     if (!tex || !mRenderer) return false;
     const Texture::Type type = asFloat ? Texture::Type::FLOAT : Texture::Type::UBYTE;
     const uint32_t bytesPerChannel = asFloat ? 4u : 1u;
     const uint32_t W = tex->getWidth(0), H = tex->getHeight(0);
-    RenderTarget* rt = RenderTarget::Builder()
-            .texture(RenderTarget::AttachmentPoint::COLOR, tex)
-            .build(*mEngine);
+    RenderTarget::Builder rtb;
+    rtb.texture(RenderTarget::AttachmentPoint::COLOR, tex);
+    // An ARRAY slice, the same way bakeSilhouette renders into one.
+    if (layer >= 0) rtb.layer(RenderTarget::AttachmentPoint::COLOR, (uint32_t) layer);
+    RenderTarget* rt = rtb.build(*mEngine);
     if (!rt) return false;
     struct Read { std::vector<uint8_t> px; std::atomic<bool> done{ false }; };
     auto* rd = new Read;
@@ -1213,4 +1217,148 @@ bool TtpRenderer::importBake(const uint8_t* bytes, uint32_t len) {
             (const math::half4*) roadSrc + roadCount);
     mBakedKey = key;
     return true;
+}
+
+// ── The silhouette layers, as bytes ─────────────────────────────────────────
+//
+// Same argument as the sun bake above, same blob discipline, and the same two
+// Filament traps (a Y flip that is GL's alone, and UPLOADABLE on anything
+// setImage touches — the array already carries it for the generic layer). What
+// differs is the KEY: a bake is a fact about the track, a mask is a fact about
+// a MODEL, so the blob holds every baked model layer and is keyed by the SET of
+// models in it.
+//
+// Worth keeping because they are not cheap and not once: five bakes cost ~330 ms
+// of a launch's first build on the Android reference box, a GPU render and a
+// flushAndWait each. The renderer already keeps them across SCENES for exactly
+// this reason (see releaseScene); this is the tier below, across runs.
+namespace {
+constexpr uint32_t kMaskMagic = 0x4b53544du;  // 'MTSK', little-endian
+// v2 carries a KIND per layer. v1 stored only the four model layers, so the
+// monster's — which is keyed by nothing, because the truck never changes —
+// still baked on every launch and simply inherited the one-time cost the model
+// layers used to pay. The whole point is that a warm launch bakes NO silhouette.
+constexpr uint32_t kMaskVersion = 2u;
+constexpr uint32_t kMaskKindModel = 0u;    // goes in any free model layer
+constexpr uint32_t kMaskKindMonster = 1u;  // goes in kMaskLayerMonster, always
+}  // namespace
+
+// What the NEXT build's silhouettes will be OF: the distinct car models the
+// shell has already provided, in a stable order so the key cannot depend on
+// which slot happens to wear what. Empty when no car bytes are provided yet,
+// which is what makes the window explicit — ask after provisioning.
+std::string TtpRenderer::masksKey() const {
+    std::vector<uint64_t> keys;
+    for (uint32_t c = 0; c < 16; c++) {
+        const auto it = mAssets.find("car" + std::to_string(c) + ".glb");
+        if (it == mAssets.end() || it->second.empty()) continue;
+        const uint64_t k = glbBytesKey(it->second);
+        if (std::find(keys.begin(), keys.end(), k) == keys.end()) keys.push_back(k);
+    }
+    if (keys.empty()) return std::string();
+    std::sort(keys.begin(), keys.end());
+    std::string out;
+    for (const uint64_t k : keys) {
+        char buf[24];
+        std::snprintf(buf, sizeof buf, "%016llx", (unsigned long long) k);
+        if (!out.empty()) out.push_back('-');
+        out += buf;
+    }
+    return out + "|" + std::to_string(backendId());
+}
+
+bool TtpRenderer::exportMasks(std::vector<uint8_t>& out) {
+    if (!mDecalMaskArray || !mRenderer) return false;
+    const bool flip = mEngine->getBackend() == Engine::Backend::OPENGL;
+    const size_t cell = (size_t) kMaskCellW * kMaskCellH * 4;
+    std::vector<uint8_t> body;
+    uint32_t stored = 0;
+    // The four MODEL layers, then the monster's — every layer a scene bakes.
+    for (int i = 0; i <= kMaskLayerMonster; i++) {
+        const bool monster = i == kMaskLayerMonster;
+        if (!(mMaskLayerBakedBits & (uint16_t) (1u << i))) continue;
+        if (!monster && !mMaskLayerKey[i]) continue;
+        std::vector<uint8_t> px;
+        if (!readBakeTexture(mDecalMaskArray, /*asFloat=*/false, px, i)) continue;
+        if (px.size() < cell) continue;
+        const uint32_t kind = monster ? kMaskKindMonster : kMaskKindModel;
+        const uint64_t k = monster ? 0ull : mMaskLayerKey[i];
+        putU32(body, kind);
+        body.insert(body.end(), (const uint8_t*) &k, (const uint8_t*) &k + 8);
+        // The blob is in the WRITING backend's setImage order — exportBake's
+        // flip note is the whole argument and applies here unchanged.
+        for (int y = 0; y < kMaskCellH; y++) {
+            const uint8_t* row = px.data()
+                    + (size_t) (flip ? kMaskCellH - 1 - y : y) * kMaskCellW * 4;
+            body.insert(body.end(), row, row + (size_t) kMaskCellW * 4);
+        }
+        stored++;
+    }
+    if (!stored) return false;
+    out.clear();
+    putU32(out, kMaskMagic);
+    putU32(out, kMaskVersion);
+    putU32(out, (uint32_t) mEngine->getBackend());
+    putU32(out, (uint32_t) kMaskCellW);
+    putU32(out, (uint32_t) kMaskCellH);
+    putU32(out, stored);
+    out.insert(out.end(), body.begin(), body.end());
+    return true;
+}
+
+// Put stored layers back and CLAIM them, so the build's own claimMaskLayer
+// finds each model already held and skips its bake — the very path a second
+// race on one field already takes.
+bool TtpRenderer::importMasks(const uint8_t* bytes, uint32_t len) {
+    if (!bytes || len < 24 || !mEngine || !ensureDecalMaskArray()) return false;
+    const uint8_t* p = bytes;
+    const uint8_t* end = bytes + len;
+    uint32_t magic = 0, version = 0, backend = 0, w = 0, h = 0, count = 0;
+    if (!takeU32(p, end, magic) || magic != kMaskMagic) return false;
+    if (!takeU32(p, end, version) || version != kMaskVersion) return false;
+    // A blob is in its writer's byte order and nothing here can re-orient it.
+    if (!takeU32(p, end, backend) || backend != (uint32_t) mEngine->getBackend()) return false;
+    if (!takeU32(p, end, w) || w != (uint32_t) kMaskCellW) return false;
+    if (!takeU32(p, end, h) || h != (uint32_t) kMaskCellH) return false;
+    if (!takeU32(p, end, count)) return false;
+    const size_t cell = (size_t) kMaskCellW * kMaskCellH * 4;
+    uint32_t took = 0;
+    for (uint32_t n = 0; n < count; n++) {
+        if ((size_t) (end - p) < 12 + cell) break;
+        uint32_t kind = 0;
+        if (!takeU32(p, end, kind)) break;
+        uint64_t k = 0;
+        std::memcpy(&k, p, 8);
+        p += 8;
+        int slot = -1;
+        bool held = false;
+        if (kind == kMaskKindMonster) {
+            // One fixed home, because nothing else may live there.
+            held = (mMaskLayerBakedBits & (uint16_t) (1u << kMaskLayerMonster)) != 0;
+            slot = kMaskLayerMonster;
+        } else {
+            for (int i = 0; i < kMaskLayerModels; i++) {
+                if (mMaskLayerKey[i] == k && (mMaskLayerBakedBits & (uint16_t) (1u << i))) held = true;
+            }
+            for (int i = 0; i < kMaskLayerModels && slot < 0; i++) {
+                if (!(mMaskLayerBakedBits & (uint16_t) (1u << i))) slot = i;
+            }
+        }
+        if (held || slot < 0) { p += cell; continue; }
+        // The descriptor points straight at the caller's buffer, which the ABI
+        // says outlives this call — and the drain below makes sure it is read
+        // before that promise expires.
+        Texture::PixelBufferDescriptor pbd(
+                const_cast<uint8_t*>(p), cell,
+                Texture::Format::RGBA, Texture::Type::UBYTE,
+                [](void*, size_t, void*) {}, nullptr);
+        mDecalMaskArray->setImage(*mEngine, 0, 0, 0, (uint32_t) slot,
+                (uint32_t) kMaskCellW, (uint32_t) kMaskCellH, 1, std::move(pbd));
+        if (kind != kMaskKindMonster) mMaskLayerKey[slot] = k;
+        mMaskLayerBakedBits |= (uint16_t) (1u << slot);
+        p += cell;
+        took++;
+    }
+    mEngine->flushAndWait();
+    return took > 0;
 }

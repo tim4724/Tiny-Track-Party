@@ -148,11 +148,12 @@ class GameCoordinator(
         assets = AssetStore(context.assets)
         proto = GameProtocol.load(baseUrl)
         display = DisplayHost(surfaceView)
-        // Where blobs kept between runs live. Constructed here because it needs
-        // a Context and the display does not have one. Scenarios get none: a
-        // screenshot harness must photograph what a build produces, not what a
-        // previous run left on disk.
-        if (!Scenarios.active) display.blobs = BlobStore(context, "bake")
+        // Where blobs kept between runs live — one directory per store the
+        // engine lists. Constructed here because it needs a Context and the
+        // display does not have one. Scenarios get none: a screenshot harness
+        // must photograph what a build produces, not what a previous run left
+        // on disk.
+        if (!Scenarios.active) display.blobs = BlobStores(context)
         net = PartyNet(proto, RelaySocket(), context)
         advertiser = RoomAdvertiser(context)
         audio = AudioDevice(context.assets, baseUrl)
