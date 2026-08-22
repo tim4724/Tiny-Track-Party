@@ -2,9 +2,12 @@ name: Release
 
 # What a release needs, in one workflow:
 #
-#   - the signed store build of the Android TV app: a .aab kept as a workflow
-#     artifact, and on a release tag published to Play's Android TV closed
-#     testing track.
+#   - the signed store builds: TWO bundles out of ONE native build, kept as a
+#     workflow artifact and, on a release tag, published to Play. The TV bundle
+#     (leanback REQUIRED) goes to tv:Alpha. The phoneTest bundle (leanback
+#     optional plus a LAUNCHER filter) goes to the ordinary alpha track,
+#     because Play's twelve-testers-for-fourteen-continuous-days gate is per
+#     APP, and a tester who owns no television cannot install the TV one.
 #   - the store SCREENSHOTS, as a second artifact. Both jobs are independent;
 #     the pictures do not wait for the engine and cannot be lost to it failing.
 #
@@ -55,6 +58,12 @@ jobs:
     # A cache miss means building Filament for two ABIs plus the host tools.
     # The cap is the job limit, not an estimate: a hit finishes in minutes.
     timeout-minutes: 360
+    # Both bundles, named once, because four steps below need the paths. The
+    # phoneTest file name is AGP's variant convention (app-<variant>.aab), not
+    # a choice made here.
+    env:
+      TV_AAB: shells/androidtv/app/build/outputs/bundle/release/app-release.aab
+      PHONE_AAB: shells/androidtv/app/build/outputs/bundle/phoneTest/app-phoneTest.aab
     steps:
       - uses: actions/checkout@v6
 
@@ -197,59 +206,86 @@ jobs:
       - name: Build the engine
         run: native/scripts/build-runtime-android.sh both
 
-      # Play rejects a reused versionCode, so stamp a unique one. The +100
-      # reserves a band below it for bundles built and uploaded BY HAND, of which
-      # there is already one (code 1, the bundle that opened the tv:Alpha track);
-      # raw run numbers would eventually collide with that band. Tag builds take
-      # their versionName from the tag; a
-      # dispatch keeps build.gradle.kts's commit-stamped default. Both are
-      # command-line overrides: the static values in the build file stay put.
-      - name: Build release bundle (.aab)
+      # TWO CODES PER RUN, and THE TV BUNDLE TAKES THE HIGHER OF THE PAIR.
+      # Both reasons point the same way:
+      #
+      #   - Version codes are ONE SPACE across every track, so whichever bundle
+      #     is lower shows as "replaced by another release" in the console. Put
+      #     that on the phone track, not on the one the TV listing is promoted
+      #     from. (We have already chased this once, from the other side.)
+      #   - phoneTest makes leanback OPTIONAL, so a TELEVISION is compatible
+      #     with BOTH bundles, and Play serves a device the highest code it can
+      #     install. Invert the pair and TVs get the phone manifest — the exact
+      #     thing src/phoneTest/AndroidManifest.xml exists to keep off them.
+      #
+      # run*2 because one run now stamps two of them; +100 still reserves the
+      # band below for bundles built and uploaded by hand, of which there are
+      # four. Tag builds take their versionName from the tag, a dispatch keeps
+      # build.gradle.kts's commit-stamped default. All of it is a command-line
+      # override: the static values in the build file stay put.
+      #
+      # Two gradlew invocations rather than one with both tasks, because
+      # -PttpVersionCode is a project property and there is one of it per
+      # invocation. The second run is cheap — same engine .so, same Kotlin,
+      # only R8 and packaging again.
+      - name: Build release bundles (.aab)
         working-directory: shells/androidtv
         run: |
           set -eu
-          VERSION_ARGS=("-PttpVersionCode=$((GITHUB_RUN_NUMBER + 100))")
+          BASE=$((GITHUB_RUN_NUMBER * 2 + 100))
+          ARGS=(--console=plain --stacktrace)
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then
-            VERSION_ARGS+=("-PttpVersionName=$GITHUB_REF_NAME")
+            ARGS+=("-PttpVersionName=$GITHUB_REF_NAME")
           fi
-          ./gradlew bundleRelease --console=plain --stacktrace "${VERSION_ARGS[@]}"
+          ./gradlew bundlePhoneTest "${ARGS[@]}" "-PttpVersionCode=$BASE"
+          ./gradlew bundleRelease   "${ARGS[@]}" "-PttpVersionCode=$((BASE + 1))"
 
       # THE FALLBACK'S GUARD RAIL. app/build.gradle.kts signs with the debug key
       # when keystore.properties is absent or unreadable, which is what keeps the
       # compile-only leg and a fresh worktree building a release APK with no
       # secret. Here that same fallback would hand Play an artifact signed by the
-      # wrong key, so prove the upload key was actually picked up.
+      # wrong key, so prove the upload key was actually picked up. BOTH bundles:
+      # phoneTest inherits the signing config through initWith, and "inherits"
+      # is a claim worth checking rather than trusting.
       #
       # An EQUALITY against the keystore's own certificate, not a search for
       # "Android Debug" in the output: a negative grep also passes when keytool
       # prints nothing at all, which is the one case worth catching. Both sides
       # go through -printcert so the labels match whatever locale the runner is
       # in — the other subcommands translate theirs.
-      - name: Verify release signature
+      - name: Verify release signatures
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           set -eu
-          AAB=shells/androidtv/app/build/outputs/bundle/release/app-release.aab
           want=$(keytool -exportcert -keystore "$RUNNER_TEMP/upload-keystore.jks" \
               -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" -rfc |
             keytool -printcert | grep -m1 'SHA256:' | tr -d ' ')
-          got=$(keytool -printcert -jarfile "$AAB" | grep -m1 'SHA256:' | tr -d ' ')
           echo "keystore $want"
-          echo "bundle   $got"
-          if [ -z "$got" ] || [ "$want" != "$got" ]; then
-            echo "::error::the bundle is not signed with the upload key"
-            exit 1
-          fi
+          # Named paths, not a glob: a glob that matches nothing walks straight
+          # through the loop and reports success.
+          for aab in "$TV_AAB" "$PHONE_AAB"; do
+            [ -f "$aab" ] || { echo "::error::$aab was not built"; exit 1; }
+            got=$(keytool -printcert -jarfile "$aab" | grep -m1 'SHA256:' | tr -d ' ')
+            echo "$(basename "$aab") $got"
+            if [ -z "$got" ] || [ "$want" != "$got" ]; then
+              echo "::error::$aab is not signed with the upload key"
+              exit 1
+            fi
+          done
 
-      # Before publishing, so a Play-side rejection still leaves the bundle
-      # downloadable from the run.
-      - name: Upload .aab artifact
+      # Before publishing, so a Play-side rejection still leaves both bundles
+      # downloadable from the run. They keep their variant directories inside
+      # the artifact, which is the only thing telling them apart once
+      # downloaded.
+      - name: Upload .aab artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: tinytrack-androidtv-aab
-          path: shells/androidtv/app/build/outputs/bundle/release/app-release.aab
+          name: tinytrack-bundles
+          path: |
+            ${{ env.TV_AAB }}
+            ${{ env.PHONE_AAB }}
           if-no-files-found: error
 
       # TAGS ONLY, unlike the artifact above. A dispatch is a build — the
@@ -270,15 +306,39 @@ jobs:
       # still reviews the release. Point this at tv:production and the draft gate
       # has to come back. mapping.txt goes with it or every crash report from an
       # R8 build is unreadable.
-      - name: Publish to Play (Android TV closed testing)
+      #
+      # TWO STEPS, AND EACH IS ITS OWN PLAY EDIT. There is no transaction across
+      # them, so a failure in the second leaves the first published. THAT IS NOT
+      # RE-RUNNABLE: GITHUB_RUN_NUMBER does not change on a re-run, so the codes
+      # come out identical and the TV upload refuses its own as already used.
+      # Recover by moving the tag, not by pressing re-run.
+      - name: Publish TV bundle to Play (tv:Alpha)
         if: github.ref_type == 'tag'
         uses: r0adkll/upload-google-play@v1.1.5
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: games.couchpad.tinytrack
-          releaseFiles: shells/androidtv/app/build/outputs/bundle/release/app-release.aab
+          releaseFiles: ${{ env.TV_AAB }}
           mappingFile: shells/androidtv/app/build/outputs/mapping/release/mapping.txt
           track: tv:Alpha
+          status: completed
+
+      # THE TESTER COUNT LIVES HERE. `alpha` is the default form factor's closed
+      # track, which is the one twelve people can actually opt into without
+      # owning a television — and the gate is per app, so clearing it here
+      # clears it for the TV listing too. A tv: track will NOT take this bundle
+      # (Play: "does not require features that are required on this track:
+      # android.software.leanback"), which is also why there is no one shared
+      # track to put both on.
+      - name: Publish phone bundle to Play (alpha)
+        if: github.ref_type == 'tag'
+        uses: r0adkll/upload-google-play@v1.1.5
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: games.couchpad.tinytrack
+          releaseFiles: ${{ env.PHONE_AAB }}
+          mappingFile: shells/androidtv/app/build/outputs/mapping/phoneTest/mapping.txt
+          track: alpha
           status: completed
 
   # THE STORE PICTURES, and they come from the WEB display rather than from a

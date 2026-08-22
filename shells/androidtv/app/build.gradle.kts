@@ -132,11 +132,11 @@ android {
         // Same applicationId, so both are the same app to Play and each upload
         // still needs a versionCode nothing has used.
         //
-        // NOTHING BUILDS THIS AUTOMATICALLY, on purpose. release.yml builds
-        // `release` only: testers are onboarded once, not re-recruited per
-        // release, so a phone build is an occasional hand upload rather than
-        // part of every tag. Build it with `./gradlew bundlePhoneTest
-        // -PttpVersionCode=<n>` and take the code from the band below 100 that
+        // A RELEASE TAG SHIPS THIS TOO. release.yml builds both bundles from
+        // one native build and gives THIS ONE THE LOWER versionCode of the
+        // pair — read the reason there before changing either, it is not a
+        // formality. By hand it is `./gradlew bundlePhoneTest
+        // -PttpVersionCode=<n>`, taking a code from the band below 100 that
         // release.yml's versionCode comment reserves for hand uploads.
         //
         // DELIBERATELY A BUILD TYPE AND NOT A FLAG ON `release`: release is what
