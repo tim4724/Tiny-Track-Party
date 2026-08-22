@@ -42,7 +42,21 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
             // QUERY and survives this. A per-frame fence is exactly the kind
             // of kick-boundary pin that stops a tiler overlapping frame N+1's
             // vertex work with frame N's fill.
-            .feature("engine.frame_info.disable_gpu_complete_metric", true);
+            .feature("engine.frame_info.disable_gpu_complete_metric", true)
+            // VULKAN, and inert on every other backend. Filament's default is a
+            // staging allocation, a vkCmdCopyBuffer and a pipeline barrier
+            // either side of it for every buffer write that follows a read in
+            // the same command buffer; on a UNIFIED-MEMORY device the buffer is
+            // already mapped, so the bypass writes it with a plain memcpy and
+            // the barrier pair — a pipeline drain on a tiler — goes away. That
+            // pair is paid PER CELL, so a four-way split pays it four times:
+            // measured -1.5 ms of a 40 ms 4P/1080 frame on the reference box,
+            // interleaved, with the boards pixel-identical either way.
+            //
+            // Filament ships this OFF and calls it experimental. It is enabled
+            // here as a MEASURED decision about one device family, not a
+            // statement that the feature is finished upstream.
+            .feature("backend.vulkan.enable_staging_buffer_bypass", true);
     if (stereoEyes) builder.featureLevel(backend::FeatureLevel::FEATURE_LEVEL_2);
     mEngine = builder.build();
     if (mEngine) {
