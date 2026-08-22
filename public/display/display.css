@@ -857,13 +857,22 @@ html.cam-free #race { pointer-events: none; }
 }
 
 /* ---- Corner buttons ---- */
-/* The top-right row over the scene: mute + fullscreen (everywhere but the
-   welcome board, see below) + pause (races only, .hidden off-race). .icon-btn
-   (theme.css) gives them the toy-button look; we only place them here. The row
-   shares the top-right corner with each cell's
-   place/lap readout, so it auto-fades once the race chrome goes idle (see
-   html.chrome-idle below). The fade is the ROW's transition, which leaves each
-   button's own .icon-btn hover/press transitions untouched. */
+/* The top-right row over the scene, on EVERY screen: mute + fullscreen
+   (everywhere but the welcome board, see below) + pause (races only, .hidden
+   off-race). .icon-btn (theme.css) gives them the toy-button look; we only place
+   them here. The row keeps this corner during a race too (user call): it is
+   where a viewer reaches for these controls, and moving it on the lobby -> race
+   change only means they are not there when someone reaches.
+
+   IT SHARES THE CORNER WITH A CELL'S PLACE/LAP BADGE, and simply draws over it:
+   the row is layered above #race's whole stacking context, and the cell overlay
+   lives inside that one, unlayered on #scene — so nothing the race paints can
+   reach over the row whatever z-index it is later given. Nothing is nudged out
+   of the way either: the badge is placed from its own cell and stays there.
+   What resolves the overlap is the auto-hide: a few seconds without a mouse or a
+   key and the row fades off the badge entirely (html.chrome-idle below). The
+   fade is the ROW's transition, which leaves each button's own .icon-btn
+   hover/press transitions untouched. */
 #corner-btns {
   position: fixed; z-index: 12;
   top: var(--corner-top);
@@ -872,31 +881,6 @@ html.cam-free #race { pointer-events: none; }
   transition: opacity 0.4s ease;
 }
 #corner-btns .icon-btn { width: var(--corner-btn); height: var(--corner-btn); }
-
-/* DURING A RACE THE TOP-RIGHT BELONGS TO THE PLACE/LAP READOUT, so the row gets
-   out of it. The two shared the corner and merely faded after a few idle seconds
-   (see .chrome-idle below), which left the ordinal — the one number a player
-   looks for — under a mute button for the first laps.
-
-   The signal is `#race` being on screen, which is `show()`'s own doing and the
-   same one the section itself runs on — NOT the pause button. The pause button is
-   the tempting one (it joins the row only during a race), but it is pushed by a
-   `set-pause-button` effect the gallery's `racing` scenario never sends, so a rule
-   keyed on it would put the buttons in one corner live and the other in every
-   reference shot. (`:has` is already how .ticket reads its own children; it is
-   needed here rather than `~` because #race comes AFTER this row in the markup.)
-
-   The bottom-right is the one corner no cell chrome uses: every steer bar is
-   centred in its OWN cell, and the music credit takes the bottom-left. On the
-   stacked 2-player layout it lands on the letterbox bar, which is the best place
-   on the screen for it — dead space, covering no picture at all.
-
-   The jump is not animated: it happens on the lobby -> race change, behind the
-   countdown, where the whole screen is changing anyway. */
-body:has(#race:not(.hidden)) #corner-btns {
-  top: auto;
-  bottom: calc(var(--safe-y-b) + var(--corner-inset));
-}
 
 /* The welcome board has no fullscreen toggle: NEW GAME is the gesture that
    claims fullscreen, so a second control beside it is only a way to spend the
