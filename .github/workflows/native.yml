@@ -5,7 +5,9 @@ name: Native conformance
 # shared corpora/fixtures bit-for-bit on every leg of the platform matrix —
 # desktop clang (linux x64 + macOS arm64), emscripten/WASM under Node, the
 # tvOS simulator, and an Android NDK cross-compile. Acceptance for Track S
-# M4: every fixture byte-exact on every runnable target.
+# M4: every fixture byte-exact on every runnable target. The android-full leg
+# is the one non-conformance job: it links the complete Android artifact,
+# renderer included, against the pinned Filament SDK for both shipped ABIs.
 
 on:
   pull_request:
@@ -14,7 +16,10 @@ on:
       - 'tests/fixtures/**'
       - '.github/workflows/native.yml'
   push:
-    branches: [main]
+    # android-pixelated-fztcl is TEMPORARY, to prove the android-full leg's
+    # cold Filament build on a real runner before this merges — remove it once
+    # that job is green.
+    branches: [main, android-pixelated-fztcl]
     paths:
       - 'native/**'
       - 'tests/fixtures/**'
@@ -133,3 +138,66 @@ jobs:
         run: cmake -S native -B native/build/android -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_LATEST_HOME/build/cmake/android.toolchain.cmake -DANDROID_ABI=${{ matrix.abi }} -DANDROID_PLATFORM=android-24
       - name: Build
         run: cmake --build native/build/android --parallel
+
+  android-full:
+    # The WHOLE Android artifact — renderer and display shim included — linked
+    # into libttp_runtime_android.so for both ABIs. The android-ndk leg above
+    # deliberately stops short of the renderer (it needs the Filament SDK), so
+    # an ABI-specific compile or link break in TtpRenderer* or the display
+    # shims used to be invisible to CI — and the arm64 slice ships DEVICE-
+    # untested (the reference box is 32-bit userspace), so before this job the
+    # first thing to execute a broken arm64 renderer build was a user's box.
+    #
+    # The Filament SDK slices are built from the pinned fork ONCE per pin bump
+    # and cached by the pin commit (~110 MB): a warm run compiles only this
+    # tree in a few minutes; a pin bump pays the fork build once. The fork's
+    # gradle AAR step (which build.sh runs after installing the slices) is
+    # allowed to fail — the slices under out/android-release/filament are the
+    # whole prize, and the num_views grep is require_sdk_slice's own gate
+    # (native/scripts/build-runtime-android.sh) for a slice built without
+    # multiview.
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v6
+      - name: Read the Filament pin
+        id: pin
+        run: sed -n 's/^FILAMENT_COMMIT=/commit=/p' native/filament.pin >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        id: sdk
+        with:
+          path: filament-sdk
+          key: filament-android-sdk-multiview-${{ steps.pin.outputs.commit }}
+      - name: Build the pinned Filament Android SDK (pin bump only)
+        if: steps.sdk.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q ninja-build libc++-dev libc++abi-dev libglu1-mesa-dev libxi-dev
+          remote=$(sed -n 's/^FILAMENT_REMOTE=//p' native/filament.pin)
+          git init -q filament-src
+          git -C filament-src remote add origin "$remote"
+          git -C filament-src fetch -q --depth 1 origin ${{ steps.pin.outputs.commit }}
+          git -C filament-src checkout -q --detach FETCH_HEAD
+          # The command build-runtime-android.sh prescribes for a missing
+          # slice, both ABIs in one pass. || true covers the trailing gradle
+          # AAR build alone; the test/grep lines are the real gate.
+          cd filament-src
+          CC=clang CXX=clang++ ANDROID_HOME=$ANDROID_HOME \
+            ./build.sh -i -q armeabi-v7a,arm64-v8a -S multiview -p android release || true
+          for abi in armeabi-v7a arm64-v8a; do
+            lib=out/android-release/filament/lib/$abi/libfilament.a
+            test -f "$lib"
+            LC_ALL=C grep -aq num_views "$lib"
+          done
+          cd ..
+          mkdir filament-sdk
+          cp -R filament-src/out/android-release/filament/. filament-sdk/
+      - name: Link the full runtime (both ABIs)
+        run: |
+          for abi in armeabi-v7a arm64-v8a; do
+            cmake -S native -B native/build/android-$abi -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_LATEST_HOME/build/cmake/android.toolchain.cmake \
+              -DANDROID_ABI=$abi -DANDROID_PLATFORM=android-24 -DANDROID_STL=c++_static \
+              -DFILAMENT_SDK=$PWD/filament-sdk
+            cmake --build native/build/android-$abi --target ttp_runtime_android --parallel
+          done
