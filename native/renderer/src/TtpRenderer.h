@@ -755,6 +755,20 @@ private:
     std::vector<TerrainFlat> mTerrainFlats;
     void setupTerrain(const TrackBin& tb);
     float terrainY(const TrackBin& tb, float x, float z) const;
+
+    // The corridor the terrain keeps flat around the road, and the ramp back up
+    // to full height past it. Named because the SAMPLE INDEX's search radius is
+    // derived from them: they used to be two literals inside terrainY.
+    static constexpr float kFlatR = 4.0f;
+    static constexpr float kRampR = 24.0f;
+    // Bucket size for that index. Anything from "a few samples per cell" up
+    // works; this keeps the neighbourhood search at 3x3 for a typical track.
+    static constexpr float kIndexCell = 32.0f;
+
+    void buildTerrainSampleIndex(const TrackBin& tb);
+    std::vector<std::vector<uint32_t>> mTsiCells;  // XZ bucket -> sample indices
+    int mTsiCols = 0, mTsiRows = 0;
+    float mTsiX0 = 0, mTsiZ0 = 0, mTsiReach = 0;
     // The sampled heightfield the ground MESH is built from, kept so every
     // placement stands on the mesh's own piecewise-linear surface rather than
     // the analytic field — between grid vertices they differ by enough to bury

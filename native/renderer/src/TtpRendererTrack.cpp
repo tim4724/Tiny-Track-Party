@@ -70,6 +70,47 @@ void TtpRenderer::setupTerrain(const TrackBin& tb) {
     mTerrainX0 = std::max(x0 - EXT, -LIM); mTerrainX1 = std::min(x1 + EXT, LIM);
     mTerrainZ0 = std::max(z0 - EXT, -LIM); mTerrainZ1 = std::min(z1 + EXT, LIM);
     if (tb.samples.empty()) mTerrainAmp = 0;
+    buildTerrainSampleIndex(tb);
+}
+
+// A bucket index over the track samples in XZ, so terrainY can ask "how far to
+// the road" without walking the whole centreline.
+//
+// It walked it before: ~9,400 grid points times a few thousand samples is ~19
+// MILLION distance-with-sqrt per build, and it measured 72 ms on the Android
+// reference box — 46% of a rebuild once the bodies were pooled, and the single
+// biggest phase left. A cache would have hidden it and still paid it on the
+// first build of every track, which is the one that hurts.
+//
+// EXACT, not approximate, and that is what the cell size buys. terrainY only
+// needs the true distance while it is inside the ramp: at or under kFlatR the
+// answer is the flat ground, at or over kFlatR + kRampR the mask saturates and
+// the exact value stops mattering. So a sample can only change the answer if it
+// is within that ramp plus its own half-width, and a search of the cells within
+// kIndexCell of the query covers every one of them.
+void TtpRenderer::buildTerrainSampleIndex(const TrackBin& tb) {
+    mTsiCells.clear();
+    mTsiCols = mTsiRows = 0;
+    if (tb.samples.empty()) return;
+    float maxHalfW = 0;
+    for (const auto& s : tb.samples) maxHalfW = std::max(maxHalfW, s.width * 0.5f);
+    // The reach a sample can have over a query point, and therefore the radius
+    // the neighbourhood search has to cover.
+    mTsiReach = kFlatR + kRampR + maxHalfW;
+    mTsiX0 = mTerrainX0 - mTsiReach;
+    mTsiZ0 = mTerrainZ0 - mTsiReach;
+    const float w = (mTerrainX1 + mTsiReach) - mTsiX0;
+    const float h = (mTerrainZ1 + mTsiReach) - mTsiZ0;
+    mTsiCols = std::max(1, (int) std::ceil(w / kIndexCell));
+    mTsiRows = std::max(1, (int) std::ceil(h / kIndexCell));
+    mTsiCells.assign((size_t) mTsiCols * mTsiRows, {});
+    for (uint32_t i = 0; i < tb.samples.size(); i++) {
+        const auto& s = tb.samples[i];
+        const int c = (int) ((s.pos.x - mTsiX0) / kIndexCell);
+        const int r = (int) ((s.pos.z - mTsiZ0) / kIndexCell);
+        if (c < 0 || r < 0 || c >= mTsiCols || r >= mTsiRows) continue;
+        mTsiCells[(size_t) r * mTsiCols + c].push_back(i);
+    }
 }
 
 float TtpRenderer::terrainY(const TrackBin& tb, float x, float z) const {
@@ -83,14 +124,34 @@ float TtpRenderer::terrainY(const TrackBin& tb, float x, float z) const {
     // Flat corridor: distance past the road EDGE (each sample's own width, like
     // the scatter's isClear), ramping to full height 28u out. Raised deck keeps
     // its flat ground too — the pillars, posts and berms under it stand on it.
+    // Only the samples that can reach this point — see buildTerrainSampleIndex.
+    // Anything further away cannot pull `edge` below the ramp's top, where the
+    // first smooth01 has already clamped to 1.
     float edge = 1e30f;
-    for (const auto& s : tb.samples) {
-        const float dx = x - s.pos.x, dz = z - s.pos.z;
-        const float d = std::sqrt(dx * dx + dz * dz) - s.width * 0.5f;
-        if (d < edge) edge = d;
-        if (edge <= 4.0f) return tb.groundY;
+    if (mTsiCells.empty()) {
+        for (const auto& s : tb.samples) {
+            const float dx = x - s.pos.x, dz = z - s.pos.z;
+            const float d = std::sqrt(dx * dx + dz * dz) - s.width * 0.5f;
+            if (d < edge) edge = d;
+            if (edge <= kFlatR) return tb.groundY;
+        }
+    } else {
+        const int span = (int) std::ceil(mTsiReach / kIndexCell);
+        const int cq = (int) ((x - mTsiX0) / kIndexCell);
+        const int rq = (int) ((z - mTsiZ0) / kIndexCell);
+        for (int r = std::max(0, rq - span); r <= std::min(mTsiRows - 1, rq + span); r++) {
+            for (int c = std::max(0, cq - span); c <= std::min(mTsiCols - 1, cq + span); c++) {
+                for (const uint32_t i : mTsiCells[(size_t) r * mTsiCols + c]) {
+                    const auto& sm = tb.samples[i];
+                    const float dx = x - sm.pos.x, dz = z - sm.pos.z;
+                    const float d = std::sqrt(dx * dx + dz * dz) - sm.width * 0.5f;
+                    if (d < edge) edge = d;
+                    if (edge <= kFlatR) return tb.groundY;
+                }
+            }
+        }
     }
-    float mask = smooth01((edge - 4.0f) / 24.0f) * smooth01(border / 24.0f);
+    float mask = smooth01((edge - kFlatR) / kRampR) * smooth01(border / kRampR);
     for (const TerrainFlat& f : mTerrainFlats) {
         if (mask <= 0) break;
         const float dx = x - f.x, dz = z - f.z;
@@ -1255,15 +1316,21 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     buildWater(tb);
     buildFliers(tb);
     buildOils(tb);   // the cones and signs; the slick itself is a road stamp
+    phaseMark("w:water+oil");
     buildStructures(tb);
     // Landmarks FIRST: their spots carve flat clearings into the terrain field
     // (mTerrainFlats), which the scatter and the ground mesh then sample. The
     // three streams are independently seeded, so this order moves nothing.
     buildLandmarks(tb);
+    phaseMark("w:struct+land");
     buildTerrainGrid(tb); // the clearings are carved; freeze the surface
+    phaseMark("w:terrain");
     buildScenery(tb);
+    phaseMark("w:scenery");
     buildProps(tb);
+    phaseMark("w:props");
     buildClutter(tb);
+    phaseMark("w:clutter");
 
     // The ground sheet, last of the static builders: the terrain field is
     // only complete once the landmark spots have carved their clearings.
