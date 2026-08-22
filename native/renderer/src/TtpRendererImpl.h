@@ -87,15 +87,17 @@ constexpr uint32_t kOilCones = 4;
 // Lawn base — makeLawnTexture's flat ground colour (#6aa84f); the stripe/grain
 // texture detail is later work.
 constexpr uint32_t LAWN_SRGB = 0x6aa84f;
-// Sky-dome radius. The JS dome sits at 420, but Filament's fog is CAMERA-
-// relative: chase cams roam up to ~100u from the origin, so sky content in a
-// 405 band could pass within the 400 fog cutoff of a cell's camera and render
-// FOGGED (a pale wedge over the track — the JS clouds/balloon are fog:false).
-// The dome scales up (its gradient is directional — screen-identical) and the
-// unfogged band moves to SKY_BAND so no camera ever sees sky content closer
-// than the cutoff.
-constexpr float SKY_R = 600.0f;
-constexpr float SKY_BAND = 520.0f; // clouds/balloon push-out radius (min camera distance ≈ 420)
+// Clouds/balloon push-out radius. Filament's fog is CAMERA-relative and chase
+// cams roam up to ~100u from the origin, so sky content any nearer than this
+// could pass within the 400 fog cutoff of a cell's camera and render FOGGED (a
+// pale wedge over the track — the JS clouds/balloon are fog:false). 520 leaves
+// a minimum camera distance of ~420.
+//
+// THE DOME THAT USED TO SIT OUT HERE IS GONE (TtpRenderer.h, mSkyCubemaps).
+// Pushing it out to 600 for this same fog rule is what put it past CAM_FAR and
+// punched a moving circular hole in the sky; the gradient is a skybox now, drawn
+// at infinity, which this rule cannot reach and no far plane can clip.
+constexpr float SKY_BAND = 520.0f;
 
 // sRGB 0xrrggbb → linear float3, matching THREE.Color's conversion — the JS
 // ribbon feeds LINEAR vertex colours, and parity depends on doing the same.
@@ -106,6 +108,16 @@ inline float3 srgbToLinear(uint32_t rgb) {
     return { srgbChannel(((rgb >> 16) & 0xff) / 255.0f),
              srgbChannel(((rgb >> 8) & 0xff) / 255.0f),
              srgbChannel((rgb & 0xff) / 255.0f) };
+}
+
+// The sky's authored colours, decoded the way the shipped JS pipeline does:
+// TWICE. paintSky pre-linearises what the pipeline then linearises again, which
+// renders a deeper sky than the raw hexes — measured against the live pane.
+// Parity means reproducing the shipped transfer, quirk included. Shared because
+// the skybox bake and its flat fallback must not drift apart.
+inline float3 skyLinear(uint32_t rgb) {
+    const float3 once = srgbToLinear(rgb);
+    return float3{ srgbChannel(once.x), srgbChannel(once.y), srgbChannel(once.z) };
 }
 
 // Bind the silhouette array to a vroad instance, clamped bilinear. Every

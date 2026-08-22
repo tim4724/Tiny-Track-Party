@@ -398,6 +398,21 @@ private:
     filament::Scene* mScene = nullptr;
     filament::Camera* mCamera = nullptr;
     filament::Skybox* mSkybox = nullptr;
+    // THE SKY IS A SKYBOX, NOT A DOME. It used to be a gradient sphere of
+    // radius SKY_R centred on the WORLD ORIGIN, and the far plane is measured
+    // from the CAMERA — so the moment a car left the origin the far side of the
+    // dome sat beyond CAM_FAR and was clipped, leaving a circular hole with the
+    // flat backstop showing through, sliding around as you drove. No radius
+    // fixes that: bigger puts more of it past the plane, smaller walks the
+    // camera through the shell. A skybox is drawn at infinity and cannot be
+    // clipped at all, so the failure mode does not exist.
+    //
+    // Cubemaps are ENGINE-LIFETIME and keyed by the three authored sky colours
+    // — coarser than track|biome, so one bake serves every track in a cup that
+    // shares a sky. They outlive releaseScene the way the parsed-kit cache
+    // does; the Skybox object in front of them is per-scene and owns nothing.
+    std::unordered_map<uint64_t, filament::Texture*> mSkyCubemaps;
+    filament::Texture* skyCubemap(const uint32_t sky[3], float lum);
     filament::Material* mMaterial = nullptr;    // unlit vertex-colour
     filament::Material* mLitMaterial = nullptr; // cheap-matte lit (custom Lambert)
     // vlit minus the sun-shadow sampler (vlitns.mat), for the dressing that
@@ -817,7 +832,6 @@ private:
     void recolourMonsterChassis(filament::gltfio::FilamentAsset* asset,
             const std::vector<filament::gltfio::FilamentInstance*>& instances,
             const filament::math::float4& rgba);
-    Mesh mSky;   // vertex-gradient dome at SKY_R (past the fog cutoff)
     Mesh mHills; // horizon dome ring
     // Per-feature anchors {x, z, top} in AUTHORED coords — the offshore
     // landmarks (lighthouse, sailboat) sit on the LOWEST island.

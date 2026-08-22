@@ -930,36 +930,6 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     }
 
 
-    // Sky dome (environment.js paintSky): vertex gradient zenith→horizon→below,
-    // the same hand-tuned easing. Sits at SKY_R, past the fog cutoff — the sky
-    // is the backdrop the fog dissolves INTO, never fogged itself.
-    {
-        // The shipped JS pipeline effectively sRGB-decodes the dome's authored
-        // colours TWICE (paintSky pre-linearises what the pipeline linearises
-        // again), rendering a deeper sky than the raw hexes — measured against
-        // the live pane. Parity means reproducing the shipped transfer, quirk
-        // included.
-        const auto skyLin = [](uint32_t rgb) {
-            const float3 once = srgbToLinear(rgb);
-            return float3{ srgbChannel(once.x), srgbChannel(once.y), srgbChannel(once.z) };
-        };
-        const float3 top = skyLin(tb.sky[0]);
-        const float3 hor = skyLin(tb.sky[1]);
-        const float3 low = skyLin(tb.sky[2]);
-        // The gradient only varies vertically, so the height segments carry the
-        // picture; the 20 wall segments are silhouette only, and the dome is a
-        // backdrop seen from inside — nothing reads its horizontal facets.
-        appendSphere(mSky, 20, 16,
-                [&](const float3& p) { return p * SKY_R; },
-                [&](const float3& p) {
-                    const float t = p.y; // -1 nadir .. 1 zenith
-                    const float3 c = t >= 0
-                            ? mix(hor, top, std::pow(t, 0.65f))
-                            : mix(hor, low, std::min(1.0f, -t * 3.0f));
-                    return packLinear(c, 1.0f);
-                });
-        if (!buildMesh(mSky)) return false;
-    }
 
     // The gallery's kit field, off in every build but its own. BEFORE the hill
     // ring, which is the one thing in the scene that reaches as far out as the
@@ -1103,6 +1073,29 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
                 .intensity(rig.hemiLux)
                 .build(*mEngine);
         mScene->setIndirectLight(mAmbient);
+
+        // THE SKY, in the one place that can bake it: the skybox samples are
+        // scaled by frameUniforms.iblLuminance on the way out, so the bake has
+        // to pre-divide by it, and that value does not exist until the line
+        // above has run. Both factors are Filament's own, read back from it
+        // rather than recomputed — the same pair fogColorGraded uses, for the
+        // same reason.
+        const float lum = mCamera
+                ? mAmbient->getIntensity() * Exposure::exposure(*mCamera) : 0.0f;
+        Skybox::Builder sb;
+        if (Texture* const sky = skyCubemap(tb.sky, lum)) {
+            sb.environment(sky);
+        } else {
+            // NEVER NO SKYBOX. The bake needs a luminance to pre-divide by, and
+            // a scene without one would otherwise show the view's clear colour
+            // as its sky. The gradient's own HORIZON band, flat, is the closest
+            // single colour to what should be there — and the CONSTANT path is
+            // the one skybox.mat does NOT scale by iblLuminance, so it is
+            // graded and handed over as it is.
+            sb.color(float4{ gradeSrgb(skyLinear(tb.sky[1])), 1.0f });
+        }
+        mSkybox = sb.build(*mEngine);
+        mScene->setSkybox(mSkybox);
     }
 
     // Cars: the real GLB when the shell provided "car<i>.glb" (gltfio +
@@ -2170,6 +2163,77 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     return true;
 }
 
+// The sky, baked once per distinct set of authored colours.
+//
+// The gradient is DIRECTIONAL — it depends on nothing but the view ray's y, a
+// property the dome's own note called out ("its gradient is directional —
+// screen-identical") — so a cubemap holds all of it, and a skybox draws it at
+// infinity where no far plane can reach it.
+//
+// PRE-GRADED, because the skybox material is FILAMENT'S and cannot include
+// ttp_grade.inc — it writes what it samples straight out. And PRE-DIVIDED by
+// iblLuminance, exactly as fogColorGraded is and for the same reason: the
+// sampled path ends in `sky.rgb *= frameUniforms.iblLuminance`. Reading
+// skybox.mat's `featureLevel: 0` as "that branch is compiled out" is wrong —
+// measured, the multiply happens, and the sky came out at 0.73x.
+//
+// HENCE RGBA16F rather than RGBA8: the divide lifts a graded value above 1.0
+// wherever iblLuminance is under it, which a normalised format would clip. 64
+// a face is plenty — the skybox samples with MagFilter::LINEAR over a gradient
+// with no high-frequency content in it.
+filament::Texture* TtpRenderer::skyCubemap(const uint32_t sky[3], float lum) {
+    if (!mEngine || !(lum > 0.0f)) return nullptr;
+    uint64_t key = 14695981039346656037ull;
+    for (int i = 0; i < 3; i++) { key ^= sky[i]; key *= 1099511628211ull; }
+    // The luminance is part of the bake, so it is part of the key.
+    uint32_t lumBits; std::memcpy(&lumBits, &lum, sizeof(lumBits));
+    key ^= lumBits; key *= 1099511628211ull;
+    const auto it = mSkyCubemaps.find(key);
+    if (it != mSkyCubemaps.end()) return it->second;
+
+    const float3 top = skyLinear(sky[0]), hor = skyLinear(sky[1]),
+                 low = skyLinear(sky[2]);
+
+    constexpr uint32_t N = 64;
+    const size_t face = (size_t) N * N;
+    auto* const pix = new float[face * 6 * 4];
+    for (uint32_t f = 0; f < 6; f++) {
+        for (uint32_t y = 0; y < N; y++) {
+            for (uint32_t x = 0; x < N; x++) {
+                const float u = 2.0f * ((float) x + 0.5f) / N - 1.0f;
+                const float v = 2.0f * ((float) y + 0.5f) / N - 1.0f;
+                float3 d;
+                switch (f) {   // GL cubemap face order: +X -X +Y -Y +Z -Z
+                    case 0:  d = {  1.0f,    -v,    -u }; break;
+                    case 1:  d = { -1.0f,    -v,     u }; break;
+                    case 2:  d = {     u,  1.0f,     v }; break;
+                    case 3:  d = {     u, -1.0f,    -v }; break;
+                    case 4:  d = {     u,    -v,  1.0f }; break;
+                    default: d = {    -u,    -v, -1.0f }; break;
+                }
+                const float t = normalize(d).y;   // -1 nadir .. 1 zenith
+                const float3 c = t >= 0
+                        ? mix(hor, top, std::pow(t, 0.65f))
+                        : mix(hor, low, std::min(1.0f, -t * 3.0f));
+                const float3 g = gradeSrgb(c) / lum;
+                float* const px = pix + ((size_t) f * face + (size_t) y * N + x) * 4;
+                px[0] = g.x; px[1] = g.y; px[2] = g.z; px[3] = 1.0f;
+            }
+        }
+    }
+    Texture* const tex = Texture::Builder()
+            .width(N).height(N).levels(1)
+            .sampler(Texture::Sampler::SAMPLER_CUBEMAP)
+            .format(Texture::InternalFormat::RGBA16F)
+            .build(*mEngine);
+    tex->setImage(*mEngine, 0, 0, 0, 0, N, N, 6,
+            Texture::PixelBufferDescriptor(pix, face * 6 * 4 * sizeof(float),
+                    Texture::Format::RGBA, Texture::Type::FLOAT,
+                    [](void* p, size_t, void*) { delete[] static_cast<float*>(p); }));
+    mSkyCubemaps.emplace(key, tex);
+    return tex;
+}
+
 bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& theme,
         const std::vector<TtpRosterCar>& roster, const ttp::rt::WearPlan& wear) {
     // Re-entrant: the game calls this again for every race (releaseScene()
@@ -2385,19 +2449,5 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
     // legal scene — it is what the lobby's track preview is before any car
     // joins it.
     mHasTrack = true;
-    // Sky: flat daylight blue behind the gradient dome (which the fog dissolves
-    // into) — a backstop for the sliver the dome doesn't cover.
-    //
-    // PRE-GRADED, because Filament's skybox material writes its constant colour
-    // straight out and cannot include ttp_grade.inc. Left linear it is the one
-    // surface in the frame that skips the encode, and it shows up as a band of
-    // the wrong blue along the horizon where the dome stops.
-    {
-        const float3 sky = gradeSrgb(float3{ 0.53f, 0.78f, 0.92f });
-        mSkybox = Skybox::Builder()
-                .color(float4{ sky, 1.0f })
-                .build(*mEngine);
-    }
-    mScene->setSkybox(mSkybox);
     return buildTrackScene(roster, geo, theme, wear);
 }

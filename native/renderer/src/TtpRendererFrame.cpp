@@ -148,7 +148,7 @@ static View::FogOptions fogFor(float near, float far, const float3& color) {
     View::FogOptions fog{};
     fog.color = color;
     fog.heightFalloff = 0.0f;
-    fog.cutOffDistance = 400.0f; // keeps the SKY_R dome unfogged (fog:false in the JS)
+    fog.cutOffDistance = 400.0f; // keeps SKY_BAND's sky content unfogged (fog:false in the JS)
     // ALWAYS DISABLED, AND THE OPTIONS STILL MATTER. `enabled` selects Filament's
     // fog VARIANT, which is the expensive thing — a cubemap sampler and a sun
     // inscattering pow behind uniform branches this scene never takes, for one

@@ -1131,7 +1131,7 @@ void TtpRenderer::tagFeatures() {
     tagMesh(mRoad, kFeatRoad);
 
     // The world the deck stands in. mGroundProxy stays out (see tagEntities).
-    meshes({ &mGround, &mSky, &mHills, &mWater, &mWet, &mStructures, &mBerms,
+    meshes({ &mGround, &mHills, &mWater, &mWet, &mStructures, &mBerms,
              &mGroundShadows, &mGantry }, kFeatTerrain);
 
     // Set dressing: everything scattered beside the track.
@@ -1330,7 +1330,6 @@ void TtpRenderer::releaseScene() {
     destroyMesh(mRoad);
     destroyMesh(mGround);
     destroyMesh(mGroundProxy);
-    destroyMesh(mSky);
     destroyMesh(mHills);
     destroyMesh(mBalloon);
     for (auto& m : mCars) destroyMesh(m);
@@ -1534,6 +1533,10 @@ TtpRenderer::~TtpRenderer() {
     // where it used to be one per build that outran its readback, forever.
     for (auto& g : mRoadLightGraves) (void) g.release();
     if (mRoadLightRead && !mRoadLightRead->done) (void) mRoadLightRead.release();
+    // Engine-lifetime, like the parsed-kit cache: outlives every scene, so it
+    // is this destructor's to free and no releaseScene's.
+    for (const auto& [_, tex] : mSkyCubemaps) mEngine->destroy(tex);
+    mSkyCubemaps.clear();
     if (mBlendMaterial) mEngine->destroy(mBlendMaterial);
     if (mPointMaterial) mEngine->destroy(mPointMaterial);
     if (mCloudMaterial) mEngine->destroy(mCloudMaterial);
