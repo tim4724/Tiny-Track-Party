@@ -222,24 +222,10 @@ fun RootScreen(game: GameCoordinator) {
             }
         }
 
-        // Over everything, including the results glass: a frame's cost is most
-        // interesting exactly where a board is on top of the scene.
-        //
-        // BOTTOM-RIGHT, which is where tvOS has always put it
-        // (`PerfOverlay.swift`). It held the TOP-right until the lobby's ⓘ took
-        // that corner to match tvOS's placement; a diagnostic block is the one
-        // thing on screen that can afford to move, and the only control on the
-        // lobby board is not. It shares the corner with the error box below —
-        // both are developer-facing, both are rare, and an error while the
-        // readout is up is a case worth seeing crowded rather than not at all.
-        //
-        // Inside the overscan margin: this is a fixed overlay over a full screen,
-        // so nothing else here is keeping it off the bezel.
-        Box(
-            Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = Tokens.safeMarginX, bottom = Tokens.safeMarginY)
-        ) { PerfOverlay() }
+        // The perf readout is NOT here: it is a plain View beside this whole
+        // ComposeView ([PerfOverlayView] has the argument and the measured
+        // numbers — its Compose form cost ~9× the frame-thread time per
+        // republish). It still shares this corner with the error box below.
 
         // The one channel this app has for saying something went wrong. A TV has no
         // console and no devtools, and every failure path in this shell is silent by
