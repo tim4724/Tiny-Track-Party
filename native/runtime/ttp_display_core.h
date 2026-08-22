@@ -13,6 +13,8 @@
 
 #include "ttp/frame_builder.h"
 
+#include <string>
+
 class TtpRenderer;
 
 namespace ttp {
@@ -24,6 +26,14 @@ namespace rt {
 struct DisplayCore : DisplayState {
     TtpRenderer* renderer = nullptr;
     bool built = false;
+
+    // The bake walk's state between its two crossings (ttp_display.h). It spans
+    // `plan` → `offer` → `build` → `keep`, which is one scene build and never
+    // outlives it: `plan` resets all three, so a shell that skips a step gets a
+    // walk that declines to write rather than one that writes the wrong blob.
+    std::string bakePlanName;  // what this key reads and writes under
+    bool bakePlanHeld = false; // …and whether the store already had it
+    bool bakePrimed = false;   // the engine took the blob the shell offered
 };
 
 // The process-wide display slot — the ABI is a deliberate singleton (see

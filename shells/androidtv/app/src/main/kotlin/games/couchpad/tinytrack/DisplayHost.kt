@@ -119,11 +119,13 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
     var onSurfaceReady: (() -> Unit)? = null
 
     /**
-     * The sun bake's disk tier, or null where there is none (a scenario harness,
-     * a device with no writable files dir). Set once at boot; [BakeCache] holds
-     * the whole argument for why it exists and what it must not get wrong.
+     * Where blobs kept between runs live, or null where there is none (a
+     * scenario harness, a device with no writable files dir). Set once at boot.
+     *
+     * It is a STORE, not a bake cache: what to read, keep and drop is the bake
+     * walk's answer in `ttp_display.h`, and this side only performs it.
      */
-    var bakes: BakeCache? = null
+    var blobs: BlobStore? = null
 
     /** Set once a scene is built; `ttp_display_frame` on an empty scene is legal but blank. */
     var hasScene: Boolean = false
@@ -558,7 +560,7 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
         val started = System.nanoTime()
         Trace.beginSection("ttp:build")
         return try {
-            biome = SceneStaging.build(trackId, roster, this, store, bakes)
+            biome = SceneStaging.build(trackId, roster, this, store, blobs)
             this.trackId = trackId
             hasScene = true
             // A NEW SCENE VOIDS THE SCALE'S MEASUREMENTS — the same argument as

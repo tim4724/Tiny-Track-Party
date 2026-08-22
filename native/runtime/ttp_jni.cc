@@ -191,16 +191,23 @@ jbyteArray n_ttp_display_bake_export(JNIEnv* env, jclass) {
     return toBytes(env, p, outLen);
 }
 
-jint n_ttp_display_bake_import(JNIEnv* env, jclass, jbyteArray bytes) {
+jbyteArray n_ttp_display_bake_keep(JNIEnv* env, jclass) {
+    (void) env;
+    return toBytes(env, ttp_display_bake_keep());
+}
+
+void n_ttp_display_bake_offer(JNIEnv* env, jclass, jbyteArray bytes) {
     const jsize n = bytes ? env->GetArrayLength(bytes) : 0;
     std::vector<uint8_t> b((size_t) n);
     if (n) env->GetByteArrayRegion(bytes, 0, n, (jbyte*) b.data());
-    return (jint) ttp_display_bake_import(b.data(), (uint32_t) n);
+    ttp_display_bake_offer(b.data(), (uint32_t) n);
 }
 
-jbyteArray n_ttp_display_bake_key(JNIEnv* env, jclass, jbyteArray a0) {
+jbyteArray n_ttp_display_bake_plan(JNIEnv* env, jclass, jbyteArray a0, jbyteArray a1, jbyteArray a2) {
     CStr s0(env, a0);
-    return toBytes(env, ttp_display_bake_key(s0.get()));
+    CStr s1(env, a1);
+    CStr s2(env, a2);
+    return toBytes(env, ttp_display_bake_plan(s0.get(), s1.get(), s2.get()));
 }
 
 void n_ttp_display_bench(JNIEnv* env, jclass, jbyteArray a0) {
@@ -1247,8 +1254,9 @@ const JNINativeMethod kMethods[] = {
     { "ttp_display_antialias", "(I)V", (void*) n_ttp_display_antialias },
     { "ttp_display_asset", "([B[B)I", (void*) n_ttp_display_asset },
     { "ttp_display_bake_export", "()[B", (void*) n_ttp_display_bake_export },
-    { "ttp_display_bake_import", "([B)I", (void*) n_ttp_display_bake_import },
-    { "ttp_display_bake_key", "([B)[B", (void*) n_ttp_display_bake_key },
+    { "ttp_display_bake_keep", "()[B", (void*) n_ttp_display_bake_keep },
+    { "ttp_display_bake_offer", "([B)V", (void*) n_ttp_display_bake_offer },
+    { "ttp_display_bake_plan", "([B[B[B)[B", (void*) n_ttp_display_bake_plan },
     { "ttp_display_bench", "([B)V", (void*) n_ttp_display_bench },
     { "ttp_display_bind", "(I)V", (void*) n_ttp_display_bind },
     { "ttp_display_biome", "([B)V", (void*) n_ttp_display_biome },

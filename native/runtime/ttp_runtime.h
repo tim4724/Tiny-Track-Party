@@ -346,12 +346,18 @@ TTP_ABI const char* ttp_item_id(int code);
  * decision is `libttp-runtime/ttp/blobstore.h`'s and the whole argument for the
  * split is in that header; this is the crossing.
  *
- * A shell keeps expensive DERIVED bytes between runs — the sun bake is the first
- * caller (ttp_display_bake_export) — and owns four primitives it cannot avoid
- * owning: list names with last-used times, read by name, write by name, delete by
- * name. It owns nothing else. What a blob is CALLED, when it stops being valid
- * and which ones to evict are rules, and three shells answering them
- * independently is three chances to answer differently.
+ * A shell keeps expensive DERIVED bytes between runs and owns four primitives it
+ * cannot avoid owning: list names with last-used times, read by name, write by
+ * name, delete by name. It owns nothing else. What a blob is CALLED, when it
+ * stops being valid and which ones to evict are rules, and three shells
+ * answering them independently is three chances to answer differently.
+ *
+ * THIS IS THE RAW CROSSING, and a shell should not normally be here. The one
+ * caller so far — the sun bake — reaches it through `ttp_display_bake_plan`
+ * (ttp_display.h), which composes this WITH the engine's own answers about what
+ * it is already holding and whether the last build baked anything, and hands a
+ * shell names to act on. Reach for this directly only for a blob kind that has
+ * no such walk, and consider whether it should grow one instead.
  *
  * Ask once per lookup, with everything currently held:
  *

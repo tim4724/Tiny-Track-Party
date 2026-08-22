@@ -29,8 +29,10 @@
 #include <vector>
 
 #include "TtpRenderer.h"
+#include "ttp/blobstore.h"
 #include "ttp/canonical.h"
 #include "ttp/frame_builder.h"
+#include "ttp/json_read.h"
 #include "ttp/framing.h"
 #include "ttp/render_scale_controller.h"
 #include "ttp/game.h"
@@ -273,15 +275,87 @@ int ttp_display_reroster(const char* rosterJson) {
     return 1;
 }
 
-const char* ttp_display_bake_key(const char* trackId) {
-    // The biome must already be latched (ttp_display_biome), exactly as it must
-    // be before a build — the shell does both in the same step, and a key asked
-    // for before the latch names the PREVIOUS scene's world.
-    static std::string key;
+// What the NEXT build's bake will be OF. The biome must already be latched
+// (ttp_display_biome), exactly as it must be before a build — the shell does
+// both in the same step, and a key derived before the latch names the PREVIOUS
+// scene's world. Internal now: the walk below is the only caller, which is the
+// point — the window used to be a comment every shell had to obey.
+static std::string plannedBakeKey(const char* trackId) {
     const char* biome = (g_disp && !g_disp->biome.empty())
             ? g_disp->biome.c_str() : ttp::rt::biome_for_track(trackId);
-    key = bakeKeyFor(trackId, biome);
-    return key.c_str();
+    return bakeKeyFor(trackId, biome);
+}
+
+const char* ttp_display_bake_plan(const char* trackId, const char* generation,
+                                  const char* entriesJson) {
+    static std::string out;
+    if (!g_disp || !g_disp->renderer) { out = "{}"; return out.c_str(); }
+    // A fresh walk. Reset FIRST, so a plan that goes on to fail leaves a state
+    // that writes nothing rather than one carrying the previous scene's answer.
+    g_disp->bakePlanName.clear();
+    g_disp->bakePlanHeld = false;
+    g_disp->bakePrimed = false;
+
+    const std::string key = plannedBakeKey(trackId);
+    ttp::rt::BlobRequest in;
+    in.store = "bake";
+    in.generation = generation ? generation : "";
+    in.key = key;
+    const ttp::Value entries = ttp::json::parse_or(entriesJson, ttp::Value::Arr());
+    for (const ttp::Value& e : entries.arr) {
+        ttp::rt::BlobEntry be;
+        be.name = ttp::json::str_field(e, "name");
+        // A nameless entry is not a file this store can act on either way, so it
+        // is dropped from the plan's INPUT rather than answered about — same
+        // rule as ttp_blob_plan_json, whose decision function this is.
+        if (be.name.empty()) continue;
+        if (const ttp::Value* used = e.find("usedMs")) be.usedMs = used->num;
+        in.entries.push_back(be);
+    }
+    const ttp::rt::BlobPlan plan = ttp::rt::planBlob(in);
+    g_disp->bakePlanName = plan.name;
+    for (const ttp::rt::BlobEntry& e : in.entries) {
+        if (e.name == plan.name) { g_disp->bakePlanHeld = true; break; }
+    }
+
+    ttp::Value m = ttp::Value::Obj();
+    ttp::Value drop = ttp::Value::Arr();
+    for (const std::string& d : plan.drop) drop.push(ttp::Value::Str(d));
+    m.set("drop", drop);
+    // ALREADY IN THE ENGINE and therefore not worth reading. The renderer keeps
+    // ONE bake, so the commonest build of all — the same track with a new field —
+    // needs no bytes at all, and asking for them would cost a multi-megabyte read
+    // to tell the engine something it already knows. This is the fact a shell
+    // used to mirror; it is answered here, where it cannot go stale.
+    const bool resident = !key.empty() && g_disp->renderer->bakedKey() == key;
+    m.set("read", (!resident && g_disp->bakePlanHeld)
+            ? ttp::Value::Str(plan.name) : ttp::Value::Null());
+    out = ttp::canonical_stringify(m);
+    return out.c_str();
+}
+
+void ttp_display_bake_offer(const uint8_t* bytes, uint32_t len) {
+    if (!g_disp || !g_disp->renderer || !bytes || !len) return;
+    // A blob the engine refuses is a version it does not know, or bytes that do
+    // not describe what they claim. That is a MISS, never an error: the scene
+    // rebakes, and `keep` below then writes the good bytes over these.
+    g_disp->bakePrimed = g_disp->renderer->importBake(bytes, len);
+}
+
+const char* ttp_display_bake_keep(void) {
+    static std::string out;
+    ttp::Value m = ttp::Value::Obj();
+    // Four ways this writes nothing, and only the first is about storage:
+    // the store already holds this blob; the shell never planned (so the name
+    // would be nobody's); the bytes came FROM the store, so writing them back
+    // is a copy of a read; and nothing is baked to export in the first place —
+    // which is also the shadows-off case (setShadowsEnabled clears the key).
+    const bool worth = g_disp && g_disp->renderer && !g_disp->bakePlanName.empty()
+            && !g_disp->bakePlanHeld && !g_disp->bakePrimed
+            && !g_disp->renderer->bakedKey().empty();
+    m.set("write", worth ? ttp::Value::Str(g_disp->bakePlanName) : ttp::Value::Null());
+    out = ttp::canonical_stringify(m);
+    return out.c_str();
 }
 
 const uint8_t* ttp_display_bake_export(uint32_t* outLen) {
@@ -295,10 +369,6 @@ const uint8_t* ttp_display_bake_export(uint32_t* outLen) {
     return blob.data();
 }
 
-int ttp_display_bake_import(const uint8_t* bytes, uint32_t len) {
-    if (!g_disp || !g_disp->renderer) return 0;
-    return g_disp->renderer->importBake(bytes, len) ? 1 : 0;
-}
 
 void ttp_display_release(void) {
     if (!g_disp || !g_disp->built) return;

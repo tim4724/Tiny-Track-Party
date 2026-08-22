@@ -329,34 +329,60 @@ TTP_ABI int ttp_display_build(const char* trackId, const char* rosterJson);
  * the fallback: a full ttp_display_build. */
 TTP_ABI int ttp_display_reroster(const char* rosterJson);
 
-/* ---- the sun bake, as bytes -------------------------------------------------
+/* ---- the sun bake, kept between RUNS ----------------------------------------
  *
  * The bake is ~520 ms of GPU on the slowest shipping box and is RESOLUTION
  * INDEPENDENT: its three sizes are compile-time constants and no viewport,
- * window or render-scale value reaches it. So it is worth keeping between RUNS,
- * not only between builds — and keeping it between runs means a file, which is
- * the shell's job, not this layer's.
+ * window or render-scale value reaches it. So it is worth keeping between runs,
+ * not only between builds — and keeping it between runs means a FILE, which is
+ * the shell's job (ttp_abi.h puts transport on the host side, and wasm has no
+ * filesystem at all).
  *
- * ttp_display_bake_key names what the NEXT build's bake will be OF. Ask it
- * AFTER ttp_display_biome and before ttp_display_build, which is where a shell
- * already latches the biome; asked earlier it names the previous scene's world.
- * Scratch, per ttp_abi.h.
+ * A WALK, NOT THREE GETTERS, and that is the whole point of this section. This
+ * used to be `bake_key` / `bake_import` / `bake_export`, which left every shell
+ * to hand-write the same choreography: ask the key in the one window it is
+ * defined over, decide whether the engine already holds that bake, read only if
+ * it does not, and write back only on a build that actually baked and only for a
+ * blob the store does not already have. NONE of that is platform knowledge —
+ * it is all knowledge about the engine, held in the engine — and a shell that
+ * mirrors it has to invalidate its mirror when a destroyed surface takes the
+ * renderer with it. That is `ttp_net.h`'s argument for the choreography walks
+ * one layer down, where all six of the first TV shell's launch bugs lived.
  *
- * WHAT THE KEY DOES NOT COVER is the binary that produced the bytes. A shader
- * edit reproduces the same key and would serve shadows baked by the old vesm,
- * invisibly and across restarts. Storing a blob under a name that changes with
- * the installed binary is therefore not an optimisation of the shell's file
- * layout, it is the other half of the correctness argument. (The BACKEND the
- * engine runs IS in the key — a blob's byte orientation is the writer's, so a
- * device flipping between Vulkan and GL keeps a blob per backend.)
+ * So the shell performs FOUR PRIMITIVES it cannot avoid owning — list names with
+ * last-used times, read by name, write by name, delete by name — and decides
+ * nothing:
  *
- * export answers NULL when nothing is baked. import answers 1 when the resident
- * bake is now the blob's — including the case where it already was, which costs
- * nothing — and 0 for any blob it does not fully trust, leaving a resident bake
- * untouched. A rejected blob is a cache miss, never an error: bake and carry on. */
-TTP_ABI const char* ttp_display_bake_key(const char* trackId);
+ *   plan   AFTER ttp_display_biome, BEFORE ttp_display_build (the only window a
+ *          bake key is defined over — the biome is half of it). Hand over the
+ *          store's contents and your binary's identity; get back
+ *              {"drop":["…"],"read":"<name>"|null}
+ *          `read` is null when nothing is held OR when the engine is already
+ *          holding this very bake, which is the commonest build of all (the same
+ *          track, a new field) and costs no read at all.
+ *   offer  the bytes `read` named. A blob the engine does not fully trust is a
+ *          cache MISS, not an error: it is dropped and the scene rebakes.
+ *   keep   AFTER ttp_display_build. Answers {"write":"<name>"} only when this
+ *          build actually baked something the store does not already hold;
+ *          {} every other time. When it names one, ttp_display_bake_export has
+ *          the bytes.
+ *
+ * GENERATION IS THE INVALIDATION and it stays yours, because only a shell knows
+ * what identifies its own binary — Android's install time, tvOS's bundle
+ * version, the web's BUILD_STAMP hash. It is folded into the NAME, so a new
+ * binary cannot name the old one's blob at all: a shader edit reproduces the
+ * same bake key and would otherwise serve shadows baked by the old vesm,
+ * invisibly and across restarts. (The BACKEND the engine runs is in the key
+ * already — a blob's byte orientation is the writer's, so a device flipping
+ * between Vulkan and GL keeps a blob per backend.)
+ *
+ * Both JSON answers are scratch, per ttp_abi.h. export answers NULL when
+ * nothing is baked. */
+TTP_ABI const char* ttp_display_bake_plan(const char* trackId, const char* generation,
+                                          const char* entriesJson);
+TTP_ABI void ttp_display_bake_offer(const uint8_t* bytes, uint32_t len);
+TTP_ABI const char* ttp_display_bake_keep(void);
 TTP_ABI const uint8_t* ttp_display_bake_export(uint32_t* outLen);
-TTP_ABI int ttp_display_bake_import(const uint8_t* bytes, uint32_t len);
 
 /* Tear the scene down; the engine, views, materials and provided assets live
  * on, so the next ttp_display_build is cheap. */

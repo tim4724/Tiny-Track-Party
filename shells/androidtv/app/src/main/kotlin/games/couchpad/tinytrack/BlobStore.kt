@@ -9,26 +9,34 @@ import java.io.File
 /**
  * Bytes kept between runs, in a directory, under names the ENGINE chooses.
  *
- * This is the Android half of `ttp_blob_plan_json` and it is deliberately almost
- * nothing: list, read, write, delete. What a blob is called, when it stops being
- * valid and which ones to evict are decided in `libttp-runtime/ttp/blobstore.h`,
- * where they are stated once for every shell and pinned by the `abi` ctest —
- * because the answers are not equally visible when wrong. A bad eviction wastes
- * disk. A bad INVALIDATION serves a stale blob forever, across restarts, with
- * nothing on screen to say so.
+ * FOUR PRIMITIVES AND NO POLICY. This lists, reads, writes and deletes; it does
+ * not know what a blob contains, what it is called, when it stops being valid or
+ * which one to throw away. Those are rules rather than platform facts, and they
+ * live in `libttp-runtime/ttp/blobstore.h` where they are stated once for every
+ * shell and pinned by the `abi` ctest — because the answers are not equally
+ * visible when wrong. A bad eviction wastes disk. A bad INVALIDATION serves a
+ * stale blob forever, across restarts, with nothing on screen to say so.
+ *
+ * It knows nothing about the SUN BAKE either, which is the point of the walk in
+ * `ttp_display.h`: the engine decides what to read, what to keep and what to
+ * drop, and hands this a name. There used to be a `BakeCache` beside this file
+ * holding that choreography — the window a bake key is defined over, whether the
+ * engine already had the bake, whether the build had actually baked — and every
+ * line of it was knowledge about the ENGINE living in a shell, with a mirror
+ * this side had to invalidate whenever a destroyed surface took the renderer
+ * away. tvOS and the web would each have needed their own copy.
  *
  * **[generation] is this shell's one real contribution**, and it is the install
  * time rather than the versionName. A `-dirty` build keeps one version string
  * across many edits, which is exactly the development loop where a stale blob is
  * most likely and hardest to spot; the install time moves whether the version
  * string did or not. The engine folds it into the NAME, so a new binary cannot
- * name the old one's file at all — and the old ones come back in `drop` on the
- * first plan that sees them.
+ * name the old one's file at all.
  *
  * NOTHING HERE IS LOAD-BEARING. A miss, a short read, a corrupt blob, a full
  * disk and a failed delete all mean the same thing: compute it again. That is
  * what a cache is, and it is why every road out of this file is a null or a
- * false rather than an exception.
+ * no-op rather than an exception.
  */
 class BlobStore(context: Context, private val store: String) {
 
@@ -41,7 +49,8 @@ class BlobStore(context: Context, private val store: String) {
         null
     }
 
-    private val generation: String = try {
+    /** What identifies the binary that produced (or would produce) these bytes. */
+    val generation: String = try {
         context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime.toString()
     } catch (e: Exception) {
         // No identity is not "any identity": an empty generation would still
@@ -52,16 +61,14 @@ class BlobStore(context: Context, private val store: String) {
     }
 
     /**
-     * The name [key] lives under, having first performed the plan's deletions.
+     * Everything held, as the walk's `entries` argument.
      *
-     * Null when there is nowhere to put anything. Ask once per lookup: the plan
-     * answers the name AND the eviction together, so a caller cannot perform one
-     * and forget the other.
+     * `usedMs` is this shell's clock and is never compared against anything but
+     * its siblings — an epoch, an uptime and a file mtime all sort the same way.
      */
-    fun resolve(key: String): String? {
-        val d = dir ?: return null
+    fun entriesJson(): String {
         val entries = JSONArray()
-        d.listFiles()?.forEach {
+        dir?.listFiles()?.forEach {
             if (!it.isFile) return@forEach
             // A `.part` is a write that died between its temp file and its
             // rename, so it is junk rather than a blob: it can never be read
@@ -72,22 +79,7 @@ class BlobStore(context: Context, private val store: String) {
             if (it.name.endsWith(".part")) { runCatching { it.delete() }; return@forEach }
             entries.put(JSONObject().put("name", it.name).put("usedMs", it.lastModified().toDouble()))
         }
-        val req = JSONObject()
-            .put("store", store)
-            .put("generation", generation)
-            .put("key", key)
-            .put("entries", entries)
-        val plan = TtpJson.obj(Ttp.ttp_blob_plan_json(TtpJson.arg(req.toString())))
-        val drop = plan.optJSONArray("drop") ?: JSONArray()
-        for (i in 0 until drop.length()) {
-            val name = drop.optString(i)
-            if (name.isNotEmpty()) runCatching { File(d, name).delete() }
-        }
-        // optStr, not optString: `name` is a key the ABI spells JSON null
-        // elsewhere, and org.json's optString would hand back the STRING "null"
-        // — a blob cheerfully written to a file called "null"
-        // (tests/androidtv-nullable-json.test.js keeps everyone honest about it).
-        return TtpJson.optStr(plan, "name")?.ifEmpty { null }
+        return entries.toString()
     }
 
     /** The blob's bytes, or null for a miss. Touches it, so eviction sees it as used. */
@@ -123,6 +115,9 @@ class BlobStore(context: Context, private val store: String) {
         }
     }
 
-    /** Whether a blob is already held, without reading it. */
-    fun has(name: String): Boolean = File(dir ?: return false, name).isFile
+    /** Throw one away. A delete that fails is not an error; the plan repeats it. */
+    fun delete(name: String) {
+        val d = dir ?: return
+        runCatching { File(d, name).delete() }
+    }
 }

@@ -148,12 +148,11 @@ class GameCoordinator(
         assets = AssetStore(context.assets)
         proto = GameProtocol.load(baseUrl)
         display = DisplayHost(surfaceView)
-        // The bake's disk tier. Constructed here because it needs a Context and
-        // the display does not have one; it prunes the previous binary's blobs on
-        // the way up, which is why it is built at boot rather than lazily on the
-        // first build. Scenarios get none: a screenshot harness must photograph
-        // what a build produces, not what a previous run left on disk.
-        if (!Scenarios.active) display.bakes = BakeCache(context)
+        // Where blobs kept between runs live. Constructed here because it needs
+        // a Context and the display does not have one. Scenarios get none: a
+        // screenshot harness must photograph what a build produces, not what a
+        // previous run left on disk.
+        if (!Scenarios.active) display.blobs = BlobStore(context, "bake")
         net = PartyNet(proto, RelaySocket(), context)
         advertiser = RoomAdvertiser(context)
         audio = AudioDevice(context.assets, baseUrl)
@@ -204,9 +203,10 @@ class GameCoordinator(
             // BEFORE any build. `buildScene` reads the materials out of the asset
             // map as it goes, and one that arrives afterwards is a material for the
             // next scene.
-            // The asset map is fresh and so is the renderer's bake — both mirrors
-            // of it have to let go on the same beat.
-            display.bakes?.forget()
+            // The asset map is fresh, and so is the renderer's bake — a
+            // destroyed surface took both. Nothing on this side has to be told:
+            // the memo [SceneStaging.materials] clears is the only mirror left,
+            // and the bake's residency is answered by the engine that holds it.
             SceneStaging.materials(display, assets)
         } catch (e: Exception) {
             state.fail("materials: ${e.message}")

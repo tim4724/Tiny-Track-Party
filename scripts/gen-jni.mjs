@@ -105,8 +105,9 @@ const OVERRIDES = {
   ttp_display_bake_export: { kind: 'bytesOut' },
   // ...and back, as (bytes, len) collapsed to one ByteArray for the reason
   // ttp_display_asset's entry gives: separate arguments can disagree, and that
-  // disagreement is a buffer overrun. The int is a PREDICATE (ttp_display.h).
-  ttp_display_bake_import: { kind: 'bytesInInt' },
+  // disagreement is a buffer overrun. It answers nothing: whether the engine
+  // took the blob is the WALK's business, not the shell's (ttp_display.h).
+  ttp_display_bake_offer: { kind: 'bytesInVoid' },
 };
 
 // ---------------------------------------------------------------------------
@@ -345,14 +346,15 @@ function emitC(fns) {
       call = `toBytes(env, p, outLen)`;
       retC = 'jbyteArray';
       sig = '()[B';
-    } else if (kind === 'bytesInInt') {
+    } else if (kind === 'bytesInInt' || kind === 'bytesInVoid') {
+      const answers = kind === 'bytesInInt';
       args.push('jbyteArray bytes');
       pre.push(`    const jsize n = bytes ? env->GetArrayLength(bytes) : 0;`);
       pre.push(`    std::vector<uint8_t> b((size_t) n);`);
       pre.push(`    if (n) env->GetByteArrayRegion(bytes, 0, n, (jbyte*) b.data());`);
-      call = `(jint) ${fn.name}(b.data(), (uint32_t) n)`;
-      retC = 'jint';
-      sig = '([B)I';
+      call = `${answers ? '(jint) ' : ''}${fn.name}(b.data(), (uint32_t) n)`;
+      retC = answers ? 'jint' : 'void';
+      sig = answers ? '([B)I' : '([B)V';
     } else if (kind === 'block') {
       pre.push(`    const auto* p = ${fn.name}();`);
       pre.push(`    if (!p) return nullptr;`);
@@ -444,6 +446,7 @@ function emitKt(fns) {
     else if (kind === 'bytesIn' || kind === 'bytesInBytesOut') { ps = ['bytes: ByteArray?']; ret = 'ByteArray?'; }
     else if (kind === 'bytesOut') { ps = []; ret = 'ByteArray?'; }
     else if (kind === 'bytesInInt') { ps = ['bytes: ByteArray?']; ret = 'Int'; }
+    else if (kind === 'bytesInVoid') { ps = ['bytes: ByteArray?']; ret = 'Unit'; }
     else if (kind === 'block') { ps = []; ret = 'ByteBuffer?'; }
     L.push(`    external fun ${fn.name}(${ps.join(', ')})${ret === 'Unit' ? '' : ': ' + ret}`);
   }
