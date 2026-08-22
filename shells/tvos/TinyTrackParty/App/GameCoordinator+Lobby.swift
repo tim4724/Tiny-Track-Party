@@ -108,6 +108,9 @@ extension GameCoordinator {
         case "pause": pauseRace()
         case "resume": resumeRace()
         case "return-to-lobby": returnToLobby()
+        // The host's Sound switch (the verdict re-checks host). The republish
+        // inside setSoundOn echoes the new state back to every phone.
+        case "set-sound": setSoundOn((msg["on"] as? Bool) ?? true)
         default: break   // "none" — refused, or not a word this layer knows
         }
     }

@@ -181,7 +181,11 @@ void TtpRenderer::ensureAssetLoader() {
     mAssetLoader = gltfio::AssetLoader::create(ac);
     gltfio::ResourceConfiguration rc{};
     rc.engine = mEngine;
-    rc.gltfPath = nullptr;
+    // No `gltfPath`: it only resolves RELATIVE uris against a base file and
+    // there is no filesystem here (the shell hands every byte over by name, see
+    // addResourceData below), so the `rc{}` zero is already the right answer.
+    // The field is UTILS_DEPRECATED upstream and scheduled for removal — setting
+    // it to nullptr bought nothing and cost a warning on every renderer build.
     rc.normalizeSkinningWeights = true;
     mResourceLoader = new gltfio::ResourceLoader(rc);
     mStbProvider = gltfio::createStbProvider(mEngine);

@@ -334,20 +334,6 @@ Value effectVal(const race::Effect& e) {
 }
 Value effectsVal(const race::Effects& es) { return arrOf(es, effectVal); }
 
-Value planVal(const race::SeriesForStart& s) {
-  if (!s.has) return Value::Null();
-  Value v = Value::Obj();
-  v.set("kind", Value::Str(race::key(s.series.kind)));
-  v.set("cupId", Value::Str(s.series.cupId));
-  // A cup plan carries ONLY kind+cupId — the shell already holds the cup.
-  if (s.series.kind != race::SeriesKind::CUP) {
-    v.set("cupName", Value::Str(s.series.cupName));
-    Value t = Value::Arr();
-    for (const std::string& id : s.series.tracks) t.push(Value::Str(id));
-    v.set("tracks", t);
-  }
-  return v;
-}
 Value wrapEffects(const race::Effects& es) {
   Value v = Value::Obj();
   v.set("effects", effectsVal(es));

@@ -2,10 +2,10 @@
 // two knobs the native AI takes (caution, laneBias).
 //
 // THIS IS NOT THE SOURCE ANY MORE, and nothing on the race path reads it.
-// libttp-sim's ttp::AI_PERSONALITIES is the one table; main.js reads it out of
-// the wasm (ttp_race_personas_json) and hands it straight back to the
-// orchestration layer, so a real race and the probe drive the same personas by
-// construction rather than by agreement.
+// libttp-sim's ttp::AI_PERSONALITIES is the one table, and no shell hands it
+// anywhere: `ttp_race_configure` reads an ABSENT `personas` key as that table,
+// so a real race and the probe drive the same personas by construction rather
+// than by agreement.
 //
 // What still needs a JS copy is the SYNCHRONOUS surfaces — the gallery/test
 // harness grids a persona per slot before any wasm call — so this stays as a

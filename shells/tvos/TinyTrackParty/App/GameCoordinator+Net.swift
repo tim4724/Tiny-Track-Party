@@ -109,6 +109,9 @@ extension GameCoordinator {
         // (refreshAutoPause fires on the roster change), before the WELCOME goes
         // out.
         net.isPaused = { [weak self] in self?.state.paused ?? false }
+        // The display's mute, for the snapshot's `soundOn` — so the host phone's
+        // Sound row shows the live state rather than guessing at it.
+        net.isSoundOn = { [weak self] in !(self?.audio.muted ?? false) }
         net.onRelayError = { [weak self] why in self?.state.lastError = "relay: \(why)" }
 
         // The CC-BY credit. A shell that streams this catalogue owes a visible

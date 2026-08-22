@@ -37,7 +37,6 @@ export async function init() {
   const c = (name, ret, args) => M.cwrap(name, ret, args);
   fn = {
     configure: c('ttp_race_configure', 'number', ['string']),
-    personas: c('ttp_race_personas_json', 'string', []),
     effectOps: c('ttp_race_effect_ops_json', 'string', []),
     demoLive: c('ttp_race_demo_live_json', 'string', ['number', 'string', 'string']),
     benchField: c('ttp_race_bench_field_json', 'string', ['string', 'number', 'number']),
@@ -70,18 +69,19 @@ const P = (s) => JSON.parse(s);
 // different players.
 const id = (x) => J(x === undefined ? null : x);
 
-// libttp-sim's persona table — the single source. Read once at boot and handed
-// back through configure().
-export function personas() { return P(fn.personas()); }
-
 // The walks' whole effect vocabulary — main.js proves its switch total at boot.
 export function effectOps() { return P(fn.effectOps()); }
 
 // The world every field rule and series lookup resolves against, set once at
 // boot. `carStats` rows are OPAQUE: copied into a field entry and never read,
 // which is what keeps CAR_STATS out of the wasm's decision layer.
-export function configure({ fieldSize, carCount, colorCount, aiPrefix, personas: ps, carStats, cups }) {
-  return fn.configure(J({ fieldSize, carCount, colorCount, aiPrefix, personas: ps, carStats, cups })) === 1;
+//
+// NO `personas`, and it is not an omission this side gets to reverse: the ABI
+// reads an ABSENT key as "libttp-sim's own table", which is the single source
+// every shell resolves to (ttp_race.h). Passing one is how the corpora inject a
+// synthetic world in ctest, and there is no reason for a shipping page to.
+export function configure({ fieldSize, carCount, colorCount, aiPrefix, carStats, cups }) {
+  return fn.configure(J({ fieldSize, carCount, colorCount, aiPrefix, carStats, cups })) === 1;
 }
 
 // The lobby attract grid + its render signature, off the live room.

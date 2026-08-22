@@ -163,14 +163,20 @@ TTP_ABI const char* ttp_net_reconnect_card_json(const char* seatJson, const char
 /* ---- controller messages --------------------------------------------------- */
 
 /* The verdict on a GAME message (what a `game-message` effect hands the
- * coordinator): "start-race" | "series-next" | "pause" | "resume" |
- * "return-to-lobby" | "control" | "none" — with the authorization inside.
+ * coordinator): "start-race" | "series-next" | "set-sound" | "pause" |
+ * "resume" | "return-to-lobby" | "control" | "none" — with the authorization
+ * inside.
  * START_GAME must come from the host AND every other racer must be ready (the
- * same readiness gate the lobby's Start button shows); SERIES_NEXT is
- * host-only; pause/resume/new-game are any player's; CONTROL needs a live
- * race. A shell dispatches on the verdict and re-derives none of the gates —
- * the if-chain this replaces existed in two shells with the gates spelled
- * twice.
+ * same readiness gate the lobby's Start button shows); SERIES_NEXT and
+ * SET_SOUND are host-only; pause/resume/new-game are any player's; CONTROL
+ * needs a live race. A shell dispatches on the verdict and re-derives none of
+ * the gates — the if-chain this replaces existed in two shells with the gates
+ * spelled twice.
+ *
+ * "set-sound" carries the display's MUTE, which is one state with two
+ * flippers: this message and whatever switch the platform's own chrome has.
+ * A shell that drops the verdict leaves the host phone's Sound row showing a
+ * setting it cannot change — see the `soundOn` field on the lobby frame.
  *
  * A shell MAY keep CONTROL on its own short-circuit ahead of this call (the
  * web does): CONTROL is the relay-fallback INPUT path, sensor-rate when the

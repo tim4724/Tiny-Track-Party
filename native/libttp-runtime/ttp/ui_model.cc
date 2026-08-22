@@ -248,7 +248,7 @@ bool cupSlot(PickMode mode, const OptStr& cupId, const OptStr& trackId,
     out.difficulty = entry ? entry->cupDifficulty : OptNum::None();
     if (cup) {
       for (size_t i = 0; i < cup->tracks.size(); i++) {
-        out.maps.push_back(MapChip{OptStr::Of(cup->tracks[i]), OptNum::Of(static_cast<double>(i + 1))});
+        out.maps.push_back(MapChip{OptStr::Of(cup->tracks[i]), OptNum::Of(static_cast<double>(i + 1)), OptStr::None()});
       }
     }
     out.cupId = cupId;
@@ -262,7 +262,7 @@ bool cupSlot(PickMode mode, const OptStr& cupId, const OptStr& trackId,
     out.racesKey = RacesKey::ONE;
     out.raceCount = OptNum::Of(1);
     out.difficulty = entry ? entry->cupDifficulty : OptNum::None();
-    out.maps.push_back(MapChip{trackId, OptNum::None()});
+    out.maps.push_back(MapChip{trackId, OptNum::None(), OptStr::None()});
     out.cupId = entry ? entry->cup : OptStr::None();
     return true;
   }
@@ -287,7 +287,7 @@ bool cupSlot(PickMode mode, const OptStr& cupId, const OptStr& trackId,
     out.racesKey = endless ? RacesKey::ENDLESS : RacesKey::COUNT;
     out.raceCount = endless ? OptNum::None() : OptNum::Of(randomRaces.v);
     out.difficulty = OptNum::None();
-    out.maps.push_back(MapChip{trackId, OptNum::None()});
+    out.maps.push_back(MapChip{trackId, OptNum::None(), OptStr::None()});
     out.cupId = entry ? entry->cup : OptStr::None();
     return true;
   }

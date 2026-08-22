@@ -46,6 +46,9 @@ class GameCoordinator(
         /** Where the couch's progression blob persists (localStorage's peer). */
         private const val PROGRESS_KEY = "ttpProgress"
 
+        /** `localStorage`'s key on the web (`display/audio/bus.js`'s MUTED_KEY). */
+        private const val MUTED_KEY = "tinytrack_sound_muted_v1"
+
         private const val PREFS = "tinytrack"
     }
 
@@ -312,6 +315,9 @@ class GameCoordinator(
         // preview was a photograph for the whole of the port.
         display.camera(2 /* TTP_CAM_BBOX */)
 
+        // The mute is REMEMBERED, like the web's, and is applied before the first
+        // sound can play. Same key, same meaning, different store.
+        audio.muted = prefs.getBoolean(MUTED_KEY, false)
         audio.start()
         wireNet()
 
@@ -403,6 +409,26 @@ class GameCoordinator(
                 .put("progress", progressChooser())
                 .toString())) != 0,
             "configuring the chooser payload")
+    }
+
+    /**
+     * The display's mute, flipped by the host phone's Sound row (`set-sound`).
+     *
+     * ONE STATE, and the phones learn it the same way they learn `paused`: the
+     * republish puts it on the snapshot as `soundOn`, so the host's switch shows
+     * what the television is actually doing and a phone that joins later agrees.
+     * A TV has no corner for the web's mute button (see `MainActivity.onKeyDown`
+     * for the same argument about the pause button), so the phone is this
+     * platform's only flipper — which makes the echo the whole of the feedback.
+     */
+    fun setSoundOn(on: Boolean) {
+        // NO CHANGE, NO REPUBLISH. A phone re-sends its switch state freely and
+        // the snapshot is the biggest object on the wire; the web guards the
+        // same way at the same point (`main.js` setSoundOn).
+        if (audio.muted != on) return
+        audio.muted = !on
+        prefs.edit().putBoolean(MUTED_KEY, !on).apply()
+        net.publishSnapshot()
     }
 
     /**
@@ -897,6 +923,9 @@ class GameCoordinator(
         net.sessionHandle = { sessionHandle }
         // Manual pause only: the silent auto-pause lifts on the reconnect itself.
         net.isPaused = { state.paused }
+        // The display's mute, for the snapshot's `soundOn` — so the host phone's
+        // Sound row shows the live state rather than guessing at it.
+        net.isSoundOn = { !audio.muted }
         net.onRelayError = { why -> state.fail("relay: $why") }
 
         audio.onSongChanged = { title, artist, license, source ->
@@ -1255,6 +1284,9 @@ class GameCoordinator(
             "pause" -> pauseRace()
             "resume" -> resumeRace()
             "return-to-lobby" -> returnToLobby()
+            // The host's Sound switch (the verdict re-checks host). The republish
+            // inside setSoundOn echoes the new state back to every phone.
+            "set-sound" -> setSoundOn(msg.optBoolean("on", true))
             else -> Unit   // "none" — refused, or not a word this layer knows
         }
     }

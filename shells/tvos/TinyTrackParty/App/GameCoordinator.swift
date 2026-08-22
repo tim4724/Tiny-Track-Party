@@ -201,6 +201,16 @@ final class GameCoordinator: ObservableObject {
             requireOK(false, "race effect ops with no performer: \(unperformable.joined(separator: ", "))")
         }
 
+        // The same proof over the NET vocabulary, which `ttp_net.h` asks for by
+        // name. It is a SECOND walk with a second switch, so the race proof says
+        // nothing about it: both are owed.
+        let netMissing = TTP.arr(ttp_net_effect_ops_json())
+            .compactMap { $0 as? String }
+            .filter { !PartyNet.performable.contains($0) }
+        if !netMissing.isEmpty {
+            requireOK(false, "net effect ops with no performer: \(netMissing.joined(separator: ", "))")
+        }
+
         // The chooser payload the phones pick from. Set ONCE, and rides the
         // LOBBY snapshot only.
         //
@@ -288,6 +298,9 @@ final class GameCoordinator: ObservableObject {
             state.lastError = "materials: \(error)"
         }
 
+        // The mute is REMEMBERED, like the web's, and is applied before the first
+        // sound can play. Same key, same meaning, different store.
+        audio.muted = UserDefaults.standard.bool(forKey: Self.mutedKey)
         try? audio.start()
         wireNet()
 
@@ -349,6 +362,26 @@ final class GameCoordinator: ObservableObject {
         // attract demo up on it, the way a join would.
         setTrack(last.flatMap { ids.contains($0) ? $0 : nil } ?? ids[0])
         refreshLobby()
+    }
+
+    /// `localStorage`'s key on the web (`display/audio/bus.js`'s MUTED_KEY).
+    static let mutedKey = "tinytrack_sound_muted_v1"
+
+    /// The display's mute, flipped by the host phone's Sound row (`set-sound`).
+    ///
+    /// ONE STATE, and the phones learn it the same way they learn `paused`: the
+    /// republish puts it on the snapshot as `soundOn`, so the host's switch shows
+    /// what the television is actually doing and a phone that joins later agrees.
+    /// A TV has no corner for the web's mute button, so the phone is this
+    /// platform's only flipper — which makes the echo the whole of the feedback.
+    func setSoundOn(_ on: Bool) {
+        // NO CHANGE, NO REPUBLISH. A phone re-sends its switch state freely and
+        // the snapshot is the biggest object on the wire; the web guards the
+        // same way at the same point (`main.js` setSoundOn).
+        guard audio.muted == on else { return }
+        audio.muted = !on
+        UserDefaults.standard.set(!on, forKey: Self.mutedKey)
+        net.publishSnapshot()
     }
 
     /// Where the couch's progression blob persists (localStorage's peer).

@@ -247,9 +247,10 @@ test('the asset showroom stages every scenery GLB in the kit', async () => {
 // ---- the CPU roster is one table ---------------------------------------------
 test('aiPersonas.js has not drifted from the wasm persona table', async () => {
   const M = await load();
-  // The runtime path no longer holds a copy: main.js reads the table out of
-  // ttp_race_personas_json (libttp-sim's own ttp::AI_PERSONALITIES) and
-  // configures it straight back. public/display/aiPersonas.js survives only for
+  // The runtime path no longer holds a copy, and no longer even carries one
+  // across: every shell omits `personas` from ttp_race_configure, which the ABI
+  // reads as libttp-sim's own ttp::AI_PERSONALITIES.
+  // public/display/aiPersonas.js survives only for
   // the test surfaces that need it synchronously — the gallery harness grids a
   // persona per slot before any wasm call — so it is a second spelling of a
   // shipped table, and this is the check that stops it drifting. It used to be

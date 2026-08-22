@@ -468,7 +468,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                         kCarBlobInk.y, kCarBlobInk.z, 0.0f });
             }
             rcm.setMaterialInstanceAt(ri, 0, mi);
-            mRoadChunks.push_back({ mi, sMin, sMax, {} });
+            mRoadChunks.push_back({ mi, sMin, sMax, {}, {} });
         }
     }
     // The whole-lap fallback instance carries the same build-time wrap

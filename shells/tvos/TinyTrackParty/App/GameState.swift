@@ -263,28 +263,34 @@ final class GameState: ObservableObject {
     /// different stories.
     @Published var results: ResultsView?
 
-    struct ResultsView {
+    struct ResultsView: Equatable {
         let podium: Bool
         let intermission: Bool
-        let titleKey: String        // -> Copy.title
+        let titleKey: String        // -> Copy.title (phase 2, or the only phase)
+        /// Phase 1's title. A cup board opens on the race it just ran, so it
+        /// wears the plain "Results" head until the standings arrive.
+        let raceTitleKey: String
         let cupName: String?
         let sub: Sub?
-        /// FROZEN QUIRK, do not "fix": the podium steps take the top three
-        /// NON-JOINING rows while `listRows` starts at index 3 of the RAW order,
-        /// so a joining row inside the first three shortens the steps without
-        /// shifting the list (`ttp_ui.h`, `ui_model.h`).
-        let podiumRows: [Row]
+        /// **A CUP BOARD IS TWO PHASES** (`ttp_ui.h`). [raceRows] is who won the
+        /// RACE, in finishing order with lap times, and it holds for
+        /// [racePhaseMs]; then it becomes [listRows], the cup table it rewrote,
+        /// in standings order with points. A shell that paints only listRows
+        /// states the delta and never shows the change.
+        let twoPhase: Bool
+        let racePhaseMs: Double
+        let raceRows: [Row]
         let listRows: [Row]
         let next: Next?
         let newGameKey: String      // -> Copy.newGame
 
-        struct Sub { let key: String; let cupName: String; let race: Int; let of: Int? }
+        struct Sub: Equatable { let key: String; let cupName: String; let race: Int; let of: Int? }
         /// `secs` is what the model emits, and it is a SNAPSHOT taken when the
         /// board was composed. The live number comes from
         /// `ttp_ui_intermission_secs` on the coordinator's 500 ms ticker, so a
         /// stalled frame or a suspended app cannot drift it away from the
         /// deadline the phones were told.
-        struct Next { let trackName: String; let secs: Int }
+        struct Next: Equatable { let trackName: String; let secs: Int }
 
         /// One board row, exactly as `rowValue` emits it.
         ///
@@ -293,7 +299,7 @@ final class GameState: ObservableObject {
         /// offset matters), and "did not finish" is `finished == false`. A
         /// decoder that invented those two fields would be re-deriving the
         /// model's answer in Swift.
-        struct Row: Identifiable {
+        struct Row: Identifiable, Equatable {
             /// `playerId`, kept as the identity's JSON so it is stable across
             /// re-decodes of the same board.
             let id: String
@@ -308,8 +314,15 @@ final class GameState: ObservableObject {
             let joining: Bool
             let points: Int?
             let gained: Int?
-            /// `joining` | `points` | `time` — which trailing cell this row
-            /// wants. Only `listRows` carry it; the podium's do not.
+            /// What this row's total stood at BEFORE the race scored it, so the
+            /// number can climb to `points` rather than jump. The model sends it
+            /// precisely so **no shell subtracts `gained` for itself**.
+            let pointsBefore: Int?
+            /// 1|2|3 on the cup podium's top three. Absent in phase 1 — the
+            /// medals are the CUP's, and phase 1 has not told it yet.
+            let medal: Int?
+            /// `time` | `time_gain` | `points` | `joining` — which trailing
+            /// cells this row wants (`ui_model.cc`).
             let kind: String?
         }
     }
@@ -472,11 +485,16 @@ extension GameState.ResultsView {
         self.init(podium: d["podium"] as? Bool ?? false,
                   intermission: d["intermission"] as? Bool ?? false,
                   titleKey: d["titleKey"] as? String ?? "",
+                  raceTitleKey: d["raceTitleKey"] as? String ?? "",
                   cupName: d["cupName"] as? String,
                   sub: sub,
-                  // Handed over exactly as sliced. The asymmetry between these
-                  // two is deliberate and frozen — see the field's own comment.
-                  podiumRows: (d["podiumRows"] as? [Any] ?? []).compactMap(Row.init),
+                  twoPhase: d["twoPhase"] as? Bool ?? false,
+                  racePhaseMs: d["racePhaseMs"] as? Double ?? 0,
+                  // `raceRows`, NOT `podiumRows` — read `ttp_ui.h`, never a
+                  // sibling shell's transcription of it. A key this ABI does not
+                  // answer decodes to an EMPTY LIST rather than to an error, so
+                  // the board it feeds is simply a phase short and says nothing.
+                  raceRows: (d["raceRows"] as? [Any] ?? []).compactMap(Row.init),
                   listRows: (d["listRows"] as? [Any] ?? []).compactMap(Row.init),
                   next: next,
                   newGameKey: d["newGameKey"] as? String ?? "")
@@ -501,6 +519,8 @@ extension GameState.ResultsView.Row {
                   joining: d["joining"] as? Bool ?? false,
                   points: (d["points"] as? Double).map { Int($0) },
                   gained: (d["gained"] as? Double).map { Int($0) },
+                  pointsBefore: (d["pointsBefore"] as? Double).map { Int($0) },
+                  medal: (d["medal"] as? Double).map { Int($0) },
                   kind: d["kind"] as? String)
     }
 }

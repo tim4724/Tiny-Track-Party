@@ -76,8 +76,11 @@ struct RenderScaleLimits {
   // only: whether the FLOOR ESCAPE below the bottom rung exists (see
   // kScaleEscapeCells). It is not a shell's opinion — the grid is the frame
   // builder's — so it crosses inside C++ rather than over the ABI. 0 means
-  // "not a split", which is what every caller predating the escape says.
-  int cells;
+  // "not a split", which is what every caller predating the escape says — and
+  // DEFAULTED here for that reason: every shell-facing caller leaves it out, so
+  // requiring the brace to spell it would only buy `-Wmissing-field-initializers`
+  // on twenty call sites that all meant 0.
+  int cells = 0;
 };
 
 // Above this the device is LATE and retreats. The only threshold left: where to

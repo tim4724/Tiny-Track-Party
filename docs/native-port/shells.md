@@ -37,7 +37,10 @@ audience:
   authored JS source is already on its page, pinned by a Node test that sees
   both: `ttp_protocol_manifest_json` (protocol.js), `ttp_net_clean_name`
   (names.js), `ttp_ui_cup_tint_rgb` + `ttp_ui_cup_field_tint_pct`
-  (trackPicker.js), `ttp_schematic_points_json` (the SVG-path reader).
+  (trackPicker.js), `ttp_schematic_points_json` (the SVG-path reader),
+  `ttp_race_personas_json` (aiPersonas.js — and NO shell calls this one: the CPU
+  roster reaches every platform by `ttp_race_configure` being handed no
+  `personas` key at all, which the ABI reads as libttp-sim's own table).
 - **Authoring tools** — the `ttp_track_*` reads and the schematic decode half,
   banner-marked in `ttp_runtime.h`. Node scripts only; a shell binds none.
 - **Dev/gallery** — the display's showcase/bench/debug latches, documented in
@@ -281,6 +284,17 @@ identically (both are commented where they bite, in `TtpRendererBakes.cpp`):
    compressor is part of the mix contract. `public/display/Audio.js` and
    `shells/tvos/TinyTrackParty/Audio/AudioDevice.swift` are the two
    implementations to compare.
+   **The MUTE is one state with two flippers**, and only one of them is yours.
+   The host phone's Sound row sends SET_SOUND, which `ttp_net_controller_action`
+   answers as `set-sound`: perform it by muting the device, persisting the flag
+   and republishing — the snapshot's `soundOn` is what draws that switch, so a
+   shell that omits the field leaves the phone showing a setting it cannot
+   change, and one that ignores the verdict leaves the switch inert. Mute at the
+   MASTER GAIN, ahead of the limiter, and silence the music player separately:
+   it does not pass through the mix on any platform. The web's other flipper is
+   a corner button, and that half stays web-only on purpose — a viewer cannot
+   click a corner of a television (the same argument that puts the pause button
+   on the remote), and a TV has its own mute.
 8. **A QR encoder.** Settled in [shared-cpp-plan.md](shared-cpp-plan.md) (§QR):
    there is deliberately no C++ encoder, because the URL composition is shared
    and only the module bitmap is per-platform. `CIQRCodeGenerator` on tvOS,
@@ -447,17 +461,17 @@ identically (both are commented where they bite, in `TtpRendererBakes.cpp`):
     browser show the URL as a QR for the phone already in the room. Read those
     two URLs out of the display's own footer rather than typing them.
 
-## Still owed by the Android TV shell (audited 2026-08-18)
+## Still owed by the TV shells (audited 2026-08-18, re-checked 2026-08-22)
 
 Each is a real item, not a simplification; the settled reasoning behind the two
-look items is in `shells/androidtv/CLAUDE.md` (Look).
+look items is in `shells/androidtv/CLAUDE.md` (Look). The first is owed by BOTH
+TV shells; the rest are Android's.
 
-- **The mute toggle** — the web's corner button and the host phone's Sound row
-  have no counterpart, and the mix has no muted state to honour; a TV's own mute
-  is the workaround.
-- **Meshing the next circuit at the intermission** (item 13) — a cup's chained
-  start shows the outgoing circuit under the count and then hitches; on this GPU
-  a build is seconds, so it is the most visible item here.
+- **Meshing the next circuit at the intermission** (item 13) — NEITHER TV shell
+  does it: a cup's chained start shows the outgoing circuit under the count and
+  then hitches. The web reference is `prepareNextTrack()` plus `Stage.prepare`;
+  there is no `prepare` call anywhere in either shell. On Android's GPU a build
+  is seconds, which makes it the most visible item here.
 - **An app baseline profile** — the release APK carries only library-supplied
   profiles, so this shell's own composables and boot path are not AOT-compiled;
   the tail it would move is the half the GPU readout cannot see, and it costs a
@@ -507,8 +521,8 @@ look items is in `shells/androidtv/CLAUDE.md` (Look).
 ## What conformance does and does not cover you for
 
 The corpora prove that a LAYER agrees with the JS that recorded it. They say
-nothing about a shell. Two gates exist for the boundary a shell actually sits
-on, and a new platform should extend both rather than inventing a third:
+nothing about a shell. Three gates exist for the boundary a shell actually sits
+on, and a new platform should extend them rather than inventing a fourth:
 
 - `native/runtimetest/abi_check.cc` — every ABI, every leg, including the
   handle-taking exports whose only statement of correctness is that they agree
@@ -517,7 +531,14 @@ on, and a new platform should extend both rather than inventing a third:
 - `tests/wire-compat.test.js` + `tests/wire-fastlane.test.js` — the only place
   two LANGUAGES agree on bytes at runtime. Phones stay on the JS controller on
   all three TV platforms, so this suite is permanent and your sender belongs
-  in it.
+  in it. Note what it does NOT see: it drives the WEB display, so the lobby
+  frame's schema is pinned for one shell only.
+- `tests/shell-parity.test.js` — the three agreements that fail silently and
+  that no compiler checks: a declared performer table that has stopped matching
+  its own switch, a controller verdict the web acts on and a TV shell drops into
+  its default arm, and a fact the web puts on the lobby snapshot that a TV shell
+  omits (absent is a legal value, so the phone just shows the setting off). A
+  fourth shell adds its files to the tables at the top.
 
 ## The ABI is a PROTOCOL, and that is where a shell actually breaks
 

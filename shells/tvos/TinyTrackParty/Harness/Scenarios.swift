@@ -268,10 +268,31 @@ enum Scenarios {
     ///
     /// Every countdown photograph this shell had taken until now was of no
     /// countdown at all.
+    ///
+    /// THE THREE BOARDS NEED IT FOR THE OPPOSITE REASON. A cup board is TWO
+    /// PHASES and the CARD IS THE SECOND ONE — the re-sort, the points counting
+    /// up, the champion crowned. Shot on arrival they photograph phase 1, which
+    /// is a "Cup podium" card that has not yet crowned anybody (the note on
+    /// `settleMs` in `galleryScenarios.js` says the same thing for the web).
+    /// The tally is bounded at the winner's gain times a tick that is itself a
+    /// fraction of phase 1, so twice the phase plus a second clears it however
+    /// slow the board; the Android twin waits exactly this.
     static func settle(_ id: String, to game: GameCoordinator) async {
-        guard id == "countdown" else { return }
-        try? await Task.sleep(nanoseconds: 1_200_000_000)
-        game.state.countdown = "3"
+        switch id {
+        case "countdown":
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            game.state.countdown = "3"
+        case "results", "intermission", "podium":
+            // `twoPhase` is the model's own word for it; `racePhaseMs > 0` is
+            // this shell re-deriving the same answer from a number that only
+            // happens to agree (ResultsView and the Android twin both read the
+            // flag).
+            guard let board = game.state.results, board.twoPhase else { return }
+            try? await Task.sleep(
+                nanoseconds: UInt64((board.racePhaseMs * 2 + 1_000) * 1_000_000))
+        default:
+            return
+        }
     }
 
     private static func padded(_ seats: [GameState.Seat]) -> [GameState.Seat] {

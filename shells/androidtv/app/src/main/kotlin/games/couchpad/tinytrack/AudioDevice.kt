@@ -72,6 +72,21 @@ class AudioDevice(
     /** The CC-BY credit for the playing song. A licensing obligation, not chrome. */
     var onSongChanged: ((String, String, String, String) -> Unit)? = null
 
+    /**
+     * The display's mute, which is ONE state whatever flipped it — the host
+     * phone's Sound row here, plus the corner button on the web.
+     *
+     * TWO SILENCERS, the same pair `Audio.js` uses and for the same reason: the
+     * mixer's master gain covers every cue, voice and bed it renders, and the
+     * music is a separate [MediaPlayer] that never passes through it.
+     */
+    var muted: Boolean = false
+        set(on) {
+            field = on
+            mixer.muted = on
+            applyMusicVolume()
+        }
+
     private val bank = CueBank(assets)
     private val mixer = AudioMixer(bank)
 
@@ -88,8 +103,26 @@ class AudioDevice(
     /** A pause that arrived before Prepared, applied when it lands. */
     private var musicWantsPause = false
     private var musicGain = 1f
+    /** The song's own level, before the mute and the master gain. */
+    private var musicBed = 1f
     /** What [music] is streaming, so a repeat rewinds instead of re-fetching. */
     private var musicUrl: String? = null
+
+    /**
+     * The music bed's level, which is the song's own times the master gain and
+     * zero while muted. The bed does NOT pass through [AudioMixer] on this
+     * platform (a [MediaPlayer] renders straight to the device), so its mute and
+     * its gain are applied here rather than in the mix — same split as the tvOS
+     * twin's `applyMusicVolume`.
+     */
+    private fun applyMusicVolume() {
+        musicGain = if (muted) 0f else musicBed * AudioMixer.MASTER
+        try {
+            music?.setVolume(musicGain, musicGain)
+        } catch (_: IllegalStateException) {
+            // A player torn down or not yet prepared; the next start applies it.
+        }
+    }
 
     fun start() {
         mixer.start()
@@ -252,7 +285,8 @@ class AudioDevice(
 
         // `* MASTER`: `Audio.js:249` sets the element's volume to
         // `level * this._volume()`, the same 0.6 the mix bus carries.
-        musicGain = bed.toFloat().coerceIn(0f, 1f) * AudioMixer.MASTER
+        musicBed = bed.toFloat().coerceIn(0f, 1f)
+        applyMusicVolume()
 
         // THE SAME SONG REWINDS; it does not re-stream. The no-repeat shuffle only
         // avoids the LAST song (`audio.cc`), so a four-race cup on a four-song pool

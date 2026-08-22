@@ -67,16 +67,19 @@ export async function bootEngine({ maxPlayers, fieldSize, carModels, carColors, 
 
   // The same once-at-boot handover for the orchestration layer's world. Two things
   // about it are worth knowing:
-  //   * the PERSONA table is read back out of the wasm (libttp-sim's own
-  //     ttp::AI_PERSONALITIES) and handed straight in, so the CPU roster has ONE
-  //     source. public/display/aiPersonas.js survives for the test surfaces that
-  //     need it synchronously, and tests/display-abi.test.js pins it to this.
+  //   * NO `personas` KEY, which is how the CPU roster has one source. An
+  //     ABSENT key asks the layer for libttp-sim's own ttp::AI_PERSONALITIES
+  //     (ttp_race.h says so), so the table never leaves C++ and all three
+  //     shells resolve to it the same way. Reading it back out through
+  //     ttp_race_personas_json and handing it in would reach the same seven
+  //     names with a serialize/parse in the middle — do not re-add it.
+  //     public/display/aiPersonas.js survives for the test surfaces that need
+  //     the table synchronously; tests/display-abi.test.js pins it to the wasm's.
   //   * carStats rows cross OPAQUE — copied into a field entry and never read —
   //     which is what keeps CAR_STATS out of the decision layer.
   flow.configure({
     fieldSize, carCount: carModels.length, colorCount: carColors.length,
-    aiPrefix: 'ai-', personas: flow.personas(),
-    carStats: carStatsRows, cups
+    aiPrefix: 'ai-', carStats: carStatsRows, cups
   });
   // The biome ABI off the same module: the ?biome= list, the music pool key and
   // the HUD boost chip's accent. The palette itself never leaves C++.

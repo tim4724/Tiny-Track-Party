@@ -94,6 +94,11 @@ final class PartyNet {
     /// Asked per publish: is the race manually paused? A rejoiner must re-raise
     /// the pause overlay it missed while away, or its wheel just feels dead.
     var isPaused: () -> Bool = { false }
+
+    /// Asked per publish: is the display's own audio ON? It rides the snapshot as
+    /// `soundOn`, which is what the host phone's Sound row renders — a shell that
+    /// never answers leaves that switch showing "off" with the race audible.
+    var isSoundOn: () -> Bool = { true }
     /// Whatever the relay refused, verbatim. A callback rather than a write into
     /// `GameState`, because this type holds no view state — see the error print
     /// in `perform` for what went undiagnosed without it.
@@ -605,12 +610,31 @@ final class PartyNet {
         default:
             // An op this build cannot perform is a MISSING CAPABILITY, not an
             // optional step — say so loudly rather than dropping it and leaving
-            // a half-set-up room. Same contract as RaceFlowPerformer's.
+            // a half-set-up room. Same contract as RaceFlowPerformer's. The
+            // boot proof over `performable` below is what turns this from a
+            // failure at the WORST moment (mid-party) into one at load.
             let op = e["op"] as? String ?? "<malformed>"
             assertionFailure("net: unperformable effect \(op)")
             onRelayError?("net: unperformable effect \(op)")
         }
     }
+
+    /// The arms of the switch above, as data, for the boot proof over
+    /// `ttp_net_effect_ops_json` (see `GameCoordinator.configure`). The walk's
+    /// whole vocabulary must be a subset: an op no arm performs is a step
+    /// silently dropped in the middle of forming a party, and the `default`
+    /// above only says so once it has already happened.
+    ///
+    /// `tests/shell-parity.test.js` pins this to the switch, so the set
+    /// cannot claim an arm the switch stopped having.
+    static let performable: Set<String> = [
+        "clear-create-timer", "arm-create-watchdog", "join-room", "create-room",
+        "pin-instance", "save-room", "forget-room", "room-ready", "start-liveness",
+        "reset-reconnect-count", "connect-fresh", "fail-attempt", "reconnect",
+        "send-to", "publish", "announce", "close-fastlane", "show-reconnect",
+        "clear-reconnect", "rekey-player", "player-renamed", "welcome-item",
+        "game-message", "race-abandoned", "track-change", "clear-standings",
+    ]
 
     private func announceRoomReady() {
         guard let room = roomCode else { return }
@@ -760,6 +784,7 @@ final class PartyNet {
         guard socket.isOpen else { return }
         socket.send(TTP.strOrEmpty(ttp_net_lobby_frame(roomHandle, sessionHandle(), TTP.json([
             "paused": isPaused(),
+            "soundOn": isSoundOn(),
             "standings": standings.map { $0 as Any } ?? NSNull()
         ]))))
     }

@@ -30,6 +30,9 @@ extern "C" int ttp_display_scale_poll(double tMs, double minScale, double maxSca
   ttp::rt::RenderScalePoint p{0.0, 0};
   // THE MONITOR IS THE READOUT'S (perf::monitor()). One window, two readers —
   // see ttp_perf.h.
+  // `cells` is left at its default and is never a shell's answer: the grid is
+  // the frame builder's, so `ttp_display_frame` declares it straight to the
+  // controller and `poll` folds it in over this (render_scale_controller.h).
   if (!ctl().poll(tMs, ttp::rt::RenderScaleLimits{minScale, maxScale, baseLines, panelMs},
                   ttp::rt::perf::monitor(), &p)) {
     return 0;

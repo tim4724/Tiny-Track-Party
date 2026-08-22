@@ -518,10 +518,11 @@ class GameState {
                     sub = sub,
                     twoPhase = d.optBoolean("twoPhase"),
                     racePhaseMs = d.optDouble("racePhaseMs", 0.0),
-                    // `raceRows`, NOT `podiumRows`. The tvOS twin decodes the latter
-                    // and there is no such key anywhere in the C++ — its board has
-                    // therefore always been handed an empty list for phase 1. Read
-                    // ttp_ui.h, not a sibling shell's transcription of it.
+                    // `raceRows`, NOT `podiumRows` — read ttp_ui.h, never a
+                    // sibling shell's transcription of it. A key this ABI does
+                    // not answer decodes to an EMPTY LIST rather than to an
+                    // error, so the board it feeds is simply a phase short and
+                    // says nothing about it.
                     raceRows = rows(d.optJSONArray("raceRows")),
                     listRows = rows(d.optJSONArray("listRows")),
                     next = next,

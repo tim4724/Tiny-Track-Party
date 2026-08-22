@@ -170,6 +170,13 @@ class PartyNet(
      */
     var isPaused: () -> Boolean = { false }
 
+    /**
+     * Asked per publish: is the display's own audio ON? It rides the snapshot as
+     * `soundOn`, which is what the host phone's Sound row renders — a shell that
+     * never answers leaves that switch showing "off" with the race audible.
+     */
+    var isSoundOn: () -> Boolean = { true }
+
     /** Whatever the relay refused, verbatim. */
     var onRelayError: ((String) -> Unit)? = null
 
@@ -992,6 +999,7 @@ class PartyNet(
         if (!socket.isOpen) return
         val extra = JSONObject()
             .put("paused", isPaused())
+            .put("soundOn", isSoundOn())
             .put("standings", standings ?: JSONObject.NULL)
         socket.send(TtpJson.strOrEmpty(Ttp.ttp_net_lobby_frame(
             roomHandle, sessionHandle(), TtpJson.arg(extra.toString()))))

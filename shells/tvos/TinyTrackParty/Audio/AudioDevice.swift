@@ -50,6 +50,23 @@ final class AudioDevice {
     /// changes how hard the limiter works and nothing else.
     private static let masterVolume: Float = 0.6
 
+    /// The display's mute, which is ONE state whatever flipped it — the host
+    /// phone's Sound row here, plus the corner button on the web.
+    ///
+    /// TWO SILENCERS, the same pair `Audio.js` uses and for the same reason: the
+    /// master mixer covers every cue, voice and bed the engine renders, and the
+    /// music is an `AVQueuePlayer` that never enters that graph (see
+    /// `applyMusicVolume`). Muting at the MASTER MIXER and not at the limiter's
+    /// output puts it where `bus.js` puts it, so the limiter sees the silence
+    /// rather than holding the last loud block's reduction.
+    var muted = false {
+        didSet {
+            guard muted != oldValue else { return }
+            masterMixer.outputVolume = muted ? 0 : Self.masterVolume
+            applyMusicVolume()
+        }
+    }
+
     private let engine = AVAudioEngine()
     private let masterMixer = AVAudioMixerNode()
     private var limiter: AVAudioUnitEffect?
@@ -156,7 +173,7 @@ final class AudioDevice {
         engine.connect(node, to: masterMixer, format: format)
         engine.connect(masterMixer, to: limiter, format: format)
         engine.connect(limiter, to: engine.mainMixerNode, format: format)
-        masterMixer.outputVolume = Self.masterVolume
+        masterMixer.outputVolume = muted ? 0 : Self.masterVolume
         configure(limiter)
 
         engine.prepare()
@@ -584,7 +601,8 @@ final class AudioDevice {
     /// scheduling it through the engine — neither is worth it for a bed that
     /// already arrives LUFS-trimmed.
     private func applyMusicVolume() {
-        musicPlayer?.volume = Float(min(max(musicLevel, 0), 1)) * Self.masterVolume
+        musicPlayer?.volume = muted ? 0
+            : Float(min(max(musicLevel, 0), 1)) * Self.masterVolume
     }
 
     private func song(at index: Int32) -> Song? {

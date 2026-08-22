@@ -227,11 +227,12 @@ absolute length inside `Canvas { }` needs `* 1.dp.toPx()`. It is exact on a
 then draw at half size on the 4K output this box actually drives.
 
 **Read the header (`ttp_ui.h`, `ttp_abi.h`), not a sibling shell's transcription
-of it.** The results view answers `raceRows`; the tvOS Swift decodes
-`podiumRows`, which exists nowhere in the C++, so its phase-1 list has always
-been empty. `TTP.swift`'s polarity comment was stale the same way, and cost a
-device run — int returns are ONE polarity, truth is non-zero (`ttp_abi.h`). Two
-shells agreeing is not evidence — the header is.
+of it.** The results view answers `raceRows`, and a shell that decoded
+`podiumRows` instead got an EMPTY LIST rather than an error — its board was a
+whole phase short and nothing anywhere said so (the tvOS Swift shipped exactly
+that). `TTP.swift`'s polarity comment was stale the same way, and cost a device
+run — int returns are ONE polarity, truth is non-zero (`ttp_abi.h`). Two shells
+agreeing is not evidence — the header is.
 
 ## Units: the density override
 

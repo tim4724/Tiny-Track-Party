@@ -188,6 +188,19 @@ class AudioMixer(private val bank: CueBank) {
     /** True once the stream is open. Nothing is worth queueing before it. */
     val ready: Boolean get() = running
 
+    /**
+     * The display's mute. One state with two flippers on the web (the corner
+     * button and the host phone's Sound row); this box has only the phone, since
+     * a viewer cannot click a corner of a television — see [GameCoordinator]'s
+     * `setSoundOn`.
+     *
+     * Read once per compressor block on the render thread, written from the
+     * frame thread, hence `@Volatile`. Nothing is torn: it is a single boolean
+     * and a block that reads the old value is one block late.
+     */
+    @Volatile
+    var muted = false
+
     fun start() {
         if (running) return
         val min = AudioTrack.getMinBufferSize(
@@ -593,6 +606,10 @@ class AudioMixer(private val bank: CueBank) {
         // which is what `bus.js` says it is for.
         val kneeStart = COMP_THRESHOLD
         val kneeEnd = COMP_THRESHOLD + COMP_KNEE
+        // THE MUTE IS THE MASTER GAIN, PRE-LIMITER — the same place `bus.js`
+        // puts it, so a muted mix is silent AND the limiter sees the silence
+        // rather than holding whatever reduction the last loud block asked for.
+        val master = if (muted) 0f else MASTER
         var i = 0
         while (i < BLOCK) {
             val n = min(COMP_STEP, BLOCK - i)
@@ -600,8 +617,8 @@ class AudioMixer(private val bank: CueBank) {
             var peak = 0f
             var j = 0
             while (j < n) {
-                val l = abs(out[(i + j) * 2] * MASTER)
-                val r = abs(out[(i + j) * 2 + 1] * MASTER)
+                val l = abs(out[(i + j) * 2] * master)
+                val r = abs(out[(i + j) * 2 + 1] * master)
                 if (l > peak) peak = l
                 if (r > peak) peak = r
                 j += 1
@@ -620,7 +637,7 @@ class AudioMixer(private val bank: CueBank) {
             }
             // Attack when the reduction deepens, release when it lifts.
             compGain += (over - compGain) * (if (over < compGain) attack else release)
-            val g = (MASTER * exp(compGain * LN10_OVER_20)).toFloat()
+            val g = (master * exp(compGain * LN10_OVER_20)).toFloat()
             j = 0
             while (j < n) {
                 out[(i + j) * 2] = clamp(out[(i + j) * 2] * g)
