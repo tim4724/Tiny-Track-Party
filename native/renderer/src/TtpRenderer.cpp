@@ -845,13 +845,66 @@ bool TtpRenderer::buildMergedGroup(std::vector<MergedGroup>& out,
 
     const size_t maxInst =
             std::min<size_t>(64, mEngine->getMaxAutomaticInstances());
-    for (size_t first = 0; first < sources.size(); first += maxInst) {
-        const size_t n = std::min(maxInst, sources.size() - first);
-        if (n < 2) break;   // a straggler of one keeps its original draw
+
+    // GROUP BY LOCALITY, NOT BY ARRAY ORDER. A merged group is ONE renderable
+    // carrying ONE bounding box that spans every instance in it, so a group
+    // whose copies are scattered around the whole circuit can never be rejected
+    // by a cell's frustum: every copy is submitted to every cell, and at four
+    // cells that is paid four times. Ordering by position and cutting a chunk
+    // when its span would exceed kMergeSpan keeps each box local, so the
+    // culling that merging used to defeat works on merged groups again.
+    //
+    // The cut is on SPAN rather than a fixed world grid: a grid splits two
+    // copies a unit apart across a boundary and merges nothing in a sparse
+    // region, while the span guard adapts to whatever density the track has.
+    // Dynamic groups (the cars, the cone pool) are grouped from their transforms
+    // at BUILD time and drift afterwards; mirrorMergedGroup re-folds their box
+    // every frame, so drift costs culling, never correctness.
+    static constexpr float kMergeSpan = 16.0f;
+    std::vector<std::vector<utils::Entity>> runs;
+    {
+        std::vector<size_t> order(sources.size());
+        for (size_t i = 0; i < order.size(); i++) order[i] = i;
+        std::vector<float3> at(sources.size(), float3{ 0 });
+        for (size_t i = 0; i < sources.size(); i++) {
+            const auto ti = tcm.getInstance(sources[i]);
+            if (ti) at[i] = tcm.getWorldTransform(ti)[3].xyz;
+        }
+        std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+            const int az = (int) std::floor(at[a].z / kMergeSpan);
+            const int bz = (int) std::floor(at[b].z / kMergeSpan);
+            if (az != bz) return az < bz;
+            return at[a].x < at[b].x;
+        });
+        // Cut into runs: maxInst instances, or the moment the run's own box
+        // would outgrow kMergeSpan on any axis.
+        std::vector<utils::Entity> run;
+        float3 rmn{ 0 }, rmx{ 0 };
+        for (const size_t i : order) {
+            const float3 pWorld = at[i];
+            const float3 nmn = run.empty() ? pWorld : min(rmn, pWorld);
+            const float3 nmx = run.empty() ? pWorld : max(rmx, pWorld);
+            const float3 span = nmx - nmn;
+            if (!run.empty() && (run.size() >= maxInst
+                    || std::max({ span.x, span.y, span.z }) > kMergeSpan)) {
+                runs.push_back(std::move(run));
+                run.clear();
+                rmn = pWorld; rmx = pWorld;
+            } else {
+                rmn = nmn; rmx = nmx;
+            }
+            run.push_back(sources[i]);
+        }
+        if (!run.empty()) runs.push_back(std::move(run));
+    }
+
+    for (const std::vector<utils::Entity>& chunk : runs) {
+        const size_t n = chunk.size();
+        if (n < 2) continue;   // a straggler of one keeps its original draw
         MergedGroup g;
         g.dynamic = dynamic;
         g.feat = feat;
-        g.sources.assign(sources.begin() + first, sources.begin() + first + n);
+        g.sources = chunk;
         g.xf.assign(n, mat4f{});
         float r2 = 0;
         for (const auto& sp : prims) {
