@@ -143,6 +143,11 @@ and returns early. The lobby looks perfect (its paper is Compose) over a dead
 surface, and then START refuses with `scene`. `onSurfaceReady` fires on EVERY
 create for exactly this.
 
+The map also OUTLIVES a `releaseScene`, which is why `SceneStaging` keeps a memo
+of what the renderer already holds and re-provisions only what changed. Anything
+that mirrors the asset map has to be dropped on the same beat the map is —
+`SceneStaging.materials` is that beat, and `BakeCache.forget` rides it too.
+
 **`optString` READS AN EXPLICIT JSON NULL AS THE STRING `"null"`.** Android's
 `org.json` is not json.org's: `optString` delegates to `JSON.toString`, which
 reaches `String.valueOf(JSONObject.NULL)` with no NULL guard, and the fallback

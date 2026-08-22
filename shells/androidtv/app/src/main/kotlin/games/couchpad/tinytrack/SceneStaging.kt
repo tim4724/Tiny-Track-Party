@@ -98,25 +98,47 @@ object SceneStaging {
     class Failure(message: String) : Exception(message)
 
     /**
-     * The car model each slot was last GIVEN to the renderer, by slot index.
+     * What the renderer already HOLDS: asset name → the source those bytes came
+     * from (a kit base name, or a texture's authored URI).
      *
-     * [redress] is on the ROSTER path, and the roster moves for far more than a
-     * car pick: a ready toggle, a rename, a welcome, a seat expiry. Every one of
-     * those used to re-read up to eight ~60 KB GLBs out of the APK and re-derive a
-     * ghost for each, to hand the renderer bytes byte-identical to the ones it
-     * already holds. The memo turns that into "only what actually changed", which
-     * is the same rule [LobbyDemo] already applies one level up with its signature.
+     * Provisioning is re-read-and-re-hand-over work, and almost all of it is
+     * re-work. `mAssets` survives `releaseScene` (`TtpRenderer.cpp` says so at
+     * the top of it), so across two builds the props are always the same bytes,
+     * the textures always are, the scenery is whenever the biome held, and the
+     * cars are unless somebody actually picked a different one. Without this
+     * every build re-inflated each of those out of the APK, re-derived every
+     * ghost, and copied the lot across JNI into a map that already had them.
+     * [redress] is worse: the roster moves for a ready toggle, a rename, a
+     * welcome or a seat expiry, none of which change a single byte.
+     *
+     * THE TAG IS WHAT THE BYTES ARE A FUNCTION OF, which is why it is the source
+     * rather than the name: `car3.glb` is different bytes when slot 3 picks a
+     * different model, while `Textures/colormap.png` never is. A slot with no
+     * model tags as `""` so that a later pick reads as a change.
      *
      * IT MIRRORS THE RENDERER'S ASSET MAP, so it is only ever valid while that map
      * is. [materials] clears it, which is exactly the right hook: it runs on every
      * surface create, before any build, and a destroyed surface is precisely what
      * takes the asset map with it (shells/androidtv/CLAUDE.md).
      */
-    private val providedCarModels = ArrayList<String>()
+    private val provided = HashMap<String, String>()
+
+    /**
+     * The image URIs a scenery model references, scanned once per model.
+     *
+     * The texture step needs this list and used to get it by scanning the GLB it
+     * had just read — which is the read this memo exists to skip. Cleared with
+     * [provided] rather than kept for the run: the two are read together, and one
+     * lifetime is one thing to be wrong about.
+     */
+    private val sceneryUris = HashMap<String, List<String>>()
 
     /** What [build] handed the renderer this time round — see its step timing. */
     private var providedBytes = 0L
     private var providedCount = 0
+
+    /** …and what it did not, because [provided] said the renderer had it. */
+    private var reusedCount = 0
 
     // -- materials ----------------------------------------------------------
 
@@ -130,9 +152,10 @@ object SceneStaging {
      * browser ships and what this wants. tvOS is the leg that needs its own set.
      */
     fun materials(display: DisplayHost, store: AssetStore) {
-        // The asset map is fresh (see [providedCarModels]): nothing the renderer
-        // holds survived, so nothing this remembers may either.
-        providedCarModels.clear()
+        // The asset map is fresh (see [provided]): nothing the renderer holds
+        // survived, so nothing this remembers may either.
+        provided.clear()
+        sceneryUris.clear()
         // A Vulkan engine reads the SPIR-V twins: a GL blob does not parse on
         // a Vulkan engine. The choice is the surface's, made at create
         // (VulkanPolicy) — never re-derived here, where a disagreement would
@@ -169,20 +192,22 @@ object SceneStaging {
         roster: List<RosterSlot>,
         display: DisplayHost,
         store: AssetStore,
-        bakes: BakeCache? = null,
+        blobs: BlobStore? = null,
     ): String {
         // THE SIX STEPS ARE TIMED SEPARATELY. A build measures 737-1323 ms on the
         // reference box and blocks the main thread for all of it, inbound relay
         // frames included — so which STEP that is decides the whole cure, and one
-        // total cannot say. Provisioning is re-read-and-re-hand-over work that a
-        // cache could remove; `ttp_display_build` is geometry that only an
-        // unchanged track could reuse. `provide` also counts the bytes, because
-        // "how much did we hand over again" is the other half of that question.
+        // total cannot say. Provisioning is re-read-and-re-hand-over work, and
+        // [provided] is what removes it; `ttp_display_build` is geometry that only
+        // an unchanged track could reuse. `provide` also counts the bytes, and the
+        // log carries the REUSED count beside them, because "how much did we hand
+        // over again" is the other half of that question.
         val split = LongArray(6)
         var mark = System.nanoTime()
         fun step(i: Int) { val now = System.nanoTime(); split[i] = now - mark; mark = now }
         providedBytes = 0
         providedCount = 0
+        reusedCount = 0
 
         // 1. Release the previous scene. `ttp_display_build` would do this
         //    itself, but not until the very end — so without this the frame loop
@@ -198,12 +223,28 @@ object SceneStaging {
         //    it, so a fetch that runs first is a fetch of the wrong models.
         val resolved = TtpJson.strOrEmpty(Ttp.ttp_theme_biome_for_track(TtpJson.arg(trackId)))
         Ttp.ttp_display_biome(TtpJson.arg(resolved))
-        // 2b. THE SUN BAKE, IF WE ALREADY HAVE IT. Between the biome latch and
-        //     the build is the only window `ttp_display_bake_key` is defined
-        //     over — it names what the NEXT build's bake will be of, and the
-        //     biome is half of that. `primed` decides whether step 6's bake was
-        //     one we have to keep.
-        val primed = bakes?.prime(trackId) ?: false
+        // 2b. THE SUN BAKE'S WALK, first half. Between the biome latch and the
+        //     build is the only window a bake key is defined over, and that is
+        //     the engine's rule, not this file's — everything below performs an
+        //     answer. Nothing here knows what a bake IS.
+        blobs?.let { store ->
+            val plan = TtpJson.obj(Ttp.ttp_display_bake_plan(
+                TtpJson.arg(trackId), TtpJson.arg(store.generation),
+                TtpJson.arg(store.entriesJson())))
+            val drop = plan.optJSONArray("drop") ?: JSONArray()
+            // Plain strings, never JSON null — unlike `read` below, which is why
+            // only that one needs the optStr guard.
+            for (i in 0 until drop.length()) {
+                drop.optString(i).takeIf { it.isNotEmpty() }?.let { store.delete(it) }
+            }
+            // optStr, not optString: `read` is a key the ABI spells JSON null,
+            // and org.json's optString would hand back the STRING "null" — a
+            // read of a file called "null" (tests/androidtv-nullable-json.test.js
+            // keeps everyone honest about it).
+            TtpJson.optStr(plan, "read")?.let { name ->
+                store.read(name)?.let { Ttp.ttp_display_bake_offer(it) }
+            }
+        }
         step(1)
 
         // 3. Scenery, in the SLOT ORDER C++ named. The index IS the contract:
@@ -214,11 +255,22 @@ object SceneStaging {
         //    after it by one.
         Trace.beginSection("ttp:build.scenery")
         val sceneryModels = TtpJson.strings(Ttp.ttp_theme_scenery_models(TtpJson.arg(resolved)))
-        val sceneryBytes = ArrayList<ByteArray>()
-        sceneryModels.forEachIndexed { slot, name ->
-            val bytes = store.glb(name) ?: return@forEachIndexed
-            sceneryBytes.add(bytes)
-            provide(display, "scenery$slot.glb", bytes)
+        // The URI scan rides this step rather than the texture one because it
+        // needs the container's bytes, and this is the only place that has them.
+        // On a repeat biome nothing here is read at all and the scan answers from
+        // [sceneryUris], which is the whole point.
+        val uris = sortedSetOf<String>()
+        sceneryModels.forEachIndexed { slot, model ->
+            val name = "scenery$slot.glb"
+            if (provided[name] == model) {
+                reusedCount += 1
+                uris.addAll(sceneryUris[model].orEmpty())
+                return@forEachIndexed
+            }
+            val bytes = store.glb(model) ?: return@forEachIndexed
+            provide(display, name, bytes)
+            provided[name] = model
+            uris.addAll(sceneryUris.getOrPut(model) { imageUris(bytes) })
         }
         Trace.endSection()
         step(2)
@@ -228,12 +280,15 @@ object SceneStaging {
         //    kit's shared palette unconditionally — the cars and props all
         //    reference that one file. Sorted only so the order is stable in a log.
         Trace.beginSection("ttp:build.textures")
-        val uris = sortedSetOf<String>()
-        for (bytes in sceneryBytes) uris.addAll(imageUris(bytes))
         uris.add("Textures/colormap.png")
         for (uri in uris) {
+            // A texture's bytes are a function of its name alone, so the tag IS
+            // the name: past the first build that provisions it, every scene in
+            // the run reuses it whatever the biome does.
+            if (provided[uri] == uri) { reusedCount += 1; continue }
             val bytes = store.texture(uri) ?: continue
             provide(display, uri, bytes)
+            provided[uri] = uri
         }
         Trace.endSection()
         step(3)
@@ -243,22 +298,35 @@ object SceneStaging {
         //    fresh ByteArray, which is why there is no copy step here and why
         //    the tvOS file needed one.
         Trace.beginSection("ttp:build.cars")
-        providedCarModels.clear()
         roster.forEachIndexed { slot, car ->
-            // "" for a slot that got no bytes, so a later re-dress with a real
-            // model provides it rather than reading the miss as "unchanged".
-            providedCarModels.add("")
-            if (car.model.isEmpty()) return@forEachIndexed
+            val name = "car$slot.glb"
+            // "" for a slot with no model, so a later pick reads as a change
+            // rather than as "unchanged". Note the engine may still hold the
+            // model this slot had two builds ago under the same name; that has
+            // always been true and nothing references it.
+            if (car.model.isEmpty()) { provided[name] = ""; return@forEachIndexed }
+            if (provided[name] == car.model) { reusedCount += 1; return@forEachIndexed }
             val bytes = store.glb(car.model) ?: return@forEachIndexed
-            provide(display, "car$slot.glb", bytes)
-            Ttp.ttp_glb_ghost(bytes)?.let { provide(display, "car$slot-ghost.glb", it) }
-            providedCarModels[slot] = car.model
+            provide(display, name, bytes)
+            provided[name] = car.model
+            // The ghost is DERIVED from those bytes, so it is skipped with them —
+            // `ttp_glb_ghost` is byte surgery over a whole container.
+            Ttp.ttp_glb_ghost(bytes)?.let {
+                provide(display, "car$slot-ghost.glb", it)
+                provided["car$slot-ghost.glb"] = car.model
+            }
         }
-        for (name in PROP_MODELS) {
-            val bytes = store.glb(name) ?: continue
-            provide(display, "$name.glb", bytes)
-            PROP_GHOSTS[name]?.let { ghostName ->
-                Ttp.ttp_glb_ghost(bytes)?.let { provide(display, ghostName, it) }
+        for (model in PROP_MODELS) {
+            val name = "$model.glb"
+            if (provided[name] == model) { reusedCount += 1; continue }
+            val bytes = store.glb(model) ?: continue
+            provide(display, name, bytes)
+            provided[name] = model
+            PROP_GHOSTS[model]?.let { ghostName ->
+                Ttp.ttp_glb_ghost(bytes)?.let {
+                    provide(display, ghostName, it)
+                    provided[ghostName] = model
+                }
             }
         }
         Trace.endSection()
@@ -291,15 +359,23 @@ object SceneStaging {
             throw Failure("ttp_display_build($trackId) rejected the track: " +
                 TtpJson.strOrEmpty(Ttp.ttp_last_error()))
         }
-        // The export costs a readback of both maps, so it is spent only where it
-        // buys something: a build that actually baked, for a track this binary
-        // has not stored yet.
-        if (!primed) bakes?.store(trackId)
+        // THE WALK'S second half. Whether this build baked anything worth
+        // keeping — and whether the store already has it — is the engine's to
+        // know; the export costs a readback of both maps, so it is asked for
+        // only when a name comes back.
+        blobs?.let { store ->
+            TtpJson.optStr(TtpJson.obj(Ttp.ttp_display_bake_keep()), "write")?.let { name ->
+                Ttp.ttp_display_bake_export()?.let { blob ->
+                    store.write(name, blob)
+                    Log.i(TAG, "bake stored as $name (${blob.size / 1024} KiB)")
+                }
+            }
+        }
         Log.i(TAG, String.format(java.util.Locale.ROOT,
             "build split %s: release %.0f biome %.0f scenery %.0f textures %.0f cars+props %.0f native %.0f ms" +
-                " (%d assets, %d KiB handed over)",
+                " (%d assets, %d KiB handed over, %d already held)",
             trackId, split[0] / 1e6, split[1] / 1e6, split[2] / 1e6, split[3] / 1e6,
-            split[4] / 1e6, split[5] / 1e6, providedCount, providedBytes / 1024))
+            split[4] / 1e6, split[5] / 1e6, providedCount, providedBytes / 1024, reusedCount))
         return resolved
     }
 
@@ -314,18 +390,21 @@ object SceneStaging {
      * the caller performs the full [build].
      */
     fun redress(roster: List<RosterSlot>, display: DisplayHost, store: AssetStore): Boolean {
-        // ONLY THE SLOTS WHOSE MODEL MOVED — see [providedCarModels] for why that
-        // is most of the calls. The livery, the name and the id ride the reroster
-        // below and need no bytes at all; only a different MODEL does.
+        // ONLY THE SLOTS WHOSE MODEL MOVED — see [provided] for why that is most
+        // of the calls. The livery, the name and the id ride the reroster below
+        // and need no bytes at all; only a different MODEL does.
         Trace.beginSection("ttp:redress")
         roster.forEachIndexed { slot, car ->
+            val name = "car$slot.glb"
             if (car.model.isEmpty()) return@forEachIndexed
-            if (slot < providedCarModels.size && providedCarModels[slot] == car.model) return@forEachIndexed
+            if (provided[name] == car.model) return@forEachIndexed
             val bytes = store.glb(car.model) ?: return@forEachIndexed
-            provide(display, "car$slot.glb", bytes)
-            Ttp.ttp_glb_ghost(bytes)?.let { provide(display, "car$slot-ghost.glb", it) }
-            while (providedCarModels.size <= slot) providedCarModels.add("")
-            providedCarModels[slot] = car.model
+            provide(display, name, bytes)
+            provided[name] = car.model
+            Ttp.ttp_glb_ghost(bytes)?.let {
+                provide(display, "car$slot-ghost.glb", it)
+                provided["car$slot-ghost.glb"] = car.model
+            }
         }
         Trace.endSection()
         val slots = JSONArray()
