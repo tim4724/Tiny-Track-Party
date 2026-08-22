@@ -952,7 +952,10 @@ void TtpRenderer::fillRoadLight(const TrackBin& tb, const float* esm,
 // directory named for the installed binary rather than beside the track id.
 namespace {
 constexpr uint32_t kBakeMagic = 0x42505454u;  // 'TTPB', little-endian
-constexpr uint32_t kBakeVersion = 1u;
+// v2: the writing BACKEND rides the header and import refuses a foreign blob —
+// see the flip note in exportBake. v1 blobs written under Vulkan are mirrored,
+// so the bump also retires every v1 file.
+constexpr uint32_t kBakeVersion = 2u;
 
 void putU32(std::vector<uint8_t>& out, uint32_t v) {
     out.insert(out.end(), (const uint8_t*) &v, (const uint8_t*) &v + 4);
@@ -1010,23 +1013,31 @@ bool TtpRenderer::exportBake(std::vector<uint8_t>& out) {
     const uint32_t ew = mShadowMap->getWidth(0), eh = mShadowMap->getHeight(0);
     const size_t texels = (size_t) ew * eh;
     if (esmRGBA.size() < texels * 16) return false;
-    // ROWS GO BACK THE OTHER WAY, and this is a documented Filament fact rather
-    // than a guess (Renderer.h, readPixels): "OpenGL only: if issuing a readPixels
-    // on a RenderTarget backed by a Texture that had data uploaded to it via
-    // setImage, the data returned from readPixels will be y-flipped with respect
-    // to the setImage call." This blob is read one way and uploaded the other, so
-    // somebody has to flip; doing it here means the file is in setImage order and
-    // import stays a straight upload.
+    // ROWS GO BACK THE OTHER WAY ON OPENGL ALONE, and this is a documented
+    // Filament fact rather than a guess (Renderer.h, readPixels): "OpenGL only:
+    // if issuing a readPixels on a RenderTarget backed by a Texture that had
+    // data uploaded to it via setImage, the data returned from readPixels will
+    // be y-flipped with respect to the setImage call." The GL backend flips
+    // every readback "to match our API" (OpenGLDriver.cpp) while Vulkan and
+    // Metal copy storage rows verbatim — so on those backends a readback IS
+    // setImage order already, and applying the GL flip mirrors the map. This
+    // blob is read one way and uploaded the other, so on GL somebody has to
+    // flip; doing it here means the file is in the writing backend's setImage
+    // order and import stays a straight upload. The header carries the backend
+    // and import refuses a foreign blob, so the two sides of the round trip
+    // can never disagree about which convention the bytes are in.
     //
-    // It is invisible in every way that matters until you look: the map still
-    // covers the track, still has the right shape, and is simply upside down —
-    // which reads on screen as a shadow that has been rotated onto the wrong side
-    // of the circuit. fillRoadLight never hit this because it consumes the
-    // readback directly, in the readback's own orientation, and never round-trips.
+    // The mirror is invisible in every way that matters until you look: the map
+    // still covers the track, still has the right shape, and is simply upside
+    // down — which reads on screen as a shadow that has been rotated onto the
+    // wrong side of the circuit. fillRoadLight never hits any of this because
+    // it consumes the readback directly, in the readback's own orientation, and
+    // never round-trips.
+    const bool flip = mEngine->getBackend() == Engine::Backend::OPENGL;
     std::vector<math::half> esm(texels);
     const float* src = (const float*) esmRGBA.data();
     for (uint32_t y = 0; y < eh; y++) {
-        const float* row = src + (size_t) (eh - 1 - y) * ew * 4;
+        const float* row = src + (size_t) (flip ? eh - 1 - y : y) * ew * 4;
         math::half* dst = esm.data() + (size_t) y * ew;
         for (uint32_t x = 0; x < ew; x++) dst[x] = math::half(row[x * 4]);
     }
@@ -1041,6 +1052,7 @@ bool TtpRenderer::exportBake(std::vector<uint8_t>& out) {
     out.clear();
     putU32(out, kBakeMagic);
     putU32(out, kBakeVersion);
+    putU32(out, (uint32_t) mEngine->getBackend());
     putU32(out, (uint32_t) mBakedKey.size());
     out.insert(out.end(), mBakedKey.begin(), mBakedKey.end());
     putF32(out, mShadowTexel);
@@ -1054,8 +1066,8 @@ bool TtpRenderer::exportBake(std::vector<uint8_t>& out) {
     putU32(out, vw); putU32(out, vh);
     if (vw && vh) {
         std::vector<uint8_t> vis((size_t) vw * vh);
-        for (uint32_t y = 0; y < vh; y++) {          // y-flipped, as above
-            const uint8_t* row = visRGBA.data() + (size_t) (vh - 1 - y) * vw * 4;
+        for (uint32_t y = 0; y < vh; y++) {          // GL-flipped, as above
+            const uint8_t* row = visRGBA.data() + (size_t) (flip ? vh - 1 - y : y) * vw * 4;
             uint8_t* dst = vis.data() + (size_t) y * vw;
             for (uint32_t x = 0; x < vw; x++) dst[x] = row[x * 4];
         }
@@ -1071,9 +1083,15 @@ bool TtpRenderer::importBake(const uint8_t* bytes, uint32_t len) {
     if (!bytes || len < 16 || !mEngine) return false;
     const uint8_t* p = bytes;
     const uint8_t* end = bytes + len;
-    uint32_t magic = 0, version = 0, keyLen = 0;
+    uint32_t magic = 0, version = 0, backend = 0, keyLen = 0;
     if (!takeU32(p, end, magic) || magic != kBakeMagic) return false;
     if (!takeU32(p, end, version) || version != kBakeVersion) return false;
+    // A blob is in its WRITER's setImage order (see the flip note in
+    // exportBake), and nothing here can re-orient bytes whose convention it
+    // cannot know — so a blob from another backend (the boot canary flipping a
+    // device between Vulkan and GL) is refused and the scene rebakes.
+    if (!takeU32(p, end, backend)
+            || backend != (uint32_t) mEngine->getBackend()) return false;
     if (!takeU32(p, end, keyLen) || (size_t) (end - p) < keyLen) return false;
     const std::string key((const char*) p, keyLen);
     p += keyLen;

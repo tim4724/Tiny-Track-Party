@@ -758,6 +758,82 @@ Per-cell FOG is the one that looks like a blocker and is not: it is a `View`
 option, but every cell of a RACE runs the same ramp, so one view's fog serves
 them. The lobby orbit and the overview are single-cell and never take this path.
 
+## Vulkan
+
+**VULKAN IS THE DEFAULT BACKEND on this shell, decided once per launch in
+`VulkanPolicy`** (property override `debug.ttp.vk`: 1 forces Vulkan, -1 forces
+GL; then the device must advertise Vulkan 1.1 via
+`FEATURE_VULKAN_HARDWARE_VERSION` — Filament's floor, and Vulkan is optional
+on Android, so no-ICD and 1.0-only boxes go GL from launch one instead of
+after two dead boots; then the SPIR-V blob set must be in the APK; then the
+boot canary — two Vulkan boots that never presented a frame and every later
+launch runs GL until a reinstall). The decision is made at surface create and carried into
+`nativeCreate` as a parameter — the shared `ttp_display_create` ABI cannot grow
+a platform-private argument — and `DisplayHost` retries the create on GL in the
+same call when the Vulkan engine refuses, so a refusing driver still shows a
+picture. A Vulkan engine runs stereo-free (multiview is a GL arrangement) and
+reads the SPIR-V twins from `assets/materials-vk/` (compiled by
+`build-runtime-android.sh` beside the multiview set; a GL blob does not parse
+on a Vulkan engine, so `SceneStaging` follows `DisplayHost.usingVulkan`, never
+the property). `perf-race` arms take `--vk 1`, PIN GL when unflagged (the
+GL-era ledgers stay comparable), and restore the property to unset on every
+exit path.
+
+**Why it exists: the GL driver was nearly half the 4-player frame.** On this
+box's PowerVR GL driver the 4P/540 GPU median reads ~27 ms; the same race on
+the same box's Vulkan driver reads ~17, and the delivered rate follows (32 →
+48 fps; 2P and 3P land on ~60 typical; solo's median drops too). The per-cell
+"fixed term" every GL-era note calls uncollectable is therefore a large part
+GL DRIVER OVERHEAD, not per-eye geometry — the `gpu ms` timer reads a
+first-to-last-command span, and the GL backend thread was stretching it. The
+GL-era cost model and its refuted-lever list DO NOT TRANSFER to this backend;
+re-price before citing either.
+
+**Two traps already sprung, one fix shipped:**
+
+- **The Vulkan driver caps 2D images at 4096 where GL reports 8192**, on the
+  same GPU. The skid layer asked for 8192 and `Texture::Builder::build`'s
+  precondition panicked. `TtpRenderer::init` now clamps `mMaxTextureDim` to
+  `Texture::getMaxTextureSize` on every backend — the rubber grid just clamps
+  one step earlier here, the quality trade the skid comment already documents.
+- **A Filament panic on this shell is a silent 100% CPU hang, not a crash.**
+  The ARM EHABI unwinder livelocks walking our apk-mapped `.so` (main thread
+  pegged, PC bouncing between the lib and the linker's `dl_unwind_find_exidx`,
+  nothing in logcat — the panic text never prints). When boot sticks under the
+  cover with one thread at 100%, suspect a thrown `TPanic` BEFORE suspecting a
+  loop; the debugging route that cracked it (lldb-server in the app sandbox via
+  `run-as`, a raw gdb-remote PC sampler, offline symbolization against the
+  unstripped `.so`) is in the session notes, since `debuggerd` wants root.
+
+The readout, the scale rule and hz30 all behave identically on it;
+`OpenGLTimerQuer`'s thread simply does not exist under Vulkan. The wider-box
+driver story is what the canary + GL retry exist for: PowerVR Vulkan drivers
+vary, and the observed failure shape (the silent unwinder hang above) is
+invisible to a crash-loop detector.
+
+**The Vulkan frame has the web's shape, and its refuted-lever list is its
+own.** Re-swept at a pinned 4P/720 (arms must SATURATE — the DVFS trap):
+the road's fill is most of the frame, dressing and terrain are small, cars
+are near-zero NET (their GL-era cost was submission, and Vulkan ate it), and
+**the merged draw groups move this backend's median nothing** — the merge
+stays for tvOS, where it is load-bearing. Refuted here, so nobody re-derives
+them: a fork patch confining each pass's Vulkan `renderArea` to its viewport
+(built, verified ACTIVE in-log, measured ZERO at 720 — the driver already
+handles untouched tiles cheaply); the sRGB-swapchain ROP encode (the grade is
+a LUT, the prize is ~1 ms of fill, and it flips translucent blending
+gamma→linear — a look change); the engine's feature flags (nothing
+Vulkan-tunable exists). What remains above the road's own shader is
+RESOLUTION — the ladder — and nothing else on this GPU.
+
+**`readPixels` on this driver has no `HOST_CACHED` staging memory**, so
+Filament's per-texel reshape used to walk an UNCACHED mapping — every 2-4 byte
+load its own memory transaction, which is what made the Vulkan scene build's
+readbacks (the road-light ESM above all) several times their GL cost. The
+fork carries the fix (`vulkan: bounce readPixels staging through a cached copy
+before reshape`, in the pin): one bulk memcpy into cached heap before the
+reshape, which halved the bake's `roadLight` phase on this box. The residual
+gap to GL is the bounce copy itself plus GPU waits — not worth chasing.
+
 ## Audio
 
 **Every cue is mixed here, in Kotlin, into one always-open `AudioTrack`.**

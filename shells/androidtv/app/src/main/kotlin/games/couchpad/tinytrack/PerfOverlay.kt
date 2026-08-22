@@ -1,22 +1,12 @@
 package games.couchpad.tinytrack
 
+import android.content.Context
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.RectF
+import android.graphics.Typeface
 import android.util.Log
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicText
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import android.view.View
 import org.json.JSONObject
 import java.nio.ByteOrder
 import java.util.Locale
@@ -63,10 +53,18 @@ import java.util.Locale
  * make). "Live in release" and "on by default" were two choices; only the first
  * had to be made.
  *
- * IT PERTURBS WHAT IT MEASURES, mildly and knowably, which is why it is a knob
- * and not a fixture: the text republishes at 4 Hz ([TEXT_INTERVAL_MS]) and
- * Compose shares this shell's one frame thread, so four recompositions a second
- * land inside the budget being reported.
+ * IT PERTURBS WHAT IT MEASURES, which is why it is a knob and not a fixture —
+ * and why the readout is a plain [PerfOverlayView] and NOT Compose. It was four
+ * `BasicText` lines once, and each 4 Hz republish spent ~3.3 ms of this
+ * shell's ONE thread in the window traversal alone (HWUI framestats on the
+ * reference box, the game's own callback excluded), plus recomposition — jank
+ * on ~4 frames a second, from the panel that reports jank. The same lines
+ * through `Canvas.drawText`, relaid out only when the panel's SIZE moves,
+ * measure 0.37 ms. Filament is NOT the next rung down: a renderer-drawn
+ * readout renders inside the very spans it reports, vanishes exactly when the
+ * pipeline it is debugging stalls (the Vulkan boot's queued unlatched frames
+ * were diagnosed by watching this panel over a black surface), and the
+ * renderer's HUD is textless by rule.
  * Everything a READER wants is inert while hidden AND unbenched: [record] does
  * not touch the profile ABI, keep a window of its own or fold a readout. What it
  * still does unconditionally is `ttp_perf_sample`, because the render scale
@@ -87,6 +85,16 @@ object PerfMonitor {
     /** The overlay's own refresh; the log's cadence is the bench contract's 1 Hz. */
     private const val TEXT_INTERVAL_MS = 250.0
     private const val LOG_INTERVAL_MS = 1000.0
+
+    /**
+     * DIAGNOSTIC colours, not chrome: the sticker palette's veto on amber does
+     * not reach a debug overlay, and the three readouts agreeing on what amber
+     * MEANS (`ttp/perf_stats.h`'s verdict) is worth more than matching the
+     * theme.
+     */
+    private val TINT_GOOD = 0xFF7DFC8A.toInt()
+    private val TINT_WARN = 0xFFFFD166.toInt()
+    private val TINT_BAD = 0xFFFF6B6B.toInt()
 
     /**
      * The per-section rings hold at most this many frames, AND at most [WINDOW_MS]
@@ -143,28 +151,35 @@ object PerfMonitor {
      */
     private val SHELL = listOf("sim", "slow", "other", "callback")
 
-    var visible by mutableStateOf(false)
+    var visible = false
         private set
-    var lines by mutableStateOf(listOf<String>())
+    var lines = listOf<String>()
         private set
-    var tint by mutableStateOf(Color.Green)
+    var tint = TINT_GOOD
         private set
+
+    /**
+     * The one consumer's wake-up — [PerfOverlayView.refresh], set at boot. A
+     * callback rather than observable state because the reader is a plain View
+     * now, and Compose snapshot machinery was the cost this file shed.
+     */
+    var onChanged: (() -> Unit)? = null
 
     /** See [bench]. */
     private var benching = false
 
-    fun show() { visible = true; reset() }
-    fun hide() { visible = false }
+    fun show() { visible = true; reset(); onChanged?.invoke() }
+    fun hide() { visible = false; onChanged?.invoke() }
     fun toggle() { if (visible) hide() else show() }
 
     /**
      * MEASURE WITHOUT DRAWING, for `Scenarios`' bench race.
      *
-     * The readout is four lines of Compose `BasicText` re-measured at 4 Hz on the
-     * one frame thread, which is main-thread work of the same order as anything a
-     * bench is hunting — so a benched run logs and shows nothing. It also retires
-     * the trap the old harness carried: the panel is a TOGGLE whose state outlives
-     * a force-stop, so a script that pressed KEYCODE_INFO blind was a coin flip on
+     * Even the Canvas readout is main-thread work at 4 Hz on the one frame
+     * thread — small now, but a bench is exactly the run where "small" must be
+     * zero — so a benched run logs and shows nothing. It also retires the trap
+     * the old harness carried: the panel is a TOGGLE whose state outlives a
+     * force-stop, so a script that pressed KEYCODE_INFO blind was a coin flip on
      * whether it had just turned the numbers OFF.
      */
     fun bench() { benching = true; reset() }
@@ -389,10 +404,11 @@ object PerfMonitor {
                 " · skip ${r.optInt("skips")}",
         ) + split.chunked(3).map { it.joinToString("  ") }
         tint = when (r.optString("verdict")) {
-            "bad" -> Color(0xFFFF6B6B)
-            "warn" -> Color(0xFFFFD166)
-            else -> Color(0xFF7DFC8A)
+            "bad" -> TINT_BAD
+            "warn" -> TINT_WARN
+            else -> TINT_GOOD
         }
+        onChanged?.invoke()
     }
 
     /** One `{max,n,p05,p50,p95}` field, or null for a series this platform has none of. */
@@ -416,33 +432,93 @@ object PerfMonitor {
 }
 
 /**
- * Drop this over everything. It renders nothing at all while the monitor is
- * hidden, and it is never focusable — a focusable debug panel would steal remote
- * presses from the pause overlay and the results button.
+ * The readout on the glass: [PerfMonitor.lines] as `Canvas.drawText`, sized by
+ * its own `onMeasure`. A plain View in [MainActivity]'s root FrameLayout — NOT
+ * a composable — for the reason the class doc gives numbers for: a Compose
+ * text block cost ~9× this View's traversal per republish, from the panel
+ * whose job is reporting what that thread spends. It sits beside the
+ * ComposeView rather than inside it, GONE while hidden (a GONE leaf costs the
+ * traversal nothing), and never focusable (the View default) — a focusable
+ * debug panel would steal remote presses from the pause overlay.
  *
- * DIAGNOSTIC colours, not chrome: the sticker palette's veto on amber does not
- * reach a debug overlay, and the three readouts agreeing on what amber MEANS
- * (`ttp/perf_stats.h`'s verdict) is worth more than matching the theme.
+ * BOTTOM-RIGHT, which is where tvOS has always put it (`PerfOverlay.swift`).
+ * It held the TOP-right until the lobby's ⓘ took that corner to match tvOS's
+ * placement; a diagnostic block is the one thing on screen that can afford to
+ * move, and the only control on the lobby board is not. It shares the corner
+ * with [RootScreen]'s error box — both are developer-facing, both are rare, and
+ * an error while the readout is up is a case worth seeing crowded rather than
+ * not at all. [MainActivity] places it inside the overscan margin.
+ *
+ * EVERY LENGTH IS AUTHORED PIXELS TIMES [scale] — this View lives outside
+ * [TtpTheme]'s density provider, so the 1920-wide authored space the old
+ * Compose dp values meant is reproduced by hand, and re-read on every
+ * [refresh] so an HDMI mode change (which recreates nothing — the manifest
+ * declares it) re-sizes the panel like it re-sizes the theme.
  */
-@Composable
-fun PerfOverlay() {
-    if (!PerfMonitor.visible) return
-    Column(
-        Modifier
-            .padding(top = 24.dp, end = 24.dp)
-            .background(Color(0xCC000000), RoundedCornerShape(8.dp))
-            .padding(horizontal = 12.dp, vertical = 9.dp)
-    ) {
+class PerfOverlayView(context: Context) : View(context) {
+
+    private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+    }
+    private val back = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xCC000000.toInt() }
+    private val rect = RectF()
+
+    // 0 is "never sized": the real scale is 1.0 on a 1080p panel, so any
+    // possible value here would skip the first-time sizing on some panel.
+    private var scale = 0f
+    private var padH = 0f
+    private var padV = 0f
+    private var radius = 0f
+    private var lineH = 0f
+
+    init {
+        visibility = GONE
+    }
+
+    /** The [PerfMonitor.onChanged] half: new lines, new tint, or show/hide. */
+    fun refresh() {
+        visibility = if (PerfMonitor.visible) VISIBLE else GONE
+        if (visibility != VISIBLE) return
+        val s = resources.displayMetrics.widthPixels / AUTHORED_WIDTH
+        if (s != scale) {
+            scale = s
+            text.textSize = 20f * s
+            padH = 12f * s
+            padV = 9f * s
+            radius = 8f * s
+            lineH = text.fontMetrics.let { it.descent - it.ascent }
+        }
+        // requestLayout ONLY when the panel's size actually moves: a layout
+        // pass is the whole WINDOW's measure — ComposeView included — and it
+        // is most of what this View would otherwise cost (framestats:
+        // traversal 0.88 ms/republish relaid out, 0.37 invalidate-only). The
+        // font is monospace, so the size only moves when a line gains a
+        // character or a row appears, not when a digit ticks.
+        if (measured() != width to height) requestLayout()
+        invalidate()
+    }
+
+    /** One rule for both askers: the panel's size, from the current lines. */
+    private fun measured(): Pair<Int, Int> {
+        var w = 0f
+        for (line in PerfMonitor.lines) w = maxOf(w, text.measureText(line))
+        return (w + 2f * padH).toInt() to
+                (PerfMonitor.lines.size * lineH + 2f * padV).toInt()
+    }
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val (w, h) = measured()
+        setMeasuredDimension(w, h)
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        rect.set(0f, 0f, width.toFloat(), height.toFloat())
+        canvas.drawRoundRect(rect, radius, radius, back)
+        text.color = PerfMonitor.tint
+        var baseline = padV - text.fontMetrics.ascent
         for (line in PerfMonitor.lines) {
-            BasicText(
-                line,
-                style = TextStyle(
-                    color = PerfMonitor.tint,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    fontFamily = FontFamily.Monospace,
-                ),
-            )
+            canvas.drawText(line, padH, baseline, text)
+            baseline += lineH
         }
     }
 }

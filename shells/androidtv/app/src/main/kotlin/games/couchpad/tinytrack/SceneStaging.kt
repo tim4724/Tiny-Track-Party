@@ -133,10 +133,19 @@ object SceneStaging {
         // The asset map is fresh (see [providedCarModels]): nothing the renderer
         // holds survived, so nothing this remembers may either.
         providedCarModels.clear()
+        // A Vulkan engine reads the SPIR-V twins: a GL blob does not parse on
+        // a Vulkan engine. The choice is the surface's, made at create
+        // (VulkanPolicy) — never re-derived here, where a disagreement would
+        // fail as a parse abort mid-boot.
+        val dir = if (display.usingVulkan) "materials-vk" else "materials"
         for (name in MATERIAL_NAMES) {
             val file = "$name.filamat"
-            val bytes = store.bundled("materials/$file")
-                ?: throw Failure("$file is not in the APK — run shells/androidtv/scripts/stage-assets.sh")
+            val bytes = store.bundled("$dir/$file")
+                ?: throw Failure(
+                    "$dir/$file is not in the APK — run shells/androidtv/scripts/stage-assets.sh" +
+                        if (dir == "materials-vk")
+                            " after native/scripts/build-runtime-android.sh (the Vulkan set is build output)"
+                        else "")
             provide(display, file, bytes)
         }
     }

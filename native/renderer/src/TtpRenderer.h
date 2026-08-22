@@ -44,6 +44,7 @@
 
 namespace filament {
 class Engine;
+class Fence;
 class IndirectLight;
 class SwapChain;
 class Renderer;
@@ -174,6 +175,11 @@ public:
     // accidentally opt in.
     void setBakeKey(const char* key) { mBakeKey = key ? key : ""; }
 
+    // Which backend the engine runs (filament::Backend as an int). Rides the
+    // bake key: a bake blob's byte orientation is a fact about the writing
+    // backend — see exportBake.
+    int backendId() const;
+
     // The resident sun bake as bytes, and back. See the block comment above
     // exportBake in TtpRendererBakes.cpp for why this crosses the ABI at all.
     // export answers false when nothing is baked; import answers false for any
@@ -181,6 +187,16 @@ public:
     // it does.
     bool exportBake(std::vector<uint8_t>& out);
     bool importBake(const uint8_t* bytes, uint32_t len);
+
+    // Has a frame of the CURRENT scene FINISHED on the GPU — not merely been
+    // submitted, which is all render()'s true says. The two part company on a
+    // queueing backend: Vulkan's first frames after a build sit behind the
+    // pipeline-compile storm, so the compositor has nothing to latch for over a
+    // second while render() keeps answering true. A boot cover that lifts on
+    // render()'s word uncovers that gap as a black lobby (the Android shell's
+    // hasPainted latch is the caller). Polls a fence armed by the first
+    // presented frame after a build; sticky true until the scene is released.
+    bool settled();
 
     bool buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& theme,
             const std::vector<TtpRosterCar>& roster, const ttp::rt::WearPlan& wear);
@@ -629,7 +645,7 @@ private:
     // hard constraints (a stereo engine, no overview — its full-surface rect
     // fits no cell-sized layer).
     bool multiviewWants(uint32_t viewCount, uint32_t flags) const {
-        if (!mStereoEyes || mMultiviewMode <= 0) return false;
+        if (!mStereoEyes || mMultiviewMode <= 0 || mMvBroken) return false;
         if (flags & TTP_FRAME_OVERVIEW) return false;
         return mMultiviewMode == 1 ? viewCount == kMvLayers
                                    : viewCount >= 2 && viewCount <= kMvLayers;
@@ -655,6 +671,22 @@ private:
     // False (without having rendered anything) when the stereo targets cannot
     // stand up — the caller then runs the classic per-cell path instead.
     bool renderCellsMultiview(const TtpFrameInput& input, double& tMark);
+    // ADVERTISED IS NOT PROVEN — see verifyMultiview in TtpRendererFrame.cpp.
+    // A driver that offers OVR_multiview2 and renders the array black (the
+    // Android emulator's gfxstream GLES does exactly this) would otherwise
+    // put four black cells with chrome on a family's screen with nothing to
+    // catch it: not a crash, so no canary; the composite draws, so no error.
+    bool mMvDrewThisFrame = false;   // set by renderCellsMultiview, per frame
+    bool mMvVerifyPending = false;   // a probe readback is in flight
+    bool mMvVerified = false;        // a LIT probe landed: trusted for good
+    bool mMvBroken = false;          // renders nothing: classic path, for good
+    uint32_t mMvBlackProbes = 0;     // consecutive black probes so far
+    // A single black frame is not a verdict — the box's OWN first stereo frame
+    // reads back black (the race stands up mid-fade), which parked a healthy
+    // driver on the classic path until this became a run length. ~2 s of
+    // stereo frames all black is a driver, not a fade.
+    static constexpr uint32_t kMvProbeLimit = 120;
+    void verifyMultiview(uint32_t viewCount);
     // The per-cell scene mutations, factored so the stereo path can run them
     // per PASS (both eyes see one scene state): billboards turn toward camPos,
     // the monster ghost swap keys on "any cell in cellMask wants the ghost".
@@ -920,6 +952,10 @@ private:
     // a rebuild changed only the field.
     std::string mBakeKey;
     std::string mBakedKey;
+    // settled()'s state: the fence armed by the first presented frame after a
+    // build, and the sticky answer once it signals. Cleared in releaseScene.
+    filament::Fence* mSettleFence = nullptr;
+    bool mSettled = false;
 
     // ---- the graveyard --------------------------------------------------
     //

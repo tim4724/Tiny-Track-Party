@@ -24,9 +24,12 @@ internal object TtpSurface {
      * Bind the engine to a live [Surface]. `width`/`height` are the surface's
      * PHYSICAL pixels and must equal the buffer size the holder was given — the
      * two are what `ttp_display_cell_rects` answers in, so a disagreement puts
-     * every HUD chip off the picture it labels.
+     * every HUD chip off the picture it labels. `vulkan` picks the Filament
+     * backend for the life of this engine — the caller decides ([VulkanPolicy]
+     * through [DisplayHost]); this just carries it across, because the shared
+     * `ttp_display_create` ABI cannot grow a platform-private parameter.
      */
-    external fun nativeCreate(surface: Surface, width: Int, height: Int): Boolean
+    external fun nativeCreate(surface: Surface, width: Int, height: Int, vulkan: Boolean): Boolean
 
     /**
      * Tear the display down. The caller removes its Choreographer callback

@@ -2,6 +2,7 @@ package games.couchpad.tinytrack
 
 import android.os.Bundle
 import android.util.Log
+import android.view.Gravity
 import android.view.KeyEvent
 import android.view.SurfaceView
 import android.view.ViewGroup
@@ -158,6 +159,21 @@ class MainActivity : ComponentActivity() {
             }
         }
         root.addView(compose)
+        // The perf readout, OVER the ComposeView and outside it — a plain View,
+        // for the cost argument in PerfOverlay.kt. Its corner and margins are
+        // the ones RootScreen's error box uses (bottom-right, inside the
+        // overscan margin), in authored pixels by hand because TtpTheme's
+        // density provider does not reach a sibling of the ComposeView.
+        val perfView = PerfOverlayView(this)
+        val authored = resources.displayMetrics.widthPixels / AUTHORED_WIDTH
+        root.addView(perfView, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.BOTTOM or Gravity.END,
+        ).apply {
+            rightMargin = ((Tokens.safeMarginX.value + 24f) * authored).toInt()
+            bottomMargin = (Tokens.safeMarginY.value * authored).toInt()
+        })
+        PerfMonitor.onChanged = { perfView.refresh() }
         setContentView(root)
 
         // THE SURFACE JOINS ONE FRAME LATER, AND THAT IS THE WHOLE COVER.

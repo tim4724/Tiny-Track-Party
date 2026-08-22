@@ -14,6 +14,8 @@ import android.util.Log
  * adb shell setprop debug.ttp.mv -1          # multiview OFF (-1); 1 = 4-cell splits
  *                                            # (the default), 2 = ANY split (measured
  *                                            # regression at 2P/3P — experiments only)
+ * adb shell setprop debug.ttp.vk 1           # backend override: 1 Vulkan, -1 GL,
+ *                                            # unset = VulkanPolicy (Vulkan when it can)
  * ```
  *
  * WHY PROPERTIES AND NOT A KEY. An ablation sweep is a dozen arms, each needing a
@@ -137,8 +139,11 @@ object PerfDebug {
      * `SystemProperties.get` by reflection. It is hidden API, and it is on the
      * allowed list — this box logs the access and serves it. There is no public
      * equivalent, and the alternative (`Runtime.exec("getprop")`) forks a process.
+     *
+     * Internal because [VulkanPolicy] reads its override (`debug.ttp.vk` — not a
+     * knob this poll can act on: a backend exists only at engine creation).
      */
-    private fun getprop(key: String): String? = try {
+    internal fun getprop(key: String): String? = try {
         val cls = Class.forName("android.os.SystemProperties")
         (cls.getMethod("get", String::class.java).invoke(null, key) as? String)
             ?.takeIf { it.isNotEmpty() }

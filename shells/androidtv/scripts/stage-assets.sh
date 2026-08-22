@@ -108,6 +108,18 @@ else
   cp "$MATERIALS"/*.filamat "$OUT/materials/"
 fi
 
+# The SPIR-V twins for the Vulkan backend — this shell's DEFAULT
+# (build-runtime-android.sh compiles them beside the multiview set). Staged
+# only when built: VulkanPolicy probes for this directory and pins an APK
+# without it to GL from launch one, so a matc-less build still runs — it just
+# runs the fallback backend.
+MATERIALS_VK="$ROOT/native/build/materials-android-vk"
+if [ -n "$(ls "$MATERIALS_VK"/*.filamat 2>/dev/null)" ]; then
+  say "materials: VULKAN experiment set ($MATERIALS_VK)"
+  mkdir -p "$OUT/materials-vk"
+  cp "$MATERIALS_VK"/*.filamat "$OUT/materials-vk/"
+fi
+
 # The design tokens, as DATA — the same file the web's CSS is baked to, so the
 # sticker palette has ONE source across all three shells rather than three
 # hand-typed copies. Tokens.kt reads this; no colour in it may be spelled again

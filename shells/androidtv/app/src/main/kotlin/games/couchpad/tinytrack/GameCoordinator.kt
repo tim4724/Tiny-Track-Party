@@ -561,9 +561,11 @@ class GameCoordinator(
      * in the gallery would become a picture of the splash.
      */
     fun refreshCover() {
+        val was = state.cover
         state.cover = if (Scenarios.active) "none" else TtpJson.str(
             Ttp.ttp_ui_cover(TtpJson.arg(state.screen.name.lowercase()),
                              if (display.hasPainted) 1 else 0)) ?: "none"
+        if (state.cover != was) Log.i(TAG, "cover $was -> ${state.cover}")
     }
 
     /**
