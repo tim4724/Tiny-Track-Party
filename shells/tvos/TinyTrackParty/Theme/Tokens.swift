@@ -43,6 +43,9 @@ enum Tokens {
     private static var colors: [String: UIColor] = [:]
     private static var lengths: [String: CGFloat] = [:]
     private static var shadows: [String: Shadow] = [:]
+    /// Unitless tokens (`type: "raw"`) — a fraction or a viewBox unit, not a
+    /// length, so there is nothing to convert to points.
+    private static var numbers: [String: CGFloat] = [:]
     /// The `car-*` group **in file order**. That order is the `colorIndex` a
     /// seat carries, so it may not be sorted or reordered.
     private static var liveries: [UIColor] = []
@@ -91,6 +94,13 @@ enum Tokens {
                 if let c = uiColor(fromRGBA: entry["rgba"]) { colors[name] = c }
             case "length":
                 if let px = entry["px"] as? Double { lengths[name] = CGFloat(px) }
+            case "raw":
+                // A bare number in the CSS: a fraction of the surface, or a
+                // width in the schematic's own viewBox. `resolved` is the
+                // authored text, so this is the one arm that parses.
+                if let raw = entry["resolved"] as? String, let v = Double(raw) {
+                    numbers[name] = CGFloat(v)
+                }
             case "shadow":
                 if let s = entry["shadow"] as? [String: Any],
                    let c = uiColor(fromRGBA: s["rgba"]) {
@@ -157,6 +167,10 @@ enum Tokens {
         for name in ["shadow-pop", "shadow-card", "shadow-float"] where shadows[name] == nil {
             assertionFailure("design-tokens.json is missing the shadow --\(name)")
         }
+        for name in ["track-map-casing", "track-map-road",
+                     "track-map-start-r", "track-map-start-ring"] where numbers[name] == nil {
+            assertionFailure("design-tokens.json is missing the number --\(name)")
+        }
         // The one rule the CSS can only state in prose, and the reason
         // `tests/design-tokens.test.js` exists on the web side: press travel
         // equal to the ledge depth would punch the button through its own ledge
@@ -198,6 +212,15 @@ enum Tokens {
     /// The four `--r-*` corner radii. Spelled `radius` because that is what
     /// every caller wants them for; `length` is the general form.
     static func radius(_ name: String) -> CGFloat { length(name) }
+
+    /// A unitless token. Whatever unit the CSS authored it in is the caller's
+    /// to know — the safe-zone tokens are fractions of the surface, the
+    /// `--track-map-*` ones are the schematic's own viewBox units.
+    static func number(_ name: String) -> CGFloat {
+        if let v = numbers[name] { return v }
+        assertionFailure("no number token --\(name)")
+        return 0
+    }
 
     static func shadow(_ name: String) -> Shadow {
         if let s = shadows[name] { return s }

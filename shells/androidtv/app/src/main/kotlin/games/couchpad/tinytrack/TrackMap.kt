@@ -42,11 +42,19 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 /** `0 0 256 256` — the box `ttp_track_schematic_json` projects into. */
 private const val VIEW = 256f
 
-// `theme.css`'s `.track-map__casing` / `__road` / `__start`, in that box's units.
-private const val CASING_W = 23f
-private const val ROAD_W = 14f
-private const val START_R = 13f
-private const val START_RING_W = 4f
+// `theme.css`'s `.track-map__casing` / `__road` / `__start`, in that box's units
+// — read from the token bake, not re-typed. tvOS draws the same picture from the
+// same four tokens, so a width that moved in the CSS moves on all three.
+//
+// GETTERS, NOT `val`s, and that is load-bearing: a top-level `val` initialises
+// when the file's class is first touched, which can be before `Tokens.load()`
+// has read the bake — so it would capture 0 and draw an invisible map, once,
+// with nothing to show for it afterwards. `Tokens.assertWhole` is what catches
+// a bake that really is missing them.
+private val CASING_W get() = Tokens.number("track-map-casing") ?: 0f
+private val ROAD_W get() = Tokens.number("track-map-road") ?: 0f
+private val START_R get() = Tokens.number("track-map-start-r") ?: 0f
+private val START_RING_W get() = Tokens.number("track-map-start-ring") ?: 0f
 
 object TrackMap {
 

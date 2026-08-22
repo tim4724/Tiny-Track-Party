@@ -157,6 +157,23 @@
      screen) and is deliberately not covered — it is also centred in a screen-wide
      cell, so nothing in the bottom-left corner reaches it. */
   --steer-band-frac: 0.0601;                          /* of the surface height */
+
+  /* -- track map (the circuit mini-map's marks) -----------------------------
+     The marks a circuit's mini-map is drawn with, in the schematic's OWN
+     viewBox units (`ttp_track_schematic_json` projects into 0 0 256 256, and
+     `schematic.cc` writes that literal). Not lengths: a tile is drawn at
+     whatever size its slot is, so a px width would be a second, contradictory
+     scale.
+
+     THEY ARE HERE BECAUSE THREE PLATFORMS DRAW THIS PICTURE. The projection is
+     C++'s and the strokes are each shell's, so the widths were spelled once in
+     the CSS below, once in Swift and once in Kotlin, with nothing that could
+     see all three — the exact shape rule 1 exists to stop. As :root tokens they
+     ride `design-tokens.json`, which both TV shells already read at boot. */
+  --track-map-casing:     23;                         /* white casing under    */
+  --track-map-road:       14;                         /* the ink road over it  */
+  --track-map-start-r:    13;                         /* start/finish dot      */
+  --track-map-start-ring:  4;                         /* its white ring        */
 }
 
 /* 3. Base / reset --------------------------------------------------------- */
@@ -343,11 +360,15 @@ body {
    with the toy road ribbon. Shared by the phone's track picker and the
    display's lobby cup slot; the container sizes it. */
 .track-map { width: 100%; aspect-ratio: 1 / 1; display: block; border-radius: var(--r-sm); background: color-mix(in srgb, var(--brand), #fff 78%); }
-/* stroke-widths are in viewBox units; the schematic viewBox is 0 0 256 256 (see
-   trackSchematic VIEW) so these are ~2.56× their old 0-100 values. */
-.track-map__casing { fill: none; stroke: #fff; stroke-width: 23; stroke-linejoin: round; stroke-linecap: round; }
-.track-map__road { fill: none; stroke: var(--ink-2); stroke-width: 14; stroke-linejoin: round; stroke-linecap: round; }
-.track-map__start { fill: var(--danger); stroke: #fff; stroke-width: 4; }
+/* The marks are :root tokens (--track-map-*), because the two TV shells draw
+   this same picture from their own toolkits and read them out of the token
+   bake. They are in viewBox units; the schematic viewBox is 0 0 256 256 (see
+   trackSchematic VIEW) so these are ~2.56× their old 0-100 values.
+   `r` is a CSS geometry property here rather than an attribute so the dot's
+   radius comes from the same one place as the strokes. */
+.track-map__casing { fill: none; stroke: #fff; stroke-width: var(--track-map-casing); stroke-linejoin: round; stroke-linecap: round; }
+.track-map__road { fill: none; stroke: var(--ink-2); stroke-width: var(--track-map-road); stroke-linejoin: round; stroke-linecap: round; }
+.track-map__start { fill: var(--danger); stroke: #fff; stroke-width: var(--track-map-start-ring); r: var(--track-map-start-r); }
 /* A schematic-less variant: the same field carrying a glyph ("?", ∞, or the
    tour's drawn ring) instead of a ribbon — the picker's random-family tiles
    wear it so they keep a track tile's exact footprint. The wash is set inline

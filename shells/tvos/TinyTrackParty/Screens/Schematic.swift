@@ -236,12 +236,20 @@ struct SchematicMap: View {
     /// and may run at any time; `ttp_track_schematic_json` is neither.
     @State private var geometry: Schematic.Geometry?
 
-    // viewBox units — the numbers in `theme.css`'s `.track-map__*` rules,
-    // authored against the 256 square (~2.56x their old 0-100 values).
-    private static let casingWidth: CGFloat = 23
-    private static let roadWidth: CGFloat = 14
-    private static let startRadius: CGFloat = 13
-    private static let startStroke: CGFloat = 4
+    // viewBox units — `theme.css`'s `--track-map-*`, authored against the 256
+    // square (~2.56x their old 0-100 values). READ, not re-typed: Android draws
+    // the same picture from the same four tokens, so a width that moves in the
+    // CSS moves on all three surfaces.
+    //
+    // COMPUTED, NOT `let`s, and that is load-bearing: a `static let` initialises
+    // lazily on first touch, which is not ordered against `Tokens.load()` — the
+    // one that lost the race would hold 0 for the life of the process and draw
+    // an invisible map. `assertLoadedFileIsWhole` catches a bake that really is
+    // missing them.
+    private static var casingWidth: CGFloat { Tokens.number("track-map-casing") }
+    private static var roadWidth: CGFloat { Tokens.number("track-map-road") }
+    private static var startRadius: CGFloat { Tokens.number("track-map-start-r") }
+    private static var startStroke: CGFloat { Tokens.number("track-map-start-ring") }
 
     var body: some View {
         GeometryReader { geo in

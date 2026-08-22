@@ -156,7 +156,9 @@ object Tokens {
         for (n in listOf("shadow-pop", "shadow-card", "shadow-float")) {
             tokenRequire(shadows[n] != null) { "design-tokens.json is missing the shadow --$n" }
         }
-        for (n in listOf("safe-frac-x", "safe-frac-y", "steer-band-frac")) {
+        for (n in listOf("safe-frac-x", "safe-frac-y", "steer-band-frac",
+            "track-map-casing", "track-map-road",
+            "track-map-start-r", "track-map-start-ring")) {
             tokenRequire(numbers[n] != null) { "design-tokens.json is missing the number --$n" }
         }
         // The one rule the CSS can only state in prose, and the reason

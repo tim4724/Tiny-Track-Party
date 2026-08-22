@@ -165,7 +165,8 @@ export function schematicSvg(svg, fieldTint) {
       const dot = document.createElementNS(SVGNS, 'circle');
       dot.setAttribute('cx', svg.start.x);
       dot.setAttribute('cy', svg.start.y);
-      dot.setAttribute('r', '13'); // ~2.56× the old r=5 for the 0 0 256 256 viewBox
+      // No `r` here: `.track-map__start` sets it from --track-map-start-r, so
+      // the radius comes from the same place the strokes do (theme.css).
       dot.setAttribute('class', 'track-map__start');
       el.appendChild(dot);
     }
