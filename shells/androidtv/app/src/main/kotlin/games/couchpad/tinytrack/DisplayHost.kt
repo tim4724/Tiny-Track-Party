@@ -484,14 +484,22 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
                         VulkanPolicy.markGood(view.context)
                     }
                     // THE FIRST PAINTED FRAME OF A BUILT SCENE, which is what the
-                    // boot cover waits on. Both halves matter and neither alone
+                    // boot cover waits on. All three halves matter and none alone
                     // is it: a present with no scene is the renderer clearing an
-                    // empty view, and a BUILT scene is not one that has reached
-                    // the glass. Fires once per process. The tvOS shell has
-                    // carried this latch since its own boot flash; this one had
-                    // only `framesPresented`, which counts the empty ones too.
-                    if (presented && hasScene && !hasPainted) {
+                    // empty view, a BUILT scene is not one that has reached the
+                    // glass, and on Vulkan a SUBMITTED frame is not one the
+                    // compositor can latch — the first frames after a build sit
+                    // behind the pipeline-compile storm for over a second, which
+                    // read as a black lobby when the cover lifted on submission
+                    // alone (ttp_display_settled says when the GPU is actually
+                    // through). Fires once per process. The tvOS shell has
+                    // carried the two-half latch since its own boot flash; this
+                    // one had only `framesPresented`, which counts the empty
+                    // ones too.
+                    if (presented && hasScene && !hasPainted
+                            && Ttp.ttp_display_settled() != 0) {
                         hasPainted = true
+                        Log.i(TAG, "first painted frame of a built scene")
                         onFirstPaint?.invoke()
                     }
                 }

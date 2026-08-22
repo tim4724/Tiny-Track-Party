@@ -44,6 +44,7 @@
 
 namespace filament {
 class Engine;
+class Fence;
 class IndirectLight;
 class SwapChain;
 class Renderer;
@@ -174,6 +175,11 @@ public:
     // accidentally opt in.
     void setBakeKey(const char* key) { mBakeKey = key ? key : ""; }
 
+    // Which backend the engine runs (filament::Backend as an int). Rides the
+    // bake key: a bake blob's byte orientation is a fact about the writing
+    // backend — see exportBake.
+    int backendId() const;
+
     // The resident sun bake as bytes, and back. See the block comment above
     // exportBake in TtpRendererBakes.cpp for why this crosses the ABI at all.
     // export answers false when nothing is baked; import answers false for any
@@ -181,6 +187,16 @@ public:
     // it does.
     bool exportBake(std::vector<uint8_t>& out);
     bool importBake(const uint8_t* bytes, uint32_t len);
+
+    // Has a frame of the CURRENT scene FINISHED on the GPU — not merely been
+    // submitted, which is all render()'s true says. The two part company on a
+    // queueing backend: Vulkan's first frames after a build sit behind the
+    // pipeline-compile storm, so the compositor has nothing to latch for over a
+    // second while render() keeps answering true. A boot cover that lifts on
+    // render()'s word uncovers that gap as a black lobby (the Android shell's
+    // hasPainted latch is the caller). Polls a fence armed by the first
+    // presented frame after a build; sticky true until the scene is released.
+    bool settled();
 
     bool buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& theme,
             const std::vector<TtpRosterCar>& roster, const ttp::rt::WearPlan& wear);
@@ -920,6 +936,10 @@ private:
     // a rebuild changed only the field.
     std::string mBakeKey;
     std::string mBakedKey;
+    // settled()'s state: the fence armed by the first presented frame after a
+    // build, and the sticky answer once it signals. Cleared in releaseScene.
+    filament::Fence* mSettleFence = nullptr;
+    bool mSettled = false;
 
     // ---- the graveyard --------------------------------------------------
     //

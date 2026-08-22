@@ -342,11 +342,13 @@ TTP_ABI int ttp_display_reroster(const char* rosterJson);
  * already latches the biome; asked earlier it names the previous scene's world.
  * Scratch, per ttp_abi.h.
  *
- * WHAT THE KEY DOES NOT COVER is the engine that produced the bytes. A shader
+ * WHAT THE KEY DOES NOT COVER is the binary that produced the bytes. A shader
  * edit reproduces the same key and would serve shadows baked by the old vesm,
  * invisibly and across restarts. Storing a blob under a name that changes with
  * the installed binary is therefore not an optimisation of the shell's file
- * layout, it is the other half of the correctness argument.
+ * layout, it is the other half of the correctness argument. (The BACKEND the
+ * engine runs IS in the key — a blob's byte orientation is the writer's, so a
+ * device flipping between Vulkan and GL keeps a blob per backend.)
  *
  * export answers NULL when nothing is baked. import answers 1 when the resident
  * bake is now the blob's — including the case where it already was, which costs
@@ -544,6 +546,15 @@ TTP_ABI void ttp_display_hold(int held);
  * first. dt 0 re-presents the last frame unchanged, which is what a canvas
  * readback needs (pixels only survive inside the task that drew them). */
 TTP_ABI int ttp_display_frame(double dtSeconds);
+
+/* 1 once a frame of the CURRENT scene has FINISHED on the GPU. Not the same
+ * fact as ttp_display_frame's 1, which only says the frame was submitted: on a
+ * queueing backend the first frames after a build sit behind Vulkan's pipeline
+ * compilation for over a second, and the compositor has nothing to latch until
+ * they clear — a boot cover lifted on submission uncovers that gap as a black
+ * screen. Poll this beside the frame call and treat "submitted AND settled" as
+ * painted. Sticky per scene; a release re-arms it. */
+TTP_ABI int ttp_display_settled(void);
 
 /* A rocket detonation, queued for the NEXT frame. The renderer cannot infer
  * these: a rocket that hit a car detonates ON that car and rides it out, while

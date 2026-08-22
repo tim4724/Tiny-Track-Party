@@ -2874,6 +2874,9 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
     renderCells(input, tMark);
     mProfile[kProfPresent] = ttpNowMs() - tMark; tMark = ttpNowMs();
     mRenderer->endFrame();
+    // Arm settled()'s fence behind the scene's FIRST submitted frame — created
+    // here, after endFrame, so everything the frame queued is ahead of it.
+    if (!mSettled && !mSettleFence) mSettleFence = mEngine->createFence();
     // A PRESENTED frame is the only clock the graveyard may age on: buffers
     // buried by a teardown are waiting for the frames that could still be
     // reading them to go by, and a wall clock keeps running when the GPU does
@@ -2882,6 +2885,23 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
     mProfile[kProfEndFrame] = ttpNowMs() - tMark;
     mProfile[kProfTotal] = ttpNowMs() - tFrame0;
     readGpuTimer();
+    return true;
+}
+
+// See the header for what settled means. A poll rather than a blocking wait:
+// the caller is the frame thread, and blocking it for the pipeline-compile
+// storm would freeze the very cover this exists to hold up.
+bool TtpRenderer::settled() {
+    if (mSettled) return true;
+    if (!mSettleFence) return false;
+    // FLUSH + zero timeout: make sure the fence command itself has been
+    // handed to the driver (endFrame usually has, but flushing again is
+    // idempotent), then QUERY — never block, this is the frame thread.
+    if (mSettleFence->wait(Fence::Mode::FLUSH, 0)
+            != backend::FenceStatus::CONDITION_SATISFIED) return false;
+    mEngine->destroy(mSettleFence);
+    mSettleFence = nullptr;
+    mSettled = true;
     return true;
 }
 

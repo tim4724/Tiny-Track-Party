@@ -154,11 +154,16 @@ const char* ttp_display_kit_field_layout(void) {
 // What a scene IS, for the sun bake — the one rule, read by the build below and
 // by ttp_display_bake_key. The ROSTER is deliberately absent: the casters are
 // the static scene and cars cast nothing, which is the whole reason a bake
-// outlives a field change.
+// outlives a field change. The BACKEND is present because a bake BLOB's byte
+// orientation is a fact about the engine that read it back (exportBake's flip
+// note): without it a device the boot canary flips between Vulkan and GL would
+// find the other backend's blob under its own name — refused on import, and
+// blocking the store dedupe from ever writing a good one over it.
 static std::string bakeKeyFor(const char* trackId, const char* biome) {
     return (trackId ? std::string(trackId) : std::string())
             + "|" + (biome ? biome : "")
-            + "|" + (g_disp && g_disp->showcase ? "1" : "0");
+            + "|" + (g_disp && g_disp->showcase ? "1" : "0")
+            + "|" + std::to_string(g_disp ? g_disp->renderer->backendId() : 0);
 }
 
 int ttp_display_build(const char* trackId, const char* rosterJson) {
@@ -501,6 +506,10 @@ int ttp_display_frame(double dtSeconds) {
     d.renderer->noteBuildMs(std::chrono::duration<double, std::milli>(
             std::chrono::steady_clock::now() - tBuild).count());
     return d.renderer->render(*head) ? 1 : 0;
+}
+
+int ttp_display_settled(void) {
+    return g_disp && g_disp->built && g_disp->renderer->settled() ? 1 : 0;
 }
 
 // ---------------------------------------------------------------------------

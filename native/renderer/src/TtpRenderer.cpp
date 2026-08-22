@@ -1230,9 +1230,16 @@ MaterialInstance* TtpRenderer::sceneInstance(Material* m) {
 // collected boxes back at their starting state. Everything below is scene
 // scope; the engine, swap chain, views, cameras, the three materials, the
 // glTF loaders and mAssets all survive.
+int TtpRenderer::backendId() const {
+    return mEngine ? (int) mEngine->getBackend() : 0;
+}
+
 void TtpRenderer::releaseScene() {
     if (!mEngine) return;
     const auto tRelease = std::chrono::steady_clock::now();
+    // A released scene is unsettled by definition — the next build re-arms.
+    if (mSettleFence) { mEngine->destroy(mSettleFence); mSettleFence = nullptr; }
+    mSettled = false;
     // NO FENCE HERE, and the danger it used to answer has not gone away: the
     // meshes' CPU copies are handed to Filament as raw pointers, so the driver
     // must not still be reading a BufferDescriptor into one when it is freed.

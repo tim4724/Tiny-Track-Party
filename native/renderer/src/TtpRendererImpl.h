@@ -4,6 +4,7 @@
 #include <filament/Camera.h>
 #include <filament/Engine.h>
 #include <filament/Exposure.h>
+#include <filament/Fence.h>
 #include <filament/IndirectLight.h>
 #include <filament/LightManager.h>
 #include <filament/IndexBuffer.h>
