@@ -33,11 +33,14 @@ import java.io.File
  * 4. The boot canary. [markAttempt] counts a Vulkan boot that has not yet
  *    presented a frame; [markGood] (the first presented frame on a Vulkan
  *    engine) resets it. Two in a row read as "this driver cannot boot the
- *    game" and every later launch runs GL — a fresh install resets the
- *    verdict. DisplayHost also retries the CREATE inline on GL when the
- *    Vulkan engine refuses outright, so a refusing driver still shows a
- *    picture that launch; the refusal keeps its count, so two of those
- *    converge on GL the same way a hang does.
+ *    game" and every later launch runs GL. The count is KEYED TO THE
+ *    INSTALLED BUILD (versionName carries the git sha): filesDir survives an
+ *    app update, and an unkeyed count would hold a box on GL forever after
+ *    we ship the APK that fixes its driver interaction — an update or a
+ *    reinstall gives Vulkan its two tries back. DisplayHost also retries the
+ *    CREATE inline on GL when the Vulkan engine refuses outright, so a
+ *    refusing driver still shows a picture that launch; the refusal keeps
+ *    its count, so two of those converge on GL the same way a hang does.
  */
 internal object VulkanPolicy {
 
@@ -86,10 +89,9 @@ internal object VulkanPolicy {
             Log.w(TAG, "GL (no materials-vk/ in this APK — see build-runtime-android.sh)")
             return false
         }
-        val failures = canaryFile(context).takeIf { it.exists() }
-            ?.readText()?.trim()?.toIntOrNull() ?: 0
+        val failures = readCount(context)
         if (failures >= GIVE_UP_AFTER) {
-            Log.w(TAG, "GL ($failures Vulkan boots never presented — giving up until reinstall)")
+            Log.w(TAG, "GL ($failures Vulkan boots never presented — giving up until the next update)")
             return false
         }
         return true
@@ -97,10 +99,23 @@ internal object VulkanPolicy {
 
     /** A Vulkan boot is starting; presume it dead until [markGood]. */
     fun markAttempt(context: Context) {
-        val f = canaryFile(context)
-        val failures = f.takeIf { it.exists() }?.readText()?.trim()?.toIntOrNull() ?: 0
-        f.writeText("${failures + 1}")
+        canaryFile(context).writeText("${build(context)}\n${readCount(context) + 1}")
     }
+
+    /**
+     * The count, but only if it was written by THIS build — a stale count
+     * (an app update, or the pre-keyed file format) reads as a clean slate,
+     * so a shipped fix gets its tries back.
+     */
+    private fun readCount(context: Context): Int {
+        val lines = canaryFile(context).takeIf { it.exists() }
+            ?.readText()?.trim()?.lines() ?: return 0
+        if (lines.size != 2 || lines[0] != build(context)) return 0
+        return lines[1].toIntOrNull() ?: 0
+    }
+
+    private fun build(context: Context): String =
+        context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "?"
 
     /** The first presented frame — the boot survived; the slate is clean. */
     fun markGood(context: Context) {

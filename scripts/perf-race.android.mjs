@@ -69,9 +69,10 @@ const TAG = 'TtpPerf';
  *                    every arm is explicit and readings stay comparable to
  *                    the pre-multiview ledgers. 2 forces ANY split (a
  *                    measured 2P/3P regression — experiments only).
- *   --vk 1           the EXPERIMENTAL Vulkan backend (classic path, stereo off).
- *                    An unflagged arm pins GL, so readings stay comparable to
- *                    every GL-era ledger; see shells/androidtv/CLAUDE.md.
+ *   --vk 1           the Vulkan backend (classic path, stereo off) — the
+ *                    SHIPPING default, but an unflagged arm pins GL so
+ *                    readings stay comparable to every GL-era ledger; see
+ *                    shells/androidtv/CLAUDE.md.
  *   --serial <id>    an explicit adb device
  */
 export function makeAndroidBackend() {

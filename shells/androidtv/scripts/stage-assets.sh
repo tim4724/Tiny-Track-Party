@@ -108,10 +108,11 @@ else
   cp "$MATERIALS"/*.filamat "$OUT/materials/"
 fi
 
-# The Vulkan experiment's SPIR-V twins (build-runtime-android.sh compiles them
-# beside the multiview set). Staged only when built; the shell reads them only
-# under `debug.ttp.vk 1`, so an APK without this directory simply cannot run
-# the Vulkan arm — SceneStaging says so instead of aborting on a parse.
+# The SPIR-V twins for the Vulkan backend — this shell's DEFAULT
+# (build-runtime-android.sh compiles them beside the multiview set). Staged
+# only when built: VulkanPolicy probes for this directory and pins an APK
+# without it to GL from launch one, so a matc-less build still runs — it just
+# runs the fallback backend.
 MATERIALS_VK="$ROOT/native/build/materials-android-vk"
 if [ -n "$(ls "$MATERIALS_VK"/*.filamat 2>/dev/null)" ]; then
   say "materials: VULKAN experiment set ($MATERIALS_VK)"
