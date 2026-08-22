@@ -211,15 +211,23 @@ void TtpRenderer::registerAssetUris(filament::gltfio::FilamentAsset* asset) {
 
 bool TtpRenderer::loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb) {
     ensureAssetLoader();
-    gltfio::FilamentAsset* asset =
-            mAssetLoader->createAsset(glb.data(), (uint32_t) glb.size());
-    if (!asset) return false;
-    registerAssetUris(asset);
-    if (!mResourceLoader->loadResources(asset)) {
-        mAssetLoader->destroyAsset(asset);
-        return false;
+    // ALREADY PARSED? The body a previous scene left parked is this model's, is
+    // already uploaded, and needs no re-dressing (mBodyPool says why). Putting
+    // its entities back in the scene is the whole of the reuse — everything
+    // below this point runs identically for a fresh parse and a parked one,
+    // because all of it reads the asset rather than the bytes.
+    const uint64_t modelKey = glbBytesKey(glb);
+    gltfio::FilamentAsset* asset = takeAsset(modelKey);
+    if (!asset) {
+        asset = mAssetLoader->createAsset(glb.data(), (uint32_t) glb.size());
+        if (!asset) return false;
+        registerAssetUris(asset);
+        if (!mResourceLoader->loadResources(asset)) {
+            mAssetLoader->destroyAsset(asset);
+            return false;
+        }
+        asset->releaseSourceData();
     }
-    asset->releaseSourceData();
     mScene->addEntities(asset->getEntities(), asset->getEntityCount());
     // Cars neither cast nor catch the sun shadow (they carry a ground blob) —
     // gltfio opts renderables in by default, the JS opts them out.
@@ -229,8 +237,8 @@ bool TtpRenderer::loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb) 
     // are the identity — same rule as the silhouette layers), decode its
     // meshes once per model, and let the next frame regroup the field.
     if (mCarModelKey.size() <= index) mCarModelKey.resize(index + 1, 0);
-    mCarModelKey[index] = glbBytesKey(glb);
-    glbMeshes(mCarModelKey[index], glb);
+    mCarModelKey[index] = modelKey;
+    glbMeshes(modelKey, glb);   // per-model mesh decode; already memoised by key
     mCarMergeDirty = true;
 
     // Wheel handles for the per-frame steer/roll cosmetics. Original local
@@ -369,6 +377,43 @@ void TtpRenderer::dropAsset(gltfio::FilamentAsset*& a) {
     a = nullptr;
 }
 
+// Park a parsed body instead of destroying it — see mBodyPool.
+//
+// This is dropAsset minus the destroy: OUT OF THE SCENE, which is what makes a
+// parked body invisible and inert, but still owned by the loader that made it
+// and still holding its uploaded buffers. A key of 0 means "we never learned
+// what model this was", which is not something to file under any model.
+void TtpRenderer::parkAsset(uint64_t key, gltfio::FilamentAsset*& a) {
+    if (!a) return;
+    if (!key || mBodyPoolCount >= kBodyPoolMax) { dropAsset(a); return; }
+    mScene->removeEntities(a->getEntities(), a->getEntityCount());
+    mBodyPool[key].push_back(a);
+    mBodyPoolCount++;
+    a = nullptr;
+}
+
+gltfio::FilamentAsset* TtpRenderer::takeAsset(uint64_t key) {
+    if (!key) return nullptr;
+    const auto it = mBodyPool.find(key);
+    if (it == mBodyPool.end() || it->second.empty()) return nullptr;
+    gltfio::FilamentAsset* a = it->second.back();
+    it->second.pop_back();
+    mBodyPoolCount--;
+    if (it->second.empty()) mBodyPool.erase(it);
+    return a;
+}
+
+void TtpRenderer::drainBodyPool() {
+    for (auto& [key, list] : mBodyPool) {
+        for (gltfio::FilamentAsset* a : list) {
+            mScene->removeEntities(a->getEntities(), a->getEntityCount());
+            mAssetLoader->destroyAsset(a);
+        }
+    }
+    mBodyPool.clear();
+    mBodyPoolCount = 0;
+}
+
 // Texture decodes ride the provider's async queue even on the synchronous
 // loadResources path — finished textures only ATTACH on a queue pump (the
 // sync path pumps at the START of the next load, so without this the last
@@ -461,9 +506,16 @@ void TtpRenderer::destroyCarSlot(uint32_t c) {
     // renderables come back with the teardown and the next frame regroups.
     destroyMergedGroups(mMergedCars);
     mCarMergeDirty = true;
+    // PARKED, like a scene release — this is the CAR PICK path, so the body
+    // being dismissed is very often the one the next pick asks for back.
+    if (mCarAssets.size() > c) {
+        parkAsset(mCarModelKey.size() > c ? mCarModelKey[c] : 0, mCarAssets[c]);
+    }
+    if (mCarGhostAssets.size() > c) {
+        parkAsset(mCarGhostKey.size() > c ? mCarGhostKey[c] : 0, mCarGhostAssets[c]);
+    }
     if (mCarModelKey.size() > c) mCarModelKey[c] = 0;
-    if (mCarAssets.size() > c) dropAsset(mCarAssets[c]);
-    if (mCarGhostAssets.size() > c) dropAsset(mCarGhostAssets[c]);
+    if (mCarGhostKey.size() > c) mCarGhostKey[c] = 0;
     if (mCarGhostIn.size() > c) mCarGhostIn[c] = 0;
     // The baked bit STAYS. Layers are keyed by model now, so this slot's
     // layer is very likely still being read by another car, and clearing it
@@ -507,15 +559,24 @@ void TtpRenderer::buildCarGhost(uint32_t c) {
     if (mCarGhostIn.size() > c) mCarGhostIn[c] = 1; // in scene below; frame 1 re-parks it
     const auto ghost = mAssets.find("car" + std::to_string(c) + "-ghost.glb");
     if (ghost == mAssets.end()) return;
-    gltfio::FilamentAsset* ga = mAssetLoader->createAsset(
-            ghost->second.data(), (uint32_t) ghost->second.size());
-    if (!ga) return;
-    registerAssetUris(ga);
-    if (!mResourceLoader->loadResources(ga)) {
-        mAssetLoader->destroyAsset(ga);
-        return;
+    // Keyed by the GHOST's own bytes, not the body's: it is a different
+    // container (the 50%-alpha clone), so it is a different model to the pool.
+    const uint64_t ghostKey = glbBytesKey(ghost->second);
+    gltfio::FilamentAsset* ga = takeAsset(ghostKey);
+    const bool ghostWasParked = ga != nullptr;
+    if (!ga) {
+        ga = mAssetLoader->createAsset(
+                ghost->second.data(), (uint32_t) ghost->second.size());
+        if (!ga) return;
+        registerAssetUris(ga);
+        if (!mResourceLoader->loadResources(ga)) {
+            mAssetLoader->destroyAsset(ga);
+            return;
+        }
+        ga->releaseSourceData();
     }
-    ga->releaseSourceData();
+    if (mCarGhostKey.size() <= c) mCarGhostKey.resize(c + 1, 0);
+    mCarGhostKey[c] = ghostKey;
     mScene->addEntities(ga->getEntities(), ga->getEntityCount());
     setShadows(ga->getEntities(), ga->getEntityCount(), false, false);
     auto& tcmG = mEngine->getTransformManager();
@@ -524,6 +585,11 @@ void TtpRenderer::buildCarGhost(uint32_t c) {
     // The ghost body is only ever shown as the GRAFTED monster body, and
     // MonsterRig strips the car's wheels before seating it — collapse them
     // once here (this instance's wheels are never animated).
+    // A PARKED ghost already had this done, and the scale is absolute rather
+    // than relative, so re-running it is harmless — but the translation it
+    // preserves is read back out of the transform it is about to overwrite,
+    // which only survives because the scale zeroes no row. Left unconditional
+    // for that reason, and noted so nobody makes it relative.
     for (const char* wn : { "wheel-fl", "wheel-fr", "wheel-bl", "wheel-br", "axle" }) {
         const utils::Entity we = ga->getFirstEntityByName(wn);
         if (we.isNull()) continue;
@@ -532,6 +598,7 @@ void TtpRenderer::buildCarGhost(uint32_t c) {
         local[3] = tcmG.getTransform(wi)[3];
         tcmG.setTransform(wi, local);
     }
+    (void) ghostWasParked;
     mCarGhostAssets[c] = ga;
     if (mStbProvider) {
         mStbProvider->waitForCompletion();

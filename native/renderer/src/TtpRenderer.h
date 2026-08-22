@@ -1517,6 +1517,42 @@ private:
     bool mDressMergeDirty = false;
     bool mMergeOff = false;                 // kFeatNoMerge (ablation only)
     std::vector<uint64_t> mCarModelKey;     // per slot: FNV of its GLB bytes
+    std::vector<uint64_t> mCarGhostKey;     // …and of its ghost twin's, for the pool
+
+    // PARSED BODIES, KEPT BY MODEL — the same argument the sun bake and the
+    // silhouette layers already won, one level up. gltfio parsing a GLB and
+    // uploading its buffers is the biggest recurring phase of a build (`cars`
+    // in the phase log), and releaseScene used to destroy every one of them
+    // while the mask layers keyed off those same bytes survived. The field is
+    // usually unchanged across a build: a Grand Prix is four races on one grid,
+    // and the lobby rebuilds on every join, pick and launch.
+    //
+    // KEYED BY THE BYTES, NEVER BY THE SLOT. `glbBytesKey` is the same identity
+    // claimMaskLayer uses, and keying by slot is the exact bug that used to drop
+    // a car to the generic oval when the next race moved it (see destroyCarSlot).
+    // A vector per key, because two slots wearing one model need two ASSETS —
+    // each carries its own entities and transforms.
+    //
+    // Safe to reuse without re-dressing, and that is reroster's finding rather
+    // than an assumption: a livery change touches no GLB at all ("the GLB body
+    // keeps its own paint"), so a body is a pure function of its model bytes.
+    std::unordered_map<uint64_t, std::vector<filament::gltfio::FilamentAsset*>> mBodyPool;
+
+    // How many parked bodies to hold. Eight slots over four car models plus the
+    // ghosts, so this covers a full grid twice over; a cache with no cap is a
+    // leak (libttp-runtime/ttp/blobstore.h makes the same point about disk), and
+    // GPU memory has no eviction signal to derive one from.
+    static constexpr size_t kBodyPoolMax = 24;
+    size_t mBodyPoolCount = 0;
+
+    // Park a parsed body for reuse instead of destroying it, or destroy it when
+    // the pool is full. Takes the pointer by reference and nulls it, like
+    // dropAsset, so no caller can keep a handle to something it gave away.
+    void parkAsset(uint64_t key, filament::gltfio::FilamentAsset*& a);
+    // …and back: null when nothing is parked for this model.
+    filament::gltfio::FilamentAsset* takeAsset(uint64_t key);
+    // Destroy everything parked. Teardown only — a scene release PARKS.
+    void drainBodyPool();
     // Parsed kit geometry, keyed by the bytes' FNV. Engine-lifetime — the kit's
     // bytes never change, so a cup's four scenes parse each model once.
     std::unordered_map<uint64_t, std::vector<ttp::rt::GlbMeshNode>> mGlbMeshCache;

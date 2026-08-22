@@ -1322,7 +1322,10 @@ void TtpRenderer::releaseScene() {
     destroyMergedGroups(mMergedDress);
     mCarMergeDirty = false;
     mDressMergeDirty = false;
-    mCarModelKey.clear();
+    // NOT mCarModelKey — the park below needs it to know what each body IS, and
+    // it is cleared with the slots at the end of this function instead. Clearing
+    // it here parked every body under key 0, which parkAsset reads as "unknown
+    // model" and destroys: the pool would have been silently inert.
     mAssetMeshKey.clear();
     destroyMesh(mRoad);
     destroyMesh(mGround);
@@ -1379,7 +1382,11 @@ void TtpRenderer::releaseScene() {
     destroyMesh(mPollen);
     for (auto& m : mRockets) destroyMesh(m);
     for (auto& m : mRocketFlames) destroyMesh(m);
-    for (auto*& a : mCarAssets) dropAsset(a);
+    // PARKED, NOT DESTROYED — see mBodyPool. The next build's field is usually
+    // the same one, and parsing these back is the biggest phase it would pay.
+    for (size_t i = 0; i < mCarAssets.size(); i++) {
+        parkAsset(i < mCarModelKey.size() ? mCarModelKey[i] : 0, mCarAssets[i]);
+    }
     // THE BAKED BITS SURVIVE THE SCENE. They used to die with the roster,
     // because a layer belonged to a grid SLOT and the next race could put a
     // different model in it. Layers belong to a MODEL now and are keyed by the
@@ -1389,7 +1396,11 @@ void TtpRenderer::releaseScene() {
     // bakes once — two render passes and a flushAndWait each — instead of
     // once per race, and no car spends the opening of race 2 on the generic
     // oval waiting for its rebake.
-    for (auto*& a : mCarGhostAssets) dropAsset(a);
+    for (size_t i = 0; i < mCarGhostAssets.size(); i++) {
+        parkAsset(i < mCarGhostKey.size() ? mCarGhostKey[i] : 0, mCarGhostAssets[i]);
+    }
+    mCarModelKey.clear();   // both pools have what they need now
+    mCarGhostKey.clear();
     for (auto*& a : mSceneryAssets) dropAsset(a);
     for (auto*& a : mPropAssets) dropAsset(a);
     for (auto*& a : mKitAssets) dropAsset(a);
@@ -1513,6 +1524,9 @@ TtpRenderer::~TtpRenderer() {
     // the one teardown that still has to pay the fence — and the only one where
     // nobody can see it.
     drainGravesBlocking();
+    // The parked bodies go with the loader that made them, and only here: a
+    // scene release parks, it does not destroy.
+    drainBodyPool();
     // A road-light readback that never landed is LEAKED on purpose, exactly as
     // the old inline version leaked its own: the driver may still hold a pointer
     // into that buffer, and there is no tick left to complete it. The difference
