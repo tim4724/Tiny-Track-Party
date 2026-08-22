@@ -2,10 +2,23 @@
 # the project; the build scripts set ANDROID_HOME instead.
 local.properties
 
+# Android Studio's own project state, from that same cause. Nothing in the
+# build reads it, and it carries per-machine paths and window layout.
+.idea/
+
 # Gradle's own state.
 .gradle/
 build/
 app/build/
+
+# The daemon JVM criteria, written by `updateDaemonJvm` when the IDE opened the
+# project. Gradle's own advice is to COMMIT this file, and that advice assumes
+# the daemon JVM is a decision the project has MADE. This one was not: it
+# arrived from an IDE and pins toolchain 21, where compileOptions and the
+# workflows' setup-java are both 17. Committed, every build here and in CI
+# would fetch a JDK nobody chose. Adopt daemon JVM criteria deliberately or
+# not at all.
+gradle/gradle-daemon-jvm.properties
 
 # BUILD OUTPUT, not artifacts. native/scripts/build-runtime-android.sh writes
 # these, and unlike public/display/engine/native/ttp_runtime.wasm they are NOT

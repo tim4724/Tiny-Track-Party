@@ -28,6 +28,11 @@ public/assets/audio/_music-pool/
 .claude/worktrees/
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+# Sibling git worktrees checked out INSIDE the repo, which this tree is worked
+# in many of. Each is another branch of this same repository, so it is local by
+# definition — there is nothing here a remote could want. Anchored, so a
+# `worktrees/` that means something else deeper in the tree is unaffected.
+/worktrees/
 native/build/
 # Trailer renders — frames, per-shot clips and the cut master (a 4K/60 master runs to
 # hundreds of MB). Wholly derived from scripts/trailer/shots.js, and the shot seeds are
