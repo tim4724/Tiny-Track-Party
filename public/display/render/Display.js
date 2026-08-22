@@ -23,6 +23,7 @@ import { loadNativeRuntime, nativeError } from '../nativeRuntime.js';
 import { loadBiomes } from '../../shared/biomes.js';
 import { assetUrl } from '../../shared/assetUrl.js';
 import { ITEM_IDS } from '../engine/contract.js';
+import { BlobStores } from './BlobStore.js';
 
 // Camera modes for a surface with no split-screen cells — the C side's
 // TTP_CAM_* (ttp_display.h).
@@ -155,7 +156,15 @@ export class Display {
       // ghost's chunk padding in particular is a trap that stays invisible until
       // cgltf rejects a whole model, and it is not worth having three times.
       glbGhost: mod.cwrap('ttp_glb_ghost', 'number', ['number', 'number', 'number']),
-      glbImageUris: mod.cwrap('ttp_glb_image_uris', 'string', ['number', 'number'])
+      glbImageUris: mod.cwrap('ttp_glb_image_uris', 'string', ['number', 'number']),
+      // Derived bytes kept between runs (ttp_display.h). A WALK: this side names
+      // no blob kind, it asks which stores exist and performs the answers.
+      blobStores: mod.cwrap('ttp_display_blob_stores', 'string', []),
+      blobPlan: mod.cwrap('ttp_display_blob_plan', 'string',
+                          ['string', 'string', 'string', 'string']),
+      blobOffer: mod.cwrap('ttp_display_blob_offer', null, ['string', 'number', 'number']),
+      blobKeep: mod.cwrap('ttp_display_blob_keep', 'string', ['string']),
+      blobExport: mod.cwrap('ttp_display_blob_export', 'number', ['string', 'number'])
     };
   }
 
@@ -176,6 +185,16 @@ export class Display {
       const res = await fetch(assetUrl(`/display/engine/native/${name}.filamat`));
       if (res.ok) d.provide(`${name}.filamat`, new Uint8Array(await res.arrayBuffer()));
     }));
+    // The disk tier, one store per kind the engine lists. AUTOMATION GETS NONE,
+    // the same rule Android applies to its scenario launches: a suite that
+    // asserts what a build produces must not be served what a previous run left
+    // behind — and the E2E suite turns the sun bake off outright (see shadows()),
+    // so half of what there is to keep would not exist anyway.
+    if (!(typeof navigator !== 'undefined' && navigator.webdriver)) {
+      try {
+        d.blobs = new BlobStores(JSON.parse(d._fn.blobStores() || '[]'));
+      } catch { d.blobs = null; }
+    }
     return d;
   }
 
@@ -189,6 +208,30 @@ export class Display {
     const ok = this._fn.asset(name, ptr, bytes.length);
     m._free(ptr);
     if (!ok) throw new Error(`ttp_display_asset(${name}) failed`);
+  }
+
+  // Hand a store's blob back to the engine. The bytes go through the heap for
+  // the reason provide() gives: cwrap has no array type, and the engine copies
+  // before this returns.
+  blobOffer(store, bytes) {
+    const m = this.m;
+    const ptr = m._malloc(bytes.length);
+    m.HEAPU8.set(bytes, ptr);
+    try { this._fn.blobOffer(store, ptr, bytes.length); } finally { m._free(ptr); }
+  }
+
+  // …and out. slice(), not subarray(): the blob is C-owned scratch that the next
+  // walk overwrites. Null when there is nothing to keep.
+  blobExport(store) {
+    const m = this.m;
+    const lenPtr = m._malloc(4);
+    try {
+      const out = this._fn.blobExport(store, lenPtr);
+      const n = m.HEAPU32[lenPtr >> 2];
+      return out && n ? m.HEAPU8.slice(out, out + n) : null;
+    } finally {
+      m._free(lenPtr);
+    }
   }
 
   // Run `bytes` through one of the ttp_glb_* readers. Both take (ptr, len) and
@@ -390,6 +433,27 @@ export class Display {
       })
     ]);
 
+    // THE BLOB WALKS, first half — AFTER provisioning and before the build, the
+    // one window that suits every store: the bake's key needs the biome (latched
+    // at the top of this method), the masks' is derived from the car GLBs handed
+    // over just above. NOTHING HERE NAMES A BLOB KIND; the engine lists its
+    // stores and this performs the answers.
+    if (this.blobs) {
+      const gen = await this.blobs.generation();
+      await this.blobs.forEach(async (store, name) => {
+        let plan;
+        try {
+          plan = JSON.parse(this._fn.blobPlan(name, trackId, gen, await store.entriesJson()) || '{}');
+        } catch { return; }
+        for (const drop of plan.drop || []) await store.delete(drop);
+        // `read` is JSON null on a miss, which JSON.parse gives back as null —
+        // the trap Android's org.json needs an explicit guard for.
+        if (!plan.read) return;
+        const bytes = await store.read(plan.read);
+        if (bytes) this.blobOffer(name, bytes);
+      });
+    }
+
     // The roster goes across whole — id, carIndex and livery, in slot order.
     // `model` stays here: it named the GLBs fetched above, which is the only
     // part of a slot this side has any business knowing. Everything else about
@@ -399,6 +463,23 @@ export class Display {
     if (!this._fn.build(trackId, JSON.stringify(this._slots(roster)))) throw nativeError(`building the scene for '${trackId}'`);
     this._slotIdCache = null; // a build is the one thing that can change slot ids
     this.built = true;
+
+    // THE WALKS' second half. Whether this build made anything worth keeping —
+    // and whether the store already has it — is the engine's to know.
+    //
+    // NOT AWAITED: the scene is built, and nothing on screen is waiting for these
+    // bytes. On this backend the first ask only ISSUES the readbacks and answers
+    // nothing (ttp_display.h); the frame loop turns the driver over and the next
+    // build's keep finds them waiting, so a store lands on every other build.
+    if (this.blobs) {
+      this.blobs.forEach(async (store, name) => {
+        let write;
+        try { write = JSON.parse(this._fn.blobKeep(name) || '{}').write; } catch { return; }
+        if (!write) return;
+        const bytes = this.blobExport(name);
+        if (bytes) await store.write(write, bytes);
+      });
+    }
   }
 
   // Re-dress the BUILT scene's car slots in place (ttp_display_reroster): same

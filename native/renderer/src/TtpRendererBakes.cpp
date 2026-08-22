@@ -993,6 +993,12 @@ void TtpRenderer::fillRoadLight(const TrackBin& tb, const float* esm,
 // vesm. That invalidation is the shell's, and it is why the file lives under a
 // directory named for the installed binary rather than beside the track id.
 namespace {
+// Enough to stamp a parked read with; not a hash anything is stored under.
+uint64_t fnv64(const std::string& s) {
+    uint64_t h = 1469598103934665603ull;
+    for (const unsigned char c : s) { h ^= c; h *= 1099511628211ull; }
+    return h;
+}
 constexpr uint32_t kBakeMagic = 0x42505454u;  // 'TTPB', little-endian
 // v2: the writing BACKEND rides the header and import refuses a foreign blob —
 // see the flip note in exportBake. v1 blobs written under Vulkan are mirrored,
@@ -1020,9 +1026,17 @@ bool takeF32(const uint8_t*& p, const uint8_t* end, float& v) {
 // RGBA is not a preference: it is the readback combo every backend accepts (the
 // road light's own read says the same thing about FLOAT). The caller takes the
 // channel it wants out of the four.
-bool TtpRenderer::readBakeTexture(Texture* tex, bool asFloat,
-        std::vector<uint8_t>& out, int layer) {
+bool TtpRenderer::ensureRead(Texture* tex, bool asFloat, int layer, uint64_t stamp) {
     if (!tex || !mRenderer) return false;
+    for (size_t i = mPendingReads.size(); i-- > 0;) {
+        PendingRead& pr = *mPendingReads[i];
+        if (pr.tex != tex || pr.layer != layer) continue;
+        if (pr.stamp == stamp) return pr.done;   // ours: ready, or still coming
+        if (!pr.done) return false;              // stale but in flight; wait it out
+        if (pr.rt) mEngine->destroy(pr.rt);      // stale and landed: retire and redo
+        mPendingReads.erase(mPendingReads.begin() + (long) i);
+        break;
+    }
     const Texture::Type type = asFloat ? Texture::Type::FLOAT : Texture::Type::UBYTE;
     const uint32_t bytesPerChannel = asFloat ? 4u : 1u;
     const uint32_t W = tex->getWidth(0), H = tex->getHeight(0);
@@ -1032,19 +1046,38 @@ bool TtpRenderer::readBakeTexture(Texture* tex, bool asFloat,
     if (layer >= 0) rtb.layer(RenderTarget::AttachmentPoint::COLOR, (uint32_t) layer);
     RenderTarget* rt = rtb.build(*mEngine);
     if (!rt) return false;
-    struct Read { std::vector<uint8_t> px; std::atomic<bool> done{ false }; };
-    auto* rd = new Read;
-    rd->px.resize((size_t) W * H * 4 * bytesPerChannel);
-    Texture::PixelBufferDescriptor pbd(rd->px.data(), rd->px.size(),
+    // THE DESTINATION IS THE PendingRead's OWN BUFFER from the start, because a
+    // read that does not finish here keeps being written into after this returns
+    // — so the buffer may not be moved, resized or freed on the way out.
+    auto pr = std::make_unique<PendingRead>();
+    pr->tex = tex;
+    pr->layer = layer;
+    pr->stamp = stamp;
+    pr->rt = rt;
+    pr->px.resize((size_t) W * H * 4 * bytesPerChannel);
+    Texture::PixelBufferDescriptor pbd(pr->px.data(), pr->px.size(),
             Texture::Format::RGBA, type,
-            [](void*, size_t, void* user) { static_cast<Read*>(user)->done = true; }, rd);
+            [](void*, size_t, void* user) { static_cast<PendingRead*>(user)->done = true; },
+            pr.get());
     mRenderer->readPixels(rt, 0, 0, W, H, std::move(pbd));
-    for (int t = 0; t < 8 && !rd->done; t++) mEngine->flushAndWait();
-    const bool ok = rd->done;
-    if (ok) out = std::move(rd->px);
-    if (ok) delete rd;   // the never-done path leaks it on purpose, as the road's read does
-    mEngine->destroy(rt);
-    return ok;
+    // THE FAST PATH IS STILL THE FAST PATH: Metal and Vulkan complete inside this
+    // pump, so nothing is ever parked on them and an export answers first time.
+    for (int t = 0; t < 8 && !pr->done; t++) mEngine->flushAndWait();
+    const bool landed = pr->done;
+    mPendingReads.push_back(std::move(pr));
+    return landed;
+}
+
+bool TtpRenderer::takeRead(Texture* tex, int layer, std::vector<uint8_t>& out) {
+    for (size_t i = mPendingReads.size(); i-- > 0;) {
+        PendingRead& pr = *mPendingReads[i];
+        if (pr.tex != tex || pr.layer != layer || !pr.done) continue;
+        if (pr.rt) mEngine->destroy(pr.rt);
+        out = std::move(pr.px);
+        mPendingReads.erase(mPendingReads.begin() + (long) i);
+        return true;
+    }
+    return false;
 }
 
 bool TtpRenderer::exportBake(std::vector<uint8_t>& out) {
@@ -1052,8 +1085,17 @@ bool TtpRenderer::exportBake(std::vector<uint8_t>& out) {
     // The ESM is R16F and comes back as RGBA float, so the R channel is taken
     // and re-narrowed to the half it is stored as — 2 MB rather than the 16 MB
     // the readback itself needs, and the same bits the texture holds.
+    // Stamped with what the resident maps are OF, so a read that lands after a
+    // rebake is dropped rather than answered (see PendingRead).
+    const uint64_t bakeStamp = fnv64(mBakedKey);
+    // BOTH MAPS OR NEITHER. The visibility map used to be optional here, which
+    // was harmless while every read landed inside the call — and silently
+    // shipped a blob with no vis map the moment one did not.
+    const bool esmReady = ensureRead(mShadowMap, /*asFloat=*/true, -1, bakeStamp);
+    const bool visReady = !mVisMap || ensureRead(mVisMap, /*asFloat=*/false, -1, bakeStamp);
+    if (!esmReady || !visReady) return false;
     std::vector<uint8_t> esmRGBA;
-    if (!readBakeTexture(mShadowMap, /*asFloat=*/true, esmRGBA)) return false;
+    if (!takeRead(mShadowMap, -1, esmRGBA)) return false;
     const uint32_t ew = mShadowMap->getWidth(0), eh = mShadowMap->getHeight(0);
     const size_t texels = (size_t) ew * eh;
     if (esmRGBA.size() < texels * 16) return false;
@@ -1088,7 +1130,7 @@ bool TtpRenderer::exportBake(std::vector<uint8_t>& out) {
 
     std::vector<uint8_t> visRGBA;
     uint32_t vw = 0, vh = 0;
-    if (mVisMap && readBakeTexture(mVisMap, /*asFloat=*/false, visRGBA)) {
+    if (mVisMap && takeRead(mVisMap, -1, visRGBA)) {
         vw = mVisMap->getWidth(0);
         vh = mVisMap->getHeight(0);
     }
@@ -1271,15 +1313,34 @@ bool TtpRenderer::exportMasks(std::vector<uint8_t>& out) {
     if (!mDecalMaskArray || !mRenderer) return false;
     const bool flip = mEngine->getBackend() == Engine::Backend::OPENGL;
     const size_t cell = (size_t) kMaskCellW * kMaskCellH * 4;
-    std::vector<uint8_t> body;
-    uint32_t stored = 0;
-    // The four MODEL layers, then the monster's — every layer a scene bakes.
+    // EVERY LAYER OR NONE, for the reason ensureRead states: taking the ones that
+    // landed while another is still coming would retire them and never converge.
+    // The layers a scene baked, and what each is stamped by — the monster's is
+    // keyed by nothing (the truck never changes), so it takes a constant no FNV
+    // can collide with.
+    std::vector<std::pair<int, uint64_t>> want;
     for (int i = 0; i <= kMaskLayerMonster; i++) {
         const bool monster = i == kMaskLayerMonster;
         if (!(mMaskLayerBakedBits & (uint16_t) (1u << i))) continue;
         if (!monster && !mMaskLayerKey[i]) continue;
+        want.emplace_back(i, monster ? 1ull : mMaskLayerKey[i]);
+    }
+    if (want.empty()) return false;
+    bool allReady = true;
+    for (const auto& [i, stamp] : want) {
+        // Not `&&`: every layer's read has to be ISSUED even once one is known to
+        // be outstanding, or they would land one per export instead of together.
+        if (!ensureRead(mDecalMaskArray, /*asFloat=*/false, i, stamp)) allReady = false;
+    }
+    if (!allReady) return false;
+
+    std::vector<uint8_t> body;
+    uint32_t stored = 0;
+    for (const auto& [i, stamp] : want) {
+        const bool monster = i == kMaskLayerMonster;
+        (void) stamp;
         std::vector<uint8_t> px;
-        if (!readBakeTexture(mDecalMaskArray, /*asFloat=*/false, px, i)) continue;
+        if (!takeRead(mDecalMaskArray, i, px)) continue;
         if (px.size() < cell) continue;
         const uint32_t kind = monster ? kMaskKindMonster : kMaskKindModel;
         const uint64_t k = monster ? 0ull : mMaskLayerKey[i];

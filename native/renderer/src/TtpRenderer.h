@@ -1463,8 +1463,42 @@ private:
     // visibility map is R8 and reads as UBYTE); the enum itself cannot appear
     // here, where filament::Texture is only forward-declared.
     // `layer` is the array slice to read, or -1 for a plain 2D texture.
-    bool readBakeTexture(filament::Texture* tex, bool asFloat,
-            std::vector<uint8_t>& out, int layer = -1);
+    // `stamp` says what the texture HELD when the read was asked for, so a read
+    // that lands after a rebake is dropped instead of answered — see PendingRead.
+    // ISSUE AND CONSUME ARE SEPARATE, and that is not tidiness. An export made of
+    // SEVERAL reads (the bake's two maps, the masks' five layers) must not take
+    // the ones that landed while another is still in flight: consuming retires a
+    // read, so a caller that bailed halfway would throw away what it had and
+    // re-issue it next time, and an export of N reads would never converge.
+    //
+    // So: ensure every read first, and only when they are ALL ready, take them.
+    // `ensure` issues one if none is parked and answers whether it has landed;
+    // `take` moves the pixels out and retires it.
+    bool ensureRead(filament::Texture* tex, bool asFloat, int layer, uint64_t stamp);
+    bool takeRead(filament::Texture* tex, int layer, std::vector<uint8_t>& out);
+
+    // A texture readback that did not finish inside the call that asked for it.
+    //
+    // ON ONE BACKEND THEY NEVER DO. A GL readback's completion is executed from
+    // OpenGLDriver::tick(), which FRenderer::endFrame() calls and flushAndWait()
+    // does not — and in a browser a task cannot wait on the GPU at all. So on GL
+    // the export of a blob cannot answer in the build that triggers it, and the
+    // read is parked here instead: the frame loop turns the driver over, and the
+    // NEXT ask (the next build's `keep`) finds the bytes waiting. Metal and
+    // Vulkan finish inside the pump and never park anything.
+    //
+    // `stamp` is what the source held when the read was issued — the bake's key,
+    // or a mask layer's model key. A read that lands after that changed is
+    // answering about a texture nobody asked about any more, so it is dropped.
+    struct PendingRead {
+        filament::Texture* tex = nullptr;
+        int layer = -1;
+        uint64_t stamp = 0;
+        std::vector<uint8_t> px;
+        std::atomic<bool> done{ false };
+        filament::RenderTarget* rt = nullptr;   // outlives the issue; freed on collect
+    };
+    std::vector<std::unique_ptr<PendingRead>> mPendingReads;
 
     bool buildTrackScene(const std::vector<TtpRosterCar>& roster, const ttp::RaceTrack& geo,
             const ttp::rt::Theme& theme, const ttp::rt::WearPlan& wear);

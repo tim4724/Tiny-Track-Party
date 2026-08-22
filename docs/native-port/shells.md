@@ -102,6 +102,15 @@ one box and obviously wrong on another:
 |---|---|---|
 | Android TV reference box | ~330 ms | 1870 → **181 ms** |
 | Apple TV 4K | (inside `cars`) | 197 → **49 ms** |
+| Web (a reload is its fresh process) | (inside `cars`) | 154 → **18 ms** |
+
+**All three shells now hold both stores**, and the web one is the reason the
+export is allowed to answer LATER: on GL a readback cannot complete inside the
+build that asks for it, so the first ask only issues the reads and the next
+build's `keep` finds them waiting. A store therefore lands on every other build
+there — a cache missing a beat, which is a cache. Nothing about the shell loop
+changes for it, which is the test that the walk is really store- and
+platform-agnostic.
 
 (The Android figure is a first build in a fresh process, which is what a launch
 actually pays. An older 520 ms is quoted elsewhere in the tree from a different
@@ -118,17 +127,20 @@ adding today.
 
 If your platform's number does justify it, **you write four primitives and no
 policy** — list names with last-used times, read by name, write by name, delete
-by name. Android's is `BlobStore.kt`. Everything else is a WALK in
-`ttp_display.h` (`ttp_display_bake_plan` / `_offer` / `_keep` / `_export`) that
-hands you names to act on:
+by name. All three are shipped and none is more than about 120 lines:
+`BlobStore.kt`, `BlobStore.swift`, `render/BlobStore.js`. Everything else is a
+WALK in `ttp_display.h` (`ttp_display_blob_stores` / `_plan` / `_offer` / `_keep`
+/ `_export`) that hands you names to act on:
 
 ```
-after ttp_display_biome, before ttp_display_build:
-    plan(trackId, generation, entries) -> {"drop":[…], "read": name|null}
-    perform the drops; if `read`, read it and offer(bytes)
-after ttp_display_build:
-    keep() -> {"write": name|null}
-    if `write`, export() and write those bytes
+for each store in ttp_display_blob_stores():        # after provisioning,
+    plan(store, trackId, generation, entries)       # before the build
+                       -> {"drop":[…], "read": name|null}
+    perform the drops; if `read`, read it and offer(store, bytes)
+ttp_display_build(...)
+for each store:
+    keep(store)        -> {"write": name|null}
+    if `write`, export(store) and write those bytes
 ```
 
 **Do not re-derive any of the decisions behind those names.** Whether the engine

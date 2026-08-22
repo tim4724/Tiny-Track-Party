@@ -35,6 +35,11 @@ struct DisplayCore : DisplayState {
         std::string name;   // what this key reads and writes under
         bool held = false;  // …and whether the store already had it
         bool primed = false;// the engine took the blob the shell offered
+        // What `keep` exported, handed straight back by `export`. It lives here
+        // rather than being produced twice because an export is a readback per
+        // texture — and because on GL the first ask only ISSUES those reads
+        // (ttp_display.h), so asking twice would never converge.
+        std::vector<uint8_t> bytes;
     };
     // One per store, indexed as ttp_display_blob_stores lists them.
     BlobWalk blobWalk[2];

@@ -422,9 +422,19 @@ const char* ttp_display_blob_keep(const char* store) {
         worth = !w.name.empty() && !w.held && !w.primed;
     }
     // The export is the expensive half (a readback per texture), so it is only
-    // reached once every cheaper reason to decline has been ruled out.
-    std::vector<uint8_t> probe;
-    if (worth) worth = exportStore(si, probe);
+    // reached once every cheaper reason to decline has been ruled out — and it
+    // happens HERE, once, with `export` handing the same buffer straight back.
+    //
+    // ON GL THIS DECLINES THE FIRST TIME AND MEANS IT. The readbacks cannot
+    // complete inside the build that asks (ttp_display.h), so the first ask only
+    // issues them; the frame loop turns the driver over, and the next build's
+    // keep finds the bytes waiting. Nothing is written in between, which is a
+    // cache missing a beat rather than anything to repair.
+    if (worth) {
+        g_disp->blobWalk[si].bytes.clear();
+        worth = exportStore(si, g_disp->blobWalk[si].bytes)
+                && !g_disp->blobWalk[si].bytes.empty();
+    }
     m.set("write", worth ? ttp::Value::Str(g_disp->blobWalk[si].name)
                          : ttp::Value::Null());
     out = ttp::canonical_stringify(m);
@@ -432,13 +442,15 @@ const char* ttp_display_blob_keep(const char* store) {
 }
 
 const uint8_t* ttp_display_blob_export(const char* store, uint32_t* outLen) {
-    static std::vector<uint8_t> blob;
-    blob.clear();
     const int si = storeIndex(store);
-    if (si < 0 || !exportStore(si, blob)) {
+    // WHAT `keep` ALREADY PRODUCED. Re-exporting here would pay a second
+    // readback per texture on the backends where that works, and would never
+    // answer at all on the one where it does not.
+    if (si < 0 || !g_disp || g_disp->blobWalk[si].bytes.empty()) {
         if (outLen) *outLen = 0;
         return nullptr;
     }
+    const std::vector<uint8_t>& blob = g_disp->blobWalk[si].bytes;
     if (outLen) *outLen = (uint32_t) blob.size();
     return blob.data();
 }
