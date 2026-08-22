@@ -218,7 +218,17 @@ bool TtpRenderer::loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb) 
     // because all of it reads the asset rather than the bytes.
     const uint64_t modelKey = glbBytesKey(glb);
     gltfio::FilamentAsset* asset = takeAsset(modelKey);
-    if (!asset) {
+    if (asset) {
+        // …with ONE thing to undo: the root still carries the last pose the
+        // frame loop wrote into it. The wheel measurement below reads
+        // getWorldTransform and takes asset-root space to BE world space ("the
+        // asset root is identity at load"), so a reused body would measure its
+        // wheel seats in the PREVIOUS race's world frame — and the deck conform
+        // then poses the car nowhere near the camera. Hand it over the way a
+        // fresh parse does.
+        auto& rootTcm = mEngine->getTransformManager();
+        rootTcm.setTransform(rootTcm.getInstance(asset->getRoot()), mat4f{});
+    } else {
         asset = mAssetLoader->createAsset(glb.data(), (uint32_t) glb.size());
         if (!asset) return false;
         registerAssetUris(asset);
