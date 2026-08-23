@@ -1482,18 +1482,19 @@ std::string TtpRenderer::importMaskBlob(const uint8_t* p, const uint8_t* end) {
     if (kind != kMaskKindMonster) {
         if (std::sscanf(key.c_str(), "%016llx", (unsigned long long*) &fnv) != 1) return std::string();
     }
-    // The descriptor points straight at the caller's buffer, which the ABI says
-    // outlives this call — and the flush below makes sure it is read before that
-    // promise expires.
-    Texture::PixelBufferDescriptor pbd(
-            const_cast<uint8_t*>(p), cell,
+    // THE DESCRIPTOR OWNS ITS PIXELS, exactly as importBakeBlob's two uploads do:
+    // the caller's bytes only have to survive the CALL, and the upload outlives
+    // it. A no-op destructor over those bytes plus a flushAndWait stood here
+    // instead and looked equivalent — what it actually drew is in
+    // native/renderer/CLAUDE.md, under the blob rules.
+    Texture::PixelBufferDescriptor pbd(malloc(cell), cell,
             Texture::Format::RGBA, Texture::Type::UBYTE,
-            [](void*, size_t, void*) {}, nullptr);
+            [](void* buf, size_t, void*) { free(buf); });
+    std::memcpy(pbd.buffer, p, cell);
     mDecalMaskArray->setImage(*mEngine, 0, 0, 0, (uint32_t) slot,
             (uint32_t) kMaskCellW, (uint32_t) kMaskCellH, 1, std::move(pbd));
     if (kind != kMaskKindMonster) mMaskLayerKey[slot] = fnv;
     mMaskLayerBakedBits |= (uint16_t) (1u << slot);
-    mEngine->flushAndWait();
     return key;
 }
 

@@ -526,6 +526,15 @@ mind here:
   leaks its own at teardown: the driver may still hold a pointer into that buffer
   and there is no tick left to fire the callback.
 
+**AN IMPORT OWNS ITS PIXELS**, which is the same argument pointing the other way.
+A `PixelBufferDescriptor` over the caller's bytes is a use-after-free that a
+`flushAndWait` does not cover: the shells free their offer buffer when the ABI
+call returns, and a shell that reuses one address per offer then has every layer
+uploading whichever blob was offered LAST, read at its own header's offset — a
+shifted copy of the wrong silhouette rather than nothing at all, which reads on
+screen as one car's shadow winning and not as a lifetime bug. Copy on the way in;
+what a shell promises is only that the bytes are valid for the call.
+
 ## The per-frame budget
 
 A steady-state race frame is one `ttp_display_frame(dt)`, one

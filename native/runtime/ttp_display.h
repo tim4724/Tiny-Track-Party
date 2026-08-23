@@ -464,7 +464,9 @@ TTP_ABI int ttp_display_reroster(const char* rosterJson);
  * is never retired would be re-exported on every frame for the rest of the run.
  *
  * Every JSON answer is scratch, per ttp_abi.h. export answers NULL for a name
- * that is not waiting. */
+ * that is not waiting. `offer` COPIES the bytes before it returns, like
+ * ttp_display_asset: a shell may free its buffer the moment the call is over,
+ * and one that hands every offer the same scratch buffer is fine. */
 TTP_ABI const char* ttp_display_blob_stores(void);
 TTP_ABI const char* ttp_display_blob_plan(const char* store, const char* trackId,
                                           const char* generation, const char* entriesJson);
