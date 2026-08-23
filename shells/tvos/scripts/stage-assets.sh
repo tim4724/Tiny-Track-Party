@@ -3,10 +3,10 @@
 # from the one place each thing is authored.
 #
 # A COPY rather than an Xcode folder reference into ../../public, deliberately:
-# public/assets is 87 MB and 81 MB of it is music this app does not ship (below),
-# so pointing the bundle at that directory would put the whole catalogue in the
-# .ipa. Staging makes what ships a list rather than an accident, and it is the
-# same list `tests/display-abi.test.js` already pins for the web.
+# that directory holds bakes, masters-adjacent artifacts and per-platform sets
+# this app has no use for, so pointing the bundle at it would ship whatever
+# lands there next. Staging makes what ships a list rather than an accident, and
+# it is the same list `tests/display-abi.test.js` already pins for the web.
 #
 # WHAT SHIPS (a few MB; the copy below is the list, and it prints its own count
 # at the end rather than stating one here that the next asset would falsify):
@@ -15,19 +15,29 @@
 #   items/      the shared item-icon SVGs, byte-for-byte
 #   audio/cues/ the pre-baked WAVs + manifest — the shell only plays them
 #   audio/      the engine loop, transcoded (below)
+#   audio/music/ the race-music catalogue, ~62 MB (below)
 #   materials/  the .filamat set, compiled for METAL by build-runtime-tvos.sh
 #   licenses/   the notice texts the info board drills into (gen-legal.mjs)
 #   fonts       committed TTFs (Resources/Fonts, staged by Xcode not by this)
 #
-# WHAT DOES NOT: the 81 MB race-music catalogue. It STREAMS from the origin, one
-# song at a time, exactly as the web does through its <audio> element — and a TV
-# app already has that origin as a hard runtime dependency, because the join QR
-# and the phone controller are served from it (docs/native-port/shells.md §8).
-# So this costs no dependency that did not already exist, and it sidesteps the
-# thing that makes the music hard to bundle: `audio.cc`'s SONG table bakes each
-# path INCLUDING its .mp3 extension, and `audio-corpus.jsonl` froze those strings
-# with its JS oracle deleted — so the catalogue cannot be re-encoded smaller
-# without an ABI change (making Song::file a stem). See the ledger's R1.
+# THE MUSIC SHIPS, and it used to be the one thing here that did not. Streaming
+# it leaned on an argument that does not survive inspection: the origin IS already
+# a hard dependency (docs/native-port/shells.md §8), but that dependency is a PAGE
+# LOAD at the start of a night, while this one is a continuous stream for the
+# length of every race. Bundling needs NO ABI change, which is the part worth
+# knowing: `audio.cc`'s SONG table bakes an origin-absolute path INCLUDING its
+# .mp3 extension and `audio-corpus.jsonl` froze those strings, so the shell keeps
+# the string exactly and merely resolves it against the BUNDLE first, falling
+# back to `baseURL`. A build that stages no music still plays; it streams.
+#
+# It is ~62 MB rather than the 81 MB it was, because SOURCES.json now encodes at
+# `-q:a 7` — a bitrate change with the extension untouched, so nothing moved in
+# the corpus. Read its `note` before going lower: q9 saves 15 MB more, passes
+# every gate in this tree, and deletes everything above 15 kHz on the way.
+#
+# Moving OFF mp3 is still an ABI + corpus change, and on this leg specifically it
+# is worse than the ledger's R1 makes it sound. SOURCES.json's `note` has the
+# reason; do not re-derive it here.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -102,6 +112,16 @@ if [ -f "$ENGINE_SRC" ]; then
     echo "  brew install ffmpeg, then re-run" >&2
   fi
 fi
+
+# The race music, as authored — mp3 is the one audio container both TV platforms
+# and every browser decode without help, which is exactly why the engine loop
+# above needs a transcode and this does not. The directory layout IS the lookup
+# key: AudioDevice strips the leading "/assets/" off `audio.cc`'s baked path and
+# resolves the rest under the staged root, so it has to land at audio/music/.
+# CREDITS.txt travels with it — CC-BY attribution is part of the asset.
+mkdir -p "$OUT/audio/music"
+cp "$ROOT/public/assets/audio/music"/*.mp3 "$OUT/audio/music/"
+cp "$ROOT/public/assets/audio/music/CREDITS.txt" "$OUT/audio/music/"
 
 # Metal .filamat. Every blob but vcolor degrades SILENTLY if absent (no voverlay
 # = the steer bar and cell dividers simply vanish), so the app asserts on the

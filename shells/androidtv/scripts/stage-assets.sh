@@ -3,25 +3,44 @@
 # copied from the one place each thing is authored.
 #
 # A COPY rather than a symlink into ../../public, deliberately and for the same
-# reason the tvOS script gives: public/assets is 89 MB and 81 MB of it is music
-# this app does not ship, so pointing the packager at that directory would put
-# the whole catalogue in the APK. Staging makes what ships a list rather than an
+# reason the tvOS script gives: that directory holds bakes, per-platform sets and
+# turntable strips this app has no use for, so pointing the packager at it would
+# ship whatever lands there next. Staging makes what ships a list rather than an
 # accident.
 #
-# WHAT SHIPS (~7 MB):
+# WHAT SHIPS (the copy below is the list, and the script prints its own total at
+# the end rather than stating one here that the next asset would falsify):
 #   toycar/     GLB + PNG — the renderer's whole model kit
 #   toycar/thumbs/  the lobby's 2D car stills
 #   audio/cues/ 28 WAV + manifest — pre-baked; the shell only plays them
 #   audio/engine_loop.ogg — the one passthrough voice with live DSP
+#   audio/music/ the race-music catalogue, ~62 MB (see below)
 #   items/      the four shared item SVGs
 #   materials/  the .filamat blobs, COMMITTED, not built here — see below
 #   design-tokens.json
 #   legal/      the attribution list + the license texts the build owes
 #
-# WHAT DOES NOT: the 81 MB race-music catalogue. It STREAMS from the origin one
-# song at a time, exactly as the web does and as the tvOS app does, and a TV app
-# already has that origin as a hard runtime dependency because the join QR and
-# the phone controller are served from it (shells.md §8).
+# THE MUSIC SHIPS, and it used to be the one thing here that did not. Streaming
+# it leaned on an argument that does not survive inspection: yes, the origin is
+# already a hard dependency (the join QR and the controller page, shells.md §8),
+# but that dependency is a PAGE LOAD at the start of a night, and this one is a
+# continuous stream for the length of every race. A TV app can just carry its own
+# music. Bundling costs no ABI change:
+# `audio.cc`'s SONG table bakes an ORIGIN-ABSOLUTE path with its `.mp3`
+# extension, and AudioDevice.startMusic resolves that same string locally FIRST
+# and falls back to `baseUrl + file`. So a build that stages no music still
+# plays; it just streams like it used to.
+#
+# It is ~62 MB rather than the 81 MB it was, because SOURCES.json now encodes at
+# `-q:a 7`. That is a plain bitrate change with the extension untouched, so no
+# corpus moved. Read its `note` before lowering it further: q9 saves another
+# 15 MB and passes every gate in this tree while quietly deleting everything
+# above 15 kHz.
+#
+# NO noCompress KNOB IS NEEDED. aapt2 already refuses to deflate `.mp3` (its
+# built-in extension list, the same one that keeps the cue `.wav`s mappable), so
+# `assets.openFd` hands back a real offset+length. If that ever changes, openFd
+# throws and the URL fallback above catches it — degraded, not broken.
 #
 # TWO THINGS ARE EASIER HERE THAN ON tvOS, and both are worth knowing rather
 # than rediscovering:
@@ -89,6 +108,15 @@ cp "$ROOT/public/assets/audio/cues/manifest.json" "$OUT/audio/cues/"
 # The engine voice, as authored. See the header for why there is no ffmpeg here.
 cp "$ROOT/public/assets/audio/engine_loop.ogg" "$OUT/audio/"
 cp "$ROOT/public/assets/audio/engine_loop.LICENSE.txt" "$OUT/audio/"
+
+# The race music. The directory name is the lookup key the same way Textures/ is:
+# the shell strips the leading "/assets/" off `audio.cc`'s baked path and asks
+# the AssetManager for what is left, so this has to land at audio/music/<name>.
+# CREDITS.txt travels with it because CC-BY attribution is a licence obligation
+# and the long-form text is part of the asset, not documentation about it.
+mkdir -p "$OUT/audio/music"
+cp "$ROOT/public/assets/audio/music"/*.mp3 "$OUT/audio/music/"
+cp "$ROOT/public/assets/audio/music/CREDITS.txt" "$OUT/audio/music/"
 
 # The compiled materials — the web's own bytes, UNLESS the multiview set has
 # been built (native/scripts/build-runtime-android.sh compiles it beside the

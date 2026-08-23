@@ -19,9 +19,8 @@ import Foundation
 ///   in the bundle and not a flattened `colormap.png`.
 /// - **Remote**: everything else, from the origin this app already depends on
 ///   (the join QR points phones at it and the controller page is served from
-///   it). The 81 MB music catalogue is the reason this leg exists — it streams
-///   one song at a time exactly as the web's `<audio>` element does, rather than
-///   riding in the .ipa.
+///   it). The race music was the reason this leg existed; it is staged now, and
+///   reaches the origin only when a build did not stage it (see [bundledURL]).
 @MainActor
 final class AssetStore {
 
@@ -81,6 +80,22 @@ final class AssetStore {
         guard let staged else { return nil }
         let url = staged.appendingPathComponent(relativePath)
         return try? Data(contentsOf: url, options: .mappedIfSafe)
+    }
+
+    /// The staged file's URL, or nil when this build did not stage one.
+    ///
+    /// Separate from [bundled] because the one caller wants a URL rather than
+    /// bytes: `AVPlayerItem` streams a song off disk, and mapping 3 MB of mp3
+    /// into memory only to hand it back would undo that.
+    ///
+    /// It STATS rather than trusting the path. Every other staged read is a
+    /// hard requirement whose absence should fail loudly; this one has a working
+    /// fallback (the origin), so the caller needs to be able to tell "not
+    /// bundled" from "bundled and broken".
+    func bundledURL(_ relativePath: String) -> URL? {
+        guard let staged else { return nil }
+        let url = staged.appendingPathComponent(relativePath)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
     /// A model from the toy-car kit by its base name — the spelling every layer

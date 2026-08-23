@@ -1,5 +1,6 @@
 package games.couchpad.tinytrack
 
+import android.content.res.AssetFileDescriptor
 import android.content.res.AssetManager
 import android.media.AudioAttributes
 import android.media.MediaPlayer
@@ -32,7 +33,10 @@ import java.nio.ByteOrder
  */
 class AudioDevice(
     private val assets: AssetManager,
-    /** The origin the race-music catalogue streams from. See [music]. */
+    /**
+     * The origin, and the music's FALLBACK source rather than its usual one:
+     * the catalogue ships in the APK now. See [openBundledSong].
+     */
     private val baseUrl: String,
 ) {
     private companion object {
@@ -310,10 +314,10 @@ class AudioDevice(
         stopMusic()
         musicUrl = file
         try {
-            // STREAMED from the origin, one song at a time, exactly as the web
-            // does and for the same reason: the catalogue is 81 MB and does not
-            // ship in the APK (stage-assets.sh's header says so). A TV app already
-            // has that origin as a hard dependency for the phone controller.
+            // PLAYED FROM THE APK, and streamed from the origin only if it is not
+            // there. stage-assets.sh bundles the catalogue; the fallback is what
+            // makes a build that staged none of it still play, and what covers an
+            // aapt2 that decided to deflate the file after all.
             val mp = MediaPlayer()
             mp.setAudioAttributes(
                 AudioAttributes.Builder()
@@ -330,7 +334,21 @@ class AudioDevice(
             // CC-BY credit advertised a track that was never playing. Both twins
             // RESOLVE rather than concatenate — `assetUrl(song.file)` on the web,
             // `URL(string:relativeTo:)` on tvOS.
-            mp.setDataSource(baseUrl + file)
+            //
+            // The SAME leading "/assets/" is why the local lookup strips it: the
+            // AssetManager's root already IS that directory, so it wants the
+            // remainder ("audio/music/x.mp3") and nothing else.
+            val local = openBundledSong(file)
+            if (local != null) {
+                local.use { mp.setDataSource(it.fileDescriptor, it.startOffset, it.length) }
+            } else {
+                mp.setDataSource(baseUrl + file)
+            }
+            // WHICH SOURCE WON, once per song. The fallback above degrades in
+            // silence by design — that is what makes it safe — so without this
+            // line an APK that bundles 62 MB of music and streams anyway looks
+            // exactly like one that works.
+            Log.i(TAG, "music $file from ${if (local != null) "the APK" else "the origin"}")
             mp.isLooping = true
             mp.setVolume(musicGain, musicGain)
             mp.setOnPreparedListener {
@@ -346,6 +364,27 @@ class AudioDevice(
             Log.w(TAG, "music $file could not start", t)
         }
         announce(song)
+    }
+
+    /**
+     * The bundled copy of a song, or null when this build did not stage one.
+     *
+     * `file` arrives ORIGIN-ABSOLUTE from `audio.cc` ("/assets/audio/music/x.mp3")
+     * and the AssetManager is rooted at that same `assets/`, so the prefix comes
+     * off. An `openFd` rather than an `open`: `MediaPlayer` wants to seek, and a
+     * deflated asset has no offset to give it — which is the one way this returns
+     * null for a file that is genuinely present, and why the caller falls back to
+     * the origin instead of treating null as "no music".
+     */
+    private fun openBundledSong(file: String): AssetFileDescriptor? {
+        val path = file.removePrefix("/assets/")
+        if (path == file) return null
+        return try {
+            assets.openFd(path)
+        } catch (t: Throwable) {
+            Log.w(TAG, "music $file is not readable from the APK; streaming it", t)
+            null
+        }
     }
 
     /** The CC-BY credit. A licensing obligation, so it rides every start path. */

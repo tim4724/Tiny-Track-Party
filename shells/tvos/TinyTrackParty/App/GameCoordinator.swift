@@ -107,7 +107,10 @@ final class GameCoordinator: ObservableObject {
         proto = GameProtocol.load(baseURL: baseURL)
         display = DisplayHost()
         net = PartyNet(proto: proto, socket: RelaySocket())
-        audio = AudioDevice(baseURL: baseURL) { [weak assets] path in assets?.bundled(path) }
+        audio = AudioDevice(
+            baseURL: baseURL,
+            bundled: { [weak assets] path in assets?.bundled(path) },
+            bundledURL: { [weak assets] path in assets?.bundledURL(path) })
         lobbyDemo = LobbyDemo()
         // THE COVER, BEFORE THE FIRST BODY. SwiftUI evaluates a body before the
         // `.task` that runs `boot()`, so a splash raised by `boot()`'s own

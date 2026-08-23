@@ -561,19 +561,28 @@ TV shells; the rest are Android's.
   LIVENESS windows as one JSON object. A C++ layer can include
   `ttp/protocol.h` instead. Nothing else is a legitimate source, and
   `tests/config-drift.test.js` pins the export to `public/shared/protocol.js`.
-- **Asset delivery: the music is the whole problem, and it is corpus-locked.**
-  `public/assets/` is ~87 MB, ~81 MB of it race music (the high-bitrate
-  masters left the tree; `SOURCES.json` holds their URLs and `npm run
-  fetch:music` rebuilds the shipped files). Everything else bundles trivially,
-  which is what tvOS does: `shells/tvos/scripts/stage-assets.sh` bundles the
-  GLBs, cues and materials and streams the music off the web origin one song
-  at a time — an origin every TV app already depends on for the join URL. Before
-  planning anything smaller: `audio.cc`'s SONG table bakes each path
-  INCLUDING the `.mp3` extension and `audio-corpus.jsonl` froze those strings
-  (its JS oracle is deleted), so re-encoding the catalogue to another
-  container — or trimming the pool, which shifts every index — is an ABI +
-  corpus change (`Song::file` would have to become a stem), not an encode. And
-  `ttp_audio_song_json`'s index has to resolve to whatever you pick.
+- **Asset delivery: everything ships, including the music.** A fourth shell
+  stages a list rather than pointing a packager at `public/assets/` (see either
+  `stage-assets.sh`), and the race-music catalogue — ~62 MB, most of what it
+  stages — is now part of that list on both TV legs. It streamed from the origin
+  until 2026-08; the argument for that ("the app depends on the origin anyway")
+  conflated a page load at the start of a night with a continuous stream for the
+  length of every race.
+  **Bundling costs no ABI change, and that is the part worth copying.**
+  `audio.cc`'s SONG table bakes an ORIGIN-ABSOLUTE path including its `.mp3`
+  extension, and `audio-corpus.jsonl` froze those strings with its JS oracle
+  deleted. So a shell keeps the string exactly as given and only chooses what to
+  resolve it against: the staged root first (dropping the leading `/assets/`,
+  which the root already is), `baseURL` if nothing is staged. Keep that
+  fallback — it is what lets a build stage no music and still play.
+  What IS still corpus-locked (the R1 that was here): changing the extension, or
+  trimming the pool, which shifts every index. Both mean making `Song::file` a
+  stem, and `ttp_audio_song_json`'s index has to resolve to whatever you pick.
+  Moving off mp3 is worse than it looks besides — Apple decodes Opus only inside
+  CAF (ffmpeg cannot mux it) and `MediaPlayer` reads Ogg Opus only from API 29
+  against minSdk 24, so a stem buys three artifacts per song rather than one.
+  Changing the BITRATE is free of all of it: `SOURCES.json`'s `encode.args` plus
+  `npm run check:music-loudness`, and nothing in the corpus moves.
 - **The Android NDK leg is the one leg that compiles but does not run the
   fixtures** (`.github/workflows/native.yml` — every other leg runs the full
   ctest suite). `fp-profile.md`

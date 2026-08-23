@@ -35,6 +35,8 @@ final class AudioDevice {
 
     private let log = Logger(subsystem: "games.couchpad.tinytrack", category: "audio")
     private let baseURL: URL
+    /// Where a staged song lives, if this build staged one. See [startMusic].
+    private let bundledURL: (String) -> URL?
     private let bank: CueBank
 
     /// How many sounds can be in the air at once. Four human seats × four
@@ -99,8 +101,11 @@ final class AudioDevice {
     private var loggedStarvation = false
     private var configurationObserver: NSObjectProtocol?
 
-    init(baseURL: URL, bundled: @escaping (String) -> Data?) {
+    init(baseURL: URL,
+         bundled: @escaping (String) -> Data?,
+         bundledURL: @escaping (String) -> URL?) {
         self.baseURL = baseURL
+        self.bundledURL = bundledURL
         self.bank = CueBank(bundled: bundled)
         voices = UnsafeMutablePointer<VoiceState>.allocate(capacity: Self.slotCount)
         voices.initialize(repeating: VoiceState(), count: Self.slotCount)
@@ -546,28 +551,42 @@ final class AudioDevice {
         let source: String
     }
 
-    /// The catalogue is NOT bundled: 81 MB of MP3 against a ~7 MB app, and it
-    /// streams from the origin one song at a time exactly as the web does
-    /// through its `<audio>` element. That origin is already a hard runtime
-    /// dependency — the join QR and the phone controller are served from it — so
-    /// this costs no dependency that did not exist.
+    /// The catalogue is BUNDLED, and streams from the origin only when a build
+    /// did not stage it. It always streamed before, on the grounds that the app
+    /// depends on that origin anyway — but that dependency is a page load at the
+    /// start of a night, and this one was a continuous stream for the length of
+    /// every race.
     ///
-    /// **Do not re-encode the catalogue to something smaller.** `audio.cc`'s
-    /// SONG table bakes each path INCLUDING its `.mp3` extension, and
-    /// `audio-corpus.jsonl` froze those strings with its JS oracle deleted, so
-    /// changing the extension turns `audio_check` and `record_audio` red on all
-    /// four legs. Moving off MP3 means making `Song::file` a stem: an ABI and
-    /// corpus change, not an encode (the ledger's R1).
+    /// The path is `audio.cc`'s, UNCHANGED, and that is the whole trick.
+    /// `Song::file` is origin-absolute and bakes its `.mp3` extension, and
+    /// `audio-corpus.jsonl` froze those strings with its JS oracle deleted — so
+    /// the shell keeps the string exactly and only chooses what to resolve it
+    /// against. Bundling cost no ABI change and moved no fixture.
+    ///
+    /// **Moving off MP3 still would.** It would mean making `Song::file` a stem
+    /// (the ledger's R1), and it is worse here than the ledger says: Apple
+    /// decodes Opus only inside a CAF container, which ffmpeg cannot mux, so
+    /// this leg alone would need a macOS-only encode step.
     private func startMusic(index: Int32, level: Double) {
         guard let song = song(at: index) else {
             log.error("no song at catalogue index \(index)")
             return
         }
-        guard let url = URL(string: song.file, relativeTo: baseURL)?.absoluteURL else {
+        // The staged root IS the `/assets/` the baked path names, so the prefix
+        // comes off for the local lookup and stays on for the remote one.
+        let staged = song.file.hasPrefix("/assets/")
+            ? bundledURL(String(song.file.dropFirst("/assets/".count)))
+            : nil
+        guard let url = staged ?? URL(string: song.file, relativeTo: baseURL)?.absoluteURL else {
             log.error("song \(song.file, privacy: .public) is not a URL under \(self.baseURL.absoluteString, privacy: .public)")
             return
         }
         musicLevel = level
+        // WHICH SOURCE WON, once per song. The fallback degrades in silence by
+        // design — that is what makes it safe — so without this line an app that
+        // bundles 62 MB of music and streams anyway looks exactly like one that
+        // works.
+        log.info("music \(song.file, privacy: .public) from \(staged != nil ? "the bundle" : "the origin", privacy: .public)")
 
         if musicURL != url {
             // A fresh player per song rather than re-pointing the looper: an

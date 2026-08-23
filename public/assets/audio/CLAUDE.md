@@ -41,9 +41,17 @@ What stands in for them is `music/SOURCES.json` (per song: download URL, master
 sha256, byte count) plus the recorded encode. `npm run fetch:music` rebuilds every
 shipped file from scratch; `--verify` just re-checks the hashes.
 
-This is what took `public/assets` down to a fraction of its old size, nearly all
-of it the preview deploy image. The songs STREAM one at a time through an
-`<audio>` element, so it was never a per-player download cost.
+**Always re-encode from the masters, which is why that script insists on the
+download.** Running a lower setting over the SHIPPED files is lossy-to-lossy: the
+encoder spends bits reproducing the last encoder's artifacts, and the catalogue
+can come out larger than it went in.
+
+The web streams one song at a time through an `<audio>` element. **Both TV shells
+bundle the whole catalogue** and fall back to the origin only when a build staged
+none of it, so the size is paid by the deploy image, every clone, and two app
+bundles. `SOURCES.json`'s `note` carries the bitrate reasoning; the short version
+is that the setting below the current one deletes everything above 15 kHz and no
+gate in this tree would tell you.
 
 ## MP3 is not a quality choice here
 
@@ -55,6 +63,16 @@ oracle is deleted.
 Changing the extension turns the audio replay and its record roundtrip red on all
 four legs. Moving off MP3 means making the song's file field a stem and letting
 each shell append its own extension: **an ABI and corpus change, not an encode.**
+
+MP3 also happens to be the only container all four legs decode unaided, which is
+what makes the bundling above a copy rather than a pipeline. Apple decodes Opus
+only inside CAF — a container ffmpeg cannot mux, so that leg alone would need a
+macOS-only `afconvert` step — and `MediaPlayer` reads Ogg Opus only from API 29,
+against this app's minSdk 24. A stem would buy three artifacts per song.
+
+Changing the BITRATE is a different question and costs none of that: the
+extension is untouched, so nothing in the corpus moves. Only `SOURCES.json`'s
+`encode.args` and `npm run check:music-loudness` are involved.
 
 ## Re-encode with NO filters
 
