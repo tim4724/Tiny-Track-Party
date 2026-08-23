@@ -468,12 +468,20 @@ reading it off a cold first build (which is what a launch log gives you) badly
 overstates what a rebuild costs. `props+rig` behaves the same way, 67 ms then 20.
 
 The consequence for anything tempted to KEEP parsed assets across a scene, the
-way the sun bake and the silhouette layers are kept: `releaseScene` does drop
-every gltfio asset while the layers keyed off those same models survive, and
-retaining them is a real asymmetry to close — but it would buy the ~28 ms, not
-the ~405. Price it against that. The one-time half is a process warm-up problem
-and belongs with `backend.vulkan.enable_pipeline_cache_prewarming`, not with a
-resource pool.
+way the sun bake and the silhouette layers are kept: what such a cache buys is
+the ~28 ms, never the ~405. Price it against that. The one-time half is a process
+warm-up problem and belongs with
+`backend.vulkan.enable_pipeline_cache_prewarming`, not with a resource pool.
+
+**Car bodies ARE kept** (`mBodyPool`) on exactly that trade; the rest of the
+gltfio assets are still dropped by `releaseScene` while the mask layers keyed off
+those same models survive, so the asymmetry is closed for the bodies and open for
+everything else. **PARKING RESTORES NOTHING** — a parked body is out of the scene
+and otherwise untouched, so it still wears the last frame's pose while
+`loadCarAsset` measures its wheel seats on the stated assumption that the asset is
+exactly as parsed. `takeAsset` therefore hands one back at its snapshotted parse
+pose (`mBodyRest`), and anything else added to the reuse path has to ask the same
+question: what would a fresh `createAsset` have guaranteed?
 
 **The casters are the STATIC scene, and cars cast nothing** (`setVisibleLayers`
 0x02). So the bake is a function of the track and its biome, and a rebuild that

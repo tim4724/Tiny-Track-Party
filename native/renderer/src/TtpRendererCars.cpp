@@ -218,17 +218,7 @@ bool TtpRenderer::loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb) 
     // because all of it reads the asset rather than the bytes.
     const uint64_t modelKey = glbBytesKey(glb);
     gltfio::FilamentAsset* asset = takeAsset(modelKey);
-    if (asset) {
-        // …with ONE thing to undo: the root still carries the last pose the
-        // frame loop wrote into it. The wheel measurement below reads
-        // getWorldTransform and takes asset-root space to BE world space ("the
-        // asset root is identity at load"), so a reused body would measure its
-        // wheel seats in the PREVIOUS race's world frame — and the deck conform
-        // then poses the car nowhere near the camera. Hand it over the way a
-        // fresh parse does.
-        auto& rootTcm = mEngine->getTransformManager();
-        rootTcm.setTransform(rootTcm.getInstance(asset->getRoot()), mat4f{});
-    } else {
+    if (!asset) {
         asset = mAssetLoader->createAsset(glb.data(), (uint32_t) glb.size());
         if (!asset) return false;
         registerAssetUris(asset);
@@ -237,6 +227,7 @@ bool TtpRenderer::loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb) 
             return false;
         }
         asset->releaseSourceData();
+        snapshotRestPose(asset);
     }
     mScene->addEntities(asset->getEntities(), asset->getEntityCount());
     // Cars neither cast nor catch the sun shadow (they carry a ground blob) —
@@ -383,15 +374,51 @@ bool TtpRenderer::loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb) 
 void TtpRenderer::dropAsset(gltfio::FilamentAsset*& a) {
     if (!a) return;
     mScene->removeEntities(a->getEntities(), a->getEntityCount());
+    mBodyRest.erase(a);
     mAssetLoader->destroyAsset(a);
     a = nullptr;
+}
+
+// The parse pose, kept and put back — mBodyRest says why a reuse needs it.
+//
+// EVERY node, not the handful the frame loop currently writes: the question a
+// reuse has to answer is what a fresh createAsset would have guaranteed, and
+// that is the whole hierarchy. Costs one mat4 per node, once per parse.
+void TtpRenderer::snapshotRestPose(gltfio::FilamentAsset* a) {
+    if (!a) return;
+    auto& tcm = mEngine->getTransformManager();
+    RestPose rest;
+    rest.nodes.reserve(a->getEntityCount());
+    for (size_t i = 0; i < a->getEntityCount(); i++) {
+        const auto ti = tcm.getInstance(a->getEntities()[i]);
+        rest.nodes.push_back(ti ? tcm.getTransform(ti) : mat4f{});
+    }
+    const auto ri = tcm.getInstance(a->getRoot());
+    rest.root = ri ? tcm.getTransform(ri) : mat4f{};
+    mBodyRest[a] = std::move(rest);
+}
+
+void TtpRenderer::restoreRestPose(gltfio::FilamentAsset* a) {
+    const auto it = a ? mBodyRest.find(a) : mBodyRest.end();
+    // A miss is not a state to have an answer for: everything that reaches here
+    // came out of the pool, both parse paths snapshot, and both destroys erase.
+    if (it == mBodyRest.end()) return;
+    auto& tcm = mEngine->getTransformManager();
+    const RestPose& rest = it->second;
+    for (size_t i = 0; i < a->getEntityCount() && i < rest.nodes.size(); i++) {
+        const auto ti = tcm.getInstance(a->getEntities()[i]);
+        if (ti) tcm.setTransform(ti, rest.nodes[i]);
+    }
+    const auto ri = tcm.getInstance(a->getRoot());
+    if (ri) tcm.setTransform(ri, rest.root);
 }
 
 // Park a parsed body instead of destroying it — see mBodyPool.
 //
 // This is dropAsset minus the destroy: OUT OF THE SCENE, which is what makes a
 // parked body invisible and inert, but still owned by the loader that made it
-// and still holding its uploaded buffers. A key of 0 means "we never learned
+// and still holding its uploaded buffers — and minus the rest-pose erase, on
+// purpose: the snapshot is what takeAsset hands the body back with. A key of 0 means "we never learned
 // what model this was", which is not something to file under any model.
 void TtpRenderer::parkAsset(uint64_t key, gltfio::FilamentAsset*& a) {
     if (!a) return;
@@ -410,15 +437,16 @@ gltfio::FilamentAsset* TtpRenderer::takeAsset(uint64_t key) {
     it->second.pop_back();
     mBodyPoolCount--;
     if (it->second.empty()) mBodyPool.erase(it);
+    // Parked is not parsed: the body still wears the last frame's pose, and
+    // every caller's next move assumes it does not (mBodyRest). One funnel, so
+    // that is answered here rather than at each reuse site.
+    restoreRestPose(a);
     return a;
 }
 
 void TtpRenderer::drainBodyPool() {
     for (auto& [key, list] : mBodyPool) {
-        for (gltfio::FilamentAsset* a : list) {
-            mScene->removeEntities(a->getEntities(), a->getEntityCount());
-            mAssetLoader->destroyAsset(a);
-        }
+        for (gltfio::FilamentAsset* a : list) dropAsset(a);
     }
     mBodyPool.clear();
     mBodyPoolCount = 0;
@@ -573,7 +601,6 @@ void TtpRenderer::buildCarGhost(uint32_t c) {
     // container (the 50%-alpha clone), so it is a different model to the pool.
     const uint64_t ghostKey = glbBytesKey(ghost->second);
     gltfio::FilamentAsset* ga = takeAsset(ghostKey);
-    const bool ghostWasParked = ga != nullptr;
     if (!ga) {
         ga = mAssetLoader->createAsset(
                 ghost->second.data(), (uint32_t) ghost->second.size());
@@ -584,6 +611,7 @@ void TtpRenderer::buildCarGhost(uint32_t c) {
             return;
         }
         ga->releaseSourceData();
+        snapshotRestPose(ga);
     }
     if (mCarGhostKey.size() <= c) mCarGhostKey.resize(c + 1, 0);
     mCarGhostKey[c] = ghostKey;
@@ -595,11 +623,11 @@ void TtpRenderer::buildCarGhost(uint32_t c) {
     // The ghost body is only ever shown as the GRAFTED monster body, and
     // MonsterRig strips the car's wheels before seating it — collapse them
     // once here (this instance's wheels are never animated).
-    // A PARKED ghost already had this done, and the scale is absolute rather
-    // than relative, so re-running it is harmless — but the translation it
-    // preserves is read back out of the transform it is about to overwrite,
-    // which only survives because the scale zeroes no row. Left unconditional
-    // for that reason, and noted so nobody makes it relative.
+    // Unconditional, and it has to be: a parked ghost comes back at its PARSE
+    // pose (takeAsset), so the collapse is undone on every reuse. The
+    // scale is absolute rather than relative, and the translation it preserves is
+    // read back out of the transform it is about to overwrite — which works only
+    // because the scale zeroes no row. Noted so nobody makes it relative.
     for (const char* wn : { "wheel-fl", "wheel-fr", "wheel-bl", "wheel-br", "axle" }) {
         const utils::Entity we = ga->getFirstEntityByName(wn);
         if (we.isNull()) continue;
@@ -608,7 +636,6 @@ void TtpRenderer::buildCarGhost(uint32_t c) {
         local[3] = tcmG.getTransform(wi)[3];
         tcmG.setTransform(wi, local);
     }
-    (void) ghostWasParked;
     mCarGhostAssets[c] = ga;
     if (mStbProvider) {
         mStbProvider->waitForCompletion();

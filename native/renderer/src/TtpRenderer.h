@@ -1751,10 +1751,31 @@ private:
     // the pool is full. Takes the pointer by reference and nulls it, like
     // dropAsset, so no caller can keep a handle to something it gave away.
     void parkAsset(uint64_t key, filament::gltfio::FilamentAsset*& a);
-    // …and back: null when nothing is parked for this model.
+    // …and back, at its parse pose (mBodyRest): null when nothing is parked for
+    // this model.
     filament::gltfio::FilamentAsset* takeAsset(uint64_t key);
     // Destroy everything parked. Teardown only — a scene release PARKS.
     void drainBodyPool();
+
+    // THE POSE A FRESH PARSE WOULD HAVE HANDED OVER: every node's own local
+    // transform, snapshotted before any frame has touched the asset and put back
+    // by takeAsset. Parking restores nothing (see parkAsset), so a parked body
+    // still wears the last frame's pose — the root, the four wheels' steer, roll
+    // and suspension, the axle, a monster's collapsed tyres — while loadCarAsset
+    // measures the seats it fills CarWheels with on the stated assumption that
+    // those nodes are at rest. Reusing without this fed each rebuild's
+    // measurement the previous one's pose, and the drift compounded across races
+    // until a corner's wheel visibly left the road.
+    //
+    // Keyed by the ASSET rather than by the model, so nothing here rests on two
+    // parses of the same bytes numbering their entities alike.
+    struct RestPose {
+        std::vector<filament::math::mat4f> nodes;  // parallel to getEntities()
+        filament::math::mat4f root;                // gltfio's own, not in there
+    };
+    std::unordered_map<const filament::gltfio::FilamentAsset*, RestPose> mBodyRest;
+    void snapshotRestPose(filament::gltfio::FilamentAsset* a);
+    void restoreRestPose(filament::gltfio::FilamentAsset* a);
     // Parsed kit geometry, keyed by the bytes' FNV. Engine-lifetime — the kit's
     // bytes never change, so a cup's four scenes parse each model once.
     std::unordered_map<uint64_t, std::vector<ttp::rt::GlbMeshNode>> mGlbMeshCache;
