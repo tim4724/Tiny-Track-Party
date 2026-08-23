@@ -123,6 +123,11 @@ test('artwork: nothing in the brand tree is unlisted', () => {
     for (const name of fs.readdirSync(abs)) {
       const file = path.join(abs, name);
       if (fs.statSync(file).isDirectory()) continue;
+      // Dotfiles are not artwork and are not in the repo: this sweep walks the
+      // FILESYSTEM, so a Finder visit to any of these directories leaves a
+      // .DS_Store behind and fails the suite for everyone on a Mac, naming a
+      // file git is already ignoring.
+      if (name.startsWith('.')) continue;
       if (skip.includes(name)) continue;
       if (!named.has(file)) orphans.push(path.relative(ROOT, file));
     }

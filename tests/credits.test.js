@@ -287,7 +287,11 @@ test('every served license text is intact', () => {
   }
   // Nothing but the texts and their provenance note lives in that directory —
   // a stray file there would be served as if it were a notice.
-  assert.deepEqual(fs.readdirSync(dir).sort(), [...Object.keys(marks), 'SOURCES.md'].sort());
+  // Dotfiles excluded for the reason artwork-manifest's sweep excludes them: this
+  // reads the FILESYSTEM, so a Finder visit leaves a .DS_Store here and fails the
+  // suite on a Mac, naming a file git is already ignoring.
+  const served = fs.readdirSync(dir).filter((n) => !n.startsWith('.'));
+  assert.deepEqual(served.sort(), [...Object.keys(marks), 'SOURCES.md'].sort());
 });
 
 // The legal footer exists twice (welcome board + licenses page) as plain markup
