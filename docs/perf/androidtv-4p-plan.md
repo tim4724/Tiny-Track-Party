@@ -313,6 +313,32 @@ than the earlier framing on this page, which measured it against the p95
 criterion and concluded it bought only margin. It buys a rung; the criterion was
 wrong, not the lever.
 
+### Verified against the new rate-step rule (2026-08-23, `621f87c3`)
+
+That commit made the rate step two-way, and its message notes the floor escape
+"comes back with it". At four cells on this box **it changes nothing**, and the
+adaptive run says so end to end — 150 s, four cells, no pin, on a build carrying
+the fix:
+
+    960x540 @ 30 fps, 0 skips/s, gpu p95 18.03    131 of 142 readouts
+    FINAL:  960x540 @ 30 fps
+
+**It parks on the escape and provably cannot climb out.** The climb gate is
+`gpuP95 <= kScaleTargetShare * budget` = 0.85 x 16.7 = **14.20 ms**, and 540
+costs **18.03**. That refusal is CORRECT — 540 at 60 measures 52 fps and 7.5
+skips/s — but it is also terminal, because the escape gave up the RATE and the
+only way back is at the same resolution.
+
+`gpuP95Ms` is `PerfMonitor`'s own fold (`render_scale_controller.cc`), the same
+`gpu.p95` the readout prints, so these are directly comparable. Note it is the
+MEDIAN of a run's window p95s, not `perf-race`'s worst-p95 column.
+
+**So the escape has to give up RESOLUTION, which is this ladder's own stated
+principle, and the numbers now say it plainly.** 640x360 holds a locked 60 with
+zero skips; its p95 median is 14.34 against the 14.20 gate, i.e. inside the
+14.20-15.03 deadband, so a point placed there would be stable rather than pumped.
+Nothing above 432 can ever climb back to 60 on this box.
+
 ## Phase 4 (cont.) — the policy decision, once the milliseconds are in
 
 The escape below the floor currently trades the RATE (540 lines at 30). The
