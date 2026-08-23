@@ -29,6 +29,7 @@ const NULL_PARTY = {
   sendTo() {}, broadcast() {}, connect() {}, join() {}, create() {},
   pinInstance() {}, resetReconnectCount() {}, closeAll() {}, close() {},
   setStateFrame() {}, // _publishLobby pushes the retained roster snapshot on every roster change
+  closeRoom() {},     // the race→lobby walk bails every phone; there are none here
 };
 
 // Keys we own — preventDefault stops arrows/Space from scrolling the page.
