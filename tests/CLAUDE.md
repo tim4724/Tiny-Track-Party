@@ -98,6 +98,17 @@ replays every trace in one process. **When adding cross-race state, own it per
 is unreachable by any fixture. No track builds with a pole, which is why pole
 collision is covered by `hazards` constructing the situation directly.
 
+**NO SUITE HERE CAN SEE THE DERIVED-BYTES CACHE**, and that is by construction
+rather than by omission: all three shells switch the blob stores off under
+automation, because a suite asserting what a BUILD produces must not be served
+what a previous run left on disk. So the warm path — plan, read, offer, import,
+and the layers a build then draws from — had no gate of any kind, and shipped an
+import that put the last offered blob's bytes into every silhouette layer.
+`npm run check:blob-cache` is the one thing that covers it, and its header says
+how; nothing in CI runs it, so **run it whenever anything on the blob walk moves**
+— the stores, the plan, an import or an export. **Anything else that survives a
+run inherits the same blind spot, and that check is where to widen.**
+
 ## The abi ctest
 
 The C ABI is not on the replay path, so the `abi` ctest covers the marshalling

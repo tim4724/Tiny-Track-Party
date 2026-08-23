@@ -122,7 +122,7 @@ export default [
   // in an ordinary script is still an error.
   {
     files: ['scripts/capture-shots.mjs', 'scripts/bake-wordmark.mjs', 'scripts/bake-shelf.mjs',
-            'scripts/lib/capture.mjs'],
+            'scripts/lib/capture.mjs', 'scripts/check-blob-cache.mjs'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
