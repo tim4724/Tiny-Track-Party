@@ -33,7 +33,16 @@
 //
 // The NEAR exit is Filament's; the FAR one is what keeps the sky dome out of the
 // fog it is meant to be dissolving into (fogFor's cutOffDistance).
+//
+// THE ABLATION SWITCH (TTP_FEAT_FOG_VERTEX) takes .y of the view global
+// ttp_grade.inc documents, and it is the only way to price THIS function: the
+// existing TTP_FEAT_FOG arm moves fog PARAMETERS, so the `length` and the `exp`
+// below are paid either way and no arm could ever see them. That is what made
+// "drop the per-vertex sqrt" a proposal nobody could check. Returning 0 here
+// skips both transcendentals AND the fragment mix's contribution, so the arm
+// measures the whole per-vertex fog term at once.
 float ttpFogFactor(highp vec3 worldPos) {
+    if (getMaterialGlobal0().y > 0.0) return 0.0;
     highp vec3 view = worldPos - getWorldCameraPosition();
     highp float d = length(view);
     if (d < frameUniforms.fogStart || d > frameUniforms.fogCutOffDistance) {

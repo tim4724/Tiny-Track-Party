@@ -53,7 +53,7 @@ export const READY_TIMEOUT_MS = 120_000;
  */
 export const FEAT = {
   ROAD: 0x04, TERRAIN: 0x08, DRESSING: 0x10, SKY: 0x20, CARS: 0x40, EFFECTS: 0x80,
-  ALL: 0x1FFC,
+  ALL: 0xDFFC,
 };
 
 /** The content groups, in the order a sweep prints them. */

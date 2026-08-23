@@ -1946,6 +1946,12 @@ public:
     // TTP_DEBUG_NO_MERGE — SET takes the merged draw groups apart, so a sweep
     // prices the merging itself as interleaved arms on one launch.
     static constexpr uint32_t kFeatNoMerge = 0x2000;
+    // The two channels that ride a Filament VIEW GLOBAL instead of a material
+    // parameter, because eleven materials include the .inc each one lives in
+    // (see ttp_grade.inc). kFeatFogVertex is NOT a finer kFeatFog: that one
+    // moves the fog's parameters and cannot reach ttpFogFactor's own maths.
+    static constexpr uint32_t kFeatGrade = 0x4000;
+    static constexpr uint32_t kFeatFogVertex = 0x8000;
     void debugFeatureMask(uint32_t mask);
 private:
     bool mHideCars = false;
@@ -1956,6 +1962,10 @@ private:
     uint8_t mFeatureMask = kFeatAll;
     uint32_t mRoadMask = kFeatRoadAll;
     bool mFogOn = true;
+    // The ablation view-global, in the sense the shaders read it: ZERO is the
+    // shipped picture, so a View nobody set renders correctly (ttp_grade.inc).
+    filament::math::float4 mDebugGlobals{ 0.0f, 0.0f, 0.0f, 0.0f };
+    void applyDebugGlobals(filament::View* v) const;
     bool mFeatureTagged = false;
     void tagFeatures();
     void tagEntities(const utils::Entity* e, size_t n, uint8_t bit);

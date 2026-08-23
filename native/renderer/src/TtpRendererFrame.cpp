@@ -156,8 +156,19 @@ static View::FogOptions fogFor(float near, float far, const float3& color) {
     // Android box; see ttp_grade.inc's ttpFog, which reproduces it for a
     // fraction). Everything below is still filled in because
     // ColorPassDescriptorSet::prepareFog runs whether or not the variant does, so
-    // these ARE the uniforms our own fog reads. The gallery's no-fog case still
-    // works: it leaves density at 0, and ttpFog's opacity is then 0 everywhere.
+    // these ARE the uniforms our own fog reads.
+    //
+    // THE NO-FOG CASE MUST ZERO THE DENSITY BY HAND. Filament's FogOptions
+    // defaults `density` to 0.1, not 0, and `distance` to 0 — so a branch that
+    // simply declined to write them left ttpFogFactor evaluating
+    // `1 - exp(-0.1 * d)` from the camera outwards, i.e. near-opaque haze by
+    // ~30 world units, on exactly the surfaces that asked for NO fog (track
+    // previews and the free-cam inspector, via ttp_display_fog(0), and the
+    // TTP_FEAT_FOG ablation arm). Confirmed on the Android box 2026-08-23 by an
+    // A/B/A of the mask on one install: the "fog off" frame was the FOGGIER of
+    // the two. An earlier comment here asserted the default was 0; it is not.
+    fog.distance = 0.0f;
+    fog.density = 0.0f;
     if (far > near) {
         const float span = far - near;
         fog.distance = near + 0.075f * span;
@@ -2381,6 +2392,7 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
             v->setFogOptions(mFogOn
                     ? fogFor(views[i].fogNear, views[i].fogFar, fogColorGraded(cam))
                     : fogFor(1.0f, 0.0f, fogColorGraded(cam)));   // far <= near disables
+            applyDebugGlobals(v);
             // Per-cell monster fade: a truck looming in front of THIS cell's
             // car swaps to its 50%-alpha ghost (chassis + grafted body), while
             // every other cell — including the monster driver's own — keeps it
@@ -2783,6 +2795,7 @@ bool TtpRenderer::renderCellsMultiview(const TtpFrameInput& input, double& tMark
         v->setFogOptions(mFogOn
                 ? fogFor(views[a].fogNear, views[a].fogFar, fogColorGraded(cam))
                 : fogFor(1.0f, 0.0f, fogColorGraded(cam)));
+        applyDebugGlobals(v);
         applyMonsterGhosts((1u << a) | (1u << b));
         orientCellBillboards((wa[3].xyz + wb[3].xyz) * 0.5f);
         mProfile[kProfCellSetup] += ttpNowMs() - tMark; tMark = ttpNowMs();

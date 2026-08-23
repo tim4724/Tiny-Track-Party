@@ -54,8 +54,25 @@ const float TTP_GRADE_EXPOSURE = 1.1;
 // A material that includes this file must declare the sampler — `materialParams`
 // is per material and matc will say so. TtpRenderer::buildScene binds it once as
 // a MATERIAL default, which is the only place every one of them can be reached.
+//
+// THE ABLATION SWITCH (TTP_FEAT_GRADE) rides a VIEW GLOBAL, not a material
+// parameter, and that is the whole reason this is spellable at all: eleven
+// materials include this file, and a parameter would have to be declared in
+// each and re-bound on every instance of each. `frameUniforms.custom[0]` is
+// per-View, set once per frame by TtpRenderer::applyDebugGlobals, and readable
+// from both shader stages by every material without any of them declaring
+// anything. See ttp_fog.inc, which takes .y of the same vector.
+//
+// THE SENSE IS "ABLATE", NOT "ENABLE", and that is deliberate: Filament zeroes
+// the globals, so a View nobody has touched renders the SHIPPED picture. An
+// enable-flag would have made every un-set View silently ablate — the failure
+// this instrument exists to catch.
 vec3 ttpGrade(vec3 linear) {
     vec3 c = clamp(linear * TTP_GRADE_EXPOSURE, 0.0, 1.0);
+    // A UNIFORM branch: one scalar compare, coherent across the whole draw,
+    // gating three DEPENDENT texture taps. Same shape as sunVisibility's
+    // `shadowTexel <= 0.0` early-out in ttp_shade.inc.
+    if (getMaterialGlobal0().x > 0.0) return c;
     return vec3(textureLod(materialParams_gradeLut, vec2(c.r, 0.5), 0.0).r,
                 textureLod(materialParams_gradeLut, vec2(c.g, 0.5), 0.0).r,
                 textureLod(materialParams_gradeLut, vec2(c.b, 0.5), 0.0).r);

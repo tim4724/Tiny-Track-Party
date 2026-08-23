@@ -1332,10 +1332,24 @@ void TtpRenderer::applyRoadDebug() {
     }
 }
 
+// Push the ablation globals onto a View. Called for EVERY view a frame renders
+// into, on every frame — Filament stores the globals per View, and a cell view
+// created after a mask was set would otherwise keep the zeros and render the
+// full picture while wearing an ablated label. That exact shape (state applied
+// once, to the views that happened to exist) is what made a feature mask read
+// as "this feature is free" before.
+void TtpRenderer::applyDebugGlobals(View* v) const {
+    if (v) v->setMaterialGlobal(0, mDebugGlobals);
+}
+
 void TtpRenderer::debugFeatureMask(uint32_t mask) {
     mFeatureMask = (uint8_t) (mask & kFeatAll);
     mRoadMask = mask & kFeatRoadAll;
     mFogOn = (mask & kFeatFog) != 0;
+    // INVERTED on the way to the shaders: they read "ablate", so that a View
+    // nobody has touched draws the shipped picture (ttp_grade.inc's note).
+    mDebugGlobals.x = (mask & kFeatGrade) ? 0.0f : 1.0f;
+    mDebugGlobals.y = (mask & kFeatFogVertex) ? 0.0f : 1.0f;
     // The merge ablation: flipping it marks both families dirty and the lazy
     // sites take the groups apart (restoring the originals) or regroup.
     const bool mergeOff = (mask & kFeatNoMerge) != 0;

@@ -38,7 +38,12 @@ export const FEAT = {
   // shorter rather than hiding anything.
   ROAD_DECALS: 0x100, ROAD_RUBBER: 0x200, ROAD_PAINT: 0x400, ROAD_SHADOW: 0x800,
   FOG: 0x1000,
-  ALL: 0x1FFC,
+  // Scene-wide, and neither is reachable by hiding a group: both ride a
+  // Filament view global (see ttp_grade.inc). GRADE is the three dependent LUT
+  // taps every shaded fragment pays; FOG_VERTEX is ttpFogFactor's own length()
+  // and exp(), which FOG cannot see because that bit only moves fog PARAMETERS.
+  GRADE: 0x4000, FOG_VERTEX: 0x8000,
+  ALL: 0xDFFC,
 };
 
 // TTP_DEBUG_NO_MERGE (ttp_display.h) — an INVERTED knob outside FEAT on
