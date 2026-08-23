@@ -121,7 +121,12 @@ three sits inside it, so none of them clears. Read them as **free** and do not
 re-derive a mechanism for the sign. Only the decal loop clears, and it clears by
 five times the bracket.
 
-## Phase 1 — the free wins. REORDERED by 0.5, and two items REFUTED.
+## Phase 1 — THERE ARE NO FREE WINS. All four items are closed, none paid.
+
+This section was the plan's optimism and it did not survive contact. Two items
+were refuted by re-taken marginals, one by a measurement Phase 2 built to get,
+and one by reading the materials. Nothing here is pending.
+
 
 **1.1 (bake the props' matte light per vertex) is refuted as a millisecond
 lever.** It was estimated at 1.1 ms; the ENTIRE dressing group's marginal at
@@ -144,10 +149,13 @@ that costs 1.1 ms in total.
 the sky group's 0.22-at-1-cell against 2.15-at-4. That gap is now 0.2 against
 0.8. The bypass collected it, exactly as the item's own stated range allowed.
 
-**1.2 (drop the fog's per-vertex `sqrt`) is unmeasured and now implausible at
-the quoted size.** It was priced at 0.5-0.8 ms on ~515k vertices. `TTP_FEAT_FOG`
-gates only the fragment mix, which measured free, so the vertex half still has
-no bit — see 2.2. Worth its bit before its build, not the other way round.
+**1.2 (drop the fog's per-vertex `sqrt`) is REFUTED, measured.** It was priced
+at 0.5-0.8 ms on ~515k vertices. Phase 2 built the bit it needed
+(`TTP_FEAT_FOG_VERTEX`) and the answer is null: the WHOLE per-vertex fog term —
+the `length()` and the `exp()` together, not just the sqrt the item wanted to
+remove — reads **-0.57 ms with the sign flipping across three interleaved
+pairs**. If removing both transcendentals measures nothing, removing one cannot
+measure something. Closed.
 
 **1.4 (audit the vertex attribute streams) is DONE, and found nothing.** Every
 `requires` entry on all sixteen scene materials is read — checked include-side
@@ -162,18 +170,38 @@ tangents; that was the last one.
 > asks for a normal — so the quaternion fetch and decode cannot be dropped
 > without dropping the lighting. Do not re-file this as a saving.
 
-## Phase 2 — close the instrumentation gaps
+## Phase 2 — DONE (2026-08-23). Both bits built, both answers negative.
 
-- **2.2 A bit for the fog's VERTEX half.** Promoted to first: it is the only
-  thing standing between 1.2 and a verdict, and 1.2 is now the only Phase 1
-  item with milliseconds still claimed.
-- **2.1 A `TTP_FEAT` bit for the grade.** `ttpGrade` is three dependent LUT taps
-  in every surface shader, priced twice by inference and refused twice on look
-  grounds, on a number nobody has measured. It rides the same fragments as the
-  decal loop, which measured at 6.45 — so this is the one remaining unmeasured
-  candidate of that size.
-- **2.3 A bit for the car-shadow layer's UPLOAD half.** It rasterizes on the CPU
-  and does a whole-level `setImage` every frame, in the base term.
+`TTP_FEAT_GRADE` (0x4000) and `TTP_FEAT_FOG_VERTEX` (0x8000) ship. They ride a
+Filament VIEW GLOBAL rather than a material parameter — eleven materials include
+each of the two `.inc` files, and `frameUniforms.custom[0]` is set once per view
+and readable from both stages by all of them. The sense is ABLATE, not ENABLE,
+so an untouched View renders the shipped picture.
+
+Measured 4P/1080, three interleaved pairs on one install, baselines bracketing to
+0.47 ms:
+
+| channel | pair deltas | verdict |
+|---|---|---|
+| **the grade** | +0.581 +0.779 +0.711 | **0.69 ms**, 3/3 same sign — REAL but small |
+| the fog's vertex half | -0.536 +0.151 -1.326 | **null**, sign flips |
+
+**2.1 answered: the grade is 0.69 ms at 1080, which is 0.17 ms at 540.** Real —
+the paired spread is 0.2 ms, so it clears easily despite sitting under the ±1.2
+unpaired noise figure, which is precisely what interleaving buys. But at the rung
+that matters it is a sixth of a millisecond against a 7.9 ms tail gap. It was
+refused twice on look grounds; those refusals were right, and now they are right
+for a measured reason. **Do not re-propose the grade, or the sRGB swap chain that
+was priced off it.**
+
+**2.2 answered: null, and it closes 1.2** — see above.
+
+**2.3 (a bit for the car-shadow layer's UPLOAD half) is NOT built, deliberately.**
+Two readings already argue it is empty, and neither needs a build: the frame map
+puts the whole main-thread upload work at `decalUp` 0.2 ms and `skids` 0.2 ms,
+and the tail fit inflates the FILL half by 40% alongside the fixed half, which is
+a heavier picture rather than a stall. An upload spike would move the fixed half
+alone. Build it only if some later evidence points back at uploads.
 
 ## Phase 3 — priced quality trades, gated on CELL COUNT
 
@@ -191,7 +219,12 @@ shell's opinion.
 | deck decal caps halved | untested; a fraction of the 6.45 | fewer simultaneous stamps |
 | sky group off | 0.2 / 0.8 | below the bracket. Not worth its look |
 | `dress_keep 0.5` | 0.3 / 1.1 | below the bracket. Not worth its look |
+| the grade off | 0.17 / 0.69 | MEASURED and too small. Refused twice on look; closed |
 | fp16/mediump on the SPIR-V path | unpriced | banding risk, per-backend blobs |
+
+**Everything on this board except the decal loop and fp16 is now measured and
+too small.** That is the state Phases 0-2 leave behind: one look trade of real
+size, and one unturned stone.
 
 On the last: it is filed everywhere as a FILL lever, but the fixed half is
 vertex ALU and fp16 runs at 2x rate there too, so it should cut both halves.
