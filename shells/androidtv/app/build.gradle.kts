@@ -1,3 +1,4 @@
+import java.io.File
 import java.util.Properties
 
 plugins {
@@ -21,12 +22,24 @@ fun git(vararg args: String): String? = try {
 }
 
 /**
- * `keystore.properties` beside this shell's Gradle root, or null when it is
- * absent — a fresh worktree, and the compile-only CI leg. The release workflow
- * is the one place CI writes it. The `release` build type below is where that
- * null is answered.
+ * The release signing secrets, or null when this machine has none — a fresh
+ * clone, and the compile-only CI leg. The `release` build type below is where
+ * that null is answered.
+ *
+ * TWO PLACES, AND THE SECOND IS THE ONE THAT SCALES. `keystore.properties`
+ * beside this shell's Gradle root wins, because that is what the release
+ * workflow writes on a runner and what a one-off override should do. Otherwise
+ * `~/.android/tinytrack.keystore.properties`, which is a PER-MACHINE file like
+ * the .jks it names and the debug keystore beside it — this tree is worked in
+ * many worktrees at once, the in-repo file is gitignored so it reaches none of
+ * them, and a worktree that silently falls back to the debug key builds an APK
+ * the box refuses as a signature mismatch. Copying the secret into every
+ * checkout answers that too, and then there are N of it to keep in step.
  */
-val keystoreProps = file("$rootDir/keystore.properties").takeIf { it.exists() }?.let { f ->
+val keystoreProps = sequenceOf(
+    file("$rootDir/keystore.properties"),
+    File(System.getProperty("user.home"), ".android/tinytrack.keystore.properties"),
+).firstOrNull { it.exists() }?.let { f ->
     Properties().apply { f.inputStream().use { load(it) } }
 }
 

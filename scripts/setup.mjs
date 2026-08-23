@@ -94,6 +94,15 @@ if (wanted.length) {
   notes.push(`no Playwright ${wanted.join('/')} browser — run \`npx playwright install ${wanted.join(' ')}\``
     + ' before `npm run test:e2e`.');
 }
+// Per-machine like the browsers above, and silent when missing in a way that only
+// shows up at the television: release APKs fall back to the debug key, and a box
+// already carrying a distribution-signed build refuses them as a signature
+// mismatch — curable only by an uninstall, which takes that box's progression.
+if (!has('shells/androidtv/keystore.properties')
+    && !fs.existsSync(path.join(process.env.HOME || '', '.android/tinytrack.keystore.properties'))) {
+  notes.push('no Android release signing secrets — `npm run build:androidtv` will sign with the'
+    + ' debug key. See shells/androidtv/keystore.properties.example.');
+}
 
 // Asked rather than remembered. A hand-typed count is wrong the first time a
 // ctest is added and nothing ever tells you — this banner claimed 47 for a tree

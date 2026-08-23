@@ -1118,14 +1118,26 @@ someone else's. `shells/androidtv/scripts/android-device.sh` is the one device
 rule (`ro.build.characteristics` says `tv`, `TTP_SERIAL` overrides, an AVD only
 ever by name) and both shell entry points source it.
 
-**The release variant is signed, and which key depends on the machine.** With
-`keystore.properties` present (gitignored, `keystore.properties.example` is the
-shape) it is the Play upload key; without it, `signingConfigs.debug`, which AGP
-generates on demand — so a fresh worktree and CI still build an installable APK
-with no secret, and release and debug upgrade over each other there. Unsigned is
-the one thing it is never: `app-release-unsigned.apk` is what no device takes.
-That fallback is also why the release workflow verifies the shipped bundle's
+**The release variant is signed, and which key depends on the machine.** The
+secrets are looked for in two places (`app/build.gradle.kts`): `keystore.properties`
+beside the Gradle root, which is what the release workflow writes on a runner,
+then `~/.android/tinytrack.keystore.properties`. THE HOME ONE IS THE NORMAL
+ANSWER on a dev machine, because it is per-machine like the .jks it names and
+this tree is worked in many worktrees at once — the in-repo file is gitignored,
+so a per-worktree copy reaches exactly one checkout and the others quietly sign
+with something else. With neither, `signingConfigs.debug`, which AGP generates on
+demand — so a fresh clone and CI still build an installable APK with no secret,
+and release and debug upgrade over each other there. Unsigned is the one thing it
+is never: `app-release-unsigned.apk` is what no device takes. That debug-key
+fallback is also why the release workflow verifies the shipped bundle's
 certificate against the keystore instead of trusting the build to have failed.
+
+**A box remembers which key it was installed with**, and Android refuses an
+update across signers (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`). The only way over
+is `adb uninstall`, which takes the app's data with it: the cup progression, the
+mute flag and the last track (`SharedPreferences`), plus the blob cache and the
+saved room in `cacheDir` — of which only the progression does not rebuild itself.
+That is the whole cost of letting one worktree fall back to the debug key.
 
 **R8 is ON in release**, and `app/proguard-rules.pro` is worth reading before
 touching either: the bridge is bound by NAME from `JNI_OnLoad`, so a rename is an
