@@ -43,6 +43,13 @@ Break-even is **567 lines**, so 540 sits 27 lines under the wire with no margin.
 - **720 at 60 needs about 5.3 ms off the frame**, and it cannot come from the
   fixed half alone — the fill has to come down with it.
 
+**THE CRITERION IS `skips/s`, NOT `p95 <= 16.7`** — corrected 2026-08-23 by the
+ladder in Phase 4, and this file said the wrong thing first. Every rung this box
+runs, including one that holds a locked 60 with zero skips, reads a p95 well
+over 16.7. Extrapolating a two-point TAIL fit downward is what produced that
+error; it predicted 60 fps needed ~283 lines, and 640x360 does it at 360.
+Measure the rung, do not model it.
+
 Milliseconds convert to lines at `lines = 1080 * sqrt((16.7 - fixed) / fill)`.
 **Every millisecond off the fixed half is worth roughly 30 lines**; a
 millisecond off the fill at 1080 is worth about 9. That is the exchange rate to
@@ -220,11 +227,40 @@ shell's opinion.
 | sky group off | 0.2 / 0.8 | below the bracket. Not worth its look |
 | `dress_keep 0.5` | 0.3 / 1.1 | below the bracket. Not worth its look |
 | the grade off | 0.17 / 0.69 | MEASURED and too small. Refused twice on look; closed |
-| fp16/mediump on the SPIR-V path | unpriced | banding risk, per-backend blobs |
+| ~~fp16/mediump on the SPIR-V path~~ | **REFUTED, see below** | — |
 
-**Everything on this board except the decal loop and fp16 is now measured and
-too small.** That is the state Phases 0-2 leave behind: one look trade of real
-size, and one unturned stone.
+**THE LAST UNTURNED STONE IS TURNED, and it was refuted on the HOST — no device
+time, no build to bench.** The plan argued fp16 was worth more than its filing
+because the fixed half is vertex ALU. The filing was wrong in a different way:
+the ALU that could be demoted is not ours to demote.
+
+Counted as RelaxedPrecision decorations in the SPIR-V unzipped from the shipped
+APK, which is deterministic where a device arm this small would be noise (the
+same reason this file already counts geometry on the host):
+
+- **The fragment stage is ALREADY 40-53% relaxed.** What remains highp there is
+  vroad's decal and arclength maths, which that file documents as load-bearing:
+  mediump quantized a world arclength to half a car length and the car shadows
+  vanished. Not demotable.
+- **Every VERTEX variant of every material is 0% relaxed** — GLSL ES defaults
+  that stage to highp — but the 260-282 arithmetic ops in the shipped variants
+  are FILAMENT'S generated transform pipeline: skinning, morphing, instancing,
+  qtangent decode, clip position. Demoting it means forking Filament's shader
+  generator AND demoting positions, the exact class of value that already broke.
+- Our own shading, demoted properly, moves **+11 vertex ops on vground and +8
+  fragment ops on vglb/vlit — and ZERO on vroad**, which is 15 ms of a 38.8 ms
+  frame and never calls the shading path at all (its light is baked into
+  custom0). Ceiling, granting fp16 double rate and charging it the whole of the
+  groups it touches: **under 0.2 ms**, against a rung step of 1.0-1.5.
+
+> A SPELLING TRAP worth keeping, because the first attempt measured nothing and
+> looked like a refutation: **declaring a function's RETURN TYPE mediump relaxes
+> no arithmetic.** The operands are highp uniforms, so the maths runs in highp
+> and only the result is converted. It needs mediump LOCALS — copy each uniform
+> into one first. Return-type-only changed exactly 0 instructions across four
+> materials and twelve variants; the locals version changed 114.
+
+**What is left on this board is the deck decal loop, and nothing else.**
 
 On the last: it is filed everywhere as a FILL lever, but the fixed half is
 vertex ALU and fp16 runs at 2x rate there too, so it should cut both halves.
@@ -247,7 +283,37 @@ cutting the channel buys proportionally less.
 Cutting it is a LOOK decision and not this plan's to make. The cure is priced;
 the trade goes to the user.
 
-## Phase 4 — the policy decision, once the milliseconds are in
+## Phase 4 — THE LADDER, MEASURED (2026-08-23). 360 already holds 60.
+
+Two passes each, 4 cells, Vulkan, scale pinned, tidepool. This is the table the
+whole plan exists to produce, and it needed no code change to get:
+
+| rung | fps | skips/s | gpu p50 | gpu p95 | |
+|---|---|---|---|---|---|
+| 960x540 | 52 | 7.5 | 15.68 | 23.88 | the shipped rung; misses badly |
+| 853x480 | 57 | 3.0 | 14.24 | 22.88 | |
+| 768x432 | 59 | 1.0 | 12.86 | 21.33 | **one skip a second short** |
+| **640x360** | **60** | **0.0** | 11.50 | 19.40 | **LOCKED, today, unmodified** |
+
+**So the escape does not have to trade the rate at all.** 640x360 at 60 is
+available now, and 768x432 is a single skip per second away — which is inside
+what one lever buys.
+
+**A lever's worth is best read in RUNGS, not milliseconds.** The decal loop is
+6.45 ms of fill at 1080, and carried down this ladder it moves each rung to
+almost exactly where the next one down sits:
+
+    540: 15.68 - 1.61 = 14.07  ~= 480's 14.24
+    480: 14.24 - 1.27 = 12.97  ~= 432's 12.86
+    432: 12.86 - 1.03 = 11.83  ~= 360's 11.50
+
+**The deck decal channel is worth one rung.** Cut at four cells it should put
+768x432 at a locked 60, or 853x480 within a skip. That is a much stronger case
+than the earlier framing on this page, which measured it against the p95
+criterion and concluded it bought only margin. It buys a rung; the criterion was
+wrong, not the lever.
+
+## Phase 4 (cont.) — the policy decision, once the milliseconds are in
 
 The escape below the floor currently trades the RATE (540 lines at 30). The
 ladder's own principle below the anchor is that RESOLUTION gives way first. So
