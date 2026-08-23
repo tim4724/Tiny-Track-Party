@@ -117,9 +117,7 @@ export function buildCarPicker({ heroEl, stripEl, selected, onPick, canPick = tr
     // say nothing the stat bars right there don't say better.
     heroEl.appendChild(detailHeader({ title: nameOf(sel) }));
     const view = document.createElement('div'); view.className = 'car-hero__view';
-    const info = document.createElement('div'); info.className = 'car-hero__info';
-    info.appendChild(buildStatBars());
-    heroEl.appendChild(view); heroEl.appendChild(info);
+    heroEl.appendChild(view); heroEl.appendChild(buildStatBars());
   }
   if (heroEl) {
     dressHead(heroEl, nameOf(sel));

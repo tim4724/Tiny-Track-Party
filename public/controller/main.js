@@ -32,6 +32,7 @@ import { initModals, onEnterLobby, closeAnyModal, anyModalOpen, closeTopModal, r
 import { renderResultsBoard } from './resultsBoard.js';
 import { initDriveSurface, startDriving, stopDriving, setInputMode, setHeldItem, resetHeldItem } from './driveSurface.js';
 import { initOrientation } from './orientation.js';
+import { initPressPaint } from './press.js';
 
 const { MSG, ROOM_STATE } = window;
 const el = (id) => document.getElementById(id);
@@ -208,6 +209,7 @@ initModals({
 initDriveSurface({ tilt, buzz, haptics });
 setInputMode(inputMode);
 initOrientation({ inShell });
+initPressPaint();
 
 function setStatus(t) { el('name-status').textContent = t; }
 // Lock the join form while a connection is in flight so a double-tap can't fire

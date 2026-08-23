@@ -20,7 +20,9 @@ const carStrip = (model) => BASE + model + '.strip.png';
 
 // Turntable: keep these in sync with the baked strips and the .carthumb__spin
 // background-size in theme.css (background-size width = SPIN_FRAMES * 100%).
-// Frames are 5:4 (256×205) — .carthumb's aspect-ratio must match, see theme.css.
+// Frames are 5:4 (256×205) — .carthumb's aspect-ratio must match, see theme.css,
+// and the controller's hero derives its column WIDTH from the same ratio (.car-hero
+// in controller.css), so a re-bake at another shape has three places to follow.
 const SPIN_FRAMES = 24;
 const SPIN_FPS = 8; // 24 frames / 8 fps = 3s per full turn
 

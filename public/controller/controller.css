@@ -148,9 +148,16 @@ input[type=text]:disabled { opacity: 0.6; }
   grid-area: pick; align-self: stretch; min-width: 0; min-height: 0;
   overflow-y: auto; padding: 0.4rem; margin: -0.4rem;
 }
-/* Cars: four tiles filling the column, 2×2. */
+/* Cars: four tiles filling the column, 2×2. The rows are minmax(0, 1fr), not
+   1fr: a bare 1fr carries an automatic MIN-CONTENT floor, and a tile's floor is
+   its 5:4 thumbnail at the column's full width — so the pair of rows demanded
+   ~340px of a column that is half a landscape screen, and everything under a
+   ~380px viewport pushed the bottom two cars out of sight into a scroll nobody
+   would guess was there. With the floor lifted the rows take the height there
+   is and the thumbs shrink to fit (see .car-opt .carthumb). */
 .carpick {
-  display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
+  display: grid; grid-template-columns: 1fr 1fr;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0.6rem;
 }
 /* Cups: the same 2-column grid, rows sized to fit however many there are. */
@@ -210,8 +217,14 @@ input[type=text]:disabled { opacity: 0.6; }
 
 /* Narrow screens: two columns leave both cramped — stack, and go back to PAGE
    scrolling (a pinned corner would leave the stacked middle almost no height).
-   The corner slots in right under the car group, ABOVE the race picker, so the
-   primary action stays near the fold instead of trailing the full catalog. */
+
+   The stack keeps the landscape grammar's own order: CHOOSE, then the thing you
+   chose, then the way on. Read left-to-right the wide layout is already
+   pick → sel → go, so stacking it any other way makes stepping between the two
+   shapes a re-learn. It used to put the corner second (sel, go, pick) to keep
+   the action near the fold, but that inverted the reading order to buy a scroll
+   position, and the scroll is better bought by making the CHOICES compact —
+   which is what the strip rule below does. */
 @media (max-width: 620px) {
   #lobby {
     height: auto;
@@ -219,13 +232,18 @@ input[type=text]:disabled { opacity: 0.6; }
     grid-template-rows: auto;      /* every row sizes to content when the page scrolls */
     grid-template-areas:
       'top'
+      'pick'
       'sel'
-      'go'
-      'pick';
+      'go';
     row-gap: 1rem;
   }
   .carpick, .racelist { overflow-y: visible; }
-  .carpick { grid-template-rows: auto; }
+  /* Stacked, the car strip LIES DOWN: one row of four, because the slot is now
+     wide and short where in landscape it was tall and narrow. As a 2×2 at the
+     full page width each tile grew to ~270px and the four of them cost ~475px
+     of scroll — a whole screen and a half of cars standing between the ribbon
+     and the card the page is about. */
+  .carpick { grid-template-columns: repeat(4, 1fr); grid-template-rows: auto; }
   .lobby-go { grid-template-columns: auto minmax(0, 1fr); }
   .lobby-go .btn { justify-self: stretch; }
 }
@@ -291,27 +309,32 @@ input[type=text]:disabled { opacity: 0.6; }
    drifting apart under it. Here the render takes the left column outright and
    the name + bars read as one block. */
 .car-hero {
-  display: grid; grid-template-columns: auto minmax(0, 1fr);
+  /* The render's height, stated ONCE — the car's row is sized from it and the
+     car's column is that height through the thumb's 5:4 ratio. Both have to be
+     written out: the column USED to be an `auto` track left to work its own
+     width out from a height:100% thumb, and WebKit does not resolve an
+     aspect-ratio box's width from a percentage height when it measures an
+     intrinsic track. Safari sized that column from the title text instead, so
+     the bars took the rest of the card and the car hung outside it — and every
+     pick re-measured and moved them again, which is what the flicker was. */
+  --hero-h: 9rem;
+  display: grid; grid-template-columns: calc(var(--hero-h) * 5 / 4) minmax(0, 1fr);
   /* The name belongs to the CAR, so it sits on top of it in the left column
      rather than off in the stats column, where it hung above everything with
      white space either side and read as belonging to nothing.
-     The stats span both rows, and the car's row is the LEFTOVER (1fr) of their
-     height — which is what makes this arrangement pay twice. The car is sized
-     from that row and its 5:4 ratio decides its column's width, so the two
-     columns share a top and a bottom edge exactly, AND the car takes only the
-     width that ratio asks for — which is what hands the rest back to the bars,
-     the thing they were short of. Nothing here is a chosen width: the stat
-     block's own height sets all of it. */
+     The stats span both rows, so the render and the name + bars share a top and
+     a bottom edge, and the car takes only the width its ratio asks for — which
+     is what hands the rest back to the bars, the thing they were short of. */
   grid-template-areas:
     'head stats'
     'view stats';
-  /* The car's row carries a FLOOR. Its height is otherwise whatever the stat
-     block leaves over, so tightening the stat rows dragged the hero render down
-     with them — far enough that the picked car was rendered SMALLER than the
-     thumbnail on an unpicked strip tile, which is backwards for the one car the
-     card exists to show. With the floor the car sets the card's height and the
-     bars centre beside it. */
-  grid-template-rows: auto minmax(9rem, auto);
+  /* --hero-h is the render's row, and a FLOOR rather than a fixed height: a
+     stat block taller than the car (the small-screen font tiers get close)
+     grows the row instead of overflowing it, and the car centres in it. The
+     floor is what stops the picked car rendering SMALLER than the thumbnail on
+     an unpicked strip tile, which is backwards for the one car the card exists
+     to show. */
+  grid-template-rows: auto minmax(var(--hero-h), auto);
   align-items: stretch; gap: 0.45rem 0.9rem;
   background: var(--surface); border-radius: var(--r-sm); padding: 0.55rem;
 }
@@ -332,25 +355,18 @@ input[type=text]:disabled { opacity: 0.6; }
    and the incoming still never has to arrive from blank. (It used to be a cut —
    worse than a cut, since a rebuilt thumb re-ran its own still→spin handoff, so
    a pick flashed a static hero before settling.)
-   Laid out exactly as the live render is (theme.css sizes .carthumb from its
-   HEIGHT here, the 5:4 ratio then setting its width), so the two sit on top of
-   each other rather than one jumping.
+   Laid out exactly as the live render is — the column's full width, centred in
+   the row — so the two sit on top of each other rather than one jumping.
    `swap-out` is declared with the cup panel's own retiring layer further down —
    ONE keyframe, because both are the same event at the same speed. */
 .carthumb--out {
-  position: absolute; top: 0; bottom: 0; left: 50%; transform: translateX(-50%);
-  width: auto; pointer-events: none;
+  position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
+  pointer-events: none;
   animation: swap-out 0.14s ease-out forwards;
 }
 @media (prefers-reduced-motion: reduce) {
   .carthumb--out { animation: none; opacity: 0; }
 }
-/* Sized from its HEIGHT, so the row decides how big the car is and the 5:4
-   ratio decides how wide its column becomes — the reverse of the theme's
-   width-first default, and what makes the two halves the same height. */
-.car-hero__view .carthumb { width: auto; height: 100%; }
-/* A pass-through: the stat block is a grid item, not a column of its own. */
-.car-hero__info { display: contents; }
 
 /* Handling stat bars — one chunky rounded pill per stat, filled in the player's
    livery so the panel reads as "theirs". Normalised across the roster in JS.
@@ -401,13 +417,21 @@ input[type=text]:disabled { opacity: 0.6; }
   box-shadow: var(--shadow-pop);
   transition: transform 0.06s, box-shadow 0.06s, background 0.08s;
 }
-.car-opt .carthumb { width: 100%; }
+/* On a short screen the cell is shorter than the thumb's 5:4, so the box is
+   capped and the still (object-fit: contain, theme.css) letterboxes inside it.
+   A CAP rather than a height, because the narrow-screen tier above
+   (max-width: 620px) turns these rows back to `auto` for page scrolling — a
+   percentage height would collapse to nothing there, where a percentage
+   max-height simply stops applying. Only the HERO spins, so no sprite strip is
+   ever stretched by this: a spin's background-size assumes the box kept its
+   ratio. */
+.car-opt .carthumb { max-height: 100%; }
 /* Pressed: the sticker goes down onto the paper and its drop closes up — the
    theme's own press (.btn, .icon-btn), at the theme's own 60ms, so a tile
    presses like every other control on the page. The duration was never the
    reason this read as missing: the tile was being destroyed mid-animation by
    its own tap (see buildModePicker). */
-.car-opt:active:not(:disabled) { transform: translate(2px, 2px) scale(0.98); box-shadow: none; }
+.car-opt:active:not(:disabled), .car-opt.held { transform: translate(2px, 2px) scale(0.98); box-shadow: none; }
 /* locked strip (player is READY): the pick stands, the alternatives recede.
    pointer-events off so a tap on a locked tile falls through to the strip
    container, where main.js answers with the "tap Ready ✓ to change" hint —
@@ -488,7 +512,7 @@ input[type=text]:disabled { opacity: 0.6; }
   box-shadow: var(--shadow-pop);
   transition: transform 0.06s, box-shadow 0.06s, background 0.08s;
 }
-.mode-opt:active:not(:disabled) { transform: translate(2px, 2px) scale(0.98); box-shadow: none; }
+.mode-opt:active:not(:disabled), .mode-opt.held { transform: translate(2px, 2px) scale(0.98); box-shadow: none; }
 .mode-opt:disabled { cursor: default; }
 /* The CURSOR (whose detail shows) when it is not also the pick — the one case
    is a locked row being examined. Same outline mark as the car strip's .sel. */
@@ -619,7 +643,7 @@ input[type=text]:disabled { opacity: 0.6; }
   box-shadow: var(--shadow-pop);
   transition: transform 0.06s, box-shadow 0.06s, background 0.08s;
 }
-.track-opt:active:not(:disabled) { transform: translate(2px, 2px) scale(0.98); box-shadow: none; }
+.track-opt:active:not(:disabled), .track-opt.held { transform: translate(2px, 2px) scale(0.98); box-shadow: none; }
 .track-opt:disabled { cursor: default; }
 /* picked tile — the identical fill a picked cup wears (and the same unchanged
    drop), so "picked" looks the same wherever it lands in the picker. The fill (its
@@ -786,7 +810,7 @@ input[type=text]:disabled { opacity: 0.6; }
   color: var(--ink-2); font-family: var(--font-body); font-weight: 800; font-size: 0.85rem;
   box-shadow: var(--shadow-pop); cursor: pointer;
 }
-.motion-tip:active { transform: translateY(1px); box-shadow: none; }
+.motion-tip:active, .motion-tip.held { transform: translateY(1px); box-shadow: none; }
 #game.mode-buttons .motion-tip { display: none; }
 
 /* ---- latency readout ---- */
@@ -974,7 +998,7 @@ input[type=text]:disabled { opacity: 0.6; }
   box-shadow: var(--shadow-pop);
   transition: transform 0.08s, box-shadow 0.08s, background 0.08s;
 }
-.mode-card:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: none; }
+.mode-card:active:not(:disabled), .mode-card.held { transform: translate(2px, 2px); box-shadow: none; }
 .mode-card:disabled { cursor: default; opacity: 0.45; }
 .mode-card[aria-checked='true'] { background: color-mix(in srgb, var(--car, var(--brand)) 16%, #fff); }
 /* the radio dot — drawn, so it carries the theme's ink weight; the picked one
@@ -1372,7 +1396,7 @@ input[type=text]:disabled { opacity: 0.6; }
 
 /* Short landscape screens (small phones with the browser bar up): tighten the
    rhythm so the HUD's buttons keep their height and the lobby stays tappable. */
-/* Short screens, in two tiers. The settings demos step their `zoom` down
+/* Short screens, in tiers. The settings demos step their `zoom` down
    rather than reflowing: the whole px-art phone re-lays-out at the smaller
    size (see .demo-stage above), so every internal proportion survives — only
    its footprint (and the reserved stage height) shrinks. */
@@ -1397,4 +1421,18 @@ input[type=text]:disabled { opacity: 0.6; }
   .demo-chev .steer-glyph { font-size: 1.3rem; }
   .settings-legend { gap: 1rem; }
   .settings-legend .help-ctrl__cap { font-size: 0.8rem; }
+}
+/* One more step, for a small phone whose browser bar is up. The card's height
+   is set by its LEFT column (the two mode rows, the TV switch, "Got it") — the
+   stage merely stretches to whatever that comes to — so stepping the demo again
+   would buy nothing, and what this tier spends is WHITESPACE: the card's own
+   gaps and padding, plus a shallower "Got it", which is full-width and so the
+   one control that can lose a few px without losing the thumb. The choices
+   themselves keep their size, because a smaller screen is not a reason for
+   smaller tap targets. Below here the card falls back to scrolling, which is
+   what its overflow-y has always been for. */
+@media (max-height: 320px) {
+  .settings-card { gap: 0.3rem 0.9rem; padding: 0.45rem 0.9rem 0.55rem; }
+  .settings-done { padding-block: 0.5em; }
+  .demo-stage { padding: 0.45rem; }
 }

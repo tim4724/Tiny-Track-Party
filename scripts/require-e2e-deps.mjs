@@ -32,7 +32,7 @@ if (missing.length) {
     `Fix: npm ci   (~1 s here — npm's cache is shared across worktrees and APFS\n` +
     `clones the files, so a fresh worktree is not worth sharing a node_modules for.\n` +
     `The browser binaries are already shared, in ~/Library/Caches/ms-playwright;\n` +
-    `if this is a new machine: npx playwright install chromium)\n\n` +
+    `if this is a new machine: npx playwright install chromium webkit)\n\n` +
     `Note that \`npm test\` needs none of this — it is node:test over ` +
     `dependency-free sources — so a bare checkout passes the unit suite and only ` +
     `trips here.\n`

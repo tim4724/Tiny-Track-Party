@@ -167,7 +167,17 @@ anything when code moved — a mutation whose anchor is gone cannot fail.
 `tests/e2e/` drives real display + controller pages against a local relay stub via
 the server's `RELAY_URL`, so it needs no production relay. Import `test`/`expect`
 from `tests/e2e/helpers.js` (it reaps leaked phone contexts), and run
-`npx playwright install chromium` once.
+`npx playwright install chromium webkit` once.
+
+**The suite is Chromium, and the phone's audience is not.** No project is
+declared, so every spec runs on Chromium — while the controller's real users are
+on iOS Safari, and both of the ways that engine differs have shipped broken (see
+`public/controller/CLAUDE.md`). One spec therefore opts into WebKit
+(`test.use({ browserName: 'webkit' })`) and gates what a Chromium run cannot
+see; it stays DOM-only — a gallery scenario, no display and no relay — which is
+what keeps the second engine cheap, and CI installs the second browser for it.
+Put a phone defect that is ENGINE-shaped there, not a second copy of a behaviour
+the Chromium specs already cover.
 
 `/gallery.html` is a manual no-relay preview surface; `/gallery-assets.html` is one
 live scene you fly, and is dev-only. Its KIT FIELD stands models the game does not

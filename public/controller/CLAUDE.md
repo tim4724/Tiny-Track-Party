@@ -23,7 +23,7 @@ display's retained snapshot. Everything self-contained sits beside it —
 `launcher.js` (the whole CouchPad shell contract, so the rest reads as a plain
 web page), `modals.js` (both popups plus the ordering rules that only make sense
 against each other), `driveSurface.js`, `linkStatus.js`, `resultsBoard.js`,
-`prefs.js`.
+`prefs.js`, `press.js`.
 
 Add a new concern as its own file. The failure mode this split fixed was
 nineteen unrelated concerns sharing one module scope, which is a thing that
@@ -39,6 +39,26 @@ the real board in two places.
 That trades a loud failure for a quiet one — a renamed payload field answers a
 plainer dressing instead of throwing — so every dressing the harness can reach is
 pinned by `tests/e2e/gallery-controller-boards.spec.js`.
+
+## Two things this page is sized and tested against
+
+**Height is the scarce axis, and scarcer than you develop at.** The page is
+landscape-only, so its height is a phone's SHORT side minus browser chrome —
+under 300px on a small phone with the bar up, where a dev window leaves 390+.
+Everything sized here has to survive that. `tests/e2e/controller-short-viewport.spec.js`
+measures the fit at the heights that bite; `scripts/lobby-fit-check.mjs` is the
+same idea on the width axis.
+
+**It is read on WebKit, and the suite is not.** Every other spec runs on
+Chromium while the phones this page is for run iOS Safari, which resolves
+intrinsic sizes differently and will not promise `:active` on touch — so the
+page paints its own press class beside `:active` (`press.js`), and
+`tests/e2e/webkit-controller-layout.spec.js` is the one spec that opens WebKit.
+When a defect here is about the ENGINE rather than the logic, that is where it
+gets pinned.
+
+Both have already cost shipped bugs; each one's mechanism is commented where it
+was fixed, not restated here.
 
 ## The display is authoritative
 

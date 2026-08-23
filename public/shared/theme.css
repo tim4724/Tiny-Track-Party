@@ -201,7 +201,14 @@ body {
 
 /* Button — chunky sticker push-button: flat colour, ink border, white text,
    hard ink ledge. Set --btn-bg to recolour; pressed = translateY onto the
-   ledge. Modifiers below cover the common roles. */
+   ledge. Modifiers below cover the common roles.
+
+   Three ways to look pressed, and they mean different things: `:active` is the
+   browser's, `.held` is a finger on it RIGHT NOW where :active can't be trusted
+   to say so (controller/press.js — WebKit withholds it on touch), and
+   `.is-pressed` is a control latched down by app state, with no finger on it
+   at all. `.held` is only ever set on an ENABLED control, which is why the
+   rules below do not repeat the `:disabled` guard their `:active` half carries. */
 .btn {
   --btn-bg: var(--brand);
   display: inline-block;
@@ -225,7 +232,7 @@ body {
   transition: transform 0.06s ease, box-shadow 0.06s ease, filter 0.06s ease;
 }
 .btn:hover { filter: brightness(1.04); }
-.btn:active, .btn.is-pressed {
+.btn:active, .btn.held, .btn.is-pressed {
   transform: translateY(var(--btn-sink));
   box-shadow: 0 calc(var(--btn-drop) - var(--btn-sink)) 0 var(--btn-ledge);
 }
@@ -239,7 +246,7 @@ body {
   color: var(--ink);
   box-shadow: 0 var(--btn-drop) 0 rgba(42, 39, 53, 0.35);
 }
-.btn--ghost:active, .btn--ghost.is-pressed {
+.btn--ghost:active, .btn--ghost.held, .btn--ghost.is-pressed {
   box-shadow: 0 calc(var(--btn-drop) - var(--btn-sink)) 0 rgba(42, 39, 53, 0.35);
 }
 .btn:disabled, .btn[disabled] {       /* e.g. join button while connecting */
@@ -261,7 +268,7 @@ body {
   transition: transform 0.06s ease, box-shadow 0.06s ease, filter 0.06s ease;
 }
 .icon-btn:hover:not(:disabled) { filter: brightness(1.03); }
-.icon-btn:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: none; }
+.icon-btn:active:not(:disabled), .icon-btn.held { transform: translate(2px, 2px); box-shadow: none; }
 .icon-btn:disabled { opacity: 0.5; cursor: default; }
 
 /* Pause glyph — two rounded bars, sized off the button's text colour. */

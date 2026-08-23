@@ -268,7 +268,7 @@ export function runControllerScenario(opts) {
       el('tv-seg').classList.remove('hidden');
       el('sound-toggle').setAttribute('aria-checked', 'true');
       el('settings-overlay').classList.remove('hidden');
-      el('settings-done').focus();   // seed focus inside the dialog (mirrors openSettings)
+      el('settings-done').focus({ preventScroll: true });   // seed focus inside the dialog (mirrors openSettings)
       break;
     }
 
@@ -293,7 +293,7 @@ export function runControllerScenario(opts) {
       fix.classList.toggle('hidden', !copy.fix);
       if (copy.fix) fix.innerHTML = copy.fix;
       el('motion-overlay').classList.remove('hidden');
-      el('motion-done').focus();
+      el('motion-done').focus({ preventScroll: true });
       break;
     }
 

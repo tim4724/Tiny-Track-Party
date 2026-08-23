@@ -95,7 +95,11 @@ function openSettings() {
   refreshSettingsCard();
   el('settings-overlay').classList.remove('hidden');
   setBackgroundInert(true);
-  el('settings-done').focus();   // keyboard-operable + announced; the trap keeps Tab inside
+  // keyboard-operable + announced; the trap keeps Tab inside. preventScroll
+  // because the seed is the card's LAST control: on a screen too short for the
+  // card, focusing it scrolled the card to the bottom, so Settings opened with
+  // its own title already off the top.
+  el('settings-done').focus({ preventScroll: true });
   _onModalToggle();
 }
 
@@ -157,7 +161,7 @@ function openMotionPopup() {
   refreshMotionPopup();
   el('motion-overlay').classList.remove('hidden');
   setBackgroundInert(true);
-  el('motion-done').focus();
+  el('motion-done').focus({ preventScroll: true });
   _onModalToggle();
 }
 
