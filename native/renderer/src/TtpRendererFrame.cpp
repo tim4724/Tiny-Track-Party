@@ -2929,6 +2929,11 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
     // every backend but one, where it is the difference between a deck that
     // takes the sun's shadow and one that never does.
     collectRoadLight();
+    // …and so does a staged blob's, for the same reason and on the same beat.
+    // This is what makes the disk cache work at all on the web: a build cannot
+    // finish its own readbacks there, so without a frame to land them nothing
+    // would ever be written.
+    collectStagedBlobs();
     const bool pace = mRenderer->beginFrame(mSwapChain);
     mProfile[kProfBeginFrame] = ttpNowMs() - tMark; tMark += mProfile[kProfBeginFrame];
 #if defined(__EMSCRIPTEN__)

@@ -216,6 +216,22 @@ models, and in what order, is entirely this side's; where they stand is entirely
 the renderer's, and the layout comes back so the chrome's camera and the scene
 cannot disagree about where one is.
 
+**Which of them still NEED fetching is the engine's answer, not a memo here.**
+`ttp_display_asset_plan` takes the want list — each name paired with the kit model
+its bytes come from — and hands back the subset the engine is not already holding
+under that tag; `ttp_display_asset_textures` then names the image URIs those
+models reference, read off the bytes the engine has rather than out of a container
+this side just handed over. The asset map survives a scene release, so on a
+rebuild of a standing track that plan is nearly empty.
+
+**Derived bytes are kept across RELOADS too, and the write half is a frame beat.**
+`render/BlobStore.js` is IndexedDB and four primitives; everything else is the
+walk in `ttp_display.h`. The plan/offer half runs in `setTrack`; the write half is
+`Display.writeReadyBlobs`, called from `_loop`, because a WebGL readback cannot
+complete inside the build that issues it — the build stages, a frame lands it.
+Under automation there is no store at all (a suite that asserts what a build
+produces must not be served what a previous run left behind).
+
 **The frame clock can be handed out.** `Stage.setFixedStep(sec)` makes dt the
 named step rather than the rAF delta, so the sim advances once per frame DRAWN
 however long the frame took; `?gate=1` (`frameGate.js`) then queues

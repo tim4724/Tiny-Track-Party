@@ -15,7 +15,7 @@ import java.nio.ByteBuffer
 
 @Suppress("FunctionName", "unused")
 object Ttp {
-    /** Registers all 219 natives via JNI_OnLoad; a mismatch fails here. */
+    /** Registers all 222 natives via JNI_OnLoad; a mismatch fails here. */
     fun load() { System.loadLibrary("ttp_runtime_android") }
 
     external fun ttp_add_bot(h: Int, idJson: ByteArray?, caution: Double, laneBias: Double, aiSeed: Int, statsJsonOrNull: ByteArray?)
@@ -29,20 +29,23 @@ object Ttp {
     external fun ttp_audio_song_json(index: Int): ByteArray?
     external fun ttp_audio_stop_car(idJson: ByteArray?)
     external fun ttp_audio_stop_voices()
-    external fun ttp_blob_plan_json(requestJson: ByteArray?): ByteArray?
     external fun ttp_car_finished(h: Int, idJson: ByteArray?): Int
     external fun ttp_car_ids_json(h: Int): ByteArray?
     external fun ttp_car_world_pos(h: Int, idJson: ByteArray?, out3: DoubleArray): Int
     external fun ttp_display_antialias(on: Int)
     external fun ttp_display_asset(name: ByteArray?, bytes: ByteArray?): Int
+    external fun ttp_display_asset_plan(wantJson: ByteArray?): ByteArray?
+    external fun ttp_display_asset_textures(): ByteArray?
     external fun ttp_display_bench(model: ByteArray?)
     external fun ttp_display_bind(session: Int)
     external fun ttp_display_biome(name: ByteArray?)
-    external fun ttp_display_blob_export(store: ByteArray?): ByteArray?
+    external fun ttp_display_blob_export(store: ByteArray?, name: ByteArray?): ByteArray?
     external fun ttp_display_blob_keep(store: ByteArray?): ByteArray?
     external fun ttp_display_blob_offer(store: ByteArray?, bytes: ByteArray?)
     external fun ttp_display_blob_plan(store: ByteArray?, trackId: ByteArray?, generation: ByteArray?, entriesJson: ByteArray?): ByteArray?
+    external fun ttp_display_blob_ready(): Int
     external fun ttp_display_blob_stores(): ByteArray?
+    external fun ttp_display_blob_wrote(store: ByteArray?, name: ByteArray?)
     external fun ttp_display_build(trackId: ByteArray?, rosterJson: ByteArray?): Int
     external fun ttp_display_burst(idJson: ByteArray?, s: Double, lat: Double)
     external fun ttp_display_camera(mode: Int)

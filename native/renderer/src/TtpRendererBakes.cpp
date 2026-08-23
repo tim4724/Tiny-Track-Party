@@ -343,11 +343,12 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     }
     mBakedKey.clear();   // whatever is resident is about to stop being the truth
     mRoadLight.clear();
-    if (mShadowMap) { mEngine->destroy(mShadowMap); mShadowMap = nullptr; }
-    // The ground's visibility bake rides this function (it needs the same
-    // camera and the finished ESM), so its output resets on the same early
-    // returns — a scene that bakes no map must not keep the last one's.
-    if (mVisMap) { mEngine->destroy(mVisMap); mVisMap = nullptr; }
+    // THROUGH replaceShadowMaps, NOT destroy: the previous build may have staged
+    // a blob whose readback is still writing into one of these, and on GL it
+    // routinely is. The ground's visibility bake rides this function (it needs
+    // the same camera and the finished ESM), so its output resets on the same
+    // early returns — a scene that bakes no map must not keep the last one's.
+    replaceShadowMaps(nullptr, nullptr);
     // Shadows off (headless automation — see setShadowsEnabled): leave the map
     // null and let the established no-map path carry it. Everything downstream
     // already handles this, because a track whose road has no verts reaches the
@@ -975,41 +976,60 @@ void TtpRenderer::fillRoadLight(const TrackBin& tb, const float* esm,
     }
 }
 
-// ── The bake, as bytes ──────────────────────────────────────────────────────
+// ── Derived bytes, kept between runs ────────────────────────────────────────
 //
-// WHY THIS CROSSES THE ABI AT ALL. The bake is 520 ms of GPU on the Android
+// WHY THIS CROSSES THE ABI AT ALL. The sun bake is 520 ms of GPU on the Android
 // reference box and it is resolution-independent — the three sizes are compile
 // -time constants (SM, ESM_SM, VIS_SM) and no viewport, window or render-scale
 // value reaches it — so it is worth keeping between RUNS, not just between
-// builds. Keeping it between runs means a file, and a file is the shell's job
+// builds. The silhouettes are the same argument on a smaller number: five bakes
+// cost ~330 ms of a launch's first build, a GPU render and a flushAndWait each.
+// Keeping something between runs means a file, and a file is the shell's job
 // (`ttp_abi.h`: the transport stays on the host side by design). So this hands
 // over bytes and takes them back, and decides nothing about where they live.
 //
-// THE BLOB CARRIES ITS OWN KEY, and that is what makes a stale file harmless
+// EVERY BLOB CARRIES ITS OWN KEY, and that is what makes a stale file harmless
 // rather than invisible: import adopts the key it finds, and the next build's
-// own key has to match it before anything is reused. What the key CANNOT cover
-// is the engine that produced it — a shader edit reproduces the same
+// own key has to match it before anything is reused. What a key CANNOT cover is
+// the engine that produced it — a shader edit reproduces the same
 // `track|biome|showcase` and would silently serve shadows baked by the old
 // vesm. That invalidation is the shell's, and it is why the file lives under a
 // directory named for the installed binary rather than beside the track id.
+//
+// A SILHOUETTE IS KEYED PER MODEL, not per roster. The layers are baked per
+// model already (mMaskLayerKey), so a set-keyed blob stored each layer once per
+// SUBSET it appeared in — up to fifteen copies of the same 512 KB — and then
+// missed outright whenever a lobby's roster covered fewer models than the blob
+// that wrote it. One key per model is the same data with none of that.
 namespace {
-// Enough to stamp a parked read with; not a hash anything is stored under.
-uint64_t fnv64(const std::string& s) {
-    uint64_t h = 1469598103934665603ull;
-    for (const unsigned char c : s) { h ^= c; h *= 1099511628211ull; }
-    return h;
-}
 constexpr uint32_t kBakeMagic = 0x42505454u;  // 'TTPB', little-endian
 // v2: the writing BACKEND rides the header and import refuses a foreign blob —
-// see the flip note in exportBake. v1 blobs written under Vulkan are mirrored,
-// so the bump also retires every v1 file.
+// see the flip note in finishBakeBlob. v1 blobs written under Vulkan are
+// mirrored, so the bump also retires every v1 file.
 constexpr uint32_t kBakeVersion = 2u;
+
+constexpr uint32_t kMaskMagic = 0x4b53544du;  // 'MTSK', little-endian
+// v3 is ONE LAYER PER BLOB, keyed by that layer's model. v2 was the whole set in
+// one container, which is what the per-model keying above retires.
+constexpr uint32_t kMaskVersion = 3u;
+constexpr uint32_t kMaskKindModel = 0u;    // goes in any free model layer
+constexpr uint32_t kMaskKindMonster = 1u;  // goes in kMaskLayerMonster, always
+
+// The monster's silhouette is keyed by nothing — the truck never changes — so it
+// takes a name no model FNV can collide with. Before v2 it had no key at all and
+// re-baked on every launch, quietly inheriting the cost the model layers had
+// already stopped paying.
+const char* const kMonsterKey = "monster";
 
 void putU32(std::vector<uint8_t>& out, uint32_t v) {
     out.insert(out.end(), (const uint8_t*) &v, (const uint8_t*) &v + 4);
 }
 void putF32(std::vector<uint8_t>& out, float v) {
     out.insert(out.end(), (const uint8_t*) &v, (const uint8_t*) &v + 4);
+}
+void putStr(std::vector<uint8_t>& out, const std::string& s) {
+    putU32(out, (uint32_t) s.size());
+    out.insert(out.end(), s.begin(), s.end());
 }
 bool takeU32(const uint8_t*& p, const uint8_t* end, uint32_t& v) {
     if ((size_t) (end - p) < 4) return false;
@@ -1019,24 +1039,67 @@ bool takeF32(const uint8_t*& p, const uint8_t* end, float& v) {
     if ((size_t) (end - p) < 4) return false;
     std::memcpy(&v, p, 4); p += 4; return true;
 }
+bool takeStr(const uint8_t*& p, const uint8_t* end, std::string& v) {
+    uint32_t n = 0;
+    if (!takeU32(p, end, n) || (size_t) (end - p) < n) return false;
+    v.assign((const char*) p, n);
+    p += n;
+    return true;
+}
+
+// A mask layer's key, from the bytes baked into it.
+std::string maskKeyOf(uint64_t fnv, int backend) {
+    char buf[40];
+    std::snprintf(buf, sizeof buf, "%016llx|%d", (unsigned long long) fnv, backend);
+    return buf;
+}
 }  // namespace
 
-// Read one of the bake's own targets back to the CPU.
-//
-// RGBA is not a preference: it is the readback combo every backend accepts (the
-// road light's own read says the same thing about FLOAT). The caller takes the
-// channel it wants out of the four.
-bool TtpRenderer::ensureRead(Texture* tex, bool asFloat, int layer, uint64_t stamp) {
-    if (!tex || !mRenderer) return false;
-    for (size_t i = mPendingReads.size(); i-- > 0;) {
-        PendingRead& pr = *mPendingReads[i];
-        if (pr.tex != tex || pr.layer != layer) continue;
-        if (pr.stamp == stamp) return pr.done;   // ours: ready, or still coming
-        if (!pr.done) return false;              // stale but in flight; wait it out
-        if (pr.rt) mEngine->destroy(pr.rt);      // stale and landed: retire and redo
-        mPendingReads.erase(mPendingReads.begin() + (long) i);
-        break;
+// ── What this build could keep, and what it already holds ───────────────────
+
+// What the NEXT build's silhouettes will be OF: one key per distinct car model
+// the shell has already provided, plus the monster's. Empty when no car bytes
+// are provided yet, which is what makes the window explicit — ask after
+// provisioning.
+std::vector<std::string> TtpRenderer::maskBlobKeys() const {
+    std::vector<uint64_t> fnvs;
+    for (uint32_t c = 0; c < 16; c++) {
+        const auto it = mAssets.find("car" + std::to_string(c) + ".glb");
+        if (it == mAssets.end() || it->second.empty()) continue;
+        const uint64_t k = glbBytesKey(it->second);
+        if (std::find(fnvs.begin(), fnvs.end(), k) == fnvs.end()) fnvs.push_back(k);
     }
+    if (fnvs.empty()) return {};
+    // Sorted so the same field in a different slot order names the same blobs.
+    std::sort(fnvs.begin(), fnvs.end());
+    const int backend = backendId();
+    std::vector<std::string> keys;
+    keys.reserve(fnvs.size() + 1);
+    for (const uint64_t k : fnvs) keys.push_back(maskKeyOf(k, backend));
+    keys.push_back(std::string(kMonsterKey) + "|" + std::to_string(backend));
+    return keys;
+}
+
+bool TtpRenderer::blobResident(const std::string& key) const {
+    if (key.empty()) return false;
+    if (key == mBakedKey && mShadowMap) return true;
+    // A mask layer is resident when a layer currently holds that model's bytes.
+    // The monster's home is fixed, so its bit alone answers.
+    const int backend = backendId();
+    if (key == std::string(kMonsterKey) + "|" + std::to_string(backend)) {
+        return (mMaskLayerBakedBits & (uint16_t) (1u << kMaskLayerMonster)) != 0;
+    }
+    for (int i = 0; i < kMaskLayerModels; i++) {
+        if (!(mMaskLayerBakedBits & (uint16_t) (1u << i))) continue;
+        if (maskKeyOf(mMaskLayerKey[i], backend) == key) return true;
+    }
+    return false;
+}
+
+// ── Staging: snapshot the metadata, issue the reads ─────────────────────────
+
+bool TtpRenderer::issueRead(StagedBlob& blob, Texture* tex, bool asFloat, int layer) {
+    if (!tex || !mRenderer) return false;
     const Texture::Type type = asFloat ? Texture::Type::FLOAT : Texture::Type::UBYTE;
     const uint32_t bytesPerChannel = asFloat ? 4u : 1u;
     const uint32_t W = tex->getWidth(0), H = tex->getHeight(0);
@@ -1046,59 +1109,35 @@ bool TtpRenderer::ensureRead(Texture* tex, bool asFloat, int layer, uint64_t sta
     if (layer >= 0) rtb.layer(RenderTarget::AttachmentPoint::COLOR, (uint32_t) layer);
     RenderTarget* rt = rtb.build(*mEngine);
     if (!rt) return false;
-    // THE DESTINATION IS THE PendingRead's OWN BUFFER from the start, because a
+    // THE DESTINATION IS THE StagedRead's OWN BUFFER from the start, because a
     // read that does not finish here keeps being written into after this returns
     // — so the buffer may not be moved, resized or freed on the way out.
-    auto pr = std::make_unique<PendingRead>();
-    pr->tex = tex;
-    pr->layer = layer;
-    pr->stamp = stamp;
-    pr->rt = rt;
-    pr->px.resize((size_t) W * H * 4 * bytesPerChannel);
-    Texture::PixelBufferDescriptor pbd(pr->px.data(), pr->px.size(),
+    auto rd = std::make_unique<StagedRead>();
+    rd->tex = tex;
+    rd->layer = layer;
+    rd->asFloat = asFloat;
+    rd->w = W;
+    rd->h = H;
+    rd->rt = rt;
+    rd->px.resize((size_t) W * H * 4 * bytesPerChannel);
+    Texture::PixelBufferDescriptor pbd(rd->px.data(), rd->px.size(),
             Texture::Format::RGBA, type,
-            [](void*, size_t, void* user) { static_cast<PendingRead*>(user)->done = true; },
-            pr.get());
+            [](void*, size_t, void* user) { static_cast<StagedRead*>(user)->done = true; },
+            rd.get());
     mRenderer->readPixels(rt, 0, 0, W, H, std::move(pbd));
-    // THE FAST PATH IS STILL THE FAST PATH: Metal and Vulkan complete inside this
-    // pump, so nothing is ever parked on them and an export answers first time.
-    for (int t = 0; t < 8 && !pr->done; t++) mEngine->flushAndWait();
-    const bool landed = pr->done;
-    mPendingReads.push_back(std::move(pr));
-    return landed;
+    blob.reads.push_back(std::move(rd));
+    return true;
 }
 
-bool TtpRenderer::takeRead(Texture* tex, int layer, std::vector<uint8_t>& out) {
-    for (size_t i = mPendingReads.size(); i-- > 0;) {
-        PendingRead& pr = *mPendingReads[i];
-        if (pr.tex != tex || pr.layer != layer || !pr.done) continue;
-        if (pr.rt) mEngine->destroy(pr.rt);
-        out = std::move(pr.px);
-        mPendingReads.erase(mPendingReads.begin() + (long) i);
-        return true;
+bool TtpRenderer::stageBlob(const std::string& key) {
+    if (key.empty() || !mEngine || !mRenderer) return false;
+    // Already staged, finished or not: staging twice would issue a second set of
+    // reads into a second buffer and finish whichever raced.
+    for (const auto& s : mStaged) {
+        if (s->key == key) return true;
     }
-    return false;
-}
-
-bool TtpRenderer::exportBake(std::vector<uint8_t>& out) {
-    if (mBakedKey.empty() || !mShadowMap) return false;
-    // The ESM is R16F and comes back as RGBA float, so the R channel is taken
-    // and re-narrowed to the half it is stored as — 2 MB rather than the 16 MB
-    // the readback itself needs, and the same bits the texture holds.
-    // Stamped with what the resident maps are OF, so a read that lands after a
-    // rebake is dropped rather than answered (see PendingRead).
-    const uint64_t bakeStamp = fnv64(mBakedKey);
-    // BOTH MAPS OR NEITHER. The visibility map used to be optional here, which
-    // was harmless while every read landed inside the call — and silently
-    // shipped a blob with no vis map the moment one did not.
-    const bool esmReady = ensureRead(mShadowMap, /*asFloat=*/true, -1, bakeStamp);
-    const bool visReady = !mVisMap || ensureRead(mVisMap, /*asFloat=*/false, -1, bakeStamp);
-    if (!esmReady || !visReady) return false;
-    std::vector<uint8_t> esmRGBA;
-    if (!takeRead(mShadowMap, -1, esmRGBA)) return false;
-    const uint32_t ew = mShadowMap->getWidth(0), eh = mShadowMap->getHeight(0);
-    const size_t texels = (size_t) ew * eh;
-    if (esmRGBA.size() < texels * 16) return false;
+    auto blob = std::make_unique<StagedBlob>();
+    blob->key = key;
     // ROWS GO BACK THE OTHER WAY ON OPENGL ALONE, and this is a documented
     // Filament fact rather than a guess (Renderer.h, readPixels): "OpenGL only:
     // if issuing a readPixels on a RenderTarget backed by a Texture that had
@@ -1106,109 +1145,260 @@ bool TtpRenderer::exportBake(std::vector<uint8_t>& out) {
     // be y-flipped with respect to the setImage call." The GL backend flips
     // every readback "to match our API" (OpenGLDriver.cpp) while Vulkan and
     // Metal copy storage rows verbatim — so on those backends a readback IS
-    // setImage order already, and applying the GL flip mirrors the map. This
-    // blob is read one way and uploaded the other, so on GL somebody has to
-    // flip; doing it here means the file is in the writing backend's setImage
-    // order and import stays a straight upload. The header carries the backend
-    // and import refuses a foreign blob, so the two sides of the round trip
-    // can never disagree about which convention the bytes are in.
+    // setImage order already, and applying the GL flip mirrors the map. A blob
+    // is read one way and uploaded the other, so on GL somebody has to flip;
+    // doing it here means the file is in the writing backend's setImage order
+    // and import stays a straight upload. The header carries the backend and
+    // import refuses a foreign blob, so the two sides of the round trip can
+    // never disagree about which convention the bytes are in.
     //
     // The mirror is invisible in every way that matters until you look: the map
     // still covers the track, still has the right shape, and is simply upside
     // down — which reads on screen as a shadow that has been rotated onto the
-    // wrong side of the circuit. fillRoadLight never hits any of this because
+    // wrong side of the circuit. applyRoadLight never hits any of this because
     // it consumes the readback directly, in the readback's own orientation, and
     // never round-trips.
-    const bool flip = mEngine->getBackend() == Engine::Backend::OPENGL;
+    blob->flip = mEngine->getBackend() == Engine::Backend::OPENGL;
+
+    // WHICH KIND, decided by what the engine is holding rather than by an
+    // argument: only one key can be the resident bake's, and a silhouette's is
+    // not a scene key. A caller that names neither gets a refusal.
+    if (!mBakedKey.empty() && key == mBakedKey) {
+        if (!mShadowMap) return false;
+        blob->mask = false;
+        // EVERYTHING THAT IS NOT A READBACK, NOW. A staged blob that read these
+        // at finish time would pair this build's pixels with a later build's
+        // matrices — which is the whole reason the split exists.
+        putU32(blob->head, kBakeMagic);
+        putU32(blob->head, kBakeVersion);
+        putU32(blob->head, (uint32_t) mEngine->getBackend());
+        putStr(blob->head, mBakedKey);
+        putF32(blob->head, mShadowTexel);
+        putF32(blob->head, mShadowDepthScale);
+        for (int c = 0; c < 4; c++) {
+            for (int r = 0; r < 4; r++) putF32(blob->head, mShadowFromWorld[c][r]);
+        }
+        putU32(blob->tail, (uint32_t) mRoadLight.size());
+        blob->tail.insert(blob->tail.end(), (const uint8_t*) mRoadLight.data(),
+                (const uint8_t*) mRoadLight.data() + mRoadLight.size() * sizeof(math::half4));
+        // BOTH MAPS OR NEITHER. The visibility map used to be optional here,
+        // which was harmless while every read landed inside the call — and
+        // silently shipped a blob with no vis map the moment one did not.
+        if (!issueRead(*blob, mShadowMap, /*asFloat=*/true, -1)) return false;
+        if (mVisMap && !issueRead(*blob, mVisMap, /*asFloat=*/false, -1)) {
+            retireStaged(*blob);
+            return false;
+        }
+        mStaged.push_back(std::move(blob));
+        return true;
+    }
+
+    // A silhouette layer. Which layer currently holds this key is what says
+    // whether there is anything to stage at all.
+    const int backend = backendId();
+    int layer = -1;
+    uint32_t kind = kMaskKindModel;
+    if (key == std::string(kMonsterKey) + "|" + std::to_string(backend)) {
+        if (!(mMaskLayerBakedBits & (uint16_t) (1u << kMaskLayerMonster))) return false;
+        layer = kMaskLayerMonster;
+        kind = kMaskKindMonster;
+    } else {
+        for (int i = 0; i < kMaskLayerModels && layer < 0; i++) {
+            if (!(mMaskLayerBakedBits & (uint16_t) (1u << i))) continue;
+            if (maskKeyOf(mMaskLayerKey[i], backend) == key) layer = i;
+        }
+        if (layer < 0) return false;
+    }
+    if (!mDecalMaskArray) return false;
+    blob->mask = true;
+    putU32(blob->head, kMaskMagic);
+    putU32(blob->head, kMaskVersion);
+    putU32(blob->head, (uint32_t) mEngine->getBackend());
+    putU32(blob->head, (uint32_t) kMaskCellW);
+    putU32(blob->head, (uint32_t) kMaskCellH);
+    putU32(blob->head, kind);
+    putStr(blob->head, key);
+    if (!issueRead(*blob, mDecalMaskArray, /*asFloat=*/false, layer)) return false;
+    mStaged.push_back(std::move(blob));
+    return true;
+}
+
+// ── Finishing: splice the landed pixels into the snapshot ───────────────────
+
+void TtpRenderer::finishBakeBlob(StagedBlob& blob) {
+    const StagedRead& esmRead = *blob.reads[0];
+    const uint32_t ew = esmRead.w, eh = esmRead.h;
+    const size_t texels = (size_t) ew * eh;
+    if (esmRead.px.size() < texels * 16) return;
+    // The ESM is R16F and comes back as RGBA float, so the R channel is taken
+    // and re-narrowed to the half it is stored as — 2 MB rather than the 16 MB
+    // the readback itself needs, and the same bits the texture holds.
     std::vector<math::half> esm(texels);
-    const float* src = (const float*) esmRGBA.data();
+    const float* src = (const float*) esmRead.px.data();
     for (uint32_t y = 0; y < eh; y++) {
-        const float* row = src + (size_t) (flip ? eh - 1 - y : y) * ew * 4;
+        const float* row = src + (size_t) (blob.flip ? eh - 1 - y : y) * ew * 4;
         math::half* dst = esm.data() + (size_t) y * ew;
         for (uint32_t x = 0; x < ew; x++) dst[x] = math::half(row[x * 4]);
     }
 
-    std::vector<uint8_t> visRGBA;
-    uint32_t vw = 0, vh = 0;
-    if (mVisMap && takeRead(mVisMap, -1, visRGBA)) {
-        vw = mVisMap->getWidth(0);
-        vh = mVisMap->getHeight(0);
-    }
-
-    out.clear();
-    putU32(out, kBakeMagic);
-    putU32(out, kBakeVersion);
-    putU32(out, (uint32_t) mEngine->getBackend());
-    putU32(out, (uint32_t) mBakedKey.size());
-    out.insert(out.end(), mBakedKey.begin(), mBakedKey.end());
-    putF32(out, mShadowTexel);
-    putF32(out, mShadowDepthScale);
-    for (int c = 0; c < 4; c++) {
-        for (int r = 0; r < 4; r++) putF32(out, mShadowFromWorld[c][r]);
-    }
-    putU32(out, ew); putU32(out, eh);
+    std::vector<uint8_t>& out = blob.bytes;
+    out = blob.head;
+    putU32(out, ew);
+    putU32(out, eh);
     out.insert(out.end(), (const uint8_t*) esm.data(),
             (const uint8_t*) esm.data() + texels * sizeof(math::half));
-    putU32(out, vw); putU32(out, vh);
+
+    const uint32_t vw = blob.reads.size() > 1 ? blob.reads[1]->w : 0;
+    const uint32_t vh = blob.reads.size() > 1 ? blob.reads[1]->h : 0;
+    putU32(out, vw);
+    putU32(out, vh);
     if (vw && vh) {
+        const std::vector<uint8_t>& visRGBA = blob.reads[1]->px;
         std::vector<uint8_t> vis((size_t) vw * vh);
         for (uint32_t y = 0; y < vh; y++) {          // GL-flipped, as above
-            const uint8_t* row = visRGBA.data() + (size_t) (flip ? vh - 1 - y : y) * vw * 4;
+            const uint8_t* row = visRGBA.data() + (size_t) (blob.flip ? vh - 1 - y : y) * vw * 4;
             uint8_t* dst = vis.data() + (size_t) y * vw;
             for (uint32_t x = 0; x < vw; x++) dst[x] = row[x * 4];
         }
         out.insert(out.end(), vis.begin(), vis.end());
     }
-    putU32(out, (uint32_t) mRoadLight.size());
-    out.insert(out.end(), (const uint8_t*) mRoadLight.data(),
-            (const uint8_t*) mRoadLight.data() + mRoadLight.size() * sizeof(math::half4));
-    return true;
+    out.insert(out.end(), blob.tail.begin(), blob.tail.end());
 }
 
-bool TtpRenderer::importBake(const uint8_t* bytes, uint32_t len) {
-    if (!bytes || len < 16 || !mEngine) return false;
+void TtpRenderer::finishMaskBlob(StagedBlob& blob) {
+    const StagedRead& read = *blob.reads[0];
+    const size_t cell = (size_t) kMaskCellW * kMaskCellH * 4;
+    if (read.px.size() < cell) return;
+    std::vector<uint8_t>& out = blob.bytes;
+    out = blob.head;
+    for (int y = 0; y < kMaskCellH; y++) {
+        const uint8_t* row = read.px.data()
+                + (size_t) (blob.flip ? kMaskCellH - 1 - y : y) * kMaskCellW * 4;
+        out.insert(out.end(), row, row + (size_t) kMaskCellW * 4);
+    }
+}
+
+void TtpRenderer::retireStaged(StagedBlob& blob) {
+    for (auto& rd : blob.reads) {
+        if (rd->rt) mEngine->destroy(rd->rt);
+        rd->rt = nullptr;
+        // A READ THAT NEVER LANDED IS LEAKED ON PURPOSE. The driver may still
+        // hold a pointer into that buffer and there is no tick left that will
+        // fire the callback, so freeing it here is a write into freed storage
+        // later. RoadLightRead makes the same trade at teardown and says so.
+        if (!rd->done) (void) rd.release();
+    }
+    blob.reads.clear();
+}
+
+bool TtpRenderer::readInFlight(const Texture* tex) const {
+    for (const auto& s : mStaged) {
+        for (const auto& rd : s->reads) {
+            if (rd->tex == tex && !rd->done) return true;
+        }
+    }
+    return false;
+}
+
+void TtpRenderer::drainTexGraves() {
+    for (size_t i = mTexGraves.size(); i-- > 0;) {
+        if (readInFlight(mTexGraves[i])) continue;
+        mEngine->destroy(mTexGraves[i]);
+        mTexGraves.erase(mTexGraves.begin() + (long) i);
+    }
+}
+
+void TtpRenderer::collectStagedBlobs() {
+    if (!mEngine) return;
+    for (auto& s : mStaged) {
+        if (s->finished || s->reads.empty()) continue;
+        bool all = true;
+        for (const auto& rd : s->reads) {
+            if (!rd->done) { all = false; break; }
+        }
+        if (!all) continue;
+        if (s->mask) finishMaskBlob(*s); else finishBakeBlob(*s);
+        s->finished = true;
+        retireStaged(*s);
+    }
+    // A blob that finished with no bytes produced nothing worth keeping (a short
+    // read); drop it rather than leave the caller asking about it forever.
+    for (size_t i = mStaged.size(); i-- > 0;) {
+        if (mStaged[i]->finished && mStaged[i]->bytes.empty()) {
+            mStaged.erase(mStaged.begin() + (long) i);
+        }
+    }
+    drainTexGraves();
+}
+
+bool TtpRenderer::takeStagedBlob(const std::string& key, std::vector<uint8_t>& out) {
+    for (size_t i = 0; i < mStaged.size(); i++) {
+        if (mStaged[i]->key != key) continue;
+        if (!mStaged[i]->finished || mStaged[i]->bytes.empty()) return false;
+        out = std::move(mStaged[i]->bytes);
+        mStaged.erase(mStaged.begin() + (long) i);
+        return true;
+    }
+    return false;
+}
+
+// ── Import ──────────────────────────────────────────────────────────────────
+//
+// SELF-DESCRIBING, so there is one entry point and no store argument: the magic
+// says which kind of blob these bytes are, and a caller that hands over the
+// wrong file gets a refusal rather than a misparse. A blob the engine refuses is
+// a MISS, never an error — the scene makes the thing again.
+
+std::string TtpRenderer::importBlob(const uint8_t* bytes, uint32_t len) {
+    if (!bytes || len < 16 || !mEngine) return std::string();
     const uint8_t* p = bytes;
     const uint8_t* end = bytes + len;
-    uint32_t magic = 0, version = 0, backend = 0, keyLen = 0;
-    if (!takeU32(p, end, magic) || magic != kBakeMagic) return false;
-    if (!takeU32(p, end, version) || version != kBakeVersion) return false;
-    // A blob is in its WRITER's setImage order (see the flip note in
-    // exportBake), and nothing here can re-orient bytes whose convention it
-    // cannot know — so a blob from another backend (the boot canary flipping a
-    // device between Vulkan and GL) is refused and the scene rebakes.
+    uint32_t magic = 0;
+    if (!takeU32(p, end, magic)) return std::string();
+    if (magic == kBakeMagic) return importBakeBlob(p, end);
+    if (magic == kMaskMagic) return importMaskBlob(p, end);
+    return std::string();
+}
+
+std::string TtpRenderer::importBakeBlob(const uint8_t* p, const uint8_t* end) {
+    uint32_t version = 0, backend = 0;
+    if (!takeU32(p, end, version) || version != kBakeVersion) return std::string();
+    // A blob is in its WRITER's setImage order (see the flip note in stageBlob),
+    // and nothing here can re-orient bytes whose convention it cannot know — so
+    // a blob from another backend (the boot canary flipping a device between
+    // Vulkan and GL) is refused and the scene rebakes.
     if (!takeU32(p, end, backend)
-            || backend != (uint32_t) mEngine->getBackend()) return false;
-    if (!takeU32(p, end, keyLen) || (size_t) (end - p) < keyLen) return false;
-    const std::string key((const char*) p, keyLen);
-    p += keyLen;
+            || backend != (uint32_t) mEngine->getBackend()) return std::string();
+    std::string key;
+    if (!takeStr(p, end, key)) return std::string();
     // ALREADY RESIDENT. Uploading two textures to arrive where we are costs the
     // ~50 ms this whole path exists to avoid.
-    if (key == mBakedKey && mShadowMap) return true;
+    if (key == mBakedKey && mShadowMap) return key;
 
     float texel = 0, depthScale = 0;
-    if (!takeF32(p, end, texel) || !takeF32(p, end, depthScale)) return false;
+    if (!takeF32(p, end, texel) || !takeF32(p, end, depthScale)) return std::string();
     math::mat4f fromWorld;
     for (int c = 0; c < 4; c++) {
         for (int r = 0; r < 4; r++) {
-            if (!takeF32(p, end, fromWorld[c][r])) return false;
+            if (!takeF32(p, end, fromWorld[c][r])) return std::string();
         }
     }
     uint32_t ew = 0, eh = 0;
-    if (!takeU32(p, end, ew) || !takeU32(p, end, eh) || !ew || !eh) return false;
+    if (!takeU32(p, end, ew) || !takeU32(p, end, eh) || !ew || !eh) return std::string();
     const size_t esmBytes = (size_t) ew * eh * sizeof(math::half);
-    if ((size_t) (end - p) < esmBytes) return false;
+    if ((size_t) (end - p) < esmBytes) return std::string();
     const uint8_t* esmSrc = p;
     p += esmBytes;
     uint32_t vw = 0, vh = 0;
-    if (!takeU32(p, end, vw) || !takeU32(p, end, vh)) return false;
+    if (!takeU32(p, end, vw) || !takeU32(p, end, vh)) return std::string();
     const size_t visBytes = (size_t) vw * vh;
-    if ((size_t) (end - p) < visBytes) return false;
+    if ((size_t) (end - p) < visBytes) return std::string();
     const uint8_t* visSrc = p;
     p += visBytes;
     uint32_t roadCount = 0;
-    if (!takeU32(p, end, roadCount)) return false;
+    if (!takeU32(p, end, roadCount)) return std::string();
     const size_t roadBytes = (size_t) roadCount * sizeof(math::half4);
-    if ((size_t) (end - p) < roadBytes) return false;
+    if ((size_t) (end - p) < roadBytes) return std::string();
     const uint8_t* roadSrc = p;
 
     // UPLOADABLE IS NOT OPTIONAL HERE, and its absence does not report: a
@@ -1222,7 +1412,7 @@ bool TtpRenderer::importBake(const uint8_t* bytes, uint32_t len) {
             .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE
                     | Texture::Usage::UPLOADABLE | Texture::Usage::BLIT_SRC)
             .build(*mEngine);
-    if (!esm) return false;
+    if (!esm) return std::string();
     {
         Texture::PixelBufferDescriptor pbd(malloc(esmBytes), esmBytes,
                 Texture::Format::R, Texture::Type::HALF,
@@ -1248,178 +1438,74 @@ bool TtpRenderer::importBake(const uint8_t* bytes, uint32_t len) {
     }
     // Only now is the old set replaced: a blob that failed any check above must
     // leave a resident bake alone rather than half-destroy it.
-    if (mShadowMap) mEngine->destroy(mShadowMap);
-    if (mVisMap) mEngine->destroy(mVisMap);
-    mShadowMap = esm;
-    mVisMap = vis;
+    replaceShadowMaps(esm, vis);
     mShadowTexel = texel;
     mShadowDepthScale = depthScale;
     mShadowFromWorld = fromWorld;
     mRoadLight.assign((const math::half4*) roadSrc,
             (const math::half4*) roadSrc + roadCount);
     mBakedKey = key;
-    return true;
+    return key;
 }
 
-// ── The silhouette layers, as bytes ─────────────────────────────────────────
-//
-// Same argument as the sun bake above, same blob discipline, and the same two
-// Filament traps (a Y flip that is GL's alone, and UPLOADABLE on anything
-// setImage touches — the array already carries it for the generic layer). What
-// differs is the KEY: a bake is a fact about the track, a mask is a fact about
-// a MODEL, so the blob holds every baked model layer and is keyed by the SET of
-// models in it.
-//
-// Worth keeping because they are not cheap and not once: five bakes cost ~330 ms
-// of a launch's first build on the Android reference box, a GPU render and a
-// flushAndWait each. The renderer already keeps them across SCENES for exactly
-// this reason (see releaseScene); this is the tier below, across runs.
-namespace {
-constexpr uint32_t kMaskMagic = 0x4b53544du;  // 'MTSK', little-endian
-// v2 carries a KIND per layer. v1 stored only the four model layers, so the
-// monster's — which is keyed by nothing, because the truck never changes —
-// still baked on every launch and simply inherited the one-time cost the model
-// layers used to pay. The whole point is that a warm launch bakes NO silhouette.
-constexpr uint32_t kMaskVersion = 2u;
-constexpr uint32_t kMaskKindModel = 0u;    // goes in any free model layer
-constexpr uint32_t kMaskKindMonster = 1u;  // goes in kMaskLayerMonster, always
-}  // namespace
-
-// What the NEXT build's silhouettes will be OF: the distinct car models the
-// shell has already provided, in a stable order so the key cannot depend on
-// which slot happens to wear what. Empty when no car bytes are provided yet,
-// which is what makes the window explicit — ask after provisioning.
-std::string TtpRenderer::masksKey() const {
-    std::vector<uint64_t> keys;
-    for (uint32_t c = 0; c < 16; c++) {
-        const auto it = mAssets.find("car" + std::to_string(c) + ".glb");
-        if (it == mAssets.end() || it->second.empty()) continue;
-        const uint64_t k = glbBytesKey(it->second);
-        if (std::find(keys.begin(), keys.end(), k) == keys.end()) keys.push_back(k);
-    }
-    if (keys.empty()) return std::string();
-    std::sort(keys.begin(), keys.end());
-    std::string out;
-    for (const uint64_t k : keys) {
-        char buf[24];
-        std::snprintf(buf, sizeof buf, "%016llx", (unsigned long long) k);
-        if (!out.empty()) out.push_back('-');
-        out += buf;
-    }
-    return out + "|" + std::to_string(backendId());
-}
-
-bool TtpRenderer::exportMasks(std::vector<uint8_t>& out) {
-    if (!mDecalMaskArray || !mRenderer) return false;
-    const bool flip = mEngine->getBackend() == Engine::Backend::OPENGL;
-    const size_t cell = (size_t) kMaskCellW * kMaskCellH * 4;
-    // EVERY LAYER OR NONE, for the reason ensureRead states: taking the ones that
-    // landed while another is still coming would retire them and never converge.
-    // The layers a scene baked, and what each is stamped by — the monster's is
-    // keyed by nothing (the truck never changes), so it takes a constant no FNV
-    // can collide with.
-    std::vector<std::pair<int, uint64_t>> want;
-    for (int i = 0; i <= kMaskLayerMonster; i++) {
-        const bool monster = i == kMaskLayerMonster;
-        if (!(mMaskLayerBakedBits & (uint16_t) (1u << i))) continue;
-        if (!monster && !mMaskLayerKey[i]) continue;
-        want.emplace_back(i, monster ? 1ull : mMaskLayerKey[i]);
-    }
-    if (want.empty()) return false;
-    bool allReady = true;
-    for (const auto& [i, stamp] : want) {
-        // Not `&&`: every layer's read has to be ISSUED even once one is known to
-        // be outstanding, or they would land one per export instead of together.
-        if (!ensureRead(mDecalMaskArray, /*asFloat=*/false, i, stamp)) allReady = false;
-    }
-    if (!allReady) return false;
-
-    std::vector<uint8_t> body;
-    uint32_t stored = 0;
-    for (const auto& [i, stamp] : want) {
-        const bool monster = i == kMaskLayerMonster;
-        (void) stamp;
-        std::vector<uint8_t> px;
-        if (!takeRead(mDecalMaskArray, i, px)) continue;
-        if (px.size() < cell) continue;
-        const uint32_t kind = monster ? kMaskKindMonster : kMaskKindModel;
-        const uint64_t k = monster ? 0ull : mMaskLayerKey[i];
-        putU32(body, kind);
-        body.insert(body.end(), (const uint8_t*) &k, (const uint8_t*) &k + 8);
-        // The blob is in the WRITING backend's setImage order — exportBake's
-        // flip note is the whole argument and applies here unchanged.
-        for (int y = 0; y < kMaskCellH; y++) {
-            const uint8_t* row = px.data()
-                    + (size_t) (flip ? kMaskCellH - 1 - y : y) * kMaskCellW * 4;
-            body.insert(body.end(), row, row + (size_t) kMaskCellW * 4);
-        }
-        stored++;
-    }
-    if (!stored) return false;
-    out.clear();
-    putU32(out, kMaskMagic);
-    putU32(out, kMaskVersion);
-    putU32(out, (uint32_t) mEngine->getBackend());
-    putU32(out, (uint32_t) kMaskCellW);
-    putU32(out, (uint32_t) kMaskCellH);
-    putU32(out, stored);
-    out.insert(out.end(), body.begin(), body.end());
-    return true;
-}
-
-// Put stored layers back and CLAIM them, so the build's own claimMaskLayer
-// finds each model already held and skips its bake — the very path a second
-// race on one field already takes.
-bool TtpRenderer::importMasks(const uint8_t* bytes, uint32_t len) {
-    if (!bytes || len < 24 || !mEngine || !ensureDecalMaskArray()) return false;
-    const uint8_t* p = bytes;
-    const uint8_t* end = bytes + len;
-    uint32_t magic = 0, version = 0, backend = 0, w = 0, h = 0, count = 0;
-    if (!takeU32(p, end, magic) || magic != kMaskMagic) return false;
-    if (!takeU32(p, end, version) || version != kMaskVersion) return false;
+// Put one stored layer back and CLAIM it, so the build's own claimMaskLayer
+// finds that model already held and skips its bake — the very path a second race
+// on one field already takes.
+std::string TtpRenderer::importMaskBlob(const uint8_t* p, const uint8_t* end) {
+    uint32_t version = 0, backend = 0, w = 0, h = 0, kind = 0;
+    if (!takeU32(p, end, version) || version != kMaskVersion) return std::string();
     // A blob is in its writer's byte order and nothing here can re-orient it.
-    if (!takeU32(p, end, backend) || backend != (uint32_t) mEngine->getBackend()) return false;
-    if (!takeU32(p, end, w) || w != (uint32_t) kMaskCellW) return false;
-    if (!takeU32(p, end, h) || h != (uint32_t) kMaskCellH) return false;
-    if (!takeU32(p, end, count)) return false;
+    if (!takeU32(p, end, backend)
+            || backend != (uint32_t) mEngine->getBackend()) return std::string();
+    if (!takeU32(p, end, w) || w != (uint32_t) kMaskCellW) return std::string();
+    if (!takeU32(p, end, h) || h != (uint32_t) kMaskCellH) return std::string();
+    if (!takeU32(p, end, kind)) return std::string();
+    std::string key;
+    if (!takeStr(p, end, key)) return std::string();
     const size_t cell = (size_t) kMaskCellW * kMaskCellH * 4;
-    uint32_t took = 0;
-    for (uint32_t n = 0; n < count; n++) {
-        if ((size_t) (end - p) < 12 + cell) break;
-        uint32_t kind = 0;
-        if (!takeU32(p, end, kind)) break;
-        uint64_t k = 0;
-        std::memcpy(&k, p, 8);
-        p += 8;
-        int slot = -1;
-        bool held = false;
-        if (kind == kMaskKindMonster) {
-            // One fixed home, because nothing else may live there.
-            held = (mMaskLayerBakedBits & (uint16_t) (1u << kMaskLayerMonster)) != 0;
-            slot = kMaskLayerMonster;
-        } else {
-            for (int i = 0; i < kMaskLayerModels; i++) {
-                if (mMaskLayerKey[i] == k && (mMaskLayerBakedBits & (uint16_t) (1u << i))) held = true;
-            }
-            for (int i = 0; i < kMaskLayerModels && slot < 0; i++) {
-                if (!(mMaskLayerBakedBits & (uint16_t) (1u << i))) slot = i;
-            }
+    if ((size_t) (end - p) < cell) return std::string();
+    if (blobResident(key)) return key;
+    if (!ensureDecalMaskArray()) return std::string();
+
+    int slot = -1;
+    if (kind == kMaskKindMonster) {
+        slot = kMaskLayerMonster;   // one fixed home, because nothing else may live there
+    } else {
+        for (int i = 0; i < kMaskLayerModels && slot < 0; i++) {
+            if (!(mMaskLayerBakedBits & (uint16_t) (1u << i))) slot = i;
         }
-        if (held || slot < 0) { p += cell; continue; }
-        // The descriptor points straight at the caller's buffer, which the ABI
-        // says outlives this call — and the drain below makes sure it is read
-        // before that promise expires.
-        Texture::PixelBufferDescriptor pbd(
-                const_cast<uint8_t*>(p), cell,
-                Texture::Format::RGBA, Texture::Type::UBYTE,
-                [](void*, size_t, void*) {}, nullptr);
-        mDecalMaskArray->setImage(*mEngine, 0, 0, 0, (uint32_t) slot,
-                (uint32_t) kMaskCellW, (uint32_t) kMaskCellH, 1, std::move(pbd));
-        if (kind != kMaskKindMonster) mMaskLayerKey[slot] = k;
-        mMaskLayerBakedBits |= (uint16_t) (1u << slot);
-        p += cell;
-        took++;
+        if (slot < 0) return std::string();   // every model layer is spoken for this build
     }
+    // The key carries the FNV the claim test compares against; a key this
+    // build's own maskBlobKeys could not have produced is not one it can claim.
+    uint64_t fnv = 0;
+    if (kind != kMaskKindMonster) {
+        if (std::sscanf(key.c_str(), "%016llx", (unsigned long long*) &fnv) != 1) return std::string();
+    }
+    // The descriptor points straight at the caller's buffer, which the ABI says
+    // outlives this call — and the flush below makes sure it is read before that
+    // promise expires.
+    Texture::PixelBufferDescriptor pbd(
+            const_cast<uint8_t*>(p), cell,
+            Texture::Format::RGBA, Texture::Type::UBYTE,
+            [](void*, size_t, void*) {}, nullptr);
+    mDecalMaskArray->setImage(*mEngine, 0, 0, 0, (uint32_t) slot,
+            (uint32_t) kMaskCellW, (uint32_t) kMaskCellH, 1, std::move(pbd));
+    if (kind != kMaskKindMonster) mMaskLayerKey[slot] = fnv;
+    mMaskLayerBakedBits |= (uint16_t) (1u << slot);
     mEngine->flushAndWait();
-    return took > 0;
+    return key;
+}
+
+// Swap the resident maps, keeping any texture a staged read is still writing
+// into alive until it lands. Destroying one under an outstanding readPixels is a
+// write into freed storage — invisible on the backends that finish inside the
+// pump, which is every backend that does not need this path.
+void TtpRenderer::replaceShadowMaps(Texture* esm, Texture* vis) {
+    for (Texture* old : { mShadowMap, mVisMap }) {
+        if (!old) continue;
+        if (readInFlight(old)) mTexGraves.push_back(old); else mEngine->destroy(old);
+    }
+    mShadowMap = esm;
+    mVisMap = vis;
 }

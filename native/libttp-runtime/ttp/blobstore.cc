@@ -55,6 +55,12 @@ uint32_t blobKeep(const std::string& store) {
     // cup's four circuits plus the lobby browsing around them, against a
     // catalogue whose full set would be ~46 MB.
     if (store == "bake") return 8;
+    // A silhouette is ONE LAYER, 256×512 RGBA = 512 KB, and there are only ever
+    // five things to hold: the four car models protocol.js ships plus the
+    // monster rig. Ten covers the whole set twice, which is what a device the
+    // boot canary flips between Vulkan and GL needs — a blob's byte orientation
+    // is the writing backend's, so each backend keeps its own. ~5 MB.
+    if (store == "mask") return 10;
     // An unknown store still gets a bound. A cache with no cap is a disk leak,
     // and answering 0 here would instead delete everything a new caller wrote.
     return 8;
@@ -63,7 +69,10 @@ uint32_t blobKeep(const std::string& store) {
 BlobPlan planBlob(const BlobRequest& in) {
     BlobPlan plan;
     const std::string gen = safe(in.generation);
-    plan.name = gen + kSep + safe(in.key) + "-" + hash8(in.key) + ".blob";
+    plan.names.reserve(in.keys.size());
+    for (const std::string& key : in.keys) {
+        plan.names.push_back(gen + kSep + safe(key) + "-" + hash8(key) + ".blob");
+    }
 
     // OTHER GENERATIONS GO FIRST, and they go whatever the cap says: they are
     // not old, they are unreadable — produced by a binary that is no longer
@@ -80,9 +89,11 @@ BlobPlan planBlob(const BlobRequest& in) {
         }
     }
 
-    // Then the cap, oldest-USED first. The entry this plan is about is exempt:
-    // it is about to be read or written, so evicting it would be a cache that
-    // deletes precisely what was asked for whenever the store is full.
+    // Then the cap, oldest-USED first. EVERY name this plan is about is exempt,
+    // not just one: they are all about to be read or written, so evicting any of
+    // them would be a cache that deletes precisely what was asked for whenever
+    // the store is full — and with a set-sized plan it would do it repeatedly,
+    // shedding one model's silhouette to make room for the next.
     const uint32_t keep = blobKeep(in.store);
     if (mine.size() > keep) {
         std::sort(mine.begin(), mine.end(),
@@ -90,7 +101,7 @@ BlobPlan planBlob(const BlobRequest& in) {
         size_t over = mine.size() - keep;
         for (const BlobEntry* e : mine) {
             if (over == 0) break;
-            if (e->name == plan.name) continue;
+            if (std::find(plan.names.begin(), plan.names.end(), e->name) != plan.names.end()) continue;
             plan.drop.push_back(e->name);
             over--;
         }

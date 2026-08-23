@@ -95,50 +95,17 @@ object SceneStaging {
         "vehicle-monster-truck" to "monster-ghost.glb",
     )
 
+    /**
+     * The toy-car kit's shared palette. Authored into some models and not
+     * others, so it is asked for by name rather than discovered by the scan.
+     */
+    private const val PALETTE_URI = "Textures/colormap.png"
+
     class Failure(message: String) : Exception(message)
-
-    /**
-     * What the renderer already HOLDS: asset name → the source those bytes came
-     * from (a kit base name, or a texture's authored URI).
-     *
-     * Provisioning is re-read-and-re-hand-over work, and almost all of it is
-     * re-work. `mAssets` survives `releaseScene` (`TtpRenderer.cpp` says so at
-     * the top of it), so across two builds the props are always the same bytes,
-     * the textures always are, the scenery is whenever the biome held, and the
-     * cars are unless somebody actually picked a different one. Without this
-     * every build re-inflated each of those out of the APK, re-derived every
-     * ghost, and copied the lot across JNI into a map that already had them.
-     * [redress] is worse: the roster moves for a ready toggle, a rename, a
-     * welcome or a seat expiry, none of which change a single byte.
-     *
-     * THE TAG IS WHAT THE BYTES ARE A FUNCTION OF, which is why it is the source
-     * rather than the name: `car3.glb` is different bytes when slot 3 picks a
-     * different model, while `Textures/colormap.png` never is. A slot with no
-     * model tags as `""` so that a later pick reads as a change.
-     *
-     * IT MIRRORS THE RENDERER'S ASSET MAP, so it is only ever valid while that map
-     * is. [materials] clears it, which is exactly the right hook: it runs on every
-     * surface create, before any build, and a destroyed surface is precisely what
-     * takes the asset map with it (shells/androidtv/CLAUDE.md).
-     */
-    private val provided = HashMap<String, String>()
-
-    /**
-     * The image URIs a scenery model references, scanned once per model.
-     *
-     * The texture step needs this list and used to get it by scanning the GLB it
-     * had just read — which is the read this memo exists to skip. Cleared with
-     * [provided] rather than kept for the run: the two are read together, and one
-     * lifetime is one thing to be wrong about.
-     */
-    private val sceneryUris = HashMap<String, List<String>>()
 
     /** What [build] handed the renderer this time round — see its step timing. */
     private var providedBytes = 0L
     private var providedCount = 0
-
-    /** …and what it did not, because [provided] said the renderer had it. */
-    private var reusedCount = 0
 
     // -- materials ----------------------------------------------------------
 
@@ -152,10 +119,12 @@ object SceneStaging {
      * browser ships and what this wants. tvOS is the leg that needs its own set.
      */
     fun materials(display: DisplayHost, store: AssetStore) {
-        // The asset map is fresh (see [provided]): nothing the renderer holds
-        // survived, so nothing this remembers may either.
-        provided.clear()
-        sceneryUris.clear()
+        // NOTHING TO INVALIDATE HERE ANY MORE. This used to be the beat that
+        // cleared a shell-side mirror of the engine's asset map, because a
+        // destroyed surface takes that map away and it runs on every surface
+        // create. The mirror is gone — `ttp_display_asset_plan` answers off the
+        // map itself, which cannot outlive it.
+        //
         // A Vulkan engine reads the SPIR-V twins: a GL blob does not parse on
         // a Vulkan engine. The choice is the surface's, made at create
         // (VulkanPolicy) — never re-derived here, where a disagreement would
@@ -194,20 +163,18 @@ object SceneStaging {
         store: AssetStore,
         blobs: BlobStores? = null,
     ): String {
-        // THE SIX STEPS ARE TIMED SEPARATELY. A build measures 737-1323 ms on the
+        // THE STEPS ARE TIMED SEPARATELY. A build measures 737-1323 ms on the
         // reference box and blocks the main thread for all of it, inbound relay
         // frames included — so which STEP that is decides the whole cure, and one
         // total cannot say. Provisioning is re-read-and-re-hand-over work, and
-        // [provided] is what removes it; `ttp_display_build` is geometry that only
-        // an unchanged track could reuse. `provide` also counts the bytes, and the
-        // log carries the REUSED count beside them, because "how much did we hand
-        // over again" is the other half of that question.
-        val split = LongArray(6)
+        // the engine's own asset plan is what removes it; `ttp_display_build` is
+        // geometry that only an unchanged track could reuse. `provide` counts the
+        // bytes, so "how much did we hand over again" reads off the same line.
+        val split = LongArray(5)
         var mark = System.nanoTime()
         fun step(i: Int) { val now = System.nanoTime(); split[i] = now - mark; mark = now }
         providedBytes = 0
         providedCount = 0
-        reusedCount = 0
 
         // 1. Release the previous scene. `ttp_display_build` would do this
         //    itself, but not until the very end — so without this the frame loop
@@ -225,96 +192,75 @@ object SceneStaging {
         Ttp.ttp_display_biome(TtpJson.arg(resolved))
         step(1)
 
-        // 3. Scenery, in the SLOT ORDER C++ named. The index IS the contract:
-        //    the renderer binds its instanced props by it, and
+        // 3. WHAT THIS SCENE IS MADE OF, as names paired with the kit model
+        //    each one's bytes come from. Nothing is read yet: which of these the
+        //    engine is already holding is its own knowledge
+        //    (`ttp_display_asset_plan`), and asking is what turns a rebuild of a
+        //    standing track from a full re-inflate into almost nothing.
+        //
+        //    THIS FILE USED TO ANSWER IT ITSELF, with a `provided` map beside
+        //    the fetch loop and a `sceneryUris` memo beside that — a mirror of
+        //    the engine's asset map that had to be cleared by hand on the beat a
+        //    destroyed surface took that map away. Both are gone. The other two
+        //    shells never had them and simply re-fetched everything on every
+        //    build, which is the same bug pointing the other way.
+        //
+        //    Scenery goes in the SLOT ORDER C++ named. The index IS the
+        //    contract: the renderer binds its instanced props by it, and
         //    `ttp_display_build` reads these same bytes back on the C++ side to
         //    resolve the biome's recolour. Iterating the NAME list means a model
         //    that fails to load leaves a hole rather than shifting every slot
         //    after it by one.
-        Trace.beginSection("ttp:build.scenery")
+        Trace.beginSection("ttp:build.models")
         val sceneryModels = TtpJson.strings(Ttp.ttp_theme_scenery_models(TtpJson.arg(resolved)))
-        // The URI scan rides this step rather than the texture one because it
-        // needs the container's bytes, and this is the only place that has them.
-        // On a repeat biome nothing here is read at all and the scan answers from
-        // [sceneryUris], which is the whole point.
-        val uris = sortedSetOf<String>()
+        val want = JSONArray()
         sceneryModels.forEachIndexed { slot, model ->
-            val name = "scenery$slot.glb"
-            if (provided[name] == model) {
-                reusedCount += 1
-                uris.addAll(sceneryUris[model].orEmpty())
-                return@forEachIndexed
-            }
-            val bytes = store.glb(model) ?: return@forEachIndexed
-            provide(display, name, bytes)
-            provided[name] = model
-            uris.addAll(sceneryUris.getOrPut(model) { imageUris(bytes) })
+            want.put(JSONObject().put("name", "scenery$slot.glb").put("tag", model))
         }
+        carWants(roster, want)
+        for (model in PROP_MODELS) {
+            want.put(JSONObject().put("name", "$model.glb").put("tag", model))
+            PROP_GHOSTS[model]?.let { ghostName ->
+                want.put(JSONObject().put("name", ghostName).put("tag", model)
+                    .put("from", "$model.glb"))
+            }
+        }
+        fetchPlanned(want, display, store)
         Trace.endSection()
         step(2)
 
         // 4. Textures, under their EXACT authored URI. There is no path
-        //    resolution on the C side. Only the SCENERY is scanned, plus the
-        //    kit's shared palette unconditionally — the cars and props all
-        //    reference that one file. Sorted only so the order is stable in a log.
+        //    resolution on the C side.
+        //
+        //    THE URI LIST IS THE ENGINE'S, off the bytes it is holding, so a
+        //    model the plan above skipped still contributes its textures and
+        //    nothing here re-reads a container it just handed over — which is
+        //    what the `sceneryUris` memo used to buy, one shell out of three.
+        //    The kit's shared palette is asked for by name because it is
+        //    authored into some models and not others. Both go through the plan
+        //    so their tags are stamped and the next build knows they are held.
         Trace.beginSection("ttp:build.textures")
-        uris.add("Textures/colormap.png")
-        for (uri in uris) {
-            // A texture's bytes are a function of its name alone, so the tag IS
-            // the name: past the first build that provisions it, every scene in
-            // the run reuses it whatever the biome does.
-            if (provided[uri] == uri) { reusedCount += 1; continue }
+        val texWant = JSONArray()
+        texWant.put(JSONObject().put("name", PALETTE_URI).put("tag", PALETTE_URI))
+        for (uri in TtpJson.strings(Ttp.ttp_display_asset_textures())) {
+            texWant.put(JSONObject().put("name", uri).put("tag", uri))
+        }
+        for (uri in TtpJson.strings(Ttp.ttp_display_asset_plan(TtpJson.arg(texWant.toString())))) {
             val bytes = store.texture(uri) ?: continue
             provide(display, uri, bytes)
-            provided[uri] = uri
         }
         Trace.endSection()
         step(3)
 
-        // 5. Cars by slot, then the props. The ghost is copied out of the ABI's
-        //    scratch as it is derived — the generated bridge already returns a
-        //    fresh ByteArray, which is why there is no copy step here and why
-        //    the tvOS file needed one.
-        Trace.beginSection("ttp:build.cars")
-        roster.forEachIndexed { slot, car ->
-            val name = "car$slot.glb"
-            // "" for a slot with no model, so a later pick reads as a change
-            // rather than as "unchanged". Note the engine may still hold the
-            // model this slot had two builds ago under the same name; that has
-            // always been true and nothing references it.
-            if (car.model.isEmpty()) { provided[name] = ""; return@forEachIndexed }
-            if (provided[name] == car.model) { reusedCount += 1; return@forEachIndexed }
-            val bytes = store.glb(car.model) ?: return@forEachIndexed
-            provide(display, name, bytes)
-            provided[name] = car.model
-            // The ghost is DERIVED from those bytes, so it is skipped with them —
-            // `ttp_glb_ghost` is byte surgery over a whole container.
-            Ttp.ttp_glb_ghost(bytes)?.let {
-                provide(display, "car$slot-ghost.glb", it)
-                provided["car$slot-ghost.glb"] = car.model
-            }
-        }
-        for (model in PROP_MODELS) {
-            val name = "$model.glb"
-            if (provided[name] == model) { reusedCount += 1; continue }
-            val bytes = store.glb(model) ?: continue
-            provide(display, name, bytes)
-            provided[name] = model
-            PROP_GHOSTS[model]?.let { ghostName ->
-                Ttp.ttp_glb_ghost(bytes)?.let {
-                    provide(display, ghostName, it)
-                    provided[ghostName] = model
-                }
-            }
-        }
-        Trace.endSection()
-        step(4)
-
-        // 5b. THE BLOB WALKS, first half — AFTER provisioning and before the
-        //     build, which is the one window that suits every store: the bake's
-        //     key needs the biome (latched at step 2), the masks' is derived
-        //     from the car GLBs handed over at step 5. NOTHING HERE NAMES A BLOB
-        //     KIND; the engine lists its stores and this performs the answers.
+        // 5. THE BLOB WALK, first half — AFTER provisioning and before the
+        //    build, which is the one window that suits every store: the bake's
+        //    key needs the biome (latched at step 2), the masks' are derived
+        //    from the car GLBs handed over at step 3. NOTHING HERE NAMES A BLOB
+        //    KIND; the engine lists its stores and this performs the answers.
+        //    The walk's SECOND half is not here at all — it is a frame beat
+        //    (`DisplayHost.writeReadyBlobs`), for the reason `ttp_display.h`
+        //    gives: a readback does not finish inside the build that issues it
+        //    on every backend, so a build's tail is the wrong place to ask.
         blobs?.forEach { store, name ->
             val plan = TtpJson.obj(Ttp.ttp_display_blob_plan(
                 TtpJson.arg(name), TtpJson.arg(trackId), TtpJson.arg(store.generation),
@@ -325,11 +271,14 @@ object SceneStaging {
             for (i in 0 until drop.length()) {
                 drop.optString(i).takeIf { it.isNotEmpty() }?.let { store.delete(it) }
             }
-            // optStr, not optString: `read` is a key the ABI spells JSON null,
-            // and org.json's optString would hand back the STRING "null" — a
-            // read of a file called "null" (tests/androidtv-nullable-json.test.js
-            // keeps everyone honest about it).
-            TtpJson.optStr(plan, "read")?.let { blobName ->
+            // Plain strings too, now that `read` is a LIST: an empty array is
+            // the miss, so there is no JSON null left on this walk for
+            // org.json's optString to turn into the string "null"
+            // (tests/androidtv-nullable-json.test.js still guards the ones there
+            // are).
+            val read = plan.optJSONArray("read") ?: JSONArray()
+            for (i in 0 until read.length()) {
+                val blobName = read.optString(i).takeIf { it.isNotEmpty() } ?: continue
                 store.read(blobName)?.let { Ttp.ttp_display_blob_offer(TtpJson.arg(name), it) }
             }
         }
@@ -356,29 +305,16 @@ object SceneStaging {
         Trace.beginSection("ttp:build.native")
         val built = Ttp.ttp_display_build(TtpJson.arg(trackId), TtpJson.arg(slots.toString()))
         Trace.endSection()
-        step(5)
+        step(4)
         if (built == 0) {
             throw Failure("ttp_display_build($trackId) rejected the track: " +
                 TtpJson.strOrEmpty(Ttp.ttp_last_error()))
         }
-        // THE WALKS' second half. Whether this build made anything worth keeping
-        // — and whether the store already has it — is the engine's to know; an
-        // export costs a readback per texture, so it is asked for only when a
-        // name comes back.
-        blobs?.forEach { store, name ->
-            TtpJson.optStr(TtpJson.obj(Ttp.ttp_display_blob_keep(TtpJson.arg(name))),
-                    "write")?.let { blobName ->
-                Ttp.ttp_display_blob_export(TtpJson.arg(name))?.let { blob ->
-                    store.write(blobName, blob)
-                    Log.i(TAG, "$name stored as $blobName (${blob.size / 1024} KiB)")
-                }
-            }
-        }
         Log.i(TAG, String.format(java.util.Locale.ROOT,
-            "build split %s: release %.0f biome %.0f scenery %.0f textures %.0f cars+props %.0f native %.0f ms" +
-                " (%d assets, %d KiB handed over, %d already held)",
+            "build split %s: release %.0f biome %.0f models %.0f textures %.0f native %.0f ms" +
+                " (%d assets, %d KiB handed over)",
             trackId, split[0] / 1e6, split[1] / 1e6, split[2] / 1e6, split[3] / 1e6,
-            split[4] / 1e6, split[5] / 1e6, providedCount, providedBytes / 1024, reusedCount))
+            split[4] / 1e6, providedCount, providedBytes / 1024))
         return resolved
     }
 
@@ -393,22 +329,12 @@ object SceneStaging {
      * the caller performs the full [build].
      */
     fun redress(roster: List<RosterSlot>, display: DisplayHost, store: AssetStore): Boolean {
-        // ONLY THE SLOTS WHOSE MODEL MOVED — see [provided] for why that is most
-        // of the calls. The livery, the name and the id ride the reroster below
-        // and need no bytes at all; only a different MODEL does.
+        // ONLY THE SLOTS WHOSE MODEL MOVED, and the engine is what says which:
+        // the livery, the name and the id ride the reroster below and need no
+        // bytes at all. That is most of the calls — the roster moves for a ready
+        // toggle, a rename, a welcome or a seat expiry, none of which change one.
         Trace.beginSection("ttp:redress")
-        roster.forEachIndexed { slot, car ->
-            val name = "car$slot.glb"
-            if (car.model.isEmpty()) return@forEachIndexed
-            if (provided[name] == car.model) return@forEachIndexed
-            val bytes = store.glb(car.model) ?: return@forEachIndexed
-            provide(display, name, bytes)
-            provided[name] = car.model
-            Ttp.ttp_glb_ghost(bytes)?.let {
-                provide(display, "car$slot-ghost.glb", it)
-                provided["car$slot-ghost.glb"] = car.model
-            }
-        }
+        fetchPlanned(carWants(roster, JSONArray()), display, store)
         Trace.endSection()
         val slots = JSONArray()
         for (car in roster) {
@@ -440,13 +366,61 @@ object SceneStaging {
         if (!display.provideAsset(name, bytes)) Log.w(TAG, "ttp_display_asset($name) refused")
     }
 
+    // -- what still has to be fetched ---------------------------------------
+
     /**
-     * Every `images[].uri` a container references, in file order and
-     * deduplicated. These must be provided BEFORE the renderer parses the model,
-     * which is why they are read from the bytes here rather than asked of the
-     * loaded asset — `getResourceUris()` knows the answer, but only once it is
-     * too late to act on it.
+     * The per-slot car GLBs and their 50%-alpha ghost twins, appended to [want]
+     * in the plan's vocabulary: `car<slot>.glb` tagged by the MODEL its bytes
+     * come from, since that is the only thing about a slot that changes them. A
+     * slot with no model tags as `""` so a later pick reads as a change rather
+     * than as "unchanged".
      */
-    private fun imageUris(bytes: ByteArray): List<String> =
-        TtpJson.strings(Ttp.ttp_glb_image_uris(bytes))
+    private fun carWants(roster: List<RosterSlot>, want: JSONArray): JSONArray {
+        roster.forEachIndexed { slot, car ->
+            want.put(JSONObject().put("name", "car$slot.glb").put("tag", car.model))
+            if (car.model.isNotEmpty()) {
+                want.put(JSONObject().put("name", "car$slot-ghost.glb").put("tag", car.model)
+                    .put("from", "car$slot.glb"))
+            }
+        }
+        return want
+    }
+
+    /**
+     * Read and hand over exactly what the engine says it still needs, then
+     * derive the ghosts out of the models that came with them — a wanted
+     * derivative always brings its source (`ttp_display.h`).
+     *
+     * The ghost is copied out of the ABI's scratch as it is derived: the
+     * generated bridge already returns a fresh ByteArray, which is why there is
+     * no copy step here and why the tvOS twin needs one.
+     */
+    private fun fetchPlanned(want: JSONArray, display: DisplayHost, store: AssetStore) {
+        val need = TtpJson.strings(Ttp.ttp_display_asset_plan(TtpJson.arg(want.toString()))).toSet()
+        val fetched = HashMap<String, ByteArray>()
+        for (i in 0 until want.length()) {
+            val w = want.optJSONObject(i) ?: continue
+            // optStr throughout, even though this file BUILT these objects and
+            // knows none of its values is JSON null: `name` is a nullable key
+            // elsewhere on this ABI, and tests/androidtv-nullable-json.test.js
+            // gates the spelling rather than the provenance — which is the right
+            // way round, since provenance is exactly what a reader gets wrong.
+            val name = TtpJson.optStr(w, "name") ?: continue
+            if (name !in need) continue
+            if (TtpJson.optStr(w, "from") != null) continue
+            val tag = TtpJson.optStr(w, "tag") ?: continue
+            if (tag.isEmpty()) continue
+            val bytes = store.glb(tag) ?: continue
+            fetched[name] = bytes
+            provide(display, name, bytes)
+        }
+        for (i in 0 until want.length()) {
+            val w = want.optJSONObject(i) ?: continue
+            val name = TtpJson.optStr(w, "name") ?: continue
+            if (name !in need) continue
+            val from = TtpJson.optStr(w, "from") ?: continue
+            val src = fetched[from] ?: continue
+            Ttp.ttp_glb_ghost(src)?.let { provide(display, name, it) }
+        }
+    }
 }

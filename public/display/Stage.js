@@ -1280,6 +1280,15 @@ export class Stage {
     if (this.onFrame) this.onFrame(dt);
     if (!this.display) { this._scheduleNext(); return; }
     this._adaptScale(t);
+    // Derived bytes the last frame landed. HERE and not at the end of a build:
+    // a WebGL readback cannot complete inside the call that issues it, so the
+    // build only stages and this is where the bake and the silhouettes actually
+    // arrive (ttp_display.h). One integer on an idle frame, and it is deliberately
+    // not awaited — nothing on screen waits for a cache write.
+    // Unawaited, and its failures are swallowed: nothing on screen waits for a
+    // cache write, and a rejected IndexedDB put must not reach the page as an
+    // unhandled rejection from the frame loop.
+    this.display.writeReadyBlobs().catch(() => {});
 
     const ids = this.soloCam ? [] : this._order.filter((id) => this.cars.has(id));
     if (ids.length) this._hudHidden = false; // cells are back; the HUD gets placed below

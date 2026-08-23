@@ -143,10 +143,15 @@ and returns early. The lobby looks perfect (its paper is Compose) over a dead
 surface, and then START refuses with `scene`. `onSurfaceReady` fires on EVERY
 create for exactly this.
 
-The map also OUTLIVES a `releaseScene`, which is why `SceneStaging` keeps a memo
-of what the renderer already holds and re-provisions only what changed. Anything
-that mirrors the asset map has to be dropped on the same beat the map is —
-`SceneStaging.materials` is that beat, and `BakeCache.forget` rides it too.
+The map also OUTLIVES a `releaseScene`, which is why a build re-provisions only
+what changed. **Which assets those are is the ENGINE's answer**
+(`ttp_display_asset_plan`), not this shell's: `SceneStaging` states what it would
+hand over, tagged by the kit model each one's bytes come from, and gets back the
+subset still missing. It kept a `provided` memo of its own for a while — a mirror
+of the asset map, with an invalidation hook on `SceneStaging.materials` because
+that is the beat a destroyed surface takes the map away on. The mirror is gone
+and so is the hook; nothing here mirrors the asset map any more, and nothing
+should.
 
 **`optString` READS AN EXPLICIT JSON NULL AS THE STRING `"null"`.** Android's
 `org.json` is not json.org's: `optString` delegates to `JSON.toString`, which

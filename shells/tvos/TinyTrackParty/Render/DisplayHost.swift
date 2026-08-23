@@ -39,6 +39,11 @@ final class DisplayHost {
     /// coordinator re-evaluates the backdrop on it — see `hasPainted`.
     var onFirstPaint: (() -> Void)?
 
+    /// Where derived bytes kept between runs live. Held here, and not only by
+    /// the coordinator, because the WRITE half of the blob walk is a frame beat
+    /// rather than a build's tail — see `writeReadyBlobs`.
+    var blobs: BlobStores?
+
     // MARK: - State the ABI cannot be asked for
 
     /// Whether `ttp_display_create` has succeeded. A no-display ABI is a
@@ -522,6 +527,12 @@ final class DisplayHost {
         // monitor rather than the floor.
         let presented = ttp_display_frame(dt) != 0
 
+        // Derived bytes this frame landed — normally the frame right after a
+        // build. The beat is here rather than at the build's tail because a
+        // readback cannot be waited on there without stalling the build, and on
+        // one backend cannot be waited on at all (`ttp_display.h`).
+        writeReadyBlobs()
+
         // The first painted frame OF A BUILT SCENE, which is what the backdrop
         // waits on. Both halves matter: a present with no scene is the renderer
         // clearing an empty view, and revealing that is the same black flash as
@@ -650,6 +661,36 @@ final class DisplayHost {
         var description: String {
             switch self {
             case .rejected(let name): return "ttp_display_asset(\(name)) was rejected"
+            }
+        }
+    }
+
+    /// Write out whatever the engine has finished — the blob walk's second half,
+    /// on the FRAME BEAT rather than at the end of a build.
+    ///
+    /// A readback does not complete inside the call that issues it on every
+    /// backend (`ttp_display.h`), so the build only STAGES its derived bytes and
+    /// this is where they actually arrive — normally the frame right after a
+    /// build, on every backend. The shape is shared with the other two shells,
+    /// because one walk performed three ways is three chances to perform it
+    /// differently.
+    ///
+    /// Gated on one integer, so an idle frame costs a single call and nothing
+    /// else. `wrote` retires a name and runs whether the write landed or not: a
+    /// name that is never retired is re-exported on every frame for the rest of
+    /// the run, and a store is a cache — the road out of a failed write is to
+    /// make the thing again.
+    private func writeReadyBlobs() {
+        guard let blobs, ttp_display_blob_ready() != 0 else { return }
+        blobs.forEach { blobStore, name in
+            for case let blobName as String
+                in (TTP.obj(ttp_display_blob_keep(name))["write"] as? [Any]) ?? [] {
+                var outLen: UInt32 = 0
+                if let p = ttp_display_blob_export(name, blobName, &outLen), outLen > 0 {
+                    blobStore.write(blobName, Data(bytes: p, count: Int(outLen)))
+                    print("[ttp] \(name) stored as \(blobName) (\(outLen / 1024) KiB)")
+                }
+                ttp_display_blob_wrote(name, blobName)
             }
         }
     }

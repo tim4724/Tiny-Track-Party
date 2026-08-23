@@ -193,6 +193,54 @@ TTP_ABI double ttp_display_scale_panel_ms(void);
  * predicate polarity, like every int on the ABI. */
 TTP_ABI int ttp_display_asset(const char* name, const uint8_t* bytes, uint32_t len);
 
+/* ---- what still has to be fetched -------------------------------------------
+ *
+ * Provisioning is mostly RE-work. The engine's asset map survives a scene
+ * release, so across two builds the props are always the same bytes, the
+ * textures always are, the scenery is whenever the biome held, and the cars are
+ * unless somebody actually picked a different one. A re-dress is worse: the
+ * roster moves for a ready toggle, a rename, a welcome or a seat expiry, none of
+ * which change a single byte.
+ *
+ * WHICH ONES ARE STALE IS NOT A PLATFORM FACT. One shell used to answer it with
+ * a memo of its own beside the fetch loop — a mirror of the engine's asset map,
+ * which it then had to invalidate itself on the beat a destroyed surface took
+ * that map away. The other two shells simply re-read, re-derived and re-copied
+ * everything, every build. Both are the same bug in different directions, and it
+ * is the one `ttp_net.h` and the blob walk above already argue about: a shell
+ * that has to re-derive an engine rule from prose is the defect.
+ *
+ * So the shell says what it WOULD hand over and the engine says what it still
+ * needs. `wantJson` is, in fetch order:
+ *
+ *   [{"name":"scenery0.glb","tag":"tree"},
+ *    {"name":"car0.glb","tag":"vehicle-racer"},
+ *    {"name":"car0-ghost.glb","tag":"vehicle-racer","from":"car0.glb"}]
+ *
+ * THE TAG IS WHAT THE BYTES ARE A FUNCTION OF, in your own vocabulary — a kit
+ * model's base name, a texture's authored URI. Not the asset name: `car3.glb` is
+ * different bytes when slot 3 picks a different model, while
+ * `Textures/colormap.png` never is. A slot with no model tags as "" so a later
+ * pick reads as a change. `from` names what a DERIVED asset is made out of (a
+ * ghost's model), and a wanted derivative always brings its source back with it
+ * — otherwise the answer would ask you to derive from bytes it just told you not
+ * to fetch.
+ *
+ * The answer is the subset to fetch, as a JSON array of names, and the tags are
+ * REMEMBERED: the ttp_display_asset calls that follow stamp them, so nothing
+ * crosses twice and there is no second call to forget.
+ *
+ * ttp_display_asset_textures answers the images[].uri every model now held
+ * references and that the engine does not already have — sorted, deduplicated,
+ * relative as authored. Ask it AFTER the models are in, which is where the shells
+ * already scanned for themselves; the engine reads the bytes it is holding, so a
+ * model the plan skipped still contributes its textures, and the scan is cached
+ * by those bytes rather than repeated per build.
+ *
+ * Both are scratch, per ttp_abi.h. */
+TTP_ABI const char* ttp_display_asset_plan(const char* wantJson);
+TTP_ABI const char* ttp_display_asset_textures(void);
+
 /* Force a biome on every scene built from here on, regardless of the track's
  * cup — the ?biome= inspector override, which is how any track gets compared in
  * any look. null, "" or an unknown name clears it and lets the cup decide;
@@ -354,24 +402,51 @@ TTP_ABI int ttp_display_reroster(const char* rosterJson);
  * performs four primitives it cannot avoid owning — list names with last-used
  * times, read by name, write by name, delete by name:
  *
- *   for each store in ttp_display_blob_stores():
+ *   BEFORE THE BUILD, once per store:
  *       plan(store, trackId, generation, entries)
- *                                -> {"drop":["…"], "read":"<name>"|null}
- *       perform the drops; if `read`, read those bytes and offer(store, them)
+ *                                -> {"drop":["…"], "read":["…"]}
+ *       perform the drops; read each `read` name and offer(store, its bytes)
  *   ttp_display_build(...)
- *   for each store:
- *       keep(store)              -> {"write":"<name>"|null}
- *       if `write`, export(store) and write those bytes under that name
  *
- * `read` is null when the engine is already holding this one, which is the
- * commonest build of all and costs no read at all. A blob the engine does not
- * fully trust is a cache MISS, not an error: it is dropped and the scene makes
- * the thing again.
+ *   ON EVERY FRAME, gated by one integer:
+ *       if (ttp_display_blob_ready()) for each store:
+ *           keep(store)          -> {"write":["…"]}
+ *           for each name: export(store, name) and write those bytes under it,
+ *                          then wrote(store, name)
  *
- * THE WINDOW IS AFTER PROVISIONING AND BEFORE THE BUILD, for both stores. The
- * bake's key needs the biome latched; the masks' key is derived from the car
- * GLBs the shell has already handed over, so it does not exist until they have
- * been. One call site satisfies both.
+ * A NAME LIST, NOT A NAME, because a store may hold several things one build
+ * wants: a silhouette is one blob per car MODEL and a field uses up to four.
+ * (Keying them by the model SET instead stored each layer once per subset it
+ * appeared in and then missed outright whenever a lobby covered fewer models
+ * than the blob that wrote it.) The bake store answers zero or one.
+ *
+ * A name is absent from `read` when the engine is already holding that thing,
+ * which is the commonest build of all and costs no read at all. A blob the
+ * engine does not fully trust is a cache MISS, not an error: it is dropped and
+ * the scene makes the thing again.
+ *
+ * THE PLAN WINDOW IS AFTER PROVISIONING AND BEFORE THE BUILD, for both stores.
+ * The bake's key needs the biome latched; the masks' keys are derived from the
+ * car GLBs the shell has already handed over, so they do not exist until they
+ * have been. One call site satisfies both.
+ *
+ * THE WRITE HALF IS A FRAME BEAT AND NOT THE BUILD'S TAIL, and that is the one
+ * thing here a shell must not shortcut. A readback does not complete inside the
+ * call that issues it on GL — the completion is executed from
+ * OpenGLDriver::tick(), which endFrame() calls and flushAndWait() does not, and
+ * in a browser a task cannot wait on the GPU at all. The build STAGES its blobs
+ * (metadata snapshotted, reads issued) and the FRAME LOOP finishes them, on
+ * every backend alike — staging deliberately does not pump the driver, because
+ * the pump that would let Metal and Vulkan answer early is a synchronous GPU
+ * stall on the build's critical path, and on Android a build IS the lobby's
+ * latency. In practice the frame after a build collects them.
+ * `ttp_display_blob_ready` is a bitmask over the store order, so the cost of
+ * asking every frame is one integer, and it is 0 on any frame where nothing
+ * landed — which is almost all of them.
+ *
+ * When this was the build's tail, the web could only ever write a blob whose
+ * track had been built TWICE IN A ROW: a Grand Prix's second, third and fourth
+ * circuits were never stored in any session, and nothing said so.
  *
  * GENERATION IS THE INVALIDATION and it stays yours, because only a shell knows
  * what identifies its own binary — Android's install time, tvOS's bundle
@@ -382,14 +457,23 @@ TTP_ABI int ttp_display_reroster(const char* rosterJson);
  * byte orientation is the writer's, so a device flipping between Vulkan and GL
  * keeps a blob per backend.)
  *
- * Every JSON answer is scratch, per ttp_abi.h. export answers NULL when there
- * is nothing to keep. */
+ * `wrote` is what retires a name, and it is the shell's to say because only it
+ * knows when the write is OVER — which on one shell is several awaits after the
+ * export. Say it once the attempt has finished, succeeded or not: a store is a
+ * cache and every road out of a failed write is "make it again", so a name that
+ * is never retired would be re-exported on every frame for the rest of the run.
+ *
+ * Every JSON answer is scratch, per ttp_abi.h. export answers NULL for a name
+ * that is not waiting. */
 TTP_ABI const char* ttp_display_blob_stores(void);
 TTP_ABI const char* ttp_display_blob_plan(const char* store, const char* trackId,
                                           const char* generation, const char* entriesJson);
 TTP_ABI void ttp_display_blob_offer(const char* store, const uint8_t* bytes, uint32_t len);
+TTP_ABI int ttp_display_blob_ready(void);
 TTP_ABI const char* ttp_display_blob_keep(const char* store);
-TTP_ABI const uint8_t* ttp_display_blob_export(const char* store, uint32_t* outLen);
+TTP_ABI const uint8_t* ttp_display_blob_export(const char* store, const char* name,
+                                               uint32_t* outLen);
+TTP_ABI void ttp_display_blob_wrote(const char* store, const char* name);
 
 /* Tear the scene down; the engine, views, materials and provided assets live
  * on, so the next ttp_display_build is cheap. */

@@ -127,6 +127,34 @@ int ttp_display_asset(const char* name, const uint8_t* bytes, uint32_t len) {
     return g_disp->renderer->provideAsset(name, bytes, len) ? 1 : 0;
 }
 
+const char* ttp_display_asset_plan(const char* wantJson) {
+    static std::string out;
+    if (!g_disp || !g_disp->renderer) { out = "[]"; return out.c_str(); }
+    std::vector<TtpRenderer::AssetWant> want;
+    const ttp::Value list = ttp::json::parse_or(wantJson, ttp::Value::Arr());
+    for (const ttp::Value& e : list.arr) {
+        TtpRenderer::AssetWant w;
+        w.name = ttp::json::str_field(e, "name");
+        if (w.name.empty()) continue;
+        w.tag = ttp::json::str_field(e, "tag");
+        w.from = ttp::json::str_field(e, "from");
+        want.push_back(std::move(w));
+    }
+    ttp::Value a = ttp::Value::Arr();
+    for (const std::string& n : g_disp->renderer->assetPlan(want)) a.push(ttp::Value::Str(n));
+    out = ttp::canonical_stringify(a);
+    return out.c_str();
+}
+
+const char* ttp_display_asset_textures(void) {
+    static std::string out;
+    if (!g_disp || !g_disp->renderer) { out = "[]"; return out.c_str(); }
+    ttp::Value a = ttp::Value::Arr();
+    for (const std::string& u : g_disp->renderer->assetTextures()) a.push(ttp::Value::Str(u));
+    out = ttp::canonical_stringify(a);
+    return out.c_str();
+}
+
 void ttp_display_biome(const char* name) {
     if (!g_disp) return;
     g_disp->biome = (name && ttp::rt::has_biome(name)) ? name : "";
@@ -168,6 +196,11 @@ static std::string bakeKeyFor(const char* trackId, const char* biome) {
             + "|" + (g_disp && g_disp->showcase ? "1" : "0")
             + "|" + std::to_string(g_disp ? g_disp->renderer->backendId() : 0);
 }
+
+// Defined with the rest of the blob walk below; called from the end of a build,
+// which is the one moment the derived bytes exist and the plan still says which
+// of them the store lacks.
+static void stagePlannedBlobs(void);
 
 int ttp_display_build(const char* trackId, const char* rosterJson) {
     ttp::clear_error();
@@ -245,6 +278,12 @@ int ttp_display_build(const char* trackId, const char* rosterJson) {
     // Start the turntable on the still view's own bearing, so a preview's first
     // frame is the framing the track was fitted for.
     g_disp->orbitAngle = g_disp->framing.ovBearing;
+    // What this build made that is worth keeping between runs. HERE and not in
+    // the shell: whether a blob is worth staging is entirely engine knowledge
+    // (does the store hold it, did these bytes come from the store, did the
+    // build actually make one), and the shell's only remaining job is to write
+    // the bytes a later `keep` names.
+    stagePlannedBlobs();
     return 1;
 }
 
@@ -276,17 +315,6 @@ int ttp_display_reroster(const char* rosterJson) {
     return 1;
 }
 
-// What the NEXT build's bake will be OF. The biome must already be latched
-// (ttp_display_biome), exactly as it must be before a build — the shell does
-// both in the same step, and a key derived before the latch names the PREVIOUS
-// scene's world. Internal now: the walk below is the only caller, which is the
-// point — the window used to be a comment every shell had to obey.
-static std::string plannedBakeKey(const char* trackId) {
-    const char* biome = (g_disp && !g_disp->biome.empty())
-            ? g_disp->biome.c_str() : ttp::rt::biome_for_track(trackId);
-    return bakeKeyFor(trackId, biome);
-}
-
 // The stores this build knows how to fill. A shell iterates this and names no
 // blob kind of its own — see ttp_display.h.
 static const char* const kBlobStores[] = { "bake", "mask" };
@@ -313,42 +341,39 @@ int storeIndex(const char* store) {
     return -1;
 }
 
-// What the NEXT build's blob of this kind will be OF.
+// What the NEXT build's blobs of this kind will be OF.
 //
-// The bake's needs the biome latched (ttp_display_biome), exactly as the build
-// does. The masks' is derived from the car GLBs the shell has already provided,
-// so it does not exist until provisioning has run — which is why ttp_display.h
-// states one window that satisfies both.
-std::string plannedKey(int store, const char* trackId) {
-    if (!g_disp || !g_disp->renderer) return std::string();
+// The bake's key needs the biome latched (ttp_display_biome), exactly as the
+// build does, so it is derived here rather than read off the renderer — which
+// is still holding the PREVIOUS scene's. The masks' keys come from the car GLBs
+// the shell has already provided, so they do not exist until provisioning has
+// run. That is why ttp_display.h states one window that satisfies both.
+std::vector<std::string> plannedKeys(int store, const char* trackId) {
+    if (!g_disp || !g_disp->renderer) return {};
     if (store == 0) {
         const char* biome = (!g_disp->biome.empty())
                 ? g_disp->biome.c_str() : ttp::rt::biome_for_track(trackId);
-        return bakeKeyFor(trackId, biome);
+        const std::string key = bakeKeyFor(trackId, biome);
+        return key.empty() ? std::vector<std::string>{} : std::vector<std::string>{ key };
     }
-    return g_disp->renderer->masksKey();
+    return g_disp->renderer->maskBlobKeys();
 }
 
-bool exportStore(int store, std::vector<uint8_t>& out) {
-    if (!g_disp || !g_disp->renderer) return false;
-    return store == 0 ? g_disp->renderer->exportBake(out)
-                      : g_disp->renderer->exportMasks(out);
-}
-
-bool importStore(int store, const uint8_t* b, uint32_t n) {
-    if (!g_disp || !g_disp->renderer) return false;
-    return store == 0 ? g_disp->renderer->importBake(b, n)
-                      : g_disp->renderer->importMasks(b, n);
-}
-
-// Is the engine already holding this one, so the shell need not read it?
-bool alreadyResident(int store, const std::string& key) {
-    if (!g_disp || !g_disp->renderer || key.empty()) return false;
-    // The bake knows exactly what its resident maps are of. The masks are a SET
-    // and layers are claimed one at a time, so "resident" is only claimed when
-    // the whole set matches — a partial hit still wants the blob for the rest,
-    // and importMasks skips the layers already held.
-    return store == 0 && g_disp->renderer->bakedKey() == key;
+// Collect the pixels for every outbound blob whose reads have landed.
+//
+// The pairing from key to filename was recorded when the build staged it, so
+// this needs nothing from the plan — which is the point. When it read the plan
+// instead, two builds with no frame between them cleared the pairing while the
+// first one's read was still in flight, and those bytes could never be written
+// or freed again.
+void harvestOutboundBlobs() {
+    if (!g_disp || !g_disp->renderer) return;
+    for (DisplayCore::BlobWalk& w : g_disp->blobWalk) {
+        for (DisplayCore::BlobOutbound& o : w.outbound) {
+            if (!o.bytes.empty()) continue;
+            g_disp->renderer->takeStagedBlob(o.key, o.bytes);
+        }
+    }
 }
 
 }  // namespace
@@ -358,101 +383,183 @@ const char* ttp_display_blob_plan(const char* store, const char* trackId,
     static std::string out;
     const int si = storeIndex(store);
     if (si < 0 || !g_disp || !g_disp->renderer) { out = "{}"; return out.c_str(); }
-    // A fresh walk for this store. Reset FIRST, so a plan that then fails leaves
-    // a state that writes nothing rather than one carrying the previous answer.
+    // A fresh PLANNED half for this store. Reset FIRST, so a plan that then
+    // fails leaves a state that writes nothing rather than one carrying the
+    // previous answer. The OUTBOUND half is deliberately untouched: those blobs
+    // belong to a build that has already happened, and on GL they routinely
+    // outlive the next plan (ttp_display_core.h).
     DisplayCore::BlobWalk& w = g_disp->blobWalk[si];
-    w = DisplayCore::BlobWalk{};
+    w.planned.clear();
 
-    const std::string key = plannedKey(si, trackId);
-    if (key.empty()) { out = "{}"; return out.c_str(); }
+    const std::vector<std::string> keys = plannedKeys(si, trackId);
+    if (keys.empty()) { out = "{}"; return out.c_str(); }
     ttp::rt::BlobRequest in;
     in.store = kBlobStores[si];
     in.generation = generation ? generation : "";
-    in.key = key;
+    in.keys = keys;
     const ttp::Value entries = ttp::json::parse_or(entriesJson, ttp::Value::Arr());
     for (const ttp::Value& e : entries.arr) {
         ttp::rt::BlobEntry be;
         be.name = ttp::json::str_field(e, "name");
         // A nameless entry is not a file this store can act on either way, so it
-        // is dropped from the plan's INPUT rather than answered about — the same
-        // rule as ttp_blob_plan_json, whose decision function this is.
+        // is dropped from the plan's INPUT rather than answered about.
         if (be.name.empty()) continue;
         if (const ttp::Value* used = e.find("usedMs")) be.usedMs = used->num;
         in.entries.push_back(be);
     }
     const ttp::rt::BlobPlan plan = ttp::rt::planBlob(in);
-    w.name = plan.name;
-    for (const ttp::rt::BlobEntry& e : in.entries) {
-        if (e.name == plan.name) { w.held = true; break; }
+
+    ttp::Value read = ttp::Value::Arr();
+    for (size_t i = 0; i < keys.size() && i < plan.names.size(); i++) {
+        DisplayCore::BlobPlanned p;
+        p.key = keys[i];
+        p.name = plan.names[i];
+        for (const ttp::rt::BlobEntry& e : in.entries) {
+            if (e.name == p.name) { p.held = true; break; }
+        }
+        // ALREADY IN THE ENGINE and therefore not worth reading: asking for it
+        // would cost a multi-megabyte read to tell the engine something it
+        // knows. This is the fact a shell used to mirror; answered here, where
+        // it cannot go stale. It used to be answered for the bake alone, so a
+        // warm build re-read every silhouette it was already holding.
+        if (p.held && !g_disp->renderer->blobResident(p.key)) {
+            read.push(ttp::Value::Str(p.name));
+        }
+        w.planned.push_back(std::move(p));
     }
 
     ttp::Value m = ttp::Value::Obj();
     ttp::Value drop = ttp::Value::Arr();
     for (const std::string& d : plan.drop) drop.push(ttp::Value::Str(d));
     m.set("drop", drop);
-    // ALREADY IN THE ENGINE and therefore not worth reading: asking for it would
-    // cost a multi-megabyte read to tell the engine something it knows. This is
-    // the fact a shell used to mirror; answered here, where it cannot go stale.
-    m.set("read", (!alreadyResident(si, key) && w.held)
-            ? ttp::Value::Str(plan.name) : ttp::Value::Null());
+    m.set("read", read);
     out = ttp::canonical_stringify(m);
     return out.c_str();
 }
 
 void ttp_display_blob_offer(const char* store, const uint8_t* bytes, uint32_t len) {
     const int si = storeIndex(store);
-    if (si < 0 || !bytes || !len || !g_disp) return;
+    if (si < 0 || !bytes || !len || !g_disp || !g_disp->renderer) return;
     // A blob the engine refuses is a version it does not know, or bytes that do
     // not describe what they claim. That is a MISS, never an error: the scene
-    // makes the thing again, and `keep` then writes the good bytes over these.
-    g_disp->blobWalk[si].primed = importStore(si, bytes, len);
+    // makes the thing again, and the build then stages the good bytes over these.
+    //
+    // WHICH blob these bytes are is theirs to say (importBlob dispatches on the
+    // magic and answers the key it adopted), so the only thing the store
+    // argument decides here is which walk records it.
+    //
+    // ONLY THAT ONE KEY IS PRIMED. Marking every key that is merely RESIDENT
+    // after the import let one offered blob vouch for its siblings — and since
+    // `primed` is what stops a blob being staged, a key that was resident but
+    // had never reached the store was then skipped by every later build too. A
+    // cache that silently stops filling is the exact failure this walk exists to
+    // remove, so it must not be reintroduced by an approximation here.
+    const std::string key = g_disp->renderer->importBlob(bytes, len);
+    if (key.empty()) return;
+    for (DisplayCore::BlobPlanned& p : g_disp->blobWalk[si].planned) {
+        if (p.key == key) { p.primed = true; break; }
+    }
+}
+
+// Stage what this build made that the store does not already have.
+//
+// CALLED BY THE BUILD, not by the shell, and that is the fix for the whole
+// class of bug this walk had. Three reasons a blob is not worth staging and
+// only the first is about storage: the store already holds it, the bytes came
+// FROM the store so writing them back is a copy of a read, and nothing was
+// planned so the name would be nobody's.
+//
+// IT ISSUES THE READS AND DOES NOT WAIT FOR THEM, on every backend. Staging
+// pumped the driver once (eight flushAndWait calls) so that Metal and Vulkan
+// could answer inside the build; that is a synchronous GPU stall on the build's
+// critical path, which is the one thing an Android lobby cannot afford, and it
+// could never work on GL anyway. So all three now land on the frame beat and
+// there is one path rather than a fast one and a slow one.
+static void stagePlannedBlobs(void) {
+    if (!g_disp || !g_disp->renderer) return;
+    for (DisplayCore::BlobWalk& w : g_disp->blobWalk) {
+        for (const DisplayCore::BlobPlanned& p : w.planned) {
+            if (p.name.empty() || p.held || p.primed) continue;
+            if (!g_disp->renderer->stageBlob(p.key)) continue;
+            // The pairing goes on the OUTBOUND list now rather than when the
+            // pixels land — see BlobOutbound. Never twice: a rebuild of the same
+            // scene stages the same key, and two entries would write it twice.
+            bool already = false;
+            for (const DisplayCore::BlobOutbound& o : w.outbound) {
+                if (o.key == p.key) { already = true; break; }
+            }
+            if (already) continue;
+            DisplayCore::BlobOutbound o;
+            o.key = p.key;
+            o.name = p.name;
+            w.outbound.push_back(std::move(o));
+        }
+    }
+    // Anything a PREVIOUS build left in flight may well have landed by now, so
+    // this build's staging is also the cheapest moment to collect it. Nothing
+    // staged above can be ready yet — no frame has run.
+    harvestOutboundBlobs();
+}
+
+int ttp_display_blob_ready(void) {
+    if (!g_disp || !g_disp->renderer) return 0;
+    harvestOutboundBlobs();
+    int bits = 0;
+    for (int si = 0; si < (int) (sizeof kBlobStores / sizeof kBlobStores[0]); si++) {
+        for (const DisplayCore::BlobOutbound& o : g_disp->blobWalk[si].outbound) {
+            if (!o.bytes.empty()) { bits |= 1 << si; break; }
+        }
+    }
+    return bits;
 }
 
 const char* ttp_display_blob_keep(const char* store) {
     static std::string out;
     ttp::Value m = ttp::Value::Obj();
+    ttp::Value write = ttp::Value::Arr();
     const int si = storeIndex(store);
-    // Four ways this writes nothing, and only the first is about storage: the
-    // store already holds this blob; the shell never planned, so the name would
-    // be nobody's; the bytes came FROM the store, so writing them back is a copy
-    // of a read; and there is nothing to export in the first place.
-    bool worth = si >= 0 && g_disp && g_disp->renderer;
-    if (worth) {
-        const DisplayCore::BlobWalk& w = g_disp->blobWalk[si];
-        worth = !w.name.empty() && !w.held && !w.primed;
+    if (si >= 0 && g_disp) {
+        for (const DisplayCore::BlobOutbound& o : g_disp->blobWalk[si].outbound) {
+            // The ones still coming are not named: a shell that wrote them would
+            // store an empty file under a name nothing would then re-derive.
+            if (!o.bytes.empty()) write.push(ttp::Value::Str(o.name));
+        }
     }
-    // The export is the expensive half (a readback per texture), so it is only
-    // reached once every cheaper reason to decline has been ruled out — and it
-    // happens HERE, once, with `export` handing the same buffer straight back.
-    //
-    // ON GL THIS DECLINES THE FIRST TIME AND MEANS IT. The readbacks cannot
-    // complete inside the build that asks (ttp_display.h), so the first ask only
-    // issues them; the frame loop turns the driver over, and the next build's
-    // keep finds the bytes waiting. Nothing is written in between, which is a
-    // cache missing a beat rather than anything to repair.
-    if (worth) {
-        g_disp->blobWalk[si].bytes.clear();
-        worth = exportStore(si, g_disp->blobWalk[si].bytes)
-                && !g_disp->blobWalk[si].bytes.empty();
-    }
-    m.set("write", worth ? ttp::Value::Str(g_disp->blobWalk[si].name)
-                         : ttp::Value::Null());
+    m.set("write", write);
     out = ttp::canonical_stringify(m);
     return out.c_str();
 }
 
-const uint8_t* ttp_display_blob_export(const char* store, uint32_t* outLen) {
+const uint8_t* ttp_display_blob_export(const char* store, const char* name,
+                                       uint32_t* outLen) {
     const int si = storeIndex(store);
-    // WHAT `keep` ALREADY PRODUCED. Re-exporting here would pay a second
+    // WHAT THE BUILD ALREADY PRODUCED. Re-exporting here would pay a second
     // readback per texture on the backends where that works, and would never
     // answer at all on the one where it does not.
-    if (si < 0 || !g_disp || g_disp->blobWalk[si].bytes.empty()) {
-        if (outLen) *outLen = 0;
-        return nullptr;
+    if (si >= 0 && name && g_disp) {
+        for (const DisplayCore::BlobOutbound& o : g_disp->blobWalk[si].outbound) {
+            if (o.name != name || o.bytes.empty()) continue;
+            if (outLen) *outLen = (uint32_t) o.bytes.size();
+            return o.bytes.data();
+        }
     }
-    const std::vector<uint8_t>& blob = g_disp->blobWalk[si].bytes;
-    if (outLen) *outLen = (uint32_t) blob.size();
-    return blob.data();
+    if (outLen) *outLen = 0;
+    return nullptr;
+}
+
+void ttp_display_blob_wrote(const char* store, const char* name) {
+    const int si = storeIndex(store);
+    if (si < 0 || !name || !g_disp) return;
+    // THE SHELL SAYS WHEN, because only it knows whether the bytes reached the
+    // disk — and a write that failed should be retried, not forgotten. Dropping
+    // the ready slot on `export` instead would lose a blob to a full disk with
+    // nothing to say so.
+    std::vector<DisplayCore::BlobOutbound>& out = g_disp->blobWalk[si].outbound;
+    for (size_t i = 0; i < out.size(); i++) {
+        if (out[i].name != name) continue;
+        out.erase(out.begin() + (long) i);
+        return;
+    }
 }
 
 

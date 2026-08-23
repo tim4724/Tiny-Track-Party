@@ -27,19 +27,40 @@ struct DisplayCore : DisplayState {
     TtpRenderer* renderer = nullptr;
     bool built = false;
 
-    // One blob walk's state between its crossings (ttp_display.h). It spans
-    // `plan` → `offer` → `build` → `keep`, which is one scene build and never
-    // outlives it: `plan` resets it, so a shell that skips a step gets a walk
-    // that declines to write rather than one that writes the wrong blob.
-    struct BlobWalk {
-        std::string name;   // what this key reads and writes under
-        bool held = false;  // …and whether the store already had it
+    // A blob walk's state between its crossings (ttp_display.h), in two halves
+    // with two different lifetimes — which is the whole lesson of the version
+    // that had one.
+    //
+    // PLANNED spans `plan` → `offer` → `build` and never outlives it: `plan`
+    // resets it, so a shell that skips a step gets a walk that declines rather
+    // than one that writes the wrong blob.
+    //
+    // OUTBOUND OUTLIVES ITS BUILD, and it has to. On GL a build cannot finish
+    // its own readbacks, so the bytes land a frame or more later — after the
+    // next `plan` may already have run. When the two were one, the only blob the
+    // web ever managed to write was one whose track had been built twice in a
+    // row; a Grand Prix's second, third and fourth circuits were never stored at
+    // all, in any session.
+    struct BlobPlanned {
+        std::string key;    // the renderer's own name for the thing
+        std::string name;   // …and the file it reads and writes under
+        bool held = false;  // whether the store already had it
         bool primed = false;// the engine took the blob the shell offered
-        // What `keep` exported, handed straight back by `export`. It lives here
-        // rather than being produced twice because an export is a readback per
-        // texture — and because on GL the first ask only ISSUES those reads
-        // (ttp_display.h), so asking twice would never converge.
-        std::vector<uint8_t> bytes;
+    };
+    // One blob on its way to the store. Recorded when the build STAGES it, not
+    // when the pixels land: the renderer knows only the key, the filename is the
+    // plan's, and a second build with no frame between would otherwise clear the
+    // pairing while the read was still in flight and strand the bytes.
+    struct BlobOutbound {
+        std::string key;
+        std::string name;
+        std::vector<uint8_t> bytes;   // empty until the reads land
+    };
+    struct BlobWalk {
+        std::vector<BlobPlanned> planned;
+        // `keep` names the ones that have bytes, `export` hands the same buffer
+        // straight back, and `wrote` drops the entry.
+        std::vector<BlobOutbound> outbound;
     };
     // One per store, indexed as ttp_display_blob_stores lists them.
     BlobWalk blobWalk[2];

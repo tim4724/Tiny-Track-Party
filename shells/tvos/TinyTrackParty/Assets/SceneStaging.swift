@@ -115,6 +115,10 @@ enum SceneStaging {
     private static let propGhosts = ["item-box": "item-box-fade.glb",
                                      "vehicle-monster-truck": "monster-ghost.glb"]
 
+    /// The toy-car kit's shared palette. Authored into some models and not
+    /// others, so it is asked for by name rather than discovered by the scan.
+    private static let palette = "Textures/colormap.png"
+
     /// Bumped by every `build`, so a build that is overtaken while it is fetching
     /// abandons instead of landing its stale roster on top of the newer one.
     /// `rebuildScene()` fires a fresh `Task` on every seat change, so two
@@ -174,7 +178,7 @@ enum SceneStaging {
         let t0 = CFAbsoluteTimeGetCurrent()
         var handed = 0, handedBytes = 0
         var mark = t0
-        var split = [Double](repeating: 0, count: 5)
+        var split = [Double](repeating: 0, count: 4)
         func step(_ i: Int) {
             let now = CFAbsoluteTimeGetCurrent()
             split[i] = (now - mark) * 1000
@@ -202,39 +206,58 @@ enum SceneStaging {
         ttp_display_biome(resolved)
         step(0)
 
-        // 4. Scenery, in the SLOT ORDER C++ named. The index is the contract, not
-        //    a suggestion: the renderer binds its instanced props by it, and
-        //    `ttp_display_build` reads these same bytes back out on the C++ side
-        //    to resolve the biome's recolour (which keys on each model's own
-        //    authored material colours). `enumerated()` over the NAME list, so a
-        //    model that fails to load leaves a hole rather than shifting every
-        //    slot after it by one.
+        // 4. WHAT THIS SCENE IS MADE OF, as names paired with the kit model
+        //    each one's bytes come from. Nothing is fetched yet: which of these
+        //    the engine is already holding is its own knowledge
+        //    (`ttp_display_asset_plan`), and asking is what turns a rebuild of a
+        //    standing track from a full re-fetch into almost nothing. A shell
+        //    memo of the same fact lived in the Android twin for a while and had
+        //    to be invalidated by hand whenever a destroyed surface took the
+        //    asset map away; this one cannot go stale, because there is no copy.
+        //
+        //    Scenery goes in the SLOT ORDER C++ named. The index is the
+        //    contract, not a suggestion: the renderer binds its instanced props
+        //    by it, and `ttp_display_build` reads these same bytes back out on
+        //    the C++ side to resolve the biome's recolour (which keys on each
+        //    model's own authored material colours). `enumerated()` over the
+        //    NAME list, so a model that fails to load leaves a hole rather than
+        //    shifting every slot after it by one.
         let sceneryModels = showcase
             ? TTP.arr(ttp_theme_showcase_models()).compactMap { $0 as? String }
             : TTP.arr(ttp_theme_scenery_models(resolved)).compactMap { $0 as? String }
 
-        var textureURIs = Set<String>()
+        var want: [[String: Any]] = []
         for (slot, name) in sceneryModels.enumerated() {
-            guard let bytes = await modelBytes(name, store) else { continue }
-            try display.provide("scenery\(slot).glb", bytes)
-            handed += 1; handedBytes += bytes.count
-            textureURIs.formUnion(imageURIs(of: bytes))
+            want.append(["name": "scenery\(slot).glb", "tag": name])
         }
+        want.append(contentsOf: carWants(roster))
+        for name in propModels {
+            want.append(["name": "\(name).glb", "tag": name])
+            if let ghostName = propGhosts[name] {
+                want.append(["name": ghostName, "tag": name, "from": "\(name).glb"])
+            }
+        }
+        let handedNow = await fetchPlanned(want, display: display, store: store)
+        handed += handedNow.count; handedBytes += handedNow.bytes
         step(1)
         guard generation == mine else { return }
 
         // 5. Textures, under their EXACT authored URI. There is no path
         //    resolution on the C side — `registerAssetUris` walks the parsed
         //    asset's own resource URIs and looks each one up verbatim — so the
-        //    name is literally "Textures/colormap.png". The scan is
-        //    `ttp_glb_image_uris`, not a container parse here.
+        //    name is literally "Textures/colormap.png".
         //
-        //    Only the SCENERY is scanned, plus the kit's shared palette
-        //    unconditionally; the cars and props all reference that one file, and
-        //    this mirrors what the web provides. `sorted()` only so the
-        //    provisioning order is stable in a log.
-        textureURIs.insert("Textures/colormap.png")
-        for uri in textureURIs.sorted() {
+        //    THE URI LIST IS THE ENGINE'S, off the bytes it is holding, so a
+        //    model the plan above skipped still contributes its textures and
+        //    nothing here re-reads a container it just handed over. The kit's
+        //    shared palette is asked for by name because it is authored into
+        //    some models and not others. Both go through the plan so their tags
+        //    are stamped and the next build knows they are held.
+        var texWant: [[String: Any]] = [["name": palette, "tag": palette]]
+        for case let uri as String in TTP.arr(ttp_display_asset_textures()) {
+            texWant.append(["name": uri, "tag": uri])
+        }
+        for case let uri as String in TTP.arr(ttp_display_asset_plan(TTP.json(texWant))) {
             guard let bytes = await textureBytes(uri, store) else { continue }
             try display.provide(uri, bytes)
             handed += 1; handedBytes += bytes.count
@@ -242,42 +265,23 @@ enum SceneStaging {
         step(2)
         guard generation == mine else { return }
 
-        // 6. Cars by slot, then the props. `ghost(of:)` copies each clone out of
-        //    the ABI's scratch as it derives it, because that buffer is reused by
-        //    the very next `ttp_glb_ghost` call — a version of this loop that
-        //    collected ghosts and provided them afterwards would hand every car
-        //    the last one's body.
-        for (slot, car) in roster.enumerated() {
-            guard !car.model.isEmpty, let bytes = await modelBytes(car.model, store) else { continue }
-            try display.provide("car\(slot).glb", bytes)
-            handed += 1; handedBytes += bytes.count
-            if let ghost = ghost(of: bytes) { try display.provide("car\(slot)-ghost.glb", ghost) }
-        }
-        for name in propModels {
-            guard let bytes = await modelBytes(name, store) else { continue }
-            try display.provide("\(name).glb", bytes)
-            handed += 1; handedBytes += bytes.count
-            if let ghostName = propGhosts[name], let ghost = ghost(of: bytes) {
-                try display.provide(ghostName, ghost)
-            }
-        }
-        step(3)
-        guard generation == mine else { return }
-
-        // 6b. THE BLOB WALKS, first half — AFTER provisioning and before the
-        //     build, which is the one window that suits every store: the bake's
-        //     key needs the biome (latched at step 3), the masks' is derived
-        //     from the car GLBs handed over at step 6. NOTHING HERE NAMES A BLOB
-        //     KIND; the engine lists its stores and this performs the answers.
+        // 6. THE BLOB WALK, first half — AFTER provisioning and before the
+        //    build, which is the one window that suits every store: the bake's
+        //    key needs the biome (latched at step 3), the masks' are derived
+        //    from the car GLBs handed over at step 4. NOTHING HERE NAMES A BLOB
+        //    KIND; the engine lists its stores and this performs the answers.
+        //    The walk's SECOND half is not here at all — it is a frame beat
+        //    (`DisplayHost.writeReadyBlobs`), for the reason `ttp_display.h`
+        //    gives: a readback does not finish inside the build that issues it
+        //    on every backend, so a build's tail is the wrong place to ask.
         blobs?.forEach { blobStore, name in
             let plan = TTP.obj(ttp_display_blob_plan(
                 name, trackId, blobStore.generation, blobStore.entriesJSON()))
             for case let dropped as String in (plan["drop"] as? [Any]) ?? [] {
                 blobStore.delete(dropped)
             }
-            // `read` is JSON null on a miss, which Swift's `as? String` gives
-            // back as nil — the trap Android's org.json needs a guard for.
-            if let blobName = plan["read"] as? String, let bytes = blobStore.read(blobName) {
+            for case let blobName as String in (plan["read"] as? [Any]) ?? [] {
+                guard let bytes = blobStore.read(blobName) else { continue }
                 bytes.withUnsafeBytes { raw in
                     ttp_display_blob_offer(name, raw.bindMemory(to: UInt8.self).baseAddress,
                                            UInt32(bytes.count))
@@ -304,23 +308,11 @@ enum SceneStaging {
         guard ttp_display_build(trackId, TTP.json(slots)) != 0 else {
             throw Failure.buildRejected(trackId)
         }
-        step(4)
-        // THE WALKS' second half. Whether this build made anything worth keeping
-        // — and whether the store already has it — is the engine's to know; an
-        // export costs a readback per texture, so it is asked for only when a
-        // name comes back.
-        blobs?.forEach { blobStore, name in
-            guard let blobName = TTP.obj(ttp_display_blob_keep(name))["write"] as? String
-            else { return }
-            var outLen: UInt32 = 0
-            guard let p = ttp_display_blob_export(name, &outLen), outLen > 0 else { return }
-            blobStore.write(blobName, Data(bytes: p, count: Int(outLen)))
-            print("[ttp] \(name) stored as \(blobName) (\(outLen / 1024) KiB)")
-        }
+        step(3)
         print(String(format:
-            "[ttp] build split %@: biome %.0f scenery %.0f textures %.0f cars+props %.0f"
-            + " native %.0f ms (%d assets, %d KiB handed over)",
-            trackId, split[0], split[1], split[2], split[3], split[4],
+            "[ttp] build split %@: biome %.0f models %.0f textures %.0f native %.0f ms"
+            + " (%d assets, %d KiB handed over)",
+            trackId, split[0], split[1], split[2], split[3],
             handed, handedBytes / 1024))
         display.sceneBuilt(rosterIds: roster.map(\.id), biome: resolved)
     }
@@ -337,11 +329,10 @@ enum SceneStaging {
     /// and the caller performs the full `build`.
     static func redress(roster: [RosterSlot], display: DisplayHost, store: AssetStore) async -> Bool {
         guard display.hasScene else { return false }
-        for (slot, car) in roster.enumerated() {
-            guard !car.model.isEmpty, let bytes = await modelBytes(car.model, store) else { continue }
-            try? display.provide("car\(slot).glb", bytes)
-            if let ghost = ghost(of: bytes) { try? display.provide("car\(slot)-ghost.glb", ghost) }
-        }
+        // Through the same plan the build uses, which is what makes the common
+        // re-dress free: a ready toggle, a rename, a welcome and a seat expiry
+        // all move the roster without moving a single byte.
+        _ = await fetchPlanned(carWants(roster), display: display, store: store)
         let slots: [[String: Any]] = roster.map {
             ["id": $0.id.numericOrString, "name": $0.name,
              "carIndex": $0.carIndex, "color": $0.color]
@@ -408,14 +399,53 @@ enum SceneStaging {
         }
     }
 
-    /// Every `images[].uri` a container references, in file order and
-    /// deduplicated. These have to be provided BEFORE the renderer parses the
-    /// model, which is why they are read from the bytes here rather than asked of
-    /// the loaded asset — `getResourceUris()` knows the answer, but only once it
-    /// is too late to act on it.
-    private static func imageURIs(of bytes: Data) -> [String] {
-        TTP.withBytes(bytes) { ptr, len in
-            TTP.arr(ttp_glb_image_uris(ptr, len)).compactMap { $0 as? String }
+    // MARK: - What still has to be fetched
+
+    /// The per-slot car GLBs and their 50%-alpha ghost twins, in the plan's
+    /// vocabulary: `car<slot>.glb` tagged by the MODEL its bytes come from,
+    /// since that is the only thing about a slot that changes them. A slot with
+    /// no model tags as `""` so a later pick reads as a change.
+    private static func carWants(_ roster: [RosterSlot]) -> [[String: Any]] {
+        var want: [[String: Any]] = []
+        for (slot, car) in roster.enumerated() {
+            want.append(["name": "car\(slot).glb", "tag": car.model])
+            if !car.model.isEmpty {
+                want.append(["name": "car\(slot)-ghost.glb", "tag": car.model,
+                             "from": "car\(slot).glb"])
+            }
         }
+        return want
+    }
+
+    /// Fetch and hand over exactly what the engine says it still needs, then
+    /// derive the ghosts out of the models that came with them — a wanted
+    /// derivative always brings its source (`ttp_display.h`).
+    ///
+    /// `ghost(of:)` copies each clone out of the ABI's scratch as it derives it,
+    /// because that buffer is reused by the very next `ttp_glb_ghost` call: a
+    /// version of this that collected ghosts and provided them afterwards would
+    /// hand every car the last one's body.
+    private static func fetchPlanned(_ want: [[String: Any]], display: DisplayHost,
+                                     store: AssetStore) async -> (count: Int, bytes: Int) {
+        let need = Set(TTP.arr(ttp_display_asset_plan(TTP.json(want)))
+            .compactMap { $0 as? String })
+        var fetched: [String: Data] = [:]
+        var count = 0, total = 0
+        for w in want {
+            guard let name = w["name"] as? String, need.contains(name) else { continue }
+            guard w["from"] == nil else { continue }
+            guard let tag = w["tag"] as? String, !tag.isEmpty else { continue }
+            guard let bytes = await modelBytes(tag, store) else { continue }
+            fetched[name] = bytes
+            try? display.provide(name, bytes)
+            count += 1; total += bytes.count
+        }
+        for w in want {
+            guard let name = w["name"] as? String, need.contains(name),
+                  let from = w["from"] as? String, let src = fetched[from],
+                  let clone = ghost(of: src) else { continue }
+            try? display.provide(name, clone)
+        }
+        return (count, total)
     }
 }

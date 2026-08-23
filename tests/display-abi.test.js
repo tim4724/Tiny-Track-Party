@@ -49,7 +49,15 @@ test('the shipped module exports the display ABI the shell binds to', async () =
                       'camera', 'look', 'fog', 'shadows',
                       'hold', 'frame', 'burst', 'hud', 'slot_ids_json',
                       'profile', 'profile_names',
-                      'biome', 'showcase']) {
+                      'biome', 'showcase',
+                      // What still has to be fetched, and the derived bytes kept
+                      // between runs. Both are WALKS this side performs every
+                      // build (asset_plan, asset_textures) or every frame
+                      // (blob_ready), so a missing export is not a degraded
+                      // cache — it is a TypeError in the render loop.
+                      'asset_plan', 'asset_textures',
+                      'blob_stores', 'blob_plan', 'blob_offer', 'blob_ready',
+                      'blob_keep', 'blob_export', 'blob_wrote']) {
     assert.equal(typeof M[`_ttp_display_${name}`], 'function',
       `_ttp_display_${name} is not exported — the browser would fail at the cwrap call`);
   }

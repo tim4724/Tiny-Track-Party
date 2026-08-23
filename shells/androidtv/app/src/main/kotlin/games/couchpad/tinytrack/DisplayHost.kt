@@ -477,6 +477,12 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
                     // beginFrame can decline, so re-feeding it would double-run
                     // the idle animations on the next call.
                     pendingDt = 0.0
+                    // Derived bytes this frame landed — normally the frame right
+                    // after a build. The beat is here rather than at the build's
+                    // tail because a readback cannot be waited on there without
+                    // stalling the build, and a stalled build IS this shell's
+                    // lobby latency (`ttp_display.h`).
+                    writeReadyBlobs()
                     if (presented) framesPresented++
                     // A Vulkan boot that gets a frame onto the glass clears its
                     // canary — the failure the canary exists for (the EHABI
@@ -543,6 +549,40 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
     private fun stop() {
         frameCallback?.let { Choreographer.getInstance().removeFrameCallback(it) }
         frameCallback = null
+    }
+
+    /**
+     * Write out whatever the engine has finished — the blob walk's second half,
+     * on the FRAME BEAT rather than at the end of a build.
+     *
+     * A readback does not complete inside the call that issues it on every
+     * backend (`ttp_display.h`), so the build only STAGES its derived bytes and
+     * this is where they actually arrive — normally the frame right after a
+     * build, on every backend. The shape is shared with the other two shells,
+     * because one walk performed three ways is three chances to perform it
+     * differently.
+     *
+     * Gated on one integer, so an idle frame costs a single JNI call and nothing
+     * else. `wrote` retires a name and runs whether the write landed or not: a
+     * name that is never retired is re-exported on every frame for the rest of
+     * the run, and a store is a cache — the road out of a failed write is to make
+     * the thing again.
+     */
+    private fun writeReadyBlobs() {
+        val stores = blobs ?: return
+        if (Ttp.ttp_display_blob_ready() == 0) return
+        stores.forEach { store, name ->
+            val write = TtpJson.obj(Ttp.ttp_display_blob_keep(TtpJson.arg(name)))
+                .optJSONArray("write") ?: return@forEach
+            for (i in 0 until write.length()) {
+                val blobName = write.optString(i).takeIf { it.isNotEmpty() } ?: continue
+                Ttp.ttp_display_blob_export(TtpJson.arg(name), TtpJson.arg(blobName))?.let { blob ->
+                    store.write(blobName, blob)
+                    Log.i(TAG, "$name stored as $blobName (${blob.size / 1024} KiB)")
+                }
+                Ttp.ttp_display_blob_wrote(TtpJson.arg(name), TtpJson.arg(blobName))
+            }
+        }
     }
 
     // -- scenes -------------------------------------------------------------

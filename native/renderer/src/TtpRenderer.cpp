@@ -6,6 +6,8 @@
 
 #include "TtpRendererImpl.h"
 
+#include "ttp/glb.h"
+
 #include <utils/Log.h>
 
 TtpRenderer::TtpRenderer() = default;
@@ -145,7 +147,63 @@ bool TtpRenderer::provideAsset(const char* name, const uint8_t* bytes,
         uint32_t len) {
     if (!name || (!bytes && len)) return false;
     mAssets[name].assign(bytes, bytes + len);
+    // Stamp what the last plan said these bytes would be a function of. An asset
+    // handed over WITHOUT a plan (the .filamat blobs at boot) has no provenance
+    // this class can vouch for, so it keeps none and a plan would always ask for
+    // it again — which is the safe direction to be wrong in.
+    const auto want = mAssetWantTag.find(name);
+    if (want != mAssetWantTag.end()) mAssetTag[name] = want->second;
+    else mAssetTag.erase(name);
+    // …and whatever was memoised ABOUT the old bytes goes with them. This is the
+    // one place an asset's content changes, which is what lets assetTextures key
+    // its memo by name instead of by a hash of every byte.
+    mAssetUriCache.erase(name);
     return true;
+}
+
+std::vector<std::string> TtpRenderer::assetPlan(const std::vector<AssetWant>& want) {
+    std::vector<std::string> need;
+    for (const AssetWant& w : want) {
+        if (w.name.empty()) continue;
+        mAssetWantTag[w.name] = w.tag;
+        const auto held = mAssetTag.find(w.name);
+        if (held != mAssetTag.end() && held->second == w.tag
+                && mAssets.count(w.name)) {
+            continue;
+        }
+        need.push_back(w.name);
+    }
+    // A wanted DERIVATIVE brings its source: the shell makes a ghost out of the
+    // model's bytes, and those bytes are exactly what it would otherwise have
+    // been told not to fetch.
+    for (const AssetWant& w : want) {
+        if (w.from.empty()) continue;
+        if (std::find(need.begin(), need.end(), w.name) == need.end()) continue;
+        if (std::find(need.begin(), need.end(), w.from) != need.end()) continue;
+        need.push_back(w.from);
+    }
+    return need;
+}
+
+std::vector<std::string> TtpRenderer::assetTextures() {
+    std::vector<std::string> out;
+    for (const auto& [name, bytes] : mAssets) {
+        if (bytes.empty()) continue;
+        if (name.size() < 4 || name.compare(name.size() - 4, 4, ".glb") != 0) continue;
+        auto it = mAssetUriCache.find(name);
+        if (it == mAssetUriCache.end()) {
+            it = mAssetUriCache.emplace(name,
+                    ttp::rt::glb_image_uris(bytes.data(), bytes.size())).first;
+        }
+        for (const std::string& uri : it->second) {
+            if (mAssets.count(uri)) continue;
+            if (std::find(out.begin(), out.end(), uri) == out.end()) out.push_back(uri);
+        }
+    }
+    // Stable, so two builds of the same scene ask in the same order and a shell
+    // logging its fetches reads the same either time.
+    std::sort(out.begin(), out.end());
+    return out;
 }
 
 const std::vector<uint8_t>* TtpRenderer::asset(const char* name) const {
@@ -1581,6 +1639,14 @@ TtpRenderer::~TtpRenderer() {
     // is this destructor's to free and no releaseScene's.
     for (const auto& [_, tex] : mSkyCubemaps) mEngine->destroy(tex);
     mSkyCubemaps.clear();
+    // A staged blob's reads go the same way, and retireStaged already states the
+    // trade: an unlanded buffer is leaked because the driver may still be
+    // writing into it. The textures they were reading from can simply go — the
+    // engine is going with them.
+    for (auto& s : mStaged) retireStaged(*s);
+    mStaged.clear();
+    for (Texture* t : mTexGraves) mEngine->destroy(t);
+    mTexGraves.clear();
     if (mBlendMaterial) mEngine->destroy(mBlendMaterial);
     if (mPointMaterial) mEngine->destroy(mPointMaterial);
     if (mCloudMaterial) mEngine->destroy(mCloudMaterial);

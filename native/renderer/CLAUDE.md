@@ -504,9 +504,27 @@ That shape is not defensive: it is what the old code's silent failure cost. It
 dropped an unfinished read on the floor, so the WEB road kept the unshadowed fill
 from build — a deck lit but taking no cast shadow, for the whole session, with
 nothing to say so. It looked right because the GROUND was unaffected: its
-visibility map is a shader tap that never goes near a readback. **`exportBake` is
-still synchronous and so still answers nothing on GL** — which is why the browser
-has no bake blob to cache, and is a deliberate limit rather than an oversight.
+visibility map is a shader tap that never goes near a readback.
+
+**EVERY blob works that way now** (`stageBlob` / `collectStagedBlobs`). A blob
+that is worth keeping between runs snapshots everything that is not a readback —
+headers, matrices, the road light, the row-flip convention — and parks the reads;
+the frame beat finishes it. The snapshot is what makes a deferred finish honest:
+the earlier synchronous `exportBake` read `mBakedKey` and `mShadowFromWorld` at
+export time, so anything that finished a parked read later would have paired one
+build's pixels with another build's matrices. Two consequences worth keeping in
+mind here:
+
+- **A texture a staged read is still writing into may not be destroyed.**
+  `replaceShadowMaps` sends it to `mTexGraves` instead, drained once the read
+  lands. The old pool keyed parked reads by (texture, layer) and retired one whose
+  stamp had moved — but the ESM texture is destroyed and reallocated on every
+  non-reused bake, so a read nobody was asking about matched nothing, was never
+  retired, and held a 16 MB buffer and a RenderTarget over freed storage for the
+  life of the page.
+- **A read that never lands is LEAKED on purpose**, exactly as `RoadLightRead`
+  leaks its own at teardown: the driver may still hold a pointer into that buffer
+  and there is no tick left to fire the callback.
 
 ## The per-frame budget
 

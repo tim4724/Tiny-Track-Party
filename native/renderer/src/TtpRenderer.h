@@ -154,6 +154,41 @@ public:
     const char* kitFieldLayout() const { return mKitLayout.c_str(); }
 
     bool provideAsset(const char* name, const uint8_t* bytes, uint32_t len);
+
+    // ---- what still has to be handed over ---------------------------------
+    //
+    // Provisioning is mostly RE-work. `mAssets` survives releaseScene, so across
+    // two builds the props are always the same bytes, the textures always are,
+    // the scenery is whenever the biome held, and the cars are unless somebody
+    // actually picked a different one. A re-dress is worse: the roster moves for
+    // a ready toggle, a rename or a seat expiry, none of which change a byte.
+    //
+    // WHICH ONES ARE STALE IS ENGINE KNOWLEDGE, and it lives here for the reason
+    // the blob walk gives one layer up: a shell that mirrors the asset map has
+    // to invalidate its mirror when a destroyed surface takes the map away, and
+    // only one of three shells ever had that mirror at all. `mAssetTag` lives
+    // and dies with `mAssets`, so there is nothing to invalidate.
+    //
+    // THE TAG IS WHAT THE BYTES ARE A FUNCTION OF, in the caller's vocabulary —
+    // a kit model's base name, a texture's authored URI. Not the asset name:
+    // `car3.glb` is different bytes when slot 3 picks a different model, while
+    // `Textures/colormap.png` never is.
+    struct AssetWant {
+        std::string name;
+        std::string tag;
+        // What a DERIVED asset is made out of (a ghost's model). Answering the
+        // derivative alone would ask a shell to derive from bytes it did not
+        // fetch, so a wanted derivative brings its source with it.
+        std::string from;
+    };
+    // The subset of `want` this engine does not already hold under that tag.
+    // Remembers every entry's tag, so the provideAsset that follows stamps it.
+    std::vector<std::string> assetPlan(const std::vector<AssetWant>& want);
+    // The images[].uri every held model references that is not held itself.
+    // Answered from the bytes the engine has, so a model the plan above skipped
+    // still contributes its textures — which is the whole reason the shells can
+    // stop reading a GLB they already handed over.
+    std::vector<std::string> assetTextures();
     // The bytes provided under `name`, or nullptr. The scene's caller needs the
     // scenery GLBs back: half of a biome's recolour rule is each model's own
     // AUTHORED material colours, and this class is where those bytes live.
@@ -176,39 +211,62 @@ public:
     // accidentally opt in.
     void setBakeKey(const char* key) { mBakeKey = key ? key : ""; }
 
-    // What the RESIDENT maps are of, or empty when nothing is baked. This is the
-    // fact a shell used to mirror (and had to invalidate itself when a destroyed
-    // surface took the renderer with it): the bake walk reads it here instead,
-    // so "the engine already holds this one" is answered where it is known.
-    const std::string& bakedKey() const { return mBakedKey; }
-
-    // Which backend the engine runs (filament::Backend as an int). Rides the
-    // bake key: a bake blob's byte orientation is a fact about the writing
-    // backend — see exportBake.
+    // Which backend the engine runs (filament::Backend as an int). Rides every
+    // blob key: a blob's byte orientation is a fact about the backend that read
+    // it back — see the flip note in finishBakeBlob.
     int backendId() const;
 
-    // The resident sun bake as bytes, and back. See the block comment above
-    // exportBake in TtpRendererBakes.cpp for why this crosses the ABI at all.
-    // export answers false when nothing is baked; import answers false for any
-    // blob it does not fully trust, and leaves a resident bake untouched when
-    // it does.
-    bool exportBake(std::vector<uint8_t>& out);
-    bool importBake(const uint8_t* bytes, uint32_t len);
-
-    // The SILHOUETTE layers as bytes, on the same argument as the sun bake and
-    // measured on the same box: five of them cost ~330 ms of a launch's first
-    // build (a GPU render and a flushAndWait each), they are small, and they
-    // are a pure function of the GLB bytes baked into them. The renderer
-    // already keeps them across scenes for exactly that reason; this is the
-    // tier below, across RUNS.
+    // ---- derived bytes, kept between runs ---------------------------------
     //
-    // The key is the SET of models this build will use, read out of the car
-    // GLBs the shell has already provided — so masksKey must be asked after
-    // provisioning and before the build, which is where the bake's window also
-    // happens to be legal.
-    std::string masksKey() const;
-    bool exportMasks(std::vector<uint8_t>& out);
-    bool importMasks(const uint8_t* bytes, uint32_t len);
+    // WHAT A KEY IS HERE. Every blob this class can produce is named by a key in
+    // the renderer's own vocabulary; the FILE it lands in is the display shim's
+    // business (ttp/blobstore.h) and nothing below knows a filename. There are
+    // two kinds and they are asked for the same way:
+    //
+    //   the sun bake  — one blob per scene, `track|biome|showcase|backend`.
+    //   a silhouette  — one blob per car MODEL, `<glb fnv>|<backend>`, plus the
+    //                   monster's fixed key. PER MODEL AND NOT PER SET: the
+    //                   layers are baked per model already, so a set-keyed blob
+    //                   re-stored layers other blobs held and missed outright
+    //                   when a lobby's roster covered fewer models than the one
+    //                   that wrote it.
+    //
+    // STAGE, THEN FINISH, and that is not tidiness. A readback does not complete
+    // inside the call that issues it on GL (see PendingRead), so an export that
+    // insisted on answering at once could only ever answer on the backends that
+    // do not need it. `stage` snapshots everything that is NOT a readback —
+    // headers, matrices, the road light, the row-flip convention — and issues
+    // the reads; `collectStagedBlobs` finishes any whose reads have landed, on
+    // the frame beat where the GL driver tick runs. The snapshot is what makes
+    // that safe: a staged blob owns its own metadata, so the build that lands it
+    // need not be the build that made it.
+    //
+    // import answers false for any blob it does not fully trust, and leaves what
+    // is resident untouched when it does.
+    // NO bakeBlobKeys() TWIN. A scene's bake key needs the biome latched, which
+    // happens one layer up, so the shim composes it there (bakeKeyFor) and this
+    // class never spells it — one rule, one place (root CLAUDE.md rule 1).
+    std::vector<std::string> maskBlobKeys() const;
+    // Is this key's thing already in the engine, so the caller need not read it?
+    bool blobResident(const std::string& key) const;
+    // Snapshot + issue. False when there is nothing to stage under that key.
+    bool stageBlob(const std::string& key);
+    // Move a finished blob's bytes out. False while it is still coming, which
+    // is how the caller polls: it holds the key/filename pairing, so there is
+    // nothing for this class to enumerate.
+    bool takeStagedBlob(const std::string& key, std::vector<uint8_t>& out);
+    // Take a blob back, and answer WHICH key it turned out to be — the bytes
+    // say (importBlob dispatches on their magic), and the caller cannot know
+    // before asking. Empty means refused: a version it does not know, or bytes
+    // that do not describe what they claim.
+    //
+    // ANSWERING THE KEY IS LOAD-BEARING, not a convenience. It used to answer a
+    // bool, so a caller could only ask "is anything resident now?" and had to
+    // mark every resident key as having come from the store. One offered blob
+    // then vouched for its siblings, and a blob that was resident but had never
+    // been written was skipped by every later build — a cache that silently
+    // stopped filling, which is the failure this whole path exists to remove.
+    std::string importBlob(const uint8_t* bytes, uint32_t len);
 
     // Has a frame of the CURRENT scene FINISHED on the GPU — not merely been
     // submitted, which is all render()'s true says. The two part company on a
@@ -1411,6 +1469,24 @@ private:
     filament::math::float3 mFogColor = { 0, 0, 0 }; // linear; set at scene build
 
     std::unordered_map<std::string, std::vector<uint8_t>> mAssets;
+    // What each held asset's bytes are a function of, in the caller's own
+    // vocabulary — see AssetWant. Same lifetime as mAssets by construction,
+    // which is the point of keeping it here rather than in a shell.
+    std::unordered_map<std::string, std::string> mAssetTag;
+    // …and what the last assetPlan said each name WOULD be a function of, so the
+    // provideAsset that answers it can stamp the tag without a second crossing.
+    std::unordered_map<std::string, std::string> mAssetWantTag;
+    // A model's images[].uri list, by ASSET NAME. The texture step needs it and
+    // used to get it by re-scanning a container the shell had just read — which
+    // is exactly the read the plan above exists to skip.
+    //
+    // BY NAME AND NOT BY CONTENT HASH, which the first version did: hashing is
+    // glbBytesKey, a byte-at-a-time FNV over the whole buffer, so consulting the
+    // cache re-read every model it was there to avoid re-reading. That is ~1.2 MB
+    // a build in play and tens of megabytes in the gallery's kit field. The name
+    // is exact because provideAsset is the only place an asset's bytes change,
+    // and it drops the entry.
+    std::unordered_map<std::string, std::vector<std::string>> mAssetUriCache;
     std::vector<filament::MaterialInstance*> mSceneMatInstances;
 
     void updateCamera();
@@ -1435,6 +1511,22 @@ private:
     // Apply a road-light readback that did not land inside the build it was
     // issued in. Called once per frame; a no-op when nothing is in flight.
     void collectRoadLight();
+
+    // Finish any staged blob whose reads have all landed, and retire the
+    // textures they were reading from. Called from the same frame beat as
+    // collectRoadLight and for the same reason: it is the one place the GL
+    // driver tick has run. A no-op on any frame with nothing staged, which is
+    // almost all of them.
+    //
+    // EVERY BACKEND LANDS HERE, not just GL. Staging deliberately does NOT pump
+    // the driver: the pump this replaced was eight flushAndWait calls on the
+    // build's critical path, and on the shell where a build IS the lobby's
+    // latency that is the last place to put a synchronous GPU wait. Metal and
+    // Vulkan would finish inside such a pump and GL cannot, so keeping it would
+    // have bought two backends a marginally earlier write in exchange for a
+    // stall and a second code path. Measured after: the first frame following a
+    // build collects them on all three.
+    void collectStagedBlobs();
 
     // A road-light readback still in flight, kept alive until it lands.
     //
@@ -1472,47 +1564,73 @@ private:
     // is dropped rather than applied to somebody else's road.
     uint64_t mBuildSerial = 0;
 
-    // One of the bake's targets back to the CPU, RGBA as every backend wants.
-    // `asFloat` picks the pixel type (the ESM is R16F and reads as FLOAT, the
-    // visibility map is R8 and reads as UBYTE); the enum itself cannot appear
-    // here, where filament::Texture is only forward-declared.
-    // `layer` is the array slice to read, or -1 for a plain 2D texture.
-    // `stamp` says what the texture HELD when the read was asked for, so a read
-    // that lands after a rebake is dropped instead of answered — see PendingRead.
-    // ISSUE AND CONSUME ARE SEPARATE, and that is not tidiness. An export made of
-    // SEVERAL reads (the bake's two maps, the masks' five layers) must not take
-    // the ones that landed while another is still in flight: consuming retires a
-    // read, so a caller that bailed halfway would throw away what it had and
-    // re-issue it next time, and an export of N reads would never converge.
+    // ---- staged blobs ------------------------------------------------------
     //
-    // So: ensure every read first, and only when they are ALL ready, take them.
-    // `ensure` issues one if none is parked and answers whether it has landed;
-    // `take` moves the pixels out and retires it.
-    bool ensureRead(filament::Texture* tex, bool asFloat, int layer, uint64_t stamp);
-    bool takeRead(filament::Texture* tex, int layer, std::vector<uint8_t>& out);
-
-    // A texture readback that did not finish inside the call that asked for it.
+    // A texture readback that a blob is waiting on.
     //
-    // ON ONE BACKEND THEY NEVER DO. A GL readback's completion is executed from
-    // OpenGLDriver::tick(), which FRenderer::endFrame() calls and flushAndWait()
-    // does not — and in a browser a task cannot wait on the GPU at all. So on GL
-    // the export of a blob cannot answer in the build that triggers it, and the
-    // read is parked here instead: the frame loop turns the driver over, and the
-    // NEXT ask (the next build's `keep`) finds the bytes waiting. Metal and
+    // ON ONE BACKEND THEY NEVER FINISH IN TIME. A GL readback's completion is
+    // executed from OpenGLDriver::tick(), which FRenderer::endFrame() calls and
+    // flushAndWait() does not — and in a browser a task cannot wait on the GPU at
+    // all. So on GL a blob cannot be finished inside the build that stages it;
+    // the read is parked and the frame loop turns the driver over. Metal and
     // Vulkan finish inside the pump and never park anything.
     //
-    // `stamp` is what the source held when the read was issued — the bake's key,
-    // or a mask layer's model key. A read that lands after that changed is
-    // answering about a texture nobody asked about any more, so it is dropped.
-    struct PendingRead {
+    // ONE READ IS OWNED BY ONE STAGED BLOB, which is what the old shared pool
+    // could not say. It keyed by (texture, layer) and retired a read whose stamp
+    // no longer matched — but the ESM texture is destroyed and reallocated on
+    // every non-reused bake, so a read for a track nobody was asking about any
+    // more matched nothing, was never retired, and sat holding a 16 MB buffer and
+    // a RenderTarget over freed storage for the life of the page.
+    struct StagedRead {
         filament::Texture* tex = nullptr;
-        int layer = -1;
-        uint64_t stamp = 0;
+        int layer = -1;                         // array slice, or -1 for a 2D texture
+        bool asFloat = false;                   // the ESM reads FLOAT, the rest UBYTE
+        uint32_t w = 0, h = 0;                  // snapshotted: `tex` may be gone by now
         std::vector<uint8_t> px;
         std::atomic<bool> done{ false };
-        filament::RenderTarget* rt = nullptr;   // outlives the issue; freed on collect
+        filament::RenderTarget* rt = nullptr;   // outlives the issue; freed on finish
     };
-    std::vector<std::unique_ptr<PendingRead>> mPendingReads;
+
+    // Derived bytes whose metadata is already snapshotted and whose pixels are
+    // still coming. See the public stageBlob for the whole argument.
+    struct StagedBlob {
+        std::string key;
+        bool mask = false;                      // which layout `finish` writes
+        bool flip = false;                      // the writer's GL row flip, latched here
+        std::vector<uint8_t> head;              // everything before the first read's pixels
+        std::vector<uint8_t> tail;              // …and after the last (the bake's road light)
+        std::vector<std::unique_ptr<StagedRead>> reads;
+        std::vector<uint8_t> bytes;             // the finished blob; empty until it is
+        bool finished = false;
+    };
+    std::vector<std::unique_ptr<StagedBlob>> mStaged;
+
+    // Issue one read into a staged blob. `layer` is the array slice or -1.
+    bool issueRead(StagedBlob& blob, filament::Texture* tex, bool asFloat, int layer);
+    // Splice landed pixels into the snapshotted head/tail. Two layouts, one per
+    // blob kind, and both of them GL's row flip away from the texture's own order.
+    void finishBakeBlob(StagedBlob& blob);
+    void finishMaskBlob(StagedBlob& blob);
+    // Retire a staged blob's reads: free the RenderTargets, and LEAK the buffer
+    // of any read that never landed. The driver may still hold a pointer into it
+    // and there is no tick left that will fire the callback — the same trade
+    // RoadLightRead makes, and for the same reason.
+    void retireStaged(StagedBlob& blob);
+    // Is a texture still the destination of an unfinished read?
+    bool readInFlight(const filament::Texture* tex) const;
+    // Textures a staged read is still writing into, kept alive past the bake that
+    // replaced them. Destroying one under an outstanding readPixels is a write
+    // into freed storage; this is the same graves idiom mRoadLightGraves uses.
+    std::vector<filament::Texture*> mTexGraves;
+    // Destroy any grave nothing is reading from any more.
+    void drainTexGraves();
+    // Swap the resident sun maps, sending any the reads still need to the graves
+    // instead of destroying them. Every path that replaces them goes through here.
+    void replaceShadowMaps(filament::Texture* esm, filament::Texture* vis);
+    // The two blob layouts importBlob dispatches to on the magic it read. Each
+    // answers the key it adopted, or empty on refusal.
+    std::string importBakeBlob(const uint8_t* p, const uint8_t* end);
+    std::string importMaskBlob(const uint8_t* p, const uint8_t* end);
 
     bool buildTrackScene(const std::vector<TtpRosterCar>& roster, const ttp::RaceTrack& geo,
             const ttp::rt::Theme& theme, const ttp::rt::WearPlan& wear);

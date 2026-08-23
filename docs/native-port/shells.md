@@ -129,19 +129,37 @@ If your platform's number does justify it, **you write four primitives and no
 policy** — list names with last-used times, read by name, write by name, delete
 by name. All three are shipped and none is more than about 120 lines:
 `BlobStore.kt`, `BlobStore.swift`, `render/BlobStore.js`. Everything else is a
-WALK in `ttp_display.h` (`ttp_display_blob_stores` / `_plan` / `_offer` / `_keep`
-/ `_export`) that hands you names to act on:
+WALK in `ttp_display.h` (`ttp_display_blob_stores` / `_plan` / `_offer` /
+`_ready` / `_keep` / `_export` / `_wrote`) that hands you names to act on:
 
 ```
 for each store in ttp_display_blob_stores():        # after provisioning,
     plan(store, trackId, generation, entries)       # before the build
-                       -> {"drop":[…], "read": name|null}
-    perform the drops; if `read`, read it and offer(store, bytes)
+                       -> {"drop":[…], "read":[…]}
+    perform the drops; read each `read` name and offer(store, its bytes)
 ttp_display_build(...)
-for each store:
-    keep(store)        -> {"write": name|null}
-    if `write`, export(store) and write those bytes
+
+# …and on EVERY FRAME, gated by one integer:
+if ttp_display_blob_ready():
+    for each store:
+        keep(store)    -> {"write":[…]}
+        for each name: export(store, name), write it, then wrote(store, name)
 ```
+
+**The write half is a FRAME BEAT, not the build's tail, and that is not
+optional.** A readback does not complete inside the call that issues it on GL —
+the completion runs from `OpenGLDriver::tick()`, which `endFrame()` calls and
+`flushAndWait()` does not — so a build cannot finish its own blobs there. It
+STAGES them (metadata snapshotted, reads issued) and the frame loop lands them —
+on every backend, because staging deliberately does not pump the driver: the pump
+that would let Metal and Vulkan answer early is a synchronous GPU stall on the
+build's critical path. In practice the frame right after a build collects them. When the write half WAS
+the build's tail, the web could only ever store a blob whose track had been built
+twice in a row, and a Grand Prix's last three circuits were never cached at all.
+
+`read` and `write` are LISTS because a store may hold several things one build
+wants: a silhouette is one blob per car MODEL and a field uses up to four. The
+bake store answers zero or one.
 
 **Do not re-derive any of the decisions behind those names.** Whether the engine
 already holds this bake, whether the build actually baked, whether the store
@@ -152,23 +170,29 @@ shell had to invalidate whenever a destroyed surface took the renderer away.
 Three shells re-deriving that is three chances to get it wrong, which is the same
 argument `ttp_net.h`'s choreography walks make one layer down.
 
-### The other thing a shell is tempted to cache: its own provisioning
+### The same argument, one layer up: your own provisioning
 
 Provided assets survive a `releaseScene`, so re-reading and re-handing the same
-GLBs and textures on every build is pure re-work — and every shell does it. Log a
-build split before deciding it is worth a memo, because **what that re-work costs
-is entirely a fact about your storage**, and the two TV shells disagree by an
-order of magnitude:
+GLBs and textures on every build is pure re-work. **Do not keep a memo of what
+the engine holds** — ask it, with `ttp_display_asset_plan`. State what you WOULD
+hand over as `[{"name","tag"}]`, the tag being whatever the bytes are a function
+of in your own vocabulary (a kit model's base name, a texture's authored URI),
+and you get back the subset still missing. `ttp_display_asset_textures` then
+answers the image URIs the models now held reference, off the bytes the engine
+has — so a model the plan skipped still contributes its textures and you never
+re-read a container you just handed over.
 
-- **Android caches it.** An APK is compressed, so each build re-inflates every
-  model and copies it across JNI into a map that already had it: measured on the
-  box, 39 ms of provisioning on the first build and 8 ms once the memo holds.
-- **tvOS does not.** An app bundle is not compressed and a re-read is barely a
-  read: measured on the device, provisioning is ~5 ms of a ~215 ms build for the
-  whole 15-asset set. A memo saving that is not worth mirroring engine state for.
+This was a `provided` HashMap in the Android shell for a while, with an
+invalidation hook on the beat a destroyed surface takes the asset map away. Same
+argument as the blob walk above and the same conclusion: the fact lives beside
+the map, where it cannot outlive it.
 
-The web is with tvOS here — its bytes are already in memory, and the copy into
-the wasm heap does not show up in a profile.
+**What the re-work costs is entirely a fact about your storage**, and the shells
+differ by an order of magnitude — an APK is compressed, so Android re-inflated
+every model and copied it across JNI (39 ms of provisioning on the first build,
+8 ms once the plan holds), while a tvOS bundle is uncompressed (~5 ms of a
+~215 ms build) and the web's bytes are already in memory. That is a reason to
+expect different WINS, not a reason for different code.
 
 **GENERATION IS THE INVALIDATION, and it is the one thing you supply.** Give it
 something that changes whenever your binary could produce different bytes —

@@ -43,8 +43,19 @@ class BlobStore(context: Context, private val store: String) {
 
     private companion object { const val TAG = "BlobStore" }
 
+    // CACHE, not files: this is derived data the app can rebuild at any time, and
+    // the system is entitled to reclaim it under pressure — which is exactly the
+    // contract a cache wants, and what the tvOS twin says about `.cachesDirectory`
+    // beside it. `filesDir` is never reclaimed and rides auto-backup, so ~23 MB of
+    // shadow maps and silhouettes would have followed the user to a new box for no
+    // reason. `cacheDir` is excluded from backup by default, so no manifest change
+    // goes with this.
     private val dir: File? = try {
-        File(context.filesDir, store).apply { mkdirs() }
+        // The old home, swept once. Generation naming already made these
+        // unreachable — no plan can name a file under a directory nothing reads —
+        // so they are pure orphans rather than a cache worth migrating.
+        runCatching { File(context.filesDir, store).deleteRecursively() }
+        File(context.cacheDir, store).apply { mkdirs() }
     } catch (e: Exception) {
         Log.w(TAG, "no $store directory; nothing will be cached", e)
         null

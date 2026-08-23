@@ -106,6 +106,9 @@ final class GameCoordinator: ObservableObject {
         blobs = Scenarios.requested == nil ? BlobStores() : nil
         proto = GameProtocol.load(baseURL: baseURL)
         display = DisplayHost()
+        // The blob walk's write half is a frame beat, so the host needs the
+        // stores as well as the staging sequence — see DisplayHost.blobs.
+        display.blobs = blobs
         net = PartyNet(proto: proto, socket: RelaySocket())
         audio = AudioDevice(
             baseURL: baseURL,

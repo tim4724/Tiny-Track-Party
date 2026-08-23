@@ -61,6 +61,17 @@ const MATERIALS = ['vcolor', 'vblend', 'vlit', 'vlitns', 'vroad', 'vglb', 'vglbf
 // (The scenery models are NOT here: those are the biome's, and C++ names them.)
 export const PROP_MODELS = ['item-box', 'item-banana', 'item-cone', 'vehicle-monster-truck'];
 
+// The ones that also need a translucent twin, and what it is called. A map
+// rather than a conditional so the fetch plan can name both in one pass.
+const PROP_GHOSTS = {
+  'item-box': 'item-box-fade.glb',
+  'vehicle-monster-truck': 'monster-ghost.glb'
+};
+
+// The toy-car kit's shared palette. Authored into some models and not others,
+// so it is asked for by name rather than discovered by the texture scan.
+const PALETTE_URI = 'Textures/colormap.png';
+
 // cellRects' "no cells" answer, so the caller's loop is the same shape either way.
 const EMPTY_RECTS = new Float32Array(0);
 // Floats per cell in that packed run: the picture rect and the safe rect, four
@@ -158,15 +169,22 @@ export class Display {
       // ghost's chunk padding in particular is a trap that stays invisible until
       // cgltf rejects a whole model, and it is not worth having three times.
       glbGhost: mod.cwrap('ttp_glb_ghost', 'number', ['number', 'number', 'number']),
-      glbImageUris: mod.cwrap('ttp_glb_image_uris', 'string', ['number', 'number']),
       // Derived bytes kept between runs (ttp_display.h). A WALK: this side names
       // no blob kind, it asks which stores exist and performs the answers.
       blobStores: mod.cwrap('ttp_display_blob_stores', 'string', []),
       blobPlan: mod.cwrap('ttp_display_blob_plan', 'string',
                           ['string', 'string', 'string', 'string']),
       blobOffer: mod.cwrap('ttp_display_blob_offer', null, ['string', 'number', 'number']),
+      blobReady: mod.cwrap('ttp_display_blob_ready', 'number', []),
       blobKeep: mod.cwrap('ttp_display_blob_keep', 'string', ['string']),
-      blobExport: mod.cwrap('ttp_display_blob_export', 'number', ['string', 'number'])
+      blobExport: mod.cwrap('ttp_display_blob_export', 'number',
+                            ['string', 'string', 'number']),
+      blobWrote: mod.cwrap('ttp_display_blob_wrote', null, ['string', 'string']),
+      // …and what still has to be fetched at all (ttp_display.h). Same argument
+      // as the walk above: which assets the engine is already holding is its own
+      // knowledge, not this side's to mirror.
+      assetPlan: mod.cwrap('ttp_display_asset_plan', 'string', ['string']),
+      assetTextures: mod.cwrap('ttp_display_asset_textures', 'string', [])
     };
   }
 
@@ -222,17 +240,49 @@ export class Display {
     try { this._fn.blobOffer(store, ptr, bytes.length); } finally { m._free(ptr); }
   }
 
-  // …and out. slice(), not subarray(): the blob is C-owned scratch that the next
-  // walk overwrites. Null when there is nothing to keep.
-  blobExport(store) {
+  // …and out. slice(), not subarray(): the blob is C-owned and the write that
+  // follows is async, so a view would be reading a buffer the next walk may have
+  // moved. Null when that name is not waiting.
+  blobExport(store, name) {
     const m = this.m;
     const lenPtr = m._malloc(4);
     try {
-      const out = this._fn.blobExport(store, lenPtr);
+      const out = this._fn.blobExport(store, name, lenPtr);
       const n = m.HEAPU32[lenPtr >> 2];
       return out && n ? m.HEAPU8.slice(out, out + n) : null;
     } finally {
       m._free(lenPtr);
+    }
+  }
+
+  // Write out whatever the engine has finished, on the FRAME BEAT rather than at
+  // the end of a build (ttp_display.h). A WebGL readback cannot complete inside
+  // the build that issues it, so the build only stages; this is where the bytes
+  // actually arrive. Gated on one integer, so an idle frame costs a single call.
+  //
+  // Re-entrancy matters here and nowhere else in the walk: the writes are
+  // IndexedDB and the frame loop will call this again long before they settle.
+  // A second pass would export the same names and race its own put.
+  async writeReadyBlobs() {
+    if (!this.blobs || this._writingBlobs) return;
+    if (!this._fn.blobReady()) return;
+    this._writingBlobs = true;
+    try {
+      await this.blobs.forEach(async (store, name) => {
+        let write;
+        try { write = JSON.parse(this._fn.blobKeep(name) || '{}').write; } catch { return; }
+        for (const blobName of write || []) {
+          const bytes = this.blobExport(name, blobName);
+          if (bytes) await store.write(blobName, bytes);
+          // ALWAYS, and after the await: the engine holds the bytes until the
+          // attempt is over, and a name that is never retired would be
+          // re-exported on every frame for the rest of the page's life. A store
+          // is a cache — the road out of a failed write is to make it again.
+          this._fn.blobWrote(name, blobName);
+        }
+      });
+    } finally {
+      this._writingBlobs = false;
     }
   }
 
@@ -268,18 +318,6 @@ export class Display {
         m._free(lenPtr);
       }
     });
-  }
-
-  // Every images[].uri the container references. These have to be provided
-  // BEFORE the renderer parses the model, which is why they are read here rather
-  // than asked of the loaded asset.
-  _imageUris(bytes) {
-    const json = this._withGlb(bytes, (ptr, len) => this._fn.glbImageUris(ptr, len));
-    try {
-      return JSON.parse(json || '[]');
-    } catch {
-      return [];
-    }
   }
 
   resize(w, h) {
@@ -377,69 +415,60 @@ export class Display {
     // function of it, and so is the scene the build call will produce.
     this._fn.biome(biome);
 
-    // Scenery GLBs, in the slot order C++ named them in: the renderer binds its
-    // instanced props by that index, and the biome's recolour — which keys on
-    // each model's own authored material colours — reads these same bytes back
-    // out on the C++ side.
+    // WHAT THIS SCENE IS MADE OF, as names paired with the kit model each one's
+    // bytes come from. Nothing is fetched yet: which of these the engine is
+    // already holding is its own knowledge (ttp_display_asset_plan), and asking
+    // is what turns a rebuild of a standing track from a full re-fetch into
+    // almost nothing.
     //
-    // In SHOWCASE mode the list is the union of every biome's (the same one for
-    // all of them, which is why it takes no biome argument) — see showcase().
+    // Scenery and props go in the slot order C++ named them in: the renderer
+    // binds its instanced props by that index, and the biome's recolour — which
+    // keys on each model's own authored material colours — reads these same
+    // bytes back out on the C++ side. In SHOWCASE mode the scenery list is the
+    // union of every biome's (the same one for all of them, which is why it
+    // takes no biome argument) — see showcase().
     const biomes = await loadBiomes();
+    const want = [];
     const scModels = this._showcase ? biomes.showcaseModels() : biomes.sceneryModels(biome);
-    const scBytes = await Promise.all(scModels.map((m) => assets.glb(m)));
-    scBytes.forEach((b, i) => { if (b) this.provide(`scenery${i}.glb`, b); });
-
-    // Trackside prop GLBs (scattered set dressing): the same slot contract
-    // one channel over, bound back as prop<i>.glb.
+    scModels.forEach((m, i) => want.push({ name: `scenery${i}.glb`, tag: m }));
     const prModels = this._showcase ? biomes.showcasePropModels() : biomes.propModels(biome);
-    const prBytes = await Promise.all(prModels.map((m) => assets.glb(m)));
-    prBytes.forEach((b, i) => { if (b) this.provide(`prop${i}.glb`, b); });
-
-    // The KIT FIELD's models (dev; empty in play). Fetched CONCURRENTLY because
-    // there are hundreds of them — one await each would turn a field into a
-    // minute of round trips — and provided in the order given, which is the
-    // order the layout comes back in and the order the chrome names them by.
-    const kitBytes = await Promise.all(this._kitModels.map((m) => assets.glb(m)));
-    kitBytes.forEach((b, i) => { if (b) this.provide(`kit${i}.glb`, b); });
-    this._fn.kitField(kitBytes.length);
-
-    // An unparseable model answers with an empty list and just renders
-    // untextured, which is what the try/catch here used to buy.
-    const texUris = new Set();
-    for (const bytes of [...scBytes, ...prBytes, ...kitBytes]) {
-      if (bytes) for (const uri of this._imageUris(bytes)) texUris.add(uri);
+    prModels.forEach((m, i) => want.push({ name: `prop${i}.glb`, tag: m }));
+    // The KIT FIELD's models (dev; empty in play). There are hundreds of them,
+    // in the order the layout comes back in and the order the chrome names them.
+    this._kitModels.forEach((m, i) => want.push({ name: `kit${i}.glb`, tag: m }));
+    want.push(...this._carWants(roster));
+    for (const name of PROP_MODELS) {
+      want.push({ name: `${name}.glb`, tag: name });
+      // A BLEND clone of the box, for the collect fade. The kit material is
+      // OPAQUE, so the solid instance cannot be faded at all — the renderer
+      // hands the grab over to this one and ramps its alpha down. The clone's
+      // baked 0.5 never shows: the renderer writes the alpha on every frame a
+      // box is dissolving, and parks these instances the rest of the time.
+      const ghostName = PROP_GHOSTS[name];
+      if (ghostName) want.push({ name: ghostName, tag: name, from: `${name}.glb` });
     }
-    texUris.add('Textures/colormap.png'); // the toy-car kit's shared palette
-    await Promise.all([...texUris].map(async (uri) => {
+    await this._fetchPlanned(want, assets);
+    this._fn.kitField(this._kitModels.length);
+
+    // The textures those models reference. The URI list comes from the ENGINE,
+    // off the bytes it is holding — so a model the plan skipped still
+    // contributes its textures, and nothing here re-reads a container it just
+    // handed over. The kit's shared palette is asked for by name because it is
+    // authored into some models and not others.
+    const texWant = [{ name: PALETTE_URI, tag: PALETTE_URI }];
+    for (const uri of this._json(this._fn.assetTextures())) texWant.push({ name: uri, tag: uri });
+    const texNeed = this._json(this._fn.assetPlan(JSON.stringify(texWant)));
+    await Promise.all(texNeed.map(async (uri) => {
       const bytes = await assets.raw(assetUrl(`/assets/toycar/${uri}`));
       if (bytes) this.provide(uri, bytes);
     }));
 
-    await Promise.all([
-      this._provideCars(roster, assets),
-      ...PROP_MODELS.map(async (name) => {
-        const bytes = await assets.glb(name);
-        if (!bytes) return;
-        this.provide(`${name}.glb`, bytes);
-        // A BLEND clone of the box, for the collect fade. The kit material is
-        // OPAQUE, so the solid instance cannot be faded at all — the renderer
-        // hands the grab over to this one and ramps its alpha down. The clone's
-        // baked 0.5 never shows: the renderer writes the alpha on every frame a
-        // box is dissolving, and parks these instances the rest of the time.
-        const ghostName = name === 'vehicle-monster-truck' ? 'monster-ghost.glb'
-                        : name === 'item-box' ? 'item-box-fade.glb' : null;
-        if (ghostName) {
-          const ghost = this._ghost(bytes);
-          if (ghost) this.provide(ghostName, ghost);
-        }
-      })
-    ]);
-
     // THE BLOB WALKS, first half — AFTER provisioning and before the build, the
     // one window that suits every store: the bake's key needs the biome (latched
-    // at the top of this method), the masks' is derived from the car GLBs handed
+    // at the top of this method), the masks' are derived from the car GLBs handed
     // over just above. NOTHING HERE NAMES A BLOB KIND; the engine lists its
-    // stores and this performs the answers.
+    // stores and this performs the answers. The second half is not here at all —
+    // it is a frame beat (writeReadyBlobs), for the reason ttp_display.h gives.
     if (this.blobs) {
       const gen = await this.blobs.generation();
       await this.blobs.forEach(async (store, name) => {
@@ -448,11 +477,10 @@ export class Display {
           plan = JSON.parse(this._fn.blobPlan(name, trackId, gen, await store.entriesJson()) || '{}');
         } catch { return; }
         for (const drop of plan.drop || []) await store.delete(drop);
-        // `read` is JSON null on a miss, which JSON.parse gives back as null —
-        // the trap Android's org.json needs an explicit guard for.
-        if (!plan.read) return;
-        const bytes = await store.read(plan.read);
-        if (bytes) this.blobOffer(name, bytes);
+        for (const blobName of plan.read || []) {
+          const bytes = await store.read(blobName);
+          if (bytes) this.blobOffer(name, bytes);
+        }
       });
     }
 
@@ -465,23 +493,6 @@ export class Display {
     if (!this._fn.build(trackId, JSON.stringify(this._slots(roster)))) throw nativeError(`building the scene for '${trackId}'`);
     this._slotIdCache = null; // a build is the one thing that can change slot ids
     this.built = true;
-
-    // THE WALKS' second half. Whether this build made anything worth keeping —
-    // and whether the store already has it — is the engine's to know.
-    //
-    // NOT AWAITED: the scene is built, and nothing on screen is waiting for these
-    // bytes. On this backend the first ask only ISSUES the readbacks and answers
-    // nothing (ttp_display.h); the frame loop turns the driver over and the next
-    // build's keep finds them waiting, so a store lands on every other build.
-    if (this.blobs) {
-      this.blobs.forEach(async (store, name) => {
-        let write;
-        try { write = JSON.parse(this._fn.blobKeep(name) || '{}').write; } catch { return; }
-        if (!write) return;
-        const bytes = this.blobExport(name);
-        if (bytes) await store.write(write, bytes);
-      });
-    }
   }
 
   // Re-dress the BUILT scene's car slots in place (ttp_display_reroster): same
@@ -493,25 +504,58 @@ export class Display {
   async reroster(roster, assets) {
     if (!this.built) return false;
     // Model swaps need their GLBs re-provided first — fetching is this side's
-    // one job in the exchange, exactly as at build.
-    await this._provideCars(roster, assets);
+    // one job in the exchange, exactly as at build. Through the same plan, which
+    // is what makes the common re-dress free: a ready toggle, a rename, a
+    // welcome and a seat expiry all move the roster without moving a byte.
+    await this._fetchPlanned(this._carWants(roster), assets);
     // A re-dress keeps the id list by contract (C++ refuses id changes there),
     // so the slot-id cache stands; a refusal falls back to build, which clears it.
     return !!this._fn.reroster(JSON.stringify(this._slots(roster)));
   }
 
-  // The per-slot car GLBs (and their 50%-alpha ghost twins), provided as
-  // car<slot>.glb in roster order — the fetch half of both setTrack and
-  // reroster. `model` names the file; it never crosses the ABI.
-  _provideCars(roster, assets) {
-    return Promise.all((roster || []).map(async (r, i) => {
-      if (!r.model) return;
-      const bytes = await assets.glb(r.model);
+  // The per-slot car GLBs and their 50%-alpha ghost twins, as the plan's
+  // vocabulary: car<slot>.glb tagged by the MODEL its bytes come from, since
+  // that is the only thing about a slot that changes them. A slot with no model
+  // tags as "" so a later pick reads as a change. `model` never crosses the ABI.
+  _carWants(roster) {
+    const want = [];
+    (roster || []).forEach((r, i) => {
+      want.push({ name: `car${i}.glb`, tag: r.model || '' });
+      if (r.model) {
+        want.push({ name: `car${i}-ghost.glb`, tag: r.model, from: `car${i}.glb` });
+      }
+    });
+    return want;
+  }
+
+  // Fetch and hand over exactly what the engine says it still needs, then derive
+  // the ghosts out of the models that came with them (a wanted derivative always
+  // brings its source — ttp_display.h).
+  async _fetchPlanned(want, assets) {
+    const need = new Set(this._json(this._fn.assetPlan(JSON.stringify(want))));
+    const fetched = new Map();
+    // Concurrently: one await each would turn a kit field into a minute of round
+    // trips, and the asset cache makes a repeat fetch free anyway.
+    await Promise.all(want.map(async (w) => {
+      if (w.from || !w.tag || !need.has(w.name)) return;
+      const bytes = await assets.glb(w.tag);
       if (!bytes) return;
-      this.provide(`car${i}.glb`, bytes);
-      const ghost = this._ghost(bytes);
-      if (ghost) this.provide(`car${i}-ghost.glb`, ghost);
+      fetched.set(w.name, bytes);
+      this.provide(w.name, bytes);
     }));
+    for (const w of want) {
+      if (!w.from || !need.has(w.name)) continue;
+      const src = fetched.get(w.from);
+      if (!src) continue;
+      const ghost = this._ghost(src);
+      if (ghost) this.provide(w.name, ghost);
+    }
+  }
+
+  // An ABI answer that is a JSON array, or [] — the same leniency every other
+  // JSON read on this side takes.
+  _json(s) {
+    try { return JSON.parse(s || '[]') || []; } catch { return []; }
   }
 
   // A roster as the ABI takes it, in slot order (see setTrack on the split

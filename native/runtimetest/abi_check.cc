@@ -443,87 +443,101 @@ void boundaryExports() {
     check(m && !m->str.empty(), "ttp_version carries a non-empty mathlib stamp");
   }
 
-  // ---- ttp_blob_plan_json: where a cached blob lives, and which stop living.
+  // ---- planBlob: where a cached blob lives, and which stop living.
   //
-  // The whole point of the export is that three shells do NOT each answer this,
-  // so the answers are stated here rather than left to whichever shell was
-  // written first. The invalidation clause is the one that matters: a bad
-  // eviction wastes disk, a bad generation rule serves a stale blob forever.
+  // The whole point of the decision function is that three shells do NOT each
+  // answer this, so the answers are stated here rather than left to whichever
+  // shell was written first. The invalidation clause is the one that matters: a
+  // bad eviction wastes disk, a bad generation rule serves a stale blob forever.
+  //
+  // Tested through the C++ directly. There was a `ttp_blob_plan_json` crossing
+  // for a while, exported and JNI-bridged, and nothing but this block ever
+  // called it: the display's own walk composes planBlob WITH what the engine is
+  // already holding, and no shell has any business planning a blob on its own.
   {
-    Value v;
-    std::string err;
-    const auto plan = [&](const char* req) {
-      check(read_line(ttp_blob_plan_json(req), v, &err), "blob plan is valid JSON");
-      return v;
+    const auto plan = [](const char* store, const char* gen,
+                         const std::vector<std::string>& keys,
+                         const std::vector<ttp::rt::BlobEntry>& entries = {}) {
+      ttp::rt::BlobRequest in;
+      in.store = store;
+      in.generation = gen;
+      in.keys = keys;
+      in.entries = entries;
+      return ttp::rt::planBlob(in);
     };
-    const auto names = [](const Value& p) {
-      std::vector<std::string> out;
-      if (const Value* d = p.find("drop")) for (const Value& n : d->arr) out.push_back(n.str);
-      std::sort(out.begin(), out.end());
-      return out;
+    const auto sorted = [](std::vector<std::string> v) {
+      std::sort(v.begin(), v.end());
+      return v;
     };
 
     // A name is a pure function of generation + key, and carries both.
-    Value a = plan(R"({"store":"bake","generation":"g1","key":"cove|beach|0"})");
-    const std::string n1 = a.find("name") ? a.find("name")->str : "";
+    const ttp::rt::BlobPlan a = plan("bake", "g1", { "cove|beach|0" });
+    check(a.names.size() == 1, "one key plans one name");
+    const std::string n1 = a.names[0];
     check(!n1.empty(), "a plan names the blob");
     check(n1.rfind("g1__", 0) == 0, "the generation leads the name");
-    Value b = plan(R"({"store":"bake","generation":"g1","key":"cove|beach|0"})");
-    check(b.find("name") && b.find("name")->str == n1, "the same request names the same blob");
+    check(plan("bake", "g1", { "cove|beach|0" }).names[0] == n1,
+          "the same request names the same blob");
 
     // A NEW BINARY CANNOT NAME THE OLD ONE'S FILE. This is the invalidation:
     // not a check that rejects a stale blob, but a name that cannot reach it.
-    Value c = plan(R"({"store":"bake","generation":"g2","key":"cove|beach|0"})");
-    check(c.find("name") && c.find("name")->str != n1,
+    check(plan("bake", "g2", { "cove|beach|0" }).names[0] != n1,
           "a different generation names a different blob");
 
     // ...and the old generation's files come back to be deleted, even though
     // the store is nowhere near its cap.
-    Value d = plan(R"({"store":"bake","generation":"g2","key":"cove|beach|0",
-                       "entries":[{"name":"g1__old-aaaaaaaa.blob","usedMs":1}]})");
-    check(names(d) == std::vector<std::string>{ "g1__old-aaaaaaaa.blob" },
+    check(plan("bake", "g2", { "cove|beach|0" }, { { "g1__old-aaaaaaaa.blob", 1 } }).drop
+                  == std::vector<std::string>{ "g1__old-aaaaaaaa.blob" },
           "another generation's blob is dropped whatever the cap says");
 
     // Two keys that SANITISE alike are still two blobs: the hash is over the
     // raw key, so a collision cannot serve one track's shadows for another.
-    Value e1 = plan(R"({"store":"bake","generation":"g","key":"a|b"})");
-    Value e2 = plan(R"({"store":"bake","generation":"g","key":"a/b"})");
-    check(e1.find("name")->str != e2.find("name")->str,
+    check(plan("bake", "g", { "a|b" }).names[0] != plan("bake", "g", { "a/b" }).names[0],
           "keys that sanitise alike still name different blobs");
 
-    // Under the cap nothing is dropped; over it, the oldest-used go, and the
-    // blob this plan is ABOUT is never one of them.
+    // A SET-SIZED PLAN names one blob per key, in order. This is what the mask
+    // store is: one blob per car model, and a build wants every model in its
+    // field at once.
     {
-      const uint32_t keep = ttp::rt::blobKeep("bake");
-      // The entry list has to contain the plan's OWN name for the exemption to
-      // mean anything, so it is asked for rather than spelled: a hand-written
-      // name would differ in its hash and quietly test nothing.
-      const std::string self = plan(
-              R"({"store":"bake","generation":"g","key":"k0"})").find("name")->str;
-      // `self` is the OLDEST, and every other entry is newer. Without the
-      // exemption it would be first out — a cache deleting exactly what was
-      // asked for, every time the store is full.
-      std::string entries = R"({"name":")" + self + R"(","usedMs":1})";
+      const ttp::rt::BlobPlan m = plan("mask", "g", { "k0", "k1", "k2" });
+      check(m.names.size() == 3, "every key in the request gets a name");
+      check(m.names[0] != m.names[1] && m.names[1] != m.names[2],
+            "…and they are its own, not one name repeated");
+      check(m.names[0] == plan("mask", "g", { "k0" }).names[0],
+            "a key's name does not depend on what it was asked beside");
+    }
+
+    // Under the cap nothing is dropped; over it, the oldest-used go, and NO
+    // blob this plan is about is one of them — every name, not just the first.
+    {
+      const uint32_t keep = ttp::rt::blobKeep("mask");
+      // The entry list has to contain the plan's OWN names for the exemption to
+      // mean anything, so they are asked for rather than spelled: a
+      // hand-written name would differ in its hash and quietly test nothing.
+      const std::vector<std::string> mine = plan("mask", "g", { "k0", "k1" }).names;
+      // Both of ours are the OLDEST, and every other entry is newer. Without
+      // the exemption they would be first out — a cache deleting exactly what
+      // was asked for, every time the store is full.
+      std::vector<ttp::rt::BlobEntry> entries;
+      for (const std::string& n : mine) entries.push_back({ n, 1 });
       std::vector<std::string> others;
       for (uint32_t i = 1; i <= keep + 1; i++) {
-        const std::string n = plan((std::string(R"({"store":"bake","generation":"g","key":"k)")
-                + std::to_string(i) + R"("})").c_str()).find("name")->str;
+        const std::string n = plan("mask", "g", { "x" + std::to_string(i) }).names[0];
         others.push_back(n);
-        entries += R"(,{"name":")" + n + R"(","usedMs":)" + std::to_string(i + 1) + "}";
+        entries.push_back({ n, (double) (i + 1) });
       }
-      const std::string req = std::string(R"({"store":"bake","generation":"g","key":"k0",)")
-              + R"("entries":[)" + entries + "]}";
-      Value f = plan(req.c_str());
-      const std::vector<std::string> dropped = names(f);
-      check(f.find("name")->str == self, "the plan still names the blob asked for");
-      // keep+2 entries, so two go.
-      check(dropped.size() == 2, "over the cap, exactly the overflow is dropped");
+      const ttp::rt::BlobPlan f = plan("mask", "g", { "k0", "k1" }, entries);
+      check(f.names == mine, "the plan still names the blobs asked for");
+      // keep+3 entries, so three go.
+      const std::vector<std::string> dropped = sorted(f.drop);
+      check(dropped.size() == 3, "over the cap, exactly the overflow is dropped");
       for (const std::string& n : dropped) {
-        check(n != self, "the blob the plan is about is never evicted, even as the oldest");
+        for (const std::string& own : mine) {
+          check(n != own, "a blob the plan is about is never evicted, even as the oldest");
+        }
       }
-      std::vector<std::string> want{ others[0], others[1] };
-      std::sort(want.begin(), want.end());
-      check(dropped == want, "eviction takes the oldest-USED first, skipping the one asked for");
+      check(dropped == sorted({ others[0], others[1], others[2] }),
+            "eviction takes the oldest-USED first, skipping the ones asked for");
     }
   }
 

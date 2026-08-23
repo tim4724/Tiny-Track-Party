@@ -54,15 +54,18 @@ struct BlobRequest {
     std::string store;
     // What identifies the binary that produced (or would produce) these bytes.
     std::string generation;
-    // What the blob is OF, in the caller's own vocabulary. The bake's is
-    // "<track>|<biome>|<showcase>".
-    std::string key;
+    // What this build's blobs are OF, in the caller's own vocabulary — the sun
+    // bake's is "<track>|<biome>|<showcase>|<backend>", a silhouette's is
+    // "<glb fnv>|<backend>". A SET rather than one key, because a store may hold
+    // several things a single build wants: the silhouettes are one blob per car
+    // MODEL, and a build wants every model in its field.
+    std::vector<std::string> keys;
     std::vector<BlobEntry> entries;
 };
 
 struct BlobPlan {
-    // The one name this key may be read from and written to.
-    std::string name;
+    // The one name each key may be read from and written to, parallel to `keys`.
+    std::vector<std::string> names;
     // Names to delete, in no order: every other generation's, plus this
     // generation's oldest once the store is over its cap.
     std::vector<std::string> drop;

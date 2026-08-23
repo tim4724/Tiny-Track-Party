@@ -149,11 +149,6 @@ void n_ttp_audio_stop_voices(JNIEnv* env, jclass) {
     ttp_audio_stop_voices();
 }
 
-jbyteArray n_ttp_blob_plan_json(JNIEnv* env, jclass, jbyteArray a0) {
-    CStr s0(env, a0);
-    return toBytes(env, ttp_blob_plan_json(s0.get()));
-}
-
 jint n_ttp_car_finished(JNIEnv* env, jclass, jint a0, jbyteArray a1) {
     CStr s1(env, a1);
     return (jint) ttp_car_finished((int) a0, s1.get());
@@ -185,6 +180,16 @@ jint n_ttp_display_asset(JNIEnv* env, jclass, jbyteArray a0, jbyteArray bytes) {
     return (jint) ttp_display_asset(s0.get(), b.data(), (uint32_t) n);
 }
 
+jbyteArray n_ttp_display_asset_plan(JNIEnv* env, jclass, jbyteArray a0) {
+    CStr s0(env, a0);
+    return toBytes(env, ttp_display_asset_plan(s0.get()));
+}
+
+jbyteArray n_ttp_display_asset_textures(JNIEnv* env, jclass) {
+    (void) env;
+    return toBytes(env, ttp_display_asset_textures());
+}
+
 void n_ttp_display_bench(JNIEnv* env, jclass, jbyteArray a0) {
     CStr s0(env, a0);
     ttp_display_bench(s0.get());
@@ -200,10 +205,11 @@ void n_ttp_display_biome(JNIEnv* env, jclass, jbyteArray a0) {
     ttp_display_biome(s0.get());
 }
 
-jbyteArray n_ttp_display_blob_export(JNIEnv* env, jclass, jbyteArray a0) {
+jbyteArray n_ttp_display_blob_export(JNIEnv* env, jclass, jbyteArray a0, jbyteArray a1) {
     CStr s0(env, a0);
+    CStr s1(env, a1);
     uint32_t outLen = 0;
-    const uint8_t* p = ttp_display_blob_export(s0.get(), &outLen);
+    const uint8_t* p = ttp_display_blob_export(s0.get(), s1.get(), &outLen);
     return toBytes(env, p, outLen);
 }
 
@@ -228,9 +234,20 @@ jbyteArray n_ttp_display_blob_plan(JNIEnv* env, jclass, jbyteArray a0, jbyteArra
     return toBytes(env, ttp_display_blob_plan(s0.get(), s1.get(), s2.get(), s3.get()));
 }
 
+jint n_ttp_display_blob_ready(JNIEnv* env, jclass) {
+    (void) env;
+    return (jint) ttp_display_blob_ready();
+}
+
 jbyteArray n_ttp_display_blob_stores(JNIEnv* env, jclass) {
     (void) env;
     return toBytes(env, ttp_display_blob_stores());
+}
+
+void n_ttp_display_blob_wrote(JNIEnv* env, jclass, jbyteArray a0, jbyteArray a1) {
+    CStr s0(env, a0);
+    CStr s1(env, a1);
+    ttp_display_blob_wrote(s0.get(), s1.get());
 }
 
 jint n_ttp_display_build(JNIEnv* env, jclass, jbyteArray a0, jbyteArray a1) {
@@ -1265,20 +1282,23 @@ const JNINativeMethod kMethods[] = {
     { "ttp_audio_song_json", "(I)[B", (void*) n_ttp_audio_song_json },
     { "ttp_audio_stop_car", "([B)V", (void*) n_ttp_audio_stop_car },
     { "ttp_audio_stop_voices", "()V", (void*) n_ttp_audio_stop_voices },
-    { "ttp_blob_plan_json", "([B)[B", (void*) n_ttp_blob_plan_json },
     { "ttp_car_finished", "(I[B)I", (void*) n_ttp_car_finished },
     { "ttp_car_ids_json", "(I)[B", (void*) n_ttp_car_ids_json },
     { "ttp_car_world_pos", "(I[B[D)I", (void*) n_ttp_car_world_pos },
     { "ttp_display_antialias", "(I)V", (void*) n_ttp_display_antialias },
     { "ttp_display_asset", "([B[B)I", (void*) n_ttp_display_asset },
+    { "ttp_display_asset_plan", "([B)[B", (void*) n_ttp_display_asset_plan },
+    { "ttp_display_asset_textures", "()[B", (void*) n_ttp_display_asset_textures },
     { "ttp_display_bench", "([B)V", (void*) n_ttp_display_bench },
     { "ttp_display_bind", "(I)V", (void*) n_ttp_display_bind },
     { "ttp_display_biome", "([B)V", (void*) n_ttp_display_biome },
-    { "ttp_display_blob_export", "([B)[B", (void*) n_ttp_display_blob_export },
+    { "ttp_display_blob_export", "([B[B)[B", (void*) n_ttp_display_blob_export },
     { "ttp_display_blob_keep", "([B)[B", (void*) n_ttp_display_blob_keep },
     { "ttp_display_blob_offer", "([B[B)V", (void*) n_ttp_display_blob_offer },
     { "ttp_display_blob_plan", "([B[B[B[B)[B", (void*) n_ttp_display_blob_plan },
+    { "ttp_display_blob_ready", "()I", (void*) n_ttp_display_blob_ready },
     { "ttp_display_blob_stores", "()[B", (void*) n_ttp_display_blob_stores },
+    { "ttp_display_blob_wrote", "([B[B)V", (void*) n_ttp_display_blob_wrote },
     { "ttp_display_build", "([B[B)I", (void*) n_ttp_display_build },
     { "ttp_display_burst", "([BDD)V", (void*) n_ttp_display_burst },
     { "ttp_display_camera", "(I)V", (void*) n_ttp_display_camera },

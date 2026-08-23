@@ -22,7 +22,6 @@
 #include "generated/track_defs.h"
 #include "ttp/ai_driver.h"
 #include "ttp/audio.h"
-#include "ttp/blobstore.h"
 #include "ttp/contract.h"
 #include "ttp/canonical.h"
 #include "ttp/centerline.h"
@@ -1676,34 +1675,6 @@ const char* ttp_item_id(int code) {
   // item; ttp::ITEM_IDS is the sim's own roll table, not a second list.
   if (code < 1 || code > 4) return nullptr;
   return ttp::ITEM_IDS[code - 1];
-}
-
-const char* ttp_blob_plan_json(const char* requestJson) {
-  static std::string out;
-  const Value req = json::parse_or(requestJson, Value::Null());
-  ttp::rt::BlobRequest in;
-  in.store = json::str_field(req, "store");
-  in.generation = json::str_field(req, "generation");
-  in.key = json::str_field(req, "key");
-  if (const Value* entries = req.find("entries")) {
-    for (const Value& e : entries->arr) {
-      ttp::rt::BlobEntry be;
-      be.name = json::str_field(e, "name");
-      // A nameless entry is not a file this store can act on either way, so it
-      // is dropped from the plan's INPUT rather than answered about.
-      if (be.name.empty()) continue;
-      if (const Value* used = e.find("usedMs")) be.usedMs = used->num;
-      in.entries.push_back(be);
-    }
-  }
-  const ttp::rt::BlobPlan plan = ttp::rt::planBlob(in);
-  Value m = Value::Obj();
-  m.set("name", Value::Str(plan.name));
-  Value drop = Value::Arr();
-  for (const std::string& d : plan.drop) drop.push(Value::Str(d));
-  m.set("drop", drop);
-  out = canonical_stringify(m);
-  return out.c_str();
 }
 
 const char* ttp_version(void) {

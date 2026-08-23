@@ -99,10 +99,11 @@ const OVERRIDES = {
   // ttp_display_profile_names(). Capped rather than trusted: a wrong length here
   // is an out-of-bounds read of the renderer's scratch.
   ttp_display_profile: { kind: 'block', bytes: 'ttpProfileBytes()' },
-  // The sun bake as a blob. It hands its length back through an out-param the
-  // Kotlin side never sees — same deal as ttp_glb_ghost, minus the input — so a
-  // shell gets a right-sized ByteArray or null and cannot get the pair wrong.
-  ttp_display_blob_export: { kind: 'strBytesOut' },
+  // A finished blob's bytes, by store and by name. It hands its length back
+  // through an out-param the Kotlin side never sees — same deal as
+  // ttp_glb_ghost, minus the input — so a shell gets a right-sized ByteArray or
+  // null and cannot get the pair wrong.
+  ttp_display_blob_export: { kind: 'strStrBytesOut' },
   // ...and back, as (bytes, len) collapsed to one ByteArray for the reason
   // ttp_display_asset's entry gives: separate arguments can disagree, and that
   // disagreement is a buffer overrun. It answers nothing: whether the engine
@@ -355,6 +356,17 @@ function emitC(fns) {
       call = `toBytes(env, p, outLen)`;
       retC = 'jbyteArray';
       sig = '([B)[B';
+    } else if (kind === 'strStrBytesOut') {
+      // …and behind TWO of them (the store, then the blob's name).
+      args.push('jbyteArray a0');
+      args.push('jbyteArray a1');
+      pre.push(`    CStr s0(env, a0);`);
+      pre.push(`    CStr s1(env, a1);`);
+      pre.push(`    uint32_t outLen = 0;`);
+      pre.push(`    const uint8_t* p = ${fn.name}(s0.get(), s1.get(), &outLen);`);
+      call = `toBytes(env, p, outLen)`;
+      retC = 'jbyteArray';
+      sig = '([B[B)[B';
     } else if (kind === 'strBytesInVoid') {
       args.push('jbyteArray a0');
       args.push('jbyteArray bytes');
@@ -467,6 +479,7 @@ function emitKt(fns) {
     else if (kind === 'bytesInInt') { ps = ['bytes: ByteArray?']; ret = 'Int'; }
     else if (kind === 'bytesInVoid') { ps = ['bytes: ByteArray?']; ret = 'Unit'; }
     else if (kind === 'strBytesOut') { ps = ['store: ByteArray?']; ret = 'ByteArray?'; }
+    else if (kind === 'strStrBytesOut') { ps = ['store: ByteArray?', 'name: ByteArray?']; ret = 'ByteArray?'; }
     else if (kind === 'strBytesInVoid') { ps = ['store: ByteArray?', 'bytes: ByteArray?']; ret = 'Unit'; }
     else if (kind === 'block') { ps = []; ret = 'ByteBuffer?'; }
     L.push(`    external fun ${fn.name}(${ps.join(', ')})${ret === 'Unit' ? '' : ': ' + ret}`);

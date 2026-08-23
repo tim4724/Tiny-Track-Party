@@ -266,3 +266,97 @@ test('every shell that performs the walks runs BOTH boot proofs', () => {
     }
   }
 });
+
+test('every shell performs BOTH halves of the blob walk, in their two places', () => {
+  // A HALF NOBODY CALLS IS A CACHE THAT SILENTLY NEVER FILLS. The plan half runs
+  // in the build path and the write half on the frame beat, and neither has a
+  // symptom: a shell that stopped planning simply recomputes the sun bake every
+  // launch, and one that stopped writing recomputes it every launch too. Both
+  // read as "the bake is just slow here", which is exactly what the web looked
+  // like for as long as its write half was the build's tail.
+  //
+  // The SPLIT is the part worth pinning rather than the calls. A readback does
+  // not complete inside the build that issues it on GL, so a shell that moves
+  // `keep` back into its build path answers null forever on that backend and
+  // writes nothing at all — which is the bug this arrangement replaced.
+  // EACH SHELL SPELLS THE ABI IN ITS OWN IDIOM, so the expected symbols are per
+  // shell rather than one list: the TV shells call the C names directly, the web
+  // reaches them through cwrapped members. Naming the C symbols for all three
+  // would pass on the web for the wrong reason — they appear in its cwrap table
+  // whatever the walk does with them.
+  //
+  // The web also keeps both halves in one FILE, so its build half is narrowed to
+  // setTrack's own body and its frame half is checked in Stage.js, where the beat
+  // actually is. Anything less asserts only that the symbols exist somewhere,
+  // which is true of the arrangement this test exists to reject.
+  const SHELLS = [
+    {
+      build: 'public/display/render/Display.js',
+      body: ['async setTrack(', 'async reroster('],
+      plan: ['blobPlan', 'blobOffer'],
+      frame: 'public/display/Stage.js',
+      write: ['writeReadyBlobs'],
+      forbidden: /blobKeep|blobExport/,
+    },
+    {
+      build: 'shells/tvos/TinyTrackParty/Assets/SceneStaging.swift',
+      plan: ['ttp_display_blob_plan', 'ttp_display_blob_offer'],
+      frame: 'shells/tvos/TinyTrackParty/Render/DisplayHost.swift',
+      write: ['ttp_display_blob_ready', 'ttp_display_blob_keep',
+              'ttp_display_blob_export', 'ttp_display_blob_wrote'],
+      forbidden: /ttp_display_blob_keep/,
+    },
+    {
+      build: 'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/SceneStaging.kt',
+      plan: ['ttp_display_blob_plan', 'ttp_display_blob_offer'],
+      frame: 'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/DisplayHost.kt',
+      write: ['ttp_display_blob_ready', 'ttp_display_blob_keep',
+              'ttp_display_blob_export', 'ttp_display_blob_wrote'],
+      forbidden: /ttp_display_blob_keep/,
+    },
+  ];
+  for (const s of SHELLS) {
+    const src = shell(s.build);
+    const frame = shell(s.frame);
+    if (!src || !frame) continue;
+    const build = s.body ? slice(src, s.build, s.body[0], s.body[1]) : src;
+    for (const sym of s.plan) {
+      assert.match(build, new RegExp(sym),
+        `${s.build} never calls ${sym} in its build path — this shell reads no `
+        + 'cached blob and nothing on screen says so');
+    }
+    for (const sym of s.write) {
+      assert.match(frame, new RegExp(sym),
+        `${s.frame} never reaches ${sym} — this shell WRITES no cached blob, so `
+        + 'every launch pays the bake again');
+    }
+    // …and the write half must NOT be back in the build path: on GL a readback
+    // cannot finish inside the build that issues it, so a `keep` asked there
+    // answers null forever and the store silently never fills. That WAS the
+    // arrangement, and it is why the web could only store a track it had built
+    // twice in a row.
+    assert.doesNotMatch(build, s.forbidden,
+      `${s.build}'s build path asks for the write half — that belongs on the `
+      + 'frame beat (ttp_display.h)');
+  }
+});
+
+test('no shell keeps its own memo of what the engine is holding', () => {
+  // ttp_display_asset_plan answers it, off the asset map itself, which cannot
+  // outlive that map. A shell-side mirror can, and one shell had exactly that:
+  // a `provided` map beside the fetch loop with an invalidation hook it had to
+  // fire on the beat a destroyed surface took the renderer away. The other two
+  // had no memo and simply re-fetched everything on every build. Both are the
+  // same bug pointing in different directions.
+  for (const file of [
+    'public/display/render/Display.js',
+    'shells/tvos/TinyTrackParty/Assets/SceneStaging.swift',
+    'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/SceneStaging.kt',
+  ]) {
+    const src = shell(file);
+    if (!src) continue;
+    assert.match(src, /ttp_display_asset_plan|assetPlan/,
+      `${file} never asks what still has to be fetched — it is re-reading and `
+      + 're-handing over bytes the engine already holds, on every build');
+  }
+});
