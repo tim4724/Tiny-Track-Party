@@ -353,6 +353,9 @@ is cleared.
 `docs/perf/androidtv-frame-map.md` is the last full reading — dated, stamped with
 its build and its panel, and kept out of this file because a number here rots
 into a phantom regression. What is durable about how it was taken is below.
+`docs/perf/androidtv-4p-plan.md` is the standing plan for four-player 60 fps,
+and it is where a lever gets priced, ordered and struck off; it is kept out of
+this file for the same reason.
 
 `scripts/perf-frame.mjs` is the FRAME MAP: one table per player count with every
 step of a frame in it, fusing the three instruments that no single one of them

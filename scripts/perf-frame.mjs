@@ -7,6 +7,8 @@
 //   --track           pin it: a lap's own cost varies by ~4 ms between circuits
 //   --pin             hold the render scale (see the saturation note below)
 //   --hz 30           present every OTHER vsync; the readout follows the pin
+//   --vk 1            the backend: 1 Vulkan (the DEFAULT here and the shipping
+//                     one), -1 GL, 0 leave it to VulkanPolicy
 //   --seconds         the frame map's own window, per player count
 //   --armSeconds      seconds of race each ablation arm is folded over
 //   --serial          an explicit adb device
@@ -83,6 +85,19 @@ const PLAYERS = arg('players', '1,4').split(',').map((n) => parseInt(n, 10));
 const TRACK = arg('track', 'tidepool');
 const PIN = arg('pin', '0.5');
 const HZ = arg('hz', '0');
+// The BACKEND, and the reason it is not left to whatever the box was last
+// left on: GL costs +10.9 ms at four cells (measured 2026-08-23), which is
+// most of a frame budget, and a map taken on the wrong one attributes that
+// to whichever step happens to be under the cursor. `debug.ttp.vk`: 1
+// Vulkan, -1 GL, 0 leaves it to VulkanPolicy. Written before every launch
+// because a backend cannot be switched on a running engine, and restored
+// below with the rest of the knobs.
+//
+// IT DEFAULTS THE OTHER WAY FROM `perf-race`, deliberately. That bench
+// pins GL unflagged so its arms stay comparable to the GL-era ledgers it
+// has been filling for months; this script has no such ledger — it never
+// wrote the property at all — so it defaults to what the box SHIPS.
+const VK = arg('vk', '1');
 const SECONDS = parseFloat(arg('seconds', '15'));
 
 const OUT = arg('json', null);
@@ -184,6 +199,7 @@ async function measure(dev, players) {
     setprop('debug.ttp.scale', PIN);
     setprop('debug.ttp.aa', 0);
     setprop('debug.ttp.hz', HZ);
+    setprop('debug.ttp.vk', VK);
     // The readout stays DOWN whatever a previous session left set: the bench
     // logs its line either way, and drawing the panel is Compose work on the one
     // thread this script exists to map.
@@ -425,7 +441,7 @@ const main = async () => {
     // RELEASE — a leftover mask turns up in a shipping build's picture with
     // nothing to explain it.
     try {
-      for (const k of ['features', 'scale', 'aa', 'hz', 'perf']) dev.setprop(`debug.ttp.${k}`, 0);
+      for (const k of ['features', 'scale', 'aa', 'hz', 'perf', 'vk']) dev.setprop(`debug.ttp.${k}`, 0);
     } catch { /* the box went away; nothing to restore it on */ }
   };
   process.once('SIGINT', () => { restore(); process.exit(130); });
