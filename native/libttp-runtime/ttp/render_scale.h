@@ -654,10 +654,33 @@ inline RenderScalePoint renderScaleStep(RenderScalePoint current,
       // FIT is not missing data, it is data saying pixels are not the cost, and
       // probing on it pumps between two rungs for the life of the scene.
       //
-      // A PROBE MAY NOT CHANGE THE RATE. It is a guess, and a guess that halves
-      // the present interval is a guess a player feels in the steering rather
-      // than sees in the picture. The rate step is only ever taken on a model.
-      if (at + 1 < n && list[at + 1].divisor == list[at].divisor) to = at + 1;
+      // A PROBE MAY NOT GUESS AT THE RATE. A guess that halves the present
+      // interval is one a player feels in the steering rather than sees in the
+      // picture, so a rate step bought with pixels is only ever taken on a model.
+      //
+      // A PURE RATE STEP IS NOT A GUESS, and barring it made the anchor a trap.
+      // The entry above the anchor holds the SAME pixels at half the present
+      // interval, so the millisecond measured here IS what it costs there and
+      // only the budget changes — arithmetic, not a model, which is why this arm
+      // may take it while the one below may not. Without it the step was
+      // ONE-WAY: falling across it is a same-scale move, so the controller
+      // records no observation (render_scale_controller.cc), a scene build
+      // clears whatever one it had, and nothing could raise the rate again —
+      // no fit to climb on, and the only branch that can move without a fit
+      // refusing to. Measured in a browser on a 120 Hz laptop: a lobby heavy
+      // enough to walk the point down to 1080@60, then every race after it
+      // pinned there with the GPU at 15% of a 16.7 ms budget, for the life of
+      // the page. The floor escape is the same shape one rung the other way.
+      //
+      // It cannot pump: the climb needs kScaleTargetShare of the budget above
+      // and the retreat needs kScaleDownShare of the same budget, so the two
+      // are the ordinary deadband apart.
+      if (at + 1 < n
+          && (list[at + 1].divisor == list[at].divisor
+              || (list[at + 1].scale <= list[at].scale + 1e-9
+                  && gpuMs <= kScaleTargetShare * pointBudgetMs(list[at + 1], limits)))) {
+        to = at + 1;
+      }
     } else if (fit.ok && sinceChangeSec >= upHold) {
       // CLIMB ONLY INTO A POINT THE MODEL SAYS FITS. This is the whole of the
       // anti-oscillation argument, and it holds at any step width: the step is

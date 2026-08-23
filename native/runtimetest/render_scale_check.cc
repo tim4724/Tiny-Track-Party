@@ -109,7 +109,12 @@ struct Shell {
     const RenderScalePoint next =
         renderScaleStep(at, gpuAt(ms), kLongHold, sinceScene, prev, b);
     if (next.scale != at.scale || next.divisor != at.divisor) {
-      prev = RenderScaleSample{at.scale, ms};
+      // ONLY ON A RESOLUTION MOVE, exactly as RenderScaleController::poll does
+      // it — two points at one scale determine no slope. A harness that
+      // recorded one on a rate move would hand the model an observation the
+      // shipped controller never has, and the rate step's own recovery is
+      // precisely the case that turns on which of the two is true.
+      if (next.scale != at.scale) prev = RenderScaleSample{at.scale, ms};
       at = next;
       moves++;
     }
@@ -473,6 +478,45 @@ int main() {
     for (int i = 0; i < 40; i++) sh.poll(cost(sh.at.scale), k4K120);
     check(sh.at.divisor == 2, "a struggling device on a 120 Hz panel runs 60, not 120");
     check(sh.lines(k4K120) < 1080.0, "…and pays in resolution, which is the stated trade");
+  }
+  {
+    // THE RATE STEP MUST NOT BE A ONE-WAY DOOR. Falling across it is a
+    // same-scale move and records no observation, a scene build clears whatever
+    // one there was, and the probe is the only branch that can move without
+    // one — so while it refused every rate change, the anchor was a trap. A
+    // browser on a 120 Hz laptop sat at 1080@60 for the life of the page with
+    // the GPU at a seventh of its budget.
+    //
+    // The pixels do not change, which is the whole permission: the millisecond
+    // measured HERE is the millisecond it costs THERE.
+    const RenderScalePoint anchor{1080.0 / 2160.0, 2};
+    const RenderScalePoint up =
+        renderScaleStep(anchor, gpuAt(2.5), kLongHold, kSettled, kNoFit, k4K120);
+    check(up.divisor == 1, "a clean anchor at half rate climbs back to the panel's own");
+    nearly(up.scale, anchor.scale, "…buying the rate, not pixels");
+    check(renderScaleStep(anchor, gpuAt(12.0), kLongHold, kSettled, kNoFit, k4K120).divisor == 2,
+          "…and a frame that does not fit the halved budget stays where it is");
+    // One rung the other way, the floor escape is the same shape: a split down
+    // there has no pixels left to give back, so the rate is the only way out.
+    const RenderScaleLimits split{0.0, 1.0, 2160.0, kHz120, kScaleEscapeCells};
+    const RenderScalePoint escaped{540.0 / 2160.0, 2 * anchorDivisor(split)};
+    check(renderScaleStep(escaped, gpuAt(2.5), kLongHold, kSettled, kNoFit, split).divisor
+              < escaped.divisor,
+          "and a split climbs back out of the floor escape the same way");
+  }
+  {
+    // END TO END, on the sequence a race actually walks: a heavy lobby steps the
+    // point down across the rate step, the race's scene build drops the
+    // observation, and the cheap race that follows has to find 120 again.
+    const auto heavy = [](double s) { return 4.0 + 32.0 * s * s; };
+    const auto light = [](double s) { return 1.0 + 2.0 * s * s; };
+    Shell sh;
+    for (int i = 0; i < 40; i++) sh.poll(heavy(sh.at.scale), k4K120);
+    check(sh.at.divisor == 2, "the lobby really did put it on the 60 Hz half of the ladder");
+    sh.prev = RenderScaleSample{0.0, 0.0};        // what a scene build does
+    for (int i = 0; i < 40; i++) sh.poll(light(sh.at.scale), k4K120, 0.0);
+    check(sh.at.divisor == 1, "and the race after it climbs back to the panel's rate");
+    nearly(sh.lines(k4K120), 2160.0, "…and on to native, as on any other ladder");
   }
 
   // ---- the controller ------------------------------------------------------
