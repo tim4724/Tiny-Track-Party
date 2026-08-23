@@ -162,6 +162,11 @@ This tree is worked in **many git worktrees at once**, and `node_modules` +
 over. `npm run setup` is the one command that fixes that; `native/CLAUDE.md`
 covers the caching that keeps rebuilds cheap.
 
+A throwaway that drives the app goes in `scratch/` (gitignored, eslint-ignored).
+It has to be inside the repo — ESM resolves from the file's own directory, so a
+probe in the system temp dir cannot import `@playwright/test` — and the ones
+written at the tree root keep outliving their session and failing `npm run lint`.
+
 **Measure CPU seconds, not wall-clock.** Concurrent worktrees swing wall-clock by
 well over 100%, so a reading taken while another build runs is noise — quote
 `user`+`sys`, or the min of three runs. For the same reason nothing here records

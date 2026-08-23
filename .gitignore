@@ -44,3 +44,9 @@ artwork/trailer/
 # its gallery beside itself; captures land wherever they are pointed).
 scripts/.preview-tracks.html
 *.jpeg
+# One-off probes. A throwaway that drives Playwright has to live INSIDE the repo
+# — ESM resolves from the file's own directory, so a script in the system temp
+# dir cannot import @playwright/test — and the ones written at the root have
+# repeatedly outlived their session and then failed `npm run lint`. This is
+# where they go instead; eslint.config.js ignores it for the same reason.
+scratch/

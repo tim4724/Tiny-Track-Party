@@ -78,11 +78,21 @@ if (!hasBin('ccache')) {
 if (!has('public/display/engine/native/ttp_runtime.wasm')) {
   notes.push('the engine wasm is missing from the checkout — nothing that loads the display will run.');
 }
-// The e2e browser is a per-machine install, not a per-worktree one, so a missing
-// one is worth saying once here rather than as a Playwright error per worktree.
-const pwCache = path.join(process.env.HOME || '', 'Library/Caches/ms-playwright');
-if (!fs.existsSync(pwCache) && !fs.existsSync(path.join(process.env.HOME || '', '.cache/ms-playwright'))) {
-  notes.push('no Playwright browser — run `npx playwright install chromium` before `npm run test:e2e`.');
+// The e2e browsers are a per-machine install, not a per-worktree one, so a
+// missing one is worth saying once here rather than as a Playwright error per
+// worktree. Both are named: the suite is Chromium except for one WebKit spec
+// (tests/CLAUDE.md says why), and "the cache directory exists" is not the
+// question — every machine that ever installed Chromium passes that and then
+// fails on the WebKit spec alone.
+const pwCache = [
+  path.join(process.env.HOME || '', 'Library/Caches/ms-playwright'),
+  path.join(process.env.HOME || '', '.cache/ms-playwright')
+].find((d) => fs.existsSync(d));
+const installed = pwCache ? fs.readdirSync(pwCache) : [];
+const wanted = ['chromium', 'webkit'].filter((b) => !installed.some((d) => d.startsWith(`${b}-`)));
+if (wanted.length) {
+  notes.push(`no Playwright ${wanted.join('/')} browser — run \`npx playwright install ${wanted.join(' ')}\``
+    + ' before `npm run test:e2e`.');
 }
 
 // Asked rather than remembered. A hand-typed count is wrong the first time a

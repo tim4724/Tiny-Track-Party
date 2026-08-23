@@ -43,6 +43,7 @@ export default [
       'public/display/engine/native/**',  // generated wasm artifacts (ttp_runtime.mjs — emscripten glue)
       'public/shared/qrcode-generator.js', // vendored verbatim; upstream style, not ours
       'artwork/**',
+      'scratch/**',                       // gitignored one-off probes; see .gitignore
     ],
   },
 

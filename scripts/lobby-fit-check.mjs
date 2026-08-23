@@ -1,15 +1,41 @@
 // Runs against the REAL controller page now that the relayout has shipped into
 // controller.css. "Bigger text if space allows" needs a limit that is checked
-// rather than eyeballed: this walks every element in the lobby at both landscape
-// viewports and reports anything wider than its own box, plus the tightest gap
+// rather than eyeballed: this walks every element in the lobby at every landscape
+// viewport below and reports anything outside its own box, plus the tightest gap
 // between a cup name and its tile edge.
-import { chromium } from 'playwright';
-const b = await chromium.launch();
+//
+// It stands up its OWN server on an allocated port (capture.mjs, whose header
+// explains the port trap this tree keeps stepping in). It used to hardcode one
+// and leave you to start the server by hand: two worktrees running it at once
+// measured each other's pages, and running it with nothing on that port died in
+// an unhandled rejection rather than saying what was missing.
+//
+// THE VIEWPORTS ARE THE COVERAGE. The short pair is not decoration: the tall
+// pair alone is what let a car strip whose rows demanded ~340px of a ~250px
+// column ship, since the spill check below would have named it on the first run
+// at a real height. A phone's landscape height is its SHORT side minus browser
+// chrome — under 300px with the bar up, where a dev window leaves 390+.
+import { serveApp, launchBrowser } from './lib/capture.mjs';
+
+const VIEWPORTS = [
+  ['iphone14', 844, 390],   // the shell, or a browser with its bar retracted
+  ['se', 667, 375],
+  ['iphone14-bar', 844, 300], // …and the same two with the browser bar up
+  ['se-bar', 667, 280]
+];
+
+const app = await serveApp();
+// realUser: false — this measures the DOM, not pixels, so the automation path
+// (scripts/CLAUDE.md) is the right one and is what the page will be under in
+// E2E anyway. What the seam is really here for is `page`'s pageerror relay: a
+// script throwing on the controller left this reporting a tidy "clean" over a
+// lobby that had not finished rendering.
+const b = await launchBrowser({ realUser: false });
 let bad = 0;
-for (const [label, w, h] of [['iphone14', 844, 390], ['se', 667, 375]]) {
-  const p = await b.newPage({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
+for (const [label, w, h] of VIEWPORTS) {
+  const p = await b.page({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
   for (const s of ['lobby-host', 'lobby-race', 'lobby-waiting', 'lobby-race-locked']) {
-    await p.goto(`http://localhost:8477/controller/index.html?scenario=${s}&color=0`, { waitUntil: 'networkidle' });
+    await p.goto(`http://127.0.0.1:${app.port}/controller/index.html?scenario=${s}&color=0`, { waitUntil: 'networkidle' });
     await p.waitForTimeout(900);
     const found = await p.evaluate(() => {
       const out = [];
@@ -63,4 +89,6 @@ for (const [label, w, h] of [['iphone14', 844, 390], ['se', 667, 375]]) {
   await p.close();
 }
 await b.close();
+app.close();
 console.log(bad ? `\n${bad} problem(s)` : '\nclean');
+process.exit(bad ? 1 : 0);

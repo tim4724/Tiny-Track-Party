@@ -10,10 +10,11 @@ source that moves when the first one does not.
 
 ## Driving a browser: use `lib/capture.mjs`
 
-A bake that needs a page goes through the seam, and does not stand up its own
+Anything here that drives a page goes through the seam — a bake, and equally a
+measurement tool like `lobby-fit-check.mjs` — and does not stand up its own
 server or launch its own Chromium. Two traps live in that plumbing and both are
-**invisible when you get them wrong** — the pictures come out looking entirely
-plausible.
+**invisible when you get them wrong**: the pictures come out looking entirely
+plausible, and the measurements come out looking clean.
 
 **The automation trap.** `Stage.js` changes two things when `navigator.webdriver`
 is set: it caps the render scale at 0.25, and it skips the sun's shadow bake.
@@ -26,8 +27,10 @@ automation path — a bench measuring what a frame costs — passes
 
 **The port trap.** This tree is worked in many worktrees at once, so a literal
 port number is not a race, it is a standing collision: the capture connects to
-another worktree's dev server and photographs a different branch. `serveApp()`
-allocates. Never write a port literal here.
+another worktree's dev server and photographs a different branch — or measures
+it. `serveApp()` allocates, and stands the server up for you. Never write a port
+literal here, and never make the caller start a server by hand: a script that
+does dies in an unhandled rejection when one isn't there.
 
 The seam also owns `waitForScene` (wait, never sleep — a cold Filament shader
 compile behind a `setTimeout` yields half-loaded scenes and nobody notices for a
