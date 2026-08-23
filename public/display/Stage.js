@@ -226,6 +226,11 @@ export class Stage {
     const ss = parseFloat(params.get('supersample'));
     this._superSample = !automation && Number.isFinite(ss) && ss > 0
         ? Math.min(ss, MAX_SUPERSAMPLE) : 0;
+    // DEBUG (?dresskeep=F, ?dresssheets=0): the two halves of the dressing
+    // ablation. ttp_display.h says what they are for and what they measured.
+    const dk = parseFloat(params.get('dresskeep'));
+    this._dressKeep = Number.isFinite(dk) && dk >= 0 && dk < 1 ? dk : null;
+    this._dressSheetsOff = params.get('dresssheets') === '0';
     this._superArmed = false;
     this._superReached = false;
     this._dpr = 1;           // real value comes from the _sizeCanvas below
@@ -296,6 +301,8 @@ export class Stage {
   // second renderer to fall back to.
   async boot() {
     this.display = await Display.create(this._canvas);
+    if (this._dressKeep !== null) this.display.dressKeep(this._dressKeep);
+    if (this._dressSheetsOff) this.display.dressSheets(false);
     // RECONCILE THE SIZE THE RENDERER WAS BORN AT. ttp_display_create is handed
     // the buffer's dimensions and Display.create THEN fetches the .filamat
     // blobs, so `display` is null for a network round trip — and _onResize drops

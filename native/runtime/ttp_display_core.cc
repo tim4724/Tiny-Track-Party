@@ -679,6 +679,14 @@ void ttp_display_antialias(int on) {
     if (g_disp && g_disp->renderer) g_disp->renderer->setAntialias(on != 0);
 }
 
+void ttp_display_dress_keep(float frac) {
+    if (g_disp && g_disp->renderer) g_disp->renderer->setDressKeep(frac);
+}
+
+void ttp_display_dress_sheets(int on) {
+    if (g_disp && g_disp->renderer) g_disp->renderer->setDressSheets(on != 0);
+}
+
 void ttp_display_multiview(int mode) {
     if (g_disp && g_disp->renderer) g_disp->renderer->setMultiview(mode);
 }

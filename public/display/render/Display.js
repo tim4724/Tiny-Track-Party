@@ -128,6 +128,8 @@ export class Display {
       debugWipeSkids: mod.cwrap('ttp_display_debug_wipe_skids', null, []),
       debugForceMaskLayer: mod.cwrap('ttp_display_debug_force_mask_layer', null, ['number']),
       debugFeatures: mod.cwrap('ttp_display_debug_features', null, ['number']),
+      dressKeep: mod.cwrap('ttp_display_dress_keep', null, ['number']),
+      dressSheets: mod.cwrap('ttp_display_dress_sheets', null, ['number']),
       biome: mod.cwrap('ttp_display_biome', null, ['string']),
       showcase: mod.cwrap('ttp_display_showcase', null, ['number']),
       modelVariant: mod.cwrap('ttp_display_model_variant', null, ['string', 'number']),
@@ -686,6 +688,10 @@ export class Display {
   // HUD's timer reads what it was costing to draw. FEATURES names the bits so a
   // sweep script does not re-type them; DEBUG ONLY, nothing on a play path.
   debugFeatures(mask) { this._fn.debugFeatures(mask >>> 0); }
+
+  dressKeep(f) { this._fn.dressKeep(f); }
+
+  dressSheets(on) { this._fn.dressSheets(on ? 1 : 0); }
 
   profile() {
     const ptr = this.m._ttp_display_profile();

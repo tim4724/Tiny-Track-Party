@@ -67,6 +67,9 @@ const PLAYERS = parseInt(arg('players', '4'), 10);
 const DPR = parseFloat(arg('dpr', '1'));
 const ROUNDS = parseInt(arg('rounds', '5'), 10);
 const OUT = arg('json', null);
+// Extra query params appended verbatim, for pricing a prototype knob on the
+// same instrument (e.g. --extra roadstride=3).
+const EXTRA = arg('extra', '');
 const SHOT = arg('shot', null);
 // Restrict the sweep to named arms ("all", "-road", "only cars", …). What it is
 // for is re-measuring ONE arm across rebuilt artifacts, where running the other
@@ -176,7 +179,8 @@ const main = async () => {
   // nothing else in the page would ask the monitor to measure, and every arm
   // would read as null cost.
   const url = `http://localhost:${PORT}/?scenario=${SCENARIO}&players=${PLAYERS}`
-      + `&track=${TRACK}&seed=1&dpr=${DPR}&gate=1&perf=1`;
+      + `&track=${TRACK}&seed=1&dpr=${DPR}&gate=1&perf=1`
+      + (EXTRA ? `&${EXTRA}` : '');
   console.log(`# ${url}  rounds=${ROUNDS}`);
   await page.goto(url);
   await page.waitForFunction(() => window.__sceneReady, null, { timeout: 60000 });

@@ -2150,6 +2150,9 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     // sync path pumps at the START of the next load, so without this the last
     // assets' textures never bind and those cars render black).
     pumpTextures();
+    // A build puts every sheet back in the scene, so an ablation arm has to be
+    // re-stated or it would quietly end at the next track.
+    if (!mDressSheets) applyDressSheets();
     mTrack = std::make_unique<TrackBin>(std::move(tb));
     mDecalProjHint.clear(); // ring indices belong to the track just replaced
     phaseMark("epilogue");

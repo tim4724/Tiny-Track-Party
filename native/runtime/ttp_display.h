@@ -609,6 +609,25 @@ TTP_ABI void ttp_display_burst(const char* idJson, double s, double lat);
  * The shell decides, because affordability is a fact about ITS device. */
 TTP_ABI void ttp_display_antialias(int on);
 
+/* THE DRESSING ABLATION, split in two because the group's cost is.
+ * `ttp_display_debug_features` hides the group whole (TTP_FEAT_DRESSING) and
+ * every layer bit is spoken for, so these two take the halves apart instead.
+ *
+ * dress_keep is the fraction of each merged group's COPIES that is kept (1 =
+ * all of them); dress_sheets is whether the one-renderable SHEETS -- boulders,
+ * landmarks, windmill, clutter, smoke, signs -- are in the scene at all.
+ *
+ * WHY BOTH EXIST. Measured on the reference Android box at four players, the
+ * copies are 40k vertices a frame and hold ~1.1 ms that no render scale can
+ * reach; the sheets are 88k and hold none of it. The copies are the kit's LIT
+ * models and the sheets carry no normals, which is the same split fillRoadLight
+ * already exploits on the deck -- so the frame's resolution-independent half is
+ * per-vertex SHADING rather than vertex count, and an arm that cannot separate
+ * lit geometry from unlit cannot show that. Both take the fragments with them,
+ * so each reads as a ceiling rather than as a saving. */
+TTP_ABI void ttp_display_dress_keep(float frac);
+TTP_ABI void ttp_display_dress_sheets(int on);
+
 /* Route split-screen cells through OVR_multiview stereo passes — two-eye
  * renders into an array target plus one resolve, instead of one render() per
  * cell. `mode` 0 = never, 1 = FOUR-cell splits only (the DEFAULT, unset), 2 =

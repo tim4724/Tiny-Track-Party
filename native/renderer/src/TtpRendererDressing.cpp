@@ -1963,6 +1963,23 @@ void TtpRenderer::mergeInstancedSet(const gltfio::FilamentAsset* asset,
         for (auto* in : insts) {
             for (const size_t e : slots) sources.push_back(in->getEntities()[e]);
         }
+        // THE COPIES HALF OF THE DRESSING ABLATION (mDressKeep, 1 = every copy;
+        // ttp_display_dress_keep says what it is for). A dropped copy leaves the
+        // scene outright, because buildMergedGroup only takes the sources it is
+        // handed out of it -- one merely omitted from the merge would keep
+        // drawing exactly as gltfio loaded it.
+        if (mDressKeep < 1.0f) {
+            std::vector<utils::Entity> kept;
+            for (size_t i = 0; i < sources.size(); i++) {
+                const auto at = [&](size_t k) {
+                    return static_cast<size_t>(static_cast<float>(k) * mDressKeep);
+                };
+                if (at(i + 1) != at(i)) kept.push_back(sources[i]);
+                else mScene->remove(sources[i]);
+            }
+            sources.swap(kept);
+            if (sources.empty()) continue;
+        }
         buildMergedGroup(mMergedDress, sources, node->prims, dynamic,
                 kFeatDressing);
     }

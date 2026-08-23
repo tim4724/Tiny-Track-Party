@@ -555,6 +555,48 @@ under half a millisecond. It is spread across the deck, the terrain and the set
 dressing, so the way to spend less of it is to submit less, not to find the one
 thing at fault. Do not go looking for that one thing again; the arms are in the
 shell's file.
+
+**AND IT IS PER-VERTEX SHADING RATHER THAN VERTEX COUNT.** "Submit less" is
+right and "submit fewer vertices" is not, because a vertex's price depends
+entirely on what its vertex shader does. Measured at four players on the
+reference Android box, splitting the dressing ablation in two
+(`ttp_display_dress_keep` / `ttp_display_dress_sheets`, which exist for this):
+
+| removed | verts/frame | resolution-independent |
+|---|---|---|
+| the merged kit COPIES | 40k | **1.1 ms** |
+| the SHEETS (boulders, clutter, landmarks, signs) | **88k** | **~0.0 ms** |
+
+Twice the vertices, none of the cost. The copies are the kit's LIT models; the
+sheets carry no normals at all. The deck agrees from the third direction: its
+shading is baked into custom0 by `fillRoadLight`, and cutting 54k deck vertices
+bought 0.4 ms where these 40k bought 1.1.
+
+Three consequences, and the first two have each been paid for once:
+
+- **A DISTANCE LOD BUYS NOTHING HERE, and the reason is the content.** The fog
+  saturates at `RACE_FOG_FAR` and the scenery is authored to end where the fog
+  does, so sweeping the far plane from 600 u to 100 u moves the count by two per
+  cent. There is no far field to grade. Nor is there detail to remove: the whole
+  kit is 20,033 vertices and 9,524 triangles, a palm is 190 of them, so a
+  "simpler model" is not an asset anybody can author. What the 126k dressing
+  vertices a frame are is INSTANCE COUNT.
+- **CUTTING GEOMETRY OFF THE DECK OR THE TERRAIN IS NOT WORTH THE COMPLEXITY.**
+  Chunking both for cullability and pairing the deck with a coarse twin cut the
+  frame's submitted vertices by a quarter and measured **−0.4 ms of GPU against
+  +0.55 ms of frame thread** — the renderable count is not free either. Both
+  were built, measured and reverted; the history has them.
+- **What WOULD pay is making a vertex cheaper to shade.** The props are static,
+  the sun is static, and they are lit from scratch every frame in every cell.
+  That is `fillRoadLight`'s argument one level out, worth the whole 1.1 ms with
+  no change to the picture.
+
+**AND NONE OF IT REACHES 60 AT FOUR PLAYERS.** Sweeping the render scale down to
+a twenty-fifth of native pixels still leaves that frame at 19.8 ms against a
+16.7 ms budget: the resolution-independent floor is ~19 ms, of which ALL
+geometry is about 4. The rest scales with CELLS, not with pixels or vertices.
+Four players is a 30 fps mode, and a millisecond saved there buys resolution
+rather than frames.
 > **A PASS PRICED AT ONE PANEL SIZE SAYS NOTHING ABOUT ANOTHER.** That same
 > cell overlay pass, at the Apple TV's nine times the pixels, was the whole
 > reason a 4-way split missed 60 Hz — and what it cost was its VIEW's blend

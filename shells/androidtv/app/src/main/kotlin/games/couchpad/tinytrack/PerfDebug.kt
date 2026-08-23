@@ -10,6 +10,11 @@ import android.util.Log
  * adb shell setprop debug.ttp.scale 1.0      # pin the render scale (0 = adaptive)
  * adb shell setprop debug.ttp.features 0x1FFC # TTP_FEAT_* mask (see ttp_display.h)
  * adb shell setprop debug.ttp.aa 1           # put the antialias pass back on
+ * adb shell setprop debug.ttp.dresskeep 0.5  # keep half the merged dressing COPIES
+ * adb shell setprop debug.ttp.dresssheets 0  # the dressing SHEETS out of the scene
+ *                                            # (1/unset = the whole scene; the two
+ *                                            # halves of TTP_FEAT_DRESSING, which
+ *                                            # ttp_display.h explains)
  * adb shell setprop debug.ttp.hz 30          # PIN every-other-vsync (0 = hand it back to the rule)
  * adb shell setprop debug.ttp.mv -1          # multiview OFF (-1); 1 = 4-cell splits
  *                                            # (the default), 2 = ANY split (measured
@@ -44,6 +49,9 @@ object PerfDebug {
     private var lastMask = -1
     private var lastScale = -1.0
     private var lastAa = 0
+    /** Both default to the whole scene, so an unset property is a no-op. */
+    private var lastDressKeep = 1.0
+    private var lastDressSheets = 1
     private var lastHz = -1
     /** 1, not 0: mode 0 is what -1 ("off") maps to; the engine's default is 1. */
     private var lastMv = 1
@@ -104,6 +112,25 @@ object PerfDebug {
             Ttp.ttp_display_multiview(mv)
             PerfMonitor.reset()
             Log.i(TAG, "multiview -> $mv")
+        }
+
+        // Both rebuild or re-state the scene rather than masking anything, so
+        // they land live -- and what is being measured has changed, so the
+        // window goes with them exactly as the feature mask's does.
+        val dressKeep = getprop("debug.ttp.dresskeep")?.toDoubleOrNull() ?: 1.0
+        if (dressKeep != lastDressKeep) {
+            lastDressKeep = dressKeep
+            Ttp.ttp_display_dress_keep(dressKeep.toFloat())
+            PerfMonitor.reset()
+            Log.i(TAG, "dress keep -> $dressKeep")
+        }
+
+        val sheets = getprop("debug.ttp.dresssheets")?.toIntOrNull() ?: 1
+        if (sheets != lastDressSheets) {
+            lastDressSheets = sheets
+            Ttp.ttp_display_dress_sheets(sheets)
+            PerfMonitor.reset()
+            Log.i(TAG, "dress sheets -> $sheets")
         }
 
         val scale = getprop("debug.ttp.scale")?.toDoubleOrNull() ?: 0.0

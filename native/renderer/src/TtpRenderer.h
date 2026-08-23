@@ -1591,6 +1591,12 @@ private:
     };
     std::vector<MergedGroup> mMergedCars;   // rebuilt whenever the roster moves
     std::vector<MergedGroup> mMergedDress;  // built once per scene's dressing
+    // THE DRESSING ABLATION, in two halves because the group's cost is in two
+    // halves and no layer bit is left to split it with (kFeat* fills the byte).
+    // mDressKeep is the fraction of each merged group's COPIES that is kept;
+    // mDressSheets is whether the one-renderable SHEETS are in the scene.
+    float mDressKeep = 1.0f;
+    bool mDressSheets = true;
     bool mCarMergeDirty = false;
     bool mDressMergeDirty = false;
     bool mMergeOff = false;                 // kFeatNoMerge (ablation only)
@@ -1744,6 +1750,9 @@ public:
     // this were argued from ambiguous screenshots. These make the stamp the
     // only thing on the road. Nothing on the shipping path reads them.
     void debugHideCars(bool on) { mHideCars = on; }
+    void setDressKeep(float frac);
+    void setDressSheets(bool on);
+    void applyDressSheets();
     void debugWipeSkids() { mSkidWipe = true; }
     // Force every masked stamp onto ONE mask layer, or −1 to leave each car on
     // its own. kMaskLayerGeneric is the generic superellipse, a shape correct

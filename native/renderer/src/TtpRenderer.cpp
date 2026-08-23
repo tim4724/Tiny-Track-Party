@@ -1108,6 +1108,50 @@ void TtpRenderer::tagEntities(const utils::Entity* e, size_t n, uint8_t bit) {
     }
 }
 
+// THE DRESSING ABLATION. `ttp_display_debug_features` can hide the group whole
+// (kFeatDressing) but cannot split it, and the group's cost turned out to be
+// lopsided in a way that matters: its merged kit COPIES are lit models and its
+// SHEETS carry no normals, so on the reference Android box the copies hold
+// every millisecond the render scale cannot reach and the sheets, at twice the
+// vertices, hold none of it. Splitting the arm is what found that.
+//
+// The copies are thinned inside the merge (mergeInstancedSet); the sheets are
+// taken out by SCENE MEMBERSHIP, because every layer bit is spoken for and
+// because a hidden layer is still walked by FScene::prepare -- which is the
+// half a vertex question is asking about. Membership is safe here for the same
+// reason it is unsafe for the feature mask: these are static meshes, not pools
+// the frame rewrites.
+void TtpRenderer::setDressKeep(float frac) {
+    const float f = frac < 0.0f ? 0.0f : (frac > 1.0f ? 1.0f : frac);
+    if (f == mDressKeep) return;
+    mDressKeep = f;
+    mDressMergeDirty = true;   // the thin lives in the merge, so redo the merge
+}
+
+void TtpRenderer::setDressSheets(bool on) {
+    if (on == mDressSheets) return;
+    mDressSheets = on;
+    applyDressSheets();
+}
+
+// Re-stated after every build as well as on the knob: a build adds the sheets
+// back, so the flag is the DESIRED state rather than a record of one edit.
+void TtpRenderer::applyDressSheets() {
+    if (!mScene) return;
+    const bool on = mDressSheets;
+    const auto show = [&](const Mesh& m) {
+        const auto one = [&](utils::Entity e) {
+            if (e.isNull()) return;
+            if (on) mScene->addEntity(e); else mScene->remove(e);
+        };
+        one(m.entity);
+        for (const utils::Entity e : m.chunks) one(e);
+    };
+    for (const Mesh* m : { &mBoulders, &mLandmarks, &mWindmill, &mClutter }) show(*m);
+    for (const Mesh& m : mSmoke) show(m);
+    for (const Mesh& m : mSignMeshes) show(m);
+}
+
 void TtpRenderer::tagMesh(const Mesh& m, uint8_t bit) {
     if (!m.entity.isNull()) tagEntities(&m.entity, 1, bit);
     if (!m.chunks.empty()) tagEntities(m.chunks.data(), m.chunks.size(), bit);

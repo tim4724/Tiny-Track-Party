@@ -309,6 +309,16 @@ void n_ttp_display_drain(JNIEnv* env, jclass) {
     ttp_display_drain();
 }
 
+void n_ttp_display_dress_keep(JNIEnv* env, jclass, jfloat a0) {
+    (void) env;
+    ttp_display_dress_keep((float) a0);
+}
+
+void n_ttp_display_dress_sheets(JNIEnv* env, jclass, jint a0) {
+    (void) env;
+    ttp_display_dress_sheets((int) a0);
+}
+
 void n_ttp_display_fog(JNIEnv* env, jclass, jint a0) {
     (void) env;
     ttp_display_fog((int) a0);
@@ -1283,6 +1293,8 @@ const JNINativeMethod kMethods[] = {
     { "ttp_display_destroy", "()V", (void*) n_ttp_display_destroy },
     { "ttp_display_dividers", "(I)V", (void*) n_ttp_display_dividers },
     { "ttp_display_drain", "()V", (void*) n_ttp_display_drain },
+    { "ttp_display_dress_keep", "(F)V", (void*) n_ttp_display_dress_keep },
+    { "ttp_display_dress_sheets", "(I)V", (void*) n_ttp_display_dress_sheets },
     { "ttp_display_fog", "(I)V", (void*) n_ttp_display_fog },
     { "ttp_display_frame", "(D)I", (void*) n_ttp_display_frame },
     { "ttp_display_gpu_ms", "()D", (void*) n_ttp_display_gpu_ms },
