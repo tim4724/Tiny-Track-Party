@@ -281,10 +281,14 @@ depth-EQUAL stamp pass is the refuted escape**: re-emitting the stamp's ring
 range of the road's own buffers as a transparent depth-EQUAL renderable
 renders correctly and measures a null — shading those fragments costs the
 same wherever they are issued, so do not rebuild it, and do not file the
-masked cost as "pass structure" again. The one lever that converts is the
-rank gate itself: budget 0 at four cells puts every car on the blob (which
-crossfades, so nothing pops) and locks 768x432@60 — a LOOK trade, the
-user's to take.
+masked cost as "pass structure" again. The third probe
+(MASK_FLAT: the tap answers a constant, the maths runs in full) prices the
+FETCH at a fraction of a millisecond — so the cost is the per-fragment
+projection maths itself, an analytic-shape silhouette is refuted unbuilt,
+and no texture format or resolution change can pay. The one lever that
+converts is the rank gate itself: budget 0 at four cells puts every car on
+the blob (which crossfades, so nothing pops) and locks 768x432@60 — a LOOK
+trade, the user's to take.
 
 **Why painting in curvilinear (s, lat) is safe NOW when it was the original
 sin:** the old objection — track space bends the stamp around corners, and the

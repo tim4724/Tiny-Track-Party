@@ -870,6 +870,13 @@ TTP_ABI void ttp_display_debug_force_mask_layer(int layer);
  * that carry a stamp, whatever the branch says; both fast = the cost is the
  * stamp's own covered fragments. Attribution only. */
 #define TTP_DEBUG_DECAL_MASK_BOUNDS0 0x400000
+/* The third probe: the masked loop runs in full — projection, feather, mix —
+ * but the silhouette tap answers a CONSTANT instead of sampling the decalMask
+ * array (a view-global uniform branch, the grade/fog idiom). Against the
+ * baseline it prices the FETCH'S EXECUTION alone; register pressure and the
+ * armed-path cost stay, which is what BOUNDS0 already prices. Attribution
+ * only: every near shadow draws as a feathered square. */
+#define TTP_DEBUG_DECAL_MASK_FLAT 0x800000
 TTP_ABI void ttp_display_debug_features(unsigned int mask);
 
 #ifdef __cplusplus

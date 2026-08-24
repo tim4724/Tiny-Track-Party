@@ -434,7 +434,10 @@ fragment {
             // makes an implicit-derivative sample UB — the ANGLE-Metal
             // flicker taught this once already. One level, so LOD 0 is exact.
             // .a: the RGBA8 array stores coverage in alpha (see the sampler).
-            float m = textureLod(materialParams_decalMask, vec3(uv, wp.w), 0.0).a;
+            // The uniform branch is TTP_DEBUG_DECAL_MASK_FLAT — the probe
+            // that prices this fetch's execution (ttp_display.h).
+            float m = getMaterialGlobal0().z > 0.0 ? 1.0
+                    : textureLod(materialParams_decalMask, vec3(uv, wp.w), 0.0).a;
             m *= 1.0 - smoothstep(0.72, 0.98, d);
             base = mix(base, materialParams.maskInk.rgb, clamp(wf.w * m, 0.0, 1.0));
         }

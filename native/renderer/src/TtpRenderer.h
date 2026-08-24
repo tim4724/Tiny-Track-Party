@@ -1970,10 +1970,11 @@ public:
     static constexpr uint32_t kDebugDecalCapsHalf  = 0x100000;
     static constexpr uint32_t kDebugDecalMaskCount0 = 0x200000;
     static constexpr uint32_t kDebugDecalMaskBounds0 = 0x400000;
+    static constexpr uint32_t kDebugDecalMaskFlat = 0x800000;
     static constexpr uint32_t kDebugDecalAll = kDebugNoDecalMasked
             | kDebugNoDecalProfile | kDebugNoDecalBlob | kDebugNoDecalStatics
             | kDebugDecalCapsHalf | kDebugDecalMaskCount0
-            | kDebugDecalMaskBounds0;
+            | kDebugDecalMaskBounds0 | kDebugDecalMaskFlat;
     void debugFeatureMask(uint32_t mask);
 private:
     bool mHideCars = false;

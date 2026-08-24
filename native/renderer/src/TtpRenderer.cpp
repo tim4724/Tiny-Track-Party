@@ -1402,6 +1402,9 @@ void TtpRenderer::debugFeatureMask(uint32_t mask) {
     // nobody has touched draws the shipped picture (ttp_grade.inc's note).
     mDebugGlobals.x = (mask & kFeatGrade) ? 0.0f : 1.0f;
     mDebugGlobals.y = (mask & kFeatFogVertex) ? 0.0f : 1.0f;
+    // MASK_FLAT is the one non-inverted global: zero draws the shipped
+    // picture (the tap), set replaces it with constant coverage.
+    mDebugGlobals.z = (mask & kDebugDecalMaskFlat) ? 1.0f : 0.0f;
     // The merge ablation: flipping it marks both families dirty and the lazy
     // sites take the groups apart (restoring the originals) or regroup.
     const bool mergeOff = (mask & kFeatNoMerge) != 0;

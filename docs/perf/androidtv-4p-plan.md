@@ -373,6 +373,16 @@ Four own-car stamps, ~1.8 ms each. Two findings that reshape earlier phases:
   paid by a stamp chunk's fragments merely for `maskCount > 0`, before any
   fragment enters the loop, and ~4.3 ms is the loop's own fragments.
 
+**The silhouette FETCH is not the cost either — measured (2026-08-24), and it
+closes the whole texture line.** The MASK_FLAT probe (the tap answers a
+constant; projection, feather and mix run in full) reads -0.30 / -2.09 /
+-0.36 across three interleaved pairs — sign-consistent, median ~0.35 ms, a
+minor slice of the ~4.3 ms the executed loop costs. So the money is the
+per-fragment PROJECTION MATH on the densest fragments plus the armed-path
+residue, not the sampler: an analytic-shape silhouette (which would keep the
+projection and drop only the tap) is refuted WITHOUT being built, and no
+texture format or resolution change can ever pay. Do not re-file either.
+
 **THE DEPTH-EQUAL STAMP PASS IS BUILT, MEASURED AND REFUTED — do not rebuild
 it.** The obvious structural escape — draw the four stamps as their own
 transparent renderables over ring ranges of the road's shared buffers, depth
