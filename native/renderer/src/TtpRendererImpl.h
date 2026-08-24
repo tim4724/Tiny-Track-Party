@@ -764,6 +764,17 @@ constexpr float kCarBlobAO = 0.62f;
 // kMaxMaskedDeckDecals for why a single global rank is starvable.
 constexpr float kShadowLodNear = 10.0f;
 constexpr float kShadowLodFar = 14.0f;
+// FOUR CELLS RIDE THE BLOB, every car — the masked pick budget goes to zero
+// and the rank gate degrades everyone to the texture layer, which crossfades
+// and cannot pop. A LOOK TRADE taken deliberately (2026-08-24, the user's
+// call after the pricing): the four own-car silhouette stamps are ~7 ms of a
+// 4P/1080 frame — the whole decal channel — and five separately-built escapes
+// measured dead (docs/perf/androidtv-4p-plan.md Phase 5), while every car on
+// the blob buys the rung that matters: 853x480 at an effectively locked 60
+// against 960x540 at 30. FOUR and not kScaleEscapeCells' three: a 3-way split
+// already holds ~60 at the floor under Vulkan, so its silhouettes are
+// affordable and stay.
+constexpr uint32_t kMaskedBlobCells = 4;
 
 // The carShadow layer's cap on summed coverage (maskInk.w — also the tap's
 // enable). The raster accumulates with saturating ADD (the rubber's idiom),

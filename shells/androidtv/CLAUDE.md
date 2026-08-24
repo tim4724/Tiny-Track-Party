@@ -567,6 +567,17 @@ rule picks a divisor of its own; leave the pin out and a pinned 30 Hz box is
 priced against a 16.7 ms budget and shredded down the ladder to hold a rate
 nobody asked for.
 
+**THE SPLIT GOES BELOW THE FLOOR IN RESOLUTION NOW, NOT RATE (2026-08-24).**
+`ttp/render_scale.h`'s sub-floor rungs (360/432/480 at the panel's own rate,
+split-gated like the escape) plus the four-cell masked-shadow trade
+(`kMaskedBlobCells` — every car on the die-cut blob) land an adaptive 4P race
+at **768x432@60 LOCKED** on this box, climbing from 360 by model, with the
+half-rate backstop kept underneath for boxes that cannot hold 60 anywhere.
+The escape's EXIT is a probe by right (the backstop's own reading is a
+downclocked paced span and can never pass a share gate — the second one-way
+door, cured like the rate step's). The paragraphs below describe the
+half-rate backstop, which still exists and still gates on cells.
+
 **THE FLOOR ESCAPE SHIPPED, 2026-08-21, and it is what makes a 4-way split
 watchable.** Four cells cost more to SUBMIT than a whole 60 Hz budget however few
 pixels each one gets, so at the bottom rung this box was not choosing between a

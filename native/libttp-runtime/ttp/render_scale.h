@@ -302,8 +302,9 @@ inline bool hasPrevObservation(RenderScaleSample prev) {
 // Sizes the caller's array AND the recovery window below, so the two cannot
 // disagree about how long the ladder is.
 // Rungs, plus the rate step above the anchor, plus the floor escape below the
-// bottom rung.
-inline constexpr int kScaleMaxPoints = kScaleLadderCount + 3;
+// bottom rung, plus the split's sub-floor rungs above the escape.
+inline constexpr int kScaleMaxPoints = kScaleLadderCount + 3
+        + 3 /* kScaleSplitLadderCount — declared below the ladder it extends */;
 
 // How long after a scene build the up-hold stays short (kScaleUpRecoverHoldSec
 // has the why). DERIVED, because what it has to cover is the longest climb the
@@ -414,6 +415,29 @@ inline constexpr double kAnchorHz = 60.0;
 // per-cell cost.
 inline constexpr int kScaleEscapeCells = 3;
 
+// THE SPLIT'S SUB-FLOOR RUNGS, at the panel's own rate, offered ONLY where the
+// escape is (cells >= kScaleEscapeCells) and ranked ABOVE the half-rate entry:
+// below the floor, resolution now gives way BEFORE the rate does, which is the
+// ladder's own principle finally applied to the one place it wasn't.
+//
+// MEASURED, and the measurement is why the escape stopped being the answer
+// (docs/perf/androidtv-4p-plan.md, Phases 4-5): on the reference box a 4-way
+// split at the floor delivers 52 fps missing 7 skips/s, while 640x360 holds a
+// LOCKED 60 with zero skips — and with the four-cell masked-shadow trade
+// (TtpRendererFrame's kMaskedBlobCells) 853x480 does too. The old single
+// half-rate escape also proved TERMINAL: 540@30's p95 can never pass the climb
+// gate back to 540@60, so a box that fell in stayed for the whole race. The
+// climb OUT of the half-rate entry now lands on a strictly cheaper point
+// (fewer pixels at full rate), which is what un-parks it.
+//
+// Solo can never fall in — same cells gate, same reasoning as the escape: at
+// one cell the entries below the floor do not exist. 432 and 360 divide both
+// TV panels wholly (2160/5, 2160/6); 480 is the measured prize rung and rides
+// a 4/9 ratio — if its scaling ever bands visibly, drop it from this list
+// before softening anything else.
+inline constexpr double kScaleSplitLadder[] = {360.0, 432.0, 480.0};
+inline constexpr int kScaleSplitLadderCount = 3;
+
 struct RenderScalePoint {
   double scale;
   int divisor;    // present every Nth vsync; 1 is the panel's own rate
@@ -444,11 +468,21 @@ inline int operatingPoints(RenderScaleLimits b, RenderScalePoint* out) {
   const int fast = base > 1 ? base - 1 : 1;   // == base where there is no faster rate
   const double anchor = kAnchorLines / (b.baseLines > 0.0 ? b.baseLines : kAnchorLines);
   int m = 0;
-  // The escape sits below every rung, at the bottom rung's own pixels: what it
-  // trades is the RATE, and the picture there is already as soft as this game
-  // is willing to show.
+  // The escape sits below everything, at the bottom rung's own pixels — the
+  // backstop for a box that cannot hold 60 at ANY resolution. Above it, the
+  // split's sub-floor rungs spend resolution before rate (their comment has
+  // the measurements); dominance ordering holds (pointAtOrBelow): the
+  // half-rate entry is worse than every full-rate one above it.
   if (b.cells >= kScaleEscapeCells && n > 0) {
     out[m++] = RenderScalePoint{r[0], base * 2};
+    if (b.baseLines > 0.0) {
+      for (int i = 0; i < kScaleSplitLadderCount; i++) {
+        const double s = kScaleSplitLadder[i] / b.baseLines;
+        if (s < r[0] - 1e-9 && s >= b.min - 1e-9) {
+          out[m++] = RenderScalePoint{s, base};
+        }
+      }
+    }
   }
   for (int i = 0; i < n; i++) {
     if (r[i] <= anchor + 1e-9) out[m++] = RenderScalePoint{r[i], base};
@@ -643,6 +677,29 @@ inline RenderScalePoint renderScaleStep(RenderScalePoint current,
       // and this arm can climb back out of a retreat it takes late.
       to = fit.ok ? pointForBudget(at, fit, list, n, limits) : at - 1;
       if (to >= at) to = at - 1;
+    } else if (sinceChangeSec >= upHold && at + 1 < n
+               && list[at].divisor > list[at + 1].divisor
+               && list[at + 1].scale < list[at].scale - 1e-9) {
+      // THE ESCAPE'S EXIT IS A PROBE BY RIGHT — the second one-way door, and
+      // the same disease the pure-rate arm below cures. Parked at the
+      // half-rate backstop, no other branch can ever fire: the fit needs two
+      // scales and a parked point only ever measures one, the no-data probe
+      // is blocked by a same-scale observation that can never become a fit,
+      // and the raw share gate compares THIS point's measurement against the
+      // next point's budget — a measurement that is itself a downclocked
+      // PACED span (a half-rate point leaves the GPU idle between presents,
+      // and this backend's timer reads the pace — the saturation trap, from
+      // the ledger). Measured on the reference box: the backstop read 14.57
+      // against a 14.20 gate while the sub-floor rung above it demonstrably
+      // held a locked 60. So the one climb that is out of a rate-trade into
+      // STRICTLY FEWER PIXELS at full rate is taken on tenure alone: a wrong
+      // probe is retreated within one evidence window on real present
+      // evidence, so a hopeless box pays one bad window per up-hold — the
+      // bounded cost every probe in this file already accepts. Only the
+      // backstop -> first sub-floor rung transition matches the guard (the
+      // rate step above the anchor moves at EQUAL pixels and keeps its own
+      // arithmetic arm below).
+      to = at + 1;
     } else if (!fit.ok && !hasPrevObservation(prev) && sinceChangeSec >= upHold) {
       // NOTHING MEASURED AT ANOTHER SCALE YET, so PROBE. A model needs two
       // scales to exist and a scale only moves when something asks it to, so

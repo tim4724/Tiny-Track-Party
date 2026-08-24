@@ -694,6 +694,10 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
         int budget = (mDecalDebug & kDebugNoDecalMasked) ? 0
                 : (mDecalDebug & kDebugDecalCapsHalf)
                         ? kMaxMaskedDeckDecals / 2 : kMaxMaskedDeckDecals;
+        // The four-cell blob trade (kMaskedBlobCells' comment has the
+        // pricing). Same shape as the scale rule's escape gate: cells decide,
+        // never cost, so solo and small splits keep their silhouettes.
+        if (input.viewCount >= kMaskedBlobCells) budget = 0;
         // FIRST, EVERY VIEW'S OWN CAR — the one it FOLLOWS (TtpViewInput.car),
         // not the one nearest its eye. Those are different questions and the
         // difference is the whole bug: the chase rig sits CHASE_DIST behind

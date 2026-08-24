@@ -443,6 +443,41 @@ look). The alternatives stand: 640x360@60 with no look change, or today's
 960x540@30. The trade is the user's call (no-perf-for-cosmetics); nothing is
 wired until it is made.
 
+## Phase 6 — WIRED (2026-08-24). The plan's goal is reached.
+
+The user took the blob trade, and both halves shipped in one commit:
+`kMaskedBlobCells = 4` zeroes the masked pick budget at four cells (the rank
+gate degrades every car to the die-cut blob, which crossfades and cannot
+pop), and the scale rule grew the split's SUB-FLOOR RUNGS — 360/432/480 at
+the panel's own rate, ranked above the half-rate backstop, offered only where
+the escape is. Below the floor a split now gives back resolution before rate,
+which was the ladder's own principle finally applied to the one place it
+wasn't.
+
+**Wiring it exposed a SECOND one-way door, same disease as the rate step's**
+(`621f87c3`): parked at the backstop, no up-branch could ever fire — the fit
+needs two scales, the no-data probe was blocked by a same-scale observation,
+and the raw share gate compared the backstop's own DOWNCLOCKED paced span
+(14.57 measured) against the next point's 14.20 gate. The escape's exit is a
+probe by right now: a climb out of a rate-trade into strictly fewer pixels at
+full rate is taken on tenure alone, and a wrong probe retreats within one
+evidence window. `render_scale_check` pins both directions (the hopeless box
+keeps returning to the backstop; the rescued box climbs out and stays out).
+
+**The acceptance walk, adaptive, unpinned, 4P tidepool on the box:** descent
+through the grid, settle at 640x360@60 locked (gpu 11.6, 0 skips), one
+model-driven climb to **768x432@60 LOCKED (gpu 12.4, 0 skips)**, held to the
+finish — still climbing when the race ended, so longer races may reach 480.
+No 30 Hz anywhere. (A 150 s fold of that run reads "fps 31" — the bench race
+ENDS inside the window and the fold averages the results board; the method
+note in `shells/androidtv/CLAUDE.md` exists for exactly this.)
+
+**540@60 is refuted as a lockable rung, for good:** with the trade it reads
+58 fps at ~2 skips/s, and the tail fit says why nothing closes it — the worst
+second is a heavier PICTURE (both cost halves ~40% up), and even the whole
+decal channel ablated left 540's worst second at 21.8 against 16.7. The
+sharpest clean rung is what ships, and that is 432 today with 480 in reach.
+
 ## Phase 4 (cont.) — the policy decision, once the milliseconds are in
 
 The escape below the floor currently trades the RATE (540 lines at 30). The
