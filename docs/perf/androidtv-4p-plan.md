@@ -396,6 +396,20 @@ masked arm off, 853x480 reads 59/1.0 then 60/0 twice — the blob trade alone
 effectively locks 480@60, one rung sharper than the 432 first quoted, and
 adding the profile channel (60/0 twice, more margin) is held in reserve.
 
+**The NEAR-SHADOW CASCADE is built, measured and refuted too (2026-08-24),
+and it completes the attribution.** The full texture-space escape — the four
+silhouettes CPU-rastered per frame into a high-density windowed R8 atlas (the
+blob layer's idiom at 50+ texels/u), the masked loop's body reduced to two
+fmas and one clamped tap, verified pixel-correct on the box — buys **-0.80 ms
+at 1080** (-1.32/-0.17/-0.92, sign-consistent), a fraction of the ~4.3 ms the
+executed loop costs. With the fetch at ~0.35 (MASK_FLAT) and the projection
+ALU at ~0.8 (this arm), the executed remainder is the LOOP'S OWN STRUCTURE:
+dynamically-indexed uniform reads per entry inside divergent flow — the
+declared-size law measured from the execution side. Reverted; the masked
+channel now has FIVE measured dead escapes (pass structure, fetch, precision,
+uniform writes, texture-space) and is closed for good. The rank gate is the
+only lever, and it is a look decision.
+
 **THE DEPTH-EQUAL STAMP PASS IS BUILT, MEASURED AND REFUTED — do not rebuild
 it.** The obvious structural escape — draw the four stamps as their own
 transparent renderables over ring ranges of the road's shared buffers, depth

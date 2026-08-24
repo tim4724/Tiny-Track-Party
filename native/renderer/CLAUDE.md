@@ -283,9 +283,14 @@ renders correctly and measures a null — shading those fragments costs the
 same wherever they are issued, so do not rebuild it, and do not file the
 masked cost as "pass structure" again. The third probe
 (MASK_FLAT: the tap answers a constant, the maths runs in full) prices the
-FETCH at a fraction of a millisecond — so the cost is the per-fragment
-projection maths itself, an analytic-shape silhouette is refuted unbuilt,
-and no texture format or resolution change can pay. The one lever that
+FETCH at a fraction of a millisecond, and the NEAR-SHADOW CASCADE — the full
+texture-space escape, silhouettes CPU-rastered into a high-density windowed
+atlas and the loop body reduced to one clamped tap — was BUILT, rendered
+correctly, and bought only ~0.8 ms: the executed cost is the per-entry
+DYNAMICALLY-INDEXED UNIFORM READS in divergent flow, the declared-size law
+seen from the execution side. Nothing spellable inside a per-entry loop
+collects it; analytic shapes, texture formats and resolutions are all refuted
+with it. The one lever that
 converts is the rank gate itself: budget 0 at four cells puts every car on
 the blob (which crossfades, so nothing pops) and locks 768x432@60 — a LOOK
 trade, the user's to take.
