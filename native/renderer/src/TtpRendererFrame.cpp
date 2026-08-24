@@ -686,7 +686,14 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
             lodCamD[i] = std::sqrt(d2);
             lodEligible[i] = false;
         }
-        int budget = kMaxMaskedDeckDecals;
+        // The decal sub-arms reach the masked list HERE, not in the shader:
+        // budget 0 (NO_DECAL_MASKED) makes every car ineligible, so lodT
+        // rides to 1 and the blob carries full alpha — the real fallback
+        // picture. CAPS_HALF halves the budget the same way; the rank gate
+        // degrades whoever misses to the blob.
+        int budget = (mDecalDebug & kDebugNoDecalMasked) ? 0
+                : (mDecalDebug & kDebugDecalCapsHalf)
+                        ? kMaxMaskedDeckDecals / 2 : kMaxMaskedDeckDecals;
         // FIRST, EVERY VIEW'S OWN CAR — the one it FOLLOWS (TtpViewInput.car),
         // not the one nearest its eye. Those are different questions and the
         // difference is the whole bug: the chase rig sits CHASE_DIST behind
@@ -1324,7 +1331,8 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                 // the upload drop out, so the arm still prices the whole
                 // channel; applyRoadDebug zeroes the tap to match.
                 if (lodT > 0.0f && mCarShadowTex[0]
-                        && (mRoadMask & kFeatRoadDecals)) {
+                        && (mRoadMask & kFeatRoadDecals)
+                        && !(mDecalDebug & kDebugNoDecalBlob)) {
                     rasterCarShadowStamp(stampSL, carS, blobA * lodT);
                 }
                 mDeckDecals.push_back({

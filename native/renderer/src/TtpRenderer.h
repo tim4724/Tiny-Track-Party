@@ -1952,6 +1952,20 @@ public:
     // moves the fog's parameters and cannot reach ttpFogFactor's own maths.
     static constexpr uint32_t kFeatGrade = 0x4000;
     static constexpr uint32_t kFeatFogVertex = 0x8000;
+    // TTP_DEBUG_NO_DECAL_* / DECAL_CAPS_HALF — kFeatRoadDecals decomposed
+    // into its sub-arms, inverted like kFeatNoMerge (ttp_display.h's comment
+    // has each arm's meaning and which are attribution-only).
+    static constexpr uint32_t kDebugNoDecalMasked  = 0x10000;
+    static constexpr uint32_t kDebugNoDecalProfile = 0x20000;
+    static constexpr uint32_t kDebugNoDecalBlob    = 0x40000;
+    static constexpr uint32_t kDebugNoDecalStatics = 0x80000;
+    static constexpr uint32_t kDebugDecalCapsHalf  = 0x100000;
+    static constexpr uint32_t kDebugDecalMaskCount0 = 0x200000;
+    static constexpr uint32_t kDebugDecalMaskBounds0 = 0x400000;
+    static constexpr uint32_t kDebugDecalAll = kDebugNoDecalMasked
+            | kDebugNoDecalProfile | kDebugNoDecalBlob | kDebugNoDecalStatics
+            | kDebugDecalCapsHalf | kDebugDecalMaskCount0
+            | kDebugDecalMaskBounds0;
     void debugFeatureMask(uint32_t mask);
 private:
     bool mHideCars = false;
@@ -1961,6 +1975,7 @@ private:
     // group's — until a caller asks, nothing here touches a shipped frame.
     uint8_t mFeatureMask = kFeatAll;
     uint32_t mRoadMask = kFeatRoadAll;
+    uint32_t mDecalDebug = 0;
     bool mFogOn = true;
     // The ablation view-global, in the sense the shaders read it: ZERO is the
     // shipped picture, so a View nobody set renders correctly (ttp_grade.inc).

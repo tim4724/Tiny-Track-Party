@@ -1287,7 +1287,7 @@ void TtpRenderer::tagFeatures() {
 // Called once per frame from uploadDeckDecals — after it, so the decal count it
 // just wrote is the one being overridden.
 void TtpRenderer::applyRoadDebug() {
-    if (mRoadMask == kFeatRoadAll) return;
+    if (mRoadMask == kFeatRoadAll && mDecalDebug == 0) return;
     const float texel = mShadowMap ? mShadowTexel : 0.0f;
     const auto set = [&](MaterialInstance* mi) {
         if (!mi) return;
@@ -1305,6 +1305,18 @@ void TtpRenderer::applyRoadDebug() {
         }
         if (!(mRoadMask & kFeatRoadPaint)) mi->setParameter("paintCount", 0);
         if (!(mRoadMask & kFeatRoadRubber)) mi->setParameter("skidLatHalf", 0.0f);
+        // The decal sub-arms. MASKED and STATICS act upstream (the pick
+        // budget and the gather), so only the loops with a shader-side count
+        // and the tap need an override here.
+        if (mDecalDebug & kDebugNoDecalProfile) mi->setParameter("profCount", 0);
+        // kDebugDecalMaskCount0 is NOT applied here on purpose: this runs
+        // every frame over every chunk, and the probe's whole point is to
+        // keep the shipped WRITE schedule — uploadDeckDecals zeroes the count
+        // inline instead, on exactly the writes the baseline makes.
+        if ((mDecalDebug & kDebugNoDecalBlob) && roadHasCarShadow()) {
+            mi->setParameter("maskInk", math::float4{ kCarBlobInk.x,
+                    kCarBlobInk.y, kCarBlobInk.z, 0.0f });
+        }
         // The baked-light vroad has no live sun channel left to ablate — the
         // road's matte light became vertex data at track build (fillRoadLight),
         // so this arm's ROAD half is structurally zero now; the ground's tap
@@ -1345,6 +1357,7 @@ void TtpRenderer::applyDebugGlobals(View* v) const {
 void TtpRenderer::debugFeatureMask(uint32_t mask) {
     mFeatureMask = (uint8_t) (mask & kFeatAll);
     mRoadMask = mask & kFeatRoadAll;
+    mDecalDebug = mask & kDebugDecalAll;
     mFogOn = (mask & kFeatFog) != 0;
     // INVERTED on the way to the shaders: they read "ablate", so that a View
     // nobody has touched draws the shipped picture (ttp_grade.inc's note).

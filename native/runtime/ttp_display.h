@@ -838,6 +838,38 @@ TTP_ABI void ttp_display_debug_force_mask_layer(int layer);
  * TTP_DEBUG_NO_MERGE is the unmerged arm). The shipped picture keeps the
  * merge. */
 #define TTP_DEBUG_NO_MERGE 0x2000
+/* TTP_FEAT_ROAD_DECALS decomposed — inverted knobs like TTP_DEBUG_NO_MERGE,
+ * so none of them joins TTP_FEAT_ALL: `TTP_FEAT_ALL | one of these` ablates
+ * that sub-arm alone.
+ *   NO_DECAL_MASKED   the near cars' silhouette stamps. Zeroes the PICK
+ *                     budget rather than the shader's count, so every car
+ *                     rides the far blob at full alpha — the real fallback
+ *                     picture, not a field of shadowless near cars.
+ *   NO_DECAL_PROFILE  the profile loop: boost auras, oil slicks, item discs.
+ *   NO_DECAL_STATICS  only the statics (slicks, item discs); auras stay.
+ *   NO_DECAL_BLOB     the far carShadow layer — raster, upload and the
+ *                     whole-deck shader tap. Attribution only: far cars lose
+ *                     their shadows outright.
+ *   DECAL_CAPS_HALF   the masked pick budget and the per-chunk profile fold
+ *                     cap, both halved. The rank gate degrades the overflow
+ *                     to the blob, so nothing loses its shadow. */
+#define TTP_DEBUG_NO_DECAL_MASKED  0x10000
+#define TTP_DEBUG_NO_DECAL_PROFILE 0x20000
+#define TTP_DEBUG_NO_DECAL_BLOB    0x40000
+#define TTP_DEBUG_NO_DECAL_STATICS 0x80000
+#define TTP_DEBUG_DECAL_CAPS_HALF  0x100000
+/* The MECHANISM probe for NO_DECAL_MASKED's saving: fold and WRITE the masked
+ * uniforms exactly as shipped, but zero the shader-side count so the loop
+ * never executes. Reads like NO_DECAL_MASKED -> the cost is the loop's
+ * fragments; reads like the baseline -> the cost is the per-frame chunk-UBO
+ * rewrites themselves. Attribution only (near cars lose their shadows). */
+#define TTP_DEBUG_DECAL_MASK_COUNT0 0x200000
+/* The probe's twin: counts and writes exactly as shipped, but maskBounds is
+ * an impossible box, so the shader's box test rejects every fragment. COUNT0
+ * fast + BOUNDS0 slow = the masked path runs PREDICATED across the chunks
+ * that carry a stamp, whatever the branch says; both fast = the cost is the
+ * stamp's own covered fragments. Attribution only. */
+#define TTP_DEBUG_DECAL_MASK_BOUNDS0 0x400000
 TTP_ABI void ttp_display_debug_features(unsigned int mask);
 
 #ifdef __cplusplus

@@ -260,7 +260,9 @@ same reason this file already counts geometry on the host):
 > into one first. Return-type-only changed exactly 0 instructions across four
 > materials and twelve variants; the locals version changed 114.
 
-**What is left on this board is the deck decal loop, and nothing else.**
+**What is left on this board is the deck decal loop, and nothing else** —
+decomposed into its sub-channels in Phase 5, which is where the lever's real
+name turned out to be the MASKED half alone.
 
 On the last: it is filed everywhere as a FILL lever, but the fixed half is
 vertex ALU and fp16 runs at 2x rate there too, so it should cut both halves.
@@ -338,6 +340,71 @@ principle, and the numbers now say it plainly.** 640x360 holds a locked 60 with
 zero skips; its p95 median is 14.34 against the 14.20 gate, i.e. inside the
 14.20-15.03 deadband, so a point placed there would be stable rather than pumped.
 Nothing above 432 can ever climb back to 60 on this box.
+
+## Phase 5 — the decal channel DECOMPOSED (2026-08-24), and the lever named
+
+The knobs that took every arm below ship in `ttp_display.h`
+(`TTP_DEBUG_NO_DECAL_*`, `DECAL_CAPS_HALF`, and the two mechanism probes) —
+inverted bits outside `TTP_FEAT_ALL`, so `TTP_FEAT_ALL | bit` ablates one
+sub-arm on one install. All arms 4P/1080 pinned, Vulkan, tidepool, on
+`1.0-6fa59af0-dirty`; the sweep bracketed to 0.52 ms, the verdicts by three
+interleaved pairs.
+
+| sub-arm | marginal | verdict |
+|---|---|---|
+| **the MASKED silhouette loop** | **7.07 ms** (−6.73/−6.80/−7.68, 3/3) | **the channel IS this** |
+| caps halved (pick budget 2) | 3.42 | linear in stamps |
+| the profile loop (auras + statics) | 1.08 | barely above bracket |
+| statics only (slicks, item discs) | 0.73 | ~bracket |
+| the far blob tap (raster+upload+tap) | −1.42 | free, like the rubber tap |
+| the whole channel (anchor) | 7.19 | reproduces Phase 0's 6.45 |
+
+Four own-car stamps, ~1.8 ms each. Two findings that reshape earlier phases:
+
+- **At 4P the masked pick is ALREADY own-cars-only** — the budget (4) is
+  consumed by the every-view's-own-car round, so "cap masked to the own car at
+  4 cells" is the shipped behaviour, not a lever, and shrinking
+  `kShadowLodFar` at 4P is structurally empty (own cars sit ~2u away with no
+  distance gate; everyone else already rides the blob).
+- **The mechanism, split by the two probes.** MASK_COUNT0 (folds and uniform
+  writes exactly as shipped, shader count zeroed) recovers 6.6 — so the
+  per-frame chunk-UBO rewrites are FREE and the cost is execution.
+  MASK_BOUNDS0 (loop armed, box impossible) recovers only 4.3 — so ~2.3 ms is
+  paid by a stamp chunk's fragments merely for `maskCount > 0`, before any
+  fragment enters the loop, and ~4.3 ms is the loop's own fragments.
+
+**THE DEPTH-EQUAL STAMP PASS IS BUILT, MEASURED AND REFUTED — do not rebuild
+it.** The obvious structural escape — draw the four stamps as their own
+transparent renderables over ring ranges of the road's shared buffers, depth
+EQUAL so each fragment lands exactly on the road fragment it shades, masked
+loop structurally dead in vroad — renders CORRECTLY (silhouettes, aura
+compositing, occlusion by car bodies all verified on the box) and buys
+NOTHING: three interleaved pairs read +(-0.2)/+1.3/+1.1 ms against the
+baseline. Shading those fragments costs ~7 ms on this GPU whichever pass
+issues them; there is no pass arrangement to collect it, the same law the
+per-cell-RT and renderArea experiments hit. The prototype is reverted
+(2026-08-24); its design and this refutation are what remain.
+
+**What the masked lever is worth on the ladder, measured with the arm on**
+(`TTP_FEAT_ALL | NO_DECAL_MASKED`, i.e. every car on the blob at full alpha —
+the real fallback picture, since the blob path already crossfades and cannot
+pop):
+
+| rung | baseline (Phase 4) | masked off |
+|---|---|---|
+| 960x540 | 52 fps, 7.5 skips/s | 58 fps, 2.0 |
+| 853x480 | 57, 3.0 | 59, 1.0 |
+| **768x432** | 59, 1.0 | **60 fps, 0.0 skips — LOCKED** |
+
+So the plan's own target — the highest rung that holds 60 — is **768x432 with
+the near silhouettes traded for the blob**, one C++ decision keyed on
+`cells >= 4`, the `kScaleEscapeCells` shape. The look cost is exactly: the
+car-shape silhouette under the four near cars becomes the soft superellipse
+blob, at quarter-cell size. Auras, slicks, item discs, paint, rubber and far
+shadows are untouched (and their arms priced too small to be worth their
+look). The alternatives stand: 640x360@60 with no look change, or today's
+960x540@30. The trade is the user's call (no-perf-for-cosmetics); nothing is
+wired until it is made.
 
 ## Phase 4 (cont.) — the policy decision, once the milliseconds are in
 

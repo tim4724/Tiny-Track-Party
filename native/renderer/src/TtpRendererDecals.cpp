@@ -785,7 +785,7 @@ void TtpRenderer::uploadDeckDecals() {
     // Statics FIRST: the array is composited in order, so a car's aura and its
     // contact shadow land over the pad or slick they are crossing, which is the
     // order the separate meshes used to get from their render priorities.
-    if (!mStaticDeckDecals.empty()) {
+    if (!mStaticDeckDecals.empty() && !(mDecalDebug & kDebugNoDecalStatics)) {
         mDeckDecals.insert(mDeckDecals.begin(),
                 mStaticDeckDecals.begin(), mStaticDeckDecals.end());
     }
@@ -825,10 +825,15 @@ void TtpRenderer::uploadDeckDecals() {
     const auto uploadTo = [&](MaterialInstance* mi, float mid, float halfSpan,
             std::vector<DeckDecal>& lastMask, std::vector<DeckDecal>& lastProf) {
         DeckDecal mask[kMaxMaskedDeckDecals], prof[kMaxProfileDeckDecals];
+        // CAPS_HALF halves only the PROFILE fold here: the masked fold's cap
+        // must equal the pick budget (renderCars halves that one), or the
+        // fold overflows and a near car loses its shadow outright.
+        const int profCap = (mDecalDebug & kDebugDecalCapsHalf)
+                ? kMaxProfileDeckDecals / 2 : kMaxProfileDeckDecals;
         const int nm = maskLoop ? foldToChunk(mDeckDecalsLast, mid, halfSpan, L,
                 mask, kMaxMaskedDeckDecals, DecalKind::Masked) : 0;
         const int np = foldToChunk(mDeckDecalsLast, mid, halfSpan, L, prof,
-                kMaxProfileDeckDecals, DecalKind::Profile);
+                profCap, DecalKind::Profile);
         const bool maskSame = (size_t) nm == lastMask.size()
                 && (nm == 0 || std::memcmp(mask, lastMask.data(),
                         nm * sizeof(DeckDecal)) == 0);
@@ -907,9 +912,19 @@ void TtpRenderer::uploadDeckDecals() {
                                     ? kCarShadowCap : 0.0f });
         }
         if (np > 0) mi->setParameter("profBounds", pBounds);
-        if (nm > 0) mi->setParameter("maskBounds", mBounds);
+        // The BOUNDS0 probe: same writes, impossible box (ttp_display.h).
+        if (nm > 0) {
+            mi->setParameter("maskBounds",
+                    (mDecalDebug & kDebugDecalMaskBounds0)
+                            ? float4{ 1e9f, -1e9f, 1e9f, -1e9f } : mBounds);
+        }
         mi->setParameter("profCount", np);
-        if (maskLoop) mi->setParameter("maskCount", nm);
+        // The MASK_COUNT0 probe: every write above lands on its shipped
+        // schedule, only the count the loop reads is zeroed (ttp_display.h).
+        if (maskLoop) {
+            mi->setParameter("maskCount",
+                    (mDecalDebug & kDebugDecalMaskCount0) ? 0 : nm);
+        }
     };
     if (!mRoadChunks.empty()) {
         for (RoadChunk& ch : mRoadChunks) {

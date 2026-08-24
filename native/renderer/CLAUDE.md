@@ -268,6 +268,24 @@ budget. (Untested and the only honest open question: whether it fits at the
 real 4-player operating point of 540p + hz30, where the budget doubles and the
 fill is ~56% — do not assume it from the 720p number.)
 
+**The masked stamps are the decal channel's whole cost on the Android box,
+and a separate pass cannot collect it.** Decomposed under Vulkan at 4P
+(`TTP_DEBUG_NO_DECAL_*`, the sub-channel knobs; readings and method in
+`docs/perf/androidtv-4p-plan.md` Phase 5): the four own-car silhouette stamps
+are ~7 ms of a 1080 frame while the profile loop, the statics and the far
+blob tap each price at or under the bracket — and the two probe bits split
+the mechanism into the loop's own fragments (~2/3) plus a residue every
+fragment of a stamp-carrying chunk pays merely for `maskCount > 0` (~1/3).
+The per-frame uniform rewrites are FREE (MASK_COUNT0 proves it). **The
+depth-EQUAL stamp pass is the refuted escape**: re-emitting the stamp's ring
+range of the road's own buffers as a transparent depth-EQUAL renderable
+renders correctly and measures a null — shading those fragments costs the
+same wherever they are issued, so do not rebuild it, and do not file the
+masked cost as "pass structure" again. The one lever that converts is the
+rank gate itself: budget 0 at four cells puts every car on the blob (which
+crossfades, so nothing pops) and locks 768x432@60 — a LOOK trade, the
+user's to take.
+
 **Why painting in curvilinear (s, lat) is safe NOW when it was the original
 sin:** the old objection — track space bends the stamp around corners, and the
 per-triangle kinks of the interpolated uv0 field ripple through a SHARP edge —
