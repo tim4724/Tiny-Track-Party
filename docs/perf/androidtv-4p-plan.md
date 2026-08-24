@@ -383,6 +383,19 @@ residue, not the sampler: an analytic-shape silhouette (which would keep the
 projection and drop only the tap) is refuted WITHOUT being built, and no
 texture format or resolution change can ever pay. Do not re-file either.
 
+**The mediump escape is refuted too (2026-08-24), and it was the last one.**
+Demoting the masked loop's PROJECTION maths to fp16 locals (rel/dots/feather —
+the subset where fp16 is millimetres, leaving the load-bearing arclength fold
+highp) measured a NULL leaning slight loss: 39.85 against 38.95 across three
+runs a side. The conversions cost what the narrower registers save. With the
+fetch, the writes, the pass structure and the precision all measured, the
+masked channel's cost is CLOSED: nothing implementation-side collects it.
+
+**The 480 rung is the trade's real prize, measured on the ladder:** with the
+masked arm off, 853x480 reads 59/1.0 then 60/0 twice — the blob trade alone
+effectively locks 480@60, one rung sharper than the 432 first quoted, and
+adding the profile channel (60/0 twice, more margin) is held in reserve.
+
 **THE DEPTH-EQUAL STAMP PASS IS BUILT, MEASURED AND REFUTED — do not rebuild
 it.** The obvious structural escape — draw the four stamps as their own
 transparent renderables over ring ranges of the road's shared buffers, depth
