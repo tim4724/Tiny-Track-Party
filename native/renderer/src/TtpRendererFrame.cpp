@@ -2284,18 +2284,17 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
         // the trail's tail runs one extra frame (~17 ms) behind the tyre, on
         // top of the SEG_MIN trailing the layer already accepts. The rects
         // keep accumulating between flushes, so nothing is lost, only late.
-        // FOUR CELLS RUN A THIRD OF THE EVENT RATE — the tail's last item,
-        // measured 2026-08-24 (the lock540 matrix): with the blob trade on,
-        // the layer OFF locks 540@60 three passes out of three while its tap
-        // and its GPU median are free, so the upload EVENTS are the cost,
-        // exactly as the A/B above concluded. A third of the rate keeps the
-        // marks and sheds two thirds of the events; the trail runs ~0.1 s
-        // behind the tyre, in a quarter-size cell, on top of the SEG_MIN lag
-        // the layer already accepts. Cells decide, never cost — the same
-        // gate family as kMaskedBlobCells.
+        // FOUR CELLS SLOW ONLY THE MIP HALF (below). The upload EVENTS are
+        // the layer's tail cost — the lock540 matrix measured the layer OFF
+        // locking a pinned 540@60 while its tap and median are free — and
+        // the mip refresh is the bursty half: refreshSkidMips lands several
+        // level uploads in ONE frame. Level 0 keeps its full ~30 Hz on
+        // purpose: a slower level 0 is the half a player can see (the trail
+        // stepping behind the tyre), and it was tried at a third rate and
+        // rejected on look. Cells decide, never cost — the same gate family
+        // as kMaskedBlobCells.
         const bool splitFour = input.viewCount >= kMaskedBlobCells;
-        if (!mSkidDirty.empty()
-                && mTime - mSkidUpAt > (splitFour ? 0.10f : 0.028f)) {
+        if (!mSkidDirty.empty() && mTime - mSkidUpAt > 0.028f) {
             uploadSkidRects();
             mSkidUpAt = mTime;
             mSkidMipsDirty = true;

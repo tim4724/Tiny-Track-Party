@@ -516,7 +516,7 @@ with the blob trade on:
 | + lever | passes | look cost |
 |---|---|---|
 | rubber layer OFF | **60/0 x3 — locks** | no skid marks at 4P |
-| skid uploads throttled (10 Hz / 2 Hz) | 59/1 x3 | trail lags ~0.1 s (kept) |
+| skid uploads throttled (10 Hz / 2 Hz) | 59/1 x3 | trail lag REJECTED on look; only the mip half ships (2 Hz at 4 cells, invisible) |
 | throttle + statics off | 58/2, 60/0, 60/0 | slicks/discs gone, auras kept |
 
 The rubber layer's cost is its UPLOAD EVENTS, as the GL-era A/B concluded —
