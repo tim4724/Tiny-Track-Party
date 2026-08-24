@@ -56,4 +56,15 @@ endforeach()
 
 add_library(filament-sdk INTERFACE)
 target_include_directories(filament-sdk INTERFACE "${FILAMENT_SDK}/include")
+# backend/platforms/VulkanPlatform.h (the platform-customization override the
+# Android renderer subclasses) includes <bluevk/BlueVK.h>, which the install
+# tree does not carry — it lives only in the CHECKOUT the install was built
+# from, above out/<config> — three levels up from the SDK root. Resolved only
+# where it exists, so the tvOS and web slices (which never include a Vulkan
+# header) are untouched.
+get_filename_component(TTP_FILAMENT_CHECKOUT "${FILAMENT_SDK}/../../.." ABSOLUTE)
+if (EXISTS "${TTP_FILAMENT_CHECKOUT}/libs/bluevk/include/bluevk/BlueVK.h")
+    target_include_directories(filament-sdk INTERFACE
+            "${TTP_FILAMENT_CHECKOUT}/libs/bluevk/include")
+endif()
 target_link_libraries(filament-sdk INTERFACE ${TTP_FILAMENT_ARCHIVES})

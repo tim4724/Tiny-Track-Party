@@ -60,6 +60,9 @@ class VertexBuffer;
 class IndexBuffer;
 class MaterialInstance;
 class InstanceBuffer;
+namespace backend {
+class Platform;
+} // namespace backend
 namespace gltfio {
 class AssetLoader;
 class FilamentAsset;
@@ -450,6 +453,11 @@ private:
     struct TrackBin; // one scene's roster + theme + geometry (defined in the .cpp)
 
     filament::Engine* mEngine = nullptr;
+#if defined(__ANDROID__)
+    // The Vulkan platform with the framebuffer-eviction override (see
+    // TtpRenderer::init) — caller-owned, so it outlives the engine here.
+    std::unique_ptr<filament::backend::Platform> mVkPlatform;
+#endif
     filament::SwapChain* mSwapChain = nullptr;
     filament::Renderer* mRenderer = nullptr;
     filament::View* mView = nullptr; // single default view (no-views fallback)

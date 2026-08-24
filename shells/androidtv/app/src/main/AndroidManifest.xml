@@ -38,6 +38,12 @@
         android:supportsRtl="false"
         android:theme="@style/Theme.TinyTrackParty">
 
+        <!-- simpleperf/profiler attach on RELEASE builds, from the shell only.
+             The perf knobs are deliberately live in release (PerfDebug's
+             measure-the-build-that-ships rule); this is the same decision for
+             the sampling profiler, and it exposes nothing to other apps. -->
+        <profileable android:shell="true" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -10,6 +10,36 @@
 
 #include <utils/Log.h>
 
+#if defined(__ANDROID__)
+#include <backend/platforms/VulkanPlatformAndroid.h>
+
+namespace {
+// The default VulkanPlatform evicts an unused VkFramebuffer after THREE
+// frames — and a triple-buffered swapchain reuses each image's framebuffers
+// exactly every third frame, so the cache sits on the eviction edge and any
+// jitter in acquire order (ordinary at 4P, where frames skip) pushes a gap
+// past it. Measured with simpleperf on the reference box (4P, Vulkan, 540):
+// ~VulkanFramebuffer alone was 7.4% of the backend thread, getFramebuffer
+// re-created what gc had just destroyed, and each fresh VkFramebuffer made
+// the PowerVR ICD rebuild its kernel render-target dataset at every
+// vkCmdEndRenderPass (RGXAddRenderTarget, 9.3%). Sixty frames keeps a
+// framebuffer alive across any realistic swapchain rotation for a few KB of
+// idle handles — the FrameGraph transient-cache age fix (Engine::Config
+// below), one layer down.
+// VulkanPlatformAndroid, not the base VulkanPlatform: the Android surface
+// and AHardwareBuffer plumbing live in the subclass, and a base-class
+// platform here would build an engine with no way to make a VkSurfaceKHR.
+class TtpVulkanPlatform : public filament::backend::VulkanPlatformAndroid {
+public:
+    Customization getCustomization() const noexcept override {
+        Customization c = VulkanPlatformAndroid::getCustomization();
+        c.timeBeforeEvictionFbo = 60;
+        return c;
+    }
+};
+}  // namespace
+#endif
+
 TtpRenderer::TtpRenderer() = default;
 
 bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
@@ -60,6 +90,15 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
             // statement that the feature is finished upstream.
             .feature("backend.vulkan.enable_staging_buffer_bypass", true);
     if (stereoEyes) builder.featureLevel(backend::FeatureLevel::FEATURE_LEVEL_2);
+#if defined(__ANDROID__)
+    // The framebuffer-eviction override above. A provided platform is
+    // caller-owned and must outlive the engine, so it is a member destroyed
+    // after Engine::destroy in shutdown; only the Vulkan backend takes it.
+    if (backend == backend::Backend::VULKAN) {
+        mVkPlatform = std::make_unique<TtpVulkanPlatform>();
+        builder.platform(mVkPlatform.get());
+    }
+#endif
     mEngine = builder.build();
     if (mEngine) {
         // The scenery is dozens of copies of a handful of GLBs — trees, boxes,
@@ -1758,5 +1797,8 @@ TtpRenderer::~TtpRenderer() {
     mEngine->destroyCameraComponent(mCameraEntity);
     utils::EntityManager::get().destroy(mCameraEntity);
     Engine::destroy(&mEngine);
+#if defined(__ANDROID__)
+    mVkPlatform.reset();   // caller-owned platform, after the engine using it
+#endif
 }
 

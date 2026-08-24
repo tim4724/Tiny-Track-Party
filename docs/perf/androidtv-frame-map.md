@@ -120,3 +120,42 @@ is actually at.
 
 `perf-frame.mjs` names any column this applies to rather than leaving it to be
 noticed.
+
+## The CPU side under VULKAN, and the framebuffer-eviction fix (2026-08-24)
+
+The tables above are the GL era's. Re-taken on the shipping backend (same box,
+same track, `--vk 1`, pin 0.5), CPU ms per presented frame:
+
+| thread | 1P | 4P before | 4P after the fix |
+|---|---|---|---|
+| `FEngine::loop` (all four threads of that name) | 6.0 | 9.32 | **7.0** |
+| the app's main thread | 3.3 | 4.96 | 5.0 |
+| `ttp-mix` | 0.4 | 1.3 | 1.3 |
+
+**What the 9.32 was, from simpleperf** (the release APK is `<profileable
+android:shell>` now, so `simpleperf record --app` works on the retail box;
+symbolize against the unstripped `.so` with `binary_cache_builder.py -lib`):
+30% of the backend thread was `ioctl` into the PowerVR KMD, and a whole
+cluster — `~VulkanFramebuffer` 7.4%, `VulkanFboCache::getFramebuffer` 1.4%,
+`ResourceManager::gc` 8.2%, `RGXAddRenderTarget` 9.3% (the ICD rebuilding its
+kernel render-target dataset at every `vkCmdEndRenderPass`) — was ONE defect:
+**Filament's default `timeBeforeEvictionFbo` is 3 frames, and a
+triple-buffered swapchain reuses each image's framebuffers every third frame**,
+so the cache sat exactly on the eviction edge and every acquire-order jitter
+(ordinary at 4P, where frames skip) recreated the lot. `TtpRenderer::init`
+now provides a `VulkanPlatformAndroid` subclass whose Customization raises the
+age to 60 — no fork patch, just the virtual `getCustomization`. After it, none
+of those symbols register in the profile, total ioctl reads ~21%, and the GPU
+arm is unchanged (15.79 p50 at 4P/540 against the 15.68-15.9 band).
+
+**What remains in the 7.0 and what it is:** one big `vkQueueSubmit` at present
+(~24% — the per-submit kernel cost on this ICD, not a count problem), the
+draws' descriptor/pipeline-cache walk, our texture uploads (`update3DImage`
+~6%: the carShadow ping-pong and the skid layer), and allocator noise. Nothing
+left is a single fault; the next real rung down would be fewer passes
+(Vulkan multiview — unbuilt, unpriced on VK).
+
+**The GL backend is not worth patching, measured:** its backend thread is 36%
+inside `libGLESv2_powervr.so` and 31% kernel, with under 5% in Filament — the
+driver itself is the cost, which is the Vulkan default's whole justification,
+now with stacks under it.
