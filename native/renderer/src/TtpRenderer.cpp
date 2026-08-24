@@ -10,7 +10,19 @@
 
 #include <utils/Log.h>
 
+// __has_include on bluevk, not just __ANDROID__: CI's android link leg
+// compiles against a BARE SDK install with no fork checkout beside it, so the
+// bluevk headers VulkanPlatform.h includes are absent there and the override
+// must compile away. Every build that reaches a device is made beside the
+// checkout (FilamentSdk.cmake resolves the include path from it), so the
+// shipped engine always carries the fix; only the compile-only leg loses it.
 #if defined(__ANDROID__)
+// mVkPlatform's unique_ptr needs the BASE type complete here for its reset()
+// whether or not the override below compiles in.
+#include <backend/Platform.h>
+#endif
+#if defined(__ANDROID__) && __has_include(<bluevk/BlueVK.h>)
+#define TTP_VK_PLATFORM_OVERRIDE 1
 #include <backend/platforms/VulkanPlatformAndroid.h>
 
 namespace {
@@ -90,7 +102,7 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
             // statement that the feature is finished upstream.
             .feature("backend.vulkan.enable_staging_buffer_bypass", true);
     if (stereoEyes) builder.featureLevel(backend::FeatureLevel::FEATURE_LEVEL_2);
-#if defined(__ANDROID__)
+#if defined(TTP_VK_PLATFORM_OVERRIDE)
     // The framebuffer-eviction override above. A provided platform is
     // caller-owned and must outlive the engine, so it is a member destroyed
     // after Engine::destroy in shutdown; only the Vulkan backend takes it.
