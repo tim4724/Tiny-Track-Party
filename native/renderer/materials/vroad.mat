@@ -507,6 +507,20 @@ fragment {
         // A box in front of the loop — see profBounds. Exact, not conservative:
         // a box IS the union of the per-entry windows its loop tests, so a
         // fragment it rejects had nothing to draw.
+        // AUDITION: the blob tap moved BEFORE the profiles, so a boost
+        // aura composites OVER the shadow — at the new near-opaque blob
+        // depth, shadow-over-aura turned the aura's designed ~1.8 Hz
+        // pulse into a visible wave around the blob's hard edge.
+        float csw = materialParams.maskInk.w;
+        if (csw > 0.0) {
+            float cs = texture(materialParams_carShadow, suv).r;
+            // VARIANT C' AUDITION: cut the smear's tail but keep ~1.5
+            // texels of transition — a razor edge draws the per-frame
+            // raster's sub-texel movement as flicker (the silhouette bake's
+            // penumbra note), so the band is the anti-flicker slack.
+            base = mix(base, materialParams.maskInk.rgb,
+                    min(cs, csw) * smoothstep(0.06, 0.27, cs));
+        }
         if (materialParams.profCount > 0) {
             highp vec4 pb = materialParams.profBounds;
             if (sLocal >= pb.x && sLocal <= pb.y && tc.y >= pb.z && tc.y <= pb.w) {
@@ -520,11 +534,6 @@ fragment {
         // min() against maskInk.w caps two stacked shadows at the depth the
         // old loop's mix-of-mixes reached instead of letting saturating-add
         // run darker.
-        float csw = materialParams.maskInk.w;
-        if (csw > 0.0) {
-            float cs = texture(materialParams_carShadow, suv).r;
-            base = mix(base, materialParams.maskInk.rgb, min(cs, csw));
-        }
         // The NEAR cars' true silhouettes, last of all (the hybrid LOD).
         if (materialParams.maskCount > 0) {
             highp vec4 mb = materialParams.maskBounds;

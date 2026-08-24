@@ -364,6 +364,18 @@ void TtpRenderer::rasterCarShadowTri(const float2* p, const float2* uv, float al
         return t0 + (t1 - t0) * ty;
     };
     const bool tlAB = topLeft(a, b), tlBC = topLeft(b, c), tlCA = topLeft(c, a);
+    // The mask's uv GRADIENT per layer texel, constant over the triangle — a
+    // 2x2 box filter's step. One point sample per texel under per-frame
+    // sub-texel slide is what breathes at a hard edge; four samples half a
+    // texel apart are the filter the minification never had.
+    const float ex1 = b.x - a.x, ey1 = b.y - a.y;
+    const float ex2 = c.x - a.x, ey2 = c.y - a.y;
+    const float du1 = ub.x - ua.x, dv1 = ub.y - ua.y;
+    const float du2 = uc.x - ua.x, dv2 = uc.y - ua.y;
+    const float det = ex1 * ey2 - ex2 * ey1;
+    const float id = det != 0.0f ? 1.0f / det : 0.0f;
+    const float dudx = (du1 * ey2 - du2 * ey1) * id, dvdx = (dv1 * ey2 - dv2 * ey1) * id;
+    const float dudy = (du2 * ex1 - du1 * ex2) * id, dvdy = (dv2 * ex1 - dv1 * ex2) * id;
     for (int y = y0; y <= y1; y++) {
         uint8_t* row = mCarShadowPix.data() + (size_t) y * W;
         const float py = (float) y + 0.5f;
@@ -379,8 +391,12 @@ void TtpRenderer::rasterCarShadowTri(const float2* p, const float2* uv, float al
                 const float w0 = eBC * inv, w1 = eCA * inv, w2 = eAB * inv;
                 const float mu = ua.x * w0 + ub.x * w1 + uc.x * w2;
                 const float mv = ua.y * w0 + ub.y * w1 + uc.y * w2;
-                const int add = (int) std::lround(
-                        std::max(0.0f, mask(mu, mv) * alpha) * 255.0f);
+                const float m4 = 0.25f
+                        * (mask(mu - 0.25f * (dudx + dudy), mv - 0.25f * (dvdx + dvdy))
+                         + mask(mu + 0.25f * (dudx - dudy), mv + 0.25f * (dvdx - dvdy))
+                         + mask(mu - 0.25f * (dudx - dudy), mv - 0.25f * (dvdx - dvdy))
+                         + mask(mu + 0.25f * (dudx + dudy), mv + 0.25f * (dvdx + dvdy)));
+                const int add = (int) std::lround(std::max(0.0f, m4 * alpha) * 255.0f);
                 if (add > 0) {
                     const int wx = ((x % W) + W) % W;
                     row[wx] = (uint8_t) std::min(255, (int) row[wx] + add);

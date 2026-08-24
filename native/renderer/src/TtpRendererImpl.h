@@ -700,7 +700,14 @@ inline std::vector<float> superellipseMaskPixels(int TW, int TH) {
             const float dx = std::fabs(x + 0.5f - TW * 0.5f) / hw;
             const float dz = std::fabs(y + 0.5f - TH * 0.5f) / hl;
             const float q = std::cbrt(dx * dx * dx + dz * dz * dz); // 1 at the edge
-            a[(size_t) y * TW + x] = q <= 1.0f ? 1.0f : 0.0f;
+            // A PENUMBRA, not a hard cut — the GPU silhouettes get theirs
+            // from the bake's blur; this CPU mask is MINIFIED by the layer
+            // raster (one point sample per ~6-8 mask texels), and a binary
+            // edge point-sampled under per-frame sub-texel slide flickers.
+            // Half a footprint of analytic feather is the filter the
+            // point-sample never had.
+            a[(size_t) y * TW + x] =
+                    1.0f - std::min(1.0f, std::max(0.0f, (q - 0.88f) / 0.24f));
         }
     }
     // Separable box blur ×3 ≈ the canvas filter's Gaussian, at the same radius.
@@ -739,7 +746,7 @@ constexpr float kBlobShadowAlpha = 0.4f;
 // prop blobs at 0.40 and the lawn discs at 0.30.
 inline const float3 kCarBlobInk = srgbToLinear(0x171513);
 
-constexpr float kCarBlobAO = 0.35f;
+constexpr float kCarBlobAO = 0.62f;
 
 // The hybrid shadow LOD's band, in world units of distance to the closest
 // ACTIVE camera (renderCars). Inside kShadowLodNear a car's contact shadow is
@@ -765,4 +772,4 @@ constexpr float kShadowLodFar = 14.0f;
 // the 0.08/0.55 load term). Capping the tap there keeps a loaded pile-up as
 // dark as it used to be instead of letting addition run it toward black;
 // three-deep pile-ups still read a shade lighter than the loop's 0.78.
-constexpr float kCarShadowCap = 0.642f;
+constexpr float kCarShadowCap = 0.918f;

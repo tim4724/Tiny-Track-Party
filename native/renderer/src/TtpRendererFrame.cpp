@@ -1439,7 +1439,11 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
             const float fw = mCarWheels.size() > i ? mCarWheels[i].footW : 0.95f;
             const float fl = mCarWheels.size() > i ? mCarWheels[i].footL : 2.0f;
             const float outerR = (fw + fl) * 0.5f * sc * 0.5f;
-            float alpha = std::min(0.85f, 0.7f + k * 0.3f) * pulse;
+            // 0.55/0.70, down from 0.70/0.85: the aura composites OVER the
+            // blob now, and at the blob's die-cut depth a near-opaque aura
+            // read as the shadow vanishing under boost. This is the point
+            // where the glow reads AND the shadow ghosts through it.
+            float alpha = std::min(0.70f, 0.55f + k * 0.3f) * pulse;
             // The JS alpha holds a 0.7 floor right down to the gate above, and
             // as a decal that reads worse than the mesh it mirrors: the mix
             // REPLACES what is under it, so when the sim's linear fade crossed
