@@ -478,6 +478,36 @@ second is a heavier PICTURE (both cost halves ~40% up), and even the whole
 decal channel ablated left 540's worst second at 21.8 against 16.7. The
 sharpest clean rung is what ships, and that is 432 today with 480 in reach.
 
+## Phase 7 — 540@60 INVESTIGATED AND CLOSED (2026-08-24). It costs the terrain.
+
+Asked for directly after the wiring, and answered with a matrix and one last
+probe, all at pin 0.5 with the blob trade on:
+
+| 540 config | fps / skips | gpu p50 / worst |
+|---|---|---|
+| the trade alone | 58-59 / 1-2 | 14.3 / 22.6 |
+| + profile channel off | 59 / 1 | 13.3 / 21.0 |
+| + sky off | no help (noise) | — |
+| + TERRAIN OFF (ceiling probe) | **60 / 0 — locked** | 11.3 / 18.1 |
+
+So the lock exists ~1.5 tail-milliseconds away, and the only measured thing
+that closes it is deleting the whole terrain — ground, hills, water, pillars,
+berms — which is not a picture anyone ships. The profile channel gets within
+one skip and costs the boost auras, which are gameplay feedback.
+
+**The FOG EARLY-OUT was the last untried lever, and it is refuted:** vroad
+and vground answering the fog colour outright past 95% opacity (skipping
+their taps and the grade on exactly the vista fragments the tail is made of)
+measured NULL across three interleaved pairs — +0.32/-0.02/+0.07 with skips
+moving randomly. The far picture was already nearly free; the expensive
+channels were box-gated to the near chunks all along ("the deck's cost is
+the one or two chunks under the cameras", measured again from a new angle).
+The probe is reverted.
+
+**540@60 on this box is therefore CLOSED**: no shippable lever reaches it.
+The sharpest clean rungs remain 432 locked (shipped) and 480 within the
+model's reach on longer races. A meaningfully faster GPU is the only door.
+
 ## Phase 4 (cont.) — the policy decision, once the milliseconds are in
 
 The escape below the floor currently trades the RATE (540 lines at 30). The
