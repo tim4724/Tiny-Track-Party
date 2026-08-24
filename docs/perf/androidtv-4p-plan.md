@@ -508,6 +508,30 @@ The probe is reverted.
 The sharpest clean rungs remain 432 locked (shipped) and 480 within the
 model's reach on longer races. A meaningfully faster GPU is the only door.
 
+## Phase 8 — the quality-compromise sweep (2026-08-24). Pinned 540 locks; adaptive races still refuse it.
+
+Asked with compromises explicitly allowed, and swept to the end. At pin 0.5
+with the blob trade on:
+
+| + lever | passes | look cost |
+|---|---|---|
+| rubber layer OFF | **60/0 x3 — locks** | no skid marks at 4P |
+| skid uploads throttled (10 Hz / 2 Hz) | 59/1 x3 | trail lags ~0.1 s (kept) |
+| throttle + statics off | 58/2, 60/0, 60/0 | slicks/discs gone, auras kept |
+
+The rubber layer's cost is its UPLOAD EVENTS, as the GL-era A/B concluded —
+the tap and the median are free — and the throttle ships (below): it firms
+the tail everywhere for a trail lag nobody sees in a quarter cell.
+
+**But the adaptive verdict is final, and it is no.** A real race run with the
+best recipe spends its GRID in the backstop (the pack is the heaviest picture
+of the whole race), probes out, and settles 432@60 — the pinned 60/0 reads
+were the calm majority of the lap, and the race's worst seconds (skips-worst
+6/s even under the recipe) are ~25% over 540's pixel budget on this GPU.
+Pinned 540 is lockable; PLAYED 540 is not. 432 locked with 480 in late-race
+reach remains the shipped truth, and the statics arm is not wired — at 432
+its margin buys nothing.
+
 ## Phase 4 (cont.) — the policy decision, once the milliseconds are in
 
 The escape below the floor currently trades the RATE (540 lines at 30). The
