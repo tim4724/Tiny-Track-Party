@@ -117,8 +117,10 @@ ctest compiles) and the GLB loader, wire bytes included, plus every boundary
 export against its header contract. It recompiles the shims rather than
 linking a lib, so the shipped export list is untouched.
 
-`tests/party-abi.test.js` covers the same ground in Node against the SHIPPED wasm,
-**the only place that artifact is exercised**.
+`tests/party-abi.test.js` covers the same ground in Node against the SHIPPED wasm
+— **the one gate on the shipped artifact's party ABI** (the ctest recompiles the
+shims, so it never touches the artifact; the other `tests/*-abi.test.js` suites
+exercise the shipped wasm's other surfaces).
 
 **A known, deliberate hole:** the audio decisions, the world they read and the ABI
 wiring are each gated, but their ASSEMBLY inside the shipped wasm is not — the

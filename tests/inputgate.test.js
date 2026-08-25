@@ -9,11 +9,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-let InputGate, DEFAULT_STEER_THRESHOLD, DEFAULT_STRONG_THRESHOLD,
-  DEFAULT_SEND_INTERVAL_MS, DEFAULT_SEND_MIN_INTERVAL_MS, SHADOW_THRESHOLDS;
+let InputGate, DEFAULT_STEER_THRESHOLD, SHADOW_THRESHOLDS;
 test.before(async () => {
-  ({ InputGate, DEFAULT_STEER_THRESHOLD, DEFAULT_STRONG_THRESHOLD,
-    DEFAULT_SEND_INTERVAL_MS, DEFAULT_SEND_MIN_INTERVAL_MS, SHADOW_THRESHOLDS } =
+  ({ InputGate, DEFAULT_STEER_THRESHOLD, SHADOW_THRESHOLDS } =
     await import('../public/controller/InputGate.js'));
 });
 
@@ -259,11 +257,9 @@ test('PROPERTY: the two-tier pacing bounds hold, and so does the rate cap', () =
   assert.ok(st.sent < st.produced, 'gate suppressed nothing — bounds are meaningless');
 });
 
-test('defaults match the manifest derivations and orderings', () => {
-  assert.equal(DEFAULT_STEER_THRESHOLD, 0.03);
-  assert.equal(DEFAULT_STRONG_THRESHOLD, 0.15);
-  assert.equal(DEFAULT_SEND_INTERVAL_MS, 100);
-  assert.equal(DEFAULT_SEND_MIN_INTERVAL_MS, 40);
+test('the shadow ladder measures the lossless case and the live default', () => {
+  // The DEFAULT_* exports themselves are pinned to protocol.STEER by
+  // tests/config-drift.test.js; only the shadow ladder is covered here.
   assert.ok(SHADOW_THRESHOLDS.includes(0), 'the lossless case must be measurable');
   assert.ok(SHADOW_THRESHOLDS.includes(DEFAULT_STEER_THRESHOLD));
 });

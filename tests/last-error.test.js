@@ -142,7 +142,9 @@ test('every shell surfaces the reason instead of composing its own', () => {
   const fs = require('node:fs');
   const shells = {
     'public/display/nativeRuntime.js': /ttp_last_error/,
-    'shells/tvos/TinyTrackParty/App/GameCoordinator.swift': /ttp_last_error/
+    'shells/tvos/TinyTrackParty/App/GameCoordinator.swift': /ttp_last_error/,
+    'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/GameCoordinator.kt':
+      /ttp_last_error/
   };
   for (const [file, needs] of Object.entries(shells)) {
     const full = path.join(ROOT, file);

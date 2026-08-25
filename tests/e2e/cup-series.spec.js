@@ -6,7 +6,8 @@
 // ended by force-finishing every human car (the same recipe as the display
 // TestHarness 'finished' scenario): humansAllDone then fast-forwards the AI to
 // the flag and endRace fires on the next frame.
-const { test, expect, openDisplay, joinController, startRace, waitForRacing, visible } = require('./helpers');
+const { test, expect, openDisplay, joinController, startRace, waitForRacing, visible,
+  recordSnapshots, midRaceSeated } = require('./helpers');
 
 const BEACH = ['tidepool', 'cove', 'driftwood', 'riptide']; // CUPS order (race 1..4)
 
@@ -345,16 +346,7 @@ test('a mid-cup joiner is seated into the next series race and scores from there
   // flow.spec.js, on the series-advance path: launchRace must build the race-2
   // session BEFORE flipping to COUNTDOWN, or Carol flashes "next race" through
   // the whole countdown and only lands on the wheel at GO).
-  await page.evaluate(() => {
-    window.__snaps = [];
-    // The retained snapshot is composed AND FRAMED in C++ now
-    // (ttp_net_lobby_frame), so the display publishes pre-encoded bytes through
-    // setStateFrame rather than handing setState an object. Unwrap the frame to
-    // get back the same snapshot this hook has always collected.
-    const p = window.__net.party, orig = p.setStateFrame.bind(p);
-    p.setStateFrame = (frame) => { window.__snaps.push(JSON.parse(frame).data); return orig(frame); };
-  });
-  const seated = await page.evaluate(() => window.__net.flow.list().filter((p) => p.connected).map((p) => p.peerIndex));
+  const seated = await recordSnapshots(page);
 
   await alice.click('#newgame-btn');
   await waitForRacing(page);
@@ -362,15 +354,7 @@ test('a mid-cup joiner is seated into the next series race and scores from there
     window.__session().carIds().filter((k) => !String(k).startsWith('ai-')).length)).toBe(2);
   await expect(carol.locator(visible('#game'))).toBeVisible();
 
-  const midRace = await page.evaluate((seated) => {
-    const mid = window.__snaps.filter((s) => s.roomState === 'countdown' || s.roomState === 'playing');
-    const offenders = mid.flatMap((s) => (s.players || [])
-      .filter((pl) => seated.includes(pl.peerIndex) && pl.inRace === false)
-      .map((pl) => ({ roomState: s.roomState, peerIndex: pl.peerIndex })));
-    const firstCountdownOk = mid.length > 0 && mid[0].roomState === 'countdown'
-      && seated.every((i) => mid[0].players.some((pl) => pl.peerIndex === i && pl.inRace === true));
-    return { offenders, firstCountdownOk };
-  }, seated);
+  const midRace = await midRaceSeated(page, seated);
   expect(midRace.offenders).toEqual([]);
   expect(midRace.firstCountdownOk).toBe(true);
 

@@ -1,4 +1,4 @@
-// The chooser payload's SHAPE, across the two shells that write it.
+// The chooser payload's SHAPE, across every shell that writes it.
 //
 // The chooser — cars, colours, tracks — is the one game payload with no gate
 // anywhere else in the tree, and it is worth being precise about why:
@@ -27,9 +27,9 @@
 // shell to the web's key set rather than to a list retyped here, which would be
 // a third source of the same fact and would rot the same way.
 //
-// It reads Swift as TEXT, which is crude and deliberate: nothing else in this
-// repo can see a .swift file and a .js file at once, and the alternative to a
-// crude gate here is the none that let this ship.
+// It reads the Swift and the Kotlin as TEXT, which is crude and deliberate:
+// nothing else in this repo can see a .swift or .kt file and a .js file at
+// once, and the alternative to a crude gate here is the none that let this ship.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -62,6 +62,14 @@ const jsKeys = (block) => {
   for (const m of block.matchAll(/[{,]\s*(\w+)\s*(?=[,}])/g)) keys.add(m[1]);
   return keys;
 };
+// Kotlin builds the payload through org.json, so a key is always the quoted
+// first argument of a `.put(`. Requiring the quote right after the paren is
+// what keeps `out.put(e)` and `out.put(JSONObject()` out.
+const kotlinKeys = (block) => {
+  const keys = new Set();
+  for (const m of block.matchAll(/\.put\(\s*"(\w+)"/g)) keys.add(m[1]);
+  return keys;
+};
 const slice = (src, start, end) => {
   const i = src.indexOf(start);
   assert.notEqual(i, -1, `anchor not found: ${start}`);
@@ -76,6 +84,9 @@ const webBoot = read('public/display/boot.js');
 // web-side anchor guard and skips only the cross-shell comparisons.
 const TVOS_FILE = 'shells/tvos/TinyTrackParty/App/GameCoordinator.swift';
 const tvos = existsSync(path.join(ROOT, TVOS_FILE)) ? read(TVOS_FILE) : null;
+const ANDROID_FILE =
+  'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/GameCoordinator.kt';
+const android = existsSync(path.join(ROOT, ANDROID_FILE)) ? read(ANDROID_FILE) : null;
 
 // `stats` is nested in both, and its four members matter as much as the wrapper
 // (a picker bar reading `undefined` draws nothing). Flattening the key sets is
@@ -84,14 +95,19 @@ const webCars = jsKeys(slice(webBoot, 'const carChooser = carModels.map', '\n  /
 const webTracks = jsKeys(slice(webBoot, 'const trackChooser = trackList.flatMap', '\n  // Car id/name/handling stats'));
 const tvosCars = tvos && swiftKeys(slice(tvos, 'private func chooserCars()', '\n    /// The chooser\'s track list'));
 const tvosTracks = tvos && swiftKeys(slice(tvos, 'private func chooserTracks(', '\n    // MARK: - Screens'));
+const androidCars = android && kotlinKeys(slice(android,
+  'private fun chooserCars()', '\n     * The chooser\'s track list'));
+const androidTracks = android && kotlinKeys(slice(android,
+  'private fun chooserTracks(', '\n    // -- screens'));
 
 // A guard on the extraction itself. Every assertion below is a set comparison,
 // and two empty sets compare equal — so an anchor that silently stops matching
 // (a rename, a reordered file) would turn this whole file green while testing
 // nothing at all.
-test('the extraction actually found the four payload shapes', () => {
+test('the extraction actually found the payload shapes', () => {
   const shapes = [['web cars', webCars], ['web tracks', webTracks]];
   if (tvos) shapes.push(['tvOS cars', tvosCars], ['tvOS tracks', tvosTracks]);
+  if (android) shapes.push(['Android cars', androidCars], ['Android tracks', androidTracks]);
   for (const [name, keys] of shapes) {
     assert.ok(keys.size >= 3, `${name}: extracted ${keys.size} keys — the anchor has drifted`);
   }
@@ -116,5 +132,19 @@ test('the tvOS shell writes the same track chooser keys as the web', () => {
   if (!tvos) return;
   assert.deepEqual([...tvosTracks].sort(), [...webTracks].sort(),
     'shells/tvos GameCoordinator.chooserTracks() and public/display/boot.js trackChooser disagree — ' +
+    'missing `svg` is a lobby with no mini-maps, missing `cup` is no cup selector at all');
+});
+
+test('the Android shell writes the same car chooser keys as the web', () => {
+  if (!android) return;
+  assert.deepEqual([...androidCars].sort(), [...webCars].sort(),
+    'shells/androidtv GameCoordinator.chooserCars() and public/display/boot.js carChooser disagree — ' +
+    'the phone reads these by name (public/controller/main.js), so a mismatch is a blank car picker');
+});
+
+test('the Android shell writes the same track chooser keys as the web', () => {
+  if (!android) return;
+  assert.deepEqual([...androidTracks].sort(), [...webTracks].sort(),
+    'shells/androidtv GameCoordinator.chooserTracks() and public/display/boot.js trackChooser disagree — ' +
     'missing `svg` is a lobby with no mini-maps, missing `cup` is no cup selector at all');
 });

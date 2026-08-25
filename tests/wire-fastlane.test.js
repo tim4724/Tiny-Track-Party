@@ -31,15 +31,25 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { readFileSync } = require('node:fs');
+const path = require('node:path');
 
 const H = require('./wire-compat/harness.js');
 const { Relay } = require('./wire-compat/relay.js');
 
-// Netcode constants, mirrored from partyplug/PartyFastlane.js's module locals and
-// native/libttp-party/ttp/fastlane.h (fastlane_check pins the two to each other).
-const TICK_MS = 50;
-const TTL_MS = 300;
-const IDLE_MS = 500;
+// The netcode cadences, read off native/libttp-party/ttp/fastlane.h rather than
+// re-typed (fastlane_check pins partyplug/PartyFastlane.js to the same header,
+// so this file advances its fake clocks by the numbers both sides really run).
+const fastlaneH = readFileSync(
+  path.join(__dirname, '..', 'native/libttp-party/ttp/fastlane.h'), 'utf8');
+const cadence = (name) => {
+  const m = fastlaneH.match(new RegExp(`\\b${name} = (\\d+)`));
+  assert.ok(m, `fastlane.h's ${name} moved`);
+  return Number(m[1]);
+};
+const TICK_MS = cadence('TICK_MS');
+const TTL_MS = cadence('TTL_MS');
+const IDLE_MS = cadence('IDLE_MS');
 
 test.after(() => H.teardownClients());
 

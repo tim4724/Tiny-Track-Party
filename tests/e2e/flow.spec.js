@@ -1,7 +1,30 @@
 // @ts-check
 // Core session flow: lobby → ready/start → countdown → racing → pause →
 // "New game" → back to the lobby, asserted across the display and both phones.
-const { test, expect, openDisplay, joinController, startRace, waitForRacing, visible } = require('./helpers');
+const { test, expect, openDisplay, joinController, startRace, waitForRacing, visible,
+  recordSnapshots, midRaceSeated } = require('./helpers');
+const fs = require('node:fs');
+const path = require('node:path');
+
+// The steer bar's geometry — BAR_SCALE, the bar's authored shape, its bottom
+// clearance — is the renderer's (TtpRendererFrame.cpp, where BAR_SCALE is "the
+// only knob"), scraped from that source rather than retyped so a C++ retune
+// moves the paint probe below with it (same pattern as safe-zone.test.js). The
+// probe samples the SHIPPED wasm, so after a retune this goes green only once
+// the artifact is rebuilt (root rule 6).
+const rendererSrc = fs.readFileSync(
+  path.join(__dirname, '../../native/renderer/src/TtpRendererFrame.cpp'), 'utf8');
+const barNum = (re, what) => {
+  const m = re.exec(rendererSrc);
+  if (!m) throw new Error(`TtpRendererFrame.cpp no longer spells ${what} the way this spec reads it`);
+  return Number(m[1]);
+};
+const BAR = {
+  scale: barNum(/BAR_SCALE = ([0-9.]+)f/, 'BAR_SCALE'),
+  w: barNum(/barW = ([0-9.]+) \* unit/, "the bar's width"),
+  h: barNum(/barW = [0-9.]+ \* unit, barH = ([0-9.]+) \* unit/, "the bar's height"),
+  clear: barNum(/\bclear = ([0-9.]+) \* unit/, "the bar's clearance")
+};
 
 test('lobby → race → pause → new game returns everyone to the lobby', async ({ page, browser }) => {
   const roomCode = await openDisplay(page);
@@ -27,16 +50,7 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
   // Record every retained-state snapshot the display publishes from here on, in
   // order, and note who's seated — so we can prove the race's FIRST snapshot
   // already marks them as racing (regression guard below).
-  await page.evaluate(() => {
-    window.__snaps = [];
-    // The retained snapshot is composed AND FRAMED in C++ now
-    // (ttp_net_lobby_frame), so the display publishes pre-encoded bytes through
-    // setStateFrame rather than handing setState an object. Unwrap the frame to
-    // get back the same snapshot this hook has always collected.
-    const p = window.__net.party, orig = p.setStateFrame.bind(p);
-    p.setStateFrame = (frame) => { window.__snaps.push(JSON.parse(frame).data); return orig(frame); };
-  });
-  const seated = await page.evaluate(() => window.__net.flow.list().filter((p) => p.connected).map((p) => p.peerIndex));
+  const seated = await recordSnapshots(page);
 
   await startRace(alice, [bob]);
 
@@ -52,17 +66,7 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
   // "you're in the next race" waiting screen for the whole countdown. A #game wait
   // can't catch that — it just resolves late, at GO. So assert on the wire: no
   // mid-race snapshot may show a seated racer as inRace:false.
-  const midRace = await page.evaluate((seated) => {
-    const mid = window.__snaps.filter((s) => s.roomState === 'countdown' || s.roomState === 'playing');
-    const offenders = mid.flatMap((s) => (s.players || [])
-      .filter((pl) => seated.includes(pl.peerIndex) && pl.inRace === false)
-      .map((pl) => ({ roomState: s.roomState, peerIndex: pl.peerIndex })));
-    // The very first mid-race snapshot IS the countdown one — prove it exists and
-    // already marks everyone in, so the assertion can't pass vacuously.
-    const firstCountdownOk = mid.length > 0 && mid[0].roomState === 'countdown'
-      && seated.every((i) => mid[0].players.some((pl) => pl.peerIndex === i && pl.inRace === true));
-    return { offenders, firstCountdownOk };
-  }, seated);
+  const midRace = await midRaceSeated(page, seated);
   expect(midRace.offenders).toEqual([]);
   expect(midRace.firstCountdownOk).toBe(true);
 
@@ -214,7 +218,7 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
   // overlay to find. The DOM half above needs no such wait, because
   // ttp_display_cell_rects answers from the surface and the cell list alone.
   await page.waitForFunction(() => !window.__scene._rebuilding);
-  const paint = await page.evaluate(() => {
+  const paint = await page.evaluate((BAR) => {
     const s = window.__scene;
     const k = s._dpr, W = s._canvas.width, H = s._canvas.height;
     const packed = s.display.cellRects(8);
@@ -230,15 +234,16 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
       cells.push({ x: packed[i] * W, y: packed[i + 1] * H,
                    w: packed[i + 2] * W, h: packed[i + 3] * H });
     }
-    // drawOverlay's own geometry: the authored 270 x 34 shape sitting 20 clear
-    // of the bottom edge, scaled by the geometric mean of the CELL's height and
-    // the SCREEN's — a damped share of the screen height, not the cell's raw
-    // pixels. Both heights matter: dropping the screen term would make the bar
-    // resolution-dependent, dropping the cell term would ignore the split.
+    // drawOverlay's own geometry: the authored shape (scraped above) sitting
+    // its clearance off the bottom edge, scaled by the geometric mean of the
+    // CELL's height and the SCREEN's — a damped share of the screen height, not
+    // the cell's raw pixels. Both heights matter: dropping the screen term
+    // would make the bar resolution-dependent, dropping the cell term would
+    // ignore the split.
     const boxes = cells.map((c) => {
-      const u = 1.7 * Math.sqrt(c.h * H) / 1080;   // BAR_SCALE, per cell
-      const barW = 270 * u, barH = 34 * u;
-      return { x: c.x + (c.w - barW) / 2, y: c.y + c.h - 20 * u - barH,
+      const u = BAR.scale * Math.sqrt(c.h * H) / 1080;   // BAR_SCALE, per cell
+      const barW = BAR.w * u, barH = BAR.h * u;
+      return { x: c.x + (c.w - barW) / 2, y: c.y + c.h - BAR.clear * u - barH,
                w: barW, h: barH };
     });
     const grab = () => s.snapshot().getContext('2d').getImageData(0, 0, W, H).data;
@@ -282,7 +287,7 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
       cssCells: cells.map((c) => [c.x / k, c.y / k, c.w / k, c.h / k]),
       cssH: H / k,   // the bar's scale reads the SCREEN's height as well as its cell's
     };
-  });
+  }, BAR);
   // A bar in every cell, covering most of the box its own cell fraction puts it in…
   expect(paint.barsChanged).toHaveLength(2);
   for (const frac of paint.barsChanged) expect(frac).toBeGreaterThan(0.5);
@@ -298,18 +303,18 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
   for (const y of paint.wideRows) expect(Math.abs(y - paint.seamY)).toBeLessThanOrEqual(2);
   // The box those pixels were sampled in is the geometry drawOverlay derives:
   // centred on its cell, and sized off the geometric mean of the cell's height
-  // and the screen's. The DOM bar's old 270 / 34 / 27 survive only as ratios — there
-  // is no CSS pixel and no devicePixelRatio anywhere in the chain now, which is
-  // why this compares the bar against its own cell rather than against a
-  // constant. Per index, not sorted: both arrays are built from `cells` in cell
-  // order, so a bar landing in the wrong cell should fail rather than sort away.
+  // and the screen's. The authored shape survives only as ratios — there is no
+  // CSS pixel and no devicePixelRatio anywhere in the chain now, which is why
+  // this compares the bar against its own cell rather than against a constant.
+  // Per index, not sorted: both arrays are built from `cells` in cell order, so
+  // a bar landing in the wrong cell should fail rather than sort away.
   for (const [i, b] of paint.boxes.entries()) {
     const c = paint.cssCells[i];
-    const u = 1.7 * Math.sqrt(c[3] * paint.cssH) / 1080;
+    const u = BAR.scale * Math.sqrt(c[3] * paint.cssH) / 1080;
     expect(b[0] + b[2] / 2).toBeCloseTo(c[0] + c[2] / 2, 4);   // centred on the cell
-    expect(b[2]).toBeCloseTo(270 * u, 4);                      // cell height AND
-    expect(b[3]).toBeCloseTo(34 * u, 4);                       // screen height
-    expect(b[1] + b[3]).toBeCloseTo(c[1] + c[3] - 20 * u, 4);
+    expect(b[2]).toBeCloseTo(BAR.w * u, 4);                    // cell height AND
+    expect(b[3]).toBeCloseTo(BAR.h * u, 4);                    // screen height
+    expect(b[1] + b[3]).toBeCloseTo(c[1] + c[3] - BAR.clear * u, 4);
   }
 
   // Any phone can pause; the overlay raises on every screen.

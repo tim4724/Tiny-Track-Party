@@ -36,12 +36,17 @@ const skip = fs.existsSync(MJS) && fs.existsSync(WASM)
   ? false
   : 'ttp_runtime.mjs/.wasm not built — run native/scripts/build-runtime-web.sh';
 
-// [car id, caution, laneBias] — the first four AI_PERSONALITIES knob pairs from
-// native/libttp-sim/ttp/ai_driver.cc, under the traces' cpu-<name> id convention.
-const PERSONAS = [
-  ['cpu-bolt', 1.05, -0.6], ['cpu-pixel', 1.00, 0.6],
-  ['cpu-rusty', 0.97, -0.25], ['cpu-zippy', 0.94, 0.25]
-];
+// [car id, caution, laneBias] — the first four persona knob pairs, under the
+// traces' cpu-<name> id convention. Derived from public/display/aiPersonas.js,
+// the one JS copy of the C++ table (display-abi.test.js pins it to the wasm).
+let _personas = null;
+async function personas() {
+  if (_personas) return _personas;
+  const { AI_PERSONALITIES } = await import('../public/display/aiPersonas.js');
+  _personas = AI_PERSONALITIES.slice(0, 4)
+    .map((p) => [`cpu-${p.name.toLowerCase()}`, p.caution, p.laneBias]);
+  return _personas;
+}
 const DT = 1000 / 60;
 
 let _abi = null;
@@ -69,7 +74,7 @@ async function race(trackId, forceItem, frames = 3000) {
   const a = await abi();
   const h = a.begin(trackId, 42, 3, forceItem);
   assert.ok(h > 0, `ttp_session_begin('${trackId}') returned a handle`);
-  for (const [id, caution, laneBias] of PERSONAS) a.addBot(h, JSON.stringify(id), caution, laneBias, 1, null);
+  for (const [id, caution, laneBias] of await personas()) a.addBot(h, JSON.stringify(id), caution, laneBias, 1, null);
   a.start(h, -1); // no countdown: racing from frame 0
   const events = [];
   const boxState = { everTaken: false, rearmed: false };
@@ -154,12 +159,6 @@ test('oil puddles spin cars on the tracks that carry them', { skip }, async () =
   const r = await race('skysnake', 'monster');
   assert.ok(spinCauses(r.events).has('oil'), 'a car crossed an oil slick and spun out');
 });
-
-// ---------------------------------------------------------------------------
-// NOT COVERED ANY MORE. Both of these need something the C ABI does not offer;
-// they are skipped rather than deleted so the gap stays visible in the test
-// output. Neither is a false alarm — the behaviour is still real, just untested.
-// ---------------------------------------------------------------------------
 
 // The Gym range itself. It is a DEV track, so it exercises two things no catalogue
 // track does: authored bananas seeded at race start (every shipped track has none),

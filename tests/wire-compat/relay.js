@@ -498,15 +498,10 @@ class Relay {
 
 module.exports = {
   Relay,
-  validateUrlTemplate,
-  fillUrlTemplate,
   CLOSE_REPLACED,
   CLOSE_ROOM_CLOSED,
-  CLOSE_IDLE,
   MAX_STATE_BYTES,
   MAX_URL_BYTES,
   IDLE_TIMEOUT_MS,
-  PING_AFTER_MS,
-  SWEEP_MS,
   HOST_GRACE_MS,
 };

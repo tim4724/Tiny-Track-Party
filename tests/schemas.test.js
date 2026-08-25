@@ -303,16 +303,11 @@ test('results schema matches a live ttp_results_json()', { skip }, async () => {
   assert.deepEqual(res.results.map((r) => r.finished), [true, false], 'the forced finisher ranks first');
 });
 
-test('committed trace fixtures agree with the snapshot schema', (t) => {
+test('committed trace fixtures agree with the snapshot schema', () => {
   const schema = loadSchema('snapshot.schema.json');
   const dir = path.join(__dirname, 'fixtures', 'traces');
   const files = fs.readdirSync(dir).filter((f) => f.endsWith('.jsonl'));
-  if (files.length === 0) {
-    // Oracle disarmed (see tests/trace.test.js); the live-snapshot check
-    // above still pins the schema against the engine.
-    t.diagnostic('no committed trace fixtures (oracle disarmed)');
-    return;
-  }
+  assert.ok(files.length > 0, 'no committed trace fixtures — broken checkout?');
   const carProps = schema.$defs.carSnap.properties;
   for (const f of files) {
     const lines = fs.readFileSync(path.join(dir, f), 'utf8').trim().split('\n');

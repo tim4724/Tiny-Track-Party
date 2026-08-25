@@ -107,6 +107,11 @@ const SHELLS = [
     file: 'shells/tvos/TinyTrackParty/App/GameCoordinator+Net.swift',
     call: /ttp_fast_forward\(sessionHandle\)/,
     hold: /display\.hold\(true\)/
+  },
+  {
+    file: 'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/GameCoordinator.kt',
+    call: /ttp_fast_forward\(sessionHandle\)/,
+    hold: /display\.hold\(true\)/
   }
 ];
 

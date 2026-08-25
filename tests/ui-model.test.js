@@ -563,7 +563,7 @@ test('the seat grid never shrinks below the field that races', async () => {
   const MAX = protocol.MAX_PLAYERS;
   for (let n = 0; n <= MAX + 2; n++) {
     const seats = Array.from({ length: n }, (_, i) => ({ name: `P${i}`, colorIndex: i }));
-    const grid = ui.seatGrid(seats, MAX, protocol.CAR_MODELS.length);
+    const grid = ui.seatGrid(seats);
     assert.equal(grid.length, Math.max(MAX, n), `a roster of ${n} must fill ${Math.max(MAX, n)} tiles`);
     assert.equal(grid.filter((g) => g.open).length, Math.max(0, MAX - n));
     // Every taken tile names a car that exists in the model roster.

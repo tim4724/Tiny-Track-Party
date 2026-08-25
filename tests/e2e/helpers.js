@@ -151,4 +151,41 @@ async function waitForRacing(displayPage, timeout = 45000) {
     () => window.__session() && window.__session().racing, null, { timeout });
 }
 
-module.exports = { test, expect: base.expect, openDisplay, joinController, startRace, waitForRacing, visible };
+// Record every retained-state snapshot the display publishes from here on, in
+// order (window.__snaps), and return who's seated (connected peerIndexes) for
+// midRaceSeated below. Call it at the moment recording should start — the
+// FIRST recorded mid-race snapshot is what midRaceSeated asserts on, so
+// installing the hook earlier changes what that assertion means.
+async function recordSnapshots(page) {
+  await page.evaluate(() => {
+    window.__snaps = [];
+    // The retained snapshot is composed AND FRAMED in C++ now
+    // (ttp_net_lobby_frame), so the display publishes pre-encoded bytes through
+    // setStateFrame rather than handing setState an object. Unwrap the frame to
+    // get back the same snapshot this hook has always collected.
+    const p = window.__net.party, orig = p.setStateFrame.bind(p);
+    p.setStateFrame = (frame) => { window.__snaps.push(JSON.parse(frame).data); return orig(frame); };
+  });
+  return page.evaluate(() =>
+    window.__net.flow.list().filter((p) => p.connected).map((p) => p.peerIndex));
+}
+
+// The regression guard both flows share: no mid-race snapshot may show a seated
+// racer as inRace:false, and the FIRST one must be the countdown snapshot with
+// everyone already in — proof the session existed before the COUNTDOWN flip,
+// so no phone flashes the waiting screen through the countdown.
+function midRaceSeated(page, seated) {
+  return page.evaluate((seated) => {
+    const mid = window.__snaps.filter((s) => s.roomState === 'countdown' || s.roomState === 'playing');
+    const offenders = mid.flatMap((s) => (s.players || [])
+      .filter((pl) => seated.includes(pl.peerIndex) && pl.inRace === false)
+      .map((pl) => ({ roomState: s.roomState, peerIndex: pl.peerIndex })));
+    // The very first mid-race snapshot IS the countdown one — prove it exists and
+    // already marks everyone in, so the assertion can't pass vacuously.
+    const firstCountdownOk = mid.length > 0 && mid[0].roomState === 'countdown'
+      && seated.every((i) => mid[0].players.some((pl) => pl.peerIndex === i && pl.inRace === true));
+    return { offenders, firstCountdownOk };
+  }, seated);
+}
+
+module.exports = { test, expect: base.expect, openDisplay, joinController, startRace, waitForRacing, visible, recordSnapshots, midRaceSeated };

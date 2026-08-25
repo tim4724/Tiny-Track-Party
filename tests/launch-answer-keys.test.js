@@ -115,6 +115,11 @@ const SHELLS = [
     // documented-keys read — the hand-written loop that once read stats off
     // the bot spec (which has none) is gone from this shell too.
     needs: [/ttp_session_begin_field/]
+  },
+  {
+    file: 'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/GameCoordinator.kt',
+    // Same split as tvOS: the field crosses verbatim, the ABI reads the keys.
+    needs: [/ttp_session_begin_field/]
   }
 ];
 
