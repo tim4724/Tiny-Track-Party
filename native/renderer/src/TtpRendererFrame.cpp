@@ -1,6 +1,5 @@
-// Split from the original single-file TtpRenderer.cpp along its subsystem
-// seams; TtpRendererImpl.h carries what the topic files share. Pure code
-// motion — behaviour, member set and ABI are unchanged.
+// The per-frame path: the cell grid, cameras, cars, effects and the per-view
+// passes. TtpRendererImpl.h carries what the topic files share.
 #include "TtpRendererImpl.h"
 
 #include <utils/Log.h>
@@ -956,10 +955,11 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
             if (c.monster > 0.5f && input.viewCount > 0) {
                 const TtpViewInput* vws = ttp_frame_views(&input);
                 const float3 mon = carPos;
-                for (uint32_t vi = 0; vi < input.viewCount && vi < input.carCount; vi++) {
-                    if (vi == i) continue;
+                for (uint32_t vi = 0; vi < input.viewCount; vi++) {
+                    const int own = vws[vi].car;
+                    if (own < 0 || own == (int) i || own >= (int) nCars) continue;
                     const float3 camP = { vws[vi].world[12], vws[vi].world[13], vws[vi].world[14] };
-                    const float3 f = float3{ cars[vi].pos.x, cars[vi].pos.y, cars[vi].pos.z } - camP;
+                    const float3 f = float3{ cars[own].pos.x, cars[own].pos.y, cars[own].pos.z } - camP;
                     const float3 mv = mon - camP;
                     if (dot(mv, f) <= 0) continue;               // behind the camera
                     if (dot(mv, mv) >= dot(f, f)) continue;      // beyond the car
@@ -1825,7 +1825,6 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
                     bf.basis(bananas[j].lat));
         }
         const TtpRocketInput* rockets = ttp_frame_rockets(&input);
-        std::vector<float3> nowRockets;
         for (uint32_t j = 0; j < (uint32_t) mRockets.size(); j++) {
             if (mRockets[j].entity.isNull()) continue;
             auto inst = tcm.getInstance(mRockets[j].entity);
@@ -1843,7 +1842,6 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
             placeBlob(f, rockets[j].lat, 0.95f);
             const float3 tanv = f.tangent();
             const float3 p = f.pos + f.lat * rockets[j].lat + f.up * 0.32f;
-            nowRockets.push_back(p);
             const mat4f rocketXf = mat4f{ float4{ f.lat, 0 }, float4{ tanv, 0 },
                     float4{ cross(f.lat, tanv), 0 }, float4{ p, 1 } }
                     * mat4f::rotation(mTime * 9.0f, float3{ 0, 1, 0 });
@@ -1857,10 +1855,9 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
                 tcm.setTransform(tcm.getInstance(mRocketFlames[j].entity), rocketXf);
             }
         }
-        // A sim reset (fixture scrubbing) teleports every car — clear the
-        // rocket trackers so the count drop can't fire a stale-position burst,
-        // and wipe the skid layer (the JS cleared marks + patina on restart;
-        // here the wipe is one unconditional clear).
+        // A sim reset (fixture scrubbing) teleports every car — kill any live
+        // bursts and wipe the skid layer (the JS cleared marks + patina on
+        // restart; here the wipe is one unconditional clear).
         if (input.carCount > 0) {
             // A RESET teleports the whole field; a lone car jumping is a
             // RESPAWN (off the deck, back to the line). The detector once
@@ -1875,8 +1872,6 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
             const bool jumped0 = length(c0 - mLastCar0) > 5.0f;
             const bool jumpedN = input.carCount == 1 || length(cN - mLastCarN) > 5.0f;
             if (jumped0 && jumpedN) {
-                mPrevRockets.clear();
-                mPrevRocketCount = 0;
                 for (Burst& b : mBursts) b.t = -1;
                 if (mSkidTex) {
                     for (WheelTrail& t : mWheelTrails) t = {};
@@ -1916,8 +1911,6 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
             slot->ball = slot->pos;
             slot->t = 0;
         }
-        mPrevRockets = std::move(nowRockets);
-        mPrevRocketCount = input.rocketCount;
         for (int bi = 0; bi < 2; bi++) {
             Burst& b = mBursts[bi];
             if (mBurstMeshes[bi].entity.isNull()) continue;
@@ -2331,9 +2324,7 @@ void TtpRenderer::renderAmbient(const TtpFrameInput& input) {
     // the three side ever loses the quirk, this collapses to a constant.
     if (mPollenMat) {
         const uint32_t vc = input.viewCount;
-        const uint32_t rows = vc ? (vc + (uint32_t) std::ceil(std::sqrt((double) vc)) - 1)
-                        / (uint32_t) std::ceil(std::sqrt((double) vc))
-                : 1u;
+        const uint32_t rows = gridDims(vc ? vc : 1).rows;
         const float fov = vc ? ttp_frame_views(&input)[0].fov : 50.0f;
         mPollenMat->setParameter("halfSize",
                 mAmbSize * (float) rows * std::tan(fov * (float) M_PI / 360.0f));
@@ -2550,7 +2541,7 @@ void TtpRenderer::orientCellBillboards(const float3& camPos) {
         float3 p = mHazePos[hi];
         p.x = std::fmod(std::fmod(p.x + 2.2f * mTime + wrap, 2 * wrap)
                 + 2 * wrap, 2 * wrap) - wrap;
-        p.x *= 1.0f; p.z *= mHillSf;
+        p.z *= mHillSf; // x already spans the mHillSf-scaled range via `wrap`
         const float yaw = std::atan2(camPos.x - p.x, camPos.z - p.z);
         tcm.setTransform(tcm.getInstance(mHaze[hi].entity),
                 mat4f::translation(p) * mat4f::rotation(yaw, float3{ 0, 1, 0 }));

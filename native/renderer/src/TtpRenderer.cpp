@@ -1,6 +1,5 @@
-// Split from the original single-file TtpRenderer.cpp along its subsystem
-// seams; TtpRendererImpl.h carries what the topic files share. Pure code
-// motion — behaviour, member set and ABI are unchanged.
+// Engine and scene lifecycle: materials, mesh build/teardown, releaseScene and
+// the ablation plumbing. TtpRendererImpl.h carries what the topic files share.
 #include <algorithm>
 #include <chrono>
 
@@ -371,13 +370,13 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
                 .material(0, mi)
                 .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
                         m.vb, m.ib, t0 * 3, n * 3)
-                // Frustum culling for everything. The bounds are real now, and
-                // the few meshes that rewrite their vertices in world space
-                // every frame (the ambient band) refresh theirs
-                // in the same breath — see refreshBounds.
-                // Pointing the camera at empty sky used to still cost 69 draw
-                // calls; per-draw GPU cost is ~18 µs, so that was over a
-                // millisecond of drawing nothing.
+                // Frustum culling for everything. Pointing the camera at empty
+                // sky used to still cost 69 draw calls; per-draw GPU cost is
+                // ~18 µs, so that was over a millisecond of drawing nothing —
+                // and off-screen scenery drawn in every cell made a 4-way
+                // split pay for the whole circuit four times. A mesh the
+                // shader expands past its build-time bounds (the burst ring)
+                // opts OUT via setMeshCulling.
                 .culling(true)
                 .receiveShadows(false)
                 .castShadows(false)
@@ -389,11 +388,12 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
     return true;
 }
 
-// Only ever called from releaseScene(), which flushes first — so dropping the
-// CPU copies here is safe even though their BufferDescriptors carry no release
-// callback. Clearing them is not optional: every builder push_backs, so a mesh
-// rebuilt over stale vectors comes out with its previous contents still in it
-// (doubled geometry AND a leak, ~14 MB a race).
+// Called from releaseScene() and the car-slot rebuild paths, with no flush
+// anywhere — the BufferDescriptors carry no release callback, so the CPU
+// copies are BURIED rather than dropped (buryMeshBuffers / MeshGrave has the
+// argument). Clearing them is not optional: every builder push_backs, so a
+// mesh rebuilt over stale vectors comes out with its previous contents still
+// in it (doubled geometry AND a leak, ~14 MB a race).
 void TtpRenderer::destroyMesh(Mesh& m) {
     for (utils::Entity e : m.chunks) {
         mScene->remove(e);
@@ -803,48 +803,6 @@ void TtpRenderer::setMeshShadows(Mesh& m, bool cast, bool receive) {
     if (!m.chunks.empty()) setShadows(m.chunks.data(), m.chunks.size(), cast, receive);
 }
 
-// Re-derive a mesh's bounds from its CPU vertices. Cheap (these pools are
-// thousands of verts, not the road's hundred thousand) and the price of letting
-// a mesh whose geometry moves every frame still be frustum-culled.
-void TtpRenderer::refreshBounds(Mesh& m) {
-    if (m.entity.isNull() || m.verts.empty()) return;
-    auto& rcm = mEngine->getRenderableManager();
-    const auto range = [&](utils::Entity e, size_t i0, size_t n) {
-        const auto ri = rcm.getInstance(e);
-        if (!ri) return;
-        float3 lo{ 1e30f }, hi{ -1e30f };
-        for (size_t k = i0; k < i0 + n && k < m.idx.size(); k++) {
-            const Vertex& v = m.verts[m.idx[k]];
-            lo = min(lo, float3{ v.px, v.py, v.pz });
-            hi = max(hi, float3{ v.px, v.py, v.pz });
-        }
-        if (hi.x < lo.x) return;
-        rcm.setAxisAlignedBoundingBox(ri,
-                { (lo + hi) * 0.5f, max((hi - lo) * 0.5f, float3{ 1e-3f }) });
-    };
-    if (m.chunks.empty()) {
-        // One renderable = every vertex belongs to it, so walk `verts` directly.
-        // Going through `idx` visits each vertex once per triangle that uses it
-        // — 840 scattered loads for the car blob's 165 points — and buys nothing
-        // when there is no index range to respect. (Measured 15.6 µs vs 2.7 µs
-        // per blob in wasm, and every conformDecal ends in one of these.)
-        const auto ri = rcm.getInstance(m.entity);
-        if (!ri) return;
-        float3 lo{ 1e30f }, hi{ -1e30f };
-        for (const Vertex& v : m.verts) {
-            lo = min(lo, float3{ v.px, v.py, v.pz });
-            hi = max(hi, float3{ v.px, v.py, v.pz });
-        }
-        if (hi.x < lo.x) return;
-        rcm.setAxisAlignedBoundingBox(ri,
-                { (lo + hi) * 0.5f, max((hi - lo) * 0.5f, float3{ 1e-3f }) });
-    } else {
-        const size_t per = m.idx.size() / (m.chunks.size() + 1);
-        range(m.entity, 0, per);
-        for (size_t c = 0; c < m.chunks.size(); c++) range(m.chunks[c], (c + 1) * per, per);
-    }
-}
-
 void TtpRenderer::setMeshCulling(Mesh& m, bool enable) {
     if (m.entity.isNull()) return;
     auto& rcm = mEngine->getRenderableManager();
@@ -1243,22 +1201,29 @@ void TtpRenderer::setDressSheets(bool on) {
     applyDressSheets();
 }
 
+// THE sheet set, written once: applyDressSheets and tagFeatures are both
+// measurement instruments over exactly these meshes, and a sheet added to one
+// list but not the other makes an ablation arm silently stop covering it —
+// which reads as "this feature is free".
+void TtpRenderer::forEachDressSheet(const std::function<void(const Mesh&)>& fn) const {
+    for (const Mesh* m : { &mBoulders, &mLandmarks, &mWindmill, &mClutter }) fn(*m);
+    for (const Mesh& m : mSmoke) fn(m);
+    for (const Mesh& m : mSignMeshes) fn(m);
+}
+
 // Re-stated after every build as well as on the knob: a build adds the sheets
 // back, so the flag is the DESIRED state rather than a record of one edit.
 void TtpRenderer::applyDressSheets() {
     if (!mScene) return;
     const bool on = mDressSheets;
-    const auto show = [&](const Mesh& m) {
+    forEachDressSheet([&](const Mesh& m) {
         const auto one = [&](utils::Entity e) {
             if (e.isNull()) return;
             if (on) mScene->addEntity(e); else mScene->remove(e);
         };
         one(m.entity);
         for (const utils::Entity e : m.chunks) one(e);
-    };
-    for (const Mesh* m : { &mBoulders, &mLandmarks, &mWindmill, &mClutter }) show(*m);
-    for (const Mesh& m : mSmoke) show(m);
-    for (const Mesh& m : mSignMeshes) show(m);
+    });
 }
 
 void TtpRenderer::tagMesh(const Mesh& m, uint8_t bit) {
@@ -1287,10 +1252,9 @@ void TtpRenderer::tagFeatures() {
     meshes({ &mGround, &mHills, &mWater, &mWet, &mStructures, &mBerms,
              &mGroundShadows, &mGantry }, kFeatTerrain);
 
-    // Set dressing: everything scattered beside the track.
-    meshes({ &mBoulders, &mLandmarks, &mWindmill, &mClutter }, kFeatDressing);
-    meshVec(mSmoke, kFeatDressing);
-    meshVec(mSignMeshes, kFeatDressing);
+    // Set dressing: everything scattered beside the track. The sheets come
+    // through forEachDressSheet, the one statement of that set.
+    forEachDressSheet([&](const Mesh& m) { tagMesh(m, kFeatDressing); });
     instVec(mConeInstances, kFeatDressing);
     for (const auto& per : mSceneryInstances) instVec(per, kFeatDressing);
     for (const auto& per : mPropInstances) instVec(per, kFeatDressing);
@@ -1474,16 +1438,16 @@ MaterialInstance* TtpRenderer::sceneInstance(Material* m) {
     return mi;
 }
 
+int TtpRenderer::backendId() const {
+    return mEngine ? (int) mEngine->getBackend() : 0;
+}
+
 // Tear the scene down to bare engine + materials + provided bytes. The game
 // rebuilds through here on every race: a Grand Prix chains four tracks, and
 // even a restart on the SAME track wants the skid ribbons, kicked cones and
 // collected boxes back at their starting state. Everything below is scene
 // scope; the engine, swap chain, views, cameras, the three materials, the
 // glTF loaders and mAssets all survive.
-int TtpRenderer::backendId() const {
-    return mEngine ? (int) mEngine->getBackend() : 0;
-}
-
 void TtpRenderer::releaseScene() {
     if (!mEngine) return;
     const auto tRelease = std::chrono::steady_clock::now();
@@ -1658,8 +1622,6 @@ void TtpRenderer::releaseScene() {
     mCarBasisInv.clear();
     mRockets.clear();
     mRocketFlames.clear();
-    mPrevRockets.clear();
-    mPrevRocketCount = 0;
     for (Burst& b : mBursts) b = {};
     // The instances themselves are scene-scoped (sceneInstance), already
     // destroyed above — just drop the dangling handles.

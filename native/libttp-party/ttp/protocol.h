@@ -115,7 +115,6 @@ inline const std::vector<std::string> CAR_MODELS = {
     "vehicle-racer-low", "vehicle-speedster", "vehicle-racer", "vehicle-vintage-racer",
 };
 inline const std::vector<std::string> CAR_NAMES = {"Dash", "Bolt", "Carve", "Rumble"};
-inline const std::vector<double> CAR_MODEL_YAW = {0, 0, 0, 0};
 
 // One balanced car plus three specialists, each bad at exactly ONE stat; mass is
 // DERIVED from accel (protocol.js carMass: 1 + 3.3*(1 - accel), 2dp) so the

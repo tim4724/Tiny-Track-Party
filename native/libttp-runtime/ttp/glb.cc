@@ -25,10 +25,8 @@ void put_le32(uint8_t* p, uint32_t v) {
     p[3] = (uint8_t) ((v >> 24) & 0xFF);
 }
 
-// The JSON chunk's payload as text, or false when this is not a GLB whose first
-// chunk is JSON. Every length is checked against the buffer we were actually
-// handed rather than against the header's own claim: a truncated download is a
-// far likelier caller mistake here than a malicious file.
+}  // namespace
+
 bool json_chunk(const uint8_t* bytes, size_t len, std::string& out) {
     if (!bytes || len < kJsonPayloadStart) return false;
     if (le32(bytes) != kGlbMagic) return false;
@@ -38,8 +36,6 @@ bool json_chunk(const uint8_t* bytes, size_t len, std::string& out) {
     out.assign((const char*) bytes + kJsonPayloadStart, jsonLen);
     return true;
 }
-
-}  // namespace
 
 std::vector<uint8_t> ghost_glb(const uint8_t* bytes, size_t len) {
     std::string text;

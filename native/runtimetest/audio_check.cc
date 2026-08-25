@@ -48,6 +48,7 @@
 #include "ttp/audio.h"
 #include "ttp/canonical.h"
 #include "ttp/centerline.h"
+#include "ttp/contract.h"
 #include "ttp/game.h"
 #include "ttp/json_read.h"
 #include "ttp/race_session.h"
@@ -59,8 +60,6 @@ using namespace ttp::corpus;
 namespace au = ttp::rt::audio;
 
 namespace {
-
-const char* const MATHLIB = "fdlibm-openlibm-0.8.7";
 
 int cases = 0, passed = 0, spew = 0;
 

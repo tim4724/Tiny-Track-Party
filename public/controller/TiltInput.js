@@ -249,6 +249,10 @@ export class TiltInput {
     clearInterval(this._timer); this._timer = null;
     this._brakeBtn = 0;
     this._btnL = this._btnR = false; // a held ‹/› must not survive into the next race
+    // …and neither must a held key whose keyup the page missed (window blurred
+    // over race end): a stale _key/_brakeKey would steer/brake the next race.
+    this._keyL = this._keyR = false; this._key = 0;
+    this._brakeKey = 0;
     this._useCount = 0; // fresh race → restart the counter (display's useSeq resets too)
     this._actKeyDown = false; // clear held-key state so a missed keyup can't suppress the next race's first press
   }

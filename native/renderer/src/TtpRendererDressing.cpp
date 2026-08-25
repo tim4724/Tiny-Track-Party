@@ -1,6 +1,5 @@
-// Split from the original single-file TtpRenderer.cpp along its subsystem
-// seams; TtpRendererImpl.h carries what the topic files share. Pure code
-// motion — behaviour, member set and ABI are unchanged.
+// Trackside dressing: the scenery scatter, landmarks, water and clutter.
+// TtpRendererImpl.h carries what the topic files share.
 #include "TtpRendererImpl.h"
 #include "TtpRendererKit.h"
 
@@ -948,7 +947,11 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
                 0, 5.85f, -0.1f, 0xd94f3d);                            // masthead pennant
     }
 
-    if (has(ttp::rt::LM_HOODOO)) { // hoodoo — a balanced-rock family trackside (canyon)
+    // The whole block draws three-entry rock picks, and an empty (or short)
+    // rocks palette is a legal theme state (buildScenery guards it the same
+    // way) — skipping BEFORE any rnd() keeps the stream draws at zero.
+    if (has(ttp::rt::LM_HOODOO) && tb.scRocks.size() >= 3) {
+        // hoodoo — a balanced-rock family trackside (canyon)
         const uint32_t* rocks = tb.scRocks.data();
         const auto hoodoo = [&](float hx, float hz, float T) {
             const float radii[4] = { 0.20f * T, 0.15f * T, 0.115f * T, 0.095f * T };
@@ -1617,7 +1620,24 @@ void TtpRenderer::buildWater(const TrackBin& tb) {
                 + SHORE_WOBBLE * (0.5f + 0.5f * harm(SHORE_H, 4, shorePh, a))
                 + SHORE_CRINKLE * harm(CRINKLE_H, 3, crinklePh, a);
     };
-    mShoreFn = shoreAt; // the sailboat anchors off the same curve
+    // The sailboat anchors off the same curve — but from buildLandmarks, AFTER
+    // this function's stack is gone, so the stored copy must OWN what it
+    // reads: the support points and the phase arrays are copied in, and
+    // `harm` is captureless. (shoreAt itself stays by-reference for the SEG
+    // loop below.)
+    std::vector<float2> shorePts;
+    shorePts.reserve(tb.samples.size());
+    for (const auto& s : tb.samples) shorePts.push_back({ s.pos.x, s.pos.z });
+    mShoreFn = [pts = std::move(shorePts), shorePh, crinklePh, harm](float a) {
+        const float cx = std::cos(a), cz = std::sin(a);
+        float support = 0;
+        for (const float2& p : pts) {
+            support = std::max(support, p.x * cx + p.y * cz);
+        }
+        return support + SHORE_MARGIN
+                + SHORE_WOBBLE * (0.5f + 0.5f * harm(SHORE_H, 4, shorePh, a))
+                + SHORE_CRINKLE * harm(CRINKLE_H, 3, crinklePh, a);
+    };
     std::vector<float> cosA(SEG + 1), sinA(SEG + 1), shoreR(SEG + 1), swashF(SEG + 1);
     float outer = 0;
     for (int si = 0; si <= SEG; si++) {

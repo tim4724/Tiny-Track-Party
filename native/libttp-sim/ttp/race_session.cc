@@ -25,7 +25,6 @@ void RaceSession::startCountdown(int seconds) {
   // with 0; every real race counts from 3, which is why no one had seen it).
   if (seconds <= 0) {
     racing_ = true;
-    onRaceStart();
     raceMs_ = 0;
   }
 }
@@ -39,7 +38,6 @@ void RaceSession::stepCountdown(double dtMs) {
     if (onCountdownTick_) onCountdownTick_(countdown_->n);  // 2, 1, 0 (GO!), then -1 (clear)
     if (countdown_->n == 0) {
       racing_ = true;
-      onRaceStart();
       raceMs_ = 0;
     } else if (countdown_->n < 0) {
       countdown_.reset();

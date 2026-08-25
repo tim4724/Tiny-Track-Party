@@ -291,9 +291,10 @@ DYNAMICALLY-INDEXED UNIFORM READS in divergent flow, the declared-size law
 seen from the execution side. Nothing spellable inside a per-entry loop
 collects it; analytic shapes, texture formats and resolutions are all refuted
 with it. The one lever that
-converts is the rank gate itself: budget 0 at four cells puts every car on
-the blob (which crossfades, so nothing pops) and locks 768x432@60 — a LOOK
-trade, the user's to take.
+converts is the rank gate itself — a LOOK trade the user took:
+`kMaskedBlobCells` (`TtpRendererImpl.h`) zeroes the masked budget at four
+cells, every car rides the die-cut blob there (which crossfades, so nothing
+pops), and 4P locks 768x432@60.
 
 **Why painting in curvilinear (s, lat) is safe NOW when it was the original
 sin:** the old objection — track space bends the stamp around corners, and the

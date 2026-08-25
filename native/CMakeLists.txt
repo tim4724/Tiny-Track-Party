@@ -108,6 +108,9 @@ add_library(ttp_mathlib STATIC ${TTP_FDLIBM_SOURCES})
 target_include_directories(ttp_mathlib PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/vendor/fdlibm/include
   ${CMAKE_CURRENT_SOURCE_DIR}/vendor/fdlibm/src
+  # ttp_fd.h — the ONE declaration site for the renamed entry points; PUBLIC so
+  # it propagates to everything that links the mathlib.
+  ${CMAKE_CURRENT_SOURCE_DIR}/mathlib
 )
 foreach(rename ${TTP_FDLIBM_RENAMES})
   target_compile_definitions(ttp_mathlib PRIVATE ${rename})

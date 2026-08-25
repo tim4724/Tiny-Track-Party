@@ -1011,11 +1011,6 @@ jbyteArray n_ttp_schematic_points_json(JNIEnv* env, jclass, jbyteArray a0) {
     return toBytes(env, ttp_schematic_points_json(s0.get()));
 }
 
-jint n_ttp_schematic_view_size(JNIEnv* env, jclass) {
-    (void) env;
-    return (jint) ttp_schematic_view_size();
-}
-
 jint n_ttp_session_begin(JNIEnv* env, jclass, jbyteArray a0, jint a1, jint a2, jbyteArray a3) {
     CStr s0(env, a0);
     CStr s3(env, a3);
@@ -1443,7 +1438,6 @@ const JNINativeMethod kMethods[] = {
     { "ttp_room_transition_to", "(I[B)I", (void*) n_ttp_room_transition_to },
     { "ttp_schematic_pack", "([BD)[B", (void*) n_ttp_schematic_pack },
     { "ttp_schematic_points_json", "([B)[B", (void*) n_ttp_schematic_points_json },
-    { "ttp_schematic_view_size", "()I", (void*) n_ttp_schematic_view_size },
     { "ttp_session_begin", "([BII[B)I", (void*) n_ttp_session_begin },
     { "ttp_session_begin_field", "([BII[B[B[B)I", (void*) n_ttp_session_begin_field },
     { "ttp_session_start", "(II)V", (void*) n_ttp_session_start },

@@ -110,16 +110,6 @@ final class AssetStore {
         bundled("toycar/\(name).glb")
     }
 
-    /// The design-token bake — `public/shared/theme.css`'s `:root`, typed and
-    /// with aliases resolved, staged verbatim.
-    ///
-    /// `Tokens.swift` reads the same file through its own bundle lookup because
-    /// it is deliberately not `@MainActor` (a `ButtonStyle` body has to reach the
-    /// palette). This accessor is for anything that already holds the store.
-    func designTokens() -> Data? {
-        bundled("design-tokens.json")
-    }
-
     // MARK: - Origin
 
     /// Fetch `path` from the origin, once. `path` is what the web would request —

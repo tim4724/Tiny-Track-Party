@@ -285,9 +285,6 @@ input[type=text]:disabled { opacity: 0.6; }
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* Section heading row ("Car", "Track") — a small pill kicker. */
-.lobby-head { display: flex; align-items: baseline; gap: 0.55rem; margin: 0 0 0.55rem; }
-
 /* Car picker = a big HERO (selected car + stats) over a compact tap STRIP. */
 
 /* Card wrapper — wraps only #car-hero, which buildCarPicker rewrites. */
@@ -821,7 +818,7 @@ input[type=text]:disabled { opacity: 0.6; }
    means a thin/absent inset pushes the box into safe content rather than
    squeezing the text off the edge. Bare ink text + bolt, no pill: a boxed
    pill read as another button down among the controls. The good/ok/bad state
-   classes stay on the element (linkStatus.js) but paint nothing — the number
+   classes stay on the element (ui.js applyLatencyChip) but paint nothing — the number
    is the readout. The bolt only shows under .latency--fastlane (P2P
    DataChannel carrying the input/ping path). z 14: UNDER every frosted
    overlay (pause is the lowest at 15), so a covered screen scrims the number

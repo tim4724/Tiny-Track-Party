@@ -33,13 +33,6 @@ export function renderWaitNote(waitEl, { name, color } = {}, suffix) {
   waitEl.append(nameEl, suffix);
 }
 
-// Lobby footer — shared by the live phone (main.js) and the gallery preview
-// (TestHarness) so the button logic can't drift. Non-hosts toggle their own
-// readiness; the host gets a single "Start race" button, disabled until every
-// other connected player is ready (the display re-validates START_GAME, so
-// this gate is purely UX). `others` is every other NON-host connected player
-// as {name, color, ready}; `host` is {name, color} for the non-host waiting
-// note; `canStart` additionally gates the host until a track is picked.
 // "Motion sensor is blocked" popup copy — one source of truth for the live phone
 // (main.js refreshMotionPopup) and the gallery preview (TestHarness's
 // 'motion-blocked' case), keyed off tilt.motionState so the two can't drift. Returns
@@ -80,6 +73,18 @@ export function motionHelpCopy(state) {
   }
 }
 
+// The late joiner's footer note (their ready button is hidden) — one string for
+// the live lobby (main.js renderLobby) and the gallery preview (TestHarness
+// 'lobby-joining').
+export const NEXT_RACE_NOTE = 'You’re in the next race!';
+
+// Lobby footer — shared by the live phone (main.js) and the gallery preview
+// (TestHarness) so the button logic can't drift. Non-hosts toggle their own
+// readiness; the host gets a single "Start race" button, disabled until every
+// other connected player is ready (the display re-validates START_GAME, so
+// this gate is purely UX). `others` is every other NON-host connected player
+// as {name, color, ready}; `host` is {name, color} for the non-host waiting
+// note; `canStart` additionally gates the host until a track is picked.
 export function renderReadyFoot(btnEl, noteEl, { amHost, amReady, tab, canStart, host, others, backEl, starting }) {
   // A new NODE for a new face, so the relabelled button can never inherit an
   // in-flight press from the face before it — its release, its :active, or a

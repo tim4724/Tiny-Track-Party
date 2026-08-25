@@ -21,8 +21,8 @@
 // FLOATING POINT. The projection is JS Number arithmetic and rounds through
 // Number.prototype.toFixed, which is NOT printf: toFixed picks the integer n
 // minimizing |n/10^f - x| and breaks ties AWAY from zero, which is exactly
-// double-conversion's ToFixed (the same code V8 runs). js_fixed below is that
-// call, and the round trip back through strtod reproduces JS's `+(x).toFixed(1)`
+// double-conversion's ToFixed (the same code V8 runs). js_fixed in schematic.cc
+// is that call, and the round trip back through strtod reproduces JS's `+(x).toFixed(1)`
 // bit for bit. No transcendental appears here except sqrt, which is exact per
 // IEEE-754, and hypot on the degenerate-chord path.
 //
@@ -95,24 +95,11 @@ std::string pack(const std::string& d, double eps = EPS);
 // `start` is just the first point, so neither is transmitted.
 Schematic unpack(const std::string& b64);
 
-// ---- the pieces, exposed for the conformance check ---------------------------
-
-// Number.prototype.toFixed(digits) followed by the implicit ToNumber the JS
-// does (`+x.toFixed(1)`), i.e. the value snapped to `digits` decimals.
-double js_fixed(double v, int digits);
-
-// The path text of a schematic's points, in JS's exact spelling: "M" then the
-// first pair, " L" before each later pair, a space between x and y, numbers
-// through Number::toString, and a trailing " Z".
-std::string path_of(const std::vector<Point>& pts);
-
-// The inverse — the reader pack() runs over a path.
+// A path's points back out of its "M x y L x y ... Z" text. Exposed because two
+// callers outside this module read paths: the conformance check
+// (tracktest/schematic_check.cc) and the ABI's ttp_schematic_points_json, which
+// parses `d` for the shells that cannot hand it to an SVG attribute.
 std::vector<Point> points_of(const std::string& d);
-
-// Ramer-Douglas-Peucker on an OPEN polyline (both endpoints fixed: the loop's
-// start point is meaningful, it is the grid). Iterative, so a pathological
-// track cannot blow a stack.
-std::vector<Point> rdp(const std::vector<Point>& pts, double eps);
 
 }  // namespace schematic
 }  // namespace ttp

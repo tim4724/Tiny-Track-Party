@@ -95,10 +95,6 @@ Value manifest() {
   for (const auto& c : CAR_NAMES) names.push(Value::Str(c));
   m.set("CAR_NAMES", std::move(names));
 
-  Value yaw = Value::Arr();
-  for (double y : CAR_MODEL_YAW) yaw.push(Value::Num(y));
-  m.set("CAR_MODEL_YAW", std::move(yaw));
-
   Value stats = Value::Arr();
   for (const auto& s : CAR_STATS) stats.push(carStatValue(s));
   m.set("CAR_STATS", std::move(stats));

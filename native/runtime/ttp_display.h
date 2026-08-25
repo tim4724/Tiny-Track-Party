@@ -526,7 +526,7 @@ TTP_ABI void ttp_display_cells(const char* idsJson);
  * four of the safe rect, TOP-LEFT origin — and returns how many CELLS it wrote:
  * min(cells, maxCells), or 0 when no car owns one (out null, or
  * ttp_display_cells empty/never called). Neither an int PREDICATE nor an OUTCOME
- * (ttp_abi.h): a COUNT, like ttp_room_size and ttp_room_connected_count.
+ * (ttp_abi.h): a COUNT.
  *
  * UNITS ARE FRACTIONS OF THE SURFACE, 0..1 — x and w of its width, y and h of
  * its height. A shell multiplies by whatever it lays out in: CSS pixels in a
@@ -753,8 +753,9 @@ TTP_ABI const char* ttp_display_profile_names(void);
  * ways with it. */
 TTP_ABI double ttp_display_gpu_ms(void);
 
-/* DEBUG: the deck decals packed for the road material last frame, as JSON
- * [{s,lat,halfS,halfLat,r,g,b,a,inner,ellipse,knee}]. Exists because a wrong
+/* DEBUG: the deck decals packed for the road material last frame, as a JSON
+ * array of one object per decal — the keys and their per-key caveats live on
+ * ttp_display_debug_decals in ttp_display_core.cc. Exists because a wrong
  * lateral coordinate survived several rounds of colour-coded shader probes —
  * reading the actual floats and comparing them against the car's own position
  * is one arithmetic check instead of a guess. */

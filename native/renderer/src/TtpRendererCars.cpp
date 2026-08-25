@@ -1,6 +1,5 @@
-// Split from the original single-file TtpRenderer.cpp along its subsystem
-// seams; TtpRendererImpl.h carries what the topic files share. Pure code
-// motion — behaviour, member set and ABI are unchanged.
+// The car field: slot bodies and the body pool, ghosts, mask layers and the
+// merged draws. TtpRendererImpl.h carries what the topic files share.
 #include "TtpRendererImpl.h"
 
 #include <utils/Log.h>
@@ -637,10 +636,7 @@ void TtpRenderer::buildCarGhost(uint32_t c) {
         tcmG.setTransform(wi, local);
     }
     mCarGhostAssets[c] = ga;
-    if (mStbProvider) {
-        mStbProvider->waitForCompletion();
-        mResourceLoader->asyncUpdateLoad();
-    }
+    pumpTextures();
 }
 
 // Regroup the whole field into merged draws: per MODEL (the bytes are the

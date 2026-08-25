@@ -291,8 +291,6 @@ void ttp_room_store_field(int roomHandle, Value field) {
   if (rh) rh->field = std::move(field);
 }
 
-// ---- liveness ---------------------------------------------------------------
-
 // ---- provider setters -------------------------------------------------------
 
 void ttp_room_set_master(int h, const char* peerIdJson) {

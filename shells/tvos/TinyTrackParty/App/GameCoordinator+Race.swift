@@ -122,14 +122,21 @@ extension GameCoordinator {
 
     // MARK: - The scene
 
-    func rebuildScene() {
-        let roster = sceneCars.map {
+    /// `sceneCars` as the display's roster — ONE spelling of the livery/model
+    /// fallback rule, shared by the full rebuild here and the lobby's in-place
+    /// redress so the two paths cannot dress the same car differently.
+    func sceneRoster() -> [RosterSlot] {
+        sceneCars.map {
             RosterSlot(id: $0.id,
                        name: $0.name,
                        carIndex: $0.carIndex ?? 0,
                        color: proto.carColors[safe: $0.colorIndex] ?? "",
                        model: proto.carModels[safe: $0.carIndex ?? 0] ?? proto.carModels[0])
         }
+    }
+
+    func rebuildScene() {
+        let roster = sceneRoster()
         // The cells are the cars that own a split-screen view, in roster order —
         // which IS cell order, and is the only place that mapping exists.
         display.setCells(sceneCars.filter(\.cell).map(\.id))

@@ -41,7 +41,6 @@ function makeVariantRow(cue, variant) {
     slider.min = '0'; slider.max = '100'; slider.value = '30';
     slider.className = 'sound-speed';
     slider.title = 'Pack speed';
-    play.textContent = '▶ ' + variant.label;
     play.addEventListener('click', () => {
       // One live voice per cue: stop whichever variant is running (resetting
       // ITS button), and only start this one if it wasn't the one playing.

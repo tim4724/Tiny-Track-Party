@@ -62,8 +62,10 @@ struct DisplayCore : DisplayState {
         // straight back, and `wrote` drops the entry.
         std::vector<BlobOutbound> outbound;
     };
-    // One per store, indexed as ttp_display_blob_stores lists them.
-    BlobWalk blobWalk[2];
+    // One per store, indexed as ttp_display_blob_stores lists them; the
+    // static_assert beside kBlobStores pins the count to that list.
+    static constexpr int kBlobStoreCount = 2;
+    BlobWalk blobWalk[kBlobStoreCount];
 };
 
 // The process-wide display slot — the ABI is a deliberate singleton (see

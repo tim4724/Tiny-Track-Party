@@ -247,9 +247,10 @@ struct RenderScaleFit {
   double fillMs;    // cost at scale 1.0 on top of `fixedMs`
 };
 
-// The last observation at a DIFFERENT scale, held by the shell exactly as
-// presentFloorMs is: it is a MEASUREMENT, and which samples may become one is
-// still decided here. scale <= 0 means "none yet".
+// The last observation at a DIFFERENT scale, held by RenderScaleController
+// exactly as the running fastest present is (shells hold nothing): it is a
+// MEASUREMENT, and which samples may become one is still decided here.
+// scale <= 0 means "none yet".
 struct RenderScaleSample {
   double scale;
   double costMs;
@@ -296,29 +297,6 @@ inline double predictMs(const RenderScaleFit& f, double scale) {
 inline bool hasPrevObservation(RenderScaleSample prev) {
   return prev.scale > 0.0 && prev.costMs > 0.0;
 }
-
-// The most operating points a surface can offer: every ladder rung that fits
-// under the ceiling, the ceiling itself, and the rate step above the anchor.
-// Sizes the caller's array AND the recovery window below, so the two cannot
-// disagree about how long the ladder is.
-// Rungs, plus the rate step above the anchor, plus the floor escape below the
-// bottom rung, plus the split's sub-floor rungs above the escape.
-inline constexpr int kScaleMaxPoints = kScaleLadderCount + 3
-        + 3 /* kScaleSplitLadderCount — declared below the ladder it extends */;
-
-// How long after a scene build the up-hold stays short (kScaleUpRecoverHoldSec
-// has the why). DERIVED, because what it has to cover is the longest climb the
-// list can ask for — bottom to top is one step short of the point count, at one
-// step per evidence window — and a window shorter than that strands the last
-// steps behind a lap-sized hold, which is most of the problem it exists to fix.
-//
-// COUNT THE OPERATING POINTS, NOT THE RUNGS. It was the rungs once, and that was
-// already wrong by two the moment the list grew a ceiling entry and a rate step:
-// 5 rungs read as a 4 s window while a 120 Hz panel's list needs 6 steps, so the
-// top of the climb sat behind the 28 s hold on exactly the panels the rate step
-// was added for.
-inline constexpr double kScaleRecoverSec =
-        (double) (kScaleMaxPoints - 1) * kScaleUpRecoverHoldSec;
 
 // The rungs this surface actually offers, ascending, as SCALES: every ladder
 // line count that fits the band, then the ceiling itself. Native is always the
@@ -436,7 +414,31 @@ inline constexpr int kScaleEscapeCells = 3;
 // a 4/9 ratio — if its scaling ever bands visibly, drop it from this list
 // before softening anything else.
 inline constexpr double kScaleSplitLadder[] = {360.0, 432.0, 480.0};
-inline constexpr int kScaleSplitLadderCount = 3;
+inline constexpr int kScaleSplitLadderCount =
+    (int) (sizeof(kScaleSplitLadder) / sizeof(kScaleSplitLadder[0]));
+
+// The most operating points a surface can offer: every ladder rung that fits
+// under the ceiling, the ceiling itself, and the rate step above the anchor.
+// Sizes the caller's array AND the recovery window below, so the two cannot
+// disagree about how long the ladder is.
+// Rungs, plus the rate step above the anchor, plus the floor escape below the
+// bottom rung, plus the split's sub-floor rungs above the escape.
+inline constexpr int kScaleMaxPoints =
+        kScaleLadderCount + 3 + kScaleSplitLadderCount;
+
+// How long after a scene build the up-hold stays short (kScaleUpRecoverHoldSec
+// has the why). DERIVED, because what it has to cover is the longest climb the
+// list can ask for — bottom to top is one step short of the point count, at one
+// step per evidence window — and a window shorter than that strands the last
+// steps behind a lap-sized hold, which is most of the problem it exists to fix.
+//
+// COUNT THE OPERATING POINTS, NOT THE RUNGS. It was the rungs once, and that was
+// already wrong by two the moment the list grew a ceiling entry and a rate step:
+// 5 rungs read as a 4 s window while a 120 Hz panel's list needs 6 steps, so the
+// top of the climb sat behind the 28 s hold on exactly the panels the rate step
+// was added for.
+inline constexpr double kScaleRecoverSec =
+        (double) (kScaleMaxPoints - 1) * kScaleUpRecoverHoldSec;
 
 struct RenderScalePoint {
   double scale;
@@ -530,17 +532,20 @@ struct RenderScaleCost {
   // had chosen. It is also what makes the cost model survive a rate change.
   double gpuP95Ms;
   int gpuFrames;
-  // p95 frame interval and how many frames it was taken over, plus the fastest
-  // present seen SO FAR — presentBaseline's running answer, which the shell
-  // stores and hands back (see it for why the caller keeps that one number).
+  // p95 frame interval and how many frames it was taken over, plus the bar
+  // lateness is judged against: the running fastest present (presentBaseline's
+  // answer, which RenderScaleController keeps) TIMES the operating point's
+  // divisor — the cadence the rule chose, not the panel's raw period. The call
+  // site in render_scale_controller.cc has the why.
   double presentP95Ms;
   double presentFloorMs;
   int presentFrames;
 };
 
-// The device's own fastest present, folded one window at a time. The shell keeps
-// the running value and passes it back in; it is a MEASUREMENT, not a decision,
-// which is why it is the one piece of state that lives out there.
+// The device's own fastest present, folded one window at a time.
+// RenderScaleController keeps the running value and passes it back in (shells
+// hold nothing); it is a MEASUREMENT, not a decision, which is why it lives in
+// the caller's state rather than being re-derived here.
 //
 // It has to outlive the stats window, and that is the whole subtlety of the
 // fallback signal. A ratio taken inside one window is blind to the case it

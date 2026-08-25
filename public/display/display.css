@@ -1,7 +1,8 @@
 /* Display — big shared screen. "Sticker Bash" look.
    Tokens + reusable bits live in /shared/theme.css; this file is layout +
-   display-only composition. Class/ID names are contracted with display/main.js
-   and SceneRenderer.js — don't rename without updating those. */
+   display-only composition. Class/ID names are contracted with display/main.js,
+   Stage.js and the render modules beside them — don't rename without updating
+   those. */
 
 html, body {
   margin: 0; height: 100%;

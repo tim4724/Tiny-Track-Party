@@ -39,8 +39,6 @@
 
 using namespace ttp;
 
-static const char* MATHLIB = "fdlibm-openlibm-0.8.7";
-
 // ---------------------------------------------------------------------------
 // Flat stats parsing (ids parse via ttp/scalar_id.h).
 // ---------------------------------------------------------------------------
@@ -1653,8 +1651,6 @@ const char* ttp_schematic_pack(const char* pathD, double eps) {
                              eps > 0 ? eps : ttp::schematic::EPS);
   return out.c_str();
 }
-
-int ttp_schematic_view_size(void) { return ttp::schematic::VIEW; }
 
 const char* ttp_schematic_points_json(const char* pathD) {
   static std::string out;

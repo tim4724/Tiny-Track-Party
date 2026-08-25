@@ -176,7 +176,10 @@ export class PerfHud {
     this._ctx = scope.getContext('2d');
     this._ctx.scale(2, 2);
 
+    const editable = (t) => !!t && (t.isContentEditable ||
+      t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT');
     window.addEventListener('keydown', (e) => {
+      if (editable(e.target)) return; // don't hijack a 'p' typed into the debug panel
       if (e.key === 'p' || e.key === 'P') this.toggle();
     });
   }
@@ -311,8 +314,8 @@ export class PerfHud {
     this._flush();
   }
 
-  // This frame's CPU cost, from Display.profile(). Called after the frame so the
-  // numbers are the ones the renderer just posted.
+  // This frame's CPU cost, from Display.profileTotal(). Called after the frame
+  // so the number is the one the renderer just posted.
   cpu(ms) {
     if (!this._measuring || ms == null || !this._hold.length) return;
     this._hold[this._hold.length - 1].cpu = ms;   // the frame tick() just opened

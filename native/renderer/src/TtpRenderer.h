@@ -1460,8 +1460,6 @@ private:
     static constexpr float kAmbR = 170.0f;  // the flake-floor grid's half-span
     static constexpr int kAmbFloorN = 86;   // ~4u cells across it
     static constexpr float kAmbBox = 60.0f; // the camera box's x/z extent
-    std::vector<filament::math::float3> mPrevRockets;
-    uint32_t mPrevRocketCount = 0;
     filament::math::float3 mLastCar0{}; // reset/teleport detector: first...
     filament::math::float3 mLastCarN{}; // ...and last car — both must jump
     utils::Entity mSun;
@@ -1900,6 +1898,7 @@ public:
     void setDressKeep(float frac);
     void setDressSheets(bool on);
     void applyDressSheets();
+    void forEachDressSheet(const std::function<void(const Mesh&)>& fn) const;
     void debugWipeSkids() { mSkidWipe = true; }
     // Force every masked stamp onto ONE mask layer, or −1 to leave each car on
     // its own. kMaskLayerGeneric is the generic superellipse, a shape correct
@@ -1995,12 +1994,9 @@ private:
     void tagEntities(const utils::Entity* e, size_t n, uint8_t bit);
     void tagMesh(const Mesh& m, uint8_t bit);
     void applyRoadDebug();
-    // Frustum culling, off by default (buildMesh): a mesh whose vertices are
-    // rewritten in WORLD space every frame — the billboards, the burst pools —
-    // outlives its build-time bounds, so only meshes that stay put (or move by
-    // transform) may opt in.
+    // Frustum culling, on by default (buildMesh): opt OUT for meshes the
+    // shader expands past their build-time bounds (the burst ring).
     void setMeshCulling(Mesh& m, bool enable);
-    void refreshBounds(Mesh& m);
     void setShadows(const utils::Entity* e, size_t n, bool cast, bool receive);
     // Add/remove from mScene, edge-triggered. The idiomatic way to hide
     // something in Filament: a parked transform still costs a prepare slot per

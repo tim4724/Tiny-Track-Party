@@ -300,13 +300,19 @@ test('a real sample resolves granted immediately, without paying the settle wind
   });
 });
 
-test('stop() resets brake + ACTION state so the next race cannot inherit a stale press', () => {
+test('stop() resets brake + ACTION + keyboard state so the next race cannot inherit a stale press', () => {
   const t = new TiltInput({});
   t.setActionEnabled(true);
   t.pressAction(); t.pressBrake(true);
+  // A held ArrowLeft + Space whose keyup the page missed (window blurred over
+  // race end). Set directly: headless Node never binds the key listeners.
+  t._keyL = true; t._key = -1; t._brakeKey = 1;
   assert.ok(t._useCount > 0 && t._brakeBtn > 0, 'state is set mid-race');
   t.stop();
   assert.equal(t._useCount, 0, 'use-counter reset on stop');
   assert.equal(t._brakeBtn, 0, 'brake reset on stop');
   assert.equal(t._actKeyDown, false, 'held-key flag cleared on stop');
+  assert.equal(t._key, 0, 'keyboard steer cleared on stop — a missed keyup must not steer the next race');
+  assert.equal(t._keyL, false, 'held-key steer flag cleared on stop');
+  assert.equal(t._brakeKey, 0, 'keyboard brake cleared on stop');
 });

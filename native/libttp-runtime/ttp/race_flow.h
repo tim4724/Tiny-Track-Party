@@ -281,11 +281,10 @@ std::string demoSig(const std::vector<DemoEntry>& field, const std::string& trac
 
 // ---- the series behind a start ----------------------------------------------
 
-struct Cup {
-  std::string id;
-  std::string name;
-  std::vector<std::string> tracks;
-};
+// The lobby card's cup row, shared rather than mirrored — this layer reads
+// only id/name/tracks, and ui::Cup's extra `color` is a picker concern it
+// never touches.
+using Cup = ui::Cup;
 
 // What Start commits to, as a DESCRIPTOR the shell hands to CupSeries — never a
 // series object, because constructing one is the shell's job and this layer

@@ -863,12 +863,13 @@ function renderReconnect(seats) {
 // race results in flight (endRace's callback argument) and the launch's field,
 // which `create-session` needs and `set-field` has already delivered.
 //
-// `ctx.results` IS LOAD-BEARING AND UNTYPED. Three ops read it — 'apply-race-points',
-// 'show-results' and the final 'broadcast-standings' — and all three are emitted
-// only by the layer's endRace(), which only main.js's endRace() performs, and it
-// always passes {results}. Nothing enforces that pairing. If one of those ops
-// ever starts being emitted from another entry point, give it its own carrier
-// rather than hoping the context happens to be populated.
+// `ctx.results` IS LOAD-BEARING AND UNTYPED. Two ops read it — 'show-results'
+// and the final 'broadcast-standings' (points banking moved inside the walk's
+// executor) — and both are emitted only by the layer's endRace(), which only
+// main.js's endRace() performs, and it always passes {results}. Nothing
+// enforces that pairing. If one of those ops ever starts being emitted from
+// another entry point, give it its own carrier rather than hoping the context
+// happens to be populated.
 function perform(effects, ctx = {}) {
   for (const e of effects) applyEffect(e, ctx);
 }
@@ -1020,13 +1021,6 @@ function applyEffect(e, ctx) {
 }
 
 // ---- race lifecycle ----
-// START_GAME gate: the host's "Start race" button is only enabled once every
-// other player is ready (controller-side renderReadyFoot); re-checked here so
-// a stale or forged START_GAME can't jump the lobby. The host themselves never
-// readies — their start IS the commitment.
-
-
-
 // The launch knobs the walks cannot know: a fresh seed per race (page RNG —
 // the display is the sole authority, so minting it here keeps the engine
 // deterministic from the seed while the rolls vary game-to-game), the E2E
@@ -1360,26 +1354,24 @@ if (!_isTestMode) wakeLock.enable();
 
 // Gallery / test mode: any ?scenario=… skips the relay and lets the
 // TestHarness drive a single screen from fake data. Normal play connects.
-const _params = new URLSearchParams(location.search);
-const _scenario = _params.get('scenario');
+const _scenario = _trackParams.get('scenario');
 if (_scenario) {
   dismissDeviceChoice(); // gallery iframes are small — keep the chooser away
   // Which backdrop each scenario gets (diorama vs the 3D scene) is the
   // harness's call, in ONE place next to the scenarios — see runDisplayScenario.
-  const _scn = _scenario;
   const _int = (v, def) => { const n = parseInt(v, 10); return isNaN(n) ? def : n; };
   import('./TestHarness.js').then(({ runDisplayScenario }) => runDisplayScenario(
     {
-      scenario: _scn,
-      players: _int(_params.get('players'), 4),
-      host: _params.get('host') === null ? null : _int(_params.get('host'), 0),
-      picked: _params.get('picked') || false,  // lobby scenario: post-pick chrome ('cup'|'track'|'random'; legacy '1' = cup)
+      scenario: _scenario,
+      players: _int(_trackParams.get('players'), 4),
+      host: _trackParams.get('host') === null ? null : _int(_trackParams.get('host'), 0),
+      picked: _trackParams.get('picked') || false,  // lobby scenario: post-pick chrome ('cup'|'track'|'random'; legacy '1' = cup)
       // ?seed=: the race's item/wander seed. Harness races are otherwise pinned to
       // ONE seed (NativeRaceSession's default), so every take of a preview is the
       // same take — fine for a gallery card, useless for a capture that wants a
       // choice of takes. Naming a seed re-rolls the whole race; the trailer rig
       // scouts seeds this way and then pins the number it liked.
-      seed: _params.get('seed') === null ? null : _int(_params.get('seed'), 1)
+      seed: _trackParams.get('seed') === null ? null : _int(_trackParams.get('seed'), 1)
     },
     // `built` is the track catalogue as entries — the chained-start preview is
     // the one scenario that shows a SECOND circuit, so it needs to name one.
@@ -1392,7 +1384,7 @@ if (_scenario) {
   // through the lobby (not the test harness) keeps that path identical to live play.
   dismissDeviceChoice(); // dev surface — never block it on the chooser
   show('lobby');
-  renderRoster([], null);
+  renderRoster(0, null);
   updateBackdrop();
   import('./DebugSolo.js').then(({ DebugSolo }) => {
     debugSolo = new DebugSolo({
@@ -1425,7 +1417,7 @@ if (_scenario) {
   // it — the already-visible chrome re-slapping is what a mid-boot click must
   // NOT cause.
   if (newGameClicked) newGameClick();
-  renderRoster([], null); // paint the open-seat placeholders now, so the lobby reveal is complete
+  renderRoster(0, null); // paint the open-seat placeholders now, so the lobby reveal is complete
   updateBackdrop();       // diorama until the host picks a track (then the 3D preview)
   startWhenDeviceChosen(() => net.start()); // warms the room BEHIND the welcome board, gated on the device chooser where it shows
 

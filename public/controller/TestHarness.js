@@ -9,8 +9,9 @@ import { buildModePicker } from '../shared/trackPicker.js';
 import { TRACK_LIST } from '../shared/tracks.js';
 import { TRACK_SCHEMATICS } from '../shared/trackSchematics.js';
 import { packSchematic, unpackSchematic } from '../shared/schematicCodec.js';
-import { applyLatencyChip, renderReadyFoot, motionHelpCopy } from './ui.js';
+import { applyLatencyChip, renderReadyFoot, motionHelpCopy, NEXT_RACE_NOTE } from './ui.js';
 import { renderResultsBoard } from './resultsBoard.js';
+import { linkCopy, showConn } from './linkStatus.js';
 import { setInputMode } from './driveSurface.js';
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
@@ -44,8 +45,6 @@ export function runControllerScenario(opts) {
   // the car-picker tiles).
   const myColor = COLORS[color % COLORS.length];
   document.documentElement.style.setProperty('--car', myColor);
-
-  window.__TEST__ = window.__TEST__ || {};
 
   // Car picker — the real shared layout (hero preview + stats + tap strip). Taps
   // re-render so the gallery shows the selection updating the big preview live.
@@ -307,7 +306,7 @@ export function runControllerScenario(opts) {
       renderCarPicker(color);
       renderModePicker(null, false);
       el('ready-btn').classList.add('hidden');
-      el('ready-note').textContent = 'You’re in the next race!'; // keep in sync with main.js renderLobby
+      el('ready-note').textContent = NEXT_RACE_NOTE;
       break;
 
     case 'countdown':
@@ -431,23 +430,19 @@ export function runControllerScenario(opts) {
     case 'conn-lost':
     case 'conn-screen-gone':
     case 'conn-replaced': {
-      // Connection overlay terminal states (copy mirrors main.js's onStatus
-      // handlers), previewed over the drive HUD — the mid-race drop is the
-      // case the overlay exists for. All three show the "Exit to start"
-      // escape hatch; only 'lost' also offers a manual retry.
+      // Connection overlay terminal states, previewed over the drive HUD — the
+      // mid-race drop is the case the overlay exists for. Rendered through the
+      // LIVE copy + overlay (linkCopy/showConn), the same pair main.js's
+      // onStatus uses, so the gallery can't drift from the real text.
       showDriveHud();
       setSteer(0);
       setHudName();
-      const [title, msg, retry] = {
-        'conn-lost': ['Connection lost', 'Scan the QR on the big screen to take your seat back — or try again here.', true],
-        'conn-screen-gone': ['Waiting for the big screen…', 'The host’s screen dropped — hang tight, it’ll reconnect you.', false],
-        'conn-replaced': ['Opened on another tab', 'This seat is now controlled from another tab or device.', false]
+      const state = {
+        'conn-lost': 'lost',
+        'conn-screen-gone': 'display_gone',
+        'conn-replaced': 'replaced'
       }[scenario];
-      el('conn-title').textContent = title;
-      el('conn-msg').textContent = msg;
-      el('conn-retry').classList.toggle('hidden', !retry);
-      el('conn-leave').classList.remove('hidden');
-      el('conn').classList.remove('hidden');
+      showConn(linkCopy(state).conn);
       break;
     }
 

@@ -7,6 +7,9 @@ export = PartyFastlane;
 declare class PartyFastlane {
   constructor(options?: PartyFastlane.Options);
 
+  /** Resend cadence (ms) while the ring holds unacked events. */
+  static TICK_MS: number;
+
   selfIndex: number | null;
 
   setSelfIndex(idx: number): void;
@@ -15,8 +18,12 @@ declare class PartyFastlane {
   open(peerIdx: number, opts?: any): Promise<void>;
   close(peerIdx: number): void;
   closeAll(): void;
-  /** Enqueue an input event to a peer over the data channel. */
-  enqueue(peerIdx: number, ev: any): void;
+  /**
+   * Enqueue an input event to a peer over the data channel: 'p2p' when it
+   * entered the send ring, 'dropped' when the channel isn't open (fall back
+   * to the relay).
+   */
+  enqueue(peerIdx: number, ev: any): 'p2p' | 'dropped';
   isOpen(peerIdx: number): boolean;
   getStats(peerIdx: number): any;
   getAllStats(): any;
@@ -35,6 +42,10 @@ declare namespace PartyFastlane {
     onPeerClosed?: (peerIdx: number) => void;
     onConnectionState?: (peerIdx: number, state: string) => void;
     onRtt?: (peerIdx: number, rttHalfMs: number) => void;
+    /** The peer CONFIRMED applying this payload (es = its event seq). */
+    onAcked?: (peerIdx: number, ev: any, es: number) => void;
     emitIdleHeartbeat?: boolean;
+    /** Cap on the resend ring (1 = latest-only). Default: unbounded. */
+    maxRing?: number;
   }
 }

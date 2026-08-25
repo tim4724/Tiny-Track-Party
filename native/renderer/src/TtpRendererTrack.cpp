@@ -1,6 +1,5 @@
-// Split from the original single-file TtpRenderer.cpp along its subsystem
-// seams; TtpRendererImpl.h carries what the topic files share. Pure code
-// motion — behaviour, member set and ABI are unchanged.
+// The track scene build: terrain, ground sheet, road chunks, gantry and the
+// hill ring. TtpRendererImpl.h carries what the topic files share.
 #include <chrono>
 #include <utility>
 
@@ -556,6 +555,48 @@ float3 TtpRenderer::groundColorAt(float x) const {
     return mGroundBands.back().col;
 }
 
+namespace {
+// The per-biome ground band palette, stated ONCE for its two consumers:
+// buildGroundTexture rasterizes the bands into the tiled canvas, and
+// buildTrackScene's mGroundBands feed groundColorAt — whose contract is to
+// answer the band that canvas would put there, so the two must agree and both
+// read this table. Each keeps its own arithmetic (8-bit lround for texels,
+// srgbChannel floats for bands); the texture-only extras (the wood's end
+// joints) stay in buildGroundTexture.
+struct GroundPalette {
+    int bands;                       // band count across one tile
+    uint32_t base;                   // base colour, sRGB hex
+    void (*factor)(int i, float* f); // per-band rgb factors
+};
+const GroundPalette& groundPalette(uint32_t kind) {
+    static const GroundPalette sand{ 10, 0xdec896, // gentle wind ripples
+            [](int i, float* f) { f[0] = f[1] = f[2] = (i % 2) ? 1.03f : 0.975f; } };
+    static const GroundPalette redrock{ 8, 0xd39671, // sediment strata (a hue wobble)
+            [](int i, float* f) {
+                const bool rust = i % 2;
+                f[0] = rust ? 1.008f : 0.997f;
+                f[1] = rust ? 0.972f : 1.024f;
+                f[2] = rust ? 0.958f : 1.036f;
+            } };
+    static const GroundPalette snow{ 10, 0xedf2f7, // whisper-contrast drift banding
+            [](int i, float* f) { f[0] = f[1] = f[2] = (i % 2) ? 1.012f : 0.988f; } };
+    static const GroundPalette wood{ 8, 0xc99c68,  // planks: per-board tone
+            [](int i, float* f) { f[0] = f[1] = f[2] = 0.96f + ((i * 37) % 5) * 0.02f; } };
+    static const GroundPalette lawn{ 8, LAWN_SRGB, // mowing stripes
+            [](int i, float* f) { f[0] = f[1] = f[2] = (i % 2) ? 1.04f : 0.965f; } };
+    switch (kind) {
+        case 1: return sand;
+        case 2: return redrock;
+        case 3: return snow;
+        case 4: return wood;
+        default: return lawn;
+    }
+}
+// The wood seam ink, stroked between planks by both consumers.
+constexpr uint32_t kWoodSeamInk = 0x604228;
+constexpr float kWoodSeamAlpha = 0.55f;
+} // namespace
+
 // The biome's floor canvas, from textures.js: N vertical bands of a per-kind
 // luminance/hue wobble over a base colour. The JS also stamped a per-kind
 // speckle pass; it is deliberately GONE — sub-pixel from the race rig, and
@@ -601,49 +642,24 @@ Texture* TtpRenderer::buildGroundTexture(uint32_t kind) {
             band((int) std::floor((float) i * S / n), (int) std::ceil((float) S / n), rgb);
         }
     };
-    switch (kind) {
-        case 1: { // sand — gentle wind ripples
-            const int base[3] = { 222, 200, 150 };
-            sweep(10, base, [](int i, float* f) { f[0] = f[1] = f[2] = (i % 2) ? 1.03f : 0.975f; });
-            break;
+    const GroundPalette& pal = groundPalette(kind);
+    const int base[3] = { (int) ((pal.base >> 16) & 0xff),
+                          (int) ((pal.base >> 8) & 0xff), (int) (pal.base & 0xff) };
+    sweep(pal.bands, base, pal.factor);
+    if (kind == 4) { // wood — the texture-only extras over the plank bands
+        const int BOARDS = pal.bands;
+        const float bw = (float) S / BOARDS;
+        const int ink[3] = { (int) ((kWoodSeamInk >> 16) & 0xff),
+                             (int) ((kWoodSeamInk >> 8) & 0xff), (int) (kWoodSeamInk & 0xff) };
+        // Board seams: a 2px dark line stroked between planks…
+        for (int i = 1; i < BOARDS; i++) {
+            blend((int) std::floor(i * bw) - 1, 0, 2, S,
+                    ink[0], ink[1], ink[2], kWoodSeamAlpha);
         }
-        case 2: { // redrock — sediment strata (a hue wobble)
-            const int base[3] = { 211, 150, 113 };
-            sweep(8, base, [](int i, float* f) {
-                const bool rust = i % 2;
-                f[0] = rust ? 1.008f : 0.997f;
-                f[1] = rust ? 0.972f : 1.024f;
-                f[2] = rust ? 0.958f : 1.036f;
-            });
-            break;
-        }
-        case 3: { // snow — whisper-contrast drift banding
-            const int base[3] = { 237, 242, 247 };
-            sweep(10, base, [](int i, float* f) { f[0] = f[1] = f[2] = (i % 2) ? 1.012f : 0.988f; });
-            break;
-        }
-        case 4: { // wood — planks: per-board tone, seams, end joints, knots
-            constexpr int BOARDS = 8;
-            const int base[3] = { 201, 156, 104 };
-            const float bw = (float) S / BOARDS;
-            sweep(BOARDS, base, [](int i, float* f) {
-                f[0] = f[1] = f[2] = 0.96f + ((i * 37) % 5) * 0.02f;
-            });
-            // Board seams: a 2px dark line stroked between planks…
-            for (int i = 1; i < BOARDS; i++) {
-                blend((int) std::floor(i * bw) - 1, 0, 2, S, 96, 66, 40, 0.55f);
-            }
-            // …and staggered end joints, offset per board so they never align.
-            for (int i = 0; i < BOARDS; i++) {
-                blend((int) std::floor(i * bw), (i * 149 + 40) % S,
-                        (int) std::ceil(bw), 2, 96, 66, 40, 0.55f);
-            }
-            break;
-        }
-        default: { // lawn — mowing stripes
-            const int base[3] = { 106, 168, 79 };
-            sweep(8, base, [](int i, float* f) { f[0] = f[1] = f[2] = (i % 2) ? 1.04f : 0.965f; });
-            break;
+        // …and staggered end joints, offset per board so they never align.
+        for (int i = 0; i < BOARDS; i++) {
+            blend((int) std::floor(i * bw), (i * 149 + 40) % S,
+                    (int) std::ceil(bw), 2, ink[0], ink[1], ink[2], kWoodSeamAlpha);
         }
     }
     Texture* tex = Texture::Builder()
@@ -863,9 +879,8 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         buildDeckPaint(tb, wear);
     }
 
-    // Ground sheet at groundY with the lawn's mowing stripes as vertex-colour
-    // bands (makeLawnTexture: 8 stripes per 33.3u tile, ×1.04 / ×0.965 on the
-    // #6aa84f base; the fine grain is texture detail for later).
+    // Ground sheet at groundY: the biome's banding as vertex-colour bands,
+    // read from the same groundPalette the tiled canvas rasterizes.
     {
         // Every ground kind is the same tiled-canvas idiom (textures.js): N
         // vertical bands of a per-kind luminance/hue wobble over a base colour,
@@ -879,49 +894,30 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
                            srgbChannel(std::min(1.0f, ((base >> 8) & 0xff) / 255.0f * fg)),
                            srgbChannel(std::min(1.0f, (base & 0xff) / 255.0f * fb)) };
         };
-        switch (tb.groundKind) {
-            case 1: // sand — gentle wind ripples, half the lawn's contrast
-                for (int i = 0; i < 10; i++) {
-                    const float f = (i % 2) ? 1.03f : 0.975f;
-                    bands.push_back({ 1.0f / 10, shade(0xdec896, f, f, f) });
+        const GroundPalette& pal = groundPalette(tb.groundKind);
+        if (tb.groundKind == 4) {
+            // wood — each band IS a plank, with a dark seam between
+            const float bw = 1.0f / pal.bands, seam = 2.0f / 256; // 2px of the 256px tile
+            for (int i = 0; i < pal.bands; i++) {
+                float f[3];
+                pal.factor(i, f);
+                if (i) {
+                    // The seam is STROKED at kWoodSeamAlpha over the plank, not
+                    // painted solid — the raw seam colour reads as a black gap
+                    // between boards. 0.45f is its paired complement, a literal
+                    // on purpose (never derived as 1 - alpha).
+                    const float3 board = shade(pal.base, f[0], f[1], f[2]);
+                    const float3 ink = shade(kWoodSeamInk, 1, 1, 1);
+                    bands.push_back({ seam, board * 0.45f + ink * kWoodSeamAlpha });
                 }
-                break;
-            case 2: // redrock — sediment strata (a hue wobble, not just luminance)
-                for (int i = 0; i < 8; i++) {
-                    const bool rust = i % 2;
-                    bands.push_back({ 1.0f / 8, shade(0xd39671,
-                            rust ? 1.008f : 0.997f, rust ? 0.972f : 1.024f,
-                            rust ? 0.958f : 1.036f) });
-                }
-                break;
-            case 3: // snow — whisper-contrast drift banding
-                for (int i = 0; i < 10; i++) {
-                    const float f = (i % 2) ? 1.012f : 0.988f;
-                    bands.push_back({ 1.0f / 10, shade(0xedf2f7, f, f, f) });
-                }
-                break;
-            case 4: { // wood — each band IS a plank, with a dark seam between
-                const float bw = 1.0f / 8, seam = 2.0f / 256; // 2px of the 256px tile
-                for (int i = 0; i < 8; i++) {
-                    const float f = 0.96f + ((i * 37) % 5) * 0.02f;
-                    if (i) {
-                        // The seam is STROKED at 0.55 alpha over the plank, not
-                        // painted solid — the raw seam colour reads as a black
-                        // gap between boards.
-                        const float3 board = shade(0xc99c68, f, f, f);
-                        const float3 ink = shade(0x604228, 1, 1, 1);
-                        bands.push_back({ seam, board * 0.45f + ink * 0.55f });
-                    }
-                    bands.push_back({ bw - (i ? seam : 0), shade(0xc99c68, f, f, f) });
-                }
-                break;
+                bands.push_back({ bw - (i ? seam : 0), shade(pal.base, f[0], f[1], f[2]) });
             }
-            default: // lawn — mowing stripes
-                for (int i = 0; i < 8; i++) {
-                    const float f = (i % 2) ? 1.04f : 0.965f;
-                    bands.push_back({ 1.0f / 8, shade(LAWN_SRGB, f, f, f) });
-                }
-                break;
+        } else {
+            for (int i = 0; i < pal.bands; i++) {
+                float f[3];
+                pal.factor(i, f);
+                bands.push_back({ 1.0f / pal.bands, shade(pal.base, f[0], f[1], f[2]) });
+            }
         }
         // The bands stay — the berms sample them by world x (groundColorAt),
         // which is how the JS shares one texture between floor and kerb. The
@@ -1039,8 +1035,8 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     // theme colour as the sky horizon, so distant geometry dissolves into sky.
     mFogColor = srgbToLinear(tb.fog);
     // tb.fogTune is NOT read here: the ramp arrives per view, already scaled.
-    // It stays in the payload for whoever computes the cameras (the JS display
-    // today, libttp-runtime once the JS retires).
+    // It stays in the payload for the framing code (libttp-runtime's
+    // framing.cc), which scales bbFog/raceFog by it.
 
     // The JS light rig (environment.js "toy lighting"): the warm KEY from
     // near-overhead (theme.key: 0xffe8d0 @1.4, position 2,12,1.5) plus the
@@ -2032,18 +2028,6 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     setMeshShadows(mGantry, true, true);
     setMeshShadows(mStructures, true, true);
     setMeshShadows(mBerms, true, true);
-
-    // Frustum culling for the static furniture. Everything here is either
-    // fixed in world space or moved by a transform (which Filament applies to
-    // the bounds), so a build-time box stays honest — unlike the decals and
-    // ribbons, whose vertices are rewritten in world space per frame and which
-    // therefore stay opted out. Off-screen scenery was being drawn in full, in
-    // every cell: a 4-way split paid for the whole circuit four times.
-    for (Mesh* m : { &mStructures, &mBerms, &mGantry, &mBoulders, &mLandmarks,
-                     &mClutter, &mWater, &mWet,
-                     &mBalloon, &mWindmill }) {
-        setMeshCulling(*m, true);
-    }
 
     // The sun's map, rendered once now that every caster exists, and handed to
     // the materials that sample it.

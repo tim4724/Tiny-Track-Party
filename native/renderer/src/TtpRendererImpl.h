@@ -738,12 +738,12 @@ constexpr float kBlobShadowAlpha = 0.4f;
 
 
 // The car ground shadow's ink (the JS UNDER_AO_COLOR) and base opacity, for
-// the masked road-shader decal. 0.35 is the measured 35% ambient dip: blocking
-// the sun leaves a surface its ambient, which on these rigs spans 32% to 36%
-// of lit (34% measured on skysnake). The JS's UNDER_AO_OPACITY 0.55 was a 56%
-// dip, picked when cast shadows were a vague haze; against a sharp one the car
-// looked pressed into a hole. It also sits the car between its siblings, the
-// prop blobs at 0.40 and the lawn discs at 0.30.
+// the masked road-shader decal. 0.62 is the die-cut retune — darker and
+// hard-edged, a deliberate departure from the measured 35% ambient dip these
+// rigs meter (blocking the sun leaves a surface its ambient, 32% to 36% of
+// lit), which read too faint under the die-cut blob. It sits the car darker
+// than its siblings on purpose, the prop blobs at 0.40 and the lawn discs
+// at 0.30.
 inline const float3 kCarBlobInk = srgbToLinear(0x171513);
 
 constexpr float kCarBlobAO = 0.62f;
@@ -779,8 +779,9 @@ constexpr uint32_t kMaskedBlobCells = 4;
 // The carShadow layer's cap on summed coverage (maskInk.w — also the tap's
 // enable). The raster accumulates with saturating ADD (the rubber's idiom),
 // where the old masked loop composited two overlapped stamps as a mix-of-mixes
-// — at full wheel load, 1-(1-0.402)² = 0.642 (0.402 = kCarBlobAO deepened by
-// the 0.08/0.55 load term). Capping the tap there keeps a loaded pile-up as
-// dark as it used to be instead of letting addition run it toward black;
-// three-deep pile-ups still read a shade lighter than the loop's 0.78.
+// — at full wheel load, 1-(1-0.710)² ~ 0.916 (0.710 = kCarBlobAO deepened by
+// the 0.08/0.55 load term); 0.918 is the shipped die-cut cap beside that
+// derivation. Capping the tap there keeps a loaded pile-up as dark as the
+// loop would draw it instead of letting addition run it toward black;
+// three-deep pile-ups still read a shade lighter than the loop's ~0.98.
 constexpr float kCarShadowCap = 0.918f;

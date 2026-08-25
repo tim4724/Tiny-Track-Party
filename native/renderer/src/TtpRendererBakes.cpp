@@ -1,6 +1,5 @@
-// Split from the original single-file TtpRenderer.cpp along its subsystem
-// seams; TtpRendererImpl.h carries what the topic files share. Pure code
-// motion — behaviour, member set and ABI are unchanged.
+// The track-scoped bakes: sun shadow map, road light, silhouettes and the
+// staged-blob machinery. TtpRendererImpl.h carries what the topic files share.
 #include "TtpRendererImpl.h"
 
 #include <algorithm>

@@ -84,7 +84,9 @@ final class GameCoordinator: ObservableObject {
     /// drift. The walks are its only writers — the host's SELECT_MODE, the
     /// harness's `applyPick`, and the race flow's `set-track` swaps. Boot
     /// writes nothing here: the lobby PREVIEWS a circuit without picking.
-    var pick: ModePick { ModePick(TTP.obj(ttp_net_pick_json(net.roomHandle))) }
+    /// The object crosses back verbatim where a model takes the whole pick
+    /// (`refreshCupSlot`), exactly as the web hands `ui.cupSlot(net.pick)`.
+    var pick: [String: Any] { TTP.obj(ttp_net_pick_json(net.roomHandle)) }
 
     /// The circuit the next race builds and the current scene shows. Held here
     /// rather than read back from the display, because the pick exists before a
@@ -158,6 +160,9 @@ final class GameCoordinator: ObservableObject {
 
         _ = TTP.str(ttp_version())
         _ = TTP.str(ttp_party_version())
+        #if DEBUG
+        Tokens.assertLiveriesMatchEngine()
+        #endif
 
         // The manifest's, not a constant of ours: TOTAL_LAPS is a number two
         // layers share, and re-declaring it here is the drift the manifest rule
@@ -222,39 +227,10 @@ final class GameCoordinator: ObservableObject {
             requireOK(false, "net effect ops with no performer: \(netMissing.joined(separator: ", "))")
         }
 
-        // The chooser payload the phones pick from. Set ONCE, and rides the
-        // LOBBY snapshot only.
-        //
-        // ITS SHAPE IS A WIRE CONTRACT WITH THE PHONE, AND NOTHING HERE CHECKS
-        // IT. `ttp_net_configure` takes this blob OPAQUELY — the session model
-        // knows exactly one thing about it, that `tracks` ride the lobby
-        // snapshot — so a wrong key name travels the whole way to the handset
-        // with no error at any layer. It is not in the protocol manifest, no
-        // corpus covers it (the frozen session corpus carries a synthetic
-        // world), and `abi_check` cannot see it either. The ONLY reader is
-        // `public/controller/main.js`, and phones stay on that JS controller on
-        // all three TV platforms, so its field names are the specification:
-        //
-        //   cars   [{id, name, stats:{accel,vmax,turn,mass}}]  (line 98)
-        //   tracks [{id, name, svg, cup, cupName, cupDifficulty}]  (line 97)
-        //
-        // This shell shipped `cars` as bare model-id STRINGS and spelled the
-        // packed map `p` and the difficulty `level`, which is why a scanned
-        // phone drew a car picker with no images, a track list with no maps and
-        // no cup selector at all — the controller read `t.svg` and `t.cup` off
-        // records that had neither. `Start race` then did nothing because it
-        // stays disabled until a pick resolves a trackId, and nothing was
-        // pickable. Four symptoms, one shape.
-        requireOK(ttp_net_configure(TTP.json([
-            "cars": chooserCars(),
-            "colors": proto.carColors,
-            "tracks": chooserTracks(catalogue),
-            // The couch's stars/lock for the phones' picker — composed AFTER
-            // the progression load above, so a returning couch's first
-            // snapshot already carries its record. The one chooser key that
-            // changes at RUNTIME: persistProgression recomposes it.
-            "progress": progressChooser()
-        ])) != 0, "configuring the chooser payload")
+        // The chooser payload the phones pick from. Set ONCE here, and again
+        // only when a banked cup moves its progress key (persistProgression).
+        // The shape is a wire contract with the phone — see configureChooser.
+        configureChooser(catalogue, "configuring the chooser payload")
 
         // THE CAMERA RIG FOR A SURFACE WITH NO CELLS, pushed once and never
         // again: with cells the renderer runs a chase cam per cell and this is
@@ -440,13 +416,43 @@ final class GameCoordinator: ObservableObject {
         // derived from it, so this is the one place the answer actually changes.
         let catalogue = TTP.obj(ttp_ui_catalogue_json())
         refreshCupShelf(catalogue)
+        configureChooser(catalogue, "recomposing the chooser after a banked cup")
+        net.publishSnapshot()
+    }
+
+    /// The ONE composition of the chooser payload, riding the LOBBY snapshot
+    /// only. Called at boot and again by `persistProgression`, whose banked cup
+    /// moves the `progress` key — the couch's stars/lock for the phones' picker,
+    /// composed after the progression load so a returning couch's first
+    /// snapshot already carries its record.
+    ///
+    /// ITS SHAPE IS A WIRE CONTRACT WITH THE PHONE, AND NOTHING HERE CHECKS
+    /// IT. `ttp_net_configure` takes this blob OPAQUELY — the session model
+    /// knows exactly one thing about it, that `tracks` ride the lobby
+    /// snapshot — so a wrong key name travels the whole way to the handset
+    /// with no error at any layer. It is not in the protocol manifest, no
+    /// corpus covers it (the frozen session corpus carries a synthetic
+    /// world), and `abi_check` cannot see it either. The ONLY reader is
+    /// `public/controller/main.js`, and phones stay on that JS controller on
+    /// all three TV platforms, so its field names are the specification:
+    ///
+    ///   cars   [{id, name, stats:{accel,vmax,turn,mass}}]  (line 98)
+    ///   tracks [{id, name, svg, cup, cupName, cupDifficulty}]  (line 97)
+    ///
+    /// This shell shipped `cars` as bare model-id STRINGS and spelled the
+    /// packed map `p` and the difficulty `level`, which is why a scanned
+    /// phone drew a car picker with no images, a track list with no maps and
+    /// no cup selector at all — the controller read `t.svg` and `t.cup` off
+    /// records that had neither. `Start race` then did nothing because it
+    /// stays disabled until a pick resolves a trackId, and nothing was
+    /// pickable. Four symptoms, one shape.
+    private func configureChooser(_ catalogue: [String: Any], _ what: String) {
         requireOK(ttp_net_configure(TTP.json([
             "cars": chooserCars(),
             "colors": proto.carColors,
             "tracks": chooserTracks(catalogue),
             "progress": progressChooser()
-        ])) != 0, "recomposing the chooser after a banked cup")
-        net.publishSnapshot()
+        ])) != 0, what)
     }
 
     /// The chooser's car list, as the phone's picker reads it: an id to load the
@@ -808,21 +814,5 @@ final class GameCoordinator: ObservableObject {
         }
     }
 
-}
-
-/// The stored lobby pick, as `ttp_net_pick_json` answers it. A thin READER over
-/// the model's own JSON — the rules that write it are the walks', and the raw
-/// object (`wire`) crosses back verbatim where a model takes the whole pick
-/// (`refreshCupSlot`), exactly as the web hands `ui.cupSlot(net.pick)`.
-struct ModePick {
-    let wire: [String: Any]
-    init(_ json: [String: Any]) { wire = json }
-    /// "random" | "cup" | "track", or nil before anything was picked.
-    var mode: String? { wire["mode"] as? String }
-    var cupId: String? { wire["cupId"] as? String }
-    /// Always the RESOLVED concrete track.
-    var trackId: String? { wire["trackId"] as? String }
-    /// A 'random' run's length: 0 endless, else that many races.
-    var randomRaces: Int { Int(wire["randomRaces"] as? Double ?? 0) }
 }
 

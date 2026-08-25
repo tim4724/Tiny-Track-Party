@@ -54,9 +54,6 @@ TTP_ABI int ttp_room_transition_to(int h, const char* stateName);  // 1 if accep
 TTP_ABI const char* ttp_room_state(int h);                         // "lobby"|"countdown"|"playing"|"results"
 
 
-// ---- liveness (pure predicates; never mutate, never emit) -------------------
-
-
 // ---- provider setters -------------------------------------------------------
 
 TTP_ABI void ttp_room_set_master(int h, const char* peerIdJson);
@@ -151,7 +148,7 @@ TTP_ABI const char* ttp_party_version(void);
 // The whole shared manifest as one JSON object: the wire vocabulary (MSG,
 // FASTLANE_TYPES, ROOM_STATE), the relay/STUN URLs, MAX_PLAYERS, TOTAL_LAPS,
 // COUNTDOWN_SECONDS, the STEER and LIVENESS blocks, and the car tables
-// (CAR_COLORS / CAR_MODELS / CAR_NAMES / CAR_MODEL_YAW / CAR_STATS). Exactly
+// (CAR_COLORS / CAR_MODELS / CAR_NAMES / CAR_STATS). Exactly
 // ttp::protocol::manifest() (native/libttp-party/ttp/protocol.h), which is the
 // 1:1 C++ mirror of public/shared/protocol.js.
 //

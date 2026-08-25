@@ -89,9 +89,9 @@ final class DisplayHost {
     /// renderer's overlay sizes itself off the cell now, and every number
     /// crossing that ABI is in the surface's own physical pixels.
     ///
-    /// What survives is the conversion this side has always owed: `cellRects`
-    /// answers in physical pixels and SwiftUI lays out in POINTS, so the chrome
-    /// still divides by this.
+    /// What survives is one reader: the perf readout reports it as `dpr`, so
+    /// the panel names the buffer it is measuring. `cellRects` answers
+    /// fractions of the surface now and never touches it.
     ///
     /// **THE BUFFER'S pixels per point, not the PANEL's** — `adoptSurface`
     /// derives it from the drawable every time that moves, and nothing else
@@ -406,11 +406,11 @@ final class DisplayHost {
     /// **`uiScale` is buffer pixels per POINT, and it is not the panel's scale.**
     /// The two agree only while the buffer is the panel's own resolution, and the
     /// adaptive render scale is exactly the thing that makes them differ.
-    /// `cellRects` divides by this, so a stale value puts every chrome element at
-    /// `renderScale` of its correct position — the HUD walking in from the corner,
-    /// which is what a stored copy of `nativeScale` did the first time this
-    /// shipped. Its own doc had predicted it: "a different one is exactly how
-    /// every label ends up at 1/scale of its cell."
+    /// `cellRects` used to divide by this, and a stale value put every chrome
+    /// element at `renderScale` of its correct position — the HUD walking in
+    /// from the corner, which is what a stored copy of `nativeScale` did the
+    /// first time this shipped. Its own doc had predicted it: "a different one
+    /// is exactly how every label ends up at 1/scale of its cell."
     ///
     /// DERIVED from the two numbers that define it rather than tracked beside
     /// them, so there is nothing to keep in sync. The passed scale is the fallback
@@ -708,10 +708,9 @@ final class DisplayHost {
         biomeName = biome
         // THE SCENE CLOCK THE SCALE RULE IS HANDED, stamped where a scene
         // actually becomes true. `SceneStaging` calls `ttp_display_build` itself
-        // and then reports here; `build(trackId:rosterJSON:)` below has no
-        // callers at all, so a hook there is stamped by nothing. Left unstamped
-        // this reported the PROCESS UPTIME as the scene's age (30971 s into a
-        // fresh race), which is a measurement the rule is entitled to trust.
+        // and then reports here. Left unstamped this reported the PROCESS
+        // UPTIME as the scene's age (30971 s into a fresh race), which is a
+        // measurement the rule is entitled to trust.
         //
         // The window goes for the reason `applyResize` drops it: the lobby
         // attract and a race are different pictures, and a percentile that
@@ -738,28 +737,6 @@ final class DisplayHost {
     }
 
     // MARK: - The scene
-
-    /// Build the scene for `trackId`. `rosterJSON` is `[{id, name, carIndex,
-    /// color}]` in SLOT order — the one thing about a race only the shell knows,
-    /// since the sim's cars carry no livery and no display name.
-    ///
-    /// **PREDICATE polarity: 1 is success** (the outcome-style returns were
-    /// retired with the polarity zoo). Returns whether a scene now exists. A
-    /// failed build leaves `hasScene` false even in the one case where C++ kept
-    /// the previous scene (an unknown trackId returns before releasing it):
-    /// reporting "ready" there would let a race launch onto the last track's
-    /// geometry.
-    @discardableResult
-    func build(trackId: String, rosterJSON: String) -> Bool {
-        // The window describes the scene that just went away, exactly as it does
-        // after a resize: the lobby attract and a race are different pictures,
-        // so a percentile that straddles a build describes neither. Same line,
-        // same reason, in `Stage.js` and Android's `DisplayHost`.
-        perf.reset()
-        hasScene = ttp_display_build(trackId, rosterJSON) != 0
-        if !hasScene { lastError = "ttp_display_build(\(trackId)) failed" }
-        return hasScene
-    }
 
     /// Tear the scene down; the engine, views, materials and provided assets
     /// live on, so the next build is cheap.

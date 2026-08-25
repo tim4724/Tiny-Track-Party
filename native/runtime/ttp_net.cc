@@ -216,28 +216,28 @@ const char* ttp_net_reconnect_card_json(const char* seatJson, const char* url) {
 
 // ---- controller messages ------------------------------------------------------
 
-// protocol.h's MSG table, by NAME — the wire spellings live there alone.
-static const std::string& msgType(const char* name) {
+// The wire spelling of a MSG key, off the shared manifest — never a literal
+// here, so this file cannot drift from what protocol.js told the phone.
+static const char* msgOf(const char* key) {
   for (const auto& kv : protocol::MSG)
-    if (kv.first == name) return kv.second;
-  static const std::string none;
-  return none;
+    if (kv.first == key) return kv.second.c_str();
+  return "";
 }
 
 const char* ttp_net_controller_action(int roomHandle, int sessionHandle,
                                       const char* fromJson, const char* type) {
   const std::string t = strOr(type);
   const char* verdict = "none";
-  if (t == msgType("CONTROL")) {
+  if (t == msgOf("CONTROL")) {
     if (ttp_session_engine(sessionHandle)) verdict = "control";
-  } else if (t == msgType("PAUSE_GAME")) {
+  } else if (t == msgOf("PAUSE_GAME")) {
     verdict = "pause";
-  } else if (t == msgType("RESUME_GAME")) {
+  } else if (t == msgOf("RESUME_GAME")) {
     verdict = "resume";
-  } else if (t == msgType("RETURN_TO_LOBBY")) {
+  } else if (t == msgOf("RETURN_TO_LOBBY")) {
     verdict = "return-to-lobby";
-  } else if (t == msgType("START_GAME") || t == msgType("SERIES_NEXT") ||
-             t == msgType("SET_SOUND")) {
+  } else if (t == msgOf("START_GAME") || t == msgOf("SERIES_NEXT") ||
+             t == msgOf("SET_SOUND")) {
     // Host-only, re-checked here so a stale or forged message cannot jump the
     // lobby; a start additionally needs every other racer ready (the same gate
     // that lights the host's button).
@@ -245,9 +245,9 @@ const char* ttp_net_controller_action(int roomHandle, int sessionHandle,
     const bool isHost = from.type != Value::NUL &&
         canonical_stringify(from) == canonical_stringify(ttp_room_host_value(roomHandle));
     if (isHost) {
-      if (t == msgType("SET_SOUND")) {
+      if (t == msgOf("SET_SOUND")) {
         verdict = "set-sound";
-      } else if (t == msgType("SERIES_NEXT")) {
+      } else if (t == msgOf("SERIES_NEXT")) {
         verdict = "series-next";
       } else {
         // The same readiness rule the lobby's Start button shows, asked of the
@@ -261,12 +261,6 @@ const char* ttp_net_controller_action(int roomHandle, int sessionHandle,
   }
   return verdict;
 }
-
-// ---- room-state transitions ----------------------------------------------------
-
-// ---- liveness -------------------------------------------------------------------
-
-// ---- claims + reconciliation ------------------------------------------------------
 
 // ===========================================================================
 // THE CHOREOGRAPHY WALKS (ttp_net.h's second section).
@@ -300,14 +294,6 @@ NetState& netStateOf(int roomHandle) { return g_netStates[roomHandle]; }
 std::string g_bufOpen, g_bufCreateTimeout, g_bufProtocol, g_bufClose, g_bufPeerMsg,
     g_bufSelectDraw, g_bufSetTrack, g_bufLiveness, g_bufSeen, g_bufHostApply,
     g_bufStateApply, g_bufPick;
-
-// The wire spelling of a MSG key, off the shared manifest — never a literal
-// here, so the walk cannot drift from what protocol.js told the phone.
-const char* msgOf(const char* key) {
-  for (const auto& kv : protocol::MSG)
-    if (kv.first == key) return kv.second.c_str();
-  return "";
-}
 
 const Value kUndef;  // JS `undefined`, for absent-key comparisons
 const Value& orUndef(const Value* v) { return v ? *v : kUndef; }

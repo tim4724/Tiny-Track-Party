@@ -60,7 +60,7 @@ static const double IMPULSE_COS_FLOOR = 0.7;
 // where the ribbon folds over itself and the ratio would invert.
 static const double RIBBON_SCALE_MIN = 0.35;
 static const double RIBBON_SCALE_MAX = 1.65;
-static const double CURV_PROBE = 0.6;        // metres, as TWIST_PROBE in recomputePoses
+static const double CURV_PROBE = 0.6;        // metres; centreline probe step for curvature and twist
 static const double KNOCK_DAMP = 6.0;
 static const double POLE_MIN_KEEP = 0.3;
 static const double OIL_RADIUS = 0.7;
@@ -360,7 +360,7 @@ Game::FP Game::footprint(const Car& c) const {
   double hl = c.halfLen * fp, hw = c.halfWid * fp;
   double yaw = colYaw(c);
   double ch = std::fabs(dmath::cos(yaw)), sh = std::fabs(dmath::sin(yaw));
-  return {hl * ch + hw * sh, hl * sh + hw * ch, hw};
+  return {hl * sh + hw * ch, hw};
 }
 
 // The curb as a POSITION constraint: pin the car inside it and say whether it
@@ -839,14 +839,13 @@ void Game::resolveCollisions(double dt) {
 }
 
 void Game::recomputePoses() {
-  const double TWIST_PROBE = 0.6;
   for (const auto& cp : cars_) {
     Car& c = *cp;
     Frame f = centerline_->sampleAt(c.totalS);
     Vec3 up = f.up;
     if (c.lat > 0.05 || c.lat < -0.05) {
-      Frame f2 = centerline_->sampleAt(c.totalS + TWIST_PROBE);
-      double tau = dmath::atan2(f.up.clone().cross(f2.up).dot(f.tangent), f.up.dot(f2.up)) / TWIST_PROBE;
+      Frame f2 = centerline_->sampleAt(c.totalS + CURV_PROBE);
+      double tau = dmath::atan2(f.up.clone().cross(f2.up).dot(f.tangent), f.up.dot(f2.up)) / CURV_PROBE;
       if (tau > 1e-3 || tau < -1e-3) up = f.up.clone().addScaledVector(f.tangent, c.lat * tau).normalize();
     }
     Vec3 forward = f.tangent.clone().applyAxisAngle(f.up, c.heading);
@@ -971,7 +970,7 @@ void Game::update(double dtMs) {
     double lap = std::floor(js_max(0.0, c.totalS) / length_);
     if (c.totalS >= 0 && lap > prevLap && prevTotal >= 0) {
       c.lap = lap;
-      if (lap >= totalLaps_ && !c.finished) {
+      if (lap >= totalLaps_) {
         c.finished = true;
         c.finishTimeNull = false; c.finishTime = elapsed_;
         c.item = ""; c.wantUse = false;

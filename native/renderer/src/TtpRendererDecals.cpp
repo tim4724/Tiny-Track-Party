@@ -1,6 +1,6 @@
-// Split from the original single-file TtpRenderer.cpp along its subsystem
-// seams; TtpRendererImpl.h carries what the topic files share. Pure code
-// motion — behaviour, member set and ABI are unchanged.
+// The road-shader channels — skid and carShadow rasters, deck decals and
+// paint — plus their 3D markers. TtpRendererImpl.h carries what the topic
+// files share.
 #include "TtpRendererImpl.h"
 
 
@@ -1011,8 +1011,8 @@ void TtpRenderer::bindVisMap(MaterialInstance* mi) {
 // The slick itself is a road-shader stamp (buildStaticDeckDecals); this builds
 // its 3D markers only.
 void TtpRenderer::buildOils(const TrackBin& tb) {
-    if ((tb.oils.empty() && tb.poles.empty())) return;
-    // Cones: hazard rings + gate poles, one instanced pool.
+    if (tb.oils.empty()) return;
+    // Cones: hazard rings, one instanced pool.
     struct ConeSpot { float s, lat; };
     std::vector<ConeSpot> spots;
     const float coneEdge = tb.roadWidth / 2 - 0.35f;

@@ -315,10 +315,9 @@ struct RootView: View {
                     .transition(.opacity)
             }
         }
-        // Each overlay fades on its OWN value. `GameState.ResultsView` is not
-        // Equatable (it holds the model's rows verbatim), so the trigger is
-        // whether there is a board at all — which is exactly when the transition
-        // runs.
+        // Each overlay fades on its OWN value. The results trigger is whether
+        // there is a board at all — which is exactly when the transition runs,
+        // rather than on every row or phase change of a standing board.
         .animation(.easeOut(duration: 0.25), value: state.results == nil)
         .animation(.easeOut(duration: 0.2), value: state.paused)
     }

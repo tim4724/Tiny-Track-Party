@@ -66,10 +66,9 @@ export class ControllerNet extends GameNet {
     this.playerName = '';
     this._pingTimer = null;
     this._lastPong = 0;
-    // Gates the sensor-rate CONTROL stream down to what the display doesn't already
-    // hold (see InputGate). opts.gate lets tests/measurement pass a configured
-    // one; the default is the shipping policy.
-    this.gate = opts.gate || new InputGate();
+    // Gates the sensor-rate CONTROL stream down to what the display doesn't
+    // already hold (see InputGate).
+    this.gate = new InputGate();
     this._srtt = 0;
     // §7 lifecycle state. _suspended: the link was dropped by suspend() and is
     // ours to rebuild on return. _terminal: the relay finished this session for
@@ -109,7 +108,7 @@ export class ControllerNet extends GameNet {
         // The display came back (reconnect — or a RELOAD that wiped its
         // roster): re-introduce ourselves so a fresh display restores this
         // seat's name, and re-open the fastlane right away instead of waiting
-        // for the retry tick. The WELCOME it answers with clears any
+        // for the retry tick. The snapshot it republishes clears any
         // "waiting for the big screen" overlay.
         this.party.sendTo(0, { type: MSG.HELLO, name: this.playerName, rejoinToken: this.rejoinToken });
         if (this.fastlane) this.fastlane.open(0);
@@ -123,7 +122,7 @@ export class ControllerNet extends GameNet {
     };
     // Retained host snapshot (the display's set_state): the lobby roster, pushed
     // live on each change and replayed by the relay right after our `joined` —
-    // so a (re)join catches up on roster/track before WELCOME round-trips. The
+    // so a (re)join catches up on roster/track before our HELLO round-trips. The
     // payload carries the same type tag a relayed message would (LOBBY_UPDATE),
     // so it funnels into the one handler.
     this.party.onState = (data) => { if (data && data.type) this.onMessage(data); };

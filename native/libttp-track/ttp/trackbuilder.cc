@@ -8,13 +8,7 @@
 #include "ttp/contract.h"
 #include "ttp/jsmath.h"
 #include "ttp/vec3.h"
-
-extern "C" {
-double ttp_fd_sin(double);
-double ttp_fd_cos(double);
-double ttp_fd_atan2(double, double);
-double ttp_fd_hypot(double, double);
-}
+#include "ttp_fd.h"
 
 namespace ttp {
 namespace {

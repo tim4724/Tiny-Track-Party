@@ -360,16 +360,17 @@ for (const c of CUPS) {
 const TRACK_ORDER = CUPS.flatMap((c) => c.tracks);
 
 // Flat list — {id, name, difficulty, cup, cupName, cupDifficulty, segments, waypoints,
-// startU, oils, pads, boxes, poles} in cup order — used by main.js, the track picker, and
-// the gallery. `difficulty` is per-track data (orders the cup + feeds the tendency); the
-// picker renders only the cup tendency. The display builds each track + computes its
-// schematic SVG, so no per-track art.
+// startU, oils, pads, boxes, poles} in cup order. `difficulty` is per-track data
+// (orders the cup + feeds the tendency); the picker renders only the cup tendency.
 //
-// This list is what main.js actually BUILDS from (buildEntry → buildTrack), so any
-// descriptor field the builder reads must be copied across or it is silently ignored in
-// the game while the unit tests — which build from TRACKS directly — still pass. `startU`
-// is one of those; `width` is deliberately absent because no descriptor sets it (the
-// shipped width games are per-SEGMENT).
+// The shipped game does NOT build from this list: its catalogue is codegen'd into the
+// wasm from TRACKS (scripts/gen-track-defs-header.mjs → track_defs.h) and read back out
+// at boot. TRACK_LIST feeds everything that previews or derives from the authored data
+// instead — the display/controller TestHarnesses, the trailer editor, the schematic and
+// export bakes, and the unit tests that iterate every shipped track. So a new descriptor
+// field reaches the GAME only through the codegen; copy it here too, or the previews
+// silently disagree with the game. `startU` is one of those; `width` is deliberately
+// absent because no descriptor sets it (the shipped width games are per-SEGMENT).
 export const TRACK_LIST = TRACK_ORDER.map((id) => ({
   id, name: TRACKS[id].name, difficulty: TRACKS[id].difficulty,
   cup: CUP_OF[id].cup, cupName: CUP_OF[id].cupName, cupDifficulty: CUP_OF[id].cupDifficulty,

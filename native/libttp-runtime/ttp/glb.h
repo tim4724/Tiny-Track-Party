@@ -61,5 +61,13 @@ std::vector<uint8_t> ghost_glb(const uint8_t* bytes, size_t len);
 // skipped: those carry their own bytes and need no provisioning.
 std::vector<std::string> glb_image_uris(const uint8_t* bytes, size_t len);
 
+// The JSON chunk's payload as text, or false when `bytes` is not a GLB whose
+// first chunk is JSON — the container read both functions above start with,
+// shared so theme.cc's tint reader walks the same bytes the same way. Every
+// length is checked against the buffer actually handed over rather than
+// against the header's own claim: a truncated download is a far likelier
+// caller mistake here than a malicious file.
+bool json_chunk(const uint8_t* bytes, size_t len, std::string& out);
+
 }  // namespace rt
 }  // namespace ttp

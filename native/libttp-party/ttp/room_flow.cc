@@ -96,10 +96,6 @@ void RoomFlow::discDelete(const PeerId& id) {
     if (disconnected_[i] == id) { disconnected_.erase(disconnected_.begin() + i); return; }
 }
 
-bool RoomFlow::lastSeenHas(const PeerId& id) const {
-  for (const auto& kv : lastSeen_) if (kv.first == id) return true;
-  return false;
-}
 bool RoomFlow::lastSeenGet(const PeerId& id, double& out) const {
   for (const auto& kv : lastSeen_) if (kv.first == id) { out = kv.second; return true; }
   return false;

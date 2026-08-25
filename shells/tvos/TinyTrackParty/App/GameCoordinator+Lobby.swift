@@ -127,7 +127,7 @@ extension GameCoordinator {
         // card is a real absence rather than a card with nothing in it. The
         // STORED pick crosses verbatim — it is already the model's own shape.
         // `veiled()` is the shell's random-family secrecy (see its note).
-        state.cupSlot = GameState.CupSlot(TTP.obj(ttp_ui_cup_slot_json(TTP.json(pick.wire))))?.veiled()
+        state.cupSlot = GameState.CupSlot(TTP.obj(ttp_ui_cup_slot_json(TTP.json(pick))))?.veiled()
     }
 
     /// The attract grid, as the scene's roster. `cell: false` throughout: the
@@ -148,13 +148,7 @@ extension GameCoordinator {
     /// start bearing. A refusal (C++'s call) falls back to the full build.
     func redressDemoSceneCars(_ field: [Any]) {
         sceneCars = demoSceneCars(field)
-        let roster = sceneCars.map {
-            RosterSlot(id: $0.id,
-                       name: $0.name,
-                       carIndex: $0.carIndex ?? 0,
-                       color: proto.carColors[safe: $0.colorIndex] ?? "",
-                       model: proto.carModels[safe: $0.carIndex ?? 0] ?? proto.carModels[0])
-        }
+        let roster = sceneRoster()
         Task { @MainActor in
             if await !SceneStaging.redress(roster: roster, display: display, store: assets) {
                 rebuildScene()

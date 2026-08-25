@@ -203,8 +203,10 @@ material {
         { type : float4[4], name : maskWFwd, precision : high },
         { type : float4[4], name : maskWRight, precision : high },
         { type : float4, name : maskInk },
-        // One 2D-array texture, one silhouette per layer: 0..7 the cars in
-        // slot order, 8 the monster rig, 9 the generic superellipse. Baked
+        // One 2D-array texture, one silhouette per layer, keyed by car MODEL:
+        // kMaskLayerModels layers claimed by GLB bytes (claimMaskLayer), then
+        // kMaskLayerMonster the monster rig, kMaskLayerGeneric the generic
+        // superellipse. Baked
         // and pre-blurred by bakeSilhouette. RGBA8, coverage in ALPHA — R8
         // was tried (a quarter of the tap bytes) and the TRANSLUCENT bake
         // pass into an R8 array layer renders ZERO coverage on the PowerVR

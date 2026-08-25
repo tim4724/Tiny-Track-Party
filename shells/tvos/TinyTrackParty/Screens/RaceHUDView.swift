@@ -195,8 +195,8 @@ private struct CellChrome: View {
 // MARK: - The name chip
 
 /// `.cell-label__name` — the player's name in their LIVERY on a white sticker.
-/// The livery is the text colour here, not a dot, which is why this is not a
-/// `StickerChip`: in a cell the car right below it is already the swatch.
+/// The livery is the text colour here, not `theme.css`'s `.chip` colour dot:
+/// in a cell the car right below it is already the swatch.
 private struct NameChip: View {
     let name: String
     let colorIndex: Int

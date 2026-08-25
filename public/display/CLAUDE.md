@@ -65,8 +65,8 @@ The pick, the random-track shuffle bag (seeded once with page entropy), the
 cup series and the launched race field all live BEHIND THE ROOM HANDLE — the
 walks write them, no shell mirrors any of it; the game layer asks `net.pick`
 or `flow.seriesState` when it needs one. Walks go through `flow.runWalk`,
-which keeps NativeRoomFlow's provider-sync and event-drain discipline around a
-mutation the class's own methods didn't make.
+which keeps NativeRoomFlow's event-drain discipline around a mutation the
+class's own methods didn't make.
 
 ## Boot and the back stack
 

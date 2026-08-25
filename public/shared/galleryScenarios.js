@@ -149,9 +149,10 @@ export const SHOT_PLATFORMS = [
   'androidtv-device', 'androidtv-emu'
 ];
 
-// The display page's query string for a scenario, shared by the live gallery's
-// iframes and the capture script's page loads so a card and its screenshot can
-// never be showing different things.
+// The display page's query string for a scenario — the CAPTURE script's URL
+// builder. The live gallery builds its iframe URLs itself (cardURL in
+// gallery-common.js, which layers preview-only dpr/host handling on top), so
+// this is kept param-compatible with its `qs` rather than shared by it.
 export function scenarioQuery(scenario, { players = 4, host = 0, viewAs = 0 } = {}) {
   const q = new URLSearchParams({ scenario: scenario.key, players: String(players) });
   if (scenario.hostVariant) q.set('host', String(host));

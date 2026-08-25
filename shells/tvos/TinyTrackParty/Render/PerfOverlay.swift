@@ -88,7 +88,7 @@ final class PerfMonitor: ObservableObject {
 
     /// Drop the shared window — stale history is worse than none. Called
     /// whenever what is being measured changes underneath: the readout coming
-    /// on, a resize and a scene build (`DisplayHost.applyResize` and `build`).
+    /// on, a resize and a scene build (`DisplayHost.applyResize` and `sceneBuilt`).
     func reset() { ttp_perf_reset() }
 
     /// Start a BENCHED run on `track`: the same readout, additionally logged

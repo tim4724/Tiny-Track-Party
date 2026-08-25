@@ -17,7 +17,7 @@
 // read as absent. A refusal that says why turns a device round trip into a line
 // of output.
 //
-// THE PATTERN IS NOT NEW, it is just not everywhere. `ttp_race_start_json`
+// THE PATTERN IS NOT NEW, it is just not everywhere. `ttp_race_start_live_json`
 // already answers `{"action":"none","reason":"room-state"|"scene"|"no-track"|
 // "no-players"}` and is the nicest ABI in the tree to call precisely because of
 // it. This generalises that to the calls whose return has no room for a reason.
@@ -35,7 +35,7 @@
 //
 //     ttp_session_begin      ttp_gp_create        ttp_display_build
 //     ttp_ui_configure       ttp_net_configure    ttp_race_configure
-//     ttp_race_launch_live_json  (an unknown room handle refuses the launch)
+//     ttp_display_reroster   (its 0 sends the shell to the fallback build)
 //
 // Each CLEARS it on entry, so a success leaves it empty and a failure leaves its
 // own reason — never an older one. That clearing is the difference between a

@@ -143,19 +143,9 @@ struct StickerCard<Content: View>: View {
 // MARK: - Button
 
 /// `.btn` — the chunky sticker push-button, driven by the focus engine.
-///
-/// `focused:` is an OVERRIDE, not the source of truth. Real focus comes from
-/// `@Environment(\.isFocused)` inside the button style, which is what the focus
-/// engine actually drives; passing `true` additionally forces the focused
-/// dressing. That exists for the screenshot harness (`TinyTrackPartyShots`),
-/// which stands each screen up from the app's own scenario hook and drives
-/// NOTHING through the remote — so without an override every button would
-/// photograph unfocused and the shots would not show the state a viewer
-/// actually sees.
 struct StickerButton: View {
     private let title: String
     private let tint: Color
-    private let forcedFocus: Bool
     private let size: CGFloat
     private let ghost: Bool
     private let action: () -> Void
@@ -177,13 +167,11 @@ struct StickerButton: View {
     ///   available is not a quieter button, it is a different button.
     init(_ title: String,
          tint: Color = Tokens.brand,
-         focused: Bool = false,
          size: CGFloat = 34,
          ghost: Bool = false,
          action: @escaping () -> Void) {
         self.title = title
         self.tint = ghost ? Tokens.surface : tint
-        self.forcedFocus = focused
         self.size = size
         self.ghost = ghost
         self.action = action
@@ -195,8 +183,7 @@ struct StickerButton: View {
                 .font(Fonts.display(size, weight: .bold))
                 .foregroundStyle(ghost ? Tokens.ink : .white)
         }
-        .buttonStyle(StickerButtonStyle(tint: tint, forcedFocus: forcedFocus,
-                                        size: size, ghost: ghost))
+        .buttonStyle(StickerButtonStyle(tint: tint, size: size, ghost: ghost))
         // THE SYSTEM FOCUS EFFECT IS OFF, and this is not a taste call.
         //
         // tvOS draws its own focus treatment UNDER a Button — a large rounded
@@ -217,28 +204,24 @@ struct StickerButton: View {
 
 private struct StickerButtonStyle: ButtonStyle {
     let tint: Color
-    let forcedFocus: Bool
     let size: CGFloat
     let ghost: Bool
 
     func makeBody(configuration: Configuration) -> some View {
         // The focus flag has to be read one level down: @Environment is only
         // resolved inside a View's body, and makeBody(configuration:) is not one.
-        Face(configuration: configuration, tint: tint, forcedFocus: forcedFocus,
-             size: size, ghost: ghost)
+        Face(configuration: configuration, tint: tint, size: size, ghost: ghost)
     }
 
     private struct Face: View {
         let configuration: StickerButtonStyle.Configuration
         let tint: Color
-        let forcedFocus: Bool
         let size: CGFloat
         let ghost: Bool
 
         @Environment(\.isFocused) private var isFocused
 
         var body: some View {
-            let focused = isFocused || forcedFocus
             let pressed = configuration.isPressed
             let drop = Sticker.buttonDrop
             let shape = RoundedRectangle(cornerRadius: Sticker.radius, style: .continuous)
@@ -262,62 +245,20 @@ private struct StickerButtonStyle: ButtonStyle {
                     .padding(.horizontal, size * 1.2)
                     .background(
                         shape.fill(tint)
-                            .hardShadow(focused ? Sticker.focusShadow : .zero)
+                            .hardShadow(isFocused ? Sticker.focusShadow : .zero)
                     )
                     .stickerOutline(Sticker.border, radius: Sticker.radius)
                     .offset(y: pressed ? Sticker.buttonSink : 0)
             }
             // Reserve the ledge, which `offset` does not take part in layout for.
             .padding(.bottom, drop)
-            .brightness(focused ? Sticker.focusBrightness : 0)
-            .scaleEffect(focused ? Sticker.focusScale : 1)
+            .brightness(isFocused ? Sticker.focusBrightness : 0)
+            .scaleEffect(isFocused ? Sticker.focusScale : 1)
             // 0.06s is the kit's own transition; focus gets a touch longer so the
             // lift reads as movement rather than a jump.
             .animation(.easeOut(duration: 0.06), value: pressed)
-            .animation(.easeOut(duration: 0.12), value: focused)
+            .animation(.easeOut(duration: 0.12), value: isFocused)
         }
-    }
-}
-
-// MARK: - Chip
-
-/// `.chip` — a small white sticker token with a colour dot. The roster's shape:
-/// the dot is the player's LIVERY (`Tokens.car(colorIndex)`), never a chrome
-/// colour, which is why `tint` here is not defaulted to a chrome role in the
-/// call sites that matter.
-struct StickerChip: View {
-    private let text: String
-    private let tint: Color
-    private let rotation: Double
-    private let size: CGFloat
-
-    /// - Parameter size: default 26. The web seat label lands at ~21px on a
-    ///   1920-wide display (`clamp(1rem, 1.3vw, 1.3rem)`); this is that, opened
-    ///   up for the sofa.
-    init(_ text: String, tint: Color = Tokens.brand, rotation: Double = 0, size: CGFloat = 26) {
-        self.text = text
-        self.tint = tint
-        self.rotation = rotation
-        self.size = size
-    }
-
-    var body: some View {
-        let dot = size * 0.85   // `.dot` is 0.85rem against a 1rem chip
-        return HStack(spacing: size * 0.55) {
-            Circle()
-                .fill(tint)
-                .frame(width: dot, height: dot)
-                .overlay(Circle().strokeBorder(Tokens.ink, lineWidth: Sticker.hairlineBorder))
-            Text(text)
-                .font(Fonts.display(size, weight: .semibold))
-                .foregroundStyle(Tokens.ink)
-        }
-        .padding(.vertical, size * 0.45)
-        .padding(.leading, size * 0.6)
-        .padding(.trailing, size * 0.95)
-        .background(Capsule().fill(Tokens.surface).hardShadow(Sticker.popShadow))
-        .overlay(Capsule().strokeBorder(Tokens.ink, lineWidth: Sticker.border))
-        .rotationEffect(.degrees(rotation))
     }
 }
 

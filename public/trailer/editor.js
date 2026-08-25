@@ -304,6 +304,10 @@ async function show(index, { preloadNext = true, wind = follow, swapFirst = fals
     destroy(cached);
   } else if (liveFrame && liveFrame.ready && sameShot(liveFrame.mounted, shot)) {
     // Already showing this exact race, and not resetting: keep it, move the playhead.
+    // Frames are cached by track|players|scenario, so this can be a DIFFERENT shot
+    // than the one the frame was mounted for — repoint it, or the clock, the kept
+    // span on the bar and "Wind to in" keep reading the old shot's in/out.
+    liveFrame.shot = shot;
     paintShots();
     if (preloadNext && shots[index + 1]) preload(shots[index + 1]);
     if (wind) await windTo(+shot.warmup);
@@ -312,6 +316,7 @@ async function show(index, { preloadNext = true, wind = follow, swapFirst = fals
   }
 
   const incoming = acquire(shot);
+  incoming.shot = shot;          // a cached frame may have been mounted for another shot
   if (incoming === nextFrame) nextFrame = null;
   const goal = Math.round((+shot.warmup || 0) * FPS);
 
@@ -663,6 +668,7 @@ function paintShots() {
     kill.onclick = (e) => {
       e.stopPropagation();
       shots.splice(i, 1);
+      if (i < liveIndex) liveIndex--;    // the live shot moved up a row
       if (liveIndex >= shots.length) liveIndex = shots.length - 1;
       save(); paintShots(); paintTotal();
     };

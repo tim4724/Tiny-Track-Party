@@ -85,13 +85,16 @@ std::vector<unsigned char> fromB64(const std::string& s) {
   return out;
 }
 
-}  // namespace
-
+// Number.prototype.toFixed(digits) followed by the implicit ToNumber the JS
+// does (`+x.toFixed(1)`), i.e. the value snapped to `digits` decimals.
 double js_fixed(double v, int digits) {
   const std::string t = fixedText(v, digits);
   return std::strtod(t.c_str(), nullptr);
 }
 
+// The path text of a schematic's points, in JS's exact spelling: "M" then the
+// first pair, " L" before each later pair, a space between x and y, numbers
+// through Number::toString, and a trailing " Z".
 std::string path_of(const std::vector<Point>& pts) {
   if (pts.empty()) return std::string();
   std::string d;
@@ -105,38 +108,9 @@ std::string path_of(const std::vector<Point>& pts) {
   return d;
 }
 
-std::vector<Point> points_of(const std::string& d) {
-  std::vector<Point> pts;
-  if (d.empty()) return pts;
-  // /^M/ then / Z$/, then split on " L" — the exact JS reader, and it only ever
-  // sees text this module wrote.
-  size_t begin = (d[0] == 'M') ? 1 : 0;
-  size_t end = d.size();
-  if (end >= begin + 2 && d.compare(end - 2, 2, " Z") == 0) end -= 2;
-  const std::string body = d.substr(begin, end - begin);
-
-  size_t pos = 0;
-  while (pos <= body.size()) {
-    size_t next = body.find(" L", pos);
-    const std::string tok = body.substr(pos, (next == std::string::npos ? body.size() : next) - pos);
-    // trim, then split on the single space between x and y
-    size_t a = tok.find_first_not_of(" \t\n\r");
-    if (a != std::string::npos) {
-      const size_t b = tok.find_last_not_of(" \t\n\r");
-      const std::string t = tok.substr(a, b - a + 1);
-      const size_t sp = t.find(' ');
-      Point p;
-      p.x = std::strtod(t.c_str(), nullptr);
-      p.y = (sp == std::string::npos) ? std::numeric_limits<double>::quiet_NaN()
-                                      : std::strtod(t.c_str() + sp + 1, nullptr);
-      pts.push_back(p);
-    }
-    if (next == std::string::npos) break;
-    pos = next + 2;
-  }
-  return pts;
-}
-
+// Ramer-Douglas-Peucker on an OPEN polyline (both endpoints fixed: the loop's
+// start point is meaningful, it is the grid). Iterative, so a pathological
+// track cannot blow a stack.
 std::vector<Point> rdp(const std::vector<Point>& pts, double eps) {
   if (pts.size() < 3) return pts;
   std::vector<unsigned char> keep(pts.size(), 0);
@@ -172,6 +146,40 @@ std::vector<Point> rdp(const std::vector<Point>& pts, double eps) {
     if (keep[i]) out.push_back(pts[i]);
   }
   return out;
+}
+
+}  // namespace
+
+std::vector<Point> points_of(const std::string& d) {
+  std::vector<Point> pts;
+  if (d.empty()) return pts;
+  // /^M/ then / Z$/, then split on " L" — the exact JS reader, and it only ever
+  // sees text this module wrote.
+  size_t begin = (d[0] == 'M') ? 1 : 0;
+  size_t end = d.size();
+  if (end >= begin + 2 && d.compare(end - 2, 2, " Z") == 0) end -= 2;
+  const std::string body = d.substr(begin, end - begin);
+
+  size_t pos = 0;
+  while (pos <= body.size()) {
+    size_t next = body.find(" L", pos);
+    const std::string tok = body.substr(pos, (next == std::string::npos ? body.size() : next) - pos);
+    // trim, then split on the single space between x and y
+    size_t a = tok.find_first_not_of(" \t\n\r");
+    if (a != std::string::npos) {
+      const size_t b = tok.find_last_not_of(" \t\n\r");
+      const std::string t = tok.substr(a, b - a + 1);
+      const size_t sp = t.find(' ');
+      Point p;
+      p.x = std::strtod(t.c_str(), nullptr);
+      p.y = (sp == std::string::npos) ? std::numeric_limits<double>::quiet_NaN()
+                                      : std::strtod(t.c_str() + sp + 1, nullptr);
+      pts.push_back(p);
+    }
+    if (next == std::string::npos) break;
+    pos = next + 2;
+  }
+  return pts;
 }
 
 Schematic build(const RaceTrack& track) {

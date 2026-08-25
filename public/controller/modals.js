@@ -28,7 +28,7 @@ let _setSoundOn = () => {};
 let _onModalToggle = () => {};
 
 // True in gallery/scenario mode — auto-popups stay shut there (the harness opens
-// the one it's previewing; a real WELCOME never fires anyway).
+// the one it's previewing; with no relay, no room snapshot ever arrives anyway).
 const inScenario = () => !!new URLSearchParams(location.search).get('scenario');
 
 // While a modal is up, mark the screens behind it inert so a screen reader's

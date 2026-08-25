@@ -16,7 +16,7 @@ import { Haptics } from './Haptics.js';
 import { buildCarPicker } from '../shared/carPicker.js';
 import { buildModePicker } from '../shared/trackPicker.js';
 import { unpackSchematic } from '../shared/schematicCodec.js';
-import { applyLatencyChip, renderReadyFoot } from './ui.js';
+import { applyLatencyChip, renderReadyFoot, NEXT_RACE_NOTE } from './ui.js';
 import { createWakeLock } from '../shared/wakeLock.js';
 // Sanitize a display name to the wire limit (trim + ≤16 chars). The cap is
 // shared with the display's own re-clamp of an incoming HELLO, so it lives in
@@ -97,7 +97,7 @@ let carCatalog = [];       // [{id,name,stats}] — snapshot.cars
 let colorPalette = (window.CAR_COLORS || []).slice(); // snapshot.colors (bundled palette = pre-snapshot fallback)
 const liveryOf = (i) => colorPalette[i] || '#888';
 let selectedMode = null;   // current pick {mode:'track'|'cup'|'random'|'tour', trackId?, cupId?} (host-controlled, echoed to all)
-let displayMode = null;    // pick the display last reported (WELCOME/LOBBY_UPDATE); null = it has none
+let displayMode = null;    // pick the display last reported (LOBBY_UPDATE snapshot); null = it has none
 let progressData = null;   // snapshot.progress — the couch's stars/locks (lobby only; cached like tracks)
 let lobbyTab = 'car';      // the host's lobby page: 'car' | 'race' (non-hosts only ever see 'car')
 let raceCursor = null;     // which race-list row the detail panel describes; null follows the pick
@@ -109,7 +109,8 @@ let amReady = false;       // my lobby ready flag (optimistic; LOBBY_UPDATE conf
 let startPending = false;
 let startGiveUpTimer = null;
 let inResults = false;     // showing the results overlay (my car finished / race over)
-// Joined while a race was already running (WELCOME said inRace:false): we have
+// Joined while a race was already running (the snapshot says our inRace is
+// false): we have
 // no car out there, so we wait on the lobby screen — car picker live, no ready
 // button — and ignore the current race's broadcasts. The display seats us
 // automatically when the next race builds its field; GAME_END (back to the
@@ -220,8 +221,8 @@ function setJoining(on) {
   el('name-input').disabled = on;
 }
 
-// The display's pick as {mode, cupId, trackId} (WELCOME / LOBBY_UPDATE carry it
-// flat). A display that predates modes sends a bare trackId — read it as an
+// The display's pick as {mode, cupId, trackId} (the LOBBY_UPDATE snapshot
+// carries it flat). A display that predates modes sends a bare trackId — read it as an
 // exact pick so a mid-deploy pairing still works.
 function modeFrom(data) {
   if (data.mode) {
@@ -397,7 +398,7 @@ function renderLobby() {
     // still hides the start controls — acceptable: the abandoned-race timer on
     // the display returns everyone to the lobby, where we get them normally.
     el('ready-btn').classList.add('hidden');
-    el('ready-note').textContent = 'You’re in the next race!'; // copy duplicated in TestHarness.js 'lobby-joining'
+    el('ready-note').textContent = NEXT_RACE_NOTE;
     return;
   }
   renderReadyFoot(el('ready-btn'), el('ready-note'), {
@@ -448,7 +449,7 @@ el('lobby-back').addEventListener('click', () => setLobbyPage('car'));
 // 4-race Grand Prix and its open panel offers exact single-track picks; Random's
 // panel offers the run's length instead). Sent as SELECT_MODE. Everyone else gets no picker at all — the big screen
 // shows the host's pick. Also hidden until the catalog arrives (older display /
-// pre-WELCOME). Layout in shared/trackPicker.js.
+// no snapshot yet). Layout in shared/trackPicker.js.
 function renderModePicker() {
   const wrap = el('trackpick');
   if (!amHost || !trackCatalog.length || lobbyTab !== 'race') { wrap.classList.add('hidden'); return; }
@@ -770,7 +771,8 @@ installBackHook(() => {
 if (inShell && shellName) {
   // Never flash the name screen (it's the default-visible section): hide it up
   // front and go straight to joining. The launcher's own joining spinner floats
-  // over the blank sky until WELCOME lands and show('lobby') takes over.
+  // over the blank sky until the replayed room snapshot lands and show('lobby')
+  // takes over.
   screens.name.classList.add('hidden');
   joinRace(shellName, { persist: false });
 } else {

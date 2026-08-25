@@ -1,8 +1,7 @@
 // ECMA-262 scalar math helpers, header-only. These reproduce JS Number
 // semantics that the C standard library gets subtly wrong; see
-// docs/native-port/fp-profile.md §3.1/§3.4. libttp-track uses js_round (via
-// util.h wrap_delta); libttp-sim will reuse all of them. Do NOT substitute the
-// std:: lookalikes — each disagrees with JS on a case the sim reaches.
+// docs/native-port/fp-profile.md §3.1/§3.4. Do NOT substitute the std::
+// lookalikes — each disagrees with JS on a case the sim reaches.
 #pragma once
 
 #include <cmath>

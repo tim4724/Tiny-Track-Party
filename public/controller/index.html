@@ -34,6 +34,15 @@
   <script src="/partyplug/PartyFastlane.js?v=__APP_V__"></script>
 </head>
 <body>
+  <!-- Shared SVG defs. The gear glyph is drawn ONCE and <use>d by both settings
+       buttons (lobby + game) — controller.css tunes them to read as the same
+       control on both screens, and the path's widened centre hole is itself
+       tuned, so the drawing must not fork. display:none inline, NOT the hidden
+       attribute: WebKit doesn't honour HTML hidden on SVG-namespace elements
+       and would lay this out as a default-size box. The path carries no fill
+       so currentColor inherits at each use site. -->
+  <svg style="display:none" aria-hidden="true"><symbol id="gear" viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 16.9c-2.7 0-4.9-2.21-4.9-4.9s2.21-4.9 4.9-4.9 4.9 2.21 4.9 4.9-2.21 4.9-4.9 4.9z"/></symbol></svg>
+
   <!-- Name -->
   <section id="name">
     <div class="wordmark name-wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></div>
@@ -59,7 +68,7 @@
          the lobby's navigation is the action corner at the bottom. -->
     <div class="lobby-top">
       <div class="lobby-me"><span id="me-name" class="lobby-me__name"></span></div>
-      <button id="settings-btn" class="settings-btn icon-btn" type="button" aria-label="Settings" aria-haspopup="dialog"><svg class="gear-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 16.9c-2.7 0-4.9-2.21-4.9-4.9s2.21-4.9 4.9-4.9 4.9 2.21 4.9 4.9-2.21 4.9-4.9 4.9z"/></svg></button>
+      <button id="settings-btn" class="settings-btn icon-btn" type="button" aria-label="Settings" aria-haspopup="dialog"><svg class="gear-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#gear"/></svg></button>
     </div>
 
     <div class="lobby-car">
@@ -75,9 +84,10 @@
            exact track from the open cup's panel. Everyone else sees the pick on
            the big screen instead. No header — the tiles say it, and dropping
            the kicker keeps this column's top level with the hero card's.
-           Hidden until the catalog arrives (WELCOME); see renderModePicker —
-           when it's hidden the whole column collapses to one centred column
-           (see #lobby:has in controller.css). -->
+           Hidden until the catalog arrives (it rides the room snapshot); see
+           renderModePicker — the wrappers are display:contents, so a hidden
+           #trackpick leaves both grid areas to the car half (the "No picker"
+           note in controller.css). -->
       <div id="trackpick" class="trackpick hidden">
         <div id="track-strip" class="trackpick__strip"></div>
       </div>
@@ -110,7 +120,7 @@
       <div class="hud-top">
         <div id="hud-name" class="hud-name"></div>
         <div class="hud-btns">
-          <button id="settings-btn-game" class="icon-btn" type="button" aria-label="Settings" aria-haspopup="dialog"><svg class="gear-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 16.9c-2.7 0-4.9-2.21-4.9-4.9s2.21-4.9 4.9-4.9 4.9 2.21 4.9 4.9-2.21 4.9-4.9 4.9z"/></svg></button>
+          <button id="settings-btn-game" class="icon-btn" type="button" aria-label="Settings" aria-haspopup="dialog"><svg class="gear-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#gear"/></svg></button>
           <button id="pause-btn" class="icon-btn" aria-label="Pause"><span class="pause-glyph"></span></button>
         </div>
       </div>

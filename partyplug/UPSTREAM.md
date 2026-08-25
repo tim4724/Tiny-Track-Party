@@ -72,7 +72,7 @@ unexplained diff hunk. Update the hash in the same commit as the edit.
 | `PartyConnection.js` | `a432dd641ccc449f` | comments only — the scalar-message note cites our `ttp_framing_classify` where upstream cites its Kotlin/Swift ports |
 | `PartyConnection.d.ts` | `81ea8d52afffa564` | none |
 | `PartyFastlane.js` | `ded18593c20e25d5` | exports `PartyFastlane.TICK_MS` so `scripts/gen-fastlane-corpus.mjs` stamps the real cadence instead of re-typing 50. Worth upstreaming |
-| `PartyFastlane.d.ts` | `777cb55352d4988b` | none |
+| `PartyFastlane.d.ts` | `07caed7eda7145ad` | declares what the JS already does: `enqueue`'s `'p2p' \| 'dropped'` return, the `onAcked`/`maxRing` options, and `static TICK_MS`. Worth upstreaming |
 | `RoomFlow.d.ts` | `1d749261479089d5` | kept as the interface the C++ port implements, though `RoomFlow.js` is not here |
 | `tests/party-connection.test.js` | `7f8467c4673d2ed8` | comments only, same reason as `PartyConnection.js` |
 | `tests/party-fastlane.test.js` | `bb048dd7e480c164` | none — but ours is a **superset** upstream lacks (loss+retransmit loopback suite, the `'p2p'` return assert). Never clobber it wholesale |

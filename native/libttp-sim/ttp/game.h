@@ -247,7 +247,7 @@ class Game {
 
   double curbLimit(double width) const;
   double colYaw(const Car& c) const;
-  struct FP { double along, side, restSide; };
+  struct FP { double side, restSide; };
   FP footprint(const Car& c) const;
   void cacheColFrame(Car& c, const Frame& f);
   Vec3 colWorld(const Car& c) const;

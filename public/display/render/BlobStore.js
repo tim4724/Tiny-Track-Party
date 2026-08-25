@@ -99,9 +99,26 @@ class BlobStore {
   async entriesJson() {
     const db = await this._db;
     if (!db) return '[]';
-    const names = await tx(db, 'readonly', (s) => s.getAllKeys());
-    const rows = await tx(db, 'readonly', (s) => s.getAll());
-    if (!names || !rows) return '[]';
+    // Both reads in ONE transaction: a write landing between two would shift
+    // getAll's key order against getAllKeys, pairing a name with a neighbour's
+    // usedMs.
+    const pair = await new Promise((resolve) => {
+      let os;
+      try {
+        os = db.transaction('blobs', 'readonly').objectStore('blobs');
+      } catch {
+        resolve(null);
+        return;
+      }
+      const keys = os.getAllKeys();
+      const rows = os.getAll();
+      let left = 2;
+      const done = () => { if (--left === 0) resolve([keys.result, rows.result]); };
+      keys.onsuccess = rows.onsuccess = done;
+      keys.onerror = rows.onerror = () => resolve(null);
+    });
+    if (!pair) return '[]';
+    const [names, rows] = pair;
     return JSON.stringify(names.map((name, i) => ({
       name: String(name), usedMs: rows[i]?.usedMs || 0
     })));

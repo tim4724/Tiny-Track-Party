@@ -18,14 +18,7 @@
 #include <fstream>
 #include <string>
 
-extern "C" {
-double ttp_fd_sin(double);
-double ttp_fd_cos(double);
-double ttp_fd_atan2(double, double);
-double ttp_fd_exp(double);
-double ttp_fd_pow(double, double);
-double ttp_fd_hypot(double, double);
-}
+#include "ttp_fd.h"
 
 namespace {
 
@@ -102,7 +95,7 @@ int main(int argc, char** argv) {
 
   while (std::getline(in, line)) {
     if (line.empty()) continue;
-    std::string f[1], ins[2], outs[1];
+    std::string f[2], ins[2], outs[2];
     if (extract_strings(line, "f", f) != 1) { std::fprintf(stderr, "bad line: %s\n", line.c_str()); return 2; }
     int nin = extract_strings(line, "i", ins);
     if (nin < 1 || extract_strings(line, "o", outs) != 1) { std::fprintf(stderr, "bad line: %s\n", line.c_str()); return 2; }

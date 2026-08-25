@@ -25,9 +25,7 @@ if (typeof document !== 'undefined') {
 // there). On the same LAN, host candidates work even without STUN.
 // VERIFIED 2026-07-29: an eturnal server answers Binding Requests here on both
 // A and AAAA (it is STUN ONLY — no TURN relay is configured, so a symmetric NAT
-// on both ends still has no path and falls back to the relay). GameNet.js also
-// lists a public STUN fallback after this one, so a stun.* outage costs
-// cross-network play nothing.
+// on both ends still has no path and falls back to the relay).
 var STUN_URL = 'stun:stun.couchpad.games:3478';
 // The public fallback GameNet lists AFTER ours, so a stun.couchpad.games
 // outage costs cross-network play nothing. Part of the manifest so a TV shell
@@ -259,13 +257,6 @@ var CAR_MODELS = [
 var CAR_NAMES = [
   'Dash', 'Bolt', 'Carve', 'Rumble'
 ];
-// Extra Y-rotation (radians) per model, for any model whose mesh faces the wrong
-// way after the renderer's base half-turn (most Kenney vehicles face -Z, so the
-// renderer turns them to +Z). Every model currently faces correctly, so this is
-// all zeros — kept as a per-model hook. Applied in-race (the renderer) and when
-// baking the car thumbnails, so the picker preview matches the racing car.
-var CAR_MODEL_YAW = [0, 0, 0, 0];
-
 // Per-model handling stats, parallel to CAR_MODELS. The native engine reads a
 // resolved stats object per car; these are the source of truth the display feeds
 // in. accel/vmax/turn are MULTIPLIERS on the engine's benchmark; `mass` is
@@ -319,7 +310,7 @@ if (typeof module !== 'undefined' && module.exports) {
     MSG, FASTLANE_TYPES, ROOM_STATE,
     RELAY_URL, STUN_URL, STUN_FALLBACK_URL,
     MAX_PLAYERS, FIELD_SIZE, TOTAL_LAPS, COUNTDOWN_SECONDS, SCHEMATIC_EPS, STEER, LIVENESS, RANDOM_RACES,
-    CAR_COLORS, CAR_MODELS, CAR_NAMES, CAR_MODEL_YAW,
+    CAR_COLORS, CAR_MODELS, CAR_NAMES,
     CAR_STATS, carStats
   };
 }

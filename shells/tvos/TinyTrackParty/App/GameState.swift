@@ -191,8 +191,9 @@ final class GameState: ObservableObject {
         /// pickup counter — the slot re-spins on a fresh PICKUP, not on the item
         /// changing, and those differ when a box re-rolls the same id.
         let car: EngineIdentity
-        /// Top-left origin, in POINTS (the raw ABI answer is physical pixels;
-        /// divide by the screen's nativeScale — see `DisplayHost.uiScale`).
+        /// Top-left origin, in POINTS. The ABI answers a fraction of the
+        /// surface; `DisplayHost.cellRects` multiplies it into the view's own
+        /// point bounds.
         ///
         /// The PICTURE: where the renderer drew this cell, and so what anything
         /// CENTRED on the cell centres on.

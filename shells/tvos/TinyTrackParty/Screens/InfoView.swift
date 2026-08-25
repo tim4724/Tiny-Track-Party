@@ -137,16 +137,14 @@ private struct LegalCard: View {
 /// button does not get for free. Rather than fork the look, this style draws
 /// the same ledge, lift and press the sticker kit's own style draws.
 struct StickerLinkStyle: ButtonStyle {
-    var ghost = false
     var tint: Color = Tokens.brand
 
     func makeBody(configuration: Configuration) -> some View {
-        Face(configuration: configuration, ghost: ghost, tint: tint)
+        Face(configuration: configuration, tint: tint)
     }
 
     private struct Face: View {
         let configuration: StickerLinkStyle.Configuration
-        let ghost: Bool
         let tint: Color
 
         @Environment(\.isFocused) private var isFocused
@@ -157,13 +155,13 @@ struct StickerLinkStyle: ButtonStyle {
             let shape = RoundedRectangle(cornerRadius: Sticker.radius, style: .continuous)
 
             return ZStack(alignment: .top) {
-                shape.fill(ghost ? Tokens.ink.opacity(0.35) : Tokens.btnLedge)
+                shape.fill(Tokens.btnLedge)
                     .offset(y: drop)
                 configuration.label
                     .padding(.vertical, 27)     // .btn is 0.8em/1.2em at 34pt
                     .padding(.horizontal, 41)
                     .background(
-                        shape.fill(ghost ? Tokens.surface : tint)
+                        shape.fill(tint)
                             .hardShadow(isFocused ? Sticker.focusShadow : .zero)
                     )
                     .stickerOutline(Sticker.border, radius: Sticker.radius)

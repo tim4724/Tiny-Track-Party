@@ -182,14 +182,15 @@ const char* ttp_display_kit_field_layout(void) {
     return (g_disp && g_disp->renderer) ? g_disp->renderer->kitFieldLayout() : "[]";
 }
 
-// What a scene IS, for the sun bake — the one rule, read by the build below and
-// by ttp_display_bake_key. The ROSTER is deliberately absent: the casters are
-// the static scene and cars cast nothing, which is the whole reason a bake
-// outlives a field change. The BACKEND is present because a bake BLOB's byte
-// orientation is a fact about the engine that read it back (exportBake's flip
-// note): without it a device the boot canary flips between Vulkan and GL would
-// find the other backend's blob under its own name — refused on import, and
-// blocking the store dedupe from ever writing a good one over it.
+// What a scene IS, for the sun bake — the one rule, read by the build below
+// and by the blob walk's plannedKeys(). The ROSTER is deliberately absent: the
+// casters are the static scene and cars cast nothing, which is the whole
+// reason a bake outlives a field change. The BACKEND is present because a bake
+// BLOB's byte orientation is a fact about the engine that read it back
+// (exportBake's flip note): without it a device the boot canary flips between
+// Vulkan and GL would find the other backend's blob under its own name —
+// refused on import, and blocking the store dedupe from ever writing a good
+// one over it.
 static std::string bakeKeyFor(const char* trackId, const char* biome) {
     return (trackId ? std::string(trackId) : std::string())
             + "|" + (biome ? biome : "")
@@ -254,9 +255,9 @@ int ttp_display_build(const char* trackId, const char* rosterJson) {
     // moulded-plastic deck plans none), like the theme.
     const ttp::rt::WearPlan wear = ttp::rt::compute_wear_plan(geo, theme.road);
     // WHAT THIS SCENE IS OF, for the shadow bake's reuse test (bakeShadowMap).
-    // ONE RULE, shared with ttp_display_bake_key so a shell naming a cache file
-    // and the build deciding whether to reuse cannot disagree about what a scene
-    // is.
+    // ONE RULE, shared with the blob walk's plannedKeys so the store's name for
+    // the bake and the build deciding whether to reuse cannot disagree about
+    // what a scene is.
     // The casters are the static scene and cars cast nothing, so two builds that
     // agree on these three agree on the bake — and a rebuild for a new FIELD is
     // then 520 ms cheaper on the Android reference box. The ROSTER is
@@ -318,6 +319,8 @@ int ttp_display_reroster(const char* rosterJson) {
 // The stores this build knows how to fill. A shell iterates this and names no
 // blob kind of its own — see ttp_display.h.
 static const char* const kBlobStores[] = { "bake", "mask" };
+static_assert(sizeof kBlobStores / sizeof kBlobStores[0] == DisplayCore::kBlobStoreCount,
+              "a new store must also widen DisplayCore::blobWalk");
 
 const char* ttp_display_blob_stores(void) {
     static std::string out;
@@ -335,7 +338,7 @@ namespace {
 // error, it simply has nothing to plan.
 int storeIndex(const char* store) {
     if (!store) return -1;
-    for (int i = 0; i < (int) (sizeof kBlobStores / sizeof kBlobStores[0]); i++) {
+    for (int i = 0; i < DisplayCore::kBlobStoreCount; i++) {
         if (std::strcmp(store, kBlobStores[i]) == 0) return i;
     }
     return -1;
@@ -505,7 +508,7 @@ int ttp_display_blob_ready(void) {
     if (!g_disp || !g_disp->renderer) return 0;
     harvestOutboundBlobs();
     int bits = 0;
-    for (int si = 0; si < (int) (sizeof kBlobStores / sizeof kBlobStores[0]); si++) {
+    for (int si = 0; si < DisplayCore::kBlobStoreCount; si++) {
         for (const DisplayCore::BlobOutbound& o : g_disp->blobWalk[si].outbound) {
             if (!o.bytes.empty()) { bits |= 1 << si; break; }
         }

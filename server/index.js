@@ -130,6 +130,7 @@ function getLocalIP() {
 // be mistaken for a room and must 404 instead of spinning up a controller.
 const RESERVED_SEGMENTS = new Set([
   'display', 'controller', 'shared', 'assets', 'partyplug', 'gallery',
+  'trailer', 'kits',
   'api', 'health', 'privacy', 'about', 'terms', 'robots', 'sitemap', 'favicon',
   'licenses', 'licences', 'credits', 'imprint', 'legal'
 ]);

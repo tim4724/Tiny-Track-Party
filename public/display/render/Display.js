@@ -31,6 +31,9 @@ export const CAM = { STILL: 0, ORBIT: 1, BBOX: 2, FREE: 3 };
 
 // Feature-ablation bits for debugFeatures() — the C side's TTP_FEAT_*
 // (ttp_display.h). DEBUG ONLY: the per-feature GPU cost map's instrument.
+// 0x2000 is TTP_DEBUG_NO_MERGE, an INVERTED knob outside FEAT on purpose: SET
+// takes the merged draw groups apart and restores the per-copy gltfio
+// renderables, so `ALL | 0x2000` is the unmerged arm of a sweep.
 export const FEAT = {
   ROAD: 0x04, TERRAIN: 0x08, DRESSING: 0x10,
   SKY: 0x20, CARS: 0x40, EFFECTS: 0x80,
@@ -45,12 +48,6 @@ export const FEAT = {
   GRADE: 0x4000, FOG_VERTEX: 0x8000,
   ALL: 0xDFFC,
 };
-
-// TTP_DEBUG_NO_MERGE (ttp_display.h) — an INVERTED knob outside FEAT on
-// purpose: SET takes the merged draw groups apart and restores the per-copy
-// gltfio renderables, so `FEAT.ALL | DEBUG_NO_MERGE` is the unmerged arm of a
-// sweep.
-export const DEBUG_NO_MERGE = 0x2000;
 
 // `vskid` is GONE with `vdecal`, same story: the rubber layer is a CPU
 // raster + upload now (TtpRenderer::renderSkids), so there is no stamp
@@ -571,12 +568,6 @@ export class Display {
     }));
   }
 
-  release() {
-    if (!this.built) return;
-    this._fn.release();
-    this.built = false;
-  }
-
   // The session whose cars get drawn (0 = an empty track, which is what the
   // lobby's preview is before the attract race starts).
   bind(session) { this._fn.bind(session | 0); }
@@ -724,7 +715,7 @@ export class Display {
     return this._profNames || (this._profNames = this._fn.profileNames().split(','));
   }
 
-  // Last frame's per-section wall clock, as { section: ms }.
+  // Per-decal diagnostic rows for the warp bench (see TestHarness.runWarpBench).
   debugDecals() { return JSON.parse(this._fn.debugDecals() || '[]'); }
   // Decal isolation — see ttp_display.h. Hiding the bodies and wiping the laid
   // rubber is what makes a contact shadow readable at all; without it every
@@ -741,14 +732,6 @@ export class Display {
   dressKeep(f) { this._fn.dressKeep(f); }
 
   dressSheets(on) { this._fn.dressSheets(on ? 1 : 0); }
-
-  profile() {
-    const ptr = this.m._ttp_display_profile();
-    if (!ptr) return null;
-    const out = {};
-    this._profileNames().forEach((n, i) => { out[n] = this.m.HEAPF64[(ptr >> 3) + i]; });
-    return out;
-  }
 
   // Just the frame total, in ms — one heap read, no object. This is the CPU cost
   // of building and submitting the frame; what the GPU then does with it is a

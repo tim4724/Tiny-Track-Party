@@ -47,7 +47,7 @@
 // lags by one RTT, the comparison is against a slightly old state, which makes the
 // gate keener to send — the safe direction.
 //
-// Rule 4 is a fresh SEND, not a retransmit. The receiver identifies an event by
+// A rule-3 resend is a fresh SEND, not a retransmit. The receiver identifies an event by
 // its seq (`es > lastAppliedEs`), so re-sending a newer payload under an already
 // delivered seq would have it discarded as a duplicate — the transport would
 // silently throw away the fresher value, and only when the network was healthy

@@ -436,7 +436,7 @@ body {
 .carthumb__spin {
   position: absolute; inset: 0;
   background-repeat: no-repeat;
-  background-size: 2400% 100%;   /* SPIN_FRAMES (24) * 100% — keep in sync with carThumbs.js */
+  /* background-size is written inline by carThumbs.js from SPIN_FRAMES */
   background-position: 0 0;
 }
 

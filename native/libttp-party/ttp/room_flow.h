@@ -146,7 +146,6 @@ class RoomFlow {
   void discAdd(const PeerId& id);
   void discDelete(const PeerId& id);
 
-  bool lastSeenHas(const PeerId& id) const;
   bool lastSeenGet(const PeerId& id, double& out) const;
   void lastSeenSet(const PeerId& id, double v);
   void lastSeenDelete(const PeerId& id);

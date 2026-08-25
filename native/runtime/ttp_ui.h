@@ -252,7 +252,7 @@ TTP_ABI const char* ttp_ui_roster_seats_room_json(int roomHandle, const char* ho
 /* The seat grid itself: those seats padded with OPEN placeholders up to
  * maxPlayers, so the lobby card keeps a fixed size as players trickle in and
  * never shrinks below the field that actually races. Takes the array
- * ttp_ui_roster_seats_json returned.
+ * ttp_ui_roster_seats_room_json returned.
  *   -> [{"open":true} | {"open":false,"name","colorIndex","carIndex",
  *       "modelIndex","off","host","ready"}, ...]
  * `off` is a held, dropped seat — dimmed, not removed. `modelIndex` wraps the
@@ -357,8 +357,8 @@ TTP_ABI const char* ttp_ui_freeze_plan_json(int paused, int autoPaused, int sess
 
 
 /* THE SAME CHIP, READ STRAIGHT OFF A ttp_gp_create HANDLE — all eight input
- * fields come from the series state (cup id/name off the cup, "" from
- * ttp_gp_next_track spelling null), so no caller can omit one and ship a
+ * fields come from the series state (cup id/name off the cup, an empty
+ * CupSeries::nextTrackId spelling null), so no caller can omit one and ship a
  * board whose podium never says `final` (the first TV shell did, over the
  * old per-field route). NOT SHELL SURFACE: no shell holds a series handle —
  * a shell's chip rides the standings board's `cup.info`, and its series read

@@ -140,12 +140,15 @@ same slot) but not across page reloads — to reconnect across a reload, persist
 new PartyFastlane({
   iceServers, selfIndex?, sendSignal,        // signaling piggybacks on the relay
   onInput, onPeerReady, onPeerClosed,
-  onConnectionState, onRtt, emitIdleHeartbeat
+  onConnectionState, onRtt, emitIdleHeartbeat,
+  onAcked,       // the peer confirmed applying a payload
+  maxRing        // cap on the resend ring (1 = latest-only)
 })
 ```
 
 Methods: `setSelfIndex(idx)`, `handleSignal(from, data)`, `open(peerIdx, opts)`
-(async), `close(peerIdx)`, `closeAll()`, `enqueue(peerIdx, ev)` (send input),
+(async), `close(peerIdx)`, `closeAll()`, `enqueue(peerIdx, ev)` (send input;
+returns `'p2p'` or `'dropped'` — fall back to the relay on `'dropped'`),
 `isOpen(peerIdx)`, `getStats(peerIdx)`, `getAllStats()`. Controllers initiate,
 the display auto-accepts. 3s of silence fires `onPeerClosed`.
 

@@ -649,10 +649,6 @@ final class PartyNet {
 
     // MARK: - The pick
 
-    /// The stored lobby pick, read where the walks keep it. One crossing per
-    /// ask, at button-press frequency; there is no mirror to drift.
-    var pick: [String: Any] { TTP.obj(ttp_net_pick_json(roomHandle)) }
-
     /// A pick made by the DISPLAY ITSELF — the boot seed, and the screenshot
     /// scenarios. The SAME peer-message walk a host's SELECT_MODE takes (draws
     /// included — the bag is the room's now), with the `type` stamped here so

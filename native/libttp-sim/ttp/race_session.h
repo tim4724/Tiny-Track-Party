@@ -53,7 +53,6 @@ class RaceSession {
 
  private:
   void stepCountdown(double dtMs);
-  void onRaceStart() {}
   void finish();
   bool timedOut();
 
