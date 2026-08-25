@@ -31,6 +31,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { Phone, loadProtocol } from './lib/phone.mjs';
+import { resolveDevicectlId } from './lib/tvos-device.mjs';
 
 const BUNDLE_ID = 'games.couchpad.tinytrack';
 const args = process.argv.slice(2);
@@ -48,15 +49,6 @@ const sh = (cmd, argv) => execFileSync(cmd, argv, { encoding: 'utf8' });
 
 // ---- the app under test -----------------------------------------------------
 
-function deviceId() {
-  // `State` reads `connected` (not `available`) for a paired Apple TV that is
-  // awake; matching only `available` finds nothing and reads as "no device".
-  const out = sh('xcrun', ['devicectl', 'list', 'devices']);
-  const row = out.split('\n').find((l) => /Apple TV/.test(l) && /connected|available/.test(l));
-  if (!row) throw new Error('no Apple TV found — is it awake and paired?');
-  return row.match(/([0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12})/i)[1];
-}
-
 /// Launch, and stream stdout to a file. The ROOM CODE is read back out of that
 /// stream: a TV has no address bar, and reading the code off the screen with a
 /// camera is not a thing a script can do.
@@ -65,7 +57,7 @@ function launchApp(logPath) {
   const out = openSync(logPath, 'w');
   const argv = SIM
     ? ['simctl', 'launch', '--console-pty', 'booted', BUNDLE_ID]
-    : ['devicectl', 'device', 'process', 'launch', '--device', deviceId(),
+    : ['devicectl', 'device', 'process', 'launch', '--device', resolveDevicectlId(),
        '--console', '--terminate-existing', BUNDLE_ID];
   const child = spawn('xcrun', argv, { stdio: ['ignore', out, out] });
   child.unref();
@@ -102,7 +94,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function backgroundApp() {
   if (SIM) { sh('xcrun', ['simctl', 'launch', 'booted', 'com.apple.TVSettings']); return; }
   sh('xcrun', ['devicectl', 'device', 'process', 'launch',
-               '--device', deviceId(), '--terminate-existing', 'com.apple.TVSettings']);
+               '--device', resolveDevicectlId(), '--terminate-existing', 'com.apple.TVSettings']);
 }
 
 /// Bring the game back to the front WITHOUT `--terminate-existing`, so this is a
@@ -112,7 +104,7 @@ function backgroundApp() {
 /// backgrounded party warms a fresh room.
 function foregroundApp() {
   if (SIM) { sh('xcrun', ['simctl', 'launch', 'booted', BUNDLE_ID]); return; }
-  sh('xcrun', ['devicectl', 'device', 'process', 'launch', '--device', deviceId(), BUNDLE_ID]);
+  sh('xcrun', ['devicectl', 'device', 'process', 'launch', '--device', resolveDevicectlId(), BUNDLE_ID]);
 }
 
 // ---- the party --------------------------------------------------------------

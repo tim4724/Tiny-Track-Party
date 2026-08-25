@@ -58,8 +58,9 @@ export function closeCourse(r) {
 // re-weights its distributions (feature count, corner radii/angles, rhythm, lap target),
 // names the seeded DECORATION passes to run after the elevation solve (rolling hills,
 // banked sweepers, width flares/pinches), and carries the difficulty BAND (`gates`) a
-// candidate must land in — structural gates plus measured metrics (see measureTrack)
-// and a headless AI lap probe (see aiProbe).
+// candidate must land in — structural gates plus measured metrics (see measureTrack).
+// The band's brakeFrac range is currently ungraded: it needed the headless AI lap
+// probe, retired with the JS engine (see aiProbe).
 //
 // `classic` reproduces the shipped Backyard bakes BIT-FOR-BIT: identical rng call order
 // and ranges to the original hard-coded generator, no decoration. Never retune it — a
@@ -690,9 +691,12 @@ export async function aiProbe() {
 // Audition a seed WITHOUT committing it: bake it exactly as gen-tracks.mjs would, then
 // grade the SHIPPING geometry. `pass` needs both layers: the structural gates the unit
 // tests enforce (closed · smooth · every crossing bridged ≥1.5 · no elevation knot ·
-// maxY ≤ 8) and the profile's difficulty BAND (crossings/length/metrics/AI brake
-// fraction in range). `fails` lists every gate missed, for scan-seeds --all.
-export async function evaluateSeed(seed, profileName = 'classic', { probe = true } = {}) {
+// maxY ≤ 8) and the profile's difficulty BAND (crossings/length/metrics in range).
+// The band's brakeFrac gate is NOT graded here — it needed the AI lap probe, retired
+// with the JS engine (see aiProbe above); bake the track, then
+// `native/build/probe_cli laptime --track=<id>`. `fails` lists every gate missed, for
+// scan-seeds --all.
+export async function evaluateSeed(seed, profileName = 'classic') {
   const G = PROFILES[profileName].gates;
   let r, baked, t;
   // Round r itself rather than re-running bakeSeed → resolveSeed: the anchor search now costs
@@ -725,16 +729,12 @@ export async function evaluateSeed(seed, profileName = 'classic', { probe = true
   band('minR', m.minRadius, G.minRadius);
   band('hairpins', m.hairpins, G.hairpins);
   band('density', m.cornerDensity, G.cornerDensity);
-  // The AI probe is the priciest gate — only pay for it on structurally sound candidates.
-  let ai = null;
-  if (probe && fails.length === 0) {
-    ai = await aiProbe({ waypoints: baked });
-    band('brake', ai.brakeFrac, G.brakeFrac);
-  }
+  // No lapSec/brakeFrac fields: the AI probe that measured them is retired (above),
+  // so scan-seeds renders them unmeasured.
   return { seed, profile: profileName, pass: fails.length === 0, fails,
     gap: +t.gap.toFixed(2), len: Math.round(L), step: +worstStep.toFixed(3), crossings,
     bridge: crossings ? +minBridge.toFixed(1) : 0, maxY: +maxY.toFixed(1), wp: baked.length,
-    ...m, ...(ai || {}) };
+    ...m };
 }
 
 // ---- furniture auto-placement ----

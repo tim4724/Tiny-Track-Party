@@ -27,9 +27,11 @@
 // hide and when to fire the shutter are the caller's business and differ wildly
 // between a favicon and a trailer frame. This is the plumbing only.
 //
-// NOT USED BY perf-race, and deliberately: a bench measures what the frame COSTS,
-// so it wants the automation defaults left exactly as the running game would see
-// them. Faking webdriver there would move the very number being measured.
+// THE BENCHES (perf-race's web backend, perf-features) take only serveApp from
+// here. Their browser stays their own: each owns its headed lifecycle, console
+// wiring and readout gating, and spoofs `navigator.webdriver` false itself
+// exactly as launchBrowser would — under the automation defaults a bench would
+// measure a different renderer (quarter scale, no shadow bake).
 import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
@@ -134,7 +136,8 @@ export async function servePages(pages, { root = path.join(ROOT, 'public') } = {
 // an init script because Stage.js reads `navigator.webdriver` during construction.
 //
 // `realUser: false` opts out, for a caller that genuinely wants the automation
-// path (a bench, a functional test).
+// path (lobby-fit-check, which measures the DOM rather than pixels and runs
+// under webdriver in E2E anyway).
 export async function launchBrowser({ realUser = true, headed = false } = {}) {
   const browser = await chromium.launch({ headless: !headed });
   async function context(opts = {}) {

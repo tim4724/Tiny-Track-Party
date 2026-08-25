@@ -29,11 +29,9 @@ import { existsSync, openSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
+import { ACTIVITY } from './lib/androidtv-bench.mjs';
 import { ADB, findTvDevice } from './lib/androidtv-device.mjs';
 import { Phone, loadProtocol } from './lib/phone.mjs';
-
-const PACKAGE = 'games.couchpad.tinytrack';
-const ACTIVITY = `${PACKAGE}/.MainActivity`;
 
 const args = process.argv.slice(2);
 const KEEP = args.includes('--keep');

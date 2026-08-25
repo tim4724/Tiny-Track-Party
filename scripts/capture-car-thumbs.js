@@ -38,10 +38,8 @@
 // same renderer at different angles, not two harnesses. See the command in
 // scripts/bake-wordmark.mjs, which consumes what it produces.
 
-const http = require('http');
 const path = require('path');
 const fs = require('fs');
-const { spawn } = require('child_process');
 const { chromium } = require('playwright');
 const { installThreeRoutes } = require('./lib/three-routes');
 
@@ -81,7 +79,6 @@ const BIAS = args.bias !== undefined ? parseFloat(args.bias) : -0.10;
 const YAW = args.yaw !== undefined ? parseFloat(args.yaw) : 305;   // hero turntable angle (deg) — front-3/4 from the right
 const PITCH = args.pitch !== undefined ? parseFloat(args.pitch) : 23; // look-down tilt (deg)
 const MARGIN = args.margin !== undefined ? parseFloat(args.margin) : 1.0; // sphere-fit slack
-const PORT = parseInt(args.port, 10) || 4322;
 const OUTDIR = path.resolve(ROOT, 'public/assets/toycar/thumbs');
 // Set only by --out: one named file for the still, and no strip. Resolved against
 // the repo root so the caller can pass a repo-relative path.
@@ -94,39 +91,24 @@ if (OUT && MODELS.length > 1) {
   process.exit(1);
 }
 
-function waitForServer(port, timeoutMs = 15000) {
-  const deadline = Date.now() + timeoutMs;
-  return new Promise((resolve, reject) => {
-    (function ping() {
-      const req = http.get({ host: '127.0.0.1', port, path: '/' }, (res) => { res.resume(); resolve(); });
-      req.on('error', () => {
-        if (Date.now() > deadline) reject(new Error(`server never came up on :${port}`));
-        else setTimeout(ping, 150);
-      });
-    })();
-  });
-}
-
 async function main() {
   fs.mkdirSync(OUTDIR, { recursive: true });
 
-  const server = spawn(process.execPath, [path.join(ROOT, 'server', 'index.js')], {
-    cwd: ROOT,
-    env: { ...process.env, PORT: String(PORT), APP_ENV: 'development' },
-    stdio: ['ignore', 'ignore', 'inherit'],
-  });
-  const killServer = () => { try { server.kill('SIGTERM'); } catch (_) {} };
-  process.on('exit', killServer);
+  // The capture seam allocates the port and makes a dead server child fatal
+  // (lib/capture.mjs's port trap). Only the server half is wanted here: the page
+  // renders its own three.js scene, not Stage, so the automation trap does not
+  // apply and the local Chromium launch stays.
+  const { serveApp } = await import('./lib/capture.mjs');
+  const server = await serveApp({ port: args.port ? parseInt(args.port, 10) : undefined });
 
   let browser;
   try {
-    await waitForServer(PORT);
     browser = await chromium.launch({ headless: !args.headed });
     const page = await browser.newPage({ viewport: { width: SIZE, height: HEIGHT }, deviceScaleFactor: 2 });
     page.on('pageerror', (e) => console.error('[page error]', e.message));
     page.on('console', (m) => { if (m.type() === 'error') console.error('[console]', m.text()); });
     await installThreeRoutes(page);
-    await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`http://127.0.0.1:${server.port}/`, { waitUntil: 'domcontentloaded' });
 
     for (const name of MODELS) {
       const { strip, still } = await page.evaluate(async ({ name, size, height, frames, yaw0, pitch, margin, bias }) => {
@@ -299,7 +281,7 @@ async function main() {
     }
   } finally {
     if (browser) await browser.close();
-    killServer();
+    server.close();
   }
 }
 

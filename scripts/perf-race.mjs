@@ -30,15 +30,10 @@
 // Register a new backend in BACKENDS (a factory, so each run gets its own
 // state). Keep it inside its own banner: this file is edited by more than one
 // pair of hands.
-import http from 'node:http';
-import path from 'node:path';
-import { spawn } from 'node:child_process';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { pathToFileURL } from 'node:url';
 
 import { makeAndroidBackend } from './perf-race.android.mjs';
 import { makeTvosBackend } from './perf-race.tvos.mjs';
-
-const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const arg = (name, dflt) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -117,36 +112,22 @@ export function lineStream() {
 // prints the readout; nothing here reaches into the page to compute one.
 // ============================================================================
 
-function waitForServer(port, timeoutMs = 20000) {
-  const deadline = Date.now() + timeoutMs;
-  return new Promise((resolve, reject) => {
-    (function ping() {
-      const req = http.get({ host: '127.0.0.1', port, path: '/' }, (res) => { res.resume(); resolve(); });
-      req.on('error', () => {
-        if (Date.now() > deadline) reject(new Error(`server never came up on :${port}`));
-        else setTimeout(ping, 150);
-      });
-    })();
-  });
-}
-
 function makeWebBackend() {
-  // Off the 4000 dev port and off the other capture scripts' ports, so a dev
-  // server and a concurrent capture are both undisturbed.
-  const port = parseInt(arg('port', '4331'), 10);
+  const portArg = arg('port', null);
   let server = null;
   let browser = null;
   let timer = null;
 
   return {
     async launch({ players, track, seconds, dpr }) {
+      // Both imported dynamically so the two TV backends need neither at module
+      // load (capture.mjs statically imports playwright). The seam provides the
+      // SERVER half only — allocated port, dead-child-fatal spawn; the browser
+      // stays this backend's own: headed, its own webdriver spoof, and the
+      // counting-gated console wiring below.
       const { chromium } = await import('playwright');
-      server = spawn(process.execPath, [path.join(ROOT, 'server', 'index.js')], {
-        cwd: ROOT,
-        env: { ...process.env, PORT: String(port), APP_ENV: 'development' },
-        stdio: ['ignore', 'ignore', 'inherit']
-      });
-      await waitForServer(port);
+      const { serveApp } = await import('./lib/capture.mjs');
+      server = await serveApp({ port: portArg ? parseInt(portArg, 10) : undefined });
 
       browser = await chromium.launch({ headless: false });
       const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
@@ -164,7 +145,7 @@ function makeWebBackend() {
       page.on('console', (m) => { if (counting) lines.push(m.text()); });
       page.on('pageerror', (e) => console.error('  [page]', e.message));
 
-      const url = `http://127.0.0.1:${port}/?test=1&scenario=bench&players=${players}`
+      const url = `http://127.0.0.1:${server.port}/?test=1&scenario=bench&players=${players}`
           + `&track=${track}&seed=${SEED}&dpr=${dpr}`;
       console.log(`# ${url}`);
       await page.goto(url);
@@ -180,7 +161,7 @@ function makeWebBackend() {
     async stop() {
       clearTimeout(timer);
       if (browser) await browser.close().catch(() => {});
-      if (server) server.kill('SIGTERM');
+      if (server) server.close();
     }
   };
 }

@@ -110,28 +110,17 @@ export default [
     },
   },
 
-  // ── Node ESM that drives a browser: the cue baker, the perf sweep ─────────
-  // Same reasoning as the CommonJS capture-script block above — the file is
-  // Node, but its page.evaluate() closures run in Chromium and reference window.
-  // (scripts/lib/bake-harness.js is browser-only and is covered by the
-  // scripts/**/*.js block, which already carries browser globals.)
-  // ── ESM that drives a browser ──────────────────────────────────────────────
+  // ── Node ESM that drives a browser ────────────────────────────────────────
   // Same situation as the CommonJS capture scripts above: the FILE is Node, but
   // it ships page.evaluate() closures that run in the page and reference browser
   // globals. Split out rather than widening the Node block, so a stray `window`
-  // in an ordinary script is still an error.
-  {
-    files: ['scripts/capture-shots.mjs', 'scripts/bake-wordmark.mjs', 'scripts/bake-shelf.mjs',
-            'scripts/lib/capture.mjs', 'scripts/check-blob-cache.mjs'],
-    languageOptions: {
-      ecmaVersion: 'latest',
-      sourceType: 'module',
-      globals: { ...globals.node, ...globals.browser },
-    },
-  },
-
+  // in an ordinary script is still an error. (scripts/lib/bake-harness.js is
+  // browser-only and is covered by the scripts/**/*.js block, which already
+  // carries browser globals.)
   {
     files: [
+      'scripts/capture-shots.mjs', 'scripts/bake-wordmark.mjs', 'scripts/bake-shelf.mjs',
+      'scripts/lib/capture.mjs', 'scripts/check-blob-cache.mjs',
       'scripts/bake-cues.mjs', 'scripts/perf-features.mjs', 'scripts/perf-race.mjs',
       'scripts/lobby-fit-check.mjs',
     ],

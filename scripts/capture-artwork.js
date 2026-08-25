@@ -6,9 +6,10 @@
 // from fake data: `/?test=1&scenario=racing&players=4` stands up the real
 // scene with four self-driving cars — one per CAR_MODELS slot, so the field shows
 // four DIFFERENT models — laid out in the same split-screen grid the live game
-// uses (bestGrid(4, 16:9) = 2x2). This script spins up the static server, drives
-// that page in headless Chromium at a 16:9 viewport, lets the race develop for a
-// beat so the cars spread along the track, and screenshots the canvas to a PNG.
+// uses (bestGrid(4, 16:9) = 2x2). This script stands the server up through the
+// capture seam (lib/capture.mjs — allocated port, ordinary-tab browser), drives
+// that page at a 16:9 viewport, lets the race develop for a beat so the cars
+// spread along the track, and screenshots the canvas to a PNG.
 //
 //   node scripts/capture-artwork.js                  # → artwork/splitscreen-4p.png (1920x1080, 2x SSAA)
 //   node scripts/capture-artwork.js --track skysnake # a different layout (and so a different BIOME)
@@ -35,111 +36,57 @@
 // Flags (all optional): --out, --width, --height, --players, --track, --scenario,
 // --ss (supersample factor, default 2), --wait (ms before the shot), --port, --headed.
 
-const http = require('http');
 const path = require('path');
 const fs = require('fs');
-const { spawn } = require('child_process');
-const { chromium } = require('playwright');
-
-const ROOT = path.join(__dirname, '..');
-
-// --- tiny flag parser: --key value, plus boolean --headed ---
-function parseArgs(argv) {
-  const out = {};
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (!a.startsWith('--')) continue;
-    const key = a.slice(2);
-    if (key === 'headed') { out.headed = true; continue; }
-    out[key] = argv[++i];
-  }
-  return out;
-}
-
-const args = parseArgs(process.argv.slice(2));
-const WIDTH = parseInt(args.width, 10) || 1920;       // 16:9 by default
-const HEIGHT = parseInt(args.height, 10) || 1080;
-const PLAYERS = parseInt(args.players, 10) || 4;       // 4 → 2x2 grid
-const TRACK = args.track || 'ribbon';                  // Backyard Cup — the canonical grass look
-const SCENARIO = args.scenario || 'racing';
-const WAIT_MS = parseInt(args.wait, 10) || 20000;      // let the race actually develop
-// 20 s, not 4: at 4 s the field is still stacked three-deep off the grid, so half the
-// cells shoot a camera buried in the car in front, and the places still read 1-2-3-4
-// down the grid — a starting line, not a race. By 20 s the bots have strung out, the
-// order has shuffled, and each cell frames its own piece of track. It is one LAP of
-// three either way. Nothing here is seeded, so framing still varies run to run: the
-// shot is worth a couple of rolls. Re-check this if the AI or the default track moves.
-const SS = Math.max(1, parseInt(args.ss, 10) || 2);    // supersample factor (2 → 4K render → 1080p)
-const PORT = parseInt(args.port, 10) || 4319;          // off the default 4000 dev port
-// The two render scales, and the whole reason there are two. Headless Chromium
-// rasterizes through SwiftShader, where the CPU is the fill rate: the 3840x2160
-// buffer this shot wants measures 0.58 fps. That is not just slow, it stops the
-// race — Stage's _loop clamps dt to 50 ms per frame, so at 0.58 fps twenty
-// seconds of wall clock advances the sim by 0.6 s and the field never leaves the
-// grid. At 0.25 the same twenty seconds is a real twenty seconds of racing.
-// Nothing is lost by racing small: the last thing before the screenshot is
-// setRenderScale(SHOT_DPR), and the shot is the frame drawn AFTER it.
-const RACE_DPR = 0.25;
-const SHOT_DPR = Math.min(SS, 2);                      // the renderer's own pixel-ratio cap
-const OUT = path.resolve(ROOT, args.out || 'artwork/splitscreen-4p.png');
-
-// Poll the server root until it answers (or time out).
-function waitForServer(port, timeoutMs = 15000) {
-  const deadline = Date.now() + timeoutMs;
-  return new Promise((resolve, reject) => {
-    (function ping() {
-      const req = http.get({ host: '127.0.0.1', port, path: '/' }, (res) => {
-        res.resume();
-        resolve();
-      });
-      req.on('error', () => {
-        if (Date.now() > deadline) reject(new Error(`server never came up on :${port}`));
-        else setTimeout(ping, 150);
-      });
-    })();
-  });
-}
 
 async function main() {
+  // The seam is ESM and this file has CJS callers by name (package.json,
+  // release.yml), so it is reached with a dynamic import.
+  const { ROOT, serveApp, launchBrowser, encode, args } = await import('./lib/capture.mjs');
+  const a = args();
+
+  const WIDTH = parseInt(a.width, 10) || 1920;       // 16:9 by default
+  const HEIGHT = parseInt(a.height, 10) || 1080;
+  const PLAYERS = parseInt(a.players, 10) || 4;       // 4 → 2x2 grid
+  const TRACK = a.track || 'ribbon';                  // Backyard Cup — the canonical grass look
+  const SCENARIO = a.scenario || 'racing';
+  const WAIT_MS = parseInt(a.wait, 10) || 20000;      // let the race actually develop
+  // 20 s, not 4: at 4 s the field is still stacked three-deep off the grid, so half the
+  // cells shoot a camera buried in the car in front, and the places still read 1-2-3-4
+  // down the grid — a starting line, not a race. By 20 s the bots have strung out, the
+  // order has shuffled, and each cell frames its own piece of track. It is one LAP of
+  // three either way. Nothing here is seeded, so framing still varies run to run: the
+  // shot is worth a couple of rolls. Re-check this if the AI or the default track moves.
+  const SS = Math.max(1, parseInt(a.ss, 10) || 2);    // supersample factor (2 → 4K render → 1080p)
+  // The two render scales, and the whole reason there are two. Headless Chromium
+  // rasterizes through SwiftShader, where the CPU is the fill rate: the 3840x2160
+  // buffer this shot wants measures 0.58 fps. That is not just slow, it stops the
+  // race — Stage's _loop clamps dt to 50 ms per frame, so at 0.58 fps twenty
+  // seconds of wall clock advances the sim by 0.6 s and the field never leaves the
+  // grid. At 0.25 the same twenty seconds is a real twenty seconds of racing.
+  // Nothing is lost by racing small: the last thing before the screenshot is
+  // setRenderScale(SHOT_DPR), and the shot is the frame drawn AFTER it.
+  const RACE_DPR = 0.25;
+  const SHOT_DPR = Math.min(SS, 2);                   // the renderer's own pixel-ratio cap
+  const OUT = path.resolve(ROOT, a.out || 'artwork/splitscreen-4p.png');
+
   fs.mkdirSync(path.dirname(OUT), { recursive: true });
 
-  // Own static server on its own port so a running dev server isn't disturbed.
-  const server = spawn(process.execPath, [path.join(ROOT, 'server', 'index.js')], {
-    cwd: ROOT,
-    env: { ...process.env, PORT: String(PORT), APP_ENV: 'development' },
-    stdio: ['ignore', 'ignore', 'inherit'],
-  });
-  const killServer = () => { try { server.kill('SIGTERM'); } catch (_) {} };
-  process.on('exit', killServer);
-
-  let browser;
+  const server = await serveApp({ port: a.port ? parseInt(a.port, 10) : undefined });
+  // launchBrowser presents the page as an ordinary tab — a hero shot wants the
+  // shipping render path, not the E2E budgets (quarter scale, no shadow bake)
+  // Stage runs under navigator.webdriver. See the automation trap in lib/capture.mjs.
+  const b = await launchBrowser({ headed: !!a.headed });
   try {
-    await waitForServer(PORT);
-
-    browser = await chromium.launch({ headless: !args.headed });
-    const page = await browser.newPage({
+    const page = await b.page({
       viewport: { width: WIDTH, height: HEIGHT }, // CSS layout px — fixes composition
       deviceScaleFactor: SS, // render (WebGL + HUD) at SS× for supersampling; shot is SS·WIDTH × SS·HEIGHT
     });
-    page.on('pageerror', (e) => console.error('[page error]', e.message));
     page.on('console', (m) => { if (m.type() === 'error') console.error('[console]', m.text()); });
-
-    // THE DISPLAY CLAMPS ITSELF UNDER AUTOMATION, and both clamps ruin a hero shot.
-    // Stage.js reads navigator.webdriver and (a) drops the render scale to dpr 0.25
-    // — a 1/16th-fragment budget for the E2E suite, which asserts DOM and engine
-    // state and never looks at a pixel — and (b) skips the sun's shadow bake. At
-    // 1920x1080 that is a 480x270 drawing buffer stretched back up: crisp DOM chrome
-    // over mush, which is what the README carried until 2026-07-30. This capture is
-    // NOT the suite and wants the shipping render path, so it presents as an ordinary
-    // tab. (?dpr= would lift the resolution alone; the shadow skip has no URL knob,
-    // and there is no reason for a screenshot to run either of the suite's budgets.)
-    await page.addInitScript(() => {
-      Object.defineProperty(navigator, 'webdriver', { get: () => false });
-    });
 
     // RACE CHEAP, SHOOT SHARP — see the RACE_DPR / SHOT_DPR note above for why the
     // whole run cannot simply be at full scale.
-    const url = `http://127.0.0.1:${PORT}/?test=1&scenario=${SCENARIO}` +
+    const url = `http://127.0.0.1:${server.port}/?test=1&scenario=${SCENARIO}` +
       `&players=${PLAYERS}&track=${TRACK}&dpr=${RACE_DPR}`;
     await page.goto(url, { waitUntil: 'networkidle' });
 
@@ -162,7 +109,8 @@ async function main() {
     // lands square on "1st"), the dev panel's gear FAB, and the two bottom-left
     // pills, which in the harness have no content and shoot as a stray dark dot.
     // Hidden rather than avoided, because where they land depends on the grid the
-    // player count picks.
+    // player count picks. NOT hideChrome(): this shot keeps the HUD chips, and its
+    // hide list carries .dbg-fab, which the seam's does not.
     await page.evaluate(() => {
       for (const sel of ['#corner-btns', '.dbg-fab', '#music-credit', '#sound-hint', '#toast']) {
         for (const node of document.querySelectorAll(sel)) node.style.display = 'none';
@@ -202,32 +150,16 @@ async function main() {
     if (SS === 1) {
       await page.screenshot({ path: OUT }); // native render, no downscale
     } else {
-      // Shot is SS·WIDTH × SS·HEIGHT; downscale to WIDTHxHEIGHT in-browser with a
-      // high-quality filter (createImageBitmap resizeQuality) for clean edges.
+      // Shot is SS·WIDTH × SS·HEIGHT; downscale to WIDTHxHEIGHT in-browser
+      // (the seam's encode — createImageBitmap resizeQuality high) for clean edges.
       const bigPng = await page.screenshot();
-      const downscaled = await page.evaluate(async ({ b64, w, h }) => {
-        // Decode base64 → bytes by hand (a fetch of a data: URL is blocked by the
-        // page's connect-src CSP), then build the source bitmap from a Blob.
-        const raw = atob(b64);
-        const src = new Uint8Array(raw.length);
-        for (let i = 0; i < raw.length; i++) src[i] = raw.charCodeAt(i);
-        const blob = new Blob([src], { type: 'image/png' });
-        const bmp = await createImageBitmap(blob, { resizeWidth: w, resizeHeight: h, resizeQuality: 'high' });
-        const canvas = new OffscreenCanvas(w, h);
-        canvas.getContext('2d').drawImage(bmp, 0, 0);
-        const outBlob = await canvas.convertToBlob({ type: 'image/png' });
-        const bytes = new Uint8Array(await outBlob.arrayBuffer());
-        let bin = '';
-        for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-        return btoa(bin);
-      }, { b64: bigPng.toString('base64'), w: WIDTH, h: HEIGHT });
-      fs.writeFileSync(OUT, Buffer.from(downscaled, 'base64'));
+      fs.writeFileSync(OUT, await encode(page, bigPng, { width: WIDTH, height: HEIGHT, type: 'image/png' }));
     }
     const note = SS === 1 ? '' : ` (${SS}x SSAA from ${WIDTH * SS}x${HEIGHT * SS})`;
     console.log(`Captured ${PLAYERS}-player ${WIDTH}x${HEIGHT} split-screen${note} → ${path.relative(ROOT, OUT)}`);
   } finally {
-    if (browser) await browser.close();
-    killServer();
+    await b.close();
+    server.close();
   }
 }
 

@@ -52,19 +52,17 @@
 //   npm run bake:cues -- --check       # re-render and diff against what's committed
 //   npm run bake:cues -- --verify-jitter
 //   npm run bake:cues -- --crossfade-audit   # how wrong the level stops are
-//   npm run bake:cues -- --check --port 4177 --headed --only pickup,roulette
+//   npm run bake:cues -- --check --headed --only pickup,roulette
 //
 // Output: public/assets/audio/cues/<name>.wav + manifest.json.
 // This script does NOT wire anything up — Audio.js still synthesises live. The
 // baked palette is judged by ear first.
 
-import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
-import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { chromium } from 'playwright';
+import { launchBrowser, serveApp } from './lib/capture.mjs';
 import {
   LEVEL_PROBES, evalLevelExpr, rolledJitter, sourceHashes, variantBlock, voiceSet,
 } from './lib/cue-source.mjs';
@@ -222,7 +220,7 @@ const round1 = (x) => Math.round(x * 10) / 10;
 const r6 = (x) => Math.round(x * 1e6) / 1e6;
 
 function parseArgs(argv) {
-  const out = { port: 4177 };
+  const out = {};   // no port default: serveApp allocates one unless --port overrides
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--check') out.check = true;
@@ -234,19 +232,6 @@ function parseArgs(argv) {
     else if (a.startsWith('--')) throw new Error('unknown flag ' + a);
   }
   return out;
-}
-
-function waitForServer(port, timeoutMs = 20000) {
-  const deadline = Date.now() + timeoutMs;
-  return new Promise((resolve, reject) => {
-    (function ping() {
-      const req = http.get({ host: '127.0.0.1', port, path: '/' }, (res) => { res.resume(); resolve(); });
-      req.on('error', () => {
-        if (Date.now() > deadline) reject(new Error(`server never came up on :${port}`));
-        else setTimeout(ping, 150);
-      });
-    })();
-  });
 }
 
 // base64 → Float32Array (copied into a fresh, aligned ArrayBuffer).
@@ -663,21 +648,18 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const { hazards, voices, hashes } = await auditCueSource();
 
-  const server = spawn(process.execPath, [path.join(ROOT, 'server', 'index.js')], {
-    cwd: ROOT,
-    env: { ...process.env, PORT: String(args.port), APP_ENV: 'development' },
-    stdio: ['ignore', 'ignore', 'inherit'],
-  });
-  const killServer = () => { try { server.kill('SIGTERM'); } catch (_) { /* already gone */ } };
-  process.on('exit', killServer);
+  // The capture seam: allocated port, dead-child-fatal server (lib/capture.mjs's
+  // port trap — a parallel worktree's server on a shared literal would bake
+  // ANOTHER BRANCH's cues.js under this branch's source hashes). The seam's
+  // realUser default is moot for the routed __bake stub — it reads no automation
+  // state — so it is left at the default.
+  const server = await serveApp({ port: args.port });
 
-  let browser;
+  let b;
   try {
-    await waitForServer(args.port);
-    browser = await chromium.launch({ headless: !args.headed });
-    const page = await browser.newPage();
+    b = await launchBrowser({ headed: args.headed });
+    const page = await b.page();
     page.on('console', (m) => { if (m.type() === 'error') console.error('[page]', m.text()); });
-    page.on('pageerror', (e) => console.error('[page]', e.message));
 
     // A routed same-origin stub: the document carries no CSP of its own, and the
     // real module it imports comes off the dev server, so /display/audio/cues.js
@@ -694,7 +676,7 @@ async function main() {
       }
       return route.fulfill({ status: 404, body: 'Not Found' });
     });
-    await page.goto(`http://127.0.0.1:${args.port}/__bake/`);
+    await page.goto(`http://127.0.0.1:${server.port}/__bake/`);
     await page.waitForFunction(() => typeof window.__bakeRender === 'function');
 
     const { picks, defaults } = await page.evaluate(() => window.__bakePicks());
@@ -725,7 +707,7 @@ async function main() {
     }
 
     const rendered = await bake(page, args, voices);
-    const version = browser.version();
+    const version = b.browser.version();
 
     // ── assemble files + manifest ──
     const cues = {};
@@ -966,8 +948,8 @@ async function main() {
         + (h.computedRhythm ? ' +loop' : '')).trim() || '—',
     })));
   } finally {
-    if (browser) await browser.close();
-    killServer();
+    if (b) await b.close();
+    server.close();
   }
 }
 

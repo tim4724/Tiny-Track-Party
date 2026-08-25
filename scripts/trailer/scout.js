@@ -36,8 +36,7 @@
 //
 // Prints the best seeds with the sim-time each first lands, which is the `warmup` to use.
 
-const { chromium } = require('playwright');
-const { UNMASK, STEP_ONE, serveStatic } = require('./harness.js');
+const { STEP_ONE } = require('./harness.js');
 const SHOTS = require('./shots.js');
 
 function parseArgs(argv) {
@@ -55,7 +54,6 @@ const SEED = args.seed != null ? parseInt(args.seed, 10) : SHOT.seed;
 const WINDOW = parseFloat(args.window) || 60;   // seconds of sim to search
 const POLL_HZ = 6;                              // beats per second at which the sim is asked
 const FPS = 60;
-const PORT = parseInt(args.port, 10) || 4322;
 
 async function sweep(page, seed, port) {
   const q = new URLSearchParams({
@@ -106,17 +104,16 @@ async function sweep(page, seed, port) {
 }
 
 async function main() {
-  const killServer = await serveStatic(PORT);
+  const { serveApp, launchBrowser } = await import('../lib/capture.mjs');
+  const app = await serveApp({ port: args.port ? parseInt(args.port, 10) : undefined });
 
-  let browser;
+  let b;
   try {
-    browser = await chromium.launch({ headless: false });
-    const page = await browser.newPage({ viewport: { width: 480, height: 270 }, deviceScaleFactor: 1 });
-    await page.addInitScript(UNMASK);
-    page.on('pageerror', (e) => console.error('[page error]', e.message));
+    b = await launchBrowser({ headed: true });
+    const page = await b.page({ viewport: { width: 480, height: 270 }, deviceScaleFactor: 1 });
 
     console.log(`Scouting ${SHOT.id} (${SHOT.scenario}, ${SHOT.players}P, ${SHOT.track}) over ${WINDOW}s of sim`);
-    const hits = await sweep(page, SEED, PORT);
+    const hits = await sweep(page, SEED, app.port);
     if (!hits.length) {
       console.log('\nNothing came near the cell car. Try a longer --window.');
       return;
@@ -142,8 +139,8 @@ async function main() {
     console.log(`  put in shots.js:  warmup: ${warmup}`);
     console.log(`  check it:         node scripts/trailer/render.js --shot ${SHOT.id} --warmup ${warmup} --preview`);
   } finally {
-    if (browser) await browser.close();
-    killServer();
+    if (b) await b.close();
+    app.close();
   }
 }
 

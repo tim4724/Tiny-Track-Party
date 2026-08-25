@@ -13,9 +13,7 @@
 //     with --seed/--laps so a fixture set can pin any value;
 //   - JSON key order is fixed by a local recursive-sort stringify (mirroring
 //     record-trace.mjs's canonicalStringify semantics, reimplemented here so the two
-//     scripts don't couple);
-//   - the centerline is projected to its serializable DATA ({samples, length}) so the
-//     live class's scratch buffers never leak into the bytes.
+//     scripts don't couple).
 // Same machine or any machine, same flags in -> byte-identical bytes out.
 //
 // CLI:
@@ -24,8 +22,8 @@
 //                 else a {trackId: augmentedTrack} object over every shipped track.
 //     --out=dir : one <trackId>.json file per track (trailing newline), dir created.
 //
-// Importable: buildAugmentedTrack(entry, {laps, seed}), serializableTrack(track),
-// canonicalStringify, SHIPPED_TRACKS.
+// Importable: buildAugmentedTrack(entry, {laps, seed}), canonicalStringify,
+// SHIPPED_TRACKS.
 
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
@@ -57,18 +55,13 @@ export function canonicalStringify(v) {
 // The RACE-READY track: the engine's own build (geometry + resolved furniture +
 // totalLaps/seed) plus the host's `cup` tag. The builder produces everything but
 // `cup`, which is a theming id the host attaches — so this is now one call and a
-// tag, where it used to re-run a JS builder and a JS furniture resolver.
+// tag, where it used to re-run a JS builder and a JS furniture resolver, then
+// project the live Centerline class down to its {samples, length} data. The
+// engine hands back plain data already, so that projection step is gone.
 export function buildAugmentedTrack(entry, { laps = 3, seed = 1 } = {}) {
   const b = buildTrack(entry.id, { laps, seed });
   b.cup = entry.cup;      // biome theming id (renderer-side identity)
   return b;
-}
-
-// The engine already hands back plain data — `centerline` is { samples, length },
-// not a class with scratch buffers — so there is nothing left to project away.
-// Kept as the named step in the pipeline the exporter documents.
-export function serializableTrack(track) {
-  return track;
 }
 
 // ---- CLI ----
@@ -98,7 +91,7 @@ function main() {
     }
   }
 
-  const built = entries.map((t) => ({ id: t.id, obj: serializableTrack(buildAugmentedTrack(t, { laps, seed })) }));
+  const built = entries.map((t) => ({ id: t.id, obj: buildAugmentedTrack(t, { laps, seed }) }));
 
   if (a.out && a.out !== true) {
     fs.mkdirSync(a.out, { recursive: true });

@@ -21,19 +21,13 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import { CAPTURED_SCENARIOS } from '../public/shared/galleryScenarios.js';
+// The launch vocabulary (Scenarios.kt's spellings; no manifest to read them
+// from) has one script-side home: lib/androidtv-bench.mjs. A rename touches
+// Scenarios.kt and that module, nothing here.
+import { ACTIVITY, EXTRA_PLAYERS, EXTRA_SCENARIO, EXTRA_TRACK, PACKAGE } from './lib/androidtv-bench.mjs';
 import { gitSha, mergeShots, shotDir, toWebp } from './lib/shots.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-
-const PACKAGE = 'games.couchpad.tinytrack';
-const ACTIVITY = `${PACKAGE}/.MainActivity`;
-
-// The extras the app reads. Spelled in Scenarios.kt as EXTRA_SCENARIO/EXTRA_TRACK/
-// EXTRA_PLAYERS; there is no manifest to read them from, so this list is the one
-// place the two sides meet and a rename has to touch both.
-const EXTRA_SCENARIO = 'ttpScenario';
-const EXTRA_TRACK = 'ttpTrack';
-const EXTRA_PLAYERS = 'ttpPlayers';
 
 const args = Object.fromEntries(
   process.argv.slice(2).flatMap((a, i, all) =>

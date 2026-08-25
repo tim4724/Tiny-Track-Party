@@ -22,8 +22,10 @@ Correct for the E2E suite, which asserts DOM and engine state and never pixels.
 Ruinous for a capture. `?dpr=` lifts the render scale; **the shadow skip has no
 URL knob**, so the only way back is a page that believes it is an ordinary tab.
 `launchBrowser()` does both by default. A caller that genuinely wants the
-automation path — a bench measuring what a frame costs — passes
-`realUser: false` and says why.
+automation path — a DOM measurement like `lobby-fit-check.mjs`, which never
+reads a pixel — passes `realUser: false` and says why. The benches are not that
+caller: they keep their own browser and spoof webdriver false themselves,
+because the automation path would measure a different renderer.
 
 **The port trap.** This tree is worked in many worktrees at once, so a literal
 port number is not a race, it is a standing collision: the capture connects to

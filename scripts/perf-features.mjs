@@ -45,16 +45,20 @@
 //   • navigator.webdriver spoofed false, or Stage caps the buffer to the E2E
 //     scale and skips the shadow bake — i.e. measures a different renderer.
 //
-// Usage: node scripts/perf-features.mjs [--port 4211] [--track skyline]
+// Usage: node scripts/perf-features.mjs [--port <n>] [--track skyline]
 //        [--players 4] [--dpr 1] [--rounds 5] [--json out.json]
 import { chromium } from 'playwright';
+// The seam's SERVER half only (allocated port, dead-child-fatal spawn): the
+// browser stays local because the GL counter + warm pump must install before the
+// page runs, and this bench wants the real-user path (headed, webdriver false).
+import { serveApp } from './lib/capture.mjs';
 
 const arg = (name, dflt) => {
   const i = process.argv.indexOf(`--${name}`);
   return i >= 0 ? process.argv[i + 1] : dflt;
 };
 
-const PORT = arg('port', '4211');
+const PORT = arg('port', null);
 const TRACK = arg('track', 'skyline');
 const SCENARIO = arg('scenario', 'racing');
 // Frames of real racing to run before the field is frozen and measured. The
@@ -96,6 +100,7 @@ const median = (a) => {
 };
 
 const main = async () => {
+  const app = await serveApp({ port: PORT ? parseInt(PORT, 10) : undefined });
   const browser = await chromium.launch({ headless: false });
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
   await ctx.addInitScript(() => {
@@ -178,7 +183,7 @@ const main = async () => {
   // off by default now, and with `?dpr=` pinned the render scale is off too — so
   // nothing else in the page would ask the monitor to measure, and every arm
   // would read as null cost.
-  const url = `http://localhost:${PORT}/?scenario=${SCENARIO}&players=${PLAYERS}`
+  const url = `http://localhost:${app.port}/?scenario=${SCENARIO}&players=${PLAYERS}`
       + `&track=${TRACK}&seed=1&dpr=${DPR}&gate=1&perf=1`
       + (EXTRA ? `&${EXTRA}` : '');
   console.log(`# ${url}  rounds=${ROUNDS}`);
@@ -433,6 +438,7 @@ const main = async () => {
     console.log(`# wrote ${OUT}`);
   }
   await browser.close();
+  app.close();
 };
 
 main().catch((e) => { console.error(e); process.exit(1); });

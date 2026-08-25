@@ -9,13 +9,15 @@
 //      element's `roll` (coordinate descent, coarse→fine) to minimize tilt on ground-level
 //      unbanked road — the automated version of Twister's "measured by probe" ±75.5.
 // Then grade the result like a seed: the structural gates the unit tests enforce (twist
-// rate, seam holonomy, strand clearance) + measureTrack metrics + the headless AI probe.
+// rate, seam holonomy, strand clearance) + measureTrack metrics. The headless AI lap
+// probe retired with the JS engine — bake the track, then
+// `native/build/probe_cli laptime --track=<id>` for the difficulty profile.
 //
 //   node scripts/compose-stunt.mjs           — solve + grade all designs, print the numbers
 //
 // The solved lengths/rolls get hard-coded into public/shared/tracks.js (like every other
 // segment track); this script is the tool that produced them, not a build step.
-import { buildTrack, measureTrack, aiProbe } from './track-gen.mjs';
+import { buildTrack, measureTrack } from './track-gen.mjs';
 
 const DEG = Math.PI / 180;
 const straight = (length, opts = {}) => ({ kind: 'straight', length, ...opts });
@@ -169,17 +171,24 @@ function sweepRolls(segs, idxs, { range = 120, coarse = 6 } = {}) {
 }
 
 // ---- structural grade (mirrors the twister unit tests) ----
+// The wasm builder hands back PLAIN {x,y,z} samples (native-track.mjs), so the
+// little vector algebra the grade needs is spelled out here.
+const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z;
+const cross = (a, b) => ({ x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x });
+const addScaled = (a, b, k) => ({ x: a.x + b.x * k, y: a.y + b.y * k, z: a.z + b.z * k });
+const norm = (a) => { const l = Math.hypot(a.x, a.y, a.z) || 1; return { x: a.x / l, y: a.y / l, z: a.z / l }; };
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 function grade(segs) {
   const t = buildTrack(segs);
   const ss = t.centerline.samples, L = t.length;
-  let worstTwist = 0, minUpSeam = ss[ss.length - 1].up.dot(ss[0].up), maxY = 0, inverted = 0, sideways = 0;
+  let worstTwist = 0, minUpSeam = dot(ss[ss.length - 1].up, ss[0].up), maxY = 0, inverted = 0, sideways = 0;
   for (let i = 1; i < ss.length; i++) {
     const a = ss[i - 1], b = ss[i], ds = b.s - a.s;
     if (ds <= 1e-6) continue;
     const tg = a.tangent;
-    const ua = a.up.clone().addScaledVector(tg, -a.up.dot(tg)).normalize();
-    const ub = b.up.clone().addScaledVector(tg, -b.up.dot(tg)).normalize();
-    worstTwist = Math.max(worstTwist, Math.abs(Math.atan2(ua.clone().cross(ub).dot(tg), ua.dot(ub))) / ds);
+    const ua = norm(addScaled(a.up, tg, -dot(a.up, tg)));
+    const ub = norm(addScaled(b.up, tg, -dot(b.up, tg)));
+    worstTwist = Math.max(worstTwist, Math.abs(Math.atan2(dot(cross(ua, ub), tg), dot(ua, ub))) / ds);
   }
   let minStrand = Infinity, strandAt = null;
   // sameLevelGap: worst (horizontal − required) between arc-distant UPRIGHT strands at
@@ -190,7 +199,7 @@ function grade(segs) {
   for (let i = 0; i < ss.length; i += 2) for (let j = i + 2; j < ss.length; j += 2) {
     const arcD = Math.min(Math.abs(ss[i].s - ss[j].s), L - Math.abs(ss[i].s - ss[j].s));
     if (arcD < 6) continue;
-    const d = ss[i].pos.distanceTo(ss[j].pos);
+    const d = dist(ss[i].pos, ss[j].pos);
     if (d < minStrand) { minStrand = d; strandAt = [Math.round(ss[i].s), Math.round(ss[j].s)]; }
     if (arcD < 8 || ss[i].up.y < 0.9 || ss[j].up.y < 0.9) continue;
     if (Math.abs(ss[i].pos.y - ss[j].pos.y) >= 0.6) continue;
@@ -368,8 +377,8 @@ export async function compose(design) {
   for (const s of segs) { delete s._sweep; delete s._leg; delete s._align; delete s._ramp; }
   const g = grade(segs);
   const m = measureTrack(buildTrack(segs), segs);
-  const ai = await aiProbe(segs);
-  return { name, segs, closure: c, rolls: r, rollIdx, grade: g, metrics: m, ai };
+  // `ai` was the headless AI lap probe, retired with the JS engine (see header).
+  return { name, segs, closure: c, rolls: r, rollIdx, grade: g, metrics: m, ai: null };
 }
 
 // ================= CLI =================
@@ -378,12 +387,11 @@ if (process.argv[1] && process.argv[1].endsWith('compose-stunt.mjs')) {
     const design = make();
     console.log(`\n=== ${design.name} ===`);
     try {
-      const { segs, closure: c, rolls: r, rollIdx, grade: g, metrics: m, ai } = await compose(design);
+      const { segs, closure: c, rolls: r, rollIdx, grade: g, metrics: m } = await compose(design);
       console.log(`closure: leg[${c.iA}] → ${segs[c.iA].length} (${c.dA >= 0 ? '+' : ''}${c.dA.toFixed(3)}), leg[${c.iB}] → ${segs[c.iB].length} (${c.dB >= 0 ? '+' : ''}${c.dB.toFixed(3)})`);
       console.log(`rolls:   ${rollIdx.map((i, n) => `seg[${i}]=${r.rolls[n]}`).join('  ')}  (tilt score ${r.score.toFixed(1)})`);
       console.log('grade:  ', g);
       console.log('metrics:', m);
-      console.log('ai:     ', ai);
     } catch (e) {
       console.log('FAILED:', e.message);
     }

@@ -48,7 +48,7 @@ const HEADERS = [
 ];
 
 // ---------------------------------------------------------------------------
-// The marshalling rules. Ten exports are not (scalars | strings); each one is
+// The marshalling rules. The exports that are not (scalars | strings) are each
 // named here with the reason, because a silent default for any of them is a
 // wrong answer rather than a compile error.
 // ---------------------------------------------------------------------------

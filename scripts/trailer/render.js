@@ -28,8 +28,7 @@
 const path = require('path');
 const fs = require('fs');
 const { spawnSync } = require('child_process');
-const { chromium } = require('playwright');
-const { ROOT, UNMASK, STEP_ONE, serveStatic } = require('./harness.js');
+const { ROOT, STEP_ONE } = require('./harness.js');
 
 function parseArgs(argv) {
   const out = { shot: [] };
@@ -56,7 +55,6 @@ const FPS = parseInt(args.fps, 10) || 60;
 const WIDTH = parseInt(args.width, 10) || (args.preview ? 960 : 1920);
 const HEIGHT = parseInt(args.height, 10) || (args.preview ? 540 : 1080);
 const DSF = parseFloat(args.dsf) || (args.preview ? 1 : 2);
-const PORT = parseInt(args.port, 10) || 4321;
 const CRF = args.crf || (args.preview ? '23' : '16');
 
 // SCOUTING a take: --seed/--warmup/--seconds override the named shot's own fields for
@@ -148,7 +146,7 @@ async function renderShot(page, shot, port) {
 
   const q = new URLSearchParams({
     test: '1',
-    gate: '1',            // the display hands us the frame clock — see the UNMASK note
+    gate: '1',            // the display hands us the frame clock — see harness.js
     scenario: shot.scenario,
     players: String(shot.players),
     track: shot.track,
@@ -242,26 +240,25 @@ async function renderShot(page, shot, port) {
 
 async function main() {
   fs.mkdirSync(OUT, { recursive: true });
-  const killServer = await serveStatic(PORT);
+  const { serveApp, launchBrowser } = await import('../lib/capture.mjs');
+  const app = await serveApp({ port: args.port ? parseInt(args.port, 10) : undefined });
 
-  let browser;
+  let b;
   try {
-    // Headed for the real GPU — see the note at the top of this file.
-    browser = await chromium.launch({ headless: false });
-    const page = await browser.newPage({
+    // HEADED for the real GPU — see the note at the top of this file.
+    b = await launchBrowser({ headed: true });
+    const page = await b.page({
       viewport: { width: WIDTH, height: HEIGHT },
       deviceScaleFactor: DSF,
     });
-    page.on('pageerror', (e) => console.error('[page error]', e.message));
     page.on('console', (m) => { if (m.type() === 'error') console.error('[console]', m.text()); });
-    await page.addInitScript(UNMASK);
 
     console.log(`Rendering ${shots.length} shot(s) at ${WIDTH * DSF}x${HEIGHT * DSF} @ ${FPS}fps`);
-    for (const shot of shots) await renderShot(page, shot, PORT);
+    for (const shot of shots) await renderShot(page, shot, app.port);
     console.log(`\nClips in ${path.relative(ROOT, path.join(OUT, 'clips'))}/ — run scripts/trailer/cut.js to stitch.`);
   } finally {
-    if (browser) await browser.close();
-    killServer();
+    if (b) await b.close();
+    app.close();
   }
 }
 
