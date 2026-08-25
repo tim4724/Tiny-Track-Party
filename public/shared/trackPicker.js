@@ -3,7 +3,7 @@
 // endless, a fixed card, or the World Tour — one draw from every cup), or —
 // from the panel a picked cup opens — one exact track (single race). Six
 // compact tiles instead of the old 16-tile strip, so the lobby never scrolls. Rendered
-// from the schematic catalog the display ships in WELCOME (each entry carries
+// from the schematic catalog in the display's retained LOBBY_UPDATE snapshot (each entry carries
 // its cup + a top-down SVG path; see native/libttp-track/ttp/schematic.h). Only the HOST
 // picks, so `canPick` gates the taps — read-only rendering is for the gallery.
 

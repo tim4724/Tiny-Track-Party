@@ -1,7 +1,7 @@
 // The join-code QR encoder, in the browser: drawing its own join code is not
 // something a display should need a server for. Every shell encodes locally and
 // only the module bitmap is per-platform — the decision, and the other two
-// shells' encoders, are in docs/native-port/shells.md §7.
+// shells' encoders, are in docs/native-port/shells.md (the QR-encoder item).
 //
 // Node imports this directly, so keep it dependency-free.
 import qrcode from './qrcode-generator.js';

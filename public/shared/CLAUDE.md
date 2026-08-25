@@ -117,7 +117,8 @@ order is respelled on the Node side.
 ## The join QR
 
 `qr.js` encodes the join URL **in the browser** — there is no server endpoint and
-no C++ encoder, and why is `docs/native-port/shells.md` §7. It owns the encoding
+no C++ encoder, and why is the QR-encoder item in `docs/native-port/shells.md`'s
+"What every shell owes" list. It owns the encoding
 policy the other shells reimplement, so its EC level and quiet zone are asserted
 structurally rather than left to prose.
 
