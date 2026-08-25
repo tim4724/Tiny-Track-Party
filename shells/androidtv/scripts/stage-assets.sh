@@ -22,10 +22,10 @@
 #
 # THE MUSIC SHIPS, and it used to be the one thing here that did not. Streaming
 # it leaned on an argument that does not survive inspection: yes, the origin is
-# already a hard dependency (the join QR and the controller page, shells.md §8),
-# but that dependency is a PAGE LOAD at the start of a night, and this one is a
-# continuous stream for the length of every race. A TV app can just carry its own
-# music. Bundling costs no ABI change:
+# already a hard dependency (the join QR and the controller page — shells.md's
+# base-URL item), but that dependency is a PAGE LOAD at the start of a night,
+# and this one is a continuous stream for the length of every race. A TV app
+# can just carry its own music. Bundling costs no ABI change:
 # `audio.cc`'s SONG table bakes an ORIGIN-ABSOLUTE path with its `.mp3`
 # extension, and AudioDevice.startMusic resolves that same string locally FIRST
 # and falls back to `baseUrl + file`. So a build that stages no music still

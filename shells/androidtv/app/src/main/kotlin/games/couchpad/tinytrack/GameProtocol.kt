@@ -25,10 +25,11 @@ class GameProtocol private constructor(
      * The web deployment serving the phone controller.
      *
      * `session.h`'s `join_url` needs an origin, and a TV app has none of its own —
-     * so the web deployment is a RUNTIME DEPENDENCY of every TV app (shells.md
-     * §8). This is the Android spelling of the web's `baseUrlOverride` seam, and
-     * the reason nothing below composes a URL by hand: every one of the four URLs
-     * a room's identity is spelled into is `ttp_net_*`'s answer over this string.
+     * so the web deployment is a RUNTIME DEPENDENCY of every TV app (shells.md,
+     * the base-URL item). This is the Android spelling of the web's
+     * `baseUrlOverride` seam, and the reason nothing below composes a URL by
+     * hand: every one of the four URLs a room's identity is spelled into is
+     * `ttp_net_*`'s answer over this string.
      */
     val baseUrl: String,
 

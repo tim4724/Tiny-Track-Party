@@ -22,13 +22,14 @@
 #
 # THE MUSIC SHIPS, and it used to be the one thing here that did not. Streaming
 # it leaned on an argument that does not survive inspection: the origin IS already
-# a hard dependency (docs/native-port/shells.md §8), but that dependency is a PAGE
-# LOAD at the start of a night, while this one is a continuous stream for the
-# length of every race. Bundling needs NO ABI change, which is the part worth
-# knowing: `audio.cc`'s SONG table bakes an origin-absolute path INCLUDING its
-# .mp3 extension and `audio-corpus.jsonl` froze those strings, so the shell keeps
-# the string exactly and merely resolves it against the BUNDLE first, falling
-# back to `baseURL`. A build that stages no music still plays; it streams.
+# a hard dependency (docs/native-port/shells.md's base-URL item), but that
+# dependency is a PAGE LOAD at the start of a night, while this one is a
+# continuous stream for the length of every race. Bundling needs NO ABI change,
+# which is the part worth knowing: `audio.cc`'s SONG table bakes an
+# origin-absolute path INCLUDING its .mp3 extension and `audio-corpus.jsonl`
+# froze those strings, so the shell keeps the string exactly and merely resolves
+# it against the BUNDLE first, falling back to `baseURL`. A build that stages no
+# music still plays; it streams.
 #
 # It is ~62 MB rather than the 81 MB it was, because SOURCES.json now encodes at
 # `-q:a 7` — a bitrate change with the extension untouched, so nothing moved in

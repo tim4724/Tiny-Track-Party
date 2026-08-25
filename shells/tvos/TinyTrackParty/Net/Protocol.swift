@@ -28,11 +28,11 @@ struct GameProtocol {
     ///
     /// `session.h`'s `join_url` needs an origin, and a TV app has none of its own
     /// — so the web deployment is a RUNTIME DEPENDENCY of every TV app
-    /// (`docs/native-port/shells.md` §8). This is the tvOS spelling of the web's
-    /// `baseUrlOverride` seam, which is the existing hook for exactly this and
-    /// the reason nothing below composes a URL by hand: every one of the four
-    /// URLs a room's identity is spelled into is `ttp_net_*`'s answer over this
-    /// string.
+    /// (`docs/native-port/shells.md`, the base-URL item). This is the tvOS
+    /// spelling of the web's `baseUrlOverride` seam, which is the existing hook
+    /// for exactly this and the reason nothing below composes a URL by hand:
+    /// every one of the four URLs a room's identity is spelled into is
+    /// `ttp_net_*`'s answer over this string.
     let baseURL: URL
 
     // MARK: - Transport

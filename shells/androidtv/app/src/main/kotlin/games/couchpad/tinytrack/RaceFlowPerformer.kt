@@ -71,12 +71,13 @@ class RaceFlowPerformer(private val game: GameCoordinator) {
             }
 
             "set-pause-overlay" -> game.state.paused = e.optBoolean("on")
-            "set-pause-button" -> game.state.pauseButtonShown = e.optBoolean("shown")
 
             // The web hides its chrome after a pointer goes idle and reveals it on
-            // movement. A TV has no pointer: the focus system decides what is
-            // visible, so these two are genuine no-ops here rather than unhandled.
-            "reveal-chrome", "hold-chrome" -> Unit
+            // movement, and shows/hides its clickable #pause-btn. A TV has no
+            // pointer — the focus system decides what is visible, and the remote's
+            // play/pause key is this platform's pause button (MainActivity.onKeyDown)
+            // — so these three are genuine no-ops here rather than unhandled.
+            "set-pause-button", "reveal-chrome", "hold-chrome" -> Unit
 
             // ---- the scene --------------------------------------------------
             "reset-scene-cars" -> {

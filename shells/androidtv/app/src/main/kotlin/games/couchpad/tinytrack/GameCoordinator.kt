@@ -401,12 +401,27 @@ class GameCoordinator(
         return JSONObject().put("cups", out)
     }
 
+    /**
+     * The cars and tracks halves, composed ONCE (the first call, at boot) and
+     * reused: the catalogue's ids, names, cups and stats never move at runtime —
+     * only `progress` does — and [chooserTracks] runs a full native TrackBuilder
+     * per catalogue track, which `persist-progression` must not re-run on the
+     * main thread while the results board is up and the next circuit is being
+     * meshed. The web performer recomposes only `progress` for the same reason.
+     * The cached arrays are never mutated.
+     */
+    private var chooserCarsCache: JSONArray? = null
+    private var chooserTracksCache: JSONArray? = null
+
     private fun setChooser(catalogue: JSONObject) {
+        val cars = chooserCarsCache ?: chooserCars().also { chooserCarsCache = it }
+        val tracks = chooserTracksCache
+            ?: chooserTracks(catalogue).also { chooserTracksCache = it }
         requireOK(
             Ttp.ttp_net_configure(TtpJson.arg(JSONObject()
-                .put("cars", chooserCars())
+                .put("cars", cars)
                 .put("colors", JSONArray(proto.carColors))
-                .put("tracks", chooserTracks(catalogue))
+                .put("tracks", tracks)
                 .put("progress", progressChooser())
                 .toString())) != 0,
             "configuring the chooser payload")

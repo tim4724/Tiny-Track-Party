@@ -215,10 +215,14 @@ class MainActivity : ComponentActivity() {
                     if (game.state.paused) 1 else 0,
                     if (game.raceEnded) 1 else 0))) {
                     // The lobby is this shell's root: the model declines, and the
-                    // press belongs to the system (leave the app).
+                    // press belongs to the system (leave the app). Re-enable after
+                    // the synchronous re-dispatch: on API 31+ a root launcher
+                    // activity is moved to back, not finished, so this callback
+                    // must survive for the relaunch.
                     "swallow", "end-party" -> {
                         isEnabled = false
                         onBackPressedDispatcher.onBackPressed()
+                        isEnabled = true
                     }
                     // A live race freezes instead of navigating, and the overlay
                     // thaws again — the walk each button in it already takes.

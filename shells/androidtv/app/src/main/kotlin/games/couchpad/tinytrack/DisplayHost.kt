@@ -336,10 +336,21 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
      */
     fun pinVsyncInterval(n: Int) {
         ratePin = n.coerceIn(0, 4)
-        if (ratePin != 0) applyVsyncInterval(ratePin)
+        // 0 must APPLY the hand-back, not just clear the pin: the rule answers a
+        // divisor only on a MOVE, so a settled rule would otherwise leave the
+        // pinned cadence in force indefinitely.
+        applyVsyncInterval(if (ratePin != 0) ratePin else ruleDivisor)
     }
 
     private var ratePin = 0
+
+    /**
+     * The divisor half of the rule's last answered operating point
+     * ([adaptScale]), 1 until it has answered. Tracked even while pinned, so
+     * unpinning restores the rule's own cadence — a 4-cell box parked on the
+     * half-rate backstop gets its divisor 2 back, not a blanket 1.
+     */
+    private var ruleDivisor = 1
 
     private fun applyVsyncInterval(n: Int) {
         // Up to 4: a 240 Hz panel's anchor divisor is 4, and the rule may answer
@@ -780,13 +791,13 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
         if (moved == 0) return
         val next = stepOut[0]
         val was = vsyncInterval
+        ruleDivisor = stepOut[1].toInt()
         // A PINNED RATE IS NOT THE RULE'S TO MOVE. `debug.ttp.hz` holds the
         // divisor, and [rulePanelMs] is what keeps the rule's budget honest
-        // about it — so the answer's rate half is discarded here rather than
-        // arbitrated. On a 60 Hz panel it can only ever be 1 anyway: the
-        // operating-point list holds no other divisor there.
-        if (ratePin == 0 && stepOut[1].toInt() != vsyncInterval) {
-            applyVsyncInterval(stepOut[1].toInt())
+        // about it — so while pinned the answer's rate half is only recorded
+        // ([ruleDivisor], for the unpin), never applied.
+        if (ratePin == 0 && ruleDivisor != vsyncInterval) {
+            applyVsyncInterval(ruleDivisor)
         }
         // WHAT THE RULE ANSWERED, and in RELEASE too, for the reason the readout
         // itself now shows there: the build with R8 is the one worth measuring,

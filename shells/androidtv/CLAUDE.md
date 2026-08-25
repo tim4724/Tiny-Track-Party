@@ -34,9 +34,9 @@ session.
 `scripts/gen-jni.mjs` reads the `TTP_ABI` declarations out of the ABI headers and
 emits `native/runtime/ttp_jni.cc` and `Ttp.kt` from one parse, so the two cannot
 disagree about a signature. `tests/jni-generated.test.js` holds the committed
-files to it. Adding an export means regenerating, never typing. The ten
+files to it. Adding an export means regenerating, never typing. The
 non-mechanical exports are named in the generator's `OVERRIDES` with the reason
-each is there; an eleventh belongs beside them.
+each is there; a new one belongs beside them.
 
 **3. Strings cross as `ByteArray`.** Never `jstring`. `NewStringUTF` and
 `GetStringUTFChars` speak *modified* UTF-8, in which a non-BMP character is a

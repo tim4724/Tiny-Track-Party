@@ -389,7 +389,6 @@ class GameState {
     /** "3" / "2" / "1" / "GO!" / null. */
     var countdown by mutableStateOf<String?>(null)
     var paused by mutableStateOf(false)
-    var pauseButtonShown by mutableStateOf(false)
 
     /**
      * The CC-BY attribution for the playing song. A LICENSING obligation, not

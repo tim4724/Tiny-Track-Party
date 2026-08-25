@@ -3,7 +3,8 @@
 
     <!-- The relay, and the origin that serves the phone controller plus the
          streamed race music. A TV app has no origin of its own, so the web
-         deployment is a runtime dependency (shells.md §8), not an optimisation. -->
+         deployment is a runtime dependency (shells.md's base-URL item), not
+         an optimisation. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 

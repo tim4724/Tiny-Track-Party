@@ -49,6 +49,8 @@ import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
 /**
@@ -235,6 +237,8 @@ private fun InfoBadge(modifier: Modifier = Modifier, onClick: () -> Unit) {
             .background(if (focused) Tokens.blue else Tokens.surface, CircleShape)
             .stickerOutline(Sticker.border, CircleShape)
             .onFocusChanged { focused = it.isFocused }
+            // The badge is icon-only, so this is the whole announcement.
+            .semantics { contentDescription = Copy.info }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
