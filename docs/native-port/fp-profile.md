@@ -438,5 +438,3 @@ Ordered by likelihood of a silent port bug:
    item roll and AI jitter draw for the rest of the race.
 6. **double-only, no `float`** (§1). A stray `float` temporary in track meshing
    or physics rounds differently from binary64 and is hard to spot.
-</content>
-</invoke>

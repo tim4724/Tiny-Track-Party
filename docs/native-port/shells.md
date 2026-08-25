@@ -607,13 +607,11 @@ TV shells; the rest are Android's.
   against minSdk 24, so a stem buys three artifacts per song rather than one.
   Changing the BITRATE is free of all of it: `SOURCES.json`'s `encode.args` plus
   `npm run check:music-loudness`, and nothing in the corpus moves.
-- **The Android NDK leg is the one leg that compiles but does not run the
-  fixtures** (`.github/workflows/native.yml` — every other leg runs the full
-  ctest suite). `fp-profile.md`
-  §NDK flags the contraction risk specifically, so the first Android work
-  should be an emulator ctest leg modelled on
-  `native/scripts/tvos-sim-spawn.sh` (a `CMAKE_CROSSCOMPILING_EMULATOR` shim),
-  not a feature.
+- **CI's Android legs are compile/link-only** (`.github/workflows/native.yml` —
+  every other leg runs the full ctest suite, but no runner has a TV). The
+  fixtures do run on real hardware: `native/scripts/android-device-spawn.sh`
+  drives the whole ctest suite on a box over adb — a scripted-manual run, not
+  a CI gate, and the answer to `fp-profile.md`'s contraction risk.
 
 ## What conformance does and does not cover you for
 

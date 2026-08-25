@@ -78,7 +78,7 @@ npm run test:native  # engine conformance suite (ctest)
 npm run test:e2e     # Playwright end-to-end, against a local relay stub
 ```
 
-The engine is checked against recorded traces of the original JavaScript implementation, replayed on every platform, so a port is held to evidence rather than to review. The E2E suite drives the real display and controller pages and needs no production relay — run `npx playwright install chromium` once.
+The engine is checked against recorded traces of the original JavaScript implementation, replayed on every platform, so a port is held to evidence rather than to review. The E2E suite drives the real display and controller pages and needs no production relay — run `npx playwright install chromium webkit` once.
 
 `/gallery.html` is a manual preview surface for UI checks.
 

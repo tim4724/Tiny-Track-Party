@@ -20,8 +20,8 @@ drivers. The web game keeps shipping throughout.
   plain header — one toolchain everywhere, including emscripten.
 - **Google Filament renders on all three platforms**: native on the TVs, a
   custom emscripten/WASM build on the web. There is no official Filament
-  tvOS support — that port is ours (simulator-proven, branch
-  `tvos-v1.74.0`, packaged via `build.sh -p tvos`). The web cutover is DONE:
+  tvOS support — that port is ours, shipped on device; the fork commit is
+  pinned in `native/filament.pin`. The web cutover is DONE:
   Filament is the only renderer, Three.js is deleted, and the renderer links
   into the SAME wasm module as the sim, so no frame state crosses to JS.
 - **The sim cutover is DONE.** The C++ core is the shipping web engine and
@@ -63,10 +63,9 @@ viewer (the renderer dev harness).
   (`CONTRACT_VERSION`, `trackMathVersion`).
   THE WRAPPERS ARE NOT EQUALLY THIN, which the original wording ("three thin
   wrappers") hid. Swift consumes a C header directly and JS has `cwrap`; the
-  JVM has neither, and the web shell touches 182 distinct exports. An Android
-  shell therefore needs a generated JNI bridge or a C++ performer that keeps
-  the JNI surface small — a decision to take before any Kotlin exists. See
-  [shells.md](shells.md).
+  JVM has neither, and the web shell touches well over a hundred distinct
+  exports. The Android shell answered that with a generated JNI bridge
+  (`scripts/gen-jni.mjs`). See [shells.md](shells.md).
 - **A shell reads shared constants, it does not copy them.** The manifest
   (`public/shared/protocol.js`, mirrored 1:1 in
   `native/libttp-party/ttp/protocol.h`) crosses to non-C++ shells whole through
@@ -109,8 +108,10 @@ viewer (the renderer dev harness).
   host ↔ unchanged JS phone ↔ real relay) is permanent.
 - **Camera**: the runtime owns camera state and cell layout; the renderer
   owns viewports and per-view billboard mechanics.
-- **Audio**: logic in the runtime; device output via miniaudio (CoreAudio /
-  AAudio / WebAudio).
+- **Audio**: logic in the runtime; the device half is per-platform by
+  decision — AVAudioEngine/Swift on tvOS, AudioTrack/Kotlin on Android,
+  WebAudio on the web (the audio-device item of [shells.md](shells.md)'s
+  "What every shell owes").
 - **Placement rule of thumb**: if two platforms would ever need it, it's
   C++; a shell may only contain code that names a platform API.
 
@@ -137,17 +138,21 @@ viewer (the renderer dev harness).
 - **Renderer scope** is ~8,200 lines (`SceneRenderer.js` + `render/`),
   including procedural canvas textures and nameplate text rasterization.
 - **Floor hardware**: Apple TV 4K (1st gen) — the Apple TV HD is
-  unsupported — and a Mali-G31-class Android TV.
+  unsupported — and, on Android TV, the audited reference box: a Google TV
+  Streamer (PowerVR GE9215; see `shells/androidtv/CLAUDE.md`).
 - **No fallback renderer.** The code targets Filament's API directly;
   switching to bgfx/Diligent would be a restart, not a swap.
-- **Asset delivery** is undecided and store-shaped: `public/assets/` is ~170 MB,
-  164 MB of it race music the web simply streams off an origin. An asset pack,
-  a first-run download or a smaller shipped pool — whichever is chosen,
-  `ttp_audio_song_json`'s index has to resolve to it.
+- **Asset delivery** is settled: every shell stages the full list, music
+  included — [shells.md](shells.md)'s "Asset delivery: everything ships"
+  bullet carries the resolution contract `ttp_audio_song_json`'s index
+  depends on.
 - **A TV app has no origin of its own.** The join QR and the controller URL
   template are composed from a base URL (`session.h`), so the web deployment is
   a runtime dependency of every native shell.
-- **The Android leg does not execute.** CI cross-compiles arm64-v8a but runs no
-  fixture there, while [fp-profile.md](fp-profile.md) §NDK singles out clang's
-  statement-level contraction as the risk. An emulator ctest leg modelled on
-  `native/scripts/tvos-sim-spawn.sh` is the missing gate.
+- **CI's Android legs compile but do not execute.** CI builds both ABIs
+  (armeabi-v7a is the primary — the reference box is 32-bit userspace) and
+  links the whole renderer artifact, but no runner has a TV, so no fixture
+  runs in CI. The fixtures run on real hardware instead:
+  `native/scripts/android-device-spawn.sh` drives the whole ctest suite on a
+  box over adb — a scripted-manual run, and the answer to
+  [fp-profile.md](fp-profile.md)'s statement-level contraction risk.

@@ -2,9 +2,9 @@
 # the full git history, and neither belongs on a PR — they answer questions that only
 # go stale over weeks:
 #
-#   mutation-check   Can the conformance gates still fail? Breaks the engine 36 ways
-#                    and requires the matching ctest to go red for each. Two gates in
-#                    this tree were already found blind this way.
+#   mutation-check   Can the conformance gates still fail? Breaks the engine dozens
+#                    of ways and requires the matching ctest to go red for each. Two
+#                    gates in this tree were already found blind this way.
 #   revive-js-oracle Can the retired JS engine still be revived and still re-record
 #                    the golden traces byte-for-byte? While it can, parity evidence is
 #                    renewable; the day it cannot, every future sim change permanently
@@ -20,7 +20,7 @@ on:
   workflow_dispatch:
     inputs:
       only:
-        description: 'mutation-check --only=<substring> (blank runs all 36)'
+        description: 'mutation-check --only=<substring> (blank runs the full set)'
         required: false
         default: ''
 
@@ -37,7 +37,7 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: '26'
-      - name: Break the engine on purpose, 36 ways
+      - name: Break the engine on purpose, dozens of ways
         run: node scripts/mutation-check.mjs ${{ inputs.only && format('--only={0}', inputs.only) || '' }}
       - name: The tree must be pristine afterwards
         # The script restores in a finally and rebuilds to prove it, but a harness that
