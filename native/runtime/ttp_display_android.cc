@@ -39,8 +39,7 @@ namespace {
 // (VulkanPolicy — the property override, the canary and the blob-set check all
 // need a Context), carried here by the JNI entry point below because
 // ttp_display_create's signature is the shared ABI and the backend is this
-// platform's private business. Vulkan runs stereo-free: multiview is a
-// GL_OVR_multiview2 arrangement.
+// platform's private business.
 static bool gUseVulkan = false;
 
 // The platform sliver over the shared core: just the window.
@@ -84,22 +83,9 @@ int ttp_display_create(const void* surface, uint32_t width, uint32_t height) {
     ANativeWindow_acquire(window);
 
     auto* renderer = new TtpRenderer();
-    // No max-texture query, unlike the web surface. That one reads
-    // GL_MAX_TEXTURE_SIZE off a context it made ITSELF before handing Filament a
-    // null window; here Filament owns the EGL context and creates it inside
-    // init(), so there is nothing current to ask yet. The renderer's conservative
-    // default stands, exactly as it does on tvOS.
-    //
-    // stereoEyes = 2 on the GL arm: the engine is configured for OVR_multiview
-    // at creation (Filament allows no later switch) and costs the same as a
-    // NONE engine while no stereo view draws — the actual render path is the
-    // live ttp_display_multiview switch. GL-only, because only that backend
-    // compiles glFramebufferTextureMultiviewOVR, and it needs the SDK built
-    // with -S multiview (build-runtime-android.sh aborts with the story).
     if (!renderer->init(gUseVulkan ? filament::backend::Backend::VULKAN
                                    : filament::backend::Backend::OPENGL,
-                        window, width, height,
-                        /*stereoEyes=*/gUseVulkan ? 0 : 2)) {
+                        window, width, height)) {
         delete renderer;
         ANativeWindow_release(window);
         return 0;

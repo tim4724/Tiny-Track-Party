@@ -797,10 +797,6 @@ void ttp_display_dress_sheets(int on) {
     if (g_disp && g_disp->renderer) g_disp->renderer->setDressSheets(on != 0);
 }
 
-void ttp_display_multiview(int mode) {
-    if (g_disp && g_disp->renderer) g_disp->renderer->setMultiview(mode);
-}
-
 double ttp_display_gpu_ms(void) {
     return g_disp && g_disp->renderer ? g_disp->renderer->gpuMs() : 0.0;
 }

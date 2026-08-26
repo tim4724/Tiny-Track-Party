@@ -13,7 +13,6 @@
 
 #include <emscripten/emscripten.h>
 #include <emscripten/html5_webgl.h>
-#include <GLES3/gl3.h>
 
 #include "TtpRenderer.h"
 
@@ -63,12 +62,6 @@ int ttp_display_create(const void* surface, uint32_t width, uint32_t height) {
     }
 
     auto* renderer = new TtpRenderer();
-    // The real device limit, not an assumed floor: the skid layer's s-axis
-    // density is capped by texture width, and 16384 (universal on desktop and
-    // recent mobile GPUs) doubles it over the conservative 8192 default.
-    GLint maxTex = 0;
-    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTex);
-    if (maxTex > 0) renderer->setMaxTextureDim((uint32_t) maxTex);
     if (!renderer->init(filament::backend::Backend::OPENGL, nullptr, width, height)) {
         delete renderer;
         emscripten_webgl_destroy_context(ctx);

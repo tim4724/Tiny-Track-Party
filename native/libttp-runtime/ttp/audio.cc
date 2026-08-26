@@ -6,9 +6,9 @@
 // The TUNING rationale did not come with it. Why AUD_PEAK is 0.7, why a CPU car
 // is never voiced, why the roulette's reveal pop is the "item ready" beat — all
 // of that lived in the JS comments, so it is now reachable only through
-// `git log --diff-filter=D -- public/display/audio/decide.js` (or
-// `npm run revive:js-oracle`). Read it there before retuning anything; what IS
-// repeated here is only what a port can get wrong.
+// `git log --diff-filter=D -- public/display/audio/decide.js`. Read it there
+// before retuning anything; what IS repeated here is only what a port can get
+// wrong.
 
 #include "ttp/audio.h"
 

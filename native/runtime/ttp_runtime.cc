@@ -329,7 +329,67 @@ static bool buildTrack(RuntimeSession& rs, const std::string& trackId, int laps,
 static const char* NULL_JSON = "null";
 static const char* EMPTY_ARR = "[]";
 
-static void buildSession(RuntimeSession* rs);
+// Session construction. ABOVE the extern "C" block that holds most of its
+// callers, with ttp_session_engine's lazy build: a static helper declared on one
+// side of that block and defined on the other compiles under clang and is a hard
+// error under GCC.
+//
+// Build every bot's controller and, with them, the racing line they share. Both
+// session modes need exactly this; written out twice, a persona knob could be
+// dropped from one path with the other still covering it.
+//
+// The racing line is primed HERE rather than left to build on first use, because
+// first use is the first frame a bot drives — the GO! beat, the exact frame the
+// player first touches the throttle. Solving it costs 4.3-5.5 ms against a
+// 0.013 ms steady frame, so it read as a stutter on the start line. It is pure
+// precomputation over a centerline that cannot change, so every trace hashes
+// identically either way.
+static void buildBots(RuntimeSession& rs) {
+  for (auto& b : rs.bots)
+    b.ai = std::make_unique<AiController>(b.caution, LOOKAHEAD, STEER_GAIN, b.laneBias, b.aiSeed);
+  if (!rs.bots.empty()) rs.eng->racingLine();
+}
+
+// Construct the RaceSession + bot controllers WITHOUT firing the countdown.
+// Called from ttp_session_start, and LAZILY from any query on a begun-but-not-
+// started handle: the JS RaceSession builds its Game in the constructor, so
+// the display reads grid-pose snapshots BEFORE startCountdown — the ABI must
+// answer those (main.js launchRace paints the grid, then starts the count).
+static void buildSession(RuntimeSession* rs) {
+  if (rs->built || rs->bare) return;
+  rs->built = true;
+
+  std::vector<PlayerDesc> players = rs->gridPlayers();
+
+  RuntimeSession* self = rs;
+  auto onEvent = [self](const Event& e) {
+      self->outQueue.push_back(e.toValue());
+      audio_tap_event(self->handle, e);
+    };
+  auto onTick = [self](int n) {
+      Value c = Value::Obj();
+      c.set("type", Value::Str("_countdown"));
+      c.set("n", Value::Num((double)n));
+      self->outQueue.push_back(std::move(c));
+      audio_tap_tick(self->handle, n);
+      if (n == 0) {  // GO beat: racing flips right after this tick (RaceSession.js)
+        Value s = Value::Obj();
+        s.set("type", Value::Str("_raceStart"));
+        self->outQueue.push_back(std::move(s));
+      }
+    };
+    auto onEnd = [self](const Value& r) {
+      Value e = Value::Obj();
+      e.set("type", Value::Str("_raceEnd"));
+      e.set("results", r);  // the getResults() object the adapter hands to onRaceEnd
+      self->outQueue.push_back(std::move(e));
+    };
+  rs->session = std::make_unique<RaceSession>(players, rs->track, onEvent, onEnd, onTick,
+                                              rs->forceItem);
+  rs->eng = &rs->session->engine();
+
+  buildBots(*rs);  // the field (and its cars) exist now
+}
 
 // ttp_session.h — the display's read-only seam onto the live engine. Same lazy
 // build every other query does, so binding a display to a begun-but-not-started
@@ -924,63 +984,6 @@ int ttp_session_begin_field(const char* trackId, uint32_t seed, int laps,
     }
   }
   return h;
-}
-
-// Build every bot's controller and, with them, the racing line they share. Both
-// session modes need exactly this; written out twice, a persona knob could be
-// dropped from one path with the other still covering it.
-//
-// The racing line is primed HERE rather than left to build on first use, because
-// first use is the first frame a bot drives — the GO! beat, the exact frame the
-// player first touches the throttle. Solving it costs 4.3-5.5 ms against a
-// 0.013 ms steady frame, so it read as a stutter on the start line. It is pure
-// precomputation over a centerline that cannot change, so every trace hashes
-// identically either way.
-static void buildBots(RuntimeSession& rs) {
-  for (auto& b : rs.bots)
-    b.ai = std::make_unique<AiController>(b.caution, LOOKAHEAD, STEER_GAIN, b.laneBias, b.aiSeed);
-  if (!rs.bots.empty()) rs.eng->racingLine();
-}
-
-// Construct the RaceSession + bot controllers WITHOUT firing the countdown.
-// Called from ttp_session_start, and LAZILY from any query on a begun-but-not-
-// started handle: the JS RaceSession builds its Game in the constructor, so
-// the display reads grid-pose snapshots BEFORE startCountdown — the ABI must
-// answer those (main.js launchRace paints the grid, then starts the count).
-static void buildSession(RuntimeSession* rs) {
-  if (rs->built || rs->bare) return;
-  rs->built = true;
-
-  std::vector<PlayerDesc> players = rs->gridPlayers();
-
-  RuntimeSession* self = rs;
-  auto onEvent = [self](const Event& e) {
-      self->outQueue.push_back(e.toValue());
-      audio_tap_event(self->handle, e);
-    };
-  auto onTick = [self](int n) {
-      Value c = Value::Obj();
-      c.set("type", Value::Str("_countdown"));
-      c.set("n", Value::Num((double)n));
-      self->outQueue.push_back(std::move(c));
-      audio_tap_tick(self->handle, n);
-      if (n == 0) {  // GO beat: racing flips right after this tick (RaceSession.js)
-        Value s = Value::Obj();
-        s.set("type", Value::Str("_raceStart"));
-        self->outQueue.push_back(std::move(s));
-      }
-    };
-    auto onEnd = [self](const Value& r) {
-      Value e = Value::Obj();
-      e.set("type", Value::Str("_raceEnd"));
-      e.set("results", r);  // the getResults() object the adapter hands to onRaceEnd
-      self->outQueue.push_back(std::move(e));
-    };
-  rs->session = std::make_unique<RaceSession>(players, rs->track, onEvent, onEnd, onTick,
-                                              rs->forceItem);
-  rs->eng = &rs->session->engine();
-
-  buildBots(*rs);  // the field (and its cars) exist now
 }
 
 void ttp_session_start(int h, int countdownSeconds) {

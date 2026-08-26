@@ -2357,14 +2357,6 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
     if (mFeatureTagged) mView->setVisibleLayers(kFeatAll, mFeatureMask);
     if (input.viewCount == 0) {
         mRenderer->render(mView);
-    } else if (multiviewWants(input.viewCount, input.flags)
-            && renderCellsMultiview(input, tMark)) {
-        // The stereo route: ceil(n/2) two-eye passes instead of n, resolved by
-        // one vpresentmv pass. multiviewWants carries the measured policy for
-        // WHICH splits take it (4 cells by default — see setMultiview);
-        // renderCellsMultiview answers false WITHOUT rendering when its
-        // targets cannot stand up (no multiview blobs served), which falls
-        // through to the classic path.
     } else {
         // Split-screen: same cell grid as the display (bestGrid ≈ square-ish,
         // row 0 on top — flipped here because GL viewports are bottom-left).
@@ -2415,7 +2407,7 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
             // car swaps to its 50%-alpha ghost (chassis + grafted body), while
             // every other cell — including the monster driver's own — keeps it
             // solid. Same between-render() trick as the cloud billboards.
-            applyMonsterGhosts(1u << i);
+            applyMonsterGhosts(i);
             // Fliers, haze, clouds and boost streaks all turn toward THIS
             // cell's camera between render() calls (single-threaded rendering
             // executes each render() immediately, the JS sprite way).
@@ -2433,25 +2425,26 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
 }
 
 // ---------------------------------------------------------------------------
-// The per-cell scene mutations, shared by the classic loop (one cell at a
-// time) and the multiview passes (one PAIR at a time — both eyes render one
-// scene state, so a pass gets the pair's midpoint / mask union instead).
+// The scene mutations the cell loop runs BETWEEN render() calls — rendering is
+// single-threaded, so each cell's render() executes against the state set just
+// before it. Each is given ONE cell's own answer, and has to be: a state shared
+// across cells is the bug both of them were written to fix.
 // ---------------------------------------------------------------------------
 
-// The monster ghost swap for every cell in cellMask: a truck looming in front
-// of a masked cell's car swaps to its 50%-alpha ghost (chassis + grafted
-// body) while everyone else keeps it solid. Under multiview the mask is the
-// PAIR's union, so the truck ghosts for a pass if EITHER of its cells wants it
-// — the neighbour sees a see-through truck for those frames, which is the
-// cheap side of the trade (the alternative renders the pass twice).
-void TtpRenderer::applyMonsterGhosts(uint32_t cellMask) {
+// The monster ghost swap for one cell: a truck looming in front of THAT cell's
+// car swaps to its 50%-alpha ghost (chassis + grafted body) while every other
+// cell — the monster driver's own included — keeps it solid. Anything that
+// ghosts on a UNION of cells reintroduces the bug the per-cell mask exists for
+// (see the blockMask build): the neighbour sees a see-through truck it has no
+// reason to.
+void TtpRenderer::applyMonsterGhosts(uint32_t cell) {
     auto& tcm = mEngine->getTransformManager();
     bool anyOn = false;
     for (size_t mi = 0; mi < mMonsterViews.size(); mi++) {
         const MonsterView& mv = mMonsterViews[mi];
         if (!mv.on) continue;
         anyOn = true;
-        const bool ghost = (mv.mask & cellMask) != 0;
+        const bool ghost = (mv.mask & (1u << cell)) != 0;
         static const mat4f GPARK = mat4f::translation(float3{ 0, -1000, 0 });
         const bool haveRigGhost = mMonsterGhostInstances.size() > mi
                 && mMonsterGhostInstances[mi];
@@ -2474,7 +2467,7 @@ void TtpRenderer::applyMonsterGhosts(uint32_t cellMask) {
                     useGhost ? mv.body : GPARK);
         }
     }
-    // The ghost swap parks transforms PER CELL (per pass), so the mirrored car
+    // The ghost swap parks transforms PER CELL, so the mirrored car
     // instances must follow it into each submission. Only while a monster is
     // on — every other frame the once-per-frame mirror in render() holds.
     if (anyOn) updateMergedTransforms();
@@ -2482,11 +2475,7 @@ void TtpRenderer::applyMonsterGhosts(uint32_t cellMask) {
 
 // Everything that turns toward the active camera between render() calls:
 // bird / kite / haze / cloud billboards yaw toward camPos, boost streaks spin
-// about their length axis toward it. camPos is the CELL camera classically and
-// the pair's midpoint under multiview — the sprites sit tens to hundreds of
-// units out, where the two chase cams subtend a few degrees, except the
-// streaks, whose error rides the pair's spacing (accepted; they live for
-// fractions of a second).
+// about their length axis toward it. camPos is THIS cell's camera position.
 void TtpRenderer::orientCellBillboards(const float3& camPos) {
     auto& tcm = mEngine->getTransformManager();
     // Fliers ride the same per-cell billboard trick as the clouds. Birds
@@ -2593,305 +2582,6 @@ void TtpRenderer::orientCellBillboards(const float3& camPos) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Multiview split-screen (Android only — shells/androidtv/CLAUDE.md has the
-// whole ledger: what the shared submission buys, what the shared cull gives
-// up, and why the per-cell effects above had to become per-PASS).
-// ---------------------------------------------------------------------------
-
-// The tightest symmetric frustum in HEAD space (eye a's frame) containing both
-// eyes' view volumes — multiview culls ONCE for the pair, so the culling
-// frustum must bound both. Fitted over the 16 frustum corners; the minimum and
-// maximum of a linear function over a convex hull sit on vertices, so corner
-// bounds ARE hull bounds and the fit is exact, not conservative. Answers false
-// when the union has no such frustum (a corner behind the head plane, or a
-// fitted fov past ~170 degrees) — the caller then disables frustum culling for
-// the pass, which submits everything and is the honest fallback: wrong culling
-// is missing geometry, and the pack spreading that wide is exactly the tail
-// the CLAUDE.md pricing note says to budget for.
-static bool fitUnionFrustum(const TtpViewInput& va, const TtpViewInput& vb,
-        const mat4& Ha, const mat4& Wb, mat4& proj, double& nearOut, double& farOut) {
-    const mat4 headFromB = inverse(Ha) * Wb;
-    const mat4* headFrom[2] = { nullptr, &headFromB };   // eye a IS head space
-    const TtpViewInput* vv[2] = { &va, &vb };
-    double maxTanX = 0.0, maxTanY = 0.0, zMin = 1e30, zMax = 0.0;
-    for (int e = 0; e < 2; e++) {
-        const double tanV = std::tan((double) vv[e]->fov * M_PI / 360.0);
-        const double tanH = tanV * (double) vv[e]->aspect;
-        for (int d = 0; d < 2; d++) {
-            const double z = d ? (double) vv[e]->farZ : (double) vv[e]->nearZ;
-            for (int sx = -1; sx <= 1; sx += 2) {
-                for (int sy = -1; sy <= 1; sy += 2) {
-                    double4 c{ sx * tanH * z, sy * tanV * z, -z, 1.0 };
-                    if (headFrom[e]) c = *headFrom[e] * c;
-                    if (c.z > -0.05) return false;
-                    maxTanX = std::max(maxTanX, std::abs(c.x) / -c.z);
-                    maxTanY = std::max(maxTanY, std::abs(c.y) / -c.z);
-                    zMin = std::min(zMin, -c.z);
-                    zMax = std::max(zMax, -c.z);
-                }
-            }
-        }
-    }
-    if (maxTanX > 11.0 || maxTanY > 11.0) return false;  // fov past ~170 deg
-    nearOut = std::max(zMin * 0.99, 0.01);
-    farOut = zMax * 1.01;
-    proj = mat4::frustum(-maxTanX * nearOut, maxTanX * nearOut,
-            -maxTanY * nearOut, maxTanY * nearOut, nearOut, farOut);
-    return true;
-}
-
-void TtpRenderer::destroyMultiviewTargets() {
-    if (!mMvColor && !mMvRT[0]) return;
-    // The composite instance holds mMvColor as its sampler, and a parameter
-    // OUTLIVES a destroy (the stale-handle panic destroySceneTarget documents)
-    // — park it on the one engine-lifetime ARRAY texture before the free.
-    if (mPresentMvInstance) {
-        if (Texture* park = ensureDecalMaskArray()) {
-            TextureSampler smp(TextureSampler::MinFilter::NEAREST,
-                    TextureSampler::MagFilter::NEAREST);
-            mPresentMvInstance->setParameter("scene", park, smp);
-        }
-    }
-    for (int p = 0; p < 2; p++) {
-        if (mMvViews[p]) mMvViews[p]->setRenderTarget(nullptr);
-    }
-    mEngine->flushAndWait();
-    for (int p = 0; p < 2; p++) {
-        if (mMvRT[p]) { mEngine->destroy(mMvRT[p]); mMvRT[p] = nullptr; }
-    }
-    if (mMvColor) { mEngine->destroy(mMvColor); mMvColor = nullptr; }
-    if (mMvDepth) { mEngine->destroy(mMvDepth); mMvDepth = nullptr; }
-    mMvW = mMvH = 0;
-}
-
-bool TtpRenderer::ensureMultiviewTargets(uint32_t cellW, uint32_t cellH) {
-    if (!mStereoEyes || !mPresentMvMaterial || !cellW || !cellH) return false;
-    if (mMvColor && mMvW == cellW && mMvH == cellH) return true;
-    // A size mismatch here means the split changed since the last teardown;
-    // render() rebuilds BEFORE beginFrame (same between-frames rule as the
-    // scene target), so finding one mid-frame answers false for this frame.
-    if (mMvColor) return false;
-    mMvColor = Texture::Builder()
-            .width(cellW).height(cellH).depth(kMvLayers).levels(1)
-            .sampler(Texture::Sampler::SAMPLER_2D_ARRAY)
-            .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
-            .format(Texture::InternalFormat::RGBA8)
-            .build(*mEngine);
-    mMvDepth = Texture::Builder()
-            .width(cellW).height(cellH).depth(kMvLayers).levels(1)
-            .sampler(Texture::Sampler::SAMPLER_2D_ARRAY)
-            .usage(Texture::Usage::DEPTH_ATTACHMENT)
-            .format(Texture::InternalFormat::DEPTH32F)
-            .build(*mEngine);
-    if (!mMvColor || !mMvDepth) { destroyMultiviewTargets(); return false; }
-    for (int p = 0; p < 2; p++) {
-        mMvRT[p] = RenderTarget::Builder()
-                .texture(RenderTarget::AttachmentPoint::COLOR, mMvColor)
-                .texture(RenderTarget::AttachmentPoint::DEPTH, mMvDepth)
-                .multiview(RenderTarget::AttachmentPoint::COLOR, 2, (uint8_t) (2 * p))
-                .multiview(RenderTarget::AttachmentPoint::DEPTH, 2, (uint8_t) (2 * p))
-                .build(*mEngine);
-        if (!mMvRT[p]) { destroyMultiviewTargets(); return false; }
-        if (!mMvViews[p]) {
-            View* v = mEngine->createView();
-            utils::Entity camEnt = utils::EntityManager::get().create();
-            Camera* cam = mEngine->createCamera(camEnt);
-            v->setCamera(cam);
-            v->setScene(mScene);
-            // Same "say no once" defaults as ensureCells.
-            v->setShadowingEnabled(false);
-            v->setScreenSpaceRefractionEnabled(false);
-            v->setPostProcessingEnabled(false);
-            View::StereoscopicOptions stereo;
-            stereo.enabled = true;
-            v->setStereoscopicOptions(stereo);
-            mMvViews[p] = v;
-            mMvCameras[p] = cam;
-            mMvCameraEntities[p] = camEnt;
-        }
-        mMvViews[p]->setRenderTarget(mMvRT[p]);
-        mMvViews[p]->setViewport({ 0, 0, cellW, cellH });
-    }
-    // The composite: the shared fullscreen triangle through vpresentmv, onto
-    // the swap chain. Engine-lifetime like the present view; only the sampler
-    // binding and viewport move with the target.
-    ensurePresentQuad();
-    if (!mPresentVB || !mPresentCamera) { destroyMultiviewTargets(); return false; }
-    if (!mPresentMvInstance) mPresentMvInstance = mPresentMvMaterial->createInstance();
-    if (!mMvPresentView) {
-        mMvPresentQuad = utils::EntityManager::get().create();
-        RenderableManager::Builder(1)
-                .boundingBox({ { 0, 0, 0 }, { 1, 1, 1 } })
-                .material(0, mPresentMvInstance)
-                .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
-                        mPresentVB, mPresentIB, 0, 3)
-                .culling(false)
-                .castShadows(false).receiveShadows(false)
-                .build(*mEngine, mMvPresentQuad);
-        mMvPresentScene = mEngine->createScene();
-        mMvPresentScene->addEntity(mMvPresentQuad);
-        mMvPresentView = mEngine->createView();
-        mMvPresentView->setScene(mMvPresentScene);
-        mMvPresentView->setCamera(mPresentCamera);
-        mMvPresentView->setPostProcessingEnabled(false);
-        mMvPresentView->setShadowingEnabled(false);
-        mMvPresentView->setFrustumCullingEnabled(false);
-    }
-    mMvPresentView->setViewport({ 0, 0, mWidth, mHeight });
-    TextureSampler smp(TextureSampler::MinFilter::NEAREST,
-            TextureSampler::MagFilter::NEAREST);
-    smp.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
-    smp.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
-    mPresentMvInstance->setParameter("scene", mMvColor, smp);
-    mMvW = cellW;
-    mMvH = cellH;
-    return true;
-}
-
-bool TtpRenderer::renderCellsMultiview(const TtpFrameInput& input, double& tMark) {
-    const TtpViewInput* views = ttp_frame_views(&input);
-    const uint32_t n = input.viewCount;
-    const CellRect r0 = cellRect(n, 0);
-    if (!mMvColor || mMvW != r0.w || mMvH != r0.h || !mMvPresentView) return false;
-    // One line the first time the stereo path actually runs — a fallback is
-    // silent by design, so a measurement needs this to prove its arm.
-    static bool sAnnounced = false;
-    if (!sAnnounced) {
-        sAnnounced = true;
-        utils::slog.i << "ttp multiview: stereo cell path ACTIVE ("
-                << mMvW << "x" << mMvH << " x" << kMvLayers << ")" << utils::io::endl;
-    }
-    mProfile[kProfCellSetup] = 0;
-    mProfile[kProfCellRender] = 0;
-    const uint32_t passes = (n + 1) / 2;
-    for (uint32_t p = 0; p < passes; p++) {
-        // An odd count's last pass renders its lone cell into BOTH layers (a
-        // two-eye shader in a two-layer target is a hard pairing — see the
-        // .mat's num_views); the composite reads the even one.
-        const uint32_t a = 2 * p, b = std::min(2 * p + 1, n - 1);
-        View* v = mMvViews[p];
-        Camera* cam = mMvCameras[p];
-        if (mFeatureTagged) v->setVisibleLayers(kFeatAll, mFeatureMask);
-        mat4f wa, wb;
-        std::memcpy(&wa, views[a].world, sizeof(wa));
-        std::memcpy(&wb, views[b].world, sizeof(wb));
-        // Head space IS eye a's frame: eye 0 rides identity, eye 1 is b's pose
-        // relative to a. Filament wants the culling frustum in head space and
-        // the eye poses head-relative (Camera.h "Stereoscopic rendering").
-        cam->setModelMatrix(wa);
-        const mat4 Ha(wa), Wb(wb);
-        cam->setEyeModelMatrix(0, mat4{});
-        cam->setEyeModelMatrix(1, inverse(Ha) * Wb);
-        // The rig's authored lens per eye, exactly the classic path's
-        // setProjection (the static helper is its maths).
-        const mat4 projs[2] = {
-            Camera::projection(Camera::Fov::VERTICAL, views[a].fov,
-                    views[a].aspect, views[a].nearZ, views[a].farZ),
-            Camera::projection(Camera::Fov::VERTICAL, views[b].fov,
-                    views[b].aspect, views[b].nearZ, views[b].farZ),
-        };
-        mat4 cullProj;
-        double nearU = views[a].nearZ, farU = views[a].farZ;
-        const bool cullOk = fitUnionFrustum(views[a], views[b], Ha, Wb,
-                cullProj, nearU, farU);
-        v->setFrustumCullingEnabled(cullOk);
-        // Spike instrumentation: how often the pair's union frustum exists at
-        // all. Culling-off passes submit the whole track per eye, which is the
-        // failure mode that would eat the multiview gain silently.
-        static uint32_t sPasses = 0, sCulled = 0;
-        sPasses++; if (cullOk) sCulled++;
-        if (sPasses % 600 == 0) {
-            utils::slog.i << "ttp multiview: " << sCulled << "/" << sPasses
-                    << " passes union-culled" << utils::io::endl;
-        }
-        if (!cullOk) cullProj = projs[0];   // unused: culling is off
-        cam->setCustomEyeProjection(projs, 2, cullProj, nearU, farU);
-        // Fog rides the VIEW, but every cell of a race runs the same ramp, so
-        // eye a's serves the pair (the one per-cell View option that is NOT a
-        // blocker — shells/androidtv/CLAUDE.md).
-        v->setFogOptions(mFogOn
-                ? fogFor(views[a].fogNear, views[a].fogFar, fogColorGraded(cam))
-                : fogFor(1.0f, 0.0f, fogColorGraded(cam)));
-        applyDebugGlobals(v);
-        applyMonsterGhosts((1u << a) | (1u << b));
-        orientCellBillboards((wa[3].xyz + wb[3].xyz) * 0.5f);
-        mProfile[kProfCellSetup] += ttpNowMs() - tMark; tMark = ttpNowMs();
-        mRenderer->render(v);
-        mProfile[kProfCellRender] += ttpNowMs() - tMark; tMark = ttpNowMs();
-    }
-    // The resolve: layer i into cell i's fitted rect. The grid uniforms are
-    // cellRect's own numbers (origin = the bottom row's first cell), never a
-    // re-derivation.
-    const GridDims g = gridDims(n);
-    const CellRect rBL = cellRect(n, (g.rows - 1) * g.cols);
-    mPresentMvInstance->setParameter("grid", float4{
-            (float) rBL.x, (float) rBL.y, (float) r0.w, (float) r0.h });
-    mPresentMvInstance->setParameter("lay", float3{
-            (float) g.cols, (float) g.rows, (float) n });
-    mPresentMvInstance->setParameter("surf", float2{
-            (float) mWidth, (float) mHeight });
-    mRenderer->render(mMvPresentView);
-    mMvDrewThisFrame = true;
-    return true;
-}
-
-// Trust the extension string, verify the pixels. The stereo route stands on
-// OVR_multiview2 doing what it advertises, and "advertised but broken" is a
-// real Android driver failure mode: the emulator's gfxstream GLES offers the
-// extension and renders the whole array BLACK — chrome and the 2D overlay
-// draw, every 3D cell is void. Nothing else can catch that: it is not a
-// crash, and the composite pass itself runs fine.
-//
-// So the stereo frames are probed: a small patch of the swap chain at cell
-// 0's centre (cellRect is already bottom-left, readPixels' own origin), one
-// probe in flight at a time, until one comes back LIT — a settled scene frame
-// is never black there (sky, fog, sand, road) — which retires the probing for
-// the renderer's life. A single black probe is NOT a verdict: the first
-// stereo frame of a real race reads back black on the reference box itself
-// (the race stands up mid-fade), and the first cut of this check parked that
-// healthy driver on the classic path for the session. Only kMvProbeLimit
-// consecutive black probes — seconds of stereo frames with nothing in them,
-// whichever half broke (the array draws or the array sampling) — set
-// mMvBroken and park this renderer on the classic per-cell path for good. A
-// broken driver shows black cells for those seconds and then heals. The
-// probe is 4 KB per frame while it lasts, on the one path that only exists
-// on Android GL — every other backend has mStereoEyes 0.
-void TtpRenderer::verifyMultiview(uint32_t viewCount) {
-    const CellRect r = cellRect(viewCount, 0);
-    constexpr uint32_t kProbe = 32;
-    if (r.w < kProbe || r.h < kProbe) return;
-    struct Probe { TtpRenderer* self; std::vector<uint8_t> px; };
-    auto* probe = new Probe{ this, std::vector<uint8_t>((size_t) kProbe * kProbe * 4) };
-    Texture::PixelBufferDescriptor pbd(probe->px.data(), probe->px.size(),
-            Texture::Format::RGBA, Texture::Type::UBYTE,
-            [](void*, size_t, void* user) {
-                auto* probe = static_cast<Probe*>(user);
-                bool lit = false;
-                for (size_t i = 0; i < probe->px.size() && !lit; i++) {
-                    // Alpha is 255 regardless of content; 8 is dither headroom.
-                    lit = (i & 3) != 3 && probe->px[i] > 8;
-                }
-                TtpRenderer* self = probe->self;
-                self->mMvVerifyPending = false;
-                if (lit) {
-                    self->mMvVerified = true;
-                    utils::slog.i << "ttp multiview: verified lit after "
-                            << self->mMvBlackProbes << " black probes" << utils::io::endl;
-                } else if (++self->mMvBlackProbes >= kMvProbeLimit) {
-                    self->mMvBroken = true;
-                    utils::slog.w << "ttp multiview: " << self->mMvBlackProbes
-                            << " consecutive stereo frames read back black — the driver "
-                            "advertises the extension and renders nothing; falling back "
-                            "to the classic per-cell path" << utils::io::endl;
-                }
-                delete probe;
-            }, probe);
-    mMvVerifyPending = true;
-    mRenderer->readPixels((uint32_t) r.x + (r.w - kProbe) / 2,
-            (uint32_t) r.y + (r.h - kProbe) / 2, kProbe, kProbe, std::move(pbd));
-}
-
 bool TtpRenderer::render(const TtpFrameInput& input) {
     if (input.version != TTP_FRAME_INPUT_VERSION) return false;
     // Every wall-clock cosmetic phases off the DRIVING scene's clock — an own
@@ -2942,19 +2632,6 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
         if (mMergeOff) destroyMergedGroups(mMergedDress); else buildDressingMerge();
     }
     updateMergedTransforms();
-    // The multiview array target follows the CELL size, which moves with the
-    // split — (re)built HERE, before beginFrame, because swapping a render
-    // target mid-frame aborts the module (the scene target's rule). A frame
-    // whose targets aren't ready falls back to the classic path for one frame.
-    // A failed verify parks the route for good; the targets go here, between
-    // frames (the same rule the resize teardown follows), never from the
-    // probe's callback.
-    if (mMvBroken && mMvColor) destroyMultiviewTargets();
-    if (multiviewWants(input.viewCount, input.flags)) {
-        const CellRect r0 = cellRect(input.viewCount, 0);
-        if (mMvColor && (mMvW != r0.w || mMvH != r0.h)) destroyMultiviewTargets();
-        ensureMultiviewTargets(r0.w, r0.h);
-    }
     // A road-light readback that outran its own build lands HERE, because the
     // driver tick that fires it rides endFrame — see RoadLightRead. Free on
     // every backend but one, where it is the difference between a deck that
@@ -2974,15 +2651,6 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
 #endif
 
     renderCells(input, tMark);
-    // The probe must sit between render() and endFrame() — the swap chain is
-    // only readable there (Renderer.h). !mMvBroken matters even though a
-    // broken route stops drawing: the deciding callback can land INSIDE the
-    // frame whose stereo draw already happened, and without the check that
-    // frame issues one more probe and the verdict logs twice.
-    if (mMvDrewThisFrame && !mMvVerified && !mMvBroken && !mMvVerifyPending) {
-        verifyMultiview(input.viewCount);
-    }
-    mMvDrewThisFrame = false;
     mProfile[kProfPresent] = ttpNowMs() - tMark; tMark = ttpNowMs();
     mRenderer->endFrame();
     // Arm settled()'s fence behind the scene's FIRST submitted frame — created

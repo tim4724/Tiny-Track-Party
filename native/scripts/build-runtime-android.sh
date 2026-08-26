@@ -11,9 +11,8 @@
 #   GLES3 — so the .filamat blobs already committed under
 #   public/display/engine/native/ are the bytes this app bundles, byte for
 #   byte; tvOS is the one leg that needs its own compile of THOSE (Metal). The
-#   one set this script does compile is the Android-only MULTIVIEW twin of the
-#   shared materials — see the step below for why it can never be the
-#   committed set.
+#   one set this script does compile is the SPIR-V twin for the Vulkan
+#   backend — see the step below.
 #
 #   TWO ABIS, NOT TWO SDKS. The tvOS script configures once per SDK because
 #   device and simulator are both arm64 and lipo cannot combine them. Here the
@@ -65,44 +64,28 @@ if [ ! -f "$SDK_ROOT/include/filament/Engine.h" ]; then
   echo "build-runtime-android.sh: no Filament Android SDK at $SDK_ROOT" >&2
   echo "  Build it in the pinned checkout (~25 min per ABI):" >&2
   echo "    cd $FILAMENT_SRC" >&2
-  echo "    ANDROID_HOME=$ANDROID_HOME ./build.sh -i -q armeabi-v7a -S multiview -p android release" >&2
-  echo "    ANDROID_HOME=$ANDROID_HOME ./build.sh -i -q arm64-v8a   -S multiview -p android release" >&2
+  echo "    ANDROID_HOME=$ANDROID_HOME ./build.sh -i -q armeabi-v7a -p android release" >&2
+  echo "    ANDROID_HOME=$ANDROID_HOME ./build.sh -i -q arm64-v8a   -p android release" >&2
   echo "  Both install under ONE root; FilamentSdk.cmake picks lib/<abi>." >&2
-  echo "" >&2
-  echo "  -S multiview IS NOT OPTIONAL and it is not about the samples: it is the" >&2
-  echo "  only way to set FILAMENT_ENABLE_MULTIVIEW, and without it Filament never" >&2
-  echo "  compiles the _multiview variants of its OWN built-in materials. A" >&2
-  echo "  MULTIVIEW engine then reaches assert_invariant(false) — INERT in release" >&2
-  echo "  — and builds its default material from a null package, which fails as" >&2
-  echo "  'could not parse the material package for material <empty name>'. That" >&2
-  echo "  reads like a bad blob and is a missing file; it blocked three attempts." >&2
   exit 1
 fi
 
 # THE SLICE, NOT THE ROOT. The check above proves an SDK was installed here
 # once; it says nothing about the ABI this build is about to link. Both ABIs
 # install under ONE root, so a root that exists can still be missing arm64
-# entirely, or hold one built without -S multiview — the failure the -S text
-# above describes, reached from the other direction. It stays invisible until
-# it runs, and then only on arm64: the box this shell is developed against is
-# armeabi-v7a, so the whole loop stays green while every phone aborts on launch.
-#
-# The marker is the built-in materials' multiview vertex shaders, which declare
-# layout(num_views). A slice without them cannot serve a MULTIVIEW engine.
+# entirely. It stays invisible until it runs, and then only on arm64: the box
+# this shell is developed against is armeabi-v7a, so the whole loop stays green
+# while every phone aborts on launch.
 require_sdk_slice() {
   local abi="$1"
   local lib="$SDK_ROOT/lib/$abi/libfilament.a"
-  if [ ! -f "$lib" ]; then
-    echo "build-runtime-android.sh: no $abi slice at $lib" >&2
-  elif ! LC_ALL=C grep -aq num_views "$lib"; then
-    echo "build-runtime-android.sh: the $abi slice was built without multiview" >&2
-    echo "  $lib" >&2
-  else
+  if [ -f "$lib" ]; then
     return 0
   fi
+  echo "build-runtime-android.sh: no $abi slice at $lib" >&2
   echo "  Rebuild that ABI in the pinned checkout (~25 min):" >&2
   echo "    cd $FILAMENT_SRC" >&2
-  echo "    ANDROID_HOME=$ANDROID_HOME ./build.sh -i -q $abi -S multiview -p android release" >&2
+  echo "    ANDROID_HOME=$ANDROID_HOME ./build.sh -i -q $abi -p android release" >&2
   echo "  If that reports everything up-to-date and changes nothing, its cmake" >&2
   echo "  directory is stale and must be deleted so the configure happens again." >&2
   echo "  Filament names those by ITS arch codename, not by the ABI string:" >&2
@@ -111,15 +94,9 @@ require_sdk_slice() {
   exit 1
 }
 
-# THE MULTIVIEW MATERIALS STEP — the one set this leg compiles (the header has
-# the shared set's story), and Android-only for the reason
-# shells/androidtv/CLAUDE.md's Multiview section gives: a multiview blob's
-# stereo variants declare
-# `layout(num_views)` in their vertex shaders, which the web and Metal backends
-# reject, so this set can never be the committed shared one. It is BUILD OUTPUT
-# (like the .so), staged into the APK by stage-assets.sh when present. The
-# non-stereo variants inside are byte-for-byte the shared set's shaders, so an
-# APK carrying these renders identically until a stereo view draws.
+# THE VULKAN MATERIALS STEP — the one set this leg compiles (the header has the
+# shared set's story). It is BUILD OUTPUT (like the .so), staged into the APK by
+# stage-assets.sh when present.
 MATC="$FILAMENT_SRC/out/cmake-release/tools/matc/matc"
 # TWO PLACES A HOST matc CAN BE, and only one of them is this leg's own doing. A
 # DESKTOP build puts it in out/cmake-release, which is where the web artifact
@@ -127,25 +104,21 @@ MATC="$FILAMENT_SRC/out/cmake-release/tools/matc/matc"
 # says "Building tools for split build") and puts that one under
 # out/prebuilt-tools-release. A machine that has only ever built THIS leg — a CI
 # runner, most obviously — therefore has the second and not the first, and the
-# miss is silent: no matc means no multiview material set, and the APK renders
-# every split with the classic path instead.
+# miss is silent: no matc means no Vulkan material set, and every install pins
+# itself to the GL backend.
 [ -x "$MATC" ] || MATC="$FILAMENT_SRC/out/prebuilt-tools-release/tools/matc/matc"
 if [ -x "$MATC" ]; then
-  "$NATIVE/scripts/build-materials.sh" "$MATC" "$NATIVE/build/materials-android-mv" \
-      opengl mobile multiview
-  # THE VULKAN SET — the same materials as SPIR-V, staged as
+  # THE VULKAN SET — the shared materials as SPIR-V, staged as
   # assets/materials-vk/ and read whenever VulkanPolicy picks the Vulkan
   # backend, which is this shell's DEFAULT (ttp_display_android.cc has the
   # switch, SceneStaging.materials the matching blob pick). An APK built
   # without it still runs: the policy's blob probe pins that install to GL.
-  # Non-stereo on purpose: multiview is a GL arrangement and a Vulkan engine
-  # runs stereo-free.
   "$NATIVE/scripts/build-materials.sh" "$MATC" "$NATIVE/build/materials-android-vk" \
       vulkan mobile
 else
-  echo "==> no host matc at $MATC — skipping the multiview material set" >&2
-  echo "    (the APK will stage the committed non-stereo blobs; the multiview" >&2
-  echo "    render path needs this set and will stay off without it)" >&2
+  echo "==> no host matc at $MATC — skipping the Vulkan material set" >&2
+  echo "    (the APK will stage the committed GL blobs only, and VulkanPolicy's" >&2
+  echo "    blob probe will pin every install of it to the GL backend)" >&2
 fi
 
 # The bridge is generated from the ABI headers, and a stale one marshals the

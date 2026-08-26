@@ -176,23 +176,17 @@ async function main() {
   // sits there, which reads exactly like a hung room and photographs as black.
   adb(serial, ['shell', 'input', 'keyevent', 'KEYCODE_WAKEUP']);
 
-  // THE EMULATOR'S DRIVERS ARE NOT WORTH PHOTOGRAPHING, on two counts. Its
-  // Vulkan (no host passthrough → guest-side software Lavapipe) hands back
-  // vkMapMemory'd host-visible memory with PROT_NONE holes in it, so the first
-  // readPixels of a scene build (bakeSilhouette) SIGSEGVs in code upstream
-  // Filament would run identically — left alone, VulkanPolicy's boot canary
-  // still lands every fresh AVD on GL, but only after two dead launches that
-  // read as capture flakes. And its GLES advertises OVR_multiview2 but renders
-  // the 4-cell multiview array BLACK (chrome and the 2D cell overlay draw;
-  // every 3D cell is empty), so the four-player scenarios photograph as HUD on
-  // void. The AVD lane exists to exercise the arm64 SLICE (the JNI bridge,
-  // Bionic, the engine), not those drivers — so pin GL and the classic
-  // per-cell path up front. The BOX lane must never do this: photographing the
-  // shipping configuration is the point there.
-  if (EMU) {
-    adb(serial, ['shell', 'setprop', 'debug.ttp.vk', '-1']);
-    adb(serial, ['shell', 'setprop', 'debug.ttp.mv', '-1']);
-  }
+  // THE EMULATOR'S VULKAN IS NOT WORTH PHOTOGRAPHING. With no host passthrough
+  // it is guest-side software Lavapipe, which hands back vkMapMemory'd
+  // host-visible memory with PROT_NONE holes in it, so the first readPixels of
+  // a scene build (bakeSilhouette) SIGSEGVs in code upstream Filament would run
+  // identically — left alone, VulkanPolicy's boot canary still lands every
+  // fresh AVD on GL, but only after two dead launches that read as capture
+  // flakes. The AVD lane exists to exercise the arm64 SLICE (the JNI bridge,
+  // Bionic, the engine), not that driver — so pin GL up front. The BOX lane
+  // must never do this: photographing the shipping configuration is the point
+  // there.
+  if (EMU) adb(serial, ['shell', 'setprop', 'debug.ttp.vk', '-1']);
 
   const dir = shotDir(ROOT, PLATFORM);
   fs.mkdirSync(dir, { recursive: true });

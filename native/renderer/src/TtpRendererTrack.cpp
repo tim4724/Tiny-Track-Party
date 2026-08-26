@@ -1443,7 +1443,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     // the width, lat across the height), rasterized on the CPU (mSkidPix) and
     // uploaded as dirty rects, sampled by every vroad instance. Per-track
     // because its width is the lap length at a fixed texel density; the
-    // density is capped by the device's max texture size, so a very long
+    // density is capped by the width ceiling (mMaxTextureDim), so a very long
     // lap trades edge crispness, never correctness.
     mWheelTrails.assign(carCount * 4, {});
     if (tb.length > 1.0f) {
@@ -1455,13 +1455,10 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         // still sits rows away from the CLAMP edge rows the shader relies on
         // staying empty (see bindSkidLayer).
         mSkidLatHalf = maxHalf + 0.7f;
-        // 80 texels/u along s — the SAME density as lat's 512 rows (~80/u),
-        // so on hardware whose real texture limit accommodates it the grid is
-        // ISOTROPIC and a diagonal mark resolves exactly like a straight one.
-        // The cap is the device's reported GL_MAX_TEXTURE_SIZE, and ONLY THE
-        // WEB REPORTS ONE (mMaxTextureDim): tvOS and Android TV keep the 8192
-        // default, where every shipped track clamps and the grid comes out
-        // 3-4x anisotropic rather than isotropic. Where it clamps, the
+        // 80 texels/u along s would match lat's 512 rows (~80/u), but no
+        // shipped lap is short enough to get it: the cap (mMaxTextureDim, 8192
+        // on every platform) binds on all of them and leaves s at ~18-25
+        // texels/u, so the grid is ~4x ANISOTROPIC. Where it clamps, the
         // angle-aware feather in the render block widens instead, so a long
         // lap gets SOFTER diagonals, never blockier ones — which is why the
         // clamp is a quality trade and not a defect.
@@ -2350,15 +2347,6 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
                 .package(voverlay->second.data(), voverlay->second.size())
                 .build(*mEngine);
     }
-    // The multiview resolve — only the Android shell stages it, and only a
-    // stereo-configured engine ever draws it; everyone else never finds the
-    // asset and the multiview path stays off (renderCellsMultiview's probe).
-    const auto vpresentmv = mAssets.find("vpresentmv.filamat");
-    if (!mPresentMvMaterial && mStereoEyes && vpresentmv != mAssets.end()) {
-        mPresentMvMaterial = Material::Builder()
-                .package(vpresentmv->second.data(), vpresentmv->second.size())
-                .build(*mEngine);
-    }
     // THE GRADE'S CURVE AS A TABLE — see ttp_grade.inc for why a texture beats a
     // `pow` here. Built once, handed to every
     // material that grades as a MATERIAL default, because the instances are made
@@ -2419,7 +2407,7 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
                          mRoadMaterial, mGlbMaterial, mGlbFadeMaterial,
                          mGroundMaterial, mPointMaterial, mCloudMaterial,
                          mBurstMaterial, mBlurMaterial, mEsmMaterial,
-                         mPresentMaterial, mPresentMvMaterial, mOverlayMaterial,
+                         mPresentMaterial, mOverlayMaterial,
                          mVisMaterial }) {
         if (m) m->compile(Material::CompilerPriorityQueue::HIGH);
     }

@@ -16,9 +16,6 @@ import android.util.Log
  *                                            # halves of TTP_FEAT_DRESSING, which
  *                                            # ttp_display.h explains)
  * adb shell setprop debug.ttp.hz 30          # PIN every-other-vsync (0 = hand it back to the rule)
- * adb shell setprop debug.ttp.mv -1          # multiview OFF (-1); 1 = 4-cell splits
- *                                            # (the default), 2 = ANY split (measured
- *                                            # regression at 2P/3P — experiments only)
  * adb shell setprop debug.ttp.vk 1           # backend override: 1 Vulkan, -1 GL,
  *                                            # unset = VulkanPolicy (Vulkan when it can)
  * ```
@@ -53,8 +50,6 @@ object PerfDebug {
     private var lastDressKeep = 1.0
     private var lastDressSheets = 1
     private var lastHz = -1
-    /** 1, not 0: mode 0 is what -1 ("off") maps to; the engine's default is 1. */
-    private var lastMv = 1
 
     /** Read the knobs and apply whatever moved. */
     fun poll(display: DisplayHost) {
@@ -97,21 +92,6 @@ object PerfDebug {
             lastAa = aa
             Ttp.ttp_display_antialias(aa)
             Log.i(TAG, "antialias -> $aa")
-        }
-
-        // Multiview split-screen: a live path switch (the engine is stereo-
-        // configured either way — see ttp_display_android.cc), so an A/B
-        // interleaves on one launch. Same "0 restores the default" contract as
-        // the feature mask — the engine's default is mode 1 (4-cell splits),
-        // so OFF has to be spelled -1 or a cleared property could not restore.
-        // What changed is what is measured, so the window resets too.
-        val mvRaw = getprop("debug.ttp.mv")?.toIntOrNull() ?: 0
-        val mv = if (mvRaw == 0) 1 else if (mvRaw < 0) 0 else mvRaw
-        if (mv != lastMv) {
-            lastMv = mv
-            Ttp.ttp_display_multiview(mv)
-            PerfMonitor.reset()
-            Log.i(TAG, "multiview -> $mv")
         }
 
         // Both rebuild or re-state the scene rather than masking anything, so

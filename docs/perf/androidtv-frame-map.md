@@ -152,8 +152,7 @@ arm is unchanged (15.79 p50 at 4P/540 against the 15.68-15.9 band).
 (~24% — the per-submit kernel cost on this ICD, not a count problem), the
 draws' descriptor/pipeline-cache walk, our texture uploads (`update3DImage`
 ~6%: the carShadow ping-pong and the skid layer), and allocator noise. Nothing
-left is a single fault; the next real rung down would be fewer passes
-(Vulkan multiview — unbuilt, unpriced on VK).
+left is a single fault.
 
 **The GL backend is not worth patching, measured:** its backend thread is 36%
 inside `libGLESv2_powervr.so` and 31% kernel, with under 5% in Filament — the
