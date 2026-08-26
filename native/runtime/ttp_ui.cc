@@ -10,6 +10,14 @@
 // wrong JSON type lives exactly here and is invisible to a check that calls C++
 // objects directly.
 //
+// ONE THING IS DECIDED HERE, and it is decided here because the model cannot
+// hold it: ttp_ui_settle_standings' "only a cup's FINAL board settles".
+// `settled` is a WIRE CUE for the phone and deliberately never enters ui::Board
+// — the board's contracted key set is pinned by tests/ui-model.test.js and by
+// the frozen ui corpus, both of which an always-present key would break — so
+// there is no model state for a model rule to read. It is a one-field read over
+// the retained Value, gated by abi_check like every other walk.
+//
 // KEY ORDER IS NOT A CONTRACT. Every answer goes out canonical (sorted keys),
 // like every other ABI, so the order the Values below are built in is free. Key
 // PRESENCE still is contract — a null and an absent key are different answers.
@@ -73,8 +81,9 @@ std::vector<std::string> shippedCupIds() {
 // the next call") is per handle, and this ABI has none.
 std::string g_bufSeats, g_bufGrid, g_bufConnected, g_bufSlot, g_bufDiff,
     g_bufPushes, g_bufWelcome, g_bufFlow, g_bufAutoPause, g_bufSeries,
-    g_bufBoard, g_bufView, g_bufCatalogue, g_bufFlowLive, g_bufAutoLive,
-    g_bufSeriesGp, g_bufBoardLive, g_bufFreeze, g_bufResultsAction, g_bufProgress;
+    g_bufView, g_bufCatalogue, g_bufFlowLive, g_bufAutoLive,
+    g_bufSeriesGp, g_bufBoardLive, g_bufViewLive, g_bufFreeze, g_bufResultsAction,
+    g_bufProgress;
 
 const char* put(std::string& buf, const Value& v) {
   canonical_stringify_into(v, buf);
@@ -751,17 +760,14 @@ static Value boardValue(const ui::Board& b) {
   return o;
 }
 
-const char* ttp_ui_standings_live_json(int sessionHandle, int roomHandle, int over,
-                                       const char* resultsJsonOrNull, double autoAdvanceMs) {
+// THE BOARD, off the live handles — the one composition, shared by the JSON
+// export below and by the retaining twin the race walk calls. `rowsOrNull` is
+// the result rows already extracted; null reads the live session's.
+static Value composeBoard(int sessionHandle, int roomHandle, bool over,
+                          const Value* rowsOrNull, double autoAdvanceMs) {
   const int gpHandle = ttp_room_series(roomHandle);
-  // endRace's own results object when the caller holds one (no effect can
-  // carry it), else the live session's — broadcastStandings' either-or.
-  Value resultsObj = json::parse_or(resultsJsonOrNull ? resultsJsonOrNull : "null",
-                                    Value::Null());
-  const Value rowsV = resultsObj.type == Value::OBJ && resultsObj.find("results")
-      ? *resultsObj.find("results")
-      : ttp_session_results_rows(sessionHandle);
-  const std::vector<ui::ResultRow> results = resultRowsOf(&rowsV);
+  const Value liveRows = rowsOrNull ? Value::Null() : ttp_session_results_rows(sessionHandle);
+  const std::vector<ui::ResultRow> results = resultRowsOf(rowsOrNull ? rowsOrNull : &liveRows);
 
   // The field is the room-retained launch copy, rename/rekey repairs applied
   // by the walks — the last hand-assembled input, gone.
@@ -783,14 +789,43 @@ const char* ttp_ui_standings_live_json(int sessionHandle, int roomHandle, int ov
   }
 
   const Value hostV = ttp_room_host_value(roomHandle);
-  const ui::Board b = ui::standingsPayload(results, field, cup.standings ? &cup : nullptr,
-                                           late, idOf(&hostV), over != 0);
-  return put(g_bufBoardLive, boardValue(b));
+  return boardValue(ui::standingsPayload(results, field, cup.standings ? &cup : nullptr,
+                                         late, idOf(&hostV), over));
 }
 
-const char* ttp_ui_results_view_json(const char* boardJson, double intermissionMs) {
-  const Value bv = json::parse_or(boardJson, Value::Obj());
-  const ui::Board board = boardOf(bv);
+const char* ttp_ui_standings_live_json(int sessionHandle, int roomHandle, int over,
+                                       const char* resultsJsonOrNull, double autoAdvanceMs) {
+  // endRace's own results object when the caller holds one (no effect can
+  // carry it), else the live session's — broadcastStandings' either-or.
+  const Value resultsObj = json::parse_or(resultsJsonOrNull ? resultsJsonOrNull : "null",
+                                          Value::Null());
+  const Value* rows = resultsObj.type == Value::OBJ ? resultsObj.find("results") : nullptr;
+  return put(g_bufBoardLive,
+             composeBoard(sessionHandle, roomHandle, over != 0, rows, autoAdvanceMs));
+}
+
+int ttp_ui_settle_standings(int roomHandle) {
+  Value board = ttp_room_board_value(roomHandle);
+  if (board.type != Value::OBJ) return 0;          // no board out: nothing to settle
+  // WHOSE board settles is the rule, not the shell's: only a cup's LAST board.
+  // Mid-cup the phone stays on the race and the standings stay the TV's, so a
+  // shell arms this on every results screen and lets the answer decide.
+  const Value* series = board.find("series");
+  if (!series || series->type != Value::OBJ || !json::truthy(series->find("final"))) return 0;
+  if (board.find("settled")) return 0;             // already stamped: no second publish
+  // PATCHED, never recomposed. A recompose here would pick up whatever the
+  // roster did during the seconds-long podium reveal, so the second push would
+  // differ from the first in more than this one key — and the phones read the
+  // difference as the race changing under them.
+  board.set("settled", Value::Bool(true));
+  ttp_room_store_board(roomHandle, std::move(board));
+  return 1;
+}
+
+// The overlay's own encoder, over a board that has already been parsed. Shared
+// by the board-taking export (the three screenshot harnesses' synthetic boards)
+// and the live one (the room's retained board).
+static Value resultsViewOf(const ui::Board& board, double intermissionMs) {
   const ui::ResultsView v = ui::resultsView(board, intermissionMs);
 
   Value o = Value::Obj();
@@ -822,7 +857,20 @@ const char* ttp_ui_results_view_json(const char* boardJson, double intermissionM
     o.set("next", Value::Null());
   }
   o.set("newGameKey", Value::Str(ui::key(v.newGameKey)));
-  return put(g_bufView, o);
+  return o;
+}
+
+const char* ttp_ui_results_view_json(const char* boardJson, double intermissionMs) {
+  return put(g_bufView,
+             resultsViewOf(boardOf(json::parse_or(boardJson, Value::Obj())), intermissionMs));
+}
+
+const char* ttp_ui_results_view_live_json(int roomHandle, double intermissionMs) {
+  const Value board = ttp_room_board_value(roomHandle);
+  // No board retained is not an empty overlay, it is NO overlay — the shell has
+  // nothing to paint and must not paint a blank one.
+  if (board.type != Value::OBJ) return put(g_bufViewLive, Value::Null());
+  return put(g_bufViewLive, resultsViewOf(boardOf(board), intermissionMs));
 }
 
 double ttp_ui_intermission_secs(double deadlineMs, double nowMs) {
@@ -861,6 +909,20 @@ bool ttp_live_humans_all_done(int sessionHandle, int roomHandle) {
   return ui::humansAllDone(idListOf(&carIdsV), idSetOf(&aiV),
                            idSetWhere(carIdsV, ttp_room_disconnected_flags(roomHandle, carIdsV)),
                            idSetWhere(carIdsV, ttp_session_finished_flags(sessionHandle, carIdsV)));
+}
+
+bool ttp_live_store_standings(int sessionHandle, int roomHandle, bool over,
+                              const Value* resultsRowsOrNull, double autoAdvanceMs) {
+  // THE NO-SESSION GUARD, which used to be `if (!session) return` at the top of
+  // three shells' broadcastStandings. Composed without a race the board has no
+  // rows and no host story, and a phone reads a non-null `standings` as "raise
+  // the results overlay" — so retaining one here pops an empty results screen
+  // over every wheel. See ttp_live.h.
+  if (!ttp_session_engine(sessionHandle)) return false;
+  ttp_room_store_board(roomHandle,
+                       composeBoard(sessionHandle, roomHandle, over, resultsRowsOrNull,
+                                    autoAdvanceMs));
+  return true;
 }
 
 std::vector<ui::RosterEntry> ttp_live_roster_players(int roomHandle, bool connectedOnly) {

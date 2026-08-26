@@ -103,7 +103,9 @@ export function startRace(roomHandle, sceneReady, { seed, countdownSeconds, forc
 }
 
 // The frame's drain: every queued race event routed and answered as one effect
-// list; `results` is non-null exactly when the drain crossed the race's end.
+// list. Nothing rides beside it — endRace's ranked rows never leave C++ now (the
+// walk banks the points and retains the board against them), so an effect is
+// all a caller gets and all it needs.
 export function drainEvents(sessionHandle, roomHandle,
                             { biome, audioReady, fastForwarding, intermissionMs, nowMs }) {
   return P(fn.events(sessionHandle, roomHandle, biome || '',

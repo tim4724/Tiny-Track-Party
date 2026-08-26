@@ -31,6 +31,20 @@ bool ttp_live_humans_all_done(int sessionHandle, int roomHandle);
 std::vector<ttp::rt::ui::RosterEntry> ttp_live_roster_players(int roomHandle,
                                                               bool connectedOnly);
 
+// COMPOSE the standings board off the live handles and RETAIN it behind the
+// room (ttp_room_store_board) — the only write path onto that slot other than
+// the in-place patches. `resultsRowsOrNull` is the end-of-race walk's own
+// result rows, which no effect can carry; null reads the live session instead,
+// the either-or broadcastStandings always had.
+//
+// ANSWERS false AND STORES NOTHING WHEN THERE IS NO LIVE SESSION. That guard
+// was shell state — all three broadcastStandings implementations bailed on it —
+// and it is not cosmetic: without a session the compose yields an EMPTY board,
+// which is not "no board" to a phone (the results overlay is raised by
+// `standings` being non-null) but an empty results screen over every wheel.
+bool ttp_live_store_standings(int sessionHandle, int roomHandle, bool over,
+                              const ttp::Value* resultsRowsOrNull, double autoAdvanceMs);
+
 // One draw from the room's shuffle bag ("" when unseeded or the catalogue is
 // empty — the bagless refusal). Implemented in ttp_net.cc, which owns the
 // chooser catalogue the deck shuffles over; drawn by the net mode-pick walk

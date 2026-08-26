@@ -518,8 +518,9 @@ scene.onFrame = (dt) => {
   // Everything the update's events mean — countdown beats, GO, pickups,
   // finishes, the race's end — is routed and decided in ONE crossing
   // (ttp_race_events_live_json): the lifecycle routing table is not this
-  // shell's anymore. `results` rides the answer because no effect can carry
-  // endRace's callback argument.
+  // shell's anymore, and neither is endRace's ranked board — the walk banks the
+  // cup points and retains the standings against it, so nothing rides back but
+  // effects.
   drainRaceEvents();
   // One SLOW TICK drives everything below that isn't the frame itself: the
   // finish check here, and the HUD + ITEM push further down. Hoisted so the
@@ -766,19 +767,16 @@ function rekeyCarPlayer(oldId, newId) {
 }
 
 // A seated player renamed themselves. The lobby needs nothing — its seat grid is
-// re-read off the room handle on the same _announce that delivered this — but a
-// RACE freezes copies of the name at its start, and each has to be moved by hand:
-// the cell chip Stage wrote when the car was added (the room-retained field
-// row every standings board reads was already repaired inside the walk). A
-// no-op for a seat with no car, since a late joiner is in neither.
+// re-read off the room handle on the same _announce that delivered this — and a
+// RACE's two frozen copies of the name are both repaired inside the walk now:
+// the room-retained field row every later board composes from, and the ROWS of
+// the board already out (patched, not recomposed, so the re-push differs in the
+// name and nothing else — and the walk's own `announce` is what republishes it).
+// What is left on this side is the one copy no handle knows about: the cell chip
+// Stage wrote when the car was added. A no-op for a seat with no car, since a
+// late joiner is in neither.
 function renamePlayer(peerIndex, name) {
-  // The room-retained field row was repaired inside the rename walk; what is
-  // left here is the scene chip and the board re-push.
   scene.setCarName(peerIndex, name);
-  // currentField only reaches the phones on the board's NEXT push — mid-race the
-  // next car to cross, on the podium never. So re-push the board already out, at
-  // the same `over` it went out with; never a first one (see net.hasStandings).
-  if (net.hasStandings()) broadcastStandings(raceEnded);
 }
 
 // Every race runs a full grid: seats no human took are filled by AI ("CPU")
@@ -853,19 +851,14 @@ function renderReconnect(seats) {
 // the LOBBY flip), which is exactly why the order is data now instead of the
 // shape of this file. Nothing here may reorder, batch or skip.
 //
-// `ctx` carries the few things an effect names but the layer cannot hold: the
-// race results in flight (endRace's callback argument) and the launch's field,
-// which `create-session` needs and `set-field` has already delivered.
-//
-// `ctx.results` IS LOAD-BEARING AND UNTYPED. Two ops read it — 'show-results'
-// and the final 'broadcast-standings' (points banking moved inside the walk's
-// executor) — and both are emitted only by the layer's endRace(), which only
-// main.js's endRace() performs, and it always passes {results}. Nothing
-// enforces that pairing. If one of those ops ever starts being emitted from
-// another entry point, give it its own carrier rather than hoping the context
-// happens to be populated.
-function perform(effects, ctx = {}) {
-  for (const e of effects) applyEffect(e, ctx);
+// NO PERFORM CONTEXT. It used to carry endRace's results object down to
+// 'show-results' and the final 'broadcast-standings', untyped and paired with
+// its two readers by nothing at all. Both read the ROOM-RETAINED board now
+// (the walk's executor composes and retains it before it spells either op), so
+// every effect is self-contained and an op emitted from a new entry point can
+// no longer arrive at an empty context.
+function perform(effects) {
+  for (const e of effects) applyEffect(e);
 }
 
 // The race walks' performers, one per op of ttp_race_effect_ops_json — a TABLE
@@ -918,8 +911,11 @@ const RACE_PERFORMERS = {
   'item-pickup': (e) => { scene.itemPickup(e.id, e.item); pushHeldItems(); },
   'rocket-impact': (e) => scene.rocketImpact(e.id),
   'rocket-expire': (e) => scene.rocketExpire(e.s, e.lat),
-  'broadcast-standings': (e, ctx) => broadcastStandings(e.over, ctx.results),
-  'show-results': (e, ctx) => showResults(ctx.results),
+  // The board itself was composed and RETAINED behind the room inside the walk
+  // — nothing about it crosses to this side, and the op is now bare. What is
+  // left to perform is the republish that carries it to the phones.
+  'broadcast-standings': () => net.syncState(),
+  'show-results': () => showResults(),
   'arm-intermission': (e) => {
     seriesDeadline = e.deadline;
     seriesTimer = setTimeout(advanceSeriesRace, e.ms);
@@ -999,9 +995,9 @@ const RACE_PERFORMERS = {
   if (missing.length) throw new Error(`race effect ops with no performer: ${missing.join(', ')}`);
 }
 
-function applyEffect(e, ctx) {
+function applyEffect(e) {
   const perform = RACE_PERFORMERS[e.op];
-  if (perform) return perform(e, ctx);
+  if (perform) return perform(e);
   // A race answer may carry NET-vocabulary ops in place: the executor merges
   // the set-track walk's tail (track-change, publish, …) into it. Those are
   // the net performer's; anything neither table knows throws there.
@@ -1139,7 +1135,7 @@ function drainRaceEvents() {
     biome: scene.biome(), audioReady: audio.ready, fastForwarding,
     intermissionMs: intermissionMs(), nowMs: Date.now()
   });
-  if (d.effects.length) perform(d.effects, { results: d.results });
+  if (d.effects.length) perform(d.effects);
 }
 
 // The finish-moment pair, off one call: `allDone` is true once every CONNECTED
@@ -1152,36 +1148,15 @@ function raceFlow() {
   return ui.raceFlow(session ? session.h : 0, net.flow.handle);
 }
 
-// Live standings for the controllers' results overlay. Pushed as each car
-// finishes (over=false) and once more at race end (over=true, so DNF/AFK cars
-// resolve and everyone — not just finishers — sees the final board). The BOARD
-// is the ui model's, and the results, cup half (standings + chip), late
-// joiners and host are all gathered off the live handles in C++. What stays
-// here is nothing at all — the AI racers aren't in the lobby roster the
-// phones know, so the display is the only side that can name/colour them —
-// and the results object endRace's callback carries (no effect can).
-function standingsPayload(results, over) {
-  return ui.standingsPayload({
-    sessionHandle: session ? session.h : 0,
-    roomHandle: net.flow.handle,
-    over,
-    results: results || null,
-    autoAdvanceMs: intermissionMs()
-  });
-}
+// NO STANDINGS COMPOSER HERE. The board is composed and RETAINED behind the
+// room handle inside the walk (ttp_ui.h), the lobby frame carries it, and the
+// no-session refusal that used to be this file's `if (!session) return` is the
+// seam's. What a 'broadcast-standings' effect asks of this shell is a
+// republish, and nothing else.
 
 // The intermission budget — the layer's number (race_flow.h), with the E2E
 // override (__intermissionMs) applied shell-side.
 function intermissionMs() { return window.__intermissionMs || flow.intermissionMs(); }
-
-function broadcastStandings(over, results) {
-  if (!session) return;
-  // The final board rides endRace's OWN results object (via the perform
-  // context); with none in flight the twin re-reads the live session in C++,
-  // which is the same thing mid-race.
-  const board = standingsPayload(results || null, over);
-  net.setStandings(board);    // standings live in the room snapshot — pushed live + replayed on (re)join
-}
 
 // The host ends the results screen with "New game" (RETURN_TO_LOBBY); a room
 // nobody is left in recovers on its own through the liveness tick's
@@ -1197,21 +1172,27 @@ function renderIntermissionCountdown() {
 }
 
 // The results overlay, painted by raceOverlays.js. WHICH dressing (single race,
-// cup intermission, podium) and every row's content are uiModel.resultsView's;
-// what happens here is only the two crossings that need this shell's state — the
-// live board, and the intermission budget.
-function showResults(results) {
-  const board = standingsPayload(results, true);
+// cup intermission, podium) and every row's content are the ui model's, read off
+// the ROOM-RETAINED board the walk composed a step earlier. The one crossing
+// that still needs this shell's state is the intermission budget (the E2E
+// override lives here).
+//
+// A null answer is NO board out, and that is no overlay rather than a blank
+// one — which is the whole reason the live form answers null instead of an
+// empty board.
+function showResults() {
+  const view = ui.resultsViewLive(net.flow.handle, { intermissionMs: intermissionMs() });
+  if (!view) return hideResults();
   // The phones were handed this board the moment the race ended, which is the
-  // moment this one STARTS revealing what the cup did with it. So on a cup's
-  // last race they are sent it a second time once the reveal has landed, marked
-  // `settled` — that is their cue to stop reporting the race and report the cup.
-  // Ahead of it they would be crowning the champion on four screens while the
-  // TV was still counting points towards it. Mid-cup boards need no second push:
-  // the phone stays on the race there, and the standings stay the TV's.
-  const final = !!(board.series && board.series.final);
-  renderResults(ui.resultsView(board, { intermissionMs: intermissionMs() }), CAR_COLORS,
-                final ? () => net.setStandings({ ...board, settled: true }) : null);
+  // moment this one STARTS revealing what the cup did with it. So once the
+  // reveal has landed the board is STAMPED `settled` and pushed again — the
+  // phones' cue to stop reporting the race and report the cup. Ahead of it they
+  // would be crowning the champion on four screens while the TV was still
+  // counting points towards it. WHICH boards settle is the rule's, not this
+  // file's — only a cup's last — so the callback is armed on every board and
+  // the answer decides whether anything moved and needs republishing.
+  renderResults(view, CAR_COLORS,
+                () => { if (ui.settleStandings(net.flow.handle)) net.syncState(); });
 }
 
 function returnToLobby() {

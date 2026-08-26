@@ -691,10 +691,16 @@ now UNREPRESENTABLE, because the entry point that permitted each is gone:
    depends on the active order (`auto-pause`, the standings board's late
    joiners) does the synced read inside the walk.
 
-There is no hand-assembled input left at all: the launch's field copy is
-retained behind the room and repaired by the rename/rekey walks, so the
-standings board is a pure read (`ttp_ui_standings_live_json(session, room,
-over, resultsOrNull, autoAdvanceMs)`).
+There is no hand-assembled input left at all, and the standings board is not
+even a read any more: the launch's field copy is retained behind the room and
+repaired by the rename/rekey walks, and the BOARD is retained beside it. The
+race walk composes and stores it, the rename walk and `ttp_ui_settle_standings`
+patch it in place, the statechange walk drops it, and `ttp_net_lobby_frame`
+puts it on the wire. What a shell owns is the republish and the moment the
+podium reveal lands. Its results screen reads
+`ttp_ui_results_view_live_json(room, intermissionMs)`; the board-taking
+`ttp_ui_results_view_json` survives for the screenshot harnesses, which stage a
+synthetic board with no room behind it.
 
 And one that is not an ABI call at all: **a method nothing invokes reads as
 implemented.** A room teardown shipped complete, documented as running "on

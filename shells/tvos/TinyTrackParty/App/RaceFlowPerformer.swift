@@ -31,11 +31,11 @@ import Foundation
 @MainActor
 struct RaceFlowPerformer {
 
-    /// What an op needs that is not in its own payload. Only `results` is read,
-    /// by exactly three ops, and all three are emitted only by `endRace`.
-    struct Context {
-        var results: [String: Any]?
-    }
+    // NO PERFORM CONTEXT. It used to carry `endRace`'s results object down to
+    // `show-results` and the final `broadcast-standings`, untyped and paired
+    // with its two readers by nothing at all. Both read the ROOM-RETAINED board
+    // now (the walk's executor composes and retains it before it spells either
+    // op), so every effect is self-contained.
 
     enum Failure: Error, CustomStringConvertible {
         case unperformable(String)
@@ -48,17 +48,17 @@ struct RaceFlowPerformer {
 
     unowned let game: GameCoordinator
 
-    func perform(_ effects: [Any], context: Context = Context()) throws {
+    func perform(_ effects: [Any]) throws {
         for effect in effects {
             guard let e = effect as? [String: Any], let op = e["op"] as? String else {
                 throw Failure.unperformable("<malformed>")
             }
-            try apply(op, e, context)
+            try apply(op, e)
         }
     }
 
     // swiftlint:disable:next cyclomatic_complexity function_body_length
-    private func apply(_ op: String, _ e: [String: Any], _ ctx: Context) throws {
+    private func apply(_ op: String, _ e: [String: Any]) throws {
         switch op {
 
         // ---- setup ------------------------------------------------------
@@ -175,13 +175,16 @@ struct RaceFlowPerformer {
                                lat: e["lat"] as? Double ?? 0)
 
         // ---- the finish --------------------------------------------------
+        // The board itself was composed and RETAINED behind the room inside the
+        // walk — nothing about it crosses to this side, and the op is now bare.
+        // What is left to perform is the republish that carries it to the phones.
         case "broadcast-standings":
-            game.broadcastStandings(over: e["over"] as? Bool ?? false, results: ctx.results)
+            game.net.publishSnapshot()
 
         // The points banking (constraint 3: BEFORE the final board goes out)
         // happens inside the event drain's executor now — no op crosses.
         case "show-results":
-            game.showResults(ctx.results)
+            game.showResults()
 
         case "arm-intermission":
             game.armIntermission(ms: e["ms"] as? Double ?? 0,

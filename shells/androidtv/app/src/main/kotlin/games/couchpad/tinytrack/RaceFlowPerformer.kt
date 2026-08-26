@@ -35,21 +35,21 @@ import org.json.JSONObject
  */
 class RaceFlowPerformer(private val game: GameCoordinator) {
 
-    /**
-     * What an op needs that is not in its own payload. Only `results` is read, by
-     * exactly three ops, and all three are emitted only by `endRace`.
-     */
-    class Context(val results: JSONObject? = null)
+    // NO PERFORM CONTEXT. It used to carry `endRace`'s results object down to
+    // `show-results` and the final `broadcast-standings`, untyped and paired with
+    // its two readers by nothing at all. Both read the ROOM-RETAINED board now
+    // (the walk's executor composes and retains it before it spells either op),
+    // so every effect is self-contained.
 
-    fun perform(effects: JSONArray, ctx: Context = Context()) {
+    fun perform(effects: JSONArray) {
         for (i in 0 until effects.length()) {
             val e = effects.optJSONObject(i)
             if (e == null) { game.state.fail("raceFlow: unperformable effect <malformed>"); continue }
-            apply(e.optString("op"), e, ctx)
+            apply(e.optString("op"), e)
         }
     }
 
-    private fun apply(op: String, e: JSONObject, ctx: Context) {
+    private fun apply(op: String, e: JSONObject) {
         when (op) {
             // ---- setup ------------------------------------------------------
             "stop-lobby-demo" -> game.lobbyDemo.stop()
@@ -154,12 +154,15 @@ class RaceFlowPerformer(private val game: GameCoordinator) {
                 game.display.burst(null, e.optDouble("s", 0.0), e.optDouble("lat", 0.0))
 
             // ---- the finish --------------------------------------------------
-            "broadcast-standings" ->
-                game.broadcastStandings(e.optBoolean("over"), ctx.results)
+            // The board itself was composed and RETAINED behind the room inside
+            // the walk — nothing about it crosses to this side, and the op is now
+            // bare. What is left to perform is the republish that carries it to
+            // the phones.
+            "broadcast-standings" -> game.net.publishSnapshot()
 
             // The points banking (constraint 3: BEFORE the final board goes out)
             // happens inside the event drain's executor — no op crosses.
-            "show-results" -> game.showResults(ctx.results)
+            "show-results" -> game.showResults()
 
             "arm-intermission" ->
                 game.armIntermission(e.optDouble("ms", 0.0), e.optDouble("deadline", 0.0))

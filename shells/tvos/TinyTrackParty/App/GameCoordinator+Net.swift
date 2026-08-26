@@ -190,16 +190,17 @@ extension GameCoordinator {
     /// vanished and the room sat in COUNTDOWN forever — is not a shell concern
     /// any more.
     ///
-    /// `results` rides the ANSWER because no effect can carry it: it is
-    /// non-null exactly when the drain crossed the race's end, and the
-    /// show-results / final broadcast-standings effects read it as context.
+    /// NOTHING RIDES BESIDE THE EFFECTS. `endRace`'s ranked board used to, as
+    /// the context the show-results / final broadcast-standings effects read;
+    /// the walk banks the cup points and composes and RETAINS the standings
+    /// against it now, so the rows never leave C++ and every effect here is
+    /// self-contained.
     func drainRaceEvents() {
         guard sessionHandle != 0 else { return }
-        let d = TTP.obj(ttp_race_events_live_json(
+        run(TTP.obj(ttp_race_events_live_json(
             sessionHandle, net.roomHandle, display.biomeName,
             audio.ready ? 1 : 0, fastForwarding ? 1 : 0,
-            ttp_race_intermission_ms(), nowMs()))
-        run(d, results: d["results"] as? [String: Any])
+            ttp_race_intermission_ms(), nowMs())))
     }
 
     /// The ~6 Hz poll. Everything the DOM used to be written for per frame lives

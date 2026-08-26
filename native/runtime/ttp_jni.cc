@@ -1214,6 +1214,11 @@ jbyteArray n_ttp_ui_results_view_json(JNIEnv* env, jclass, jbyteArray a0, jdoubl
     return toBytes(env, ttp_ui_results_view_json(s0.get(), (double) a1));
 }
 
+jbyteArray n_ttp_ui_results_view_live_json(JNIEnv* env, jclass, jint a0, jdouble a1) {
+    (void) env;
+    return toBytes(env, ttp_ui_results_view_live_json((int) a0, (double) a1));
+}
+
 jbyteArray n_ttp_ui_roster_seats_room_json(JNIEnv* env, jclass, jint a0, jbyteArray a1) {
     CStr s1(env, a1);
     return toBytes(env, ttp_ui_roster_seats_room_json((int) a0, s1.get()));
@@ -1233,6 +1238,11 @@ jbyteArray n_ttp_ui_seat_grid_json(JNIEnv* env, jclass, jbyteArray a0) {
 jbyteArray n_ttp_ui_series_info_live_json(JNIEnv* env, jclass, jint a0, jdouble a1) {
     (void) env;
     return toBytes(env, ttp_ui_series_info_live_json((int) a0, (double) a1));
+}
+
+jint n_ttp_ui_settle_standings(JNIEnv* env, jclass, jint a0) {
+    (void) env;
+    return (jint) ttp_ui_settle_standings((int) a0);
 }
 
 jbyteArray n_ttp_ui_standings_live_json(JNIEnv* env, jclass, jint a0, jint a1, jint a2, jbyteArray a3, jdouble a4) {
@@ -1467,10 +1477,12 @@ const JNINativeMethod kMethods[] = {
     { "ttp_ui_reconnect_diff_json", "([B[B)[B", (void*) n_ttp_ui_reconnect_diff_json },
     { "ttp_ui_results_action_json", "(I)[B", (void*) n_ttp_ui_results_action_json },
     { "ttp_ui_results_view_json", "([BD)[B", (void*) n_ttp_ui_results_view_json },
+    { "ttp_ui_results_view_live_json", "(ID)[B", (void*) n_ttp_ui_results_view_live_json },
     { "ttp_ui_roster_seats_room_json", "(I[B)[B", (void*) n_ttp_ui_roster_seats_room_json },
     { "ttp_ui_screen_step", "([B[B)I", (void*) n_ttp_ui_screen_step },
     { "ttp_ui_seat_grid_json", "([B)[B", (void*) n_ttp_ui_seat_grid_json },
     { "ttp_ui_series_info_live_json", "(ID)[B", (void*) n_ttp_ui_series_info_live_json },
+    { "ttp_ui_settle_standings", "(I)I", (void*) n_ttp_ui_settle_standings },
     { "ttp_ui_standings_live_json", "(III[BD)[B", (void*) n_ttp_ui_standings_live_json },
     { "ttp_ui_welcome_item_live_json", "(I[B)[B", (void*) n_ttp_ui_welcome_item_live_json },
     { "ttp_update", "(ID)V", (void*) n_ttp_update },

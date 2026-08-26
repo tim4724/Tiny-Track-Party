@@ -60,17 +60,45 @@ correctness constraints live in that order alone. Both performer tables
 own vocabulary exports (`ttp_race_effect_ops_json` / `ttp_net_effect_ops_json`),
 so a build whose walks grew an op this shell cannot perform fails on load.
 
+**An effect carries everything it needs, and there is no perform context.**
+`perform()` once took a second argument holding endRace's ranked results, read
+by two ops and paired with them by nothing at all — the kind of unenforced
+pairing that breaks the first time one of those ops is emitted from a new entry
+point. The rows never leave C++ now: the walk banks the cup points against them
+and composes the standings board from them, so the drain answers effects and
+nothing else. Do not reintroduce a carrier; if an op needs a fact, it names it.
+
 `Net.js` is the same shape one layer down: every inbound trigger (relay frame,
 peer message, socket close, liveness tick, drained room event) is ONE walk into
 `ttp_net.h`, which mutates the room inside the wasm and answers an ordered
 effect list; `_performNetEffect` holds the same no-reorder/no-skip contract.
 What stays in the file is the socket, the three timers and sessionStorage.
 The pick, the random-track shuffle bag (seeded once with page entropy), the
-cup series and the launched race field all live BEHIND THE ROOM HANDLE — the
-walks write them, no shell mirrors any of it; the game layer asks `net.pick`
-or `flow.seriesState` when it needs one. Walks go through `flow.runWalk`,
-which keeps NativeRoomFlow's event-drain discipline around a mutation the
-class's own methods didn't make.
+cup series, the launched race field and the standings board all live BEHIND THE
+ROOM HANDLE — the walks write them, no shell mirrors any of it; the game layer
+asks `net.pick` or `flow.seriesState` when it needs one. Walks go through
+`flow.runWalk`, which keeps NativeRoomFlow's event-drain discipline around a
+mutation the class's own methods didn't make.
+
+**The RESULTS BOARD is the newest of those, and it went last because it looked
+like a message rather than like state.** It is composed and retained by the race
+walk, injected under `standings` by `ttp_net_lobby_frame`, patched in place by
+the rename walk and by the settle stamp, and dropped by the statechange walk —
+so `broadcast-standings` is now a bare "republish" and `show-results` paints off
+`ttp_ui_results_view_live_json`. Three things left this file with it, and each
+was a rule spelled three times across three shells: the mirror itself, the
+never-raise-a-first-board gate (a non-null `standings` is what raises a phone's
+results overlay, so a board pushed before anyone has crossed the line pops an
+empty one over every wheel), and the no-session refusal. All three are C++'s.
+
+**`settled` is the one thing about a board this side still decides the TIMING
+of**, and only the timing. It is a wire cue, never part of the board rule, and
+it appears only as `true` and only on a cup's LAST board — the phones' signal to
+stop reporting the race and report the cup, which they must not do while the TV
+is still counting points towards it. The reveal's own completion callback is a
+fact no handle knows, so the shell fires `ui.settleStandings()` on every board
+that finishes settling and the answer decides whether anything moved and needs
+republishing. A board torn down mid-reveal never settled.
 
 ## Boot and the back stack
 

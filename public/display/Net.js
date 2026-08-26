@@ -134,8 +134,10 @@ const NET_PERFORMERS = {
   'welcome-item': (n, e) => n.onPlayerWelcomed(e.peerIndex),
   'game-message': (n, e, ctx) => n.onControllerMessage(ctx.from, ctx.data),
   'race-abandoned': (n) => n.onRaceAbandoned(),
-  'track-change': (n, e) => n.onTrackChange(e.trackId),
-  'clear-standings': (n) => { n._standings = null; }
+  'track-change': (n, e) => n.onTrackChange(e.trackId)
+  // NO clear-standings. The results board is room-retained (ttp_room.h), so the
+  // statechange walk drops it with a store and its own `publish` carries the
+  // change — this shell holds no board to null out.
 };
 
 // The boot proof: every op this build's walks can emit has a performer. Run at
@@ -220,11 +222,12 @@ export class DisplayNet extends GameNet {
     session.configure({ cars: this.carChooser, colors: this.colorPalette,
                         tracks: this.trackChooser, progress: this.progressChooser });
     assertNetOps();
-    // Latest standings board, mirrored into the snapshot so a phone that reconnects
-    // on the results screen (or after its car finished) recovers it by replay.
-    // null outside a race; set via setStandings on each finish + at race end,
-    // cleared by the statechange walk's clear-standings effect.
-    this._standings = null;
+    // NO STANDINGS MIRROR. The results board lives behind the room handle like
+    // the pick, the series and the field: the race walk composes and retains it,
+    // the lobby frame reads it on every publish, and the rename patch and the
+    // settle stamp move the stored one. What this shell does about a board is
+    // republish (see the broadcast-standings performer in main.js).
+
     // The shuffle bag lives BEHIND THE ROOM; what this shell supplies is one
     // page-entropy seed at init_pick. hasBag false is the bagless test
     // surface, which refuses random picks outright (the walk's gate).
@@ -481,27 +484,13 @@ export class DisplayNet extends GameNet {
   // on the boundary this call exists to keep it off.
   _publishLobby() {
     if (!this.party) return;
-    // The pick is not here: the frame reads the stored one off the handle.
+    // Neither the pick nor the standings board is here: the frame reads both
+    // off the room handle, where the walks wrote them.
     this.party.setStateFrame(session.lobbyFrame(this.flow.handle, this.sessionHandle(), {
       paused: !!this.isPaused(),
-      soundOn: !!this.isSoundOn(),
-      standings: this._standings      // results board (playing/results), else null
+      soundOn: !!this.isSoundOn()
     }));
   }
-
-  // Mirror the latest standings board into the snapshot (display drives this on
-  // each finish + at race end; cleared on lobby return). Republishes so the change
-  // reaches live controllers and every later (re)joiner.
-  setStandings(board) {
-    this._standings = board || null;
-    this._publishLobby();
-  }
-
-  // Is a board currently in the retained snapshot? A live rename refreshes the
-  // one that is out (it carries player NAMES) but must never publish the first:
-  // phones raise their results overlay on a non-null standings, so a board pushed
-  // before anyone has crossed the line pops an empty one over every wheel.
-  hasStandings() { return this._standings != null; }
 
   // Public nudge for the game layer to republish the snapshot when a field it owns
   // changes without a roster/state event (manual pause, mid-race car forfeit/rekey).

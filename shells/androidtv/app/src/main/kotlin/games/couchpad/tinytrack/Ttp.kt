@@ -15,7 +15,7 @@ import java.nio.ByteBuffer
 
 @Suppress("FunctionName", "unused")
 object Ttp {
-    /** Registers all 219 natives via JNI_OnLoad; a mismatch fails here. */
+    /** Registers all 221 natives via JNI_OnLoad; a mismatch fails here. */
     fun load() { System.loadLibrary("ttp_runtime_android") }
 
     external fun ttp_add_bot(h: Int, idJson: ByteArray?, caution: Double, laneBias: Double, aiSeed: Int, statsJsonOrNull: ByteArray?)
@@ -230,10 +230,12 @@ object Ttp {
     external fun ttp_ui_reconnect_diff_json(shownIdsJson: ByteArray?, seatIdsJson: ByteArray?): ByteArray?
     external fun ttp_ui_results_action_json(roomHandle: Int): ByteArray?
     external fun ttp_ui_results_view_json(boardJson: ByteArray?, intermissionMs: Double): ByteArray?
+    external fun ttp_ui_results_view_live_json(roomHandle: Int, intermissionMs: Double): ByteArray?
     external fun ttp_ui_roster_seats_room_json(roomHandle: Int, hostIdJson: ByteArray?): ByteArray?
     external fun ttp_ui_screen_step(prevScreen: ByteArray?, nextScreen: ByteArray?): Int
     external fun ttp_ui_seat_grid_json(seatsJson: ByteArray?): ByteArray?
     external fun ttp_ui_series_info_live_json(gpHandle: Int, autoAdvanceMs: Double): ByteArray?
+    external fun ttp_ui_settle_standings(roomHandle: Int): Int
     external fun ttp_ui_standings_live_json(sessionHandle: Int, roomHandle: Int, over: Int, resultsJsonOrNull: ByteArray?, autoAdvanceMs: Double): ByteArray?
     external fun ttp_ui_welcome_item_live_json(sessionHandle: Int, peerIdJson: ByteArray?): ByteArray?
     external fun ttp_update(h: Int, dtMs: Double)

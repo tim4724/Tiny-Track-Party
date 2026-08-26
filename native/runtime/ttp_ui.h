@@ -24,10 +24,12 @@
  * the engine's, and the shell picks how often to ask — the web one folds it
  * into the same tick as the HUD read.
  *
- * There is a second reason, and it is the deciding one for the standings board:
- * that answer becomes part of a JSON message. The shell hands it back into the
- * room snapshot without ever decoding it, so a JSON ABI passes a tree through
- * instead of decoding a struct only to re-encode the same object.
+ * There is a second reason, and it used to be the deciding one for the
+ * standings board: that answer becomes part of a JSON message, so a JSON ABI
+ * passed the tree through instead of decoding a struct only to re-encode it.
+ * The board does not pass through a shell at all any more — it is composed and
+ * RETAINED behind the room handle, and ttp_net_lobby_frame puts it on the wire
+ * from there. The reason survives for everything else this layer answers.
  *
  * KEY ORDER IS NOT A CONTRACT, and this header used to claim otherwise. Returned
  * JSON is canonical (sorted keys) like every other ABI's. The claim was that the
@@ -51,7 +53,10 @@
  * whatever list it is handed — which is what lets the conformance corpus carry
  * a synthetic world of its own. The second is the ITEM OUTBOX, which the two
  * item calls below WRITE; it hangs off the session handle rather than off this
- * ABI, and its section says why.
+ * ABI, and its section says why. Neither is state of THIS file, and nor is the
+ * third writer added since — ttp_ui_settle_standings stamps the board behind
+ * the ROOM handle (ttp_room.h). The rule is the same one every time: shim state
+ * hangs off the handle whose lifetime it shares, never off the ABI.
  *
  * IDS. A player id crosses as a JSON scalar, exactly as in ttp_party.h: the
  * token `3` is the number 3 and `"3"` is the string "3", and they are different
@@ -394,22 +399,62 @@ TTP_ABI const char* ttp_ui_results_action_json(int roomHandle);
 /* ---- the standings board ------------------------------------------------- */
 
 
-/* THE BOARD, GATHERED OFF THE LIVE HANDLES — every input:
- *   results      the race's own results OBJECT (the event drain's `results`
- *                answer, which no effect can carry), or "null"/NULL to read
- *                the live session — the same either-or broadcastStandings
- *                always had
+/* THE BOARD IS ROOM-RETAINED. The race walk composes it and stores it behind
+ * the room handle (ttp_room.h), the lobby frame injects it under `standings`,
+ * and the two things that happen to a board already out — a rename and the
+ * podium's settle stamp — PATCH the stored one. No shell holds a copy, and no
+ * shell composes one: what a shell does about a board is republish.
+ *
+ * THE BOARD, GATHERED OFF THE LIVE HANDLES — the same composition, answered as
+ * text rather than retained. Every input:
+ *   results      the race's own results OBJECT, or "null"/NULL to read the
+ *                live session — the same either-or broadcastStandings had
  * The race FIELD is the room-retained launch copy (rename/rekey repairs
  * applied by the walks), the cup half is the room's stored series, and
  * lateJoiners + the host come off the room seam — no shell assembles a row.
- * autoAdvanceMs as in ttp_ui_series_info_live_json. */
+ * autoAdvanceMs as in ttp_ui_series_info_live_json.
+ *
+ * NOT the live path any more: the walk retains through the internal seam
+ * (ttp_live.h's ttp_live_store_standings, this same composition). What this
+ * export is now is the CONFORMANCE surface — tests/ui-model.test.js pins the
+ * board rule against the shipped catalogue through it, and the abi ctest pins
+ * the retained board to it. */
 TTP_ABI const char* ttp_ui_standings_live_json(int sessionHandle, int roomHandle,
                                                int over,
                                                const char* resultsJsonOrNull,
                                                double autoAdvanceMs);
 
-/* The results overlay in its three dressings, as semantic values, off the board
- * above (pass its JSON straight back).
+/* THE PODIUM REVEAL HAS LANDED: stamp `settled` on the room's retained board.
+ * Returns 1 when it stamped and the snapshot must be republished, 0 otherwise.
+ *
+ * The phones were handed this board the moment the race ended, which is the
+ * moment the TV STARTS revealing what the cup did with it. `settled` is their
+ * cue to stop reporting the race and report the cup; ahead of it they would be
+ * crowning the champion on four screens while the TV was still counting points
+ * towards it. WHICH boards settle is decided here, not by a caller — only a
+ * cup's final one — so a shell arms this on every results screen and lets the
+ * answer decide.
+ *
+ * The TIMING is necessarily the shell's: it fires from the reveal's own
+ * completion callback, a fact no handle knows. Everything else is here.
+ *
+ * `settled` is stamped ONTO THE STORED VALUE, never recomposed onto a fresh
+ * board, and it never enters the board rule (ui::Board) — it is a wire cue for
+ * the phone, and the board's contracted key set is pinned by
+ * tests/ui-model.test.js and the frozen ui corpus. It appears only when true. */
+TTP_ABI int ttp_ui_settle_standings(int roomHandle);
+
+/* The results overlay in its three dressings, as semantic values, off the
+ * ROOM-RETAINED board — the live form, and the one the TV's results screen
+ * uses. `null` when no board is retained, which is not an empty overlay but
+ * NO overlay: paint nothing rather than a blank one. intermissionMs stays the
+ * caller's (the E2E override lives shell-side). Shape below. */
+TTP_ABI const char* ttp_ui_results_view_live_json(int roomHandle, double intermissionMs);
+
+/* THE SAME OVERLAY OFF A BOARD HANDED IN — kept for the three screenshot
+ * harnesses (public/display/TestHarness.js, the tvOS and Android TV Scenarios),
+ * which stage a SYNTHETIC board with no room and no race behind it. Not the
+ * live path; a shell painting a real results screen calls the form above.
  *   plain single-race board  titleKey "results",    rows carry a lap time
  *   cup intermission         titleKey "standings" + a sub + a "next up" footer
  *   cup podium               titleKey "cup_champs", the top three medalled

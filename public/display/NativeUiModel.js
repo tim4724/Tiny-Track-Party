@@ -58,8 +58,8 @@ export async function init() {
     raceFlowLive: c('ttp_ui_race_flow_live_json', 'string', ['number', 'number']),
     freezePlan: c('ttp_ui_freeze_plan_json', 'string', ['number', 'number', 'number']),
     resultsAction: c('ttp_ui_results_action_json', 'string', ['number']),
-    standingsLive: c('ttp_ui_standings_live_json', 'string',
-      ['number', 'number', 'number', 'string', 'number']),
+    settleStandings: c('ttp_ui_settle_standings', 'number', ['number']),
+    resultsViewLive: c('ttp_ui_results_view_live_json', 'string', ['number', 'number']),
     resultsView: c('ttp_ui_results_view_json', 'string', ['string', 'number']),
     intermissionSecs: c('ttp_ui_intermission_secs', 'number', ['number', 'number'])
   };
@@ -218,30 +218,32 @@ export function resultsAction(roomHandle) {
 }
 
 // ---- the standings board ----------------------------------------------------
+// THE BOARD IS ROOM-RETAINED, so there is no composer here and no board in this
+// shell at all: the race walk composes it and stores it behind the room handle,
+// ttp_net_lobby_frame puts it on the wire from there, and the rename walk
+// patches the stored one. This page only republishes.
 // (The Grand Prix chip rides the board's `cup.info` — ttp_ui_series_info_live_json
 // stays exported for a shell that draws the chip alone; this page reads it off
 // the board and wraps nothing.)
 
-// The board the TV and every phone render.
-//
-// ITS KEY ORDER IS NOT THE WIRE'S — see the key-order note on lobbyFrame in
-// NativeSessionModel.js. This board reaches phones inside the retained room
-// snapshot, and ttp_party.cc canonicalizes every outbound frame, so the order
-// ttp_ui_standings_json writes is sorted away before it leaves. The ordered
-// emitter is pinned by abi_check at the ABI boundary and by the frozen ui
-// corpus; it is not a wire guarantee.
-// results/cup/lateJoiners/host are gathered in C++ off the three handles
-// (ttp_ui_standings_live_json). The FIELD is the one shell-owned input left:
-// the launch's frozen copy plus the shell's rename/rekey repairs (the AI
-// racers are not in any roster the room knows).
-export function standingsPayload({ sessionHandle, roomHandle, over, results, autoAdvanceMs }) {
-  return JSON.parse(fn.standingsLive(
-    sessionHandle | 0, roomHandle | 0, b(over),
-    results ? J(results) : null,
-    autoAdvanceMs));
+// THE PODIUM REVEAL HAS LANDED: stamp `settled` on the room's retained board.
+// Answers whether it stamped, which is whether the snapshot must be republished.
+// WHICH boards settle is the rule's (only a cup's final one), so this is armed
+// on every results screen and the answer decides.
+export function settleStandings(roomHandle) {
+  return !!fn.settleStandings(roomHandle | 0);
 }
 
-// The results overlay, off that same board — pass it straight back.
+// The results overlay off the room's retained board — the live path, and the one
+// the TV's own results screen uses. `null` means NO board is out, which is not
+// an empty overlay: paint nothing rather than a blank one.
+export function resultsViewLive(roomHandle, { intermissionMs }) {
+  return JSON.parse(fn.resultsViewLive(roomHandle | 0, intermissionMs));
+}
+
+// The same overlay off a board handed in — the screenshot harness's synthetic
+// one (TestHarness.js), which has no room and no race behind it. Not the live
+// path; live play calls resultsViewLive above.
 export function resultsView(board, { intermissionMs }) {
   return JSON.parse(fn.resultsView(J(board), intermissionMs));
 }

@@ -75,7 +75,7 @@ const char* const NET_EFFECT_OPS[] = {
     "reset-reconnect-count", "connect-fresh", "fail-attempt", "reconnect",
     "send-to", "publish", "announce", "close-fastlane", "show-reconnect",
     "clear-reconnect", "rekey-player", "player-renamed", "welcome-item",
-    "game-message", "race-abandoned", "track-change", "clear-standings"};
+    "game-message", "race-abandoned", "track-change"};
 
 const char* put(std::string& buf, const Value& v) {
   canonical_stringify_into(v, buf);
@@ -166,11 +166,13 @@ int ttp_net_configure(const char* chooserJson) {
 
 const char* ttp_net_lobby_frame(int roomHandle, int sessionHandle, const char* fieldsJson) {
   // The game-owned half — now only what the walks cannot know: the pause latch
-  // and the standings board. The PICK is the stored one (ttp_room.h) — the
-  // walks are its writers, so the frame reads it where it lives.
+  // and the mute latch. The PICK and the STANDINGS BOARD are both stored
+  // (ttp_room.h) — the walks are their writers, so the frame reads them where
+  // they live.
   Value input = json::parse_or(fieldsJson, Value::Obj());
   if (input.type != Value::OBJ) input = Value::Obj();
   setPickFields(roomHandle, input);
+  input.set("standings", ttp_room_board_value(roomHandle));
   // The room-owned half, read through the seam — the SAME four keys the shell
   // used to gather and hand back, so lobby_snapshot below is the untouched,
   // corpus-pinned rule and not a variant of it. The roster is built ONCE and
@@ -929,6 +931,29 @@ const char* ttp_net_on_peer_message_json(int roomHandle, int sessionHandle,
             }
             ttp_room_store_field(roomHandle, std::move(f));
           }
+          // The board ALREADY OUT carries the old name too, and the field only
+          // reaches a phone on the board's next compose — mid-race the next car
+          // to cross, on the podium never. So PATCH the retained board's rows
+          // (the `announce` below republishes it).
+          //
+          // Patched, NOT recomposed, for two reasons. A recompose would pick up
+          // whatever the roster did since the board went out, so the re-push
+          // would differ in more than the name; and this walk holds no
+          // intermission budget, so it would silently re-price the board's cup
+          // chip — dropping the web's __intermissionMs E2E override in the
+          // process. Late-joiner rows are patched by the same loop: their name
+          // came off the roster, and it is the roster that just moved.
+          Value board = ttp_room_board_value(roomHandle);
+          const Value* order = board.type == Value::OBJ ? board.find("order") : nullptr;
+          if (order && order->type == Value::ARR) {
+            Value rows = *order;
+            for (Value& row : rows.arr) {
+              const Value* pid = row.find("playerId");
+              if (pid && strictEquals(*pid, from.toValue())) row.set("name", Value::Str(name));
+            }
+            board.set("order", std::move(rows));
+            ttp_room_store_board(roomHandle, std::move(board));
+          }
           Value e = effectOp("player-renamed");
           e.set("peerIndex", from.toValue());
           e.set("name", Value::Str(name));
@@ -1179,7 +1204,12 @@ const char* ttp_net_state_change_apply_json(int roomHandle, const char* to, doub
     }
     for (const PeerId& id : ids) expireSeatWalk(flow, id, effects);
   }
-  if (plan.clearStandings) pushOp(effects, "clear-standings");
+  // A fresh race and the lobby both start with no results board. EXECUTED here
+  // rather than spelled: the board lives behind the room (ttp_room.h), so
+  // dropping it is a store, not a platform op — and the `publish` below is
+  // already the push that tells the phones. The plan FIELD stays: it is
+  // session::StateChangePlan's rule and the frozen session corpus pins it.
+  if (plan.clearStandings) ttp_room_store_board(roomHandle, Value::Null());
   if (plan.publish) pushOp(effects, "publish");
   return answer(g_bufStateApply, std::move(effects));
 }

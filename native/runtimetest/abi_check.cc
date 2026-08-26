@@ -2183,13 +2183,18 @@ void handlePathsMatchJsonPaths() {
   ttp_add_human(sess, "1", nullptr);
   ttp_add_human(sess, "3", nullptr);   // a dropped seat still holds its car
 
-  // The shell hands over only what the walks cannot know; the pick rides the
-  // room handle (staged here exactly as a select_mode walk would store it).
-  const char* kFields = "{\"paused\":false,\"soundOn\":false,\"standings\":null}";
+  // The shell hands over only the two LATCHES; the pick and the standings board
+  // both ride the room handle (staged here exactly as the walks would store
+  // them). The dead `standings` key is passed on purpose — a shell that still
+  // sends one must not be able to put a board on the wire.
+  const char* kFields =
+      "{\"paused\":false,\"soundOn\":false,\"standings\":{\"over\":true,\"order\":[]}}";
   const char* kPick =
       "{\"mode\":\"cup\",\"cupId\":\"beach\",\"randomRaces\":0,"
       "\"trackId\":\"tidepool\",\"hasBag\":false}";
+  const char* kBoard = "{\"hostPeerIndex\":1,\"order\":[],\"over\":true,\"total\":0}";
   ttp_room_store_pick(room, parseOrNull(kPick, "staged pick"));
+  ttp_room_store_board(room, parseOrNull(kBoard, "staged board"));
 
   // The old path, spelled out: the pick plus the four room keys the shell used
   // to gather, each through the ABI call it used to make — and then the two
@@ -2201,6 +2206,9 @@ void handlePathsMatchJsonPaths() {
     const Value pick = parseOrNull(kPick, "lobby-frame pick");
     for (const char* k : {"mode", "cupId", "randomRaces", "trackId"})
       input.set(k, *pick.find(k));
+    // The board is the ROOM's too now — the shell's `standings` key is dead, so
+    // the expected side composes over the slot exactly as the frame does.
+    input.set("standings", ttp_room_board_value(r));
     Value roster = parseOrNull(ttp_room_list_json(r), "room list");
     Value inRace = Value::Arr();
     for (const Value& seat : roster.arr) {
@@ -2250,6 +2258,13 @@ void handlePathsMatchJsonPaths() {
   };
 
   sameFrame(room, sess, "lobby, a live race");
+  {
+    // …and the board on the wire is the ROOM's slot, never the caller's key.
+    const Value frame = parseOrNull(ttp_net_lobby_frame(room, sess, kFields), "frame");
+    check(canonical_stringify(at(at(frame, "data"), "standings")) ==
+              canonical_stringify(parseOrNull(kBoard, "staged board")),
+          "the frame carries the room-retained board, not the caller's `standings`");
+  }
   sameSeats(room, "1", "lobby, host 1");
   sameSeats(room, "null", "lobby, no host");
 
@@ -2683,6 +2698,87 @@ void uiLiveTwinsMatchJsonPaths() {
                 "{\"playerId\":3,\"finished\":false,\"time\":null}]}",
                 "cup, final board off the callback argument");
 
+  // ---- the ROOM-RETAINED board: the live overlay and the settle stamp --------
+  //
+  // Two more handle-taking forms, gated the way every other one is (native's
+  // CLAUDE.md): they add no rule — they read what a caller used to hand in — so
+  // the statement of correctness is agreement, in this same run, with the form
+  // that still takes the value. The board is staged through ttp_room_store_board
+  // exactly as the race walk's executor writes it (raceLiveWalks gates that the
+  // executor really does).
+  {
+    const std::string boardBytes = ttp_ui_standings_live_json(sess, room, 1, nullptr, kMs);
+    ttp_room_store_board(room, parseOrNull(boardBytes.c_str(), "staged board"));
+    check(std::string(ttp_ui_results_view_live_json(room, kMs)) ==
+              std::string(ttp_ui_results_view_json(boardBytes.c_str(), kMs)),
+          "ttp_ui_results_view_live_json == ttp_ui_results_view_json over the retained board");
+
+    // No board is NO overlay, not an empty one — a shell painting a blank
+    // results screen over a live race is the failure this spelling prevents.
+    ttp_room_store_board(room, Value::Null());
+    check(std::string(ttp_ui_results_view_live_json(room, kMs)) == "null",
+          "…and with no board retained it answers null, never a blank overlay");
+
+    // THE SETTLE STAMP. Which boards settle is the rule's, not a caller's: only
+    // a cup's FINAL one. Staged by flipping `final` on the composed board —
+    // this cup is on its first race, and the point here is the stamp, not the
+    // chip (sameStandings above already pins the chip to its own export).
+    Value finalBoard = parseOrNull(boardBytes.c_str(), "board to settle");
+    check(finalBoard.has("series"), "premise: a cup board is what settles");
+    Value chip = at(finalBoard, "series");
+    chip.set("final", Value::Bool(true));
+    finalBoard.set("series", std::move(chip));
+    ttp_room_store_board(room, finalBoard);
+    check(ttp_ui_settle_standings(room) == 1,
+          "a final cup board settles, and says the snapshot must be republished");
+    Value want = finalBoard;
+    want.set("settled", Value::Bool(true));
+    // PATCHED, NOT RECOMPOSED: `settled` is the only difference between the two
+    // pushes a phone receives, which is the whole point of the second one.
+    check(canonical_stringify(ttp_room_board_value(room)) == canonical_stringify(want),
+          "…stamping exactly `settled`, leaving every other key alone\n  want " +
+              canonical_stringify(want) + "\n  got  " +
+              canonical_stringify(ttp_room_board_value(room)));
+    check(ttp_ui_settle_standings(room) == 0 &&
+              canonical_stringify(ttp_room_board_value(room)) == canonical_stringify(want),
+          "…and settling a settled board changes nothing and asks for no publish");
+
+    // The two refusals. `settled` may NEVER ride a board that is not a cup's
+    // last: the phone reads it as "stop reporting the race, report the cup".
+    ttp_room_store_board(room, parseOrNull(boardBytes.c_str(), "mid-cup board"));
+    check(ttp_ui_settle_standings(room) == 0 &&
+              !ttp_room_board_value(room).has("settled"),
+          "a mid-cup board never settles");
+    ttp_room_store_board(room, parseOrNull("{\"over\":true,\"order\":[],\"total\":0}",
+                                           "plain board"));
+    check(ttp_ui_settle_standings(room) == 0 &&
+              !ttp_room_board_value(room).has("settled"),
+          "a plain single-race board never settles");
+    ttp_room_store_board(room, Value::Null());
+    check(ttp_ui_settle_standings(room) == 0, "and with no board there is nothing to settle");
+    check(ttp_ui_settle_standings(0) == 0, "…nor on a handle that is not a room");
+
+    // THE COMPOSE-AND-RETAIN SEAM ITSELF (ttp_live.h), which the race walk's
+    // executor calls: it stores what the export above answers, and nothing else.
+    check(ttp_live_store_standings(sess, room, true, nullptr, kMs) &&
+              canonical_stringify(ttp_room_board_value(room)) == boardBytes,
+          "ttp_live_store_standings retains ttp_ui_standings_live_json's own board");
+
+    // THE NO-SESSION GUARD, which was `if (!session) return` at the top of three
+    // shells' broadcastStandings. Without it a synthetic or torn-down path
+    // composes an EMPTY board and retains it — and a phone reads a non-null
+    // `standings` as "raise the results overlay", so that is a blank results
+    // screen over every wheel, not the absence of one.
+    ttp_room_store_board(room, Value::Null());
+    check(!ttp_live_store_standings(0, room, true, nullptr, kMs) &&
+              ttp_room_board_value(room).type == Value::NUL,
+          "no live session retains NO board — never an empty one");
+    check(!ttp_live_store_standings(sess, room, true, nullptr, kMs) ||
+              ttp_room_board_value(room).type == Value::OBJ,
+          "…and a live one still does");
+    ttp_room_store_board(room, Value::Null());
+  }
+
   // ---- the endless-draw gate ------------------------------------------------
   // NativeCupSeries spelled `drawNext && raceIndex >= raceCount - 1`; the state
   // object owns the index half now. A fixed cup never draws; an endless series
@@ -3039,6 +3135,12 @@ void sameRooms(int walkRoom, ShellTwin& twin, const char* where) {
   check(walkRoster == twinRoster, std::string("netwalk ") + where + ": rosters byte-identical");
   check(std::string(ttp_room_state(walkRoom)) == ttp_room_state(twin.room),
         std::string("netwalk ") + where + ": room state equal");
+  // The retained standings board is room state the walks now WRITE (the
+  // statechange clear, the rename patch), so it is part of what "the rooms
+  // agree" means — an executed step is only gated by the state it moved.
+  check(canonical_stringify(ttp_room_board_value(walkRoom)) ==
+            canonical_stringify(ttp_room_board_value(twin.room)),
+        std::string("netwalk ") + where + ": retained standings board equal");
 }
 
 void sameEffects(const Value& walk, const ShellTwin& twin, const char* where) {
@@ -3494,6 +3596,12 @@ void netWalksMatchMultiCallPath() {
   // --- the race: statechange restamp, a drop, liveness, the claim ----------
   {
     // Both rooms flip to countdown/playing; the statechange walk restamps.
+    // A board from the PREVIOUS race is out when that happens — staged through
+    // the same seam the race walk's executor writes it through, so the clear
+    // below has something to drop and can be seen to have dropped it.
+    const Value staleBoard = parseOrNull("{\"over\":true,\"order\":[],\"total\":0}", "stale board");
+    ttp_room_store_board(walkRoom, staleBoard);
+    ttp_room_store_board(twin.room, staleBoard);
     ttp_room_transition_to(walkRoom, "countdown");
     ttp_room_transition_to(twin.room, "countdown");
     Value sc = walkOf(ttp_net_state_change_apply_json(walkRoom, "countdown", 4000), "sc countdown");
@@ -3506,10 +3614,16 @@ void netWalksMatchMultiCallPath() {
           if (json::truthy(p.find("connected")))
             twin.flow->onSeen(json::id_of<PeerId>(p.find("peerIndex")), 4000);
       }
-      if (plan.clearStandings) twin.expected.push(bareEffect("clear-standings"));
+      // clearStandings is EXECUTED — the board lives behind the room, so the
+      // twin drops its own room's board rather than expecting an effect. The
+      // plan field is still the rule (the frozen session corpus pins it); what
+      // went is the op three shells each mirrored a board to perform.
+      if (plan.clearStandings) ttp_room_store_board(twin.room, Value::Null());
       if (plan.publish) twin.expected.push(bareEffect("publish"));
     }
     sameEffects(sc, twin, "statechange/countdown");
+    check(ttp_room_board_value(walkRoom).type == Value::NUL,
+          "netwalk statechange/countdown: the stale board was DROPPED behind the room");
     sameRooms(walkRoom, twin, "statechange/countdown");
     ttp_room_transition_to(walkRoom, "playing");
     ttp_room_transition_to(twin.room, "playing");
@@ -3619,7 +3733,10 @@ void netWalksMatchMultiCallPath() {
     sameEffects(cw, twin, "claim/rekey");
     sameRooms(walkRoom, twin, "claim/rekey");
 
-    // Back to the lobby: disconnected seats are freed, standings cleared.
+    // Back to the lobby: disconnected seats are freed, standings cleared. This
+    // race's board is out, so the clear is again observable rather than vacuous.
+    ttp_room_store_board(walkRoom, staleBoard);
+    ttp_room_store_board(twin.room, staleBoard);
     ttp_room_transition_to(walkRoom, "lobby");
     ttp_room_transition_to(twin.room, "lobby");
     ttp_room_events_json(walkRoom);
@@ -3640,10 +3757,12 @@ void netWalksMatchMultiCallPath() {
         }
         for (double id : disc) twin.expireSeat(id);
       }
-      if (plan.clearStandings) twin.expected.push(bareEffect("clear-standings"));
+      if (plan.clearStandings) ttp_room_store_board(twin.room, Value::Null());
       if (plan.publish) twin.expected.push(bareEffect("publish"));
     }
     sameEffects(lob, twin, "statechange/lobby");
+    check(ttp_room_board_value(walkRoom).type == Value::NUL,
+          "netwalk statechange/lobby: the board was DROPPED behind the room");
     sameRooms(walkRoom, twin, "statechange/lobby");
     ttp_dispose(sess);
   }
@@ -4784,6 +4903,8 @@ void raceLiveWalks() {
     };
     readSeries();
     check(!hasSeries, "premise: no cup behind the room for the countdown pass");
+    check(ttp_room_board_value(room).type == Value::NUL,
+          "premise: the room retains no standings board yet");
 
     // The expected effects for whatever the twin drained, routed the way the
     // walk routes them — the three lifecycle beats to their own rules, the rest
@@ -4829,8 +4950,12 @@ void raceLiveWalks() {
         beats++;
         if (json::num_field(e, "n") == 0) gos++;
       }
-      check(at(got, "results").type == Value::NUL || json::str_field(got, "op") == "",
-            "results stays null until the race ends");
+      // THE NEVER-RAISE-A-FIRST-BOARD RULE, which used to be three shells'
+      // hasStandings() gate: nothing crosses the line during a countdown, so
+      // nothing may be retained — a board is what raises a phone's results
+      // overlay, and one here pops it over every wheel mid-count.
+      check(ttp_room_board_value(room).type == Value::NUL,
+            "no board is retained before anyone has crossed the line");
     }
     check(beats >= 2 && gos == 1,
           "the countdown beats were routed, GO among them (" + std::to_string(beats) +
@@ -4839,14 +4964,15 @@ void raceLiveWalks() {
     const Value empty = parseOrNull(
         ttp_race_events_live_json(live, room, "beach", 1, 0, kInterMs, 9000),
         "events_live empty");
-    check(at(empty, "effects").arr.empty() && at(empty, "results").type == Value::NUL,
-          "a drained queue answers no effects and a null results");
+    check(at(empty, "effects").arr.empty(), "a drained queue answers no effects");
 
-    // The end of the race, with a cup behind the room: `results` rides the
-    // ANSWER (no effect can carry it and three of them read it as their
-    // context), and the points are BANKED INSIDE the drain — apply-race-points
-    // never reaches a shell, so the gate is that the room's series moved
-    // exactly as an independent series driven with the same rows does.
+    // The end of the race, with a cup behind the room. NOTHING about the result
+    // rows leaves this call any more: the points are BANKED and the standings
+    // board is COMPOSED AND RETAINED inside the drain, so neither
+    // apply-race-points nor the rows reach a shell. The gates are therefore
+    // both on stored state — the room's series moved exactly as an independent
+    // series driven with the same rows does, and the room's board IS the board
+    // the composition export answers for those same rows.
     const char* kCup = "{\"id\":\"beach\",\"name\":\"Beach\",\"tracks\":[\"tidepool\",\"helix\"]}";
     const char* kFieldRows =
         "[{\"peerIndex\":1,\"name\":\"Ada\",\"colorIndex\":0,\"ai\":false},"
@@ -4868,17 +4994,26 @@ void raceLiveWalks() {
         ttp_race_events_live_json(live, room, "beach", 1, 0, kInterMs, 10000),
         "events_live end");
     sameOps(ended, expectedFor(drained, "beach", 1, 0, 10000), "events_live effects at the flag");
-    check(at(ended, "results").type == Value::OBJ,
-          "the end of the race carries its ranked board on the answer");
+    check(!ended.has("results"),
+          "the answer carries no results rider — the rows never leave C++");
     check(opsOf(ended).find("show-results") != std::string::npos,
           "…and the endRace composition is in the effects");
 
-    // The banking, against a series nothing else touched. The rows are the ones
-    // the answer carried and the field is the room's retained copy, which is
-    // exactly what the executor had to hand.
-    ttp_gp_apply_race(oracle,
-                      canonical_stringify(at(at(ended, "results"), "results")).c_str(),
-                      kFieldRows, nullptr);
+    // The rows the executor had to hand: the _raceEnd beat's own results object,
+    // off the twin's drain. Both halves of the end-of-race walk are gated
+    // against it — the banking below and the retained board after that.
+    Value endRows = Value::Null();
+    for (const Value& e : drained.arr) {
+      if (json::str_field(e, "type") != "_raceEnd") continue;
+      const Value* r = e.find("results");
+      if (r) endRows = at(*r, "results");
+    }
+    check(endRows.type == Value::ARR && !endRows.arr.empty(),
+          "premise: the race end carried its ranked rows");
+
+    // The banking, against a series nothing else touched. The field is the
+    // room's retained copy, which is the other thing the executor had to hand.
+    ttp_gp_apply_race(oracle, canonical_stringify(endRows).c_str(), kFieldRows, nullptr);
     const std::string banked = ttp_race_series_state_json(room);
     check(banked == ttp_gp_state_json(oracle),
           "apply-race-points was EXECUTED inside the drain\n  want " +
@@ -4886,6 +5021,77 @@ void raceLiveWalks() {
     check(banked.find("\"points\"") != std::string::npos &&
               banked.find("\"points\":0") == std::string::npos,
           "…and the standings really carry this race's points");
+
+    // THE BOARD WAS COMPOSED AND RETAINED, and it is the SAME board the
+    // composition export answers for these rows — byte for byte, because both
+    // sides are that export's own encoder. This is the whole statement of the
+    // retained slot's correctness: the walk gathers what a shell used to gather
+    // and stores it where the lobby frame reads it.
+    Value wrapped = Value::Obj();
+    wrapped.set("results", endRows);
+    const std::string wantBoardBytes = ttp_ui_standings_live_json(
+        live, room, 1, canonical_stringify(wrapped).c_str(), kInterMs);
+    check(canonical_stringify(ttp_room_board_value(room)) == wantBoardBytes,
+          "the final board was RETAINED behind the room\n  want " + wantBoardBytes +
+              "\n  got  " + canonical_stringify(ttp_room_board_value(room)));
+    check(!ttp_room_board_value(room).has("settled"),
+          "…and it carries no `settled` until the reveal lands");
+
+    // The lobby frame INJECTS it: no shell mirrors the board, so `standings` on
+    // the wire is the room's slot and nothing else. A `standings` key handed in
+    // is dead — pass a decoy and watch the room's board win.
+    {
+      const Value frame = parseOrNull(
+          ttp_net_lobby_frame(room, live,
+                              "{\"paused\":false,\"soundOn\":false,\"standings\":\"decoy\"}"),
+          "frame with a board out");
+      check(canonical_stringify(at(at(frame, "data"), "standings")) == wantBoardBytes,
+            "…and ttp_net_lobby_frame carries THAT board, not the caller's");
+    }
+
+    // The settle stamp: a cup that is NOT on its last race must not settle (the
+    // phone stays on the race there), and the stamp PATCHES rather than
+    // recomposes — every other key of the board is untouched.
+    check(ttp_ui_settle_standings(room) == 0,
+          "a mid-cup board never settles");
+    check(canonical_stringify(ttp_room_board_value(room)) == wantBoardBytes,
+          "…and a refused settle leaves the board exactly as it was");
+
+    // A rename mid-board PATCHES the retained rows in place. Nothing else may
+    // move: a recompose here would re-price the cup chip off a budget this walk
+    // does not hold.
+    {
+      ttp_room_add_player(room, "1", "{\"name\":\"Ada\",\"colorIndex\":0}");
+      const Value rn = parseOrNull(
+          ttp_net_on_peer_message_json(room, live, "1",
+                                       "{\"type\":\"hello\",\"name\":\"Zaza\"}", 0, 11000),
+          "rename with a board out");
+      check(opsOf(rn).find("player-renamed") != std::string::npos,
+            "premise: that hello really was a rename (" + opsOf(rn) + ")");
+      Value want = parseOrNull(wantBoardBytes.c_str(), "board before the rename");
+      Value rows = at(want, "order");
+      for (Value& r : rows.arr)
+        if (canonical_stringify(at(r, "playerId")) == "1") r.set("name", Value::Str("Zaza"));
+      want.set("order", std::move(rows));
+      check(canonical_stringify(ttp_room_board_value(room)) == canonical_stringify(want),
+            "a rename PATCHES the retained board's rows and nothing else\n  want " +
+                canonical_stringify(want) + "\n  got  " +
+                canonical_stringify(ttp_room_board_value(room)));
+    }
+
+    // The statechange walk drops it — a store now, not an effect a shell mirrors.
+    {
+      ttp_room_transition_to(room, "lobby");
+      ttp_room_events_json(room);
+      const Value sc = parseOrNull(ttp_net_state_change_apply_json(room, "lobby", 12000),
+                                   "statechange lobby");
+      check(opsOf(sc).find("clear-standings") == std::string::npos &&
+                opsOf(sc).find("publish") != std::string::npos,
+            "the statechange walk spells no clear-standings, only the publish that "
+            "carries the drop (" + opsOf(sc) + ")");
+      check(ttp_room_board_value(room).type == Value::NUL,
+            "…and the board behind the room is gone");
+    }
     ttp_gp_dispose(oracle);
     ttp_dispose(live);
     ttp_dispose(twin);

@@ -796,10 +796,10 @@ final class GameCoordinator: ObservableObject {
 
     /// Walk whatever the layer answered. Every entry point above funnels through
     /// here so there is exactly one place effects are performed, in order.
-    func run(_ answer: [String: Any], results: [String: Any]? = nil) {
+    func run(_ answer: [String: Any]) {
         let effects = answer["effects"] as? [Any] ?? []
         do {
-            try performer.perform(effects, context: .init(results: results))
+            try performer.perform(effects)
         } catch {
             // An unperformable effect is a missing capability. Surfacing it beats
             // continuing with a half-built race.

@@ -284,7 +284,6 @@ Value effectVal(const race::Effect& e) {
       v.set("s", Value::Num(e.s));
       v.set("lat", Value::Num(e.lat));
       break;
-    case race::Op::BROADCAST_STANDINGS: v.set("over", Value::Bool(e.over)); break;
     case race::Op::ARM_INTERMISSION:
       v.set("ms", Value::Num(e.num));
       v.set("deadline", Value::Num(e.deadline));
@@ -299,6 +298,10 @@ Value effectVal(const race::Effect& e) {
       break;
     case race::Op::STOP_LOBBY_DEMO:
     case race::Op::CLEAR_ITEM_CACHE:
+    // BARE since the board became room-retained: `over` selected which board
+    // the shell would compose, and no shell composes one. What is left is
+    // "republish the snapshot".
+    case race::Op::BROADCAST_STANDINGS:
     case race::Op::HIDE_RESULTS:
     case race::Op::REVEAL_CHROME:
     case race::Op::HOLD_CHROME:
@@ -341,12 +344,22 @@ Value wrapEffects(const race::Effects& es) {
 // ---- the executor ------------------------------------------------------------
 // The decision layer (race_flow.cc) still answers the FULL corpus-pinned
 // effect list; this walk executes the ops whose object lives behind the room
-// (the series, the retained field, the pick's track) and spells the remainder
-// for the shell. What a shell performs is therefore only what names a
-// platform API — and what the executor performed is observable through the
-// stored state, which is how abi_check gates it.
-void executeAndSpell(int roomHandle, const race::Effects& es,
-                     const Value* resultsRowsForApply, Value& out) {
+// (the series, the retained field, the standings board, the pick's track) and
+// spells the remainder for the shell. What a shell performs is therefore only
+// what names a platform API — and what the executor performed is observable
+// through the stored state, which is how abi_check gates it.
+
+// What the drain's end-of-race and finish ops need and no effect can carry.
+// Only ttp_race_events_live_json fills it in; every other walk passes {},
+// because no other emits an op that reads any of it.
+struct RaceCtx {
+  int sessionHandle = 0;              // the live race a board is composed against
+  double autoAdvanceMs = 0;           // the intermission budget the cup chip carries
+  const Value* resultRows = nullptr;  // endRace's own rows; null reads the session
+};
+
+void executeAndSpell(int roomHandle, const race::Effects& es, const RaceCtx& ctx,
+                     Value& out) {
   for (const race::Effect& e : es) {
     switch (e.op) {
       case race::Op::SET_FIELD:
@@ -365,15 +378,27 @@ void executeAndSpell(int roomHandle, const race::Effects& es,
         // corpus pins that list; what it no longer is, is three shells each
         // holding a map for a rule none of them owns.
         break;
+      case race::Op::BROADCAST_STANDINGS:
+        // COMPOSE AND RETAIN behind the room; the board itself never crosses to
+        // a shell, which picks it up on the next lobby frame. What is left for
+        // the shell to perform is the republish — the op keeps its name (the
+        // frozen raceflow corpus pins the decision layer's list) and loses its
+        // payload, because nothing reads `over` outside this arm any more.
+        // A no-session compose is refused inside the seam (ttp_live.h); the op
+        // still leaves, and republishing an unchanged snapshot is a no-op.
+        ttp_live_store_standings(ctx.sessionHandle, roomHandle, e.over, ctx.resultRows,
+                                 ctx.autoAdvanceMs);
+        out.push(effectVal(e));
+        break;
       case race::Op::APPLY_RACE_POINTS: {
         const int gp = ttp_room_series(roomHandle);
-        if (gp && resultsRowsForApply) {
+        if (gp && ctx.resultRows) {
           // An endless series on its last queued race extends itself from the
           // room's bag — the WHEN is the series engine's (needsDraw).
           std::string drawn;
           const Value st = json::parse_or(ttp_gp_state_json(gp), Value::Obj());
           if (json::truthy(st.find("needsDraw"))) drawn = ttp_live_bag_draw(roomHandle);
-          ttp_gp_apply_race(gp, canonical_stringify(*resultsRowsForApply).c_str(),
+          ttp_gp_apply_race(gp, canonical_stringify(*ctx.resultRows).c_str(),
                             canonical_stringify(ttp_room_field_value(roomHandle)).c_str(),
                             drawn.empty() ? nullptr : drawn.c_str());
         }
@@ -694,10 +719,10 @@ const char* ttp_race_start_live_json(int roomHandle, int sceneReady, double seed
   Value v = Value::Obj();
   v.set("action", Value::Str("launch"));
   Value fx = Value::Arr();
-  executeAndSpell(roomHandle, lr.effects, nullptr, fx);
+  executeAndSpell(roomHandle, lr.effects, {}, fx);
   v.set("effects", std::move(fx));
   Value tail = Value::Arr();
-  executeAndSpell(roomHandle, lr.countdownEffects, nullptr, tail);
+  executeAndSpell(roomHandle, lr.countdownEffects, {}, tail);
   v.set("countdownEffects", std::move(tail));
   return put(g_bufStart, v);
 }
@@ -711,7 +736,10 @@ const char* ttp_race_events_live_json(int sessionHandle, int roomHandle,
   const Value evs = ttp_session_drain_events(sessionHandle);
   const ttp::CupSeries* series = ttp_gp_series(ttp_room_series(roomHandle));
   Value fx = Value::Arr();
-  Value results = Value::Null();
+  // The board ops compose against the live race, and the cup chip they carry is
+  // priced in the caller's intermission budget (the E2E override rides that
+  // argument, which is why nothing here re-reads ttp_race_intermission_ms).
+  const RaceCtx live{sessionHandle, intermissionMs, nullptr};
   if (evs.type == Value::ARR) {
     for (const Value& e : evs.arr) {
       const std::string type = json::str_field(e, "type");
@@ -719,10 +747,10 @@ const char* ttp_race_events_live_json(int sessionHandle, int roomHandle,
       // to the ordinary-event filter makes them vanish, which is the routing
       // bug this drain exists to end (shells.md, the fourth launch bug).
       if (type == "_countdown") {
-        executeAndSpell(roomHandle, race::countdownTick(json::num_field(e, "n")), nullptr, fx);
+        executeAndSpell(roomHandle, race::countdownTick(json::num_field(e, "n")), {}, fx);
       } else if (type == "_raceStart") {
         executeAndSpell(roomHandle, race::raceStart(biome ? biome : "", audioReady != 0),
-                        nullptr, fx);
+                        {}, fx);
       } else if (type == "_raceEnd") {
         race::EndRaceInput ei;
         ei.hasSeries = series != nullptr;
@@ -739,11 +767,15 @@ const char* ttp_race_events_live_json(int sessionHandle, int roomHandle,
         // The live walk always banks a finished series; the flag exists so the
         // frozen corpus lines (which predate progression) stay byte-identical.
         ei.bankProgression = true;
-        if (const Value* r = e.find("results")) results = *r;
-        // Points bank HERE, against the retained field — before the board
-        // effects the shell performs, exactly the order the corpus pins.
-        const Value* rows = results.type == Value::OBJ ? results.find("results") : nullptr;
-        executeAndSpell(roomHandle, race::endRace(ei), rows, fx);
+        // endRace's OWN ranked board, which no effect can carry and which now
+        // never leaves C++: the points bank against it (against the retained
+        // field, BEFORE the board is composed — the order the corpus pins) and
+        // the final board composes from it.
+        const Value* results = e.find("results");
+        RaceCtx end = live;
+        end.resultRows = results && results->type == Value::OBJ ? results->find("results")
+                                                                : nullptr;
+        executeAndSpell(roomHandle, race::endRace(ei), end, fx);
       } else {
         // humans-all-done is read off the live handles exactly when a finish
         // asks for it — the one event whose effects branch on the answer.
@@ -751,13 +783,12 @@ const char* ttp_race_events_live_json(int sessionHandle, int roomHandle,
                              ttp_live_humans_all_done(sessionHandle, roomHandle);
         executeAndSpell(roomHandle,
                         race::raceEvent(eventOf(e), fastForwarding != 0, allDone),
-                        nullptr, fx);
+                        live, fx);
       }
     }
   }
   Value v = Value::Obj();
   v.set("effects", std::move(fx));
-  v.set("results", std::move(results));
   return put(g_bufEvents, v);
 }
 
@@ -779,7 +810,7 @@ const char* ttp_race_advance_live_json(int roomHandle, int sceneReady, double se
   v.set("action", Value::Str(race::key(r.action)));
   Value fx = Value::Arr();
   Value tail = Value::Arr();
-  executeAndSpell(roomHandle, r.effects, nullptr, fx);
+  executeAndSpell(roomHandle, r.effects, {}, fx);
   if (r.action == race::AdvanceAction::ADVANCE) {
     // The advance re-aimed the pick at the cup's next circuit (executed
     // above), so the launch reads everything back off the handles. One walk:
@@ -789,8 +820,8 @@ const char* ttp_race_advance_live_json(int roomHandle, int sceneReady, double se
     race::LaunchResult lr = launchOff(roomHandle, ai.players, seed, countdownSeconds,
                                       forceItemOrNull, botCapJson,
                                       s ? s->lastRaceOrder() : std::vector<race::Id>{});
-    executeAndSpell(roomHandle, lr.effects, nullptr, fx);
-    executeAndSpell(roomHandle, lr.countdownEffects, nullptr, tail);
+    executeAndSpell(roomHandle, lr.effects, {}, fx);
+    executeAndSpell(roomHandle, lr.countdownEffects, {}, tail);
   }
   v.set("effects", std::move(fx));
   v.set("countdownEffects", std::move(tail));
@@ -830,7 +861,7 @@ const char* ttp_race_return_live_json(int roomHandle) {
   Value v = Value::Obj();
   v.set("action", Value::Str(race::key(r.action)));
   Value fx = Value::Arr();
-  executeAndSpell(roomHandle, r.effects, nullptr, fx);
+  executeAndSpell(roomHandle, r.effects, {}, fx);
   v.set("effects", std::move(fx));
   return put(g_bufReturn, v);
 }
@@ -913,7 +944,7 @@ const char* ttp_race_rekey_live_json(int sessionHandle, int roomHandle,
   // Banked points follow the PLAYER and the retained field rows follow the
   // seat — both executed here (series-rekey / rekey-field never reach a shell).
   Value fx = Value::Arr();
-  executeAndSpell(roomHandle, es, nullptr, fx);
+  executeAndSpell(roomHandle, es, {}, fx);
   Value v = Value::Obj();
   v.set("effects", std::move(fx));
   return put(g_bufRekey, v);

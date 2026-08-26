@@ -88,7 +88,7 @@ export function configure({ cars, colors, tracks, progress }) {
 
 // ---- the retained room snapshot --------------------------------------------
 // THE WHOLE LOBBY_UPDATE, COMPOSED AND FRAMED IN C++. The shell's part is two
-// handles and the six fields only the game knows; the answer is the exact frame
+// handles and the two LATCHES only the game knows; the answer is the exact frame
  // TEXT for the socket. There is deliberately no parse here — a caller that
 // wants to look inside is asking for the snapshot, not the frame, and should
 // say so.

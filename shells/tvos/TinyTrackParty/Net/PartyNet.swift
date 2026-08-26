@@ -144,7 +144,11 @@ final class PartyNet {
     /// recovery still reclaims slot 0.
     private var clientId = ""
 
-    private var standings: [String: Any]?
+    // NO STANDINGS MIRROR. The results board lives behind the room handle like
+    // the pick, the series and the field: the race walk composes and retains it,
+    // `ttp_net_lobby_frame` reads it on every publish, and the rename patch and
+    // the settle stamp move the stored one. What this shell does about a board
+    // is `publishSnapshot()`.
 
     // The reconnect budget, mirroring PartyConnection's. This is the KIT half:
     // `ttp_framing_close_outcome` spends and caps it, `ttp_framing_backoff_ms`
@@ -604,8 +608,9 @@ final class PartyNet {
         case "track-change":
             if let id = e["trackId"] as? String { onTrackChange?(id) }
 
-        case "clear-standings":
-            standings = nil
+        // NO clear-standings arm. The board is room-retained, so the statechange
+        // walk drops it with a store inside the wasm and its own `publish`
+        // carries the change — there is no mirror here to null out.
 
         default:
             // An op this build cannot perform is a MISSING CAPABILITY, not an
@@ -633,7 +638,7 @@ final class PartyNet {
         "reset-reconnect-count", "connect-fresh", "fail-attempt", "reconnect",
         "send-to", "publish", "announce", "close-fastlane", "show-reconnect",
         "clear-reconnect", "rekey-player", "player-renamed", "welcome-item",
-        "game-message", "race-abandoned", "track-change", "clear-standings",
+        "game-message", "race-abandoned", "track-change",
     ]
 
     private func announceRoomReady() {
@@ -771,36 +776,20 @@ final class PartyNet {
     ///
     /// TRAP: `ttp_net_lobby_frame` returns the FINISHED socket text — composed
     /// and framed without leaving C++, reading the roster, every seat's
-    /// `inRace` AND the stored pick off the handles. Do not parse it, do not
-    /// re-encode it, and do not route it through `ttp_framing_encode_set_state`:
-    /// a JSON string is itself a legal `set_state` payload, so there is no way
-    /// to sniff "already encoded", and guessing publishes a quoted blob the
-    /// phones cannot read.
+    /// `inRace` AND the stored pick and standings board off the handles. Do not
+    /// parse it, do not re-encode it, and do not route it through
+    /// `ttp_framing_encode_set_state`: a JSON string is itself a legal
+    /// `set_state` payload, so there is no way to sniff "already encoded", and
+    /// guessing publishes a quoted blob the phones cannot read.
+    ///
+    /// The two LATCHES below are all a shell still supplies. A `standings` key
+    /// passed here would be dead — the frame reads the room's retained board.
     func publishSnapshot() {
         guard socket.isOpen else { return }
         socket.send(TTP.strOrEmpty(ttp_net_lobby_frame(roomHandle, sessionHandle(), TTP.json([
             "paused": isPaused(),
-            "soundOn": isSoundOn(),
-            "standings": standings.map { $0 as Any } ?? NSNull()
+            "soundOn": isSoundOn()
         ]))))
-    }
-
-    /// Whether a standings board has already gone out this race.
-    ///
-    /// It gates the re-push after a rename: re-sending a board that is already up
-    /// corrects it, but sending a FIRST one early would raise every phone's
-    /// results overlay mid-race, because that overlay is triggered by a non-null
-    /// standings.
-    func hasStandings() -> Bool { standings != nil }
-
-    /// Mirror the latest standings board into the snapshot, so a phone that
-    /// reconnects on the results screen recovers it by replay. Takes the board's
-    /// JSON TEXT, which is what `ttp_ui_standings_json` answers; the re-encode
-    /// costs nothing at the wire (every outbound frame is canonicalized).
-    func setStandings(_ json: String) {
-        let board = TTP.obj(json)
-        standings = board.isEmpty ? nil : board
-        publishSnapshot()
     }
 
     /// Broadcast to every controller. The only broadcast in the game is

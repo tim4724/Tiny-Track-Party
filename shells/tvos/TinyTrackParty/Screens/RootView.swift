@@ -305,7 +305,8 @@ struct RootView: View {
                 RaceResultsView(view: results,
                                 intermissionSecs: state.intermissionSecs,
                                 onNextRace: { game.advanceSeriesRace() },
-                                onNewGame: { game.returnToLobby() })
+                                onNewGame: { game.returnToLobby() },
+                                onSettled: { game.settleStandings() })
                     .transition(.opacity)
             }
 

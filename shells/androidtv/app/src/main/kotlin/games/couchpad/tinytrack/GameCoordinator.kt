@@ -873,11 +873,8 @@ class GameCoordinator(
      * Walk whatever the layer answered. Every entry point above funnels through
      * here so there is exactly one place effects are performed, in order.
      */
-    fun run(answer: JSONObject, results: JSONObject? = null) {
-        performer.perform(
-            answer.optJSONArray("effects") ?: JSONArray(),
-            RaceFlowPerformer.Context(results),
-        )
+    fun run(answer: JSONObject) {
+        performer.perform(answer.optJSONArray("effects") ?: JSONArray())
     }
 
     // -- the net edge ---------------------------------------------------------
@@ -1002,16 +999,17 @@ class GameCoordinator(
      * The frame's one drain. WHICH events do what is decided inside the engine off
      * the queued events and the two live handles.
      *
-     * `results` rides the ANSWER because no effect can carry it: it is non-null
-     * exactly when the drain crossed the race's end.
+     * NOTHING RIDES BESIDE THE EFFECTS. `endRace`'s ranked board used to, as the
+     * context the show-results / final broadcast-standings effects read; the walk
+     * banks the cup points and composes and RETAINS the standings against it now,
+     * so the rows never leave C++ and every effect here is self-contained.
      */
     private fun drainRaceEvents() {
         if (sessionHandle == 0) return
-        val d = TtpJson.obj(Ttp.ttp_race_events_live_json(
+        run(TtpJson.obj(Ttp.ttp_race_events_live_json(
             sessionHandle, net.roomHandle, TtpJson.arg(display.biome),
             if (audio.ready) 1 else 0, if (fastForwarding) 1 else 0,
-            Ttp.ttp_race_intermission_ms(), nowMs()))
-        run(d, d.optJSONObject("results"))
+            Ttp.ttp_race_intermission_ms(), nowMs())))
     }
 
     /**
@@ -1549,18 +1547,18 @@ class GameCoordinator(
      * A seated player changed their name.
      *
      * The LOBBY needs nothing: its seat grid is re-read off the room handle on the
-     * same announce that delivered this. A RACE still froze one copy at its start —
-     * the cell chip — so that is moved by hand, and the board already out is
-     * re-pushed.
+     * same announce that delivered this. A RACE's two frozen copies are both
+     * repaired inside the rename walk now — the room-retained field row every
+     * later board composes from, and the ROWS of the board already out (patched,
+     * not recomposed, so the re-push differs in the name and nothing else; the
+     * walk's own `announce` republishes it). What is left here is the one copy no
+     * handle knows about: the cell chip.
      *
      * The car's REAR NAME PLATE is untouched and stays stale until the next scene
      * build: it is geometry baked from the build roster. Same on the web.
      */
     private fun renamePlayer(id: EngineId, name: String) {
         sceneCars = sceneCars.map { if (it.id == id) it.copy(name = name) else it }
-        // Never a FIRST board: a phone raises its results overlay on a non-null
-        // standings.
-        if (net.hasStandings()) broadcastStandings(raceEnded, null)
     }
 
     fun itemPickup(id: EngineId) {
@@ -1571,27 +1569,40 @@ class GameCoordinator(
 
     // -- results --------------------------------------------------------------
 
-    fun broadcastStandings(over: Boolean, results: JSONObject?) {
-        if (sessionHandle == 0) return
-        net.setStandings(standingsBoard(over, results))
-    }
+    // NOTHING ABOUT THE BOARD IS COMPOSED HERE. The cup points are banked and the
+    // standings board is composed and RETAINED behind the room handle by the
+    // EXECUTOR, inside the event drain, against the room's series and retained
+    // field — before the board effects, the order the corpus pins. The no-session
+    // refusal that used to be this file's `if (sessionHandle == 0) return` is the
+    // seam's (`ttp_live_store_standings`), the `broadcast-standings` effect is a
+    // republish, and the phones read the board off the lobby frame.
 
-    fun showResults(results: JSONObject?) {
-        state.results = GameState.ResultsView.from(TtpJson.obj(Ttp.ttp_ui_results_view_json(
-            TtpJson.arg(standingsBoard(true, results)), Ttp.ttp_race_intermission_ms())))
+    /**
+     * The results overlay, off the ROOM-RETAINED board.
+     *
+     * A `null` answer — which [TtpJson.obj] gives back empty, and
+     * [GameState.ResultsView.from] then turns into null — means NO board is out.
+     * That is no overlay rather than a blank one, which is the whole reason the
+     * live form answers null instead of an empty board.
+     */
+    fun showResults() {
+        state.results = GameState.ResultsView.from(TtpJson.obj(
+            Ttp.ttp_ui_results_view_live_json(net.roomHandle, Ttp.ttp_race_intermission_ms())))
     }
 
     /**
-     * The board the TV and every phone render, off `ttp_ui_standings_live_json`:
-     * the results rows, the room-retained race FIELD (rename/rekey repairs applied
-     * by the walks), the cup half off the room's stored series, and the late
-     * joiners + host through the synced seam — every input gathered off the two
-     * handles in C++.
+     * The podium reveal has landed: stamp `settled` on the retained board and
+     * republish if it moved.
+     *
+     * The phones were handed this board the moment the race ended, which is the
+     * moment the TV STARTS revealing what the cup did with it — `settled` is their
+     * cue to stop reporting the race and report the cup. WHICH boards settle is the
+     * rule's, not this file's (only a cup's LAST), so this is armed on every
+     * results screen and the answer decides.
      */
-    private fun standingsBoard(over: Boolean, results: JSONObject?): String =
-        TtpJson.strOrEmpty(Ttp.ttp_ui_standings_live_json(
-            sessionHandle, net.roomHandle, if (over) 1 else 0,
-            results?.let { TtpJson.arg(it.toString()) }, Ttp.ttp_race_intermission_ms()))
+    fun settleStandings() {
+        if (Ttp.ttp_ui_settle_standings(net.roomHandle) != 0) net.publishSnapshot()
+    }
 
     // -- timers the effects arm ------------------------------------------------
 

@@ -80,10 +80,12 @@ TTP_ABI int ttp_net_configure(const char* chooserJson);
  *                  host and the room phase
  *   sessionHandle  a ttp_session_begin handle, or 0 for no live race — supplies
  *                  every seat's inRace, read off the Game itself
- *   fieldsJson     {"paused":bool,"standings":obj|null} — the two things only
- *                  the game layer knows. The PICK is not among them: the frame
- *                  reads the stored one off the room handle (see the stored
- *                  pick section below), so a pick key passed here is dead.
+ *   fieldsJson     {"paused":bool,"soundOn":bool} — the two LATCHES only the
+ *                  game layer knows. Neither the PICK nor the STANDINGS BOARD
+ *                  is among them: the frame reads both off the room handle
+ *                  (see the stored pick section below and ttp_room.h), so a
+ *                  `pick` or `standings` key passed here is dead.
+ *                  tests/shell-parity.test.js pins this list across the shells.
  *   ->             {"data":{...the LOBBY_UPDATE...},"type":"set_state"}
  *
  * The snapshot composer + ttp_framing_encode_set_state are the two halves
@@ -247,7 +249,12 @@ TTP_ABI const char* ttp_net_controller_action(int roomHandle, int sessionHandle,
  *                                            from/data — nothing re-crosses)
  *   race-abandoned                           the onRaceAbandoned callback
  *   track-change {trackId}                   the onTrackChange callback
- *   clear-standings                          drop the mirrored results board */
+ *
+ * NO clear-standings. The results board is room-retained (ttp_room.h), so the
+ * statechange walk drops it with a store and lets its own `publish` carry the
+ * change — three shells each holding a mirror to null out is exactly what the
+ * retained slot removed. The session PLAN still carries the flag: it is
+ * session::StateChangePlan's rule and the frozen session corpus pins it. */
 
 /* The walks' effect vocabulary, as a JSON array of op keys in a stable order —
  * the table above as data. A shell walks it at boot and asserts its performer
@@ -352,7 +359,8 @@ TTP_ABI const char* ttp_net_host_change_apply_json(int roomHandle, const char* h
 
 /* The drained statechange event's body: restamp connected seats on a race
  * start (never a blanket clear-disconnected — it would orphan a grace-pending
- * seat's QR), free disconnected seats on LOBBY, clear-standings, publish. */
+ * seat's QR), free disconnected seats on LOBBY, drop the room's retained
+ * standings board, publish. Only the publish is a shell's to perform. */
 TTP_ABI const char* ttp_net_state_change_apply_json(int roomHandle, const char* to,
                                                     double nowMs);
 
