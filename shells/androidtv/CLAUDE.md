@@ -950,21 +950,18 @@ a shot beside the browser's:
   content inside it. This is the shape every d-pad-scrolled page wants (see
   `LicensesScreen.LicenseText`), so it will come up again.
 
-Two web looks this shell still owes (`docs/native-port/shells.md` holds the
-ledger) whose HOW is already settled:
-
-- **The boards' frosted blur is unreachable from COMPOSE, which is not the same
-  as impossible.** The web's `#pause-overlay` and `#results` blur the frozen race
-  behind them; here that picture is the SurfaceView, composited by SurfaceFlinger
-  in a layer BELOW the app window, so no `RenderEffect` or modifier in the view
-  hierarchy can ever see it. Both boards already carry the right paper wash
-  (`--paper` at 0.72 and 0.92). The two live routes are
-  `Window.setBackgroundBlurRadius` (API 31+ — SurfaceFlinger blurs everything
-  behind the WINDOW, so it toggles as a board shows and hides; disabled outright
-  on low-end boxes, which falls back to today's look, not a failure) and a
-  renderer pass, which is where the web's own blur effectively lives.
-- **The scene's edge vignette (`#scene::after`) belongs UNDER the chrome**, so a
-  Compose overlay is the wrong place for it; it is a renderer pass.
+**The full-screen boards are a FLAT paper wash, and that is the finished look.**
+The web's `#pause-overlay` and `#results` also blur the frozen race behind them;
+this shell does not, and will not. The mechanism is why, and it is permanent:
+that picture is the SurfaceView, composited by SurfaceFlinger in a layer BELOW
+the app window, so no `RenderEffect` or modifier anywhere in the view hierarchy
+can ever see it — unreachable from Compose is not the same as impossible, but
+every route out of Compose costs more than the difference is worth. Both boards
+carry the right wash already (`--paper` at 0.72 and 0.92); at 0.92 only 8% of
+the race reaches the eye, so the results board is near-indistinguishable from
+the web's, and the pause overlay is the only board where the delta reads at all.
+The scene's edge vignette is decided the same way and is not Android's alone:
+see `docs/native-port/shells.md` (Decided, not owed).
 
 ## The info board
 

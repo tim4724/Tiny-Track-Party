@@ -119,7 +119,9 @@ fun ResultsScreen(state: GameState, game: GameCoordinator) {
     Box(
         // PAPER, not ink. `#results` is `rgba(255,246,235,0.92)` — warm paper is
         // exactly what a full-screen board is allowed (and the only place it is),
-        // so scrimming with ink inverts the board's whole value.
+        // so scrimming with ink inverts the board's whole value. Flat, with no blur
+        // behind it, by decision: at 0.92 only 8% of the frozen race gets through.
+        // See `docs/native-port/shells.md`, "Decided, not owed".
         Modifier.fillMaxSize().background(Tokens.paper.copy(alpha = 0.92f)),
         contentAlignment = Alignment.Center,
     ) {
