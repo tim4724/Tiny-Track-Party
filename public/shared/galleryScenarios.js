@@ -18,7 +18,7 @@
 // cards deliberately share one (the lobby, four ways).
 
 export const GALLERY_SCENARIOS = [
-  { id: 'welcome', key: 'welcome', title: 'Welcome', replayable: true },
+  { id: 'welcome', key: 'welcome', title: 'Welcome' },
   { id: 'lobby-loading', key: 'lobby-loading', title: 'Lobby (loading)' },
   { id: 'lobby-empty', key: 'lobby-empty', title: 'Lobby (waiting)', animated: true },
   {
@@ -33,20 +33,20 @@ export const GALLERY_SCENARIOS = [
     id: 'lobby-random', key: 'lobby', title: 'Lobby (random picked)',
     hostVariant: true, animated: true, params: { picked: 'random', track: 'powder' }
   },
-  // TWO KINDS OF MOTION, and an entry declares whichever it has:
-  //   animated    the SIM is the animation — a live scene that would otherwise
-  //               render forever. The live gallery's preview becomes a
-  //               play/pause surface over window.__preview and idles on one held
-  //               frame until asked; the capture script lets it run on past the
-  //               start grid before shooting.
-  //   replayable  the DOM is the animation — an entrance slap-in, or the results
-  //               board's race->standings turn. It plays once on arrival and is
-  //               then over, so the live card gets a play button that runs it
-  //               again through window.__TEST__.replay.
-  // An entry with neither is a still. A capture ignores `replayable` entirely,
-  // but it belongs here rather than in the page, so the two surfaces describe
-  // one thing.
-  { id: 'countdown', key: 'countdown', title: 'Countdown', replayable: true },
+  // MOTION IS THE SIM, and `animated` is the entry that declares it: a live
+  // scene that would otherwise render forever, so the live gallery's preview
+  // becomes a play/pause surface over window.__preview and idles on one held
+  // frame until asked, and the capture script lets it run on past the start grid
+  // before shooting.
+  //
+  // AN ENTRY WITHOUT IT IS A STILL, including every screen whose motion is DOM
+  // (the welcome slap-in, the countdown banner, the results board's
+  // race->standings turn). Those play once on arrival and are then over, and the
+  // frame they settle into IS the card — which is also what the reference shots
+  // hold and what a reduced-motion visitor sees on the first paint. There is no
+  // replay surface: a card that offered one was a button whose only job was to
+  // show an entrance a second time.
+  { id: 'countdown', key: 'countdown', title: 'Countdown' },
   { id: 'racing', key: 'racing', title: 'Race', animated: true },
   // Deck-decal check: hairpins force scrub skids and the pads sit on the racing
   // line, so one card shows every road-shader decal (contact shadows, boost
@@ -108,21 +108,18 @@ export const GALLERY_SCENARIOS = [
   { id: 'paused', key: 'paused', title: 'Paused' },
   { id: 'reconnect', key: 'reconnect', title: 'Reconnect' },
   { id: 'finished', key: 'finished', title: 'Player finished' },
-  // `settleMs` — WHICH MOMENT of a replayable card is the card. A capture waits
-  // this long after the screen stands up before it shoots, and the three board
-  // cards need it for the same reason: a cup board is TWO PHASES, and its second
-  // one (the re-sort, the points counting up, the champion crowned) is the thing
-  // the card is named after. Shot on arrival they photograph phase 1 — a "Cup
-  // podium" card that has not yet crowned anybody. The countdown is replayable too
-  // and wants the opposite, which is why this is per-entry rather than a rule about
-  // `replayable`.
-  { id: 'results', key: 'results', title: 'Results', replayable: true, settleMs: 1200 },
-  {
-    id: 'intermission', key: 'intermission', title: 'Cup intermission',
-    replayable: true, settleMs: 4500
-  },
+  // `settleMs` — WHICH MOMENT of a still card is the card. A capture waits this
+  // long after the screen stands up before it shoots, and the three board cards
+  // are the only ones that want a later one: a cup board is TWO PHASES, and its
+  // second (the re-sort, the points counting up, the champion crowned) is the
+  // thing the card is named after. Shot on arrival they photograph phase 1 — a
+  // "Cup podium" card that has not yet crowned anybody. Per entry, not a rule
+  // about stills, because the countdown wants the opposite: its banner settles
+  // on the first frame and never turns.
+  { id: 'results', key: 'results', title: 'Results', settleMs: 1200 },
+  { id: 'intermission', key: 'intermission', title: 'Cup intermission', settleMs: 4500 },
   { id: 'chain', key: 'chain', title: 'Cup: race → next race', animated: true },
-  { id: 'podium', key: 'podium', title: 'Cup podium', replayable: true, settleMs: 4500 }
+  { id: 'podium', key: 'podium', title: 'Cup podium', settleMs: 4500 }
 ];
 
 // The scenarios a CAMERA sees, which is every screen minus the instruments.

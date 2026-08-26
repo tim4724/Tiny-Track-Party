@@ -92,8 +92,7 @@ function render() {
       frameClass: 'controller',
       logical: d.logical,
       chromePx: d.chromePx,
-      url: cardURL(c),
-      replayable: !!c.replayable
+      url: cardURL(c)
     });
     strip.appendChild(card);
     allCards.push(card);

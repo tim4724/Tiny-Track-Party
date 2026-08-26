@@ -5,8 +5,7 @@
 // is the same module the capture script (`npm run shots:web`), the screens
 // gallery and tests/shots-manifest.test.js read — a second hand-kept list here
 // is how this page and the capture would drift into showing different games.
-// The entry shape and the two kinds of motion (`animated` / `replayable`) are
-// documented there.
+// The entry shape and what `animated` means are documented there.
 //
 // hostVariant cards swap their `host` URL param when the host selector changes
 // (no iframe rebuild) so the ★ host marker can be previewed per slot.
@@ -73,7 +72,6 @@ function render() {
       frameClass: 'display',
       logical: d,
       url: cardURL(c),
-      replayable: !!c.replayable,
       animated: !!c.animated
     });
     strip.appendChild(card);

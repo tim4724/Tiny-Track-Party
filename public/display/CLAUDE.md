@@ -37,17 +37,19 @@ stopped using. Where the harness has to synthesize a model INPUT (a standings
 board, a pick), an E2E case pins a dressing only the correct shape can produce —
 a renamed field degrades quietly instead of throwing.
 
-**A card declares its motion, and the declaration is gated.** `animated` means
-the SIM animates it, and the preview becomes a play/pause surface over
-`window.__preview`. `replayable` means the DOM animates it — an entrance, or the
-results board's race→standings turn — which plays once and is then over, so the
-card gets a ▶ that runs `window.__TEST__.replay`. Restarting a CSS animation
-needs the element to go `display:none` and back **with a style recalc between**;
-a hide/show in one task is a silent no-op. A card may declare a ▶ with no hook
-behind it and look fine, which is how the phone's Countdown card carried a dead
-button — `tests/e2e/gallery-replay.spec.js` walks the real gallery pages and
-follows every ▶ to the scenario it points at, so a flag without a hook fails on
-the commit that adds it.
+**Only a SIM-animated card declares motion; a DOM-animated one is a still.**
+`animated` (shared/galleryScenarios.js) means the sim animates it, and the
+preview becomes a play/pause surface over `window.__preview`. Everything else is
+a still of the frame its entrance settles into — the welcome slap-in, the
+countdown banner, the results board's race→standings turn all play once on
+arrival and are then over, which is what the reference shots hold and what a
+reduced-motion visitor already sees. There is no replay hook: a ▶ whose only job
+was to show an entrance again is a button that had to be kept alive per card,
+and the phone's Countdown card carried a dead one for months.
+
+The boards are still PAINTED on arrival rather than painted settled: only phase 1
+carries the lap time, the `+N` gain and the points a row came in with, and
+`tests/e2e/gallery-boards.spec.js` pins that turn.
 
 `perform()` walks the race flow's ordered effect list and **may not reorder, batch
 or skip** — an op it cannot perform throws rather than being dropped. Several
@@ -328,6 +330,15 @@ vsync plateau, so it can only ever show DROPS).
 AudioContext, variant picks, the `<audio>` element. The DSP palette stays
 BAKED rather than ported, because emscripten's AudioWorklet path needs the
 COOP/COEP isolation this build refuses.
+
+**`apply()` is the only way a sound starts, previews included.** `Audio.js` once
+carried named cue methods for the gallery, on the premise that a preview had no
+players and so no distance model to decide against; the previews race the bench
+field now, whose player seats are autopiloted PARTICIPANTS, so the decision layer
+has its listeners and voices and the harness binds and frames it like any race
+(see `TestHarness.js`). Do not re-add a bespoke surface: it was a second set of
+levels for the same sounds, pinned at full where the world mix decides one by
+distance, so a preview auditioned a mix no player would ever hear.
 
 The master bus — gain → soft limiter → destination — is `audio/bus.js`, with the
 one volume preference behind it. It is its own file because the sound gallery
