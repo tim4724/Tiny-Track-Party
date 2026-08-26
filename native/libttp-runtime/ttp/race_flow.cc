@@ -44,8 +44,6 @@ const char* key(Op op) {
     case Op::BROADCAST_STANDINGS: return "broadcast-standings";
     case Op::APPLY_RACE_POINTS: return "apply-race-points";
     case Op::SHOW_RESULTS: return "show-results";
-    case Op::ARM_RESULTS_FAILSAFE: return "arm-results-failsafe";
-    case Op::CLEAR_RESULTS_FAILSAFE: return "clear-results-failsafe";
     case Op::ARM_INTERMISSION: return "arm-intermission";
     case Op::CLEAR_INTERMISSION: return "clear-intermission";
     case Op::SERIES_ADVANCE: return "series-advance";
@@ -642,12 +640,11 @@ Effects endRace(const EndRaceInput& in) {
   // final board → phones show the full results overlay
   e = mk(Op::BROADCAST_STANDINGS); e.over = true; out.push_back(e);
   out.push_back(mk(Op::SHOW_RESULTS));
-  // The host ends the results screen with "New game"; this is only a safety net
-  // so a room whose players all left mid-podium still recovers.
-  e = mk(Op::ARM_RESULTS_FAILSAFE); e.num = in.resultsFailsafeMs; out.push_back(e);
-  // Mid-cup: this results screen is an INTERMISSION — arm the auto-advance into
-  // the next race (the host can jump it early; advanceSeriesRace disarms the
-  // failsafe above).
+  // The host ends the results screen with "New game", and nothing here overrides
+  // that on a clock: an ABANDONED podium is recovered by RoomFlow::graceTick's
+  // RESULTS arm, which fires on the room being empty rather than on a timer.
+  // Mid-cup, though, this results screen is an INTERMISSION — arm the
+  // auto-advance into the next race (the host can jump it early).
   if (in.hasSeries && !in.seriesFinished) {
     e = mk(Op::ARM_INTERMISSION);
     e.num = in.intermissionMs;
@@ -668,8 +665,6 @@ AdvanceResult advanceSeriesRace(const AdvanceInput& in) {
   // Everyone left mid-intermission.
   if (in.players.empty()) { r.action = AdvanceAction::RETURN_TO_LOBBY; return r; }
   r.action = AdvanceAction::ADVANCE;
-  // endRace armed the back-to-lobby failsafe — it must not yank race N+1.
-  r.effects.push_back(mk(Op::CLEAR_RESULTS_FAILSAFE));
   r.effects.push_back(mk(Op::CLEAR_INTERMISSION));
   r.effects.push_back(mk(Op::SERIES_ADVANCE));
   // publishes + selects (track/totalLaps swap). Outside the lobby the select
@@ -706,8 +701,7 @@ ReturnResult returnToLobby(const ReturnInput& in) {
   }
 
   Effect e;
-  r.effects.push_back(mk(Op::CLEAR_RESULTS_FAILSAFE));
-  // every exit route cancels a running cup (quit, abandon, failsafe)
+  // every exit route cancels a running cup (quit, abandon, empty room)
   r.effects.push_back(mk(Op::CLEAR_SERIES));
   r.effects.push_back(mk(Op::CLEAR_INTERMISSION));
   if (r.trackSwap.has) { e = mk(Op::SET_TRACK); e.str = r.trackSwap.v; r.effects.push_back(e); }

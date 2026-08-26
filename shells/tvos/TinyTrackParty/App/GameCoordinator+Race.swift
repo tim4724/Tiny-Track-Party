@@ -295,20 +295,6 @@ extension GameCoordinator {
 
     // MARK: - Timers the effects arm
 
-    func armResultsFailsafe(ms: Double) {
-        clearResultsFailsafe()
-        resultsFailsafe = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: UInt64(ms * 1_000_000))
-            guard !Task.isCancelled else { return }
-            self.returnToLobby()
-        }
-    }
-
-    func clearResultsFailsafe() {
-        resultsFailsafe?.cancel()
-        resultsFailsafe = nil
-    }
-
     func armIntermission(ms: Double, deadline: Double) {
         clearIntermission()
         intermissionDeadline = deadline

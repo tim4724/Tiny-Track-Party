@@ -115,6 +115,12 @@ display's room policy), `ui-corpus.jsonl`, `audio-corpus.jsonl` and
 AHEAD of their port; `schematic-corpus.jsonl` is the odd one, its per-track
 expectations being the committed `public/shared/trackSchematics.js` bake.
 
+`session-corpus.jsonl` has since been DEMOTED to class 2 by a deliberate
+re-record: the rejoinToken normalizer stopped emulating JS `Number(value)` and
+became a plain type check (session.h), which flipped every non-number token to
+"no claim". Its JS-parity claim lives in git history, at the bytes before that
+re-record.
+
 **All of them are now FROZEN.** `sessionModel.js`, `uiModel.js`,
 `audio/decide.js`, `trackSchematic.js` and finally `raceFlow.js` were deleted
 once their ports were conformance-proven, and their generators went with them:

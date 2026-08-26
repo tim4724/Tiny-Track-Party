@@ -663,8 +663,9 @@ const net = new DisplayNet({
   // The display's mute switch, for the snapshot's soundOn — so the host
   // phone's Sound setting shows the live state, TV-button flips included.
   isSoundOn: () => !audio.muted,
-  // RoomFlow's abandoned-race deadline expired: no racer left and someone is
-  // waiting for the next one. Same exit as any other quit path.
+  // RoomFlow's abandoned-ROOM deadline expired: mid-race, no racer left and
+  // someone waiting for the next one; on the results board, nobody connected at
+  // all. Same exit as any other quit path.
   onRaceAbandoned: returnToLobby,
   // A (re)joining phone recovers all room/results state from the snapshot replay,
   // but its held item is per-owner and rides ITEM (sent only on change) — so
@@ -919,11 +920,6 @@ const RACE_PERFORMERS = {
   'rocket-expire': (e) => scene.rocketExpire(e.s, e.lat),
   'broadcast-standings': (e, ctx) => broadcastStandings(e.over, ctx.results),
   'show-results': (e, ctx) => showResults(ctx.results),
-  'arm-results-failsafe': (e) => {
-    clearTimeout(endTimer);
-    endTimer = setTimeout(returnToLobby, e.ms);
-  },
-  'clear-results-failsafe': () => clearTimeout(endTimer),
   'arm-intermission': (e) => {
     seriesDeadline = e.deadline;
     seriesTimer = setTimeout(advanceSeriesRace, e.ms);
@@ -962,7 +958,7 @@ const RACE_PERFORMERS = {
   // only way the scene could be showing the wrong circuit — until prepareNextTrack
   // gave the shell its own reason to have moved it. Reaching the lobby straight
   // from an intermission board does exactly that: the room left mid-intermission
-  // (or the results failsafe fired) with the pick still on the race just run, so
+  // (or emptied on the podium) with the pick still on the race just run, so
   // the layer says there is nothing to place — while the scene is sitting on the
   // speculatively-meshed NEXT race. The lobby then attracts on a circuit its own
   // card does not name. Placing
@@ -1141,8 +1137,7 @@ function drainRaceEvents() {
   if (!session) return;
   const d = flow.drainEvents(session.h, net.flow.handle, {
     biome: scene.biome(), audioReady: audio.ready, fastForwarding,
-    intermissionMs: intermissionMs(), nowMs: Date.now(),
-    resultsFailsafeMs: flow.resultsFailsafeMs()
+    intermissionMs: intermissionMs(), nowMs: Date.now()
   });
   if (d.effects.length) perform(d.effects, { results: d.results });
 }
@@ -1188,12 +1183,11 @@ function broadcastStandings(over, results) {
   net.setStandings(board);    // standings live in the room snapshot — pushed live + replayed on (re)join
 }
 
-// The host ends the results screen with "New game" (RETURN_TO_LOBBY); the
-// failsafe (the layer's number) is only a net so a room whose players all
-// left mid-podium still recovers. The end-of-race walk itself rides the event
-// drain above — banking the points BEFORE the board goes out, and arming the
+// The host ends the results screen with "New game" (RETURN_TO_LOBBY); a room
+// nobody is left in recovers on its own through the liveness tick's
+// race-abandoned effect. The end-of-race walk itself rides the event drain
+// above — banking the points BEFORE the board goes out, and arming the
 // intermission only mid-cup, are the layer's order.
-let endTimer = null;
 
 // Tick the intermission's "starting in N…" against the auto-advance deadline
 // (a fresh ceil each beat instead of a decrementing counter, so it can't drift).

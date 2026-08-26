@@ -91,7 +91,6 @@ final class GameCoordinator: ObservableObject {
     /// is only the value before `boot()` runs, never what a race launches with.
     var laps: Int32 = 3
 
-    var resultsFailsafe: Task<Void, Never>?
     var intermissionTask: Task<Void, Never>?
     var intermissionTicker: Task<Void, Never>?
     var intermissionDeadline: Double = 0

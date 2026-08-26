@@ -1,10 +1,11 @@
 // Session-model conformance check — replays tests/fixtures/session-corpus.jsonl
 // against native/libttp-party/ttp/session.h.
 //
-// JS-RECORDED evidence, like the roomflow/ui/audio corpora and unlike the
-// C++-authored ones: every line here was taken off the live
-// public/display/sessionModel.js before the port, so it settles whether the port
-// matches the JS it replaced.
+// Every line here was taken off the live public/display/sessionModel.js before
+// the port. The bytes are no longer that JS's answers, though: a deliberate
+// re-record demoted this corpus to class 2 (tests/CLAUDE.md) when the rejoinToken
+// normalizer stopped emulating JS `Number(value)` — so what it holds now is
+// REGRESSION evidence, and the JS-parity claim sits with the older bytes in git.
 //
 // --record RE-EMITS, IT DOES NOT REGENERATE. `--record <fixture> --out=<f>`
 // replays the fixture's own recorded INPUTS through the port and writes the
@@ -12,9 +13,8 @@
 // byte-identical. It cannot invent a case — the scenarios are read off the
 // committed file, not rebuilt — so what it proves is that the port reproduces
 // every recorded answer and its exact JSON spelling, which is strictly more than
-// the structural replay below asserts. It is NOT parity evidence: the committed
-// bytes carry that, and the JS wrote them. If a re-record ever differs, the
-// committed file is right.
+// the structural replay below asserts. An unexplained difference is a defect in
+// the change; only a traded behaviour change re-records, green-first.
 //
 // Line 1 is a header {kind,scenarios,steps}. Then {case:"scenario",name} starts a
 // scenario and {case:"step",name,step,op,in,out,state} is one step. Each step's
@@ -32,10 +32,10 @@
 // and the frame encoder canonicalizes everything that leaves. (This note used to
 // claim wire-compat pinned the order. It never did.)
 //
-// ONE THING THIS CHECK DELIBERATELY REPRODUCES BY HAND rather than reading off
-// the port, because it is the contract:
-//   * `in.absent` distinguishes a MISSING rejoinToken (JS undefined) from an
-//     explicit null. They answer differently and that is frozen; see session.h.
+// `in.absent` marks a MISSING rejoinToken (a nullptr Value) as against an
+// explicit null. The two now answer the SAME — a token is an integer or it is
+// nothing (session.h) — and the corpus keeps both spellings so that stays
+// pinned; it was recorded when they diverged.
 
 #include <cstdio>
 #include <cstdlib>
@@ -123,7 +123,8 @@ bool applyOp(Shell& st, const std::string& op, const Value& in, Value& out, std:
     return true;
   }
   if (op == "normIndex") {
-    // `absent` is JS undefined; otherwise the recorded value, INCLUDING null.
+    // `absent` is a missing key (nullptr); otherwise the recorded value,
+    // INCLUDING null. Both answer null now — see the header.
     const Value* v = json::truthy(field(in, "absent")) ? nullptr : field(in, "value");
     double n = 0;
     out.set("index", ns::norm_index(v, &n) ? Value::Num(n) : Value::Null());

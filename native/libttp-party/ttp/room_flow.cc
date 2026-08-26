@@ -436,7 +436,17 @@ Value RoomFlow::lateJoinersValue() const {
 }
 
 bool RoomFlow::graceTick(double nowMs) {
-  if (state_ == State::PLAYING && allParticipantsDisconnected() && hasLateJoiners()) {
+  // Mid-race: every participant is gone and someone is waiting for the next one.
+  const bool raceAbandoned =
+      state_ == State::PLAYING && allParticipantsDisconnected() && hasLateJoiners();
+  // On the results board: nobody is connected at all. The recovery this replaces
+  // was a 60 s timer the shells armed off endRace, and it fired on a CLOCK — so
+  // it yanked a party that was still talking off its own podium. This fires on
+  // the room being EMPTY, which is the condition that timer was always a proxy
+  // for. "Empty" is connectedCount() == 0, the same set advanceSeriesRace's
+  // empty-roster branch reads (its players come from the connected-only roster).
+  const bool podiumAbandoned = state_ == State::RESULTS && connectedCount() == 0;
+  if (raceAbandoned || podiumAbandoned) {
     if (!hasGraceDeadline_) { hasGraceDeadline_ = true; graceDeadline_ = nowMs + cfg_.graceMs; return false; }
     if (nowMs >= graceDeadline_) { hasGraceDeadline_ = false; return true; }
     return false;

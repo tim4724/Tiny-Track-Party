@@ -131,7 +131,6 @@ class GameCoordinator(
     /** Laps per race — the manifest's TOTAL_LAPS, assigned at boot. */
     private var laps = 3
 
-    private var resultsFailsafe: Runnable? = null
     private var intermissionTask: Runnable? = null
     private var intermissionTicker: Runnable? = null
     private var intermissionDeadline = 0.0
@@ -1011,7 +1010,7 @@ class GameCoordinator(
         val d = TtpJson.obj(Ttp.ttp_race_events_live_json(
             sessionHandle, net.roomHandle, TtpJson.arg(display.biome),
             if (audio.ready) 1 else 0, if (fastForwarding) 1 else 0,
-            Ttp.ttp_race_intermission_ms(), nowMs(), Ttp.ttp_race_results_failsafe_ms()))
+            Ttp.ttp_race_intermission_ms(), nowMs()))
         run(d, d.optJSONObject("results"))
     }
 
@@ -1595,18 +1594,6 @@ class GameCoordinator(
             results?.let { TtpJson.arg(it.toString()) }, Ttp.ttp_race_intermission_ms()))
 
     // -- timers the effects arm ------------------------------------------------
-
-    fun armResultsFailsafe(ms: Double) {
-        clearResultsFailsafe()
-        val r = Runnable { returnToLobby() }
-        resultsFailsafe = r
-        main.postDelayed(r, ms.toLong())
-    }
-
-    fun clearResultsFailsafe() {
-        resultsFailsafe?.let { main.removeCallbacks(it) }
-        resultsFailsafe = null
-    }
 
     fun armIntermission(ms: Double, deadline: Double) {
         clearIntermission()

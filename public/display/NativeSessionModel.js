@@ -135,9 +135,8 @@ export function reconnectCard(seat, url) {
 // ---- the choreography walks -------------------------------------------------
 // Raw-string answers, deliberately: Net.js._walk owns the single JSON.parse,
 // and the _seen hot path skips it on the shared empty answer. The peer message
-// and the current pick cross as the shell's own objects; JSON.stringify keeps
-// the absent-vs-null distinction the claim logic turns on (an absent
-// rejoinToken drops out of the message text, exactly as the wasm expects).
+// and the current pick cross as the shell's own objects, stringified here —
+// the shell re-derives no rule from them, it just marshals.
 
 export function restoreRoom(roomHandle, code, instance) {
   fn.restoreRoom(roomHandle | 0, code || '', instance || '');

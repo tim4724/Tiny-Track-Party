@@ -1208,7 +1208,8 @@ void abandonedRacePolicy() {
   check(!tick(20000), "a reconnected racer disarms the deadline");
   check(!tick(99999), "…and it stays disarmed while they are here");
 
-  // Leaving PLAYING disarms it too — the results board is not an abandoned race.
+  // Leaving PLAYING disarms the RACE arm — a results board is not a race that
+  // can be abandoned, and seat 3 is still on the couch besides.
   leave(1, 100000);
   check(!tick(100001), "re-arms on the first qualifying tick");
   ttp_room_transition_to(h, "results");
@@ -1218,6 +1219,24 @@ void abandonedRacePolicy() {
   ttp_room_transition_to(h, "playing");
   ttp_room_events_json(h);
   check(!tick(300000), "the state change dropped the armed deadline");
+
+  // ---- the RESULTS arm: an EMPTY room recovers its own podium ---------------
+  // This replaced the 60 s results failsafe the three shells armed off endRace.
+  // That timer fired on a CLOCK, so it yanked a party still talking about the
+  // race it had just run; this fires on the room being EMPTY, which is the
+  // condition the timer was always a proxy for. "Empty" is no CONNECTED peer —
+  // the same set advanceSeriesRace's empty-roster branch reads.
+  ttp_room_transition_to(h, "results");
+  ttp_room_events_json(h);
+  ttp_net_on_seen_json(h, "3", 400000);       // one phone still in the room
+  ttp_room_events_json(h);
+  check(!tick(400000), "a podium with someone connected is not abandoned");
+  check(!tick(500000), "…and no amount of sitting on it changes that");
+  leave(3, 600000);                           // the last phone leaves
+  check(!tick(600000), "the first empty-room tick only ARMS");
+  check(!tick(601499), "…and holds until graceMs has elapsed");
+  check(tick(601500), "an EMPTY results board goes back to the lobby");
+  check(!tick(601500), "fires exactly ONCE, like the race arm");
 
   ttp_dispose(race);
   ttp_room_dispose(h);
@@ -3586,7 +3605,11 @@ void netWalksMatchMultiCallPath() {
     // The cross-device claim: seat 1 (dropped, car-holding) reclaimed from a
     // fresh connection as peer 7. welcome-item fires — the live race holds the
     // rekeyed car — and the twin's inRace callback agrees through ttp_has_car.
-    const char* claimHello = "{\"type\":\"hello\",\"name\":\"Zephyr\",\"rejoinToken\":\"1\"}";
+    // rejoinToken is an INTEGER or it is nothing (session.h). Spelled "1" this
+    // scenario claims no seat, walk and twin agree on that, and the ttp_rekey_car
+    // below then moves a car whose seat never moved — a gate that passes while
+    // exercising none of what it names.
+    const char* claimHello = "{\"type\":\"hello\",\"name\":\"Zephyr\",\"rejoinToken\":1}";
     Value cw = walkPeerMsg(7, claimHello, sess, 9200);
     // The walk rekeys the ROOM seat; the car moves under the shell's
     // rekey-player effect, so move it here before comparing welcome-item.
@@ -4747,9 +4770,8 @@ void raceLiveWalks() {
     ttp_session_start(live, 1);
     ttp_session_start(twin, 1);
     const double kInterMs = ttp_race_intermission_ms();
-    const double kFailMs = ttp_race_results_failsafe_ms();
-    check(kInterMs == race::INTERMISSION_MS && kFailMs == race::RESULTS_FAILSAFE_MS,
-          "the two timing budgets read back as race_flow's own");
+    check(kInterMs == race::INTERMISSION_MS,
+          "the timing budget reads back as race_flow's own");
 
     // The series half of the end-of-race rule, read off the room BEFORE the
     // walk runs (the walk banks against it, and an expectation composed
@@ -4782,7 +4804,6 @@ void raceLiveWalks() {
           ei.seriesFinished = seriesFinished;
           ei.intermissionMs = kInterMs;
           ei.nowMs = nowMs;
-          ei.resultsFailsafeMs = kFailMs;
           es = race::endRace(ei);
         } else {
           const bool allDone = type == "finish" && !fastForwarding &&
@@ -4800,7 +4821,7 @@ void raceLiveWalks() {
       ttp_update(twin, 1000.0 / 60.0);
       const Value drained = parseOrNull(ttp_events_json(twin), "twin events");
       const Value got = parseOrNull(
-          ttp_race_events_live_json(live, room, "beach", 1, 0, kInterMs, f * 16.0, kFailMs),
+          ttp_race_events_live_json(live, room, "beach", 1, 0, kInterMs, f * 16.0),
           "events_live");
       sameOps(got, expectedFor(drained, "beach", 1, 0, f * 16.0), "events_live effects");
       for (const Value& e : drained.arr) {
@@ -4816,7 +4837,7 @@ void raceLiveWalks() {
               " beats, " + std::to_string(gos) + " GO)");
     // The queue really empties: a second drain with nothing behind it.
     const Value empty = parseOrNull(
-        ttp_race_events_live_json(live, room, "beach", 1, 0, kInterMs, 9000, kFailMs),
+        ttp_race_events_live_json(live, room, "beach", 1, 0, kInterMs, 9000),
         "events_live empty");
     check(at(empty, "effects").arr.empty() && at(empty, "results").type == Value::NUL,
           "a drained queue answers no effects and a null results");
@@ -4844,7 +4865,7 @@ void raceLiveWalks() {
     ttp_update(twin, 1000.0 / 60.0);
     const Value drained = parseOrNull(ttp_events_json(twin), "twin end events");
     const Value ended = parseOrNull(
-        ttp_race_events_live_json(live, room, "beach", 1, 0, kInterMs, 10000, kFailMs),
+        ttp_race_events_live_json(live, room, "beach", 1, 0, kInterMs, 10000),
         "events_live end");
     sameOps(ended, expectedFor(drained, "beach", 1, 0, 10000), "events_live effects at the flag");
     check(at(ended, "results").type == Value::OBJ,

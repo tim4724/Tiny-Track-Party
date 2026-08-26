@@ -41,8 +41,7 @@ import kotlin.random.Random
  * exactly as before (`tests/wire-no-webrtc.test.js` pins that this is allowed).
  *
  * THREE TIMERS, all here: the 1 Hz liveness tick, the create watchdog, the
- * reconnect backoff. The results failsafe and the cup intermission are the RACE
- * layer's.
+ * reconnect backoff. The cup intermission is the RACE layer's.
  */
 class PartyNet(
     private val proto: GameProtocol,
@@ -113,7 +112,10 @@ class PartyNet(
      */
     var onRosterChanged: (() -> Unit)? = null
 
-    /** The `race-abandoned` effect: no racer left and someone is waiting for the next race. */
+    /**
+     * The `race-abandoned` effect: mid-race, no racer left and someone waiting for
+     * the next race; on the results board, nobody connected at all.
+     */
     var onRaceAbandoned: (() -> Unit)? = null
 
     /** The socket closed. `true` means the ROOM died (4001) rather than the link. */

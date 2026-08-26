@@ -61,9 +61,9 @@ export class Phone {
       'join to be answered', timeout);
   }
 
-  /// The HELLO handshake. `rejoinToken` is deliberately passed through as given
-  /// (including `undefined`) — absent and null are DIFFERENT on the wire, and
-  /// `session.h`'s norm_index freezes that asymmetry on purpose.
+  /// The HELLO handshake. `rejoinToken` is passed through as given (including
+  /// `undefined`, which drops the key), so a harness can send the shapes a real
+  /// phone would not. Only an integer claims a seat — see `session.h`.
   hello(rejoinToken) {
     const msg = { type: this.proto.MSG.HELLO, name: this.name };
     if (rejoinToken !== undefined) msg.rejoinToken = rejoinToken;

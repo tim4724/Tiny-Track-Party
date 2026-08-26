@@ -161,8 +161,6 @@ class RaceFlowPerformer(private val game: GameCoordinator) {
             // happens inside the event drain's executor — no op crosses.
             "show-results" -> game.showResults(ctx.results)
 
-            "arm-results-failsafe" -> game.armResultsFailsafe(e.optDouble("ms", 60_000.0))
-            "clear-results-failsafe" -> game.clearResultsFailsafe()
             "arm-intermission" ->
                 game.armIntermission(e.optDouble("ms", 0.0), e.optDouble("deadline", 0.0))
             "clear-intermission" -> game.clearIntermission()
@@ -237,7 +235,6 @@ class RaceFlowPerformer(private val game: GameCoordinator) {
             "start-music", "stop-music", "show-music-credit", "stop-voices",
             "stop-car-audio", "item-pickup", "rocket-impact", "rocket-expire",
             "broadcast-standings", "show-results",
-            "arm-results-failsafe", "clear-results-failsafe",
             "arm-intermission", "clear-intermission", "place-track",
             "dispose-session", "fade-to-lobby", "remove-scene-car",
             "sync-state", "rekey-scene-car", "set-auto-paused", "sync-frozen",

@@ -87,8 +87,8 @@ enum class Op {
   BIND_SESSION, PAINT_INITIAL_HUD, START_COUNTDOWN, SHOW_COUNTDOWN,
   BROADCAST_COUNTDOWN, REFRESH_AUTO_PAUSE, START_MUSIC, STOP_MUSIC,
   SHOW_MUSIC_CREDIT, STOP_VOICES, ITEM_PICKUP, ROCKET_IMPACT, ROCKET_EXPIRE,
-  BROADCAST_STANDINGS, APPLY_RACE_POINTS, SHOW_RESULTS, ARM_RESULTS_FAILSAFE,
-  CLEAR_RESULTS_FAILSAFE, ARM_INTERMISSION, CLEAR_INTERMISSION, SERIES_ADVANCE,
+  BROADCAST_STANDINGS, APPLY_RACE_POINTS, SHOW_RESULTS, ARM_INTERMISSION,
+  CLEAR_INTERMISSION, SERIES_ADVANCE,
   CLEAR_SERIES, SET_TRACK_FROM_SERIES, PLACE_TRACK, SET_TRACK, DISPOSE_SESSION,
   CLEAR_FIELD, FADE_TO_LOBBY, REMOVE_SCENE_CAR, STOP_CAR_AUDIO, SYNC_STATE,
   SERIES_REKEY, REKEY_SCENE_CAR, REKEY_FIELD, SET_AUTO_PAUSED, SYNC_FROZEN,
@@ -489,7 +489,6 @@ struct EndRaceInput {
   bool seriesFinished = false;
   double intermissionMs = 0;
   double nowMs = 0;
-  double resultsFailsafeMs = 0;
   // Emit persist-progression on a finished series' podium. Default-off keeps
   // the frozen corpus lines byte-identical (same trick as LaunchInput's
   // humansAtBack); the live executor always sets it.
@@ -567,15 +566,14 @@ struct PauseResult {
 PauseResult pauseRace(const PauseInput& in);
 PauseResult resumeRace(const PauseInput& in);
 
-// The two game-timing budgets endRace takes as inputs. They live HERE — the
-// layer that arms the timers' effects — and shells read them through the ABI
-// (main.js used to own both numbers, which made them the only game timings a
-// second shell had to re-author). The E2E overrides (__intermissionMs and
-// friends) stay shell-side overrides of these defaults; the raceflow corpus
-// header records the values it was driven with and raceflow_check pins it to
-// these, so the oracle and the layer cannot drift.
+// The game-timing budget endRace takes as an input. It lives HERE — the layer
+// that arms the timer's effect — and shells read it through the ABI (main.js
+// used to own the number, which made it a game timing a second shell had to
+// re-author). The E2E override (__intermissionMs) stays a shell-side override
+// of this default; the raceflow corpus header records the value it was driven
+// with and raceflow_check pins it to this, so the oracle and the layer cannot
+// drift.
 inline constexpr double INTERMISSION_MS = 10000;       // auto-advance budget; the host can advance early
-inline constexpr double RESULTS_FAILSAFE_MS = 60000;   // players-all-left recovery net
 
 // ---- the roster-driven repairs ----------------------------------------------
 

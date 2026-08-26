@@ -32,8 +32,8 @@ import Foundation
 /// mutations already anchor.
 ///
 /// THE TIMERS THIS FILE OWNS are the 1 Hz liveness tick, the create watchdog and
-/// the reconnect backoff, and no others: the results failsafe, the cup
-/// intermission and its display ticker are the RACE layer's and live in
+/// the reconnect backoff, and no others: the cup intermission and its display
+/// ticker are the RACE layer's and live in
 /// `GameCoordinator+Race.swift`, and the fastlane's receive-side WATCHDOG is
 /// `Fastlane.swift`'s (the kit's send/idle timers are the sender's and exist on
 /// the phone, not here). Counted rather than named, this list was wrong within
@@ -55,8 +55,8 @@ final class PartyNet {
     /// `ttp_ui_roster_seats_room_json`. Deliberately carries no payload — the
     /// roster never becomes a Swift value, exactly as it never becomes a JS one.
     var onRosterChanged: (() -> Void)?
-    /// The `race-abandoned` effect: the race has no racer left and someone is
-    /// waiting for the next one.
+    /// The `race-abandoned` effect: mid-race, no racer left and someone waiting
+    /// for the next one; on the results board, nobody connected at all.
     var onRaceAbandoned: (() -> Void)?
     /// The socket closed. `true` means the ROOM died (4001) rather than the link.
     var onClose: ((Bool) -> Void)?

@@ -107,6 +107,10 @@ class RoomFlow {
   // "waiting for the next race" rows must read them from here, so the rows and
   // the graceTick policy can never disagree about who is waiting.
   Value lateJoinersValue() const;
+  // The abandoned-room deadline, true the ONE time it expires. Two arms, one
+  // deadline: mid-race, every participant gone while someone waits; on the
+  // RESULTS board, nobody connected at all. See the .cc for why the results arm
+  // is a condition rather than the clock it replaced.
   bool graceTick(double nowMs);
 
   // ---- provider setters -----------------------------------------------------

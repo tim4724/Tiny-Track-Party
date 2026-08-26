@@ -135,13 +135,12 @@ bool loadWorld(const Value& header, World& w) {
     std::fprintf(stderr, "the corpus header's `world` is not a world\n");
     return false;
   }
-  // The layer OWNS the game-timing budgets now (race_flow.h); the recorder
-  // still writes the values it drove with, so a drift between the oracle
-  // script and the constants fails here instead of shipping.
-  if (json::num_field(header, "intermissionMs") != race::INTERMISSION_MS ||
-      json::num_field(header, "resultsFailsafeMs") != race::RESULTS_FAILSAFE_MS) {
+  // The layer OWNS the game-timing budget now (race_flow.h); the recorder
+  // still writes the value it drove with, so a drift between the oracle
+  // script and the constant fails here instead of shipping.
+  if (json::num_field(header, "intermissionMs") != race::INTERMISSION_MS) {
     std::fprintf(stderr,
-                 "the corpus was recorded with different game-timing budgets "
+                 "the corpus was recorded with a different game-timing budget "
                  "than race_flow.h declares\n");
     return false;
   }
@@ -301,7 +300,6 @@ Value effectVal(const race::Effect& e) {
       v.set("lat", Value::Num(e.lat));
       break;
     case race::Op::BROADCAST_STANDINGS: v.set("over", Value::Bool(e.over)); break;
-    case race::Op::ARM_RESULTS_FAILSAFE: v.set("ms", Value::Num(e.num)); break;
     case race::Op::ARM_INTERMISSION:
       v.set("ms", Value::Num(e.num));
       v.set("deadline", Value::Num(e.deadline));
@@ -327,7 +325,6 @@ Value effectVal(const race::Effect& e) {
     case race::Op::STOP_VOICES:
     case race::Op::APPLY_RACE_POINTS:
     case race::Op::SHOW_RESULTS:
-    case race::Op::CLEAR_RESULTS_FAILSAFE:
     case race::Op::CLEAR_INTERMISSION:
     case race::Op::SERIES_ADVANCE:
     case race::Op::CLEAR_SERIES:
@@ -389,7 +386,6 @@ struct Shell {
   std::vector<race::FieldEntry> field;
   bool demoRunning = true;
   race::OptNum seriesRaceIndex;
-  race::OptNum resultsFailsafe;
   race::OptNum intermissionDeadline;
   race::OptStr lastBroadcast;
   std::vector<std::string> ops;
@@ -423,8 +419,6 @@ void applyEffect(Shell& s, const race::Effect& e) {
     case race::Op::SHOW_MUSIC_CREDIT: s.musicCredit = e.on; break;
     case race::Op::BROADCAST_STANDINGS:
       s.lastBroadcast = race::OptStr::Of(e.over ? "final" : "running"); break;
-    case race::Op::ARM_RESULTS_FAILSAFE: s.resultsFailsafe = race::OptNum::Of(e.num); break;
-    case race::Op::CLEAR_RESULTS_FAILSAFE: s.resultsFailsafe = race::OptNum::None(); break;
     case race::Op::ARM_INTERMISSION:
       s.intermissionDeadline = race::OptNum::Of(e.deadline); break;
     case race::Op::CLEAR_INTERMISSION:
@@ -502,7 +496,6 @@ Value digest(const Shell& s) {
   v.set("aiIds", idArr(s.aiIds));
   v.set("demoRunning", Value::Bool(s.demoRunning));
   v.set("seriesRaceIndex", valOf(s.seriesRaceIndex));
-  v.set("resultsFailsafe", valOf(s.resultsFailsafe));
   v.set("intermissionDeadline", valOf(s.intermissionDeadline));
   v.set("lastBroadcast", valOf(s.lastBroadcast));
   Value ops = Value::Arr();
@@ -673,7 +666,6 @@ Value runStep(Shell& s, const std::string& op, const Value& in) {
     ei.seriesFinished = json::truthy(in.find("seriesFinished"));
     ei.intermissionMs = json::num_field(in, "intermissionMs");
     ei.nowMs = json::num_field(in, "nowMs");
-    ei.resultsFailsafeMs = json::num_field(in, "resultsFailsafeMs");
     // Absent on every frozen line (they predate progression) — truthy reads
     // that as false, which is what keeps them byte-identical.
     ei.bankProgression = json::truthy(in.find("bankProgression"));

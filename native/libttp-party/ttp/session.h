@@ -149,22 +149,22 @@ bool controller_url_template(const std::string& base, const std::string& platfor
                              std::string* out);
 
 // ---- the rejoinToken normalizer ---------------------------------------------
-// FROZEN QUIRK, DO NOT TIDY. This is JS `Number(value)`, so norm_index of a JSON
-// null yields 0 and therefore EVERY ordinary HELLO — which carries no
-// rejoinToken — is a claim on seat 0. It is harmless only because seat 0 is the
-// DISPLAY'S OWN slot and never appears on the roster, so claim_plan's `hasOld`
-// always misses. Reproducing Number() loosely, or "fixing" null to be rejected,
-// changes who is able to claim what.
+// THE RULE, and every other mention of rejoinToken points here: THE TOKEN IS AN
+// INTEGER OR IT IS NOTHING. A JSON number that is finite, integral and >= 0
+// claims; every other shape — string, bool, array, object, null — is nothing, so
+// ABSENT AND NULL ARE THE SAME ANSWER and a client that sends the seat as a
+// STRING silently fails to claim. `v` is the raw JSON value, or nullptr for an
+// absent key; returns false for "no index".
 //
-// `v` is the raw JSON value, or nullptr for JS `undefined` (an absent key —
-// which is NOT the same as null: Number(undefined) is NaN). Returns false when
-// the JS answer is null.
+// This layer type-checks untrusted phone input rather than coercing it (as
+// set_car_decision does), and the shipped controller's deriveClaim
+// (public/controller/Net.js) already sends an integer or null, so nothing a real
+// phone can send changed answer when the coercion went. What went with it: this
+// used to be JS `Number(value)`, under which a JSON null read as 0 and therefore
+// EVERY ordinary HELLO was a claim on seat 0 — harmless only because seat 0 is
+// the DISPLAY'S OWN slot and claim_plan's `hasOld` always missed it. That
+// booby-trap is now gone rather than documented.
 bool norm_index(const Value* v, double* out);
-
-// JS ToNumber over the JSON value set, which norm_index is built on. Exposed
-// because it is the part worth testing directly: null->0, true->1, ""->0,
-// " 42 "->42, "0x10"->16, [7]->7, [1,2]->NaN, {}->NaN.
-double js_to_number(const Value* v);
 
 // ---- seats ------------------------------------------------------------------
 
@@ -335,7 +335,8 @@ HeartbeatTick heartbeat_tick(bool inRoom, bool hbPending, double hbSentAt, doubl
 // would expire again on the very next tick without it. It is exactly the sort of
 // detail a reimplementation loses, which is why it is an explicit command.
 //
-// `rejoinToken` is nullptr for an absent key (JS undefined) — see norm_index.
+// `rejoinToken` is nullptr for an absent key, which claims nothing — as does any
+// token that is not a non-negative integer. See norm_index.
 struct ClaimPlan {
   bool claim = false;
   double oldId = 0;

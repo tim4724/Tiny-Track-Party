@@ -364,9 +364,9 @@ test('wire: a real phone joins a C++-hosted room and HELLO/PING cross both parse
   assert.ok(hello, 'HELLO arrived');
   assert.equal(hello.from, 1);
   assert.equal(hello.data.name, 'Ada');
-  // rejoinToken is LITERALLY null on a normal join, and DisplayNet._normIndex(null)
-  // is 0 (Number(null) === 0) — every normal HELLO is a claim on seat 0 that
-  // survives only because the display's own slot is never on the roster.
+  // rejoinToken is LITERALLY null on a normal join — the key is present, and the
+  // controller only ever fills it with an integer. A token that is not a number
+  // claims nothing (session.h), so this null and an absent key are one answer.
   assert.equal(hello.data.rejoinToken, null);
   assert.ok('rejoinToken' in hello.data, 'the key is PRESENT, not absent');
 

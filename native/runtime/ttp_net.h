@@ -35,12 +35,10 @@
  * The random pick's shuffle bag moved BEHIND THE ROOM (2026-07-31): the shell
  * seeds it once with page entropy and the walks own every draw.
  *
- * NULL IS NOT ZERO, and ABSENT IS NOT NULL. The rejoinToken normalizer (inside
- * the hello walk) turns on that difference: JS Number(null) is 0 while
- * Number(undefined) is NaN, so a HELLO carrying an explicit null claims seat 0
- * while one carrying no token at all claims nothing. Pass NULL or "" for an
- * absent value; pass "null" for an explicit JSON null. This is a FROZEN quirk,
- * not a rough edge — see session.h.
+ * A rejoinToken IS AN INTEGER OR IT IS NOTHING. The normalizer inside the hello
+ * walk takes a finite, integral, non-negative JSON NUMBER and refuses every
+ * other shape, so absent and null are the same answer and a client spelling the
+ * seat as a string silently claims nothing — see session.h.
  */
 #ifndef TTP_NET_H
 #define TTP_NET_H

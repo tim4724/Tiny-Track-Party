@@ -183,12 +183,6 @@ struct RaceFlowPerformer {
         case "show-results":
             game.showResults(ctx.results)
 
-        case "arm-results-failsafe":
-            game.armResultsFailsafe(ms: e["ms"] as? Double ?? 60_000)
-
-        case "clear-results-failsafe":
-            game.clearResultsFailsafe()
-
         case "arm-intermission":
             game.armIntermission(ms: e["ms"] as? Double ?? 0,
                                  deadline: e["deadline"] as? Double ?? 0)
@@ -287,7 +281,6 @@ struct RaceFlowPerformer {
         "start-music", "stop-music", "show-music-credit", "stop-voices",
         "stop-car-audio", "item-pickup", "rocket-impact", "rocket-expire",
         "broadcast-standings", "show-results",
-        "arm-results-failsafe", "clear-results-failsafe",
         "arm-intermission", "clear-intermission", "place-track",
         "dispose-session", "fade-to-lobby", "remove-scene-car",
         "sync-state", "rekey-scene-car", "set-auto-paused", "sync-frozen",

@@ -182,7 +182,6 @@ TTP_ABI const char* ttp_race_start_live_json(int roomHandle, int sceneReady,
  *   fastForwarding    inside the AI-only fast-forward burst: visuals silenced
  *   intermissionMs    ttp_race_intermission_ms(), or the E2E override
  *   nowMs             the shell's clock (the intermission deadline is absolute)
- *   resultsFailsafeMs ttp_race_results_failsafe_ms()
  *
  *   -> {"effects":[...], "results": obj|null}
  *
@@ -193,8 +192,7 @@ TTP_ABI const char* ttp_race_start_live_json(int roomHandle, int sceneReady,
 TTP_ABI const char* ttp_race_events_live_json(int sessionHandle, int roomHandle,
                                               const char* biome,
                                               int audioReady, int fastForwarding,
-                                              double intermissionMs, double nowMs,
-                                              double resultsFailsafeMs);
+                                              double intermissionMs, double nowMs);
 
 /* ---- the cup chain / the way out ----------------------------------------- */
 
@@ -238,10 +236,9 @@ TTP_ABI const char* ttp_race_pause_live_json(int sessionHandle, int roomHandle,
 TTP_ABI const char* ttp_race_resume_live_json(int sessionHandle, int roomHandle,
                                               int paused, int autoPaused, int raceEnded);
 
-/* The two game-timing budgets (race_flow.h INTERMISSION_MS /
- * RESULTS_FAILSAFE_MS). Read them; the numbers have no shell home anymore. */
+/* The game-timing budget (race_flow.h INTERMISSION_MS). Read it; the number has
+ * no shell home anymore. */
 TTP_ABI double ttp_race_intermission_ms(void);
-TTP_ABI double ttp_race_results_failsafe_ms(void);
 
 /* ---- the countdown gate --------------------------------------------------- */
 

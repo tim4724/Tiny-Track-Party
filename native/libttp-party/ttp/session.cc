@@ -1,7 +1,6 @@
 #include "ttp/session.h"
 
 #include <cmath>
-#include <cstdlib>
 #include <set>
 
 #include "ttp/json_read.h"
@@ -19,112 +18,12 @@ namespace {
 // grace, the tick cadence) is fed into RoomFlow by the shell, not decided here.
 constexpr double kHeartbeatDeadMs = protocol::LIVENESS_HEARTBEAT_DEAD_MS;
 
-// JS whitespace for String -> Number trimming: WhiteSpace + LineTerminator.
-// The non-ASCII members (U+00A0, U+FEFF and the Unicode Zs class) arrive as
-// UTF-8 byte sequences; the two that actually turn up in the wild are handled,
-// and anything else is junk -> NaN, which is also what a stray byte should be.
-bool isJsSpaceAt(const std::string& s, size_t i, size_t* width) {
-  const unsigned char c = static_cast<unsigned char>(s[i]);
-  if (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v') {
-    *width = 1;
-    return true;
-  }
-  if (c == 0xC2 && i + 1 < s.size() && static_cast<unsigned char>(s[i + 1]) == 0xA0) {
-    *width = 2;  // U+00A0 NO-BREAK SPACE
-    return true;
-  }
-  if (c == 0xEF && i + 2 < s.size() && static_cast<unsigned char>(s[i + 1]) == 0xBB &&
-      static_cast<unsigned char>(s[i + 2]) == 0xBF) {
-    *width = 3;  // U+FEFF BOM
-    return true;
-  }
-  return false;
-}
-
-std::string jsTrim(const std::string& s) {
-  size_t a = 0;
-  size_t w = 0;
-  while (a < s.size() && isJsSpaceAt(s, a, &w)) a += w;
-  size_t b = s.size();
-  while (b > a) {
-    // Walk back over the (1..3 byte) space forms.
-    size_t step = 0;
-    if (b >= a + 3 && isJsSpaceAt(s, b - 3, &w) && w == 3) step = 3;
-    else if (b >= a + 2 && isJsSpaceAt(s, b - 2, &w) && w == 2) step = 2;
-    else if (isJsSpaceAt(s, b - 1, &w) && w == 1) step = 1;
-    if (!step) break;
-    b -= step;
-  }
-  return s.substr(a, b - a);
-}
-
-const double kNaN = std::nan("");
-
-// digitValue for a radix prefix (0x / 0o / 0b). -1 = not a digit.
-int radixDigit(char c) {
-  if (c >= '0' && c <= '9') return c - '0';
-  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-  if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-  return -1;
-}
-
-bool parseRadix(const std::string& s, int radix, double* out) {
-  if (s.empty()) return false;
-  double v = 0;
-  for (char c : s) {
-    const int d = radixDigit(c);
-    if (d < 0 || d >= radix) return false;
-    v = v * radix + d;
-  }
-  *out = v;
-  return true;
-}
-
-// StrDecimalLiteral, validated before strtod so the things C accepts and JS does
-// not ("inf", "nan", "0x1p3", "1_0", a bare "." or "e5", trailing junk) all fall
-// through to NaN.
-bool validDecimal(const std::string& s) {
-  size_t i = 0;
-  if (i < s.size() && (s[i] == '+' || s[i] == '-')) i++;
-  size_t intDigits = 0;
-  while (i < s.size() && s[i] >= '0' && s[i] <= '9') { i++; intDigits++; }
-  size_t fracDigits = 0;
-  if (i < s.size() && s[i] == '.') {
-    i++;
-    while (i < s.size() && s[i] >= '0' && s[i] <= '9') { i++; fracDigits++; }
-  }
-  if (intDigits == 0 && fracDigits == 0) return false;
-  if (i < s.size() && (s[i] == 'e' || s[i] == 'E')) {
-    i++;
-    if (i < s.size() && (s[i] == '+' || s[i] == '-')) i++;
-    size_t expDigits = 0;
-    while (i < s.size() && s[i] >= '0' && s[i] <= '9') { i++; expDigits++; }
-    if (expDigits == 0) return false;
-  }
-  return i == s.size();
-}
-
-double jsStringToNumber(const std::string& raw) {
-  const std::string s = jsTrim(raw);
-  if (s.empty()) return 0;  // Number('') === 0, and Number('   ') too
-  if (s.size() > 2 && s[0] == '0') {
-    double v = 0;
-    const char p = s[1];
-    if ((p == 'x' || p == 'X') && parseRadix(s.substr(2), 16, &v)) return v;
-    if ((p == 'o' || p == 'O') && parseRadix(s.substr(2), 8, &v)) return v;
-    if ((p == 'b' || p == 'B') && parseRadix(s.substr(2), 2, &v)) return v;
-    if (p == 'x' || p == 'X' || p == 'o' || p == 'O' || p == 'b' || p == 'B') return kNaN;
-  }
-  if (s == "Infinity" || s == "+Infinity") return HUGE_VAL;
-  if (s == "-Infinity") return -HUGE_VAL;
-  if (!validDecimal(s)) return kNaN;
-  return std::strtod(s.c_str(), nullptr);  // correctly rounded (json_parse.h §number)
-}
-
-// String(value) for the ToPrimitive step an ARRAY takes: elements joined by ','
-// with null/undefined contributing the empty string, an object contributing
-// "[object Object]" and a nested array recursing. That is why Number([7]) is 7,
-// Number([]) is 0 and Number([1,2]) is NaN.
+// JS String(value) over the JSON value set: an array joins its elements with
+// ',' with null/undefined contributing the empty string, an object is
+// "[object Object]", and a nested array recurses. clean_name_json is the one
+// caller (and ttp_net_clean_name the shipped ABI over it): a phone's `name` is
+// whatever JSON it sent, and the display must call the player what the phone's
+// own String() would have, right down to `String([1,2])` being "1,2".
 std::string jsToString(const Value& v) {
   switch (v.type) {
     case Value::UNDEF:
@@ -159,17 +58,10 @@ void copyKey(Value& dst, const Value& src, const char* key) {
 
 
 // ECMA-262 WhiteSpace + LineTerminator, in FULL — what String.prototype.trim
-// actually strips, and what clean_name_json needs.
-//
-// It is NOT `isJsSpaceAt` above, and the difference is the point. That one
-// handles the three forms "that actually turn up in the wild" because its caller
-// is jsStringToNumber, where an unrecognised space and a stray letter reach the
-// same answer: NaN. A NAME has no such luck — a space this does not know stays
-// in the string, so the display keeps a name the phone already trimmed away and
-// the two halves disagree about what the player is called.
-//
-// Widening isJsSpaceAt instead would have been the tidier-looking fix and the
-// wrong one: it feeds norm_index, which the FROZEN session corpus pins.
+// actually strips, and what clean_name_json needs. FULL is the requirement: a
+// space form this does not know stays in the string, so the display keeps a name
+// the phone already trimmed away and the two halves disagree about what the
+// player is called.
 bool jsSpaceUnit(uint16_t u) {
   switch (u) {
     case 0x09: case 0x0A: case 0x0B: case 0x0C: case 0x0D: case 0x20:
@@ -290,26 +182,15 @@ bool controller_url_template(const std::string& base, const std::string& platfor
   return true;
 }
 
-double js_to_number(const Value* v) {
-  if (!v) return kNaN;  // Number(undefined)
-  switch (v->type) {
-    case Value::UNDEF: return kNaN;
-    case Value::NUL: return 0;
-    case Value::BOOL: return v->b ? 1 : 0;
-    case Value::NUM: return v->num;
-    case Value::STR: return jsStringToNumber(v->str);
-    case Value::OBJ: return kNaN;
-    case Value::ARR: return jsStringToNumber(jsToString(*v));
-  }
-  return kNaN;
-}
-
 bool norm_index(const Value* v, double* out) {
-  const double n = js_to_number(v);
-  // Number.isInteger: finite and equal to its own truncation. NaN and both
-  // infinities fail, which is what makes 'abc' and 'Infinity' null rather than 0.
+  // Number.isInteger(x) — and, like set_car_decision above, x must BE a number.
+  // Untrusted input from a phone is type-checked, never coerced: `nullptr` (an
+  // absent key) and a JSON null reach the same answer here, which is the whole
+  // point of the rule.
+  if (!v || v->type != Value::NUM) return false;
+  const double n = v->num;
   if (!std::isfinite(n) || std::trunc(n) != n) return false;
-  if (!(n >= 0)) return false;
+  if (n < 0) return false;
   *out = n;
   return true;
 }

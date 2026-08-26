@@ -35,12 +35,13 @@ which this layer keeps opaque.
 lives in the ABI shim, not here: this library stays pure over plain data, which
 is what keeps the frozen corpus replayable with no room machine at all.
 
-**`norm_index` carries a frozen, security-adjacent quirk.** It is JS
-`Number(value)`, so a HELLO with an explicit null rejoin token claims seat 0 while
-one with no token claims nothing. It is harmless only because seat 0 is the
-display's own slot and never appears on the roster. **Do not tidy it** — the corpus
-pins both answers, and the ABI takes the whole HELLO rather than the token so
-absent and null stay distinguishable.
+**A rejoinToken is an integer or it is nothing.** `norm_index` accepts a JSON
+number that is finite, integral and non-negative, and refuses every other shape,
+so absent and null are the same answer and a client that sends the seat as a
+string silently fails to claim. Untrusted phone input is type-checked here, never
+coerced. This layer used to reproduce JS `Number(value)` instead, under which a
+null read as 0 and every ordinary HELLO was a claim on seat 0; the corpus pins
+the current answers.
 
 ## Liveness and disconnects
 
@@ -54,11 +55,18 @@ The self-heartbeat uses an **in-flight flag, never an echo age**, so a throttled
 background tab cannot misread its own starvation as a dead link. The shell owns
 only the interval and the calls the tick asks for.
 
-**The abandoned-race policy** rides that same tick: every participant gone while
-someone waits arms a grace timer that fires once. Its participant set is derived
-from the LIVE RACE through the session seam — every seat holding a car, plus every
-dropped seat — so a shell passes a session handle and **no car id is ever
-serialized out and handed back.**
+**The abandoned-room policy** rides that same tick and has TWO arms on ONE grace
+deadline, both firing once. Mid-race: every participant gone while someone waits.
+On the RESULTS board: **no connected peer at all** — the same "the room is empty"
+the cup chain's advance already uses. The results arm replaced a wall-clock
+failsafe the three shells armed off the end of a race, which fired on a timer and
+so yanked a party that was still talking off its own podium; it fires on the
+condition that timer was always a proxy for. **A podium with anybody still in the
+room waits for a human**, however long it sits there.
+
+The mid-race arm's participant set is derived from the LIVE RACE through the
+session seam — every seat holding a car, plus every dropped seat — so a shell
+passes a session handle and **no car id is ever serialized out and handed back.**
 
 What falls outside that set is exactly a connected, car-less seat, and one
 definition stands behind the policy, the standings' joining rows and the display's

@@ -285,7 +285,6 @@ Value effectVal(const race::Effect& e) {
       v.set("lat", Value::Num(e.lat));
       break;
     case race::Op::BROADCAST_STANDINGS: v.set("over", Value::Bool(e.over)); break;
-    case race::Op::ARM_RESULTS_FAILSAFE: v.set("ms", Value::Num(e.num)); break;
     case race::Op::ARM_INTERMISSION:
       v.set("ms", Value::Num(e.num));
       v.set("deadline", Value::Num(e.deadline));
@@ -309,7 +308,6 @@ Value effectVal(const race::Effect& e) {
     case race::Op::STOP_VOICES:
     case race::Op::APPLY_RACE_POINTS:
     case race::Op::SHOW_RESULTS:
-    case race::Op::CLEAR_RESULTS_FAILSAFE:
     case race::Op::CLEAR_INTERMISSION:
     case race::Op::SERIES_ADVANCE:
     case race::Op::CLEAR_SERIES:
@@ -709,8 +707,7 @@ const char* ttp_race_start_live_json(int roomHandle, int sceneReady, double seed
 const char* ttp_race_events_live_json(int sessionHandle, int roomHandle,
                                       const char* biome,
                                       int audioReady, int fastForwarding,
-                                      double intermissionMs, double nowMs,
-                                      double resultsFailsafeMs) {
+                                      double intermissionMs, double nowMs) {
   const Value evs = ttp_session_drain_events(sessionHandle);
   const ttp::CupSeries* series = ttp_gp_series(ttp_room_series(roomHandle));
   Value fx = Value::Arr();
@@ -739,7 +736,6 @@ const char* ttp_race_events_live_json(int sessionHandle, int roomHandle,
                        (!series->endless() && series->raceIndex() + 1 >= series->raceCount()));
         ei.intermissionMs = intermissionMs;
         ei.nowMs = nowMs;
-        ei.resultsFailsafeMs = resultsFailsafeMs;
         // The live walk always banks a finished series; the flag exists so the
         // frozen corpus lines (which predate progression) stay byte-identical.
         ei.bankProgression = true;
@@ -884,7 +880,6 @@ const char* ttp_race_resume_live_json(int sessionHandle, int roomHandle,
 }
 
 double ttp_race_intermission_ms(void) { return race::INTERMISSION_MS; }
-double ttp_race_results_failsafe_ms(void) { return race::RESULTS_FAILSAFE_MS; }
 
 // ---- the countdown gate ------------------------------------------------------
 

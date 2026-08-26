@@ -44,7 +44,7 @@ export async function init() {
              ['number', 'number', 'number', 'number', 'string', 'string']),
     events: c('ttp_race_events_live_json', 'string',
               ['number', 'number', 'string', 'number', 'number',
-               'number', 'number', 'number']),
+               'number', 'number']),
     advance: c('ttp_race_advance_live_json', 'string',
                ['number', 'number', 'number', 'number', 'string', 'string']),
     ret: c('ttp_race_return_live_json', 'string', ['number']),
@@ -55,7 +55,6 @@ export async function init() {
     resumeRace: c('ttp_race_resume_live_json', 'string',
                   ['number', 'number', 'number', 'number', 'number']),
     intermissionMs: c('ttp_race_intermission_ms', 'number', []),
-    resultsFailsafeMs: c('ttp_race_results_failsafe_ms', 'number', []),
     countdownReady: c('ttp_race_countdown_ready', 'number', ['number', 'number', 'number']),
     forfeit: c('ttp_race_forfeit_live_json', 'string', ['number', 'string']),
     rekey: c('ttp_race_rekey_live_json', 'string', ['number', 'number', 'string', 'string']),  // (session, room)
@@ -106,10 +105,10 @@ export function startRace(roomHandle, sceneReady, { seed, countdownSeconds, forc
 // The frame's drain: every queued race event routed and answered as one effect
 // list; `results` is non-null exactly when the drain crossed the race's end.
 export function drainEvents(sessionHandle, roomHandle,
-                            { biome, audioReady, fastForwarding, intermissionMs, nowMs, resultsFailsafeMs }) {
+                            { biome, audioReady, fastForwarding, intermissionMs, nowMs }) {
   return P(fn.events(sessionHandle, roomHandle, biome || '',
                      audioReady ? 1 : 0, fastForwarding ? 1 : 0,
-                     intermissionMs, nowMs, resultsFailsafeMs));
+                     intermissionMs, nowMs));
 }
 
 export function advanceSeriesRace(roomHandle, sceneReady, { seed, countdownSeconds, forceItem, botCap }) {
@@ -133,7 +132,6 @@ export function resumeRace(sessionHandle, roomHandle, { paused, autoPaused, race
 }
 
 export function intermissionMs() { return fn.intermissionMs(); }
-export function resultsFailsafeMs() { return fn.resultsFailsafeMs(); }
 
 // May the launch's held-back countdown start? The facts only a shell has go in —
 // whether its scene build has returned, whether it is feeding the frame monitor

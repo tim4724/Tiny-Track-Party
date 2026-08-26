@@ -494,9 +494,10 @@ add_test(NAME framing
 #
 # It is the first oracle three of those units have EVER had: the claim URL, the
 # rejoinToken normalizer and the cross-device seat claim were exercised by
-# nothing in the tree — not one test built a claim URL or scanned a claim QR —
-# and the normalizer carries a frozen security-adjacent quirk (Number(null) is 0,
-# so every ordinary HELLO is a claim on seat 0). No --record mode on purpose.
+# nothing in the tree — not one test built a claim URL or scanned a claim QR.
+# It is also what pins the normalizer's rule (a token is an integer or it is
+# nothing, session.h) across every JSON shape a phone can send.
+# It re-emits through --record, held byte-identical by record_session below.
 add_executable(session_check partytest/session_check.cc)
 target_link_libraries(session_check PRIVATE libttp_party ttp_testsupport ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(session_check)
@@ -700,9 +701,11 @@ add_test(NAME record_runtime
 # So byte identity proves the port reproduces every recorded answer and its exact
 # JSON spelling (key set, null-vs-absent, every number through
 # js_number_to_string) — strictly more than the structural replays assert. It
-# does NOT prove the port matches the JS; the committed bytes carry that, and the
-# JS wrote them. If one of these ever fails, the committed file is right and the
-# C++ is wrong. See tests/fixtures/traces/README.md.
+# does NOT prove the port matches the JS; only the committed bytes can carry
+# that, and only while the JS wrote them. An unexplained failure is a defect in
+# the change, and the committed file is right; a TRADED behaviour change
+# re-records green-first and demotes that fixture to class 2, as the session
+# corpus already is. See tests/fixtures/traces/README.md.
 add_test(NAME record_ui
   COMMAND ${CMAKE_COMMAND}
     -DCLI=$<TARGET_FILE:ui_check>

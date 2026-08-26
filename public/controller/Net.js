@@ -34,6 +34,10 @@ function deriveInstance() {
 // this token tells the display which dropped seat to hand this fresh connection —
 // see DisplayNet._claimReconnect. A same-device reconnect keeps its relay slot by
 // clientId and never needs it. Null on a normal first-time join.
+//
+// INTEGER OR NOTHING: the display type-checks this token and coerces nothing, so
+// sending the seat as the raw query STRING would silently claim no seat at all.
+// Number() here is not a convenience — it is the contract (session.h).
 function deriveClaim() {
   const raw = new URLSearchParams(location.search).get('claim');
   if (raw == null || raw === '') return null;

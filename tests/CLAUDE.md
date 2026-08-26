@@ -26,8 +26,8 @@ same green-first, read-the-diff rule.
 
 **Class 1 — JS-recorded**: cross-implementation evidence from the port era. A
 deliberate re-record demotes the fixture to class 2 from that commit on; the
-JS-parity claim stays with the old bytes in git history. The traces, audio and
-theme corpora have been demoted this way.
+JS-parity claim stays with the old bytes in git history. The traces, audio, theme
+and session corpora have been demoted this way.
 
 **Class 2 — C++-authored** (the `--record` mode of the sim, sweep and runtime
 checks): regression evidence only. It proves the sim and cameras still do what

@@ -418,11 +418,10 @@ void addPeerWalk(RoomFlow* flow, const PeerId& id, double nowMs, Value& effects)
 }
 
 // _claimReconnect: the cross-device rejoin, claiming a dropped seat via the
-// HELLO's rejoinToken. The WHOLE message is consulted, not just the token: an
-// ABSENT rejoinToken and an explicit null answer differently, and that
-// difference is frozen — see claim_plan/norm_index. Answers the CLAIMED old
-// seat (None when nothing was claimed): the hello walk needs it, because the
-// still-racing car is keyed to that seat until the shell performs rekey-player.
+// HELLO's rejoinToken — an integer or nothing, see claim_plan/norm_index.
+// Answers the CLAIMED old seat (None when nothing was claimed): the hello walk
+// needs it, because the still-racing car is keyed to that seat until the shell
+// performs rekey-player.
 PeerId claimWalk(RoomFlow* flow, const Value* fromV, const PeerId& from, const Value& msg,
                  double nowMs, Value& effects) {
   const Value* token = mfind(msg, "rejoinToken");

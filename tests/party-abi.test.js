@@ -426,12 +426,14 @@ test('party ABI: the session choreography walks run against the shipped wasm', a
   drain();
 
   // The cross-device claim: drop seat 1, then a fresh connection carries its
-  // index as the rejoin token. The car is still keyed to the OLD seat when the
-  // walk decides — rekey-player must precede welcome-item in the answer.
+  // index as the rejoin token — an INTEGER, never the string '1', or the walk
+  // reads no token at all and claims nothing (session.h). The car is still keyed
+  // to the OLD seat when the walk decides — rekey-player must precede
+  // welcome-item in the answer.
   net.onProtocol(h, 'peer_left', '{"index":1}', 6700);
   drain();
   const claim = walk(net.onPeerMessage(h, s, '7',
-    JSON.stringify({ type: 'hello', name: 'Ada', rejoinToken: '1' }), 0, 6800));
+    JSON.stringify({ type: 'hello', name: 'Ada', rejoinToken: 1 }), 0, 6800));
   const claimOps = claim.effects.map((e) => e.op);
   assert.ok(claimOps.indexOf('rekey-player') >= 0, 'the seat was claimed');
   assert.ok(claimOps.indexOf('rekey-player') < claimOps.indexOf('welcome-item'),

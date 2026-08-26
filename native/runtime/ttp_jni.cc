@@ -860,9 +860,9 @@ jbyteArray n_ttp_race_end_party_json(JNIEnv* env, jclass) {
     return toBytes(env, ttp_race_end_party_json());
 }
 
-jbyteArray n_ttp_race_events_live_json(JNIEnv* env, jclass, jint a0, jint a1, jbyteArray a2, jint a3, jint a4, jdouble a5, jdouble a6, jdouble a7) {
+jbyteArray n_ttp_race_events_live_json(JNIEnv* env, jclass, jint a0, jint a1, jbyteArray a2, jint a3, jint a4, jdouble a5, jdouble a6) {
     CStr s2(env, a2);
-    return toBytes(env, ttp_race_events_live_json((int) a0, (int) a1, s2.get(), (int) a3, (int) a4, (double) a5, (double) a6, (double) a7));
+    return toBytes(env, ttp_race_events_live_json((int) a0, (int) a1, s2.get(), (int) a3, (int) a4, (double) a5, (double) a6));
 }
 
 jbyteArray n_ttp_race_forfeit_live_json(JNIEnv* env, jclass, jint a0, jbyteArray a1) {
@@ -889,11 +889,6 @@ jbyteArray n_ttp_race_rekey_live_json(JNIEnv* env, jclass, jint a0, jint a1, jby
     CStr s2(env, a2);
     CStr s3(env, a3);
     return toBytes(env, ttp_race_rekey_live_json((int) a0, (int) a1, s2.get(), s3.get()));
-}
-
-jdouble n_ttp_race_results_failsafe_ms(JNIEnv* env, jclass) {
-    (void) env;
-    return (jdouble) ttp_race_results_failsafe_ms();
 }
 
 jbyteArray n_ttp_race_resume_live_json(JNIEnv* env, jclass, jint a0, jint a1, jint a2, jint a3, jint a4) {
@@ -1404,13 +1399,12 @@ const JNINativeMethod kMethods[] = {
     { "ttp_race_demo_live_json", "(I[B[B)[B", (void*) n_ttp_race_demo_live_json },
     { "ttp_race_effect_ops_json", "()[B", (void*) n_ttp_race_effect_ops_json },
     { "ttp_race_end_party_json", "()[B", (void*) n_ttp_race_end_party_json },
-    { "ttp_race_events_live_json", "(II[BIIDDD)[B", (void*) n_ttp_race_events_live_json },
+    { "ttp_race_events_live_json", "(II[BIIDD)[B", (void*) n_ttp_race_events_live_json },
     { "ttp_race_forfeit_live_json", "(I[B)[B", (void*) n_ttp_race_forfeit_live_json },
     { "ttp_race_intermission_ms", "()D", (void*) n_ttp_race_intermission_ms },
     { "ttp_race_pause_live_json", "(IIIII)[B", (void*) n_ttp_race_pause_live_json },
     { "ttp_race_personas_json", "()[B", (void*) n_ttp_race_personas_json },
     { "ttp_race_rekey_live_json", "(II[B[B)[B", (void*) n_ttp_race_rekey_live_json },
-    { "ttp_race_results_failsafe_ms", "()D", (void*) n_ttp_race_results_failsafe_ms },
     { "ttp_race_resume_live_json", "(IIIII)[B", (void*) n_ttp_race_resume_live_json },
     { "ttp_race_return_live_json", "(I)[B", (void*) n_ttp_race_return_live_json },
     { "ttp_race_series_state_json", "(I)[B", (void*) n_ttp_race_series_state_json },

@@ -198,7 +198,7 @@ extension GameCoordinator {
         let d = TTP.obj(ttp_race_events_live_json(
             sessionHandle, net.roomHandle, display.biomeName,
             audio.ready ? 1 : 0, fastForwarding ? 1 : 0,
-            ttp_race_intermission_ms(), nowMs(), ttp_race_results_failsafe_ms()))
+            ttp_race_intermission_ms(), nowMs()))
         run(d, results: d["results"] as? [String: Any])
     }
 
