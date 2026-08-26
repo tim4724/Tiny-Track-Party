@@ -202,14 +202,14 @@ function ui_() {
           seriesState: () => JSON.parse(raw.raceSeriesState(room)),
           // Run the current race out in the order given (ids finish 60s, 61s,
           // ...) and drain it. The drain is where the executor banks the cup
-          // points, so `results` and the series move together, as at a party.
+          // points, so a board read after this sees the live session and the
+          // series move together, as at a party.
           finish: (order) => {
             order.forEach((id, i) => raw.raceForceFinish(session, J(id), 60 + i));
             raw.raceUpdate(session, 16);
             const d = JSON.parse(raw.raceEventsLive(session, room, 'beach', 0, 0,
                                                     8000, 100000));
             perform(d.effects);
-            return d.results;
           },
           nextRace: () => launch(raw.raceAdvanceLive),
           board: ({ over = false, results = null, autoAdvanceMs = 10000 } = {}) =>
@@ -433,7 +433,8 @@ test('the standings board carries exactly the keys it contracts', async () => {
   // list is subtracted from the live race inside C++ rather than handed in.
   const p = ui.party({ names: ['Ada'], pick: { mode: 'track', trackId: 'tidepool' } });
   const bo = p.join('Bo');
-  const board = p.board({ over: true, results: p.finish([1]) });
+  p.finish([1]);
+  const board = p.board({ over: true });
 
   // The controller reads this by key, but the shape is a contract two languages
   // will implement, so pin it rather than leave it to whoever writes the struct.
@@ -452,7 +453,8 @@ test('the standings board carries exactly the keys it contracts', async () => {
   // The cup half is ONE nested object composed here, never two sibling keys.
   // A cup pick is the whole difference: same walks, same board, one more key.
   const gp = ui.party({ names: ['Ada'], pick: { mode: 'cup', cupId: ui.CUPS[0].id } });
-  const cupBoard = gp.board({ over: true, results: gp.finish([1]) });
+  gp.finish([1]);
+  const cupBoard = gp.board({ over: true });
   assert.deepEqual(keys(cupBoard), ['hostPeerIndex', 'order', 'over', 'series', 'total']);
   assert.deepEqual(keys(cupBoard.order[0]),
     ['ai', 'colorIndex', 'finished', 'gained', 'name', 'playerId', 'points', 'racePlace', 'time']);
@@ -484,7 +486,8 @@ test('a live cup board stays in race order; only the final board re-sorts', asyn
   // Run it out for real: the drain banks Bo's 9 and Ada's 6 against the room's
   // series before the final board is composed, which is the order the corpus
   // pins. Ada still leads, so the final board re-sorts away from the race.
-  const final = p.board({ over: true, results: p.finish([BO, ADA]) });
+  p.finish([BO, ADA]);
+  const final = p.board({ over: true });
   assert.deepEqual(final.order.map((r) => r.playerId), [ADA, BO],
     'the final board tells the cup story');
   assert.deepEqual(final.order.map((r) => r.gained), [6, 9]);
