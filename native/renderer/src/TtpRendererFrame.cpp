@@ -2219,13 +2219,24 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
             // the radius, so an upload throttle still shows.
             // The whole ribbon shifts by this, head and tail together, so the
             // mark traces the same curve — only its phase along that curve
-            // moves, by less than a fifth of a car length.
+            // moves, by at most a third of a car length.
             // Model space faces −Z (FLIP maps it to the car's forward), and
             // taking it off poseSpun rather than off `fwd` keeps a spun-out
             // car's scribbles leading its own wheels.
+            //
+            // BOUNDED HERE rather than where either radius is measured, and
+            // that is the point: both come off a wheel node's AABB in shell-
+            // provided GLB bytes, and mMonsterWheelRadius ALSO divides the
+            // roll animation, where a clamp would silently retime the spin.
+            // Only this use is a position, so only this use needs the ceiling
+            // — a mismeasured wheel may spin wrong, but it may not float ink
+            // off the tyre. The kit measures 0.125 and the monster rig 0.188,
+            // so the cap is slack on everything shipped; it exists to make
+            // the bound above a fact rather than a property of the assets.
+            constexpr float LEAD_MAX = 0.3f;
             const float3 leadDir = normalize((poseSpun * float4{ 0, 0, -1, 0 }).xyz);
-            const float lead = (mwp && mMonsterWheelRadius > 0)
-                    ? mMonsterWheelRadius : cw.wheelRadius;
+            const float lead = std::min(LEAD_MAX, (mwp && mMonsterWheelRadius > 0)
+                    ? mMonsterWheelRadius : cw.wheelRadius);
             for (int wi = marksAll ? 0 : 2; wi < 4; wi++) {
                 WheelTrail& st = trails[wi];
                 const float3 gp = (poseSpun * float4{ wlocal[wi], 1 }).xyz
