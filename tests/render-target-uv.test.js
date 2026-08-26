@@ -50,6 +50,12 @@ const RENDER_TARGET_SAMPLERS = new Set([
   // shadowFromWorld's affine output, so the varying carries it pre-flipped
   // and the fragment samples raw, like the fullscreen passes.
   'visMap',
+  // The DECK's baked sun-visibility map (vroadvis.mat renders it once per track
+  // inside bakeShadowMap). Unlike visMap its uv is TRACK space, not
+  // shadowFromWorld's output — a barrel roll and the deck it shadows share one
+  // light-space texel, and a loop has two arclengths at one (x, z) — so there is
+  // no affine varying to carry the flip and vroad wraps the sample itself.
+  'sunVis',
   // vesm/vblur read the pass before them; vpresent reads the scene target.
   'src', 'scene'
 ]);

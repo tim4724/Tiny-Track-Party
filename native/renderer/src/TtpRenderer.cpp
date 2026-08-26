@@ -1305,10 +1305,18 @@ void TtpRenderer::applyRoadDebug() {
             mi->setParameter("maskInk", math::float4{ kCarBlobInk.x,
                     kCarBlobInk.y, kCarBlobInk.z, 0.0f });
         }
-        // The baked-light vroad has no live sun channel left to ablate — the
-        // road's matte light became vertex data at track build (fillRoadLight),
-        // so this arm's ROAD half is structurally zero now; the ground's tap
-        // below still toggles. An OLD vroad blob keeps the knob.
+        // THE ROAD HALF OF THIS ARM IS LIVE AGAIN. It was structurally zero
+        // while the deck's sun visibility was vertex data, and it is one
+        // bilinear tap of the track-space bake now (vroadvis.mat) — so the arm
+        // measures what it says again, and the tap this change ADDED is priced
+        // by the instrument that already exists. A 0 lat span is the shader's
+        // own "no map" path, so the ablated arm takes no tap at all rather
+        // than one against a white texture.
+        if (mi->getMaterial()->hasParameter("invSunVisLatSpan")) {
+            mi->setParameter("invSunVisLatSpan",
+                    (mRoadMask & kFeatRoadShadow) ? roadVisLatSpan() : 0.0f);
+        }
+        // An OLD vroad blob (live ESM decode per fragment) keeps the knob.
         if (mi->getMaterial()->hasParameter("shadowTexel")) {
             mi->setParameter("shadowTexel",
                     (mRoadMask & kFeatRoadShadow) ? texel : 0.0f);
@@ -1316,11 +1324,8 @@ void TtpRenderer::applyRoadDebug() {
     };
     for (RoadChunk& ch : mRoadChunks) set(ch.mi);
     set(mRoadInst);
-    // The GROUND's tap rides the same arm — and under the baked-light vroad it
-    // is the arm's only live half: the road's sun visibility became vertex
-    // data at track build (fillRoadLight), so nothing per-frame is left to
-    // toggle there. The ground's only knob IS the texture — white reads as
-    // fully lit.
+    // The GROUND's tap rides the same arm. Its only knob IS the texture —
+    // white reads as fully lit.
     if (mGroundInst && mGroundMaterial && mGroundMaterial->hasParameter("visMap")
             && !(mRoadMask & kFeatRoadShadow)) {
         Texture* w = whiteTexture();
@@ -1386,6 +1391,12 @@ void TtpRenderer::debugFeatureMask(uint32_t mask) {
                 (mSkidTex && mSkidLatHalf > 0.0f) ? 0.5f / mSkidLatHalf : 0.0f);
         if (mi->getMaterial()->hasParameter("shadowTexel")) {
             mi->setParameter("shadowTexel", mShadowMap ? mShadowTexel : 0.0f);
+        }
+        // The deck's sun-visibility tap likewise: applyRoadDebug forces its lat
+        // span to 0, and it has no per-frame writer, so nothing else would ever
+        // put it back — and applyRoadDebug returns early once the mask is whole.
+        if (mi->getMaterial()->hasParameter("invSunVisLatSpan")) {
+            mi->setParameter("invSunVisLatSpan", roadVisLatSpan());
         }
         // The carShadow tap back on (the masked arrays restore themselves
         // through the cleared lastMask on the next uploadDeckDecals; the tap
@@ -1643,21 +1654,14 @@ TtpRenderer::~TtpRenderer() {
     // The parked bodies go with the loader that made them, and only here: a
     // scene release parks, it does not destroy.
     drainBodyPool();
-    // A road-light readback that never landed is LEAKED on purpose, exactly as
-    // the old inline version leaked its own: the driver may still hold a pointer
-    // into that buffer, and there is no tick left to complete it. The difference
-    // is the count — this is at most a couple of buffers once, at teardown,
-    // where it used to be one per build that outran its readback, forever.
-    for (auto& g : mRoadLightGraves) (void) g.release();
-    if (mRoadLightRead && !mRoadLightRead->done) (void) mRoadLightRead.release();
     // Engine-lifetime, like the parsed-kit cache: outlives every scene, so it
     // is this destructor's to free and no releaseScene's.
     for (const auto& [_, tex] : mSkyCubemaps) mEngine->destroy(tex);
     mSkyCubemaps.clear();
-    // A staged blob's reads go the same way, and retireStaged already states the
-    // trade: an unlanded buffer is leaked because the driver may still be
-    // writing into it. The textures they were reading from can simply go — the
-    // engine is going with them.
+    // A staged blob's unlanded reads are LEAKED on purpose, and retireStaged
+    // already states the trade: the driver may still be writing into that
+    // buffer and there is no tick left to complete it. The textures they were
+    // reading from can simply go — the engine is going with them.
     for (auto& s : mStaged) retireStaged(*s);
     mStaged.clear();
     for (Texture* t : mTexGraves) mEngine->destroy(t);
@@ -1674,6 +1678,7 @@ TtpRenderer::~TtpRenderer() {
     if (mDecalMaskArray) mEngine->destroy(mDecalMaskArray);
     if (mShadowMap) mEngine->destroy(mShadowMap);
     if (mVisMap) mEngine->destroy(mVisMap);
+    if (mRoadVisMap) mEngine->destroy(mRoadVisMap);
     if (mGlbMaterial) mEngine->destroy(mGlbMaterial);
     if (mGlbFadeMaterial) mEngine->destroy(mGlbFadeMaterial);
     delete mResourceLoader;
@@ -1716,6 +1721,7 @@ TtpRenderer::~TtpRenderer() {
     if (mLitMaterial) mEngine->destroy(mLitMaterial);
     if (mLitPlainMaterial) mEngine->destroy(mLitPlainMaterial);
     if (mVisMaterial) mEngine->destroy(mVisMaterial);
+    if (mRoadVisMaterial) mEngine->destroy(mRoadVisMaterial);
     if (mRoadMaterial) mEngine->destroy(mRoadMaterial);
     for (size_t i = 0; i < mCellViews.size(); i++) {
         mEngine->destroy(mCellViews[i]);

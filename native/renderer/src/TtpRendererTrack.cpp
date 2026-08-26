@@ -470,7 +470,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     if (bakedLight) {
         mRoad.custom0.resize(mRoad.verts.size(),
                 math::half4{ 1.0f, 1.0f, 1.0f, 1.0f });
-        fillRoadLight(tb, nullptr, 0, 0);
+        fillRoadLight(tb);
     }
     // Chunked: ~2.5k triangles a piece, each with its own bounds, so a chase
     // camera pays for the stretch of circuit it can actually see instead of all
@@ -2040,6 +2040,10 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         if (mRoadInst) bindShadowMap(mRoadInst);
         for (const RoadChunk& ch : mRoadChunks) bindShadowMap(ch.mi);
     }
+    // What the deck DOES take is its own track-space visibility map — the term
+    // that could not survive being a vertex attribute (vroadvis.mat).
+    if (mRoadInst) bindRoadVisMap(mRoadInst);
+    for (const RoadChunk& ch : mRoadChunks) bindRoadVisMap(ch.mi);
     // ...and the ground takes its BAKED visibility map instead — an elevated
     // deck lays its shape on the floor below through vvis's one-time decode.
     if (mGroundInst) bindVisMap(mGroundInst);
@@ -2223,11 +2227,6 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
     // Re-entrant: the game calls this again for every race (releaseScene()
     // first). The three materials are RENDERER scope — compiled once from the
     // provided .filamat bytes and reused by every scene after.
-    //
-    // The serial is what makes a road-light readback still in flight from the
-    // LAST build identifiable as stale (see RoadLightRead): it would otherwise
-    // land on a road mesh that is not the one it was read for.
-    mBuildSerial++;
     const auto mat = mAssets.find("vcolor.filamat");
     if (mat == mAssets.end()) return false;
     if (!mMaterial) {
@@ -2303,6 +2302,16 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
     if (!mVisMaterial && vvis != mAssets.end()) {
         mVisMaterial = Material::Builder()
                 .package(vvis->second.data(), vvis->second.size())
+                .build(*mEngine);
+    }
+    // The DECK's visibility BAKE material (vroadvis.mat) — the road's half of
+    // what vvis does for the ground, used once per track inside bakeShadowMap
+    // and never in a frame. Optional like the rest: without it no map is baked
+    // and bindRoadVisMap's 0 lat span leaves the deck fully lit.
+    const auto vroadvis = mAssets.find("vroadvis.filamat");
+    if (!mRoadVisMaterial && vroadvis != mAssets.end()) {
+        mRoadVisMaterial = Material::Builder()
+                .package(vroadvis->second.data(), vroadvis->second.size())
                 .build(*mEngine);
     }
     const auto vpoint = mAssets.find("vpoint.filamat");

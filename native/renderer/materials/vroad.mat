@@ -29,19 +29,31 @@
 material {
     name : TtpVroad,
     // The per-vertex fog factor (ttp_fog.inc); .yzw unused.
-    variables : [ fog ],
+    // fog.x + the ambient term in .yzw, and the sun term in `sun`.xyz. The same
+    // layout vground carries, for the same reason: the deck's visibility is a
+    // per-fragment tap now, so the two halves of the light have to reach the
+    // fragment separately — multiplying a tap into the FINISHED light would
+    // darken the ambient floor with it and take a shadowed deck to black.
+    variables : [ fog, sun ],
     requires : [
         color,
         // (s, lat) in world units — see above
         uv0,
-        // The matte light — ambient + sun + the baked ESM's visibility — BAKED
-        // per road vertex at track build (TtpRenderer::fillRoadLight, the CPU
-        // twin of ttpMatteLight): every input is static per track, so
-        // re-evaluating it per vertex PER FRAME bought nothing. Baking it also
-        // retired `tangents` — nothing in either stage reads the normal now,
-        // which drops a 16-byte qtangent fetch per vertex on the scene's
+        // The matte light's SMOOTH HALVES, baked per road vertex at track build
+        // (TtpRenderer::fillRoadLight, the CPU twin of ttpMatteAmbient): .xyz is
+        // the ambient term, .w is NoL. Every input is static per track, so
+        // re-evaluating them per vertex PER FRAME bought nothing. Baking them
+        // also retired `tangents` — nothing in either stage reads the normal
+        // now, which drops a 16-byte qtangent fetch per vertex on the scene's
         // biggest mesh (buildMesh feeds CUSTOM0 instead of TANGENTS when this
         // attribute is required).
+        //
+        // VISIBILITY IS NOT IN HERE, and that is the point. It used to be —
+        // custom0 held the finished ambient + sun × vis — and it was the one
+        // term that is NOT smooth across the deck: the cross-section leaves
+        // ~2.15 u of each lane with no vertex column, so a cast shadow narrower
+        // than that was interpolated away. It comes from a track-space tap now
+        // (sunVis, below); vroadvis.mat carries the full argument.
         custom0
     ],
     shadingModel : unlit,
@@ -54,11 +66,29 @@ material {
     // 1 - lat equals the decal's lat, i.e. over by the far kerb. Off.
     flipUV : false,
     parameters : [
-        // (No shadow parameters here any more: the ESM decode this material
-        // shared with vlit runs ONCE per track now, on the CPU, into the
-        // custom0 vertex light — see fillRoadLight. That also unbinds a
-        // sampler from every road chunk's draw, the same per-draw descriptor
-        // cost vlitns.mat exists to avoid.)
+        // — the deck's sun visibility —
+        // (Still NO ESM parameters here: the decode this material shared with
+        // vlit runs ONCE per track, in vroadvis.mat's bake, and what reaches a
+        // draw is one R8 tap. That keeps the ESM's sampler and its highp mat4
+        // off every road chunk's draw, the same per-draw descriptor cost
+        // vlitns.mat exists to avoid.)
+        //
+        // Baked in TRACK space so a barrel roll and the deck beneath it are
+        // distinct texels — see vroadvis.mat for why the light's own grid
+        // cannot hold both, and why this replaced a per-vertex term.
+        { type : sampler2d, name : sunVis },
+        // 0.5 / (the map's lat half-span), premultiplied C++-side so the v
+        // mapping is a MAD rather than a per-fragment divide — the same trade
+        // invSkidLatSpan makes just below. 0 disables the tap (no map baked:
+        // shadows off, no float targets, or a torn-down scene), which reads as
+        // fully lit and is exactly what the old shadowTexel-0 path answered.
+        //
+        // NOT the rubber layer's span, deliberately. That one reaches
+        // maxHalf + 0.7 so a mark can never touch the CLAMP edge rows the
+        // stamper relies on staying empty; this one is the DECK's own ±maxHalf
+        // precisely so that a kerb's out-of-band lat clamps ONTO the deck edge
+        // and inherits its shadow instead of falling off the map.
+        { type : float, name : invSunVisLatSpan },
 
         // — deck decals: ONE typed uniform list (profiles) + ONE texture tap
         //   (the car shadows) —
@@ -452,8 +482,11 @@ fragment {
         // former so nothing else in the pipeline touches it.
         material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
 
-        // The light is variable_fog.yzw, BAKED per vertex at track build — see
-        // the vertex block. Nothing in either stage reads the normal any more.
+        // The light's two halves are variable_fog.yzw (ambient) and
+        // variable_sun.xyz (sun at full visibility), both BAKED per vertex at
+        // track build — see the vertex block. Nothing in either stage reads the
+        // normal any more. The visibility that scales the sun half is the
+        // track-space tap below, not a vertex term.
         vec3 base = getColor().rgb;
 
         // THE DECK MASK IS A PER-VERTEX FLAG, NOT A THRESHOLD. One was in this
@@ -544,13 +577,41 @@ fragment {
             }
         }
 
+        // THE DECK'S SUN VISIBILITY, one bilinear tap of the track-space bake.
+        // Re-uses tc.x's lap normalisation (invTrackLength) so u cannot drift
+        // from the rubber layer's; only the lat span differs, and vroadvis.mat
+        // says why. uvToRenderTargetUV is mandatory: the map is an OFFSCREEN
+        // RENDER TARGET, so v = 0 names the first row in memory — the bottom of
+        // the picture on OpenGL and the top on Metal, Vulkan and WebGPU — and a
+        // raw sample reads it mirrored on those backends. Same correction
+        // sunVisibility and vground already carry.
+        //
+        // A kerb, skirt or underside fragment carries OFF_DECK_LAT here, so it
+        // clamps onto the outermost deck column and inherits that column's
+        // shadow: a band crosses the rail instead of stopping at it.
+        float vis = 1.0;
+        if (materialParams.invSunVisLatSpan > 0.0) {
+            vis = textureLod(materialParams_sunVis, uvToRenderTargetUV(vec2(
+                    tc.x * materialParams.invTrackLength,
+                    clamp(tc.y * materialParams.invSunVisLatSpan + 0.5,
+                            0.0, 1.0))), 0.0).r;
+        }
         // emissive.w = 0 → no second exposure; both terms are pre-exposed.
         material.emissive = vec4(
-                ttpFogMix(ttpGrade(base * variable_fog.yzw), variable_fog.x), 0.0);
+                ttpFogMix(ttpGrade(base
+                        * (variable_fog.yzw + variable_sun.xyz * vis)),
+                        variable_fog.x), 0.0);
     }
 }
 
 vertex {
+    // NO_SUN_SHADOW so the include emits no sunVisibility referencing shadow
+    // parameters this material does not declare — the visibility is the
+    // fragment's baked tap. SHADE_VERTEX for the usual no-fwidth reason.
+    // Exactly vground's pair, and for exactly its reasons.
+    #define TTP_NO_SUN_SHADOW
+    #define TTP_SHADE_VERTEX
+    #include "ttp_shade.inc"
     #include "ttp_fog.inc"
 
     // TWO smooth terms, in ONE varying. The fog factor is .x — camera-dependent,
@@ -564,11 +625,16 @@ vertex {
     // tap, a log, a sqrt and two smoothsteps, per road vertex PER FRAME, and
     // every input is static per track: the sun is fixed, the deck never moves,
     // and the cars cast blob decals rather than ESM shadows.
-    // TtpRenderer::fillRoadLight evaluates the identical ttpMatteLight (minus
-    // the fwidth AA floor, which vvis.mat's bake drops for the same reason)
-    // once per track, after bakeShadowMap, and this stage is left with a move.
+    // TtpRenderer::fillRoadLight evaluates the identical ttpMatteAmbient once
+    // per track and this stage is left with a move; the sun term is one
+    // multiply off frameUniforms, which is where vground takes its own from.
+    //
+    // ttpMatteSunTerm's `n` is unused — every term in it reaches the surface
+    // through NoL alone — so the baked scalar is the whole input, and the one
+    // spelling in ttp_shade.inc still owns the constant.
     void materialVertex(inout MaterialVertexInputs material) {
-        material.fog = vec4(ttpFogFactor(material.worldPosition.xyz),
-                getCustom0().xyz);
+        vec4 c0 = getCustom0();
+        material.fog = vec4(ttpFogFactor(material.worldPosition.xyz), c0.xyz);
+        material.sun = vec4(ttpMatteSunTerm(vec3(0.0, 1.0, 0.0), c0.w), 0.0);
     }
 }

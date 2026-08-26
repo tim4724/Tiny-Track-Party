@@ -1,0 +1,92 @@
+// The ROAD DECK's sun-visibility BAKE, in TRACK space — one pass at track
+// build, never per frame. The deck's half of what vvis.mat does for the ground.
+//
+// WHY THE DECK NEEDED ITS OWN MAP. The deck's light was baked PER VERTEX into
+// custom0 (see fillRoadLight), on the premise that a shadow whose penumbra is
+// 0.6 world units is smooth against the road's 0.48 u ring step. That premise
+// holds ALONG the track and fails ACROSS it: the 16-point cross-section puts
+// deck-level columns at lat ±half, ±(half-gap), ±(half-gap-lw) and ±dashW/2, so
+// each lane spans ~2.15 u with no vertex in it at all. A cast shadow narrower
+// than that — a barrel roll's, where the rolled deck turns edge-on to the sun
+// and its shadow closes to ~2 u — lands between the columns and is interpolated
+// into a 2.15 u linear ramp or lost outright. Measured on skyline's roll: the
+// fully-dark core goes 1.62 u (truth) to 0.66 u (per vertex), and the per-vertex
+// answer barely moves as the roll turns, because it is pinned to the columns
+// rather than following the caster.
+//
+// WHY TRACK SPACE AND NOT THE LIGHT'S GRID. vvis bakes the ground on the light's
+// own grid, which works because the ground is single-valued under a near-overhead
+// sun. The road is not: a barrel roll sits directly over the deck it shadows and
+// a loop has two arclengths at one (x, z), so both would land in the same texel.
+// Track space is the one parameterisation where they are distinct — the same
+// reason the deck's decals and its rubber layer live there.
+//
+// SO THE MESH IS RASTERIZED BY ITS OWN uv0. vertexDomain is `device`, and the
+// bake mesh (buildRoadVisMesh) carries the deck's (s, lat) already mapped to
+// clip space in POSITION, with the light-space uv and NoL riding custom0. Two
+// consequences worth knowing:
+//
+//   - OFF-DECK STRIPS CLIP THEMSELVES OUT, for free. The road's section is a
+//     CLOSED ring and only the strips with both endpoints at y == 0 carry real
+//     track space; the kerbs, skirts and underside get OFF_DECK_LAT (1000), which
+//     maps far outside the viewport. The deck flag is a per-QUAD constant, so
+//     such a quad has all four corners outside and is dropped whole — no test
+//     here, and no way for this pass and the decal loop to disagree about what
+//     the deck is.
+//   - AND THOSE STRIPS STILL GET A SHADOW, by CLAMP_TO_EDGE. The map's lat span
+//     is the deck's own (±maxHalf), so a kerb's out-of-band lat clamps to the
+//     outermost deck column beside it. A kerb top stands 0.26 u above the deck,
+//     which displaces its true shadow by 0.26 × 0.208 = 0.05 u — far inside one
+//     texel — so the deck's answer IS the kerb's. That is what keeps a shadow
+//     band from stopping dead at the rail, with no second parameterisation.
+//
+// The visibility written here is the FULL runtime decode including the
+// edge-on fade, so vroad multiplies it straight into its sun term.
+material {
+    name : TtpVroadvis,
+    requires : [
+        // (light-space uv .xyz, NoL) — see buildRoadVisMesh. NOT a world
+        // position: the uv is affine in it and w is exactly 1 (ortho light), so
+        // interpolating the uv is exact and keeps this varying in a range that
+        // does not care about precision, where a world position would.
+        custom0
+    ],
+    variables : [ probe ],
+    vertexDomain : device,
+    shadingModel : unlit,
+    culling : none,
+    depthWrite : false,
+    depthCulling : false,
+    parameters : [
+        // The five shadow parameters, by the same names ttp_shade.inc reads
+        // everywhere — bindShadowMap fills them on this instance too.
+        { type : sampler2d, name : shadowMap, precision : high },
+        { type : mat4, name : shadowFromWorld, precision : high },
+        { type : float, name : shadowTexel },
+        { type : float, name : shadowK },
+        { type : float, name : shadowDepthScale }
+    ]
+}
+
+vertex {
+    void materialVertex(inout MaterialVertexInputs material) {
+        material.probe = getCustom0();
+    }
+}
+
+fragment {
+    // SHADE_VERTEX drops the fwidth AA floor, exactly as vvis.mat's bake does:
+    // that term guards SCREEN-space aliasing of the compare, and there is no
+    // screen here. After the bake the map's own bilinear filtering plus the
+    // world-unit floor on the ramp (kPenumbraWorld) carry that job.
+    #define TTP_SHADE_VERTEX
+    #include "ttp_shade.inc"
+
+    void material(inout MaterialInputs material) {
+        prepareMaterial(material);
+        material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
+        material.emissive = vec4(
+                sunVisibilityUV(variable_probe.xyz, variable_probe.w),
+                0.0, 0.0, 0.0);
+    }
+}

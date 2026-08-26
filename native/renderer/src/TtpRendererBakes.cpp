@@ -312,28 +312,24 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     // knows what a scene is OF — and an empty one means "do not reuse", which is
     // what every caller that has not opted in gets.
     //
-    // The road's vertex light is NOT skipped: the road MESH is new every build,
-    // so its CUSTOM0 has to be refilled. That is the cheap half (~45 ms), and it
-    // reads the ESM back out of the cached pixels rather than off the GPU again.
-    // The two guards below (shadows off, a road with no verts) both DROP the
-    // resident maps on purpose, so the reuse test has to clear them itself
-    // rather than sit after them.
+    // What is NOT skipped is anything keyed to the road MESH, which is new on
+    // every build — see the two calls inside. The two guards below (shadows off,
+    // a road with no verts) both DROP the resident maps on purpose, so the reuse
+    // test has to clear them itself rather than sit after them.
     if (!mBakeKey.empty() && mBakeKey == mBakedKey && mShadowMap
             && mShadowsEnabled && !mRoad.verts.empty() && mRenderer) {
-        // THE ROAD'S LIGHT COMES WITH THE MAPS. Same track, so the road mesh was
-        // rebuilt identically and its CUSTOM0 is the same bytes; uploading them
-        // skips the ESM readback AND the per-vertex evaluation. The size test is
-        // the belt to that braces: a road of a different length is not this
-        // track's, whatever the key says, and the honest answer then is to
-        // re-derive rather than to upload a fill that does not fit.
-        if (mRoadLight.size() == mRoad.custom0.size() && !mRoadLight.empty() && mRoad.vb) {
-            mRoad.custom0 = mRoadLight;
-            mRoad.vb->setBufferAt(*mEngine, mRoad.custom0Slot,
-                    VertexBuffer::BufferDescriptor(mRoad.custom0.data(),
-                            mRoad.custom0.size() * sizeof(half4), nullptr));
-        } else {
-            refillRoadLight(tb);
-        }
+        // THE ROAD'S LIGHT IS NOT WORTH CACHING. Ambient and NoL come off the
+        // road's own normals, so re-deriving them is a few hundred microseconds
+        // of arithmetic and a cache would only be a second thing to keep in step
+        // with the mesh.
+        applyRoadLight(tb);
+        // AND THE DECK'S MAP IS RE-BAKED, not reused with the ESM. It is keyed
+        // to the ROAD MESH's track space, and the mesh is rebuilt on every
+        // build; re-deriving it is one draw into a small target with no readback
+        // and no wait, which is cheaper than reasoning about whether a map
+        // outlived the mesh it was rasterized from. The ESM above is the
+        // expensive half and that IS reused.
+        bakeRoadVis(tb);
         mBakeKey.clear();   // CONSUMED — see the clear on the baking path below
         bakeMark("reused");
         utils::slog.i << "ttp shadow bake: REUSED " << mBakedKey.c_str()
@@ -341,7 +337,6 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
         return;
     }
     mBakedKey.clear();   // whatever is resident is about to stop being the truth
-    mRoadLight.clear();
     // THROUGH replaceShadowMaps, NOT destroy: the previous build may have staged
     // a blob whose readback is still writing into one of these, and on GL it
     // routinely is. The ground's visibility bake rides this function (it needs
@@ -761,17 +756,26 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
         }
     }
 
-    // ── The ROAD's baked vertex light ────────────────────────────────────
+    // ── The ROAD's baked vertex light, and the deck's visibility map ─────
     // vroad's materialVertex used to run the whole matte-light split per road
     // vertex PER FRAME (a mat4 multiply, a vertex texture tap, a log, a sqrt,
     // two smoothsteps — on the scene's biggest mesh), and every input is
-    // static per track. Read the finished ESM back once and evaluate the
-    // identical function on the CPU into the road's CUSTOM0 attribute. The
-    // readback is asynchronous on every backend; this is track build, and the
-    // one hitch at load is already the documented price of the bakes.
-    if (esmOk) refillRoadLight(tb);
-    mRoadLight = mRoad.custom0;   // for the next build of this same track
+    // static per track, so it was evaluated once here instead.
+    //
+    // THE SPLIT MOVED, and only its smooth half is still a vertex term. Ambient
+    // and NoL vary over metres in BOTH axes and stay baked; visibility does not
+    // — the cross-section leaves ~2.15 u of each lane with no vertex column, so
+    // a cast shadow narrower than that was interpolated away (vroadvis.mat has
+    // the measurements). It is a track-space GPU bake now.
+    //
+    // Which is also why nothing here reads a map any more, and why the whole
+    // deferred-readback apparatus this function used to need is gone: the fill
+    // is arithmetic over the road's own normals and completes inside the build
+    // on every backend.
+    applyRoadLight(tb);
     bakeMark("roadLight");
+    bakeRoadVis(tb);
+    bakeMark("roadVis");
 
     mEngine->destroy(view);
     mEngine->destroy(rt);
@@ -791,187 +795,181 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     }
 }
 
-// Read the finished ESM back and refill the ROAD's baked vertex light.
+// ── The DECK's sun-visibility bake ──────────────────────────────────────────
 //
-// Split out because BOTH bake paths need it: the road MESH is rebuilt on every
-// build even when the map that lights it is the one already resident, so a
-// reused bake still has to refill CUSTOM0 on the new vertices.
-void TtpRenderer::refillRoadLight(const TrackBin& tb) {
-    if (mRoad.custom0.empty() || !mRoad.vb || !mShadowMap || !mRenderer) return;
-    // Whatever was in flight is the PREVIOUS road's, and this build has just
-    // replaced the mesh it would have been written into.
-    dropRoadLightRead();
-    const uint32_t W = mShadowMap->getWidth(0);
-    const uint32_t H = mShadowMap->getHeight(0);
-    RenderTarget* rrt = RenderTarget::Builder()
-            .texture(RenderTarget::AttachmentPoint::COLOR, mShadowMap)
-            .build(*mEngine);
-    if (!rrt) return;
-    // Heap-owned, because it may well outlive this function — see RoadLightRead
-    // for the backend where it always does. `done` is atomic: the completion
-    // callback fires on a backend thread (Metal's completion queue, GL's driver
-    // thread) while this one polls it.
-    auto rd = std::make_unique<RoadLightRead>();
-    rd->px.resize((size_t) W * H * 4);
-    rd->rt = rrt;
-    rd->w = W;
-    rd->h = H;
-    rd->serial = mBuildSerial;
-    // RGBA + FLOAT: the one float readback combo all three backends accept
-    // (WebGL2 guarantees exactly this pair for float targets; Metal maps it to
-    // RGBA32Float).
-    Texture::PixelBufferDescriptor pbd(rd->px.data(),
-            rd->px.size() * sizeof(float),
-            Texture::Format::RGBA, Texture::Type::FLOAT,
-            [](void*, size_t, void* user) {
-                static_cast<RoadLightRead*>(user)->done = true;
-            }, rd.get());
-    mRenderer->readPixels(rrt, 0, 0, W, H, std::move(pbd));
-    // THE FAST PATH IS STILL THE FAST PATH. Metal and Vulkan complete inside
-    // this pump, so they finish here with the road lit before the build returns
-    // and nothing is ever deferred on them.
-    for (int t = 0; t < 8 && !rd->done; t++) mEngine->flushAndWait();
-    if (rd->done) {
-        applyRoadLight(tb, rd->px.data(), W, H);
-        mRoadLight = mRoad.custom0;   // for the next build of this same track
-        mEngine->destroy(rrt);
+// One draw of the road, rasterized by its OWN uv0 into a track-space R8 map.
+// vroadvis.mat carries the whole argument for why the deck needs a map at all
+// and why it cannot be the light's grid; this is the plumbing.
+//
+// NO READBACK, and that is the point of the whole shape: the ESM stays on the
+// GPU and is sampled by the bake shader, where it used to be pulled to the CPU
+// so fillRoadLight could evaluate the same decode per vertex.
+void TtpRenderer::bakeRoadVis(const TrackBin& tb) {
+    if (mRoadVisMap) { mEngine->destroy(mRoadVisMap); mRoadVisMap = nullptr; }
+    mRoadVisLatHalf = 0;
+    if (!mRoadVisMaterial || !mShadowMap || !mRenderer || !mRoad.ib
+            || mRoad.verts.empty() || mRoad.uvs.size() < mRoad.verts.size()
+            || mRoad.normals.size() < mRoad.verts.size()) {
         return;
     }
-    // …and GL keeps it for the frame loop, where endFrame ticks the driver.
-    // mRoadLight is deliberately NOT stamped here: it is the reuse path's copy
-    // of a FINISHED fill, and an unshadowed one would be uploaded verbatim by
-    // the next build of this same track. Left empty, that path re-reads instead.
-    mRoadLightRead = std::move(rd);
-}
+    // The DECK's own half-span. Not the rubber layer's maxHalf + 0.7: an
+    // off-deck lat has to clamp ONTO the deck edge here, not into a margin.
+    float maxHalf = tb.roadWidth * 0.5f;
+    for (const TrackBin::Sample& r : tb.rings) maxHalf = std::max(maxHalf, r.width * 0.5f);
+    if (!(maxHalf > 0.0f) || !(tb.length > 1.0f)) return;
 
-// Apply a road-light readback that landed after its build had returned.
-void TtpRenderer::collectRoadLight() {
-    // Graves first: a parked read that has now completed can simply be freed.
-    for (size_t i = mRoadLightGraves.size(); i-- > 0;) {
-        if (mRoadLightGraves[i]->done) mRoadLightGraves.erase(mRoadLightGraves.begin() + (long) i);
+    // SIZED FROM THE PENUMBRA, not from the deck's texel budget. kPenumbraWorld
+    // is 0.6 world units, and ~8 texels across it is smooth under a bilinear
+    // tap, so ~13 texels/u is the target on both axes. The width cap is what
+    // binds on a long lap (as it does for the rubber layer), and where it binds
+    // the map simply gets coarser ALONG the track — the axis the old per-vertex
+    // term was already fine on, since the rings are 0.48 u apart.
+    const uint32_t W = (uint32_t) std::min((float) mMaxTextureDim,
+            std::max(512.0f, std::round(tb.length * 13.0f)));
+    const uint32_t H = (uint32_t) std::min(256.0f,
+            std::max(64.0f, std::round(2.0f * maxHalf * 13.0f)));
+
+    // The bake mesh: the road's own topology, with POSITION already in clip
+    // space (track uv) and custom0 carrying what the fragment needs. Built here
+    // and destroyed below — it is a few hundred KB for one draw, and keeping it
+    // would mean keeping it in step with a mesh that is rebuilt every build.
+    // HEAP-OWNED, WITH A RELEASE CALLBACK, and this is not defensive. A
+    // BufferDescriptor over a LOCAL is a use-after-free that no flush covers:
+    // the upload is asynchronous, so the driver may read these bytes long after
+    // this function has returned and its stack is gone. Measured on the Android
+    // box, where it cost the whole render loop — the warm launch built its
+    // scene, emitted one readout and then presented nothing more.
+    //
+    // Same law the blob import already carries ("AN IMPORT OWNS ITS PIXELS") and
+    // the same one mRoad's own CPU copies obey by living for the whole run.
+    const size_t nv = mRoad.verts.size();
+    float* pos = new float[nv * 3];
+    float* probe = new float[nv * 4];
+    const auto freeFloats = [](void* buf, size_t, void*) {
+        delete[] static_cast<float*>(buf);
+    };
+    const float invLen = 1.0f / tb.length;
+    const float invLat = 0.5f / maxHalf;
+    for (size_t i = 0; i < nv; i++) {
+        const float2 tc = mRoad.uvs[i];
+        // OFF-DECK STRIPS CARRY OFF_DECK_LAT AND CLIP THEMSELVES OUT. The deck
+        // flag is a per-quad constant, so such a quad has all four corners far
+        // outside the viewport and is dropped whole.
+        pos[i * 3 + 0] = tc.x * invLen * 2.0f - 1.0f;
+        pos[i * 3 + 1] = (tc.y * invLat + 0.5f) * 2.0f - 1.0f;
+        pos[i * 3 + 2] = 0.0f;
+        const float3 nrm = mRoad.normals[i];
+        const float3 wp{ mRoad.verts[i].px, mRoad.verts[i].py, mRoad.verts[i].pz };
+        const float4 uv = mShadowFromWorld * float4{ wp, 1.0f };
+        probe[i * 4 + 0] = uv.x;
+        probe[i * 4 + 1] = uv.y;
+        probe[i * 4 + 2] = uv.z;
+        probe[i * 4 + 3] = std::min(1.0f, std::max(0.0f, dot(nrm, kToSun)));
     }
-    if (!mRoadLightRead || !mRoadLightRead->done) return;
-    const std::unique_ptr<RoadLightRead> rd = std::move(mRoadLightRead);
-    if (rd->rt) mEngine->destroy(rd->rt);
-    // STALE IS DROPPED, NOT APPLIED. A build that started while this was in
-    // flight has a different road mesh, and CUSTOM0 sized for the old one would
-    // be written over the new one's — the size test is the belt to that brace.
-    if (rd->serial != mBuildSerial || !mTrack || !mRoad.vb) return;
-    if (mRoad.custom0.size() != (size_t) mRoad.verts.size()) return;
-    applyRoadLight(*mTrack, rd->px.data(), rd->w, rd->h);
-    mRoadLight = mRoad.custom0;   // now it IS a finished fill; the reuse path may have it
+    VertexBuffer* vb = VertexBuffer::Builder()
+            .vertexCount((uint32_t) nv).bufferCount(2)
+            .attribute(VertexAttribute::POSITION, 0, VertexBuffer::AttributeType::FLOAT3)
+            .attribute(VertexAttribute::CUSTOM0, 1, VertexBuffer::AttributeType::FLOAT4)
+            .build(*mEngine);
+    if (!vb) { delete[] pos; delete[] probe; return; }
+    vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
+            pos, nv * 3 * sizeof(float), freeFloats));
+    vb->setBufferAt(*mEngine, 1, VertexBuffer::BufferDescriptor(
+            probe, nv * 4 * sizeof(float), freeFloats));
+
+    Texture* vis = Texture::Builder()
+            .width(W).height(H).levels(1)
+            .format(Texture::InternalFormat::R8)
+            .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
+            .build(*mEngine);
+    if (!vis) { mEngine->destroy(vb); return; }   // vb's descriptors free themselves
+
+    MaterialInstance* mi = mRoadVisMaterial->createInstance();
+    bindShadowMap(mi);
+    utils::Entity e = utils::EntityManager::get().create();
+    RenderableManager::Builder(1)
+            .boundingBox({ { 0, 0, 0 }, { 1, 1, 1 } })
+            .material(0, mi)
+            .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
+                    vb, mRoad.ib, 0, mRoad.idx.size())
+            .culling(false).castShadows(false).receiveShadows(false)
+            .build(*mEngine, e);
+    Scene* sc = mEngine->createScene();
+    sc->addEntity(e);
+    utils::Entity camEnt = utils::EntityManager::get().create();
+    Camera* cam = mEngine->createCamera(camEnt);
+    cam->setProjection(Camera::Projection::ORTHO, -1, 1, -1, 1, 0, 1);
+    RenderTarget* rt = RenderTarget::Builder()
+            .texture(RenderTarget::AttachmentPoint::COLOR, vis)
+            .build(*mEngine);
+    View* v = mEngine->createView();
+    v->setScene(sc);
+    v->setCamera(cam);
+    v->setViewport({ 0, 0, W, H });
+    v->setRenderTarget(rt);
+    v->setPostProcessingEnabled(false);
+    v->setShadowingEnabled(false);
+    v->setFrustumCullingEnabled(false);
+    const Renderer::ClearOptions prev = mRenderer->getClearOptions();
+    Renderer::ClearOptions co{};
+    co.clear = true;
+    // FULLY LIT where no deck quad lands. The margin rows outside the deck's
+    // own lat span are never rasterized, and CLAMP_TO_EDGE means a receiver
+    // never samples them anyway — but a cleared target must not start as ink.
+    co.clearColor = { 1, 1, 1, 1 };
+    mRenderer->setClearOptions(co);
+    mRenderer->renderStandaloneView(v);
+    mRenderer->setClearOptions(prev);
+    // NOT flushAndWait: nothing reads this back, and the only ordering that
+    // matters is Filament's own (the tap happens in a later frame's draw).
+    mEngine->destroy(v);
+    mEngine->destroy(rt);
+    mEngine->destroyCameraComponent(camEnt);
+    utils::EntityManager::get().destroy(camEnt);
+    sc->remove(e);
+    mEngine->destroy(e);
+    utils::EntityManager::get().destroy(e);
+    mEngine->destroy(sc);
+    mEngine->destroy(mi);
+    mEngine->destroy(vb);
+    mRoadVisMap = vis;
+    mRoadVisLatHalf = maxHalf;
 }
 
-// Forget a read still in flight. The buffer it would write into is this
-// object's own, so it must outlive nothing — but the callback may still fire,
-// so the object is only released once it has (or with the engine).
-void TtpRenderer::dropRoadLightRead() {
-    if (!mRoadLightRead) return;
-    if (mRoadLightRead->rt) mEngine->destroy(mRoadLightRead->rt);
-    mRoadLightRead->rt = nullptr;
-    if (mRoadLightRead->done) { mRoadLightRead.reset(); return; }
-    // Never landed and never will be wanted: hand it to the graveyard rather
-    // than freeing a buffer the driver may yet write into.
-    mRoadLightGraves.push_back(std::move(mRoadLightRead));
-}
-
-// ── The road's matte light, evaluated ONCE ──────────────────────────────────
-// The CPU twin of ttpMatteLight (ttp_shade.inc) for the ROAD's vertices: the
-// 2-band SH ambient, the sun's N·L term, and sunVisibility's ESM decode —
-// minus the fwidth AA floor, exactly the term vvis.mat's bake drops
-// (TTP_SHADE_VERTEX), because it guarded SCREEN-space aliasing and the road's
-// 0.48 u rings interpolate finer than the 0.6 u penumbra. A fix in
-// ttp_shade.inc must reach this function: same arithmetic, two languages.
-//
-// frameUniforms replication, verified against the pinned fork
-// (ColorPassDescriptorSet.cpp): iblSH is the IndirectLight builder's
-// coefficients copied UNSCALED; iblLuminance is ibl intensity × exposure;
-// lightColorIntensity is { colour, lux × exposure }; lightDirection is the
-// negated light direction, i.e. kToSun. No camera here ever calls
-// setExposure, so every view shares the default exposure read off mCamera —
-// if that ever changes, this bake must follow it.
-// fillRoadLight plus the upload it is useless without. Both bake paths end here
-// — the one that just read the ESM off the GPU, and the one reusing a cached
-// read — so the road can never be filled by one of them and uploaded by neither.
-void TtpRenderer::applyRoadLight(const TrackBin& tb, const float* esm,
-        uint32_t esmW, uint32_t esmH) {
+// fillRoadLight plus the upload it is useless without.
+void TtpRenderer::applyRoadLight(const TrackBin& tb) {
     if (mRoad.custom0.empty() || !mRoad.vb) return;
-    fillRoadLight(tb, esm, esmW, esmH);
+    fillRoadLight(tb);
     mRoad.vb->setBufferAt(*mEngine, mRoad.custom0Slot,
             VertexBuffer::BufferDescriptor(mRoad.custom0.data(),
                     mRoad.custom0.size() * sizeof(half4), nullptr));
 }
 
-void TtpRenderer::fillRoadLight(const TrackBin& tb, const float* esm,
-        uint32_t esmW, uint32_t esmH) {
+void TtpRenderer::fillRoadLight(const TrackBin& tb) {
     const size_t n = mRoad.custom0.size();
-    if (!n || mRoad.normals.size() < n || mRoad.verts.size() < n) return;
+    if (!n || mRoad.normals.size() < n) return;
     const MatteRig rig = matteRig(tb);
     const float exposure = Exposure::exposure(*mCamera);
-    const float3 sunTint = rig.sunColor
-            * (rig.sunLux * exposure * (1.0f / (float) M_PI));
     const float iblLum = rig.hemiLux * exposure;
-    const float k = kShadowEsmK;
-    // ttp_shade.inc's kPenumbraWorld — the C++ twin of the shader constant
-    // (named there as this function's twin; change both).
-    constexpr float kPenumbraWorld = 0.6f;
-    const float w = kPenumbraWorld * mShadowDepthScale * k;
-    const auto smoothstep = [](float a, float b, float x) {
-        const float t = std::min(1.0f, std::max(0.0f, (x - a) / (b - a)));
-        return t * t * (3.0f - 2.0f * t);
-    };
-    // One clamped bilinear R tap of the readback — the ESM sampler's
-    // CLAMP_TO_EDGE + LINEAR, in floats. ROW ORDER: Filament's readPixels
-    // hands rows back TOP row first on every backend (the GL driver flips
-    // glReadPixels' bottom-up rows "to match our API"; Metal's memory order
-    // is already top-down), while shadowFromWorld's uv is GL-style (v = 0 at
-    // the picture's bottom) — so v flips here, the same correction
-    // uvToRenderTargetUV applies for the shader on the non-GL backends.
-    // tests/render-target-uv.test.js audits .mat files only; the gate for
-    // THIS read is visual — a wrong flip moves every climbing track's deck
-    // shadow to the mirrored half of the light frustum on all backends.
-    const auto tap = [&](float u, float v) {
-        const float fx = u * (float) esmW - 0.5f;
-        const float fy = (1.0f - v) * (float) esmH - 0.5f;
-        const int x0 = (int) std::floor(fx), y0 = (int) std::floor(fy);
-        const float tx = fx - (float) x0, ty = fy - (float) y0;
-        const auto at = [&](int x, int y) {
-            x = std::min((int) esmW - 1, std::max(0, x));
-            y = std::min((int) esmH - 1, std::max(0, y));
-            return esm[((size_t) y * esmW + x) * 4]; // RGBA rows; R = exp(-k·d)
-        };
-        const float a = at(x0, y0) + (at(x0 + 1, y0) - at(x0, y0)) * tx;
-        const float b = at(x0, y0 + 1) + (at(x0 + 1, y0 + 1) - at(x0, y0 + 1)) * tx;
-        return a + (b - a) * ty;
-    };
+    // THE SMOOTH HALVES ONLY — ambient in xyz, NoL in w. The sun's COLOUR is a
+    // frame uniform, so vroad's vertex stage rebuilds the sun term from this
+    // scalar through ttp_shade.inc's own ttpMatteSunTerm and there is still one
+    // spelling of the constant. And VISIBILITY is not here at all: it is the
+    // one term that is not smooth across the deck, so it comes from a
+    // track-space tap (bakeRoadVis) instead of being interpolated between
+    // vertex columns 2.15 u apart.
+    //
+    // Which is why this function reads no map. It used to take the ESM back off
+    // the GPU to evaluate the whole decode per vertex; now it is arithmetic
+    // over the road's own normals and finishes inside the build on every
+    // backend, so no read is ever parked and nothing has to collect one later.
     for (size_t i = 0; i < n; i++) {
         const float3 nrm = mRoad.normals[i];
-        const float3 wp{ mRoad.verts[i].px, mRoad.verts[i].py, mRoad.verts[i].pz };
         const float NoL = std::min(1.0f, std::max(0.0f, dot(nrm, kToSun)));
-        // sunVisibility, line for line (minus the fwidth floor). esm == null
-        // is the shader's shadowTexel-0 early-out: fully lit.
-        float vis = 1.0f;
-        if (esm) {
-            const float4 uv = mShadowFromWorld * float4{ wp, 1.0f };
-            // No perspective divide: ortho light, w == 1 (see ttp_shade.inc).
-            if (!(uv.x < 0.0f || uv.x > 1.0f || uv.y < 0.0f || uv.y > 1.0f
-                    || uv.z <= 0.0f || uv.z >= 1.0f)) {
-                const float slope = std::min(12.0f, std::max(1.0f,
-                        std::sqrt(std::max(0.0f, 1.0f - NoL * NoL))
-                                / std::max(NoL, 0.12f)));
-                const float biasW = mShadowTexel * 2.0f * slope;
-                const float occ = tap(uv.x, uv.y);
-                const float raw = uv.z * k + std::log(std::max(occ, 1e-30f));
-                const float biasN = std::max(biasW * mShadowDepthScale * k, w);
-                const float v = smoothstep(-w, w, raw + biasN);
-                vis = 1.0f + (v - 1.0f) * smoothstep(0.05f, 0.40f, NoL);
-            }
-        }
-        // ttpMatteAmbient + ttpMatteSunTerm × vis (sh2/sh3 are zero — the
-        // hemisphere has no horizontal band).
+        // ttpMatteAmbient (sh2/sh3 are zero — the hemisphere has no horizontal
+        // band), pre-exposed exactly as the shader's iblLuminance is.
         const float3 amb = max(rig.sh0 + rig.sh1 * nrm.y, float3{ 0.0f }) * iblLum;
-        const float3 light = amb + sunTint * (NoL * vis);
-        mRoad.custom0[i] = half4{ light.x, light.y, light.z, 1.0f };
+        mRoad.custom0[i] = half4{ amb.x, amb.y, amb.z, NoL };
     }
 }
 
@@ -1005,7 +1003,10 @@ constexpr uint32_t kBakeMagic = 0x42505454u;  // 'TTPB', little-endian
 // v2: the writing BACKEND rides the header and import refuses a foreign blob —
 // see the flip note in finishBakeBlob. v1 blobs written under Vulkan are
 // mirrored, so the bump also retires every v1 file.
-constexpr uint32_t kBakeVersion = 2u;
+// v3: the road's baked vertex light left the tail. It was cached because
+// re-deriving it needed an ESM readback; it reads no map now (fillRoadLight),
+// so the bytes cost more than the arithmetic they saved.
+constexpr uint32_t kBakeVersion = 3u;
 
 constexpr uint32_t kMaskMagic = 0x4b53544du;  // 'MTSK', little-endian
 // v3 is ONE LAYER PER BLOB, keyed by that layer's model. v2 was the whole set in
@@ -1154,9 +1155,7 @@ bool TtpRenderer::stageBlob(const std::string& key) {
     // The mirror is invisible in every way that matters until you look: the map
     // still covers the track, still has the right shape, and is simply upside
     // down — which reads on screen as a shadow that has been rotated onto the
-    // wrong side of the circuit. applyRoadLight never hits any of this because
-    // it consumes the readback directly, in the readback's own orientation, and
-    // never round-trips.
+    // wrong side of the circuit.
     blob->flip = mEngine->getBackend() == Engine::Backend::OPENGL;
 
     // WHICH KIND, decided by what the engine is holding rather than by an
@@ -1177,9 +1176,6 @@ bool TtpRenderer::stageBlob(const std::string& key) {
         for (int c = 0; c < 4; c++) {
             for (int r = 0; r < 4; r++) putF32(blob->head, mShadowFromWorld[c][r]);
         }
-        putU32(blob->tail, (uint32_t) mRoadLight.size());
-        blob->tail.insert(blob->tail.end(), (const uint8_t*) mRoadLight.data(),
-                (const uint8_t*) mRoadLight.data() + mRoadLight.size() * sizeof(math::half4));
         // BOTH MAPS OR NEITHER. The visibility map used to be optional here,
         // which was harmless while every read landed inside the call — and
         // silently shipped a blob with no vis map the moment one did not.
@@ -1284,7 +1280,7 @@ void TtpRenderer::retireStaged(StagedBlob& blob) {
         // A READ THAT NEVER LANDED IS LEAKED ON PURPOSE. The driver may still
         // hold a pointer into that buffer and there is no tick left that will
         // fire the callback, so freeing it here is a write into freed storage
-        // later. RoadLightRead makes the same trade at teardown and says so.
+        // later.
         if (!rd->done) (void) rd.release();
     }
     blob.reads.clear();
@@ -1394,11 +1390,6 @@ std::string TtpRenderer::importBakeBlob(const uint8_t* p, const uint8_t* end) {
     if ((size_t) (end - p) < visBytes) return std::string();
     const uint8_t* visSrc = p;
     p += visBytes;
-    uint32_t roadCount = 0;
-    if (!takeU32(p, end, roadCount)) return std::string();
-    const size_t roadBytes = (size_t) roadCount * sizeof(math::half4);
-    if ((size_t) (end - p) < roadBytes) return std::string();
-    const uint8_t* roadSrc = p;
 
     // UPLOADABLE IS NOT OPTIONAL HERE, and its absence does not report: a
     // setImage into a texture that lacks it hangs this driver outright, with no
@@ -1441,8 +1432,6 @@ std::string TtpRenderer::importBakeBlob(const uint8_t* p, const uint8_t* end) {
     mShadowTexel = texel;
     mShadowDepthScale = depthScale;
     mShadowFromWorld = fromWorld;
-    mRoadLight.assign((const math::half4*) roadSrc,
-            (const math::half4*) roadSrc + roadCount);
     mBakedKey = key;
     return key;
 }

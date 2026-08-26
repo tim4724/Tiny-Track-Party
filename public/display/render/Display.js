@@ -53,8 +53,8 @@ export const FEAT = {
 // raster + upload now (TtpRenderer::renderSkids), so there is no stamp
 // material to serve.
 const MATERIALS = ['vcolor', 'vblend', 'vlit', 'vlitns', 'vroad', 'vglb', 'vglbfade',
-                   'vpoint', 'vcloud', 'vground', 'vvis', 'vpresent', 'vesm', 'vblur',
-                   'vburst', 'voverlay'];
+                   'vpoint', 'vcloud', 'vground', 'vvis', 'vroadvis', 'vpresent', 'vesm',
+                   'vblur', 'vburst', 'voverlay'];
 
 // The GLBs every scene needs whatever the track and the biome are: the track's
 // own furniture, and the truck a monster item turns a car into. Exported because

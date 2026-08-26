@@ -100,7 +100,7 @@ public:
     // toggle, since the map is baked into the scene.
     // Clears the bake's reuse key with it: shadows-off drops the resident maps,
     // so the next build must re-bake rather than match a key against nothing.
-    void setShadowsEnabled(bool on) { mShadowsEnabled = on; mBakedKey.clear(); mRoadLight.clear(); }
+    void setShadowsEnabled(bool on) { mShadowsEnabled = on; mBakedKey.clear(); }
 
     // ---- model variants (dev) ---------------------------------------------
     // Which take on a named prop ("rocket", "gnome", "train") this and every
@@ -1001,6 +1001,15 @@ private:
     // decode per fragment — bindVisMap is the one binder.
     filament::Texture* mVisMap = nullptr;
     filament::Material* mVisMaterial = nullptr;
+    // The ROAD DECK's baked sun-visibility map (vroadvis.mat), in TRACK space
+    // rather than the light's grid — a barrel roll and the deck it shadows land
+    // in one light-space texel, and a loop has two arclengths at one (x, z).
+    // vroad taps it once per deck fragment; bindRoadVisMap is the one binder,
+    // and mRoadVisLatHalf is the deck's own ±maxHalf so an off-deck lat clamps
+    // onto the deck edge (see the material for the whole argument).
+    filament::Texture* mRoadVisMap = nullptr;
+    filament::Material* mRoadVisMaterial = nullptr;
+    float mRoadVisLatHalf = 0;
     // The bake's reuse test — see bakeShadowMap for the whole argument.
     // mBakeKey is what the caller says the NEXT build's statics are; mBakedKey
     // is what the resident maps were actually made from. They match exactly when
@@ -1068,14 +1077,6 @@ private:
     // Free every grave NOW, fence first. For teardowns that cannot wait for
     // frames because none are coming.
     void drainGravesBlocking();
-    // The ROAD's baked vertex light for mBakedKey's track, kept beside the maps
-    // it was derived from. The road MESH is rebuilt on every build, but for the
-    // same track it is rebuilt IDENTICALLY (build_race_track is a pure function
-    // of the descriptor), so its CUSTOM0 is too — and re-deriving it means
-    // reading the ESM back off the GPU (~30 ms) and evaluating the matte-light
-    // split per vertex (~15 ms) to arrive at bytes we already had. A few hundred
-    // KB against the 2 MB map next to it.
-    std::vector<filament::math::half4> mRoadLight;
     // See setShadowsEnabled. False leaves mShadowMap null, which is already the
     // "this track baked no map" path: bindShadowMap falls back to the 1×1 white
     // texture and passes shadowTexel 0, and vlit.mat reads that as fully lit.
@@ -1450,22 +1451,28 @@ private:
             // culling (the default every dynamic mesh wants).
             uint32_t chunkTris = 0);
     void destroyMesh(Mesh& m);
-    // fillRoadLight + the vertex upload that has to follow it.
-    void applyRoadLight(const TrackBin& tb, const float* esm,
-            uint32_t esmW, uint32_t esmH);
+    // fillRoadLight + the vertex upload that has to follow it. Pure arithmetic
+    // over the road's own normals now — it reads no map, so it completes inside
+    // the build on every backend and nothing is ever deferred.
+    void applyRoadLight(const TrackBin& tb);
 
-    // Read the resident ESM back and refill the road's baked vertex light.
-    void refillRoadLight(const TrackBin& tb);
-
-    // Apply a road-light readback that did not land inside the build it was
-    // issued in. Called once per frame; a no-op when nothing is in flight.
-    void collectRoadLight();
+    // Bake the deck's sun visibility into mRoadVisMap (vroadvis.mat), in track
+    // space. Needs a resident ESM and a built road; a no-op without either,
+    // which leaves the map null and the tap answering fully lit.
+    void bakeRoadVis(const TrackBin& tb);
+    // Bind mRoadVisMap (or the 1×1 stand-in) to one road material instance.
+    void bindRoadVisMap(filament::MaterialInstance* mi);
+    // vroad's sunVis lat scale, and its own "no map" signal — 0 means the
+    // shader takes no tap at all. ONE derivation: the feature ablation sets the
+    // same parameter, and a second spelling would drift from the binder.
+    float roadVisLatSpan() const {
+        return (mRoadVisMap && mRoadVisLatHalf > 0.0f) ? 0.5f / mRoadVisLatHalf : 0.0f;
+    }
 
     // Finish any staged blob whose reads have all landed, and retire the
-    // textures they were reading from. Called from the same frame beat as
-    // collectRoadLight and for the same reason: it is the one place the GL
-    // driver tick has run. A no-op on any frame with nothing staged, which is
-    // almost all of them.
+    // textures they were reading from. Called from the frame beat because that
+    // is the one place the GL driver tick has run. A no-op on any frame with
+    // nothing staged, which is almost all of them.
     //
     // EVERY BACKEND LANDS HERE, not just GL. Staging deliberately does NOT pump
     // the driver: the pump this replaced was eight flushAndWait calls on the
@@ -1476,42 +1483,6 @@ private:
     // stall and a second code path. Measured after: the first frame following a
     // build collects them on all three.
     void collectStagedBlobs();
-
-    // A road-light readback still in flight, kept alive until it lands.
-    //
-    // ON ONE BACKEND IT NEVER LANDS IN TIME. A GL readback's completion is
-    // executed from OpenGLDriver::tick(), which FRenderer::endFrame() calls and
-    // flushAndWait() does not — so the build's own pump cannot see it, however
-    // many times it flushes, and in a browser a task cannot wait on the GPU
-    // anyway. Metal and Vulkan fire theirs from command-buffer completion and
-    // land on the first pass, where this is never allocated at all.
-    //
-    // It used to be dropped on the floor: the read leaked, the road kept the
-    // unshadowed fill from build, and the deck rendered lit but taking no cast
-    // shadow — for the whole session, on the web alone, with nothing to say so.
-    // (The GROUND was unaffected, which is why it looked right: its visibility
-    // map is a shader tap that never goes near a readback.)
-    struct RoadLightRead {
-        std::vector<float> px;
-        std::atomic<bool> done{ false };
-        filament::RenderTarget* rt = nullptr;   // outlives the issue; freed on collect
-        uint32_t w = 0, h = 0;
-        uint64_t serial = 0;                    // the build it belongs to
-    };
-    std::unique_ptr<RoadLightRead> mRoadLightRead;
-
-    // Reads abandoned by a rebuild before they landed. The driver may still
-    // write into their buffers, so they are held rather than freed — the same
-    // reason the old code leaked its read on purpose, made explicit and bounded
-    // (one per build that outran its own readback, freed when it completes).
-    std::vector<std::unique_ptr<RoadLightRead>> mRoadLightGraves;
-
-    // Release a read still in flight, or park it until it lands.
-    void dropRoadLightRead();
-
-    // Bumped per scene build, so a readback that lands after the track changed
-    // is dropped rather than applied to somebody else's road.
-    uint64_t mBuildSerial = 0;
 
     // ---- staged blobs ------------------------------------------------------
     //
@@ -1563,13 +1534,13 @@ private:
     // Retire a staged blob's reads: free the RenderTargets, and LEAK the buffer
     // of any read that never landed. The driver may still hold a pointer into it
     // and there is no tick left that will fire the callback — the same trade
-    // RoadLightRead makes, and for the same reason.
+    // the road-light read used to make, and for the same reason.
     void retireStaged(StagedBlob& blob);
     // Is a texture still the destination of an unfinished read?
     bool readInFlight(const filament::Texture* tex) const;
     // Textures a staged read is still writing into, kept alive past the bake that
     // replaced them. Destroying one under an outstanding readPixels is a write
-    // into freed storage; this is the same graves idiom mRoadLightGraves uses.
+    // into freed storage.
     std::vector<filament::Texture*> mTexGraves;
     // Destroy any grave nothing is reading from any more.
     void drainTexGraves();
@@ -1775,12 +1746,10 @@ private:
     MatteRig matteRig(const TrackBin& tb) const;
     // Evaluate the road's matte light — ttpMatteLight's CPU twin, the fwidth
     // AA floor dropped exactly as vvis.mat's bake drops it — into
-    // mRoad.custom0. `esm` is bakeShadowMap's blurred exponential map read
-    // back as RGBA floats (Renderer::readPixels convention: TOP row first on
-    // every backend); null means "no map baked" and answers fully lit, like
-    // the shader's shadowTexel-0 early-out did.
-    void fillRoadLight(const TrackBin& tb, const float* esm,
-            uint32_t esmW, uint32_t esmH);
+    // mRoad.custom0 as (ambient.rgb, NoL). It reads NO map: the deck's
+    // visibility is bakeRoadVis's track-space tap, so nothing here needs the
+    // ESM off the GPU and the fill completes inside the build on every backend.
+    void fillRoadLight(const TrackBin& tb);
     // Hand the baked map + its world→light matrix to a material instance.
     void bindShadowMap(filament::MaterialInstance* mi);
     void bindVisMap(filament::MaterialInstance* mi);

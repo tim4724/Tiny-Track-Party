@@ -984,7 +984,29 @@ void TtpRenderer::bindShadowMap(MaterialInstance* mi) {
     mi->setParameter("shadowDepthScale", mShadowDepthScale);
 }
 
-// The ground's baked sun-visibility map (vvis.mat) — its uv is
+// The DECK's baked sun-visibility map (vroadvis.mat), in TRACK space. White
+// with a 0 lat span = fully lit, for a track that baked no map — the same
+// no-branch fallback the old shadowTexel-0 early-out gave, and what a road
+// material predating this parameter keeps doing.
+//
+// The sampler is CLAMP on BOTH axes, and clamping v is what carries the kerbs:
+// an off-deck fragment's OFF_DECK_LAT lands on the outermost deck column and
+// inherits its shadow. u clamps rather than repeats because the map covers the
+// lap exactly once and a wrap would fold the finish line's shadow onto the
+// start line's.
+void TtpRenderer::bindRoadVisMap(MaterialInstance* mi) {
+    if (!mi || !mi->getMaterial()->hasParameter("sunVis")) return;
+    Texture* tex = mRoadVisMap ? mRoadVisMap : whiteTexture();
+    if (!tex) return;
+    TextureSampler smp(TextureSampler::MinFilter::LINEAR,
+            TextureSampler::MagFilter::LINEAR);
+    smp.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+    smp.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+    mi->setParameter("sunVis", tex, smp);
+    mi->setParameter("invSunVisLatSpan", roadVisLatSpan());
+}
+
+// The GROUND's baked sun-visibility map (vvis.mat) — its uv is
 // shadowFromWorld's own output, so the matrix rides along with the texture.
 // White = fully lit, for a track that baked no map — the same no-branch
 // fallback the old shadowTexel-0 early-out provided. A shell still serving

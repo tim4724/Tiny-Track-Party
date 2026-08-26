@@ -69,7 +69,8 @@ object SceneStaging {
      */
     val MATERIAL_NAMES = listOf(
         "vcolor", "vblend", "vlit", "vlitns", "vroad", "vglb", "vglbfade", "vpoint",
-        "vcloud", "vground", "vvis", "vpresent", "vesm", "vblur", "vburst", "voverlay",
+        "vcloud", "vground", "vvis", "vroadvis", "vpresent", "vesm", "vblur", "vburst",
+        "voverlay",
     )
 
     /**

@@ -67,18 +67,17 @@ const float kPenumbraWorld = 0.6;
 // a road uniformly in shadow, which reads as "the compare is inverted" and
 // is not.
 #ifdef TTP_NO_SUN_SHADOW
+float sunVisibilityUV(highp vec3 uv, float NoL) { return 1.0; }
 float sunVisibility(highp vec3 wp, highp vec3 n, float NoL) { return 1.0; }
 #else
-float sunVisibility(highp vec3 wp, highp vec3 n, float NoL) {
+// The decode, taking the LIGHT-SPACE uv directly. Split out so a bake that has
+// already transformed its receiver — vroadvis.mat, which rasterizes the deck in
+// TRACK space and so cannot hand a world position to the matrix below — reads
+// the map through this exact spelling rather than a second copy of it. The
+// transform is affine and w is exactly 1 (see below), so a caller may
+// interpolate the uv across a triangle and get the same answer this would.
+float sunVisibilityUV(highp vec3 uv, float NoL) {
     if (materialParams.shadowTexel <= 0.0) return 1.0;
-    // No normal offset: ESM's bias is inherent (equal depths give exp(0) = 1),
-    // and nudging the sample along the normal would only detach the shadow
-    // from whatever cast it.
-    // NO PERSPECTIVE DIVIDE. The light is an ORTHO camera (bakeShadowMap), and
-    // the bias matrix folded into shadowFromWorld is a scale and a translate, so
-    // w is exactly 1 for every receiver. The divide was a highp reciprocal per
-    // fragment of every shadowed surface in the frame, for nothing.
-    highp vec3 uv = (materialParams.shadowFromWorld * vec4(wp, 1.0)).xyz;
     if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0
             || uv.z <= 0.0 || uv.z >= 1.0) return 1.0;
     // ONE bilinear tap. vesm.mat pre-blurred exp(-k·d) at bake time, so the
@@ -185,6 +184,25 @@ float sunVisibility(highp vec3 wp, highp vec3 n, float NoL) {
     // (NoL 0.40 is 24 degrees above grazing; a road deck under an overpass
     // sits at 0.98 and is untouched) and let it go where it does not.
     return mix(1.0, vis, smoothstep(0.05, 0.40, NoL));
+}
+
+// The world-space entry point. `n` is unused and kept only so the call sites
+// read as "visibility of this surface": every term above needs the surface
+// only through NoL.
+//
+// NO PERSPECTIVE DIVIDE. The light is an ORTHO camera (bakeShadowMap), and the
+// bias matrix folded into shadowFromWorld is a scale and a translate, so w is
+// exactly 1 for every receiver. The divide was a highp reciprocal per fragment
+// of every shadowed surface in the frame, for nothing. It is also what lets
+// sunVisibilityUV take an INTERPOLATED uv.
+//
+// No normal offset either: ESM's bias is inherent (equal depths give
+// exp(0) = 1), and nudging the sample along the normal would only detach the
+// shadow from whatever cast it.
+float sunVisibility(highp vec3 wp, highp vec3 n, float NoL) {
+    if (materialParams.shadowTexel <= 0.0) return 1.0;
+    return sunVisibilityUV(
+            (materialParams.shadowFromWorld * vec4(wp, 1.0)).xyz, NoL);
 }
 #endif
 

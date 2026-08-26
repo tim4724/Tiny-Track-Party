@@ -541,20 +541,30 @@ A GL readback's completion is executed from `OpenGLDriver::tick()`, which
 `FRenderer::endFrame()` calls and `flushAndWait()` does not — so however many
 times a build flushes, the callback cannot land, and in a browser a task cannot
 wait on the GPU at all. Metal and Vulkan fire theirs from command-buffer
-completion and land on the first pass. `refillRoadLight` therefore keeps its
-synchronous pump AND parks an unfinished read for `collectRoadLight`, which the
-frame loop calls; a read is stamped with a build serial so one that lands after
-the track changed is dropped rather than written into the new road's CUSTOM0.
+completion and land on the first pass.
 
-That shape is not defensive: it is what the old code's silent failure cost. It
-dropped an unfinished read on the floor, so the WEB road kept the unshadowed fill
-from build — a deck lit but taking no cast shadow, for the whole session, with
-nothing to say so. It looked right because the GROUND was unaffected: its
-visibility map is a shader tap that never goes near a readback.
+**SO THE BAKES DO NOT READ BACK AT ALL ANY MORE**, and the cheapest way to
+satisfy this rule turned out to be to stop needing it. The road's baked vertex
+light was the one thing in a build that pulled a map to the CPU: it took the
+whole 1024² ESM back as RGBA float (16 MB) so `fillRoadLight` could evaluate the
+decode per vertex, and around that sat a deferred-read apparatus — a parked
+read, a build serial to drop a stale one, graves for buffers a driver might
+still be writing, a frame-beat collector, and a per-track cache of the finished
+fill. Visibility is a GPU bake now (`vroadvis.mat`), so the fill is arithmetic
+over the road's own normals and all of it is gone.
+
+Keep the failure it cost, though, because it is the shape of the whole class:
+the old code dropped an unfinished read on the floor, so the WEB road kept the
+unshadowed fill from build — a deck lit but taking no cast shadow, for the whole
+session, with nothing to say so. It looked right because the GROUND was
+unaffected: its visibility map is a shader tap that never goes near a readback.
+**A receiver that is fed by a readback and one that is fed by a tap will
+disagree silently**, and the disagreement is invisible unless you look at the
+two side by side.
 
 **EVERY blob works that way now** (`stageBlob` / `collectStagedBlobs`). A blob
 that is worth keeping between runs snapshots everything that is not a readback —
-headers, matrices, the road light, the row-flip convention — and parks the reads;
+headers, matrices, the row-flip convention — and parks the reads;
 the frame beat finishes it. The snapshot is what makes a deferred finish honest:
 the earlier synchronous `exportBake` read `mBakedKey` and `mShadowFromWorld` at
 export time, so anything that finished a parked read later would have paired one
@@ -568,9 +578,9 @@ mind here:
   non-reused bake, so a read nobody was asking about matched nothing, was never
   retired, and held a 16 MB buffer and a RenderTarget over freed storage for the
   life of the page.
-- **A read that never lands is LEAKED on purpose**, exactly as `RoadLightRead`
-  leaks its own at teardown: the driver may still hold a pointer into that buffer
-  and there is no tick left to fire the callback.
+- **A read that never lands is LEAKED on purpose** at teardown: the driver may
+  still hold a pointer into that buffer and there is no tick left to fire the
+  callback.
 
 **AN IMPORT OWNS ITS PIXELS**, which is the same argument pointing the other way.
 A `PixelBufferDescriptor` over the caller's bytes is a use-after-free that a
@@ -803,21 +813,43 @@ holds the material's array sizes and each loop's clamp to the C++ constants.
 
 **MOVE THE SMOOTH HALF OF THE SHADING TO THE VERTEX STAGE.** The same trade the
 fog made, for the same reason, and worth 7.5 ms of a 720p frame on that GPU: the
-deck's light — ambient, N·L and the baked sun map's visibility — is smooth over
-metres, while its COLOUR (asphalt, lines, dashes, paint, rubber, decals) is the
-detailed half. `ttpMatteLight` is the split (`ttp_shade.inc`); for the ROAD every input to it
-is frame-invariant (static sun, static deck, cars cast blob decals), so
-`fillRoadLight` evaluates the identical function once per track — after
-`bakeShadowMap`, reading the ESM back through `Renderer::readPixels` — into a
-baked per-vertex attribute (custom0) that rides the fog varying's unused
-`.yzw`. The fragment keeps its multiply, the per-frame vertex stage is left
-with a move, and the road stopped emitting tangents: nothing reads its normal
-at draw time any more. **A caller must own the sampling rate**: this is only sound where
-the mesh is finer than the shadow's own softness, which the road's 0.48 u rings
-are against a 0.6 u penumbra. The ground sheet's 20 u step is NOT — so vground
-samples per fragment, but from `visMap`, the ground's own sun-visibility BAKE
-(vvis.mat renders the real ground through the ESM's light camera once per
-track, in `bakeShadowMap`): one R8 tap instead of the full ESM decode.
+deck's light — ambient and N·L — is smooth over metres, while its COLOUR
+(asphalt, lines, dashes, paint, rubber, decals) is the detailed half.
+`ttpMatteAmbient` / `ttpMatteSunTerm` are the split (`ttp_shade.inc`); for the
+ROAD both are frame-invariant (static sun, static deck), so `fillRoadLight`
+evaluates them once per track into a baked per-vertex attribute — custom0 as
+`(ambient.rgb, NoL)`, riding the fog varying's `.yzw` and a second varying. The
+fragment keeps its multiply, the per-frame vertex stage is left with a move, and
+the road stopped emitting tangents: nothing reads its normal at draw time.
+
+**A caller must own the sampling rate, IN BOTH AXES.** This is only sound where
+the mesh is finer than the shadow's own softness. For the road that was checked
+ALONG the track — 0.48 u rings against a 0.6 u penumbra — and not ACROSS it,
+where the 16-point cross-section puts deck-level columns at lat ±half,
+±(half−gap), ±(half−gap−lw) and ±dashW/2 and leaves **~2.15 u of each lane with
+no vertex at all**. So VISIBILITY could never be a vertex term: a cast shadow
+narrower than that is interpolated into a 2.15 u ramp or lost. Measured on
+skyline's barrel roll, where the rolled deck turns edge-on and its shadow closes
+to ~2 u: the fully-dark core went 1.62 u (per fragment) to 0.66 u (per vertex),
+and the per-vertex answer barely moved as the roll turned, being pinned to the
+columns rather than following the caster. It is a **track-space bake** now
+(`vroadvis.mat`), one R8 tap in vroad.
+
+Two receivers, two bakes, and the reason they differ is worth keeping: the
+ground sheet's 20 u step is too coarse the same way, so vground samples per
+fragment from `visMap` — but that map is on the LIGHT's own grid (vvis.mat
+renders the real ground through the ESM's light camera), which works only
+because the ground is single-valued under a near-overhead sun. The road is not:
+a barrel roll sits directly over the deck it shadows and a loop has two
+arclengths at one `(x, z)`, so its map has to be in TRACK space.
+
+**And with visibility off the CPU, the road-light READBACK is gone.** It existed
+only so `fillRoadLight` could evaluate the ESM decode per vertex, and on GL a
+readback completes from `OpenGLDriver::tick()` — which `endFrame()` calls and
+`flushAndWait()` does not — so an entire deferred-read apparatus (parked reads,
+build serials, stale-drop, graves, a per-track cache of the finished fill)
+existed to finish it on a later frame. `fillRoadLight` reads no map now and
+completes inside the build on every backend.
 
 `public/display/render/Display.js` is the browser's whole edge of this; for
 measuring frame cost see `public/display/CLAUDE.md`.

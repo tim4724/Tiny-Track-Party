@@ -797,9 +797,9 @@ TTP_ABI void ttp_display_debug_force_mask_layer(int layer);
 #define TTP_FEAT_ROAD_DECALS 0x0100  /* the per-fragment decal loop (shadows, auras, statics) */
 #define TTP_FEAT_ROAD_RUBBER 0x0200  /* the laid-rubber texture tap */
 #define TTP_FEAT_ROAD_PAINT  0x0400  /* the deck's own paint (repairs, boost pads) */
-#define TTP_FEAT_ROAD_SHADOW 0x0800  /* the GROUND's baked sun-vis tap (the road's
-                                        light is baked into its vertices at track
-                                        build, so this arm has no road half) */
+#define TTP_FEAT_ROAD_SHADOW 0x0800  /* the baked sun-vis taps: the DECK's
+                                        track-space one (vroadvis.mat) and the
+                                        GROUND's light-space one (vvis.mat) */
 /* SCENE-WIDE channels: the same picture with one per-fragment term skipped on
  * every surface. Filament's fog is composited INSIDE each surface shader, so it
  * cannot be ablated by hiding a group — it needs a bit of its own. */
