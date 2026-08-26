@@ -831,9 +831,13 @@ add_test(NAME ui_model
 )
 
 # ---- Conformance: the race orchestration ------------------------------------
-# JS-RECORDED evidence again: tests/fixtures/raceflow-corpus.jsonl was recorded
-# off the live public/display/raceFlow.js before ttp/race_flow.cc existed, so it
-# settles whether the state machine was ported right.
+# tests/fixtures/raceflow-corpus.jsonl was recorded off the live
+# public/display/raceFlow.js before ttp/race_flow.cc existed, so these bytes
+# began as JS-recorded parity evidence. Baking the three launch flags in
+# re-recorded the launch and podium lines and DEMOTED it to class 2 — regression
+# evidence (tests/fixtures/traces/README.md); the parity claim stays in git
+# history. What it still gates, on every leg, is that the state machine does not
+# move by accident.
 #
 # It checks TWO things per step and needs both. `out` is the answer; `state` is
 # the shell state the generator's driver threads, rebuilt here by walking each

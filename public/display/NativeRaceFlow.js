@@ -23,9 +23,11 @@
 // configure (libttp-sim's own), so boot hands over nothing it read back.
 //
 // tests/fixtures/raceflow-corpus.jsonl was recorded off the JS oracle
-// (public/display/raceFlow.js, retired — git history has it) and is FROZEN;
-// native/runtimetest/raceflow_check.cc replays every step through the C++ on
-// every leg.
+// (public/display/raceFlow.js, retired — git history has it), which is gone, so
+// nothing can re-derive the fixture. It is no longer JS-parity evidence: a
+// deliberate re-record demoted it to class 2 (tests/fixtures/traces/README.md).
+// native/runtimetest/raceflow_check.cc still replays every step through the C++
+// on every leg, which is what keeps the walks from moving by accident.
 
 import { loadNativeRuntime } from './nativeRuntime.js';
 

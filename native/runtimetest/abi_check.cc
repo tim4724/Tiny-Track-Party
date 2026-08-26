@@ -2934,7 +2934,7 @@ void beginFieldMatchesManualPath() {
 
   // The ordering rule itself: a field with bots in front seats in FIELD order
   // — index 0 is pole (game.cc seats by index). This is the live path the
-  // walks' humansAtBack/gridOrder ordering rides on; buckets must not undo it.
+  // walks' back-of-grid/gridOrder ordering rides on; buckets must not undo it.
   const int e = ttp_session_begin_field("tidepool", 7u, 3, nullptr,
       "[{\"peerIndex\":\"ai-0\"},{\"peerIndex\":\"ai-1\"},{\"peerIndex\":1}]",
       "[{\"peerIndex\":\"ai-0\"},{\"peerIndex\":\"ai-1\"}]");
@@ -4139,8 +4139,6 @@ void raceLiveWalks() {
     li.countdownSeconds = countdownSeconds;
     if (forceItem && *forceItem) li.forceItem = race::OptStr::Of(forceItem);
     li.world = W;
-    li.humansAtBack = true;     // the walks' standing grid rule
-    li.deferCountdown = true;   // …and their standing countdown rule
     return race::launchRace(li);
   };
 
@@ -4277,8 +4275,6 @@ void raceLiveWalks() {
     li.forceItem = race::OptStr::Of("rocket");
     li.world = W;
     li.world.botCap = race::OptNum::Of(1);
-    li.humansAtBack = true;
-    li.deferCountdown = true;
     const race::LaunchResult lrForced = race::launchRace(li);
     sameOps(forced, lrForced.effects, "start_live with ?item and ?bots");
     sameOpsIn(forced, "countdownEffects", lrForced.countdownEffects,
@@ -4394,8 +4390,6 @@ void raceLiveWalks() {
         li.trackId = next;
         li.countdownSeconds = 3;
         li.world = W;
-        li.humansAtBack = true;
-        li.deferCountdown = true;
         // The chained grid: the previous race's finish order, read off the
         // stored series exactly as the walk reads it (advance() moves only
         // raceIndex, so either side of the call answers the same).
@@ -5430,7 +5424,6 @@ void autopilotedPlayerSeats() {
   li.world.fieldSize = 8;
   li.world.carCount = 12;
   li.world.colorCount = 12;
-  li.humansAtBack = true;
   bool anyMarked = false;
   for (const race::BotSpec& b : race::launchRace(li).bots) anyMarked = anyMarked || b.player;
   check(!anyMarked, "bench: autopilotPlayers off marks nothing (the shipping path)");

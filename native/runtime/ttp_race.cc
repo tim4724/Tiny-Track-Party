@@ -132,9 +132,9 @@ race::OptStr optStrOfC(const char* s) {
 }
 
 // The launch, shared by the start walk and the cup chain's launch. The grid
-// rule is the GAME's, so it lives here in the shared walk rather than in any
-// shell: humans always start at the back, and a chained series race grids by
-// the previous race's finish order (gridOrder — empty on a fresh start).
+// rule is the GAME's and lives in race_flow.cc (orderGrid): humans always start
+// at the back. All this walk supplies is the chain — a series race grids by the
+// previous race's finish order (gridOrder), empty on a fresh start.
 race::LaunchResult launchOff(int roomHandle, std::vector<race::Human> players,
                              double seed, double countdownSeconds,
                              const char* forceItemOrNull, const char* botCapJson,
@@ -147,13 +147,8 @@ race::LaunchResult launchOff(int roomHandle, std::vector<race::Human> players,
   li.countdownSeconds = countdownSeconds;
   li.forceItem = optStrOfC(forceItemOrNull);
   li.world = worldWithCap(botCapJson);
-  li.humansAtBack = true;
   li.autopilotPlayers = g_autopilotPlayers;
   li.gridOrder = std::move(gridOrder);
-  // EVERY LIVE LAUNCH DEFERS. The flag exists for the corpus, whose recorded
-  // launches predate the gate; a shipping race always waits for the scene it is
-  // about to be driven on (race_flow.h, countdownReady).
-  li.deferCountdown = true;
   return race::launchRace(li);
 }
 
@@ -602,10 +597,9 @@ const char* ttp_race_bench_field_json(const char* trackId, int players, double s
   li.seed = seed;
   li.trackId = trackId ? trackId : "";
   li.world = g_world;
-  // The game's rule, both of them, unconditionally: this exists so a bench with
-  // no room draws what the walk would, and a bench that gridded differently
-  // would be measuring a different picture.
-  li.humansAtBack = true;
+  // The grid rule is the layer's now, so a bench with no room draws what the
+  // walk would for free. Autopilot is the one thing this composes for itself: a
+  // bench that gridded or steered differently would measure a different picture.
   li.autopilotPlayers = true;
   const race::LaunchResult r = race::launchRace(li);
 
@@ -764,9 +758,6 @@ const char* ttp_race_events_live_json(int sessionHandle, int roomHandle,
                        (!series->endless() && series->raceIndex() + 1 >= series->raceCount()));
         ei.intermissionMs = intermissionMs;
         ei.nowMs = nowMs;
-        // The live walk always banks a finished series; the flag exists so the
-        // frozen corpus lines (which predate progression) stay byte-identical.
-        ei.bankProgression = true;
         // endRace's OWN ranked board, which no effect can carry and which now
         // never leaves C++: the points bank against it (against the retained
         // field, BEFORE the board is composed — the order the corpus pins) and

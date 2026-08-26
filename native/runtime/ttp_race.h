@@ -244,14 +244,15 @@ TTP_ABI double ttp_race_intermission_ms(void);
 
 /* ---- the countdown gate --------------------------------------------------- */
 
-/* MAY THE DEFERRED COUNTDOWN START YET? Poll it once a frame after a launch,
- * and perform the answer's `countdownEffects` the first time this says yes.
+/* MAY THE COUNTDOWN START YET? Poll it once a frame after a launch, and perform
+ * the answer's `countdownEffects` the first time this says yes.
  *
- * The start and advance walks now answer with TWO lists: `effects`, walked at
- * once as always, and `countdownEffects` — start-countdown alone — held back
+ * EVERY launch answers with TWO lists and there is no other shape: `effects`,
+ * walked at once, and `countdownEffects` — start-countdown alone — held back
  * until the scene the race is about to be driven on has stopped assembling
- * itself. race_flow.h's countdownReady says what the wait buys and why it is
- * measured in frames rather than in the build returning.
+ * itself. A shell that walks only the first list starts a race that never
+ * counts down. race_flow.h's countdownReady says what the wait buys and why it
+ * is measured in frames rather than in the build returning.
  *
  *   sceneBuilt     the shell's "my scene build has returned" latch
  *   measuring      is this surface feeding ttp_perf_sample at all? A shell that

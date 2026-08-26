@@ -1,11 +1,16 @@
 // Race-orchestration conformance check — replays tests/fixtures/raceflow-corpus.jsonl
 // against native/libttp-runtime/ttp/race_flow.h.
 //
-// JS-RECORDED evidence, like the ui/audio/session corpora and unlike the
-// C++-authored ones: every line was taken off public/display/raceFlow.js (the
-// oracle, retired 2026-07-31 — git history has it) while it was live, so it
-// settles whether the port matches the JS it replaced. The fixture is FROZEN.
-// A disagreement is a bug in the C++, never in the fixture.
+// Every line was taken off public/display/raceFlow.js (the oracle, retired
+// 2026-07-31 — git history has it) while it was live, so these bytes began as
+// JS-RECORDED parity evidence. They no longer are: baking the three launch
+// flags into race_flow.h (humansAtBack, deferCountdown, bankProgression, whose
+// OFF paths had become dead code on every shipping path) DELIBERATELY
+// re-recorded the launch and podium lines, which DEMOTES the whole fixture to
+// class 2 — regression evidence (tests/fixtures/traces/README.md). The parity
+// claim stays with the bytes before that commit. The oracle is gone, so the
+// fixture is still FROZEN in the sense that matters: nothing can re-derive it,
+// and an UNEXPLAINED disagreement is a bug in the C++, never in the fixture.
 //
 // WHAT IT REPLAYS, AND WHY BOTH HALVES MATTER. Each step carries `out` (the
 // layer's answer) and `state` (the shell state the generator's driver threads).
@@ -32,8 +37,24 @@
 // while a random plan also carries cupName and tracks. Emitting a null where the
 // recording has no key at all is a failure, and diff_val treats it as one.
 //
-// There is NO --record mode, on the same grounds as session_check.cc: this
-// fixture's whole value is that C++ did not write it.
+// A LAUNCH ANSWERS WITH TWO EFFECT LISTS, AND THIS REPLAY WALKS BOTH. `effects`
+// is the launch; `countdownEffects` is `start-countdown`, held by the shell
+// until countdownReady() says the scene has settled. The obvious harness — the
+// one that predates the bake — serialized `effects` only, and the moment the
+// countdown stopped being optional that harness would have DELETED
+// start-countdown from every recorded launch and called it a clean diff: a
+// coverage loss wearing the shape of a simplification. So the op is serialized
+// under its own key AND applied, in the order a shell performs them. Applying
+// it is what keeps `countdownShown` meaning something for the rest of each
+// scenario; recording it separately is what keeps the two lists' CONTENTS
+// pinned rather than just their concatenation.
+//
+// There is NO --record mode. Not for session_check.cc's old reason — that check
+// has one now, and the session corpus was itself deliberately re-recorded — but
+// because this replay is STRUCTURAL: it rebuilds each answer from the layer and
+// diffs it, and never reproduces the file's own JSON spelling, so a re-emit
+// here would assert nothing a replay does not already assert. A deliberate
+// change edits the fixture by hand, green-first, diff read (tests/CLAUDE.md).
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -618,8 +639,11 @@ Value runStep(Shell& s, const std::string& op, const Value& in) {
     li.forceItem = strOf(in.find("forceItem"));
     li.world = worldOf(in);
     race::LaunchResult r = race::launchRace(li);
+    // BOTH lists, applied in the order a shell performs them — see the header.
     applyAll(s, r.effects);
+    applyAll(s, r.countdownEffects);
     Value v = Value::Obj();
+    v.set("countdownEffects", effectsVal(r.countdownEffects));
     v.set("effects", effectsVal(r.effects));
     v.set("field", arrOf(r.field, fieldVal));
     v.set("aiIds", idArr(r.aiIds));
@@ -666,9 +690,6 @@ Value runStep(Shell& s, const std::string& op, const Value& in) {
     ei.seriesFinished = json::truthy(in.find("seriesFinished"));
     ei.intermissionMs = json::num_field(in, "intermissionMs");
     ei.nowMs = json::num_field(in, "nowMs");
-    // Absent on every frozen line (they predate progression) — truthy reads
-    // that as false, which is what keeps them byte-identical.
-    ei.bankProgression = json::truthy(in.find("bankProgression"));
     race::Effects es = race::endRace(ei);
     applyAll(s, es);
     Value v = Value::Obj();

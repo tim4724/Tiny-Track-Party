@@ -402,16 +402,16 @@ StartResult startRace(const StartInput& in) {
   return r;
 }
 
-// launchRace's grid reorder — see LaunchInput. Pure permutation: livery, model,
-// persona and bot seed were all fixed by the fill above; only who starts where
-// moves. Stable throughout, so ties keep the built (join) order.
+// launchRace's grid reorder — see LaunchInput::gridOrder, this rule's ONE input
+// (a chained race's finish order, empty on a first race). Pure permutation:
+// livery, model, persona and bot seed were all fixed by the fill above; only who
+// starts where moves. Stable throughout, so ties keep the built (join) order.
 static std::vector<FieldEntry> orderGrid(std::vector<FieldEntry> field,
-                                         const LaunchInput& in) {
-  if (in.gridOrder.empty() && !in.humansAtBack) return field;
+                                         const std::vector<Id>& gridOrder) {
   std::vector<FieldEntry> ordered;
   ordered.reserve(field.size());
   std::vector<char> placed(field.size(), 0);
-  for (const Id& id : in.gridOrder) {
+  for (const Id& id : gridOrder) {
     for (size_t i = 0; i < field.size(); i++) {
       if (!placed[i] && field[i].peerIndex == id) {
         placed[i] = 1;
@@ -420,16 +420,15 @@ static std::vector<FieldEntry> orderGrid(std::vector<FieldEntry> field,
       }
     }
   }
-  // The leftovers start at the back — CPU ahead of humans when humansAtBack,
-  // which is also the whole rule for a first race (empty gridOrder).
+  // The leftovers start at the back, CPU ahead of humans — which is also the
+  // whole rule for a first race (empty gridOrder). Two passes over the same
+  // array, partitioned by `ai`, so nothing is placed twice.
   for (int wantAi = 1; wantAi >= 0; wantAi--) {
     for (size_t i = 0; i < field.size(); i++) {
-      if (placed[i]) continue;
-      if (in.humansAtBack && field[i].ai != (wantAi == 1)) continue;
+      if (placed[i] || field[i].ai != (wantAi == 1)) continue;
       placed[i] = 1;
       ordered.push_back(std::move(field[i]));
     }
-    if (!in.humansAtBack) break;  // one pass took everyone, in built order
   }
   return ordered;
 }
@@ -445,7 +444,7 @@ LaunchResult launchRace(const LaunchInput& in) {
   // into a full rebuild of the scene prepared under the intermission board,
   // and shuffle the players' split cells by finish order.
   const std::vector<FieldEntry> sceneRoster = built.field;
-  built.field = orderGrid(std::move(built.field), in);
+  built.field = orderGrid(std::move(built.field), in.gridOrder);
   // AUTOPILOT: every player seat gains a controller, and nothing else about the
   // launch moves. Appended AFTER the grid is ordered so the persona comes off
   // the FINAL grid index, which spreads the personas across the players
@@ -537,10 +536,10 @@ LaunchResult launchRace(const LaunchInput& in) {
   out.effects.push_back(mk(Op::BIND_SESSION));
   // chrome at final size through the countdown, no pop-in at GO
   out.effects.push_back(mk(Op::PAINT_INITIAL_HUD));
-  // …and the last op is the one that may have to wait: see countdownReady.
-  // Deferred, it rides its own list, so the walk above stays whole either way.
+  // …and the last op is the one that has to wait: see countdownReady. It rides
+  // its OWN list, so the walk above stays whole.
   e = mk(Op::START_COUNTDOWN); e.num = in.countdownSeconds;
-  (in.deferCountdown ? out.countdownEffects : out.effects).push_back(e);
+  out.countdownEffects.push_back(e);
   return out;
 }
 
@@ -624,8 +623,7 @@ Effects endRace(const EndRaceInput& in) {
   if (in.hasSeries) out.push_back(mk(Op::APPLY_RACE_POINTS));
   // A finished series banks the couch's star record — AFTER the points, so the
   // standings the executor reads are final.
-  if (in.hasSeries && in.seriesFinished && in.bankProgression)
-    out.push_back(mk(Op::PERSIST_PROGRESSION));
+  if (in.hasSeries && in.seriesFinished) out.push_back(mk(Op::PERSIST_PROGRESSION));
   // hold the finish frame behind the translucent results overlay
   e = mk(Op::SET_RACE_FLAGS);
   e.paused = false; e.autoPaused = false; e.raceEnded = true;
