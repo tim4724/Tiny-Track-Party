@@ -228,7 +228,14 @@ test('every shell paces the points tally by the same two numbers', () => {
 test('every shell puts the same facts on the lobby snapshot', () => {
   // What the shell SUPPLIES; everything else on the frame is composed in C++ off
   // the room handle (ttp_net_lobby_frame) and cannot go missing per platform.
-  const EXTRAS = ['paused', 'soundOn', 'standings'];
+  //
+  // `standings` was on this list and is not any more, and that is the point of
+  // the list shrinking: the board is RETAINED behind the room handle now, so the
+  // frame reads it where the walks wrote it and a shell has nothing to supply.
+  // The three mirrors this pinned are what the retained slot deleted. Do not
+  // add a key here to "restore" it — a `standings` passed to the frame is dead,
+  // and abi_check pins that the room's board wins over a caller's decoy.
+  const EXTRAS = ['paused', 'soundOn'];
   const web = shell(WEB_PUBLISH);
   for (const key of EXTRAS) {
     assert.match(web, new RegExp(`\\b${key}:`),

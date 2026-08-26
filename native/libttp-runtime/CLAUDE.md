@@ -73,8 +73,18 @@ FRAMES because that is what pays a scene's staging cost — `render_scale.h`'s
 scene grace records an A10X presenting at 7-25 fps for ~2.6 s *after* the build
 call came back — and the test is SPREAD (p95 over p50 of the present series), not
 speed, because a 4-cell race on the weakest box is steadily over budget and
-should still start. `LaunchInput::deferCountdown` is default-OFF for the corpus's
-sake, the same trick as `humansAtBack`.
+should still start. There is no other shape: EVERY launch answers with both
+lists, and a shell that walks only the first starts a race that never counts
+down.
+
+**Three launch knobs were baked in and are now the layer's only behaviour** —
+the humans-at-back grid, the deferred countdown and the finished series banking
+progression. Each was default-OFF purely so the raceflow corpus's recorded lines
+stayed byte-identical, which meant every shipping caller hard-coded it true and
+the OFF branch was dead code exercised only by the fixture. The corpus was
+re-recorded instead (and demoted to class 2 for it — `tests/CLAUDE.md`), so the
+shipped grid and countdown finally have a fixture. `autopilotPlayers` below is
+the one flag that survives, for the reason stated there.
 
 **A draw cannot be put back**, which is why the start/return walks ask the
 rules for the verdict BEFORE drawing: a refused start must not advance the
@@ -111,9 +121,11 @@ files the seat under BOTH, and `ttp_session_ai_ids` and the audio's AI set ask
 the FLAG rather than the bucket — a marked seat keeps its split-screen cell, is
 heard, and is counted by `ui::autoPause`.
 
-`LaunchInput::autopilotPlayers` is default-OFF for the corpus's sake, the same
-trick as `humansAtBack`, and `ttp_race.cc` emits the marker key only when it is
-set — so no recorded launch gains a byte. `benchPlayers` decides the bench
+`LaunchInput::autopilotPlayers` is default-OFF, and unlike the three flags baked
+in above it CANNOT be: OFF is what a shipping race does — a real party steers
+from phones — and `ttp_race_autopilot_players` sets a runtime latch the live
+launch path reads. `ttp_race.cc` emits the marker key only when it is set, so no
+recorded launch gains a byte. `benchPlayers` decides the bench
 roster (names, liveries, cars) once, because three shells photographing the same
 screen side by side must differ in the UI under inspection and in nothing else.
 

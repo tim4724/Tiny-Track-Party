@@ -566,10 +566,11 @@ geometry (-0.4 ms of GPU against +0.55 ms of frame thread, reverted); pipeline
 cache prewarming (the box does not advertise the extension it needs); the sRGB
 swap chain (a 3.5 ms LOSS on this driver).
 
-**MULTIVIEW IS OFF THE PLAN.** It is a GL-only arrangement, it is moot under the
-Vulkan default, it needed two defect fixes and a black-frame probe before it was
-safe on real drivers, and at four cells it bought +2-3 fps of tail and nothing
-of the median. It is not a lever for this goal.
+**MULTIVIEW IS OFF THE PLAN, and the path is DELETED.** It is a GL-only
+arrangement, moot under the Vulkan default, it needed two defect fixes and a
+black-frame probe before it was safe on real drivers, and at four cells it
+bought +2-3 fps of tail and nothing of the median. It is not a lever for this
+goal; `shells/androidtv/CLAUDE.md` carries the removal note.
 
 Also settled: at four cells under Vulkan, merged and unmerged draw groups are a
 wash. Keep the locality merge, justified by the counts it strictly reduces.

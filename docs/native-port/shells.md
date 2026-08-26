@@ -549,11 +549,12 @@ identically (both are commented where they bite, in `TtpRendererBakes.cpp`):
     browser show the URL as a QR for the phone already in the room. Read those
     two URLs out of the display's own footer rather than typing them.
 
-## Still owed by the TV shells (audited 2026-08-18, re-checked 2026-08-22)
+## Still owed by the TV shells
 
-Each is a real item, not a simplification; the settled reasoning behind the two
-look items is in `shells/androidtv/CLAUDE.md` (Look). The first is owed by BOTH
-TV shells; the rest are Android's.
+This list is an audit walked against the shells' code, not a wishlist: each row
+is a real item, not a simplification. A row leaves it two ways — a shell does
+the work, or the work is decided against and moves to **Decided, not owed**
+below. The first is owed by BOTH TV shells; the second is Android's.
 
 - **Meshing the next circuit at the intermission** (item 13) — NEITHER TV shell
   does it: a cup's chained start shows the outgoing circuit under the count and
@@ -565,10 +566,31 @@ TV shells; the rest are Android's.
   the tail it would move is the half the GPU readout cannot see, and it costs a
   macrobenchmark module plus a device run, which is why it is an investment and
   not a build-file flag.
-- **Frosting behind the full-screen boards** — unreachable from Compose; the two
-  live routes are recorded in the shell's file.
-- **The scene's edge vignette** — belongs under the chrome, so it is a renderer
-  pass.
+
+### Decided, not owed
+
+Two web looks a TV shell will notice it lacks. Neither is coming; do not
+re-open them as work.
+
+- **Frosting behind the full-screen boards** (Android). The flat paper wash IS
+  the look. Compose cannot reach the picture it would blur — the frozen race is
+  a SurfaceView composited by SurfaceFlinger in a layer BELOW the app window —
+  so what is left is a whole-window blur toggled per board (API 31+, and off
+  outright on low-end boxes) or a renderer pass, and neither earns its cost
+  against what it buys: the results board's paper is nearly opaque, so almost
+  none of the race shows through and the board is near-indistinguishable from
+  the web's. The more translucent pause overlay is the one board where the
+  difference reads at all. The
+  mechanism is the durable half and lives in `shells/androidtv/CLAUDE.md`
+  (Look).
+- **The scene's edge vignette** — WEB-ONLY, permanently, and that is a
+  CROSS-SHELL decision: neither TV shell builds one. It is a DOM effect
+  (`#scene::after` in `public/display/display.css`, one radial gradient over the
+  canvas), and because it belongs under the chrome the only route on a TV is a
+  renderer pass — but `native/renderer` is shared C++ linked into all three
+  shells, so that pass would spend engine frame budget on every platform to
+  darken the edges of a picture no one has called too bright. The web keeps its
+  own; nothing else grows one.
 
 ## The asymmetries worth knowing before you start
 
@@ -670,10 +692,16 @@ now UNREPRESENTABLE, because the entry point that permitted each is gone:
    depends on the active order (`auto-pause`, the standings board's late
    joiners) does the synced read inside the walk.
 
-There is no hand-assembled input left at all: the launch's field copy is
-retained behind the room and repaired by the rename/rekey walks, so the
-standings board is a pure read (`ttp_ui_standings_live_json(session, room,
-over, resultsOrNull, autoAdvanceMs)`).
+There is no hand-assembled input left at all, and the standings board is not
+even a read any more: the launch's field copy is retained behind the room and
+repaired by the rename/rekey walks, and the BOARD is retained beside it. The
+race walk composes and stores it, the rename walk and `ttp_ui_settle_standings`
+patch it in place, the statechange walk drops it, and `ttp_net_lobby_frame`
+puts it on the wire. What a shell owns is the republish and the moment the
+podium reveal lands. Its results screen reads
+`ttp_ui_results_view_live_json(room, intermissionMs)`; the board-taking
+`ttp_ui_results_view_json` survives for the screenshot harnesses, which stage a
+synthetic board with no room behind it.
 
 And one that is not an ABI call at all: **a method nothing invokes reads as
 implemented.** A room teardown shipped complete, documented as running "on

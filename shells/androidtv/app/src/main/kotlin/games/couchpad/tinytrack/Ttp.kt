@@ -72,7 +72,6 @@ object Ttp {
     external fun ttp_display_kit_field_layout(): ByteArray?
     external fun ttp_display_look(eyeX: Double, eyeY: Double, eyeZ: Double, tgtX: Double, tgtY: Double, tgtZ: Double)
     external fun ttp_display_model_variant(model: ByteArray?, variant: Int)
-    external fun ttp_display_multiview(mode: Int)
     external fun ttp_display_profile(): ByteBuffer?
     external fun ttp_display_profile_names(): ByteArray?
     external fun ttp_display_release()
@@ -163,13 +162,12 @@ object Ttp {
     external fun ttp_race_demo_live_json(roomHandle: Int, trackId: ByteArray?, botCapJson: ByteArray?): ByteArray?
     external fun ttp_race_effect_ops_json(): ByteArray?
     external fun ttp_race_end_party_json(): ByteArray?
-    external fun ttp_race_events_live_json(sessionHandle: Int, roomHandle: Int, biome: ByteArray?, audioReady: Int, fastForwarding: Int, intermissionMs: Double, nowMs: Double, resultsFailsafeMs: Double): ByteArray?
+    external fun ttp_race_events_live_json(sessionHandle: Int, roomHandle: Int, biome: ByteArray?, audioReady: Int, fastForwarding: Int, intermissionMs: Double, nowMs: Double): ByteArray?
     external fun ttp_race_forfeit_live_json(sessionHandle: Int, peerIdJson: ByteArray?): ByteArray?
     external fun ttp_race_intermission_ms(): Double
     external fun ttp_race_pause_live_json(sessionHandle: Int, roomHandle: Int, paused: Int, autoPaused: Int, raceEnded: Int): ByteArray?
     external fun ttp_race_personas_json(): ByteArray?
     external fun ttp_race_rekey_live_json(sessionHandle: Int, roomHandle: Int, oldIdJson: ByteArray?, newIdJson: ByteArray?): ByteArray?
-    external fun ttp_race_results_failsafe_ms(): Double
     external fun ttp_race_resume_live_json(sessionHandle: Int, roomHandle: Int, paused: Int, autoPaused: Int, raceEnded: Int): ByteArray?
     external fun ttp_race_return_live_json(roomHandle: Int): ByteArray?
     external fun ttp_race_series_state_json(roomHandle: Int): ByteArray?
@@ -224,7 +222,7 @@ object Ttp {
     external fun ttp_ui_cup_tint_rgb(cupIdOrNull: ByteArray?, pct: Double): Int
     external fun ttp_ui_freeze_plan_json(paused: Int, autoPaused: Int, sessionPaused: Int): ByteArray?
     external fun ttp_ui_intermission_secs(deadlineMs: Double, nowMs: Double): Double
-    external fun ttp_ui_item_pushes_live_json(sessionHandle: Int, lastItemJson: ByteArray?): ByteArray?
+    external fun ttp_ui_item_pushes_live_json(sessionHandle: Int): ByteArray?
     external fun ttp_ui_neutral_tint_rgb(pct: Double): Int
     external fun ttp_ui_progress_json(): ByteArray?
     external fun ttp_ui_progress_load(jsonOrNull: ByteArray?, unlockAll: Int): Int
@@ -232,10 +230,12 @@ object Ttp {
     external fun ttp_ui_reconnect_diff_json(shownIdsJson: ByteArray?, seatIdsJson: ByteArray?): ByteArray?
     external fun ttp_ui_results_action_json(roomHandle: Int): ByteArray?
     external fun ttp_ui_results_view_json(boardJson: ByteArray?, intermissionMs: Double): ByteArray?
+    external fun ttp_ui_results_view_live_json(roomHandle: Int, intermissionMs: Double): ByteArray?
     external fun ttp_ui_roster_seats_room_json(roomHandle: Int, hostIdJson: ByteArray?): ByteArray?
     external fun ttp_ui_screen_step(prevScreen: ByteArray?, nextScreen: ByteArray?): Int
     external fun ttp_ui_seat_grid_json(seatsJson: ByteArray?): ByteArray?
     external fun ttp_ui_series_info_live_json(gpHandle: Int, autoAdvanceMs: Double): ByteArray?
+    external fun ttp_ui_settle_standings(roomHandle: Int): Int
     external fun ttp_ui_standings_live_json(sessionHandle: Int, roomHandle: Int, over: Int, resultsJsonOrNull: ByteArray?, autoAdvanceMs: Double): ByteArray?
     external fun ttp_ui_welcome_item_live_json(sessionHandle: Int, peerIdJson: ByteArray?): ByteArray?
     external fun ttp_update(h: Int, dtMs: Double)

@@ -18,12 +18,10 @@ import Foundation
 ///   OUTCOME family left to remember — but a shell ported from a revision that
 ///   had one is inverting those checks.
 /// - **An identity crosses as a JSON SCALAR inside a string.** `"3"` and
-///   `"\"3\""` are different players. Absent is `nil`; `"null"` is not the same
-///   thing as absent for `ttp_net_norm_index_json`, which is a frozen quirk, not
-///   a bug (see `EngineIdentity`).
-/// - **Returned JSON is canonical (sorted keys) except from `ttp_ui.h` and
-///   `ttp_net.h`**, which emit the model's own key order. Nothing here may
-///   depend on either — the wire re-sorts everything anyway.
+///   `"\"3\""` are different players, and absent is `nil` (see `EngineIdentity`).
+/// - **Returned JSON is canonical (sorted keys), from every header.** `ttp_ui.h`
+///   and `ttp_net.h` used to be exceptions, emitting the model's own key order;
+///   nothing here ever depended on that, and nothing may start.
 enum TTP {
 
     // MARK: - Strings

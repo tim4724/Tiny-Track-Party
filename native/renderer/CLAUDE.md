@@ -445,9 +445,9 @@ permanence is also how a real toy track behaves; the racing line rubbers in
 over a race. Do not reintroduce a per-frame fullscreen pass here without
 measuring on the weakest shell — the **mip refresh is throttled to ~7 Hz**
 for exactly that reason. The layer needs that chain: the tap is trilinear
-because the deck ahead minifies an 8k-to-16k-wide texture (the width is the
-shell-reported GL_MAX_TEXTURE_SIZE, and only the WEB surface reports one — see
-mMaxTextureDim), and a no-mip LINEAR tap
+because the deck ahead minifies an 8k-wide texture (`mMaxTextureDim` is a
+chosen ceiling on every platform, clamped down by the driver and never up — no
+surface queries a device maximum), and a no-mip LINEAR tap
 scintillated every mark across the whole deck. Its throttle rides `mTime`,
 which restarts per scene, so its timestamp is per-scene state and is cleared
 with the texture. There is no pool, no budget and no lift; unbounded marks

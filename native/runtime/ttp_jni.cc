@@ -382,11 +382,6 @@ void n_ttp_display_model_variant(JNIEnv* env, jclass, jbyteArray a0, jint a1) {
     ttp_display_model_variant(s0.get(), (int) a1);
 }
 
-void n_ttp_display_multiview(JNIEnv* env, jclass, jint a0) {
-    (void) env;
-    ttp_display_multiview((int) a0);
-}
-
 jobject n_ttp_display_profile(JNIEnv* env, jclass) {
     const auto* p = ttp_display_profile();
     if (!p) return nullptr;
@@ -865,9 +860,9 @@ jbyteArray n_ttp_race_end_party_json(JNIEnv* env, jclass) {
     return toBytes(env, ttp_race_end_party_json());
 }
 
-jbyteArray n_ttp_race_events_live_json(JNIEnv* env, jclass, jint a0, jint a1, jbyteArray a2, jint a3, jint a4, jdouble a5, jdouble a6, jdouble a7) {
+jbyteArray n_ttp_race_events_live_json(JNIEnv* env, jclass, jint a0, jint a1, jbyteArray a2, jint a3, jint a4, jdouble a5, jdouble a6) {
     CStr s2(env, a2);
-    return toBytes(env, ttp_race_events_live_json((int) a0, (int) a1, s2.get(), (int) a3, (int) a4, (double) a5, (double) a6, (double) a7));
+    return toBytes(env, ttp_race_events_live_json((int) a0, (int) a1, s2.get(), (int) a3, (int) a4, (double) a5, (double) a6));
 }
 
 jbyteArray n_ttp_race_forfeit_live_json(JNIEnv* env, jclass, jint a0, jbyteArray a1) {
@@ -894,11 +889,6 @@ jbyteArray n_ttp_race_rekey_live_json(JNIEnv* env, jclass, jint a0, jint a1, jby
     CStr s2(env, a2);
     CStr s3(env, a3);
     return toBytes(env, ttp_race_rekey_live_json((int) a0, (int) a1, s2.get(), s3.get()));
-}
-
-jdouble n_ttp_race_results_failsafe_ms(JNIEnv* env, jclass) {
-    (void) env;
-    return (jdouble) ttp_race_results_failsafe_ms();
 }
 
 jbyteArray n_ttp_race_resume_live_json(JNIEnv* env, jclass, jint a0, jint a1, jint a2, jint a3, jint a4) {
@@ -1183,9 +1173,9 @@ jdouble n_ttp_ui_intermission_secs(JNIEnv* env, jclass, jdouble a0, jdouble a1) 
     return (jdouble) ttp_ui_intermission_secs((double) a0, (double) a1);
 }
 
-jbyteArray n_ttp_ui_item_pushes_live_json(JNIEnv* env, jclass, jint a0, jbyteArray a1) {
-    CStr s1(env, a1);
-    return toBytes(env, ttp_ui_item_pushes_live_json((int) a0, s1.get()));
+jbyteArray n_ttp_ui_item_pushes_live_json(JNIEnv* env, jclass, jint a0) {
+    (void) env;
+    return toBytes(env, ttp_ui_item_pushes_live_json((int) a0));
 }
 
 jint n_ttp_ui_neutral_tint_rgb(JNIEnv* env, jclass, jdouble a0) {
@@ -1224,6 +1214,11 @@ jbyteArray n_ttp_ui_results_view_json(JNIEnv* env, jclass, jbyteArray a0, jdoubl
     return toBytes(env, ttp_ui_results_view_json(s0.get(), (double) a1));
 }
 
+jbyteArray n_ttp_ui_results_view_live_json(JNIEnv* env, jclass, jint a0, jdouble a1) {
+    (void) env;
+    return toBytes(env, ttp_ui_results_view_live_json((int) a0, (double) a1));
+}
+
 jbyteArray n_ttp_ui_roster_seats_room_json(JNIEnv* env, jclass, jint a0, jbyteArray a1) {
     CStr s1(env, a1);
     return toBytes(env, ttp_ui_roster_seats_room_json((int) a0, s1.get()));
@@ -1243,6 +1238,11 @@ jbyteArray n_ttp_ui_seat_grid_json(JNIEnv* env, jclass, jbyteArray a0) {
 jbyteArray n_ttp_ui_series_info_live_json(JNIEnv* env, jclass, jint a0, jdouble a1) {
     (void) env;
     return toBytes(env, ttp_ui_series_info_live_json((int) a0, (double) a1));
+}
+
+jint n_ttp_ui_settle_standings(JNIEnv* env, jclass, jint a0) {
+    (void) env;
+    return (jint) ttp_ui_settle_standings((int) a0);
 }
 
 jbyteArray n_ttp_ui_standings_live_json(JNIEnv* env, jclass, jint a0, jint a1, jint a2, jbyteArray a3, jdouble a4) {
@@ -1319,7 +1319,6 @@ const JNINativeMethod kMethods[] = {
     { "ttp_display_kit_field_layout", "()[B", (void*) n_ttp_display_kit_field_layout },
     { "ttp_display_look", "(DDDDDD)V", (void*) n_ttp_display_look },
     { "ttp_display_model_variant", "([BI)V", (void*) n_ttp_display_model_variant },
-    { "ttp_display_multiview", "(I)V", (void*) n_ttp_display_multiview },
     { "ttp_display_profile", "()Ljava/nio/ByteBuffer;", (void*) n_ttp_display_profile },
     { "ttp_display_profile_names", "()[B", (void*) n_ttp_display_profile_names },
     { "ttp_display_release", "()V", (void*) n_ttp_display_release },
@@ -1410,13 +1409,12 @@ const JNINativeMethod kMethods[] = {
     { "ttp_race_demo_live_json", "(I[B[B)[B", (void*) n_ttp_race_demo_live_json },
     { "ttp_race_effect_ops_json", "()[B", (void*) n_ttp_race_effect_ops_json },
     { "ttp_race_end_party_json", "()[B", (void*) n_ttp_race_end_party_json },
-    { "ttp_race_events_live_json", "(II[BIIDDD)[B", (void*) n_ttp_race_events_live_json },
+    { "ttp_race_events_live_json", "(II[BIIDD)[B", (void*) n_ttp_race_events_live_json },
     { "ttp_race_forfeit_live_json", "(I[B)[B", (void*) n_ttp_race_forfeit_live_json },
     { "ttp_race_intermission_ms", "()D", (void*) n_ttp_race_intermission_ms },
     { "ttp_race_pause_live_json", "(IIIII)[B", (void*) n_ttp_race_pause_live_json },
     { "ttp_race_personas_json", "()[B", (void*) n_ttp_race_personas_json },
     { "ttp_race_rekey_live_json", "(II[B[B)[B", (void*) n_ttp_race_rekey_live_json },
-    { "ttp_race_results_failsafe_ms", "()D", (void*) n_ttp_race_results_failsafe_ms },
     { "ttp_race_resume_live_json", "(IIIII)[B", (void*) n_ttp_race_resume_live_json },
     { "ttp_race_return_live_json", "(I)[B", (void*) n_ttp_race_return_live_json },
     { "ttp_race_series_state_json", "(I)[B", (void*) n_ttp_race_series_state_json },
@@ -1471,7 +1469,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_ui_cup_tint_rgb", "([BD)I", (void*) n_ttp_ui_cup_tint_rgb },
     { "ttp_ui_freeze_plan_json", "(III)[B", (void*) n_ttp_ui_freeze_plan_json },
     { "ttp_ui_intermission_secs", "(DD)D", (void*) n_ttp_ui_intermission_secs },
-    { "ttp_ui_item_pushes_live_json", "(I[B)[B", (void*) n_ttp_ui_item_pushes_live_json },
+    { "ttp_ui_item_pushes_live_json", "(I)[B", (void*) n_ttp_ui_item_pushes_live_json },
     { "ttp_ui_neutral_tint_rgb", "(D)I", (void*) n_ttp_ui_neutral_tint_rgb },
     { "ttp_ui_progress_json", "()[B", (void*) n_ttp_ui_progress_json },
     { "ttp_ui_progress_load", "([BI)I", (void*) n_ttp_ui_progress_load },
@@ -1479,10 +1477,12 @@ const JNINativeMethod kMethods[] = {
     { "ttp_ui_reconnect_diff_json", "([B[B)[B", (void*) n_ttp_ui_reconnect_diff_json },
     { "ttp_ui_results_action_json", "(I)[B", (void*) n_ttp_ui_results_action_json },
     { "ttp_ui_results_view_json", "([BD)[B", (void*) n_ttp_ui_results_view_json },
+    { "ttp_ui_results_view_live_json", "(ID)[B", (void*) n_ttp_ui_results_view_live_json },
     { "ttp_ui_roster_seats_room_json", "(I[B)[B", (void*) n_ttp_ui_roster_seats_room_json },
     { "ttp_ui_screen_step", "([B[B)I", (void*) n_ttp_ui_screen_step },
     { "ttp_ui_seat_grid_json", "([B)[B", (void*) n_ttp_ui_seat_grid_json },
     { "ttp_ui_series_info_live_json", "(ID)[B", (void*) n_ttp_ui_series_info_live_json },
+    { "ttp_ui_settle_standings", "(I)I", (void*) n_ttp_ui_settle_standings },
     { "ttp_ui_standings_live_json", "(III[BD)[B", (void*) n_ttp_ui_standings_live_json },
     { "ttp_ui_welcome_item_live_json", "(I[B)[B", (void*) n_ttp_ui_welcome_item_live_json },
     { "ttp_update", "(ID)V", (void*) n_ttp_update },

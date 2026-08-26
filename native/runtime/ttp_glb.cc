@@ -38,9 +38,9 @@ const uint8_t* ttp_glb_ghost(const uint8_t* bytes, uint32_t len, uint32_t* outLe
 const char* ttp_glb_image_uris(const uint8_t* bytes, uint32_t len) {
     ttp::Value a = ttp::Value::Arr();
     for (const std::string& u : ttp::rt::glb_image_uris(bytes, len)) a.push(ttp::Value::Str(u));
-    // ordered, not canonical: the array's order is the container's own image
-    // order, which a sort would throw away for nothing.
-    ttp::ordered_stringify_into(a, uriScratch());
+    // Canonical, like every ABI answer. A sort touches object KEYS only, so the
+    // array's order — the container's own image order — is untouched by it.
+    ttp::canonical_stringify_into(a, uriScratch());
     return uriScratch().c_str();
 }
 

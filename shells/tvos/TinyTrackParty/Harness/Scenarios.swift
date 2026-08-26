@@ -227,7 +227,7 @@ enum Scenarios {
             // on an arrangement the game cannot produce is worth nothing. The
             // player seats drive because `apply` latched autopilot above, and
             // the live launch grids humans at the back of an eight-car field
-            // (ttp_race.cc, `humansAtBack`), which is exactly what
+            // (race_flow.cc, `orderGrid`), which is exactly what
             // `ttp_race_bench_field_json` composes for a shell with no room.
             //
             // `-ttpPlayers N` picks how many cells are in the picture and

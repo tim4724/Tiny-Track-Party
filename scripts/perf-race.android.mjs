@@ -62,17 +62,9 @@ const TAG = 'TtpPerf';
  *                    `budgetMs` doubles and every share on the line is against
  *                    that, which is what makes a paced arm comparable to a free
  *                    one.
- *   --mv 1           multiview split-screen: cells as two-eye stereo passes
- *                    (shells/androidtv/CLAUDE.md's Multiview section). The
- *                    SHIPPED default is mode 1 (4-cell splits only), but a
- *                    bench arm without --mv pins the CLASSIC path (-1), so
- *                    every arm is explicit and readings stay comparable to
- *                    the pre-multiview ledgers. 2 forces ANY split (a
- *                    measured 2P/3P regression — experiments only).
- *   --vk 1           the Vulkan backend (classic path, stereo off) — the
- *                    SHIPPING default, but an unflagged arm pins GL so
- *                    readings stay comparable to every GL-era ledger; see
- *                    shells/androidtv/CLAUDE.md.
+ *   --vk 1           the Vulkan backend — the SHIPPING default, but an
+ *                    unflagged arm pins GL so readings stay comparable to
+ *                    every GL-era ledger; see shells/androidtv/CLAUDE.md.
  *   --serial <id>    an explicit adb device
  */
 export function makeAndroidBackend() {
@@ -107,7 +99,6 @@ export function makeAndroidBackend() {
       setprop('debug.ttp.features', 0);   // 0 = "not set", i.e. draw everything
       setprop('debug.ttp.aa', 0);
       setprop('debug.ttp.hz', 0);
-      setprop('debug.ttp.mv', 0);
       setprop('debug.ttp.perf', 0);
       setprop('debug.ttp.vk', 0);         // a leftover 1 flips the ENGINE's backend
     } catch { /* the box went away; nothing to restore it on */ }
@@ -188,17 +179,10 @@ export function makeAndroidBackend() {
       // parser reads without drawing anything — and drawing it is four Compose
       // re-measures a second on the very thread being priced.
       setprop('debug.ttp.perf', 0);
-      // Multiview split-screen (`shells/androidtv/CLAUDE.md`). A live path
-      // switch, so unlike the feature mask it needs no scene up first. An
-      // unflagged arm PINS the classic path (-1, not the shipped 4-cell
-      // default): the bench's readings predate multiview, and an arm that
-      // silently rode the default would not be comparable to any of them.
-      setprop('debug.ttp.mv', arg('mv', -1));
       // The backend (`debug.ttp.vk`: 1 Vulkan, -1 GL, unset = VulkanPolicy,
-      // which defaults to VULKAN). Explicit per arm for the same comparability
-      // reason as --mv — an unflagged arm PINS GL so readings stay comparable
-      // to the GL-era ledgers — and set BEFORE the launch below because a
-      // backend cannot be switched on a running engine.
+      // which defaults to VULKAN). Explicit per arm — an unflagged arm PINS GL
+      // so readings stay comparable to the GL-era ledgers — and set BEFORE the
+      // launch below because a backend cannot be switched on a running engine.
       setprop('debug.ttp.vk', arg('vk', -1));
 
       adb('logcat', '-c');

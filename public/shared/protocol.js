@@ -68,7 +68,12 @@ var MSG = {
   // Display -> all controllers: the retained room snapshot (relay set_state)
   LOBBY_UPDATE: 'lobby_update', // THE room snapshot. { roomState, hostPeerIndex, paused, soundOn, mode, cupId, trackId, randomRaces,
                                 //   players:[{peerIndex,name,colorIndex,carIndex,connected,ready,inRace}],
-                                //   standings:{over,order:[…],series?}|null (playing/results),
+                                //   standings:{over,total,hostPeerIndex,order:[…],series?,settled?}|null (playing/results;
+                                //   composed and RETAINED in C++ behind the room handle, so every shell puts the same board out).
+                                //   `settled` appears ONLY as true, and only on a cup's FINAL board, once the TV's podium reveal
+                                //   has landed — the phone's cue to stop reporting the race and report the cup. It is the ONLY
+                                //   difference between the two pushes of that board; ahead of it the phones would crown the champion
+                                //   while the TV was still counting points towards it.
                                 //   cars:[{id,name,stats}], colors:['#…'], tracks:[{id,name,cup,cupName,cupDifficulty,svg}]|null (lobby only),
                                 //   progress:{cups:[{id,stars,locked,unlockDone?,unlockNeed?}]} (lobby only; absent, not null, elsewhere —
                                 //   the couch's DERIVED star record, composed display-side off the wasm catalogue; phones draw it, never re-derive it) }.

@@ -216,7 +216,7 @@ export function autoPauseOnHeaderFocus() {
 
 // --- Card factory ---
 export function makeCard(opts) {
-  // opts: { title, tag, frameClass, logical, url, replayable, chromePx }
+  // opts: { title, tag, frameClass, logical, url, animated, chromePx }
   var card = document.createElement('div');
   card.className = 'card';
 
@@ -234,21 +234,6 @@ export function makeCard(opts) {
   head.appendChild(title);
 
   var actions = document.createElement('div'); actions.className = 'actions';
-  // Replay button calls window.__TEST__.replay() inside the iframe so
-  // animated scenarios (countdown) can be re-run without reloading.
-  if (opts.replayable) {
-    var replayBtn = document.createElement('button');
-    replayBtn.className = 'card-btn'; replayBtn.textContent = '▶';
-    replayBtn.title = 'Replay animation';
-    replayBtn.addEventListener('click', function() {
-      try {
-        var win = iframe.contentWindow;
-        var fn = win && win.__TEST__ && win.__TEST__.replay;
-        if (typeof fn === 'function') fn();
-      } catch (_) { /* iframe not ready */ }
-    });
-    actions.appendChild(replayBtn);
-  }
   var link = document.createElement('a');
   link.className = 'open-link'; link.target = '_blank'; link.rel = 'noopener';
   link.textContent = 'open ↗'; link.href = openHref(opts.url);

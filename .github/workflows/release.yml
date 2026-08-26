@@ -16,7 +16,7 @@ name: Release
 # design. A store build has to produce the real thing, which means the whole
 # native chain on a runner that has none of it: the pinned Filament fork built
 # as an Android SDK for BOTH ABIs, the NDK that fork pins, and a host matc for
-# the Android-only multiview material set. That is hours of build, so it is
+# the Android-only SPIR-V material set. That is hours of build, so it is
 # CACHED ON THE PIN — see the two steps that do it.
 #
 # Triggers: a bare-semver release tag (the repo's tag convention) or manual
@@ -139,12 +139,11 @@ jobs:
             ${{ runner.temp }}/filament/out/prebuilt-tools-release/tools/matc/matc
           key: filament-android-${{ steps.pin.outputs.commit }}
 
-      # -S multiview IS NOT OPTIONAL and it is not about the samples: it is the
-      # only way to set FILAMENT_ENABLE_MULTIVIEW, and without it Filament never
-      # compiles the _multiview variants of its own built-in materials, which a
-      # MULTIVIEW engine then fails to parse at runtime. Both ABIs install under
-      # ONE root. The android target also builds the host tools, which is where
-      # the matc the multiview material set needs comes from.
+      # Both ABIs install under ONE root. The android target also builds the
+      # host tools, which is where the matc comes from — and matc is what
+      # compiles the SPIR-V material set (materials-android-vk) that
+      # VulkanPolicy probes for, so a bundle built without it pins every
+      # install to the GL backend.
       #
       # CC/CXX ARE NOT OPTIONAL. Filament's CMakeLists rejects GCC outright
       # ("Detected CXX compiler GNU is unsupported"), and an Ubuntu runner's
@@ -162,8 +161,8 @@ jobs:
           sudo apt-get install -y ninja-build clang libc++-dev libc++abi-dev \
             libglu1-mesa-dev libxi-dev libxcomposite-dev libxxf86vm-dev \
             mesa-common-dev
-          ./build.sh -i -q armeabi-v7a -S multiview -p android release
-          ./build.sh -i -q arm64-v8a   -S multiview -p android release
+          ./build.sh -i -q armeabi-v7a -p android release
+          ./build.sh -i -q arm64-v8a   -p android release
 
       # Keyed and pathed identically to the restore above, or the next run's
       # restore misses and rebuilds what this just saved.

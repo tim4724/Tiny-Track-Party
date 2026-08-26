@@ -485,8 +485,9 @@ fun PauseOverlay(game: GameCoordinator) {
         // (The web adds `backdrop-filter: blur(10px)`. There is no equivalent here:
         // Compose's RenderEffect blurs its own subtree, and what is behind this is
         // a SurfaceView composited by SurfaceFlinger in a layer BELOW the app
-        // window — nothing in the view hierarchy can reach it. Blurring it would be
-        // the renderer's job.)
+        // window — nothing in the view hierarchy can reach it. The flat wash is the
+        // DECIDED look, not a gap waiting on a blur: see `docs/native-port/shells.md`,
+        // "Decided, not owed".)
         Modifier.fillMaxSize().background(Tokens.paper.copy(alpha = 0.72f)),
         contentAlignment = Alignment.Center,
     ) {

@@ -35,25 +35,24 @@ import org.json.JSONObject
  */
 class RaceFlowPerformer(private val game: GameCoordinator) {
 
-    /**
-     * What an op needs that is not in its own payload. Only `results` is read, by
-     * exactly three ops, and all three are emitted only by `endRace`.
-     */
-    class Context(val results: JSONObject? = null)
+    // NO PERFORM CONTEXT. It used to carry `endRace`'s results object down to
+    // `show-results` and the final `broadcast-standings`, untyped and paired with
+    // its two readers by nothing at all. Both read the ROOM-RETAINED board now
+    // (the walk's executor composes and retains it before it spells either op),
+    // so every effect is self-contained.
 
-    fun perform(effects: JSONArray, ctx: Context = Context()) {
+    fun perform(effects: JSONArray) {
         for (i in 0 until effects.length()) {
             val e = effects.optJSONObject(i)
             if (e == null) { game.state.fail("raceFlow: unperformable effect <malformed>"); continue }
-            apply(e.optString("op"), e, ctx)
+            apply(e.optString("op"), e)
         }
     }
 
-    private fun apply(op: String, e: JSONObject, ctx: Context) {
+    private fun apply(op: String, e: JSONObject) {
         when (op) {
             // ---- setup ------------------------------------------------------
             "stop-lobby-demo" -> game.lobbyDemo.stop()
-            "clear-item-cache" -> game.lastItem.clear()
 
             // ---- screens ----------------------------------------------------
             "show-screen" -> when (e.optString("screen")) {
@@ -155,15 +154,16 @@ class RaceFlowPerformer(private val game: GameCoordinator) {
                 game.display.burst(null, e.optDouble("s", 0.0), e.optDouble("lat", 0.0))
 
             // ---- the finish --------------------------------------------------
-            "broadcast-standings" ->
-                game.broadcastStandings(e.optBoolean("over"), ctx.results)
+            // The board itself was composed and RETAINED behind the room inside
+            // the walk — nothing about it crosses to this side, and the op is now
+            // bare. What is left to perform is the republish that carries it to
+            // the phones.
+            "broadcast-standings" -> game.net.publishSnapshot()
 
             // The points banking (constraint 3: BEFORE the final board goes out)
             // happens inside the event drain's executor — no op crosses.
-            "show-results" -> game.showResults(ctx.results)
+            "show-results" -> game.showResults()
 
-            "arm-results-failsafe" -> game.armResultsFailsafe(e.optDouble("ms", 60_000.0))
-            "clear-results-failsafe" -> game.clearResultsFailsafe()
             "arm-intermission" ->
                 game.armIntermission(e.optDouble("ms", 0.0), e.optDouble("deadline", 0.0))
             "clear-intermission" -> game.clearIntermission()
@@ -229,7 +229,7 @@ class RaceFlowPerformer(private val game: GameCoordinator) {
          * deliberately absent — they fall through to PartyNet's switch.
          */
         val PERFORMABLE: Set<String> = setOf(
-            "stop-lobby-demo", "clear-item-cache",
+            "stop-lobby-demo",
             "show-screen", "hide-results", "set-race-flags", "set-pause-overlay",
             "set-pause-button", "reveal-chrome", "hold-chrome",
             "reset-scene-cars", "create-session", "transition", "bind-session",
@@ -238,7 +238,6 @@ class RaceFlowPerformer(private val game: GameCoordinator) {
             "start-music", "stop-music", "show-music-credit", "stop-voices",
             "stop-car-audio", "item-pickup", "rocket-impact", "rocket-expire",
             "broadcast-standings", "show-results",
-            "arm-results-failsafe", "clear-results-failsafe",
             "arm-intermission", "clear-intermission", "place-track",
             "dispose-session", "fade-to-lobby", "remove-scene-car",
             "sync-state", "rekey-scene-car", "set-auto-paused", "sync-frozen",

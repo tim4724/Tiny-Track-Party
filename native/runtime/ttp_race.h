@@ -53,9 +53,8 @@
  * are different players. Peer indices are numbers and bots are strings like
  * "ai-0"; both flow through the same field.
  *
- * NULL IS NOT ZERO. A seat with no car pick, a launch with no ?item override
- * and a drain that crossed no race end all come out as JSON null, never 0
- * or "".
+ * NULL IS NOT ZERO. A seat with no car pick and a launch with no ?item
+ * override come out as JSON null, never 0 or "".
  */
 #ifndef TTP_RACE_H
 #define TTP_RACE_H
@@ -174,27 +173,28 @@ TTP_ABI const char* ttp_race_start_live_json(int roomHandle, int sceneReady,
  * forever; that routing table is not a shell concern any more. Ordinary events
  * run the finish/visuals rule, with humans-all-done read off the live handles
  * exactly when a finish asks for it. At the race's end the executor banks the
- * cup points against the room's series and retained field — before the board
- * effects, the order the corpus pins.
+ * cup points against the room's series and retained field, and then COMPOSES
+ * AND RETAINS the standings board behind the room — before the board effects,
+ * the order the corpus pins.
  *
  *   biome             the built scene's biome (the GO beat's music pick)
  *   audioReady        the device can play (a locked AudioContext picks no song)
  *   fastForwarding    inside the AI-only fast-forward burst: visuals silenced
- *   intermissionMs    ttp_race_intermission_ms(), or the E2E override
+ *   intermissionMs    ttp_race_intermission_ms(), or the E2E override — also
+ *                     the budget the retained board's cup chip is priced in
  *   nowMs             the shell's clock (the intermission deadline is absolute)
- *   resultsFailsafeMs ttp_race_results_failsafe_ms()
  *
- *   -> {"effects":[...], "results": obj|null}
+ *   -> {"effects":[...]}
  *
- * `results` is non-null exactly when the drain crossed the race's end: the
- * ranked board endRace hands its callback, which the show-results and final
- * broadcast-standings effects read as their context. No effect can carry it,
- * so it rides the answer. */
+ * NO `results` RIDER. It used to carry the ranked board endRace hands its
+ * callback, because the show-results and broadcast-standings effects needed it
+ * and no effect could. Both read the ROOM-RETAINED board now
+ * (ttp_ui_results_view_live_json, ttp_net_lobby_frame), so the rows never leave
+ * C++ and no shell holds an untyped perform-context to route them through. */
 TTP_ABI const char* ttp_race_events_live_json(int sessionHandle, int roomHandle,
                                               const char* biome,
                                               int audioReady, int fastForwarding,
-                                              double intermissionMs, double nowMs,
-                                              double resultsFailsafeMs);
+                                              double intermissionMs, double nowMs);
 
 /* ---- the cup chain / the way out ----------------------------------------- */
 
@@ -238,21 +238,21 @@ TTP_ABI const char* ttp_race_pause_live_json(int sessionHandle, int roomHandle,
 TTP_ABI const char* ttp_race_resume_live_json(int sessionHandle, int roomHandle,
                                               int paused, int autoPaused, int raceEnded);
 
-/* The two game-timing budgets (race_flow.h INTERMISSION_MS /
- * RESULTS_FAILSAFE_MS). Read them; the numbers have no shell home anymore. */
+/* The game-timing budget (race_flow.h INTERMISSION_MS). Read it; the number has
+ * no shell home anymore. */
 TTP_ABI double ttp_race_intermission_ms(void);
-TTP_ABI double ttp_race_results_failsafe_ms(void);
 
 /* ---- the countdown gate --------------------------------------------------- */
 
-/* MAY THE DEFERRED COUNTDOWN START YET? Poll it once a frame after a launch,
- * and perform the answer's `countdownEffects` the first time this says yes.
+/* MAY THE COUNTDOWN START YET? Poll it once a frame after a launch, and perform
+ * the answer's `countdownEffects` the first time this says yes.
  *
- * The start and advance walks now answer with TWO lists: `effects`, walked at
- * once as always, and `countdownEffects` — start-countdown alone — held back
+ * EVERY launch answers with TWO lists and there is no other shape: `effects`,
+ * walked at once, and `countdownEffects` — start-countdown alone — held back
  * until the scene the race is about to be driven on has stopped assembling
- * itself. race_flow.h's countdownReady says what the wait buys and why it is
- * measured in frames rather than in the build returning.
+ * itself. A shell that walks only the first list starts a race that never
+ * counts down. race_flow.h's countdownReady says what the wait buys and why it
+ * is measured in frames rather than in the build returning.
  *
  *   sceneBuilt     the shell's "my scene build has returned" latch
  *   measuring      is this surface feeding ttp_perf_sample at all? A shell that

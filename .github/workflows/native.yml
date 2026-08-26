@@ -150,9 +150,12 @@ jobs:
     # tree in a few minutes; a pin bump pays the fork build once. The fork's
     # gradle AAR step (which build.sh runs after installing the slices) is
     # allowed to fail — the slices under out/android-release/filament are the
-    # whole prize, and the num_views grep is require_sdk_slice's own gate
-    # (native/scripts/build-runtime-android.sh) for a slice built without
-    # multiview.
+    # whole prize, so the per-ABI `test -f` is the real gate.
+    #
+    # THE CACHE KEY STILL SAYS `multiview`, and that is deliberate: an SDK
+    # built with the flag serves a non-multiview engine perfectly well, and
+    # renaming the key throws away a ~110 MB cached Filament SDK for one cold
+    # 150-minute build. The name is history, not a requirement.
     runs-on: ubuntu-latest
     timeout-minutes: 150
     steps:
@@ -177,14 +180,12 @@ jobs:
           git -C filament-src checkout -q --detach FETCH_HEAD
           # The command build-runtime-android.sh prescribes for a missing
           # slice, both ABIs in one pass. || true covers the trailing gradle
-          # AAR build alone; the test/grep lines are the real gate.
+          # AAR build alone; the test lines are the real gate.
           cd filament-src
           CC=clang CXX=clang++ ANDROID_HOME=$ANDROID_HOME \
-            ./build.sh -i -q armeabi-v7a,arm64-v8a -S multiview -p android release || true
+            ./build.sh -i -q armeabi-v7a,arm64-v8a -p android release || true
           for abi in armeabi-v7a arm64-v8a; do
-            lib=out/android-release/filament/lib/$abi/libfilament.a
-            test -f "$lib"
-            LC_ALL=C grep -aq num_views "$lib"
+            test -f out/android-release/filament/lib/$abi/libfilament.a
           done
           cd ..
           mkdir filament-sdk

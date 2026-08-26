@@ -79,7 +79,7 @@ function ui_() {
       raceAdvanceLive: c('ttp_race_advance_live_json', 'string',
         ['number', 'number', 'number', 'number', 'string', 'string']),
       raceEventsLive: c('ttp_race_events_live_json', 'string',
-        ['number', 'number', 'string', 'number', 'number', 'number', 'number', 'number']),
+        ['number', 'number', 'string', 'number', 'number', 'number', 'number']),
       raceSeriesState: c('ttp_race_series_state_json', 'string', ['number']),
       raceBegin: c('ttp_session_begin', 'number', ['string', 'number', 'number', 'string']),
       raceAddHuman: c('ttp_add_human', null, ['number', 'string', 'string']),
@@ -202,14 +202,14 @@ function ui_() {
           seriesState: () => JSON.parse(raw.raceSeriesState(room)),
           // Run the current race out in the order given (ids finish 60s, 61s,
           // ...) and drain it. The drain is where the executor banks the cup
-          // points, so `results` and the series move together, as at a party.
+          // points, so a board read after this sees the live session and the
+          // series move together, as at a party.
           finish: (order) => {
             order.forEach((id, i) => raw.raceForceFinish(session, J(id), 60 + i));
             raw.raceUpdate(session, 16);
             const d = JSON.parse(raw.raceEventsLive(session, room, 'beach', 0, 0,
-                                                    8000, 100000, 20000));
+                                                    8000, 100000));
             perform(d.effects);
-            return d.results;
           },
           nextRace: () => launch(raw.raceAdvanceLive),
           board: ({ over = false, results = null, autoAdvanceMs = 10000 } = {}) =>
@@ -421,22 +421,27 @@ test('the cup chip names the next race out of the shipped catalogue', async () =
   assert.equal(done.final, true);
 });
 
-test('the standings board keeps its wire key order', async () => {
+test('the standings board carries exactly the keys it contracts', async () => {
   const ui = await ui_();
+  // Key SET, not key order: the ABI answers canonical (sorted) JSON like every
+  // other, so both sides sort before they are compared — the same shape
+  // tests/party-abi.test.js and tests/wire-compat.test.js use.
+  const keys = (o) => Object.keys(o).sort();
 
   // Ada races alone; Bo's phone arrives AFTER the launch, so he holds a seat
   // with no car — the only way to get a joining row now, because the late-joiner
   // list is subtracted from the live race inside C++ rather than handed in.
   const p = ui.party({ names: ['Ada'], pick: { mode: 'track', trackId: 'tidepool' } });
   const bo = p.join('Bo');
-  const board = p.board({ over: true, results: p.finish([1]) });
+  p.finish([1]);
+  const board = p.board({ over: true });
 
   // The controller reads this by key, but the shape is a contract two languages
   // will implement, so pin it rather than leave it to whoever writes the struct.
-  assert.deepEqual(Object.keys(board), ['over', 'hostPeerIndex', 'total', 'order']);
-  assert.deepEqual(Object.keys(board.order[0]),
-    ['playerId', 'name', 'colorIndex', 'ai', 'finished', 'time', 'racePlace']);
-  assert.deepEqual(Object.keys(board.order[1]), ['playerId', 'name', 'colorIndex', 'joining']);
+  assert.deepEqual(keys(board), ['hostPeerIndex', 'order', 'over', 'total']);
+  assert.deepEqual(keys(board.order[0]),
+    ['ai', 'colorIndex', 'finished', 'name', 'playerId', 'racePlace', 'time']);
+  assert.deepEqual(keys(board.order[1]), ['colorIndex', 'joining', 'name', 'playerId']);
   assert.equal(board.total, board.order.length, 'total always counts the joining rows too');
   // The joining row is dressed from the ROOM record, not from the race field.
   assert.deepEqual(board.order[1], {
@@ -448,10 +453,11 @@ test('the standings board keeps its wire key order', async () => {
   // The cup half is ONE nested object composed here, never two sibling keys.
   // A cup pick is the whole difference: same walks, same board, one more key.
   const gp = ui.party({ names: ['Ada'], pick: { mode: 'cup', cupId: ui.CUPS[0].id } });
-  const cupBoard = gp.board({ over: true, results: gp.finish([1]) });
-  assert.deepEqual(Object.keys(cupBoard), ['over', 'hostPeerIndex', 'series', 'total', 'order']);
-  assert.deepEqual(Object.keys(cupBoard.order[0]),
-    ['playerId', 'name', 'colorIndex', 'ai', 'finished', 'time', 'racePlace', 'points', 'gained']);
+  gp.finish([1]);
+  const cupBoard = gp.board({ over: true });
+  assert.deepEqual(keys(cupBoard), ['hostPeerIndex', 'order', 'over', 'series', 'total']);
+  assert.deepEqual(keys(cupBoard.order[0]),
+    ['ai', 'colorIndex', 'finished', 'gained', 'name', 'playerId', 'points', 'racePlace', 'time']);
 });
 
 test('a live cup board stays in race order; only the final board re-sorts', async () => {
@@ -480,7 +486,8 @@ test('a live cup board stays in race order; only the final board re-sorts', asyn
   // Run it out for real: the drain banks Bo's 9 and Ada's 6 against the room's
   // series before the final board is composed, which is the order the corpus
   // pins. Ada still leads, so the final board re-sorts away from the race.
-  const final = p.board({ over: true, results: p.finish([BO, ADA]) });
+  p.finish([BO, ADA]);
+  const final = p.board({ over: true });
   assert.deepEqual(final.order.map((r) => r.playerId), [ADA, BO],
     'the final board tells the cup story');
   assert.deepEqual(final.order.map((r) => r.gained), [6, 9]);

@@ -42,12 +42,14 @@
 // keeping the second copy public/display/aiPersonas.js used to be.
 //
 // CONFORMANCE. tests/fixtures/raceflow-corpus.jsonl was recorded off the live
-// raceFlow.js before this file existed, which makes it JS-RECORDED
-// cross-implementation evidence: class 1 in tests/fixtures/traces/README.md,
-// the only class that can settle a parity question. runtimetest/raceflow_check.cc
-// replays every step of it — `out` AND the shell state its driver threads —
-// through this header on all four legs. A disagreement is a bug HERE, never in
-// the corpus.
+// raceFlow.js before this file existed, and its JS-parity claim now lives in git
+// history: baking the three launch flags in (below) re-recorded every launch and
+// podium line, which DEMOTES the fixture to class 2 — regression evidence, not
+// cross-implementation evidence (tests/fixtures/traces/README.md).
+// runtimetest/raceflow_check.cc still replays every step of it — `out` AND the
+// shell state its driver threads — through this header on all four legs, and an
+// UNEXPLAINED disagreement is still a bug HERE: the fixture moves only on a
+// deliberate, green-first, diff-read re-record (root rule 4).
 //
 // WHAT IS DELIBERATELY NOT HERE. The performing (sockets, timers, the History
 // API, the AudioContext, scene objects), and — for the reason the plan gives
@@ -87,8 +89,8 @@ enum class Op {
   BIND_SESSION, PAINT_INITIAL_HUD, START_COUNTDOWN, SHOW_COUNTDOWN,
   BROADCAST_COUNTDOWN, REFRESH_AUTO_PAUSE, START_MUSIC, STOP_MUSIC,
   SHOW_MUSIC_CREDIT, STOP_VOICES, ITEM_PICKUP, ROCKET_IMPACT, ROCKET_EXPIRE,
-  BROADCAST_STANDINGS, APPLY_RACE_POINTS, SHOW_RESULTS, ARM_RESULTS_FAILSAFE,
-  CLEAR_RESULTS_FAILSAFE, ARM_INTERMISSION, CLEAR_INTERMISSION, SERIES_ADVANCE,
+  BROADCAST_STANDINGS, APPLY_RACE_POINTS, SHOW_RESULTS, ARM_INTERMISSION,
+  CLEAR_INTERMISSION, SERIES_ADVANCE,
   CLEAR_SERIES, SET_TRACK_FROM_SERIES, PLACE_TRACK, SET_TRACK, DISPOSE_SESSION,
   CLEAR_FIELD, FADE_TO_LOBBY, REMOVE_SCENE_CAR, STOP_CAR_AUDIO, SYNC_STATE,
   SERIES_REKEY, REKEY_SCENE_CAR, REKEY_FIELD, SET_AUTO_PAUSED, SYNC_FROZEN,
@@ -360,37 +362,34 @@ struct LaunchInput {
   OptStr forceItem;
   FieldWorld world;
   // Grid order. The field array IS the grid — index 0 is pole (the session
-  // seats cars in field order) — and these two knobs reorder it AFTER the fill:
-  //   * gridOrder, when non-empty, is the previous race's finish order and wins
-  //     outright (a chained series race). Ids it does not name — a mid-series
-  //     joiner, a fresh fill bot — start at the back.
-  //   * humansAtBack sends the CPU field out front (a first race, and the
-  //     back-of-grid rule for ids gridOrder missed).
-  // Both default OFF because the raceflow corpus predates them: recorded
-  // launches replay the recorded grid, and the live walks pass the game's rule.
-  bool humansAtBack = false;
+  // seats cars in field order) — and it is reordered AFTER the fill by the
+  // GAME'S ONE RULE, which has no off switch: HUMANS START AT THE BACK, behind
+  // the CPU field. `gridOrder`, when non-empty, is the previous race's finish
+  // order and wins outright over it (a chained series race); ids it does not
+  // name — a mid-series joiner, a fresh fill bot — fall to the back-of-grid
+  // rule. An empty gridOrder is a first race, where the rule is the whole
+  // ordering.
   std::vector<Id> gridOrder;
   // Give every PLAYER seat a controller too (BotSpec::player) — the bench, the
   // attract race and the screenshot harnesses, where nobody is holding a phone.
   // The field is otherwise identical to a real launch's: same fill, same grid
   // rule, same cells, same ids. Only the source of the steering changes.
   //
-  // Default OFF for the corpus's sake, exactly like humansAtBack.
+  // THE ONE FLAG LEFT, and it cannot be baked in the way the grid and countdown
+  // rules were: it is not what a shipping race does — a real party steers from
+  // phones — and ttp_race_autopilot_players() sets a runtime latch the live
+  // launch path reads, so OFF is a state the shipping build reaches.
   bool autopilotPlayers = false;
-  // THE COUNTDOWN DOES NOT START ON A SCENE THAT IS STILL ASSEMBLING ITSELF.
-  // On, the launch stops one op short and the countdown rides `countdownEffects`
-  // instead, to be performed when countdownReady() says the picture has settled.
-  // See that function for what the wait is actually for.
-  //
-  // Default OFF for the corpus's sake, exactly like the two above.
-  bool deferCountdown = false;
 };
 struct LaunchResult {
   Effects effects;
-  // The launch's tail, EMPTY unless deferCountdown asked for it. A second list
-  // rather than a marker op in the first, because a walk is performed whole:
-  // a shell that had to suspend halfway through one would be sequencing the
-  // launch itself, which is the thing this layer exists to stop.
+  // The launch's tail: `start-countdown` alone, held until countdownReady()
+  // says the scene has stopped assembling. THE COUNTDOWN DOES NOT START ON A
+  // SCENE THAT IS STILL ASSEMBLING ITSELF — see countdownReady for what the
+  // wait is actually for. A second list rather than a marker op in the first,
+  // because a walk is performed whole: a shell that had to suspend halfway
+  // through one would be sequencing the launch itself, which is the thing this
+  // layer exists to stop.
   Effects countdownEffects;
   std::vector<FieldEntry> field;
   std::vector<Id> aiIds;
@@ -489,11 +488,6 @@ struct EndRaceInput {
   bool seriesFinished = false;
   double intermissionMs = 0;
   double nowMs = 0;
-  double resultsFailsafeMs = 0;
-  // Emit persist-progression on a finished series' podium. Default-off keeps
-  // the frozen corpus lines byte-identical (same trick as LaunchInput's
-  // humansAtBack); the live executor always sets it.
-  bool bankProgression = false;
 };
 Effects endRace(const EndRaceInput& in);
 
@@ -567,15 +561,14 @@ struct PauseResult {
 PauseResult pauseRace(const PauseInput& in);
 PauseResult resumeRace(const PauseInput& in);
 
-// The two game-timing budgets endRace takes as inputs. They live HERE — the
-// layer that arms the timers' effects — and shells read them through the ABI
-// (main.js used to own both numbers, which made them the only game timings a
-// second shell had to re-author). The E2E overrides (__intermissionMs and
-// friends) stay shell-side overrides of these defaults; the raceflow corpus
-// header records the values it was driven with and raceflow_check pins it to
-// these, so the oracle and the layer cannot drift.
+// The game-timing budget endRace takes as an input. It lives HERE — the layer
+// that arms the timer's effect — and shells read it through the ABI (main.js
+// used to own the number, which made it a game timing a second shell had to
+// re-author). The E2E override (__intermissionMs) stays a shell-side override
+// of this default; the raceflow corpus header records the value it was driven
+// with and raceflow_check pins it to this, so the oracle and the layer cannot
+// drift.
 inline constexpr double INTERMISSION_MS = 10000;       // auto-advance budget; the host can advance early
-inline constexpr double RESULTS_FAILSAFE_MS = 60000;   // players-all-left recovery net
 
 // ---- the roster-driven repairs ----------------------------------------------
 

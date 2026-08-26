@@ -118,29 +118,19 @@ mkdir -p "$OUT/audio/music"
 cp "$ROOT/public/assets/audio/music"/*.mp3 "$OUT/audio/music/"
 cp "$ROOT/public/assets/audio/music/CREDITS.txt" "$OUT/audio/music/"
 
-# The compiled materials — the web's own bytes, UNLESS the multiview set has
-# been built (native/scripts/build-runtime-android.sh compiles it beside the
-# .so). That set is the same materials with the OVR_multiview stereo variants
-# added — identical shaders for every non-stereo draw — and it is what the
-# multiview split-screen path needs; it stays build output because its blobs
-# cannot be the committed shared set (shells/androidtv/CLAUDE.md, Multiview).
-# Ten of the fourteen degrade SILENTLY if absent (no voverlay = the steer bar
-# and cell dividers simply vanish, with nothing logged), so the shell asserts
-# on the whole set at load rather than skipping like the web's `if (res.ok)`.
-MATERIALS_MV="$ROOT/native/build/materials-android-mv"
-if [ -n "$(ls "$MATERIALS_MV"/*.filamat 2>/dev/null)" ]; then
-  say "materials: MULTIVIEW set ($MATERIALS_MV)"
-  cp "$MATERIALS_MV"/*.filamat "$OUT/materials/"
-else
-  say "materials: committed shared set (no multiview build present)"
-  cp "$MATERIALS"/*.filamat "$OUT/materials/"
-fi
+# The compiled materials — the web's own bytes, because GLES3 is GLES3 and this
+# shell's GL arm loads exactly what the browser does. Most of the set degrades
+# SILENTLY if absent (no voverlay = the steer bar and cell dividers simply
+# vanish, with nothing logged), so the shell asserts on the whole set at load
+# rather than skipping like the web's `if (res.ok)`.
+say "materials: committed shared set"
+cp "$MATERIALS"/*.filamat "$OUT/materials/"
 
 # The SPIR-V twins for the Vulkan backend — this shell's DEFAULT
-# (build-runtime-android.sh compiles them beside the multiview set). Staged
-# only when built: VulkanPolicy probes for this directory and pins an APK
-# without it to GL from launch one, so a matc-less build still runs — it just
-# runs the fallback backend.
+# (build-runtime-android.sh compiles them). Staged only when built:
+# VulkanPolicy probes for this directory and pins an APK without it to GL from
+# launch one, so a matc-less build still runs — it just runs the fallback
+# backend.
 MATERIALS_VK="$ROOT/native/build/materials-android-vk"
 if [ -n "$(ls "$MATERIALS_VK"/*.filamat 2>/dev/null)" ]; then
   say "materials: VULKAN experiment set ($MATERIALS_VK)"

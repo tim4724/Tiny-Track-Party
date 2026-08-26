@@ -122,9 +122,11 @@ export class RaceAudio {
   }
 
   // ---- the command bus ----
-  // Perform a decision stream, in order. This is the ONLY path the race drives
-  // (NativeAudio.js hands it the wasm's answers); the named methods below exist
-  // for the gallery harness, which has no decision layer behind it.
+  // Perform a decision stream, in order. This is the ONLY way a sound starts:
+  // NativeAudio.js hands over the wasm's answers, and the gallery previews walk
+  // the same decision layer rather than firing cues of their own (they run a
+  // real sim with real player seats, so there is nothing for a bespoke surface
+  // to stand in for).
   apply(cmds) {
     for (const c of cmds) {
       if (c.cue !== undefined) {
@@ -165,6 +167,12 @@ export class RaceAudio {
   // live physics every frame (boost wind, cornering squeal, brake skid, the
   // engine loop, a rocket's jet). The decision layer owns when one starts and
   // stops; this just holds the live nodes.
+  //
+  // `mod` — {rateMul, gainMul, lpMul} — DEEPENS a voice into a heavy big-truck
+  // growl (pitch down, a touch louder, top end muffled). It rides the command as
+  // NUMBERS rather than as a flag this file resolves through a table of its own,
+  // so the monster truck's timbre is written down once, in the C++ layer that
+  // authored it (audio.cc's MONSTER_ENGINE_MOD).
   _stateVoice(cueId, id, level, mod) {
     if (!this.ready) return;
     const key = cueId + ':' + id;
@@ -176,7 +184,7 @@ export class RaceAudio {
       voice = v.start(this.ctx, this.master);
       this._voices.set(key, voice);
     }
-    voice.set(level, mod); // mod (optional) deepens the engine voice into a monster-truck growl
+    voice.set(level, mod);
   }
   _stopVoice(cueId, id) {
     const key = cueId + ':' + id;
@@ -195,26 +203,6 @@ export class RaceAudio {
     for (const [key, voice] of this._voices) {
       if (key.endsWith(':' + id)) { voice.stop(); this._voices.delete(key); }
     }
-  }
-
-  // ---- gallery surface ----
-  // /gallery.html's scenarios (display/TestHarness.js) fire cues directly: they
-  // run a preview world with no players, so there is no distance model and no
-  // decision stream behind them. Full level, no gating.
-  spin(vol = 1) { this._play('banana_slip', vol); } // oil shares the comedy cue
-  monsterInflate(vol = 1) { this._play('monster_inflate', vol); }
-  monsterDeflate(vol = 1) { this._play('monster_deflate', vol); }
-  rocketFlight(id, level) { this._stateVoice('rocket_fire', id, Math.max(0, Math.min(1, level))); }
-  rocketHit(level = 1) { this._play('rocket_hit', Math.max(0, Math.min(1, level))); }
-  // `mod` DEEPENS the engine into a heavy big-truck growl (pitch down, a touch
-  // louder, top end muffled) — {rateMul, gainMul, lpMul}, or null for the stock
-  // voice. The CALLER supplies it rather than this file keeping a monster flag
-  // and a table to resolve it: on the race path that timbre already arrives as
-  // numbers on the voice command (NativeAudio's cmd.mod, authored in the C++
-  // decision layer), so a second copy here would be the one place the growl was
-  // written down twice. The gallery hands in MONSTER_ENGINE_MOD from the oracle.
-  engineDrive(id, level, mod = null) {
-    this._stateVoice('engine_putt', id, Math.max(0, Math.min(1, level)), mod);
   }
 
   // ---- background music ----

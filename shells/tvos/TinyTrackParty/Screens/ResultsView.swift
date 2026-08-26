@@ -57,6 +57,20 @@ struct RaceResultsView: View {
     /// End of the road: back to the lobby (which also cancels a cup).
     let onNewGame: () -> Void
 
+    /// The last point has landed and the board has stopped moving.
+    ///
+    /// **The phones need it, and this shell never sent it.** They are handed the
+    /// standings the instant the race ends, which is the instant this board
+    /// STARTS its reveal, so anything they say about the cup before now would be
+    /// said ahead of the TV. The TIMING is necessarily a shell's — it is this
+    /// reveal's own completion and no handle knows it — while WHICH boards it
+    /// means anything for is the rule's (`ttp_ui_settle_standings`: only a cup's
+    /// LAST). So this fires on every board that finishes settling and the model
+    /// decides. It is deliberately NOT called on a cancelled reveal: a board
+    /// torn down mid-flight never settled. The web twin is `raceOverlays.js`'s
+    /// `onSettled`.
+    let onSettled: () -> Void
+
     /// Phase 2 is up. A single-race board has one phase and opens already there.
     @State private var standings = false
     /// How much of each row's "+N" has moved into its total, 0...1.
@@ -104,6 +118,8 @@ struct RaceResultsView: View {
     private func runPhases() async {
         standings = !view.twoPhase
         accounted = view.twoPhase ? 0 : 1
+        // A single-phase board never settles, exactly as on the web: `settle()`
+        // there is reachable only from phase 2.
         guard view.twoPhase else { return }
 
         guard await sleep(ms: view.racePhaseMs) else { return }
@@ -114,7 +130,7 @@ struct RaceResultsView: View {
         // intermission budget — a fixed duration would leave the tally still
         // running after the next race had started.
         let most = view.listRows.map(\.owed).max() ?? 0
-        guard most > 0 else { accounted = 1; return }
+        guard most > 0 else { accounted = 1; onSettled(); return }
         let tickMs = max(16.0, view.racePhaseMs * Self.tickOfPhase)
         let runMs = Double(most) * tickMs
         let startedAt = CACurrentMediaTime()
@@ -127,6 +143,8 @@ struct RaceResultsView: View {
             if elapsed >= runMs { break }
         }
         accounted = 1
+        // The cup is now told. Anything waiting on it — the phones — can say so.
+        onSettled()
     }
 
     /// `Task.sleep`, answering whether it completed rather than throwing — a

@@ -24,15 +24,19 @@
 // drives `lastItem`, and a `pushes` check with no `rows` check beside it would
 // silently accept a step whose cars were misread.
 //
-// THE BOARD'S KEY ORDER. `out.wire` is the recorded JSON.stringify of the
-// standings payload — INSERTION order, the bytes the phones receive. The
-// structural diff cannot see that (it sorts keys, as canonical JSON must), so
-// the board is rebuilt in the JS's own key order and serialized with
-// ordered_stringify — libttp-json's second emitter, which shares its whole walk
-// with canonical_stringify and differs only in not sorting. That is also what
-// runtime/ttp_ui.cc emits with, so this check pins the exact bytes the shipping
-// ABI hands a shell. canonical_stringify keeps the sort and its evidence-only
-// job; it must not grow a mode.
+// THE BOARD'S `wire` FIELD. `out.wire` is the recorded JSON.stringify of the
+// standings payload, in the JS literal's key order. That order is no longer
+// anybody's contract — runtime/ttp_ui.cc emits canonical JSON like every other
+// ABI, because the board only ever reached a phone inside a frame the encoder
+// canonicalizes — so this check COPIES the recorded string through verbatim and
+// asserts against it separately, in checkWire(). Copying is what keeps the
+// re-recorded fixture byte-identical for record_ui's SHA gate; checkWire is what
+// keeps the field from being a value that compares to itself. The copy-through
+// cuts one way: a DELIBERATE board-shape change re-recorded via --record bakes
+// the stale `wire` strings into the fresh fixture and checkWire goes red on
+// every board step with no code defect. The escape is to delete the `wire`
+// fields from the fixture first — checkWire and the copy-through both skip an
+// absent field.
 //
 // THE SYNTHETIC WORLD COMES OUT OF THE CORPUS. The model is catalogue-AGNOSTIC
 // — it looks cups and tracks up in whatever list it is handed — so the generator
@@ -205,11 +209,6 @@ Value idArray(const std::vector<ui::Id>& ids) {
   return a;
 }
 
-// The wire bytes: JSON.stringify in INSERTION order. Values are built below in
-// the JS literal's own key order, so walking them unsorted reproduces the
-// phones' bytes exactly.
-std::string wire(const Value& v) { return ordered_stringify(v); }
-
 // ---- the shell state a scenario threads --------------------------------------
 // Exactly what main.js owns beside the model, and what gen-ui-corpus.mjs's
 // newShellState() records after every step.
@@ -365,7 +364,7 @@ ui::SeriesInfo seriesFrom(const Value& s, const std::vector<ui::CatalogEntry>& c
 }
 
 Value seriesValue(const ui::SeriesInfo& s) {
-  Value o = Value::Obj();   // seriesInfo's literal order — part of `wire`
+  Value o = Value::Obj();   // key order is free here: every comparison sorts
   o.set("cupId", valOf(s.cupId));
   o.set("cupName", valOf(s.cupName));
   o.set("endless", Value::Bool(s.endless));
@@ -379,7 +378,7 @@ Value seriesValue(const ui::SeriesInfo& s) {
 }
 
 Value rowValue(const ui::BoardRow& r) {
-  Value o = Value::Obj();   // standingsPayload's literal order — part of `wire`
+  Value o = Value::Obj();   // key order is free; key PRESENCE below is not
   o.set("playerId", r.playerId.toValue());
   o.set("name", Value::Str(r.name));
   o.set("colorIndex", Value::Num(r.colorIndex));
@@ -458,7 +457,9 @@ Value viewValue(const ui::ResultsView& v) {
 }
 
 // One step: run the op, mutate the shell, return the `out` the corpus records.
-Value applyOp(Shell& st, const std::string& op, const Value& in) {
+// `recorded` is the step's recorded `out`, and exactly one op reads it — `board`,
+// which copies `wire` through verbatim (see the note up top).
+Value applyOp(Shell& st, const std::string& op, const Value& in, const Value* recorded) {
   const std::vector<ui::Cup>& cups = g_world.cups;
   const std::vector<ui::CatalogEntry>& catalog = g_world.catalog;
   Value out = Value::Obj();
@@ -677,7 +678,8 @@ Value applyOp(Shell& st, const std::string& op, const Value& in) {
         results, field, cup.standings ? &cup : nullptr, late, idOf(in.find("hostPeerIndex")), over);
     const Value bv = boardValue(board);
     out.set("board", bv);
-    out.set("wire", Value::Str(wire(bv)));
+    const Value* w = recorded ? recorded->find("wire") : nullptr;
+    if (w && w->type == Value::STR) out.set("wire", *w);
     out.set("view", over ? viewValue(ui::resultsView(board, g_world.intermissionMs))
                          : Value::Null());
     return out;
@@ -689,6 +691,34 @@ Value applyOp(Shell& st, const std::string& op, const Value& in) {
   }
   std::fprintf(stderr, "unknown ui-corpus op '%s'\n", op.c_str());
   std::exit(2);
+}
+
+// What the recorded `wire` still proves, now that applyOp copies it through
+// rather than re-spelling it: parsed and canonicalized, it must be the SAME TREE
+// as the board this run built — the shape, the js_number_to_string spelling of
+// every number, and null-vs-absent (JSON.stringify dropped `undefined`, so a key
+// the recording never emitted must not appear here either). What it no longer
+// proves is key ORDER, which is not a contract anywhere any more.
+//
+// Weigh it honestly: the same step's `out.board` carries that identical tree and
+// is diffed against the recording too, so this assert is close to redundant with
+// what the `board` comparison already gives. It is kept because it costs one
+// parse, and without it a copied-through field would compare only to itself.
+void checkWire(const std::string& what, const Value& wantOut, const Value& got) {
+  const Value* w = wantOut.find("wire");
+  const Value* board = got.find("board");
+  if (!w || w->type != Value::STR || !board) return;
+  bool ok = false;
+  const Value parsed = json::parse(w->str.c_str(), &ok);
+  const std::string want = ok ? canonical_stringify(parsed) : std::string();
+  const std::string mine = canonical_stringify(*board);
+  cases++;
+  if (ok && want == mine) {
+    passed++;
+  } else if (spew++ < 20) {
+    std::fprintf(stderr, "FAIL %s wire\n  recorded %s\n  board    %s\n", what.c_str(),
+                 want.c_str(), mine.c_str());
+  }
 }
 
 // The room-state vocabulary is TWO lists once this library declines to depend on
@@ -789,7 +819,8 @@ int recordCorpus(const std::string& fixture, const std::string& outPath) {
     const Value* inV = root.find("in");
     const Value empty = Value::Obj();
     const Value got = applyOp(st, opV ? opV->str : std::string(),
-                              inV && inV->type == Value::OBJ ? *inV : empty);
+                              inV && inV->type == Value::OBJ ? *inV : empty,
+                              root.find("out"));
     // The generator's key SET; canonical_stringify sorts them.
     Value line = Value::Obj();
     line.set("case", Value::Str("step"));
@@ -863,7 +894,8 @@ int main(int argc, char** argv) {
     }
     const Value* inV = root.find("in");
     const Value empty = Value::Obj();
-    const Value got = applyOp(st, opV->str, inV && inV->type == Value::OBJ ? *inV : empty);
+    const Value got = applyOp(st, opV->str, inV && inV->type == Value::OBJ ? *inV : empty,
+                              wantOut);
     steps++;
 
     const Value* stepN = root.find("step");
@@ -871,6 +903,7 @@ int main(int argc, char** argv) {
                              std::to_string(stepN ? (long long) stepN->num : -1);
     report(what, diff_val(*wantOut, got, "out"));
     report(what, diff_val(*wantState, st.toValue(), "state"));
+    checkWire(what, *wantOut, got);
   }
 
   // The corpus is frozen, so a shape change that silently stopped matching any

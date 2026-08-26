@@ -229,13 +229,15 @@ extension GameCoordinator {
     /// A seated player changed their name.
     ///
     /// The LOBBY needs nothing: its seat grid is re-read off the room handle on
-    /// the same announce that delivered this, and the room-retained field row
-    /// every standings board reads was already repaired inside the rename walk.
-    /// A RACE still froze one copy at its start — the cell chip (`sceneCars`,
-    /// which the HUD poll reads) — so that is moved by hand, and the board
-    /// already out is re-pushed.
+    /// the same announce that delivered this. A RACE's two frozen copies are
+    /// both repaired inside the rename walk now — the room-retained field row
+    /// every later board composes from, and the ROWS of the board already out
+    /// (patched, not recomposed, so the re-push differs in the name and nothing
+    /// else; the walk's own `announce` republishes it).
     ///
-    /// A no-op for a seat with no car, since a late joiner is in neither.
+    /// What is left here is the one copy no handle knows about: the cell chip
+    /// (`sceneCars`, which the HUD poll reads). A no-op for a seat with no car,
+    /// since a late joiner is in neither.
     ///
     /// The car's REAR NAME PLATE is untouched and stays stale until the next
     /// scene build: it is geometry baked from the build roster, so moving it
@@ -246,11 +248,6 @@ extension GameCoordinator {
             return SceneCar(id: $0.id, colorIndex: $0.colorIndex, name: name,
                             cell: $0.cell, carIndex: $0.carIndex)
         }
-        // The board only reaches the phones on its NEXT push — mid-race that is
-        // the next car to cross, and on the podium never. So re-push the board
-        // already out, at the same `over` it went out with. Never a FIRST one:
-        // a phone raises its results overlay on a non-null standings.
-        if net.hasStandings() { broadcastStandings(over: raceEnded, results: nil) }
     }
 
     /// The effect's own `item` is deliberately not taken: the slot-machine spin
@@ -263,51 +260,38 @@ extension GameCoordinator {
 
     // MARK: - Results
 
-    // The cup points are banked by the EXECUTOR, inside the event drain,
-    // against the room's series and retained field — before the board effects,
-    // the order the corpus pins. Nothing here applies points any more.
+    // NOTHING ABOUT THE BOARD IS COMPOSED HERE. The cup points are banked and
+    // the standings board is composed and RETAINED behind the room handle by the
+    // EXECUTOR, inside the event drain, against the room's series and retained
+    // field — before the board effects, the order the corpus pins. The
+    // no-session refusal that used to be this file's `guard sessionHandle != 0`
+    // is the seam's (`ttp_live_store_standings`), the `broadcast-standings`
+    // effect is a republish, and the phones read the board off the lobby frame.
 
-    /// Push the board to the phones.
+    /// The results overlay, off the ROOM-RETAINED board.
     ///
-    /// The FINAL board rides the drain's own results object, handed down
-    /// through the effect context; with none in flight the twin re-reads the
-    /// live session in C++, which is the same thing mid-race.
-    func broadcastStandings(over: Bool, results: [String: Any]?) {
-        guard sessionHandle != 0 else { return }
-        net.setStandings(standingsBoard(over: over, results: results))
+    /// A `null` answer — which `TTP.obj` gives back empty, and the failable init
+    /// then turns into `nil` — means NO board is out. That is no overlay rather
+    /// than a blank one, which is the whole reason the live form answers null
+    /// instead of an empty board.
+    func showResults() {
+        state.results = GameState.ResultsView(TTP.obj(ttp_ui_results_view_live_json(
+            net.roomHandle, ttp_race_intermission_ms())))
     }
 
-    func showResults(_ results: [String: Any]?) {
-        state.results = GameState.ResultsView(TTP.obj(ttp_ui_results_view_json(
-            standingsBoard(over: true, results: results), ttp_race_intermission_ms())))
-    }
-
-    /// The board the TV and every phone render, off `ttp_ui_standings_live_json`:
-    /// the results rows, the room-retained race FIELD (rename/rekey repairs
-    /// applied by the walks — the last hand-assembled input, gone), the cup
-    /// half off the room's stored series, and the late joiners + host through
-    /// the synced seam — every input gathered off the two handles in C++.
-    private func standingsBoard(over: Bool, results: [String: Any]?) -> String {
-        TTP.strOrEmpty(ttp_ui_standings_live_json(
-            sessionHandle, net.roomHandle, over ? 1 : 0,
-            results.map { TTP.json($0) }, ttp_race_intermission_ms()))
+    /// The podium reveal has landed: stamp `settled` on the retained board and
+    /// republish if it moved.
+    ///
+    /// The phones were handed this board the moment the race ended, which is the
+    /// moment the TV STARTS revealing what the cup did with it — `settled` is
+    /// their cue to stop reporting the race and report the cup. WHICH boards
+    /// settle is the rule's, not this file's (only a cup's LAST), so this is
+    /// armed on every results screen and the answer decides.
+    func settleStandings() {
+        if ttp_ui_settle_standings(net.roomHandle) != 0 { net.publishSnapshot() }
     }
 
     // MARK: - Timers the effects arm
-
-    func armResultsFailsafe(ms: Double) {
-        clearResultsFailsafe()
-        resultsFailsafe = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: UInt64(ms * 1_000_000))
-            guard !Task.isCancelled else { return }
-            self.returnToLobby()
-        }
-    }
-
-    func clearResultsFailsafe() {
-        resultsFailsafe?.cancel()
-        resultsFailsafe = nil
-    }
 
     func armIntermission(ms: Double, deadline: Double) {
         clearIntermission()

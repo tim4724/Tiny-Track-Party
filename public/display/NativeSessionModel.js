@@ -88,7 +88,7 @@ export function configure({ cars, colors, tracks, progress }) {
 
 // ---- the retained room snapshot --------------------------------------------
 // THE WHOLE LOBBY_UPDATE, COMPOSED AND FRAMED IN C++. The shell's part is two
-// handles and the six fields only the game knows; the answer is the exact frame
+// handles and the two LATCHES only the game knows; the answer is the exact frame
  // TEXT for the socket. There is deliberately no parse here — a caller that
 // wants to look inside is asking for the snapshot, not the frame, and should
 // say so.
@@ -135,9 +135,8 @@ export function reconnectCard(seat, url) {
 // ---- the choreography walks -------------------------------------------------
 // Raw-string answers, deliberately: Net.js._walk owns the single JSON.parse,
 // and the _seen hot path skips it on the shared empty answer. The peer message
-// and the current pick cross as the shell's own objects; JSON.stringify keeps
-// the absent-vs-null distinction the claim logic turns on (an absent
-// rejoinToken drops out of the message text, exactly as the wasm expects).
+// and the current pick cross as the shell's own objects, stringified here —
+// the shell re-derives no rule from them, it just marshals.
 
 export function restoreRoom(roomHandle, code, instance) {
   fn.restoreRoom(roomHandle | 0, code || '', instance || '');

@@ -41,8 +41,7 @@ import kotlin.random.Random
  * exactly as before (`tests/wire-no-webrtc.test.js` pins that this is allowed).
  *
  * THREE TIMERS, all here: the 1 Hz liveness tick, the create watchdog, the
- * reconnect backoff. The results failsafe and the cup intermission are the RACE
- * layer's.
+ * reconnect backoff. The cup intermission is the RACE layer's.
  */
 class PartyNet(
     private val proto: GameProtocol,
@@ -89,7 +88,7 @@ class PartyNet(
             "reset-reconnect-count", "connect-fresh", "fail-attempt", "reconnect",
             "send-to", "publish", "announce", "close-fastlane", "show-reconnect",
             "clear-reconnect", "rekey-player", "player-renamed", "welcome-item",
-            "game-message", "race-abandoned", "track-change", "clear-standings",
+            "game-message", "race-abandoned", "track-change",
         )
 
     }
@@ -113,7 +112,10 @@ class PartyNet(
      */
     var onRosterChanged: (() -> Unit)? = null
 
-    /** The `race-abandoned` effect: no racer left and someone is waiting for the next race. */
+    /**
+     * The `race-abandoned` effect: mid-race, no racer left and someone waiting for
+     * the next race; on the results board, nobody connected at all.
+     */
     var onRaceAbandoned: (() -> Unit)? = null
 
     /** The socket closed. `true` means the ROOM died (4001) rather than the link. */
@@ -216,7 +218,11 @@ class PartyNet(
      */
     private var clientId = ""
 
-    private var standings: JSONObject? = null
+    // NO STANDINGS MIRROR. The results board lives behind the room handle like
+    // the pick, the series and the field: the race walk composes and retains it,
+    // `ttp_net_lobby_frame` reads it on every publish, and the rename patch and
+    // the settle stamp move the stored one. What this shell does about a board is
+    // [publishSnapshot].
 
     // The reconnect budget, mirroring PartyConnection's. This is the KIT half:
     // `ttp_framing_close_outcome` spends and caps it, `ttp_framing_backoff_ms`
@@ -807,7 +813,9 @@ class PartyNet(
                 TtpJson.optStr(e, "trackId")?.let { onTrackChange?.invoke(it) }
             }
 
-            "clear-standings" -> standings = null
+            // NO clear-standings arm. The board is room-retained, so the
+            // statechange walk drops it with a store inside the engine and its
+            // own `publish` carries the change — there is no mirror to null out.
 
             else -> {
                 // An op this build cannot perform is a MISSING CAPABILITY, not an
@@ -990,39 +998,22 @@ class PartyNet(
      *
      * TRAP: `ttp_net_lobby_frame` returns the FINISHED socket text — composed and
      * framed without leaving C++, reading the roster, every seat's `inRace` AND the
-     * stored pick off the handles. Do not parse it, do not re-encode it, and do not
-     * route it through `ttp_framing_encode_set_state`: a JSON string is itself a
-     * legal `set_state` payload, so there is no way to sniff "already encoded", and
-     * guessing publishes a quoted blob the phones cannot read.
+     * stored pick and standings board off the handles. Do not parse it, do not
+     * re-encode it, and do not route it through `ttp_framing_encode_set_state`: a
+     * JSON string is itself a legal `set_state` payload, so there is no way to
+     * sniff "already encoded", and guessing publishes a quoted blob the phones
+     * cannot read.
+     *
+     * The two LATCHES below are all a shell still supplies. A `standings` key
+     * passed here would be dead — the frame reads the room's retained board.
      */
     fun publishSnapshot() {
         if (!socket.isOpen) return
         val extra = JSONObject()
             .put("paused", isPaused())
             .put("soundOn", isSoundOn())
-            .put("standings", standings ?: JSONObject.NULL)
         socket.send(TtpJson.strOrEmpty(Ttp.ttp_net_lobby_frame(
             roomHandle, sessionHandle(), TtpJson.arg(extra.toString()))))
-    }
-
-    /**
-     * Whether a standings board has already gone out this race.
-     *
-     * It gates the re-push after a rename: re-sending a board that is already up
-     * corrects it, but sending a FIRST one early would raise every phone's results
-     * overlay mid-race, because that overlay is triggered by a non-null standings.
-     */
-    fun hasStandings(): Boolean = standings != null
-
-    /**
-     * Mirror the latest standings board into the snapshot, so a phone that
-     * reconnects on the results screen recovers it by replay. Takes the board's
-     * JSON TEXT, which is what `ttp_ui_standings_json` answers.
-     */
-    fun setStandings(json: String) {
-        val board = try { JSONObject(json) } catch (_: Throwable) { JSONObject() }
-        standings = if (board.length() == 0) null else board
-        publishSnapshot()
     }
 
     /** Broadcast to every controller. The only broadcast in the game is `MSG.COUNTDOWN`. */

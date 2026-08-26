@@ -54,7 +54,7 @@ public:
 TtpRenderer::TtpRenderer() = default;
 
 bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
-        uint32_t width, uint32_t height, uint8_t stereoEyes) {
+        uint32_t width, uint32_t height) {
     // The skid stamp pass only runs on frames that commit a trail segment, so
     // its FrameGraph depth transient (a deck-sized ~16 MB texture) sits unused
     // for a frame or two between passes. The texture cache's default max age
@@ -64,18 +64,6 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
     // later.
     Engine::Config engineConfig{};
     engineConfig.resourceAllocatorCacheMaxAge = 4;
-    mStereoEyes = stereoEyes;
-    if (stereoEyes) {
-        // OVR_multiview stereo, decided at engine creation (Filament allows no
-        // later switch). Costs nothing while no View sets stereo options —
-        // measured on the box — but it does demand an SDK built with
-        // FILAMENT_ENABLE_MULTIVIEW (build-runtime-android.sh's error text has
-        // the whole story). The DRIVER side is a separate question, asked of
-        // the built engine below: what gates multiview there is the
-        // GL_OVR_multiview2 extension, not the feature level.
-        engineConfig.stereoscopicType = backend::StereoscopicType::MULTIVIEW;
-        engineConfig.stereoscopicEyeCount = stereoEyes;
-    }
     Engine::Builder builder;
     builder.backend(backend)
             .config(&engineConfig)
@@ -100,7 +88,6 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
             // here as a MEASURED decision about one device family, not a
             // statement that the feature is finished upstream.
             .feature("backend.vulkan.enable_staging_buffer_bypass", true);
-    if (stereoEyes) builder.featureLevel(backend::FeatureLevel::FEATURE_LEVEL_2);
 #if defined(TTP_VK_PLATFORM_OVERRIDE)
     // The framebuffer-eviction override above. A provided platform is
     // caller-owned and must outlive the engine, so it is a member destroyed
@@ -126,23 +113,12 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
     // images at 4096, and a skid layer built past the cap is a
     // Texture::build PreconditionPanic in the middle of a scene build (which
     // the ARM EHABI unwinder then turns into a silent 100%-CPU hang rather
-    // than an abort). Clamp rather than assign: the web surface hands in its
-    // own measured GL_MAX_TEXTURE_SIZE before init, and a driver answering
-    // more than the default must not raise it.
+    // than an abort). Clamp rather than assign: mMaxTextureDim is the policy
+    // ceiling and a driver answering more than it must not raise it. No floor
+    // under the min — a driver answering even less just gets a coarser rubber
+    // grid, which is the same quality trade this box already takes.
     mMaxTextureDim = (uint32_t) std::min<size_t>(mMaxTextureDim,
             Texture::getMaxTextureSize(*mEngine, Texture::Sampler::SAMPLER_2D));
-    // THE DRIVER'S ANSWER, which the config above only asked for. A box without
-    // GL_OVR_multiview2 leaves Filament's View::hasStereo() false, so it picks
-    // the NON-stereo shader variants — while this renderer would still run its
-    // two-eye passes into a 4-layer array and composite layers nothing wrote.
-    // That fails silently and totally: the split renders BLACK in every cell,
-    // HUD and all else intact. Clearing the request here is the whole fallback,
-    // because every other gate (multiviewWants, ensureMultiviewTargets, the
-    // vpresentmv build) already reads mStereoEyes.
-    if (mStereoEyes
-            && !mEngine->isStereoSupported(backend::StereoscopicType::MULTIVIEW)) {
-        mStereoEyes = 0;
-    }
     mSwapChain = mEngine->createSwapChain(nativeWindow);
     mRenderer = mEngine->createRenderer();
     // Clear the colour buffer at the start of a frame. It costs nothing (a load
@@ -176,9 +152,6 @@ void TtpRenderer::resize(uint32_t width, uint32_t height) {
     // Called between frames, which is the only safe place to swap the scene
     // buffer: render() must never find a size mismatch, so rebuild it here.
     destroySceneTarget();
-    // The multiview array target follows the CELL size, which follows the
-    // surface — same between-frames rule, rebuilt lazily by the frame path.
-    destroyMultiviewTargets();
     // Only where the antialias pass will actually read it: with AA off (the
     // Android shell) this allocated a full-surface RGBA8+depth on EVERY
     // adaptive-scale move, for nothing — the frame path re-ensures it lazily
@@ -1711,23 +1684,6 @@ TtpRenderer::~TtpRenderer() {
     mNames = nullptr;
     if (mMatProvider) { mMatProvider->destroyMaterials(); delete mMatProvider; }
     destroySceneTarget();
-    destroyMultiviewTargets();
-    if (mMvPresentView) mEngine->destroy(mMvPresentView);
-    if (mMvPresentScene) mEngine->destroy(mMvPresentScene);
-    if (mMvPresentQuad) {
-        mEngine->destroy(mMvPresentQuad);
-        utils::EntityManager::get().destroy(mMvPresentQuad);
-    }
-    if (mPresentMvInstance) mEngine->destroy(mPresentMvInstance);
-    if (mPresentMvMaterial) mEngine->destroy(mPresentMvMaterial);
-    for (int p = 0; p < 2; p++) {
-        if (mMvCameras[p]) {
-            mEngine->destroyCameraComponent(mMvCameraEntities[p]);
-            utils::EntityManager::get().destroy(mMvCameraEntities[p]);
-            mMvCameras[p] = nullptr;
-        }
-        if (mMvViews[p]) { mEngine->destroy(mMvViews[p]); mMvViews[p] = nullptr; }
-    }
     if (mPresentView) mEngine->destroy(mPresentView);
     if (mPresentScene) mEngine->destroy(mPresentScene);
     if (mPresentCamera) {

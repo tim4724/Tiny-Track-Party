@@ -23,9 +23,11 @@
 // configure (libttp-sim's own), so boot hands over nothing it read back.
 //
 // tests/fixtures/raceflow-corpus.jsonl was recorded off the JS oracle
-// (public/display/raceFlow.js, retired — git history has it) and is FROZEN;
-// native/runtimetest/raceflow_check.cc replays every step through the C++ on
-// every leg.
+// (public/display/raceFlow.js, retired — git history has it), which is gone, so
+// nothing can re-derive the fixture. It is no longer JS-parity evidence: a
+// deliberate re-record demoted it to class 2 (tests/fixtures/traces/README.md).
+// native/runtimetest/raceflow_check.cc still replays every step through the C++
+// on every leg, which is what keeps the walks from moving by accident.
 
 import { loadNativeRuntime } from './nativeRuntime.js';
 
@@ -44,7 +46,7 @@ export async function init() {
              ['number', 'number', 'number', 'number', 'string', 'string']),
     events: c('ttp_race_events_live_json', 'string',
               ['number', 'number', 'string', 'number', 'number',
-               'number', 'number', 'number']),
+               'number', 'number']),
     advance: c('ttp_race_advance_live_json', 'string',
                ['number', 'number', 'number', 'number', 'string', 'string']),
     ret: c('ttp_race_return_live_json', 'string', ['number']),
@@ -55,7 +57,6 @@ export async function init() {
     resumeRace: c('ttp_race_resume_live_json', 'string',
                   ['number', 'number', 'number', 'number', 'number']),
     intermissionMs: c('ttp_race_intermission_ms', 'number', []),
-    resultsFailsafeMs: c('ttp_race_results_failsafe_ms', 'number', []),
     countdownReady: c('ttp_race_countdown_ready', 'number', ['number', 'number', 'number']),
     forfeit: c('ttp_race_forfeit_live_json', 'string', ['number', 'string']),
     rekey: c('ttp_race_rekey_live_json', 'string', ['number', 'number', 'string', 'string']),  // (session, room)
@@ -104,12 +105,14 @@ export function startRace(roomHandle, sceneReady, { seed, countdownSeconds, forc
 }
 
 // The frame's drain: every queued race event routed and answered as one effect
-// list; `results` is non-null exactly when the drain crossed the race's end.
+// list. Nothing rides beside it — endRace's ranked rows never leave C++ now (the
+// walk banks the points and retains the board against them), so an effect is
+// all a caller gets and all it needs.
 export function drainEvents(sessionHandle, roomHandle,
-                            { biome, audioReady, fastForwarding, intermissionMs, nowMs, resultsFailsafeMs }) {
+                            { biome, audioReady, fastForwarding, intermissionMs, nowMs }) {
   return P(fn.events(sessionHandle, roomHandle, biome || '',
                      audioReady ? 1 : 0, fastForwarding ? 1 : 0,
-                     intermissionMs, nowMs, resultsFailsafeMs));
+                     intermissionMs, nowMs));
 }
 
 export function advanceSeriesRace(roomHandle, sceneReady, { seed, countdownSeconds, forceItem, botCap }) {
@@ -133,7 +136,6 @@ export function resumeRace(sessionHandle, roomHandle, { paused, autoPaused, race
 }
 
 export function intermissionMs() { return fn.intermissionMs(); }
-export function resultsFailsafeMs() { return fn.resultsFailsafeMs(); }
 
 // May the launch's held-back countdown start? The facts only a shell has go in —
 // whether its scene build has returned, whether it is feeding the frame monitor

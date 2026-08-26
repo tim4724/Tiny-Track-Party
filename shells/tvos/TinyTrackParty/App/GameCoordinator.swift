@@ -44,11 +44,6 @@ final class GameCoordinator: ObservableObject {
     // launched field, the shuffle bag AND the race seed all ride the walks now
     // — nothing about a race roster or launch is mirrored here.
 
-    /// What each phone was last told its item was — a String, or NSNull for an
-    /// explicitly-cleared slot. The model gates the push
-    /// (`ttp_ui_item_pushes_live_json`); this is the memory the gate reads, and
-    /// null-vs-absent is a real distinction there, not a style choice.
-    var lastItem: [EngineIdentity: Any] = [:]
     /// Which reconnect cards actually attached, so the diff has a previous.
     var shownReconnectIds: Set<EngineIdentity> = []
     var sceneCars: [SceneCar] = []
@@ -96,7 +91,6 @@ final class GameCoordinator: ObservableObject {
     /// is only the value before `boot()` runs, never what a race launches with.
     var laps: Int32 = 3
 
-    var resultsFailsafe: Task<Void, Never>?
     var intermissionTask: Task<Void, Never>?
     var intermissionTicker: Task<Void, Never>?
     var intermissionDeadline: Double = 0
@@ -802,10 +796,10 @@ final class GameCoordinator: ObservableObject {
 
     /// Walk whatever the layer answered. Every entry point above funnels through
     /// here so there is exactly one place effects are performed, in order.
-    func run(_ answer: [String: Any], results: [String: Any]? = nil) {
+    func run(_ answer: [String: Any]) {
         let effects = answer["effects"] as? [Any] ?? []
         do {
-            try performer.perform(effects, context: .init(results: results))
+            try performer.perform(effects)
         } catch {
             // An unperformable effect is a missing capability. Surfacing it beats
             // continuing with a half-built race.

@@ -19,9 +19,9 @@
 // the same scenarios through the old multi-call path in the same run and
 // asserts the mutations and effects agree.
 //
-// KEY ORDER IS OUTPUT for the snapshot: it is emitted with ordered_stringify so
-// the bytes the relay retains are the ones the phones have always parsed. See
-// ttp_net.h's deviation note.
+// KEY ORDER IS NOT A CONTRACT, the snapshot included: ttp_net_lobby_frame hands
+// its snapshot to the frame encoder, which canonicalizes, so the composed order
+// never reached a phone. Every answer here goes out canonical. See ttp_net.h.
 #include "ttp_error.h"
 #include "ttp_net.h"
 
@@ -75,10 +75,10 @@ const char* const NET_EFFECT_OPS[] = {
     "reset-reconnect-count", "connect-fresh", "fail-attempt", "reconnect",
     "send-to", "publish", "announce", "close-fastlane", "show-reconnect",
     "clear-reconnect", "rekey-player", "player-renamed", "welcome-item",
-    "game-message", "race-abandoned", "track-change", "clear-standings"};
+    "game-message", "race-abandoned", "track-change"};
 
 const char* put(std::string& buf, const Value& v) {
-  ordered_stringify_into(v, buf);
+  canonical_stringify_into(v, buf);
   return buf.c_str();
 }
 const char* putStr(std::string& buf, std::string s) {
@@ -139,7 +139,9 @@ ns::RoomState stateOf(const char* s) { return ns::room_state_of(strOr(s)); }
 const char* ttp_net_effect_ops_json(void) {
   Value a = Value::Arr();
   for (const char* op : NET_EFFECT_OPS) a.push(Value::Str(op));
-  ordered_stringify_into(a, g_bufOps);
+  // Canonical sorts object KEYS; an array is left alone, so the table's own
+  // order is the answer's order and this is the same bytes either emitter gave.
+  canonical_stringify_into(a, g_bufOps);
   return g_bufOps.c_str();
 }
 
@@ -164,11 +166,13 @@ int ttp_net_configure(const char* chooserJson) {
 
 const char* ttp_net_lobby_frame(int roomHandle, int sessionHandle, const char* fieldsJson) {
   // The game-owned half — now only what the walks cannot know: the pause latch
-  // and the standings board. The PICK is the stored one (ttp_room.h) — the
-  // walks are its writers, so the frame reads it where it lives.
+  // and the mute latch. The PICK and the STANDINGS BOARD are both stored
+  // (ttp_room.h) — the walks are their writers, so the frame reads them where
+  // they live.
   Value input = json::parse_or(fieldsJson, Value::Obj());
   if (input.type != Value::OBJ) input = Value::Obj();
   setPickFields(roomHandle, input);
+  input.set("standings", ttp_room_board_value(roomHandle));
   // The room-owned half, read through the seam — the SAME four keys the shell
   // used to gather and hand back, so lobby_snapshot below is the untouched,
   // corpus-pinned rule and not a variant of it. The roster is built ONCE and
@@ -178,8 +182,6 @@ const char* ttp_net_lobby_frame(int roomHandle, int sessionHandle, const char* f
   input.set("roster", std::move(roster));
   input.set("hostPeerIndex", ttp_room_host_value(roomHandle));
   input.set("roomState", Value::Str(ttp_room_state_name(roomHandle)));
-  // Canonical, like every other frame encoder: g_bufFrame is framed output, not
-  // an ABI answer, so it takes ttp_party.cc's spelling and not this file's.
   g_bufFrame = canonical_stringify(framing::encode_set_state(ns::lobby_snapshot(input, g_chooser)));
   return g_bufFrame.c_str();
 }
@@ -347,7 +349,7 @@ void pushPeerOp(Value& effects, const char* op, const PeerId& id) {
 const char* answer(std::string& buf, Value effects) {
   Value out = Value::Obj();
   out.set("effects", std::move(effects));
-  ordered_stringify_into(out, buf);
+  canonical_stringify_into(out, buf);
   return buf.c_str();
 }
 
@@ -418,11 +420,10 @@ void addPeerWalk(RoomFlow* flow, const PeerId& id, double nowMs, Value& effects)
 }
 
 // _claimReconnect: the cross-device rejoin, claiming a dropped seat via the
-// HELLO's rejoinToken. The WHOLE message is consulted, not just the token: an
-// ABSENT rejoinToken and an explicit null answer differently, and that
-// difference is frozen — see claim_plan/norm_index. Answers the CLAIMED old
-// seat (None when nothing was claimed): the hello walk needs it, because the
-// still-racing car is keyed to that seat until the shell performs rekey-player.
+// HELLO's rejoinToken — an integer or nothing, see claim_plan/norm_index.
+// Answers the CLAIMED old seat (None when nothing was claimed): the hello walk
+// needs it, because the still-racing car is keyed to that seat until the shell
+// performs rekey-player.
 PeerId claimWalk(RoomFlow* flow, const Value* fromV, const PeerId& from, const Value& msg,
                  double nowMs, Value& effects) {
   const Value* token = mfind(msg, "rejoinToken");
@@ -930,6 +931,29 @@ const char* ttp_net_on_peer_message_json(int roomHandle, int sessionHandle,
             }
             ttp_room_store_field(roomHandle, std::move(f));
           }
+          // The board ALREADY OUT carries the old name too, and the field only
+          // reaches a phone on the board's next compose — mid-race the next car
+          // to cross, on the podium never. So PATCH the retained board's rows
+          // (the `announce` below republishes it).
+          //
+          // Patched, NOT recomposed, for two reasons. A recompose would pick up
+          // whatever the roster did since the board went out, so the re-push
+          // would differ in more than the name; and this walk holds no
+          // intermission budget, so it would silently re-price the board's cup
+          // chip — dropping the web's __intermissionMs E2E override in the
+          // process. Late-joiner rows are patched by the same loop: their name
+          // came off the roster, and it is the roster that just moved.
+          Value board = ttp_room_board_value(roomHandle);
+          const Value* order = board.type == Value::OBJ ? board.find("order") : nullptr;
+          if (order && order->type == Value::ARR) {
+            Value rows = *order;
+            for (Value& row : rows.arr) {
+              const Value* pid = row.find("playerId");
+              if (pid && strictEquals(*pid, from.toValue())) row.set("name", Value::Str(name));
+            }
+            board.set("order", std::move(rows));
+            ttp_room_store_board(roomHandle, std::move(board));
+          }
           Value e = effectOp("player-renamed");
           e.set("peerIndex", from.toValue());
           e.set("name", Value::Str(name));
@@ -1083,7 +1107,7 @@ void ttp_net_clear_pick(int roomHandle) {
 const char* ttp_net_pick_json(int roomHandle) {
   Value out = Value::Obj();
   setPickFields(roomHandle, out);
-  ordered_stringify_into(out, g_bufPick);
+  canonical_stringify_into(out, g_bufPick);
   return g_bufPick.c_str();
 }
 
@@ -1180,7 +1204,12 @@ const char* ttp_net_state_change_apply_json(int roomHandle, const char* to, doub
     }
     for (const PeerId& id : ids) expireSeatWalk(flow, id, effects);
   }
-  if (plan.clearStandings) pushOp(effects, "clear-standings");
+  // A fresh race and the lobby both start with no results board. EXECUTED here
+  // rather than spelled: the board lives behind the room (ttp_room.h), so
+  // dropping it is a store, not a platform op — and the `publish` below is
+  // already the push that tells the phones. The plan FIELD stays: it is
+  // session::StateChangePlan's rule and the frozen session corpus pins it.
+  if (plan.clearStandings) ttp_room_store_board(roomHandle, Value::Null());
   if (plan.publish) pushOp(effects, "publish");
   return answer(g_bufStateApply, std::move(effects));
 }

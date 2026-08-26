@@ -60,6 +60,16 @@ struct RoomHandle {
   // Written by the launch walks; repaired in place by the rename and rekey
   // walks; cleared with the race. Null outside a race.
   Value field = Value::Null();
+  // The composed STANDINGS BOARD the phones' results overlay reads (the lobby
+  // frame injects it under `standings`). Written by the race walk's executor,
+  // patched in place by the rename walk and by the settled stamp, cleared by
+  // the statechange walk. Null outside a race.
+  //
+  // ON THE ROOM AND NOT ON THE SESSION deliberately — see ttp_room.h: the
+  // results screen and the phones' copy of the board outlive the race that made
+  // it, so a board that died with the session would blank every phone
+  // mid-podium.
+  Value board = Value::Null();
 };
 
 std::map<int, std::unique_ptr<RoomHandle>> g_rooms;
@@ -289,6 +299,16 @@ Value ttp_room_field_value(int roomHandle) {
 void ttp_room_store_field(int roomHandle, Value field) {
   RoomHandle* rh = room(roomHandle);
   if (rh) rh->field = std::move(field);
+}
+
+Value ttp_room_board_value(int roomHandle) {
+  RoomHandle* rh = room(roomHandle);
+  return rh ? rh->board : Value::Null();
+}
+
+void ttp_room_store_board(int roomHandle, Value board) {
+  RoomHandle* rh = room(roomHandle);
+  if (rh) rh->board = std::move(board);
 }
 
 // ---- provider setters -------------------------------------------------------

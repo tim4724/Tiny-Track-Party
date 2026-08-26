@@ -6,7 +6,7 @@
 // the lobby cards once drifted to a screen that no longer existed.
 //
 // It also puts a shape contract in the harness: the board it synthesizes has to
-// keep matching what standingsPayload emits. A field renamed on the C++ side
+// keep matching what ttp_ui_standings_live_json emits. A field renamed on the C++ side
 // (`series`, `order`, `final`, `gained`, `racePlace`…) would not throw — it
 // would quietly answer a PLAINER dressing, so a cup board would silently render
 // as a single race. Each case below pins the dressing to something only the

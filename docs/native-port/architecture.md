@@ -25,11 +25,14 @@ drivers. The web game keeps shipping throughout.
   Filament is the only renderer, Three.js is deleted, and the renderer links
   into the SAME wasm module as the sim, so no frame state crosses to JS.
 - **The sim cutover is DONE.** The C++ core is the shipping web engine and
-  there is no JS fallback. The retired JS engine's golden traces stay the
-  conformance evidence and are never re-recorded from C++ — that would only
-  prove C++ matches itself. `npm run revive:js-oracle` restores the twin from
-  git and re-records all 8 traces byte-identically; while it passes, the parity
-  evidence is renewable.
+  there is no JS fallback. The golden traces were the JS engine's parity
+  evidence and that evidence is now SPENT: deliberate behaviour changes
+  re-emitted them from C++, so they pin regression and the sim has no
+  cross-implementation oracle left. `tests/fixtures/traces/README.md` records
+  what each spend bought and cost. What still holds JS parity is the math,
+  trackbuilder and track-sampler corpora, whose oracles were never re-emitted;
+  `npm run revive:js-oracle` restores their twins from git should one of them
+  ever have to be re-derived.
 
 ## Layers
 

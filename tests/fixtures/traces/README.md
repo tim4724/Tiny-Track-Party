@@ -115,12 +115,26 @@ display's room policy), `ui-corpus.jsonl`, `audio-corpus.jsonl` and
 AHEAD of their port; `schematic-corpus.jsonl` is the odd one, its per-track
 expectations being the committed `public/shared/trackSchematics.js` bake.
 
+Two have since been DEMOTED to class 2 by a deliberate re-record, and in both
+cases the JS-parity claim lives in git history at the bytes before it.
+`session-corpus.jsonl`: the rejoinToken normalizer stopped emulating JS
+`Number(value)` and became a plain type check (session.h), which flipped every
+non-number token to "no claim". `raceflow-corpus.jsonl`: three launch flags
+(`humansAtBack`, `deferCountdown`, `bankProgression`) whose OFF paths existed
+only to keep these bytes still were baked into race_flow.h, so the fixture now
+records the grid, the deferred countdown and the banked podium the game actually
+ships — the trade being that a knob no shipping caller ever set stops being
+dead code, paid for in this corpus's class.
+
 **All of them are now FROZEN.** `sessionModel.js`, `uiModel.js`,
 `audio/decide.js`, `trackSchematic.js` and finally `raceFlow.js` were deleted
 once their ports were conformance-proven, and their generators went with them:
 those corpora can never be re-derived, exactly like the traces above. The
 `record_*` roundtrips replaced the freshness checks where a re-emit mode
-exists; the raceflow check replays structurally and has none on purpose.
+exists; the raceflow check replays structurally and has none on purpose — a
+re-emit could only reproduce a JSON spelling that replay never reads. Its
+deliberate changes are hand edits, under the same green-first, read-the-diff
+rule (`tests/CLAUDE.md`).
 
 The schematic one is worth a note, because retiring its twin also moved a
 SHIPPING codegen path onto C++: `scripts/gen-track-schematics.js` bakes

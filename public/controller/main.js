@@ -793,16 +793,6 @@ if (_scenario) {
   }));
 }
 
-// Measurement overlay for the CONTROL send gate: ?netstats=1 (optionally with
-// ?steerThresh=…). Same escape-hatch shape as ?scenario= above — opt-in via URL,
-// so it can't reach a player who joined by scanning the QR. See NetStats.js.
-if (_params.get('netstats')) {
-  const _thresh = parseFloat(_params.get('steerThresh'));
-  if (isFinite(_thresh) && _thresh >= 0) net.gate.steerThreshold = _thresh;
-  net.gate.enableShadows(); // the suppression-curve counters exist for this overlay
-  import('./NetStats.js').then(({ initNetStats }) => initNetStats(net.gate));
-}
-
 // No debug-settings wrench on the controller — it's the player-facing phone, so the
 // query-param editor would ship to real players. Scenarios are still reachable
 // directly via ?scenario=…&color=… (handled above); the gallery drives them that way.

@@ -22,9 +22,11 @@ counter of its own, that is the signal it has become one of those.
 
 `main.js` and the render modules beside it (`lobbySeats.js`, `raceOverlays.js`)
 render from the ui model and decide nothing. The shell keeps only the state the
-model threads back to it — the current screen, which reconnect cards attached,
-what each phone was last told its item was — and nothing else. The model emits
-KEYS plus data, so copy tables live next to the elements they fill.
+model threads back to it — the current screen, which reconnect cards attached —
+and nothing else. The per-phone ITEM outbox used to be here too and is now the
+session's (`ttp_ui.h`); the answer arrives already stamped, so a failed send is
+not retried by asking again. The model emits KEYS plus data, so copy tables live
+next to the elements they fill.
 
 **A preview renders through the live renderer, never a copy of it.** Every
 gallery scenario that shows a real screen (the seat grid, the cup slot, the
@@ -37,17 +39,19 @@ stopped using. Where the harness has to synthesize a model INPUT (a standings
 board, a pick), an E2E case pins a dressing only the correct shape can produce —
 a renamed field degrades quietly instead of throwing.
 
-**A card declares its motion, and the declaration is gated.** `animated` means
-the SIM animates it, and the preview becomes a play/pause surface over
-`window.__preview`. `replayable` means the DOM animates it — an entrance, or the
-results board's race→standings turn — which plays once and is then over, so the
-card gets a ▶ that runs `window.__TEST__.replay`. Restarting a CSS animation
-needs the element to go `display:none` and back **with a style recalc between**;
-a hide/show in one task is a silent no-op. A card may declare a ▶ with no hook
-behind it and look fine, which is how the phone's Countdown card carried a dead
-button — `tests/e2e/gallery-replay.spec.js` walks the real gallery pages and
-follows every ▶ to the scenario it points at, so a flag without a hook fails on
-the commit that adds it.
+**Only a SIM-animated card declares motion; a DOM-animated one is a still.**
+`animated` (shared/galleryScenarios.js) means the sim animates it, and the
+preview becomes a play/pause surface over `window.__preview`. Everything else is
+a still of the frame its entrance settles into — the welcome slap-in, the
+countdown banner, the results board's race→standings turn all play once on
+arrival and are then over, which is what the reference shots hold and what a
+reduced-motion visitor already sees. There is no replay hook: a ▶ whose only job
+was to show an entrance again is a button that had to be kept alive per card,
+and the phone's Countdown card carried a dead one for months.
+
+The boards are still PAINTED on arrival rather than painted settled: only phase 1
+carries the lap time, the `+N` gain and the points a row came in with, and
+`tests/e2e/gallery-boards.spec.js` pins that turn.
 
 `perform()` walks the race flow's ordered effect list and **may not reorder, batch
 or skip** — an op it cannot perform throws rather than being dropped. Several
@@ -56,17 +60,45 @@ correctness constraints live in that order alone. Both performer tables
 own vocabulary exports (`ttp_race_effect_ops_json` / `ttp_net_effect_ops_json`),
 so a build whose walks grew an op this shell cannot perform fails on load.
 
+**An effect carries everything it needs, and there is no perform context.**
+`perform()` once took a second argument holding endRace's ranked results, read
+by two ops and paired with them by nothing at all — the kind of unenforced
+pairing that breaks the first time one of those ops is emitted from a new entry
+point. The rows never leave C++ now: the walk banks the cup points against them
+and composes the standings board from them, so the drain answers effects and
+nothing else. Do not reintroduce a carrier; if an op needs a fact, it names it.
+
 `Net.js` is the same shape one layer down: every inbound trigger (relay frame,
 peer message, socket close, liveness tick, drained room event) is ONE walk into
 `ttp_net.h`, which mutates the room inside the wasm and answers an ordered
 effect list; `_performNetEffect` holds the same no-reorder/no-skip contract.
 What stays in the file is the socket, the three timers and sessionStorage.
 The pick, the random-track shuffle bag (seeded once with page entropy), the
-cup series and the launched race field all live BEHIND THE ROOM HANDLE — the
-walks write them, no shell mirrors any of it; the game layer asks `net.pick`
-or `flow.seriesState` when it needs one. Walks go through `flow.runWalk`,
-which keeps NativeRoomFlow's event-drain discipline around a mutation the
-class's own methods didn't make.
+cup series, the launched race field and the standings board all live BEHIND THE
+ROOM HANDLE — the walks write them, no shell mirrors any of it; the game layer
+asks `net.pick` or `flow.seriesState` when it needs one. Walks go through
+`flow.runWalk`, which keeps NativeRoomFlow's event-drain discipline around a
+mutation the class's own methods didn't make.
+
+**The RESULTS BOARD is the newest of those, and it went last because it looked
+like a message rather than like state.** It is composed and retained by the race
+walk, injected under `standings` by `ttp_net_lobby_frame`, patched in place by
+the rename walk and by the settle stamp, and dropped by the statechange walk —
+so `broadcast-standings` is now a bare "republish" and `show-results` paints off
+`ttp_ui_results_view_live_json`. Three things left this file with it, and each
+was a rule spelled three times across three shells: the mirror itself, the
+never-raise-a-first-board gate (a non-null `standings` is what raises a phone's
+results overlay, so a board pushed before anyone has crossed the line pops an
+empty one over every wheel), and the no-session refusal. All three are C++'s.
+
+**`settled` is the one thing about a board this side still decides the TIMING
+of**, and only the timing. It is a wire cue, never part of the board rule, and
+it appears only as `true` and only on a cup's LAST board — the phones' signal to
+stop reporting the race and report the cup, which they must not do while the TV
+is still counting points towards it. The reveal's own completion callback is a
+fact no handle knows, so the shell fires `ui.settleStandings()` on every board
+that finishes settling and the answer decides whether anything moved and needs
+republishing. A board torn down mid-reveal never settled.
 
 ## Boot and the back stack
 
@@ -328,6 +360,15 @@ vsync plateau, so it can only ever show DROPS).
 AudioContext, variant picks, the `<audio>` element. The DSP palette stays
 BAKED rather than ported, because emscripten's AudioWorklet path needs the
 COOP/COEP isolation this build refuses.
+
+**`apply()` is the only way a sound starts, previews included.** `Audio.js` once
+carried named cue methods for the gallery, on the premise that a preview had no
+players and so no distance model to decide against; the previews race the bench
+field now, whose player seats are autopiloted PARTICIPANTS, so the decision layer
+has its listeners and voices and the harness binds and frames it like any race
+(see `TestHarness.js`). Do not re-add a bespoke surface: it was a second set of
+levels for the same sounds, pinned at full where the world mix decides one by
+distance, so a preview auditioned a mix no player would ever hear.
 
 The master bus — gain → soft limiter → destination — is `audio/bus.js`, with the
 one volume preference behind it. It is its own file because the sound gallery

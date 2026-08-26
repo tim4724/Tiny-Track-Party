@@ -351,9 +351,10 @@ struct ItemVal {
   bool operator!=(const ItemVal& o) const { return !(*this == o); }
 };
 
-// What each phone was last told (main.js's `_lastItem`). Insertion-ordered
-// because it is a JS Map and the shell's own state dump is `[...entries()]`;
-// re-setting an existing key does not move it.
+// What each phone was last told. Insertion-ordered because the JS this was
+// recorded off held a Map and the corpus's state dump is `[...entries()]`;
+// re-setting an existing key does not move it. The live game's copy hangs off
+// the session handle (runtime/ttp_session.h); this layer only reads one.
 class LastItems {
  public:
   // Map.get: ABSENT when this phone was never told anything.
@@ -377,8 +378,9 @@ struct ItemPush {
   ItemVal item;
 };
 // Which phones need a push this tick. AI cars have no phone behind them. PURE:
-// the caller applies the answers to `lastItem`, exactly as the JS caller does,
-// and clears it per race so the first tick resends every empty slot.
+// the caller applies the answers to `lastItem`, exactly as the JS caller did,
+// and a race starts from an empty one so the first tick resends every empty
+// slot.
 std::vector<ItemPush> itemPushes(const std::vector<PushCar>& cars, const IdSet& aiIds,
                                  const LastItems& lastItem);
 

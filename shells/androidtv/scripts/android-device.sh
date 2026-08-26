@@ -4,9 +4,10 @@
 # is worked in many worktrees at once: a second agent's `install` lands its APK
 # on the box you are measuring and on any emulator you have open. That failure
 # does not look like an install — it looks like YOUR build crashing, because the
-# APK that starts is someone else's. (One did: a multiview engine over the
-# committed `opengl mobile` blobs aborts with "could not parse the material
-# package for material", 30 ms into a launch, with no name in the message.)
+# APK that starts is someone else's. (One did, in the multiview era: the
+# stranger's engine aborted with "could not parse the material package for
+# material" 30 ms into a launch, with no name in the message — an APK/blob
+# mismatch reads as a defect in whatever you were just working on.)
 #
 # So nothing here installs through Gradle. Assemble, then `adb -s "$SERIAL"`.
 #

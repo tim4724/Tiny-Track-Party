@@ -44,8 +44,6 @@ const char* key(Op op) {
     case Op::BROADCAST_STANDINGS: return "broadcast-standings";
     case Op::APPLY_RACE_POINTS: return "apply-race-points";
     case Op::SHOW_RESULTS: return "show-results";
-    case Op::ARM_RESULTS_FAILSAFE: return "arm-results-failsafe";
-    case Op::CLEAR_RESULTS_FAILSAFE: return "clear-results-failsafe";
     case Op::ARM_INTERMISSION: return "arm-intermission";
     case Op::CLEAR_INTERMISSION: return "clear-intermission";
     case Op::SERIES_ADVANCE: return "series-advance";
@@ -404,16 +402,16 @@ StartResult startRace(const StartInput& in) {
   return r;
 }
 
-// launchRace's grid reorder — see LaunchInput. Pure permutation: livery, model,
-// persona and bot seed were all fixed by the fill above; only who starts where
-// moves. Stable throughout, so ties keep the built (join) order.
+// launchRace's grid reorder — see LaunchInput::gridOrder, this rule's ONE input
+// (a chained race's finish order, empty on a first race). Pure permutation:
+// livery, model, persona and bot seed were all fixed by the fill above; only who
+// starts where moves. Stable throughout, so ties keep the built (join) order.
 static std::vector<FieldEntry> orderGrid(std::vector<FieldEntry> field,
-                                         const LaunchInput& in) {
-  if (in.gridOrder.empty() && !in.humansAtBack) return field;
+                                         const std::vector<Id>& gridOrder) {
   std::vector<FieldEntry> ordered;
   ordered.reserve(field.size());
   std::vector<char> placed(field.size(), 0);
-  for (const Id& id : in.gridOrder) {
+  for (const Id& id : gridOrder) {
     for (size_t i = 0; i < field.size(); i++) {
       if (!placed[i] && field[i].peerIndex == id) {
         placed[i] = 1;
@@ -422,16 +420,15 @@ static std::vector<FieldEntry> orderGrid(std::vector<FieldEntry> field,
       }
     }
   }
-  // The leftovers start at the back — CPU ahead of humans when humansAtBack,
-  // which is also the whole rule for a first race (empty gridOrder).
+  // The leftovers start at the back, CPU ahead of humans — which is also the
+  // whole rule for a first race (empty gridOrder). Two passes over the same
+  // array, partitioned by `ai`, so nothing is placed twice.
   for (int wantAi = 1; wantAi >= 0; wantAi--) {
     for (size_t i = 0; i < field.size(); i++) {
-      if (placed[i]) continue;
-      if (in.humansAtBack && field[i].ai != (wantAi == 1)) continue;
+      if (placed[i] || field[i].ai != (wantAi == 1)) continue;
       placed[i] = 1;
       ordered.push_back(std::move(field[i]));
     }
-    if (!in.humansAtBack) break;  // one pass took everyone, in built order
   }
   return ordered;
 }
@@ -447,7 +444,7 @@ LaunchResult launchRace(const LaunchInput& in) {
   // into a full rebuild of the scene prepared under the intermission board,
   // and shuffle the players' split cells by finish order.
   const std::vector<FieldEntry> sceneRoster = built.field;
-  built.field = orderGrid(std::move(built.field), in);
+  built.field = orderGrid(std::move(built.field), in.gridOrder);
   // AUTOPILOT: every player seat gains a controller, and nothing else about the
   // launch moves. Appended AFTER the grid is ordered so the persona comes off
   // the FINAL grid index, which spreads the personas across the players
@@ -539,10 +536,10 @@ LaunchResult launchRace(const LaunchInput& in) {
   out.effects.push_back(mk(Op::BIND_SESSION));
   // chrome at final size through the countdown, no pop-in at GO
   out.effects.push_back(mk(Op::PAINT_INITIAL_HUD));
-  // …and the last op is the one that may have to wait: see countdownReady.
-  // Deferred, it rides its own list, so the walk above stays whole either way.
+  // …and the last op is the one that has to wait: see countdownReady. It rides
+  // its OWN list, so the walk above stays whole.
   e = mk(Op::START_COUNTDOWN); e.num = in.countdownSeconds;
-  (in.deferCountdown ? out.countdownEffects : out.effects).push_back(e);
+  out.countdownEffects.push_back(e);
   return out;
 }
 
@@ -626,8 +623,7 @@ Effects endRace(const EndRaceInput& in) {
   if (in.hasSeries) out.push_back(mk(Op::APPLY_RACE_POINTS));
   // A finished series banks the couch's star record — AFTER the points, so the
   // standings the executor reads are final.
-  if (in.hasSeries && in.seriesFinished && in.bankProgression)
-    out.push_back(mk(Op::PERSIST_PROGRESSION));
+  if (in.hasSeries && in.seriesFinished) out.push_back(mk(Op::PERSIST_PROGRESSION));
   // hold the finish frame behind the translucent results overlay
   e = mk(Op::SET_RACE_FLAGS);
   e.paused = false; e.autoPaused = false; e.raceEnded = true;
@@ -642,12 +638,11 @@ Effects endRace(const EndRaceInput& in) {
   // final board → phones show the full results overlay
   e = mk(Op::BROADCAST_STANDINGS); e.over = true; out.push_back(e);
   out.push_back(mk(Op::SHOW_RESULTS));
-  // The host ends the results screen with "New game"; this is only a safety net
-  // so a room whose players all left mid-podium still recovers.
-  e = mk(Op::ARM_RESULTS_FAILSAFE); e.num = in.resultsFailsafeMs; out.push_back(e);
-  // Mid-cup: this results screen is an INTERMISSION — arm the auto-advance into
-  // the next race (the host can jump it early; advanceSeriesRace disarms the
-  // failsafe above).
+  // The host ends the results screen with "New game", and nothing here overrides
+  // that on a clock: an ABANDONED podium is recovered by RoomFlow::graceTick's
+  // RESULTS arm, which fires on the room being empty rather than on a timer.
+  // Mid-cup, though, this results screen is an INTERMISSION — arm the
+  // auto-advance into the next race (the host can jump it early).
   if (in.hasSeries && !in.seriesFinished) {
     e = mk(Op::ARM_INTERMISSION);
     e.num = in.intermissionMs;
@@ -668,8 +663,6 @@ AdvanceResult advanceSeriesRace(const AdvanceInput& in) {
   // Everyone left mid-intermission.
   if (in.players.empty()) { r.action = AdvanceAction::RETURN_TO_LOBBY; return r; }
   r.action = AdvanceAction::ADVANCE;
-  // endRace armed the back-to-lobby failsafe — it must not yank race N+1.
-  r.effects.push_back(mk(Op::CLEAR_RESULTS_FAILSAFE));
   r.effects.push_back(mk(Op::CLEAR_INTERMISSION));
   r.effects.push_back(mk(Op::SERIES_ADVANCE));
   // publishes + selects (track/totalLaps swap). Outside the lobby the select
@@ -706,8 +699,7 @@ ReturnResult returnToLobby(const ReturnInput& in) {
   }
 
   Effect e;
-  r.effects.push_back(mk(Op::CLEAR_RESULTS_FAILSAFE));
-  // every exit route cancels a running cup (quit, abandon, failsafe)
+  // every exit route cancels a running cup (quit, abandon, empty room)
   r.effects.push_back(mk(Op::CLEAR_SERIES));
   r.effects.push_back(mk(Op::CLEAR_INTERMISSION));
   if (r.trackSwap.has) { e = mk(Op::SET_TRACK); e.str = r.trackSwap.v; r.effects.push_back(e); }

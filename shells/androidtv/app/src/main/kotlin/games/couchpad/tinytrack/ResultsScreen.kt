@@ -67,6 +67,20 @@ fun ResultsScreen(state: GameState, game: GameCoordinator) {
     // How many points each row has moved out of its "+N" and into its total.
     var accounted by remember(results) { mutableStateOf(0f) }
 
+    // THE SETTLE STAMP IS THIS SHELL'S OWN BEAT. The phones are handed the board
+    // the instant the race ends, which is the instant this screen STARTS its
+    // reveal — `settled` is their cue to stop reporting the race and report the
+    // cup, and sending it early crowns a champion on four phones while the TV is
+    // still counting points towards one. The TIMING is necessarily here (it is
+    // this reveal's own completion and no handle knows it); WHICH boards it means
+    // anything for is the rule's, so [GameCoordinator.settleStandings] is armed on
+    // every board that finishes settling and the model decides. A single-phase
+    // board never settles, and neither does a reveal cancelled mid-flight — the
+    // web's `raceOverlays.js` has both properties for the same reasons.
+    //
+    // ON THE MAIN THREAD, which this shell's rule 1 requires of every `ttp_*`
+    // call: a LaunchedEffect runs on the composition's own AndroidUiDispatcher,
+    // and `delay` resumes on it, so both call sites below are on main.
     LaunchedEffect(results) {
         if (!results.twoPhase) return@LaunchedEffect
         delay(results.racePhaseMs.toLong())
@@ -76,7 +90,7 @@ fun ResultsScreen(state: GameState, game: GameCoordinator) {
         // budget — a fixed duration would leave the tally still running after the
         // next race had started.
         val most = results.listRows.maxOfOrNull { it.owed() } ?: 0
-        if (most == 0) { accounted = 1f; return@LaunchedEffect }
+        if (most == 0) { accounted = 1f; game.settleStandings(); return@LaunchedEffect }
         val tickMs = max(16.0, results.racePhaseMs * TICK_OF_PHASE)
         val runMs = most * tickMs
         // Driven from the CLOCK, not from accumulated nominal delays. `delay` is a
@@ -93,6 +107,8 @@ fun ResultsScreen(state: GameState, game: GameCoordinator) {
             if (elapsed >= runMs) break
         }
         accounted = 1f
+        // The cup is now told. Anything waiting on it — the phones — can say so.
+        game.settleStandings()
     }
 
     // The rows as they stand RIGHT NOW: phase 1 is the race's order untouched;
@@ -119,7 +135,9 @@ fun ResultsScreen(state: GameState, game: GameCoordinator) {
     Box(
         // PAPER, not ink. `#results` is `rgba(255,246,235,0.92)` — warm paper is
         // exactly what a full-screen board is allowed (and the only place it is),
-        // so scrimming with ink inverts the board's whole value.
+        // so scrimming with ink inverts the board's whole value. Flat, with no blur
+        // behind it, by decision: at 0.92 only 8% of the frozen race gets through.
+        // See `docs/native-port/shells.md`, "Decided, not owed".
         Modifier.fillMaxSize().background(Tokens.paper.copy(alpha = 0.92f)),
         contentAlignment = Alignment.Center,
     ) {

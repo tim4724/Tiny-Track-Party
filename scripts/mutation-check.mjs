@@ -214,13 +214,15 @@ const MUTATIONS = [
     expect: 'session',
   },
   {
-    // FROZEN QUIRK: Number(null) is 0 and Number(undefined) is NaN, so an absent
-    // rejoinToken and an explicit null claim different seats. "Tidying" this is
-    // exactly the change the corpus exists to refuse.
-    name: 'session/absent-rejoin-token-becomes-an-explicit-null',
+    // rejoinToken is an INTEGER or it is nothing (session.h). Drop the TYPE half
+    // of that and every non-number reads Value's zero-initialised `num`, so a
+    // JSON null claims seat 0 again — the exact quirk this layer stopped
+    // carrying. The corpus keeps the null, bool, string, array and object
+    // inputs, so it has plenty to kill this with.
+    name: 'session/rejoin-token-accepts-any-json-type-again',
     file: 'native/libttp-party/ttp/session.cc',
-    find: '  if (!v) return kNaN;  // Number(undefined)',
-    replace: '  if (!v) return 0;',
+    find: '  if (!v || v->type != Value::NUM) return false;',
+    replace: '  if (!v) return false;',
     expect: 'session',
   },
   {
