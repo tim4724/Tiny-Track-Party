@@ -88,8 +88,10 @@
 // suppresses: sensor jitter, how twitchy a given person is and how much of a lap
 // is spent holding a line all move it, so that number has to be read off an
 // actual party rather than a simulated input walk — which is what the retired
-// on-phone overlay and its per-threshold shadow counters were for, revivable via
-// `git show 39fe3599:public/controller/NetStats.js`.
+// on-phone overlay and its per-threshold shadow counters were for. The whole
+// rig — NetStats.js, this file's shadow counters and `stats()`, and the
+// ?netstats wiring in controller main.js — is revivable from one commit:
+// `git show 39fe3599` has all of it.
 export const DEFAULT_STEER_THRESHOLD = 0.03;
 
 // A steer delta at or past this is a deliberate action rather than drift: 5x

@@ -31,7 +31,12 @@
 // canonicalizes — so this check COPIES the recorded string through verbatim and
 // asserts against it separately, in checkWire(). Copying is what keeps the
 // re-recorded fixture byte-identical for record_ui's SHA gate; checkWire is what
-// keeps the field from being a value that compares to itself.
+// keeps the field from being a value that compares to itself. The copy-through
+// cuts one way: a DELIBERATE board-shape change re-recorded via --record bakes
+// the stale `wire` strings into the fresh fixture and checkWire goes red on
+// every board step with no code defect. The escape is to delete the `wire`
+// fields from the fixture first — checkWire and the copy-through both skip an
+// absent field.
 //
 // THE SYNTHETIC WORLD COMES OUT OF THE CORPUS. The model is catalogue-AGNOSTIC
 // — it looks cups and tracks up in whatever list it is handed — so the generator

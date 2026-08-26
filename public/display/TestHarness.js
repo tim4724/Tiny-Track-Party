@@ -282,8 +282,8 @@ export function runDisplayScenario(opts, ctx) {
   };
 
   // Paint the results overlay from a SYNTHESIZED board — the same shape
-  // standingsPayload hands live play — through the real ui model and the real
-  // renderer. The preview's whole job is choosing what board to show; every
+  // ttp_ui_standings_live_json hands live play — through the real ui model and
+  // the real renderer. The preview's whole job is choosing what board to show; every
   // decision after that (dressing, row kinds, podium split, footer) is the
   // model's, exactly as in a real race.
   //
@@ -303,7 +303,7 @@ export function runDisplayScenario(opts, ctx) {
     const cup = CUPS[0];
     const nextId = cup.tracks[raceIdx + 1] || null;
     // Built in FINISHING order (times and gains ride the index), then sorted into
-    // cup order — the same two orders standingsPayload produces, and `racePlace`
+    // cup order — the same two orders the C++ board composes, and `racePlace`
     // is what carries the first one through the sort. Without it the board's
     // race phase would replay the cup table and the preview would show a leader
     // swap that never happened.

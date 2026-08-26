@@ -473,7 +473,7 @@ export class DisplayNet extends GameNet {
   // NOTHING ABOUT A SEAT CROSSES. The roster, the effective host, the room phase
   // and every seat's "does this seat hold a car in the live race" are read off
   // the two HANDLES in C++ (ttp_net_lobby_frame over ttp_room.h's seam); what is
-  // passed here is the six fields only the game knows. The answer is the finished
+  // passed here is the two latches only the game knows. The answer is the finished
   // frame text, so the socket write is the next statement and there is no object
   // in between. (~169.6 us -> 44.4 us a publish in the browser at the 4-player
   // cap when the round trip through this file was removed; most of what was

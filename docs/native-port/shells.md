@@ -577,9 +577,10 @@ re-open them as work.
   a SurfaceView composited by SurfaceFlinger in a layer BELOW the app window —
   so what is left is a whole-window blur toggled per board (API 31+, and off
   outright on low-end boxes) or a renderer pass, and neither earns its cost
-  against what it buys: at the results board's 0.92 paper only 8% of the race
-  shows through, which is near-indistinguishable from the web's. The pause
-  overlay's 0.72 is the one board where the difference reads at all. The
+  against what it buys: the results board's paper is nearly opaque, so almost
+  none of the race shows through and the board is near-indistinguishable from
+  the web's. The more translucent pause overlay is the one board where the
+  difference reads at all. The
   mechanism is the durable half and lives in `shells/androidtv/CLAUDE.md`
   (Look).
 - **The scene's edge vignette** — WEB-ONLY, permanently, and that is a

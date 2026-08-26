@@ -867,9 +867,10 @@ that picture is the SurfaceView, composited by SurfaceFlinger in a layer BELOW
 the app window, so no `RenderEffect` or modifier anywhere in the view hierarchy
 can ever see it — unreachable from Compose is not the same as impossible, but
 every route out of Compose costs more than the difference is worth. Both boards
-carry the right wash already (`--paper` at 0.72 and 0.92); at 0.92 only 8% of
-the race reaches the eye, so the results board is near-indistinguishable from
-the web's, and the pause overlay is the only board where the delta reads at all.
+carry the right wash already (`--paper`, values in `public/display/display.css`);
+the results board's paper is nearly opaque, so the race barely reaches the eye
+and the board is near-indistinguishable from the web's — the more translucent
+pause overlay is the only board where the delta reads at all.
 The scene's edge vignette is decided the same way and is not Android's alone:
 see `docs/native-port/shells.md` (Decided, not owed).
 
