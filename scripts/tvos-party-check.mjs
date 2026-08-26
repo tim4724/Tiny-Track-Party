@@ -31,7 +31,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { Phone, loadProtocol } from './lib/phone.mjs';
-import { resolveDevicectlId } from './lib/tvos-device.mjs';
+import { resolveDevicectlId, assertAwake } from './lib/tvos-device.mjs';
 
 const BUNDLE_ID = 'games.couchpad.tinytrack';
 const args = process.argv.slice(2);
@@ -110,6 +110,16 @@ function foregroundApp() {
 // ---- the party --------------------------------------------------------------
 
 async function main() {
+  // FAIL FAST ON A DARK/HEADLESS BOX, before spending the whole check on it.
+  // `--full`'s countdown/GO/finish assertions are all driven by the display's
+  // frame callback (DisplayHost), so a box with nothing on HDMI fails those
+  // two checks and nothing else — a signature that once cost two sessions
+  // misread as an A10X-specific race-launch hang (it wasn't; see
+  // tvos-a10x-race-launch-hang in project memory). `assertAwake` already knew
+  // how to catch this via `devicectl device info displays`; it just wasn't
+  // wired up here.
+  if (!SIM) assertAwake(resolveDevicectlId());
+
   const proto = await loadProtocol();
   const logPath = join(tmpdir(), `ttp-party-check-${SIM ? 'sim' : 'device'}.log`);
 
