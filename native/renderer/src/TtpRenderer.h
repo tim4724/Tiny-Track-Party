@@ -906,6 +906,8 @@ private:
         float jitter = 0, rawJitter = 0, upJitter = 0;
         bool hasPrev = false;
         float skidWidth = 0.12f;                   // tyre-contact width (wheel AABB, clamped)
+        float wheelRadius = 0.125f;                // rolling radius (wheel AABB) — the skid
+                                                   // ribbon's lead, renderSkids says why
         float skidHold = 0;                        // scuff strength, released over SKID_RELEASE
         float skidAllHold = 0;                     // same, for the four-wheel (scrub/spin) channel
         float footW = 0.95f, footL = 2.0f;         // car footprint (asset AABB) — blob + boost disk
@@ -1175,7 +1177,6 @@ private:
     // is on the mTime clock, which restarts at 0 with every scene build.
     bool mSkidMipsDirty = false;
     float mSkidMipsAt = 0;
-    float mSkidUpAt = 0; // level-0 upload throttle, same per-scene clock
     // ── The car-shadow layer ────────────────────────────────────────────
     // The eight contact shadows as a per-frame CPU-rasterized track-space R8
     // texture (the rubber layer's idiom — same mapping, same lat span, so

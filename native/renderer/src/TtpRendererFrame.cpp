@@ -2207,9 +2207,29 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
             if (!marksAll) { trails[0].seeded = false; trails[1].seeded = false; }
             const float halfW = (mwp && mMonsterSkidWidth > 0
                     ? mMonsterSkidWidth : cw.skidWidth) / 2;
+            // The ribbon is anchored at the tyre's LEADING ground contact, not
+            // at the contact patch centre: the head runs one rolling radius
+            // ahead of the wheel node, which is exactly where the wheel's own
+            // ground silhouette ends. A trail head can only ever LAG (ink is
+            // additive and permanent, so nothing may be drawn ahead of the
+            // wheel and rewritten), and the lead buys a radius of lag that
+            // falls under the tyre and cannot be seen — the SEG_MIN commit
+            // distance fits inside it whole. It does not hide arbitrary
+            // latency: at VMAX one 60 Hz frame of travel is already wider than
+            // the radius, so an upload throttle still shows.
+            // The whole ribbon shifts by this, head and tail together, so the
+            // mark traces the same curve — only its phase along that curve
+            // moves, by less than a fifth of a car length.
+            // Model space faces −Z (FLIP maps it to the car's forward), and
+            // taking it off poseSpun rather than off `fwd` keeps a spun-out
+            // car's scribbles leading its own wheels.
+            const float3 leadDir = normalize((poseSpun * float4{ 0, 0, -1, 0 }).xyz);
+            const float lead = (mwp && mMonsterWheelRadius > 0)
+                    ? mMonsterWheelRadius : cw.wheelRadius;
             for (int wi = marksAll ? 0 : 2; wi < 4; wi++) {
                 WheelTrail& st = trails[wi];
-                const float3 gp = (poseSpun * float4{ wlocal[wi], 1 }).xyz;
+                const float3 gp = (poseSpun * float4{ wlocal[wi], 1 }).xyz
+                        + leadDir * lead;
                 if (st.projHint < 0 && mDecalProjHint.size() > i) {
                     st.projHint = mDecalProjHint[i]; // seed from the car
                 }
@@ -2267,29 +2287,24 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
                 st.last = cur;
             }
         }
-        // The upload, at ~30 Hz rather than per stamp frame. The live A/B
-        // that gated the layer whole took the dropped-frame rate from ~16/s
-        // to ~6 at 720p while the GPU MEDIAN did not move — and the delta
-        // survived replacing the mip blits with CPU sub-rect uploads, so the
-        // driver pays per UPLOAD EVENT on this in-flight texture, not per
-        // pass or per byte (rect coalescing was measured within noise long
-        // before). Halving the event rate is the lever left. What it costs:
-        // the trail's tail runs one extra frame (~17 ms) behind the tyre, on
-        // top of the SEG_MIN trailing the layer already accepts. The rects
-        // keep accumulating between flushes, so nothing is lost, only late.
-        // FOUR CELLS SLOW ONLY THE MIP HALF (below). The upload EVENTS are
-        // the layer's tail cost — the lock540 matrix measured the layer OFF
-        // locking a pinned 540@60 while its tap and median are free — and
-        // the mip refresh is the bursty half: refreshSkidMips lands several
-        // level uploads in ONE frame. Level 0 keeps its full ~30 Hz on
-        // purpose: a slower level 0 is the half a player can see (the trail
-        // stepping behind the tyre), and it was tried at a third rate and
-        // rejected on look. Cells decide, never cost — the same gate family
-        // as kMaskedBlobCells.
-        const bool splitFour = input.viewCount >= kMaskedBlobCells;
-        if (!mSkidDirty.empty() && mTime - mSkidUpAt > 0.028f) {
+        // The upload: every frame that commits a stamp, at every cell count.
+        // It runs BEFORE beginFrame, so ink stamped this frame is drawn this
+        // frame and the ribbon's visible head is the tyre's own position.
+        //
+        // THERE WAS A ~30 Hz THROTTLE HERE AND IT BOUGHT NOTHING, which is
+        // why there is no rate limit to find. It cost the half a player can
+        // SEE — a trail's head lags the tyre by upload latency times road
+        // speed, up to half a car length of bare road at VMAX — on the theory
+        // that the driver pays per upload EVENT on this in-flight texture.
+        // Measured against no throttle it is a null, and ablating the layer
+        // WHOLE is not: the layer's cost is the tap and the CPU raster.
+        // `shells/androidtv/CLAUDE.md` has the sweep and its controls.
+        // Do not reintroduce one without re-running that sweep — the reading
+        // the throttle originally came from predates kMaskedBlobCells zeroing
+        // the masked shadow budget at four cells, which was ~7 ms of the
+        // frame it was taken in.
+        if (!mSkidDirty.empty()) {
             uploadSkidRects();
-            mSkidUpAt = mTime;
             mSkidMipsDirty = true;
         }
         // Refresh the rubber layer's mip chain, throttled. The tap filters
@@ -2301,7 +2316,12 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
         // the full-chain generateMipmaps this used to be measured ~10 dropped
         // frames/s on the reference Android box, invisible in the GPU median.
         // The ~7 Hz throttle stays: a fresh mark is under the car at mip 0
-        // for those 150 ms, where no one can see the difference.
+        // for those 150 ms, where no one can see the difference. FOUR CELLS
+        // SLOW THIS HALF AND ONLY THIS HALF (2 Hz), because it is the bursty
+        // one — refreshSkidMips lands several level uploads in ONE frame —
+        // and because a quarter cell is where its far field is smallest.
+        // Cells decide, never cost: the same gate family as kMaskedBlobCells.
+        const bool splitFour = input.viewCount >= kMaskedBlobCells;
         if (mSkidMipsDirty && mSkidTex
                 && mTime - mSkidMipsAt > (splitFour ? 0.50f : 0.15f)) {
             refreshSkidMips();

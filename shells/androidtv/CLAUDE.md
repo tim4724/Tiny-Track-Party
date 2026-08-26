@@ -473,17 +473,27 @@ bake) — are `native/renderer/CLAUDE.md`'s, each with its measured worth.
   The rubber layer is the worked example: ablated whole (raster, uploads and mip
   refresh, not just the tap — `--features 0x1DFC` on the LIVE script; the gate
   at the top of `renderSkids` is what makes that bit cover the upload half) it
-  leaves the GPU median unchanged and takes the dropped-frame rate from ~16/s
-  to ~6 at a pinned 720p. The attribution, taken live one half at a time: the
-  TAP is ~0.6 ms of GPU fill, and the rest is the UPLOAD path — and within
-  that, the stall is the per-frame `setImage` EVENTS on an in-flight texture,
-  not the mip blits: replacing the ~7 Hz full-chain `generateMipmaps` with CPU
-  box-filtered per-level sub-rect uploads moved nothing on its own (kept
-  anyway — it completes the layer's no-passes design), while throttling the
-  level-0 uploads to ~30 Hz is the half that pays. Rect COUNT was already
-  measured as noise (the coalescing arm), so it is the events' frequency, not
-  their size. A cost that is invisible in the median and decides the p95 is
-  what sets the frame rate on a vsync-locked display, so measure both.
+  leaves the GPU median unchanged and moves the TAIL. Re-measured live at 4
+  players / pinned 720 / Vulkan (2026-08-26, three whole-race reps an arm):
+  ablating the layer whole is 43 -> 48 fps, 20.08 -> 19.33 ms of GPU median and
+  17 -> 13 skips/s, with no overlap between the two sets of runs.
+  **The EVENT RATE is not what that costs.** Throttling the level-0 uploads to
+  ~30 Hz — which this file used to name as "the half that pays" — measures a
+  clean null on the same sweep: 43 fps both arms, 20.08 vs 19.87 ms, 17 skips/s
+  both, a gap inside the ~0.2 ms repeat resolution and smaller than either arm's
+  own spread; and at the shipping 4-player point (432), where a throttle bites
+  hardest at 60 events/s against its 35, both arms lock 60 with zero drops. The
+  throttle is GONE from `renderSkids` and the trail's head now sits at the tyre.
+  What remains of the layer is the TAP and the CPU raster. Rect COUNT was
+  already measured as noise (the coalescing arm), and the mip blits moved
+  nothing on their own either (replacing the ~7 Hz full-chain `generateMipmaps`
+  with CPU box-filtered per-level sub-rect uploads is kept anyway — it completes
+  the layer's no-passes design). The earlier attribution was taken before
+  `kMaskedBlobCells` zeroed the masked shadow budget at four cells, which was
+  ~7 ms of the frame it was measured in; **re-price a lever whose frame has
+  changed under it rather than inheriting its verdict.** A cost that is
+  invisible in the median and decides the p95 is what sets the frame rate on a
+  vsync-locked display, so measure both.
 
 **Measured and NOT worth taking** — each cost a build and a sweep, so do not
 re-derive them:

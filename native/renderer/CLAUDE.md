@@ -438,7 +438,17 @@ and wear ghosting through it.
 The writer is a CPU rasterizer, not a pass: each committed trail segment's
 4-column quad is filled top-left-rule into a persistent CPU buffer
 (`mSkidPix`, additive with saturation — `vskid.mat`'s old blend) and the
-frame's dirty rects upload by `setImage`. Ink is permanent until the
+frame's dirty rects upload by `setImage`, on EVERY frame that commits a stamp
+and before `beginFrame`, so a mark is drawn the frame it is laid. A ~30 Hz
+throttle stood here and was removed once measured: it lagged the trail's
+visible head behind the tyre by latency times road speed and bought nothing
+back (`renderSkids` carries the sweep, `shells/androidtv/CLAUDE.md` the
+numbers — the layer's cost is the tap and the raster, never the event rate).
+The ribbon is anchored a rolling radius AHEAD of the wheel node, at the
+tyre's leading ground contact: a head can only ever lag, since additive
+permanent ink cannot be drawn ahead and rewritten, so the lead puts the
+`SKID_SEG_MIN` commit distance under the tyre where it cannot be seen.
+Ink is permanent until the
 race-restart wipe — a memset + full re-upload — because a decay pass was the
 layer's whole recurring GPU cost (megatexels of read-modify-write) and
 permanence is also how a real toy track behaves; the racing line rubbers in

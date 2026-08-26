@@ -519,9 +519,19 @@ with the blob trade on:
 | skid uploads throttled (10 Hz / 2 Hz) | 59/1 x3 | trail lag REJECTED on look; only the mip half ships (2 Hz at 4 cells, invisible) |
 | throttle + statics off | 58/2, 60/0, 60/0 | slicks/discs gone, auras kept |
 
-The rubber layer's cost is its UPLOAD EVENTS, as the GL-era A/B concluded —
-the tap and the median are free — and the throttle ships (below): it firms
-the tail everywhere for a trail lag nobody sees in a quarter cell.
+> **SUPERSEDED 2026-08-26 — the level-0 upload throttle is GONE.** This phase
+> concluded that "the rubber layer's cost is its UPLOAD EVENTS, as the GL-era
+> A/B concluded", and the ~30 Hz level-0 throttle shipped on it. But the arm
+> in the table above is **10 Hz**, and it reads 59/1 against the whole layer's
+> 60/0 — so even here the uploads were not the whole cost, and the 30 Hz rate
+> that actually shipped was never priced on its own. Measured directly (4
+> players, tidepool, Vulkan, pinned 720, three interleaved whole-race reps an
+> arm): 30 Hz against no throttle is a NULL — 43 fps both, 20.08 vs 19.87 ms,
+> 17 skips/s both — while ablating the layer whole moves 43 -> 48 fps with no
+> overlap. The layer's cost is the TAP and the CPU raster; the trail lag was
+> being paid for nothing, and `renderSkids` now uploads every stamp frame.
+> Only the MIP half keeps a throttle (2 Hz at four cells, invisible).
+> `shells/androidtv/CLAUDE.md` carries the standing version of this.
 
 **But the adaptive verdict is final, and it is no.** A real race run with the
 best recipe spends its GRID in the backstop (the pack is the heaviest picture

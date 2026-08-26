@@ -1484,7 +1484,6 @@ void TtpRenderer::releaseScene() {
     mSkidMipsDirty = false;
     mSkidMipsAt = 0; // mTime restarts at 0 per scene; a stale stamp here would
                      // hold the refresh gate shut for the whole next race
-    mSkidUpAt = 0;   // ditto for the level-0 upload throttle
     // The car-shadow layer is per-track like the rubber (its width is the lap
     // length); the CPU superellipse (mCarShadowMask) is engine-lifetime — the
     // shape never changes.

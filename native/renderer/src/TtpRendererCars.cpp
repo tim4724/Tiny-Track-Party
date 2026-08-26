@@ -362,6 +362,14 @@ bool TtpRenderer::loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb) 
             if (wx > 0 && wz > 0) {
                 w.skidWidth = std::min(0.24f, std::max(0.06f, std::min(wx, wz)));
             }
+            // Rolling radius — the tyre's reach AHEAD of its own contact patch,
+            // which is how far renderSkids may run the ribbon without the ink
+            // leaving the wheel's ground silhouette. Off the z half-extent (the
+            // rolling direction; x is the tread width), the monster rig's
+            // mMonsterWheelRadius measured the same quantity first.
+            if (box.halfExtent.z > 0) {
+                w.wheelRadius = std::max(0.04f, box.halfExtent.z);
+            }
         }
     }
     return true;
