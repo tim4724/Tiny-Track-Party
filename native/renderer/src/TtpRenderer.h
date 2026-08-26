@@ -920,6 +920,18 @@ private:
         filament::math::float3 monsterMount{ 0, 0.28f, 0 };
     };
     std::vector<CarWheels> mCarWheels;
+    // The rolling radius of whichever tyre is actually ON THE ROAD: the rig's
+    // fat one while a monster transform is up (the car's own are scaled to
+    // nothing there), the car's measured one otherwise. ONE source, because
+    // two callers turn on it — the wheel-roll animation and the skid ribbon's
+    // lead — and they had already drifted apart, the roll dividing by a
+    // hand-typed 0.13 while the ribbon used the 0.125 measured off the mesh.
+    // The roll's readability slowdown is WHEEL_SPIN_SCALE's job alone; it does
+    // not belong in a radius.
+    float wheelRadiusFor(const CarWheels& w, bool monster) const {
+        return (monster && mMonsterWheelRadius > 0) ? mMonsterWheelRadius
+                                                    : w.wheelRadius;
+    }
     // Per-cell monster ghosting: the swap runs between render() calls, so each
     // cell sees the truck solid or 50%-alpha according to its OWN block test.
     struct MonsterView {

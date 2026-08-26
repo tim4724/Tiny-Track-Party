@@ -1027,13 +1027,20 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                 mv.body = pose;
             }
             // Wheel cosmetics (SceneRenderer's readability numbers): roll from
-            // the car's REAL travel this frame (ds/r × WHEEL_SPIN_SCALE 0.4 —
-            // the marshalled spd is NORMALIZED and can't drive it), fronts yaw
+            // the car's REAL travel this frame (ds/r × WHEEL_SPIN_SCALE — the
+            // marshalled spd is NORMALIZED and can't drive it), fronts yaw
             // ±0.5 rad with steerYaw. Teleport-sized jumps don't spin the wheels.
+            //
+            // WHEEL_SPIN_SCALE is the WHOLE readability slowdown and the only
+            // place one belongs. It used to be smeared across two numbers: the
+            // 0.4 here and a WHEEL_RADIUS of 0.13 against a wheel that actually
+            // measures 0.125, so the wheels really turned at 0.385 of the
+            // physical rate while the code appeared to say 0.4. The radius is
+            // now the measured one (wheelRadiusFor), which makes this constant
+            // the honest figure — read it as "wheels turn at 2/5 of true".
             if (mCarWheels.size() > i) {
                 constexpr float WHEEL_TURN_MAX = 0.5f;
                 constexpr float WHEEL_SPIN_SCALE = 0.4f;
-                constexpr float WHEEL_RADIUS = 0.13f;
                 constexpr float ROLL_SEG_MAX = 1.5f;
                 CarWheels& w = mCarWheels[i];
                 const float3 posW = carPos;
@@ -1049,8 +1056,7 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                 // While the monster is up its own fat tyres are the ones on the
                 // ground, so the roll accumulates at THEIR radius (the JS swaps
                 // c.wheelRadius to the rig's for the same reason).
-                const float radius = (isMonster && mMonsterWheelRadius > 0)
-                        ? mMonsterWheelRadius : WHEEL_RADIUS;
+                const float radius = wheelRadiusFor(w, isMonster);
                 if (std::fabs(ds) < ROLL_SEG_MAX) {
                     w.roll += (ds / radius) * WHEEL_SPIN_SCALE;
                     w.roll = std::fmod(std::fmod(w.roll + (float) M_PI, 2.0f * (float) M_PI)
@@ -2226,17 +2232,16 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
             //
             // BOUNDED HERE rather than where either radius is measured, and
             // that is the point: both come off a wheel node's AABB in shell-
-            // provided GLB bytes, and mMonsterWheelRadius ALSO divides the
-            // roll animation, where a clamp would silently retime the spin.
-            // Only this use is a position, so only this use needs the ceiling
-            // — a mismeasured wheel may spin wrong, but it may not float ink
-            // off the tyre. The kit measures 0.125 and the monster rig 0.188,
-            // so the cap is slack on everything shipped; it exists to make
-            // the bound above a fact rather than a property of the assets.
+            // provided GLB bytes, and the same radius ALSO divides the roll
+            // animation, where a clamp would silently retime the spin. Only
+            // this use is a position, so only this use needs the ceiling — a
+            // mismeasured wheel may spin wrong, but it may not float ink off
+            // the tyre. The kit measures 0.125 and the monster rig 0.188, so
+            // the cap is slack on everything shipped; it exists to make the
+            // bound above a fact rather than a property of the assets.
             constexpr float LEAD_MAX = 0.3f;
             const float3 leadDir = normalize((poseSpun * float4{ 0, 0, -1, 0 }).xyz);
-            const float lead = std::min(LEAD_MAX, (mwp && mMonsterWheelRadius > 0)
-                    ? mMonsterWheelRadius : cw.wheelRadius);
+            const float lead = std::min(LEAD_MAX, wheelRadiusFor(cw, mwp != nullptr));
             for (int wi = marksAll ? 0 : 2; wi < 4; wi++) {
                 WheelTrail& st = trails[wi];
                 const float3 gp = (poseSpun * float4{ wlocal[wi], 1 }).xyz
