@@ -21,7 +21,9 @@ wastes an afternoon. Only the ledger is audited against the tree:
 | [plan.md](../docs/native-port/plan.md), [shared-cpp-plan.md](../docs/native-port/shared-cpp-plan.md) | **Plans.** Per-track state lives in their own headings; the tree is what was actually built. |
 
 The retired JS engine and its recorders are reachable through
-`npm run revive:js-oracle`; what gates the port TODAY is the ctest suite.
+`npm run revive:js-oracle`, which restores them into a throwaway worktree. That is
+an archaeology and corpus-re-derivation tool, not a gate: what gates the port
+TODAY is the ctest suite.
 
 ## Layout
 

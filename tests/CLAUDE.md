@@ -52,9 +52,13 @@ See `tests/fixtures/traces/README.md`.
 
 Some `scripts/gen-*-corpus.mjs` are **frozen** — their JS twin is retired, so they
 can no longer run against a live implementation. Frozen headers name the `git show`
-that restores a twin, and `npm run revive:js-oracle` does the set. The audio, ui,
-session, schematic, theme and raceflow oracles were **deleted outright** with their
-twins; those corpora can never be re-derived from JS at all. The `record_*`
+that restores a twin, and `npm run revive:js-oracle` restores the whole set into a
+throwaway worktree to run one in. **That path is worth keeping for exactly three
+corpora** — math, trackbuilder and track-sampler — because their oracles have never
+been re-emitted from C++, which makes them the last cross-implementation evidence
+in the tree. The audio, ui, session, schematic, theme and raceflow oracles were
+**deleted outright** with their twins; those corpora can never be re-derived from
+JS at all. The `record_*`
 roundtrip carries the freshness obligation for all of those except raceflow, whose
 check replays structurally and deliberately has no record mode, so its obligation
 simply ended with the oracle.
@@ -199,13 +203,13 @@ packing, in the `kitfield` ctest, and nothing asserts that a kit is on the disk.
 
 ## Auditing the suite itself
 
-Two checks audit the SUITE rather than the code, weekly and on demand, never on
-PRs: `npm run mutation-check` breaks the engine many ways and requires the matching
-ctest to go red for each (gates have been found blind this way), and
-`npm run revive:js-oracle` restores the retired JS sim and track builder from git —
-each file from its own retirement commit — and re-records the golden traces
-byte-identically. It pulls its whole dependency set out of history rather than
-leaning on surviving modules, so it cannot rot from under itself.
+`npm run mutation-check` audits the SUITE rather than the code — weekly and on
+demand, never on PRs. It breaks the engine many ways and requires the matching
+ctest to go red for each; gates have been found blind this way.
 
-While that passes, parity evidence is renewable. When it starts failing, decide
-consciously whether to repair the twin or accept that the traces are frozen.
+A second check used to revive the JS twin, re-record the golden traces and demand
+byte identity, on the theory that parity evidence stayed renewable while it passed.
+It went with the traces' parity claim: once those were re-emitted from C++ the
+compare could not pass again, and nothing was left for it to prove. Its restore
+half survives as a tool (see the oracle generators above); **do not rebuild the
+gate on top of it.**

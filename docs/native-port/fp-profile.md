@@ -408,8 +408,10 @@ now — the JS gates that once sat here went with the engine they tested.
 | `tests/schemas.test.js` | Snapshot/event/track/results field sets match the contract and the fixtures. |
 | `.github/workflows/native.yml`, on every push or PR touching `native/` | The whole ctest suite on FOUR legs — ubuntu, macOS, wasm/Node, tvOS-sim — so a platform-specific FP divergence cannot hide on the one machine that built it. The Android NDK leg cross-compiles BOTH ABIs (an Android TV box may have no 64-bit userspace at all) and runs nothing, having no TV; its on-device replay is `native/scripts/android-device-spawn.sh` as a ctest emulator shim, scripted-manual. |
 
-The traces are FROZEN: they were recorded from the JS engine, so the set can
-never grow — a scenario authored from C++ would only prove C++ matches itself.
+The traces began as JS recordings, and that parity evidence has been SPENT:
+deliberate sim changes re-emitted them from C++, so what they hold today is
+regression rather than the port (`tests/fixtures/traces/README.md`). A new trace
+can be authored from C++, and says only that the sim still does what it did.
 That is also why there is no purity gate here any more. The JS one checked the
 sim path for `Math.random` and clocks by source scan; the replays subsume it,
 since any non-deterministic input would break byte agreement on the first frame.

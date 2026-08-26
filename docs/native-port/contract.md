@@ -121,14 +121,16 @@ remains is the evidence they produced: the fixtures are committed and the
 `replay_*` ctests replay them through `replay_cli`, which is where the C++ port
 passes or fails conformance.
 
-**Re-recording is no longer available, and that is the point.** The traces are
-frozen cross-implementation evidence; re-recording them from C++ would only
-prove C++ matches itself. So the fixture set can never grow, and the coverage it
-was built to have — the whole event vocabulary and the endgame path, not just
-early-race physics — is the coverage it will always have (two starter slices
-plus a full skysnake race exercising all seven event kinds, all four spin
-causes, rocket flight, the monster transform, lap
-counting across the s = 0 seam, and every car finishing inside the budget).
+**The cross-implementation claim is spent.** Re-recording from JS is no longer
+available, and deliberate sim changes have since re-emitted these fixtures from
+C++, so they pin regression rather than the port —
+`tests/fixtures/traces/README.md` records each spend. What survives a re-emit
+untouched is the coverage they were built with, since each line's own recorded
+input is what gets fed back through: the whole event vocabulary and the endgame
+path, not just early-race physics (two starter slices plus a full skysnake race
+exercising all seven event kinds, all four spin causes, rocket flight, the
+monster transform, lap counting across the s = 0 seam, and every car finishing
+inside the budget).
 
 ## Input: the CONTROL message
 
