@@ -15,9 +15,11 @@ cross-device claim, and post-reload reconciliation against the relay's peer list
 **It holds no room handle and mutates nothing** — every function is pure over
 plain data, which is what lets the corpus replay with no room machine at all.
 
-Returns come out in the model's key order, because the snapshot IS the wire. One
-piece of configured state (the chooser payload) is set once and stays opaque to
-the model, bar the rule that tracks ride the LOBBY snapshot only.
+Returns are plain `Value` trees and their key order means nothing: the snapshot's
+only caller frames it, and the frame encoder canonicalizes, so the composed order
+has never reached a phone. One piece of configured state (the chooser payload) is
+set once and stays opaque to the model, bar the rule that tracks ride the LOBBY
+snapshot only.
 
 **Deliberately did not cross:** the transport and its timers, the QR bitmap (the
 URL composition is shared, the bitmap is three platform one-liners), the reconnect

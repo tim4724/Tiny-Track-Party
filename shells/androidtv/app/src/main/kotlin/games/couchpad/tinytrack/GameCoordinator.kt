@@ -77,14 +77,6 @@ class GameCoordinator(
 
     // -- shell state the model threads but does not hold ---------------------
 
-    /**
-     * What each phone was last told its item was — a String, or JSONObject.NULL for
-     * an explicitly-cleared slot. The model gates the push
-     * (`ttp_ui_item_pushes_live_json`); this is the memory the gate reads, and
-     * null-vs-absent is a real distinction there, not a style choice.
-     */
-    val lastItem = HashMap<EngineId, Any>()
-
     /** Which reconnect cards actually attached, so the diff has a previous. */
     private val shownReconnectIds = LinkedHashSet<EngineId>()
 
@@ -1138,6 +1130,9 @@ class GameCoordinator(
      * replay, but the held ITEM is per-owner and rides its own message SENT ONLY ON
      * CHANGE — so without this a driver who reconnects mid-race sits there with a
      * dark USE button until their next pickup, holding an item they cannot see.
+     *
+     * The call stamps the session's own outbox, so the next push tick does not
+     * repeat what this just said.
      */
     private fun relightItem(id: EngineId) {
         if (sessionHandle == 0) return
@@ -1145,7 +1140,6 @@ class GameCoordinator(
             Ttp.ttp_ui_welcome_item_live_json(sessionHandle, TtpJson.arg(id.json)))
         val value = try { JSONArray("[$answer]").opt(0) } catch (_: Throwable) { null }
             ?: JSONObject.NULL
-        lastItem[id] = value
         net.sendTo(id, JSONObject().put("type", proto.msgItem).put("item", value).toString())
     }
 
@@ -1157,25 +1151,23 @@ class GameCoordinator(
         if (code < 1) null else TtpJson.str(Ttp.ttp_item_id(code))
 
     /**
-     * The per-phone ITEM push. The GATE is the model's — it reads the live session
-     * itself and decides which phones are owed a message; `lastItem` is the memory
-     * that gate reads, and it distinguishes null from absent (a slot that went from
-     * null to absent pushes again — three states, not two).
+     * The per-phone ITEM push. All of it is the model's — it reads the live session
+     * itself AND the outbox of what each phone was last told, which it stamps as it
+     * answers. This shell keeps no memory of any of it and only sends.
+     *
+     * The stamp therefore lands BEFORE the send, where this shell used to send
+     * first: a `sendTo` that fails now leaves the phone unaware until that seat's
+     * item changes again, instead of retrying on the next tick. See `ttp_ui.h` —
+     * the trade is deliberate, so do not "fix" it by re-adding a map here.
      */
     private fun pushItems() {
         if (sessionHandle == 0) return
-        val last = JSONArray()
-        for ((id, item) in lastItem) {
-            last.put(JSONObject().put("id", id.boxed()).put("item", item))
-        }
-        val pushes = TtpJson.arr(Ttp.ttp_ui_item_pushes_live_json(
-            sessionHandle, TtpJson.arg(last.toString())))
+        val pushes = TtpJson.arr(Ttp.ttp_ui_item_pushes_live_json(sessionHandle))
         for (i in 0 until pushes.length()) {
             val p = pushes.optJSONObject(i) ?: continue
             val id = EngineId.from(p.opt("id")) ?: continue
             val item = p.opt("item") ?: JSONObject.NULL
             net.sendTo(id, JSONObject().put("type", proto.msgItem).put("item", item).toString())
-            lastItem[id] = item
         }
     }
 

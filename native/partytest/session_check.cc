@@ -26,12 +26,14 @@
 // numbers via js_number_to_string — so a recorded decimal matches iff it
 // round-trips to the same double.
 //
-// TWO THINGS THIS CHECK DELIBERATELY REPRODUCES BY HAND rather than reading off
-// the port, because they are the contract:
-//   * the snapshot's KEY ORDER is not compared here (diff_val is structural, and
-//     canonical). The order is the wire's and is pinned by
-//     tests/wire-compat.test.js against the real unmodified controller, which is
-//     the only place that question can honestly be settled.
+// THE SNAPSHOT'S KEY ORDER IS NOT COMPARED HERE, and nothing else compares it
+// either: diff_val is structural and canonical, tests/wire-compat.test.js sorts
+// both sides before it compares key SETS against the real unmodified controller,
+// and the frame encoder canonicalizes everything that leaves. (This note used to
+// claim wire-compat pinned the order. It never did.)
+//
+// ONE THING THIS CHECK DELIBERATELY REPRODUCES BY HAND rather than reading off
+// the port, because it is the contract:
 //   * `in.absent` distinguishes a MISSING rejoinToken (JS undefined) from an
 //     explicit null. They answer differently and that is frozen; see session.h.
 

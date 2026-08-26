@@ -10,10 +10,10 @@
 // wrong JSON type lives exactly here and is invisible to a check that calls C++
 // objects directly.
 //
-// KEY ORDER IS OUTPUT, not incidental. Every Value below is built in the order
-// the JS object literal was written in and emitted with ordered_stringify, so
-// the standings board comes out as the bytes the phones have always received.
-// See ttp_ui.h's deviation note.
+// KEY ORDER IS NOT A CONTRACT. Every answer goes out canonical (sorted keys),
+// like every other ABI, so the order the Values below are built in is free. Key
+// PRESENCE still is contract — a null and an absent key are different answers.
+// See ttp_ui.h.
 #include "ttp_error.h"
 #include "ttp_ui.h"
 
@@ -77,7 +77,7 @@ std::string g_bufSeats, g_bufGrid, g_bufConnected, g_bufSlot, g_bufDiff,
     g_bufSeriesGp, g_bufBoardLive, g_bufFreeze, g_bufResultsAction, g_bufProgress;
 
 const char* put(std::string& buf, const Value& v) {
-  ordered_stringify_into(v, buf);
+  canonical_stringify_into(v, buf);
   return buf.c_str();
 }
 
@@ -542,13 +542,16 @@ const char* ttp_ui_reconnect_diff_json(const char* shownIdsJson, const char* sea
 // ---- the ITEM push -----------------------------------------------------------
 
 // The ITEM push, live: the cars (id / held item / finished) come off the bound
-// engine through the seam and the CPU set off the bot registry — the shell
-// supplies only its own map of what each phone was last told. See ttp_ui.h for
-// the three-state item contract the map encodes.
-const char* ttp_ui_item_pushes_live_json(int sessionHandle, const char* lastItemJson) {
+// engine through the seam, the CPU set off the bot registry, and the outbox —
+// what each phone was last told — off the session (ttp_session.h). Nothing
+// about the push crosses the ABI but the answer. See ttp_ui.h for the
+// three-state item contract the outbox encodes, and for the send-order nuance
+// stamping here imposes on a shell.
+const char* ttp_ui_item_pushes_live_json(int sessionHandle) {
+  ui::LastItems* outbox = ttp_session_item_outbox(sessionHandle);
+  if (!outbox) return put(g_bufPushes, Value::Arr());   // no session: nothing to push
   const Value carsV = ttp_session_item_cars(sessionHandle);
   const Value aiV = ttp_session_ai_ids(sessionHandle);
-  const Value lastV = json::parse_or(lastItemJson, Value::Arr());
 
   std::vector<ui::PushCar> cars;
   if (carsV.type == Value::ARR) {
@@ -560,14 +563,9 @@ const char* ttp_ui_item_pushes_live_json(int sessionHandle, const char* lastItem
       cars.push_back(std::move(pc));
     }
   }
-  // The shell's Map, rebuilt in ITS insertion order — re-setting an existing key
-  // must not move it, which LastItems preserves.
-  ui::LastItems last;
-  if (lastV.type == Value::ARR) {
-    for (const Value& e : lastV.arr) last.set(idOf(e.find("id")), itemOf(e));
-  }
   Value a = Value::Arr();
-  for (const ui::ItemPush& p : ui::itemPushes(cars, idSetOf(&aiV), last)) {
+  for (const ui::ItemPush& p : ui::itemPushes(cars, idSetOf(&aiV), *outbox)) {
+    outbox->set(p.id, p.item);   // the rule is PURE; applying its answers is the caller's
     Value o = Value::Obj();
     o.set("id", p.id.toValue());
     setItem(o, p.item);
@@ -579,7 +577,9 @@ const char* ttp_ui_item_pushes_live_json(int sessionHandle, const char* lastItem
 // The one-shot relight a (re)joining phone gets, off the live race: the walk's
 // welcome-item effect names a seat, and this answers that seat's held item as
 // a bare JSON value (a quoted string, or null — the relight message carries
-// `item` directly and the phone reads null for an empty slot).
+// `item` directly and the phone reads null for an empty slot). It stamps the
+// outbox too, so the next push tick does not repeat what this relight just
+// said.
 const char* ttp_ui_welcome_item_live_json(int sessionHandle, const char* peerIdJson) {
   const ui::Id want = parse_scalar_id(peerIdJson);
   const Value carsV = ttp_session_item_cars(sessionHandle);
@@ -596,6 +596,7 @@ const char* ttp_ui_welcome_item_live_json(int sessionHandle, const char* peerIdJ
     }
   }
   const ui::ItemVal item = ui::welcomeItem(live ? &car : nullptr);
+  if (ui::LastItems* outbox = ttp_session_item_outbox(sessionHandle)) outbox->set(want, item);
   return put(g_bufWelcome,
              item.kind == ui::ItemVal::STR ? Value::Str(item.str) : Value::Null());
 }

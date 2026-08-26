@@ -58,13 +58,18 @@
 #include "ttp/race_track.h"       // find_track_def — the levels the tendency cases pick by
 #include "ttp/race_track_json.h"
 #include "ttp/trackbuilder.h"
-// TWO library headers this ABI check reaches past its own boundary for, each
+// THREE library headers this ABI check reaches past its own boundary for, each
 // for its own reason.
 //
 // ttp::rt::ui::cupTendency has no export of its own — the only ABI path to it is
 // the shipped catalogue, which exposes five answers and none of the edges — and
 // it is a RULE, so it needs a gate on every leg. See uiCupTendency below.
 #include "ttp/ui_model.h"
+// Game::giveItem STAGES a held item for the ITEM-push gate. The C ABI exports
+// no item mutator on purpose (native/CLAUDE.md), and rolling a real box would
+// mean ticking the sim until a car happens to cross one — so the check reaches
+// the engine through the session seam, exactly as replay_cli does.
+#include "ttp/game.h"
 // ttp::protocol::manifest() is the ORACLE for ttp_protocol_manifest_json: the
 // export's only claim is that it hands the library's own tables over unchanged,
 // and the sole way to state that is to hold the two side by side.
@@ -2187,7 +2192,7 @@ void handlePathsMatchJsonPaths() {
     input.set("inRace", inRace);
     input.set("hostPeerIndex", parseOrNull(ttp_room_host_json(r), "room host"));
     input.set("roomState", Value::Str(ttp_room_state(r)));
-    const std::string snapshot = ordered_stringify(ns::lobby_snapshot(input, chooser));
+    const std::string snapshot = canonical_stringify(ns::lobby_snapshot(input, chooser));
     return std::string(ttp_framing_encode_set_state(snapshot.c_str()));
   };
 
@@ -2363,7 +2368,7 @@ void uiLiveTwinsMatchJsonPaths() {
 
   // ---- race flow: the role sets main.js gathered, then the two rules --------
   // Byte for byte here, because the answer is two values and no encoder is
-  // being restated: {"allDone":bool,"forfeit":[id,...]}, in that order.
+  // being restated: {"allDone":bool,"forfeit":[id,...]}, canonically spelled.
   const auto wantRaceFlow = [&](int s, int r) {
     std::vector<ui::Id> carIds;
     ui::IdSet ai, disc, fin;
@@ -2384,7 +2389,7 @@ void uiLiveTwinsMatchJsonPaths() {
     Value f = Value::Arr();
     for (const ui::Id& id : ui::forfeitCandidates(carIds, ai, disc)) f.push(id.toValue());
     o.set("forfeit", std::move(f));
-    return ordered_stringify(o);
+    return canonical_stringify(o);
   };
   const auto sameRaceFlow = [&](const char* where) {
     const std::string want = wantRaceFlow(sess, room);
@@ -2400,18 +2405,34 @@ void uiLiveTwinsMatchJsonPaths() {
         "ttp_ui_race_flow_live_json without a session is the no-race constant");
 
   // ---- the ITEM pushes, off the live race -----------------------------------
-  // The shell used to hand the rule a car list and an AI set it had assembled
-  // itself; the twin reads both off the session and takes only the outbox map.
+  // The shell used to hand the rule a car list, an AI set AND its own outbox
+  // map; the twin reads all three off the session and answers only the pushes.
   // Compared FIELD for field: the three-state item (absent / explicit null /
   // string) is the whole contract and a writer spelled here would be the stale
   // second copy of it.
+  //
+  // THE OUTBOX IS INTERNAL NOW (ttp_session.h's ttp_session_item_outbox), so
+  // this gate MIRRORS it instead of scripting it: `outbox` below is applied
+  // exactly as the walk applies its own, which puts the STAMPING inside the
+  // equivalence — a second call with nothing changed must answer []. The two
+  // scripted states that used to be typed here are reached by giving a LIVE
+  // car a real item through the sim, which is strictly closer to the game than
+  // a hand-written map was.
+  //
+  // ONE STATE IS NO LONGER REACHABLE AT THIS LEVEL, and that is the whole cost:
+  // an outbox row that is ABSENT for a car already told something. Only this
+  // ABI writes the map now, and it never writes an absent — so the row cannot
+  // exist. ui_check.cc replays it from the frozen ui corpus, which is where the
+  // rule's three states have always been pinned; what is gated here is the
+  // marshalling and the stamping, and both are.
   const auto itemValOf = [](const Value& o) {
     const Value* v = o.find("item");
     if (!v || v->type == Value::UNDEF) return ui::ItemVal::Absent();
     if (v->type == Value::STR) return ui::ItemVal::Str(v->str);
     return ui::ItemVal::Null();
   };
-  const auto samePushes = [&](int s, const char* lastJson, const char* where) {
+  ui::LastItems outbox;   // the mirror of the session's own, applied in step
+  const auto samePushes = [&](int s, const char* where) {
     std::vector<ui::PushCar> cars;
     for (const Value& c : ttp_session_item_cars(s).arr) {
       ui::PushCar pc;
@@ -2422,12 +2443,12 @@ void uiLiveTwinsMatchJsonPaths() {
     }
     ui::IdSet ai;
     for (const Value& a : ttp_session_ai_ids(s).arr) ai.add(json::id_of<ui::Id>(&a));
-    ui::LastItems last;
-    for (const Value& e : parseOrNull(lastJson, "last items").arr)
-      last.set(json::id_of<ui::Id>(e.find("id")), itemValOf(e));
-    const std::vector<ui::ItemPush> want = ui::itemPushes(cars, ai, last);
+    const std::vector<ui::ItemPush> want = ui::itemPushes(cars, ai, outbox);
+    // Applied BEFORE the compare: the mirror tracks what the outbox SHOULD
+    // hold, so a failing arm does not cascade into every arm after it.
+    for (const ui::ItemPush& p : want) outbox.set(p.id, p.item);
 
-    const Value got = parseOrNull(ttp_ui_item_pushes_live_json(s, lastJson), "item pushes live");
+    const Value got = parseOrNull(ttp_ui_item_pushes_live_json(s), "item pushes live");
     const std::string at_ = std::string("ttp_ui_item_pushes_live_json == ui::itemPushes (") +
                             where + ")";
     check(got.arr.size() == want.size(),
@@ -2441,15 +2462,29 @@ void uiLiveTwinsMatchJsonPaths() {
              itemValOf(got.arr[i]) == want[i].item;
     check(rows, at_ + ": every id and its three-state item");
   };
+  // Staging a held item is a Game call (ttp/game.h): the C ABI deliberately
+  // exports no item mutator, and forcing a real box roll would mean ticking the
+  // sim until a car happens to cross one.
+  Game* itemEng = ttp_session_engine(sess);
+  if (!itemEng) { fail("ui-twins: the session has no engine to stage items on"); return; }
+  const std::string held = ITEM_IDS[2];   // a real roll from the sim's own table
+
   // A fresh outbox pushes every phone's empty slot; the CPU cars have no phone.
-  samePushes(sess, "[]", "fresh outbox");
-  // Told "rocket" and holding nothing, both seats push again — car 1 is over
-  // the line, which the gather has to carry or its slot would read as held.
-  samePushes(sess, "[{\"id\":1,\"item\":\"rocket\"},{\"id\":3,\"item\":\"rocket\"}]",
-             "a stale held item");
-  // Caught up: nothing to say.
-  samePushes(sess, "[{\"id\":1,\"item\":null},{\"id\":3,\"item\":null}]", "outbox in step");
-  samePushes(0, "[]", "no race at all");
+  samePushes(sess, "a fresh outbox");
+  // Nothing moved, and the answers were stamped: nothing to say.
+  samePushes(sess, "an outbox in step");
+  // A live pickup on the seat still racing.
+  itemEng->giveItem(ui::Id::Num(3), held, false, 0.0);
+  samePushes(sess, "a live pickup");
+  // Used it. The outbox holds the item, the car holds nothing — the state the
+  // scripted "stale held item" arm used to type out.
+  itemEng->giveItem(ui::Id::Num(3), "", false, 0.0);
+  samePushes(sess, "the slot emptied again");
+  // Car 1 is over the line, so its slot reads empty however it is filled — the
+  // gather has to carry `finished` or this pushes a held item to a victory lap.
+  itemEng->giveItem(ui::Id::Num(1), held, false, 0.0);
+  samePushes(sess, "a finished car handed an item");
+  samePushes(0, "no race at all");
 
   const auto sameWelcome = [&](int s, const char* idJson, const char* where) {
     const ui::Id want = parse_scalar_id(idJson);
@@ -2464,6 +2499,7 @@ void uiLiveTwinsMatchJsonPaths() {
       break;
     }
     const ui::ItemVal item = ui::welcomeItem(live ? &car : nullptr);
+    if (s != 0) outbox.set(want, item);   // the relight stamps too
     const std::string got = ttp_ui_welcome_item_live_json(s, idJson);
     const std::string exp = item.kind == ui::ItemVal::STR
                                 ? canonical_stringify(Value::Str(item.str))
@@ -2476,6 +2512,13 @@ void uiLiveTwinsMatchJsonPaths() {
   sameWelcome(sess, "\"ai-0\"", "a CPU car");
   sameWelcome(sess, "9", "a seat with no car");
   sameWelcome(0, "3", "no race at all");
+  // The relight's own stamp, gated where it can actually be seen: hand seat 3 a
+  // fresh item, relight it, and the next tick must have NOTHING to say. Without
+  // the stamp the phone is told twice — which is what the shells used to
+  // prevent by writing their own map beside the send.
+  itemEng->giveItem(ui::Id::Num(3), held, false, 0.0);
+  sameWelcome(sess, "3", "a relight after a pickup");
+  samePushes(sess, "the tick after a relight");
 
   ttp_room_transition_to(room, "countdown");
   ttp_room_transition_to(room, "playing");
@@ -2656,16 +2699,18 @@ void uiLiveTwinsMatchJsonPaths() {
                   ui::key(ui::freezeTransition(p != 0, ap != 0, sp != 0)),
               "freeze plan transition == ui::freezeTransition");
       }
+  // Keys sorted (the answer is canonical, like every ABI's); the OPS ARRAY keeps
+  // the order the rule emitted, which is the half that is contract.
   check(std::string(ttp_ui_freeze_plan_json(1, 0, 0)) ==
-            "{\"transition\":\"freeze\",\"ops\":[\"pause-session\",\"stop-voices\","
-            "\"pause-music\",\"hold-cars\"]}",
+            "{\"ops\":[\"pause-session\",\"stop-voices\",\"pause-music\",\"hold-cars\"],"
+            "\"transition\":\"freeze\"}",
         "freeze ops, in order");
   check(std::string(ttp_ui_freeze_plan_json(0, 0, 1)) ==
-            "{\"transition\":\"thaw\",\"ops\":[\"resume-session\",\"release-cars\","
-            "\"resume-music\"]}",
+            "{\"ops\":[\"resume-session\",\"release-cars\",\"resume-music\"],"
+            "\"transition\":\"thaw\"}",
         "thaw ops, in order — voices never restart");
   check(std::string(ttp_ui_freeze_plan_json(0, 0, 0)) ==
-            "{\"transition\":\"none\",\"ops\":[]}",
+            "{\"ops\":[],\"transition\":\"none\"}",
         "no transition, no ops");
 
   // ---- the results button's action ------------------------------------------
@@ -3209,7 +3254,8 @@ void netWalksMatchMultiCallPath() {
     };
     const auto pickJson = [](const char* mode, const char* cupId, int races,
                              const std::string& trackId) {
-      return std::string("{\"mode\":") + mode + ",\"cupId\":" + cupId + ",\"randomRaces\":" +
+      // Canonical, like the answer: keys sorted.
+      return std::string("{\"cupId\":") + cupId + ",\"mode\":" + mode + ",\"randomRaces\":" +
              std::to_string(races) + ",\"trackId\":\"" + trackId + "\"}";
     };
 
@@ -3225,7 +3271,7 @@ void netWalksMatchMultiCallPath() {
                           0, 2900),
                       "select_mode non-host");
     literalEffects(nh, Value::Arr(), "pick/non-host");
-    pickIs("{\"mode\":null,\"cupId\":null,\"randomRaces\":0,\"trackId\":null}", "non-host untouched");
+    pickIs("{\"cupId\":null,\"mode\":null,\"randomRaces\":0,\"trackId\":null}", "non-host untouched");
 
     // The host's exact-track pick stores and answers the tail.
     Value w = walkOf(ttp_net_on_peer_message_json(
@@ -3234,7 +3280,7 @@ void netWalksMatchMultiCallPath() {
                          0, 3000),
                      "select_mode track");
     literalEffects(w, wantTail("tidepool"), "pick/track");
-    pickIs("{\"mode\":\"track\",\"cupId\":null,\"randomRaces\":0,\"trackId\":\"tidepool\"}",
+    pickIs("{\"cupId\":null,\"mode\":\"track\",\"randomRaces\":0,\"trackId\":\"tidepool\"}",
            "track stored");
 
     // Same pick again: a no-op — against the pick the WALK stored, no staging.
@@ -3252,7 +3298,7 @@ void netWalksMatchMultiCallPath() {
                            0, 3200),
                        "select_mode cup");
     literalEffects(cup, wantTail("summit"), "pick/cup-first-race");
-    pickIs("{\"mode\":\"cup\",\"cupId\":\"alpine\",\"randomRaces\":0,\"trackId\":\"summit\"}",
+    pickIs("{\"cupId\":\"alpine\",\"mode\":\"cup\",\"randomRaces\":0,\"trackId\":\"summit\"}",
            "cup stored");
 
     Value bad = walkOf(ttp_net_on_peer_message_json(
@@ -3312,10 +3358,10 @@ void netWalksMatchMultiCallPath() {
     // init_pick spells the constructor rule (and re-seeds the bag); clear_pick
     // keeps only hasBag.
     ttp_net_init_pick(walkRoom, "tidepool", 1, 20260731);
-    pickIs("{\"mode\":\"track\",\"cupId\":null,\"randomRaces\":0,\"trackId\":\"tidepool\"}",
+    pickIs("{\"cupId\":null,\"mode\":\"track\",\"randomRaces\":0,\"trackId\":\"tidepool\"}",
            "init with a default track");
     ttp_net_init_pick(walkRoom, nullptr, 1, 20260731);
-    pickIs("{\"mode\":null,\"cupId\":null,\"randomRaces\":0,\"trackId\":null}",
+    pickIs("{\"cupId\":null,\"mode\":null,\"randomRaces\":0,\"trackId\":null}",
            "init without one");
 
     // setTrack: the game-layer swap keeps mode/cup, same tail, same gates.
@@ -3323,7 +3369,7 @@ void netWalksMatchMultiCallPath() {
             "\"hasBag\":true}");
     Value st = walkOf(ttp_net_set_track_json(walkRoom, "tidepool"), "set_track");
     literalEffects(st, wantTail("tidepool"), "set_track/accept");
-    pickIs("{\"mode\":\"random\",\"cupId\":null,\"randomRaces\":4,\"trackId\":\"tidepool\"}",
+    pickIs("{\"cupId\":null,\"mode\":\"random\",\"randomRaces\":4,\"trackId\":\"tidepool\"}",
            "set_track keeps mode and length");
     literalEffects(walkOf(ttp_net_set_track_json(walkRoom, "tidepool"), "set_track same"),
                    Value::Arr(), "set_track/same-id-noop");
@@ -3334,7 +3380,7 @@ void netWalksMatchMultiCallPath() {
     // bag itself survived, which a walk that draws internally is the only way
     // left to observe.
     ttp_net_clear_pick(walkRoom);
-    pickIs("{\"mode\":null,\"cupId\":null,\"randomRaces\":0,\"trackId\":null}", "cleared");
+    pickIs("{\"cupId\":null,\"mode\":null,\"randomRaces\":0,\"trackId\":null}", "cleared");
     Value stillBagged = walkOf(ttp_net_on_peer_message_json(
                                    walkRoom, 0, "1", "{\"type\":\"select_mode\","
                                                      "\"mode\":\"random\",\"randomRaces\":2}",
@@ -3732,13 +3778,16 @@ std::string opsOf(const race::Effects& es) {
 }
 
 // The ops the EXECUTOR performs against the room's stored series, retained
-// field and pick. ttp_race.h promises none of them ever reaches a shell, which
-// is what a shell's performer switch is written against — so the promise is
-// spelled here and held to ttp_race_effect_ops_json, the export that makes it.
+// field and pick — plus clear-item-cache, whose object is the session's ITEM
+// outbox and which therefore has nothing left to do (ttp_race.cc says why).
+// ttp_race.h promises none of them ever reaches a shell, which is what a
+// shell's performer switch is written against — so the promise is spelled here
+// and held to ttp_race_effect_ops_json, the export that makes it.
 bool executorOp(race::Op op) {
   switch (op) {
     case race::Op::SET_FIELD:
     case race::Op::CLEAR_FIELD:
+    case race::Op::CLEAR_ITEM_CACHE:
     case race::Op::APPLY_RACE_POINTS:
     case race::Op::SERIES_ADVANCE:
     case race::Op::CLEAR_SERIES:
@@ -4892,9 +4941,9 @@ void raceLiveWalks() {
         ("{\"mode\":\"tour\",\"cupId\":null,\"trackId\":\"" + race1 + "\",\"randomRaces\":2}")
             .c_str());
     const std::string wantSlot =
-        "{\"nameKey\":\"tour\",\"name\":null,\"racesKey\":\"count\",\"raceCount\":2,"
-        "\"difficulty\":null,\"maps\":[{\"trackId\":null,\"cup\":\"beach\"},"
-        "{\"trackId\":null,\"cup\":\"alpine\"}],\"cupId\":null}";
+        "{\"cupId\":null,\"difficulty\":null,"
+        "\"maps\":[{\"cup\":\"beach\",\"trackId\":null},{\"cup\":\"alpine\",\"trackId\":null}],"
+        "\"name\":null,\"nameKey\":\"tour\",\"raceCount\":2,\"racesKey\":\"count\"}";
     check(slot == wantSlot, "tour: the race card spells the per-cup chips\n  want " + wantSlot +
                                 "\n  got  " + slot);
 
@@ -4977,10 +5026,10 @@ void raceLiveWalks() {
     const std::string lslot = ttp_ui_cup_slot_json(
         "{\"mode\":\"tour\",\"cupId\":null,\"trackId\":\"tidepool\",\"randomRaces\":2}");
     const std::string wantL =
-        "{\"nameKey\":\"tour\",\"name\":null,\"racesKey\":\"count\",\"raceCount\":2,"
-        "\"difficulty\":null,\"maps\":[{\"trackId\":null,\"cup\":\"beach\"},"
-        "{\"trackId\":null,\"cup\":\"snow\"},"
-        "{\"trackId\":null,\"cup\":\"rooftop\",\"locked\":true}],\"cupId\":null}";
+        "{\"cupId\":null,\"difficulty\":null,"
+        "\"maps\":[{\"cup\":\"beach\",\"trackId\":null},{\"cup\":\"snow\",\"trackId\":null},"
+        "{\"cup\":\"rooftop\",\"locked\":true,\"trackId\":null}],"
+        "\"name\":null,\"nameKey\":\"tour\",\"raceCount\":2,\"racesKey\":\"count\"}";
     check(lslot == wantL, "lock: the tour card teases the locked cup\n  want " + wantL +
                               "\n  got  " + lslot);
 

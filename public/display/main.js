@@ -460,10 +460,6 @@ let session = null;
 let paused = false;        // race frozen via the pause overlay (display or a controller)
 let autoPaused = false;    // race frozen because no connected human holds a car (silent; see refreshAutoPause)
 let lastHudTick = 0;
-// Last held item pushed to each car's phone (peerIndex -> item|null), so ITEM is
-// sent only when it changes. Cleared per race (launchRace); a reconnect forces a
-// resend via onPlayerWelcomed.
-const _lastItem = new Map();
 // AI ("CPU") racers that filled empty seats this race: peerIndex -> controller.
 // Empty when four humans race. The full field (humans + AI) is retained
 // kept so the results screen can resolve AI names/liveries (they're not in the lobby).
@@ -476,16 +472,14 @@ const _lastItem = new Map();
 // construction (the layer's buildField registers exactly these as bot personas).
 
 // Reconcile every phone's held-item light against the engine's HUD block.
-// The DECISION (who gets an ITEM message, only on change, AIs filtered) is
-// C++'s ui.itemPushes; this only chooses WHEN to ask. Called from the slow
-// HUD tick as the steady-state net, and from the 'item-pickup' effect so the
-// light + pickup haptic land at the event instead of up to a HUD tick later.
+// The DECISION (who gets an ITEM message, only on change, AIs filtered) and the
+// outbox it turns on are both C++'s; this only chooses WHEN to ask. Called from
+// the slow HUD tick as the steady-state net, and from the 'item-pickup' effect
+// so the light + pickup haptic land at the event instead of up to a HUD tick
+// later.
 const pushHeldItems = () => {
   if (!session) return;
-  for (const { id, item } of ui.itemPushes(session.h, _lastItem)) {
-    _lastItem.set(id, item);
-    net.sendTo(id, { type: MSG.ITEM, item });
-  }
+  for (const { id, item } of ui.itemPushes(session.h)) net.sendTo(id, { type: MSG.ITEM, item });
 };
 // The launch effects a scene build stands between (race_flow.h's countdown
 // gate): { effects, at }, or null when no launch is waiting. `at` is the walk's
@@ -587,8 +581,8 @@ scene.onFrame = (dt) => {
   // so each cell reads its start position and "Lap 1/N" while the lights count.
   // The walk's one-shot paint-initial-hud fires before reset-scene-cars' async
   // rebuild has landed the new slot table, so this poll is what actually fills
-  // the countdown chrome (and CLEAR_ITEM_CACHE's empty-ITEM resend rides the
-  // first tick, countdown or not).
+  // the countdown chrome (and a new session's outbox is empty, so every phone's
+  // ITEM is resent on this first tick, countdown or not).
   if (slowTick) {
     // Stamped only when the tick is spent — the finish.allDone branch above can
     // still return before this line, and that frame must not consume the tick.
@@ -680,10 +674,9 @@ const net = new DisplayNet({
   // this callback used to apply itself lives behind the session handle now.
   onPlayerWelcomed: (peerIndex) => {
     if (!session) return; // the handle the effect was decided on is being torn down
-    // The seat's held item, off the live race in C++ — one crossing.
-    const item = ui.welcomeItem(session.h, peerIndex);
-    _lastItem.set(peerIndex, item);
-    net.sendTo(peerIndex, { type: MSG.ITEM, item });
+    // The seat's held item, off the live race in C++ — one crossing, and it
+    // stamps the outbox itself so the next push tick does not repeat it.
+    net.sendTo(peerIndex, { type: MSG.ITEM, item: ui.welcomeItem(session.h, peerIndex) });
   },
   onControllerMessage: (from, data) => {
     // CONTROL stays on its own short-circuit: it is the relay-fallback INPUT
@@ -880,7 +873,6 @@ function perform(effects, ctx = {}) {
 // failure instead of a half-built race.
 const RACE_PERFORMERS = {
   'stop-lobby-demo': () => lobbyDemo.stop(),
-  'clear-item-cache': () => _lastItem.clear(),
   'show-screen': (e) => show(e.screen),
   'hide-results': () => hideResults(),
   'set-race-flags': (e) => {

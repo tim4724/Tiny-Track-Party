@@ -19,9 +19,9 @@
 // the same scenarios through the old multi-call path in the same run and
 // asserts the mutations and effects agree.
 //
-// KEY ORDER IS OUTPUT for the snapshot: it is emitted with ordered_stringify so
-// the bytes the relay retains are the ones the phones have always parsed. See
-// ttp_net.h's deviation note.
+// KEY ORDER IS NOT A CONTRACT, the snapshot included: ttp_net_lobby_frame hands
+// its snapshot to the frame encoder, which canonicalizes, so the composed order
+// never reached a phone. Every answer here goes out canonical. See ttp_net.h.
 #include "ttp_error.h"
 #include "ttp_net.h"
 
@@ -78,7 +78,7 @@ const char* const NET_EFFECT_OPS[] = {
     "game-message", "race-abandoned", "track-change", "clear-standings"};
 
 const char* put(std::string& buf, const Value& v) {
-  ordered_stringify_into(v, buf);
+  canonical_stringify_into(v, buf);
   return buf.c_str();
 }
 const char* putStr(std::string& buf, std::string s) {
@@ -139,7 +139,9 @@ ns::RoomState stateOf(const char* s) { return ns::room_state_of(strOr(s)); }
 const char* ttp_net_effect_ops_json(void) {
   Value a = Value::Arr();
   for (const char* op : NET_EFFECT_OPS) a.push(Value::Str(op));
-  ordered_stringify_into(a, g_bufOps);
+  // Canonical sorts object KEYS; an array is left alone, so the table's own
+  // order is the answer's order and this is the same bytes either emitter gave.
+  canonical_stringify_into(a, g_bufOps);
   return g_bufOps.c_str();
 }
 
@@ -178,8 +180,6 @@ const char* ttp_net_lobby_frame(int roomHandle, int sessionHandle, const char* f
   input.set("roster", std::move(roster));
   input.set("hostPeerIndex", ttp_room_host_value(roomHandle));
   input.set("roomState", Value::Str(ttp_room_state_name(roomHandle)));
-  // Canonical, like every other frame encoder: g_bufFrame is framed output, not
-  // an ABI answer, so it takes ttp_party.cc's spelling and not this file's.
   g_bufFrame = canonical_stringify(framing::encode_set_state(ns::lobby_snapshot(input, g_chooser)));
   return g_bufFrame.c_str();
 }
@@ -347,7 +347,7 @@ void pushPeerOp(Value& effects, const char* op, const PeerId& id) {
 const char* answer(std::string& buf, Value effects) {
   Value out = Value::Obj();
   out.set("effects", std::move(effects));
-  ordered_stringify_into(out, buf);
+  canonical_stringify_into(out, buf);
   return buf.c_str();
 }
 
@@ -1083,7 +1083,7 @@ void ttp_net_clear_pick(int roomHandle) {
 const char* ttp_net_pick_json(int roomHandle) {
   Value out = Value::Obj();
   setPickFields(roomHandle, out);
-  ordered_stringify_into(out, g_bufPick);
+  canonical_stringify_into(out, g_bufPick);
   return g_bufPick.c_str();
 }
 

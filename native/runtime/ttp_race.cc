@@ -10,10 +10,10 @@
 // a wrong key, a dropped null or an id parsed as the wrong JSON type lives
 // exactly here and is invisible to a check that calls C++ objects directly.
 //
-// KEY ORDER IS OUTPUT, not incidental — every Value below is built in the order
-// the JS object literal was written in and emitted with ordered_stringify. And
-// key PRESENCE is contract: see ttp_race.h. An `if` that adds a key only on one
-// branch is deliberate everywhere it appears.
+// KEY ORDER IS NOT A CONTRACT — every answer goes out canonical (sorted keys),
+// so the order the Values below are built in is free. Key PRESENCE still is
+// contract: see ttp_race.h. An `if` that adds a key only on one branch is
+// deliberate everywhere it appears.
 #include "ttp_error.h"
 #include "ttp_race.h"
 
@@ -65,7 +65,7 @@ std::string g_bufPersonas, g_bufOps, g_bufDemo, g_bufStart, g_bufLaunch,
     g_bufForfeit, g_bufRekey, g_bufAutoPause, g_bufBench;
 
 const char* put(std::string& buf, const Value& v) {
-  ordered_stringify_into(v, buf);
+  canonical_stringify_into(v, buf);
   return buf.c_str();
 }
 
@@ -358,6 +358,15 @@ void executeAndSpell(int roomHandle, const race::Effects& es,
       case race::Op::CLEAR_FIELD:
         ttp_room_store_field(roomHandle, Value::Null());
         break;
+      case race::Op::CLEAR_ITEM_CACHE:
+        // Deliberately nothing. The ITEM outbox lives on the SESSION now
+        // (ttp_session.h), and this effect is emitted while a race is being
+        // LAUNCHED — before create-session, so the session whose outbox it
+        // means does not exist yet, and the one it will get is empty by
+        // construction. The op stays in the decision layer's list because the
+        // corpus pins that list; what it no longer is, is three shells each
+        // holding a map for a rule none of them owns.
+        break;
       case race::Op::APPLY_RACE_POINTS: {
         const int gp = ttp_room_series(roomHandle);
         if (gp && resultsRowsForApply) {
@@ -593,13 +602,16 @@ const char* ttp_race_bench_field_json(const char* trackId, int players, double s
 
 // The ops a walk's ANSWER can carry — the enum minus the executor's own set,
 // which executeAndSpell performs against the room's stored series/field/pick
-// and strips. A shell asserts its performer table against exactly this list
-// (net-vocabulary ops merged in by the set-track executor are the net list's,
-// asserted separately against ttp_net_effect_ops_json).
+// (and, for clear-item-cache, against the session's outbox, which is why that
+// arm has nothing to do) and strips. A shell asserts its performer table
+// against exactly this list (net-vocabulary ops merged in by the set-track
+// executor are the net list's, asserted separately against
+// ttp_net_effect_ops_json).
 static bool executorOp(race::Op op) {
   switch (op) {
     case race::Op::SET_FIELD:
     case race::Op::CLEAR_FIELD:
+    case race::Op::CLEAR_ITEM_CACHE:
     case race::Op::APPLY_RACE_POINTS:
     case race::Op::SERIES_ADVANCE:
     case race::Op::CLEAR_SERIES:

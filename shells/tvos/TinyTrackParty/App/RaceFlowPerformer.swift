@@ -65,9 +65,6 @@ struct RaceFlowPerformer {
         case "stop-lobby-demo":
             game.lobbyDemo.stop()
 
-        case "clear-item-cache":
-            game.lastItem.removeAll()
-
         // ---- screens ----------------------------------------------------
         case "show-screen":
             if let name = e["screen"] as? String, let s = GameState.Screen(rawValue: name) {
@@ -281,7 +278,7 @@ struct RaceFlowPerformer {
     /// (`ttp_race_effect_ops_json` must be a subset). Net-vocabulary ops are
     /// deliberately absent — they fall through to PartyNet's switch.
     static let performable: Set<String> = [
-        "stop-lobby-demo", "clear-item-cache",
+        "stop-lobby-demo",
         "show-screen", "hide-results", "set-race-flags", "set-pause-overlay",
         "set-pause-button", "reveal-chrome", "hold-chrome",
         "reset-scene-cars", "create-session", "transition", "bind-session",

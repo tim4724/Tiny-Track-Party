@@ -53,7 +53,7 @@ export async function init() {
     seatGrid: c('ttp_ui_seat_grid_json', 'string', ['string']),
     cupSlot: c('ttp_ui_cup_slot_json', 'string', ['string']),
     reconnectDiff: c('ttp_ui_reconnect_diff_json', 'string', ['string', 'string']),
-    itemPushes: c('ttp_ui_item_pushes_live_json', 'string', ['number', 'string']),
+    itemPushes: c('ttp_ui_item_pushes_live_json', 'string', ['number']),
     welcomeItem: c('ttp_ui_welcome_item_live_json', 'string', ['number', 'string']),
     raceFlowLive: c('ttp_ui_race_flow_live_json', 'string', ['number', 'number']),
     freezePlan: c('ttp_ui_freeze_plan_json', 'string', ['number', 'number', 'number']),
@@ -172,20 +172,19 @@ export function reconnectDiff(shownIds, seats) {
 }
 
 // ---- the ITEM push ---------------------------------------------------------
-// The cars and the CPU set come off the live session in C++; what crosses is
-// the shell's own outbox map — what each phone was last told, in insertion
-// order. An `item` that is undefined stays undefined through JSON.stringify
-// (the key vanishes), which is the third state the rule turns on.
-export function itemPushes(sessionHandle, lastItem) {
-  const last = [];
-  for (const [k, v] of lastItem) last.push(v === undefined ? { id: k } : { id: k, item: v });
-  const out = JSON.parse(fn.itemPushes(sessionHandle | 0, J(last)));
+// The cars, the CPU set and the OUTBOX — what each phone was last told — all
+// live behind the session handle, so nothing crosses but the handle, and the
+// answer is already stamped by the time it arrives (ttp_ui.h). Send what comes
+// back and keep no memory of it.
+export function itemPushes(sessionHandle) {
+  const out = JSON.parse(fn.itemPushes(sessionHandle | 0));
   // `item` is absent on the wire when it is undefined — reading the key back
   // gives undefined again, so the ITEM message keeps the shape it always had.
   return out.map((p) => ({ id: p.id, item: p.item }));
 }
 
-// The one-shot relight a (re)joining phone gets, off the live race.
+// The one-shot relight a (re)joining phone gets, off the live race. It stamps
+// the outbox too, so the next push tick does not repeat it.
 export function welcomeItem(sessionHandle, peerIndex) {
   return JSON.parse(fn.welcomeItem(sessionHandle | 0, id(peerIndex)));
 }

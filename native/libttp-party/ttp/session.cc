@@ -233,11 +233,10 @@ Value lobby_snapshot(const Value& input, const Value& chooser) {
 
   copyKey(out, input, "mode");
   copyKey(out, input, "cupId");
-  // Between cupId and trackId because that is where the JS literal put it and
-  // the key order of this message IS the wire (see the header). A 'random' pick's
-  // run length: 0 endless, else that many races. Passthrough like every other
-  // pick field — the select-mode walk (runtime/ttp_net.cc normRandomRaces, over
-  // protocol.h RANDOM_RACES_*) already clamped it before the snapshot is composed.
+  // A 'random' pick's run length: 0 endless, else that many races. Passthrough
+  // like every other pick field — the select-mode walk (runtime/ttp_net.cc
+  // normRandomRaces, over protocol.h RANDOM_RACES_*) already clamped it before
+  // the snapshot is composed.
   copyKey(out, input, "randomRaces");
   copyKey(out, input, "trackId");
   copyKey(out, input, "standings");

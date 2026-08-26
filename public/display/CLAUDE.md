@@ -22,9 +22,11 @@ counter of its own, that is the signal it has become one of those.
 
 `main.js` and the render modules beside it (`lobbySeats.js`, `raceOverlays.js`)
 render from the ui model and decide nothing. The shell keeps only the state the
-model threads back to it — the current screen, which reconnect cards attached,
-what each phone was last told its item was — and nothing else. The model emits
-KEYS plus data, so copy tables live next to the elements they fill.
+model threads back to it — the current screen, which reconnect cards attached —
+and nothing else. The per-phone ITEM outbox used to be here too and is now the
+session's (`ttp_ui.h`); the answer arrives already stamped, so a failed send is
+not retried by asking again. The model emits KEYS plus data, so copy tables live
+next to the elements they fill.
 
 **A preview renders through the live renderer, never a copy of it.** Every
 gallery scenario that shows a real screen (the seat grid, the cup slot, the

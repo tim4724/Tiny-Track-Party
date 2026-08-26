@@ -64,22 +64,27 @@ std::string canonical_stringify(const Value& v);
 // path allocates nothing steady-state.
 void canonical_stringify_into(const Value& v, std::string& out);
 
-// JSON.stringify with NO key sort — the object's own INSERTION order, which is
-// the order a JS object literal was written in. Everything else is identical
+// JSON.stringify with NO key sort — each object's own INSERTION order, which for
+// a parsed tree is the order it was read in. Everything else is identical
 // (undefined dropped, shortest-form numbers, the same escaping), so the two
 // share one walker.
 //
-// WHEN TO USE WHICH, and it is not a taste question. canonical_stringify is for
-// EVIDENCE: every corpus digest, every recorded frame hash and every ABI
-// readback whose bytes are compared to a fixture depends on the sort, and it
-// must never grow an ordering mode. This one is for BYTES SOMEBODY ELSE READS
-// in a shape we did not choose — the standings board that
-// libttp-runtime/ttp/ui_model.h builds is JSON.stringify'd onto the relay by
-// whichever shell holds it, and its key order is the wire order the phones have
-// always received. Emitting it sorted would be a silent re-spelling of a shipped
-// message; there is nothing else in the tree that cares.
+// WHEN TO USE WHICH, and it is not a taste question. canonical_stringify is the
+// default and is what every ABI return and every outbound frame is emitted with:
+// it is also for EVIDENCE — every corpus digest, every recorded frame hash and
+// every readback whose bytes are compared to a fixture depends on the sort — so
+// it must never grow an ordering mode.
+//
+// This one has ONE caller: the glTF document libttp-runtime/ttp/glb.cc rewrites.
+// cgltf reads a glTF's keys in any order, so the sort would buy nothing and cost
+// the only thing that makes that rewrite debuggable — a readable diff of the
+// source chunk against the re-emitted one. (It also served the standings board,
+// on the theory that the board's key order was the wire's. It was not: the frame
+// encoder canonicalizes, so the model order stopped at framing.)
+//
+// Note what neither emitter touches: ARRAY order. An answer whose order matters
+// because it is a LIST needs nothing from this one.
 std::string ordered_stringify(const Value& v);
-void ordered_stringify_into(const Value& v, std::string& out);
 
 // JSON string escaping identical to JSON.stringify's QuoteJSONString: escapes
 // " \ and control chars (\b \t \n \f \r, else \u00XX lowercase), passes bytes

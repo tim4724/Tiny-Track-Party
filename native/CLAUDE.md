@@ -29,12 +29,13 @@ Exports come from `TTP_ABI` on each declaration in the public headers; there is 
 export list to maintain. The C ABI is not on the replay path, so the `abi` ctest
 covers this marshalling layer — see `tests/CLAUDE.md`.
 
-**Returns are canonical JSON (key-sorted)** except `ttp_ui.h` and `ttp_net.h`,
-which return the model's own key order. That order is **not** a wire guarantee:
-every outbound frame is canonicalized before it leaves, so phones always receive
-sorted keys. It earns its keep only at the ABI boundary, where the `abi` ctest asserts
-exact bytes against corpora recorded from a JS oracle. Do not spend anything
-defending a key order the wire discards.
+**Returns are canonical JSON (key-sorted), with no exception.** `ttp_ui.h` and
+`ttp_net.h` used to answer in the model's own key order, on the theory that the
+standings board and the room snapshot were wire bytes; they never were — every
+outbound frame is canonicalized before it leaves, so the model order stopped at
+framing. Nothing anywhere may depend on the order a Value was built in. What IS
+contract is key PRESENCE: a null and an absent key are different answers, and
+`libttp-json`'s `ordered_stringify` survives for one caller (the glTF rewrite).
 
 **JSON or packed? Answer by call frequency.** A layer answering once per event
 returns JSON, especially when half its answer is unbounded text. A layer drained
@@ -50,9 +51,10 @@ synthetic world and needs no room machine, so it never needed the ABI. The
 state in the same run and demanding byte-identical answers.
 
 **Not every C++ entry point is exported.** The item, rocket and car-stat mutators
-are reachable only from `replay_cli`, which calls C++ directly. A scenario needing
-them cannot be driven from JS or wasm — write it in C++ rather than hunting for
-the export. The same restraint applies to reads: a rule two shims share crosses
+are reachable only from callers that hold the C++ objects — `replay_cli`, and a
+ctest staging a scenario through the session seam. A scenario needing them
+cannot be driven from JS or wasm — write it in C++ rather than hunting for the
+export. The same restraint applies to reads: a rule two shims share crosses
 as an internal seam (`ttp_room.h`, `ttp_session.h`, `ttp_live.h`), never as a
 second export.
 

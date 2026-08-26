@@ -35,6 +35,9 @@
 #include "ttp/grand_prix.h"
 #include "ttp/race_session.h"
 #include "ttp/trackbuilder.h"
+// ui::LastItems — the per-phone ITEM outbox a session carries for the ui twins.
+// A type only; no screen decision is taken in this file.
+#include "ttp/ui_model.h"
 #include "ttp/util.h"
 
 using namespace ttp;
@@ -288,6 +291,11 @@ struct RuntimeSession {
   std::vector<Value> outQueue;
   std::string scratch;
 
+  // What each phone was last told its held item was — the ITEM push's outbox,
+  // stamped by ttp_ui.cc as it answers. Empty here is what makes the race
+  // walk's clear-item-cache a no-op; see ttp_session.h.
+  ttp::rt::ui::LastItems itemOutbox;
+
   // Drive every bot's controller (a no-op for finished/removed cars). Add order.
   void driveBots() {
     for (auto& b : bots)
@@ -455,6 +463,13 @@ Value ttp_session_item_cars(int h) {
     }
   }
   return a;
+}
+
+ttp::rt::ui::LastItems* ttp_session_item_outbox(int h) {
+  // No lazy build: the outbox is the session's, not the engine's, and a handle
+  // that has begun can be asked before its cars exist.
+  RuntimeSession* rs = get(h);
+  return rs ? &rs->itemOutbox : nullptr;
 }
 
 // ===========================================================================

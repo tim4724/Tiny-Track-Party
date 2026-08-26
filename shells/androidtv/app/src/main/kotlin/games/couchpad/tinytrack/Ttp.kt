@@ -223,7 +223,7 @@ object Ttp {
     external fun ttp_ui_cup_tint_rgb(cupIdOrNull: ByteArray?, pct: Double): Int
     external fun ttp_ui_freeze_plan_json(paused: Int, autoPaused: Int, sessionPaused: Int): ByteArray?
     external fun ttp_ui_intermission_secs(deadlineMs: Double, nowMs: Double): Double
-    external fun ttp_ui_item_pushes_live_json(sessionHandle: Int, lastItemJson: ByteArray?): ByteArray?
+    external fun ttp_ui_item_pushes_live_json(sessionHandle: Int): ByteArray?
     external fun ttp_ui_neutral_tint_rgb(pct: Double): Int
     external fun ttp_ui_progress_json(): ByteArray?
     external fun ttp_ui_progress_load(jsonOrNull: ByteArray?, unlockAll: Int): Int

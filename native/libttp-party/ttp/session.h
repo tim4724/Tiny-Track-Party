@@ -66,8 +66,6 @@ RoomState room_state_of(const std::string& name);
 // A field absent from a roster record stays absent from the row (JS reads
 // `undefined` and JSON.stringify drops the key); `ready` and `inRace` are always
 // present, coerced.
-//
-// KEY ORDER IS THE WIRE'S. See the note on lobby_snapshot.
 Value roster_rows(const Value& roster, const Value& inRace);
 
 // The room's single outbound message (LOBBY_UPDATE over the relay's set_state).
@@ -82,9 +80,11 @@ Value roster_rows(const Value& roster, const Value& inRace);
 // `tracks` are LOBBY-ONLY: they are the bulk of the blob, the picker is only
 // shown there, and the whole snapshot must fit the relay's 16 KiB cap.
 //
-// THE KEY ORDER OF THIS ANSWER IS THE WIRE'S, not canonical. The phones have
-// parsed these bytes since the JS wrote them; emitting them sorted would be a
-// silent re-spelling of a shipped message. Emit with ordered_stringify.
+// KEY ORDER IS NOT A CONTRACT, and this header used to say it was the wire's.
+// The only shipping caller (runtime/ttp_net.cc's ttp_net_lobby_frame) frames
+// this answer before it goes anywhere, and the frame encoder canonicalizes, so
+// the composed order has never reached a phone. Emit it with whatever the
+// caller emits everything else with.
 Value lobby_snapshot(const Value& input, const Value& chooser);
 
 // ---- the display-name cap ---------------------------------------------------

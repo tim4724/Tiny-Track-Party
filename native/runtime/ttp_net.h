@@ -1,8 +1,8 @@
 /* ttp_net.h — the SESSION-POLICY half of the party C ABI: every room decision
  * the display owns that is not a socket, a timer, a storage key or a canvas.
  * Sibling of ttp_party.h (RoomFlow + relay framing + fastlane), ttp_ui.h (the
- * screens) and ttp_runtime.h (the sim), same conventions (ttp_abi.h) except for
- * the one stated below.
+ * screens) and ttp_runtime.h (the sim), same conventions (ttp_abi.h), with no
+ * exception.
  *
  * WHAT IS BEHIND IT. libttp-party/ttp/session.{h,cc} — the retained room
  * snapshot and its `players` projection, the four URLs a room's identity is
@@ -22,12 +22,11 @@
  * handles) and two stateless kits beside it (framing, fastlane). This layer is
  * the POLICY over that machine: what an inbound trigger means, in order.
  *
- * THE ONE DEVIATION FROM ttp_abi.h, and it is ttp_ui.h's. Returned JSON here is
- * NOT canonical: keys come out in the MODEL'S OWN order. That matters for
- * exactly one answer and it matters a lot — the retained LOBBY_UPDATE inside
- * ttp_net_lobby_frame IS the message every phone parses, and sorting its keys
- * would silently re-spell bytes that have shipped since the JS wrote them
- * (the frame itself is canonicalized; the model order stops at framing).
+ * KEY ORDER IS NOT A CONTRACT, and this header used to claim otherwise — the
+ * claim being that the retained LOBBY_UPDATE inside ttp_net_lobby_frame is the
+ * message every phone parses, so its key order was shipped bytes. The frame
+ * encoder canonicalizes, so the model order stopped at framing and never
+ * reached a phone. Returned JSON is canonical, like every other ABI's.
  *
  * WHAT STAYS WITH THE SHELL, deliberately: the WebSocket and RTCPeerConnection,
  * sessionStorage, setInterval/setTimeout, the QR module bitmap (decision D3 —

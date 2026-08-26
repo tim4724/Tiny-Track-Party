@@ -1,7 +1,7 @@
 /* ttp_ui.h — the UI MODEL half of the runtime C ABI: every "what should the
  * screen say" decision the display owns. Sibling of ttp_runtime.h (sim),
  * ttp_party.h (party), ttp_display.h (renderer) and ttp_audio.h (sound), same
- * conventions (ttp_abi.h) except for the one stated below.
+ * conventions (ttp_abi.h), with no exception.
  *
  * WHAT IS BEHIND IT. libttp-runtime/ttp/ui_model.{h,cc} — the seat grid, the
  * lobby readiness rule, the lobby race card, the ITEM-push gate, the
@@ -20,22 +20,21 @@
  * packed record cannot hold a name without inventing a string table and a
  * second read, so the precedent that fits is ttp_room_events_json's: bursty,
  * string-shaped data, drained as JSON. The one call on anything like a cadence
- * (ttp_ui_item_pushes_live_json) is a live gather with one shell-owned input,
- * and the shell picks how often to ask — the web one folds it into the same
- * tick as the HUD read.
+ * (ttp_ui_item_pushes_live_json) is a live gather over state that is entirely
+ * the engine's, and the shell picks how often to ask — the web one folds it
+ * into the same tick as the HUD read.
  *
  * There is a second reason, and it is the deciding one for the standings board:
- * that answer IS a JSON message. The shell puts it on the relay verbatim, so a
- * JSON ABI hands it straight through instead of decoding a struct only to
- * re-encode the same object.
+ * that answer becomes part of a JSON message. The shell hands it back into the
+ * room snapshot without ever decoding it, so a JSON ABI passes a tree through
+ * instead of decoding a struct only to re-encode the same object.
  *
- * THE ONE DEVIATION FROM ttp_abi.h. Returned JSON here is NOT canonical: keys
- * come out in the MODEL'S OWN order, not sorted. That is deliberate and it is
- * about those wire bytes — the board's key order is the order the phones have
- * received since the JS model wrote it, and sorting it would silently re-spell
- * a shipped message. Nothing hashes a UI answer, so the canonical convention
- * buys nothing here and costs that. (libttp-json's ordered_stringify is the
- * emitter; canonical_stringify keeps its sort and its evidence-only job.)
+ * KEY ORDER IS NOT A CONTRACT, and this header used to claim otherwise. Returned
+ * JSON is canonical (sorted keys) like every other ABI's. The claim was that the
+ * standings board's key order was the order the phones receive; it never was,
+ * because the board reaches a phone inside a frame the encoder canonicalizes, so
+ * the model order stopped at framing. What IS contract is key PRESENCE — see
+ * NULL IS NOT ZERO below.
  *
  * STRINGS ARE KEYS, NOT COPY. Nothing user-facing crosses as English. A title,
  * a subtitle, a row's trailing cell, a race count and the back gesture's
@@ -44,13 +43,15 @@
  * live in each shell, next to the elements they fill. A formatted sentence
  * coming out of here would be a defect.
  *
- * STATELESS, WITH ONE EXCEPTION. Every call is a pure function of its
- * arguments. The exception is the CATALOGUE (ttp_ui_configure): the cups, the
- * track list and the two field sizes are authored data that changes when the
- * game ships, not while it runs, so a shell sets it once at boot rather than
- * re-sending ~2 KB of it on every rename. ui_model.cc itself stays
- * catalogue-agnostic — it looks ids up in whatever list it is handed — which is
- * what lets the conformance corpus carry a synthetic world of its own.
+ * STATELESS, WITH TWO EXCEPTIONS, and neither is a rule. The first is the
+ * CATALOGUE (ttp_ui_configure): the cups, the track list and the two field
+ * sizes are authored data that changes when the game ships, not while it runs,
+ * so a shell sets it once at boot rather than re-sending ~2 KB of it on every
+ * rename. ui_model.cc itself stays catalogue-agnostic — it looks ids up in
+ * whatever list it is handed — which is what lets the conformance corpus carry
+ * a synthetic world of its own. The second is the ITEM OUTBOX, which the two
+ * item calls below WRITE; it hangs off the session handle rather than off this
+ * ABI, and its section says why.
  *
  * IDS. A player id crosses as a JSON scalar, exactly as in ttp_party.h: the
  * token `3` is the number 3 and `"3"` is the string "3", and they are different
@@ -300,25 +301,39 @@ TTP_ABI const char* ttp_ui_reconnect_diff_json(const char* shownIdsJson, const c
 
 /* Which phones need an ITEM push this tick, off the LIVE race: the cars (id /
  * held item / finished — a finished car is on a victory lap with no usable
- * slot, so its item reads empty) and the CPU set come off the session handle;
- * the shell supplies only lastItem — what each phone was last told, in Map
- * insertion order — because the push rides its own message sent ONLY ON
- * CHANGE and the map is the shell's outbox state.
- *   lastItem  [{"id":id,"item":str|null}, ...]
- *   ->        [{"id":id,"item":str|null}, ...]
+ * slot, so its item reads empty) and the CPU set come off the session handle,
+ * and so does the OUTBOX — what each phone was last told, in the order the
+ * phones were first told — because the push rides its own message sent ONLY ON
+ * CHANGE. Nothing crosses but the handle.
+ *   ->  [{"id":id,"item":str|null}, ...]
  *
  * THREE STATES, not two: JS distinguishes a missing `item` key from an
  * explicit null and `!==` sees the difference, so a car whose slot went from
  * null to absent pushes again. The empty string is a fourth value and is NOT
- * folded to null here. PURE over the map: the caller applies the answers to
- * its own map, and clears it per race so the first tick resends every phone's
- * empty slot. */
-TTP_ABI const char* ttp_ui_item_pushes_live_json(int sessionHandle, const char* lastItemJson);
+ * folded to null here.
+ *
+ * THE OUTBOX IS THE SESSION'S (ttp_session.h's ttp_session_item_outbox), and
+ * this call STAMPS it as it answers. It used to be the shell's map, handed in
+ * and applied back out — the same two-writer coupling spelled in three
+ * languages, which is what the walk's clear-item-cache had to reach into. A
+ * new session's outbox is empty by construction, so the first tick of a race
+ * still resends every phone's empty slot.
+ *
+ * THE STAMP LANDS BEFORE THE SEND, and on two shells it did not. The web has
+ * always stamped first; both televisions sent and then stamped, so a sendTo
+ * that threw left the row unstamped and the next 6 Hz tick retried it. Stamped
+ * here, a failed send is a row the phone never receives until that seat's item
+ * changes again. Accepted — the failure window is one item change, and the web
+ * has shipped that behaviour throughout — but it IS a change to two platforms,
+ * so a shell must not be written as though a send can be retried by asking
+ * again. */
+TTP_ABI const char* ttp_ui_item_pushes_live_json(int sessionHandle);
 
 /* The same rule for the one-shot relight a (re)joining phone gets: the
  * welcome-item effect names a seat, this answers that seat's held item off
  * the live race as a bare JSON value — a quoted string, or null (no live car,
- * or an empty slot; the relight message carries `item` directly). */
+ * or an empty slot; the relight message carries `item` directly). It stamps
+ * the seat's outbox row, so the next push tick does not repeat it. */
 TTP_ABI const char* ttp_ui_welcome_item_live_json(int sessionHandle, const char* peerIdJson);
 
 /* ---- race flow ----------------------------------------------------------- */

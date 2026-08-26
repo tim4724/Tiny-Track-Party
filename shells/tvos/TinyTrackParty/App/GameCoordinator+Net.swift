@@ -336,12 +336,13 @@ extension GameCoordinator {
     /// The seat's held item comes off the live race in C++
     /// (`ttp_ui_welcome_item_live_json`) — one crossing, answering a bare JSON
     /// value (a quoted string, or null for no live car / an empty slot), so it
-    /// is unwrapped through a one-element array rather than hand-parsed.
+    /// is unwrapped through a one-element array rather than hand-parsed. It
+    /// stamps the session's own outbox, so the next push tick does not repeat
+    /// what this just said.
     private func relightItem(for id: EngineIdentity) {
         guard sessionHandle != 0 else { return }
         let answer = TTP.strOrEmpty(ttp_ui_welcome_item_live_json(sessionHandle, id.json))
         let value = TTP.arr("[\(answer)]").first ?? NSNull()
-        lastItem[id] = value
         net.sendTo(id, TTP.json(["type": proto.msgItem, "item": value]))
     }
 
@@ -353,18 +354,21 @@ extension GameCoordinator {
         return TTP.str(ttp_item_id(code))
     }
 
-    /// The per-phone ITEM push. The GATE is the model's — it reads the live
+    /// The per-phone ITEM push. All of it is the model's — it reads the live
     /// session itself (who holds a car, what each slot carries, which cars are
-    /// bots) and decides which phones are owed a message; `lastItem` is the
-    /// memory that gate reads, and it distinguishes null from absent (a slot
-    /// that went from null to absent pushes again — three states, not two).
+    /// bots) AND the outbox of what each phone was last told, which it stamps
+    /// as it answers. This shell keeps no memory of any of it and only sends.
+    ///
+    /// The stamp therefore lands BEFORE the send, where this shell used to send
+    /// first: a `sendTo` that fails now leaves the phone unaware until that
+    /// seat's item changes again, instead of retrying on the next tick. See
+    /// `ttp_ui.h` — the trade is deliberate, so do not "fix" it by re-adding a
+    /// map here.
     func pushItems() {
         guard sessionHandle != 0 else { return }
-        let last = lastItem.map { ["id": $0.key.numericOrString, "item": $0.value] }
-        for push in TTP.arr(ttp_ui_item_pushes_live_json(sessionHandle, TTP.json(last))) {
+        for push in TTP.arr(ttp_ui_item_pushes_live_json(sessionHandle)) {
             guard let p = push as? [String: Any], let id = EngineIdentity.from(p["id"]) else { continue }
             net.sendTo(id, TTP.json(["type": proto.msgItem, "item": p["item"] ?? NSNull()]))
-            lastItem[id] = p["item"] ?? NSNull()
         }
     }
 }

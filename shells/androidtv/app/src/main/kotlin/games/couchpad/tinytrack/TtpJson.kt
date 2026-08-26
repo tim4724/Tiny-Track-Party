@@ -22,9 +22,9 @@ import org.json.JSONObject
  *   applied, -1 for no such car).
  * - **An identity crosses as a JSON SCALAR inside a string.** `3` and `"3"` are
  *   different players. See [EngineId].
- * - **Returned JSON is canonical (sorted keys) except from `ttp_ui.h` and
- *   `ttp_net.h`**, which emit the model's own key order. Nothing here may depend
- *   on either — the wire re-sorts everything anyway.
+ * - **Returned JSON is canonical (sorted keys), from every header.** `ttp_ui.h`
+ *   and `ttp_net.h` used to be exceptions, emitting the model's own key order;
+ *   nothing here ever depended on that, and nothing may start.
  *
  * ONE RULE FROM THE OTHER TWO SHELLS IS ALREADY GONE. A returned `const char*`
  * points into per-handle scratch valid only until the next call on that handle,

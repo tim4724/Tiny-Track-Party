@@ -53,7 +53,6 @@ class RaceFlowPerformer(private val game: GameCoordinator) {
         when (op) {
             // ---- setup ------------------------------------------------------
             "stop-lobby-demo" -> game.lobbyDemo.stop()
-            "clear-item-cache" -> game.lastItem.clear()
 
             // ---- screens ----------------------------------------------------
             "show-screen" -> when (e.optString("screen")) {
@@ -229,7 +228,7 @@ class RaceFlowPerformer(private val game: GameCoordinator) {
          * deliberately absent — they fall through to PartyNet's switch.
          */
         val PERFORMABLE: Set<String> = setOf(
-            "stop-lobby-demo", "clear-item-cache",
+            "stop-lobby-demo",
             "show-screen", "hide-results", "set-race-flags", "set-pause-overlay",
             "set-pause-button", "reveal-chrome", "hold-chrome",
             "reset-scene-cars", "create-session", "transition", "bind-session",

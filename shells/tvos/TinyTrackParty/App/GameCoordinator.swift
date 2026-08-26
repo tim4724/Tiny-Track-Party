@@ -44,11 +44,6 @@ final class GameCoordinator: ObservableObject {
     // launched field, the shuffle bag AND the race seed all ride the walks now
     // — nothing about a race roster or launch is mirrored here.
 
-    /// What each phone was last told its item was — a String, or NSNull for an
-    /// explicitly-cleared slot. The model gates the push
-    /// (`ttp_ui_item_pushes_live_json`); this is the memory the gate reads, and
-    /// null-vs-absent is a real distinction there, not a style choice.
-    var lastItem: [EngineIdentity: Any] = [:]
     /// Which reconnect cards actually attached, so the diff has a previous.
     var shownReconnectIds: Set<EngineIdentity> = []
     var sceneCars: [SceneCar] = []

@@ -1178,9 +1178,9 @@ jdouble n_ttp_ui_intermission_secs(JNIEnv* env, jclass, jdouble a0, jdouble a1) 
     return (jdouble) ttp_ui_intermission_secs((double) a0, (double) a1);
 }
 
-jbyteArray n_ttp_ui_item_pushes_live_json(JNIEnv* env, jclass, jint a0, jbyteArray a1) {
-    CStr s1(env, a1);
-    return toBytes(env, ttp_ui_item_pushes_live_json((int) a0, s1.get()));
+jbyteArray n_ttp_ui_item_pushes_live_json(JNIEnv* env, jclass, jint a0) {
+    (void) env;
+    return toBytes(env, ttp_ui_item_pushes_live_json((int) a0));
 }
 
 jint n_ttp_ui_neutral_tint_rgb(JNIEnv* env, jclass, jdouble a0) {
@@ -1465,7 +1465,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_ui_cup_tint_rgb", "([BD)I", (void*) n_ttp_ui_cup_tint_rgb },
     { "ttp_ui_freeze_plan_json", "(III)[B", (void*) n_ttp_ui_freeze_plan_json },
     { "ttp_ui_intermission_secs", "(DD)D", (void*) n_ttp_ui_intermission_secs },
-    { "ttp_ui_item_pushes_live_json", "(I[B)[B", (void*) n_ttp_ui_item_pushes_live_json },
+    { "ttp_ui_item_pushes_live_json", "(I)[B", (void*) n_ttp_ui_item_pushes_live_json },
     { "ttp_ui_neutral_tint_rgb", "(D)I", (void*) n_ttp_ui_neutral_tint_rgb },
     { "ttp_ui_progress_json", "()[B", (void*) n_ttp_ui_progress_json },
     { "ttp_ui_progress_load", "([BI)I", (void*) n_ttp_ui_progress_load },
