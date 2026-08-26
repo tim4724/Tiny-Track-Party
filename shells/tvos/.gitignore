@@ -15,3 +15,6 @@ Generated/
 # using XcodeGen is that the project stays reviewable as text rather than as a
 # pbxproj nobody can read a diff of.
 *.xcodeproj
+
+# test.sh's result bundle.
+*.xcresult

@@ -20,15 +20,7 @@ set -euo pipefail
 WHICH="${1:-device}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 TVOS="$(cd "$HERE/.." && pwd)"
-
-development_team() {
-  if [ -n "${TTP_DEVELOPMENT_TEAM:-}" ]; then echo "$TTP_DEVELOPMENT_TEAM"; return; fi
-  local name
-  name="$(security find-identity -v -p codesigning | sed -n 's/.*"\(Apple Development: [^"]*\)".*/\1/p' | head -1)"
-  [ -n "$name" ] || return 0
-  security find-certificate -c "$name" -p | openssl x509 -noout -subject |
-    sed -n 's/.*OU *= *\([A-Z0-9]*\).*/\1/p'
-}
+source "$HERE/lib.sh"
 
 SIGNING=()
 case "$WHICH" in

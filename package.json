@@ -41,6 +41,8 @@
     "test": "npm run lint && node --test tests/*.test.js partyplug/tests/*.test.js",
     "test:e2e": "playwright test",
     "test:native": "node scripts/test-native.mjs",
+    "test:tvos-device": "shells/tvos/scripts/test.sh",
+    "test:tvos-device-sim": "shells/tvos/scripts/test.sh simulator",
     "thumbs:car": "node scripts/capture-car-thumbs.js",
     "trailer": "node scripts/trailer/render.js && node scripts/trailer/cut.js",
     "trailer:cut": "node scripts/trailer/cut.js",
