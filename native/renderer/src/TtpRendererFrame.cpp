@@ -1032,25 +1032,26 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
             // ±0.5 rad with steerYaw. Teleport-sized jumps don't spin the wheels.
             //
             // WHEEL_SPIN_SCALE is the WHOLE readability slowdown and the only
-            // place one belongs. It used to be smeared across two numbers: the
-            // 0.4 here and a WHEEL_RADIUS of 0.13 against a wheel that actually
-            // measures 0.125, so the wheels really turned at 0.385 of the
-            // physical rate while the code appeared to say 0.4. The radius is
-            // now the measured one (wheelRadiusFor), which makes this constant
-            // the honest figure — read it as "wheels turn at 2/5 of true".
+            // place one belongs: the radius it divides by is the measured one
+            // (wheelRadiusFor), so this constant reads straight — the wheels
+            // turn at two fifths of the rate the ground speed really implies.
+            // Spinning them true strobes against the frame rate, which reads
+            // as wheels that stall or run backwards. 0.5 was auditioned and
+            // rejected on look; the slower wheel is the one that reads.
             if (mCarWheels.size() > i) {
                 constexpr float WHEEL_TURN_MAX = 0.5f;
                 constexpr float WHEEL_SPIN_SCALE = 0.4f;
                 constexpr float ROLL_SEG_MAX = 1.5f;
                 CarWheels& w = mCarWheels[i];
-                const float3 posW = carPos;
+                // The WHOLE distance travelled, signed by whether it was
+                // forward — a sideways slide still turns the wheels, so this
+                // is a length rather than a projection onto fwd.
                 float ds = 0;
                 if (w.hasLastPos) {
-                    const float3 d = posW - w.lastPos;
-                    const float len = length(d);
-                    ds = len * (dot(d, fwd) >= 0 ? 1.0f : -1.0f);
+                    const float3 d = carPos - w.lastPos;
+                    ds = std::copysign(length(d), dot(d, fwd));
                 }
-                w.lastPos = posW;
+                w.lastPos = carPos;
                 w.hasLastPos = true;
                 w.lastDs = ds; // the boost streaks cycle at this real travel speed
                 // While the monster is up its own fat tyres are the ones on the
@@ -1058,9 +1059,14 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                 // c.wheelRadius to the rig's for the same reason).
                 const float radius = wheelRadiusFor(w, isMonster);
                 if (std::fabs(ds) < ROLL_SEG_MAX) {
-                    w.roll += (ds / radius) * WHEEL_SPIN_SCALE;
-                    w.roll = std::fmod(std::fmod(w.roll + (float) M_PI, 2.0f * (float) M_PI)
-                            + 2.0f * (float) M_PI, 2.0f * (float) M_PI) - (float) M_PI;
+                    // Wrapped to (−π, π] so the accumulator cannot drift into
+                    // the range where a float has no precision left for a
+                    // small step. remainder() IS that wrap — it subtracts the
+                    // NEAREST multiple, where fmod subtracts toward zero and
+                    // needs a second pass to lift the negative half.
+                    w.roll = std::remainder(
+                            w.roll + (ds / radius) * WHEEL_SPIN_SCALE,
+                            2.0f * (float) M_PI);
                 }
                 // Steer yaw is about the wheel's local +Y, and the pose's
                 // half-turn is ITSELF about Y — so unlike the roll axis, this
