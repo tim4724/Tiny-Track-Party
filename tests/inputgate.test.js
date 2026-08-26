@@ -9,10 +9,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-let InputGate, DEFAULT_STEER_THRESHOLD, SHADOW_THRESHOLDS;
+let InputGate;
 test.before(async () => {
-  ({ InputGate, DEFAULT_STEER_THRESHOLD, SHADOW_THRESHOLDS } =
-    await import('../public/controller/InputGate.js'));
+  ({ InputGate } = await import('../public/controller/InputGate.js'));
 });
 
 const TICK = 40; // a stand-in sample spacing for these tests — the real controller samples on sensor events, not a fixed interval
@@ -45,7 +44,6 @@ test('an identical sample is filtered (the display already holds it)', () => {
   const gate = new InputGate();
   const seq = feed(gate, [sample(0.5), sample(0.5), sample(0.5)]);
   assert.deepEqual(seq.map((r) => r.why), ['change', null, null]);
-  assert.equal(gate.stats().sent, 1);
 });
 
 test('sub-threshold drift is filtered; crossing the threshold sends', () => {
@@ -165,42 +163,12 @@ test('reset() drops confirmed state so the next sample re-establishes ground tru
     'after a transport reset the display state is unknowable — assume it knows nothing');
 });
 
-test('shadow counters cover every candidate threshold and are monotonic', () => {
-  const gate = new InputGate({ steerThreshold: 0.03 });
-  gate.enableShadows(); // off by default — only the ?netstats=1 overlay turns them on
-  // A noisy hold: ±0.02 wobble, the shape real sensor jitter takes.
-  const samples = Array.from({ length: 200 }, (_, i) => sample(0.4 + (i % 2 ? 0.02 : -0.02)));
-  feed(gate, samples);
-  const { shadows } = gate.stats();
-  assert.equal(shadows.length, SHADOW_THRESHOLDS.length);
-  // A coarser threshold can never send more than a finer one.
-  for (let i = 1; i < shadows.length; i++) {
-    assert.ok(shadows[i].sent <= shadows[i - 1].sent,
-      `threshold ${shadows[i].threshold} sent ${shadows[i].sent}, more than ${shadows[i - 1].threshold}`);
-  }
-  // This wobble (0.04 peak-to-peak) is exactly what a 0.03 gate should NOT absorb
-  // and a 0.05 gate should — the case the whole threshold derivation turns on.
-  const at3 = shadows.find((s) => s.threshold === 0.03);
-  const at5 = shadows.find((s) => s.threshold === 0.05);
-  assert.ok(at3.suppressedPct < 10, `0.03 should pass jitter this size (got ${at3.suppressedPct}%)`);
-  assert.ok(at5.suppressedPct > 90, `0.05 should absorb it (got ${at5.suppressedPct}%)`);
-});
-
-test('the lossless shadow (threshold 0) only ever filters exact repeats', () => {
-  const gate = new InputGate();
-  gate.enableShadows();
-  const samples = [sample(0.1), sample(0.1), sample(0.100001), sample(0.1)];
-  feed(gate, samples);
-  const zero = gate.stats().shadows.find((s) => s.threshold === 0);
-  // sample 2 is an exact repeat (filtered); 3 differs and 4 differs from 3.
-  assert.equal(zero.sent, 3);
-});
-
 // --- the guarantee -----------------------------------------------------------
 
 test('PROPERTY: the two-tier pacing bounds hold, and so does the rate cap', () => {
   const THRESH = 0.03, STRONG = 0.15, INTERVAL = 100, FLOOR = 40, IDLE = 500;
   const SENSOR_TICK = 16; // drive at sensor rate — the gate is offered ~60 Hz
+  const SAMPLES = 8000;
   // Deterministic pseudo-random walk — mixes slow drifts (the case the gate is
   // allowed to pace) with flicks (the case that may only wait out the floor).
   let seed = 12345;
@@ -210,9 +178,9 @@ test('PROPERTY: the two-tier pacing bounds hold, and so does the rate cap', () =
   let s = 0, displayHolds = null, t = 0;
   let newsSince = 0, strongSince = 0;   // when the current unsent divergence arose/escalated
   let worstNewsWait = 0, worstStrongWait = 0, worstStale = 0, minGap = Infinity;
-  let lastSendAt = null, lastChangeAt = 0;
+  let lastSendAt = null, lastChangeAt = 0, sends = 0;
 
-  for (let i = 0; i < 8000; i++) {
+  for (let i = 0; i < SAMPLES; i++) {
     // 2% of ticks are a flick, the rest a slow drift.
     s = rnd() < 0.02 ? rnd() * 2 - 1 : Math.max(-1, Math.min(1, s + (rnd() - 0.5) * 0.01));
     const smp = sample(+s.toFixed(3));
@@ -229,6 +197,7 @@ test('PROPERTY: the two-tier pacing bounds hold, and so does the rate cap', () =
     if (why) {
       if (lastSendAt != null) minGap = Math.min(minGap, t - lastSendAt);
       lastSendAt = t;
+      sends += 1;
       gate.markSent(smp, t);
       gate.markAcked(smp);       // healthy link: confirmed immediately
       displayHolds = smp.s;
@@ -253,13 +222,6 @@ test('PROPERTY: the two-tier pacing bounds hold, and so does the rate cap', () =
     `stale for ${worstStale}ms, expected <= ${IDLE + SENSOR_TICK}ms`);
   assert.ok(minGap >= FLOOR, `two sends only ${minGap}ms apart — the rate cap is broken`);
   // And it must actually be doing something, or the bounds are trivially met.
-  const st = gate.stats();
-  assert.ok(st.sent < st.produced, 'gate suppressed nothing — bounds are meaningless');
-});
-
-test('the shadow ladder measures the lossless case and the live default', () => {
-  // The DEFAULT_* exports themselves are pinned to protocol.STEER by
-  // tests/config-drift.test.js; only the shadow ladder is covered here.
-  assert.ok(SHADOW_THRESHOLDS.includes(0), 'the lossless case must be measurable');
-  assert.ok(SHADOW_THRESHOLDS.includes(DEFAULT_STEER_THRESHOLD));
+  assert.ok(sends < SAMPLES,
+    `gate suppressed nothing (${sends} sends of ${SAMPLES} samples) — bounds are meaningless`);
 });

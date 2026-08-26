@@ -83,6 +83,13 @@
 // figures below are the derivation's own inputs. tests/config-drift.test.js
 // re-runs both bounds against the manifest, so tuning STEER_EXPO in the C++ sim
 // or ROLL_LOCK on the phone fails here instead of silently invalidating this.
+//
+// What none of that derivation can tell you is how much of a REAL stream this
+// suppresses: sensor jitter, how twitchy a given person is and how much of a lap
+// is spent holding a line all move it, so that number has to be read off an
+// actual party rather than a simulated input walk — which is what the retired
+// on-phone overlay and its per-threshold shadow counters were for, revivable via
+// `git show 39fe3599:public/controller/NetStats.js`.
 export const DEFAULT_STEER_THRESHOLD = 0.03;
 
 // A steer delta at or past this is a deliberate action rather than drift: 5x
@@ -120,14 +127,6 @@ export const DEFAULT_IDLE_MS = 500;
 // every single sample.
 export const DEFAULT_MIN_RESEND_MS = 50;
 export const RESEND_RTT_FACTOR = 1.5;
-
-// Thresholds the shadow counters evaluate alongside the live one, so a single
-// real session yields the whole suppression curve instead of one point. 0 is the
-// LOSSLESS case: it filters only exactly-identical samples, which the display
-// provably cannot distinguish, so it costs nothing in feel. Measurement
-// scaffolding, not gameplay: shadows are off until enableShadows() — only the
-// ?netstats=1 overlay (their sole consumer) turns them on.
-export const SHADOW_THRESHOLDS = [0, 0.01, 0.02, 0.03, 0.05, 0.08];
 
 const num = (v) => (typeof v === 'number' && isFinite(v) ? v : 0);
 
@@ -169,21 +168,6 @@ export class InputGate {
     this._sent = null;       // newest sample handed to the transport
     this._sentAt = -Infinity; // when that happened; never-sent means no pacing wait
     this._pending = false;   // that send is outstanding (sent, not yet acked)
-
-    // Live counters. Shadow counters (the per-threshold suppression curve) are
-    // only allocated by enableShadows(): they exist to measure, and the one
-    // consumer is the ?netstats=1 overlay.
-    this.produced = 0;
-    this.sent = 0;
-    this._shadows = null;
-  }
-
-  // Install one shadow counter per candidate threshold. Shadows track their own
-  // would-be acked state, because a different threshold would have sent at
-  // different moments and therefore have a different confirmed value.
-  enableShadows() {
-    if (this._shadows) return;
-    this._shadows = SHADOW_THRESHOLDS.map((t) => ({ threshold: t, sent: 0, acked: null, sentAt: 0 }));
   }
 
   // Resend cadence for an unacked sample, from the live smoothed RTT.
@@ -192,13 +176,10 @@ export class InputGate {
   }
 
   // Decide whether `sample` goes on the wire. Returns the reason it was sent
-  // ('change' | 'resend' | 'idle') or null when it is filtered. Pure apart from
-  // the counters — call markSent() when the send actually happens, so a dropped
-  // or failed transmit doesn't get recorded as confirmed-in-flight.
+  // ('change' | 'resend' | 'idle') or null when it is filtered. Pure — call
+  // markSent() when the send actually happens, so a dropped or failed transmit
+  // doesn't get recorded as confirmed-in-flight.
   decide(sample, nowMs, srttMs) {
-    this.produced += 1;
-    if (this._shadows) this._tickShadows(sample, nowMs);
-
     // The display already holds an equivalent value: only the staleness bound
     // can justify spending a packet.
     if (!differs(sample, this._acked, this.steerThreshold)) {
@@ -226,7 +207,6 @@ export class InputGate {
 
   // Record that `sample` was handed to the transport.
   markSent(sample, nowMs) {
-    this.sent += 1;
     this._sent = { s: num(sample.s), b: num(sample.b), u: num(sample.u) };
     this._sentAt = nowMs;
     this._pending = true;
@@ -249,39 +229,5 @@ export class InputGate {
     this._sent = null;
     this._pending = false;
     this._sentAt = -Infinity;
-    for (const sh of this._shadows || []) { sh.acked = null; sh.sentAt = 0; }
-  }
-
-  // Counters for the netstats overlay. `shadows` answers "what would we have
-  // sent at threshold X" over the same real input, so one party measures the
-  // whole curve. Shadow rows assume every send is instantly confirmed, so they
-  // read as the FLOOR — the live path also spends sends on resends and idles.
-  stats() {
-    const suppressed = this.produced - this.sent;
-    return {
-      produced: this.produced,
-      sent: this.sent,
-      suppressed,
-      suppressedPct: this.produced ? (suppressed / this.produced) * 100 : 0,
-      threshold: this.steerThreshold,
-      shadows: (this._shadows || []).map((sh) => ({
-        threshold: sh.threshold,
-        sent: sh.sent,
-        suppressedPct: this.produced ? ((this.produced - sh.sent) / this.produced) * 100 : 0,
-      })),
-    };
-  }
-
-  // Replay this sample through each candidate threshold. Mirrors decide()'s
-  // change/idle rules; 'resend' is deliberately left out because it depends on
-  // real ack timing a shadow can't observe, which is why shadows are a floor.
-  _tickShadows(sample, nowMs) {
-    for (const sh of this._shadows) {
-      if (differs(sample, sh.acked, sh.threshold) || nowMs - sh.sentAt >= this.idleMs) {
-        sh.sent += 1;
-        sh.sentAt = nowMs;
-        sh.acked = { s: num(sample.s), b: num(sample.b), u: num(sample.u) };
-      }
-    }
   }
 }
