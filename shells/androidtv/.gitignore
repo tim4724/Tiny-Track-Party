@@ -42,3 +42,7 @@ app/src/main/assets/
 app/src/main/res/drawable-nodpi/
 app/src/main/res/mipmap-nodpi/
 /keystore.properties
+
+# The Kotlin compiler's own session scratch, written beside the project by
+# Kotlin 2.x. Per-build, per-machine, and empty once the daemon exits.
+.kotlin/

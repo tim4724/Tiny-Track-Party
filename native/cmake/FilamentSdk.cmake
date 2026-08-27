@@ -56,15 +56,24 @@ endforeach()
 
 add_library(filament-sdk INTERFACE)
 target_include_directories(filament-sdk INTERFACE "${FILAMENT_SDK}/include")
-# backend/platforms/VulkanPlatform.h (the platform-customization override the
-# Android renderer subclasses) includes <bluevk/BlueVK.h>, which the install
-# tree does not carry — it lives only in the CHECKOUT the install was built
-# from, above out/<config> — three levels up from the SDK root. Resolved only
-# where it exists, so the tvOS and web slices (which never include a Vulkan
-# header) are untouched.
+# TWO HEADERS AN INSTALLED SDK INCLUDES BUT DOES NOT SHIP, both reached from
+# backend/platforms/VulkanPlatform*.h (the platform-customization override the
+# Android renderer subclasses): <bluevk/BlueVK.h>, and — since Filament 1.76,
+# through the new AndroidNdk.h — <utils/api_level.h>, which is not among the
+# utils headers the install exports. Both live only in the CHECKOUT the install
+# was built from, above out/<config>, three levels up from the SDK root.
+#
+# Appended AFTER the SDK's own include dir so an installed header still wins;
+# the checkout is at the pinned commit, so the two copies agree by construction.
+# Resolved only where they exist, so the tvOS and web slices (which never
+# include a Vulkan header) are untouched.
 get_filename_component(TTP_FILAMENT_CHECKOUT "${FILAMENT_SDK}/../../.." ABSOLUTE)
 if (EXISTS "${TTP_FILAMENT_CHECKOUT}/libs/bluevk/include/bluevk/BlueVK.h")
     target_include_directories(filament-sdk INTERFACE
             "${TTP_FILAMENT_CHECKOUT}/libs/bluevk/include")
+endif()
+if (EXISTS "${TTP_FILAMENT_CHECKOUT}/libs/utils/include/utils/api_level.h")
+    target_include_directories(filament-sdk INTERFACE
+            "${TTP_FILAMENT_CHECKOUT}/libs/utils/include")
 endif()
 target_link_libraries(filament-sdk INTERFACE ${TTP_FILAMENT_ARCHIVES})
