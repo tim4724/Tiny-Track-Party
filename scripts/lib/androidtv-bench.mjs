@@ -53,11 +53,20 @@ export const READY_TIMEOUT_MS = 120_000;
  */
 export const FEAT = {
   ROAD: 0x04, TERRAIN: 0x08, DRESSING: 0x10, SKY: 0x20, CARS: 0x40, EFFECTS: 0x80,
+  ROAD_DECALS: 0x0100, ROAD_RUBBER: 0x0200, ROAD_PAINT: 0x0400, ROAD_SHADOW: 0x0800,
   ALL: 0xDFFC,
 };
 
 /** The content groups, in the order a sweep prints them. */
 export const GROUPS = ['ROAD', 'TERRAIN', 'DRESSING', 'SKY', 'CARS', 'EFFECTS'];
+
+/**
+ * The deck shader's four fragment channels. NOT content groups: the same deck
+ * is drawn either way, one channel shorter, so a channel's marginal is the most
+ * any optimisation of it could be worth and nothing behind it takes the fill
+ * over. They are swept separately because on this box the road IS the frame.
+ */
+export const ROAD_CHANNELS = ['ROAD_DECALS', 'ROAD_RUBBER', 'ROAD_PAINT', 'ROAD_SHADOW'];
 
 /**
  * Every content group off; the road's fragment channels and the fog stay, and

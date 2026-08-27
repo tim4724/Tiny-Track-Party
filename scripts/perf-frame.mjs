@@ -78,7 +78,7 @@ import { GRID_MS } from './perf-race.mjs';
 import { ADB, findTvDevice } from './lib/androidtv-device.mjs';
 import {
   arg, sleep, pct, phases, PACKAGE, ACTIVITY, SCENARIO, EXTRA_SCENARIO,
-  EXTRA_TRACK, EXTRA_PLAYERS, READY_TIMEOUT_MS, FEAT, GROUPS, EMPTY, hex,
+  EXTRA_TRACK, EXTRA_PLAYERS, READY_TIMEOUT_MS, FEAT, GROUPS, ROAD_CHANNELS, EMPTY, hex,
 } from './lib/androidtv-bench.mjs';
 
 const PLAYERS = arg('players', '1,4').split(',').map((n) => parseInt(n, 10));
@@ -288,8 +288,17 @@ async function measure(dev, players) {
     // `all` is run TWICE, first and last, and the gap between the two is this
     // sweep's own resolution: the same picture measured either side of every
     // other arm, so whatever moved underneath the run in between is in it.
+    // One arm per name: the whole picture with that bit cleared. A group HIDES
+    // renderables and a channel only skips a fragment term, but the mask is
+    // built the same way for both, and so is the marginal [table] reads off it.
+    const ablate = (names) =>
+      names.map((n) => ({ name: `-${n.toLowerCase()}`, mask: FEAT.ALL & ~FEAT[n] }));
     const arms = [{ name: 'all', mask: FEAT.ALL }, { name: 'floor', mask: EMPTY },
-      ...GROUPS.map((g) => ({ name: `-${g.toLowerCase()}`, mask: FEAT.ALL & ~FEAT[g] })),
+      ...ablate(GROUPS),
+      // The deck's fragment channels, on the same paired reasoning as the
+      // groups above — but they hide nothing, so their marginal is a straight
+      // saving rather than a trade with whatever was behind them.
+      ...ablate(ROAD_CHANNELS),
       { name: 'all2', mask: FEAT.ALL }];
     map.arms = {};
     for (const a of arms) {
@@ -414,14 +423,18 @@ function table(maps) {
   console.log(`${'  (repeat)'.padEnd(13)}`
     + maps.map((m) => fmt(spread(m, 'gpuP50')) + fmt(spread(m, 'gpuP95'))).join('')
     + '   the SAME arm either side of the sweep — the resolution, not a cost');
-  for (const g of GROUPS) {
-    const key = `-${g.toLowerCase()}`;
-    console.log(`${g.toLowerCase().padEnd(13)}`
-      + maps.map((m) => {
-        const off = m.arms[key];
-        return fmt(off?.gpuP50 != null ? base(m, 'gpuP50') - off.gpuP50 : null)
-          + fmt(off?.gpuP95 != null ? base(m, 'gpuP95') - off.gpuP95 : null);
-      }).join('') + `   marginal: what the frame loses when this group is dropped`);
+  // What the frame loses when one arm's bit is cleared, against the averaged
+  // baseline beside it. One row shape for both halves of the sweep.
+  const marginal = (label, name, what) => console.log(`${label.padEnd(13)}`
+    + maps.map((m) => {
+      const off = m.arms[`-${name.toLowerCase()}`];
+      return fmt(off?.gpuP50 != null ? base(m, 'gpuP50') - off.gpuP50 : null)
+        + fmt(off?.gpuP95 != null ? base(m, 'gpuP95') - off.gpuP95 : null);
+    }).join('') + `   marginal: what the frame loses when this ${what}`);
+  for (const g of GROUPS) marginal(g.toLowerCase(), g, 'group is dropped');
+  console.log(`\n  the deck shader's channels — the SAME deck, one channel shorter`);
+  for (const c of ROAD_CHANNELS) {
+    marginal(c.toLowerCase().replace('road_', '  '), c, 'channel is skipped');
   }
   console.log('  A marginal can be NEGATIVE and that is a real reading, not noise: cars');
   console.log('  occlude deck fragments, so hiding them makes the frame slower.');
