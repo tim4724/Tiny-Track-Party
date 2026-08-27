@@ -350,6 +350,20 @@ bool TtpRenderer::loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb) 
                 && !((mMaskLayerBakedBits >> ml) & 1u)) {
             bakeSilhouette(asset, bb.min, bb.max, ml);
         }
+        // …and the CPU outline the carShadow LAYER stamps, which is what every
+        // car draws now. Keyed by the model exactly as the GPU layer is, and
+        // baked here for the same reason: the asset is at its parse pose, so
+        // the outline is a fact about the model rather than about this frame.
+        // A model whose bake fails is simply absent from the store and falls
+        // back to the superellipse.
+        const uint64_t key = mCarModelKey.size() > index ? mCarModelKey[index] : 0;
+        if (mCarShadowMaskOfSlot.size() <= index) {
+            mCarShadowMaskOfSlot.resize(index + 1, 0);
+        }
+        mCarShadowMaskOfSlot[index] = key;
+        if (key && !mCarShadowMasks.count(key)) {
+            bakeCarFootprint(key, glb, asset, bb.min, bb.max);
+        }
     }
     // Tyre-contact width for the skid ribbons: min(0.24, max(0.06,
     // min(wheelBox.x, wheelBox.z))) — SceneRenderer addCar's measurement.
@@ -568,6 +582,11 @@ void TtpRenderer::destroyCarSlot(uint32_t c) {
     // recycles a layer that really has gone unused; releaseScene clears the
     // lot when the roster that produced them dies.
     if (mMaskLayerOfSlot.size() > c) mMaskLayerOfSlot[c] = kMaskLayerGeneric;
+    // Same rule for the CPU outline, and for the same reason: the STORE is
+    // keyed by model and very likely still read by another slot, so only this
+    // slot's pointer into it is cleared. rebakeCarShadowMasks is what drops an
+    // outline no live slot names any more.
+    if (mCarShadowMaskOfSlot.size() > c) mCarShadowMaskOfSlot[c] = 0;
     if (mCars.size() > c) destroyMesh(mCars[c]);
     if (mCarWheels.size() > c) mCarWheels[c] = CarWheels{};
     if (mMonsterViews.size() > c) mMonsterViews[c] = MonsterView{};

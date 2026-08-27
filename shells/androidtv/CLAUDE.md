@@ -383,6 +383,14 @@ does it settle"; interleaved runs at a pinned scale answer "what does this
 feature cost". It joins no phones and touches no relay: the bench seats its own
 players, so a measurement no longer depends on a service on the internet.
 
+**THE CAR SHADOW IS TUNED FROM HERE TOO** — `debug.ttp.shadow` takes the tuning
+as PARTIAL JSON (`ttp_display_shadow_tuning`), because that channel's cost is
+CPU and only this box has any. It is ~2 ms of frame thread here and free on a
+desktop GPU, so `/shadow-lab.html` cannot answer a single question about it; the
+table in `native/renderer/CLAUDE.md` was taken with this knob. Clearing the
+property restores the shipped tuning, for the same reason the feature mask
+treats 0 as "not set".
+
 **MEASURE AT A PINNED SCALE, AND SET THE MASK EVERY TIME.** Two traps have cost
 an experiment each. `debug.ttp.features` is a SYSTEM PROPERTY that survives a
 force-stop, so an arm that does not set it silently inherits the last one. And

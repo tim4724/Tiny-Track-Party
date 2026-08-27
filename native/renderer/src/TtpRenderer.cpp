@@ -1285,10 +1285,7 @@ void TtpRenderer::applyRoadDebug() {
             // carShadow tap through maskInk.w. The tap's raster + upload
             // drop out on the same bit in renderCars.
             if (roadHasMaskLoop()) mi->setParameter("maskCount", 0);
-            if (roadHasCarShadow()) {
-                mi->setParameter("maskInk", math::float4{ kCarBlobInk.x,
-                        kCarBlobInk.y, kCarBlobInk.z, 0.0f });
-            }
+            if (roadHasCarShadow()) mi->setParameter("maskInk", shadowInkParam(false));
             mi->setParameter("profCount", 0);
         }
         if (!(mRoadMask & kFeatRoadPaint)) mi->setParameter("paintCount", 0);
@@ -1302,8 +1299,7 @@ void TtpRenderer::applyRoadDebug() {
         // keep the shipped WRITE schedule — uploadDeckDecals zeroes the count
         // inline instead, on exactly the writes the baseline makes.
         if ((mDecalDebug & kDebugNoDecalBlob) && roadHasCarShadow()) {
-            mi->setParameter("maskInk", math::float4{ kCarBlobInk.x,
-                    kCarBlobInk.y, kCarBlobInk.z, 0.0f });
+            mi->setParameter("maskInk", shadowInkParam(false));
         }
         // THE ROAD HALF OF THIS ARM IS LIVE AGAIN. It was structurally zero
         // while the deck's sun visibility was vertex data, and it is one
@@ -1402,9 +1398,7 @@ void TtpRenderer::debugFeatureMask(uint32_t mask) {
         // through the cleared lastMask on the next uploadDeckDecals; the tap
         // has no per-frame writer, so its restore is here).
         if (roadHasCarShadow()) {
-            mi->setParameter("maskInk", math::float4{ kCarBlobInk.x,
-                    kCarBlobInk.y, kCarBlobInk.z,
-                    mCarShadowTex[0] ? kCarShadowCap : 0.0f });
+            mi->setParameter("maskInk", shadowInkParam(mCarShadowTex[0] != nullptr));
         }
         mi->setParameter("paintCount", paintN);   // written once per track
     };
@@ -1503,9 +1497,16 @@ void TtpRenderer::releaseScene() {
     }
     std::vector<uint8_t>().swap(mCarShadowPix);
     mCarShadowDirty.clear();
+    for (auto& l : mCarShadowWas) l.clear();
+    mCarShadowWasAt = 0;
     mCarShadowW = mCarShadowH = 0;
     mCarShadowPing = 0;
     mCarShadowUpload = false;
+    // THE OUTLINES SURVIVE THE SCENE, exactly as the baked silhouette bits do
+    // and for the same argument: a footprint is a fact about the KIT, not about
+    // this race, so a cup's four races bake them once. Only the per-SLOT
+    // pointers into the store are per-roster.
+    mCarShadowMaskOfSlot.clear();
     for (auto& m : mBurstMeshes) destroyMesh(m);
     for (auto& m : mBurstBalls) destroyMesh(m);
     destroyMesh(mPollen);
@@ -1630,7 +1631,6 @@ void TtpRenderer::releaseScene() {
     mTime = 0;
     mLastCar0 = {};
     mLastCarN = {};
-    mMonsterFootW = mMonsterFootL = 0;
     mMonsterWheels.clear();
     mMonsterWheelRadius = 0;
     mMonsterSkidWidth = 0;

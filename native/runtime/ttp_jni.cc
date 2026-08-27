@@ -435,6 +435,26 @@ jint n_ttp_display_settled(JNIEnv* env, jclass) {
     return (jint) ttp_display_settled();
 }
 
+jbyteArray n_ttp_display_shadow_layer_json(JNIEnv* env, jclass, jint a0, jint a1, jint a2, jint a3) {
+    (void) env;
+    return toBytes(env, ttp_display_shadow_layer_json((int) a0, (int) a1, (int) a2, (int) a3));
+}
+
+jbyteArray n_ttp_display_shadow_mask_json(JNIEnv* env, jclass, jint a0) {
+    (void) env;
+    return toBytes(env, ttp_display_shadow_mask_json((int) a0));
+}
+
+void n_ttp_display_shadow_tuning(JNIEnv* env, jclass, jbyteArray a0) {
+    CStr s0(env, a0);
+    ttp_display_shadow_tuning(s0.get());
+}
+
+jbyteArray n_ttp_display_shadow_tuning_json(JNIEnv* env, jclass) {
+    (void) env;
+    return toBytes(env, ttp_display_shadow_tuning_json());
+}
+
 void n_ttp_display_shadows(JNIEnv* env, jclass, jint a0) {
     (void) env;
     ttp_display_shadows((int) a0);
@@ -1329,6 +1349,10 @@ const JNINativeMethod kMethods[] = {
     { "ttp_display_scale_poll", "(DDDDD[D)I", (void*) n_ttp_display_scale_poll },
     { "ttp_display_scale_scene", "(D)V", (void*) n_ttp_display_scale_scene },
     { "ttp_display_settled", "()I", (void*) n_ttp_display_settled },
+    { "ttp_display_shadow_layer_json", "(IIII)[B", (void*) n_ttp_display_shadow_layer_json },
+    { "ttp_display_shadow_mask_json", "(I)[B", (void*) n_ttp_display_shadow_mask_json },
+    { "ttp_display_shadow_tuning", "([B)V", (void*) n_ttp_display_shadow_tuning },
+    { "ttp_display_shadow_tuning_json", "()[B", (void*) n_ttp_display_shadow_tuning_json },
     { "ttp_display_shadows", "(I)V", (void*) n_ttp_display_shadows },
     { "ttp_display_showcase", "(I)V", (void*) n_ttp_display_showcase },
     { "ttp_display_slot_ids_json", "()[B", (void*) n_ttp_display_slot_ids_json },

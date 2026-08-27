@@ -223,22 +223,37 @@ same expression gave a strip and a disc visibly different weights. The
 rectangle's box height is **derived** from that stroke rather than frozen, or a
 narrower strip clips its outer columns.
 
-The car's contact shadow is a **HYBRID, by distance**: `kMaxMaskedDeckDecals`
-(4) cars within `kShadowLodFar` of an active camera draw true baked-silhouette
-MASKED stamps (the per-fragment uniform loop), and everyone else rides **one
-bilinear tap of the carShadow layer** — a small track-space R8 texture the
+**EVERY car's contact shadow is the BLOB — one bilinear tap of the carShadow
+layer — at every cell count.** That layer is a small track-space R8 texture the
 renderer CPU-rasterizes per frame (the rubber layer's idiom — same (s, lat)
-mapping, same lat span, so vroad's tap reuses the rubber uv) and re-uploads
-WHOLE, as one `setImage`, into a **ping-pong pair** so the upload never
-respecifies the texture the driver is reading (`uploadCarShadow` has the
-argument; the skid layer's stall history is why). Between the bands the two
-representations crossfade with complementary alphas, statelessly, so it cannot
-pop; and the near pick is a RANK gate, so the masked cap can only downgrade a
-shadow to the texture blob, never delete it. The texture path is what retired
-the old ALL-masked loop's cost — ~5 ms of the realistic 720p frame under a
-pack, after every arithmetic-level cut inside it measured zero — and the masked
-near band is what the texture layer's ~8 texels/u cannot carry: the
-silhouette's car-shape under your own car.
+mapping, same lat span, so vroad's tap reuses the rubber uv) and re-uploads by
+**DIRTY RECT** — the stamps' own, merged — into a **ping-pong pair** so the
+upload never respecifies the texture the driver is reading (`uploadCarShadow`
+has the argument; the skid layer's stall history is why). **The pair is what
+makes the dirty rects three frames deep**: a texture is written every OTHER
+frame, so it was last correct two frames ago, and missing one frame's rects
+leaves each texture holding the other's stale stamps — the shadow strobes
+between two positions. `uploadWhole` is the A/B arm that priced it.
+
+`CarShadowTuning::mode` is the switch and `kShadowModeBlob` is what ships, so
+the masked per-fragment loop draws NOTHING in an ordinary frame: every entry
+goes out `texrot.w == 2`, readback-only, and `foldToChunk` never makes one
+fold-visible. What that buys is the whole decal channel on the weakest box —
+~7 ms of a 4P/1080 Android frame, priced below — and it cannot pop, because the
+blob is what the crossfade always degraded to anyway. **The two other modes are
+A/B arms** (`/shadow-lab.html` drives them) and nothing on the shipping path
+selects one: `kShadowModeSilhouette` puts every car the pick reaches on the
+masked loop with no distance fade, and `kShadowModeHybrid` restores the
+distance LOD described below.
+
+> **The hybrid, for when the trade is re-argued.** `kMaxMaskedDeckDecals` (4)
+> cars within `kShadowLodFar` of an active camera drew true baked-silhouette
+> MASKED stamps and everyone else rode the blob, the two crossfading with
+> complementary alphas between the bands, statelessly, so it could not pop; the
+> near pick was a RANK gate, so the masked cap could only downgrade a shadow to
+> the blob, never delete it. Its near band existed for the one thing the layer's
+> ~8 texels/u could not carry — the silhouette's car-shape under your own car —
+> and the per-car footprint below is what replaced that argument.
 
 **WHICH four is a PER-VIEW round robin, and that is a correctness rule, not a
 tuning knob.** Each camera takes its first choice before any camera takes its
@@ -290,11 +305,13 @@ correctly, and bought only ~0.8 ms: the executed cost is the per-entry
 DYNAMICALLY-INDEXED UNIFORM READS in divergent flow, the declared-size law
 seen from the execution side. Nothing spellable inside a per-entry loop
 collects it; analytic shapes, texture formats and resolutions are all refuted
-with it. The one lever that
-converts is the rank gate itself — a LOOK trade the user took:
-`kMaskedBlobCells` (`TtpRendererImpl.h`) zeroes the masked budget at four
-cells, every car rides the die-cut blob there (which crossfades, so nothing
-pops), and 4P locks 768x432@60.
+with it. The one lever that converts is the rank gate itself — a LOOK trade the
+user took, first at four cells and then everywhere: `CarShadowTuning::mode`
+ships as `kShadowModeBlob`, so no frame draws a masked stamp at any cell count
+and the channel's cost goes with it. 4P locks 768x432@60. What made it a trade
+worth taking rather than a loss was the per-car FOOTPRINT above — the near
+band's whole argument was the car-shape under your own car, and the blob
+carries one now.
 
 **Why painting in curvilinear (s, lat) is safe NOW when it was the original
 sin:** the old objection — track space bends the stamp around corners, and the
@@ -308,12 +325,150 @@ order, not first-order axis-aligned smear. If the shimmer ever returns, the
 escalation is `project()`-projected corners (the settle-point the skids use),
 not a return to the uniform loop.
 
-**The TEXTURE path's silhouette source is the CPU superellipse for every car**
-— at the layer's density a baked per-car silhouette is indistinguishable from
-it, it needs no per-scene readback, and being symmetric it cannot be mirrored
-by a handedness mistake. `bakeSilhouette` RUNS on the shipping blob: it feeds
-the NEAR cars' masked stamps, where the true car-shape does read. **An
-airborne-anchor theory is a dead end already walked.**
+**AND BOTH PREMISES OF THAT SAFETY ARGUMENT HAVE SINCE BEEN SPENT.** The
+flicker fix took the layer to 16 texels/u, so a kink that was sub-texel is
+resolvable; and the edge is now a NARROW THRESHOLD on a smooth field rather
+than a penumbra, which is precisely the "SHARP edge" this paragraph says the
+kinks ripple through. A cornering ripple was reported after both landed. It is
+NOT the slicing (measured, above), and the density test cannot speak to it —
+dropping the density doubles the ordinary edge crawl and swamps the thing
+under test. **The open question is whether the stamp should be placed by
+`project()` rather than `deckFoot`**: the raster writes at the ANALYTIC
+surface's (s, lat) while the shader reads through uv0's per-triangle
+interpolation, and the disagreement between the two is exactly the kink. That
+is the named escalation and it is unbuilt.
+
+**THE BLOB'S SHAPE IS A ROUNDED RECT FITTED TO EACH MODEL'S OWN OUTLINE —
+four corners for every car, by the user's eye** (`ttp/car_footprint.h`,
+executed on every leg by the `carfootprint` ctest). The model's triangles are
+projected top-down and rasterized on the CPU out of the same GLB bytes the
+merged draw groups already decode — no parse, no GPU pass, no readback — and
+the fit (fill across, fill along, corner radius) is one pass over that
+coverage. The raster evaluates the rect in CLOSED FORM: the cheap arm, half
+the channel's CPU on the Android box against sampling the outline mask, and
+still per car — Rumble's fit comes out visibly rounder, the monster's bigger.
+`analyticCoverage` is the ONE evaluator both the raster and the mask-card
+readback go through, so the lab cannot show a shape the deck is not drawing.
+
+> **The fitted k-GON (`kShadowShapePoly`) was built, shown, and NOT chosen —
+> it survives as a lab arm beside the masks.** A convex hull simplified to
+> `polyEdges` edges (containment-preserving, symmetrized, two lobes split at
+> the silhouette's waist so a body pinch reads) carries taper the rect
+> cannot — and still read WORSE on the model that mattered: Rumble is an
+> open-wheeler, a narrow rear body with a GAP to wheels that poke past it,
+> and any lobeless closed-form shape renders that as lumps. Silhouette
+> fidelity past "grounded, per-car, four corners" is the outline MASK's job
+> (`kShadowShapeCar`), at its measured cost.
+
+**The AABB cannot do this job, which is the whole reason the footprint exists.**
+All four roster cars measure x ±0.26 to ±0.28 by z ±0.438 and are
+origin-centred, so a shape sized off the bounding box is the SAME shape for
+every one of them. Only the outline inside the box differs.
+
+**Two things about it are easy to get silently wrong, and both are pinned.**
+The mask's v axis runs tail (0) to NOSE (1) and the kit models nose toward −Z
+under the renderer's base `FLIP`, so the bake negates both axes; on a
+left-right symmetric car the v sign is the only one that can show, and the
+ctest pins it. And the outline must be captured while the asset is at its
+PARSE POSE — `getWorldTransform` answers where the car IS, so a capture taken
+mid-race measures a car hundreds of units from the mask's frame and rasterizes
+to nothing at all. That is why `mCarOutlines` keeps the captured geometry and
+every re-bake rasterizes from the copy; `bakeCarFootprint` refuses a capture
+whose extent does not straddle the origin rather than let it fail silently.
+
+**THE BLOB'S COST IS CPU, NOT GPU — the tap is free and the RASTER AND UPLOAD
+are not.** Measured on the Android reference box at four players by ablating the
+channel (`TTP_DEBUG_NO_DECAL_BLOB`), every arm with the same build, GPU flat at
+21.0-21.7 ms throughout:
+
+| arm | CPU ms |
+|---|---|
+| channel off | 3.28 |
+| 8 / 128, dirty-rect upload | 4.19 |
+| 16 / 256, dirty-rect upload | 5.32 |
+| 16 / 256, whole-level upload | 6.17 |
+
+So the channel is ~2.0 ms of frame thread as it ships, and BOTH halves scale
+with density: the raster because a denser stamp covers more texels, the upload
+because there are more bytes. **This is where to spend effort, and the GPU is
+not.** `debug.ttp.shadow` on that box takes the tuning as partial JSON, which is
+how every row above was taken; `/shadow-lab.html` cannot answer this question
+because the same channel is free on a desktop GPU.
+
+**THE LAYER'S DENSITY IS THE FLICKER, and it is the first thing to reach for.**
+The raster re-lands every stamp at a new sub-texel offset each frame, so a
+coarse grid cannot hold an edge still. At the original 8 texels/u by 128 rows a
+car's whole stamp was **15 by 10 texels** and its edge boiled — measured against
+a shadow-off baseline over identical gated sim frames, it carried about twice
+the temporal energy the masked silhouette put in the same band. 16 / 256 doubles
+the grid each way, cuts that excess by ~53-73% depending on the scene, and lands
+at or below the silhouette it replaced; it is the shipped default. **It
+saturates there**: the width clamps against the driver's texture ceiling, so
+24/384 measured only a few points better for twice the bytes again. The cost is
+the whole-level upload, 0.38 -> 1.53 MB a frame — still ONE event, and GPU time
+on the web reference did not move (2.02 -> 1.80 ms p50 at four players, three
+interleaved reps). **The Android box is the one that has not been re-measured.**
+
+**THE EDGE IS A WIDE MEDIUM BAND (0.2..0.8 of peak) OVER A WIDE FIELD (blur
+0.07), CUT IN THE SHADER — and both cliffs beside it are measured.** The road
+mesh interpolates uv0 linearly per triangle, so the tap's read coordinate has
+a GRADIENT JUMP at every triangle edge. A flat stored value reads flat through
+any kink, but wherever the stored field has gradient the kink prints as a
+Mach-band crease — under a yawed car, diagonal bands through the shadow
+(user-reported twice). **The layer readback is what pins this to the read
+side**: the stored stamp is clean while the screen bands — diagnose there
+first, never from pixels. With NO cut the whole wide skirt is gradient and
+the creases get their maximum area (that arm shipped for a day and failed the
+user's eye); with the die-cut's NARROW threshold (0.39..0.61) the slope
+facets on the bilinear texel grid and amplifies the raster's per-frame
+sub-texel re-landing into edge boil (that arm failed the user's eye first).
+The wide band is the middle: `remapLo` clips the faint tail where the creases
+have the most area, `remapHi` saturating at mid-field keeps the visible
+transition tight, and the ~1.7 slope is far from the die-cut's ~4.5. Density
+does not move the creases (16 → 32 texels/u, same picture) and neither does
+`stampProject` — a write-side placement cannot remove a read-map derivative
+jump, which is also why it stays a knob and off. An EMPTY band
+(`remapHi <= remapLo`) means no remap anywhere — one invariant, honoured by
+`shadowRemapParam` (which forces the shader's raw-tap route; a degenerate
+smoothstep is UB) and by the raster's cut alike; it is the lab's cut-off arm.
+
+The die-cut era's measurements survive and still bound the knobs:
+
+- Cutting in the RASTER measured 44% MORE edge flicker than cutting in the
+  shader on identical gated frames (the finished alpha quantises the edge to
+  the texel grid before the tap ever sees it). `remapInShader` keeps both
+  arms; the shader side ships.
+- Sweeping `blur` under the cut: 0.030 cut edge flicker 25%, 0.040 43%,
+  0.060 61%. The old reason to stop at 0.040 — the outline mask's wheel lobes
+  blurring away — left with the rounded rect, which has no lobes to lose.
+- The analytic shape's stored ramp is sized from `blur`; at half a texel it
+  measured 30% WORSE than the masks, so the ramp floor is the texel footprint
+  and the target is the blur width.
+
+`remapLo`/`remapHi` are FRACTIONS OF THE PEAK ALPHA, scaled by `ao` on the way
+to the uniform, so an arm dragging opacity cannot slide the shadow under its
+own threshold.
+
+**How far the SHAPE is worth pushing is also a measured question.** At the
+original density the four models' masks differed by at most ~0.07 mean coverage
+and two of them (Dash and Carve) by 0.001 — these are boxy toy cars whose wheels
+sit near flush with the body. `grow` and the density are the knobs that convert
+what difference there is into something visible; `/shadow-lab.html` is where
+they are dragged, it prints the stamp's texel count beside them, and
+`ttp_display_shadow_mask_json` is how the baked mask is read back — the only way
+to tell a shape that is WRONG from one that is right and merely too small to
+read.
+
+> **Measuring flicker here has one trap that wasted a run.** Scoring arms one
+> after another lets the car drive somewhere else in between, and the scenery it
+> passes swamps the effect — a first pass ranked SHADOWS-OFF as the flickeriest
+> arm. Pump ONE gated frame, then re-render it once per arm (`display.frame()`
+> draws, the session advances the sim, so a repaint costs no sim time) and score
+> each arm down its own sequence. Cars hidden, rubber wiped.
+
+`bakeSilhouette` (the GPU array-layer bake) still RUNS: it feeds the masked
+stamps the two A/B modes draw. **An airborne-anchor theory is a dead end
+already walked.**
 
 **The silhouette store is keyed by MODEL, and a bake outlives the scene.** A
 layer belongs to the GLB's bytes (`claimMaskLayer` hashes them), not to a grid

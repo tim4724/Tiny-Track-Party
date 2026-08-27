@@ -824,6 +824,175 @@ void ttp_display_debug_force_mask_layer(int layer) {
     if (g_disp && g_disp->renderer) g_disp->renderer->debugForceMaskLayer(layer);
 }
 
+namespace {
+
+// The tuning as JSON. One writer for both the live values and the defaults, so
+// a page cannot be shown a key the setter does not read.
+ttp::Value shadowTuningValue(const CarShadowTuning& t) {
+    ttp::Value o = ttp::Value::Obj();
+    o.set("mode", ttp::Value::Num(t.mode));
+    o.set("shape", ttp::Value::Num(t.shape));
+    o.set("polyEdges", ttp::Value::Num(t.polyEdges));
+    o.set("corner", ttp::Value::Num(t.corner));
+    o.set("ao", ttp::Value::Num(t.ao));
+    o.set("cap", ttp::Value::Num(t.cap));
+    o.set("loadGain", ttp::Value::Num(t.loadGain));
+    o.set("ink", ttp::Value::Num((double) t.ink));
+    o.set("overscan", ttp::Value::Num(t.overscan));
+    o.set("grow", ttp::Value::Num(t.grow));
+    o.set("blur", ttp::Value::Num(t.blur));
+    o.set("remapLo", ttp::Value::Num(t.remapLo));
+    o.set("remapHi", ttp::Value::Num(t.remapHi));
+    o.set("texelsPerU", ttp::Value::Num(t.texelsPerU));
+    o.set("rows", ttp::Value::Num(t.rows));
+    o.set("stampProject", ttp::Value::Bool(t.stampProject));
+    o.set("uploadWhole", ttp::Value::Bool(t.uploadWhole));
+    o.set("remapInShader", ttp::Value::Bool(t.remapInShader));
+    o.set("smoothTap", ttp::Value::Bool(t.smoothTap));
+    return o;
+}
+
+}  // namespace
+
+// A PARTIAL object: any key the caller left out keeps the value it already has,
+// so a page may send one knob per drag without carrying the other twelve.
+void ttp_display_shadow_tuning(const char* json) {
+    if (!g_disp || !g_disp->renderer) return;
+    const ttp::Value v = ttp::json::parse_or(json, ttp::Value::Obj());
+    if (v.type != ttp::Value::OBJ) return;
+    CarShadowTuning t = g_disp->renderer->shadowTuning();
+    t.mode = (int) ttp::json::num_field(v, "mode", t.mode);
+    t.shape = (int) ttp::json::num_field(v, "shape", t.shape);
+    t.polyEdges = (int) ttp::json::num_field(v, "polyEdges", t.polyEdges);
+    t.corner = (float) ttp::json::num_field(v, "corner", t.corner);
+    if (v.find("stampProject")) t.stampProject = ttp::json::truthy(v, "stampProject");
+    if (v.find("uploadWhole")) t.uploadWhole = ttp::json::truthy(v, "uploadWhole");
+    if (v.find("remapInShader")) t.remapInShader = ttp::json::truthy(v, "remapInShader");
+    if (v.find("smoothTap")) t.smoothTap = ttp::json::truthy(v, "smoothTap");
+    t.ao = (float) ttp::json::num_field(v, "ao", t.ao);
+    t.cap = (float) ttp::json::num_field(v, "cap", t.cap);
+    t.loadGain = (float) ttp::json::num_field(v, "loadGain", t.loadGain);
+    t.ink = (uint32_t) ttp::json::num_field(v, "ink", t.ink);
+    t.overscan = (float) ttp::json::num_field(v, "overscan", t.overscan);
+    t.grow = (float) ttp::json::num_field(v, "grow", t.grow);
+    t.blur = (float) ttp::json::num_field(v, "blur", t.blur);
+    t.remapLo = (float) ttp::json::num_field(v, "remapLo", t.remapLo);
+    t.remapHi = (float) ttp::json::num_field(v, "remapHi", t.remapHi);
+    t.texelsPerU = (float) ttp::json::num_field(v, "texelsPerU", t.texelsPerU);
+    t.rows = (int) ttp::json::num_field(v, "rows", t.rows);
+    // Clamps live HERE and not in the setter's callers: a page dragging a
+    // slider is exactly the caller that can send an out-of-range number, and
+    // an overscan of 0 divides by zero inside the mask bake.
+    t.mode = t.mode < 0 ? 0 : (t.mode > 2 ? 2 : t.mode);
+    t.shape = t.shape < 0 ? 0 : (t.shape > 3 ? 3 : t.shape);
+    t.polyEdges = t.polyEdges < 3 ? 3
+            : (t.polyEdges > (int) ttp::rt::PolyFit::kMaxEdges
+                    ? (int) ttp::rt::PolyFit::kMaxEdges : t.polyEdges);
+    t.corner = t.corner < 0.0f ? 0.0f : (t.corner > 1.0f ? 1.0f : t.corner);
+    t.overscan = t.overscan < 1.0f ? 1.0f : (t.overscan > 4.0f ? 4.0f : t.overscan);
+    t.ao = t.ao < 0.0f ? 0.0f : (t.ao > 1.0f ? 1.0f : t.ao);
+    t.cap = t.cap < 0.0f ? 0.0f : (t.cap > 1.0f ? 1.0f : t.cap);
+    t.grow = t.grow < 0.0f ? 0.0f : (t.grow > 1.0f ? 1.0f : t.grow);
+    t.blur = t.blur < 0.0f ? 0.0f : (t.blur > 0.25f ? 0.25f : t.blur);
+    g_disp->renderer->setShadowTuning(t);
+}
+
+namespace {
+// Base64 of a byte block. Shared by the two shadow readbacks below; local and
+// debug-only, for the reason the mask one already gives.
+std::string b64Of(const uint8_t* p, size_t n) {
+    static const char kB64[] =
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve((n + 2) / 3 * 4);
+    for (size_t i = 0; i < n; i += 3) {
+        const uint32_t b0 = p[i];
+        const uint32_t b1 = i + 1 < n ? p[i + 1] : 0u;
+        const uint32_t b2 = i + 2 < n ? p[i + 2] : 0u;
+        const uint32_t w = (b0 << 16) | (b1 << 8) | b2;
+        out += kB64[(w >> 18) & 63];
+        out += kB64[(w >> 12) & 63];
+        out += (i + 1 < n) ? kB64[(w >> 6) & 63] : '=';
+        out += (i + 2 < n) ? kB64[w & 63] : '=';
+    }
+    return out;
+}
+}  // namespace
+
+const char* ttp_display_shadow_layer_json(int x, int y, int w, int h) {
+    static std::string json;
+    json = "{}";
+    if (!g_disp || !g_disp->renderer) return json.c_str();
+    // Bounded: this is a debug window, not a way to ask for the whole layer.
+    if (w <= 0 || h <= 0 || w > 512 || h > 512) return json.c_str();
+    std::vector<uint8_t> px;
+    if (!g_disp->renderer->shadowLayerWindow(x, y, w, h, px)) return json.c_str();
+    ttp::Value o = ttp::Value::Obj();
+    o.set("x", ttp::Value::Num(x));
+    o.set("y", ttp::Value::Num(y));
+    o.set("w", ttp::Value::Num(w));
+    o.set("h", ttp::Value::Num(h));
+    o.set("px", ttp::Value::Str(b64Of(px.data(), px.size())));
+    json = ttp::canonical_stringify(o);
+    return json.c_str();
+}
+
+const char* ttp_display_shadow_mask_json(int slot) {
+    static std::string json;
+    json = "{}";
+    if (!g_disp || !g_disp->renderer || slot < 0) return json.c_str();
+    const TtpRenderer::ShadowMaskView v = g_disp->renderer->shadowMaskView((size_t) slot);
+    if (!v.px || v.w <= 0 || v.h <= 0) return json.c_str();
+    // Quantise the coverage and share the encoder with the layer window above.
+    const size_t n = (size_t) v.w * v.h;
+    std::vector<uint8_t> bytes(n);
+    for (size_t i = 0; i < n; i++) {
+        bytes[i] = (uint8_t) std::lround(
+                std::min(1.0f, std::max(0.0f, v.px[i])) * 255.0f);
+    }
+    const std::string b64 = b64Of(bytes.data(), n);
+    char key[32];
+    std::snprintf(key, sizeof key, "%016llx", (unsigned long long) v.model);
+    ttp::Value o = ttp::Value::Obj();
+    o.set("w", ttp::Value::Num(v.w));
+    o.set("h", ttp::Value::Num(v.h));
+    o.set("model", ttp::Value::Str(key));
+    o.set("generic", ttp::Value::Bool(v.generic));
+    o.set("px", ttp::Value::Str(b64));
+    json = ttp::canonical_stringify(o);
+    return json.c_str();
+}
+
+const char* ttp_display_shadow_tuning_json(void) {
+    static std::string json;
+    ttp::Value o = ttp::Value::Obj();
+    o.set("current", shadowTuningValue(
+            g_disp && g_disp->renderer ? g_disp->renderer->shadowTuning()
+                                       : CarShadowTuning{}));
+    // The SHIPPED values, so a tuning page's sliders and its "reset" both come
+    // from the engine rather than from numbers re-typed in JS.
+    o.set("defaults", shadowTuningValue(CarShadowTuning{}));
+    // WHAT THE DENSITY ACTUALLY BOUGHT, and what it costs. Derived, never set:
+    // the width clamps against the driver's texture ceiling, so asking for 24
+    // texels/u on a long lap silently gets fewer — and how many texels a car's
+    // stamp lands on is the number that decides whether its edge can hold
+    // still. `uploadBytes` is the whole level, re-sent every frame.
+    if (g_disp && g_disp->renderer) {
+        const TtpRenderer::ShadowLayerInfo li = g_disp->renderer->shadowLayerInfo();
+        ttp::Value l = ttp::Value::Obj();
+        l.set("w", ttp::Value::Num(li.w));
+        l.set("h", ttp::Value::Num(li.h));
+        l.set("texelsPerU", ttp::Value::Num(li.texelsPerU));
+        l.set("texelsPerLat", ttp::Value::Num(li.texelsPerLat));
+        l.set("stampTexelsS", ttp::Value::Num(li.stampTexelsS));
+        l.set("stampTexelsLat", ttp::Value::Num(li.stampTexelsLat));
+        l.set("uploadBytes", ttp::Value::Num((double) li.w * li.h));
+        o.set("layer", l);
+    }
+    json = ttp::canonical_stringify(o);
+    return json.c_str();
+}
+
 void ttp_display_debug_features(unsigned int mask) {
     if (g_disp && g_disp->renderer) g_disp->renderer->debugFeatureMask((uint32_t) mask);
 }

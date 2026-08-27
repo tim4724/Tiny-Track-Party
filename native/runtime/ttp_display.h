@@ -758,6 +758,74 @@ TTP_ABI void ttp_display_debug_wipe_skids(void);
 // separates "the bake is wrong" from "everything downstream of it is wrong".
 TTP_ABI void ttp_display_debug_force_mask_layer(int layer);
 
+/* THE CAR CONTACT SHADOW'S TUNING — /shadow-lab.html's whole surface.
+ *
+ * JSON both ways, by the call-frequency rule: this is a once-per-drag event and
+ * never a frame path. The getter answers the CURRENT values beside the SHIPPED
+ * defaults under "defaults", so a tuning page builds its sliders from the
+ * engine's own numbers instead of re-typing them and drifting (root rule 1).
+ *
+ * The setter takes a partial object — any key absent keeps its current value —
+ * so a page may send one knob per drag. Unknown keys are ignored. Keys:
+ *
+ *   mode         0 blob (shipped: every car, every cell count), 1 silhouette
+ *                (the old masked loop for everyone), 2 hybrid (the old
+ *                distance LOD). 1 and 2 exist for the A/B and cost what
+ *                native/renderer/CLAUDE.md prices them at.
+ *   shape        0 each model's own outline, 1 the shared superellipse,
+ *                2 a rounded rect in CLOSED FORM (shipped), 3 a fitted convex
+ *                k-gon, likewise closed form. The four roster cars have the
+ *                SAME bounding box, so the per-model FIT is the only thing
+ *                that tells them apart — and 2/3 are the cheap arms, because
+ *                0 and 1 are masks the CPU raster samples sixteen times a
+ *                texel while an expression is evaluated once. Both are still
+ *                PER-CAR, fitted to each model's own outline at bake time.
+ *                `corner` SCALES the fitted radius (1 = as fitted, 0 = a hard
+ *                rectangle); `polyEdges` (3..12) is the k-gon arm's edge
+ *                budget.
+ *   ao           the stamp's peak opacity        cap    summed-coverage ceiling
+ *   loadGain     deepening at full body pitch    ink    colour, 0xRRGGBB
+ *   overscan     footprint's share of the quad   grow   dilate the outline
+ *   blur         the stored field's ramp         remapLo/remapHi  the edge band
+ *                (an EMPTY band, hi <= lo, means no cut at all)
+ *   smoothTap    bool: bicubic B-spline tap (shipped on) vs raw bilinear
+ *   remapInShader  bool A/B arm: where a non-empty band is cut
+ *   stampProject   bool A/B arm: project() vs deckFoot() stamp placement
+ *   uploadWhole    bool A/B arm: whole-level upload vs the stamps' own rects
+ *   texelsPerU   layer density along the lap     rows   layer rows across it
+ *
+ * The last two RE-ALLOCATE the layer pair and the shape knobs RE-BAKE the
+ * masks; everything else is free and lands on the next frame. Nothing on the
+ * shipping path calls either of these. */
+TTP_ABI void ttp_display_shadow_tuning(const char* json);
+TTP_ABI const char* ttp_display_shadow_tuning_json(void);
+
+/* DEBUG: the mask car slot `slot` actually stamps, as
+ * { w, h, model: "<hex>", generic: bool, px: "<base64 of w*h bytes>" }.
+ *
+ * Exists because "does this shape look like the car?" cannot be answered from
+ * the deck: the stamp lands in roughly 16 by 11 texels of the carShadow layer,
+ * under a car, on asphalt. Reading the mask back is the only way to separate a
+ * shape that is WRONG from a shape that is right and merely too small to read
+ * — and those two want opposite fixes. `generic` says the outline bake did not
+ * land and the superellipse is standing in, which is a state no screenshot can
+ * distinguish from a rounded car. */
+TTP_ABI const char* ttp_display_shadow_mask_json(int slot);
+
+/* DEBUG: a WINDOW OF THE LAYER ITSELF — w*h texels of the carShadow texture at
+ * (x, y), as { x, y, w, h, px: "<base64>" }. Clamped to the layer; an empty
+ * object when there is no layer.
+ *
+ * THIS IS THE INSTRUMENT THAT SEPARATES THE WRITE FROM THE READ, and three
+ * wrong diagnoses of one artifact went by without it. Everything else about
+ * this channel is judged from screen pixels, which have been through a camera,
+ * the road's shader, the tail cut, tone mapping and a lossy capture — so
+ * "banding" seen there could be the raster, the sampling, or the grade, and
+ * guessing which is how the last three attempts were spent. The layer is what
+ * the raster actually wrote. If an artifact is in here it is the WRITE side; if
+ * this is clean and the deck is not, it is the READ side. */
+TTP_ABI const char* ttp_display_shadow_layer_json(int x, int y, int w, int h);
+
 /* FEATURE ABLATION, for the per-feature cost map. Each bit KEEPS one group of
  * renderables; a cleared bit hides it, so the GPU timer around the frame reads
  * that group's draw cost directly. The frame is submission-bound (per-cell draw

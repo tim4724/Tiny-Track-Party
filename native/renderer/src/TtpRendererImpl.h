@@ -685,49 +685,16 @@ struct TtpRenderer::TrackBin {
 // loop's hard cast shadow, not a wide soft ring", as the source puts it. That
 // is ~5% of the half-width, so the shape has to come from a texture.
 //
-// The one thing this does NOT reproduce is the outline: three's is the model's
-// real silhouette (cabin narrow, wheels poking out), ours a superellipse fitted
-// to the same footprint. Same size, same softness, rounder corners.
-// The pixels, at any resolution: a superellipse over 1/1.45 of the frame
-// (SHADOW_OVERSCAN) with the JS bake's blur.
+// THE PIXELS THEMSELVES ARE `ttp/car_footprint.h`'s, not this file's, because
+// the per-car footprint beside them has to be executed by a ctest on every leg
+// and the two shapes must agree about the frame they are drawn in. This is the
+// fallback half: a superellipse fitted to the same footprint — same size, same
+// softness, rounder corners than any real car.
 inline std::vector<float> superellipseMaskPixels(int TW, int TH) {
-    std::vector<float> a((size_t) TW * TH, 0.0f);
-    // Footprint occupies 1/1.45 of the quad (SHADOW_OVERSCAN), leaving the rest
-    // as room for the blur tail — exactly how the JS frames its bake.
-    const float hw = (TW * 0.5f) / 1.45f, hl = (TH * 0.5f) / 1.45f;
-    for (int y = 0; y < TH; y++) {
-        for (int x = 0; x < TW; x++) {
-            const float dx = std::fabs(x + 0.5f - TW * 0.5f) / hw;
-            const float dz = std::fabs(y + 0.5f - TH * 0.5f) / hl;
-            const float q = std::cbrt(dx * dx * dx + dz * dz * dz); // 1 at the edge
-            // A PENUMBRA, not a hard cut — the GPU silhouettes get theirs
-            // from the bake's blur; this CPU mask is MINIFIED by the layer
-            // raster (one point sample per ~6-8 mask texels), and a binary
-            // edge point-sampled under per-frame sub-texel slide flickers.
-            // Half a footprint of analytic feather is the filter the
-            // point-sample never had.
-            a[(size_t) y * TW + x] =
-                    1.0f - std::min(1.0f, std::max(0.0f, (q - 0.88f) / 0.24f));
-        }
-    }
-    // Separable box blur ×3 ≈ the canvas filter's Gaussian, at the same radius.
-    const int R = std::max(2, (int) std::lround(TW * 0.022f));
-    std::vector<float> tmp(a.size());
-    const auto pass = [&](std::vector<float>& src, std::vector<float>& dst, bool horiz) {
-        for (int y = 0; y < TH; y++)
-            for (int x = 0; x < TW; x++) {
-                float s = 0; int n = 0;
-                for (int k = -R; k <= R; k++) {
-                    const int px = horiz ? x + k : x, py = horiz ? y : y + k;
-                    if (px < 0 || px >= TW || py < 0 || py >= TH) { n++; continue; } // outside = 0
-                    s += src[(size_t) py * TW + px];
-                    n++;
-                }
-                dst[(size_t) y * TW + x] = s / (float) n;
-            }
-    };
-    for (int i = 0; i < 3; i++) { pass(a, tmp, true); pass(tmp, a, false); }
-    return a;
+    ttp::rt::FootprintSpec spec;
+    spec.w = TW;
+    spec.h = TH;
+    return ttp::rt::superellipse_mask(spec);
 }
 
 
@@ -737,25 +704,19 @@ inline std::vector<float> superellipseMaskPixels(int TW, int TH) {
 constexpr float kBlobShadowAlpha = 0.4f;
 
 
-// The car ground shadow's ink (the JS UNDER_AO_COLOR) and base opacity, for
-// the masked road-shader decal. 0.62 is the die-cut retune — darker and
-// hard-edged, a deliberate departure from the measured 35% ambient dip these
-// rigs meter (blocking the sun leaves a surface its ambient, 32% to 36% of
-// lit), which read too faint under the die-cut blob. It sits the car darker
-// than its siblings on purpose, the prop blobs at 0.40 and the lawn discs
-// at 0.30.
-inline const float3 kCarBlobInk = srgbToLinear(0x171513);
-
-constexpr float kCarBlobAO = 0.62f;
+// The car ground shadow's ink, opacity and coverage cap live in
+// CarShadowTuning (TtpRenderer.h) — the tuning ABI's one home for them; the
+// prop blobs at 0.40 and the lawn discs at 0.30 sit lighter on purpose.
 
 // The hybrid shadow LOD's band, in world units of distance to the closest
-// ACTIVE camera (renderCars). Inside kShadowLodNear a car's contact shadow is
-// the true MASKED baked silhouette — near is where its car-shape reads, and
-// where the carShadow layer's ~8 texels/u visibly cannot carry it (the blob
-// under the player's own car was the tell). Past kShadowLodFar the shadow is
-// the texture raster alone; between, the two crossfade with complementary
-// alphas. 14u keeps the own car (~2u) and adjacent rivals silhouetted while
-// bounding the masked list at [4].
+// ACTIVE camera (renderCars). ONLY kShadowModeHybrid reads it now — the shipped
+// mode is BLOB for every car, and CarShadowTuning says why — but the band is
+// kept because that mode is the A/B arm the trade gets re-argued against.
+//
+// Inside kShadowLodNear a car's contact shadow is the true MASKED baked
+// silhouette; past kShadowLodFar it is the texture raster alone; between, the
+// two crossfade with complementary alphas. 14u keeps the own car (~2u) and
+// adjacent rivals silhouetted while bounding the masked list at [4].
 //
 // Note the two distances answer different questions and both are needed. The
 // band above is against the CLOSEST camera, because that is who the fade has
@@ -764,24 +725,10 @@ constexpr float kCarBlobAO = 0.62f;
 // kMaxMaskedDeckDecals for why a single global rank is starvable.
 constexpr float kShadowLodNear = 10.0f;
 constexpr float kShadowLodFar = 14.0f;
-// FOUR CELLS RIDE THE BLOB, every car — the masked pick budget goes to zero
-// and the rank gate degrades everyone to the texture layer, which crossfades
-// and cannot pop. A LOOK TRADE taken deliberately (2026-08-24, the user's
-// call after the pricing): the four own-car silhouette stamps are ~7 ms of a
-// 4P/1080 frame — the whole decal channel — and five separately-built escapes
-// measured dead (docs/perf/androidtv-4p-plan.md Phase 5), while every car on
-// the blob buys the rung that matters: 853x480 at an effectively locked 60
-// against 960x540 at 30. FOUR and not kScaleEscapeCells' three: a 3-way split
-// already holds ~60 at the floor under Vulkan, so its silhouettes are
-// affordable and stay.
+// FOUR CELLS, and it now gates only the RUBBER layer's MIP REFRESH
+// (TtpRendererFrame's `splitFour`). Both of its other jobs are gone: the level-0
+// upload throttle it also gated was measured a null and dropped, and the car
+// shadow no longer has a cell threshold at all — `CarShadowTuning::mode` ships
+// as kShadowModeBlob at EVERY count, so there is nothing left to cross. The
+// pricing that settled the shadow half is in kShadowModeBlob's comment.
 constexpr uint32_t kMaskedBlobCells = 4;
-
-// The carShadow layer's cap on summed coverage (maskInk.w — also the tap's
-// enable). The raster accumulates with saturating ADD (the rubber's idiom),
-// where the old masked loop composited two overlapped stamps as a mix-of-mixes
-// — at full wheel load, 1-(1-0.710)² ~ 0.916 (0.710 = kCarBlobAO deepened by
-// the 0.08/0.55 load term); 0.918 is the shipped die-cut cap beside that
-// derivation. Capping the tap there keeps a loaded pile-up as dark as the
-// loop would draw it instead of letting addition run it toward black;
-// three-deep pile-ups still read a shade lighter than the loop's ~0.98.
-constexpr float kCarShadowCap = 0.918f;

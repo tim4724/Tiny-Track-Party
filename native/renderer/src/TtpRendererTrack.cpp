@@ -524,8 +524,10 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
             bindSkidLayer(mi);
             if (roadHasCarShadow()) {
                 bindCarShadow(mi, mCarShadowTex[0]);
-                mi->setParameter("maskInk", math::float4{ kCarBlobInk.x,
-                        kCarBlobInk.y, kCarBlobInk.z, 0.0f });
+                mi->setParameter("maskInk", shadowInkParam(false));
+                if (mi->getMaterial()->hasParameter("carShadowRemap")) {
+                    mi->setParameter("carShadowRemap", shadowRemapParam());
+                }
             }
             rcm.setMaterialInstanceAt(ri, 0, mi);
             mRoadChunks.push_back({ mi, sMin, sMax, {}, {} });
@@ -1208,8 +1210,6 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     if (mMonsterAsset) {
         const filament::Aabb mbb = mMonsterAsset->getBoundingBox();
         if (mbb.max.x > mbb.min.x) {
-            mMonsterFootW = mbb.max.x - mbb.min.x;
-            mMonsterFootL = mbb.max.z - mbb.min.z;
             // The rig's own outline, off instance 0 while the whole pool still
             // sits at rest (loadInstancedProp adds them un-posed; the first
             // frame is what takes them out of the scene). One bake serves every
@@ -1218,6 +1218,9 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
             // serves every car: the truck never changes. The layer is
             // engine-lifetime and releaseScene no longer clears its bit, so
             // this runs on the first scene of a session and never again.
+            // (The BLOB path takes no bake at all: a monster keeps the wearing
+            // car's shape at kMonsterShadowScale — the truck's own footprint
+            // fit was ballooning to the whole wheel spread.)
             if (!mMonsterInstances.empty() && mMonsterInstances[0]
                     && !((mMaskLayerBakedBits >> kMaskLayerMonster) & 1u)) {
                 bakeSilhouette(mMonsterInstances[0]->getEntities(),
@@ -1512,72 +1515,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
             if (rc.mi) bindSkidLayer(rc.mi);
         }
 
-        // The CAR-SHADOW layer — the texture path replacing vroad's masked
-        // uniform loop, only when the served blob carries the tap. It rides
-        // the rubber layer's lat span (mSkidLatHalf) so the shader's one uv
-        // serves both taps, which is why it is created here, inside the same
-        // guard. A PAIR, both zeroed now (a fresh texture holds garbage —
-        // the lobby-speckle lesson): the per-frame upload alternates between
-        // them so it never lands on the texture the driver is reading
-        // (uploadCarShadow has the whole argument). W targets 8 texels/u of
-        // arclength — coarse against the rubber's 80 on purpose: the stamp
-        // is a pre-blurred blob and the whole level re-uploads every frame,
-        // so W bounds that event's size (512 KB at the 4096 cap).
-        if (mSkidTex && roadHasCarShadow()) {
-            mCarShadowH = (uint32_t) kCarShadowH;
-            mCarShadowW = (uint32_t) std::min(4096.0f,
-                    std::max(1024.0f, std::round(tb.length * 8.0f)));
-            if (mCarShadowMask.empty()) {
-                mCarShadowMask = superellipseMaskPixels(kCarShadowMaskW, kCarShadowMaskH);
-            }
-            bool ok = true;
-            for (int t = 0; t < 2 && ok; t++) {
-                mCarShadowTex[t] = Texture::Builder()
-                        .width(mCarShadowW).height(mCarShadowH).levels(1)
-                        .format(Texture::InternalFormat::R8)
-                        // UPLOAD-ONLY, like the rubber: no COLOR_ATTACHMENT,
-                        // ever (the A10X RT law — see mSkidPix).
-                        .usage(Texture::Usage::SAMPLEABLE | Texture::Usage::UPLOADABLE)
-                        .build(*mEngine);
-                if (!mCarShadowTex[t]) { ok = false; break; }
-                const size_t bytes = (size_t) mCarShadowW * mCarShadowH;
-                auto* zeros = new uint8_t[bytes]();
-                mCarShadowTex[t]->setImage(*mEngine, 0,
-                        Texture::PixelBufferDescriptor(zeros, bytes,
-                                Texture::Format::R, Texture::Type::UBYTE,
-                                [](void* b, size_t, void*) { delete[] (uint8_t*) b; },
-                                nullptr));
-            }
-            if (ok) {
-                mCarShadowPix.assign((size_t) mCarShadowW * mCarShadowH, 0);
-                mCarShadowDirty.clear();
-                // 1, not 0: the instances below bind tex[0], so the FIRST
-                // upload must land on tex[1] — starting at 0 respecified the
-                // very texture the driver was reading, once per scene, which
-                // is the exact in-flight conflict the pair exists to avoid.
-                mCarShadowPing = 1;
-                mCarShadowUpload = false;
-                const math::float4 ink{ kCarBlobInk.x, kCarBlobInk.y,
-                        kCarBlobInk.z, kCarShadowCap };
-                if (mRoadInst) {
-                    bindCarShadow(mRoadInst, mCarShadowTex[0]);
-                    mRoadInst->setParameter("maskInk", ink);
-                }
-                for (RoadChunk& rc : mRoadChunks) {
-                    if (!rc.mi) continue;
-                    bindCarShadow(rc.mi, mCarShadowTex[0]);
-                    rc.mi->setParameter("maskInk", ink);
-                }
-            } else {
-                // No layer, no tap: maskInk.w stayed 0 at instance creation,
-                // so the deck simply draws no car shadows — the same benign
-                // state a shell with no vroad at all is already in.
-                for (auto*& t : mCarShadowTex) {
-                    if (t) { mEngine->destroy(t); t = nullptr; }
-                }
-                mCarShadowW = mCarShadowH = 0;
-            }
-        }
+        if (mSkidTex) buildCarShadowLayer(tb.length);
     }
 
     // Ambient particles (theme.ambient): the first `count` of buildAmbient's

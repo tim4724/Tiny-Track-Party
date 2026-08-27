@@ -16,6 +16,7 @@ import android.util.Log
  *                                            # halves of TTP_FEAT_DRESSING, which
  *                                            # ttp_display.h explains)
  * adb shell setprop debug.ttp.hz 30          # PIN every-other-vsync (0 = hand it back to the rule)
+ * adb shell setprop debug.ttp.shadow '{"rows":128}'   # car-shadow tuning, PARTIAL json (unset = shipped)
  * adb shell setprop debug.ttp.vk 1           # backend override: 1 Vulkan, -1 GL,
  *                                            # unset = VulkanPolicy (Vulkan when it can)
  * ```
@@ -50,6 +51,9 @@ object PerfDebug {
     private var lastDressKeep = 1.0
     private var lastDressSheets = 1
     private var lastHz = -1
+
+    /** Empty = the shipped tuning, so an unset property is a no-op. */
+    private var lastShadow = ""
 
     /** Read the knobs and apply whatever moved. */
     fun poll(display: DisplayHost) {
@@ -136,6 +140,32 @@ object PerfDebug {
             lastHz = hz
             display.pinVsyncInterval(if (hz == 30) 2 else 0)
             Log.i(TAG, "hz -> ${if (hz == 30) "pinned 30" else "adaptive"}")
+        }
+
+        // THE CAR SHADOW'S TUNING, as the JSON `ttp_display_shadow_tuning` takes
+        // (a PARTIAL object — anything left out keeps its shipped value). This
+        // box is the one the shadow's cost has to be answered on, and the web
+        // tuning page cannot answer for it: the channel is ~3 ms of CPU here and
+        // essentially free on a desktop GPU, so every arm of that question has
+        // to be settable over adb like the rest of this file.
+        //
+        //   adb shell setprop debug.ttp.shadow '{"texelsPerU":8,"rows":128}'
+        //   adb shell setprop debug.ttp.shadow '{"uploadWhole":true}'
+        //
+        // A property is capped at 91 characters, which is plenty for the two or
+        // three keys an arm moves and is why this takes a partial object rather
+        // than a whole tuning.
+        val shadow = getprop("debug.ttp.shadow") ?: ""
+        if (shadow != lastShadow) {
+            lastShadow = shadow
+            // Clearing the property RESTORES the shipped tuning rather than
+            // leaving the last arm latched — same reason the feature mask treats
+            // 0 as "not set": a sweep that dies mid-run must not leave the box
+            // in an arm nobody can see.
+            // The bridge takes UTF-8 bytes, not a String (shells/androidtv/CLAUDE.md).
+            Ttp.ttp_display_shadow_tuning(TtpJson.arg(if (shadow.isEmpty()) "{}" else shadow))
+            PerfMonitor.reset()
+            Log.i(TAG, "shadow -> ${if (shadow.isEmpty()) "shipped" else shadow}")
         }
     }
 

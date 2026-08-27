@@ -207,8 +207,9 @@ material {
         // second-order and sub-texel against the penumbra. The old shimmer
         // was an edge phenomenon and the edge is gone.
         //
-        // rgb = the blob ink, in linear (kCarBlobInk — one colour for every
-        // car shadow). w = the ENABLE and the CAP on summed coverage: 0 while
+        // rgb = the blob ink, in linear (CarShadowTuning::ink — one colour
+        // for every car shadow). w = the ENABLE and the CAP on summed
+        // coverage: 0 while
         // no layer exists (no track, torn down, or the ablation arm), else
         // the darkest two stacked shadows may go (the mix-of-mixes the old
         // loop produced for two overlapped stamps).
@@ -253,6 +254,12 @@ material {
         // silhouette at LOD 0 with no mips too, so minification behaves as
         // it did.
         { type : sampler2d, name : carShadow },
+        // The carShadow tap's TAIL-CUT REMAP: smoothstep(x, y, coverage), zw
+        // unused. A UNIFORM and not a constant because it is the die-cut
+        // look's sharpest knob — x is where the smear's tail is cut and the
+        // band to y is the anti-flicker slack a razor edge cannot have (the
+        // raster moves sub-texel every frame). /shadow-lab.html drags it.
+        { type : float4, name : carShadowRemap },
 
         // — the paint channel: the deck's OWN surface (repairs, boost pads) —
         // Identical entry layout to the decal arrays above and painted by the
@@ -548,13 +555,69 @@ fragment {
         // pulse into a visible wave around the blob's hard edge.
         float csw = materialParams.maskInk.w;
         if (csw > 0.0) {
+            // SMOOTH the tap (carShadowRemap.w, ships on): bilinear
+            // interpolation is C0 — its GRADIENT kinks at every texel
+            // boundary, and over the stamp's smooth ramp those kinks print as
+            // Mach bands on the texel grid, the density-dependent half of the
+            // "diagonal bands through the shadow" report (the uv0 half is the
+            // remap band's job). The cure is a bicubic B-SPLINE through four
+            // bilinear fetches (Sigg-Hadwiger): C2 across texel boundaries,
+            // and its ~one-texel softening is welcome on a shadow.
+            //
+            // THE ONE-TAP QUINTIC-WARP TRICK IS REFUTED HERE — tried first,
+            // and it printed WORSE bands than raw bilinear. Warping the
+            // fractional coordinate flattens the interpolation at texel
+            // centres and steepens it between them, which is right for texel
+            // art and exactly wrong for a smooth field: a ramp spanning N
+            // texels terraces into N visible micro-bands. Do not bring it
+            // back for any gradient-content layer.
+            // GATED on a cheap probe tap: the layer is a few thousand inked
+            // texels in megatexels of empty deck, and ungated the B-spline's
+            // four fetches ran on every road fragment — +2.1 ms of the 4P
+            // frame on the Android box. Bilinear-zero fragments take the
+            // probe's answer; only the stamp neighbourhoods pay the filter,
+            // and the branch is coherent everywhere but the stamps' edges.
+            // Where bilinear reads 0 the B-spline could read at most the
+            // outer texel ring's faint tail, which sits under the remap
+            // band's clip — the gate is visually lossless with the band on.
             float cs = texture(materialParams_carShadow, suv).r;
-            // VARIANT C' AUDITION: cut the smear's tail but keep ~1.5
-            // texels of transition — a razor edge draws the per-frame
-            // raster's sub-texel movement as flicker (the silhouette bake's
-            // penumbra note), so the band is the anti-flicker slack.
-            base = mix(base, materialParams.maskInk.rgb,
-                    min(cs, csw) * smoothstep(0.06, 0.27, cs));
+            // textureLod, NOT texture(): the `cs` gate makes this branch
+            // NON-UNIFORM, where an implicit-derivative sample is UB — the
+            // whole renderer's rule (CLAUDE.md trap #5), and the exact
+            // mistake that made this same shadow blink on ANGLE-Metal once.
+            // The layer is single-level, so LOD 0 is what an implicit sample
+            // would pick anyway.
+            if (materialParams.carShadowRemap.w > 0.5 && cs > 0.004) {
+                highp vec2 ts = vec2(textureSize(materialParams_carShadow, 0));
+                highp vec2 p = suv * ts - 0.5;
+                highp vec2 i = floor(p);
+                highp vec2 f = p - i;
+                highp vec2 f2 = f * f;
+                highp vec2 f3 = f2 * f;
+                highp vec2 w0 = (1.0 - 3.0 * f + 3.0 * f2 - f3) / 6.0;
+                highp vec2 w1 = (4.0 - 6.0 * f2 + 3.0 * f3) / 6.0;
+                highp vec2 w3 = f3 / 6.0;
+                highp vec2 g0 = w0 + w1;
+                highp vec2 g1 = 1.0 - g0;
+                highp vec2 c0 = (i + 0.5 - 1.0 + w1 / g0) / ts;
+                highp vec2 c1 = (i + 0.5 + 1.0 + w3 / g1) / ts;
+                cs = g0.x * (g0.y * textureLod(materialParams_carShadow, c0, 0.0).r
+                           + g1.y * textureLod(materialParams_carShadow, vec2(c0.x, c1.y), 0.0).r)
+                   + g1.x * (g0.y * textureLod(materialParams_carShadow, vec2(c1.x, c0.y), 0.0).r
+                           + g1.y * textureLod(materialParams_carShadow, c1, 0.0).r);
+            }
+            // The smoothstep is the shipped path: a WIDE band (0.2..0.8 of
+            // peak) over a wide stored field — CarShadowTuning's remap block
+            // holds the whole argument (tail clipped where the uv0 kinks
+            // band, slope far from the die-cut's facet cliff). .z = 1 routes
+            // the tap through raw: the lab's cut-off arm, and where an empty
+            // band lands (shadowRemapParam forces it there — a degenerate
+            // smoothstep is UB).
+            float a = materialParams.carShadowRemap.z > 0.5
+                    ? cs
+                    : cs * smoothstep(materialParams.carShadowRemap.x,
+                            materialParams.carShadowRemap.y, cs);
+            base = mix(base, materialParams.maskInk.rgb, min(a, csw));
         }
         if (materialParams.profCount > 0) {
             highp vec4 pb = materialParams.profBounds;
@@ -564,8 +627,10 @@ fragment {
         }
         // The car shadows, OVER the profiles — a shadow stays visible through
         // an aura it crosses, and a mix replaces, so the order is structural.
-        // ONE tap for the whole field, in UNIFORM control flow (the guard is
-        // a uniform), so texture() is sound here like the rubber tap above.
+        // The PROBE tap above sits in uniform control flow (its guard is a
+        // uniform), so its texture() is sound like the rubber tap's; the
+        // B-spline fetches inside the cs gate are textureLod for the
+        // non-uniform-flow reason on the block itself.
         // min() against maskInk.w caps two stacked shadows at the depth the
         // old loop's mix-of-mixes reached instead of letting saturating-add
         // run darker.

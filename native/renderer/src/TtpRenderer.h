@@ -29,12 +29,190 @@
 // The GLB mesh reader behind the merged draw groups — header-only for the same
 // no-link-edge reason as theme.h above; ctests execute it on every leg.
 #include "ttp/glb_mesh.h"
+#include "ttp/car_footprint.h"
+
+
+// The car contact shadow's live knobs, and the ONE place their defaults are
+// written down. `ttp_display_shadow_tuning` moves them at runtime for
+// /shadow-lab.html; every default here is the SHIPPED look, and the ABI hands
+// this struct's defaults out so a tuning page never re-types one.
+//
+// It exists because what a contact shadow should look like at the carShadow
+// layer's ~8 texels/u of arclength is a question that has to be judged on a
+// television, and a rebuild-per-guess loop is what stopped it being judged.
+struct CarShadowTuning {
+    // WHICH representation draws. The shipped answer is BLOB for every car at
+    // every cell count — see kShadowModeBlob.
+    int mode = 0;
+    // Where the blob's SHAPE comes from — see kShadowShape* below. The four
+    // roster cars have the SAME bounding box, so this is the only knob that can
+    // tell them apart, and it is also the knob that decides what the CPU raster
+    // costs: two of the three answers are a MASK the raster samples sixteen
+    // times a texel, and the third is an expression it evaluates once.
+    //
+    // THE FITTED ROUNDED RECT SHIPS — four corners for every car, the user's
+    // call after seeing the alternatives on the glass. The fitted k-gon
+    // (kShadowShapePoly, the hull-of-the-outline arm) carried more silhouette
+    // and read WORSE where it mattered: the roster's one distinctive
+    // footprint, Rumble, is an open-wheeler — a narrow rear body with a GAP
+    // to wheels that poke past it — and a lobeless closed-form shape can only
+    // render that as lumps. The rect covers wheels and body in one clean
+    // four-cornered stamp, is per-car through its fit (fill across, fill
+    // along, corner radius — Rumble's comes out visibly rounder), and is the
+    // cheap arm: half the channel's CPU on the Android box against the
+    // mask's sixteen reads. The k-gon stays a lab arm beside the masks.
+    int shape = 2;
+    // How many edges the k-gon ARM keeps. The stamp is ~30x20 layer texels
+    // and the soft band eats another texel of edge, so past ~8 the extra
+    // edges buy nothing a television can show.
+    int polyEdges = 7;
+    // The rounded rect's corner radius as a SCALE on the one fitted to each
+    // model: 1 is the fit, 0 a hard rectangle, higher rounder. A scale and not
+    // an absolute so the slider always does something AND the cars stay
+    // different from each other. Analytic shape only.
+    float corner = 1.0f;
+    float ao = 0.62f;          // the stamp's peak opacity
+    // Summed-coverage ceiling, the shader's maskInk.w (which is also the
+    // tap's enable). The raster accumulates with saturating ADD, where the
+    // old masked loop composited two overlapped stamps as a mix-of-mixes —
+    // at full wheel load 1-(1-0.710)² ~ 0.916 (0.710 = ao deepened by the
+    // loadGain term) — so the cap keeps a pile-up as dark as the loop drew
+    // it instead of letting addition run it toward black.
+    float cap = 0.918f;
+    float loadGain = 0.08f / 0.55f;  // deepening at full body pitch
+    uint32_t ink = 0x171513u;  // the shadow's colour, sRGB
+    float overscan = 1.45f;    // footprint's share of the stamp quad
+    float grow = 0.0f;         // dilate the outline, in footprint half-widths
+    // THE STORED FIELD'S WIDTH — deliberately wider than the penumbra the
+    // player sees, because the remap below carves the visible edge out of its
+    // middle and a wide smooth field is what keeps that edge sub-texel under
+    // the raster's per-frame re-landing. The die-cut era's sweep stands as
+    // the evidence: on identical gated frames 0.030 cut edge flicker 25%,
+    // 0.040 43%, 0.060 61% — wider is calmer, and the old reason to stop
+    // (the outline mask's wheel lobes blurring away) left with the rounded
+    // rect, which has no lobes to lose.
+    float blur = 0.07f;        // the field's ramp, as a fraction of mask width
+    // The tail-cut remap, AS FRACTIONS OF THE PEAK ALPHA — `applyShadowInk`
+    // multiplies them by `ao` on the way to the uniform, so dragging `ao` down
+    // cannot slide the shadow under its own threshold. An empty band
+    // (hi <= lo) means no remap anywhere — `shadowRemapParam` and the
+    // raster's cut both key on it, and it is the lab's "cut off" arm.
+    //
+    // **A WIDE MEDIUM BAND OVER A WIDE FIELD IS THE LOOK**, and both ends are
+    // load-bearing against a defect the band's WIDTH controls. The road mesh
+    // interpolates uv0 linearly per triangle, so the tap's read coordinate has
+    // a GRADIENT JUMP at every triangle edge; the stored field's flat core
+    // reads flat through any such kink, but wherever the field has gradient
+    // the kink prints as a Mach-band crease — under a yawed car, "diagonal
+    // bands through the shadow" (user-reported; the layer READBACK is clean,
+    // which is what pins the read side, and neither density nor stampProject
+    // moves it). So the visible skirt has to be narrow relative to the stamp:
+    // `remapLo` clips the wide faint tail where the creases have the most
+    // area, `remapHi` saturating at mid-field pulls the visible transition
+    // tight. The band stays WIDE — the die-cut's narrow band (0.39..0.61) is
+    // the other cliff, a slope steep enough to facet on the bilinear texel
+    // grid and to amplify the raster's per-frame sub-texel re-landing into
+    // edge boil. 0.2..0.8 is the middle: outline defined, tail clipped,
+    // slope ~1.7 against the die-cut's ~4.5.
+    float remapLo = 0.2f;
+    float remapHi = 0.8f;
+    // WHERE the band is applied: the shader (interpolate, then cut — the
+    // signed-distance trick, and what ships) or the raster (cut, then store
+    // the finished alpha — the lab arm that measured 44% MORE edge flicker,
+    // kept so nobody re-derives it).
+    bool remapInShader = true;
+    // Bicubic B-spline tap — four bilinear fetches, C2 across texel
+    // boundaries (vroad.mat says why, and why the one-tap quintic warp is
+    // refuted; rides carShadowRemap.w). This is the density-DEPENDENT half
+    // of the diagonal-bands report retired at 16/256 instead of paying for
+    // 32/512's raster and upload.
+    bool smoothTap = true;
+    // The LAYER's own density, and THE FLICKER LIVES HERE. Changing either
+    // RE-ALLOCATES the texture pair and moves the size of the whole-level
+    // upload every frame pays, so these are the two knobs that are not free to
+    // drag.
+    //
+    // **8 / 128 PUT A CAR'S WHOLE STAMP ON 15 BY 10 TEXELS AND IT BOILED.** The
+    // raster re-lands the stamp at a new sub-texel offset every frame, so at
+    // that grid its edge cannot hold still — measured against a shadow-off
+    // baseline over identical gated sim frames, it carried TWICE the temporal
+    // energy the masked silhouette put in the same band, which is what
+    // "flickering a lot" was. 16 / 256 doubles the grid each way (30 by 20
+    // texels), cuts that excess by 53%, and lands BELOW the silhouette it
+    // replaced. It costs 0.38 -> 1.53 MB per frame of upload, still ONE event;
+    // GPU time on the web reference did not move (2.02 -> 1.80 ms p50 at four
+    // players, three interleaved reps).
+    //
+    // Past this it saturates: the width clamps against the driver's ceiling, so
+    // 24/384 measured 56% for twice the bytes again. Do not spend there.
+    // The remaining flicker is EDGE SHARPNESS, and that is `remapLo`/`blur` —
+    // a LOOK knob, deliberately left where the die-cut retune put it.
+    float texelsPerU = 16.0f;  // along arclength
+    int rows = 256;            // across the deck's full lat span
+    // WHICH SURFACE the stamp's probes measure against, and it decides whether
+    // a cornering car's shadow RIPPLES.
+    //
+    // `deckFoot` answers the ANALYTIC deck — the true surface, and the right
+    // answer to a different question. The shader does not read the analytic
+    // deck: it reads the layer through uv0, which the road mesh interpolates
+    // LINEARLY PER TRIANGLE and whose gradient therefore JUMPS at every
+    // triangle diagonal. Writing at one and reading at the other leaves a
+    // displacement that changes per triangle, and because the jump is in the
+    // GRADIENT it prints as a crease line — which no amount of `blur` softens
+    // (it is a distortion of where the texture is read, not detail inside it)
+    // and which survives dropping the mask for the analytic shape. Both were
+    // tried; both still rippled.
+    //
+    // `project` reproduces the rasterizer's uv0 stage by stage — same ring
+    // polyline, same ring-plane blend, same per-triangle barycentric
+    // interpolation — so the write lands exactly where the read looks. Its own
+    // comment names this artifact: "the difference oscillates under a driving
+    // car at knot-crossing rate". It costs a windowed ring scan per probe
+    // against deckFoot's Gauss-Newton walk — six probes per car per frame, on a
+    // channel that is CPU-bound on the Android box.
+    //
+    // **DEFAULTED OFF, because it was never shown to buy anything.** It went in
+    // as the fix for a cornering ripple that turned out to be the raster
+    // double-writing its own shared edges (mStampCov). The decal readback puts
+    // the two probes' stamps at identical (s, lat) with the cull window ~1.5%
+    // apart, so what this changes is real but small, and nothing has measured
+    // it either on the glass or on the box. It stays a knob rather than a
+    // default: paying CPU on the one platform that cannot spare it, for an
+    // unmeasured benefit, is the trade this tree does not take.
+    bool stampProject = false;
+    // Send the WHOLE level every frame instead of the stamps' own rects. The
+    // A/B arm for the upload, kept because the shipped answer was measured and
+    // not reasoned: see uploadCarShadow.
+    bool uploadWhole = false;
+};
+
+// `mode` values, shared with the ABI and the tuning page.
+//
+// BLOB IS WHAT SHIPS, for every car at every cell count. The masked
+// silhouette's per-fragment loop is ~7 ms of a 4-player 1080 frame on the
+// Android reference box — the whole decal channel — and five separately-built
+// escapes measured dead (docs/perf/androidtv-4p-plan.md Phase 5), while the
+// blob crossfades and so cannot pop. The other two exist for the A/B on
+// /shadow-lab.html and nothing on the shipping path selects them.
+constexpr int kShadowModeBlob = 0;        // every car on the texture layer
+constexpr int kShadowModeSilhouette = 1;  // every car on the masked loop
+constexpr int kShadowModeHybrid = 2;      // the old distance LOD between them
+
+// `shape` values. The first two are MASKS — the raster samples a 64x128 image
+// four times per texel, which is sixteen scattered reads and a dozen lerps. The
+// last two are EXPRESSIONS evaluated once, and on a weak in-order core that is
+// the difference the whole channel's CPU cost turns on (see rasterCarShadowTri).
+constexpr int kShadowShapeCar = 0;        // the model's own outline
+constexpr int kShadowShapeSuperellipse = 1;  // the generic oval, one for all
+constexpr int kShadowShapeRounded = 2;    // a rounded rect, in closed form
+constexpr int kShadowShapePoly = 3;       // a fitted convex k-gon, in closed form
 
 #include <backend/DriverEnums.h>
 #include <math/mat4.h>
 #include <math/vec3.h>
 #include <utils/Entity.h>
 
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <functional>
@@ -1211,21 +1389,132 @@ private:
     std::vector<uint8_t> mCarShadowPix;    // CPU raster truth, W×H, row 0 = -latHalf
     uint32_t mCarShadowW = 0, mCarShadowH = 0;
     uint32_t mCarShadowPing = 0;           // which of the pair takes the NEXT upload
-    std::vector<SkidRect> mCarShadowDirty; // last raster's rects (unwrapped x) — the erase list
+    std::vector<SkidRect> mCarShadowDirty; // this frame's stamp rects (unwrapped x)
+    // THE TWO FRAMES BEFORE THIS ONE'S, and they exist because of the ping-pong.
+    // A texture takes an upload every OTHER frame, so the one about to be
+    // written was last correct two frames ago — and what changed since is the
+    // regions this frame stamped, the regions last frame stamped (which this
+    // frame's erase zeroed), and the frame before that's. Uploading only the
+    // current rects leaves each texture holding the other's stale stamps, which
+    // reads on screen as the shadow strobing between two positions.
+    std::vector<SkidRect> mCarShadowWas[2];
+    uint32_t mCarShadowWasAt = 0;
     bool mCarShadowUpload = false;         // the CPU buffer changed since the last upload
-    // The silhouette SOURCE the raster samples: the CPU superellipse
-    // (superellipseMaskPixels — the decalMask array's generic layer, i.e. the
-    // shipped fallback look), for EVERY car. At the layer's texel density the
-    // baked per-car silhouettes are indistinguishable from it, and evaluating
-    // it on the CPU retires the per-scene readback the bakes would need.
-    // Engine-lifetime: the shape never changes.
+    // The silhouette SOURCE the raster samples, PER MODEL — the car's own
+    // top-down outline (ttp/car_footprint.h), rasterized on the CPU from the
+    // same GLB bytes the merged draw groups already decode.
+    //
+    // It is a fact about the KIT, not about this race, so it is keyed by the
+    // model the way the GPU silhouette layers are and survives releaseScene:
+    // the field is eight cars over four models, and a re-dress into a model
+    // someone else drives costs nothing.
+    //
+    // **THE AABB CANNOT DO THIS JOB.** All four roster cars measure x ±0.26 to
+    // ±0.28 by z ±0.438, so a shape sized off the bounding box is the SAME
+    // shape for every one of them — which is exactly what the shared
+    // superellipse was. The outline inside the box is the only thing that
+    // differs, and it is what this holds.
+    std::unordered_map<uint64_t, std::vector<float>> mCarShadowMasks;
+    std::vector<uint64_t> mCarShadowMaskOfSlot;  // slot -> model key (0 = generic)
+    // The model's triangles, FLATTENED TO THE GROUND IN ITS REST POSE, kept so
+    // a re-bake never has to look at the asset again.
+    //
+    // THIS IS NOT AN OPTIMISATION, IT IS THE CORRECTNESS FIX. A posed car's
+    // world transform puts it out on the track, hundreds of units from the mask
+    // frame, so re-deriving an outline from the live asset answers an EMPTY
+    // mask and every car silently drops to the superellipse. It is the same
+    // law `mBodyRest` exists for one level up: a POSE IS NOT A FACT ABOUT THE
+    // MODEL, and anything that wants one has to have taken it while the asset
+    // was still at rest.
+    struct CarOutline {
+        std::vector<float> xz;      // 2 per vertex, rest-pose model space
+        std::vector<uint32_t> idx;  // triangles
+        float halfX = 0, halfZ = 0; // the AABB the stamp is sized to
+        // The rounded rect fitted to this model's mask, so the ANALYTIC shape
+        // is per-car too. Re-derived whenever the mask is.
+        ttp::rt::RoundedFit fit;
+        // The convex lobes fitted to the same capture (kShadowShapePoly): one
+        // hull, or two split at the body's waist so the union keeps the pinch
+        // (car_footprint.h says why lobeless, not convex, is the property).
+        // poly[0].count == 0 means the fit failed and the rect stands in.
+        std::array<ttp::rt::PolyFit, 2> poly{};
+    };
+    std::unordered_map<uint64_t, CarOutline> mCarOutlines;
+    // The fallback, and what kShadowShapeSuperellipse selects: one superellipse
+    // for everyone. Engine-lifetime while the tuning is untouched.
     std::vector<float> mCarShadowMask;
+    // ONE STAMP'S COVERAGE, resolved before it touches the layer.
+    //
+    // **THE TRIANGLES MUST NOT ACCUMULATE INTO EACH OTHER.** A stamp is four
+    // triangles with three shared internal edges, and the two triangles either
+    // side of a shared edge evaluate it from DIFFERENT vertex pairs — which are
+    // exact negations only in exact arithmetic. In floating point both can
+    // claim the same texel, write it twice, and double its alpha. That is a
+    // darker band along every diagonal, written into the layer, which is why no
+    // amount of blur, no change of shape and no change of probe surface touched
+    // it: the extra ink is really there.
+    //
+    // So the triangles resolve by MAX into this, and the finished stamp is
+    // added to the layer once. Two different CARS still add — that is a real
+    // pile-up and the shader's cap bounds it — but a stamp can no longer
+    // overlap itself.
+    std::vector<float> mStampCov;
+    int mStampX0 = 0, mStampY0 = 0, mStampW = 0, mStampH = 0;
+    // The analytic shape drawn as pixels, for the tuning page's readback ONLY
+    // (shadowMaskView). Nothing on a frame path reads it.
+    std::vector<float> mAnalyticPreview;
     static constexpr int kCarShadowMaskW = 64, kCarShadowMaskH = 128;
-    // 128 rows over the rubber layer's ±skidLatHalf (~20 texels/u across lat);
-    // width targets 8 texels/u of arclength, clamped — coarse next to the
-    // rubber's 80/u ON PURPOSE: the stamp is a pre-blurred blob, and the
-    // whole texture must be cheap to rebuild and upload every frame.
-    static constexpr int kCarShadowH = 128;
+    // Capture one model's outline out of its GLB bytes + the asset's node
+    // transforms, then rasterize it. **THE ASSET MUST BE AT ITS PARSE POSE** —
+    // call this only from the load path, never once a frame has posed the car
+    // (see mCarOutlines). Answers false when the model could not be read, which
+    // leaves that car on the superellipse rather than on a blank stamp.
+    bool bakeCarFootprint(uint64_t key, const std::vector<uint8_t>& glb,
+            filament::gltfio::FilamentAsset* asset,
+            const filament::math::float3& bbMin, const filament::math::float3& bbMax);
+    // Rasterize one captured outline at the current tuning. Pure — no asset, no
+    // scene — which is what makes a tuning drag safe at any point in a race.
+    bool rasterCarOutline(uint64_t key);
+    // THIS CAR's shape, whichever kind the tuning asked for — the mask the
+    // raster samples, or the rounded rect fitted to it. The stamp is the only
+    // place a per-model shape reaches the picture, so it travels with the call
+    // rather than being read off a member the raster would have to pick from.
+    //
+    // **THE FIT IS WHY THE CHEAP SHAPE IS STILL PER-CAR.** The raster evaluates
+    // one expression whatever is in here, so a rounded rect fitted to this model
+    // costs exactly what a generic one costs — including the monster truck's,
+    // which owns an outline like any other model.
+    struct StampShape {
+        const std::vector<float>* mask = nullptr;   // null for the analytic shapes
+        ttp::rt::RoundedFit fit;
+        const ttp::rt::PolyFit* poly = nullptr;     // set only by kShadowShapePoly
+        const ttp::rt::PolyFit* poly2 = nullptr;    // the waist's second lobe, if any
+    };
+    // Which shape slot `i` stamps — its model's outline or fit, or the generic.
+    StampShape carShadowShapeFor(size_t slot) const;
+    // A car wearing the MONSTER keeps its own shape; the stamp scales by
+    // these two factors instead. Deriving the size from the truck's AABB (and
+    // its own fitted outline) read too big; a single 1.2 both ways read too
+    // narrow at the wheels AND too long — because the truck's MEASURED
+    // footprint (GLB node-transformed AABBs) is only ~1.14x the cars' width
+    // and exactly their length. Width carries margin on top of that ratio
+    // because the fit's corner rounding and the soft band's half-alpha edge
+    // both sit inside the geometric box, right where the corner wheels are.
+    static constexpr float kMonsterShadowScaleW = 1.35f;
+    static constexpr float kMonsterShadowScaleL = 1.05f;
+    // The one evaluator both the raster and the readback preview go through,
+    // so the tuning page can never show a shape the deck is not drawing.
+    float analyticCoverage(const StampShape& s, float u, float v, float soft) const;
+    // The polygon's corner rounding, in the footprint's q units, scaled by the
+    // tuning's `corner` knob (the rect scales its FITTED radius instead).
+    // 0.28, up from a first cut at 0.15 the user read as "a little sharp" —
+    // the rect era's FITTED radii sat around 0.42, so the eye is calibrated
+    // to rounder corners than a hull's vertices give.
+    static constexpr float kPolyCornerBase = 0.28f;
+    // Re-derive every mask from the current tuning. Cheap (four models, a few
+    // hundred thousand supersampled pixels each) and only ever called from the
+    // tuning ABI, never from a frame.
+    void rebakeCarShadowMasks();
     // Independent capability probes on the served vroad — the current blob
     // carries both (the hybrid's near/far halves); see TtpRendererDecals.cpp.
     bool roadHasMaskLoop() const;   // hasParameter("maskRect")
@@ -1236,17 +1525,48 @@ private:
     // now kept) rasterized as TWO warped quads with the silhouette sampled
     // bilinearly across them — the bending of track space lives INSIDE the
     // stamp, second-order per slice, instead of smearing it axis-aligned.
-    void rasterCarShadowStamp(const filament::math::float2* sl, float carS, float alpha);
+    void rasterCarShadowStamp(const filament::math::float2* sl, float carS, float alpha,
+            const StampShape& shape);
     void rasterCarShadowTri(const filament::math::float2* p,
-            const filament::math::float2* uv, float alpha);
+            const filament::math::float2* uv, float alpha,
+            const StampShape& shape);
     void uploadCarShadow();         // the one setImage + the ping-pong rebind
+    // Re-allocate the layer pair at the tuning's current density. Separate from
+    // the track build because the two density knobs are live on /shadow-lab.
+    void buildCarShadowLayer(float trackLength);
+    // The shadow's ink, cap and tail-cut remap onto every road instance.
+    void applyShadowInk();
+    // The tail cut as the shader wants it: the band scaled from fractions of
+    // the peak alpha into absolute alpha, and .z saying whether the layer
+    // already holds the finished value. One place, because three sites push it.
+    filament::math::float4 shadowRemapParam() const {
+        // An empty band is NO CUT (.z = 1 routes the shader to the raw tap),
+        // never a degenerate smoothstep — its edge0 == edge1 is UB in GLSL.
+        const bool cut = mShadowTune.remapInShader
+                && mShadowTune.remapHi > mShadowTune.remapLo;
+        return { mShadowTune.remapLo * mShadowTune.ao,
+                 mShadowTune.remapHi * mShadowTune.ao,
+                 cut ? 0.0f : 1.0f,
+                 mShadowTune.smoothTap ? 1.0f : 0.0f };
+    }
     struct WheelTrail {
         filament::math::float2 last{}, dir{}, edgeL{}, edgeR{}; // all (s, lat)
         bool hasEdge = false, seeded = false;
         int projHint = -1;     // project()'s warm start
     };
     std::vector<WheelTrail> mWheelTrails; // carCount × 4 (fl fr bl br)
-    float mMonsterFootW = 0, mMonsterFootL = 0; // monster asset footprint (blob swap)
+    // The contact shadow's live knobs; TtpRendererImpl.h holds every default.
+    CarShadowTuning mShadowTune;
+    // mShadowTune.ink decoded once. The maskInk write happens per CHUNK per
+    // FRAME, and an sRGB decode is three pow() calls — not a thing to do on
+    // that path for a value that changes when a person drags a colour.
+    filament::math::float3 mShadowInkLinear{ 0.00967f, 0.00787f, 0.00615f };
+    // The maskInk parameter as the shader wants it: the tuning's ink, and the
+    // tap's enable+cap in w (0 is what actually disables the tap).
+    filament::math::float4 shadowInkParam(bool enabled) const {
+        return { mShadowInkLinear.x, mShadowInkLinear.y, mShadowInkLinear.z,
+                 enabled ? mShadowTune.cap : 0.0f };
+    }
     Mesh mGantry; // procedural start/finish gantry (FinishGate.js port)
     // The sea ring + its wet-sand glaze (theme.water), fitted to the track's
     // own shoreline.
@@ -1822,6 +2142,41 @@ public:
         mForceMaskLayer = layer < 0 ? -1
                 : (layer >= kMaskLayers ? kMaskLayers - 1 : layer);
     }
+
+    // THE CONTACT SHADOW'S LIVE KNOBS — /shadow-lab.html's whole surface.
+    // Applying a tuning re-bakes the masks and, if a density moved, the layer
+    // pair; everything else lands on the next frame for free.
+    const CarShadowTuning& shadowTuning() const { return mShadowTune; }
+    void setShadowTuning(const CarShadowTuning& t);
+
+    // The mask one car slot actually stamps, for the tuning page's readback.
+    // `generic` means the outline bake did not land and the superellipse is
+    // standing in — a state no screenshot separates from a rounded car.
+    struct ShadowMaskView {
+        const float* px = nullptr;
+        int w = 0, h = 0;
+        uint64_t model = 0;
+        bool generic = true;
+    };
+    ShadowMaskView shadowMaskView(size_t slot);
+
+    // A window of the LAYER the raster wrote — the one place this channel can
+    // be inspected without a camera and a shader in the way. `out` is filled
+    // row-major, w*h bytes; answers false when there is no layer.
+    bool shadowLayerWindow(int x, int y, int w, int h, std::vector<uint8_t>& out) const;
+
+    // What the density knobs actually BOUGHT. Derived, never set: the width
+    // clamps against the driver's texture ceiling, so asking for more texels/u
+    // on a long lap silently gets fewer — and `stampTexels*` is the number the
+    // whole flicker question turns on, because a stamp re-landed at a new
+    // sub-texel offset every frame can only hold an edge still if there are
+    // enough texels under it.
+    struct ShadowLayerInfo {
+        int w = 0, h = 0;
+        float texelsPerU = 0, texelsPerLat = 0;
+        float stampTexelsS = 0, stampTexelsLat = 0;
+    };
+    ShadowLayerInfo shadowLayerInfo() const;
 
     // FEATURE ABLATION — the per-feature cost map's only instrument.
     //

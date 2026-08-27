@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="app-version" content="__APP_VERSION__">
+<title>Shadow lab — Tiny Track Party</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/shared/theme.css?v=__APP_V__">
+<link rel="stylesheet" href="/shadow-lab.css?v=__APP_V__">
+</head>
+<body>
+
+<main id="lab">
+  <section id="stage">
+    <div id="stage-frame"><!-- the display iframe is built in JS --></div>
+    <p id="stage-hint">
+      <b>WASD</b> / arrows drive &middot; <b>S</b> brake &middot; <b>Enter</b> race &middot; <b>R</b> reset
+      &nbsp;|&nbsp; <b>B</b> blob&hairsp;/&hairsp;silhouette &middot; <b>H</b> hide cars &middot; <b>K</b> wipe rubber
+    </p>
+  </section>
+
+  <aside id="rail">
+    <header id="rail-head">
+      <span class="wordmark">Shadow lab</span>
+      <span id="status" class="pill">starting…</span>
+    </header>
+    <div id="controls"><!-- built in JS from the engine's own defaults --></div>
+  </aside>
+</main>
+
+<script src="/shared/protocol.js?v=__APP_V__"></script>
+<script type="module" src="/shadow-lab.js?v=__APP_V__"></script>
+</body>
+</html>

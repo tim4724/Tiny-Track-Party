@@ -200,6 +200,23 @@ as a season of racing. Two siblings were built and removed by decision (git
 history has both): a pre-rubbered racing groove, and left/right turn chevrons —
 parked for a later revisit of how sharp turns announce themselves.
 
+## Shapes the renderer draws with
+
+`ttp/car_footprint.h` makes the car contact shadow's mask: the generic
+superellipse, and a per-model FOOTPRINT rasterized from the car's own triangles.
+Header-only for the `kitfield.h` reason above — the renderer consumes it and may
+not link this library — and the `carfootprint` ctest executes it on every leg,
+which matters more here than usual: the shape is something a person judges by
+eye on a television, so the parts that are NOT taste (the frame, the
+orientation, that two outlines in one bounding box come out different, that a
+failed bake answers empty rather than blank) are the parts a check has to hold.
+
+**It takes geometry, not an asset.** The caller applies the node transforms and
+hands over flat (x, z) triangles, because a scene hierarchy is the renderer's
+to know and the rest is arithmetic. `native/renderer/CLAUDE.md` carries the two
+traps that live on the renderer's side of that line — the v-axis sign, and that
+the capture only means anything at the asset's rest pose.
+
 ## The asset gallery and the model bench
 
 `/gallery-assets.html` holds the whole kit in one scene, built from data rather

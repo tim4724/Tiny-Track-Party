@@ -401,8 +401,9 @@ inline constexpr int kScaleEscapeCells = 3;
 // MEASURED, and the measurement is why the escape stopped being the answer
 // (docs/perf/androidtv-4p-plan.md, Phases 4-5): on the reference box a 4-way
 // split at the floor delivers 52 fps missing 7 skips/s, while 640x360 holds a
-// LOCKED 60 with zero skips — and with the four-cell masked-shadow trade
-// (TtpRendererFrame's kMaskedBlobCells) 853x480 does too. The old single
+// LOCKED 60 with zero skips — and with the masked-shadow trade (every car on
+// the blob; renderer/src/TtpRenderer.h's CarShadowTuning, taken at four cells
+// first and now everywhere) 853x480 does too. The old single
 // half-rate escape also proved TERMINAL: 540@30's p95 can never pass the climb
 // gate back to 540@60, so a box that fell in stayed for the whole race. The
 // climb OUT of the half-rate entry now lands on a strictly cheaper point

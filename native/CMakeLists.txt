@@ -917,6 +917,14 @@ target_link_libraries(glbmesh_check PRIVATE libttp_runtime ttp_strict_fp ttp_war
 ttp_emscripten_cli(glbmesh_check)
 add_test(NAME glbmesh COMMAND glbmesh_check)
 
+# The car contact shadow's SHAPE (ttp/car_footprint.h) — header-inline for the
+# same reason, and the picture depends on it: the four roster cars share a
+# bounding box, so the footprint is the only thing that tells them apart.
+add_executable(carfootprint_check runtimetest/carfootprint_check.cc)
+target_link_libraries(carfootprint_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(carfootprint_check)
+add_test(NAME carfootprint COMMAND carfootprint_check)
+
 # ---- Behavioural: the asset gallery's world ---------------------------------
 # NOT conformance evidence and no corpus — showcase_theme stages a scene that
 # has never existed in play, so there is no oracle to record against. What this

@@ -325,6 +325,20 @@ live race on the launch's own field with 1, 2 or 4 autopiloted player seats,
 printing `TtpPerf <json>` once a second. The line is the readout's own bytes and
 the two TV shells log the same one, so a single parser folds all three.
 
+**`/shadow-lab.html` is the car contact shadow's tuning bench** — a live race in
+an iframe with the shadow's knobs beside it, over `ttp_display_shadow_tuning`.
+It is a PAGE and not fields on the wrench panel because `shared/debugPanel.js`
+is a URL editor: only `range` carries a `live` hook, every other field costs a
+reload, and a reload throws away the race you were judging. Two rules it keeps
+that any similar surface should: every value and every default is read back
+from the engine (`ttp_display_shadow_tuning_json`), so the page cannot drift
+from the shipped look, and the three knobs that re-bake or re-allocate commit on
+`change` rather than `input`, or one drag across the rail issues a hundred
+reallocations. It also draws the BAKED MASK per model
+(`ttp_display_shadow_mask_json`), which is the only way to separate a shape
+that is wrong from a shape that is right and too small to read on the deck —
+those want opposite fixes.
+
 **Where the frame's cost actually is** — `scripts/perf-features.mjs`. It ablates
 one group of renderables at a time (`ttp_display_debug_features`) inside ONE page
 load and reads the timer per arm. Its header lists the traps it is shaped around,

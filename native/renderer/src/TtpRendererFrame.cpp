@@ -646,8 +646,14 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
     // and the no-views case stay on the TEXTURE path, so every car keeps a
     // shadow under the [4] masked cap; a vroad without the carShadow sampler
     // or the forced debug mask layer go all-MASKED instead.
+    // BLOB MODE NEEDS NO PICK AT ALL — nobody is eligible, so the ranking below
+    // is skipped outright rather than run and thrown away. The other two modes
+    // both need it: hybrid to crossfade by distance, and silhouette because the
+    // masked list still only holds four, and WHICH four has to be the per-view
+    // round robin or a player loses their own car's shadow (see below).
     const TtpViewInput* lodViews = ((input.flags & TTP_FRAME_OVERVIEW) == 0u
-            && input.viewCount > 0 && mForceMaskLayer < 0 && mCarShadowTex[0])
+            && input.viewCount > 0 && mForceMaskLayer < 0 && mCarShadowTex[0]
+            && mShadowTune.mode != kShadowModeBlob)
             ? ttp_frame_views(&input) : nullptr;
     // RANK the near band, PER VIEW. A pack can put more cars inside
     // kShadowLodNear than the masked list holds, and a car whose entry the
@@ -672,6 +678,11 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
     // seating below moves a car millimetres.
     float lodCamD[16];
     bool lodEligible[16];
+    // SILHOUETTE mode has no distance band — it is the A/B arm for "what did
+    // the masked loop look like", so every car the pick reaches is fully masked
+    // rather than faded in over kShadowLodNear. Declared out here because the
+    // per-car loop below reads it.
+    const bool allMasked = mShadowTune.mode == kShadowModeSilhouette;
     if (lodViews) {
         for (uint32_t i = 0; i < nCars && i < 16; i++) {
             const TtpCarInput& ci = cars[i];
@@ -693,10 +704,6 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
         int budget = (mDecalDebug & kDebugNoDecalMasked) ? 0
                 : (mDecalDebug & kDebugDecalCapsHalf)
                         ? kMaxMaskedDeckDecals / 2 : kMaxMaskedDeckDecals;
-        // The four-cell blob trade (kMaskedBlobCells' comment has the
-        // pricing). Same shape as the scale rule's escape gate: cells decide,
-        // never cost, so solo and small splits keep their silhouettes.
-        if (input.viewCount >= kMaskedBlobCells) budget = 0;
         // FIRST, EVERY VIEW'S OWN CAR — the one it FOLLOWS (TtpViewInput.car),
         // not the one nearest its eye. Those are different questions and the
         // difference is the whole bug: the chase rig sits CHASE_DIST behind
@@ -1169,18 +1176,20 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
         // Ground shadow: a MASKED road-shader decal riding the road-aligned
         // pose basis (it follows whatever the car drives — bank, hill, loop
         // deck), spun by the spin-out whirl so the silhouette tracks the car
-        // (the JS shadow's rotated right/forward axes). A monster swaps to its
-        // own footprint.
+        // (the JS shadow's rotated right/forward axes). A monster keeps the
+        // CAR's shadow, one step larger.
         {
             const mat4f bm = (c.spin != 0)
                     ? m * mat4f::rotation(c.spin, float3{ 0, 1, 0 })
                     : m;
             float sx = 1, sz = 1;
-            const bool monsterBlob = c.monster > 0.5f && mMonsterFootW > 0
-                    && mCarWheels.size() > i;
+            const bool monsterBlob = c.monster > 0.5f && mCarWheels.size() > i;
             if (monsterBlob) {
-                sx = mMonsterFootW / mCarWheels[i].footW;
-                sz = mMonsterFootL / mCarWheels[i].footL;
+                // The CAR's own shadow, wider at the wheels and barely
+                // longer — simple, by the user's call, with the two factors
+                // set from the truck's measured footprint (TtpRenderer.h).
+                sx = kMonsterShadowScaleW;
+                sz = kMonsterShadowScaleL;
             }
             // Load shift: the harder the body pitches, the closer the chassis
             // presses to the road (JS aoMat.opacity = 0.55 + AO_LOAD_GAIN·k).
@@ -1222,8 +1231,8 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                 // The blob quad's halves in the CAR's frame: forward in rect.z,
                 // right in rect.w (the shader divides its rotated components by
                 // exactly these).
-                const float halfF = fl * sz * 1.45f * 0.5f;
-                const float halfR = fw * sx * 1.45f * 0.5f;
+                const float halfF = fl * sz * mShadowTune.overscan * 0.5f;
+                const float halfR = fw * sx * mShadowTune.overscan * 0.5f;
                 // Heading against the track frame at carS. `bm` already carries
                 // the spin-out whirl, so the silhouette keeps whirling.
                 const TrackBin::Sample f0 = mTrack->frameAt(carS);
@@ -1298,7 +1307,14 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                     const float rk = k < 3 ? -1.0f : 1.0f;      // left / right edge
                     const float3 corner = aPos + wF * (fk * halfF) + wR * (rk * halfR);
                     float ks = c.trackS, kl = c.trackLat;
-                    mTrack->deckFoot(corner, ks, kl);
+                    if (mShadowTune.stampProject) {
+                        // WHERE THE SHADER WILL LOOK, not where the surface
+                        // truly is — see CarShadowTuning::stampProject.
+                        int hint = mDecalProjHint.size() > i ? mDecalProjHint[i] : -1;
+                        mTrack->project(corner, aUp, ks, kl, &hint);
+                    } else {
+                        mTrack->deckFoot(corner, ks, kl);
+                    }
                     stampSL[k] = { ks, kl };
                     halfSw = std::max(halfSw, std::fabs(ks - c.trackS));
                     halfLw = std::max(halfLw, std::fabs(kl - c.trackLat));
@@ -1310,7 +1326,8 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                 halfLw += 0.05f;
                 // Load shift folded into the stamp's peak alpha, one
                 // expression for the CPU entry and the raster.
-                const float blobA = kCarBlobAO * (1.0f + (0.08f / 0.55f) * load);
+                const float blobA = mShadowTune.ao
+                        * (1.0f + mShadowTune.loadGain * load);
                 // THE HYBRID SHADOW LOD. Near a camera the silhouette's
                 // car-shape reads and the texture layer's ~8 texels/u cannot
                 // carry it (the blob under YOUR OWN CAR looked visibly worse
@@ -1330,9 +1347,9 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                     // The gate can no longer strand a PLAYER's car, because
                     // round one of the pick is every view's own (see above).
                     lodT = (i < 16 && lodEligible[i])
-                            ? std::min(1.0f, std::max(0.0f,
+                            ? (allMasked ? 0.0f : std::min(1.0f, std::max(0.0f,
                                     (lodCamD[i] - kShadowLodNear)
-                                            / (kShadowLodFar - kShadowLodNear)))
+                                            / (kShadowLodFar - kShadowLodNear))))
                             : 1.0f;
                 } else if (!mCarShadowTex[0] || mForceMaskLayer >= 0) {
                     // All MASKED: no texture to ride (an old vroad blob), or
@@ -1349,11 +1366,16 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                 if (lodT > 0.0f && mCarShadowTex[0]
                         && (mRoadMask & kFeatRoadDecals)
                         && !(mDecalDebug & kDebugNoDecalBlob)) {
-                    rasterCarShadowStamp(stampSL, carS, blobA * lodT);
+                    // THE CAR'S OWN OUTLINE, not one shape for the field.
+                    // The four roster models share a bounding box, so this is
+                    // the only place they can be told apart.
+                    rasterCarShadowStamp(stampSL, carS, blobA * lodT,
+                            carShadowShapeFor(i));
                 }
                 mDeckDecals.push_back({
                         float4{ carS, carLat, halfF, halfR },
-                        float4{ kCarBlobInk.x, kCarBlobInk.y, kCarBlobInk.z,
+                        float4{ mShadowInkLinear.x, mShadowInkLinear.y,
+                                mShadowInkLinear.z,
                                 lodT < 1.0f ? blobA * (1.0f - lodT) : blobA },
                         // `shape` is the profile decals' (inner/ellipse/knee/
                         // chevrons) and the masked path reads none of it, so it
