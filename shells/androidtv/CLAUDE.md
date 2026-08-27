@@ -85,6 +85,21 @@ board this app DRAWS ([RootScreen]), from the same `ttp_ui_cover` answer the web
 and tvOS perform, over the same `launch-tv.png` bake tvOS uses. `installSplashScreen()`
 stays for one job only: swapping the launch theme for `postSplashScreenTheme`.
 
+**A FLAT PNG IN `android:icon` IS A *LEGACY* ICON, AND THE PLATFORM DRAWS IT ON
+A WHITE PLATE.** From API 26 the launcher masks icons to a shape of its own, and
+it cannot tell subject from background in a bitmap — so rather than cut into one
+it shrinks the WHOLE FILE and centres it on a system-drawn plate. This shell
+shipped the square brand bake that way for months and the result was two nested
+backgrounds, the theme's warm paper inside a white squircle, with the car at
+about half the icon's width. Nothing reports it: the build is clean, the resource
+resolves, and the TV HOME ROW shows the banner rather than the icon, so it is
+only wrong in Settings, the Apps row, notifications and the share sheet. The fix
+is `res/mipmap-anydpi-v26/ic_launcher.xml` — an `<adaptive-icon>` naming two
+staged layers — and it is not only plumbing: the platform draws only part of the
+canvas and guarantees less, so the layers are their own composition and not the
+square icon cut in two (`scripts/bake-wordmark.mjs` owns that geometry).
+`mipmap-nodpi/ic_launcher.png` is the pre-26 fallback, which minSdk keeps live.
+
 **The surface joins the view tree ONE FRAME LATE, and the cover is why.** Attach
 it in the first traversal and the whole boot happens inside that traversal —
 `surfaceChanged` creates the engine and runs `displayReady` inline, one ~10 s

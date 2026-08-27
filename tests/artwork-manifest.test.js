@@ -70,6 +70,13 @@ test('artwork: every manifest entry exists at the size it claims', () => {
     const got = imageSize(file);
     assert.deepEqual(got, { w: entry.w, h: entry.h },
       `${entry.id}: ${entry.file} is ${got.w}x${got.h}, manifest says ${entry.w}x${entry.h}`);
+    // An adaptive icon's two layers are composited pixel over pixel, so a pair
+    // that disagrees on size is a misregistered icon rather than a small one —
+    // the car would land off the grass line by whatever the ratio is.
+    if (!entry.adaptive) continue;
+    const fore = path.join(ASSETS, 'brand', `${entry.adaptive}-fore.png`);
+    assert.ok(fs.existsSync(fore), `${entry.id}: missing ${entry.adaptive}-fore.png — run ${entry.bake}`);
+    assert.deepEqual(imageSize(fore), got, `${entry.id}: the two layers are different sizes`);
   }
 });
 
@@ -99,6 +106,10 @@ test('artwork: nothing in the brand tree is unlisted', () => {
   const named = new Set();
   for (const e of MANIFEST.ARTWORK) {
     named.add(path.join(ASSETS, e.file));
+    // The Android adaptive icon is a PAIR under one entry, on the same terms:
+    // `adaptive` is the prefix, `-back` is the entry's own file and `-fore` the
+    // layer the launcher composites over it.
+    if (e.adaptive) named.add(path.join(ASSETS, 'brand', `${e.adaptive}-fore.png`));
     if (!e.layers) continue;
     for (const layer of ['back', 'middle', 'front']) {
       named.add(path.join(ASSETS, 'brand', `${e.layers}-${layer}.png`));

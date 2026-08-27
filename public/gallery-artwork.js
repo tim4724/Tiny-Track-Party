@@ -33,7 +33,18 @@ import { ITEM_IDS } from '/display/engine/contract.js';
 
 const src = (rel) => assetUrl(`/assets/${rel}`);
 
-const state = { darkMat: false, chrome: false };
+const state = { darkMat: false, chrome: false, mask: 'circle' };
+
+// THE ANDROID MASKS. A launcher picks its own shape and the app never learns
+// which, so the only honest way to look at an adaptive icon is under all of
+// them — and the CIRCLE is the one that decides: it is the shape the safe zone
+// is drawn for, so what survives it survives every launcher.
+const MASKS = {
+  circle: 'circle(50%)',
+  squircle: 'inset(0 round 29%)',
+  'rounded square': 'inset(0 round 17%)',
+  square: 'none'
+};
 
 function el(tag, className, text) {
   const n = document.createElement(tag);
@@ -61,8 +72,9 @@ function span(entry) {
   return Math.max(1, Math.min(3, Math.ceil((want - COL) / (COL + GAP)) + 1));
 }
 
-// One card. `layers` turns the plate into a tvOS stack: the three .imagestacklayer
-// PNGs composited, and separated on hover the way the platform separates them.
+// One card, with two special plates. `layers` is a tvOS stack — the three
+// .imagestacklayer PNGs composited, and separated on hover the way the platform
+// separates them; `adaptive` is the Android pair under a launcher's mask.
 function card(entry) {
   const c = el('div', 'card art-card');
   c.dataset.span = `span ${span(entry)}`;
@@ -85,7 +97,21 @@ function card(entry) {
   const plate = el('div', 'art-plate');
   const dims = el('div', 'art-dims');
 
-  if (entry.layers) {
+  if (entry.adaptive) {
+    // Two layers, back then fore. The scale onto the platform's viewport and the
+    // mask over it are `.art-adaptive`'s, in the page CSS — so anything this card
+    // cuts is something a launcher cuts, which is the question it answers.
+    const box = el('div', 'art-adaptive');
+    for (const layer of ['back', 'fore']) {
+      const l = new Image();
+      l.alt = '';
+      l.src = src(`brand/${entry.adaptive}-${layer}.png`);
+      box.appendChild(l);
+    }
+    box.style.width = `${entry.drawnAt}px`;
+    plate.appendChild(box);
+    dims.textContent = `${entry.w}×${entry.h} · 2 layers`;
+  } else if (entry.layers) {
     const stack = el('div', 'art-stack');
     for (const [layer, cls] of [['back', 'lyr-back'], ['middle', 'lyr-mid'], ['front', 'lyr-front']]) {
       const l = new Image();
@@ -215,6 +241,12 @@ function render(families) {
   }
   document.body.classList.toggle('dark-mat', state.darkMat);
   document.body.classList.toggle('show-chrome', state.chrome);
+  applyMask();
+}
+
+function applyMask() {
+  const shape = MASKS[state.mask];
+  for (const box of document.querySelectorAll('.art-adaptive')) box.style.clipPath = shape;
 }
 
 async function main() {
@@ -253,6 +285,13 @@ async function main() {
   document.getElementById('tv-chrome').addEventListener('change', (e) => {
     state.chrome = e.target.checked;
     document.body.classList.toggle('show-chrome', state.chrome);
+  });
+  const maskSel = document.getElementById('android-mask');
+  for (const name of Object.keys(MASKS)) maskSel.appendChild(el('option', null, name));
+  maskSel.value = state.mask;
+  maskSel.addEventListener('change', (e) => {
+    state.mask = e.target.value;
+    applyMask();
   });
 }
 

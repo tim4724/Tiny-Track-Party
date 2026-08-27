@@ -133,9 +133,19 @@ const CAR = '/assets/brand/car-hero.png';
 //
 // The clouds are dropped rather than moved: at the size a launcher draws this,
 // there is no room for weather behind the subject.
-const SCENE_SQ = `
-    .scene__grass { left: -26%; right: -26%; height: 22%;
-                    border-radius: 50% 50% 0 0 / 10% 10% 0 0; }
+//
+// PARAMETERISED BY BAND HEIGHT, on the same terms as SCENE_TV below, because the
+// adaptive icon composes the same stage against a taller band. The dome is the
+// part that cannot simply be re-typed: `border-radius`'s vertical radius is a
+// percentage OF THE BAND, so holding the arc still as the band grows means
+// scaling it down by exactly as much. SQ_BAND/SQ_DOME are the pair the square
+// icon was authored at, and the arc every other height is fitted to.
+const SQ_BAND = 0.22;
+const SQ_DOME = 0.10;
+const pct = (x) => `${+(x * 100).toFixed(4)}%`;
+const SCENE_SQ = (band) => `
+    .scene__grass { left: -26%; right: -26%; height: ${pct(band)};
+                    border-radius: 50% 50% 0 0 / ${pct(SQ_BAND * SQ_DOME / band)} ${pct(SQ_BAND * SQ_DOME / band)} 0 0; }
     .scene__sky::before, .scene__sky::after { display: none; }`;
 
 // THE BANNER. The car breaks the left edge, the wordmark sits right. Full bleed:
@@ -167,28 +177,36 @@ const BANNER = `<!doctype html>
 // own content box, measured off the bake and identical at every size it is
 // rendered at:
 const CAR_BODY_W = 0.8906;      // body width as a fraction of the hero's square
+const CAR_BODY_TOP = 0.2427;    // where the rear wing tops out in that square
 const CAR_BODY_BOTTOM = 0.8027; // where the wheels sit in that square
+// The painted body's own aspect, wider than tall. The adaptive icon fits the car
+// to a CIRCLE and needs the ratio rather than the two edges.
+const CAR_BODY_ASPECT = CAR_BODY_W / (CAR_BODY_BOTTOM - CAR_BODY_TOP);
 
 // Place the hero so its BODY (not its transparent frame, and not its ground
 // shadow) is `bodyW` of the target width with the wheels at `bottom` of the
 // target height. Answers the two CSS lengths that position it.
 //
-// THE BODY IS 1.048x AS TALL AS IT IS WIDE in a 5:3 frame — its painted box runs
-// 0.2427 to 0.8027 down the hero's square against 0.8906 across — which is why
-// the tv icon below drops its wheel line as the car grows: holding `bottom` fixed
-// and raising `bodyW` past ~0.70 pushes the rear wing off the top edge.
+// THE BODY IS TALLER THAN IT IS WIDE ONCE A 5:3 FRAME SQUASHES IT — CAR_BODY_*
+// above are its painted box in the hero's square — which is why the tv icon
+// below drops its wheel line as the car grows: holding `bottom` fixed and
+// raising `bodyW` past ~0.70 pushes the rear wing off the top edge.
 function carBox(w, h, bodyW, bottom) {
   const size = (bodyW * w) / CAR_BODY_W;
   return { size, top: bottom * h - CAR_BODY_BOTTOM * size };
 }
 
-// THE SQUARE ICON: app icon, apple-touch icon and favicon, one composition at
-// four sizes.
+// THE SQUARE ICON: store master, apple-touch icon and favicon, one composition
+// at four sizes.
 //
-// FULL BLEED AND UN-ROUNDED for everything a PLATFORM shows, because every one of
-// them masks it to its own shape: iOS applies the squircle to the apple-touch
-// icon, Android its adaptive mask, tvOS its own. A radius baked in there would sit
-// inside the launcher's and read as a ring.
+// NOT ANDROID'S LAUNCHER ICON. It was, and that is the defect ADAPT_LAYER below
+// exists to fix; what it still answers for on that platform is the PRE-26
+// fallback, where the launcher masks nothing and takes the file as given.
+//
+// FULL BLEED AND UN-ROUNDED for everything a PLATFORM shows, because each of them
+// masks it to its own shape: iOS applies the squircle to the apple-touch icon,
+// tvOS its own, Play its own to the store listing. A radius baked in there would
+// sit inside the platform's and read as a ring.
 //
 // THE FAVICON IS THE EXCEPTION, and it is a real one rather than a taste call: a
 // browser tab masks nothing. It draws the 32px PNG exactly as given, so the only
@@ -209,7 +227,7 @@ const ICON_SQ = (px, radius = 0) => `<!doctype html>
     .tile { width: ${px}px; height: ${px}px; position: relative; overflow: hidden;
             background: var(--paper);${radius ? `\n            border-radius: ${radius}px;` : ''} }
     .scene { position: absolute; inset: 0; }
-    ${SCENE_SQ}
+    ${SCENE_SQ(SQ_BAND)}
     /* GROUNDED, on the same rule the tv assets use rather than centred in the
        box: the wheels land on the grass line, which is what the hero's baked
        ground shadow wants under it, and the car is sized by its BODY so the
@@ -226,6 +244,72 @@ const ICON_SQ = (px, radius = 0) => `<!doctype html>
     </div>
     <img class="car" src="${CAR}" alt="">
   </div>`;
+
+// ---------------------------------------------------------------------------
+// THE ANDROID ADAPTIVE ICON — two layers, and its OWN composition. Why the shell
+// needs one at all is `shells/androidtv/CLAUDE.md`'s (a flat PNG is a LEGACY icon
+// and the platform draws it on a plate); what is decided HERE is the geometry.
+//
+// IT IS NOT THE SQUARE ICON CUT IN TWO, because the frame is not the same frame.
+// The square composition is full bleed with the body at 95% of it and the wheels
+// on the bottom edge — right for a platform that draws the whole file, and cut to
+// pieces by one that masks. These four numbers are the frame it is laid out for.
+const ADAPT = 108;               // dp. The platform's canvas, and the layout unit here.
+const ADAPT_SCALE = 4;           // xxxhdpi. One nodpi bitmap then covers every box.
+const ADAPT_VIEW = 72 / ADAPT;   // what any mask MAY draw; the rest is slide margin
+const ADAPT_SAFE = 66 / ADAPT;   // what EVERY mask draws — a centred circle
+// The grass, as a fraction of the VISIBLE box rather than of the canvas: the band
+// is composed against what a player sees, and only then bled out to the canvas.
+// A third reads as ground under a circular mask; SQ_BAND would come back as a
+// chord too thin to be a horizon.
+const ADAPT_GRASS = 0.30;
+
+// THE CAR FITS THE SAFE CIRCLE, computed rather than eyeballed on the same terms
+// as carBox: the widest rectangle of the body's aspect that fits corner-to-corner
+// inside a circle of diameter ADAPT_SAFE. Outside that circle is shape a launcher
+// MIGHT cut, so nothing of the subject may live there.
+const ADAPT_BODY_W = (ADAPT_SAFE * CAR_BODY_ASPECT) / Math.hypot(CAR_BODY_ASPECT, 1);
+// …and centred on the canvas centre, which is where that circle is centred. The
+// wheel line is therefore derived from the body's own height, not chosen.
+const ADAPT_WHEELS = 0.5 + ADAPT_BODY_W / CAR_BODY_ASPECT / 2;
+
+// ONE LAYER of the pair, `back` or `fore` — the same tokens the filenames, the
+// manifest prefix and the staged resources use.
+//
+// BOTH LAYERS BLEED THE FULL CANVAS and neither is inset: the platform slides
+// them against each other by up to the margin outside ADAPT_VIEW, and a
+// background that stopped at the viewport would expose bare canvas at one edge
+// the moment it did. Same rule the tvOS stack above obeys, for the same reason.
+//
+// THE CAR KEEPS ITS BAKED CONTACT SHADOW. The system shadow an adaptive icon gets
+// is drawn under the MASKED SILHOUETTE, on the launcher's ground — it is not a
+// shadow for the car, and without the hero's own the car floats off the grass.
+//
+// NO <monochrome> LAYER. Themed icons are an Android 13 LAUNCHER feature, and the
+// shipping build requires leanback, so it reaches only televisions and no TV
+// launcher themes icons. The `phoneTest` variant does reach a tester's phone,
+// where an Android 13 launcher would draw this pair unthemed beside its themed
+// neighbours — which is the whole cost, and not worth a third layer.
+const ADAPT_LAYER = (layer) => {
+  const car = carBox(ADAPT, ADAPT, ADAPT_BODY_W, ADAPT_WHEELS);
+  // Where the band's top edge lands on the CANVAS, once ADAPT_GRASS of the
+  // visible box is measured up from the visible box's own bottom.
+  const grassH = 1 - ((1 - ADAPT_VIEW) / 2 + ADAPT_VIEW * (1 - ADAPT_GRASS));
+  return `<!doctype html>
+  <link rel="stylesheet" href="/shared/theme.css">
+  <style>
+    html, body { margin: 0; background: transparent; }
+    body { width: ${ADAPT}px; height: ${ADAPT}px; position: relative; overflow: hidden;
+           background: ${layer === 'back' ? 'var(--paper)' : 'transparent'}; }
+    .scene { position: absolute; inset: 0; }
+    ${SCENE_SQ(grassH)}
+    .car { position: absolute; left: 50%; transform: translateX(-50%);
+           top: ${car.top.toFixed(2)}px; width: ${car.size.toFixed(2)}px; }
+  </style>
+  ${layer === 'back'
+    ? '<div class="scene"><div class="scene__sky"></div><div class="scene__grass"></div></div>'
+    : `<img class="car" src="${CAR}" alt="">`}`;
+};
 
 // ---------------------------------------------------------------------------
 // tvOS BRAND ASSETS
@@ -330,6 +414,8 @@ const PAGES = {
   '/icon-512.html': ICON_SQ(512),
   '/icon-180.html': ICON_SQ(180),
   '/icon-32.html': ICON_SQ(32, FAVICON_RADIUS),
+  '/icon-adaptive-back.html': ADAPT_LAYER('back'),
+  '/icon-adaptive-fore.html': ADAPT_LAYER('fore'),
   '/tv-store-back.html': TV_ICON_LAYER(1280, 768, 'back'),
   '/tv-store-middle.html': TV_ICON_LAYER(1280, 768, 'middle'),
   '/tv-store-front.html': TV_ICON_LAYER(1280, 768, 'front'),
@@ -460,6 +546,26 @@ for (const [px, dest, label, rounded] of [
   writeFileSync(dest, buf);
   console.log(`icon${String(px).padStart(4)} -> ${label} (${buf.length} B, ${px}x${px})`);
   await page.close();
+}
+
+// THE ANDROID ADAPTIVE ICON'S TWO LAYERS. Authored at 108 and delivered at 4x,
+// the same trade the banner makes: the grass band's dome and the car's fit to the
+// safe circle are proportions of a 108-unit layout, and re-typing them larger
+// would change the composition rather than sharpen it.
+//
+// `fore` is shot with omitBackground, or it would hide the grass under it.
+for (const layer of ['back', 'fore']) {
+  const file = `icon-adaptive-${layer}.png`;
+  const ap = await chrome.page({
+    viewport: { width: ADAPT, height: ADAPT },
+    deviceScaleFactor: ADAPT_SCALE
+  });
+  await ap.goto(`http://127.0.0.1:${port}/${file.replace('.png', '.html')}`, { waitUntil: 'load' });
+  const buf = await ap.screenshot({ omitBackground: layer === 'fore' });
+  writeFileSync(join(out, file), buf);
+  const px = ADAPT * ADAPT_SCALE;
+  console.log(`adaptive -> public/assets/brand/${file} (${buf.length} B, ${px}x${px})`);
+  await ap.close();
 }
 
 // THE tvOS APP ICON STACKS. Three layers each, and the @2x variants are the SAME

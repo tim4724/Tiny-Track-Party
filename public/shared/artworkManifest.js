@@ -49,8 +49,9 @@ export const ARTWORK_FAMILIES = [
   {
     id: 'launcher',
     title: 'Launcher and splash',
-    blurb: 'The tiles and boards a platform draws before a line of app code runs: an Android TV '
-         + 'launcher banner, an Android 12 splash icon masked to a circle, a tvOS launch image.',
+    blurb: 'The tiles and boards a platform draws before a line of app code runs: the Android '
+         + 'ADAPTIVE icon (two layers, masked and slid by the launcher), an Android TV launcher '
+         + 'banner, an Android 12 splash icon masked to a circle, a tvOS launch image.',
     bake: 'npm run bake:wordmark'
   },
   {
@@ -91,7 +92,9 @@ export const ARTWORK = [
         + 'draws is a few hundred px, so this in an APK would be four times the bytes for nothing.' },
   { id: 'icon-512', family: 'icon', file: 'brand/icon.png', w: 512, h: 512,
     drawnAt: 180, bake: 'npm run bake:wordmark',
-    note: 'What Play wants, and what the Android staging reads.' },
+    note: 'What Play wants. Also the Android shell’s PRE-API-26 fallback and nothing more: from 26 '
+        + 'the launcher takes the adaptive pair below, and a launcher old enough to want this one '
+        + 'masks nothing, so full bleed is right for it.' },
   { id: 'icon-180', family: 'icon', file: 'icon/apple-touch-icon.png', w: 180, h: 180,
     drawnAt: 180, bake: 'npm run bake:wordmark',
     note: 'The iOS home-screen icon for the controller page. Drawn 1:1 here.' },
@@ -102,6 +105,12 @@ export const ARTWORK = [
         + 'masks nothing, so unlike every platform icon here its shape has to be in the file.' },
 
   // ---- launcher and splash -------------------------------------------------
+  { id: 'icon-adaptive', family: 'launcher', file: 'brand/icon-adaptive-back.png', w: 432, h: 432,
+    drawnAt: 220, bake: 'npm run bake:wordmark', adaptive: 'icon-adaptive',
+    note: 'THE ANDROID LAUNCHER ICON, and the one entry here that is not a picture: two layers the '
+        + 'platform masks to a shape of its own choosing and slides against each other. Drawn here '
+        + 'the way a launcher draws it — the canvas is bigger than the viewport, and the viewport is '
+        + 'what the card shows. Pick a mask above: what survives the CIRCLE survives every launcher.' },
   { id: 'banner', family: 'launcher', file: 'brand/banner.png', w: 1280, h: 720,
     drawnAt: 320, bake: 'npm run bake:wordmark',
     note: 'The Android TV launcher tile. Laid out at 320x180 DP and baked at 4x: it is staged into '

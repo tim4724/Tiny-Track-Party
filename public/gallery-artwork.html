@@ -33,6 +33,18 @@
   }
   .art-plate img { display: block; max-width: 100%; height: auto; box-shadow: 0 2px 10px rgba(0,0,0,.25); }
 
+  /* The ANDROID ADAPTIVE ICON. The card is the platform's VIEWPORT — the middle
+     72 of the 108dp canvas — so both layers are scaled by 108/72 and the mask is
+     clipped over that. The margin outside the viewport is not decoration: it is
+     what the layers slide within, and drawing the whole canvas here would show a
+     composition no launcher ever draws. */
+  .art-adaptive { position: relative; aspect-ratio: 1; overflow: hidden; }
+  /* `max-width: none` is load-bearing: .art-plate img clamps to 100% for the
+     single-picture cards, and a clamped layer renders at canvas scale and is then
+     shifted left by its own negative margin. */
+  .art-adaptive img { position: absolute; inset: 0; width: 150%; height: 150%;
+                      max-width: none; margin: -25%; box-shadow: none; }
+
   /* The tvOS stack. It CLIPS, and every layer is scaled past the frame by the
      margin it is allowed to travel within — without that, sliding a full-bleed
      layer exposes what is behind it at one edge. The movement itself follows the
@@ -88,6 +100,9 @@
   </div>
   <div class="group">
     <label class="checkbox-label"><input type="checkbox" id="tv-chrome"> tvOS carousel chrome</label>
+  </div>
+  <div class="group">
+    <label class="checkbox-label">Android mask <select id="android-mask"></select></label>
   </div>
   <nav>
     <a href="/gallery.html">Display</a>

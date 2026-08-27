@@ -31,8 +31,14 @@ app/src/main/jniLibs/
 # cues, the materials and design-tokens.json.
 app/src/main/assets/
 
-# Likewise, and for the same reason — but these two must be RESOURCES rather
-# than assets: the window background and the launcher tile are both read before
-# any app code runs. scripts/bake-wordmark.mjs is where they come from.
+# Likewise, and for the same reason — but these must be RESOURCES rather than
+# assets: the launcher tile, the launcher icon and the splash icon are all read
+# from the installed package before any app code runs, so none of them can be an
+# asset. scripts/bake-wordmark.mjs is where every file in both directories comes
+# from, and stage-assets.sh empties them before it copies.
+#
+# res/mipmap-anydpi-v26/ IS committed — it is the adaptive-icon declaration, hand
+# written Android source that NAMES two of these bitmaps rather than being one.
 app/src/main/res/drawable-nodpi/
+app/src/main/res/mipmap-nodpi/
 /keystore.properties

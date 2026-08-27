@@ -180,27 +180,29 @@ if ! command -v node >/dev/null 2>&1; then
 fi
 node "$HERE/gen-legal.mjs"
 
-# THE BRAND PNGs, and these are the only staged files that go to res/ rather
-# than assets/. Three of the four are consumed before a line of app code runs —
-# the launcher tile is read by the home screen from the installed package, and
-# the two splash resources by the window manager from the theme — so none of
-# them can ask Compose to draw, and a VectorDrawable has no text primitive: the
-# wordmark reaches them as a BAKE of the real `.wordmark` rule
-# (scripts/bake-wordmark.mjs). res/ is also simply where a Compose
-# `painterResource` reads, which is what the fourth one is for.
+# THE BRAND PNGs, and these two directories are the only staged files that go to
+# res/ rather than assets/. Most of them are consumed before a line of app code
+# runs — the launcher tile by the home screen from the installed package, the
+# splash icon by the window manager from the theme — so they cannot ask Compose
+# to draw, and a VectorDrawable has no text primitive: the wordmark reaches them
+# as a BAKE of the real `.wordmark` rule (scripts/bake-wordmark.mjs). res/ is
+# also simply where a Compose `painterResource` reads, which is what launch_tv
+# is for.
 #
 # Staged, not committed, for the reason everything else here is: the bake in
 # public/assets/brand/ is the one copy.
+#
+# EMPTIED FIRST, like $OUT above, and that is not tidiness. Both directories are
+# gitignored and wholly written here, so a file this script stops copying is
+# invisible to git and survives in every existing worktree and CI cache — and
+# gets packed into the APK. `app_icon.png` did exactly that when the launcher
+# icon moved to $MIP below.
 RES="$SHELL_DIR/app/src/main/res/drawable-nodpi"
-mkdir -p "$RES"
+MIP="$SHELL_DIR/app/src/main/res/mipmap-nodpi"
+rm -rf "$RES" "$MIP"
+mkdir -p "$RES" "$MIP"
 cp "$ROOT/public/assets/brand/wordmark.png" "$RES/"
 cp "$ROOT/public/assets/brand/banner.png" "$RES/"
-# The APP ICON, square, and separate from the banner on purpose: `android:icon`
-# pointed at the 320x180 tile, so every square slot the platform has — settings,
-# the app list, notifications — got a letterboxed banner. RENAMED to match the
-# manifest's `@drawable/app_icon`: `icon` alone is a legal resource name but says
-# nothing next to the four other bakes landing in this directory.
-cp "$ROOT/public/assets/brand/icon.png" "$RES/app_icon.png"
 # The system splash's icon. Square and laid out to survive the CIRCULAR MASK the
 # platform applies to it — see the bake, which sizes the mark to the inscribed
 # circle rather than to the canvas.
@@ -215,6 +217,22 @@ cp "$ROOT/public/assets/brand/splash-icon.png" "$RES/splash_icon.png"
 # RootScreen's cover — and a shell that drew live type instead would put a
 # second, subtly different mark on the same beat.
 cp "$ROOT/public/assets/brand/launch-tv.png" "$RES/launch_tv.png"
+
+# THE LAUNCHER ICON. `mipmap` rather than `drawable` because `@mipmap/ic_launcher`
+# is the launcher-icon convention the platform's own tooling assumes, and because
+# `mipmap-anydpi-v26/ic_launcher.xml` — COMMITTED beside these, since it is
+# Android source rather than a bake — has to live in a mipmap directory for the
+# adaptive declaration to be found. The bitmaps it names live beside it.
+#
+# ic_launcher.png is the PRE-26 FALLBACK and nothing else: a launcher that
+# predates adaptive icons masks nothing, so the flat full-bleed square is exactly
+# right there, and minSdk still reaches those boxes. From 26 the two layers below
+# are what draws; the XML says why.
+#
+# Hyphens again: an Android resource filename may only hold a-z, 0-9 and _.
+cp "$ROOT/public/assets/brand/icon.png" "$MIP/ic_launcher.png"
+cp "$ROOT/public/assets/brand/icon-adaptive-back.png" "$MIP/ic_launcher_background.png"
+cp "$ROOT/public/assets/brand/icon-adaptive-fore.png" "$MIP/ic_launcher_foreground.png"
 
 # NOT staged: public/shared/trackSchematics.js, the web's prebaked mini-maps.
 # That bake exists so a browser need not run the projection; this app HAS the
