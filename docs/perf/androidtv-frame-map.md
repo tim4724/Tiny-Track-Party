@@ -142,6 +142,96 @@ Four readings worth stating in words:
 - **Two players is cheaper than one at the same pixel count** (24.7 vs 29.2 at
   1080). Two half-height cells frame less deck each than one full cell does.
 
+## Inside the decal channel: the carShadow TAP is the item, and it is CLOSED
+
+The channel decomposes with the inverted `TTP_DEBUG_NO_DECAL_*` bits, plus one
+probe that is not a feature bit: **`debug.ttp.shadow '{"cap":0}'` zeroes
+`maskInk.w`, which gates the whole tap block in the deck shader while the CPU
+raster and the per-frame layer upload keep running.** That is what splits the
+blob's shading from its upload, and it is the reference every row below is
+paired against. 4P/1080, Vulkan, tidepool.
+
+| | ms | knob |
+|---|---|---|
+| decal channel, total | 6.8 | `~ROAD_DECALS` |
+| ↳ masked silhouette loop | 0.2 | `NO_DECAL_MASKED` |
+| ↳ profile loop (auras) | 2.0 | `NO_DECAL_PROFILE` |
+| ↳ statics, inside the profile loop | 1.0 | `NO_DECAL_STATICS` |
+| ↳ **carShadow blob** | **6.3** | `NO_DECAL_BLOB` |
+| &nbsp;&nbsp;&nbsp;↳ the tap block (shading) | **4.4** | `cap:0` |
+| &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;↳ of which the bicubic B-spline | 0.55 | `smoothTap:false` |
+| &nbsp;&nbsp;&nbsp;↳ CPU raster + upload | 1.9 | `cap:0` minus `NO_DECAL_BLOB` |
+
+**These rows do not sum either, and for a duller reason than the table above.**
+Each is its own ablation arm against its own reference, taken in a later sweep
+than the feature table, and this one carries a between-build drift of ~1.2 ms
+(measured; see the levers below). That is also the whole of the gap between the
+7.5 ms this channel prices at in the feature table and the 6.8 ms here. Read the
+ORDER of these rows, not their arithmetic.
+
+**The masked loop is DEAD and the cost moved wholesale to the layer that
+replaced it.** `kShadowModeBlob` ships at every cell count, `maskCount` is
+pinned to 0, and the ablation confirms the loop at 0.2 ms. Any older reading
+that attributes this channel to the masked silhouette loop
+(`androidtv-4p-plan.md`, Phase 5) describes code that no longer runs. What costs
+now is ONE unconditional `texture(carShadow, suv).r` on every deck fragment —
+about 3.8 ms once the bicubic is taken out — beside the structurally identical
+rubber tap at 3.7 ms.
+
+### Three levers measured dead
+
+Each was paired against its own `cap:0` reference, so the raster/upload half
+cancels out of every row.
+
+- **Shrinking the layer: NULL.** `rows` 256 → 64 and `texelsPerU` 16 → 4, and
+  both together (a SIXTEENTH of the area), moved the tap 5.61 → 4.93 → 4.78 →
+  4.70 ms against a sweep drift of 1.24 ms. The `cap:0` references were flat
+  across all four sizes, so the upload half is not size-bound either. **The tap
+  is not memory traffic into a big sparse layer.**
+- **The bicubic: already paid for.** 0.55 ms, because the four extra fetches sit
+  behind a `cs > 0.004` probe gate — the shader comment records +2.1 ms when
+  they did not.
+- **A per-chunk `shadowBounds` box: NULL.** Built the way `profBounds` and
+  `maskBounds` are, from the raster's own rects rather than the decal entries
+  (a blob's footprint is projected by `stampSL` under `overscan`, which is not
+  the reach `maskRect` carries). It works mechanically — real box on the chunk
+  holding cars, empty box everywhere else — and bought 0.60 ms against a
+  1.12 ms between-build drift. **Reverted; do not rebuild it.**
+
+The last one has a mechanism worth keeping: at a 10.5 degree chase pitch the
+expensive fragments are the near ones at the bottom of the frame, and those are
+exactly where the car — and therefore any box drawn around its shadow — is. A
+reject window keeps the costly fragments and drops the cheap distant ones.
+
+That is the same shape as the masked loop's own history, where a depth-EQUAL
+stamp pass was built and refuted with "those fragments cost ~7 ms whichever pass
+shades them". **Both halves of this channel have now refused every structural
+escape tried on them. Price the fragments or delete the channel; do not look for
+a seventh pass arrangement.**
+
+### The channel DOES deliver its picture — verified, after a false alarm
+
+The shadow is easy to convince yourself is missing: it sits under and just
+behind the car at a 10.5 degree chase pitch, it is soft, and it darkens a deck
+that is already grey. Two arms settle it, and both are cheap to repeat:
+
+- **Measured.** Over the deck band under the player car, the 5th-percentile
+  luminance goes 108 (`NO_DECAL_BLOB`) -> 79 (shipped); the median goes
+  121 -> 115.
+- **Seen directly.** A temporary `base = vec3(cs)` / `vec3(min(a, csw))` in the
+  tap block paints the sampled coverage and the composited alpha onto the deck.
+  Both come back bright on VISIBLE deck behind the car, so the tap reads the
+  stamp and the remap passes it through.
+
+Worth writing down because the eye is the wrong instrument here and three
+separate checks were run on the strength of it. **Do not conclude this channel
+is broken from a screenshot** — measure the band, or paint the coverage.
+
+The stamp is also the CAR'S OWN FOOTPRINT and no larger, so most of it is
+occluded by the car from a chase camera by construction. `grow` (0..1, dilate in
+footprint half-widths) is what makes it obvious in a debug capture; the shipped
+0 is not a bug.
+
 ## EVERY SETTLED COLUMN IS A PACED SPAN, and this is why the sweep runs twice
 
 At the rung each player count settles on, the box presents on essentially every

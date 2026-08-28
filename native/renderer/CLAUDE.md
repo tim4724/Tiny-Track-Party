@@ -283,8 +283,13 @@ budget. (Untested and the only honest open question: whether it fits at the
 real 4-player operating point of 540p + hz30, where the budget doubles and the
 fill is ~56% — do not assume it from the 720p number.)
 
-**The masked stamps are the decal channel's whole cost on the Android box,
-and a separate pass cannot collect it.** Decomposed under Vulkan at 4P
+**The masked stamps WERE the decal channel's whole cost on the Android box,
+and a separate pass could not collect it.** Past tense since 2026-08-27: the
+rank gate at the end of this paragraph retired the loop everywhere, and a
+re-decomposition then found the cost had moved wholesale onto the layer that
+replaced it, not vanished — see `docs/perf/androidtv-frame-map.md`. Keep reading
+anyway: the refuted escapes below are the durable half, and the retired loop is
+still what the plan doc's Phase 5 numbers describe. Decomposed under Vulkan at 4P
 (`TTP_DEBUG_NO_DECAL_*`, the sub-channel knobs; readings and method in
 `docs/perf/androidtv-4p-plan.md` Phase 5): the four own-car silhouette stamps
 are ~7 ms of a 1080 frame while the profile loop, the statics and the far
@@ -307,8 +312,10 @@ seen from the execution side. Nothing spellable inside a per-entry loop
 collects it; analytic shapes, texture formats and resolutions are all refuted
 with it. The one lever that converts is the rank gate itself — a LOOK trade the
 user took, first at four cells and then everywhere: `CarShadowTuning::mode`
-ships as `kShadowModeBlob`, so no frame draws a masked stamp at any cell count
-and the channel's cost goes with it. 4P locks 768x432@60. What made it a trade
+ships as `kShadowModeBlob`, so no frame draws a masked stamp at any cell count.
+The channel's cost did NOT go with it, and 4P no longer locks 768x432@60 — it
+passes through that rung and cycles below it. Both are re-measured in the frame
+map; do not quote the lock from here. What made it a trade
 worth taking rather than a loss was the per-car FOOTPRINT above — the near
 band's whole argument was the car-shape under your own car, and the blob
 carries one now.
@@ -376,10 +383,17 @@ to nothing at all. That is why `mCarOutlines` keeps the captured geometry and
 every re-bake rasterizes from the copy; `bakeCarFootprint` refuses a capture
 whose extent does not straddle the origin rather than let it fail silently.
 
-**THE BLOB'S COST IS CPU, NOT GPU — the tap is free and the RASTER AND UPLOAD
-are not.** Measured on the Android reference box at four players by ablating the
-channel (`TTP_DEBUG_NO_DECAL_BLOB`), every arm with the same build, GPU flat at
-21.0-21.7 ms throughout:
+**THE BLOB COSTS ON BOTH SIDES, and the GPU half is the bigger one.** The table
+below is the CPU half and still holds; the "GPU flat, the tap is free" reading it
+was first written around does NOT, and was taken when the blob was the FAR-car
+path beside a masked loop rather than the only shadow in the frame. Paired
+against `cap:0` — which gates the tap block while the raster and upload keep
+running — 4P/1080 prices the tap block at 4.4 ms of GPU against 1.9 ms of CPU
+raster and upload. Spend on either half, and price the one you are spending on.
+The frame map carries that split and the three levers measured dead inside it.
+
+Measured on the Android reference box at four players by ablating the
+channel (`TTP_DEBUG_NO_DECAL_BLOB`), every arm with the same build:
 
 | arm | CPU ms |
 |---|---|
@@ -390,9 +404,10 @@ channel (`TTP_DEBUG_NO_DECAL_BLOB`), every arm with the same build, GPU flat at
 
 So the channel is ~2.0 ms of frame thread as it ships, and BOTH halves scale
 with density: the raster because a denser stamp covers more texels, the upload
-because there are more bytes. **This is where to spend effort, and the GPU is
-not.** `debug.ttp.shadow` on that box takes the tuning as partial JSON, which is
-how every row above was taken; `/shadow-lab.html` cannot answer this question
+because there are more bytes. **The GPU half does not scale with it** — shrinking
+the layer sixteenfold moved the tap by nothing measurable, which is why density
+is a CPU lever only. `debug.ttp.shadow` on that box takes the tuning as partial
+JSON, which is how every row above was taken; `/shadow-lab.html` cannot answer this question
 because the same channel is free on a desktop GPU.
 
 **THE LAYER'S DENSITY IS THE FLICKER, and it is the first thing to reach for.**
