@@ -50,10 +50,34 @@ lands on 640x360@60 rather than back on 432. It then cycles: 540@30 → 360@60 �
 540@30. 432@60 is where the box can actually run and is the one rung the rule
 never returns to.
 
-That is a change: 432@60 was LOCKED when the sub-floor rungs shipped. The frame
-has since grown a per-car contact-shadow stamp and a per-fragment deck shadow,
-and at 432 the p95 now sits within a millisecond of the 0.90 share the rule
-retreats on — so the rung is no longer held, it is merely passed through.
+That is a change: 432@60 was LOCKED when the sub-floor rungs shipped, and the
+loss has since been BISECTED on the box (2026-08-28). It is a real code
+regression, not the box drifting and not the harness: `b8da49cf`, the commit
+whose message is "4P is 432@60 now", still reads 60 fps / 0 skips at a pinned
+432 today.
+
+| build | pinned 432, two reps | GPU p50 |
+|---|---|---|
+| `b8da49cf` the lock commit | **60 / 0 skips**, 60 / 0 | 12.86, 12.64 |
+| `b2ea2725` skid throttle dropped | **60 / 0**, 60 / 0 | 12.19, 12.66 |
+| `0bf4f784` wheel-roll cosmetics | **60 / 0**, 60 / 0 | 12.88, 12.52 |
+| `77ee2a82` deck shadow per fragment | 60 / 0, **58 / 1** | 13.24, 13.61 |
+| `bafe8fc7` car contact shadow | 57 / 3, 59 / 1 | 15.78, 14.04 |
+| `ace8ad0d` HEAD | 56 / 4, 59 / 1 | 15.55, 15.87 |
+
+The two shadow commits are CUMULATIVE — `77ee2a82` costs about 0.8 ms and
+leaves the rung marginal (one rep locks, one does not), `bafe8fc7` costs the
+rest and breaks it. The Filament v1.75 -> v1.76 bump is NOT implicated:
+`bafe8fc7` and HEAD, which straddle it, measure the same.
+
+**AND THE FEATURE BITS DO NOT RECOVER IT.** At HEAD, pinned 432, with
+`NO_DECAL_BLOB`, with `~ROAD_SHADOW`, and with both, every arm still reads
+58-59 fps and 1-2 skips against the pre-shadow builds' 60 / 0. Turning these two
+features OFF does not buy back what landing them cost, so what they added is
+not all inside the ablatable path — a bit that gates shading cannot un-bind a
+sampler, un-declare a vertex attribute or un-send an upload. **Treat the two
+shadow rows of the feature table as a LOWER BOUND on those commits, and never
+size a revert from an ablation.**
 
 ## The frame, step by step
 
@@ -124,6 +148,15 @@ channel shorter, so nothing behind them takes the fill over.
 The unablated arm was run first AND last, either side of every other arm; the
 `(repeat)` row is how far the two disagree. **Nothing narrower than that row is
 a result.**
+
+One more caveat, learned the hard way (see the bisect above): an ablation is
+only as good as the point it is taken at. The first pass at this regression
+ablated at the SETTLED rung, where the box presents on nearly every vsync, and
+read GPU p50 — a paced span, where arm differences compress toward nothing. It
+returned "both shadows cost 0.4 ms and neither is the cause", and the bisect
+then contradicted it. **Ablate at a PINNED point, and judge a rung question on
+fps and skips, which say whether the frame met the deadline and cannot be
+compressed by pacing.**
 
 Four readings worth stating in words:
 
@@ -208,6 +241,37 @@ stamp pass was built and refuted with "those fragments cost ~7 ms whichever pass
 shades them". **Both halves of this channel have now refused every structural
 escape tried on them. Price the fragments or delete the channel; do not look for
 a seventh pass arrangement.**
+
+### The tap is TWO fetches, and only one of them is collectible in principle
+
+Same-build paired arms (`tap = on - cap:0`), 4P/1080, `smoothTap:false`
+throughout so the bicubic is out of both. A probe build hoists ONE
+`texture(skidLayer, suv)` and feeds both the rubber and the shadow tap from it —
+wrong picture, right instruction count minus one fetch:
+
+| | tap block |
+|---|---|
+| shipped, two fetches | 5.17 ms |
+| probe, one fetch | 3.01 ms |
+| **the second fetch** | **~2.2 ms** |
+
+So a fetch on the deck is worth about 2 ms, and the deck takes two at the same
+coordinate — `vroad.mat` says the shadow layer is built on the rubber layer's
+exact lat span deliberately. One texture serving both would collect it.
+
+**It is not worth building.** One fetch means one texture, which means shared
+dimensions AND a shared mip chain: the rubber is 8192x512 with a full chain
+refreshed under dirty rects, the shadow is `min(8192, length*16)` x 256, single
+level, rewritten every frame. Merging drags a per-frame channel through the
+rubber's pyramid at the rubber's higher texel density, trading GPU fill for
+frame-thread and upload work — and per the bisect above, fill is not what costs
+4P its rung anyway. The 2.2 ms only cashes at 1080 and 4K, where nothing is
+currently short.
+
+**The remap is free.** Moving the tail cut out of the shader and into the raster
+(`remapInShader:false`, an A/B arm that needs no rebuild) measured 39.26 against
+a 39.71 shader-side mean, against a 0.97 ms repeat spread. Null — and it would
+have cost 44% more edge flicker. Do not spend on the smoothstep.
 
 ### The channel DOES deliver its picture — verified, after a false alarm
 
