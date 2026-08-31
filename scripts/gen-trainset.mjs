@@ -9,9 +9,15 @@
 // scene then pays for one model with no per-frame cost and no new renderer path.
 //
 // The ring is short STRAIGHTS around a circle rather than the kit's own bend
-// pieces: their connector geometry is not written down anywhere, and a chord of
-// 0.5 on this radius is within a percent of the arc, so the joins close visually
-// while the layout stays something you can read in this file.
+// pieces. The bends DO close exactly — four of them are a circle — but only at
+// the radius their geometry is cut for, which is under half of this one, and a
+// locomotive is a RIGID body: on a ring that tight it spans enough arc to hang
+// off the rails at both ends. Scaling the bends up scales their gauge past the
+// train. So the radius is chosen for the TRAIN, and the ring is a polygon of
+// straights whose chord is under a percent off the arc.
+//
+// The circle is also a CONTRACT, not a shape choice: the whole train moves by
+// one rotation of SPIN_NODE, so anything but a circle cannot be driven at all.
 //
 //   node scripts/gen-trainset.mjs
 //
@@ -49,8 +55,21 @@ const TRAIN = [
 ];
 const COUPLING = 0.06;
 // What the renderer turns to drive the train round the rails. A prop model may
-// name ONE node this, and nothing else in the game does.
+// name ONE node this, and nothing else in the game does. It turns the ring
+// FORWARD, in the +angle direction — so that is the way the locomotive faces.
 const SPIN_NODE = 'spin';
+
+// Where a piece sits on the ring, and which way it points.
+//
+// EVERY PIECE HERE RUNS ALONG ITS OWN +X — measured, not assumed: the straight's
+// two rail heads are 0.15 apart in z and continuous in x, and the locomotive's
+// cab is the tall block at -x with the chimney ahead of it.
+//
+// A yaw about +y sends local +x to (cos yaw, -sin yaw) in (x, z), and the ring's
+// tangent at angle `a` is (-sin a, cos a). Those meet at -a - PI/2 and nowhere
+// else; -a is the RADIAL direction, which lays the straights out as spokes and
+// the train broadside across them.
+const ringAt = (a) => ({ x: Math.cos(a) * RADIUS, z: Math.sin(a) * RADIUS, yaw: -a - Math.PI / 2 });
 
 const GLB_MAGIC = 0x46546c67, JSON_CHUNK = 0x4e4f534a, BIN_CHUNK = 0x004e4942;
 
@@ -95,8 +114,8 @@ const binParts = [];
 let binLen = 0;
 
 // Append a source's meshes and buffers ONCE, and hand back where they landed.
-// Twenty rails are twenty nodes over one copy of the rail's geometry — appending
-// per placement instead cost 280 kB for a 40 kB model.
+// Every rail on the ring is its own node over ONE copy of the rail's geometry —
+// appending per placement instead cost 280 kB for a 40 kB model.
 function load(src) {
   const base = {
     node: out.nodes.length,
@@ -164,16 +183,19 @@ function place(roots, { x, z, yaw, y = 0, scene = true }) {
 }
 
 const rail = load(readGlb(RAIL));
-// One straight per chord of RAIL_LEN, rotated to lie along its own tangent. The
-// kit's straights run along their +x, which is what the tangent is here.
-const count = Math.max(4, Math.round((2 * Math.PI * RADIUS) / RAIL_LEN));
-for (let i = 0; i < count; i++) {
-  const a = (i / count) * 2 * Math.PI;
-  place(rail, { x: Math.cos(a) * RADIUS, z: Math.sin(a) * RADIUS, yaw: -a });
-}
+// One straight per chord of RAIL_LEN, laid along its own tangent. CEIL, not
+// round: it makes the chord shorter than the piece, so consecutive straights
+// overlap at the centreline rather than leaving a sliver of floor between them.
+// The ring is a polygon, so each join is a visible kink — at this piece count a
+// shallow one, and the overlap keeps the sleepers reading as continuous track.
+const count = Math.max(4, Math.ceil((2 * Math.PI * RADIUS) / RAIL_LEN));
+for (let i = 0; i < count; i++) place(rail, ringAt((i / count) * 2 * Math.PI));
 
-// The train, nose to tail along the same circle, starting a quarter turn round
-// so it reads as travelling rather than parked at the seam.
+// The train, nose to tail along the same circle, its locomotive a quarter turn
+// round so the set reads as travelling rather than parked at the seam. The
+// consist runs BACKWARDS from the loco — each following car a half-length, a
+// coupling and a half-length further against the direction of travel — because
+// the loco pulls: stepping forward instead put the wagons out in front of it.
 //
 // Under a PIVOT at the ring's centre, named so the renderer can find it: turning
 // that one node walks the whole train round the rails, which is the only moving
@@ -182,15 +204,34 @@ for (let i = 0; i < count; i++) {
 const carriages = [];
 let arc = Math.PI * 0.5;
 for (const car of TRAIN) {
-  arc += (car.len / 2 + COUPLING) / RADIUS;
-  carriages.push(place(load(readGlb(car.file)), {
-    x: Math.cos(arc) * RADIUS, z: Math.sin(arc) * RADIUS, yaw: -arc, y: RAIL_TOP,
-    scene: false,
-  }));
-  arc += (car.len / 2) / RADIUS;
+  arc -= (car.len / 2) / RADIUS;
+  carriages.push(place(load(readGlb(car.file)),
+    { ...ringAt(arc), y: RAIL_TOP, scene: false }));
+  arc -= (car.len / 2 + COUPLING) / RADIUS;
 }
 out.nodes.push({ name: SPIN_NODE, children: carriages });
 out.scenes[0].nodes.push(out.nodes.length - 1);
+
+// DROP EVERY NODE THE SCENE CANNOT REACH. `load` appends a source's nodes so
+// `place` has something to copy, and those templates are then parented to
+// nothing — which is not the same as invisible: gltfio instantiates the node
+// ARRAY, so an orphan is drawn, at identity, wherever the model is placed. That
+// is what parked a second locomotive, a tender, a wagon and a rail on top of
+// each other in the middle of the ring.
+const keep = new Set();
+const reach = (i) => {
+  if (keep.has(i)) return;
+  keep.add(i);
+  for (const c of out.nodes[i].children || []) reach(c);
+};
+out.scenes[0].nodes.forEach(reach);
+const remap = new Map();
+const kept = [];
+out.nodes.forEach((n, i) => { if (keep.has(i)) { remap.set(i, kept.length); kept.push(n); } });
+out.nodes = kept.map((n) => (n.children
+  ? { ...n, children: n.children.map((c) => remap.get(c)) }
+  : n));
+out.scenes[0].nodes = out.scenes[0].nodes.map((r) => remap.get(r));
 
 const bin = Buffer.concat(binParts, binLen);
 out.buffers = [{ byteLength: bin.length }];
