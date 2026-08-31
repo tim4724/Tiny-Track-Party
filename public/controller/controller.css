@@ -612,8 +612,15 @@ input[type=text]:disabled { opacity: 0.6; }
      later grows the row by one line and never by four.
      scripts/lobby-fit-check.mjs measures the clip VERTICALLY now — a wrapping
      name cannot overflow its own width, so the old horizontal slack reading
-     would have passed whatever it was handed. */
+     would have passed whatever it was handed.
+     Both lines are RESERVED, not just allowed. The tiles are one grid of equal
+     boxes with their content centred, so a one-line name ("Snow Cup") centred
+     its own shorter block and put its stars a half-line above the two-line
+     tile's beside it — six tiles, four text baselines. Reserving the second
+     line makes every tile's content the same height, which is what puts the
+     names on one line and the stars on another across the whole grid. */
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  min-height: calc(2 * 1.15em);   /* = -webkit-line-clamp x line-height */
   overflow: hidden; overflow-wrap: break-word;
 }
 .mode-opt__sub { grid-area: trail; font-weight: 800; font-size: 0.88rem; color: var(--ink-3); }
@@ -707,24 +714,32 @@ input[type=text]:disabled { opacity: 0.6; }
   padding: 0.55rem;
   border-radius: var(--r-sm);
 }
-.modepick__tracks .trackpick__grid { grid-template-columns: repeat(4, 1fr); gap: 0.45rem; }
+.modepick__tracks .trackpick__grid { grid-template-columns: repeat(4, minmax(0, var(--track-tile))); gap: 0.45rem; justify-content: space-evenly; }
 /* The maps are SQUARE and take the width they are given, so the panel's height
    is set by the card's width — widen the card and the four schematics push the
    panel down into the action corner. (The corner is out of this card's flow, so
    nothing stops them; there was 3px of clearance at 844x300 before the card was
-   widened, and -23px after.)
-   Capped on BOTH axes, because the panel is squeezed from both. 6rem holds the
-   width-driven growth: past that a schematic is only bigger, not clearer, and
-   the card is free to widen without the panel chasing it. The dvh term holds
-   the other end — 100dvh less the page furniture the maps share the screen with
-   (the identity ribbon, the action corner, this card's own title and its
-   legend, and the gaps between) — and binds only under ~300px, where the fixed
-   furniture, not the card's width, is what leaves no room.
+   widened, and -23px after.) So the schematic is capped — and the cap is on the
+   TILE, not on the map inside it.
+   That distinction is the whole rule. Capping the map left the tile stretched
+   to its 1fr share of the card, so the slack piled up as side gutters INSIDE
+   the tile: 26px left and right against 6px top, which is what a tile with
+   uneven padding is. Capping the tile hands the slack to the row instead, where
+   space-evenly spreads it as equal gaps, and the map fills the tile it is in.
+   6rem holds the width-driven growth: past that a schematic is only bigger, not
+   clearer, and the card is free to widen without the panel chasing it. It is
+   also all the vertical budget there is — the clearance the panel leaves the
+   action corner falls PIXEL FOR PIXEL with the cap, and 6rem is what leaves
+   840x320 its 2px. The dvh term holds the other end — 100dvh less the page furniture the maps share the
+   screen with (the identity ribbon, the action corner, this card's own title
+   and its legend, and the gaps between) — and binds only under ~300px, where
+   the fixed furniture, not the card's width, is what leaves no room.
    max-WIDTH for both, because a square that meets a max-HEIGHT keeps its width
    and letterboxes the schematic inside a wide, short box; capping the width
-   shrinks the square as a square.
+   shrinks the square as a square. The tile's own padding and border ride along
+   on top of the map's cap, since the cap is the size the SCHEMATIC may reach.
    tests/e2e/controller-short-viewport.spec.js is the gate. */
-.modepick__tracks .track-map { max-width: min(6rem, calc(100dvh - 220px)); }
+.modepick__tracks { --track-tile: calc(min(6rem, 100dvh - 220px) + 0.5rem + 4px); }
 /* Random's panel holds RUNS, not tracks, but wears the exact same grid and tile
    anatomy — a "?" square (.track-map--q) where a schematic would sit — so
    swapping a cup for Random moves nothing below the picker. */
