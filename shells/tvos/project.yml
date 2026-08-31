@@ -60,6 +60,25 @@ settings:
     # screenshot runner resolves a CONCRETE simulator id, and a concrete
     # destination pins the arch to that device's.
     ARCHS: arm64
+    # THE VERSION, IN ONE PLACE FOR BOTH TARGETS. Both Info.plists below read
+    # these through $(...) rather than carrying a literal, because App Store
+    # Connect enforces two rules that a literal cannot keep: a CFBundleVersion
+    # may not repeat under one CFBundleShortVersionString, and an embedded
+    # app-extension's CFBundleVersion must EQUAL the app's. Setting them here
+    # means one xcodebuild override moves the app and the Top Shelf appex
+    # together — .github/workflows/release.yml passes the run number as
+    # CURRENT_PROJECT_VERSION and the release tag as MARKETING_VERSION, the same
+    # shape as Android's -PttpVersionCode / -PttpVersionName.
+    #
+    # WHICH BUILD ACTUALLY SEES THESE differs between the two, and the asymmetry
+    # is deliberate: release.yml overrides CURRENT_PROJECT_VERSION on EVERY run,
+    # tag and dispatch alike, because App Store Connect refuses a build number it
+    # has already seen — while MARKETING_VERSION is overridden only by a tag, so
+    # a dispatch ships the value below. A build outside that workflow keeps both:
+    # a local xcodebuild, or tvos.yml's simulator leg, which sets neither.
+    # Nothing here needs editing to cut a release.
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
 
 # The item icons ship as the SHARED SVGs (public/assets/items/, staged by
 # stage-assets.sh), and UIKit cannot rasterize an SVG file at runtime —
@@ -113,8 +132,15 @@ targets:
       path: TinyTrackParty/Resources/Info.plist
       properties:
         CFBundleDisplayName: Tiny Track Party
-        CFBundleShortVersionString: "0.1.0"
-        CFBundleVersion: "1"
+        # Expanded from the build settings at the top of this file — see the
+        # note there for why neither may be a literal.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # NO ENCRYPTION BEYOND HTTPS/WSS, which is the exempt case. Declared here
+        # rather than answered in the console because an upload that does not
+        # carry it PARKS in App Store Connect waiting for the answer, and cannot
+        # reach a TestFlight tester until someone opens the web UI.
+        ITSAppUsesNonExemptEncryption: false
         # Where the phones load the controller from (Protocol.swift's seam).
         # Without this the app falls back to the per-push preview deploy.
         TTPBaseURL: https://tinytrack.couchpad.games
@@ -271,8 +297,22 @@ targets:
       path: TopShelf/Info.plist
       properties:
         CFBundleDisplayName: Tiny Track Party Shelf
-        CFBundleShortVersionString: "0.1.0"
-        CFBundleVersion: "1"
+        # THE SAME TWO SETTINGS THE APP READS, and that is the point: an appex
+        # whose CFBundleVersion differs from its host app's is rejected at
+        # upload, so this must not be able to drift.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # DECLARED HERE BECAUSE THE APP'S COPY IS NOT INHERITED. Xcode injects
+        # UIRequiredDeviceCapabilities=[arm64] into an APPLICATION's plist on its
+        # own, but this plist is generated wholesale from these properties — the
+        # same rewrite the NSExtension note below is about — so the appex gets
+        # whatever is written here and nothing else. Without it App Store Connect
+        # refuses the upload: "Invalid Bundle. Your binary,
+        # games.couchpad.tinytrack.topshelf, has a 64-bit architecture slice, so
+        # you must include the arm64 value" (ITMS-90502). The archive, the export
+        # and every local install succeed; only the store says no.
+        UIRequiredDeviceCapabilities:
+          - arm64
         NSExtension:
           # The Top Shelf extension point. TVTopShelfContentProvider is only
           # consulted for a bundle carrying exactly this identifier; anything else

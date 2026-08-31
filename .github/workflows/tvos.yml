@@ -1,0 +1,208 @@
+name: Apple TV app
+
+# The Swift half of shells/tvos/, and the two things NO other job compiles: the
+# Filament renderer for tvOS, and runtime/ttp_display_tvos.mm — the tree's only
+# ObjC++ file, which carries its own -fno-objc-exceptions requirement that
+# nothing else can check.
+#
+# WHY THIS IS NOT native.yml's tvos-sim LEG. That one cross-compiles the ctest
+# suite and runs it on a booted Apple TV 4K, which proves the ENGINE is
+# bit-exact — but it configures without -DFILAMENT_SDK, so `ttp_renderer` does
+# not exist and native/CMakeLists.txt gates both display sources off. The
+# television's whole renderer half was therefore uncompiled until this job.
+#
+# WHY ONE JOB AND NOT TWO. On Android the halves separate cleanly: androidtv.yml
+# compiles Kotlin with -PttpNoEngine and native.yml's android-full links the .so.
+# Here they cannot — shells/tvos/scripts/build.sh runs prepare.sh, which builds
+# the engine, compiles the Metal materials, stages the bundle and regenerates the
+# project before xcodebuild ever starts. The app build subsumes the engine build,
+# and splitting them would pay the Filament restore twice.
+#
+# SIMULATOR ONLY for the app, because a signed device build needs a certificate
+# and this workflow runs on pull requests, where secrets must not be reachable.
+# The DEVICE slice is still compiled — see the step that builds it — because
+# appletvos is the arch that ships and it is a separate compile from
+# appletvsimulator (both arm64, so there is no fat library and no lipo).
+#
+# The store build lives in release.yml's `tvos` job, and RESTORES THE CACHE THIS
+# JOB WRITES: caches written on the default branch are what tag runs restore, so
+# a green run here is what keeps a release out of a cold Filament cross build.
+#
+# NOT covered here: ffmpeg is absent, so stage-assets.sh warns and stages no
+# engine_loop.wav. That is a resource, not a compile, and the release job — which
+# must not ship a silent engine — installs ffmpeg and gates on the file.
+
+on:
+  pull_request:
+    paths:
+      - 'native/**'
+      - 'shells/tvos/**'
+      - '.github/workflows/tvos.yml'
+      # Staged into the bundle by shells/tvos/scripts/stage-assets.sh.
+      - 'public/assets/toycar/**'
+      - 'public/assets/items/**'
+      - 'public/assets/audio/cues/**'
+      - 'public/assets/audio/engine_loop.*'
+      - 'public/assets/audio/music/**'
+      - 'public/assets/brand/**'
+      - 'public/assets/fonts/OFL-*'
+      - 'public/shared/design-tokens.json'
+      # Baked into Swift by the two generators staging runs: the scenario table
+      # the screenshot runner compiles in, and the info board's legal data with
+      # the credit sources it derives the notice list from.
+      - 'public/shared/galleryScenarios.js'
+      - 'public/shared/credits.js'
+      - 'public/display/audio/musicCatalogue.js'
+      - 'public/display/index.html'
+      - 'public/assets/licenses/**'
+      - 'shells/licenses/**'
+      - 'scripts/shell-credits.mjs'
+  push:
+    branches: [main]
+    paths:
+      - 'native/**'
+      - 'shells/tvos/**'
+      - '.github/workflows/tvos.yml'
+      - 'public/assets/toycar/**'
+      - 'public/assets/items/**'
+      - 'public/assets/audio/cues/**'
+      - 'public/assets/audio/engine_loop.*'
+      - 'public/assets/audio/music/**'
+      - 'public/assets/brand/**'
+      - 'public/assets/fonts/OFL-*'
+      - 'public/shared/design-tokens.json'
+      - 'public/shared/galleryScenarios.js'
+      - 'public/shared/credits.js'
+      - 'public/display/audio/musicCatalogue.js'
+      - 'public/display/index.html'
+      - 'public/assets/licenses/**'
+      - 'shells/licenses/**'
+      - 'scripts/shell-credits.mjs'
+
+concurrency:
+  group: tvos-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    runs-on: macos-latest
+    # A cache miss means building Filament for two tvOS SDKs plus the partial
+    # desktop build it needs for matc. A hit finishes in minutes.
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Read the Filament pin
+        id: pin
+        run: |
+          set -eu
+          . native/filament.pin
+          echo "commit=$FILAMENT_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "remote=$FILAMENT_REMOTE" >> "$GITHUB_OUTPUT"
+
+      # xcodegen is not in the runner image. ninja is, but naming it costs
+      # nothing and build-runtime-tvos.sh fixes -G Ninja for the life of the
+      # build directory, so a missing one fails at configure rather than at
+      # install time. Guarded per formula because `brew install` on an
+      # already-present one is a warning this job should not have to read.
+      - name: Install the build tools
+        run: |
+          set -eu
+          for f in ninja xcodegen; do
+            brew list --formula "$f" >/dev/null 2>&1 || brew install "$f"
+          done
+
+      # OUTSIDE THE WORKSPACE, like release.yml's: a 1.6 GB tree inside the repo
+      # makes every `git status --porcelain` dirty, and build.sh stamps that
+      # string into the version the DEBUG lobby shows.
+      #
+      # FILAMENT_SRC is an allowed override of filament-checkout.sh's
+      # version-addressed default, but only AT the pinned commit — which is why
+      # this fetches the commit itself rather than a branch.
+      - name: Fetch the pinned Filament fork
+        run: |
+          set -eu
+          SRC="$RUNNER_TEMP/filament"
+          mkdir -p "$SRC"
+          git -C "$SRC" init -q
+          git -C "$SRC" remote add origin "${{ steps.pin.outputs.remote }}"
+          git -C "$SRC" fetch -q --depth 1 origin "${{ steps.pin.outputs.commit }}"
+          git -C "$SRC" checkout -q --detach FETCH_HEAD
+          echo "FILAMENT_SRC=$SRC" >> "$GITHUB_ENV"
+
+      # KEYED ON THE PIN AND NOTHING ELSE, and no restore-keys: a near-miss
+      # would restore a DIFFERENT Filament's headers and libs, and a
+      # MATERIAL_VERSION mismatch surfaces as a material that fails to parse on
+      # the television, not as a build error.
+      #
+      # THE INSTALL TREES ONLY, never out/cmake-tvos-*. Two reasons, and both
+      # matter: ~72 MB instead of gigabytes, and no CMakeCache.txt for
+      # filament-checkout.sh's require_local_install to inspect — that guard
+      # exists to catch an out/ carried across pins, whose baked
+      # CMAKE_INSTALL_PREFIX points at the wrong tree. Keying on the pin is what
+      # makes a restore always same-pin and therefore safe.
+      #
+      # matc comes from out/cmake-release: build.sh performs a partial DESKTOP
+      # build as part of any tvos build, and that is where the host tool lands
+      # (build-runtime-tvos.sh reads exactly this path).
+      #
+      # RESTORE AND SAVE AS SEPARATE STEPS, for the reason release.yml gives:
+      # the combined action only writes in its post step when the whole job
+      # succeeds, and everything after this can fail for reasons that have
+      # nothing to do with Filament.
+      - name: Restore the Filament tvOS SDK
+        id: filament-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ runner.temp }}/filament/out/tvos-release/filament-appletvos
+            ${{ runner.temp }}/filament/out/tvos-release/filament-appletvsimulator
+            ${{ runner.temp }}/filament/out/cmake-release/tools/matc/matc
+          key: filament-tvos-${{ steps.pin.outputs.commit }}
+
+      # TWO STEPS, and the second is the one that is easy to miss:
+      # `build.sh -i` installs the XCFRAMEWORK ROOT only, and the per-SDK trees
+      # this tree links are written by an explicit `cmake --install` off each
+      # SDK's own build directory. build-runtime-tvos.sh's missing-SDK error
+      # prints both commands for the same reason.
+      #
+      # -s adds the simulator slice. -a is deliberately NOT passed: it only
+      # generates a .tgz distribution archive, which nothing restores.
+      - name: Build the Filament tvOS SDK (pin bump only)
+        if: steps.filament-cache.outputs.cache-hit != 'true'
+        working-directory: ${{ runner.temp }}/filament
+        run: |
+          set -eu
+          ./build.sh -s -i -p tvos release
+          for sdk in appletvos appletvsimulator; do
+            cmake --install "out/cmake-tvos-release-arm64-$sdk" \
+              --prefix "out/tvos-release/filament-$sdk"
+            test -f "out/tvos-release/filament-$sdk/include/filament/Engine.h"
+          done
+          test -x out/cmake-release/tools/matc/matc
+
+      # Keyed and pathed identically to the restore, or the next run misses and
+      # rebuilds what this just saved.
+      - name: Save the Filament tvOS SDK
+        if: steps.filament-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ runner.temp }}/filament/out/tvos-release/filament-appletvos
+            ${{ runner.temp }}/filament/out/tvos-release/filament-appletvsimulator
+            ${{ runner.temp }}/filament/out/cmake-release/tools/matc/matc
+          key: filament-tvos-${{ steps.pin.outputs.commit }}
+
+      # THE SHIPPING SLICE, and it is not the one the app build below produces.
+      # Apple TV device and simulator are both arm64, so they are separate
+      # compiles with no fat library between them — without this step the arch
+      # that reaches a television is the one arch CI never compiles. No signing
+      # is involved: this emits a .a.
+      - name: Build the engine (appletvos, the device slice)
+        run: native/scripts/build-runtime-tvos.sh device
+
+      # Engine (simulator slice), Metal materials, staged bundle, xcodegen, then
+      # an unsigned xcodebuild — build.sh runs prepare.sh itself, so the four
+      # ordering traps prepare.sh's header documents cannot be reproduced here.
+      - name: Build the app (tvOS simulator, unsigned)
+        run: shells/tvos/scripts/build.sh simulator

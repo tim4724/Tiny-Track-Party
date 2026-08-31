@@ -634,6 +634,20 @@ re-open them as work.
   fixtures do run on real hardware: `native/scripts/android-device-spawn.sh`
   drives the whole ctest suite on a box over adb — a scripted-manual run, not
   a CI gate, and the answer to `fp-profile.md`'s contraction risk.
+- **A shell's RENDERER is compiled by its own workflow, not by the conformance
+  matrix.** `native.yml` configures without `-DFILAMENT_SDK` on every leg, and
+  `native/CMakeLists.txt` gates `ttp_display_*.cc/.mm` and `ttp_renderer` behind
+  that, so the conformance jobs prove the engine and see none of the display
+  half. Each TV shell therefore owns a workflow that builds the real thing
+  against the pinned Filament fork, cached on the pin commit: `androidtv.yml`
+  plus `native.yml`'s `android-full`, and `tvos.yml`. A fourth shell owes one
+  too, and it is where its platform's only ObjC++/JNI/glue file first compiles.
+- **Both TV shells publish from `release.yml`, and NEITHER is device-tested by a
+  runner.** Its jobs are independent, take the same pin-keyed Filament cache the
+  per-shell workflow warms on `main`, and publish only on a tag — a dispatch
+  builds and hands back an artifact. What a runner cannot do either way is see a
+  frame: the store pictures come from the WEB display (`screenshots`), and the
+  first machine to render a shipped build is a television.
 
 ## What conformance does and does not cover you for
 
