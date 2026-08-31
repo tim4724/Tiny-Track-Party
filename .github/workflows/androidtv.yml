@@ -32,6 +32,11 @@ on:
       - 'public/assets/items/**'
       - 'public/assets/audio/cues/**'
       - 'public/assets/audio/engine_loop.*'
+      - 'public/assets/audio/music/**'
+      # *.png, NOT brand/**: brand/tv/ underneath it is the Apple TV shelf and
+      # icon stack, which this shell never reads and `npm run bake:shelf`
+      # rewrites wholesale. The seven files staged here sit directly in brand/.
+      - 'public/assets/brand/*.png'
       - 'public/assets/fonts/OFL-*'
       - 'public/shared/design-tokens.json'
       - 'public/display/engine/native/*.filamat'
@@ -56,6 +61,11 @@ on:
       - 'public/assets/items/**'
       - 'public/assets/audio/cues/**'
       - 'public/assets/audio/engine_loop.*'
+      - 'public/assets/audio/music/**'
+      # *.png, NOT brand/**: brand/tv/ underneath it is the Apple TV shelf and
+      # icon stack, which this shell never reads and `npm run bake:shelf`
+      # rewrites wholesale. The seven files staged here sit directly in brand/.
+      - 'public/assets/brand/*.png'
       - 'public/assets/fonts/OFL-*'
       - 'public/shared/design-tokens.json'
       - 'public/display/engine/native/*.filamat'
