@@ -336,9 +336,17 @@ function dressRow(btn, { trail, locked, mine, cursor, tint, pickTint, canPick, o
   if (mine) btn.setAttribute('aria-current', 'true');
   else btn.removeAttribute('aria-current');
   btn.disabled = !canPick;
+  // The padlock rides INSIDE the trail, not beside it: the tile centres its
+  // content, and a padlock in a column of its own centred the count without it.
+  // It is built once (buildRow) and re-homed here, because the trail element
+  // itself is replaced on every dress.
   const old = btn.querySelector('.starrow, .mode-opt__sub');
+  const lock = btn.querySelector('.lock-glyph');   // may be inside `old`
   if (old) old.remove();
-  if (trail) btn.appendChild(trail);
+  if (trail) {
+    if (lock) trail.insertBefore(lock, trail.firstChild);
+    btn.appendChild(trail);
+  } else if (lock) btn.appendChild(lock);
   btn.onclick = (canPick && onTap) ? onTap : null;
 }
 

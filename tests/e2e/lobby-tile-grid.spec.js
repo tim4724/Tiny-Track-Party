@@ -6,8 +6,12 @@
 //   • The cup tiles centre their content, so a one-line name ("Snow Cup") built
 //     a shorter block than the two-line tile beside it and centred THAT — its
 //     name and its stars each landing half a line off its neighbour's. Six
-//     tiles, four different baselines. The cure is that the name reserves both
-//     of its lines whether or not it uses them (.mode-opt__name min-height).
+//     tiles, four different baselines. The cure is that the NAME'S ROW is a
+//     fixed two lines whether the name uses them or not (.mode-opt grid rows).
+//   • Half those names wrap and half do not, so a left-flush tile read ragged
+//     down one axis and not the other, and the padlock in a column of its own
+//     pushed the count it qualifies off centre. Both halves of the tile are
+//     centred now, the padlock inside the trail (shared/trackPicker.js).
 //   • The four track tiles were stretched to their share of the card while the
 //     schematic inside them was capped, so the slack piled up INSIDE each tile
 //     as side gutters four times its top padding. The cure is that the cap sits
@@ -32,21 +36,37 @@ for (const vp of AT) {
       const tile = e.getBoundingClientRect();
       const name = e.querySelector('.mode-opt__name').getBoundingClientRect();
       const trail = e.querySelector('.mode-opt__sub, .starrow').getBoundingClientRect();
+      const nameEl = e.querySelector('.mode-opt__name');
+      const lines = Math.round(name.height / parseFloat(getComputedStyle(nameEl).lineHeight));
       return {
-        nameH: Math.round(name.height),
-        nameOff: Math.round(name.top - tile.top),
-        trailOff: Math.round(trail.top - tile.top)
+        lines,
+        // The name's MIDDLE, not its top: a one-line name is centred in the
+        // two-line row it is given, so it is the centres that coincide.
+        nameMid: Math.round(name.top + name.height / 2 - tile.top),
+        trailOff: Math.round(trail.top - tile.top),
+        nameOffCentre: Math.round(name.left + name.right - tile.left - tile.right),
+        trailOffCentre: Math.round(trail.left + trail.right - tile.left - tile.right)
       };
     }));
     expect(tiles.length).toBeGreaterThan(2);
+    // The premise: this only proves anything while the names actually DIFFER in
+    // how many lines they take. Rename the cups so they all fit on one and the
+    // assertions below hold with the fix reverted.
+    expect(new Set(tiles.map((t) => t.lines)).size, 'some names wrap and some do not').toBeGreaterThan(1);
 
-    // Measured against the tile's OWN top, so this holds down the whole ladder
+    // Measured against the tile's OWN box, so this holds down the whole ladder
     // and not merely across one row of two. A 1px allowance is the grid's
     // rounding, not slack: the failure this pins is a whole line, not a pixel.
     const spread = (k) => Math.max(...tiles.map((t) => t[k])) - Math.min(...tiles.map((t) => t[k]));
-    expect(spread('nameH'), 'every name block is the same height').toBeLessThanOrEqual(1);
-    expect(spread('nameOff'), 'every name starts at the same place in its tile').toBeLessThanOrEqual(1);
+    expect(spread('nameMid'), 'every name sits at the same height in its tile').toBeLessThanOrEqual(1);
     expect(spread('trailOff'), 'every stars/count row does too').toBeLessThanOrEqual(1);
+
+    // Centred across too — including the locked tile, whose padlock used to
+    // take a column of its own and carry the count off with it.
+    for (const t of tiles) {
+      expect(Math.abs(t.nameOffCentre), 'the name is centred').toBeLessThanOrEqual(1);
+      expect(Math.abs(t.trailOffCentre), 'and so is the trail, padlock included').toBeLessThanOrEqual(2);
+    }
   });
 
   test(`track tiles ${at}: the schematic sits in even padding`, async ({ page }) => {
