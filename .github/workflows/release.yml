@@ -161,8 +161,23 @@ jobs:
           sudo apt-get install -y ninja-build clang libc++-dev libc++abi-dev \
             libglu1-mesa-dev libxi-dev libxcomposite-dev libxxf86vm-dev \
             mesa-common-dev
-          ./build.sh -i -q armeabi-v7a -p android release
-          ./build.sh -i -q arm64-v8a   -p android release
+          # || true COVERS THE TRAILING GRADLE AAR BUILD AND NOTHING ELSE.
+          # build.sh installs the static slices and the host tools first, then
+          # builds filament-android's AAR — which nothing in this tree loads.
+          # Since the pin moved to v1.76 that AAR wants JDK 21 while this job
+          # pins 17 (what app/build.gradle.kts targets), so it fails with
+          # "invalid source release: 21" and used to take the whole release down
+          # with it. A cache HIT skips this step, so the break stayed invisible
+          # until the cache expired. native.yml's android-full leg has carried
+          # this guard all along; the test lines below are the real gate.
+          ./build.sh -i -q armeabi-v7a -p android release || true
+          ./build.sh -i -q arm64-v8a   -p android release || true
+          for abi in armeabi-v7a arm64-v8a; do
+            test -f "out/android-release/filament/lib/$abi/libfilament.a"
+          done
+          # Gated for the same reason it is cached: no host matc means no
+          # SPIR-V material set, and VulkanPolicy then pins every install to GL.
+          test -x out/prebuilt-tools-release/tools/matc/matc
 
       # Keyed and pathed identically to the restore above, or the next run's
       # restore misses and rebuilds what this just saved.
