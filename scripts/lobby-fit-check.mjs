@@ -1,8 +1,14 @@
 // Runs against the REAL controller page now that the relayout has shipped into
 // controller.css. "Bigger text if space allows" needs a limit that is checked
 // rather than eyeballed: this walks every element in the lobby at every landscape
-// viewport below and reports anything outside its own box, plus the tightest gap
-// between a cup name and its tile edge.
+// viewport below and reports anything outside its own box, plus how close the
+// cup names are to being clipped and whether the two halves are still in order.
+//
+// The cup-name reading is VERTICAL. The names wrap to two lines and then
+// ellipsise (controller.css .mode-opt__name), so a name can no longer outgrow
+// its width — the horizontal slack this used to print would pass whatever it
+// was handed. What can still go wrong is a third line, so what is measured is
+// the lines left before the clamp bites.
 //
 // It stands up its OWN server on an allocated port (capture.mjs, whose header
 // explains the port trap this tree keeps stepping in). It used to hardcode one
@@ -68,10 +74,25 @@ for (const [label, w, h] of VIEWPORTS) {
           out.push(['CORNER/CHIP', btn.id, btn.textContent.trim().slice(0, 20), `overlap ${-clear}px`]);
         }
       }
-      // tightest text-to-edge margin among the cup tiles, so "nearly clipped" shows up too
+      // The choices track must never be the WIDER half: the card is what the
+      // page is about, and a picker that outgrows it inverts the page. One
+      // declaration feeds both lobby pages, so this reads on all four scenarios.
+      const cols = getComputedStyle(document.getElementById('lobby'))
+        .gridTemplateColumns.split(' ').map((x) => parseFloat(x));
+      if (cols.length === 2 && cols[1] < cols[0]) {
+        out.push(['SIDES', 'lobby', 'choices wider than the card',
+          `${Math.round(cols[0])} > ${Math.round(cols[1])}`]);
+      }
+      // Cup names clamp at two lines. What is worth printing is how many lines
+      // the longest name actually takes — 2 means the clamp is the only thing
+      // left between it and a clip, which is the state to notice before a cup
+      // named later crosses it. A real clip is reported outright.
       const tight = [...document.querySelectorAll('.mode-opt__name')].map((e) => {
-        const par = e.closest('.mode-opt');
-        return Math.round(par.getBoundingClientRect().right - e.getBoundingClientRect().right);
+        if (e.scrollHeight > e.clientHeight + 1) {
+          out.push(['CLIPPED', 'mode-opt__name', (e.textContent || '').trim().slice(0, 28),
+            `${e.scrollHeight}>${e.clientHeight}`]);
+        }
+        return Math.round(e.scrollHeight / parseFloat(getComputedStyle(e).lineHeight));
       });
       const gap = (() => {
         const btns = [...document.querySelectorAll('.lobby-go .btn')].filter((b) => !b.classList.contains('hidden'));
@@ -79,11 +100,11 @@ for (const [label, w, h] of VIEWPORTS) {
         const right = Math.max(...btns.map((b) => b.getBoundingClientRect().right));
         return Math.round(chip.getBoundingClientRect().left - right);
       })();
-      return { out, tight: Math.min(...tight), gap };
+      return { out, tight: tight.length ? Math.max(...tight) : null, gap };
     });
     for (const f of found.out) { bad++; console.log(label.padEnd(9), s.padEnd(18), f.join(' | ')); }
     console.log(label.padEnd(9), s.padEnd(18),
-      'cup-name slack:', String(found.tight + 'px').padEnd(9),
+      'longest cup name:', (found.tight == null ? 'n/a' : found.tight + ' line(s)').padEnd(9),
       'corner-to-chip:', found.gap == null ? 'n/a' : found.gap + 'px');
   }
   await p.close();

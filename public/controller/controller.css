@@ -129,12 +129,16 @@ input[type=text]:disabled { opacity: 0.6; }
      under the thumb that just pressed it (tests/e2e/lobby-feedback.spec.js pins
      this to the pixel).
 
-     23rem is the CUP list's number, it being the wider of the two: two columns
-     of cup tiles measure ~22.5rem at their longest name, where the car rail
-     wants under 12. In rem, so it steps down with the root font on the small
-     tiers, which is where it is tightest. scripts/lobby-fit-check.mjs is the
-     gate on a cup named later outgrowing it. */
-  grid-template-columns: 23rem minmax(0, 1fr);
+     16rem is the CUP list's number, it being the wider of the two: two columns
+     of cup tiles need ~15.1rem to hold their longest WORD ("Playroom"), the
+     names wrapping to a second line rather than demanding their full length,
+     where the car rail wants under 12. In rem, so it steps down with the root
+     font on the small tiers, which is where it is tightest.
+     It is also comfortably under half the page at every width this layout runs
+     at, so the card is never the narrower half. scripts/lobby-fit-check.mjs is
+     the gate on both — a cup named later outgrowing the track, and the two
+     sides swapping order. */
+  grid-template-columns: 16rem minmax(0, 1fr);
   /* The render on a rail tile. A definite width, NOT a height-driven one: the
      thumb is an aspect-ratio box, and WebKit will not resolve such a box's
      width from a percentage height inside an intrinsic track (the same trap
@@ -572,10 +576,12 @@ input[type=text]:disabled { opacity: 0.6; }
    the markup, and as a flex child it took a row of its own. */
 .mode-opt {
   display: grid; grid-template-columns: auto minmax(0, 1fr);
-  /* The trail sits in the NAME's column, never spanning back under the lock —
-     on the one locked tile a spanning trail hung its unlock count out to the
-     left of the name above it while every other tile looked square. */
-  grid-template-areas: 'lock name' '.    trail';
+  /* The NAME takes the whole width and wraps; the padlock drops to the trail
+     row, where it reads against the count it qualifies ("3/4") instead of
+     against the name, which it never described. Giving the name both columns is
+     also what lets the track be narrow: a name that may take two lines needs
+     room for its longest WORD, not its longest line. */
+  grid-template-areas: 'name name' 'lock trail';
   align-content: center; justify-items: start; min-height: 0;
   cursor: pointer; padding: 0.5rem 0.75rem;
   /* NO column gap. The lock column is `auto`, which collapses to zero on the
@@ -599,14 +605,24 @@ input[type=text]:disabled { opacity: 0.6; }
 .mode-opt__name {
   grid-area: name; min-width: 0; max-width: 100%;
   font-family: var(--font-display); font-weight: 700; font-size: 1.25rem;
+  line-height: 1.15;
   color: var(--ink);
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  /* Wraps, to TWO lines, then ellipsis. Two is what "Playroom Cup" needs at the
+     narrow track this page now runs; the clamp is the backstop, so a cup named
+     later grows the row by one line and never by four.
+     scripts/lobby-fit-check.mjs measures the clip VERTICALLY now — a wrapping
+     name cannot overflow its own width, so the old horizontal slack reading
+     would have passed whatever it was handed. */
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+  overflow: hidden; overflow-wrap: break-word;
 }
 .mode-opt__sub { grid-area: trail; font-weight: 800; font-size: 0.88rem; color: var(--ink-3); }
 .mode-opt .starrow { grid-area: trail; font-size: 0.95rem; }
+/* On the TRAIL row, ahead of the count it qualifies. Sized off the trail's own
+   font rather than the name's, so it sits with the numbers. */
 .mode-opt .lock-glyph {
-  grid-area: lock; align-self: center; width: 1em; height: 1em;
-  margin-right: 0.4rem;   /* the gap the column no longer supplies */
+  grid-area: lock; align-self: center; width: 0.88rem; height: 0.88rem;
+  margin-right: 0.35rem;   /* the gap the column no longer supplies */
 }
 /* Small landscape phones already drop the ROOT font to 14px (top of this file),
    but the tile does not narrow in proportion: at 1.25rem the longest cup name
@@ -697,14 +713,18 @@ input[type=text]:disabled { opacity: 0.6; }
    panel down into the action corner. (The corner is out of this card's flow, so
    nothing stops them; there was 3px of clearance at 844x300 before the card was
    widened, and -23px after.)
-   Capped by the height there is, therefore, not by the width: 100dvh less the
-   page furniture the maps have to share the screen with — the identity ribbon,
-   the action corner, this card's own title and its legend, and the gaps between.
-   Only binds on the short tiers. max-WIDTH, because a square that meets a
-   max-height keeps its width and letterboxes the schematic inside a wide, short
-   box; capping the width shrinks the square as a square.
+   Capped on BOTH axes, because the panel is squeezed from both. 6rem holds the
+   width-driven growth: past that a schematic is only bigger, not clearer, and
+   the card is free to widen without the panel chasing it. The dvh term holds
+   the other end — 100dvh less the page furniture the maps share the screen with
+   (the identity ribbon, the action corner, this card's own title and its
+   legend, and the gaps between) — and binds only under ~300px, where the fixed
+   furniture, not the card's width, is what leaves no room.
+   max-WIDTH for both, because a square that meets a max-HEIGHT keeps its width
+   and letterboxes the schematic inside a wide, short box; capping the width
+   shrinks the square as a square.
    tests/e2e/controller-short-viewport.spec.js is the gate. */
-.modepick__tracks .track-map { max-width: 6rem; }
+.modepick__tracks .track-map { max-width: min(6rem, calc(100dvh - 220px)); }
 /* Random's panel holds RUNS, not tracks, but wears the exact same grid and tile
    anatomy — a "?" square (.track-map--q) where a schematic would sit — so
    swapping a cup for Random moves nothing below the picker. */
