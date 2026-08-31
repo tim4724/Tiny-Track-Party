@@ -151,6 +151,15 @@ export function buildCarPicker({ heroEl, stripEl, selected, onPick, canPick = tr
         btn.disabled = !canPick;
         btn.setAttribute('aria-label', nameOf(i));
         btn.appendChild(carThumbNode(idOf(i), { spin: false })); // strip tiles are stills (cheap; hero draws the eye)
+        // The name rides every tile and the CSS decides whether there is room
+        // to show it (controller.css .car-opt__name): down the rail a tile is a
+        // wide row and reads like a cup tile, name and all; in the square tiers
+        // it is a thumbnail with no width to spare. aria-label above carries
+        // the name either way, so hiding it costs nothing to a screen reader.
+        const nm = document.createElement('span');
+        nm.className = 'car-opt__name';
+        nm.textContent = nameOf(i);
+        btn.appendChild(nm);
         if (canPick && onPick) btn.addEventListener('click', () => onPick(i));
         stripEl.appendChild(btn);
       }
