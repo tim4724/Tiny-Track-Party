@@ -123,9 +123,6 @@ input[type=text]:disabled { opacity: 0.6; }
 #lobby {
   display: grid;
   height: 100dvh; box-sizing: border-box;
-  /* same top padding as #game: the name chip + gear carry over between the two
-     screens, and a different inset made them hop on the transition */
-  padding-top: calc(0.5rem + var(--safe-top));
   /* The choices track WRAPS: a fixed width holding what the choices need, with
      every remaining pixel going to the card. A share of the page (it was
      1fr / 1.05fr) gave the card only ever half, and the choices more than they
@@ -826,7 +823,6 @@ input[type=text]:disabled { opacity: 0.6; }
    display:contents so each button lands in its own grid area per mode. */
 #game {
   align-items: stretch; justify-content: flex-start; user-select: none;
-  padding-top: calc(0.5rem + var(--safe-top));
 }
 #drive-hud {
   flex: 1; min-height: 0;
@@ -1589,7 +1585,10 @@ input[type=text]:disabled { opacity: 0.6; }
   .mode-card { padding: 0.55rem 0.8rem; }
 }
 @media (max-height: 380px) {
-  section { padding-top: max(var(--safe-top), 6px); }
+  /* Short screens buy their headroom by lowering the FLOOR, not by overriding
+     the padding: the shape stays the one at the top of this file, so there is
+     still exactly one place that computes an edge. */
+  :root { --edge-top: calc(max(var(--safe-top), 2px) + 4px); }
   #drive-hud { gap: 0.4rem 0.7rem; }
   .hud-top { min-height: 1.8rem; }
   .hud-name { font-size: 1rem; }
