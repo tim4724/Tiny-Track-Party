@@ -213,17 +213,17 @@ body {
      time the button spends not yet looking pressed — 30ms of ease measured as
      33-43ms from touch to settled, because the transition cannot start until
      the frame after the class lands. Coming BACK UP is where the movement goes,
-     and it is longer than the old symmetric 60ms so the button still springs
-     rather than snapping: cutting BOTH ends to zero was tried once and read as
-     harsh, which is what that was really about. Every pressed surface on the
-     phone shares this pair; see the tiles in controller.css. */
-  transition: transform 0.09s ease, box-shadow 0.09s ease, filter 0.09s ease;
+     at 50ms, so the button springs rather than snapping: cutting BOTH ends to
+     zero was tried once and read as harsh, which is what that was really about.
+     Every pressed surface on the phone shares this pair; see the tiles in
+     controller.css. */
+  transition: transform 0.05s ease, box-shadow 0.05s ease, filter 0.05s ease;
 }
 .btn:hover { filter: brightness(1.04); }
 .btn:active, .btn.held, .btn.is-pressed {
   transform: translateY(var(--btn-sink));
   box-shadow: 0 calc(var(--btn-drop) - var(--btn-sink)) 0 var(--btn-ledge);
-  transition: transform 0s, box-shadow 0s, filter 0.09s ease;   /* down NOW */
+  transition: transform 0s, box-shadow 0s, filter 0.05s ease;   /* down NOW */
 }
 .btn--brand  { --btn-bg: var(--brand); }
 .btn--accent { --btn-bg: var(--accent); }   /* red now — white text stands */
@@ -254,12 +254,12 @@ body {
   box-shadow: var(--shadow-pop);
   cursor: pointer;
   /* same press, and the same reasoning as .btn's transition above */
-  transition: transform 0.09s ease, box-shadow 0.09s ease, filter 0.09s ease;
+  transition: transform 0.05s ease, box-shadow 0.05s ease, filter 0.05s ease;
 }
 .icon-btn:hover:not(:disabled) { filter: brightness(1.03); }
 .icon-btn:active:not(:disabled), .icon-btn.held {
   transform: translate(2px, 2px); box-shadow: none;
-  transition: transform 0s, box-shadow 0s, filter 0.09s ease;
+  transition: transform 0s, box-shadow 0s, filter 0.05s ease;
 }
 .icon-btn:disabled { opacity: 0.5; cursor: default; }
 

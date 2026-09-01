@@ -477,7 +477,7 @@ input[type=text]:disabled { opacity: 0.6; }
   padding: 0.4rem 0.9rem 0.4rem 0.5rem;
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r-sm);
   box-shadow: var(--shadow-pop);
-  transition: transform 0.09s, box-shadow 0.09s, background 0.08s;
+  transition: transform 0.05s, box-shadow 0.05s, background 0.08s;
 }
 /* The render is sized by the ROW and capped by its column, so it shrinks with
    the rows on a short screen instead of setting a floor they cannot go under —
@@ -599,7 +599,7 @@ input[type=text]:disabled { opacity: 0.6; }
   row-gap: 0.6rem;
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r-sm);
   box-shadow: var(--shadow-pop);
-  transition: transform 0.09s, box-shadow 0.09s, background 0.08s;
+  transition: transform 0.05s, box-shadow 0.05s, background 0.08s;
 }
 .mode-opt:active:not(:disabled), .mode-opt.held {
   transform: translate(2px, 2px) scale(0.98); box-shadow: none;
@@ -778,7 +778,7 @@ input[type=text]:disabled { opacity: 0.6; }
   cursor: pointer; padding: 0.45rem 0.4rem 0.5rem;
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r-sm);
   box-shadow: var(--shadow-pop);
-  transition: transform 0.09s, box-shadow 0.09s, background 0.08s;
+  transition: transform 0.05s, box-shadow 0.05s, background 0.08s;
 }
 .track-opt:active:not(:disabled), .track-opt.held {
   transform: translate(2px, 2px) scale(0.98); box-shadow: none;
@@ -906,7 +906,7 @@ input[type=text]:disabled { opacity: 0.6; }
   font-family: var(--font-display); font-weight: 700; color: #fff;
   border: 3px solid var(--ink); border-radius: var(--r);
   box-shadow: 0 var(--btn-drop) 0 var(--btn-ledge);   /* same ledge as every other button */
-  touch-action: none; transition: transform 0.09s, box-shadow 0.09s, filter 0.09s, opacity 0.15s;
+  touch-action: none; transition: transform 0.05s, box-shadow 0.05s, filter 0.05s, opacity 0.15s;
   /* no selection on a HELD control — with touch-action:none this closes off
      Android's long-press gesture (whose OS haptic buzzed mid-hold); the
      drive surface also preventDefaults contextmenu (driveSurface.js) */
@@ -1146,7 +1146,7 @@ input[type=text]:disabled { opacity: 0.6; }
   gap: 0.7rem; padding: 0.8rem 0.9rem; cursor: pointer;
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r);
   box-shadow: var(--shadow-pop);
-  transition: transform 0.09s, box-shadow 0.09s, background 0.08s;
+  transition: transform 0.05s, box-shadow 0.05s, background 0.08s;
 }
 .mode-card:active:not(:disabled), .mode-card.held {
   transform: translate(2px, 2px); box-shadow: none;
