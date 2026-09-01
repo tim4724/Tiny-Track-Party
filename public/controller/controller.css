@@ -37,14 +37,6 @@
   --edge-bottom: calc(max(var(--safe-bottom), 10px) + 4px);
   --edge-x:      calc(max(var(--safe-x),      10px) + 4px);
 
-  /* The latency chip's own geometry — how far it floats off the bottom, and its
-     line box (it is one line at font-size, line-height 1). Declared here because
-     the drive HUD reserves the strip the chip sits in and must reserve exactly
-     that (see #drive-hud): the two used to be a 1.1rem guess against these, and
-     the guess was tuned on a phone WITH a home indicator, so a phone without one
-     lost 12px of button height to nothing. */
-  --latency-lift: 0.5rem;
-  --latency-line: 0.72rem;
 }
 
 html, body {
@@ -836,22 +828,6 @@ input[type=text]:disabled { opacity: 0.6; }
 #drive-hud {
   flex: 1; min-height: 0;
   display: grid; gap: 0.6rem 0.9rem;
-  /* Keep the bottom row's buttons clear of the fixed latency readout — bare ink
-     text has no box to save it when it lands on the red BRAKE, so the bottom
-     strip is its lane. Exactly its lane: the chip's own lift and line box, plus
-     a gap, less whatever the page's bottom edge already holds back. It floors at
-     zero, because on a deep inset the edge alone is already past the chip.
-     The gap counts --btn-drop because these buttons hang a LEDGE below their box
-     — measure to the border edge alone and the ledge is what lands on the
-     number. The 6px on top is separation the eye can see: it is measured from
-     the ledge, so it is all of the gap there is.
-     This is the one place the page's own margin is not the whole story, and it
-     is the corner's rent: the readout has held the bottom right on every screen,
-     and down here every edge belongs to a control. Moving it up into the HUD's
-     top row instead was built and rejected. */
-  padding-bottom: max(0px, calc(
-    var(--latency-lift) + var(--latency-line) + var(--btn-drop) + 6px
-    + var(--safe-bottom) - var(--edge-bottom)));
 }
 /* Both modes share one vertical rhythm: name row, then the stretchy MID row
    (the steer bar floats with its space around it vertically), then the
@@ -990,7 +966,18 @@ input[type=text]:disabled { opacity: 0.6; }
 /* ---- latency readout ---- */
 /* One-way latency (RTT/2), living in the bottom-right UNSAFE strip — it's a
    passive readout (pointer-events:none), not chrome the player aims at, so it
-   uses the space the buttons must keep clear of. The element is a box as wide
+   OVERLAPS whatever is under it rather than reserving a strip of its own. That
+   is a decision, not an oversight: during a race every edge down there belongs
+   to a control, so the corner it holds on every other screen can only be kept by
+   the drive buttons giving up height for it — a bottom margin that matches no
+   other screen. The buttons keep the page's own margin instead, and the number
+   sits over the last few pixels of the right-hand one.
+   Which is why it carries a PAPER HALO. Bare ink was legible while it had a
+   strip to itself; overlapping, it lands on the button's ledge, which is the
+   darkest thing on the screen — ink on ink. The halo is not the pill that was
+   vetoed here before: no box, no border, nothing that reads as a control. It is
+   invisible against the paper it sits on everywhere else, and it is the only
+   thing separating the number from the ledge during a race. The element is a box as wide
    as that strip (--safe-x) with the number CENTRED in it; the 3.4rem floor
    means a thin/absent inset pushes the box into safe content rather than
    squeezing the text off the edge. Bare ink text + bolt, no pill: a boxed
@@ -1004,12 +991,13 @@ input[type=text]:disabled { opacity: 0.6; }
   position: fixed;
   right: 0;
   width: max(var(--safe-x), 3.4rem);
-  bottom: calc(var(--latency-lift) + var(--safe-bottom));
+  bottom: calc(0.5rem + var(--safe-bottom));
   z-index: 14;
   display: inline-flex; align-items: center; justify-content: center; gap: 3px;
-  font-family: var(--font-body); font-weight: 800; font-size: var(--latency-line); line-height: 1;
+  font-family: var(--font-body); font-weight: 800; font-size: 0.72rem; line-height: 1;
   font-variant-numeric: tabular-nums;            /* stable width as the ms count ticks */
   color: var(--ink);
+  text-shadow: 0 0 3px var(--paper), 0 0 2px var(--paper), 0 0 1px var(--paper);
   pointer-events: none; user-select: none;
 }
 .latency__bolt { display: none; font-size: 0.9em; }
