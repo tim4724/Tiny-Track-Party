@@ -29,12 +29,14 @@
      screenshot here agrees with both — but on a notched phone held landscape
      the insets are the notch's own width, so the page carried ~73px of side
      margin against 10px top. The page is not cramped at the inset edge; it was
-     lopsided a finger's width in from it.
+     lopsided a finger's width in from it. One gutter on all four sides now: the
+     14px this used to carry was chosen to sit ON TOP of an inset, and with the
+     sum gone there was nothing left to justify it being the odd one out.
      The overlays below follow the same rule against their own, larger gutters:
      max(6vw, var(--safe-x)), never a sum. */
   --edge-top:    max(var(--safe-top),    10px);
   --edge-bottom: max(var(--safe-bottom), 10px);
-  --edge-x:      max(var(--safe-x),      14px);
+  --edge-x:      max(var(--safe-x),      10px);
 }
 
 html, body {
