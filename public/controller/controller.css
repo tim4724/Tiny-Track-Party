@@ -29,14 +29,15 @@
      screenshot here agrees with both — but on a notched phone held landscape
      the insets are the notch's own width, so the page carried ~73px of side
      margin against 10px top. The page is not cramped at the inset edge; it was
-     lopsided a finger's width in from it. One gutter on all four sides now: the
-     14px this used to carry was chosen to sit ON TOP of an inset, and with the
-     sum gone there was nothing left to justify it being the odd one out.
+     lopsided a finger's width in from it. One gutter on all four sides now, and
+     the side's old 14px is no longer the odd one out: it was picked to sit ON
+     TOP of an inset, and with the sum gone there was no reason for it to differ
+     from the other three.
      The overlays below follow the same rule against their own, larger gutters:
      max(6vw, var(--safe-x)), never a sum. */
-  --edge-top:    max(var(--safe-top),    10px);
-  --edge-bottom: max(var(--safe-bottom), 10px);
-  --edge-x:      max(var(--safe-x),      10px);
+  --edge-top:    max(var(--safe-top),    14px);
+  --edge-bottom: max(var(--safe-bottom), 14px);
+  --edge-x:      max(var(--safe-x),      14px);
 }
 
 html, body {
@@ -750,25 +751,30 @@ input[type=text]:disabled { opacity: 0.6; }
    the tile: 26px left and right against 6px top, which is what a tile with
    uneven padding is. Capping the tile hands the slack to the row instead, where
    space-evenly spreads it as equal gaps, and the map fills the tile it is in.
-   6rem holds the width-driven growth: past that a schematic is only bigger, not
-   clearer, and the card is free to widen without the panel chasing it. It is
+   5.5rem holds the width-driven growth: past that a schematic is only bigger,
+   not clearer, and the card is free to widen without the panel chasing it. It is
    also all the vertical budget there is — the clearance the panel leaves the
-   action corner falls PIXEL FOR PIXEL with the cap, and 6rem is what leaves
-   840x320 its 2px. The dvh term holds the other end — 100dvh less the page furniture the maps share the
+   action corner falls PIXEL FOR PIXEL with the cap, and 5.5rem is what leaves
+   the tightest sweep point its 2px. It was 6rem until the page's gutter went to
+   14px and the gear grew to a 44px touch target: 16px of new furniture, and this
+   is where the vertical half of it comes from. The dvh term holds the other end — 100dvh less the page furniture the maps share the
    screen with (the identity ribbon, the action corner, this card's own title
-   and its legend, and the gaps between) — and binds only under ~300px, where
+   and its legend, and the gaps between) — and binds only under ~290px, where
    the fixed furniture, not the card's width, is what leaves no room.
    max-WIDTH for both, because a square that meets a max-HEIGHT keeps its width
    and letterboxes the schematic inside a wide, short box; capping the width
    shrinks the square as a square. The tile's own padding and border ride along
    on top of the map's cap, since the cap is the size the SCHEMATIC may reach.
    tests/e2e/controller-short-viewport.spec.js is the gate. */
-.modepick__tracks { --track-tile: calc(min(6rem, 100dvh - 220px) + 0.5rem + 4px); }
+.modepick__tracks { --track-tile: calc(min(5.5rem, 100dvh - 236px) + 0.5rem + 4px); }
 /* Random's panel holds RUNS, not tracks, but wears the exact same grid and tile
    anatomy — a "?" square (.track-map--q) where a schematic would sit — so
    swapping a cup for Random moves nothing below the picker. */
 .modepick__tracks .track-opt { padding: 0.25rem 0.25rem 0.3rem; gap: 0.25rem; border-width: 2px; }
-.modepick__tracks .track-opt__name { font-size: 0.82rem; }
+/* 0.76rem, not the 0.82 it was: the tile narrowed with its cap (above) and the
+   longest track name no longer fit, and an ellipsised name on a tile whose whole
+   job is to say which track this is costs more than the two points do. */
+.modepick__tracks .track-opt__name { font-size: 0.76rem; }
 /* difficulty TENDENCY meter — 4 pips, the first `data-level` filled RED
    (matching the display's cup slot; the old green→amber ramp died with amber
    chrome); a lean for the whole cup, not a per-track badge. */
@@ -1507,9 +1513,19 @@ input[type=text]:disabled { opacity: 0.6; }
 /* The persistent gear trigger in the lobby — pinned to the ribbon's far right.
    The theme's .icon-btn sticker square at the SAME size as the in-game gear
    (.hud-btns), so the button reads as the same control on both screens. */
+/* 2.9rem is the size it SHARES with the in-game gear, and 44px is the floor a
+   fingertip needs. The rem alone was not enough: the short-viewport tiers at the
+   top of this file drop the root font to 14px and then 12.5px, which took this
+   square to 40px and then 36px — so the one control that is always on screen was
+   hardest to hit on the phones with least room, which is also the case where the
+   browser bar is up. Floored on the SQUARE rather than on a hit area reaching
+   out past it, because an overflowing target is invisible to the eye and not to
+   scrollWidth: it reads as an overflow to every guard that measures one
+   (scripts/lobby-fit-check.mjs). Below the tiers the gear is 3px wider than the
+   in-game one; they are never on screen together. */
 .settings-btn {
   margin-left: auto; flex: none;
-  width: 2.9rem; height: 2.9rem;
+  width: max(2.9rem, 44px); height: max(2.9rem, 44px);
   font-size: 1.5rem; line-height: 1;
 }
 
