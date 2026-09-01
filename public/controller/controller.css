@@ -29,7 +29,9 @@
      screenshot here agrees with both — but on a notched phone held landscape
      the insets are the notch's own width, so the page carried ~73px of side
      margin against 10px top. The page is not cramped at the inset edge; it was
-     lopsided a finger's width in from it. */
+     lopsided a finger's width in from it.
+     The overlays below follow the same rule against their own, larger gutters:
+     max(6vw, var(--safe-x)), never a sum. */
   --edge-top:    max(var(--safe-top),    10px);
   --edge-bottom: max(var(--safe-bottom), 10px);
   --edge-x:      max(var(--safe-x),      14px);
@@ -1008,8 +1010,8 @@ input[type=text]:disabled { opacity: 0.6; }
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 0.9rem;
   padding:
-    calc(4vh + var(--safe-top)) calc(6vw + var(--safe-x))
-    calc(1vh + var(--overlay-bottom)) calc(6vw + var(--safe-x));
+    calc(4vh + var(--safe-top)) max(6vw, var(--safe-x))
+    calc(1vh + var(--overlay-bottom)) max(6vw, var(--safe-x));
   background: rgba(255, 246, 235, 0.82); backdrop-filter: blur(8px);
 }
 #pause-overlay h2 {
@@ -1024,8 +1026,8 @@ input[type=text]:disabled { opacity: 0.6; }
   position: fixed; inset: 0; z-index: 30;
   display: flex; align-items: center; justify-content: center;
   padding:
-    calc(4vh + var(--safe-top)) calc(6vw + var(--safe-x))
-    calc(4vh + var(--safe-bottom)) calc(6vw + var(--safe-x));
+    calc(4vh + var(--safe-top)) max(6vw, var(--safe-x))
+    calc(4vh + var(--safe-bottom)) max(6vw, var(--safe-x));
   background: rgba(255, 246, 235, 0.92); backdrop-filter: blur(8px);
   text-align: center;
 }
@@ -1093,8 +1095,8 @@ input[type=text]:disabled { opacity: 0.6; }
      card sits visually centred; bottom floored because opening ARMS back (§9),
      see --overlay-bottom */
   padding:
-    max(var(--safe-top), 18px) calc(4vw + var(--safe-x))
-    var(--overlay-bottom) calc(4vw + var(--safe-x));
+    max(var(--safe-top), 18px) max(4vw, var(--safe-x))
+    var(--overlay-bottom) max(4vw, var(--safe-x));
   background: rgba(255, 246, 235, 0.9); backdrop-filter: blur(8px);
 }
 #settings-overlay.hidden { display: none; }
@@ -1480,8 +1482,8 @@ input[type=text]:disabled { opacity: 0.6; }
   position: fixed; inset: 0; z-index: 18;
   display: flex; align-items: center; justify-content: center;
   padding:
-    calc(2vh + var(--safe-top)) calc(4vw + var(--safe-x))
-    var(--overlay-bottom) calc(4vw + var(--safe-x));   /* floored — opening ARMS back (§9), see --overlay-bottom */
+    calc(2vh + var(--safe-top)) max(4vw, var(--safe-x))
+    var(--overlay-bottom) max(4vw, var(--safe-x));   /* floored — opening ARMS back (§9), see --overlay-bottom */
   background: rgba(255, 246, 235, 0.92); backdrop-filter: blur(8px);
 }
 #motion-overlay.hidden { display: none; }
@@ -1518,7 +1520,7 @@ input[type=text]:disabled { opacity: 0.6; }
   .rotate {
     position: fixed; inset: 0; z-index: 40;
     display: flex; align-items: center; justify-content: center;
-    padding: 2rem calc(1.5rem + var(--safe-x));
+    padding: 2rem max(1.5rem, var(--safe-x));
     background: var(--paper);
     text-align: center;
   }
