@@ -24,16 +24,18 @@ namespace rt {
 //
 // DIST AND LOOK ARE ONE BASELINE: the pitch is
 // atan((HEIGHT - TGT_UP) / (LOOK + DIST)), so only the SUM (2.85) steers the
-// aim. Move one alone and the picture noses over — at DIST 1.0 the pitch went
-// 10.5 -> 12.0 degrees. HEIGHT is in that numerator but is not the lever for it:
-// it is what sees over the car, and trading it away hides the road ahead.
-constexpr float CHASE_DIST = 1.35f, CHASE_HEIGHT = 0.64f, CHASE_LOOK = 1.5f;
+// aim. Move one alone and the picture noses over — a 0.35 cut to DIST by itself
+// takes the pitch 10.5 -> 12.0 degrees. HEIGHT is in that numerator but is not
+// the lever for it: it is what sees over the car, and trading it away hides the
+// road ahead. So a closer camera is DIST down and LOOK up by the same amount.
+constexpr float CHASE_DIST = 1.15f, CHASE_HEIGHT = 0.64f, CHASE_LOOK = 1.7f;
 constexpr float CHASE_TGT_UP = 0.11f;      // look point barely above the road
 // 7 -> 32. This one constant decides both how far back the camera sits while
 // racing and how far that is from the parked shot, which never lags at all: the
-// eye went 1.97 -> 1.73 racing with the grid unmoved at 1.49. It cost the swing —
-// at 30% throttle the lag is 0.08 where it was 0.33, leaving the spd² shaping
-// below a trim on a large base rather than the main event.
+// eye's lag behind its parked place fell 0.44 -> 0.20u flat out, and that is
+// v/rate, so it holds whatever DIST is. It cost the swing — at 30% throttle the
+// lag is 0.08 where it was 0.33, leaving the spd² shaping below a trim on a
+// large base rather than the main event.
 constexpr float CAM_POS_RATE = 32.0f, CAM_TGT_RATE = 13.0f;  // damping (1/s)
 // The position spring lags the car by ~velocity/rate, so the faster you go the
 // further back the camera sits. The follow rate therefore climbs with spd²:
