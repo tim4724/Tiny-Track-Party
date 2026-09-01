@@ -21,12 +21,18 @@
                 var(--cp-safe-right, 0px), env(safe-area-inset-right, 0px));
 
   /* Screen margin = the safe inset, floored at a small design gutter that
-     still clears a real notch/home-indicator when one is larger. */
+     still clears a real notch/home-indicator when one is larger. All three
+     edges the same way: the gutter is a FLOOR, never added on top.
+     Left/right used to add its 14px to the inset, on the reasoning that content
+     flush against a notch boundary reads as cramped. On a phone that has no
+     inset it looks identical — which is why every viewport sweep and every
+     screenshot here agrees with both — but on a notched phone held landscape
+     the insets are the notch's own width, so the page carried ~73px of side
+     margin against 10px top. The page is not cramped at the inset edge; it was
+     lopsided a finger's width in from it. */
   --edge-top:    max(var(--safe-top),    10px);
   --edge-bottom: max(var(--safe-bottom), 10px);
-  /* Left/right the gutter is ADDITIVE: content clears the safe inset AND keeps
-     a visible margin — flush against a notch boundary reads as cramped. */
-  --edge-x:      calc(var(--safe-x) + 14px);
+  --edge-x:      max(var(--safe-x),      14px);
 }
 
 html, body {
