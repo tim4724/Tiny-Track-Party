@@ -20,24 +20,22 @@
   --safe-x: max(var(--cp-safe-left,  0px), env(safe-area-inset-left,  0px),
                 var(--cp-safe-right, 0px), env(safe-area-inset-right, 0px));
 
-  /* Screen margin = the safe inset, floored at a small design gutter that
-     still clears a real notch/home-indicator when one is larger. All three
-     edges the same way: the gutter is a FLOOR, never added on top.
-     Left/right used to add its 14px to the inset, on the reasoning that content
-     flush against a notch boundary reads as cramped. On a phone that has no
-     inset it looks identical — which is why every viewport sweep and every
-     screenshot here agrees with both — but on a notched phone held landscape
-     the insets are the notch's own width, so the page carried ~73px of side
-     margin against 10px top. The page is not cramped at the inset edge; it was
-     lopsided a finger's width in from it. One gutter on all four sides now, and
-     the side's old 14px is no longer the odd one out: it was picked to sit ON
-     TOP of an inset, and with the sum gone there was no reason for it to differ
-     from the other three.
-     The overlays below follow the same rule against their own, larger gutters:
-     max(6vw, var(--safe-x)), never a sum. */
-  --edge-top:    max(var(--safe-top),    14px);
-  --edge-bottom: max(var(--safe-bottom), 14px);
-  --edge-x:      max(var(--safe-x),      14px);
+  /* Screen margin = the inset floored at a 10px design gutter, plus 4px of
+     clearance so content never sits flush ON the inset edge. All three edges
+     take the same shape, and the ORDER of the two operations is the point.
+     Left/right used to be calc(var(--safe-x) + 14px) — the whole gutter added
+     on top. With no inset that is indistinguishable from this, which is why
+     every viewport sweep and screenshot here agrees with both; but on a notched
+     phone held landscape the insets are the notch's own width, so the page
+     carried ~73px of side margin against 10px top. It was never cramped at the
+     inset edge, it was lopsided a finger's width in from it. Flooring first and
+     adding a hair keeps the page off the boundary without paying for the gutter
+     twice: 14px on a plain screen, inset+4 on a notched one.
+     The overlays below floor against their own, larger gutters and add nothing:
+     max(6vw, var(--safe-x)) is already well clear at any inset. */
+  --edge-top:    calc(max(var(--safe-top),    10px) + 4px);
+  --edge-bottom: calc(max(var(--safe-bottom), 10px) + 4px);
+  --edge-x:      calc(max(var(--safe-x),      10px) + 4px);
 }
 
 html, body {
