@@ -37,10 +37,14 @@
   --edge-bottom: calc(max(var(--safe-bottom), 10px) + 4px);
   --edge-x:      calc(max(var(--safe-x),      10px) + 4px);
 
-
-  /* The drive HUD's top row, shared with the latency chip that sits in it during
-     a race (see .latency) — the chip has to land ON the row, not near it. */
-  --hud-row: 2.9rem;
+  /* The latency chip's own geometry — how far it floats off the bottom, and its
+     line box (it is one line at font-size, line-height 1). Declared here because
+     the drive HUD reserves the strip the chip sits in and must reserve exactly
+     that (see #drive-hud): the two used to be a 1.1rem guess against these, and
+     the guess was tuned on a phone WITH a home indicator, so a phone without one
+     lost 12px of button height to nothing. */
+  --latency-lift: 0.5rem;
+  --latency-line: 0.72rem;
 }
 
 html, body {
@@ -832,6 +836,22 @@ input[type=text]:disabled { opacity: 0.6; }
 #drive-hud {
   flex: 1; min-height: 0;
   display: grid; gap: 0.6rem 0.9rem;
+  /* Keep the bottom row's buttons clear of the fixed latency readout — bare ink
+     text has no box to save it when it lands on the red BRAKE, so the bottom
+     strip is its lane. Exactly its lane: the chip's own lift and line box, plus
+     a gap, less whatever the page's bottom edge already holds back. It floors at
+     zero, because on a deep inset the edge alone is already past the chip.
+     The gap counts --btn-drop because these buttons hang a LEDGE below their box
+     — measure to the border edge alone and the ledge is what lands on the
+     number. The 6px on top is separation the eye can see: it is measured from
+     the ledge, so it is all of the gap there is.
+     This is the one place the page's own margin is not the whole story, and it
+     is the corner's rent: the readout has held the bottom right on every screen,
+     and down here every edge belongs to a control. Moving it up into the HUD's
+     top row instead was built and rejected. */
+  padding-bottom: max(0px, calc(
+    var(--latency-lift) + var(--latency-line) + var(--btn-drop) + 6px
+    + var(--safe-bottom) - var(--edge-bottom)));
 }
 /* Both modes share one vertical rhythm: name row, then the stretchy MID row
    (the steer bar floats with its space around it vertically), then the
@@ -859,7 +879,7 @@ input[type=text]:disabled { opacity: 0.6; }
 /* Top row: the player name (livery sticker, like the display's
    .cell-label__name) on the left, settings + pause pinned FAR RIGHT.
    No place/lap on the phone — the standings live on the big screen. */
-.hud-top { grid-area: name; display: flex; align-items: center; min-height: var(--hud-row); }
+.hud-top { grid-area: name; display: flex; align-items: center; min-height: 2.9rem; }
 .hud-btns { display: flex; gap: 0.55rem; margin-left: auto; }
 .hud-btns .icon-btn { width: 2.9rem; height: 2.9rem; font-size: 1.5rem; }
 /* The gear is DRAWN (inline SVG, currentColor) like .pause-glyph/.steer-glyph —
@@ -984,26 +1004,13 @@ input[type=text]:disabled { opacity: 0.6; }
   position: fixed;
   right: 0;
   width: max(var(--safe-x), 3.4rem);
-  bottom: calc(0.5rem + var(--safe-bottom));
+  bottom: calc(var(--latency-lift) + var(--safe-bottom));
   z-index: 14;
   display: inline-flex; align-items: center; justify-content: center; gap: 3px;
-  font-family: var(--font-body); font-weight: 800; font-size: 0.72rem; line-height: 1;
+  font-family: var(--font-body); font-weight: 800; font-size: var(--latency-line); line-height: 1;
   font-variant-numeric: tabular-nums;            /* stable width as the ms count ticks */
   color: var(--ink);
   pointer-events: none; user-select: none;
-}
-/* DURING A RACE it moves. Every edge down there belongs to a control, so the
-   corner it holds on every other screen can only be had by the buttons giving up
-   a strip of height for it — which is a margin that matches nothing else on the
-   page, and was a hand-tuned number besides. The top row's middle is empty on
-   both input modes (name sticker left, gear and pause right), and it is paper,
-   which is what the bare ink needs. The buttons keep the page's own margin like
-   everything else.
-   A SIBLING selector, because the chip is not inside the screen it reports on:
-   it is a fixed element at the end of the body, after all three sections. */
-#game:not(.hidden) ~ .latency {
-  top: var(--edge-top); bottom: auto;
-  left: 0; right: 0; width: auto; height: var(--hud-row);
 }
 .latency__bolt { display: none; font-size: 0.9em; }
 .latency__bolt::before { content: "\26A1\FE0E"; }  /* ⚡ forced to monochrome text presentation */
