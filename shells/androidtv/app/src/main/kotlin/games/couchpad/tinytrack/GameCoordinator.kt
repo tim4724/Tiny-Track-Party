@@ -1243,7 +1243,13 @@ class GameCoordinator(
             // a phone that sends `true` must brake, not be ignored.
             if (msg.has("b") && !msg.isNull("b")) {
                 mask = mask or 2
-                b = when (val v = msg.opt("b")) {
+                // `Any?` SPELLED OUT, not inferred. `opt` is Java, so it hands
+                // back the platform type `Any!`, and K2 then reports this very
+                // `when` as needing "a 'null' or 'else' branch" while the else
+                // below is right there. Naming the type is what silences it;
+                // an added `null ->` branch also does, but it would be dead
+                // code under the else and read as if null were special here.
+                b = when (val v: Any? = msg.opt("b")) {
                     is Boolean -> if (v) 1.0 else 0.0
                     is Number -> v.toDouble()
                     else -> 0.0
