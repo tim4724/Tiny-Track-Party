@@ -477,7 +477,7 @@ input[type=text]:disabled { opacity: 0.6; }
   padding: 0.4rem 0.9rem 0.4rem 0.5rem;
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r-sm);
   box-shadow: var(--shadow-pop);
-  transition: transform 0.06s, box-shadow 0.06s, background 0.08s;
+  transition: transform 0.03s, box-shadow 0.03s, background 0.08s;
 }
 /* The render is sized by the ROW and capped by its column, so it shrinks with
    the rows on a short screen instead of setting a floor they cannot go under —
@@ -576,26 +576,27 @@ input[type=text]:disabled { opacity: 0.6; }
    the padlock now rides inside the trail element rather than beside it
    (shared/trackPicker.js) — in a column of its own it pushed the count off
    centre, and it never described the name it used to sit against anyway.
-   Centred, because a name that WRAPS has to be. Left-flush, the second line
-   ("Cup") hung under a longer first line and the tile read as ragged; the six
-   names split 3-and-3 between one line and two, so half the grid was ragged and
-   half was not. Centred, both shapes are the same object.
+   Centred, because the names are SET as two lines rather than left to wrap
+   (shared/trackPicker.js puts the last word below the rest). Left-flush, the
+   second line hung under a longer first one and every tile read as ragged.
    The first row is a fixed TWO LINES whether the name uses them or not, and the
-   name is centred inside it. That is what puts every tile's trail on one line
-   across the whole grid: the tiles are equal boxes centring their content, so a
-   one-line name would otherwise centre a shorter block and lift its stars half
-   a line above its neighbour's. */
+   name is centred inside it. That is what keeps every tile's trail on one line
+   across the grid: the tiles are equal boxes centring their content, so a name
+   that took only one line — a one-word cup, or any name at all before the break
+   was set — would centre a shorter block and lift its stars half a line above
+   its neighbour's. */
 .mode-opt {
   display: grid; grid-template-columns: minmax(0, 1fr);
   grid-template-rows: calc(2 * 1.15em) auto;   /* = -webkit-line-clamp x line-height */
   align-content: center; align-items: center; min-height: 0;
   cursor: pointer; padding: 0.5rem 0.75rem;
-  /* Enough that a name using BOTH its lines still stands off its trail — the
-     reserved row is full in that case and the gap is the only air there is. */
-  row-gap: 0.4rem;
+  /* Every name now uses BOTH its lines (shared/trackPicker.js sets the break),
+     so the reserved row is always full and this gap is the only air between the
+     name and its trail. */
+  row-gap: 0.6rem;
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r-sm);
   box-shadow: var(--shadow-pop);
-  transition: transform 0.06s, box-shadow 0.06s, background 0.08s;
+  transition: transform 0.03s, box-shadow 0.03s, background 0.08s;
 }
 .mode-opt:active:not(:disabled), .mode-opt.held { transform: translate(2px, 2px) scale(0.98); box-shadow: none; }
 .mode-opt:disabled { cursor: default; }
@@ -771,7 +772,7 @@ input[type=text]:disabled { opacity: 0.6; }
   cursor: pointer; padding: 0.45rem 0.4rem 0.5rem;
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r-sm);
   box-shadow: var(--shadow-pop);
-  transition: transform 0.06s, box-shadow 0.06s, background 0.08s;
+  transition: transform 0.03s, box-shadow 0.03s, background 0.08s;
 }
 .track-opt:active:not(:disabled), .track-opt.held { transform: translate(2px, 2px) scale(0.98); box-shadow: none; }
 .track-opt:disabled { cursor: default; }
@@ -896,7 +897,7 @@ input[type=text]:disabled { opacity: 0.6; }
   font-family: var(--font-display); font-weight: 700; color: #fff;
   border: 3px solid var(--ink); border-radius: var(--r);
   box-shadow: 0 var(--btn-drop) 0 var(--btn-ledge);   /* same ledge as every other button */
-  touch-action: none; transition: transform 0.06s, box-shadow 0.06s, filter 0.06s, opacity 0.15s;
+  touch-action: none; transition: transform 0.03s, box-shadow 0.03s, filter 0.03s, opacity 0.15s;
   /* no selection on a HELD control — with touch-action:none this closes off
      Android's long-press gesture (whose OS haptic buzzed mid-hold); the
      drive surface also preventDefaults contextmenu (driveSurface.js) */

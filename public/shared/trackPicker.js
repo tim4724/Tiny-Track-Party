@@ -312,7 +312,18 @@ function buildRow(label, locked) {
   if (locked) btn.appendChild(lockGlyph());
   const lab = document.createElement('span');
   lab.className = 'mode-opt__name';
-  lab.textContent = label;
+  // SET as two lines, not wrapped into them: the last word goes below the rest,
+  // so every cup reads "<Biome>" over "Cup" and the six tiles are one shape.
+  // Left to wrap, the short names sat on one line and the long ones on two, and
+  // the grid read as ragged however it was aligned. The tile reserves the second
+  // line either way (controller.css .mode-opt), so this costs no height.
+  // aria-label on the button carries the name unbroken.
+  const cut = label.lastIndexOf(' ');
+  // The space stays IN the text (a trailing space before a break renders as
+  // nothing), so the tile still reads "Beach Cup" to a text search — dropping it
+  // gave "BeachCup", which every by-text locator in the suite stopped matching.
+  if (cut > 0) lab.append(label.slice(0, cut + 1), document.createElement('br'), label.slice(cut + 1));
+  else lab.textContent = label;
   btn.appendChild(lab);
   return btn;
 }

@@ -3,15 +3,16 @@
 // reasons no other test can see — nothing overflows, nothing overlaps, every
 // element is where its own rule puts it, and the page still looks unfinished.
 //
-//   • The cup tiles centre their content, so a one-line name ("Snow Cup") built
-//     a shorter block than the two-line tile beside it and centred THAT — its
-//     name and its stars each landing half a line off its neighbour's. Six
-//     tiles, four different baselines. The cure is that the NAME'S ROW is a
-//     fixed two lines whether the name uses them or not (.mode-opt grid rows).
-//   • Half those names wrap and half do not, so a left-flush tile read ragged
-//     down one axis and not the other, and the padlock in a column of its own
-//     pushed the count it qualifies off centre. Both halves of the tile are
-//     centred now, the padlock inside the trail (shared/trackPicker.js).
+//   • The cup tiles centre their content, and the names WRAPPED — short ones on
+//     one line, long ones on two — so a tile built a taller or shorter block
+//     than its neighbour and centred THAT, landing its stars half a line off.
+//     Six tiles, four baselines, and no alignment could fix it because the
+//     tiles were not the same shape. Every name is now SET to two lines, the
+//     last word below the rest (shared/trackPicker.js), over a row that
+//     reserves both whether they are used or not (.mode-opt grid rows).
+//   • The padlock had a grid column of its own, which pinned it to the tile's
+//     edge while the count it qualifies centred away from it. It rides inside
+//     the trail element now, so the pair centres as one thing.
 //   • The four track tiles were stretched to their share of the card while the
 //     schematic inside them was capped, so the slack piled up INSIDE each tile
 //     as side gutters four times its top padding. The cure is that the cap sits
@@ -49,10 +50,10 @@ for (const vp of AT) {
       };
     }));
     expect(tiles.length).toBeGreaterThan(2);
-    // The premise: this only proves anything while the names actually DIFFER in
-    // how many lines they take. Rename the cups so they all fit on one and the
-    // assertions below hold with the fix reverted.
-    expect(new Set(tiles.map((t) => t.lines)).size, 'some names wrap and some do not').toBeGreaterThan(1);
+    // One shape for all six, which is the thing the alignment rests on: lose
+    // the forced break and the short names fall back to one line, at which
+    // point no amount of centring makes the grid read straight.
+    for (const t of tiles) expect(t.lines, 'every name is set to two lines').toBe(2);
 
     // Measured against the tile's OWN box, so this holds down the whole ladder
     // and not merely across one row of two. A 1px allowance is the grid's

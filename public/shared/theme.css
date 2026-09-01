@@ -208,12 +208,13 @@ body {
   background: var(--btn-bg);
   box-shadow: 0 var(--btn-drop) 0 var(--btn-ledge);
   cursor: pointer;
-  /* SHORT, and short for a reason. The press once read as missing entirely, and
-     the cause was a re-render destroying the element mid-animation, not the
-     duration — so this stayed at 60ms rather than being cut to zero, which felt
-     harsh. Long enough to be a movement, short enough that the shortest real
-     tap still arrives. */
-  transition: transform 0.06s ease, box-shadow 0.06s ease, filter 0.06s ease;
+  /* SHORT, and short for a reason, in both directions. The press once read as
+     missing entirely, and the cause was a re-render destroying the element
+     mid-animation, not the duration — so it is not cut to zero, which felt
+     harsh when that was tried. 30ms is two frames: long enough to be a
+     movement, short enough that the finger does not wait for it. Every pressed
+     surface on the phone shares this number; see the tiles in controller.css. */
+  transition: transform 0.03s ease, box-shadow 0.03s ease, filter 0.03s ease;
 }
 .btn:hover { filter: brightness(1.04); }
 .btn:active, .btn.held, .btn.is-pressed {
@@ -249,7 +250,7 @@ body {
   box-shadow: var(--shadow-pop);
   cursor: pointer;
   /* same press, and the same reasoning as .btn's transition above */
-  transition: transform 0.06s ease, box-shadow 0.06s ease, filter 0.06s ease;
+  transition: transform 0.03s ease, box-shadow 0.03s ease, filter 0.03s ease;
 }
 .icon-btn:hover:not(:disabled) { filter: brightness(1.03); }
 .icon-btn:active:not(:disabled), .icon-btn.held { transform: translate(2px, 2px); box-shadow: none; }
