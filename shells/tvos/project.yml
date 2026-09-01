@@ -79,6 +79,33 @@ settings:
     # Nothing here needs editing to cut a release.
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
+  # MANUAL SIGNING, AND ONLY FOR RELEASE. Two separate reasons, and both matter:
+  #
+  #   WHY MANUAL. Automatic signing asks Apple to mint the profile, which Xcode
+  #   calls "cloud signing" and which an App Store Connect API key may only do
+  #   with the ADMIN role. Handing a CI runner a team-wide Admin credential to
+  #   save creating two profiles by hand is a bad trade — with the profiles
+  #   supplied, the key does nothing but upload, and App Manager covers that.
+  #   HexStacker's tvOS shell signs the same way for a second reason worth
+  #   knowing: automatic signing cannot archive a tvOS app without a registered
+  #   device, because it insists on a device-BOUND development profile, while an
+  #   App Store profile is bound to nothing.
+  #
+  #   WHY RELEASE ONLY. The Archive action builds Release and the Launch action
+  #   builds Debug, which is what `xcodebuild build` takes — so scoping this to
+  #   Release leaves shells/tvos/scripts/build.sh exactly as it was, signing a
+  #   local device build with whatever Apple Development identity the keychain
+  #   holds (lib.sh derives the team from that cert). A developer never needs the
+  #   distribution profile installed to build and run on their own Apple TV.
+  #
+  # The profile NAMES are the contract with the portal: they must exist under
+  # exactly these names, and .github/workflows/release.yml installs them by UUID
+  # from secrets before it archives. PROVISIONING_PROFILE_SPECIFIER is per target
+  # (an appex needs its own profile), so it sits on each target rather than here.
+  configs:
+    Release:
+      CODE_SIGN_STYLE: Manual
+      CODE_SIGN_IDENTITY: Apple Distribution
 
 # The item icons ship as the SHARED SVGs (public/assets/items/, staged by
 # stage-assets.sh), and UIKit cannot rasterize an SVG file at runtime —
@@ -188,6 +215,9 @@ targets:
           This app does not use the microphone. A networking library
           references the API.
     settings:
+      configs:
+        Release:
+          PROVISIONING_PROFILE_SPECIFIER: Tiny Track Party tvOS App Store
       base:
         PRODUCT_BUNDLE_IDENTIFIER: games.couchpad.tinytrack
         # Names the set inside Generated/Assets.xcassets. Without it actool
@@ -320,6 +350,11 @@ targets:
           NSExtensionPointIdentifier: com.apple.tv-top-shelf
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ContentProvider
     settings:
+      configs:
+        Release:
+          # ITS OWN PROFILE. An app-extension is a separate bundle id and cannot
+          # ride the host app's profile.
+          PROVISIONING_PROFILE_SPECIFIER: Tiny Track Party Top Shelf App Store
       base:
         PRODUCT_BUNDLE_IDENTIFIER: games.couchpad.tinytrack.topshelf
     dependencies:

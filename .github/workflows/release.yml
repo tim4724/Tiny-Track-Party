@@ -383,12 +383,24 @@ jobs:
   #                             way for a local device build)
   #   ASC_KEY_ID                App Store Connect API key id
   #   ASC_ISSUER_ID             that key's issuer id
-  #   ASC_KEY_P8_B64            base64 of the key's .p8. The key needs App
-  #                             Manager or Admin: -allowProvisioningUpdates
-  #                             CREATES the two distribution profiles with it
-  #                             (games.couchpad.tinytrack and .topshelf), which
-  #                             is why no profile is stored as a secret — a
-  #                             stored one expires annually and fails silently.
+  #   ASC_KEY_P8_B64            base64 of the key's .p8. APP MANAGER IS ENOUGH,
+  #                             and that is the point of signing manually: the
+  #                             key is used to upload and for nothing else.
+  #                             Automatic signing would have Xcode ask Apple to
+  #                             mint the profiles ("cloud signing"), which needs
+  #                             an ADMIN key — a team-wide credential on a runner,
+  #                             traded for not creating two profiles by hand.
+  #   APPLE_PROFILE_APP_B64     base64 of the "Tiny Track Party tvOS App Store"
+  #                             .mobileprovision (games.couchpad.tinytrack)
+  #   APPLE_PROFILE_TOPSHELF_B64  the same for "Tiny Track Party Top Shelf App
+  #                             Store" (games.couchpad.tinytrack.topshelf). An
+  #                             appex cannot ride its host's profile.
+  #
+  # BOTH PROFILES EXPIRE, about a year out, and that is the cost of this trade.
+  # It is a LOUD failure — the export names the profile it could not resolve —
+  # but it is a failure inside a release, so renew them before a tag rather than
+  # during one. The names above are a contract with shells/tvos/project.yml,
+  # which selects them by PROVISIONING_PROFILE_SPECIFIER.
   tvos:
     runs-on: macos-latest
     # A cache miss means building Filament for two tvOS SDKs plus the partial
@@ -499,10 +511,13 @@ jobs:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_KEY_P8_B64: ${{ secrets.ASC_KEY_P8_B64 }}
+          APPLE_PROFILE_APP_B64: ${{ secrets.APPLE_PROFILE_APP_B64 }}
+          APPLE_PROFILE_TOPSHELF_B64: ${{ secrets.APPLE_PROFILE_TOPSHELF_B64 }}
         run: |
           set -eu
           for v in APPLE_DIST_CERT_P12_B64 APPLE_DIST_CERT_PASSWORD APPLE_TEAM_ID \
-                   ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8_B64; do
+                   ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8_B64 \
+                   APPLE_PROFILE_APP_B64 APPLE_PROFILE_TOPSHELF_B64; do
             if [ -z "$(eval "echo \"\$$v\"")" ]; then
               echo "::error::secret $v is not set"
               exit 1
@@ -529,14 +544,32 @@ jobs:
             $(security list-keychains -d user | tr -d '"')
           rm -f "$RUNNER_TEMP/dist.p12"
 
+          # BY UUID, which is the only name Xcode resolves a profile by on disk.
+          # The human name inside it is what project.yml's
+          # PROVISIONING_PROFILE_SPECIFIER and the export options match on, so a
+          # profile renamed in the portal breaks the build by name, loudly.
+          PROFDIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFDIR"
+          for pair in "app:$APPLE_PROFILE_APP_B64" "topshelf:$APPLE_PROFILE_TOPSHELF_B64"; do
+            f="$RUNNER_TEMP/${pair%%:*}.mobileprovision"
+            echo "${pair#*:}" | base64 --decode > "$f"
+            uuid=$(security cms -D -i "$f" | plutil -extract UUID raw -o - -)
+            name=$(security cms -D -i "$f" | plutil -extract Name raw -o - -)
+            cp "$f" "$PROFDIR/$uuid.mobileprovision"
+            echo "installed profile '$name' ($uuid)"
+            rm -f "$f"
+          done
+
           KEYDIR="$HOME/.appstoreconnect/private_keys"
           mkdir -p "$KEYDIR"
           echo "$ASC_KEY_P8_B64" | base64 --decode > "$KEYDIR/AuthKey_$ASC_KEY_ID.p8"
           chmod 600 "$KEYDIR/AuthKey_$ASC_KEY_ID.p8"
 
+          # No ASC_KEY_PATH: nothing takes the key by path any more. altool
+          # locates it by id under the directory above, and the archive and
+          # export no longer authenticate at all.
           {
             echo "KEYCHAIN=$KEYCHAIN"
-            echo "ASC_KEY_PATH=$KEYDIR/AuthKey_$ASC_KEY_ID.p8"
             echo "DEVELOPMENT_TEAM=$APPLE_TEAM_ID"
           } >> "$GITHUB_ENV"
 
@@ -572,12 +605,14 @@ jobs:
       - name: Archive
         run: |
           set -eu
+          # NO -allowProvisioningUpdates AND NO AUTH FLAGS. Both exist to let
+          # Xcode mint provisioning on demand, and the profiles are already on
+          # disk — passing them would re-enable the cloud-signing path this job
+          # deliberately does not use, and would need an Admin key again.
+          # The scheme archives Release, which is the only config project.yml
+          # puts manual signing on.
           ARGS=(-project shells/tvos/TinyTrackParty.xcodeproj -scheme TinyTrackParty
                 -destination 'generic/platform=tvOS' -archivePath "$ARCHIVE"
-                -allowProvisioningUpdates
-                -authenticationKeyPath "$ASC_KEY_PATH"
-                -authenticationKeyID "${{ secrets.ASC_KEY_ID }}"
-                -authenticationKeyIssuerID "${{ secrets.ASC_ISSUER_ID }}"
                 "DEVELOPMENT_TEAM=$DEVELOPMENT_TEAM"
                 "CURRENT_PROJECT_VERSION=$GITHUB_RUN_NUMBER")
           if [ "$GITHUB_REF_TYPE" = "tag" ]; then
@@ -602,17 +637,22 @@ jobs:
             <key>method</key><string>app-store-connect</string>
             <key>destination</key><string>export</string>
             <key>teamID</key><string>$DEVELOPMENT_TEAM</string>
-            <key>signingStyle</key><string>automatic</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>signingCertificate</key><string>Apple Distribution</string>
+            <key>provisioningProfiles</key><dict>
+              <key>games.couchpad.tinytrack</key><string>Tiny Track Party tvOS App Store</string>
+              <key>games.couchpad.tinytrack.topshelf</key><string>Tiny Track Party Top Shelf App Store</string>
+            </dict>
             <key>uploadSymbols</key><true/>
+            <!-- Or xcodebuild rewrites what the archive already stamped: the
+                 run number is the build number App Store Connect will refuse a
+                 second time, and it is decided at archive, not here. -->
+            <key>manageAppVersionAndBuildNumber</key><false/>
           </dict></plist>
           PLIST
           xcodebuild -exportArchive -archivePath "$ARCHIVE" \
             -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
-            -exportPath "$EXPORT_DIR" \
-            -allowProvisioningUpdates \
-            -authenticationKeyPath "$ASC_KEY_PATH" \
-            -authenticationKeyID "${{ secrets.ASC_KEY_ID }}" \
-            -authenticationKeyIssuerID "${{ secrets.ASC_ISSUER_ID }}"
+            -exportPath "$EXPORT_DIR"
           ls -l "$EXPORT_DIR"
 
       # BEFORE the upload, and on every run including a dispatch. Store-side
