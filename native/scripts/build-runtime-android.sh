@@ -67,6 +67,15 @@ if [ ! -f "$SDK_ROOT/include/filament/Engine.h" ]; then
   echo "    ANDROID_HOME=$ANDROID_HOME ./build.sh -i -q armeabi-v7a -p android release" >&2
   echo "    ANDROID_HOME=$ANDROID_HOME ./build.sh -i -q arm64-v8a   -p android release" >&2
   echo "  Both install under ONE root; FilamentSdk.cmake picks lib/<abi>." >&2
+  echo "" >&2
+  echo "  OR CARRY ONE OVER, when the pin delta cannot reach this leg — a commit" >&2
+  echo "  touching only emscripten or tvOS builds the same Android bytes:" >&2
+  echo "    git -C $FILAMENT_SRC diff <sha-the-other-SDK-was-built-from>..HEAD" >&2
+  echo "    cp -R <other-checkout>/out/android-release $FILAMENT_SRC/out/" >&2
+  echo "  THE INSTALL ONLY, never out/cmake-android-*. A copied build dir keeps" >&2
+  echo "  installing into the tree it was configured in and reports success while" >&2
+  echo "  changing nothing here; require_local_install (filament-checkout.sh) is" >&2
+  echo "  the gate for that, and it cannot see an install dir." >&2
   exit 1
 fi
 

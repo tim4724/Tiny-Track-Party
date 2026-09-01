@@ -104,6 +104,34 @@ if (!has('shells/androidtv/keystore.properties')
     + ' debug key. See shells/androidtv/keystore.properties.example.');
 }
 
+// THE TV ENGINE SDKS ARE HAND-BUILT, and nothing else announces their absence.
+// The wasm leg fetches everything it needs (the fork clone, emsdk), so "the
+// Filament fork is pinned and automatic" is true there and false here: the
+// Android and tvOS legs link a Filament SDK that only `./build.sh` in the
+// pinned checkout produces, at ~25 min per slice, and a pin bump moves the
+// checkout and leaves every one of them behind in the old one. Reported per
+// SLICE rather than per platform for the reason build-runtime-android.sh
+// guards them that way: both Android ABIs install under one root, so a root
+// that exists can still be missing arm64 entirely, and that stays invisible
+// until someone installs on a 64-bit device.
+const filamentSrc = process.env.FILAMENT_SRC || (() => {
+  const pin = fs.readFileSync(path.join(ROOT, 'native/filament.pin'), 'utf8');
+  const sha = /^FILAMENT_COMMIT=(\w+)/m.exec(pin)?.[1] ?? '';
+  return path.join(process.env.HOME || '', 'Projects', `filament-${sha.slice(0, 12)}`);
+})();
+const slices = [
+  ['Android armeabi-v7a', 'out/android-release/filament/lib/armeabi-v7a/libfilament.a'],
+  ['Android arm64-v8a', 'out/android-release/filament/lib/arm64-v8a/libfilament.a'],
+  ['tvOS device', 'out/tvos-release/filament-appletvos/include/filament/Engine.h'],
+  ['tvOS simulator', 'out/tvos-release/filament-appletvsimulator/include/filament/Engine.h']
+].filter(([, p]) => !fs.existsSync(path.join(filamentSrc, p))).map(([name]) => name);
+if (slices.length) {
+  notes.push(`no Filament SDK for ${slices.join(', ')} in ${filamentSrc} —`
+    + ' `npm run build:androidtv` / `build:tvos` stop there and print the build to run'
+    + ' (~25 min each). An SDK built from another checkout can be carried over when'
+    + ' the pin delta cannot reach that platform; those scripts say how.');
+}
+
 // Asked rather than remembered. A hand-typed count is wrong the first time a
 // ctest is added and nothing ever tells you — this banner claimed 47 for a tree
 // that had 48. `ctest -N` only lists, needs no build, and costs ~13 ms.
@@ -128,9 +156,11 @@ console.log(`  npm run test:native             native conformance, ${ctestCount}
 console.log('  npm run test:e2e                Playwright  (a few minutes)');
 console.log('  npm run dev                     the server, watching');
 console.log('  npm run build:tvos [device|simulator]   the Apple TV app, engine + bundle included');
-console.log('\nEngine changes (native/) additionally need the Filament fork + emsdk (both fetched automatically, pinned by native/filament.pin):');
-console.log('  native/scripts/build-runtime-web.sh   then commit the artifacts');
+console.log('  npm run build:androidtv -- [release|debug] [install]   the Android TV app, likewise');
+console.log('\nEngine changes (native/) additionally need the Filament fork, pinned by native/filament.pin:');
+console.log('  native/scripts/build-runtime-web.sh   then commit the artifacts  (fork + emsdk fetched automatically)');
 console.log('  npm run check:artifact                is the checked-in wasm current?  (instant)');
+console.log('  the two TV apps above                 additionally need a HAND-BUILT Filament SDK per slice');
 
 if (notes.length) {
   console.log('\nNotes:');
