@@ -477,7 +477,7 @@ input[type=text]:disabled { opacity: 0.6; }
   padding: 0.4rem 0.9rem 0.4rem 0.5rem;
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r-sm);
   box-shadow: var(--shadow-pop);
-  transition: transform 0.03s, box-shadow 0.03s, background 0.08s;
+  transition: transform 0.09s, box-shadow 0.09s, background 0.08s;
 }
 /* The render is sized by the ROW and capped by its column, so it shrinks with
    the rows on a short screen instead of setting a floor they cannot go under —
@@ -510,7 +510,10 @@ input[type=text]:disabled { opacity: 0.6; }
    presses like every other control on the page. The duration was never the
    reason this read as missing: the tile was being destroyed mid-animation by
    its own tap (see buildModePicker). */
-.car-opt:active:not(:disabled), .car-opt.held { transform: translate(2px, 2px) scale(0.98); box-shadow: none; }
+.car-opt:active:not(:disabled), .car-opt.held {
+  transform: translate(2px, 2px) scale(0.98); box-shadow: none;
+  transition: transform 0s, box-shadow 0s, background 0.08s;   /* down NOW; see theme.css .btn */
+}
 /* locked strip (player is READY): the pick stands, the alternatives recede.
    pointer-events off so a tap on a locked tile falls through to the strip
    container, where main.js answers with the "tap Ready ✓ to change" hint —
@@ -596,9 +599,12 @@ input[type=text]:disabled { opacity: 0.6; }
   row-gap: 0.6rem;
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r-sm);
   box-shadow: var(--shadow-pop);
-  transition: transform 0.03s, box-shadow 0.03s, background 0.08s;
+  transition: transform 0.09s, box-shadow 0.09s, background 0.08s;
 }
-.mode-opt:active:not(:disabled), .mode-opt.held { transform: translate(2px, 2px) scale(0.98); box-shadow: none; }
+.mode-opt:active:not(:disabled), .mode-opt.held {
+  transform: translate(2px, 2px) scale(0.98); box-shadow: none;
+  transition: transform 0s, box-shadow 0s, background 0.08s;   /* down NOW; see theme.css .btn */
+}
 .mode-opt:disabled { cursor: default; }
 /* The CURSOR (whose detail shows) when it is not also the pick — the one case
    is a locked row being examined. Same outline mark as the car strip's .sel. */
@@ -772,9 +778,12 @@ input[type=text]:disabled { opacity: 0.6; }
   cursor: pointer; padding: 0.45rem 0.4rem 0.5rem;
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r-sm);
   box-shadow: var(--shadow-pop);
-  transition: transform 0.03s, box-shadow 0.03s, background 0.08s;
+  transition: transform 0.09s, box-shadow 0.09s, background 0.08s;
 }
-.track-opt:active:not(:disabled), .track-opt.held { transform: translate(2px, 2px) scale(0.98); box-shadow: none; }
+.track-opt:active:not(:disabled), .track-opt.held {
+  transform: translate(2px, 2px) scale(0.98); box-shadow: none;
+  transition: transform 0s, box-shadow 0s, background 0.08s;   /* down NOW; see theme.css .btn */
+}
 .track-opt:disabled { cursor: default; }
 /* picked tile — the identical fill a picked cup wears (and the same unchanged
    drop), so "picked" looks the same wherever it lands in the picker. The fill (its
@@ -897,7 +906,7 @@ input[type=text]:disabled { opacity: 0.6; }
   font-family: var(--font-display); font-weight: 700; color: #fff;
   border: 3px solid var(--ink); border-radius: var(--r);
   box-shadow: 0 var(--btn-drop) 0 var(--btn-ledge);   /* same ledge as every other button */
-  touch-action: none; transition: transform 0.03s, box-shadow 0.03s, filter 0.03s, opacity 0.15s;
+  touch-action: none; transition: transform 0.09s, box-shadow 0.09s, filter 0.09s, opacity 0.15s;
   /* no selection on a HELD control — with touch-action:none this closes off
      Android's long-press gesture (whose OS haptic buzzed mid-hold); the
      drive surface also preventDefaults contextmenu (driveSurface.js) */
@@ -908,6 +917,9 @@ input[type=text]:disabled { opacity: 0.6; }
   filter: brightness(1.05);
   transform: translateY(var(--btn-sink));
   box-shadow: 0 calc(var(--btn-drop) - var(--btn-sink)) 0 var(--btn-ledge);
+  /* down NOW, and here it is not only feel: this class IS the input state
+     (driveSurface.js), so the paint must not trail the steering it reports. */
+  transition: transform 0s, box-shadow 0s, filter 0s, opacity 0.15s;
 }
 /* tilt mode: ITEM is the left thumb column, BRAKE the right (PURPLE = items,
    RED = brake, everywhere in the chrome) */
@@ -1134,9 +1146,12 @@ input[type=text]:disabled { opacity: 0.6; }
   gap: 0.7rem; padding: 0.8rem 0.9rem; cursor: pointer;
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r);
   box-shadow: var(--shadow-pop);
-  transition: transform 0.08s, box-shadow 0.08s, background 0.08s;
+  transition: transform 0.09s, box-shadow 0.09s, background 0.08s;
 }
-.mode-card:active:not(:disabled), .mode-card.held { transform: translate(2px, 2px); box-shadow: none; }
+.mode-card:active:not(:disabled), .mode-card.held {
+  transform: translate(2px, 2px); box-shadow: none;
+  transition: transform 0s, box-shadow 0s, background 0.08s;
+}
 .mode-card:disabled { cursor: default; opacity: 0.45; }
 .mode-card[aria-checked='true'] { background: color-mix(in srgb, var(--car, var(--brand)) 16%, #fff); }
 /* the radio dot — drawn, so it carries the theme's ink weight; the picked one
