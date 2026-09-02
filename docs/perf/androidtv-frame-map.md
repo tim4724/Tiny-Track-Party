@@ -490,6 +490,28 @@ seconds, baseline 13.4-13.9 across the day):**
   with only the cars and the cone pool left on the material. Pixel-identical
   otherwise (flat-shaded kit), so nothing to trade against.
 
+**INPUT LATENCY ON THE BOX IS THE PLATFORM'S PIPELINE, NOT OUR QUEUE**
+(2026-09-02, SurfaceFlinger `--latency` on the app's BLAST layer). A finished
+frame waits ~49 ms (p50; p90 51) from its acquire fence to the panel at 60,
+~41 at the pinned 30, with a clean 16.7 ms cadence and zero skips. The
+swapchain is not why: a scratch Filament (session history) added flags for
+the surface's MINIMUM image count and MAILBOX presentation, the box's driver
+granted both (`Swapchain: 4 images (min 4), present mode MAILBOX` — the
+surface's minimum is FOUR), and all four arms read the same 48-49 ms. The
+number is the box's frame timeline: `dumpsys SurfaceFlinger` shows app phase
++13.7 ms, app work duration 20 ms, SF ready duration 33 ms — the app is
+handed the vsync 3 ms before the next one and SurfaceFlinger takes two more
+to show what it queues. Nothing in the swapchain, the present mode or the
+image count reaches that. The frame timeline API was then PROBED and is
+dead too (`Choreographer.postVsyncCallback`, the offered slots logged): per
+vsync SurfaceFlinger offers presents at +36, +53 (preferred), +70 ms ...,
+each with a queue-and-fence deadline 33 ms before it. The app's callback
+lands at +13.7 and its GPU work is done near +28, so the +53 slot's +20
+deadline is missed on every real frame and the +70 slot is what the 49 ms
+is. Making +53 needs the GPU finished within ~6 ms of the callback; a
+self-timed loop starting the frame at the vsync would make it, but samples
+input that much earlier — a net ~5 ms for a drift-prone loop. Not built.
+
 What remains is per-fragment: the two deck taps at
 ~1.5 ms each on the heavy seconds, the copies 1.3, the sheets 2.5 (they are lit
 `vlitns`, not free), cars 2.3.
