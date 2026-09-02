@@ -447,7 +447,31 @@ instances expanded into one mesh, texture colour from `generated/kit_colors.h`
 x the live factor x light per vertex): 14.08 / 13.88 → 13.52 / 13.88, a third
 of a millisecond, pixel-identical to the live draw. Every static thing in the
 scene is now lit at build; what still lights live is the cars, the cone pool,
-the windmill, the plane, the rockets and the shadow receivers. What remains is per-fragment: the two deck taps at
+the windmill, the plane, the rockets and the shadow receivers.
+
+**THE COST MODEL RE-FITTED ON THIS BUILD (4P, heavy seconds, pinned).** The
+old "2.6 ms per cell, resolution-independent" was vertex and binning work
+that the ribbon and the bakes have since cut, NOT pass structure: an EMPTY
+scene (a mask naming no group, `0x2` — a mask of 0 is untagged and draws
+everything) costs 2.5 ms at 4P and 1.6 at 1P, so an extra cell's passes,
+clears and overlay are ~0.3 ms. Everything else is inside the groups, each
+drawn alone at 432 and at 216 lines (above the empty scene):
+
+| group | alone at 432 | alone at 216 | reading |
+|---|---|---|---|
+| terrain | 3.8 | 0.7 | fill |
+| road | 3.1 | 0.7 | mostly fill |
+| dressing | 2.5 | 1.2 | half fixed, half fill |
+| cars | 2.0 | — | mostly fixed |
+| sky | 0.1 | — | nothing |
+
+Full scene at 432: 13.6; the sweep 10.5 / 13.6 / 21.1 ms at 216 / 432 / 648
+lines. So the 4P frame is FILL now, the sand first. Drawing the ground and
+hills AFTER every other opaque (priority 5) to let the depth test reject the
+sand under the road measured a null (13.67 / 13.37 against 13.60 / 13.65) —
+the tiler already kills that overdraw. The grade LUT is 0.4 ms of the frame
+(`0x9FFC`, two reps: 14.10 / 14.00 → 13.62 / 13.66) and cannot be made
+cheaper in arithmetic; only an sRGB surface recovers it. What remains is per-fragment: the two deck taps at
 ~1.5 ms each on the heavy seconds, the copies 1.3, the sheets 2.5 (they are lit
 `vlitns`, not free), cars 2.3.
 
