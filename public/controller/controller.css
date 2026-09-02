@@ -589,21 +589,24 @@ input[type=text]:disabled { opacity: 0.6; }
    Centred, because the names are SET as two lines rather than left to wrap
    (shared/trackPicker.js puts the last word below the rest). Left-flush, the
    second line hung under a longer first one and every tile read as ragged.
-   The first row is a fixed TWO LINES whether the name uses them or not, and the
-   name is centred inside it. That is what keeps every tile's trail on one line
-   across the grid: the tiles are equal boxes centring their content, so a name
-   that took only one line — a one-word cup, or any name at all before the break
-   was set — would centre a shorter block and lift its stars half a line above
-   its neighbour's. */
+   Two lines are RESERVED whether the name uses them or not — that is what keeps
+   every tile's trail on one line across the grid, since the tiles are equal
+   boxes centring their content and a name that took only one line would centre a
+   shorter block and lift its stars half a line above its neighbour's. The
+   reservation is a min-height on the NAME (below) and not a fixed row here, for
+   a reason worth keeping: `em` on this element is not the name's em. A <button>
+   does not inherit font-size, so a row of `calc(2 * 1.15em)` measured the UA's
+   own ~13px and came out 30.66px at every viewport while the name it was meant
+   to reserve for was 46. The name simply overflowed the row and ate the gap
+   below it — 9.6px of row-gap rendered as under 2px of daylight. Sized in the
+   name's own em there is one number, it tracks the font tiers by itself, and
+   this gap is the air it says it is. */
 .mode-opt {
   display: grid; grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: calc(2 * 1.15em) auto;   /* = -webkit-line-clamp x line-height */
   align-content: center; align-items: center; min-height: 0;
   cursor: pointer; padding: 0.5rem 0.75rem;
-  /* Every name now uses BOTH its lines (shared/trackPicker.js sets the break),
-     so the reserved row is always full and this gap is the only air between the
-     name and its trail. */
-  row-gap: 0.6rem;
+  /* The only air between the name and its trail, and now the whole of it. */
+  row-gap: 0.75rem;
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r-sm);
   box-shadow: var(--shadow-pop);
   transition: transform 0.05s, box-shadow 0.05s, background 0.08s;
@@ -624,6 +627,10 @@ input[type=text]:disabled { opacity: 0.6; }
   min-width: 0; max-width: 100%;
   font-family: var(--font-display); font-weight: 700; font-size: 1.25rem;
   line-height: 1.15;
+  /* The two lines the clamp allows, held open whether the name fills them or
+     not (see .mode-opt). In the name's OWN em, so it is the clamp x the
+     line-height directly above it. */
+  min-height: calc(2 * 1.15em);
   color: var(--ink);
   /* Wraps, to TWO lines, then ellipsis. Two is what "Playroom Cup" needs at the
      narrow track this page now runs; the clamp is the backstop, so a cup named
@@ -631,12 +638,10 @@ input[type=text]:disabled { opacity: 0.6; }
      scripts/lobby-fit-check.mjs measures the clip VERTICALLY now — a wrapping
      name cannot overflow its own width, so the old horizontal slack reading
      would have passed whatever it was handed.
-     Both lines are RESERVED, not just allowed. The tiles are one grid of equal
-     boxes with their content centred, so a one-line name ("Snow Cup") centred
-     its own shorter block and put its stars a half-line above the two-line
-     tile's beside it — six tiles, four text baselines. Reserving the second
-     line makes every tile's content the same height, which is what puts the
-     names on one line and the stars on another across the whole grid. */
+     Reserving the second line (min-height above) is what makes every tile's
+     content the same height: a one-line name ("Snow Cup") centred its own
+     shorter block and put its stars a half-line above the two-line tile's
+     beside it — six tiles, four text baselines. */
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
   overflow: hidden; overflow-wrap: break-word;
 }
