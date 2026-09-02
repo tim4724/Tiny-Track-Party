@@ -971,6 +971,20 @@ rebuild this.
 > cell-overlay pass — full surface, almost nothing drawn, measurably free —
 > is the standing counter-example that there is no such term.
 
+**AN sRGB SURFACE IN PLACE OF THE GRADE LUT WAS BUILT, PRICED ON ALL THREE
+PLATFORMS, AND DECLINED** (2026-09-02): an sRGB swapchain where Filament
+grants one, an sRGB CAMetalLayer on tvOS, every material writing linear
+through the grade's bypass global, the fog, sky and overlay colours
+converted to match, the web keeping the LUT. Pixel-correct everywhere. A
+null on the Android box (the store-side encode costs what the three taps
+cost on that GPU) and about a millisecond of the Apple TV's 4P native 4K
+frame. The rule this tree hunts by is "improves the Android box, the weakest
+device" — a tvOS-only millisecond does not qualify, so it is not in the
+tree; the session's history has the patch if that rule ever changes. Priced
+beside it and dead on its own numbers: a two-drawable CAMetalLayer (one
+present interval less input latency, by construction) dropped 29 frames a
+second at 4P 4K — one frame of queue cannot absorb a 13 ms frame's spikes.
+
 **The full-screen antialias pass is a switch** (`ttp_display_antialias`), and
 turning it off removes the offscreen scene buffer with it, so the saving is both
 that buffer's store and vpresent's read. **Both TV shells turn it off**; the web
