@@ -103,6 +103,13 @@ settings:
   # from secrets before it archives. PROVISIONING_PROFILE_SPECIFIER is per target
   # (an appex needs its own profile), so it sits on each target rather than here.
   configs:
+    # SAID OUT LOUD, because an unset style is read as Manual: once Release
+    # named its style below, XcodeGen stopped emitting the automatic one Debug
+    # had always had, and every local device build failed with "requires a
+    # provisioning profile" while the certificate, the team and the device
+    # registration were all valid.
+    Debug:
+      CODE_SIGN_STYLE: Automatic
     Release:
       CODE_SIGN_STYLE: Manual
       CODE_SIGN_IDENTITY: Apple Distribution
