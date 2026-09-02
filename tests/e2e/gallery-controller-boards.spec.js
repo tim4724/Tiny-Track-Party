@@ -126,6 +126,41 @@ test('phone race page: the pick list carries stars; the first cup detail is open
   await expect(page.locator('.modepick__tracks .track-opt')).toHaveCount(4);
 });
 
+test('phone race page: waiting on the grid gates Start and clears the legend from under the chip', async ({ page }) => {
+  // The host's own waiting state: Start needs everyone, so it sits disabled
+  // with the floating note explaining why. Only a roster with an unready player
+  // produces this — an all-ready one renders a live button and no chip at all.
+  await page.setViewportSize({ width: 844, height: 390 });
+  await page.goto(`${CONTROLLER}lobby-race-waiting&color=1`);
+  await page.waitForSelector('.racelist .mode-opt');
+  await expect(page.locator('#ready-btn')).toHaveText('Start race');
+  await expect(page.locator('#ready-btn')).toBeDisabled();
+  await expect(page.locator('#ready-note')).toHaveText(/Waiting for all players/);
+
+  // The chip is out of flow and lands on the RACE page's taller card, where the
+  // star legend used to stick out either side of it. The legend stands down —
+  // by VISIBILITY, so the card keeps the exact geometry it has with the chip
+  // gone and nothing moves when the last player readies up.
+  const box = async (sel) => page.locator(sel).evaluate((e) => {
+    const r = e.getBoundingClientRect();
+    return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, vis: getComputedStyle(e).visibility };
+  });
+  const waiting = { legend: await box('.star-legend'), card: await box('.racedetail'), note: await box('#ready-note') };
+  expect(waiting.legend.vis).toBe('hidden');
+  // …and it was genuinely in the way: the two boxes do intersect.
+  expect(waiting.note.top).toBeLessThan(waiting.legend.bottom);
+  expect(waiting.note.bottom).toBeGreaterThan(waiting.legend.top);
+
+  await page.goto(`${CONTROLLER}lobby-race&color=1`);
+  await page.waitForSelector('.racelist .mode-opt');
+  const ready = { legend: await box('.star-legend'), card: await box('.racedetail') };
+  expect(ready.legend.vis).toBe('visible');
+  expect(ready.legend).toEqual(expect.objectContaining({
+    top: waiting.legend.top, bottom: waiting.legend.bottom, left: waiting.legend.left, right: waiting.legend.right
+  }));
+  expect(ready.card.bottom).toBe(waiting.card.bottom);
+});
+
 test('phone race page: examining the locked cup swaps the detail for the unlock pitch', async ({ page }) => {
   await page.goto(`${CONTROLLER}lobby-race-locked&color=1`);
   await page.waitForSelector('.modepick__tracks--locked');
