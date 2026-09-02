@@ -139,20 +139,6 @@ enum Copy {
         return nil
     }
 
-    /// The now-playing chip, bottom-left of the race screen.
-    ///
-    /// This is the CC-BY attribution for the music catalogue, not decoration:
-    /// the songs are Kevin MacLeod's under CC-BY and a shell that plays them
-    /// owes a visible credit. Do not hide it to clean up the frame.
-    static func musicCredit(title: String, artist: String) -> String { "\(title) · \(artist)" }
-
-    /// The long form the web hangs off the link's tooltip. A TV has no hover, so
-    /// wherever this lands it has to be somewhere reachable — an info panel, or
-    /// the chip itself if there is room.
-    static func musicCreditFull(title: String, artist: String, license: String) -> String {
-        "\(title) by \(artist) — \(license) (source ↗)"
-    }
-
     // MARK: - Wordmark
 
     static let wordmarkLine1 = "TINY TRACK"

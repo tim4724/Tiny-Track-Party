@@ -65,7 +65,7 @@ test('music start carries a resolved song descriptor, not an index', async () =>
   assert.equal(typeof start.song.file, 'string', 'a song names a file to stream');
   assert.ok(start.song.file.length, 'the file is not empty');
   for (const k of ['title', 'artist', 'license', 'source']) {
-    assert.equal(typeof start.song[k], 'string', `the credit chip's ${k} crossed`);
+    assert.equal(typeof start.song[k], 'string', `the attribution's ${k} crossed`);
   }
   assert.equal(typeof start.level, 'number', 'the per-song LUFS trim rides the command');
   assert.ok(start.level > 0 && start.level <= 4, `a plausible gain, got ${start.level}`);

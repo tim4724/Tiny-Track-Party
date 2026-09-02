@@ -1,12 +1,12 @@
 import SwiftUI
 
-/// The three pieces of race chrome that are not per-cell: the countdown banner,
-/// the pause overlay, and the now-playing credit.
+/// The two pieces of race chrome that are not per-cell: the countdown banner
+/// and the pause overlay.
 ///
-/// All three float BARE over the live 3D view — no paper stage, no panel behind
-/// them (the pause overlay's frosted glass is the deliberate exception, and it
-/// is a MODAL, which is the one thing paper is for). Everything below renders
-/// from `GameState`; none of it decides anything.
+/// Both float BARE over the live 3D view — no paper stage, no panel behind them
+/// (the pause overlay's frosted glass is the deliberate exception, and it is a
+/// MODAL, which is the one thing paper is for). Everything below renders from
+/// `GameState`; none of it decides anything.
 
 // MARK: - The countdown banner
 
@@ -195,45 +195,5 @@ struct PauseOverlay: View {
         // runs when the focus system ESTABLISHES focus here and again after
         // every reset, so it cannot lose the race the manual version can.
         .defaultFocus($focus, .resume)
-    }
-}
-
-// MARK: - The now-playing credit
-
-/// The bottom-left credit chip.
-///
-/// **THIS IS A LICENSING OBLIGATION, NOT DECORATION.** The race catalogue is
-/// Kevin MacLeod's under CC-BY, and a shell that plays it owes a visible credit.
-/// Do not hide it to clean up the frame, and do not make it conditional on
-/// anything but the music actually playing (`show-music-credit` clears
-/// `GameState.musicCredit`, which is the only thing that takes it away).
-struct MusicCreditChip: View {
-
-    let credit: GameState.MusicCredit
-
-    var body: some View {
-        // "♪" and two spaces — `.music-credit::before`.
-        Text("\u{266A}  " + Copy.musicCredit(title: credit.title, artist: credit.artist))
-            .font(Fonts.body(22, weight: .bold))
-            .foregroundStyle(.white.opacity(0.92))
-            .lineLimit(1)
-            .truncationMode(.tail)
-            .padding(.vertical, 10)
-            .padding(.horizontal, 22)
-            // A dark translucent pill so it reads over the bright 3D scene
-            // without competing with the HUD. `--ink` at the CSS's own 0.55,
-            // never `#000` (`theme.css`'s standing rule).
-            .background(Capsule().fill(Tokens.ink.opacity(0.55)))
-            .opacity(0.9)
-            // The web hangs the LICENSE and the source link off a tooltip. A TV
-            // has neither a pointer nor a browser to hand a URL to, so the long
-            // form rides the accessibility label — which is somewhere reachable,
-            // and is what the ledger asks for. The chip itself stays
-            // non-focusable: it is not an action, and a focusable chip on the
-            // race screen would compete with the pause overlay for the remote.
-            .accessibilityLabel(Copy.musicCreditFull(title: credit.title,
-                                                     artist: credit.artist,
-                                                     license: credit.license))
-            .allowsHitTesting(false)
     }
 }

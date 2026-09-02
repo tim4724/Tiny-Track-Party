@@ -438,23 +438,6 @@ function setSoundOn(on) {
 el('mute-btn').addEventListener('click', () => setSoundOn(audio.muted));
 syncMuteBtn();   // a reload seats the button on the persisted state
 
-// Now-playing credit chip (bottom-left): the current song + artist, linking to
-// its source — and the on-screen CC-BY attribution. Filled from whichever song
-// startMusic picked for this race (audio.nowPlaying); toggled with the music
-// lifecycle (shown on GO, hidden at results / lobby). Values are static config,
-// so textContent/href are safe to set raw.
-function showMusicCredit(on) {
-  const mc = el('music-credit');
-  if (!mc) return;
-  const np = audio.nowPlaying;
-  if (on && np) {
-    mc.textContent = `${np.title} · ${np.artist}`;
-    mc.href = np.source;
-    mc.title = `${np.title} by ${np.artist} — ${np.license} (source ↗)`;
-  }
-  mc.classList.toggle('hidden', !(on && np));
-}
-
 // ---- race state ----
 let session = null;
 let paused = false;        // race frozen via the pause overlay (display or a controller)
@@ -906,7 +889,6 @@ const RACE_PERFORMERS = {
   },
   'start-music': (e) => sfx(audioDecide.startMusic(e.biome)),
   'stop-music': () => sfx(audioDecide.stopMusic()),
-  'show-music-credit': (e) => showMusicCredit(e.on),
   'stop-voices': () => sfx(audioDecide.stopVoices()),
   'item-pickup': (e) => { scene.itemPickup(e.id, e.item); pushHeldItems(); },
   'rocket-impact': (e) => scene.rocketImpact(e.id),

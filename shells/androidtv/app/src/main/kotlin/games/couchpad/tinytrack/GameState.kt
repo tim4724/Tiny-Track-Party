@@ -391,20 +391,6 @@ class GameState {
     var paused by mutableStateOf(false)
 
     /**
-     * The CC-BY attribution for the playing song. A LICENSING obligation, not
-     * chrome: the catalogue is Kevin MacLeod's under CC-BY and a shell that plays
-     * it owes a visible credit.
-     */
-    var musicCredit by mutableStateOf<MusicCredit?>(null)
-
-    data class MusicCredit(
-        val title: String,
-        val artist: String,
-        val license: String,
-        val source: String,
-    )
-
-    /**
      * The BOOST item icon's chevron accent for the biome the current scene
      * resolved to. `ttp_theme_boost_icon(biome)` answers it, and it is one of
      * exactly two colours a shell may ask the theme for. Wanting a third means the

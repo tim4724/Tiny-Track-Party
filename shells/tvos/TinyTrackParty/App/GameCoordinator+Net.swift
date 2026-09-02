@@ -114,13 +114,6 @@ extension GameCoordinator {
         net.isSoundOn = { [weak self] in !(self?.audio.muted ?? false) }
         net.onRelayError = { [weak self] why in self?.state.lastError = "relay: \(why)" }
 
-        // The CC-BY credit. A shell that streams this catalogue owes a visible
-        // attribution: it is a licensing obligation, not chrome.
-        audio.onSongChanged = { [weak self] title, artist, license, source in
-            self?.state.musicCredit = GameState.MusicCredit(
-                title: title, artist: artist, license: license, source: source)
-        }
-
         // The lobby's attract race drives the picked track behind the boards.
         lobbyDemo.room = { [weak self] in self?.net.roomHandle ?? 0 }
         lobbyDemo.trackId = { [weak self] in self?.trackId ?? "" }

@@ -53,7 +53,6 @@ export class RaceAudio {
     this._voices = new Map(); // 'cueId:carId' -> live state voice {set, stop}
     this._music = null;       // streamed background track (HTMLAudioElement)
     this._musicUrl = null;    // its current src, so we only reload on a track change
-    this.nowPlaying = null;   // the picked song descriptor — read by the credit chip
     this._muted = storedMuted(); // the display's mute switch, persisted in bus.js
   }
 
@@ -218,7 +217,6 @@ export class RaceAudio {
   // 'start' command.
   _startMusic(song, level) {
     if (!this.ready) return;
-    this.nowPlaying = song;
     if (!this._music) {
       const el = new Audio();
       el.loop = true;

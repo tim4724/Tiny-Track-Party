@@ -135,9 +135,9 @@ export class NativeAudioDecider {
   pauseMusic() { fn.music(3, null); return this._drain(); }
   resumeMusic() { fn.music(4, null); return this._drain(); }
 
-  // A song descriptor by catalogue index — the file to stream plus the credit
-  // chip's fields. Off the frame path (one pick per race) and memoized, so the
-  // one string in the whole audio path is read at most once per song.
+  // A song descriptor by catalogue index — the file to stream plus the
+  // attribution fields. Off the frame path (one pick per race) and memoized, so
+  // the one string in the whole audio path is read at most once per song.
   _song(index) {
     let s = this._songs.get(index);
     if (!s) {

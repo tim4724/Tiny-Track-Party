@@ -899,8 +899,8 @@ html.cam-free #race { pointer-events: none; }
    surface, and an arrow parked over the track is nothing but litter. Any input
    brings both straight back.
    `html.chrome-idle *` (0,1,1) is deliberately more specific than the .btn /
-   .icon-btn / .music-credit `cursor: pointer` rules (0,1,0), so hovering one of
-   those can't resurrect the arrow regardless of stylesheet order. */
+   .icon-btn `cursor: pointer` rules (0,1,0), so hovering one of those can't
+   resurrect the arrow regardless of stylesheet order. */
 html.chrome-idle, html.chrome-idle * { cursor: none; }
 html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
 
@@ -1043,36 +1043,6 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
   box-shadow: var(--shadow-float);
   cursor: pointer;
 }
-
-/* ---- Now-playing music credit ---- bottom-left link: the current track +
-   artist, linking to its source (also the on-screen CC-BY attribution). A dark
-   translucent pill so it reads over the bright 3D scene without grabbing focus.
-   Shares the sound-hint's corner, but they never show together (the hint is up
-   only while audio is locked; this only during a race). */
-.music-credit {
-  /* Inside the safe zone, unlike the 1rem it used to sit at flat. This one is a
-     LICENSING obligation (CC-BY on the whole music catalogue), so a TV that eats
-     the bottom of the picture must not be able to eat the attribution with it.
-
-     ABOVE THE STEER BAR, not merely inside the safe margin: in a split the
-     bottom-left cell's bar reaches back far enough to sit under a long title,
-     and the margin alone left the credit right in its band. Clearing it is what
-     lets the width cap below stay generous enough to keep the ARTIST readable,
-     which is the half of the attribution that matters. */
-  position: fixed; z-index: 9;
-  left: calc(var(--safe-x) + 1rem);
-  bottom: calc(var(--steer-band-frac) * 100vh + 0.6rem);
-  max-width: min(46vw, 24rem);
-  display: inline-block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  font: inherit; font-weight: 700; font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.92); text-decoration: none;
-  background: rgba(42, 39, 53, 0.55);
-  padding: 0.4rem 0.9rem; border-radius: var(--r-pill);
-  box-shadow: var(--shadow-float);
-  opacity: 0.78; transition: opacity 0.2s ease, background 0.2s ease;
-}
-.music-credit::before { content: "\266A\00a0\00a0"; opacity: 0.9; } /* ♪ */
-.music-credit:hover { opacity: 1; background: rgba(42, 39, 53, 0.72); }
 
 /* ---- Reconnect card ---- a QR for a dropped player, centred in their own
    split-screen cell exactly like the FINISHED card. It REUSES .cell-finish for

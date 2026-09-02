@@ -149,16 +149,6 @@ object Copy {
         else -> null
     }
 
-    /**
-     * The now-playing chip, bottom-left of the race screen. This is the CC-BY
-     * attribution for the music catalogue, not decoration: the songs are Kevin
-     * MacLeod's under CC-BY and a shell that plays them owes a visible credit.
-     *
-     * `.music-credit::before { content: "\266A\00a0\00a0" }` — the note and its two
-     * non-breaking spaces are part of the mark, not decoration the CSS added.
-     */
-    fun musicCredit(title: String, artist: String): String = "♪  $title · $artist"
-
     // -- wordmark -----------------------------------------------------------
 
     const val wordmarkLine1 = "TINY TRACK"

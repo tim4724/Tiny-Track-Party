@@ -151,9 +151,6 @@ struct RaceFlowPerformer {
         case "stop-music":
             game.audio.music(biome: nil)
 
-        case "show-music-credit":
-            if !(e["on"] as? Bool ?? false) { game.state.musicCredit = nil }
-
         case "stop-voices":
             game.audio.stopVoices()
 
@@ -281,7 +278,7 @@ struct RaceFlowPerformer {
         "reset-scene-cars", "create-session", "transition", "bind-session",
         "paint-initial-hud", "start-countdown", "show-countdown",
         "broadcast-countdown", "refresh-auto-pause", "persist-progression",
-        "start-music", "stop-music", "show-music-credit", "stop-voices",
+        "start-music", "stop-music", "stop-voices",
         "stop-car-audio", "item-pickup", "rocket-impact", "rocket-expire",
         "broadcast-standings", "show-results",
         "arm-intermission", "clear-intermission", "place-track",

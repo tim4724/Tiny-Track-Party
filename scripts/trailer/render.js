@@ -175,7 +175,7 @@ async function renderShot(page, shot, port) {
   // Everything on the page that is not the GAME: the corner buttons in particular
   // sit on top of the top-right cell's place chip.
   await page.evaluate(() => {
-    for (const sel of ['#corner-btns', '.dbg-fab', '#music-credit', '#sound-hint', '#toast', '.cam-hint']) {
+    for (const sel of ['#corner-btns', '.dbg-fab', '#sound-hint', '#toast', '.cam-hint']) {
       for (const node of document.querySelectorAll(sel)) node.style.display = 'none';
     }
   });

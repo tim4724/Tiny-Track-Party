@@ -289,7 +289,6 @@ Value effectVal(const race::Effect& e) {
       v.set("raceEnded", Value::Bool(e.raceEnded));
       break;
     case race::Op::SET_PAUSE_OVERLAY:
-    case race::Op::SHOW_MUSIC_CREDIT:
     case race::Op::SET_AUTO_PAUSED: v.set("on", Value::Bool(e.on)); break;
     case race::Op::SET_PAUSE_BUTTON: v.set("shown", Value::Bool(e.shown)); break;
     case race::Op::RESET_SCENE_CARS: v.set("cars", arrOf(e.cars, carVal)); break;
@@ -398,7 +397,6 @@ struct Shell {
   bool pauseOverlay = false, pauseButton = false;
   std::string chrome = "held";
   std::string music = "stopped";
-  bool musicCredit = false;
   race::OptStr trackId;
   race::OptNum trackSeed;
   race::OptNum countdownShown;
@@ -437,7 +435,6 @@ void applyEffect(Shell& s, const race::Effect& e) {
     case race::Op::SHOW_COUNTDOWN: s.countdownShown = race::OptNum::Of(e.num); break;
     case race::Op::START_MUSIC: s.music = "playing"; break;
     case race::Op::STOP_MUSIC: s.music = "stopped"; break;
-    case race::Op::SHOW_MUSIC_CREDIT: s.musicCredit = e.on; break;
     case race::Op::BROADCAST_STANDINGS:
       s.lastBroadcast = race::OptStr::Of(e.over ? "final" : "running"); break;
     case race::Op::ARM_INTERMISSION:
@@ -509,7 +506,6 @@ Value digest(const Shell& s) {
   v.set("pauseButton", Value::Bool(s.pauseButton));
   v.set("chrome", Value::Str(s.chrome));
   v.set("music", Value::Str(s.music));
-  v.set("musicCredit", Value::Bool(s.musicCredit));
   v.set("trackId", valOf(s.trackId));
   v.set("trackSeed", valOf(s.trackSeed));
   v.set("countdownShown", valOf(s.countdownShown));

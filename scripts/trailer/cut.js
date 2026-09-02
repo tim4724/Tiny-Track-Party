@@ -164,8 +164,8 @@ function main() {
 
   // The music bed is one of the shipped race songs, and every one of those is CC-BY —
   // see public/assets/audio/music/CREDITS.txt, which says attribution is required before
-  // public release. A trailer is a public release, and it has no now-playing chip to
-  // carry the credit the game shows, so print it here rather than let it be forgotten.
+  // public release. A trailer is a public release, and it carries no licenses page the
+  // way the game does, so print the credit here rather than let it be forgotten.
   const song = path.basename(MUSIC, '.mp3').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
   console.log('\nATTRIBUTION REQUIRED wherever this is published (CC-BY 4.0):');
   console.log(`  "${song}" by Kevin MacLeod (incompetech.com)`);

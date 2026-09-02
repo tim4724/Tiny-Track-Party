@@ -45,7 +45,7 @@ enum Fonts {
         return font.lineHeight
     }
 
-    /// Nunito. Running text — the welcome tagline, the music credit.
+    /// Nunito. Running text — the welcome tagline, the info board's prose.
     static func body(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
         face(nunito.face(for: cssWeight(weight)), size)
     }

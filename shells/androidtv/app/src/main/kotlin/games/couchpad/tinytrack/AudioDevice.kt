@@ -5,7 +5,6 @@ import android.content.res.AssetManager
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.util.Log
-import org.json.JSONObject
 import java.nio.ByteOrder
 
 /**
@@ -72,9 +71,6 @@ class AudioDevice(
      * the no-repeat shuffle unheard.
      */
     val ready: Boolean get() = bank.ready && mixer.ready
-
-    /** The CC-BY credit for the playing song. A licensing obligation, not chrome. */
-    var onSongChanged: ((String, String, String, String) -> Unit)? = null
 
     /**
      * The display's mute, which is ONE state whatever flipped it — the host
@@ -305,7 +301,6 @@ class AudioDevice(
                 live.seekTo(0)
                 musicWantsPause = false
                 if (!live.isPlaying) live.start()
-                announce(song)
                 return
             } catch (t: Throwable) {
                 Log.w(TAG, "music could not rewind; restarting it", t)
@@ -329,9 +324,8 @@ class AudioDevice(
             // bakes the path in ORIGIN-ABSOLUTE ("/assets/audio/music/" + name), so
             // adding a second one asks for `/assets//assets/audio/music/...`, which
             // `server/index.js` normalises to a directory that does not exist and
-            // answers 404. Every song on this shell had 404'd since the port: the
-            // error listener swallows it and `onSongChanged` still fires, so the
-            // CC-BY credit advertised a track that was never playing. Both twins
+            // answers 404. Every song on this shell had 404'd since the port, and
+            // the error listener swallows it, so the race ran silently. Both twins
             // RESOLVE rather than concatenate — `assetUrl(song.file)` on the web,
             // `URL(string:relativeTo:)` on tvOS.
             //
@@ -363,7 +357,6 @@ class AudioDevice(
         } catch (t: Throwable) {
             Log.w(TAG, "music $file could not start", t)
         }
-        announce(song)
     }
 
     /**
@@ -385,14 +378,6 @@ class AudioDevice(
             Log.w(TAG, "music $file is not readable from the APK; streaming it", t)
             null
         }
-    }
-
-    /** The CC-BY credit. A licensing obligation, so it rides every start path. */
-    private fun announce(song: org.json.JSONObject) {
-        onSongChanged?.invoke(
-            song.optString("title"), song.optString("artist"),
-            song.optString("license"), song.optString("source"),
-        )
     }
 
     private fun stopMusic() {

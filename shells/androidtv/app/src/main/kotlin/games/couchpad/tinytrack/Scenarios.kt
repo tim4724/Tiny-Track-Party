@@ -490,11 +490,6 @@ object Scenarios {
                 )
                 game.state.results = view
                 if (id == "intermission") game.state.intermissionSecs = 5
-                // The live race-over road emits `show-music-credit {on:false}`
-                // with the board, and a fabricated board fires no effects — so
-                // without this the credit chip survives onto all three results
-                // shots, where the real game has already taken it down.
-                game.state.musicCredit = null
                 // phase 1 + the tally + a beat. The tally is bounded at the winner's
                 // gain (9 points) times a tick that is itself a fraction of phase 1,
                 // so twice the phase plus a second clears it however slow the board.

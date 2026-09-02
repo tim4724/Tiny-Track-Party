@@ -88,7 +88,7 @@ enum class Op {
   REVEAL_CHROME, HOLD_CHROME, RESET_SCENE_CARS, CREATE_SESSION, TRANSITION,
   BIND_SESSION, PAINT_INITIAL_HUD, START_COUNTDOWN, SHOW_COUNTDOWN,
   BROADCAST_COUNTDOWN, REFRESH_AUTO_PAUSE, START_MUSIC, STOP_MUSIC,
-  SHOW_MUSIC_CREDIT, STOP_VOICES, ITEM_PICKUP, ROCKET_IMPACT, ROCKET_EXPIRE,
+  STOP_VOICES, ITEM_PICKUP, ROCKET_IMPACT, ROCKET_EXPIRE,
   BROADCAST_STANDINGS, APPLY_RACE_POINTS, SHOW_RESULTS, ARM_INTERMISSION,
   CLEAR_INTERMISSION, SERIES_ADVANCE,
   CLEAR_SERIES, SET_TRACK_FROM_SERIES, PLACE_TRACK, SET_TRACK, DISPOSE_SESSION,
@@ -176,7 +176,7 @@ struct Effect {
 
   double num = 0;         // create-session's seed | n | ms | seconds
   double deadline = 0;    // arm-intermission — when the auto-advance fires
-  bool on = false;        // set-pause-overlay/show-music-credit/set-auto-paused
+  bool on = false;        // set-pause-overlay/set-auto-paused
   bool shown = false;     // set-pause-button
   bool over = false;      // broadcast-standings
   bool deferred = false;  // refresh-auto-pause — see the header

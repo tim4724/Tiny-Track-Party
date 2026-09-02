@@ -411,7 +411,6 @@ void Decider::startMusic(const std::string& biome, std::vector<Command>& out) {
   // 2^31 wrap).
   const int32_t idx = (int32_t)(rng_() * (double) fresh.size());
   const Song* pick = fresh[(size_t) idx];
-  nowPlaying_ = pick;
   musicFile_ = pick->file;
   Command c;
   c.kind = Command::MUSIC;

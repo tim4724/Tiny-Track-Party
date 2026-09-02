@@ -233,11 +233,6 @@ final class GameState: ObservableObject {
     @Published var paused = false
     @Published var pauseButtonShown = false
 
-    /// The CC-BY attribution for the playing song. This is a LICENSING
-    /// obligation, not chrome: the catalogue is Kevin MacLeod's under CC-BY and
-    /// a shell that plays it owes a visible credit.
-    @Published var musicCredit: MusicCredit?
-
     /// The BOOST item icon's chevron accent, for the biome the current scene
     /// resolved to. `ttp_theme_boost_icon(biome)` answers it, and it is one of
     /// exactly two colours `biomes.js` says a shell may ask the theme for — the
@@ -249,13 +244,6 @@ final class GameState: ObservableObject {
     /// needs the hex back out. Defaulted to the SVG's own fallback so a slot
     /// drawn before any scene exists is the pre-theme teal rather than clear.
     @Published var boostAccent: UInt32 = ItemIcon.defaultAccent
-
-    struct MusicCredit {
-        let title: String
-        let artist: String
-        let license: String
-        let source: String
-    }
 
     // MARK: - Results
 

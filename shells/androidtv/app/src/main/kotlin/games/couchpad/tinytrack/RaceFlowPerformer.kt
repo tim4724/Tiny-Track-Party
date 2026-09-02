@@ -143,7 +143,6 @@ class RaceFlowPerformer(private val game: GameCoordinator) {
             // ---- audio ------------------------------------------------------
             "start-music" -> game.audio.music(e.optString("biome").ifEmpty { null })
             "stop-music" -> game.audio.music(null)
-            "show-music-credit" -> if (!e.optBoolean("on")) game.state.musicCredit = null
             "stop-voices" -> game.audio.stopVoices()
             "stop-car-audio" -> EngineId.from(e.opt("id"))?.let { game.audio.stopCar(it) }
 
@@ -235,7 +234,7 @@ class RaceFlowPerformer(private val game: GameCoordinator) {
             "reset-scene-cars", "create-session", "transition", "bind-session",
             "paint-initial-hud", "start-countdown", "show-countdown",
             "broadcast-countdown", "refresh-auto-pause", "persist-progression",
-            "start-music", "stop-music", "show-music-credit", "stop-voices",
+            "start-music", "stop-music", "stop-voices",
             "stop-car-audio", "item-pickup", "rocket-impact", "rocket-expire",
             "broadcast-standings", "show-results",
             "arm-intermission", "clear-intermission", "place-track",

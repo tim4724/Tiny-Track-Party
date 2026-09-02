@@ -10,7 +10,6 @@ import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -21,7 +20,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -123,57 +121,6 @@ fun RootScreen(game: GameCoordinator) {
         ) { CountdownBanner(lastCount) }
 
         if (state.results != null) ResultsScreen(state, game)
-
-        // The CC-BY credit for the playing song, bottom-left of the race screen. A
-        // LICENSING obligation, not decoration: the catalogue is Kevin MacLeod's
-        // under CC-BY and a shell that plays it owes a visible credit. Do not hide
-        // it to clean up the frame.
-        //
-        // Paint order matches the web's z-indexes: the credit sits OVER the results
-        // board and UNDER the pause scrim. Placement is the web's own 16 authored px
-        // in from the SAFE edge — the overscan margin and then the authored offset,
-        // which is what display.css now spells as `calc(var(--safe-x) + 1rem)`.
-        // It used to be 16 px from the true edge, which on a set that crops put a
-        // LICENSING obligation under the bezel: the whole music catalogue is
-        // CC-BY, and the credit is the attribution it is licensed on.
-        state.musicCredit?.let { credit ->
-            if (state.screen == GameState.Screen.RACE) {
-                Box(
-                    Modifier
-                        .align(Alignment.BottomStart)
-                        // ABOVE THE STEER BAR, not merely inside the safe margin:
-                        // in a split the bottom-left cell's bar reaches back far
-                        // enough to sit under a long title, and the margin alone
-                        // left this right in its band. The band is wider than the
-                        // margin, so it subsumes it.
-                        .padding(start = Tokens.safeMarginX + 16.dp,
-                                 bottom = Tokens.steerBand + 10.dp)
-                        // `max-width: min(46vw, 24rem)` with an ellipsis: a long
-                        // title otherwise runs across the bottom of the screen and
-                        // under the next cell's steer bar.
-                        .widthIn(max = 384.dp)
-                        .hardShadow(Sticker.floatShadow, RoundedCornerShape(percent = 50))
-                        .background(
-                            // The web applies rgba(42,39,53,0.55) AND a whole-element
-                            // opacity of 0.78, so the ink lands at ~0.43. Folded into
-                            // the colour rather than applied as `Modifier.alpha`,
-                            // which is a graphicsLayer with `clip = true` — it would
-                            // cut the hard drop off at the chip's own bounds, and
-                            // every sticker's drop lives outside them.
-                            Tokens.ink.copy(alpha = 0.55f * 0.78f),
-                            RoundedCornerShape(percent = 50),
-                        )
-                        .padding(horizontal = 14.dp, vertical = 6.dp)
-                ) {
-                    StickerText(
-                        Copy.musicCredit(credit.title, credit.artist),
-                        size = 14.dp,
-                        color = Color.White.copy(alpha = 0.92f * 0.78f),
-                        body = true,
-                    )
-                }
-            }
-        }
 
         if (state.screen == GameState.Screen.RACE && state.paused && state.results == null) {
             PauseOverlay(game)

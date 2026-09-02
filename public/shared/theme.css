@@ -142,22 +142,6 @@
   --safe-frac-x:  0.025;                              /* per side, of width    */
   --safe-frac-y:  0.025;                              /* per side, of height   */
 
-  /* The band along the bottom of a split-screen cell that its STEER BAR owns.
-     Not a style: the bar is the RENDERER's (TtpRendererFrame.cpp), composed as
-     (20 clear + 34 tall) authored px times its own per-cell scale, which lands
-     at 6.01% of the surface height for every cell of a 2- OR 4-player split —
-     both are 540 tall, so one number covers both. `tests/safe-zone.test.js`
-     recomputes it from the renderer's own constants and fails if either side
-     moves; do not round it by hand.
-
-     Chrome anchored to the bottom-left clears it with this rather than by eye.
-     That is the music credit, which a long title used to run under: it is the
-     attribution a CC-BY catalogue is licensed on, so it may be truncated but it
-     may not be hidden. A 1-player bar is TALLER than this (its cell is the whole
-     screen) and is deliberately not covered — it is also centred in a screen-wide
-     cell, so nothing in the bottom-left corner reaches it. */
-  --steer-band-frac: 0.0601;                          /* of the surface height */
-
   /* -- track map (the circuit mini-map's marks) -----------------------------
      The marks a circuit's mini-map is drawn with, in the schematic's OWN
      viewBox units (`ttp_track_schematic_json` projects into 0 0 256 256, and

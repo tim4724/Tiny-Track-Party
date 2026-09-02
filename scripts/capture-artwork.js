@@ -112,7 +112,7 @@ async function main() {
     // player count picks. NOT hideChrome(): this shot keeps the HUD chips, and its
     // hide list carries .dbg-fab, which the seam's does not.
     await page.evaluate(() => {
-      for (const sel of ['#corner-btns', '.dbg-fab', '#music-credit', '#sound-hint', '#toast']) {
+      for (const sel of ['#corner-btns', '.dbg-fab', '#sound-hint', '#toast']) {
         for (const node of document.querySelectorAll(sel)) node.style.display = 'none';
       }
     });

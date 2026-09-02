@@ -194,7 +194,7 @@ export async function waitForScene(page, { timeout = 30000 } = {}) {
 // Stage only re-pushes the mask when its OWN computed value changes, so setting
 // it from out here sticks for the rest of the run.
 const HUD_SELECTORS = ['.cell-label', '.cell-rank', '.cell-finish'];
-const CHROME_SELECTORS = ['#corner-btns', '#music-credit', '#sound-hint', '#toast'];
+const CHROME_SELECTORS = ['#corner-btns', '#sound-hint', '#toast'];
 
 export async function hideChrome(page, { hud = true } = {}) {
   if (hud) await page.evaluate(() => window.__scene?.display?.cellCards?.(0xF));

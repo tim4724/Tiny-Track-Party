@@ -932,10 +932,6 @@ class GameCoordinator(
         net.isSoundOn = { !audio.muted }
         net.onRelayError = { why -> state.fail("relay: $why") }
 
-        audio.onSongChanged = { title, artist, license, source ->
-            state.musicCredit = GameState.MusicCredit(title, artist, license, source)
-        }
-
         lobbyDemo.room = { net.roomHandle }
         lobbyDemo.trackId = { trackId }
         // THE ROSTER, THEN THE BIND. `onField` puts the attract grid into the scene

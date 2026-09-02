@@ -248,7 +248,6 @@ Value effectVal(const race::Effect& e) {
       v.set("raceEnded", Value::Bool(e.raceEnded));
       break;
     case race::Op::SET_PAUSE_OVERLAY:
-    case race::Op::SHOW_MUSIC_CREDIT:
     case race::Op::SET_AUTO_PAUSED: v.set("on", Value::Bool(e.on)); break;
     case race::Op::SET_PAUSE_BUTTON: v.set("shown", Value::Bool(e.shown)); break;
     case race::Op::RESET_SCENE_CARS: v.set("cars", arrOf(e.cars, carVal)); break;

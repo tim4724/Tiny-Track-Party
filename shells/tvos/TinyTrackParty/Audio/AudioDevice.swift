@@ -21,15 +21,11 @@ import os
 ///   rocket's sequence number cannot collide with a peer index;
 /// - a song is an INDEX resolved once per race through `ttp_audio_song_json`.
 ///
-/// **A shell that streams this music owes a visible credit.** The catalogue is
-/// Kevin MacLeod's under CC-BY; `title`/`artist`/`source`/`license` come back
-/// from `ttp_audio_song_json` and go out through `onSongChanged` for exactly
-/// that reason. It is a licensing obligation, not chrome (the ledger's R18).
+/// The catalogue's CC-BY attribution is the Licenses board's, baked from
+/// `public/shared/credits.js` plus the live music catalogue (the ledger's item
+/// 16). Nothing about the playing song is published from here.
 @MainActor
 final class AudioDevice {
-
-    /// The playing song's CC-BY credit: title, artist, license, source.
-    var onSongChanged: ((String, String, String, String) -> Void)?
 
     // MARK: - Construction
 
@@ -89,8 +85,8 @@ final class AudioDevice {
     /// are fire-and-forget and are not tracked.
     private var live: [VoiceKey: Int] = [:]
 
-    /// Song descriptors by catalogue index, resolved at most once each.
-    private var songs: [Int32: Song] = [:]
+    /// Catalogue paths by song index, resolved at most once each.
+    private var songs: [Int32: String] = [:]
     private var musicPlayer: AVQueuePlayer?
     private var musicLooper: AVPlayerLooper?
     private var musicURL: URL?
@@ -543,42 +539,34 @@ final class AudioDevice {
 
     // MARK: - Music
 
-    private struct Song {
-        let file: String
-        let title: String
-        let artist: String
-        let license: String
-        let source: String
-    }
-
     /// The catalogue is BUNDLED, and streams from the origin only when a build
     /// did not stage it. It always streamed before, on the grounds that the app
     /// depends on that origin anyway — but that dependency is a page load at the
     /// start of a night, and this one was a continuous stream for the length of
     /// every race.
     ///
-    /// The path is `audio.cc`'s, UNCHANGED, and that is the whole trick.
-    /// `Song::file` is origin-absolute and bakes its `.mp3` extension, and
+    /// The path is `audio.cc`'s, UNCHANGED, and that is the whole trick. The
+    /// catalogue's `file` is origin-absolute and bakes its `.mp3` extension, and
     /// `audio-corpus.jsonl` froze those strings with its JS oracle deleted — so
     /// the shell keeps the string exactly and only chooses what to resolve it
     /// against. Bundling cost no ABI change and moved no fixture.
     ///
-    /// **Moving off MP3 still would.** It would mean making `Song::file` a stem
+    /// **Moving off MP3 still would.** It would mean making that `file` a stem
     /// (the ledger's R1), and it is worse here than the ledger says: Apple
     /// decodes Opus only inside a CAF container, which ffmpeg cannot mux, so
     /// this leg alone would need a macOS-only encode step.
     private func startMusic(index: Int32, level: Double) {
-        guard let song = song(at: index) else {
+        guard let file = songFile(at: index) else {
             log.error("no song at catalogue index \(index)")
             return
         }
         // The staged root IS the `/assets/` the baked path names, so the prefix
         // comes off for the local lookup and stays on for the remote one.
-        let staged = song.file.hasPrefix("/assets/")
-            ? bundledURL(String(song.file.dropFirst("/assets/".count)))
+        let staged = file.hasPrefix("/assets/")
+            ? bundledURL(String(file.dropFirst("/assets/".count)))
             : nil
-        guard let url = staged ?? URL(string: song.file, relativeTo: baseURL)?.absoluteURL else {
-            log.error("song \(song.file, privacy: .public) is not a URL under \(self.baseURL.absoluteString, privacy: .public)")
+        guard let url = staged ?? URL(string: file, relativeTo: baseURL)?.absoluteURL else {
+            log.error("song \(file, privacy: .public) is not a URL under \(self.baseURL.absoluteString, privacy: .public)")
             return
         }
         musicLevel = level
@@ -586,7 +574,7 @@ final class AudioDevice {
         // design — that is what makes it safe — so without this line an app that
         // bundles 62 MB of music and streams anyway looks exactly like one that
         // works.
-        log.info("music \(song.file, privacy: .public) from \(staged != nil ? "the bundle" : "the origin", privacy: .public)")
+        log.info("music \(file, privacy: .public) from \(staged != nil ? "the bundle" : "the origin", privacy: .public)")
 
         if musicURL != url {
             // A fresh player per song rather than re-pointing the looper: an
@@ -604,9 +592,6 @@ final class AudioDevice {
         }
         applyMusicVolume()
         musicPlayer?.play()
-
-        // The CC-BY credit. The UI owes the player a visible attribution.
-        onSongChanged?(song.title, song.artist, song.license, song.source)
     }
 
     /// The bed does NOT pass through the limiter on this platform, and that is a
@@ -624,17 +609,15 @@ final class AudioDevice {
             : Float(min(max(musicLevel, 0), 1)) * Self.masterVolume
     }
 
-    private func song(at index: Int32) -> Song? {
+    /// The catalogue path for a song index, memoized. Only the path crosses:
+    /// the attribution fields `ttp_audio_song_json` also answers are the
+    /// Licenses board's, baked at build time and never read here.
+    private func songFile(at index: Int32) -> String? {
         if let cached = songs[index] { return cached }
         let json = TTP.obj(ttp_audio_song_json(index))
         guard let file = json["file"] as? String else { return nil }
-        let song = Song(file: file,
-                        title: json["title"] as? String ?? "",
-                        artist: json["artist"] as? String ?? "",
-                        license: json["license"] as? String ?? "",
-                        source: json["source"] as? String ?? "")
-        songs[index] = song
-        return song
+        songs[index] = file
+        return file
     }
 
     // MARK: - The render callback

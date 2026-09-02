@@ -36,7 +36,6 @@ const char* key(Op op) {
     case Op::REFRESH_AUTO_PAUSE: return "refresh-auto-pause";
     case Op::START_MUSIC: return "start-music";
     case Op::STOP_MUSIC: return "stop-music";
-    case Op::SHOW_MUSIC_CREDIT: return "show-music-credit";
     case Op::STOP_VOICES: return "stop-voices";
     case Op::ITEM_PICKUP: return "item-pickup";
     case Op::ROCKET_IMPACT: return "rocket-impact";
@@ -576,7 +575,6 @@ Effects raceStart(const std::string& biome, bool audioReady) {
   // Background song for the whole race, from the biome's pool. The pick only
   // happens if the device can play it.
   if (audioReady) { e = mk(Op::START_MUSIC); e.str = biome; out.push_back(e); }
-  e = mk(Op::SHOW_MUSIC_CREDIT); e.on = true; out.push_back(e);
   return out;
 }
 
@@ -631,7 +629,6 @@ Effects endRace(const EndRaceInput& in) {
   // the frozen frame must not hold wind/squeal voices open
   out.push_back(mk(Op::STOP_VOICES));
   out.push_back(mk(Op::STOP_MUSIC));           // race over → results screen is quiet
-  e = mk(Op::SHOW_MUSIC_CREDIT); e.on = false; out.push_back(e);
   e = mk(Op::SET_PAUSE_OVERLAY); e.on = false; out.push_back(e);   // results aren't pausable
   e = mk(Op::SET_PAUSE_BUTTON); e.shown = false; out.push_back(e);
   out.push_back(mk(Op::HOLD_CHROME));
@@ -710,7 +707,6 @@ ReturnResult returnToLobby(const ReturnInput& in) {
   // key) — kill any state voices or a boost wind would drone on in the lobby.
   r.effects.push_back(mk(Op::STOP_VOICES));
   r.effects.push_back(mk(Op::STOP_MUSIC));
-  e = mk(Op::SHOW_MUSIC_CREDIT); e.on = false; r.effects.push_back(e);
   e = mk(Op::SET_RACE_FLAGS);
   e.paused = false; e.autoPaused = false; e.raceEnded = false;
   r.effects.push_back(e);

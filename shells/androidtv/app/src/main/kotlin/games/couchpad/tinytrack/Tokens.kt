@@ -156,7 +156,7 @@ object Tokens {
         for (n in listOf("shadow-pop", "shadow-card", "shadow-float")) {
             tokenRequire(shadows[n] != null) { "design-tokens.json is missing the shadow --$n" }
         }
-        for (n in listOf("safe-frac-x", "safe-frac-y", "steer-band-frac",
+        for (n in listOf("safe-frac-x", "safe-frac-y",
             "track-map-casing", "track-map-road",
             "track-map-start-r", "track-map-start-ring")) {
             tokenRequire(numbers[n] != null) { "design-tokens.json is missing the number --$n" }
@@ -223,14 +223,6 @@ object Tokens {
      */
     val safeMarginX: Dp get() = ((number("safe-frac-x") ?: 0f) * AUTHORED_WIDTH).dp
     val safeMarginY: Dp get() = ((number("safe-frac-y") ?: 0f) * AUTHORED_HEIGHT).dp
-
-    /**
-     * How far up from the bottom of a split-screen cell that cell's STEER BAR
-     * reaches, in authored px. The bar is the renderer's, so this is a token and
-     * not a number to re-measure here — see `--steer-band-frac` in `theme.css`
-     * for what composes it and which layouts it covers.
-     */
-    val steerBand: Dp get() = ((number("steer-band-frac") ?: 0f) * AUTHORED_HEIGHT).dp
 
     fun shadow(name: String): Shadow =
         shadows[name] ?: Shadow(0.dp, 0.dp, 0.dp, Color.Transparent).also {

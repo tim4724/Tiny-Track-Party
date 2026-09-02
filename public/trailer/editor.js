@@ -106,7 +106,7 @@ const urlFor = (shot) => `/?test=1&gate=1&scenario=${shot.scenario}&players=${sh
 // same set for the same reason — change one, change the other.
 function hideChrome(w) {
   try {
-    for (const sel of ['#corner-btns', '.dbg-fab', '#music-credit', '#sound-hint', '#toast', '.cam-hint']) {
+    for (const sel of ['#corner-btns', '.dbg-fab', '#sound-hint', '#toast', '.cam-hint']) {
       for (const node of w.document.querySelectorAll(sel)) node.style.display = 'none';
     }
   } catch (_) { /* frame torn down mid-boot */ }

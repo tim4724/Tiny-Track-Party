@@ -856,7 +856,7 @@ because this shell added a second `/assets/`.** `audio.cc`'s `SONG` macro bakes
 the path in as `/assets/audio/music/<name>.mp3`, so the URL is `baseUrl + file`
 and nothing else; `baseUrl + "/assets/" + file` normalises server-side to a
 directory that does not exist. Nothing said so: `setOnErrorListener` returns true
-and swallows it, and the CC-BY credit chip still announced the track. Both twins
+and swallows it, so the race simply ran without a bed. Both twins
 RESOLVE the path rather than concatenating (`assetUrl` on the web,
 `URL(string:relativeTo:)` on tvOS), which is why neither of them can show you
 this one either.

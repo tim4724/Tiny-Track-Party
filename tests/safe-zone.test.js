@@ -30,7 +30,6 @@ const path = require('node:path');
 const ROOT = path.join(__dirname, '..');
 const TOKENS = path.join(ROOT, 'public/shared/design-tokens.json');
 const FRAME_BUILDER = path.join(ROOT, 'native/libttp-runtime/ttp/frame_builder.h');
-const RENDERER_FRAME = path.join(ROOT, 'native/renderer/src/TtpRendererFrame.cpp');
 const KOTLIN = path.join(ROOT, 'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack');
 
 const tokens = JSON.parse(fs.readFileSync(TOKENS, 'utf8')).tokens;
@@ -58,32 +57,6 @@ test('the C++ default matches the authored token', () => {
     'DisplayState::safeFracX drifted from --safe-frac-x');
   assert.equal(Number(m[2]), token('safe-frac-y'),
     'DisplayState::safeFracY drifted from --safe-frac-y');
-});
-
-test('the steer-band token still matches the bar the renderer draws', () => {
-  // --steer-band-frac exists so bottom-left chrome (the music credit) can clear
-  // the split-screen steer bar. The bar is the RENDERER's, so the token is a
-  // COPY of geometry that lives in C++ — recomputed here from that source rather
-  // than trusted, which is the same tripwire the C++ default gets above.
-  const src = fs.readFileSync(RENDERER_FRAME, 'utf8');
-  const num = (re, what) => {
-    const m = re.exec(src);
-    assert.ok(m, `TtpRendererFrame.cpp no longer spells ${what} the way this test reads it`);
-    return Number(m[1]);
-  };
-  const scale = num(/BAR_SCALE = ([0-9.]+)f/, 'BAR_SCALE');
-  const barH = num(/barW = [0-9.]+ \* unit, barH = ([0-9.]+) \* unit/, "the bar's height");
-  const clear = num(/clear = ([0-9.]+) \* unit/, "the bar's clearance");
-  // `unit` is BAR_SCALE * sqrt(cell.h * surfaceH) / 1080, and the band the bar
-  // owns is (clear + barH) * unit measured up from the cell's bottom edge. Every
-  // cell of a 2- AND a 4-player split is 540 tall, which is why one number covers
-  // both — and why this is the case the token is cut for.
-  const H = 1080, cellH = 540;
-  const unit = scale * Math.sqrt(cellH * H) / 1080;
-  const expected = (clear + barH) * unit / H;
-  assert.ok(Math.abs(token('steer-band-frac') - expected) < 5e-4,
-    `--steer-band-frac is ${token('steer-band-frac')} but the renderer's bar band is `
-    + `${expected.toFixed(4)} of the height — one of the two moved`);
 });
 
 test('the Android shell spells the margin nowhere but the token', () => {

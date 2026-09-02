@@ -1,7 +1,7 @@
 {
   "generated": "derived from public/shared/theme.css by scripts/gen-design-tokens.mjs — edit the CSS, not this",
   "source": "public/shared/theme.css",
-  "count": 48,
+  "count": 47,
   "groups": [
     {
       "label": "car palette (mirrors CAR_COLORS in shared/protocol.js)",
@@ -96,8 +96,7 @@
       "note": "A television may crop the edges of the picture it is handed, and neither the browser nor Android can ask it how much: overscan is a property of the panel, not of the signal. 2.5%, WHICH IS THE REAL FIGURE AND NOT GOOGLE'S. The classic \"televisions crop about 5%\" means 5% of the PICTURE, so ~2.5% per edge; Google's TV guidance doubles that to 5% a side, which is the CRT-era worst case and dates from 2014. A modern panel fed a 1:1 HDMI signal crops nothing at all. Shipped at 5% first and rejected on sight: it pushed the chrome so far in that it read as floating rather than as cornered. FRACTIONS OF THE SURFACE, not lengths, because overscan is a percentage and an authored px is not: 48px is 2.5% of a 1920 board and 3.75% of a 1280 one. Each shell converts once and reports the pair to `ttp_display_safe_insets`, which is what insets the per-cell HUD rects — see public/display/CLAUDE.md. Applied to EVERY edge of every cell and not only to the screen's own, which is a look decision argued where it is applied (ttp_display_core.cc). tvOS does NOT read these: it reports the safe area the system gives it, which is a real 90/60 pt rather than an assumption. The steer bar is deliberately NOT inset by them. It is the one HUD element the player also has in their hand, and moving it up crowds the car in a stacked cell — TtpRendererFrame.cpp says so where it places the bar.",
       "tokens": [
         "safe-frac-x",
-        "safe-frac-y",
-        "steer-band-frac"
+        "safe-frac-y"
       ]
     },
     {
@@ -730,16 +729,6 @@
       "value": "0.025",
       "resolved": "0.025",
       "note": "per side, of height"
-    },
-    {
-      "name": "steer-band-frac",
-      "var": "--steer-band-frac",
-      "group": "safe zone (TV overscan)",
-      "type": "raw",
-      "value": "0.0601",
-      "resolved": "0.0601",
-      "doc": "The band along the bottom of a split-screen cell that its STEER BAR owns. Not a style: the bar is the RENDERER's (TtpRendererFrame.cpp), composed as (20 clear + 34 tall) authored px times its own per-cell scale, which lands at 6.01% of the surface height for every cell of a 2- OR 4-player split — both are 540 tall, so one number covers both. `tests/safe-zone.test.js` recomputes it from the renderer's own constants and fails if either side moves; do not round it by hand. Chrome anchored to the bottom-left clears it with this rather than by eye. That is the music credit, which a long title used to run under: it is the attribution a CC-BY catalogue is licensed on, so it may be truncated but it may not be hidden. A 1-player bar is TALLER than this (its cell is the whole screen) and is deliberately not covered — it is also centred in a screen-wide cell, so nothing in the bottom-left corner reaches it.",
-      "note": "of the surface height"
     },
     {
       "name": "track-map-casing",

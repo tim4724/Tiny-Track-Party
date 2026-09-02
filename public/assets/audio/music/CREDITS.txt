@@ -6,12 +6,12 @@ Creative Commons Attribution 4.0 (CC-BY 4.0)
 https://creativecommons.org/licenses/by/4.0/
 
 ATTRIBUTION IS REQUIRED. Unlike the CC0 engine clip, shipping these tracks
-obliges us to credit the author. Two places carry that credit: the in-game
-now-playing chip (bottom-left during a race, linking to the source), and the
-licenses page at /licenses.html, reached from the welcome board's footer.
-Neither lists songs by hand — both render shared/credits.js, whose song list
-derives from the live RACE_MUSIC map, so a change to the picks cannot leave a
-song uncredited (tests/credits.test.js guards it):
+obliges us to credit the author. The licenses page carries that credit on every
+platform: /licenses.html on the web, reached from the welcome board's footer,
+and the Licenses board the two TV shells bake from the same source. Nothing
+lists songs by hand — they render shared/credits.js, whose song list derives
+from the live RACE_MUSIC map, so a change to the picks cannot leave a song
+uncredited (tests/credits.test.js guards it):
 
   "Beachfront Celebration", "Island Meet and Greet", "Paradise Found",
   "Tiki Bar Mixer", "Arroz Con Pollo", "Itty Bitty 8 Bit", "Bit Shift",
