@@ -991,11 +991,6 @@ jint n_ttp_room_set_field(JNIEnv* env, jclass, jint a0, jbyteArray a1, jbyteArra
     return (jint) ttp_room_set_field((int) a0, s1.get(), s2.get(), s3.get());
 }
 
-void n_ttp_room_set_liveness_enabled(JNIEnv* env, jclass, jint a0, jint a1) {
-    (void) env;
-    ttp_room_set_liveness_enabled((int) a0, (int) a1);
-}
-
 void n_ttp_room_set_master(JNIEnv* env, jclass, jint a0, jbyteArray a1) {
     CStr s1(env, a1);
     ttp_room_set_master((int) a0, s1.get());
@@ -1454,7 +1449,6 @@ const JNINativeMethod kMethods[] = {
     { "ttp_room_host_json", "(I)[B", (void*) n_ttp_room_host_json },
     { "ttp_room_list_json", "(I)[B", (void*) n_ttp_room_list_json },
     { "ttp_room_set_field", "(I[B[B[B)I", (void*) n_ttp_room_set_field },
-    { "ttp_room_set_liveness_enabled", "(II)V", (void*) n_ttp_room_set_liveness_enabled },
     { "ttp_room_set_master", "(I[B)V", (void*) n_ttp_room_set_master },
     { "ttp_room_state", "(I)[B", (void*) n_ttp_room_state },
     { "ttp_room_transition_to", "(I[B)I", (void*) n_ttp_room_transition_to },

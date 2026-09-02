@@ -16,15 +16,20 @@ globals.
 
 It is also **the manifest for every number two layers share**: the car tables, the
 tilt→steer contract split across the sim and the phone and the wire gate, the
-presence contract split across the phone's ping and the display's windows, and
+presence contract split across the phone's ping and the display's canary, and
 whatever arrives later. Read the file for the current set; the point is the rule,
 not the list.
 
-Two worked examples of why things land here. "A seat silent past N seconds is
-dropped" is only true against a matching ping rate, and those two numbers used to
-live in two files with a prose comment between them. The display's own heartbeat
-message was a bare literal inside its net module, so a TV shell reimplementing that
-liveness had nothing to copy.
+Two worked examples of why things land here. The phone's ping cadence and the
+window the phone judges a missing PONG against are one design, and those two
+numbers used to live in two files with a prose comment between them. The display's
+own heartbeat message was a bare literal inside its net module, so a TV shell
+reimplementing that canary had nothing to copy.
+
+The LIVENESS block also carries a decision, not just numbers: presence is the
+relay's answer, from `peer_joined` to `peer_left`, and no window there drops a
+seat. Read its header before adding one back — `native/libttp-party/CLAUDE.md` has
+the why and the measured cost.
 
 **Nothing may re-declare a manifest number silently, and a new shared number is
 added HERE first.**

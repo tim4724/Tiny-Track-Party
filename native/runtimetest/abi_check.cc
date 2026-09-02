@@ -955,7 +955,7 @@ void roomShellSurface() {
     }
   }
 
-  const int h = ttp_room_create("{\"liveness\":{\"timeoutMs\":3000,\"graceMs\":1500}}");
+  const int h = ttp_room_create("{\"liveness\":{\"graceMs\":1500}}");
   if (h <= 0) { fail("room surface: ttp_room_create returned no handle"); return; }
 
   // ---- add_player's answer: the three KIT-OWNED keys plus the caller's fields,
@@ -1047,33 +1047,33 @@ void roomShellSurface() {
     }
   }
 
-  // ---- the liveness-enabled setter, observable through the walk that reads it:
-  // with liveness off nothing expires however long a seat is silent.
+  // ---- silence is not an event: however long a seated phone says nothing, the
+  // tick drops no one. Presence is the relay's answer, so peer_left is the only
+  // thing that can take a seat away, and this is the gate on that rule holding
+  // at the ABI. (The liveness-enabled setter that used to be asserted here went
+  // with the sweep it switched off — RoomFlow still has the flag, driven by the
+  // roomflow corpus, but nothing configures an expiry for it to gate.)
   {
-    // useEnabledProvider is what makes the setter consulted at all — without
-    // it the flag is inert, which is the config parse being asserted here too.
-    const int q = ttp_room_create(
-        "{\"liveness\":{\"timeoutMs\":10,\"graceMs\":10,\"useEnabledProvider\":true}}");
+    const int q = ttp_room_create("{\"liveness\":{\"graceMs\":10}}");
     ttp_net_restore_room(q, "ROOM", "");
     ttp_net_on_protocol_json(q, "created", "{\"room\":\"ROOM\",\"instance\":\"m-1\"}", 0);
     ttp_net_on_protocol_json(q, "peer_joined", "{\"index\":1}", 0);
     ttp_room_transition_to(q, "countdown");
     ttp_room_transition_to(q, "playing");
     ttp_room_events_json(q);
-    ttp_room_set_liveness_enabled(q, 0);
-    Value off = parseOrNull(ttp_net_liveness_json(q, 0, 100000), "liveness off");
-    bool dropped = false;
-    for (const Value& e : at(off, "effects").arr)
-      dropped = dropped || json::str_field(e, "op") == "show-reconnect";
-    check(!dropped, "liveness disabled: a silent seat is never expired");
-    // The canary comes home, so the next tick sends again instead of declaring
-    // the socket dead and skipping its sweep.
+    // Two ticks a hundred seconds apart, with the canary's echo between them so
+    // the second one is a live tick and not a skipped one.
+    Value quiet = parseOrNull(ttp_net_liveness_json(q, 0, 100000), "liveness quiet");
     ttp_net_on_peer_message_json(q, 0, "0", "{\"type\":\"_heartbeat\"}", 0, 100000);
-    ttp_room_set_liveness_enabled(q, 1);
-    Value on = parseOrNull(ttp_net_liveness_json(q, 0, 200000), "liveness on");
-    for (const Value& e : at(on, "effects").arr)
-      dropped = dropped || json::str_field(e, "op") == "show-reconnect";
-    check(dropped, "…and re-enabling it drops them on the next sweep");
+    Value quiet2 = parseOrNull(ttp_net_liveness_json(q, 0, 200000), "liveness quiet 2");
+    bool dropped = false;
+    for (const Value* v : {&quiet, &quiet2})
+      for (const Value& e : at(*v, "effects").arr)
+        dropped = dropped || json::str_field(e, "op") == "show-reconnect";
+    check(!dropped, "a silent seat is never dropped: only peer_left takes a seat");
+    const Value roster = parseOrNull(ttp_room_list_json(q), "roster");
+    check(roster.arr.size() == 1 && json::truthy(roster.arr[0].find("connected")),
+          "…and it is still marked connected 200 s later");
     ttp_room_dispose(q);
   }
 
@@ -1112,7 +1112,7 @@ void abandonedRacePolicy() {
   // section isolates the ABANDONED-RACE deadline from the per-seat expiry
   // sweep that shares its tick (which has its own case in
   // netWalksMatchMultiCallPath).
-  const int h = ttp_room_create("{\"liveness\":{\"timeoutMs\":600000,\"graceMs\":1500}}");
+  const int h = ttp_room_create("{\"liveness\":{\"graceMs\":1500}}");
   if (h <= 0) { fail("abandoned-race: ttp_room_create returned no handle"); return; }
   RoomFlow* flow = ttp_room_flow(h);
   if (!flow) { fail("abandoned-race: no machine behind the room handle"); return; }
@@ -1251,7 +1251,7 @@ void abandonedRacePolicy() {
   // The case that matters is a late joiner who has ALSO dropped: a ghost seat, no
   // car, no phone. Against the raw COUNTDOWN snapshot it counts as someone
   // waiting and would yank a blipped party's whole race back to the lobby.
-  const int g = ttp_room_create("{\"liveness\":{\"timeoutMs\":600000,\"graceMs\":1500}}");
+  const int g = ttp_room_create("{\"liveness\":{\"graceMs\":1500}}");
   if (g <= 0) { fail("abandoned-race/ghost: ttp_room_create returned no handle"); return; }
   RoomFlow* gflow = ttp_room_flow(g);
   // The race: Ada (seat 1) plus a bot. The bot is deliberate — a car id that is
@@ -3015,10 +3015,10 @@ struct ShellTwin {
 
   void reset() { expected = Value::Arr(); }
 
-  // Net.js _seen
-  void seen(double id, double now) {
+  // Net.js _seen — the disconnect LIFT, and nothing else. It stamped a last-seen
+  // time until presence became the relay's answer; there is no expiry to feed.
+  void seen(double id, double /*now*/) {
     const PeerId p = PeerId::Num(id);
-    flow->onSeen(p, now);
     if (flow->isDisconnected(p)) {
       flow->markReconnected(p);
       expected.push(peerEffect("clear-reconnect", id));
@@ -3073,7 +3073,7 @@ struct ShellTwin {
   }
 
   // Net.js _claimReconnect
-  void claim(double from, const Value& hello, double now) {
+  void claim(double from, const Value& hello, double /*now*/) {
     const Value* token = hello.find("rejoinToken");
     double guess = 0;
     const bool hasGuess = ns::norm_index(token, &guess);
@@ -3085,7 +3085,7 @@ struct ShellTwin {
     expected.push(peerEffect("close-fastlane", oldId));
     expected.push(peerEffect("close-fastlane", from));
     flow->rekey(PeerId::Num(oldId), PeerId::Num(from));
-    if (plan.restamp) flow->onSeen(PeerId::Num(from), now);
+    // plan.restamp goes unspent on both sides — nothing expires.
     Value e = bareEffect("rekey-player");
     e.set("oldId", Value::Num(oldId));
     e.set("newId", Value::Num(from));
@@ -3165,9 +3165,9 @@ void netWalksMatchMultiCallPath() {
       "{\"id\":\"lagoon\",\"name\":\"Lagoon\",\"cup\":\"beach\"},"
       "{\"id\":\"summit\",\"name\":\"Summit\",\"cup\":\"alpine\"}]}");
 
-  const int walkRoom = ttp_room_create("{\"liveness\":{\"timeoutMs\":3000,\"graceMs\":1500}}");
+  const int walkRoom = ttp_room_create("{\"liveness\":{\"graceMs\":1500}}");
   ShellTwin twin;
-  twin.room = ttp_room_create("{\"liveness\":{\"timeoutMs\":3000,\"graceMs\":1500}}");
+  twin.room = ttp_room_create("{\"liveness\":{\"graceMs\":1500}}");
   twin.flow = ttp_room_flow(twin.room);
   if (walkRoom <= 0 || twin.room <= 0 || !twin.flow) { fail("netwalk: no room handles"); return; }
 
@@ -3593,7 +3593,7 @@ void netWalksMatchMultiCallPath() {
     ttp_room_events_json(twin.room);
   }
 
-  // --- the race: statechange restamp, a drop, liveness, the claim ----------
+  // --- the race: statechange, drops, liveness, the claim ----------
   {
     // Both rooms flip to countdown/playing; the statechange walk restamps.
     // A board from the PREVIOUS race is out when that happens — staged through
@@ -3607,13 +3607,10 @@ void netWalksMatchMultiCallPath() {
     Value sc = walkOf(ttp_net_state_change_apply_json(walkRoom, "countdown", 4000), "sc countdown");
     twin.reset();
     {
-      // Net.js's statechange handler: restampConnected + clearStandings + publish.
+      // Net.js's statechange handler: clearStandings + publish. plan.restampConnected
+      // is not spent on either side — it existed to keep lobby silence off the
+      // first countdown tick, and nothing measures silence any more.
       const ns::StateChangePlan plan = ns::state_change_plan(ns::RoomState::COUNTDOWN);
-      if (plan.restampConnected) {
-        for (const Value& p : twin.flow->listValue().arr)
-          if (json::truthy(p.find("connected")))
-            twin.flow->onSeen(json::id_of<PeerId>(p.find("peerIndex")), 4000);
-      }
       // clearStandings is EXECUTED — the board lives behind the room, so the
       // twin drops its own room's board rather than expecting an effect. The
       // plan field is still the rule (the frozen session corpus pins it); what
@@ -3654,15 +3651,16 @@ void netWalksMatchMultiCallPath() {
                    json::str_field(*e.find("data"), "type") == "_heartbeat";
       check(sentHb, "netwalk liveness: the canary heartbeat is composed off the manifest");
     }
-    // The twin's sweep half, over the same clock (its heartbeat state was JS
-    // shell state; the sweep is what touches the room).
+    // The twin's room half, over the same clock (its heartbeat state was JS
+    // shell state; the deadline is what touches the room). NO sweep on either
+    // side: presence is the relay's answer, so a tick can only arm or fire the
+    // abandoned-race deadline.
     twin.reset();
     {
-      for (const PeerId& id : twin.flow->expiredPeers(5100)) twin.dropSeat(id.num);
       ttp_room_sync_active_order(twin.room, sess);
       if (twin.flow->graceTick(5100)) twin.expected.push(bareEffect("race-abandoned"));
     }
-    sameRooms(walkRoom, twin, "liveness/no-expiry");
+    sameRooms(walkRoom, twin, "liveness/no-drop");
 
     // The echo comes home and clears the in-flight flag: the NEXT tick sends
     // again instead of reconnecting.
@@ -3678,36 +3676,44 @@ void netWalksMatchMultiCallPath() {
       check(sentAgain && !reconnected, "netwalk liveness: the echo closed the loop");
     }
     twin.reset();
-    // (the echo routes 'self-heartbeat' in the twin too — no stamp, no effect)
+    // (the echo routes 'self-heartbeat' in the twin too — no effect)
     {
-      for (const PeerId& id : twin.flow->expiredPeers(5300)) twin.dropSeat(id.num);
       ttp_room_sync_active_order(twin.room, sess);
       if (twin.flow->graceTick(5300)) twin.expected.push(bareEffect("race-abandoned"));
     }
     sameRooms(walkRoom, twin, "liveness/echoed");
 
-    // Seat 2 goes silent past the timeout: the sweep drops it in both worlds.
-    Value lt3 = walkOf(ttp_net_liveness_json(walkRoom, sess, 9000), "liveness expiry");
+    // Seat 2 says NOTHING across a window four times the old drop timeout, and
+    // keeps its seat: a tick is not a presence detector. The heartbeat half
+    // differs (the twin holds no canary state), so compare the room half plus
+    // the effects with send-to/reconnect stripped — which must be empty.
+    Value lt3 = walkOf(ttp_net_liveness_json(walkRoom, sess, 9000), "liveness quiet");
     twin.reset();
     {
-      for (const PeerId& id : twin.flow->expiredPeers(9000)) twin.dropSeat(id.num);
       ttp_room_sync_active_order(twin.room, sess);
       if (twin.flow->graceTick(9000)) twin.expected.push(bareEffect("race-abandoned"));
     }
-    // The heartbeat half differs (the twin holds no canary state), so compare
-    // only the sweep's effects: strip send-to/reconnect from the walk's answer.
     {
-      Value sweep = Value::Arr();
+      Value room = Value::Arr();
       for (const Value& e : lt3.find("effects")->arr) {
         const std::string op = json::str_field(e, "op");
-        if (op != "send-to" && op != "reconnect") sweep.push(e);
+        if (op != "send-to" && op != "reconnect") room.push(e);
       }
-      const std::string got = canonical_stringify(sweep);
+      const std::string got = canonical_stringify(room);
       const std::string want = canonical_stringify(twin.expected);
-      check(got == want, "netwalk liveness/expiry: sweep effects\n  want " + want +
+      check(got == want, "netwalk liveness/quiet: room effects\n  want " + want +
                              "\n  got  " + got);
     }
-    sameRooms(walkRoom, twin, "liveness/expiry");
+    sameRooms(walkRoom, twin, "liveness/quiet");
+
+    // Its socket THEN closes, which is what drops it: seat and car kept, QR up.
+    Value pl2 = walkOf(ttp_net_on_protocol_json(walkRoom, "peer_left", "{\"index\":2}", 9050),
+                       "peer_left 2");
+    twin.reset();
+    twin.expected.push(peerEffect("close-fastlane", 2));
+    twin.dropSeat(2);
+    sameEffects(pl2, twin, "peer_left/quiet-seat");
+    sameRooms(walkRoom, twin, "peer_left/quiet-seat");
 
     // _seen lifts the dropped seat back: the single writer, in both worlds.
     Value seen = walkOf(ttp_net_on_seen_json(walkRoom, "2", 9100), "on_seen");

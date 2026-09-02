@@ -318,11 +318,6 @@ void ttp_room_set_master(int h, const char* peerIdJson) {
   if (rh) rh->flow->setMasterValue(parse_scalar_id(peerIdJson));
 }
 
-void ttp_room_set_liveness_enabled(int h, int enabled) {
-  RoomHandle* rh = room(h);
-  if (rh) rh->flow->setLivenessEnabled(enabled != 0);
-}
-
 // ---- read accessors ---------------------------------------------------------
 
 const char* ttp_room_host_json(int h) {

@@ -92,9 +92,11 @@ class GameProtocol private constructor(
      * `arm-create-watchdog` effect.
      */
     class Liveness(
-        /** DISPLAY. Silence longer than this drops a seat, through the same path as a real `peer_left`. */
-        val timeoutMs: Double,
-        /** DISPLAY. The cadence the display re-checks presence on. */
+        /**
+         * DISPLAY. The cadence of the display's own tick: the self-heartbeat and the
+         * abandoned-race deadline. It sweeps no seats — presence is the relay's answer,
+         * from `peer_joined` to `peer_left`.
+         */
         val tickMs: Double,
         /** DISPLAY. Every racer gone while late joiners wait: hold the room this long, then return. */
         val abandonedRaceGraceMs: Double,
@@ -159,7 +161,6 @@ class GameProtocol private constructor(
                 msgSelectMode = str(msg, "SELECT_MODE", "MSG"),
 
                 liveness = Liveness(
-                    timeoutMs = num(live, "TIMEOUT_MS", "LIVENESS"),
                     tickMs = num(live, "TICK_MS", "LIVENESS"),
                     abandonedRaceGraceMs = num(live, "ABANDONED_RACE_GRACE_MS", "LIVENESS"),
                 ),

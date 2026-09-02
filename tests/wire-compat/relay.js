@@ -51,10 +51,11 @@
 // observed instants exactly: the ping at 8 s and, unanswered, the close at 12 s.
 //
 // This matters because the opposite model ("the relay drops a quiet phone")
-// invents a drop path the display would be relying on. In truth the relay reports
-// a locked phone as PRESENT until its socket really dies, which is precisely why
-// display/Net.js runs its own 1 Hz liveness (LIVENESS_TIMEOUT_MS) rather than
-// trusting peer_left, and why a TV shell that skips that layer shows ghosts.
+// invents a drop path the display DOES rely on: presence is peer_left and nothing
+// else now (protocol.js LIVENESS). In truth the relay reports a locked phone as
+// PRESENT until its socket really dies, so that phone holds its seat — the known,
+// accepted cost of one authority instead of two, and the reason the phone closes
+// its own link on background rather than waiting to be noticed.
 //
 // WHAT THIS MODEL STILL IS NOT:
 //   * not the real Bun socket stack: no fragmentation, no backpressure, no

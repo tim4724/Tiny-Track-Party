@@ -227,14 +227,17 @@ test('party ABI: the liveness walk abandons a race nobody is left driving', asyn
   assert.deepEqual(JSON.parse(cw('ttp_party_version', 'string', [])()),
     { contractVersion: 2, layer: 'party' }, 'the party layer in the artifact is the one the adapter expects');
 
-  const h = room.create(JSON.stringify({ liveness: { timeoutMs: 3000, graceMs: 1500 } }));
+  // No timeoutMs — presence is the relay's answer, so the room machine holds no
+  // per-seat expiry and a seat is dropped by peer_left and by nothing else.
+  const h = room.create(JSON.stringify({ liveness: { graceMs: 1500 } }));
   assert.ok(h > 0);
   const ops = (raw) => JSON.parse(raw).effects.map((e) => e.op);
   const tick = (s, t) => ops(net.liveness(h, s, t)).filter((o) => o !== 'send-to');
+  const left = (i, t) => ops(net.onProtocol(h, 'peer_left', JSON.stringify({ index: i }), t));
   const seat = (i) => JSON.parse(room.list(h)).find((p) => p.peerIndex === i);
 
   // A room the walks believe they are IN — the heartbeat's in-room latch is what
-  // lets a tick sweep at all, and it is set by the relay's `created`.
+  // lets a tick do anything at all, and it is set by the relay's `created`.
   net.onOpen(h);
   net.onProtocol(h, 'created', '{"room":"ABCD"}', 1000);
   net.onProtocol(h, 'peer_joined', '{"index":1}', 1000);
@@ -244,7 +247,7 @@ test('party ABI: the liveness walk abandons a race nobody is left driving', asyn
   const s = sim.begin('tidepool', 42, 3, null);
   sim.addHuman(s, '1', null);
   room.transitionTo(h, 'countdown');
-  net.stateChangeApply(h, 'countdown', 2000);   // restamps every connected seat
+  net.stateChangeApply(h, 'countdown', 2000);
   room.transitionTo(h, 'playing');
   net.stateChangeApply(h, 'playing', 2000);
   // ...and a third phone scans in mid-race, car-less: the one WAITING.
@@ -253,22 +256,30 @@ test('party ABI: the liveness walk abandons a race nobody is left driving', asyn
 
   assert.deepEqual(tick(s, 2100), [], 'a healthy race arms no deadline');
 
-  // The racers go silent. Seat 3 keeps proving life, so it is still waiting when
-  // the sweep drops the other two.
-  net.onSeen(h, '3', 5100);
-  assert.deepEqual(tick(s, 5200), ['close-fastlane', 'show-reconnect', 'close-fastlane', 'show-reconnect'],
-    'the silent seats are dropped, cards up, before the deadline is consulted');
+  // The racers go SILENT, which is now not an event at all: no ping, no input,
+  // nothing on the wire, for far longer than the drop window this walk used to
+  // enforce. Nothing happens, because presence is the relay's answer.
+  assert.deepEqual(tick(s, 5200), [], 'silence alone drops nobody');
+  assert.equal(seat(1).connected, true, 'a quiet racer is still in the race');
+
+  // Their sockets then close, which IS the event. Both go through the mid-game
+  // drop: seat AND car held, reconnect card up.
+  assert.deepEqual(left(1, 5300), ['close-fastlane', 'close-fastlane', 'show-reconnect']);
+  assert.deepEqual(left(2, 5300), ['close-fastlane', 'close-fastlane', 'show-reconnect']);
   assert.equal(seat(1).connected, false);
-  assert.equal(seat(3).connected, true, 'the waiting phone is not swept with them');
+  assert.equal(seat(3).connected, true, 'the waiting phone kept its socket, so it kept its seat');
   // A DROPPED seat is still a participant — its car is held for the reconnect —
   // so the deadline is armed by seat 3 waiting, not by the drops themselves.
-  assert.deepEqual(tick(s, 6699), [], 'the first qualifying tick only armed it');
-  assert.deepEqual(tick(s, 6700), ['race-abandoned'], 'it fires at the tick + graceMs');
-  assert.deepEqual(tick(s, 6800), [], 'and fires exactly once');
+  // It arms on the first TICK that sees the condition, never on the drop, so
+  // the clock starts at 5400 and not at the peer_left before it.
+  assert.deepEqual(tick(s, 5400), [], 'the first qualifying tick only armed it');
+  assert.deepEqual(tick(s, 6899), [], 'still inside the grace');
+  assert.deepEqual(tick(s, 6900), ['race-abandoned'], 'it fires at that tick + graceMs');
+  assert.deepEqual(tick(s, 7000), [], 'and fires exactly once');
 
-  // One racer scans back in: a fastlane packet is proof of life, and a live
+  // One racer scans back in: a fastlane packet lifts the seat, and a live
   // participant disarms the deadline.
-  assert.deepEqual(ops(net.onSeen(h, '1', 6900)), ['clear-reconnect']);
+  assert.deepEqual(ops(net.onSeen(h, '1', 7100)), ['clear-reconnect']);
   assert.deepEqual(tick(s, 8000), [], 'a returning racer disarms it');
 
   sim.dispose(s);
@@ -327,7 +338,7 @@ test('party ABI: the session choreography walks run against the shipped wasm', a
     cars: [{ id: 'dash' }], colors: ['#f00'],
     tracks: [{ id: 'tidepool', cup: 'beach' }, { id: 'lagoon', cup: 'beach' }]
   })), 1);
-  const h = room.create(JSON.stringify({ liveness: { timeoutMs: 3000, graceMs: 1500 } }));
+  const h = room.create(JSON.stringify({ liveness: { graceMs: 1500 } }));
   assert.ok(h > 0);
   const walk = (raw) => JSON.parse(raw);
   const ops = (raw) => walk(raw).effects.map((e) => e.op);
@@ -398,7 +409,7 @@ test('party ABI: the session choreography walks run against the shipped wasm', a
     { mode: 'random', cupId: null, randomRaces: 4, trackId: other });
   drain();
 
-  // Into the race; the statechange walk restamps so lobby silence isn't charged.
+  // Into the race.
   room.transitionTo(h, 'countdown');
   net.stateChangeApply(h, 'countdown', 3000);
   room.transitionTo(h, 'playing');
@@ -407,19 +418,26 @@ test('party ABI: the session choreography walks run against the shipped wasm', a
   const s = sim.begin('tidepool', 42, 3, null);
   sim.addHuman(s, '1', null);
 
-  // The liveness tick: first the canary send, then — once seat 2 has been
-  // silent past the timeout — the sweep drops it with a reconnect card.
+  // The liveness tick is the canary send and nothing else. Seat 2 says nothing
+  // at all across every tick below — no ping, no input — and keeps its seat,
+  // because presence is the relay's answer and the relay has not spoken.
   assert.deepEqual(ops(net.liveness(h, s, 3100)), ['send-to']);
   net.onPeerMessage(h, s, '0', '{"type":"_heartbeat"}', 0, 3200); // the echo comes home
   net.onSeen(h, '1', 5000);              // seat 1 keeps driving (fastlane input)
-  const expiry = walk(net.liveness(h, s, 6500));
-  assert.deepEqual(ops(JSON.stringify(expiry)).filter((o) => o !== 'send-to'),
-    ['close-fastlane', 'show-reconnect'], 'seat 2 (silent since the 3000 restamp) expired; seat 1 did not');
+  assert.deepEqual(ops(net.liveness(h, s, 6500)).filter((o) => o !== 'send-to'), [],
+    'no sweep: a silent seat is not a dropped seat');
+  assert.equal(connected(2), true);
+  drain();
+
+  // Its socket closing is what drops it, mid-game, card up.
+  const expiry = walk(net.onProtocol(h, 'peer_left', '{"index":2}', 6550));
+  assert.deepEqual(ops(JSON.stringify(expiry)),
+    ['close-fastlane', 'close-fastlane', 'show-reconnect']);
   assert.deepEqual(expiry.effects.find((e) => e.op === 'show-reconnect').seat.peerIndex, 2);
   assert.equal(connected(2), false);
   drain();
 
-  // A fastlane packet is proof of life: the single writer lifts the drop.
+  // A fastlane packet from the seat says it is back: the single writer lifts it.
   const lifted = walk(net.onSeen(h, '2', 6600));
   assert.deepEqual(lifted.effects, [{ op: 'clear-reconnect', peerIndex: 2 }]);
   assert.equal(connected(2), true);

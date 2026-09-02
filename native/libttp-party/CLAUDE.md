@@ -45,13 +45,27 @@ the current answers.
 
 ## Liveness and disconnects
 
-The relay fires `peer_left` only on a real socket close, so the display also runs
-its own liveness: phones ping, and a seat silent past the timeout is dropped
-mid-game by the same path, with any traffic restoring it. Both windows live in the
-protocol manifest, because "silent past N seconds" is only true against a matching
-ping rate.
+**Presence is the relay's answer, and only the relay's.** A seat is connected from
+`peer_joined` until `peer_left`; the display runs no silence detector over other
+people's sockets. RoomFlow still HAS one — it is kit code, driven by the roomflow
+corpus — but nothing configures a `timeoutMs` for it, so `expiredPeers` can only
+ever be empty. `seenWalk` survives as the disconnect LIFT alone: traffic from a
+seat the display had dropped means it is back.
 
-The self-heartbeat uses an **in-flight flag, never an echo age**, so a throttled
+That is a decision with a known cost, not an oversight. The display used to run a
+3 s silence window budgeted against the phone's 1 Hz ping, and it was given up
+because two authorities disagreeing about the room is worse than one authority
+being slow: Party-Sockets' cap counts LIVE SOCKETS, so a seat dropped here still
+filled a relay slot and the reconnect QR offered for it was answered "Room is
+full". What that costs is measured and pinned by `tests/wire-compat.test.js` — uWS
+answers its own keepalive pings inside the browser's network stack, so a locked or
+backgrounded phone reads as PRESENT for as long as its socket survives. The phone
+closing its own link on background (`controller/Net.js` `suspend()`) is what turns
+a pocketed phone into a free seat; one killed without that `pagehide` holds its
+seat until the relay's idle timeout closes the socket.
+
+The self-heartbeat is the one detector left, and it watches exactly one socket:
+ours. It uses an **in-flight flag, never an echo age**, so a throttled
 background tab cannot misread its own starvation as a dead link. The shell owns
 only the interval and the calls the tick asks for.
 

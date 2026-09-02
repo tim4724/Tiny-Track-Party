@@ -68,14 +68,15 @@ inline constexpr int COUNTDOWN_SECONDS = 3;
 inline constexpr double SCHEMATIC_EPS = 0.35;
 
 // ---- the presence contract (protocol.js LIVENESS) ---------------------------
-// The phone's ping cadence and the display's drop / grace / canary windows.
-// Mirrored here for the same reason STEER is: these are the numbers two
-// implementations must agree on, and "a seat silent past 3 s is dropped" is
-// only true against a 1 Hz ping. ttp::session (session.h) spends
+// The phone's ping cadence and the display's grace / canary windows. Mirrored
+// here for the same reason STEER is: these are the numbers two implementations
+// must agree on. PRESENCE ITSELF IS NOT AMONG THEM — a seat is connected from
+// peer_joined until peer_left, so no window here drops one; see protocol.js for
+// what that decision cost. ttp::session (session.h) spends
 // LIVENESS_HEARTBEAT_DEAD_MS directly; the rest are the shell's to feed into
 // RoomFlow's liveness config and its timers.
 inline constexpr double LIVENESS_PING_INTERVAL_MS = 1000;
-inline constexpr double LIVENESS_TIMEOUT_MS = 3000;
+inline constexpr double LIVENESS_PONG_TIMEOUT_MS = 3000;
 inline constexpr double LIVENESS_TICK_MS = 1000;
 inline constexpr double LIVENESS_HEARTBEAT_DEAD_MS = 6000;
 inline constexpr double LIVENESS_ABANDONED_RACE_GRACE_MS = 15000;

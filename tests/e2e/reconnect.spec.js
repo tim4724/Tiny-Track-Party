@@ -25,10 +25,10 @@ test('a reloaded phone rejoins straight into its still-running race', async ({ p
 
 test('a mid-race drop holds the seat, the car and its cell — the lobby return frees it',
   async ({ page, browser }) => {
-    // The liveness test below covers SILENCE (socket open, no peer_left). This is
-    // the other arm of session.cc's presence_action fork — a REAL socket close —
-    // and no other spec drives it: mid-game the seat and the still-racing car must
-    // survive the drop, so the camera stays on the cell and its reconnect QR.
+    // The spec below covers SILENCE, which drops nobody. This is the MID-GAME arm
+    // of session.cc's presence_action fork on a real socket close, and no other
+    // spec drives it: the seat and the still-racing car must survive the drop, so
+    // the camera stays on the cell and its reconnect QR.
     //
     // There is no give-up timer: a manual pause, a locked phone or a tab switch
     // must never cost the slot. Which makes the RELEASE half a rule of its own —
@@ -72,7 +72,13 @@ test('a lobby peer_left frees the seat outright', async ({ page, browser }) => {
   await expect(page.locator('#players')).not.toContainText('Bob');
 });
 
-test('a silent phone is dropped by liveness and restored when its pings resume', async ({ page, browser }) => {
+test('a silent phone keeps its seat: only the socket closing drops one', async ({ page, browser }) => {
+  // THE RULE, end to end: presence is the relay's answer, from peer_joined to
+  // peer_left. A player who simply stops steering — parked on the grid, phone
+  // face-down on the sofa, hands off the wheel — sends nothing at all, and the
+  // big screen must not read that as leaving. This spec asserted the OPPOSITE
+  // while the display ran a silence window of its own; native/libttp-party's
+  // CLAUDE.md carries why that was given up.
   const roomCode = await openDisplay(page);
   const alice = await joinController(browser, roomCode, 'Alice'); // host, peerIndex 1
   await startRace(alice, []);
@@ -80,8 +86,7 @@ test('a silent phone is dropped by liveness and restored when its pings resume',
 
   // Lock-screen simulation: every outbound path goes quiet — pings, the CONTROL
   // stream (which falls back to the relay without a fastlane), RTC signalling —
-  // but the relay socket stays OPEN, so peer_left never fires and only the
-  // display's 1 Hz liveness check can notice.
+  // but the relay socket stays OPEN, so peer_left never fires.
   await alice.evaluate(() => {
     const net = window.__net;
     net._stopPing();
@@ -89,18 +94,27 @@ test('a silent phone is dropped by liveness and restored when its pings resume',
     net.party._send = () => {}; // shadow the prototype method; deleted on "wake"
   });
 
-  // ~3 s of relay silence → seat dropped, its reconnect QR card up on the cell.
-  await page.waitForFunction(() => window.__net.flow.isDisconnected(1), null, { timeout: 10000 });
-  await expect(page.locator('.cell-reconnect')).toBeVisible();
+  // Well past the window that used to drop it, and past three of the display's
+  // own ticks. Nothing happens: seat connected, car racing, no QR card.
+  await page.waitForTimeout(5000);
+  expect(await page.evaluate(() => ({
+    disc: window.__net.flow.isDisconnected(1),
+    cars: window.__session().carIds(),
+  }))).toEqual({ disc: false, cars: expect.arrayContaining([1]) });
+  await expect(page.locator('.cell-reconnect')).toHaveCount(0);
 
-  // The phone wakes: traffic resumes on the SAME socket (no rejoin handshake) —
-  // the seat flips back to connected and the QR card comes down.
+  // Traffic resuming on the SAME socket is a non-event too — nothing to restore.
   await alice.evaluate(() => {
     delete window.__net.party._send; // un-shadow → prototype send works again
     window.__net._startPing();
   });
-  await page.waitForFunction(() => !window.__net.flow.isDisconnected(1), null, { timeout: 10000 });
   await expect(page.locator('.cell-reconnect')).toHaveCount(0);
+
+  // Its socket closing IS the event, and mid-race that is the soft drop: seat
+  // and car kept, reconnect QR up.
+  await alice.context().close();
+  await page.waitForFunction(() => window.__net.flow.isDisconnected(1), null, { timeout: 10000 });
+  await expect(page.locator('.cell-reconnect')).toBeVisible();
 });
 
 test('a crashed display rejoins its own room and regathers the party', async ({ page, browser }) => {

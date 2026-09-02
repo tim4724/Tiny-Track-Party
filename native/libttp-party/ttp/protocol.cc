@@ -71,7 +71,7 @@ Value manifest() {
 
   Value liveness = Value::Obj();
   liveness.set("PING_INTERVAL_MS", Value::Num(LIVENESS_PING_INTERVAL_MS));
-  liveness.set("TIMEOUT_MS", Value::Num(LIVENESS_TIMEOUT_MS));
+  liveness.set("PONG_TIMEOUT_MS", Value::Num(LIVENESS_PONG_TIMEOUT_MS));
   liveness.set("TICK_MS", Value::Num(LIVENESS_TICK_MS));
   liveness.set("HEARTBEAT_DEAD_MS", Value::Num(LIVENESS_HEARTBEAT_DEAD_MS));
   liveness.set("ABANDONED_RACE_GRACE_MS", Value::Num(LIVENESS_ABANDONED_RACE_GRACE_MS));

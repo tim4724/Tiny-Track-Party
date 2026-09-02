@@ -28,13 +28,14 @@ import { buildQRMatrix } from '../shared/qr.js';
 const { PartyConnection, RELAY_URL, CAR_COLORS, LIVENESS } = window;
 
 // Presence windows. The manifest numbers this shell still SPENDS itself: the
-// detection windows feed RoomFlow at construction, and the tick rate arms the
-// one interval the start-liveness effect asks for. The create watchdog's delay
-// is no longer read here — it rides the arm-create-watchdog effect, from the
+// abandoned-race grace feeds RoomFlow at construction, and the tick rate arms
+// the one interval the start-liveness effect asks for. There is no drop window
+// to read — a seat is connected from peer_joined until peer_left, and this
+// shell detects nothing about anyone else's socket. The create watchdog's delay
+// is not read here either; it rides the arm-create-watchdog effect, from the
 // same manifest entry via protocol.h. __abandonGraceMs is the E2E hook that
 // shortens the wait, and it is the one platform-flavoured part — an override
 // of a manifest number, not a second declaration of it.
-const LIVENESS_TIMEOUT_MS = LIVENESS.TIMEOUT_MS;
 const ABANDONED_RACE_GRACE_MS = window.__abandonGraceMs || LIVENESS.ABANDONED_RACE_GRACE_MS;
 const LIVENESS_TICK_MS = LIVENESS.TICK_MS;
 
@@ -251,8 +252,11 @@ export class DisplayNet extends GameNet {
     // what the display uses; keep the kit class as the documented default.
     this._PartyConnectionImpl = opts.PartyConnectionImpl || PartyConnection;
     if (opts.FastlaneImpl) this.FastlaneImpl = opts.FastlaneImpl;
+    // The grace window and nothing else. Leaving RoomFlow's expiry unset leaves
+    // it at Infinity, which is how "the relay decides who is connected" is
+    // spelled to the kit.
     this.flow = new this._RoomFlowImpl({
-      liveness: { timeoutMs: LIVENESS_TIMEOUT_MS, graceMs: ABANDONED_RACE_GRACE_MS }
+      liveness: { graceMs: ABANDONED_RACE_GRACE_MS }
     });
     session.initPick(this.flow.handle,
       opts.defaultTrackId != null ? opts.defaultTrackId : null, this._hasBag,
@@ -263,8 +267,8 @@ export class DisplayNet extends GameNet {
     this.baseUrlOverride = null;
     this._createTimer = null; // created/joined-answer watchdog (armed/cleared by effects)
 
-    // Fastlane input counts as proof of life: a phone whose relay socket died
-    // can still be driving over the open P2P channel — its car must not grow a
+    // Fastlane input lifts a dropped seat: a phone whose relay socket blipped
+    // can still be driving over the open P2P channel — its car must not keep a
     // reconnect QR mid-corner.
     this._initFastlane(0, { onInput: (peerIdx, ev) => { this._seen(peerIdx); this.onControllerMessage(peerIdx, ev); } });
 
@@ -378,8 +382,8 @@ export class DisplayNet extends GameNet {
 
   _onMessage(from, data) {
     if (!data) return;
-    // The fastlane consumes RTC signals; the walk still stamps liveness for
-    // them (ANY traffic from a peer is proof of life) and then stops.
+    // The fastlane consumes RTC signals; the walk still runs the seat lift for
+    // them (ANY traffic from a peer says it is back) and then stops.
     const sig = this._isSignal(from, data);
     const ctx = { from, data };
     this._walk(this.flow.runWalk(() =>
@@ -438,15 +442,15 @@ export class DisplayNet extends GameNet {
   }
 
   // ---- liveness (1 Hz) ----
-  // Record proof of life for a peer outside the message path — fastlane input.
-  // The walk also lifts a dropped seat back to connected (a phone can go silent
-  // and resume WITHOUT its socket ever closing) and is the single writer that
-  // lifts disconnection; the message walks run the same C++ internally.
+  // Lift a dropped seat back to connected from outside the message path —
+  // fastlane input. It is the single writer that lifts disconnection, and the
+  // message walks run the same C++ internally. It stamps nothing: presence is
+  // the relay's answer, so a seat is dropped by peer_left and by nothing else.
   _seen(peerIndex) {
     const raw = session.onSeen(this.flow.handle, peerIndex, Date.now());
     // Hot path: this rides every fastlane input event, and the common answer is
-    // the shared empty list — the stamp moved no record and queued no event, so
-    // skip the parse and the drain entirely.
+    // the shared empty list — the seat was already connected, so nothing moved
+    // and nothing was queued; skip the parse and the drain entirely.
     if (raw === EMPTY_EFFECTS) return;
     this.flow.walkMutated();
     this._walk(raw);
@@ -455,9 +459,9 @@ export class DisplayNet extends GameNet {
   _livenessTick() {
     if (!this.party) return;
     // The whole tick is one walk: the self-heartbeat state machine (in-flight
-    // pair lives in the wasm), then on a sweep the expiry drops, the
-    // active-order re-sync and the abandoned-race deadline, in that order on
-    // one clock reading.
+    // pair lives in the wasm), then the active-order re-sync and the
+    // abandoned-race deadline, in that order on one clock reading. It sweeps no
+    // seats — the relay's peer_left is the only thing that drops one.
     this._walk(this.flow.runWalk(() =>
       session.liveness(this.flow.handle, this.sessionHandle(), Date.now())));
   }

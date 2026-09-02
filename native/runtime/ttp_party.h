@@ -57,7 +57,9 @@ TTP_ABI const char* ttp_room_state(int h);                         // "lobby"|"c
 // ---- provider setters -------------------------------------------------------
 
 TTP_ABI void ttp_room_set_master(int h, const char* peerIdJson);
-TTP_ABI void ttp_room_set_liveness_enabled(int h, int enabled);
+// No liveness-enabled setter: RoomFlow still carries the flag (kit code, driven
+// by the roomflow corpus) but nothing configures an expiry for it to gate, since
+// presence is the relay's answer — peer_joined to peer_left.
 
 // ---- read accessors ---------------------------------------------------------
 

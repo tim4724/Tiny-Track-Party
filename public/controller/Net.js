@@ -11,14 +11,17 @@ import { InputGate } from './InputGate.js';
 const { PartyConnection, MSG, RELAY_URL, FASTLANE_TYPES, LIVENESS } = window;
 const enc = encodeURIComponent;
 
-// Relay-liveness ping cadence and the overdue-PONG threshold after which we
-// surface a "no signal" reading (only when the fastlane isn't carrying its own
-// live RTT). Both come from the shared presence contract (protocol.js LIVENESS)
-// rather than being restated here: this cadence is the thing the display's
-// 3 s drop window is budgeted against, and the two files used to name their own
-// numbers with only a comment between them.
+// Ping cadence and the overdue-PONG threshold after which we surface a "no
+// signal" reading (only when the fastlane isn't carrying its own live RTT).
+// Both come from the shared presence contract (protocol.js LIVENESS) rather
+// than being restated here.
+//
+// The ping is NOT how the big screen knows we are here — presence is the
+// relay's answer, from peer_joined to peer_left. It keeps the relay's own idle
+// timeout off our socket, and it is the WS-path latency sample. The threshold
+// below only paints this phone's chip.
 const PING_INTERVAL_MS = LIVENESS.PING_INTERVAL_MS;
-const PONG_TIMEOUT_MS = LIVENESS.TIMEOUT_MS;
+const PONG_TIMEOUT_MS = LIVENESS.PONG_TIMEOUT_MS;
 
 function deriveRoomCode() {
   const seg = (location.pathname || '/').split('/').filter(Boolean)[0];
@@ -280,11 +283,12 @@ export class ControllerNet extends GameNet {
     if (this.fastlane) this.fastlane.open(0); // null with no WebRTC: relay only
   }
 
-  // ---- ping / pong (WS relay-liveness + WS-path latency) ----
+  // ---- ping / pong (relay keepalive + WS-path latency) ----
   // The fastlane reports its own (lower) RTT via onRtt; this WS ping is the
-  // fallback latency source and the liveness check. When the fastlane is open
-  // its samples win — we don't let the 1 Hz WS reading clobber the live P2P
-  // chip (the gate in _handlePong / the timeout below).
+  // fallback latency source, and it keeps the relay's idle timeout off a socket
+  // whose inputs are all going over the fastlane. When the fastlane is open its
+  // samples win — we don't let the 1 Hz WS reading clobber the live P2P chip
+  // (the gate in _handlePong / the timeout below).
   _startPing() {
     this._stopPing();
     this._lastPong = Date.now();

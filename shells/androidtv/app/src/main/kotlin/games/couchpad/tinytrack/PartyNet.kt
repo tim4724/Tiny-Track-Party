@@ -34,7 +34,7 @@ import kotlin.random.Random
  * **THE FASTLANE IS [Fastlane]** — the WebRTC transport over the C++ Link. So
  * the `__rtc` envelopes play their web double role here: the fastlane consumes
  * them (offer/ICE to answer) AND they stay this shell's SIGNAL for the walk,
- * which stamps liveness (any traffic is proof of life) and stops.
+ * which lifts a seat the display had dropped (any traffic says it is back) and stops.
  *
  * It remains an ENHANCEMENT: CONTROL falls back to the relay per-message, so a
  * phone with no WebRTC, or a symmetric NAT with no TURN to escape it, plays
@@ -281,15 +281,16 @@ class PartyNet(
 
     init {
         // The room machine exists before the socket does, so `roomHandle` is valid
-        // for every reader from the first frame drawn. The two windows are the
+        // for every reader from the first frame drawn. The grace window is the
         // manifest's, fed straight into RoomFlow's own liveness config — this
-        // shell picks neither.
+        // shell picks it no more than the web does. No `timeoutMs`: presence is
+        // the relay's answer, so RoomFlow's expiry is left at its Infinity
+        // default and no seat is ever dropped on silence.
         roomHandle = Ttp.ttp_room_create(
             TtpJson.arg(
                 JSONObject().put(
                     "liveness",
                     JSONObject()
-                        .put("timeoutMs", proto.liveness.timeoutMs)
                         .put("graceMs", proto.liveness.abandonedRaceGraceMs),
                 ).toString()
             )
@@ -464,7 +465,7 @@ class PartyNet(
         val payload = data as? JSONObject
         // The `__rtc` envelopes play their web double role: the fastlane consumes
         // them (offer/ICE to answer), AND they stay this shell's "signal" for the
-        // walk, which stamps liveness (any traffic is proof of life) and stops.
+        // walk, which lifts a seat the display had dropped, and stops.
         val isSignal = payload?.has(Fastlane.RTC_KEY) == true
         if (isSignal) {
             // The display is relay slot 0 and the signalling peer is a NUMBERED

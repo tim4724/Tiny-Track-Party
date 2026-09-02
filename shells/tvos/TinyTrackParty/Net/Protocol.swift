@@ -7,7 +7,7 @@ import Foundation
 /// layer honours the config rule by including `ttp/protocol.h` and the web shell
 /// by reading `public/shared/protocol.js`, and a shell that can do neither had no
 /// third option, so its lobby would hand-copy the car list and its transport the
-/// liveness windows, with nothing anywhere watching the copy.
+/// presence windows, with nothing anywhere watching the copy.
 ///
 /// **A table retyped into Swift is pinned by nothing** and will drift the first
 /// time a number moves. What pins the export instead:
@@ -72,10 +72,9 @@ struct GameProtocol {
     /// heartbeat-dead window lives inside `ttp_net_heartbeat_tick_json`, and
     /// the create watchdog's delay rides the `arm-create-watchdog` effect.
     struct Liveness {
-        /// DISPLAY. Silence longer than this drops a seat mid-game, through the
-        /// same path as a real `peer_left`.
-        let timeoutMs: Double
-        /// DISPLAY. The cadence the display re-checks presence on.
+        /// DISPLAY. The cadence of the display's own tick: the self-heartbeat
+        /// and the abandoned-race deadline. It sweeps no seats — presence is
+        /// the relay's answer, from `peer_joined` to `peer_left`.
         let tickMs: Double
         /// DISPLAY. Every racer gone while late joiners wait: hold the room this
         /// long, then return to the lobby.
@@ -172,7 +171,6 @@ struct GameProtocol {
             msgSelectMode: str(msg, "SELECT_MODE", "MSG"),
 
             liveness: Liveness(
-                timeoutMs: num(live, "TIMEOUT_MS", "LIVENESS"),
                 tickMs: num(live, "TICK_MS", "LIVENESS"),
                 abandonedRaceGraceMs: num(live, "ABANDONED_RACE_GRACE_MS", "LIVENESS")),
 

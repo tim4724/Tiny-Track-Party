@@ -1085,9 +1085,13 @@ test('asym: prod does NOT drop an application-idle socket — only one that stop
   //
   // WHAT THIS MEANS AT A REAL PARTY: the relay reports a locked, backgrounded or
   // Wi-Fi-parked phone as PRESENT, for as long as its socket survives. peer_left
-  // is not a silence detector, which is exactly why display/Net.js runs its own
-  // 1 Hz liveness (LIVENESS_TIMEOUT_MS = 3 s) instead of trusting the relay, and
-  // why a TV shell that skips that layer will show ghosts on the grid.
+  // is not a silence detector — and peer_left is now the display's ONLY presence
+  // signal, so this is the exact shape of what that costs. It is the accepted
+  // price of a single authority: the display's own 3 s window disagreed with the
+  // relay's cap (which counts live sockets), and a seat dropped here still filled
+  // a slot, so its reconnect QR was answered "Room is full". What keeps a pocketed
+  // phone from holding a seat is the phone itself: controller/Net.js suspend()
+  // closes the link on background. A shell that skips THAT will show ghosts.
   //
   // The E2E stub never times out at all, so neither half of this was ever
   // exercised; the previous version of this test asserted the OPPOSITE of what

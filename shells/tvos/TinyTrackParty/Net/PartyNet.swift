@@ -186,11 +186,12 @@ final class PartyNet {
 
         // §4.5's boot order: the room machine exists before the socket does, so
         // `roomHandle` is valid for every reader from the first frame drawn. The
-        // two windows are the manifest's, fed straight into RoomFlow's own
-        // liveness config — this shell picks neither.
+        // grace window is the manifest's, fed straight into RoomFlow's own
+        // liveness config — this shell picks it no more than the web does. No
+        // `timeoutMs`: presence is the relay's answer, so RoomFlow's expiry is
+        // left at its Infinity default and no seat is ever dropped on silence.
         roomHandle = ttp_room_create(TTP.json([
             "liveness": [
-                "timeoutMs": proto.liveness.timeoutMs,
                 "graceMs": proto.liveness.abandonedRaceGraceMs
             ]
         ]))
@@ -287,15 +288,15 @@ final class PartyNet {
     }
 
     /// A relay message. The walk routes slot-0 echoes (the heartbeat closes its
-    /// loop there), stamps liveness, and runs the whole peer switch — hello,
+    /// loop there), lifts a dropped seat back, and runs the whole peer switch — hello,
     /// leave, set_car, set_ready, select_mode, ping — inside the engine.
     private func handleMessage(from: Any?, data: Any?) {
         guard let data, !(data is NSNull) else { return }
         let payload = data as? [String: Any]
         // The `__rtc` envelopes play their web double role: the fastlane
         // consumes them (offer/ICE → answer), AND they stay this shell's
-        // "signal" for the walk, which stamps liveness (any traffic is proof
-        // of life) and stops.
+        // "signal" for the walk, which lifts a seat the display had dropped
+        // (any traffic says it is back) and stops.
         let isSignal = payload?["__rtc"] != nil
         if isSignal, let payload, let idx = (from as? NSNumber)?.intValue {
             fastlane.handleSignal(from: idx, data: payload)

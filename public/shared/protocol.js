@@ -150,14 +150,24 @@ var RANDOM_RACES = {
   MAX: 8
 };
 
-// ---- The presence contract (phone pings -> display drops) ----
+// ---- The presence contract (the relay decides who is connected) ----
 // Six numbers that, like STEER above, only mean anything TOGETHER and are read
-// by two files in two roles: the phone's ping cadence (controller/Net.js) and
-// the display's drop/grace/canary windows (display/Net.js, fed straight into
-// the native RoomFlow's liveness config). "A seat silent past 3 s is dropped"
-// is only true because the phone pings at 1 Hz — until this block existed that
-// was a two-file chain held together by prose comments, and a tvOS shell would
-// have picked its own 3 s with nothing to say so.
+// by two files in two roles: the phone's ping cadence and chip threshold
+// (controller/Net.js), and the display's grace/canary windows (display/Net.js,
+// fed straight into the native RoomFlow's liveness config).
+//
+// PRESENCE IS THE RELAY'S ANSWER, and only the relay's: a seat is connected
+// from peer_joined until peer_left, and the display runs no silence detector of
+// its own. It used to run one, a 3 s drop window budgeted against the ping
+// cadence below, which is why these numbers still read as a set. What that
+// second opinion cost was that the display and Party-Sockets could disagree,
+// and the relay is the half that owns the room: its cap counts LIVE SOCKETS, so
+// a seat the display had dropped on silence still filled a slot, and the
+// reconnect QR offered for that seat was answered "Room is full".
+//
+// It is not free: a locked phone whose socket outlives it reads as PRESENT.
+// native/libttp-party/CLAUDE.md carries that cost in full, measured against the
+// real relay and pinned by tests/wire-compat.test.js.
 //
 // These are the WINDOWS, not the timers: setInterval/setTimeout stay with each
 // platform's shell, and so does the E2E `window.__abandonGraceMs` override.
@@ -165,20 +175,24 @@ var RANDOM_RACES = {
 // scripts/gen-protocol-corpus.mjs carries it into the protocol corpus, which
 // the `protocol` ctest replays against native/libttp-party/ttp/protocol.h.
 var LIVENESS = {
-  // PHONE. How often a controller pings the display (MSG.PING). Everything
-  // below is budgeted against this cadence.
+  // PHONE. How often a controller pings the display (MSG.PING). NOT a presence
+  // signal: it keeps the relay's own idle timeout from closing an
+  // application-quiet socket, and it is the WS-path latency sample.
   PING_INTERVAL_MS: 1000,
-  // DISPLAY. Silence longer than this drops a seat mid-game, through the same
-  // path as a real peer_left. Three missed pings, so a single dropped packet
-  // or a scheduling hiccup can never kick a live phone.
-  TIMEOUT_MS: 3000,
-  // DISPLAY. The cadence the display re-checks presence on (its own tick).
+  // PHONE. No PONG back inside this window and the latency chip reads "no
+  // signal". A phone-side display threshold only — nothing is dropped by it,
+  // here or on the big screen. Three missed pings, so one lost packet cannot
+  // blink the chip.
+  PONG_TIMEOUT_MS: 3000,
+  // DISPLAY. The cadence of the display's own tick: the self-heartbeat below,
+  // and the abandoned-race deadline. It sweeps no seats.
   TICK_MS: 1000,
   // DISPLAY. The self-heartbeat's deadline: no echo of MSG.HEARTBEAT back from
   // our own slot inside this window means OUR socket is half-dead, so force a
-  // reconnect rather than wait for TCP. Wider than TIMEOUT_MS because with the
-  // fastlane carrying inputs the display's socket sees only ~1 Hz of traffic,
-  // so this lone canary needs the margin.
+  // reconnect rather than wait for TCP. Wide because with the fastlane carrying
+  // inputs the display's socket sees only ~1 Hz of traffic, so this lone canary
+  // needs the margin. It is the one liveness detector left, and it watches
+  // exactly one socket: our own.
   HEARTBEAT_DEAD_MS: 6000,
   // DISPLAY. Every racer gone while late joiners wait: hold the room this long
   // for the dropped party to scan back in, then return to the lobby.

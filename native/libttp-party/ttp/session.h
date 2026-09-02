@@ -197,11 +197,11 @@ std::string seat_name(const SeatDefaults& d);
 // A full room REFUSES the seat and does NOT stamp it — the relay let them onto
 // the socket, but there is no chair. An EXISTING seat is a same-device
 // reconnect: the relay keys slots by clientId, so a returning phone lands back
-// on its old index and only needs its liveness clock restarted.
+// on its old index and only needs its presence lifted.
 struct AddPeerPlan {
   bool hasSeat = false;   // false = seat nobody (full room, or already seated)
   SeatDefaults seat;
-  bool stamp = false;     // record proof of life for this peer
+  bool stamp = false;     // run the seen walk for this peer (lift it if dropped)
 };
 AddPeerPlan add_peer_plan(bool has, double size, double maxPlayers, double colorIndex);
 
@@ -263,13 +263,12 @@ bool set_ready_decision(bool isHost, RoomState state, bool ready, bool current);
 
 // What a phase flip means, beyond the flip itself.
 //
-// restampConnected: race start re-stamps every CONNECTED seat's liveness, so
-//   silence accumulated in the lobby (where expiries are gated off) is not
-//   charged against the first countdown tick — a phone whose ping was throttled
-//   past the timeout before the host hit Start would otherwise be dropped one
-//   tick in. The window must run from race start. Deliberately NOT a blanket
-//   clear-disconnected: flipping a grace-pending seat back to connected here
-//   would orphan its reconnect QR.
+// restampConnected: NOT SPENT any more, and the field survives because the
+//   frozen session corpus pins it. It re-stamped every connected seat at race
+//   start so lobby silence was not charged against the first countdown tick —
+//   a rule that only meant anything while the display ran a silence sweep of
+//   its own. Presence is the relay's answer now (native/libttp-party/CLAUDE.md),
+//   so nothing measures silence and nothing needs the clock restarted.
 // freeDisconnected: back in the lobby, the race that reserved dropped seats is
 //   over, so reclaim any that never came back.
 // clearStandings: a fresh race and the lobby both start with no results board.
