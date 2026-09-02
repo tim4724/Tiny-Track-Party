@@ -797,8 +797,54 @@ private:
         // The paint entries this chunk was built with. Written once per track,
         // so it is kept only so the ablation debug can put the channel back.
         int paintN = 0;
+        // THE DECK'S FAR RIBBON. Two index ranges over the SAME vertex buffer —
+        // the shipped ribbon (mRoad.ib) and the far one (mRoadFarIb, built by
+        // buildRoadMesh) — and chooseDeckLod hands the chunk one of them per
+        // CELL, by that cell's camera distance to this box. Nothing else about
+        // the chunk changes: same entity, same material instance, same bounds
+        // (the far ribbon's corners are a subset of the fine one's).
+        utils::Entity entity;
+        uint32_t fullOff = 0, fullCnt = 0, farOff = 0, farCnt = 0;
+        filament::math::float3 boxMin{ 0 }, boxMax{ 0 };
+        int lod = 0;
     };
     std::vector<RoadChunk> mRoadChunks;
+    // See RoadChunk. The CPU copy stays alive for the run and is BURIED with
+    // the road (buryMeshBuffers' rule); the buffer dies in releaseScene.
+    filament::IndexBuffer* mRoadFarIb = nullptr;
+    std::vector<uint32_t> mRoadFarIdx;
+    // EVERY cell count draws the far ribbon past its gate, one player included
+    // (the user's call, 2026-09-02; it began as a split-only trade). The gate
+    // is the one below, so a big cell simply pushes it out — a 1080-line
+    // single cell past ~80 u, a 4K one past the fog.
+    //
+    // How far a far-ribbon chord may leave the rings it spans, in world units
+    // (buildRoadMesh), and how many pixels of that a cell may show: the two
+    // together put the near edge of the far ribbon where the chord error is
+    // under a pixel for THAT cell's size (renderCells). Dropping the gate
+    // altogether measured 1.2 ms more on the box's 4P heavy seconds and was
+    // shipped for an hour; the user wanted a threshold back.
+    static constexpr float kDeckLodTol = 0.08f;
+    static constexpr float kDeckLodChordPx = 2.0f;   // the user asked for aggressive
+    // Picks per chunk for one cell, and writes the cell's far-chunk bitmask
+    // into view globals 1..3 when the tint is armed (zeros otherwise).
+    void chooseDeckLod(filament::View* v, const filament::math::float3& cam,
+            float near, bool enabled);
+    // kDebugNoDeckLod: every chunk stays on the fine ribbon in every cell, so
+    // a sweep prices the far ribbon as interleaved arms.
+    bool mDeckLodOff = false;
+    // kDebugDeckLodTint: the far ribbon painted magenta, per cell, so the
+    // swap can be seen — it reuses the fine ribbon's vertices and colours and
+    // is otherwise invisible. It shipped ON while the trade was being judged;
+    // the user turned it off 2026-09-02.
+    bool mDeckLodTint = false;
+    static constexpr uint32_t kDebugNoDeckLod = 0x1000000;
+    static constexpr uint32_t kDebugDeckLodTint = 0x4000000;
+    // TTP_DEBUG_DECK_LOD_ALL — SET draws EVERY chunk with the far ribbon, gate
+    // or no gate, own car included: what the trade looks like where the eye
+    // can resolve it, which past the gate it cannot.
+    static constexpr uint32_t kDebugDeckLodAll = 0x8000000;
+    bool mDeckLodAll = false;
     // Ditto for the whole-lap fallback chunk.
     std::vector<DeckDecal> mRoadInstLastMask, mRoadInstLastProf;
     int mRoadInstPaintN = 0;               // and its RoadChunk::paintN

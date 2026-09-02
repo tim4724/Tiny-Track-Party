@@ -81,7 +81,7 @@ fun RootScreen(game: GameCoordinator) {
                 // enum mirrors the model's rather than this shell's. Rendering the
                 // lobby here too keeps the switch total without inventing a board.
                 GameState.Screen.WELCOME, GameState.Screen.LOBBY -> LobbyScreen(state)
-                GameState.Screen.RACE -> RaceHud(state)
+                GameState.Screen.RACE -> if (!PerfDebug.hudHidden) RaceHud(state)
             }
         }
 

@@ -1355,6 +1355,11 @@ void TtpRenderer::debugFeatureMask(uint32_t mask) {
     // MASK_FLAT is the one non-inverted global: zero draws the shipped
     // picture (the tap), set replaces it with constant coverage.
     mDebugGlobals.z = (mask & kDebugDecalMaskFlat) ? 1.0f : 0.0f;
+    // The deck's far ribbon: renderCells reads these per frame (TtpRenderer.h
+    // says what each bit is for).
+    mDeckLodOff = (mask & kDebugNoDeckLod) != 0;
+    mDeckLodTint = (mask & kDebugDeckLodTint) != 0;
+    mDeckLodAll = (mask & kDebugDeckLodAll) != 0;
     // The merge ablation: flipping it marks both families dirty and the lazy
     // sites take the groups apart (restoring the originals) or regroup.
     const bool mergeOff = (mask & kFeatNoMerge) != 0;
@@ -1453,6 +1458,12 @@ void TtpRenderer::releaseScene() {
     // model" and destroys: the pool would have been silently inert.
     mAssetMeshKey.clear();
     destroyMesh(mRoad);
+    if (mRoadFarIb) { mEngine->destroy(mRoadFarIb); mRoadFarIb = nullptr; }
+    {
+        Mesh far;
+        far.idx.swap(mRoadFarIdx);
+        buryMeshBuffers(far);
+    }
     destroyMesh(mGround);
     destroyMesh(mGroundProxy);
     destroyMesh(mHills);

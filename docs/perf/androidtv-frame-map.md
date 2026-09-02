@@ -40,7 +40,7 @@ player is at, and every "settled" column below is pinned to it.
 |---|---|---|---|
 | 1 | 960x540 | 60 fps, 0 skips/s | 9.0 / 10.6 |
 | 2 | 960x540 | 60 fps, 0 skips/s | 9.4 / 11.5 |
-| 4 | **does not settle** — 960x540@30 ↔ 640x360@60 | 30 or 56 fps | 12.4 / 15.9 at 360 |
+| 4 | **does not settle** — 960x540@30 ↔ 640x360@60 *(2026-08-27; superseded below: 128 of 150 s at 60 fps on 2026-09-02)* | 30 or 56 fps | 12.4 / 15.9 at 360 |
 
 **FOUR PLAYERS NO LONGER HOLDS A RUNG.** The rule reaches 768x432@60 on the way
 down, holds a clean 60 with zero skips and a GPU p95 of 12-15 ms there for about
@@ -345,3 +345,116 @@ left is a single fault.
 inside `libGLESv2_powervr.so` and 31% kernel, with under 5% in Filament — the
 driver itself is the cost, which is the Vulkan default's whole justification,
 now with stacks under it.
+
+## The 4P frame is TWO frames, and the far deck is the one that costs (2026-09-02)
+
+Same box, same build lineage (`1.0-ae7e22ba`), Vulkan, tidepool, 4P pinned
+768x432. Read the readouts PER SECOND instead of folding the run, and the "tail"
+every table above describes turns out to be a periodic picture: about nine
+seconds a lap at GPU p50 ~11.5 ms, clean 60, zero skips — then about eight
+seconds at 20-21 ms, 40-50 fps, 10-20 skips/s. The expensive stretch is every
+cell looking down the start straight at the whole deck receding to the horizon
+(the host counter puts that frame at 590k indices against 330k, 238k of them the
+deck's). It recurs every ~17 s because that is the bench lap.
+`perf-race --timeline` prints this split now; a whole-race median cannot see it.
+
+**Only the expensive seconds are honest numbers.** The quiet seconds hold 60, so
+the GPU downclocks into the gap and their p50 is a PACED span: every ablation
+delta taken from them came back compressed two to three times. Rank on the
+heavy seconds and nothing else.
+
+**The fix is the deck's FAR RIBBON** (`RoadChunk`, `chooseDeckLod`): a second
+index buffer over the road's own vertices in which each strip draws a run of
+same-coloured rings as one quad, chord error capped at 0.08 u, and each chunk
+swapped onto it per cell where that chord is under a pixel for the cell's size
+(two pixels since — the arms are at the end of this section). Interleaved on
+ONE install, the bit verified on the device log:
+
+| arm | quiet 30% | vista 30% | clean seconds of 40 |
+|---|---|---|---|
+| far ribbon (near ≈ 17 u at 216 lines) | 10.94 / 10.95 | **15.40 / 15.84** | 33 / 32 |
+| fine ribbon everywhere (`0x100DFFC`) | 11.86 | **20.95** | 19 |
+
+Five milliseconds of a 16.7 budget on the stretch that decided the rung, for a
+picture that is pixel-flat at 1280x720 on the host (the far kerb bands, dashes
+and edge lines are the fine ribbon's own vertices, so they do not smear). An
+adaptive 4P race on the same build ran 60 fps / 0 skips typical and climbed
+480 → 540 → (a vista dip to 360) → 432 → 540 over its first ninety seconds,
+where the ledger above recorded it cycling 540@30 ↔ 360@60.
+
+**THE RULE THEN SPENT HALF THE RACE AT 30 FPS BY ITS OWN CHOICE**, read per
+second over 150 s of adaptive racing on the far-ribbon build: 480@60 for 10 s,
+then the half-rate 540 entry for 28 s, 360@60 for 30 s, 432@60 for 9 s, the
+half-rate entry for 27 s again — 54 of 150 s at 30 fps while every full-rate
+rung it left had just measured 58-60 fps. Two things in `render_scale.h` did
+that. A retreat with a fit went straight past the split's rungs to the
+half-rate entry, because a p95 fit on a vsync-quantised device reads 432 and
+360 as late; the backstop is now entered from the bottom rung only. And the
+entry's exit probe waited out the lap-sized up-hold, so one late second bought
+28 s at 30 fps; it probes on its own 8 s hold now (`kScaleEscapeProbeSec`).
+The same race afterwards:
+
+| operating point | seconds of 150 | mean fps | skips/s |
+|---|---|---|---|
+| 640x360 @60 | 100 | 59.7 | 0.3 |
+| 768x432 @60 | 28 | 60.0 | 0.0 |
+| 853x480 @60 | 10 | 59.0 | 1.0 |
+| 960x540 at half rate | 8 | 30.3 | 0.1 |
+
+Both rules are pinned in `render_scale_check` (the retreat from a mid rung
+lands on the bottom one, the retreat from the bottom rung still reaches the
+backstop, the probe fires on its own hold and not before). What the box still
+does: it takes the far ribbon's 432 only after a 28 s climb hold at 360, and a
+genuinely late vista second at 360 (16.5 ms, 3-6 skips) still dips it to the
+backstop for 8 s.
+
+**The chunk length is the ribbon's real near gate.** A chunk swaps whole and
+the chunk the camera is in is always near, so at 78 rings (37 u) the far
+ribbon could not start before the next boundary, 40-70 u ahead, whatever the
+distance gate said — which is why every nearer gate measured null. Cutting
+chunks at 26 rings (~12 u) takes the heavy seconds from 15.4-15.8 to
+14.2-14.5 ms; 13 rings reads 14.7 and adds 0.7 ms of frame thread (each chunk
+is a renderable and a decal fold). Shipped at 26; while the trade was being
+judged the ribbon was painted magenta (now `TTP_DEBUG_DECK_LOD_TINT`,
+0x400DFFC): 14.9 ms and 36 clean seconds of 40 with the tint on.
+
+**The gate's whole remaining value is 1.2 ms**, measured by drawing the whole
+deck on the ribbon (interleaved, pinned 432, two reps: heavy seconds 15.01 /
+14.84 → 13.56 / 13.91 ms, paced 10.6 → 9.6, clean seconds unchanged). That
+shipped briefly and was taken back for a threshold, which now applies at
+every cell count, one player included. The threshold then went to a
+TWO-pixel chord (`kDeckLodChordPx`, the gate halved: ~8 u in a 4P cell on the
+box): 14.63 / 14.65 ms on the heavy seconds, 34 clean seconds of 40 — a third
+of the way from the one-pixel gate to no gate.
+
+**What the far deck is NOT, priced at the same point:** its lateral slivers
+(a 6-strip far cross-section measured the same as the ring runs alone — the
+strips stay), a second, coarser level past 60 u (0.3 u chords, 48-ring spans:
+15.39/15.67 with, 15.26/15.48 without), a nearer gate (the chord bound at two
+pixels, ~8 u: 15.35), the rubber tap's anisotropy (0), the shadow layer's size
+(0), merged vs unmerged groups (0.15), the road material minus its dead masked
+block (≤ 0.5, inside a cross-install bracket), the Compose HUD window (0), and
+static dressing culled past 100 u (0.2 — the dressing's 3.8 ms is all inside
+the fog's near edge). **Moving the kit's and the lit sheets' matte light to the
+vertex stage is a LOSS** (16.05/16.63 against 15.4-15.8): at four cells the
+frame is vertex-bound, and the fragment work that trade removes is smaller than
+the vertex work it adds. What remains is per-fragment: the two deck taps at
+~1.5 ms each on the heavy seconds, the copies 1.3, the sheets 2.5 (they are lit
+`vlitns`, not free), cars 2.3.
+
+**Three method traps, each of which cost hours here:**
+
+- **A seven-digit mask.** `TTP_FEAT_ALL | 0x1000000` is `0x100DFFC`; `0x10DFFC`
+  sets bit 20 (`DECAL_CAPS_HALF`) and leaves the new bit clear. Every "off" arm
+  of the first pass was on, every within-build A/B of a bit above 0x800000 read
+  null by construction, and the real signal sat in the cross-build numbers
+  being written off as noise. **Log the state the bit gates from the renderer
+  and read it off the device before believing an A/B** — one `slog.i` line a
+  second found this in one arm.
+- **The absolute level moves with the BUILD, not the install.** Reinstalling one
+  APK reproduces its vista to ±0.2 ms; two builds that differ only in a
+  supposedly-inert path do not. There is no "install plateau" to correct for.
+- **A backgrounded `adb logcat | grep > file` outlives its arm** and keeps
+  appending, so a file re-read later carries later arms under later pids, and a
+  caller piping the sweep's output waits forever on the pipe the orphan still
+  holds. Capture with a plain child, kill it by PID, filter afterwards.

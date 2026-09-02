@@ -931,6 +931,19 @@ TTP_ABI const char* ttp_display_shadow_layer_json(int x, int y, int w, int h);
  * armed-path cost stay, which is what BOUNDS0 already prices. Attribution
  * only: every near shadow draws as a feathered square. */
 #define TTP_DEBUG_DECAL_MASK_FLAT 0x800000
+/* SET keeps every road chunk on the fine ribbon in every cell — the deck's far
+ * ribbon off (TtpRenderer::chooseDeckLod) — so a sweep prices it as interleaved
+ * arms on one launch. Inverted like TTP_DEBUG_NO_MERGE, and SEVEN hex digits
+ * wide: the arm is TTP_FEAT_ALL | this = 0x100DFFC. (0x10DFFC is CAPS_HALF.) */
+#define TTP_DEBUG_NO_DECK_LOD 0x1000000
+/* SET paints the far ribbon magenta, per cell, so the swap can be seen — the
+ * far ribbon reuses the fine ribbon's vertices and colours and is otherwise
+ * invisible: TTP_FEAT_ALL | this = 0x400DFFC. */
+#define TTP_DEBUG_DECK_LOD_TINT 0x4000000
+/* SET draws EVERY road chunk with the far ribbon in a split, the near ones
+ * under the cars included — the trade where the eye can resolve it:
+ * TTP_FEAT_ALL | this = 0x800DFFC. */
+#define TTP_DEBUG_DECK_LOD_ALL 0x8000000
 TTP_ABI void ttp_display_debug_features(unsigned int mask);
 
 #ifdef __cplusplus

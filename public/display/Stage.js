@@ -231,6 +231,11 @@ export class Stage {
     const dk = parseFloat(params.get('dresskeep'));
     this._dressKeep = Number.isFinite(dk) && dk >= 0 && dk < 1 ? dk : null;
     this._dressSheetsOff = params.get('dresssheets') === '0';
+    // DEBUG (?features=0x800DFFC): the whole ttp_display_debug_features mask,
+    // for the bits that have no knob of their own (the deck's far-ribbon ones).
+    // Seven hex digits: 0x800DFFC and 0x80DFFC are different masks.
+    const fm = parseInt(params.get('features'), 16);
+    this._features = Number.isFinite(fm) ? fm : null;
     this._superArmed = false;
     this._superReached = false;
     this._dpr = 1;           // real value comes from the _sizeCanvas below
@@ -303,6 +308,7 @@ export class Stage {
     this.display = await Display.create(this._canvas);
     if (this._dressKeep !== null) this.display.dressKeep(this._dressKeep);
     if (this._dressSheetsOff) this.display.dressSheets(false);
+    if (this._features !== null) this.display.debugFeatures(this._features);
     // RECONCILE THE SIZE THE RENDERER WAS BORN AT. ttp_display_create is handed
     // the buffer's dimensions and Display.create THEN fetches the .filamat
     // blobs, so `display` is null for a network round trip — and _onResize drops

@@ -834,11 +834,25 @@ Three consequences, and the first two have each been paid for once:
   kit is 20,033 vertices and 9,524 triangles, a palm is 190 of them, so a
   "simpler model" is not an asset anybody can author. What the 126k dressing
   vertices a frame are is INSTANCE COUNT.
-- **CUTTING GEOMETRY OFF THE DECK OR THE TERRAIN IS NOT WORTH THE COMPLEXITY.**
-  Chunking both for cullability and pairing the deck with a coarse twin cut the
-  frame's submitted vertices by a quarter and measured **−0.4 ms of GPU against
-  +0.55 ms of frame thread** — the renderable count is not free either. Both
-  were built, measured and reverted; the history has them.
+- **CUTTING GEOMETRY OFF THE DECK OR THE TERRAIN IS NOT WORTH THE COMPLEXITY —
+  ON THE RUN'S MEDIAN.** Chunking both for cullability and pairing the deck
+  with a coarse twin cut the frame's submitted vertices by a quarter and
+  measured **−0.4 ms of GPU against +0.55 ms of frame thread** — the renderable
+  count is not free either. Both were built, measured and reverted; the history
+  has them. **The exception is the deck's FAR RIBBON, and it is why the median
+  lied** (`RoadChunk`, `chooseDeckLod`, 2026-09-02): the 4P frame is not one
+  picture but two — nine seconds a lap of clean 60 and eight of every cell
+  looking down the straight at the whole deck, where the fine ribbon is
+  thousands of sub-pixel triangles a cell. A second index buffer over the
+  road's OWN vertices, one quad per run of same-coloured rings under a 0.08 u
+  chord, swapped in per cell past the distance where that chord would cover
+  `kDeckLodChordPx` pixels, takes about a third off those seconds on the
+  Android box — and moves the median by little, which is exactly what the
+  twin measured. It runs at EVERY cell count (the user's call); the gate is
+  pixel-derived, so a big cell simply pushes it out. A gate of zero (the
+  whole deck on the ribbon) was priced and declined; the frame map's
+  2026-09-02 section has every arm. Read a 4P lever on the heavy seconds
+  (`perf-race --timeline`), never the run.
 - **What WOULD pay is making a vertex cheaper to shade.** The props are static,
   the sun is static, and they are lit from scratch every frame in every cell.
   That is `fillRoadLight`'s argument one level out, worth the whole 1.1 ms with
@@ -848,8 +862,10 @@ Three consequences, and the first two have each been paid for once:
 a twenty-fifth of native pixels still leaves that frame at 19.8 ms against a
 16.7 ms budget: the resolution-independent floor is ~19 ms, of which ALL
 geometry is about 4. The rest scales with CELLS, not with pixels or vertices.
-Four players is a 30 fps mode, and a millisecond saved there buys resolution
-rather than frames.
+Four players WAS a 30 fps mode; since the deck's far ribbon and the
+render-scale retreat fixes of 2026-09-02 the reference box runs a 4P race at
+60 fps for all but a few seconds a lap (`docs/perf/androidtv-frame-map.md`),
+and a millisecond saved there buys resolution rather than frames.
 > **A PASS PRICED AT ONE PANEL SIZE SAYS NOTHING ABOUT ANOTHER.** That same
 > cell overlay pass, at the Apple TV's nine times the pixels, was the whole
 > reason a 4-way split missed 60 Hz — and what it cost was its VIEW's blend

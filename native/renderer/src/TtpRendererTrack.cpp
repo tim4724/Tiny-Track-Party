@@ -393,11 +393,13 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     mRoad.normals.reserve((size_t) N * 16 * 4);
     mRoad.uvs.reserve((size_t) N * 16 * 4);
     mRoad.idx.reserve((size_t) N * 16 * 6);
+    std::vector<uint32_t> quadKey((size_t) N * 16);
     for (uint32_t i = 0; i < N; i++) {
         const uint32_t ni = (i + 1) % N;
         const float3 colL = bandCol(kerbL, i), colR = bandCol(kerbR, i);
         const bool bare = bareAsphalt(i);
-        for (const Strip& st : STRIPS) {
+        for (int s = 0; s < 16; s++) {
+            const Strip& st = STRIPS[s];
             const bool onDeck = P[st.a].y == 0.0f && P[st.b].y == 0.0f;
             float3 cb;
             switch (st.kind) {
@@ -408,6 +410,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                 case K_GAP: cb = tb.edgeLines ? ASPHALT : SHOULDER; break;
                 default: cb = ASPHALT; break;
             }
+            quadKey[(size_t) i * 16 + s] = packLinear(cb, 1.0f);
             const uint32_t ringIdx[4] = { i, i, ni, ni };
             // uv0's arclength must NOT wrap with the ring index. ringIdx uses
             // ni = (i+1) % N, so on the last strip it is 0 and u would sweep from
@@ -472,15 +475,131 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                 math::half4{ 1.0f, 1.0f, 1.0f, 1.0f });
         fillRoadLight(tb);
     }
-    // Chunked: ~2.5k triangles a piece, each with its own bounds, so a chase
-    // camera pays for the stretch of circuit it can actually see instead of all
-    // ~59k triangles of it — per cell, every frame. (Three's ribbon is chunked
-    // at 160 rings for exactly this.) mRoad.verts still carries every quad
-    // corner as a point set — its readers (the AMB_FLAKE floor raster, the
+    // Chunked by RINGS, each chunk with its own bounds, so a chase camera pays
+    // for the stretch of circuit it can actually see instead of all ~59k
+    // triangles of it — per cell, every frame. mRoad.verts still carries every
+    // quad corner as a point set — its readers (the AMB_FLAKE floor raster, the
     // shadow bake's fit) take a max/bound per point, which merging the
     // diagonal's exact duplicates cannot change.
-    constexpr uint32_t kRoadChunkTris = 2500;
+    //
+    // 26 rings (~12 u) is the knee, and the far ribbon below is why it moved
+    // from 78: a chunk is swapped whole, and the chunk the camera is IN is
+    // always near, so the far ribbon cannot start before the next boundary —
+    // at 78 rings that was 40-70 u ahead however near the gate sat. Measured on
+    // the Android box at 4P/432 on the heavy seconds: 78 rings 15.4-15.8 ms,
+    // 26 rings 14.2-14.5, 13 rings 14.7 and +0.7 ms of frame thread (every
+    // chunk is a renderable and a decal fold). Draws are cheap under Vulkan;
+    // the fold is not free.
+    constexpr uint32_t kRoadChunkRings = 26;
+    constexpr uint32_t trisPerRing = 16 * 2;
+    constexpr uint32_t kRoadChunkTris = kRoadChunkRings * trisPerRing;
     if (!buildMesh(mRoad, true, roadInstance(), 4, kRoadChunkTris)) return false;
+
+    // THE FAR RIBBON: a second index buffer over the SAME vertices, per chunk.
+    // Along each strip, a run of rings painted one colour is drawn as ONE quad
+    // from the run's first ring to its last — the corners are vertices the fine
+    // ribbon already owns, so colours, uv0 (track space), the baked light and
+    // the chunk boundaries are all exactly the fine ribbon's. What a run gives
+    // up is the chord between its two rings, capped by kDeckLodTol against
+    // every ring it skips (bends, crests and width changes keep their rings)
+    // and by kDeckLodSpan. A split cell on the Android box is ~200 lines tall
+    // and a 0.48 u ring past ~17 u is under two pixels, so looking down a
+    // straight the fine ribbon is thousands of sub-pixel triangles a cell; the
+    // far ribbon is worth ~4 ms of that frame (chooseDeckLod has the numbers).
+    // Ring runs are the whole of it: a coarse CROSS-SECTION on top measured
+    // nothing further, so the sixteen strips stay.
+    constexpr uint32_t kDeckLodSpan = 16;
+    mRoadFarIdx.clear();
+    std::vector<std::pair<uint32_t, uint32_t>> farRange;
+    {
+        const auto quadBase = [&](uint32_t ring, int s) {
+            return (ring * 16u + (uint32_t) s) * 4u;
+        };
+        const auto chordOk = [&](uint32_t i, uint32_t j, const Strip& st) {
+            for (const int pt : { st.a, st.b }) {
+                const float3 a = pointAt(i, pt), b = pointAt(j % N, pt);
+                const float3 ab = b - a;
+                const float ab2 = std::max(dot(ab, ab), 1e-9f);
+                for (uint32_t r = i + 1; r < j; r++) {
+                    const float3 p = pointAt(r % N, pt);
+                    const float t = std::clamp(dot(p - a, ab) / ab2, 0.0f, 1.0f);
+                    const float3 q = a + ab * t;
+                    if (length(p - q) > kDeckLodTol) return false;
+                }
+            }
+            return true;
+        };
+        // A strip's vertex at a ring, on its a or b edge, inside a run: the
+        // fine ribbon's own corner (quad r's a/b at r, the run's last ring
+        // from quad r-1's far corners so the colour is the run's).
+        const auto vertAt = [&](uint32_t r, int s, bool bSide, uint32_t runEnd) {
+            if (r == runEnd) return quadBase(r - 1, s) + (bSide ? 2u : 3u);
+            return quadBase(r, s) + (bSide ? 1u : 0u);
+        };
+        for (uint32_t r0 = 0; r0 < N; r0 += kRoadChunkRings) {
+            const uint32_t r1 = std::min(N, r0 + kRoadChunkRings);
+            const uint32_t off = (uint32_t) mRoadFarIdx.size();
+            // Each strip's run boundaries first: the rings where its runs
+            // start, plus the chunk's end.
+            std::vector<uint32_t> bounds[16];
+            for (int s = 0; s < 16; s++) {
+                const Strip& st = STRIPS[s];
+                uint32_t i = r0;
+                while (i < r1) {
+                    bounds[s].push_back(i);
+                    uint32_t j = i;
+                    while (j + 1 < r1 && j + 1 - i < kDeckLodSpan
+                            && quadKey[(size_t) (j + 1) * 16 + s] == quadKey[(size_t) i * 16 + s]
+                            && chordOk(i, j + 2, st)) {
+                        j++;
+                    }
+                    i = j + 1;
+                }
+                bounds[s].push_back(r1);
+            }
+            // WATERTIGHT: a run's edge shared with a neighbouring strip
+            // carries that neighbour's boundary rings as extra vertices, so
+            // the two strips meet at the same corners wherever either one
+            // ends a run. Without this a strip spanning a chord beside one
+            // ending on the true ring leaves a T-junction crack of up to the
+            // chord bound — sub-pixel past the gate, a dark hairline up
+            // close (seen with every chunk forced far). The run is then a
+            // polygon between two polylines, triangulated by walking both.
+            for (int s = 0; s < 16; s++) {
+                const std::vector<uint32_t>& ba = bounds[(s + 15) % 16];   // shares point a
+                const std::vector<uint32_t>& bb = bounds[(s + 1) % 16];    // shares point b
+                const std::vector<uint32_t>& own = bounds[s];
+                for (size_t k = 0; k + 1 < own.size(); k++) {
+                    const uint32_t i = own[k], j = own[k + 1];
+                    std::vector<uint32_t> ra{ i }, rb{ i };
+                    for (uint32_t r : ba) if (r > i && r < j) ra.push_back(r);
+                    for (uint32_t r : bb) if (r > i && r < j) rb.push_back(r);
+                    ra.push_back(j); rb.push_back(j);
+                    size_t ia = 0, ib = 0;
+                    while (ia + 1 < ra.size() || ib + 1 < rb.size()) {
+                        const uint32_t A = vertAt(ra[ia], s, false, j);
+                        const uint32_t B = vertAt(rb[ib], s, true, j);
+                        if (ia + 1 < ra.size() && (ib + 1 == rb.size() || ra[ia + 1] <= rb[ib + 1])) {
+                            const uint32_t tri[3] = { A, B, vertAt(ra[ia + 1], s, false, j) };
+                            mRoadFarIdx.insert(mRoadFarIdx.end(), tri, tri + 3);
+                            ia++;
+                        } else {
+                            const uint32_t tri[3] = { A, B, vertAt(rb[ib + 1], s, true, j) };
+                            mRoadFarIdx.insert(mRoadFarIdx.end(), tri, tri + 3);
+                            ib++;
+                        }
+                    }
+                }
+            }
+            farRange.push_back({ off, (uint32_t) mRoadFarIdx.size() - off });
+        }
+        mRoadFarIb = IndexBuffer::Builder()
+                .indexCount((uint32_t) mRoadFarIdx.size())
+                .bufferType(IndexBuffer::IndexType::UINT)
+                .build(*mEngine);
+        mRoadFarIb->setBuffer(*mEngine, IndexBuffer::BufferDescriptor(
+                mRoadFarIdx.data(), mRoadFarIdx.size() * sizeof(uint32_t), nullptr));
+    }
 
     // Per-chunk material instances. Each ring contributes 16 strips of 2
     // triangles, so a chunk's triangle range maps straight back to an arclength
@@ -488,7 +607,6 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     mRoadChunks.clear();
     if (mRoadMaterial) {
         auto& rcm = mEngine->getRenderableManager();
-        const uint32_t trisPerRing = 16 * 2;
         const size_t triCount = mRoad.idx.size() / 3;
         const size_t perChunk = std::min<size_t>(kRoadChunkTris, triCount);
         size_t k = 0;
@@ -501,6 +619,24 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
             if (!ri) continue;
             const float sMin = (float) (t0 / trisPerRing) / N * L;
             const float sMax = (float) ((t0 + n) / trisPerRing + 1) / N * L;
+            RoadChunk chunk{};
+            chunk.entity = e;
+            chunk.fullOff = (uint32_t) (t0 * 3);
+            chunk.fullCnt = (uint32_t) (n * 3);
+            if (k < farRange.size()) {
+                chunk.farOff = farRange[k].first;
+                chunk.farCnt = farRange[k].second;
+            }
+            {
+                const size_t v0 = (t0 / trisPerRing) * 64, v1 = ((t0 + n) / trisPerRing) * 64;
+                float3 lo{ 1e30f }, hi{ -1e30f };
+                for (size_t v = v0; v < v1 && v < mRoad.verts.size(); v++) {
+                    const Vertex& vt = mRoad.verts[v];
+                    lo = min(lo, float3{ vt.px, vt.py, vt.pz });
+                    hi = max(hi, float3{ vt.px, vt.py, vt.pz });
+                }
+                chunk.boxMin = lo; chunk.boxMax = hi;
+            }
             MaterialInstance* mi = sceneInstance(mRoadMaterial);
             // Absent on the baked-light vroad — its ESM decode ran at build
             // (fillRoadLight); an old blob still carries the live one.
@@ -515,6 +651,9 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
             mi->setParameter("trackLength", L);
             mi->setParameter("invTrackLength", L > 0.0f ? 1.0f / L : 0.0f);
             mi->setParameter("chunkMid", (sMin + sMax) * 0.5f);
+            if (mRoadMaterial->hasParameter("chunkIndex")) {
+                mi->setParameter("chunkIndex", (float) k);
+            }
             // The silhouette array serves the masked loop's NEAR cars; the
             // far cars' carShadow layer is created after the rubber layer
             // below (the two share a lat span) and re-bound there.
@@ -530,7 +669,10 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                 }
             }
             rcm.setMaterialInstanceAt(ri, 0, mi);
-            mRoadChunks.push_back({ mi, sMin, sMax, {}, {} });
+            chunk.mi = mi;
+            chunk.sMin = sMin;
+            chunk.sMax = sMax;
+            mRoadChunks.push_back(std::move(chunk));
         }
     }
     // The whole-lap fallback instance carries the same build-time wrap

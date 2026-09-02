@@ -6,6 +6,12 @@ mode. It is reached iteratively — every phase below either buys milliseconds,
 which convert into lines, or buys certainty about a number that is currently
 contradictory.
 
+**Reached, 2026-09-02** — by the deck's far ribbon and two render-scale
+retreat rules, neither of which is a phase below: an adaptive 4P race on the
+box runs at 60 fps for 128 of 150 s, mostly at 640x360 with stretches at
+768x432. `androidtv-frame-map.md`'s 2026-09-02 section has the readings; the
+phases here stay as the ledger of what was priced on the way.
+
 A plan is not a rule, so this lives here rather than in
 `shells/androidtv/CLAUDE.md`, next to `androidtv-frame-map.md` and for the same
 reason: what is durable about the METHOD is in that file, what is a reading or a

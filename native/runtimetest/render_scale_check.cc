@@ -856,6 +856,41 @@ int main() {
               "…onto a sub-floor rung, not back to the floor's own pixels");
       }
       {
+        // THE BACKSTOP IS ENTERED FROM THE BOTTOM RUNG ONLY. A p95 fit taken
+        // on a vsync-quantised device reads the sub-floor rungs as late while
+        // they demonstrably hold 60 (the Android box's 432 and 360, 2026-09-02
+        // in the frame map), and the old retreat took a split from 480 or 432
+        // straight to the half-rate entry on that fit — half of every lap at
+        // 30 fps by the rule's choice. The split spends resolution before
+        // rate, so a retreat spends the rungs first.
+        operatingPoints(split, list);   // the 2-way probe above overwrote it
+        const RenderScalePoint at432 = list[2], at360 = list[1];
+        // A fit whose fixed half puts every full-rate rung over the target
+        // share and only the double budget in reach: 22 ms at 480 seen
+        // before, 20 at 432 now.
+        const RenderScaleSample prev480{list[3].scale, 22.0};
+        const RenderScalePoint fromMid =
+            renderScaleStep(at432, gpuAt(20.0), kLongHold, kSettled, prev480, split);
+        check(fromMid.divisor == 1 && fromMid.scale < at432.scale - 1e-9,
+              "late above the bottom rung, a split retreats to a full-rate rung");
+        nearly(fromMid.scale, at360.scale, "…the bottom one, not past it");
+        const RenderScalePoint fromBottom =
+            renderScaleStep(at360, gpuAt(19.0), kLongHold, kSettled, prev480, split);
+        check(fromBottom.divisor == 2,
+              "late AT the bottom rung, the backstop is still where it goes");
+        // AND THE STAY THERE IS A PROBE'S, NOT A LAP'S: parked at the
+        // backstop with a paced reading and no fit, the exit fires on
+        // kScaleEscapeProbeSec, well inside the climb hold.
+        const RenderScalePoint parked = list[0];
+        const RenderScalePoint soon = renderScaleStep(parked, gpuAt(14.5),
+            ttp::rt::kScaleEscapeProbeSec + 0.5, kSettled, kNoFit, split);
+        check(soon.divisor == 1 && soon.scale < parked.scale - 1e-9,
+              "the backstop's exit probes the bottom rung on its own short hold");
+        const RenderScalePoint notYet = renderScaleStep(parked, gpuAt(14.5),
+            ttp::rt::kScaleEscapeProbeSec - 0.5, kSettled, kNoFit, split);
+        check(notYet.divisor == 2, "…and not before it");
+      }
+      {
         // THE SAME BOX AT ONE CELL keeps the full rate, because the entry it
         // would fall into does not exist. The reverted design's failure, as a
         // gate.

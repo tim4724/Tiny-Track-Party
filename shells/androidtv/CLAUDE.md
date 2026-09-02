@@ -605,6 +605,17 @@ downclocked paced span and can never pass a share gate — the second one-way
 door, cured like the rate step's). The paragraphs below describe the
 half-rate backstop, which still exists and still gates on cells.
 
+**2026-09-02: the lock was lost to two shadow commits, and won back twice
+over.** The deck's far ribbon (`native/renderer/CLAUDE.md`, the per-cell LOD)
+took the straight's heavy seconds from ~21 ms to ~14.6 at 432, and two
+retreat rules in `render_scale.h` (the backstop is entered from the bottom
+rung only; its exit probes on `kScaleEscapeProbeSec`) stopped the rule
+charging 28 s at 30 fps for one late second. Read per second, an adaptive 4P
+race on this box is now at 60 fps for 128 of 150 s (100 s at 640x360, 28 at
+768x432) and at the backstop for 8. The per-second reading is
+`perf-race --timeline`; a run median cannot see any of this, and the ledger
+(`docs/perf/androidtv-frame-map.md`) carries why.
+
 **THE FLOOR ESCAPE SHIPPED, 2026-08-21, and it is what makes a 4-way split
 watchable.** Four cells cost more to SUBMIT than a whole 60 Hz budget however few
 pixels each one gets, so at the bottom rung this box was not choosing between a

@@ -298,6 +298,11 @@ material {
         // a = the cap on summed ink, so crossing trails darken but a donut spot
         // cannot go pure black.
         { type : float4, name : skidColor },
+        // Which road chunk this instance is, 0.. along the lap, for the far
+        // ribbon's debug tint below — the one thing a fragment cannot tell
+        // about the ribbon it is drawn with, since both ribbons index the same
+        // vertices (TtpRenderer::chooseDeckLod).
+        { type : float, name : chunkIndex },
         { type : sampler2d, name : gradeLut }
     ]
 }
@@ -660,6 +665,29 @@ fragment {
                     tc.x * materialParams.invTrackLength,
                     clamp(tc.y * materialParams.invSunVisLatSpan + 0.5,
                             0.0, 1.0))), 0.0).r;
+        }
+        // The far ribbon painted magenta for debugging
+        // (TTP_DEBUG_DECK_LOD_TINT).
+        // View globals 1..3 carry, PER CELL, which chunks that cell draws with
+        // the far ribbon: EIGHT bits per channel, global 1's .w arming it.
+        // A VIEW global because a material-instance parameter set between
+        // cells lands a frame late (Filament commits instances once, in
+        // beginFrame); eight bits because filamat's mobile fragment default
+        // is mediump, where a 24-bit mask in one float is infinity; and
+        // INTEGER ops because the float spelling (m / exp2(bit), then mod 2)
+        // is not exact even on exact inputs — a desktop GPU turned 240 into
+        // 238 whenever the quotient was a whole number, which is precisely a
+        // mask whose low bits are clear: the chunks nearest the camera.
+        highp vec4 t1 = getMaterialGlobal1();
+        if (t1.w > 0.0) {
+            highp vec4 t2 = getMaterialGlobal2(), t3 = getMaterialGlobal3();
+            int ci = int(materialParams.chunkIndex);
+            int ch = ci >> 3, bit = ci & 7;
+            float m = ch < 3 ? (ch < 1 ? t1.x : ch < 2 ? t1.y : t1.z)
+                    : ch < 7 ? (ch < 4 ? t2.x : ch < 5 ? t2.y : ch < 6 ? t2.z : t2.w)
+                    : ch < 11 ? (ch < 8 ? t3.x : ch < 9 ? t3.y : ch < 10 ? t3.z : t3.w)
+                    : 0.0;
+            if (((int(m + 0.5) >> bit) & 1) == 1) base = mix(base, vec3(0.8, 0.0, 0.8), 0.6);
         }
         // emissive.w = 0 → no second exposure; both terms are pre-exposed.
         material.emissive = vec4(

@@ -1,6 +1,9 @@
 package games.couchpad.tinytrack
 
 import android.util.Log
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 
 /**
  * The knobs, driven from `adb setprop`, for measuring this box.
@@ -19,6 +22,8 @@ import android.util.Log
  * adb shell setprop debug.ttp.shadow '{"rows":128}'   # car-shadow tuning, PARTIAL json (unset = shipped)
  * adb shell setprop debug.ttp.vk 1           # backend override: 1 Vulkan, -1 GL,
  *                                            # unset = VulkanPolicy (Vulkan when it can)
+ * adb shell setprop debug.ttp.hud 0          # compose NO race chrome (1/unset = shown):
+ *                                            # prices the Compose window's own GPU share
  * ```
  *
  * WHY PROPERTIES AND NOT A KEY. An ablation sweep is a dozen arms, each needing a
@@ -55,8 +60,23 @@ object PerfDebug {
     /** Empty = the shipped tuning, so an unset property is a no-op. */
     private var lastShadow = ""
 
+    /**
+     * `debug.ttp.hud 0` composes NO race chrome. An A/B knob for the one GPU
+     * consumer no Filament timer can see: the Compose window is a second 1080p
+     * surface on the same GPU, and every HUD redraw is a frame HWUI renders
+     * between two of ours.
+     */
+    var hudHidden by mutableStateOf(false)
+        private set
+
     /** Read the knobs and apply whatever moved. */
     fun poll(display: DisplayHost) {
+        val hud = getprop("debug.ttp.hud")?.toIntOrNull() ?: 1
+        if ((hud == 0) != hudHidden) {
+            hudHidden = hud == 0
+            Log.i(TAG, "race hud -> ${if (hudHidden) "hidden" else "shown"}")
+        }
+
         // THE READOUT ITSELF, which is off until this says otherwise (MainActivity
         // says why). A property rather than only KEYCODE_INFO for the reason every
         // knob here is one: it survives a force-stop, so a sweep that relaunches

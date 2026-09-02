@@ -168,6 +168,16 @@ inline constexpr double kScaleUpHoldSec = 28.0;
 // more than that. kScaleRecoverSec is derived from the ladder's own length,
 // below, where the rungs are.
 inline constexpr double kScaleUpRecoverHoldSec = 1.0;
+// THE BACKSTOP'S EXIT PROBE RUNS ON ITS OWN, SHORT HOLD. The half-rate entry is
+// where a split lands after one demonstrably late second, and a lap-sized hold
+// there charged 28 s at 30 fps for that one second — measured on the Android
+// box (docs/perf/androidtv-frame-map.md, 2026-09-02): every dip into the
+// backstop cost half a lap while the rung above it held a clean 60. A probe
+// costs one evidence window at most if wrong (kScaleDownHoldSec plus the
+// signal window), so the stay is sized to that and not to the climb hold: a
+// hopeless box parks at the backstop between probes as before, and a box the
+// backstop only caught mid-vista is back at full rate before the next one.
+inline constexpr double kScaleEscapeProbeSec = 8.0;
 // Below this the answer is "no change": a step the eye cannot see is not worth a
 // buffer reallocation, and it is what stops a scale pinned at a limit from
 // re-deciding every poll.
@@ -683,7 +693,18 @@ inline RenderScalePoint renderScaleStep(RenderScalePoint current,
       // and this arm can climb back out of a retreat it takes late.
       to = fit.ok ? pointForBudget(at, fit, list, n, limits) : at - 1;
       if (to >= at) to = at - 1;
-    } else if (sinceChangeSec >= upHold && at + 1 < n
+      // THE BACKSTOP IS ENTERED FROM THE BOTTOM RUNG ONLY. The fit that
+      // sends a retreat past the split's full-rate rungs straight to the
+      // half-rate entry is a p95 fit taken on a vsync-quantised device, and
+      // it has read a rung that demonstrably holds a locked 60 as one that
+      // cannot (the Android box's 432 and 360, docs/perf/androidtv-frame-map.md
+      // 2026-09-02: an adaptive race spent half its laps at 540@30 by this
+      // path while 432@60 measured 60 fps and 0 skips). The split's rungs
+      // spend resolution before rate by design, so a retreat spends them
+      // first: the entry below the bottom full-rate rung is reachable only
+      // from that rung, where the measurement at that scale is the evidence.
+      if (n > 1 && list[0].divisor > list[1].divisor && to == 0 && at > 1) to = 1;
+    } else if (sinceChangeSec >= std::min(upHold, kScaleEscapeProbeSec) && at + 1 < n
                && list[at].divisor > list[at + 1].divisor
                && list[at + 1].scale < list[at].scale - 1e-9) {
       // THE ESCAPE'S EXIT IS A PROBE BY RIGHT — the second one-way door, and
@@ -700,8 +721,9 @@ inline RenderScalePoint renderScaleStep(RenderScalePoint current,
       // held a locked 60. So the one climb that is out of a rate-trade into
       // STRICTLY FEWER PIXELS at full rate is taken on tenure alone: a wrong
       // probe is retreated within one evidence window on real present
-      // evidence, so a hopeless box pays one bad window per up-hold — the
-      // bounded cost every probe in this file already accepts. Only the
+      // evidence, so a hopeless box pays one bad window per probe hold
+      // (kScaleEscapeProbeSec, not the lap-sized up-hold) — the bounded
+      // cost every probe in this file already accepts. Only the
       // backstop -> first sub-floor rung transition matches the guard (the
       // rate step above the anchor moves at EQUAL pixels and keeps its own
       // arithmetic arm below).

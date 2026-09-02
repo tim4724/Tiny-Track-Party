@@ -44,6 +44,14 @@ const PLATFORM = arg('platform', 'web');
 const PLAYERS = parseInt(arg('players', '4'), 10);
 const TRACK = arg('track', 'tidepool');
 const SECONDS = parseFloat(arg('seconds', '45'));
+// Print every readout in order and split the run into its light and heavy
+// seconds. A race is not one picture: on the Android box at four players the
+// same lap is ~9 s of clean 60 followed by ~8 s at 40-50 fps every time the
+// cells look down the straight, and a run median reports neither. The light
+// seconds hold the panel's rate, so the GPU downclocks into the gap and their
+// cost reads as a PACED span — only the heavy band is a saturated number an
+// arm can be compared on. See docs/perf/androidtv-frame-map.md, 2026-09-02.
+const TIMELINE = process.argv.includes('--timeline');
 const SEED = parseInt(arg('seed', '1'), 10);
 // A REQUEST, not a cap (Stage): it pins the drawing buffer and switches the
 // adaptive render scale off, so a run measures one resolution instead of
@@ -237,6 +245,33 @@ function report(rows) {
   console.log(`\nverdict ${order[0]}   (`
       + ['good', 'warn', 'bad'].filter((v) => tally.has(v))
           .map((v) => `${v} ${tally.get(v)}`).join(' · ') + ')');
+  if (TIMELINE) timeline(rows);
+}
+
+// The run second by second, then its two bands. `light` is the mean GPU p50 of
+// the cheapest 30% of seconds and `heavy` of the dearest 30% — the split the
+// header of TIMELINE describes. Rows at a size other than the last readout's
+// are dropped: a run that ends on the results board, or an adaptive run that
+// moved, would otherwise mix two pictures into one band.
+function timeline(rows) {
+  const n = (v, d) => (v == null ? '   —' : v.toFixed(d));
+  const last = rows[rows.length - 1];
+  const same = rows.filter((r) => r.width === last.width && r.height === last.height
+      && r.cells === last.cells);
+  console.log('\n   s   fps  skips   gpu p50    p95');
+  same.forEach((r, i) => console.log(`${String(i + 1).padStart(4)}  ${String(r.fps).padStart(4)}`
+      + `  ${String(r.skips).padStart(5)}  ${n(r.gpu && r.gpu.p50, 1).padStart(8)}`
+      + `  ${n(r.gpu && r.gpu.p95, 1).padStart(5)}`));
+  const p50s = of(same, (r) => r.gpu && r.gpu.p50).sort((a, b) => a - b);
+  if (p50s.length < 4) return;
+  const band = Math.max(1, Math.floor(p50s.length * 0.3));
+  const mean = (xs) => xs.reduce((s, v) => s + v, 0) / xs.length;
+  const light = mean(p50s.slice(0, band));
+  const heavy = mean(p50s.slice(-band));
+  const clean = same.filter((r) => r.fps >= 60 && r.skips === 0).length;
+  console.log(`\nlight 30% of seconds: gpu p50 ${light.toFixed(2)} ms (a PACED span if they hold 60)`
+      + `\nheavy 30% of seconds: gpu p50 ${heavy.toFixed(2)} ms (the saturated picture — compare arms here)`
+      + `\nclean seconds (60 fps, 0 skips): ${clean} of ${same.length}`);
 }
 
 async function main() {
