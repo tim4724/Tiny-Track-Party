@@ -1,6 +1,7 @@
 // Trackside dressing: the scenery scatter, landmarks, water and clutter.
 // TtpRendererImpl.h carries what the topic files share.
 #include "TtpRendererImpl.h"
+#include "../generated/kit_colors.h"
 #include "TtpRendererKit.h"
 
 #include <cstdio>
@@ -190,6 +191,7 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
         mBoulders.idx.resize(mBoulders.verts.size());
         for (uint32_t i = 0; i < mBoulders.idx.size(); i++) mBoulders.idx[i] = i;
         accumulateNormals(mBoulders); // soup → flat faceted, the kit read
+        mBoulders.bakeLight = true;
         buildMesh(mBoulders);
     }
 }
@@ -544,6 +546,7 @@ void TtpRenderer::buildClutter(const TrackBin& tb) {
     }
     if (!mClutter.verts.empty()) {
         accumulateNormals(mClutter);
+        mClutter.bakeLight = true;
         buildMesh(mClutter, true, nullptr, 4, 2000);
     }
 }
@@ -856,6 +859,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         }
         if (!mLandmarks.verts.empty()) {
             accumulateNormals(mLandmarks);
+            mLandmarks.bakeLight = true;
             buildMesh(mLandmarks);
         }
         return;
@@ -1955,6 +1959,9 @@ void TtpRenderer::mergeInstancedSet(const gltfio::FilamentAsset* asset,
     auto& rcm = mEngine->getRenderableManager();
     const size_t nEnt = insts[0] ? insts[0]->getEntityCount() : 0;
     if (!nEnt) return;
+    // The kit colour table for this model, keyed by the same bytes hash; a
+    // model it does not know keeps the instanced, live-lit draw.
+    const ttp::kitcolors::Model* const colorModel = ttp::kitcolors::find(keyIt->second);
     for (auto* in : insts) {
         if (!in || in->getEntityCount() != nEnt) return;
     }
@@ -2000,8 +2007,11 @@ void TtpRenderer::mergeInstancedSet(const gltfio::FilamentAsset* asset,
             sources.swap(kept);
             if (sources.empty()) continue;
         }
+        const ttp::kitcolors::Mesh* colors = (colorModel && node->mesh >= 0
+                && (uint32_t) node->mesh < colorModel->meshCount)
+                ? &colorModel->meshes[node->mesh] : nullptr;
         buildMergedGroup(mMergedDress, sources, node->prims, dynamic,
-                kFeatDressing);
+                kFeatDressing, colors);
     }
 }
 

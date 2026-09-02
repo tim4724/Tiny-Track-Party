@@ -853,10 +853,20 @@ Three consequences, and the first two have each been paid for once:
   whole deck on the ribbon) was priced and declined; the frame map's
   2026-09-02 section has every arm. Read a 4P lever on the heavy seconds
   (`perf-race --timeline`), never the run.
-- **What WOULD pay is making a vertex cheaper to shade.** The props are static,
-  the sun is static, and they are lit from scratch every frame in every cell.
-  That is `fillRoadLight`'s argument one level out, worth the whole 1.1 ms with
-  no change to the picture.
+- **What DOES pay is making a vertex cheaper to shade.** The props are static,
+  the sun is static, and they were lit from scratch every frame in every cell.
+  The static SHEETS (hills, boulders, clutter, landmarks, gantry) now fold the
+  matte light into their vertex colours at build and draw unlit
+  (`Mesh::bakeLight`, `bakedMatteLight` — `fillRoadLight`'s argument one
+  level out), which the frame map prices at about 0.6 ms of the 4P heavy
+  seconds. A mesh that MOVES after build cannot take it (the light would
+  ride the transform), which is why it is opt-in. The one visible
+  difference is a vertex bake's own: a coarse smooth-normal cylinder is lit
+  between its vertices rather than per pixel. The kit COPIES are baked the
+  same way through their merged groups (below, "A STATIC dressing group is
+  BAKED"). What still lights live: the cars, the cone pool, the windmill,
+  the plane, the rockets, and the sun-shadow RECEIVERS (structures, berms,
+  ground), whose visibility tap is the shadow you see.
 
 **AND NONE OF IT REACHES 60 AT FOUR PLAYERS.** Sweeping the render scale down to
 a twenty-fifth of native pixels still leaves that frame at 19.8 ms against a
@@ -894,6 +904,20 @@ frame the draw count IS the cost. The rules that keep it honest:
   order matters twice: `destroyCarSlot` kills the groups BEFORE the asset
   whose material instances they share, and `releaseScene` destroys them
   while the source entities are still alive to be handed back.
+- **A STATIC dressing group is BAKED, not instanced** (`MergedGroup::baked`,
+  `bakeMergedRun`): the copies expand into one world-space mesh whose vertex
+  colour is texture x live baseColorFactor x matte light, drawn by the plain
+  unlit material — same draw count, no instance buffer, no tangents, no
+  sampler, nothing lit at draw time. Expanded because the light depends on
+  each copy's own rotation. The texture half comes from
+  `generated/kit_colors.h` (scripts/gen-kit-colors.mjs, gated by
+  codegen-freshness): the kit's atlas is flat swatches with a linear ramp
+  and every kit UV triangle is a point or a vertical line inside one, so a
+  vertex sample interpolates back to the picture — verified by pixel diff.
+  The FACTOR is read back from the live instance, never the GLB, because the
+  biome recolours untextured models by overriding it. A model the table does
+  not know (its bytes hash misses) keeps the instanced, live-lit draw. The
+  cars and the cone pool are dynamic and stay instanced.
 
 The item-box fade twins stay unmerged on purpose: they hold PER-INSTANCE
 materials, the one thing a shared instanced draw cannot express.

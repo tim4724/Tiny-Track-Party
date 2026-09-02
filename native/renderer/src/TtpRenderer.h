@@ -29,6 +29,7 @@
 // The GLB mesh reader behind the merged draw groups — header-only for the same
 // no-link-edge reason as theme.h above; ctests execute it on every leg.
 #include "ttp/glb_mesh.h"
+namespace ttp { namespace kitcolors { struct Mesh; } }
 #include "ttp/car_footprint.h"
 
 
@@ -596,6 +597,13 @@ private:
         // re-uploads it in place once the ESM exists.
         std::vector<filament::math::half4> custom0;
         uint8_t custom0Slot = 0;
+        // OPT-IN for a STATIC lit sheet: buildMesh folds the matte light into
+        // the vertex colours (bakedMatteLight) and draws it UNLIT, so nothing
+        // at draw time transforms a normal or shades a fragment. Only a mesh
+        // that never moves after build may say so — a transform would carry
+        // the baked light with it (the windmill's blades, the plane, the
+        // rockets and the kicked cones all stay lit at draw).
+        bool bakeLight = false;
         // Flat-decal template in car-local (x, z) with its rest alpha: the
         // conform rewrites `verts` into world space from this every frame.
         struct Local { float x, z; uint8_t a; };
@@ -1987,6 +1995,14 @@ private:
         utils::Entity ent;
         std::vector<MergedPrim> prims;
         filament::InstanceBuffer* ibuf = nullptr;
+        // THE BAKED FORM, for a STATIC group whose model the kit colour table
+        // knows (generated/kit_colors.h): the copies expanded into one
+        // world-space mesh with base colour x matte light folded per vertex,
+        // drawn unlit — no instance buffer, no tangents, no texture, no
+        // shading. `ent` is this mesh's entity and `prims`/`ibuf` stay empty.
+        // Expanded rather than instanced because the light depends on each
+        // copy's own rotation. bakeMergedRun builds it.
+        Mesh baked;
         std::vector<utils::Entity> sources;      // one gltfio node per instance
         std::vector<filament::math::mat4f> xf;   // mirror scratch
         float radius = 0;                        // mesh-local bound, world AABB
@@ -2073,7 +2089,10 @@ private:
     bool buildMergedGroup(std::vector<MergedGroup>& out,
             const std::vector<utils::Entity>& sources,
             const std::vector<ttp::rt::GlbMeshPrim>& prims, bool dynamic,
-            uint8_t feat);
+            uint8_t feat, const ttp::kitcolors::Mesh* colors = nullptr);
+    bool bakeMergedRun(MergedGroup& g, const std::vector<ttp::rt::GlbMeshPrim>& prims,
+            const ttp::kitcolors::Mesh& colors,
+            utils::Entity src0);
     void destroyMergedGroups(std::vector<MergedGroup>& groups);
     void mirrorMergedGroup(MergedGroup& g,
             filament::math::float3& mn, filament::math::float3& mx);
@@ -2110,6 +2129,20 @@ private:
         float hemiLux;
     };
     MatteRig matteRig(const TrackBin& tb) const;
+    // The matte light a static sheet's vertices are folded with at build
+    // (Mesh::bakeLight): ttpMatteShade's CPU twin at visibility 1, pre-exposed
+    // exactly as the shader's frame uniforms are. buildTrackScene sets it
+    // before the first sheet is built. fillRoadLight is the same twin for the
+    // road, which keeps its light in CUSTOM0 because the road's COLOUR is
+    // computed in the shader; a sheet's colour is its vertex, so the product
+    // can be stored directly.
+    struct BakeRig {
+        filament::math::float3 sunPre{ 0 }, sh0{ 0 }, sh1{ 0 };
+        float hemiPre = 0.0f;
+        bool valid = false;
+    };
+    BakeRig mBakeRig;
+    filament::math::float3 bakedMatteLight(const filament::math::float3& n) const;
     // Evaluate the road's matte light — ttpMatteLight's CPU twin, the fwidth
     // AA floor dropped exactly as vvis.mat's bake drops it — into
     // mRoad.custom0 as (ambient.rgb, NoL). It reads NO map: the deck's

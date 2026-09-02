@@ -970,6 +970,7 @@ void TtpRenderer::buildGantry(const TrackBin& tb) {
             toWorld(-halfSpan, CLEARH, BANNER_D / 2),
             toWorld(halfSpan, CLEARH, BANNER_D / 2), PYLON_C); // underside
     accumulateNormals(mGantry);
+    mGantry.bakeLight = true;
     buildMesh(mGantry);
 }
 
@@ -1011,6 +1012,16 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     fillGeometry(tb, geo);
     tb.buildArclengthIndex(); // frameAt's bin lookup — see the comment there
     setupTerrain(tb); // before the ground sheet and every builder that stands on it
+    {
+        // The light every static sheet is folded with (Mesh::bakeLight) —
+        // before the first of them is built, and pre-exposed the way Filament
+        // hands the same rig to the shader (lightColorIntensity.w and
+        // iblLuminance both carry the camera's exposure).
+        const MatteRig rig = matteRig(tb);
+        const float exposure = mCamera ? Exposure::exposure(*mCamera) : 0.0f;
+        mBakeRig = { rig.sunColor * (rig.sunLux * exposure / (float) M_PI),
+                     rig.sh0, rig.sh1, rig.hemiLux * exposure, mCamera != nullptr };
+    }
     const uint32_t carCount = (uint32_t) tb.carColors.size();
     const float groundY = tb.groundY;
 
@@ -1172,6 +1183,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
             }
         }
         if (shape == 1 || shape == 2) accumulateNormals(mHills);
+        mHills.bakeLight = true;
         if (!buildMesh(mHills)) return false;
     }
 

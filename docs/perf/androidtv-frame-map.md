@@ -438,7 +438,16 @@ static dressing culled past 100 u (0.2 — the dressing's 3.8 ms is all inside
 the fog's near edge). **Moving the kit's and the lit sheets' matte light to the
 vertex stage is a LOSS** (16.05/16.63 against 15.4-15.8): at four cells the
 frame is vertex-bound, and the fragment work that trade removes is smaller than
-the vertex work it adds. What remains is per-fragment: the two deck taps at
+the vertex work it adds. **Baking the sheets' light INTO their vertex
+colours is a WIN** (`Mesh::bakeLight`, later the same day) — it removes the
+vertex work rather than moving it: heavy seconds 14.63 / 14.65 → 14.08 /
+13.88 ms, paced 10.3 → 9.8, two reps each, pinned 432. The kit COPIES then
+went the same way through their merged groups (`MergedGroup::baked`: the
+instances expanded into one mesh, texture colour from `generated/kit_colors.h`
+x the live factor x light per vertex): 14.08 / 13.88 → 13.52 / 13.88, a third
+of a millisecond, pixel-identical to the live draw. Every static thing in the
+scene is now lit at build; what still lights live is the cars, the cone pool,
+the windmill, the plane, the rockets and the shadow receivers. What remains is per-fragment: the two deck taps at
 ~1.5 ms each on the heavy seconds, the copies 1.3, the sheets 2.5 (they are lit
 `vlitns`, not free), cars 2.3.
 

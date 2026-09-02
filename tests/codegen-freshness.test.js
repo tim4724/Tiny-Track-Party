@@ -62,6 +62,16 @@ const DERIVED = [
     gen: 'scripts/gen-track-defs-header.mjs',
     then: 'node scripts/gen-trackbuilder-corpus.mjs && native/scripts/build-runtime-web.sh',
   },
+  // The kit's per-vertex atlas colours, which the renderer folds a static
+  // copy's light into at scene build. A stale bake here is not a desync but a
+  // MISS: the key is the GLB's bytes, so a changed model falls back to live
+  // lighting and silently gives its milliseconds back.
+  {
+    what: 'native/renderer/generated/kit_colors.h',
+    from: 'public/assets/toycar/*.glb + Textures/*.png',
+    gen: 'scripts/gen-kit-colors.mjs',
+    then: 'native/scripts/build-runtime-web.sh',
+  },
   {
     what: 'tests/fixtures/protocol-corpus.jsonl',
     from: 'public/shared/protocol.js',

@@ -4,6 +4,7 @@
 #include <chrono>
 
 #include "TtpRendererImpl.h"
+#include "../generated/kit_colors.h"
 
 #include "ttp/glb.h"
 
@@ -243,7 +244,23 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
     // qtangent was a 16-byte fetch per vertex on the scene's biggest mesh.
     // m.normals stays populated; fillRoadLight reads it on the CPU instead.
     const bool baked = !m.custom0.empty();
-    const bool lit = !baked && !m.normals.empty() && mLitMaterial != nullptr;
+    // A static sheet folds its light into its colours and draws unlit (see
+    // Mesh::bakeLight). Measured on the Android box the lit vertex was the
+    // dressing's cost — ~28 ns against the deck's ~7 baked — not the fragment.
+    const bool fold = m.bakeLight && !baked && !m.normals.empty()
+            && materialInstance == nullptr && mBakeRig.valid;
+    if (fold) {
+        m.normals.resize(m.verts.size(), float3{ 0, 1, 0 });
+        for (size_t i = 0; i < m.verts.size(); i++) {
+            Vertex& v = m.verts[i];
+            const float3 lin{ (float) (v.abgr & 0xff) / 255.0f,
+                              (float) ((v.abgr >> 8) & 0xff) / 255.0f,
+                              (float) ((v.abgr >> 16) & 0xff) / 255.0f };
+            const float alpha = (float) (v.abgr >> 24) / 255.0f;
+            v.abgr = packLinear(lin * bakedMatteLight(m.normals[i]), 1.0f, alpha);
+        }
+    }
+    const bool lit = !baked && !fold && !m.normals.empty() && mLitMaterial != nullptr;
     const bool uv = !m.uvs.empty();
     const uint8_t uvSlot = lit ? 2 : 1;
     const uint8_t customSlot = (uint8_t) (1 + (lit ? 1 : 0) + (uv ? 1 : 0));
@@ -733,6 +750,12 @@ void TtpRenderer::appendSphere(Mesh& mesh, int wseg, int hseg,
 
 // Area-weighted per-vertex normal accumulation: soup faces come out flat,
 // shared-ring surfaces smooth — the toy read either way.
+float3 TtpRenderer::bakedMatteLight(const float3& n) const {
+    const float NoL = std::min(1.0f, std::max(0.0f, dot(n, kToSun)));
+    return max(mBakeRig.sh0 + mBakeRig.sh1 * n.y, float3{ 0.0f }) * mBakeRig.hemiPre
+            + mBakeRig.sunPre * NoL;
+}
+
 void TtpRenderer::accumulateNormals(Mesh& m) {
     m.normals.assign(m.verts.size(), float3{ 0, 0, 0 });
     for (size_t i = 0; i + 2 < m.idx.size(); i += 3) {
@@ -875,10 +898,67 @@ const std::vector<ttp::rt::GlbMeshNode>* TtpRenderer::glbMeshes(uint64_t key,
     return it->second.empty() ? nullptr : &it->second;
 }
 
+// The baked form of one run (MergedGroup::baked): every copy's vertices in
+// world space, coloured with the kit table's texture colour times the LIVE
+// instance's baseColorFactor (the biome's recolour lands there, not in the
+// GLB) times the matte light of the copy's own world normal, as one unlit
+// mesh. Refuses — and the caller falls back to the instanced draw — when the
+// table and the decoded geometry disagree about a count, so a regenerated GLB
+// can never be drawn with another model's colours.
+bool TtpRenderer::bakeMergedRun(MergedGroup& g,
+        const std::vector<ttp::rt::GlbMeshPrim>& prims,
+        const ttp::kitcolors::Mesh& colors, utils::Entity src0) {
+    if (colors.primCount != prims.size()) return false;
+    auto& tcm = mEngine->getTransformManager();
+    auto& rcm = mEngine->getRenderableManager();
+    const auto ri0 = rcm.getInstance(src0);
+    if (!ri0) return false;
+    std::vector<float3> factor(prims.size(), float3{ 1.0f });
+    for (size_t p = 0; p < prims.size(); p++) {
+        if (colors.prims[p].vertexCount * 3 != prims[p].pos.size()
+                || prims[p].normal.size() != prims[p].pos.size()) {
+            return false;
+        }
+        const MaterialInstance* mi = rcm.getMaterialInstanceAt(ri0, p);
+        if (!mi || !mi->getMaterial()->hasParameter("baseColorFactor")) return false;
+        factor[p] = mi->getParameter<float4>("baseColorFactor").xyz;
+    }
+    const uint8_t layer = rcm.getLayerMask(ri0);
+    Mesh& m = g.baked;
+    for (const utils::Entity src : g.sources) {
+        const auto ti = tcm.getInstance(src);
+        if (!ti) return false;
+        const mat4f xf = tcm.getWorldTransform(ti);
+        const mat3f nm = transpose(inverse(mat3f{ xf[0].xyz, xf[1].xyz, xf[2].xyz }));
+        for (size_t p = 0; p < prims.size(); p++) {
+            const ttp::rt::GlbMeshPrim& sp = prims[p];
+            const uint8_t* rgb = colors.prims[p].rgb;
+            const uint32_t base = (uint32_t) m.verts.size();
+            const size_t nv = sp.pos.size() / 3;
+            for (size_t i = 0; i < nv; i++) {
+                const float3 pw = (xf * float4{ sp.pos[i * 3], sp.pos[i * 3 + 1],
+                        sp.pos[i * 3 + 2], 1.0f }).xyz;
+                const float3 nw = normalize(nm * float3{ sp.normal[i * 3],
+                        sp.normal[i * 3 + 1], sp.normal[i * 3 + 2] });
+                const float3 lin = float3{ rgb[i * 3] / 255.0f, rgb[i * 3 + 1] / 255.0f,
+                        rgb[i * 3 + 2] / 255.0f } * factor[p];
+                m.verts.push_back({ pw.x, pw.y, pw.z,
+                        packLinear(lin * bakedMatteLight(nw), 1.0f) });
+            }
+            for (const uint32_t k : sp.idx) m.idx.push_back(base + k);
+        }
+    }
+    if (!buildMesh(m)) return false;
+    g.ent = m.entity;
+    // Whatever layer the originals sit on (a sweep may have tagged the scene).
+    if (const auto ri = rcm.getInstance(m.entity)) rcm.setLayerMask(ri, 0xFF, layer);
+    return true;
+}
+
 bool TtpRenderer::buildMergedGroup(std::vector<MergedGroup>& out,
         const std::vector<utils::Entity>& sources,
         const std::vector<ttp::rt::GlbMeshPrim>& prims, bool dynamic,
-        uint8_t feat) {
+        uint8_t feat, const ttp::kitcolors::Mesh* colors) {
     if (sources.size() < 2 || prims.empty() || !mScene) return false;
     auto& rcm = mEngine->getRenderableManager();
     auto& tcm = mEngine->getTransformManager();
@@ -959,6 +1039,14 @@ bool TtpRenderer::buildMergedGroup(std::vector<MergedGroup>& out,
         g.dynamic = dynamic;
         g.feat = feat;
         g.sources = chunk;
+        // A static run the kit colour table covers is BAKED (MergedGroup::baked):
+        // same draw count, no instancing, nothing lit at draw time.
+        if (!dynamic && colors && mBakeRig.valid
+                && bakeMergedRun(g, prims, *colors, sources[0])) {
+            for (size_t i = 0; i < n; i++) mScene->remove(g.sources[i]);
+            out.push_back(std::move(g));
+            continue;
+        }
         g.xf.assign(n, mat4f{});
         float r2 = 0;
         for (const auto& sp : prims) {
@@ -1087,6 +1175,10 @@ void TtpRenderer::destroyMergedGroups(std::vector<MergedGroup>& groups) {
     }
     auto& em = utils::EntityManager::get();
     for (MergedGroup& g : groups) {
+        if (!g.baked.entity.isNull() || g.baked.vb) {
+            destroyMesh(g.baked);   // owns g.ent: the mesh's entity
+            g.ent = {};
+        }
         if (!g.ent.isNull()) {
             mScene->remove(g.ent);
             mEngine->destroy(g.ent);
