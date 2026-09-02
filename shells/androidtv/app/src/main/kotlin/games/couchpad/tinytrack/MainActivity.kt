@@ -91,6 +91,21 @@ class MainActivity : ComponentActivity() {
         // mid-race.
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
+        // THE PANEL'S OWN LATENCY. Everything this shell can measure ends at
+        // SurfaceFlinger's present; the television then runs its picture
+        // processing on top, tens of milliseconds on most sets, unless the
+        // source asks for game mode over HDMI (Auto Low Latency Mode). This
+        // flag is that request; the box's HDMI output turns it into the
+        // signal. Whether the CONNECTED display honours it is the display's
+        // answer, logged so a box with a set that ignores it says so.
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            val lp = window.attributes
+            lp.preferMinimalPostProcessing = true
+            window.attributes = lp
+            Log.i("TtpDisplay", "minimal post-processing requested; display supports it: " +
+                    (display?.isMinimalPostProcessingSupported ?: false))
+        }
+
         // NO INPUT WHILE THE COVER IS UP, cleared the moment it lifts (the
         // LaunchedEffect below). This is not about the remote, it is about the
         // ANR: the boot is one unbroken main-thread stretch by design (rule 1,
