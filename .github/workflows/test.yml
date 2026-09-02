@@ -69,9 +69,14 @@ jobs:
     # Per-test sharding (fullyParallel in playwright.config.js) is what makes any
     # of these splits even; by FILE, cup-series alone would pin one shard.
     #
-    # 10 covers the slowest shard plus the retry the config arms, with room for a
-    # cold-cache run, and still trips on a genuine hang.
-    timeout-minutes: 10
+    # 10 covered the slowest shard plus the retry the config arms, with room for
+    # a cold-cache run, and still tripped on a genuine hang. What it did NOT
+    # cover was setup going wrong: `--with-deps` shells out to apt, and a slow
+    # mirror stalled it past the whole budget three times in one afternoon — the
+    # job was cancelled mid-download having run ZERO tests, and the only
+    # published signal was a red X on a green suite. So the budget is now split:
+    # the install step has its own cap below (it fails FAST and says what it was
+    # doing), and this covers that plus the 10 the tests actually want.
     strategy:
       fail-fast: false   # one shard's failure shouldn't hide the others' results
       matrix:
@@ -92,6 +97,7 @@ jobs:
     # (tests/CLAUDE.md says why) and whose libraries the stock image does not
     # carry — without it that shard dies on launch, and which shard draws it
     # moves with the sharding.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -113,7 +119,14 @@ jobs:
           # set and only downloads the delta.
           key: pw-browsers-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
           restore-keys: pw-browsers-${{ runner.os }}-
-      - run: npx playwright install --with-deps chromium webkit
+      - name: Install Playwright browsers
+        # Its OWN cap, so an apt stall cannot spend the tests' time. Four
+        # minutes is generous against a warm cache (~4 s) and a cold browser
+        # download; past that the mirror is not coming back, and a re-run is
+        # cheaper than the wait. Failing here names the step, which a job-level
+        # cancellation did not.
+        timeout-minutes: 4
+        run: npx playwright install --with-deps chromium webkit
       - name: Run E2E tests
         run: npx playwright test --shard=${{ matrix.shard }}/6
       - name: Upload traces on failure
