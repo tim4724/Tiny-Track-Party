@@ -866,7 +866,10 @@ Three consequences, and the first two have each been paid for once:
   same way through their merged groups (below, "A STATIC dressing group is
   BAKED"). What still lights live: the cars, the cone pool, the windmill,
   the plane, the rockets, and the sun-shadow RECEIVERS (structures, berms,
-  ground), whose visibility tap is the shadow you see.
+  ground), whose visibility tap is the shadow you see. Lighting the kit
+  material per VERTEX for what is left on it (the cars, the cones) measured a
+  null even after the dressing was baked out of it: the fragment shade it
+  removes is worth ~0.5 ms, and the vertex light it adds costs the same.
 
 **AND NONE OF IT REACHES 60 AT FOUR PLAYERS.** Sweeping the render scale down to
 a twenty-fifth of native pixels still leaves that frame at 19.8 ms against a

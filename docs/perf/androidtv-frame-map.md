@@ -471,7 +471,26 @@ hills AFTER every other opaque (priority 5) to let the depth test reject the
 sand under the road measured a null (13.67 / 13.37 against 13.60 / 13.65) —
 the tiler already kills that overdraw. The grade LUT is 0.4 ms of the frame
 (`0x9FFC`, two reps: 14.10 / 14.00 → 13.62 / 13.66) and cannot be made
-cheaper in arithmetic; only an sRGB surface recovers it. What remains is per-fragment: the two deck taps at
+cheaper in arithmetic; only an sRGB surface recovers it.
+
+**Three more arms after the bakes, all nulls (4P pinned 432, heavy
+seconds, baseline 13.4-13.9 across the day):**
+
+- **An sRGB swapchain instead of the grade LUT.** Filament grants the flag
+  on this box's Vulkan (the renderer logged it), the picture is right, and
+  the frame does not move: 13.75 / 13.85. The store-side encode costs what
+  the three taps cost on this GPU. The change is parked as a patch; its one
+  open question is the Apple TV at 4K, where fragments dominate, and that
+  run is blocked until Xcode can sign a device build again.
+- **The kit material unshaded** (a temporary arm, base colour only, no
+  normal): 12.75 / 13.12 — the ceiling of what lighting the cars and cones
+  cheaper could buy, ~0.5 ms.
+- **The kit material lit per vertex**, the real way to spend that ceiling:
+  13.52 / 13.88. The vertex light costs what the fragment shade saved, even
+  with only the cars and the cone pool left on the material. Pixel-identical
+  otherwise (flat-shaded kit), so nothing to trade against.
+
+What remains is per-fragment: the two deck taps at
 ~1.5 ms each on the heavy seconds, the copies 1.3, the sheets 2.5 (they are lit
 `vlitns`, not free), cars 2.3.
 
