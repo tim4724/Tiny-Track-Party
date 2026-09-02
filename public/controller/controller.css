@@ -859,7 +859,13 @@ input[type=text]:disabled { opacity: 0.6; }
    width, buttons = ‹ | ITEM | ›. */
 #drive-hud {
   position: relative;                 /* anchors the floating .hud-top */
-  grid-template-rows: minmax(0, 1fr) 56%;
+  /* The controls' share went up with the identity row's lane: that height is
+     the point of floating .hud-top, and dead paper above the buttons is not
+     where a driver wants it. The MID row keeps the rest and the bar stays
+     CENTRED in it — sizing that row to its content instead would pin the bar to
+     the top of the screen, level with the name sticker, which is the one thing
+     this must not do. */
+  grid-template-rows: minmax(0, 1fr) 64%;
 }
 #game.mode-tilt #drive-hud {
   grid-template-columns: 1fr 1fr;
