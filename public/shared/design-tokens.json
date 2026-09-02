@@ -1,7 +1,7 @@
 {
   "generated": "derived from public/shared/theme.css by scripts/gen-design-tokens.mjs — edit the CSS, not this",
   "source": "public/shared/theme.css",
-  "count": 47,
+  "count": 48,
   "groups": [
     {
       "label": "car palette (mirrors CAR_COLORS in shared/protocol.js)",
@@ -88,7 +88,8 @@
         "shadow-float",
         "btn-ledge",
         "btn-drop",
-        "btn-sink"
+        "btn-sink",
+        "press-up"
       ]
     },
     {
@@ -711,6 +712,15 @@
       "resolved": "3px",
       "px": 3,
       "note": "travel while pressed"
+    },
+    {
+      "name": "press-up",
+      "var": "--press-up",
+      "group": "shadows (hard offset, ZERO blur — the die-cut drop)",
+      "type": "raw",
+      "value": "0.05s",
+      "resolved": "0.05s",
+      "doc": "How long the spring BACK takes. Going down is always 0s (see .btn:active), so this is the only press duration there is — and every pressable surface in the game reads it, the phone's tiles included (controller.css). It was re-typed in seven places when it moved from 60ms to 50ms, which is six places to miss."
     },
     {
       "name": "safe-frac-x",

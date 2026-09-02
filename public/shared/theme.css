@@ -114,6 +114,12 @@
      ledge is always the difference, so the two can never drift apart. */
   --btn-drop:     4px;                                /* ledge depth at rest   */
   --btn-sink:     3px;                                /* travel while pressed  */
+  /* How long the spring BACK takes. Going down is always 0s (see .btn:active),
+     so this is the only press duration there is — and every pressable surface
+     in the game reads it, the phone's tiles included (controller.css). It was
+     re-typed in seven places when it moved from 60ms to 50ms, which is six
+     places to miss. */
+  --press-up:     0.05s;
 
   /* -- safe zone (TV overscan) ---------------------------------------------
      A television may crop the edges of the picture it is handed, and neither
@@ -208,17 +214,22 @@ body {
   background: var(--btn-bg);
   box-shadow: 0 var(--btn-drop) 0 var(--btn-ledge);
   cursor: pointer;
-  /* SHORT, and short for a reason. The press once read as missing entirely, and
-     the cause was a re-render destroying the element mid-animation, not the
-     duration — so this stayed at 60ms rather than being cut to zero, which felt
-     harsh. Long enough to be a movement, short enough that the shortest real
-     tap still arrives. */
-  transition: transform 0.06s ease, box-shadow 0.06s ease, filter 0.06s ease;
+  /* ASYMMETRIC, and that is the whole point. Going DOWN is instant (see the
+     pressed rule below): the finger is already there, so any duration at all is
+     time the button spends not yet looking pressed — 30ms of ease measured as
+     33-43ms from touch to settled, because the transition cannot start until
+     the frame after the class lands. Coming BACK UP is where the movement goes,
+     at 50ms, so the button springs rather than snapping: cutting BOTH ends to
+     zero was tried once and read as harsh, which is what that was really about.
+     Every pressed surface on the phone shares this pair; see the tiles in
+     controller.css. */
+  transition: transform var(--press-up) ease, box-shadow var(--press-up) ease, filter var(--press-up) ease;
 }
 .btn:hover { filter: brightness(1.04); }
 .btn:active, .btn.held, .btn.is-pressed {
   transform: translateY(var(--btn-sink));
   box-shadow: 0 calc(var(--btn-drop) - var(--btn-sink)) 0 var(--btn-ledge);
+  transition: transform 0s, box-shadow 0s, filter var(--press-up) ease;   /* down NOW */
 }
 .btn--brand  { --btn-bg: var(--brand); }
 .btn--accent { --btn-bg: var(--accent); }   /* red now — white text stands */
@@ -249,10 +260,13 @@ body {
   box-shadow: var(--shadow-pop);
   cursor: pointer;
   /* same press, and the same reasoning as .btn's transition above */
-  transition: transform 0.06s ease, box-shadow 0.06s ease, filter 0.06s ease;
+  transition: transform var(--press-up) ease, box-shadow var(--press-up) ease, filter var(--press-up) ease;
 }
 .icon-btn:hover:not(:disabled) { filter: brightness(1.03); }
-.icon-btn:active:not(:disabled), .icon-btn.held { transform: translate(2px, 2px); box-shadow: none; }
+.icon-btn:active:not(:disabled), .icon-btn.held {
+  transform: translate(2px, 2px); box-shadow: none;
+  transition: transform 0s, box-shadow 0s, filter var(--press-up) ease;
+}
 .icon-btn:disabled { opacity: 0.5; cursor: default; }
 
 /* Pause glyph — two rounded bars, sized off the button's text colour. */
