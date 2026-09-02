@@ -32,13 +32,21 @@ const { test, expect } = require('./helpers');
 
 // A small landscape phone with browser chrome, and the same again narrower.
 const SHORT = [{ width: 844, height: 300 }, { width: 667, height: 280 }];
+// The floor of the whole set: a Z Fold cover screen (280x653) turned landscape
+// with the browser bar up. The lobby has to FIT here — that is what the cap
+// floors and the sub-270px tier in controller.css are for — but Settings is
+// explicitly allowed to scroll below ~320px (its own tier says so, and the
+// scrolling path has its own test), so the sheet's no-scroll claim stops at
+// SHORT and everything else runs down to here.
+const FLOOR = { width: 653, height: 232 };
+const LOBBY = [...SHORT, FLOOR];
 
 const boxes = (page, sel) => page.$$eval(sel, (els) => els.map((e) => {
   const r = e.getBoundingClientRect();
   return { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
 }));
 
-for (const vp of SHORT) {
+for (const vp of LOBBY) {
   const at = `${vp.width}x${vp.height}`;
 
   test(`short viewport ${at}: all four cars are on screen, and the strip does not scroll`, async ({ page }) => {
@@ -88,6 +96,10 @@ for (const vp of SHORT) {
     });
     expect(clear).toBeGreaterThanOrEqual(0);
   });
+}
+
+for (const vp of SHORT) {
+  const at = `${vp.width}x${vp.height}`;
 
   test(`short viewport ${at}: the whole Settings sheet fits`, async ({ page }) => {
     await page.setViewportSize(vp);
@@ -153,3 +165,62 @@ test('narrow viewport: the stack reads choices, then the pick, then the way on',
   expect(new Set(boxes.map((b) => b.top)).size, 'four rows, not one').toBe(4);
   expect(new Set(boxes.map((b) => b.left)).size, 'one column').toBe(1);
 });
+
+// The name chip and the corner buttons are the same controls in the same corner
+// on the lobby and in the race, and a player steps straight from one to the
+// other — so they must be the same SIZE, and the transition must not resize
+// them. They were two sets of identical declarations for a while and drifted the
+// moment a short-viewport tier touched only the race's: the chip went to 1rem
+// against the lobby's 1.4rem and the buttons to 2.5rem against a 44px floor,
+// which is a third smaller, on exactly the phones where the two screens are
+// closest together. One rule each now (controller.css), and this is what says so.
+for (const vp of LOBBY) {
+  const at = `${vp.width}x${vp.height}`;
+  test(`short viewport ${at}: the name chip and corner buttons are one size across the lobby and the race`, async ({ page }) => {
+    await page.setViewportSize(vp);
+    const read = async (scenario, nameSel, btnSel) => {
+      await page.goto(`/controller/index.html?scenario=${scenario}&color=1`);
+      await page.waitForSelector(nameSel);
+      return page.evaluate(([n, b]) => {
+        const N = document.querySelector(n), B = document.querySelector(b);
+        const nb = N.getBoundingClientRect(), bb = B.getBoundingClientRect();
+        return { font: getComputedStyle(N).fontSize, nameH: Math.round(nb.height),
+          btnW: Math.round(bb.width), btnH: Math.round(bb.height) };
+      }, [nameSel, btnSel]);
+    };
+    const lobby = await read('lobby-host', '.lobby-me__name', '.settings-btn');
+    const race = await read('playing', '.hud-name', '.hud-btns .icon-btn');
+    expect(race).toEqual(lobby);
+    // …and the buttons still clear the fingertip floor the lobby gear documents.
+    expect(lobby.btnW).toBeGreaterThanOrEqual(44);
+  });
+}
+
+// .hud-top floats over the HUD rather than taking a row of it, so the identity
+// row and the steer bar MAY meet — an accepted trade, not a promise. What is
+// pinned is that it stays theoretical: the sticker is far left and the buttons
+// far right while the bar is centred, so nothing a driver reads or presses is
+// ever actually covered.
+for (const vp of [...LOBBY, { width: 844, height: 390 }]) {
+  const at = `${vp.width}x${vp.height}`;
+  for (const mode of ['playing', 'playing-buttons']) {
+    test(`short viewport ${at}: the floating ${mode} top bar covers nothing`, async ({ page }) => {
+      await page.setViewportSize(vp);
+      await page.goto(`/controller/index.html?scenario=${mode}&color=1`);
+      await page.waitForSelector('.hud-name');
+      const hits = await page.evaluate(() => {
+        const over = (a, c) => a.left < c.right && a.right > c.left && a.top < c.bottom && a.bottom > c.top;
+        const out = [];
+        for (const el of document.querySelectorAll('.hud-name, .hud-btns .icon-btn')) {
+          const a = el.getBoundingClientRect();
+          for (const c of document.querySelectorAll('.drive-controls > button, .steer')) {
+            if (over(a, c.getBoundingClientRect())) out.push(`${el.className} over ${c.id || c.className}`);
+          }
+          if (a.right > innerWidth + 1 || a.bottom > innerHeight + 1) out.push(`${el.className} off screen`);
+        }
+        return out;
+      });
+      expect(hits).toEqual([]);
+    });
+  }
+}

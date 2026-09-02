@@ -316,18 +316,22 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 
 /* Player identity — your name as a livery-tinted sticker (coloured bg, white
-   text; mirrors the display's cell name tags), leading the ribbon. Sized,
-   padded and rotated exactly like .hud-name: it is the SAME chip in the same
-   corner on the next screen. */
+   text; mirrors the display's cell name tags), leading the ribbon.
+   ONE rule for both screens, because it is one chip: it sits in the same corner
+   in the lobby and in the race, and the lobby -> game transition must not move
+   or resize it. It was two identical rules for a while and they drifted the
+   moment a short-viewport tier touched only one of them — the race chip went to
+   1rem while this one stayed at 1.4rem, on the very phones where the two screens
+   are closest together. The padding is tuned so the sticker's height lands on
+   the icon buttons beside it (.settings-btn / .hud-btns, sized by one rule for
+   the same reason). */
 .lobby-me { display: flex; max-width: 70%; }
-.lobby-me__name {
-  /* size matches .hud-name so the sticker reads as the same chip on both
-     screens (the gear beside it already does, see .settings-btn) */
+.lobby-me__name, .hud-name {
   font-family: var(--font-display); font-weight: 700; font-size: 1.4rem; line-height: 1;
   color: #fff; background: var(--car, var(--brand));
   border: 3px solid var(--ink); border-radius: var(--r-sm);
   padding: 0.39em 0.6em;
-  transform: rotate(-2deg);   /* same twist as .hud-name — it must not budge on the lobby→game transition */
+  transform: rotate(-2deg);
   box-shadow: var(--shadow-pop);
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
@@ -902,24 +906,15 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 .hud-top > * { pointer-events: auto; }
 .hud-btns { display: flex; gap: 0.55rem; margin-left: auto; }
-.hud-btns .icon-btn { width: 2.9rem; height: 2.9rem; font-size: 1.5rem; }
+/* sized with .settings-btn — see there for the 44px floor */
 /* The gear is DRAWN (inline SVG, currentColor) like .pause-glyph/.steer-glyph —
    the old ⚙ text glyph came from whatever system font had it: thin, small and
    different on every platform. Sized in em so both button tiers scale it; the
    size (and the widened centre hole in the path itself) is tuned so its ink
    weight sits level with the pause bars beside it. */
 .gear-glyph { width: 1.3em; height: 1.3em; fill: currentColor; }
-.hud-name {
-  font-family: var(--font-display); font-weight: 700; font-size: 1.4rem; line-height: 1;
-  color: #fff; background: var(--car, var(--brand));
-  border: 3px solid var(--ink); border-radius: var(--r-sm);
-  /* padding tuned so the sticker's height lands on the 2.9rem icon buttons
-     across the row — the smaller chip read as an afterthought beside them */
-  padding: 0.39em 0.6em;
-  transform: rotate(-2deg);
-  box-shadow: var(--shadow-pop);
-  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
+/* .hud-name is dressed with .lobby-me__name, up in the lobby ribbon: same chip,
+   same corner, one rule. */
 
 /* CouchPad shell: the name stickers STAY. The launcher's own name chip lives in
    its top bar, which is hidden in landscape — hiding our copies too left the
@@ -1558,24 +1553,24 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 .help-motion-fix em { color: var(--ink); font-style: normal; font-weight: 800; }
 
-/* The persistent gear trigger in the lobby — pinned to the ribbon's far right.
-   The theme's .icon-btn sticker square at the SAME size as the in-game gear
-   (.hud-btns), so the button reads as the same control on both screens. */
-/* 2.9rem is the size it SHARES with the in-game gear, and 44px is the floor a
-   fingertip needs. The rem alone was not enough: the short-viewport tiers at the
-   top of this file drop the root font to 14px and then 12.5px, which took this
-   square to 40px and then 36px — so the one control that is always on screen was
-   hardest to hit on the phones with least room, which is also the case where the
-   browser bar is up. Floored on the SQUARE rather than on a hit area reaching
-   out past it, because an overflowing target is invisible to the eye and not to
-   scrollWidth: it reads as an overflow to every guard that measures one
-   (scripts/lobby-fit-check.mjs). Below the tiers the gear is 3px wider than the
-   in-game one; they are never on screen together. */
-.settings-btn {
-  margin-left: auto; flex: none;
+/* The corner buttons: the lobby's persistent gear, and the race's gear + pause.
+   ONE rule, because they are the same control in the same corner on consecutive
+   screens — the chip beside them is shared for the same reason
+   (.lobby-me__name).
+   2.9rem is the size, and 44px is the floor a fingertip needs. The rem alone was
+   not enough: the short-viewport tiers at the top of this file drop the root
+   font to 14px and then 12.5px, which took the square to 40px and then 36px — so
+   the controls that are always on screen were hardest to hit on the phones with
+   least room, which is also the case where the browser bar is up. Floored on the
+   SQUARE rather than on a hit area reaching out past it, because an overflowing
+   target is invisible to the eye and not to scrollWidth: it reads as an overflow
+   to every guard that measures one (scripts/lobby-fit-check.mjs). */
+.settings-btn, .hud-btns .icon-btn {
+  flex: none;
   width: max(2.9rem, 44px); height: max(2.9rem, 44px);
   font-size: 1.5rem; line-height: 1;
 }
+.settings-btn { margin-left: auto; }
 
 /* ---- rotate overlay (portrait) ----
    The controller is landscape-only. Pure CSS: portrait shows this over
@@ -1644,9 +1639,12 @@ input[type=text]:disabled { opacity: 0.6; }
      still exactly one place that computes an edge. */
   :root { --edge-top: calc(max(var(--safe-top), 2px) + 4px); }
   #drive-hud { gap: 0.4rem 0.7rem; }
-  .hud-top { min-height: 1.8rem; }
-  .hud-name { font-size: 1rem; }
-  .hud-btns .icon-btn { width: 2.5rem; height: 2.5rem; font-size: 1.3rem; }
+  /* The race's name chip and corner buttons used to shrink here, and that is
+     all this tier ever bought: height for the row they sat in. That row does
+     not exist any more (.hud-top floats), so the shrink paid for nothing and
+     cost the one thing it should not — the same chip and the same gear were
+     smaller in the race than in the lobby, on exactly the phones where the two
+     screens are closest together. */
   .steer { width: clamp(11rem, 34vw, 18rem); }
   .results-title { font-size: 1.3rem; }
 }
