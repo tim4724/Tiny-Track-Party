@@ -420,6 +420,10 @@ void addPeerWalk(RoomFlow* flow, const PeerId& id, double nowMs, Value& effects)
     fields.emplace_back("ready", Value::Bool(plan.seat.ready));
     flow->addPlayer(id, fields);  // emits rosterchange -> the shell announces
   }
+  // The clock is threaded, not spent — seenWalk lifts and stamps nothing. It
+  // stays because dropping it here makes ttp_net_on_protocol_json's own nowMs
+  // unused (these two calls are its only readers), which trades one ignored
+  // parameter for three unnamed ABI ones. Not worth the churn; see seenWalk.
   if (plan.stamp) seenWalk(flow, id, nowMs, effects);
 }
 

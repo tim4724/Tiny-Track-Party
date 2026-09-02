@@ -288,7 +288,7 @@ TTP_ABI const char* ttp_net_on_protocol_json(int roomHandle, const char* type,
 TTP_ABI const char* ttp_net_on_close_json(int roomHandle, int roomClosed);
 
 /* A relay message. Routes slot-0 echoes (the heartbeat closes its loop here),
- * stamps liveness, and walks the peer switch: hello (cross-device claim,
+ * lifts a dropped seat back, and walks the peer switch: hello (cross-device claim,
  * seating, rename-vs-first-hello, welcome), leave, set_car, set_ready,
  * select_mode, ping (the PONG is composed here), default -> game-message.
  * `isSignal` is the shell's "the fastlane consumed this as an RTC signal" —
@@ -333,22 +333,25 @@ TTP_ABI const char* ttp_net_pick_json(int roomHandle);
 /* The 1 Hz liveness tick: the self-heartbeat state machine (in-flight pair
  * internal — it also resets under created/joined, BEFORE the shell's timer
  * guard can matter, so a heartbeat left in flight by a dropped socket cannot
- * survive into the fresh connection), then on a sweep the expiry drops, the
- * active-order re-sync and the abandoned-race deadline, in that order on the
- * one clock reading.
+ * survive into the fresh connection), then the active-order re-sync and the
+ * abandoned-race deadline, in that order on the one clock reading.
  *
- * TWO EDGES A NEW SHELL HITS. The sweep is GATED on the heartbeat: a shell
- * that polls this without wiring the relay's `_heartbeat` echo back through
- * the message walk reads its own socket as dead and silently stops expiring
- * seats. And the walk always re-syncs the active order off sessionHandle —
- * 0 WIPES the participant set (the sync is the set's definition, not a
- * refinement), so a room with no live race never answers "every participant
- * is gone", which is exactly what the abandoned-race policy wants. */
+ * IT DROPS NO SEAT. Presence is the relay's answer — peer_joined to peer_left
+ * — so this tick watches exactly one socket, our own. The detector it used to
+ * carry is gone; native/libttp-party/CLAUDE.md has why, and what it cost.
+ *
+ * THE EDGE A NEW SHELL HITS: the walk always re-syncs the active order off
+ * sessionHandle — 0 WIPES the participant set (the sync is the set's
+ * definition, not a refinement), so a room with no live race never answers
+ * "every participant is gone", which is exactly what the abandoned-race
+ * policy wants. */
 TTP_ABI const char* ttp_net_liveness_json(int roomHandle, int sessionHandle, double nowMs);
 
-/* Proof of life outside the message path (fastlane input): stamp, and lift a
- * dropped seat back to connected — the SINGLE writer that lifts disconnection;
- * ttp_net_on_peer_message_json runs this same walk internally. */
+/* Traffic outside the message path (fastlane input): lift a dropped seat back
+ * to connected — the SINGLE writer that lifts disconnection;
+ * ttp_net_on_peer_message_json runs this same walk internally. It records no
+ * clock: nothing expires, so `nowMs` is carried for the shells' convenience
+ * and spent by nothing. */
 TTP_ABI const char* ttp_net_on_seen_json(int roomHandle, const char* peerIdJson, double nowMs);
 
 /* The drained hostchange event's body, taking the event's own hostPeerIndex:
@@ -357,10 +360,10 @@ TTP_ABI const char* ttp_net_on_seen_json(int roomHandle, const char* peerIdJson,
  * forever), then announce. */
 TTP_ABI const char* ttp_net_host_change_apply_json(int roomHandle, const char* hostPeerIdJson);
 
-/* The drained statechange event's body: restamp connected seats on a race
- * start (never a blanket clear-disconnected — it would orphan a grace-pending
- * seat's QR), free disconnected seats on LOBBY, drop the room's retained
- * standings board, publish. Only the publish is a shell's to perform. */
+/* The drained statechange event's body: free disconnected seats on LOBBY, drop
+ * the room's retained standings board, publish. Only the publish is a shell's
+ * to perform. `nowMs` is spent by nothing — the race-start re-stamp it fed
+ * belonged to the silence sweep that no longer exists. */
 TTP_ABI const char* ttp_net_state_change_apply_json(int roomHandle, const char* to,
                                                     double nowMs);
 

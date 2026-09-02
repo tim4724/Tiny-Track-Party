@@ -693,10 +693,9 @@ final class PartyNet {
     /// Drain and re-fire, after every walk (the walks mutate; the ABI queues).
     ///
     /// The hostchange/statechange bodies are walks themselves: what a host
-    /// promotion or a phase flip implies (the ready-clear, the countdown
-    /// restamp, the lobby sweep of dropped seats, when to republish) is decided
-    /// and MUTATED inside the engine; the effects that come back are performed
-    /// like any other walk's.
+    /// promotion or a phase flip implies (the ready-clear, the lobby sweep of
+    /// dropped seats, when to republish) is decided and MUTATED inside the
+    /// engine; the effects that come back are performed like any other walk's.
     ///
     /// The re-entrancy guard is the one real difference from the kit: a nested
     /// walk here may itself mutate (freeing disconnected seats on the lobby

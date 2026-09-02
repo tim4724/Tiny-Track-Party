@@ -329,10 +329,11 @@ HeartbeatTick heartbeat_tick(bool inRoom, bool hbPending, double hbSentAt, doubl
 // their livery, car, name and host slot. A same-device reconnect keeps its index
 // and never reaches here.
 //
-// `restamp` is not decoration: the seat's carried last-seen stamp is from BEFORE
-// the drop and is therefore already older than the timeout, so a reclaimed seat
-// would expire again on the very next tick without it. It is exactly the sort of
-// detail a reimplementation loses, which is why it is an explicit command.
+// `restamp` is NOT SPENT any more, and survives because the frozen session
+// corpus pins it. It was the reclaimed seat's stay of execution: the carried
+// last-seen stamp is from before the drop and so already older than the
+// timeout, so without it the seat expired again on the very next tick. Nothing
+// expires now — presence is the relay's answer (native/libttp-party/CLAUDE.md).
 //
 // `rejoinToken` is nullptr for an absent key, which claims nothing — as does any
 // token that is not a non-negative integer. See norm_index.

@@ -3595,7 +3595,7 @@ void netWalksMatchMultiCallPath() {
 
   // --- the race: statechange, drops, liveness, the claim ----------
   {
-    // Both rooms flip to countdown/playing; the statechange walk restamps.
+    // Both rooms flip to countdown/playing through the statechange walk.
     // A board from the PREVIOUS race is out when that happens — staged through
     // the same seam the race walk's executor writes it through, so the clear
     // below has something to drop and can be seen to have dropped it.

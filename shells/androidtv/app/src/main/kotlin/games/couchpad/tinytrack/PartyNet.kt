@@ -457,8 +457,8 @@ class PartyNet(
 
     /**
      * A relay message. The walk routes slot-0 echoes (the heartbeat closes its loop
-     * there), stamps liveness, and runs the whole peer switch — hello, leave,
-     * set_car, set_ready, select_mode, ping — inside the engine.
+     * there), lifts a dropped seat back, and runs the whole peer switch — hello,
+     * leave, set_car, set_ready, select_mode, ping — inside the engine.
      */
     private fun handleMessage(from: Any?, data: Any?) {
         if (data == null || data === JSONObject.NULL) return
@@ -917,9 +917,9 @@ class PartyNet(
      * Drain and re-fire, after every walk (the walks mutate; the ABI queues).
      *
      * The hostchange/statechange bodies are walks themselves: what a host promotion
-     * or a phase flip implies (the ready-clear, the countdown restamp, the lobby
-     * sweep of dropped seats, when to republish) is decided and MUTATED inside the
-     * engine; the effects that come back are performed like any other walk's.
+     * or a phase flip implies (the ready-clear, the lobby sweep of dropped seats,
+     * when to republish) is decided and MUTATED inside the engine; the effects that
+     * come back are performed like any other walk's.
      *
      * The re-entrancy guard is the one real difference from the kit: a nested walk
      * here may itself mutate (freeing disconnected seats on the lobby transition

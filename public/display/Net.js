@@ -275,9 +275,9 @@ export class DisplayNet extends GameNet {
     // Re-broadcast roster to controllers + notify our own UI whenever it shifts.
     this.flow.on('rosterchange', () => this._announce());
     // The bodies of these two are C++ walks now: what a host promotion or a
-    // phase flip implies (the ready-clear, the countdown restamp, the lobby
-    // sweep of dropped seats, when to republish) is decided and MUTATED inside
-    // the wasm; the effects that come back are performed like any other walk's.
+    // phase flip implies (the ready-clear, the lobby sweep of dropped seats,
+    // when to republish) is decided and MUTATED inside the wasm; the effects
+    // that come back are performed like any other walk's.
     this.flow.on('hostchange', ({ hostPeerIndex }) => {
       this._walk(this.flow.runWalk(() =>
         session.hostChangeApply(this.flow.handle, hostPeerIndex)));
