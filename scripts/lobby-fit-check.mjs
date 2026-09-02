@@ -27,7 +27,13 @@ const VIEWPORTS = [
   ['iphone14', 844, 390],   // the shell, or a browser with its bar retracted
   ['se', 667, 375],
   ['iphone14-bar', 844, 300], // …and the same two with the browser bar up
-  ['se-bar', 667, 280]
+  ['se-bar', 667, 280],
+  // The floor of the whole set: a Z Fold cover screen (280x653) turned
+  // landscape with the browser bar up. It is offered in the phone gallery and
+  // was in no sweep, which is how the track-tile cap's dvh term got to go
+  // NEGATIVE there — four 10px slivers with their schematics spilling 100px off
+  // the page. Nothing above 232px could see it.
+  ['zfold-bar', 653, 232]
 ];
 
 const app = await serveApp();

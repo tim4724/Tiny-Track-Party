@@ -771,12 +771,22 @@ input[type=text]:disabled { opacity: 0.6; }
    screen with (the identity ribbon, the action corner, this card's own title
    and its legend, and the gaps between) — and binds only under ~290px, where
    the fixed furniture, not the card's width, is what leaves no room.
-   max-WIDTH for both, because a square that meets a max-HEIGHT keeps its width
-   and letterboxes the schematic inside a wide, short box; capping the width
-   shrinks the square as a square. The tile's own padding and border ride along
-   on top of the map's cap, since the cap is the size the SCHEMATIC may reach.
-   tests/e2e/controller-short-viewport.spec.js is the gate. */
-.modepick__tracks { --track-tile: calc(min(5.5rem, 100dvh - 236px) + 0.5rem + 4px); }
+   And it needs a FLOOR, because that dvh term is a subtraction and subtractions
+   go negative: a 232px-tall viewport (Z Fold cover, landscape, browser bar up)
+   made it -4px, so the four tiles collapsed to 10px slivers while the
+   schematics inside them, sized by their own aspect box, spilled 100px past the
+   bottom of the page. A cliff, not a degradation. 3rem is what the tightest
+   viewport in the gallery (Z Fold cover, landscape, bar up: 653x232) can hold
+   while the corner still clears this card — and it only clears because the tier
+   at the foot of this file has already spent the legend and the tile labels.
+   Under the floor the maps stop shrinking and the card runs out of room, which
+   is the honest failure and not a collapse.
+   max-WIDTH for all three, because a square that meets a max-HEIGHT keeps its
+   width and letterboxes the schematic inside a wide, short box; capping the
+   width shrinks the square as a square. The tile's own padding and border ride
+   along on top of the map's cap, since the cap is the size the SCHEMATIC may
+   reach. tests/e2e/controller-short-viewport.spec.js is the gate. */
+.modepick__tracks { --track-tile: calc(max(3rem, min(5.5rem, 100dvh - 236px)) + 0.5rem + 4px); }
 /* Random's panel holds RUNS, not tracks, but wears the exact same grid and tile
    anatomy — a "?" square (.track-map--q) where a schematic would sit — so
    swapping a cup for Random moves nothing below the picker. */
@@ -832,10 +842,10 @@ input[type=text]:disabled { opacity: 0.6; }
    the livery lives in the stickers (name, steer fill), not the page.
 
    Landscape-only. One grid per input mode (#game.mode-tilt / .mode-buttons, set
-   by setInputMode): the name row up top, the steer indicator + the pause/settings
-   pair in a MID row (a row beside the bar, not above it — height is the scarce
-   axis), and the mode's controls taking all remaining height. .drive-controls is
-   display:contents so each button lands in its own grid area per mode. */
+   by setInputMode): the steer indicator in a stretchy MID row and the mode's
+   controls under it. .drive-controls is display:contents so each button lands in
+   its own grid area per mode. The identity row is NOT one of the rows — see
+   .hud-top. */
 #game {
   align-items: stretch; justify-content: flex-start; user-select: none;
 }
@@ -843,33 +853,48 @@ input[type=text]:disabled { opacity: 0.6; }
   flex: 1; min-height: 0;
   display: grid; gap: 0.6rem 0.9rem;
 }
-/* Both modes share one vertical rhythm: name row, then the stretchy MID row
-   (the steer bar floats with its space around it vertically), then the
-   controls row at a fixed share of the height. Only the columns differ:
-   tilt = ITEM | BRAKE sharing the width, buttons = ‹ | ITEM | ›. */
+/* Both modes share one vertical rhythm: the stretchy MID row (the steer bar
+   floats with its space around it vertically), then the controls row at a fixed
+   share of the height. Only the columns differ: tilt = ITEM | BRAKE sharing the
+   width, buttons = ‹ | ITEM | ›. */
 #drive-hud {
-  grid-template-rows: auto minmax(0, 1fr) 56%;
+  position: relative;                 /* anchors the floating .hud-top */
+  grid-template-rows: minmax(0, 1fr) 56%;
 }
 #game.mode-tilt #drive-hud {
   grid-template-columns: 1fr 1fr;
   grid-template-areas:
-    'name name'
     'mid  mid'
     'item brake';
 }
 #game.mode-buttons #drive-hud {
   grid-template-columns: 1fr 1fr 1fr;
   grid-template-areas:
-    'name name name'
     'mid  mid  mid'
     'left item right';
 }
 .drive-controls { display: contents; }
 
-/* Top row: the player name (livery sticker, like the display's
+/* The identity row: the player name (livery sticker, like the display's
    .cell-label__name) on the left, settings + pause pinned FAR RIGHT.
-   No place/lap on the phone — the standings live on the big screen. */
-.hud-top { grid-area: name; display: flex; align-items: center; min-height: 2.9rem; }
+   No place/lap on the phone — the standings live on the big screen.
+
+   It FLOATS over the HUD rather than taking a row of it. Height is the scarce
+   axis on this screen and this row was buying ~52px of it (its own 2.9rem plus
+   the grid gap) to hold a name nobody reads mid-race and two buttons that are
+   found by their corner. Out of flow, that height goes to the steer bar and the
+   controls, which is where a driver is actually looking. The two may in theory
+   meet: the bar centres in the row and a tall enough screen keeps them well
+   apart, a short one lets the sticker sit near it. That is the accepted trade,
+   not an oversight — nothing here is obscured by it, since the sticker is at the
+   far left and the buttons at the far right while the bar is centred.
+   z-index so the BUTTONS stay pressable wherever they land. */
+.hud-top {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 2;
+  display: flex; align-items: center; min-height: 2.9rem;
+  pointer-events: none;               /* the paper between them stays inert */
+}
+.hud-top > * { pointer-events: auto; }
 .hud-btns { display: flex; gap: 0.55rem; margin-left: auto; }
 .hud-btns .icon-btn { width: 2.9rem; height: 2.9rem; font-size: 1.5rem; }
 /* The gear is DRAWN (inline SVG, currentColor) like .pause-glyph/.steer-glyph —
@@ -1618,6 +1643,37 @@ input[type=text]:disabled { opacity: 0.6; }
   .hud-btns .icon-btn { width: 2.5rem; height: 2.5rem; font-size: 1.3rem; }
   .steer { width: clamp(11rem, 34vw, 18rem); }
   .results-title { font-size: 1.3rem; }
+}
+/* Below here a cup tile cannot hold two lines of name, its stars AND its own
+   padding: the left column is three rows of ~43px and the content wants 72. The
+   step is STRUCTURAL rather than another font trim — the name drops to ONE line
+   (the <br> shared/trackPicker.js sets is what makes every tile the same shape
+   at every other size, and here it is the thing that has to go) and ellipsises
+   instead. It fits: this column is ~115px wide per tile, and the longest cup
+   name is well inside that at this tier's type size. */
+@media (max-height: 270px) {
+  /* The legend is the one thing on this card that is a nicety: it explains the
+     stars, it never changes, and at this height its 22px is exactly what stands
+     between the detail card and the action corner landing on top of it. Gone,
+     not hidden — here the space is the point. */
+  .star-legend { display: none; }
+  /* A schematic tile drops its NAME and spends the height on the map instead.
+     At this size the label could only ever be "Tid…" — and a 47px schematic
+     that reads is worth more than a 30px one under four clipped words. The
+     button keeps its aria-label (shared/trackPicker.js), so nothing is lost to
+     a screen reader. Random's panel is exempt: its tiles carry a "?" and the
+     label IS the choice ("3 races"), so there the name is the content. */
+  .modepick__tracks .track-opt:has(.track-map:not(.track-map--q)) .track-opt__name { display: none; }
+  .mode-opt { row-gap: 0.3rem; padding: 0.3rem 0.35rem; }
+  .mode-opt__name br { display: none; }
+  .mode-opt__name {
+    /* one step down again, and the side padding above gives the rest: on one
+       line the longest name is now WIDTH-bound, and "Playroom Cup" wants every
+       pixel of a 96px tile. */
+    font-size: 1rem;
+    -webkit-line-clamp: 1; min-height: 1.15em;
+    white-space: nowrap; text-overflow: ellipsis;
+  }
 }
 @media (max-height: 356px) {
   .settings-card { gap: 0.45rem 0.9rem; padding: 0.6rem 1rem 0.8rem; }
