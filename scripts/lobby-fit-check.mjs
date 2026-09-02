@@ -40,7 +40,7 @@ const b = await launchBrowser({ realUser: false });
 let bad = 0;
 for (const [label, w, h] of VIEWPORTS) {
   const p = await b.page({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
-  for (const s of ['lobby-host', 'lobby-race', 'lobby-waiting', 'lobby-race-locked']) {
+  for (const s of ['lobby-host', 'lobby-race', 'lobby-race-waiting', 'lobby-waiting', 'lobby-race-locked']) {
     await p.goto(`http://127.0.0.1:${app.port}/controller/index.html?scenario=${s}&color=0`, { waitUntil: 'networkidle' });
     await p.waitForTimeout(900);
     const found = await p.evaluate(() => {

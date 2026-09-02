@@ -215,6 +215,23 @@ export function runControllerScenario(opts) {
       ], 'race');
       break;
 
+    case 'lobby-race-waiting':
+      // The host's RACE page with the grid NOT yet ready: Start is the one
+      // control on this page that needs everyone else, so it sits disabled with
+      // the floating note chip explaining why (renderReadyFoot). Its own screen
+      // because it is the state a host actually waits in — 'lobby-race' shows
+      // the moment after, and the chip only ever appeared on the CAR page in
+      // this gallery, which is the busier corner of the two.
+      show('lobby');
+      el('me-name').textContent = FAKE_NAMES[color];
+      setLobbyPage('race', true);
+      renderModePicker(DEFAULT_MODE, true);
+      renderReadyPreview(true, false, null, [
+        { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], color: COLORS[(color + 1) % COLORS.length], ready: true },
+        { name: FAKE_NAMES[(color + 2) % FAKE_NAMES.length], color: COLORS[(color + 2) % COLORS.length], ready: false }
+      ], 'race');
+      break;
+
     case 'lobby-race-locked':
       // The locked Playroom examined: the detail panel is the unlock pitch
       // (rules + per-cup checks), the pick itself untouched.

@@ -550,9 +550,9 @@ input[type=text]:disabled { opacity: 0.6; }
 /* over the corner's button: why it's gated / who we're waiting on. A floating
    sticker chip OUT OF FLOW (so text coming and going never moves the button,
    and an empty note costs no height), hung above the corner and centred on
-   it. It lands in the paper gap the wrapped card leaves, so it overlaps
-   nothing. Hidden by :empty (renderReadyFoot clears it rather than toggling a
-   class). */
+   it. It lands in the paper gap the wrapped card leaves. Hidden by :empty
+   (renderReadyFoot clears it rather than toggling a class), which is also the
+   hook the star legend reads below. */
 #ready-note {
   position: absolute; bottom: calc(100% + 0.4rem); left: 50%; transform: translateX(-50%);
   max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -724,6 +724,15 @@ input[type=text]:disabled { opacity: 0.6; }
   display: flex; gap: 1rem; justify-content: flex-end;
   margin-top: 0.5rem; flex: none;
 }
+/* The legend stands down while the corner is explaining itself. On the CAR page
+   the note chip lands in the paper the wrapped card leaves and overlaps nothing;
+   on the RACE page the card is taller and this legend is exactly what is under
+   the chip, so a host waiting on the grid read a sentence with the legend
+   sticking out either side of it (gallery: lobby-race-waiting, the screen that
+   found this). VISIBILITY, not display: the card keeps its height, so the legend
+   coming back when the last player readies up moves nothing — least of all the
+   button, which is the whole reason the chip is out of flow. */
+#lobby:has(#ready-note:not(:empty)) .star-legend { visibility: hidden; }
 .star-legend__item {
   display: flex; align-items: center; gap: 0.35rem;
   font-weight: 800; font-size: 0.92rem; color: var(--ink-2);
