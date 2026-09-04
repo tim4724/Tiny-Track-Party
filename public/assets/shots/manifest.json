@@ -31,9 +31,9 @@
       "file": "web/chain.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 71326,
-      "capturedAt": "2026-09-04T06:49:55.798Z",
-      "gitSha": "82224f4c"
+      "bytes": 71436,
+      "capturedAt": "2026-09-04T13:45:37.580Z",
+      "gitSha": "4b6409c0"
     },
     {
       "scenario": "countdown",
@@ -89,9 +89,9 @@
       "file": "web/countdown.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 71550,
-      "capturedAt": "2026-09-04T06:48:40.247Z",
-      "gitSha": "82224f4c"
+      "bytes": 71540,
+      "capturedAt": "2026-09-04T13:39:02.192Z",
+      "gitSha": "4b6409c0"
     },
     {
       "scenario": "finished",
@@ -135,9 +135,9 @@
       "file": "web/finished.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 47082,
-      "capturedAt": "2026-09-04T06:49:32.837Z",
-      "gitSha": "82224f4c"
+      "bytes": 46642,
+      "capturedAt": "2026-09-04T13:44:20.419Z",
+      "gitSha": "4b6409c0"
     },
     {
       "scenario": "intermission",
@@ -298,8 +298,8 @@
       "w": 1280,
       "h": 720,
       "bytes": 18622,
-      "capturedAt": "2026-09-04T06:47:55.125Z",
-      "gitSha": "82224f4c"
+      "capturedAt": "2026-09-04T13:37:29.331Z",
+      "gitSha": "4b6409c0"
     },
     {
       "scenario": "lobby-random",
@@ -517,9 +517,9 @@
       "file": "web/monster.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 56580,
-      "capturedAt": "2026-09-04T06:49:14.434Z",
-      "gitSha": "82224f4c"
+      "bytes": 58866,
+      "capturedAt": "2026-09-04T13:43:00.178Z",
+      "gitSha": "4b6409c0"
     },
     {
       "scenario": "paused",
@@ -563,9 +563,9 @@
       "file": "web/paused.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 14296,
-      "capturedAt": "2026-09-04T06:49:20.808Z",
-      "gitSha": "82224f4c"
+      "bytes": 14330,
+      "capturedAt": "2026-09-04T13:43:39.240Z",
+      "gitSha": "4b6409c0"
     },
     {
       "scenario": "podium",
@@ -655,9 +655,9 @@
       "file": "web/racing.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 56584,
-      "capturedAt": "2026-09-04T06:48:48.553Z",
-      "gitSha": "82224f4c"
+      "bytes": 63322,
+      "capturedAt": "2026-09-04T13:40:09.347Z",
+      "gitSha": "4b6409c0"
     },
     {
       "scenario": "racing-sidewinder",
@@ -689,9 +689,9 @@
       "file": "web/racing-sidewinder.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 47216,
-      "capturedAt": "2026-09-04T06:48:58.115Z",
-      "gitSha": "82224f4c"
+      "bytes": 56862,
+      "capturedAt": "2026-09-04T13:41:15.066Z",
+      "gitSha": "4b6409c0"
     },
     {
       "scenario": "reconnect",
@@ -735,9 +735,9 @@
       "file": "web/reconnect.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 57664,
-      "capturedAt": "2026-09-04T06:49:27.115Z",
-      "gitSha": "82224f4c"
+      "bytes": 57714,
+      "capturedAt": "2026-09-04T13:43:48.976Z",
+      "gitSha": "4b6409c0"
     },
     {
       "scenario": "results",
@@ -827,9 +827,9 @@
       "file": "web/rocket.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 56670,
-      "capturedAt": "2026-09-04T06:49:06.378Z",
-      "gitSha": "82224f4c"
+      "bytes": 58978,
+      "capturedAt": "2026-09-04T13:42:34.821Z",
+      "gitSha": "4b6409c0"
     },
     {
       "scenario": "welcome",

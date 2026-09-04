@@ -165,9 +165,11 @@ private fun CellChrome(cell: GameState.CellHUD, state: GameState) {
 }
 
 /**
- * `.cell-label__name` — the player's name in their LIVERY on a white sticker. The
- * livery is the text colour here, not a dot, which is why this is not the web's
- * `.chip` token: in a cell the car right below it is already the swatch.
+ * `.cell-label__name` — the player's name on a sticker FILLED with their livery,
+ * white text. Filled rather than livery text on white (which this was, and which
+ * the phone never did): across a four-way split the thing you hunt for is your own
+ * cell, and a solid block of your colour is found in peripheral vision where
+ * coloured GLYPHS are not.
  */
 @Composable
 private fun NameChip(name: String, colorIndex: Int) {
@@ -177,12 +179,12 @@ private fun NameChip(name: String, colorIndex: Int) {
         Modifier
             .tilt(-2f)
             .hardShadow(Sticker.popShadow, shape)
-            .background(Tokens.surface, shape)
+            .background(Tokens.car(colorIndex), shape)
             .stickerOutline(Sticker.border, shape)
             .padding(vertical = size * 0.3f, horizontal = size * 0.55f)
     ) {
         StickerText(
-            name, size = size, color = Tokens.car(colorIndex),
+            name, size = size, color = Color.White,
             // `max-width: 14em`, so a long name truncates rather than running
             // across the cell into the next player's picture.
             modifier = Modifier.widthIn(max = size * 14),
@@ -480,7 +482,7 @@ fun PauseOverlay(game: GameCoordinator) {
         // `rgba(255,246,235,0.72)` — the same warm glass the results board uses —
         // so the frozen race washes OUT toward paper and the card reads as sitting
         // on something lit. Scrimming with ink at 45% inverted the value of the
-        // whole screen: a name chip's white paper fell from 255 to 166.
+        // whole screen: the place badge's white paper fell from 255 to 166.
         //
         // (The web adds `backdrop-filter: blur(10px)`. There is no equivalent here:
         // Compose's RenderEffect blurs its own subtree, and what is behind this is

@@ -194,9 +194,11 @@ private struct CellChrome: View {
 
 // MARK: - The name chip
 
-/// `.cell-label__name` — the player's name in their LIVERY on a white sticker.
-/// The livery is the text colour here, not `theme.css`'s `.chip` colour dot:
-/// in a cell the car right below it is already the swatch.
+/// `.cell-label__name` — the player's name on a sticker FILLED with their livery,
+/// white text. Filled rather than livery text on white (which this was, and which
+/// the phone never did): across a four-way split the thing you hunt for is your
+/// own cell, and a solid block of your colour is found in peripheral vision where
+/// coloured GLYPHS are not.
 private struct NameChip: View {
     let name: String
     let colorIndex: Int
@@ -211,14 +213,14 @@ private struct NameChip: View {
     var body: some View {
         Text(name)
             .font(Fonts.display(Self.size, weight: .bold))
-            .foregroundStyle(Tokens.car(colorIndex))
+            .foregroundStyle(.white)
             .lineLimit(1)
             .truncationMode(.tail)
             .padding(.vertical, Self.size * 0.3)
             .padding(.horizontal, Self.size * 0.55)
             .background(
                 RoundedRectangle(cornerRadius: Sticker.radiusSmall, style: .continuous)
-                    .fill(Tokens.surface)
+                    .fill(Tokens.car(colorIndex))
                     .hardShadow(Sticker.popShadow)
             )
             .stickerOutline(Sticker.border, radius: Sticker.radiusSmall)

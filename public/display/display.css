@@ -605,18 +605,25 @@ html.cam-free #race { pointer-events: none; }
 }
 
 /* per-viewport (split-screen) label, anchored at each cell's top-left: the
-   player's name as a white sticker tag, the item slot beneath it. */
+   player's name as a LIVERY sticker tag, the item slot beneath it. */
 .cell-label {
   position: absolute; display: none; margin: 0.7rem; pointer-events: none;
 }
 /* name on top, the item slot stacked + left-aligned below it (place + lap
    moved out to the top-right .cell-rank readout) */
 .cell-label__row { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+/* FILLED with the player's livery, white text — the same tag the phone wears
+   (controller.css .lobby-me__name), so your name reads as one object across both
+   screens. Filled rather than livery text on white: across a 4-way split the
+   thing you hunt for is your cell, and a solid block of your car's colour is
+   found in peripheral vision where coloured GLYPHS are not. It also degrades
+   better on the palest liveries, where the name washes out either way round but
+   the tag still says whose cell this is. */
 .cell-label__name {
   font-family: var(--font-display); font-weight: 700; font-size: clamp(1.5rem, 2vw, 2.2rem);
   line-height: 1;
-  color: var(--c, var(--ink));
-  background: var(--surface);
+  color: #fff;
+  background: var(--c, var(--brand));
   border: 3px solid var(--ink); border-radius: var(--r-sm);
   padding: 0.3em 0.55em;
   transform: rotate(-2deg);
