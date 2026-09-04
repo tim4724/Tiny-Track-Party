@@ -108,8 +108,10 @@ const randomManifest = () => {
 // than a star row on every platform that has one — so a dice here lifted the
 // name above its neighbours' and the grid read as ragged
 // (tests/e2e/lobby-tile-grid.spec.js measures exactly that). It is not needed:
-// the grey these three wear IS "belongs to no cup", single-sourced with the
+// the grey the other two wear IS "belongs to no cup", single-sourced with the
 // display's own unknown-cup chips (NEUTRAL_COLOR), and they sit together.
+// The TOUR is the exception and takes no grey: it belongs to every cup rather
+// than to none, and wears one band of each instead (tourBands).
 const TOUR_LABEL = 'World Tour';
 const randomRuns = () => {
   const m = randomManifest();
@@ -137,10 +139,53 @@ export function cupTint(cupId, pct) {
 }
 
 // The neutral "no cup" grey as a wash — exported for the display's cup slot,
-// whose unknown-cup "?" chips wear it (same single source as the 🎲 tile's own
-// fill above, so "belongs to no cup" is one colour everywhere).
+// whose unknown-cup "?" chips wear it (same single source as the random tiles'
+// own fill above, so "belongs to no cup" is one colour everywhere).
 export function neutralTint(pct) {
   return towardWhite(NEUTRAL_COLOR, pct);
+}
+
+// The World Tour's fill: one BAND PER CUP, in the ladder's own order, raked a
+// few degrees off vertical and blended into each other so it reads as one run
+// through the ladder rather than as a progress bar. It is the one random run that is not "any biome" — it races one
+// draw from every cup — and wearing all five colours is the shortest way to say
+// so, next to four tiles each wearing one of them.
+//
+// Not a new idea: the DISPLAY already renders a tour pick as one "?" chip per
+// cup tinted with that cup's colour (native ui_model.cc, PickMode::TOUR), so
+// this is the phone saying what the TV says, out of the same CUP_COLOR table.
+//
+// UNLOCKED cups only, which is what the tour actually races: the authority's cup
+// list for it skips a locked cup outright (ttp_net.cc chooserCups — "the tour's
+// cup count, and so its race count, falls straight out of this list"), and the
+// TV's card filters the same way before drawing its chips (ttp_ui.cc). So the
+// band count IS the race count, and opening a cup visibly adds a band. Counting
+// the locked one would have the tile promise a race that never runs.
+//
+// Below two cups there is nothing to band and it falls back to the neutral grey,
+// which is also what a phone with a one-cup catalogue should show.
+const RAKE = '96deg';
+// How much of a band is spent BLENDING into its neighbour rather than holding
+// its own colour. Hard stops read as a chart — five cups filed side by side —
+// where the tour is one continuous run through all of them, and a soft edge
+// says that. It is deliberately small: this is a seam between two colours, not
+// a wash over them. Most of every band stays flat, which is what keeps the tile
+// countable at arm's length and keeps each cup's colour the one on its own tile
+// in the row above; at half a band and up it stops reading as bands at all.
+// The one place the theme's flat colour is deliberately not flat.
+const BLEND = 0.28;
+function tourBands(cupIds, pct) {
+  if (cupIds.length < 2) return towardWhite(NEUTRAL_COLOR, pct);
+  const step = 100 / cupIds.length;
+  const half = (step * BLEND) / 2;   // each boundary blends `half` into both sides
+  const stops = cupIds.map((id, i) => {
+    // The outer edges do NOT blend — there is nothing beyond them to blend into,
+    // and a band that fades at the tile's own border reads as a print error.
+    const from = i === 0 ? 0 : i * step + half;
+    const to = i === cupIds.length - 1 ? 100 : (i + 1) * step - half;
+    return `${cupTint(id, pct)} ${from.toFixed(2)}% ${to.toFixed(2)}%`;
+  });
+  return `linear-gradient(${RAKE}, ${stops.join(', ')})`;
 }
 
 // Build one schematic <svg>: a wide casing path under a narrower road path (the
@@ -390,7 +435,11 @@ export function buildModePicker({ gridEl, keyEl, catalog, progress, selection,
   // read in difficulty order, so anything in front of them cut that order in
   // half. Last, they read as what they are — what you reach for once the named
   // cups aren't what you want.
+  // The tour's own colour is every OPEN cup's, so it needs the ladder the cup
+  // tiles above were just built from.
+  const openCups = groups.filter((g) => !lockedOf(g.id)).map((g) => g.id);
   for (const r of randomRuns()) {
+    const tour = r.key === 'tour';
     tiles.push({
       key: r.key, label: r.label, locked: false,
       trail: () => subSpan(r.sub),
@@ -402,8 +451,9 @@ export function buildModePicker({ gridEl, keyEl, catalog, progress, selection,
         : sel.mode === 'random' && (r.key === 'endless' ? randomRaces === 0 : randomRaces !== 0),
       // Belonging to no cup, they have no colour of their own — a neutral grey
       // stands in so they still wear the same fill-and-drop mark the cups do.
-      tint: towardWhite(NEUTRAL_COLOR, REST_TINT),
-      pickTint: towardWhite(NEUTRAL_COLOR, PICK_TINT),
+      // The tour belongs to all of them instead, and wears one band of each.
+      tint: tour ? tourBands(openCups, REST_TINT) : towardWhite(NEUTRAL_COLOR, REST_TINT),
+      pickTint: tour ? tourBands(openCups, PICK_TINT) : towardWhite(NEUTRAL_COLOR, PICK_TINT),
       // Not filtered on the same pick: every random-family tap deals fresh
       // track(s) on the display, which is the whole gesture.
       onTap: () => pick({ ...r.pick })

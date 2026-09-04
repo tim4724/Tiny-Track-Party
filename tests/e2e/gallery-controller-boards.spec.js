@@ -127,6 +127,20 @@ test('phone race page: the grid carries stars and the lock, and the ribbon the k
   // sentence under the grid said the same thing a page-width lower down.
   await expect(page.locator('.mode-opt--locked')).toContainText('3/4');
   expect(await page.locator('.mode-opt--locked').evaluate((e) => !!e.onclick)).toBe(false);
+  // The World Tour wears one BAND PER UNLOCKED CUP, in the ladder's own order —
+  // the same thing the TV's card says with one tinted chip per cup
+  // (native ui_model.cc PickMode::TOUR). The preview has five cups with the
+  // Playroom locked, and a locked cup is not toured (ttp_net.cc chooserCups), so
+  // FOUR bands is the count that matches the races that would actually run.
+  // Its two neighbours stay the flat "belongs to no cup" grey.
+  const bg = (name) => page.locator('.mode-opt', { hasText: name })
+    .evaluate((e) => getComputedStyle(e).backgroundImage);
+  const tour = await bg('World Tour');
+  expect(tour).toContain('linear-gradient');
+  expect(new Set(tour.match(/(?:rgba?|color)\([^)]*\)/g)).size,
+    'one band per unlocked cup').toBe(4);
+  expect(await bg('Endless Run'), 'the other random runs stay flat').toBe('none');
+
   // The star key lives in the page's top ribbon, and ONLY on this page — the car
   // page's ratings name themselves in the tile, so a shared ribbon carrying a
   // race-page key onto it would be explaining a badge that isn't there.
