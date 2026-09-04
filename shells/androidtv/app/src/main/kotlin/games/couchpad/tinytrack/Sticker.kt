@@ -498,9 +498,14 @@ private fun Star(size: Dp, on: Boolean) {
         ).asComposePath()
         drawContext.transform.scale(this.size.minDimension / 24f, this.size.minDimension / 24f,
             androidx.compose.ui.geometry.Offset.Zero)
-        drawPath(p, fill)
+        // STROKE FIRST, THEN FILL — `paint-order: stroke fill` in theme.css, and
+        // for the reason spelled there: a stroke straddles the path, so drawing
+        // it last eats half its width out of the fill, and at the cup shelf's
+        // 16dp that turned a red star black with its points blunted. Under the
+        // fill, the outline is entirely outside the shape.
         drawPath(p, ink, style = androidx.compose.ui.graphics.drawscope.Stroke(
             width = 2.4f, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+        drawPath(p, fill)
     }
 }
 

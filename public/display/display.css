@@ -35,28 +35,38 @@ html {
   --safe-y-b: calc(var(--safe-frac-y) * 100vh + env(safe-area-inset-bottom));
 }
 
-/* The corner button row's geometry, declared once: it is FIXED over every
-   screen, so chrome that must not sit under it (the lobby's right rail) has to
-   derive its own clearance from these — see .race-rail.
+/* The corner button's SIZE, declared once: the row is FIXED over every screen,
+   so chrome that must not sit under it (the lobby's right rail) has to derive
+   its own clearance from this — see .race-rail.
 
-   --corner-inset is the offset from the SAFE edge, and --corner-top is that
-   edge plus it. The rail needs the first and not the second: it lives inside
-   #lobby, whose padding has already stepped past the safe zone, so clearing the
-   full --corner-top would step past it a second time and drop the pick card by
-   5vh of nothing. */
+   There is no offset token beside it because THE ROW SITS ON THE SAFE EDGE and
+   `#corner-btns` reads `--safe-x/y` directly. Every edge-anchored thing on this
+   page lines up on that one rectangle, so the buttons, the lobby's rails and the
+   sound hint share a margin instead of each carrying its own guess at one. It
+   also fixes the order they used to sit in: the row carried a 1.1rem inset of
+   its own while the lobby carried a bigger authored gutter, which put the
+   buttons OUTSIDE the content they float over. */
 html {
-  --corner-inset: 1.1rem;
-  --corner-top: calc(var(--safe-y) + var(--corner-inset));
-  --corner-edge: calc(var(--safe-x) + var(--corner-inset));
   --corner-btn: 3.4rem;
 }
 
 /* ---- Lobby ---- */
 /* Sticker chrome FRAMING the board (paper stage OR live 3D preview behind —
    the layout is identical in both states): two rails that run the full height
-   of the content band, and a footer band (seat dock) that closes it. One top
-   line, one bottom line, two gutters, and the middle left open for the track.
-   The hand-slapped tilts stay playful because the grid beneath is straight.
+   of the board, and the seat dock hanging from the bottom of the middle.
+   Everything hangs off ONE bottom line. The hand-slapped tilts stay playful
+   because the grid beneath is straight.
+
+   THE DOCK IS BESIDE THE RAILS, NOT BELOW THEM, and that is what keeps the
+   cars on screen. It used to be a footer row under a `1fr auto` grid, which
+   made the board's height the sum of the tallest rail AND the dock — and the
+   race rail does not shrink: ~280px of it (the corner-button clearance and the
+   cup shelf's five text rows) is authored in rem, so it costs the same on a
+   720p board as on a 1080p one. The sum therefore only fitted at 1080, and on
+   every shorter board — 16:9 ones included — the dock, last in the column, was
+   what went over the edge. The middle column is the free space the rails leave,
+   the dock is narrower than it at every size the wide layout is used at, and
+   in its own column it cannot push anything anywhere.
 
    Both rails are capped by VIEWPORT HEIGHT as well as width (the `min()` in
    the columns): a rail's cards are sized by their column, so on a squat board
@@ -68,25 +78,32 @@ html {
   display: grid;
   grid-template-columns:
     min(clamp(240px, 26vw, 440px), 38vh)
-    1fr
+    minmax(0, 1fr)
     min(clamp(220px, 24vw, 460px), 32vh);
-  grid-template-rows: 1fr auto;
-  /* the middle cell is deliberately EMPTY — what shows there is #scene, behind
-     the whole grid, not an item in it */
-  grid-template-areas:
-    "ticket .    race"
-    "dock   dock dock";
+  /* ONE ROW, full height. The middle column carries only the dock, hung from
+     its bottom edge; the rest of it is left open for #scene, which is behind
+     the whole grid rather than an item in it.
+
+     `minmax(0, 1fr)` and not `1fr`: a bare 1fr floors at the dock's min-content,
+     so a wide roster would push the middle column past the space the rails left
+     and take the whole board with it. The dock overflows its own column instead,
+     centred, into the gutters it shares with nothing. */
+  grid-template-areas: "ticket dock race";
+  /* The row is CLAMPED to the board, not floored at its tallest item: on a
+     board squat enough that even a full-height race rail does not fit, an auto
+     floor would grow the row and carry the dock off the bottom with it — the
+     exact failure this layout exists to remove. Clamped, the dock keeps the
+     bottom line and the cup shelf is what runs past it instead, which is the
+     right thing to lose: it is the long game, and the cars are the room. */
+  grid-template-rows: minmax(0, 1fr);
   column-gap: clamp(16px, 2vw, 36px);
-  row-gap: clamp(10px, 1.6vh, 20px);
-  /* generous side gutters: the rails frame the centre without hugging the
-     bezel (the middle stays open for the live track preview) */
-  /* The authored gutters, OUTSIDE the safe zone rather than instead of it: the
-     rails frame the centre without hugging the bezel, and on a set that crops
-     they still do. */
-  padding:
-    calc(var(--safe-y) + clamp(14px, 2.4vh, 26px))
-    calc(var(--safe-x) + clamp(28px, 3.6vw, 72px))
-    calc(var(--safe-y-b) + clamp(16px, 2.6vh, 30px));
+  /* THE SAFE ZONE IS THE GUTTER. The rails used to add an authored gutter on
+     top of it, which framed the centre well on a set that crops nothing and
+     read as two different margins beside the corner buttons. One rectangle
+     now: the rails, the button row and the hint all measure from it. The
+     middle stays open for the live track preview either way — what sets that
+     is the column widths above, not this padding. */
+  padding: var(--safe-y) var(--safe-x) var(--safe-y-b);
 }
 
 /* Left rail — the join ticket, which carries its own scan hint. The rail
@@ -177,17 +194,24 @@ html {
   display: flex; flex-direction: column;
   gap: clamp(10px, 1.4vh, 18px);
   /* clear #corner-btns, which is FIXED over every screen — without this the
-     pick card would sit under the mute/fullscreen row. */
-  padding-top: calc(var(--corner-inset) + var(--corner-btn) + 0.5rem);
+     pick card would sit under the mute/fullscreen row. The row and this rail
+     both start at the safe edge, so the clearance is the button plus air. */
+  padding-top: calc(var(--corner-btn) + 0.5rem);
 }
 
 /* Cup slot — empty pre-pick, the race card post-pick (renderCupSlot fills it).
-   The auto margin below it is what pins the SHELF to the rail's bottom: the
-   slot is empty (zero-height) until the host picks, and a `space-between`
-   rail would park the lone shelf at the TOP and then drop it when the pick
-   arrived. This way the shelf never moves. */
+   AUTO MARGINS BOTH SIDES: the pick floats in the middle of the rail's free
+   space and the shelf keeps the bottom line. Top-aligned, the card clung under
+   the corner buttons with the whole surplus dropped in one hole between it and
+   the shelf; split in two, the same surplus reads as air.
+
+   The margin below is also what pins the SHELF to the rail's bottom, and that
+   is the half that must not become `justify-content`: the slot is empty
+   (zero-height) until the host picks, and a `space-between` rail would park the
+   lone shelf at the TOP and then drop it when the pick arrived. This way the
+   shelf never moves. */
 .cup-slot {
-  margin-bottom: auto;
+  margin: auto 0;
   display: flex; justify-content: center;
 }
 /* the pick sits on its own white sticker card (mirroring the join ticket's
@@ -338,6 +362,8 @@ html {
    the dock never wraps. */
 .lobby-foot {
   grid-area: dock;
+  align-self: end;            /* the bottom line the rails also hang off */
+  min-width: 0;
   display: flex; flex-direction: column; align-items: center; gap: 0.8rem;
 }
 #players { display: flex; justify-content: center; gap: clamp(0.6rem, 1.1vw, 1.1rem); }
@@ -876,8 +902,8 @@ html.cam-free #race { pointer-events: none; }
    hover/press transitions untouched. */
 #corner-btns {
   position: fixed; z-index: 12;
-  top: var(--corner-top);
-  right: var(--corner-edge);
+  top: var(--safe-y);
+  right: var(--safe-x);
   display: flex; gap: 0.6rem;
   transition: opacity 0.4s ease;
 }
@@ -1016,12 +1042,21 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
   /* the stage clouds are placed for the wide layout — behind the stacked
      column they poke out from odd corners, so they sit this one out */
   .scene__cloud { display: none; }
+  /* The corner row measures from the safe zone, which this viewport has just
+     dropped: 2.5vw of a 380px window is 9px, and 9px is not a margin. Back to a
+     flat inset, matching the column's own side padding above. */
+  #corner-btns { top: 1rem; right: 1rem; }
 }
 
 /* ---- Toast ---- transient confirmation (e.g. "Copied"), bottom-centre.
    Hidden until .is-on is added; fades + slides in, then back out. */
 .toast {
-  position: fixed; left: 50%; bottom: 2.5rem; transform: translate(-50%, 1rem);
+  /* Clear of the safe edge rather than on it: the toast floats OVER the seat
+     dock, which now ends at that edge, so a flush pill would land on the last
+     row of seats. The flat 2.5rem it used to sit at was inside the crop margin
+     on a 4K board. */
+  position: fixed; left: 50%; bottom: calc(var(--safe-y-b) + 1rem);
+  transform: translate(-50%, 1rem);
   z-index: 10;
   font-family: var(--font-display); font-weight: 600; font-size: 1rem; color: #fff;
   background: var(--brand);
@@ -1036,7 +1071,10 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
 /* ---- Sound hint ---- persistent pill while the browser still has audio
    locked (no user gesture yet); see #sound-hint in index.html. */
 .sound-hint {
-  position: fixed; left: 1rem; bottom: 1rem; z-index: 10;
+  /* On the safe edge with the rest of the edge-anchored chrome: this pill is up
+     on the welcome board and in the lobby, where a television that crops would
+     eat the flat 1rem it used to sit at. */
+  position: fixed; left: var(--safe-x); bottom: var(--safe-y-b); z-index: 10;
   font: inherit; font-weight: 800; font-size: 0.95rem; color: #fff;
   background: rgba(42, 39, 53, 0.7);
   border: 0; padding: 0.6rem 1.2rem; border-radius: var(--r-pill);

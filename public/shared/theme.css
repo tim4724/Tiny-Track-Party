@@ -397,10 +397,22 @@ body {
 
 /* Star row — cup progression (built by starRow in shared/trackPicker.js): a row
    of die-cut stars, filled = earned. RED on purpose — amber/gold is vetoed in
-   chrome, and celebration is red. Size by context via font-size. */
+   chrome, and celebration is red. Size by context via font-size.
+
+   `paint-order: stroke fill` is what makes it a DIE CUT rather than a blot, and
+   it is the same line `.seat__host` already carries. An SVG stroke straddles the
+   path, so half of it paints INWARD: at the cup shelf's 0.78em the star renders
+   about 11px from a 24-unit box, the 2.4 units eat a fifth of its radius, and a
+   red star came out reading black with its five points blunted. Painting the
+   stroke UNDER the fill leaves the outline entirely outside the shape, which is
+   also how tvOS draws this row (an ink star stacked behind a smaller coloured
+   one — SF Symbols there, since that glyph cannot be shipped to the web). */
 .starrow { display: inline-flex; gap: 0.14em; line-height: 1; }
 .starrow .star { width: 1em; height: 1em; }
-.starrow .star path { fill: var(--red); stroke: var(--ink); stroke-width: 2.4; stroke-linejoin: round; }
+.starrow .star path {
+  fill: var(--red); stroke: var(--ink); stroke-width: 2.4; stroke-linejoin: round;
+  paint-order: stroke fill;
+}
 .starrow .star--off path { fill: #fff; opacity: 0.35; }
 
 /* Drawn padlock (lockGlyph in shared/trackPicker.js) — platform lock emoji are

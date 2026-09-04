@@ -31,9 +31,9 @@
       "file": "web/chain.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 71318,
-      "capturedAt": "2026-09-01T15:55:27.516Z",
-      "gitSha": "3e159502"
+      "bytes": 71326,
+      "capturedAt": "2026-09-04T06:49:55.798Z",
+      "gitSha": "82224f4c"
     },
     {
       "scenario": "countdown",
@@ -89,9 +89,9 @@
       "file": "web/countdown.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 70816,
-      "capturedAt": "2026-09-01T15:54:10.451Z",
-      "gitSha": "3e159502"
+      "bytes": 71550,
+      "capturedAt": "2026-09-04T06:48:40.247Z",
+      "gitSha": "82224f4c"
     },
     {
       "scenario": "finished",
@@ -135,9 +135,9 @@
       "file": "web/finished.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 49540,
-      "capturedAt": "2026-09-01T15:55:03.740Z",
-      "gitSha": "3e159502"
+      "bytes": 47082,
+      "capturedAt": "2026-09-04T06:49:32.837Z",
+      "gitSha": "82224f4c"
     },
     {
       "scenario": "intermission",
@@ -181,9 +181,9 @@
       "file": "web/intermission.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 18670,
-      "capturedAt": "2026-09-01T15:55:19.671Z",
-      "gitSha": "3e159502"
+      "bytes": 18666,
+      "capturedAt": "2026-09-04T06:49:48.695Z",
+      "gitSha": "82224f4c"
     },
     {
       "scenario": "lobby-empty",
@@ -203,9 +203,9 @@
       "file": "androidtv-emu/lobby-empty.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 52904,
-      "capturedAt": "2026-08-22T07:25:31.239Z",
-      "gitSha": "193864fc",
+      "bytes": 42946,
+      "capturedAt": "2026-09-04T06:52:16.230Z",
+      "gitSha": "82224f4c",
       "deviceName": "Television_4K_Android_TV",
       "deviceId": "emulator-5554"
     },
@@ -215,11 +215,23 @@
       "file": "tvos-device/lobby-empty.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 45922,
-      "capturedAt": "2026-08-16T04:52:39.599Z",
-      "gitSha": "ab95c4ef",
+      "bytes": 51210,
+      "capturedAt": "2026-09-04T06:32:15.174Z",
+      "gitSha": "82224f4c",
       "deviceName": "Spielzimmer",
       "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
+    },
+    {
+      "scenario": "lobby-empty",
+      "platform": "tvos-sim",
+      "file": "tvos-sim/lobby-empty.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 35128,
+      "capturedAt": "2026-09-04T05:55:52.091Z",
+      "gitSha": "82224f4c",
+      "deviceName": "Apple TV 4K (3rd generation)",
+      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
     },
     {
       "scenario": "lobby-empty",
@@ -227,9 +239,9 @@
       "file": "web/lobby-empty.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 46300,
-      "capturedAt": "2026-09-01T15:53:42.450Z",
-      "gitSha": "3e159502"
+      "bytes": 50156,
+      "capturedAt": "2026-09-04T06:48:11.222Z",
+      "gitSha": "82224f4c"
     },
     {
       "scenario": "lobby-loading",
@@ -249,9 +261,9 @@
       "file": "androidtv-emu/lobby-loading.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 18208,
-      "capturedAt": "2026-08-22T07:25:19.922Z",
-      "gitSha": "193864fc",
+      "bytes": 17710,
+      "capturedAt": "2026-09-04T05:57:03.945Z",
+      "gitSha": "82224f4c",
       "deviceName": "Television_4K_Android_TV",
       "deviceId": "emulator-5554"
     },
@@ -261,11 +273,23 @@
       "file": "tvos-device/lobby-loading.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 17654,
-      "capturedAt": "2026-08-16T04:52:39.515Z",
-      "gitSha": "ab95c4ef",
+      "bytes": 17068,
+      "capturedAt": "2026-09-04T06:32:14.990Z",
+      "gitSha": "82224f4c",
       "deviceName": "Spielzimmer",
       "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
+    },
+    {
+      "scenario": "lobby-loading",
+      "platform": "tvos-sim",
+      "file": "tvos-sim/lobby-loading.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 17090,
+      "capturedAt": "2026-09-04T05:55:51.923Z",
+      "gitSha": "82224f4c",
+      "deviceName": "Apple TV 4K (3rd generation)",
+      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
     },
     {
       "scenario": "lobby-loading",
@@ -273,9 +297,9 @@
       "file": "web/lobby-loading.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 18582,
-      "capturedAt": "2026-09-01T15:53:27.591Z",
-      "gitSha": "3e159502"
+      "bytes": 18622,
+      "capturedAt": "2026-09-04T06:47:55.125Z",
+      "gitSha": "82224f4c"
     },
     {
       "scenario": "lobby-random",
@@ -295,9 +319,9 @@
       "file": "androidtv-emu/lobby-random.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 49534,
-      "capturedAt": "2026-08-22T07:26:09.091Z",
-      "gitSha": "193864fc",
+      "bytes": 47738,
+      "capturedAt": "2026-09-04T06:01:35.872Z",
+      "gitSha": "82224f4c",
       "deviceName": "Television_4K_Android_TV",
       "deviceId": "emulator-5554"
     },
@@ -307,11 +331,23 @@
       "file": "tvos-device/lobby-random.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 44974,
-      "capturedAt": "2026-08-16T04:52:39.766Z",
-      "gitSha": "ab95c4ef",
+      "bytes": 46546,
+      "capturedAt": "2026-09-04T06:32:15.687Z",
+      "gitSha": "82224f4c",
       "deviceName": "Spielzimmer",
       "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
+    },
+    {
+      "scenario": "lobby-random",
+      "platform": "tvos-sim",
+      "file": "tvos-sim/lobby-random.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 46702,
+      "capturedAt": "2026-09-04T05:55:52.611Z",
+      "gitSha": "82224f4c",
+      "deviceName": "Apple TV 4K (3rd generation)",
+      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
     },
     {
       "scenario": "lobby-random",
@@ -319,9 +355,9 @@
       "file": "web/lobby-random.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 42108,
-      "capturedAt": "2026-09-01T15:54:04.368Z",
-      "gitSha": "3e159502"
+      "bytes": 42492,
+      "capturedAt": "2026-09-04T06:48:34.083Z",
+      "gitSha": "82224f4c"
     },
     {
       "scenario": "lobby-tour",
@@ -341,11 +377,35 @@
       "file": "androidtv-emu/lobby-tour.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 57696,
-      "capturedAt": "2026-08-22T07:25:55.287Z",
-      "gitSha": "193864fc",
+      "bytes": 58914,
+      "capturedAt": "2026-09-04T07:01:31.054Z",
+      "gitSha": "82224f4c",
       "deviceName": "Television_4K_Android_TV",
       "deviceId": "emulator-5554"
+    },
+    {
+      "scenario": "lobby-tour",
+      "platform": "tvos-device",
+      "file": "tvos-device/lobby-tour.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 46596,
+      "capturedAt": "2026-09-04T06:32:15.518Z",
+      "gitSha": "82224f4c",
+      "deviceName": "Spielzimmer",
+      "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
+    },
+    {
+      "scenario": "lobby-tour",
+      "platform": "tvos-sim",
+      "file": "tvos-sim/lobby-tour.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 47050,
+      "capturedAt": "2026-09-04T05:55:52.437Z",
+      "gitSha": "82224f4c",
+      "deviceName": "Apple TV 4K (3rd generation)",
+      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
     },
     {
       "scenario": "lobby-tour",
@@ -353,9 +413,9 @@
       "file": "web/lobby-tour.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 51640,
-      "capturedAt": "2026-09-01T15:53:56.519Z",
-      "gitSha": "3e159502"
+      "bytes": 52026,
+      "capturedAt": "2026-09-04T06:48:26.189Z",
+      "gitSha": "82224f4c"
     },
     {
       "scenario": "lobby-track",
@@ -375,9 +435,9 @@
       "file": "androidtv-emu/lobby-track.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 57812,
-      "capturedAt": "2026-08-22T07:25:44.118Z",
-      "gitSha": "193864fc",
+      "bytes": 60456,
+      "capturedAt": "2026-09-04T06:55:23.779Z",
+      "gitSha": "82224f4c",
       "deviceName": "Television_4K_Android_TV",
       "deviceId": "emulator-5554"
     },
@@ -387,11 +447,23 @@
       "file": "tvos-device/lobby-track.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 53176,
-      "capturedAt": "2026-08-16T06:42:53.132Z",
-      "gitSha": "5d037a49",
+      "bytes": 56824,
+      "capturedAt": "2026-09-04T06:32:15.347Z",
+      "gitSha": "82224f4c",
       "deviceName": "Spielzimmer",
       "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
+    },
+    {
+      "scenario": "lobby-track",
+      "platform": "tvos-sim",
+      "file": "tvos-sim/lobby-track.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 56986,
+      "capturedAt": "2026-09-04T05:55:52.266Z",
+      "gitSha": "82224f4c",
+      "deviceName": "Apple TV 4K (3rd generation)",
+      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
     },
     {
       "scenario": "lobby-track",
@@ -399,9 +471,9 @@
       "file": "web/lobby-track.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 48454,
-      "capturedAt": "2026-09-01T15:53:49.994Z",
-      "gitSha": "3e159502"
+      "bytes": 50540,
+      "capturedAt": "2026-09-04T06:48:19.745Z",
+      "gitSha": "82224f4c"
     },
     {
       "scenario": "monster",
@@ -445,9 +517,9 @@
       "file": "web/monster.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 62214,
-      "capturedAt": "2026-09-01T15:54:45.502Z",
-      "gitSha": "3e159502"
+      "bytes": 56580,
+      "capturedAt": "2026-09-04T06:49:14.434Z",
+      "gitSha": "82224f4c"
     },
     {
       "scenario": "paused",
@@ -491,9 +563,9 @@
       "file": "web/paused.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 14222,
-      "capturedAt": "2026-09-01T15:54:51.726Z",
-      "gitSha": "3e159502"
+      "bytes": 14296,
+      "capturedAt": "2026-09-04T06:49:20.808Z",
+      "gitSha": "82224f4c"
     },
     {
       "scenario": "podium",
@@ -537,9 +609,9 @@
       "file": "web/podium.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 19698,
-      "capturedAt": "2026-09-01T15:55:37.151Z",
-      "gitSha": "3e159502"
+      "bytes": 19742,
+      "capturedAt": "2026-09-04T06:50:05.403Z",
+      "gitSha": "82224f4c"
     },
     {
       "scenario": "racing",
@@ -583,9 +655,9 @@
       "file": "web/racing.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 56868,
-      "capturedAt": "2026-09-01T15:54:18.722Z",
-      "gitSha": "3e159502"
+      "bytes": 56584,
+      "capturedAt": "2026-09-04T06:48:48.553Z",
+      "gitSha": "82224f4c"
     },
     {
       "scenario": "racing-sidewinder",
@@ -617,9 +689,9 @@
       "file": "web/racing-sidewinder.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 46884,
-      "capturedAt": "2026-09-01T15:54:28.287Z",
-      "gitSha": "3e159502"
+      "bytes": 47216,
+      "capturedAt": "2026-09-04T06:48:58.115Z",
+      "gitSha": "82224f4c"
     },
     {
       "scenario": "reconnect",
@@ -663,9 +735,9 @@
       "file": "web/reconnect.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 57898,
-      "capturedAt": "2026-09-01T15:54:57.828Z",
-      "gitSha": "3e159502"
+      "bytes": 57664,
+      "capturedAt": "2026-09-04T06:49:27.115Z",
+      "gitSha": "82224f4c"
     },
     {
       "scenario": "results",
@@ -709,9 +781,9 @@
       "file": "web/results.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 16562,
-      "capturedAt": "2026-09-01T15:55:09.982Z",
-      "gitSha": "3e159502"
+      "bytes": 16618,
+      "capturedAt": "2026-09-04T06:49:39.124Z",
+      "gitSha": "82224f4c"
     },
     {
       "scenario": "rocket",
@@ -755,9 +827,9 @@
       "file": "web/rocket.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 57086,
-      "capturedAt": "2026-09-01T15:54:36.784Z",
-      "gitSha": "3e159502"
+      "bytes": 56670,
+      "capturedAt": "2026-09-04T06:49:06.378Z",
+      "gitSha": "82224f4c"
     },
     {
       "scenario": "welcome",
@@ -765,9 +837,9 @@
       "file": "web/welcome.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 19188,
-      "capturedAt": "2026-09-01T15:53:20.529Z",
-      "gitSha": "3e159502"
+      "bytes": 19176,
+      "capturedAt": "2026-09-04T06:47:47.744Z",
+      "gitSha": "82224f4c"
     }
   ]
 }

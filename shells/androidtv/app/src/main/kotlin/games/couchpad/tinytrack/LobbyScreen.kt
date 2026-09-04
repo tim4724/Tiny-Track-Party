@@ -65,10 +65,10 @@ import androidx.compose.ui.unit.dp
 const val BACKDROP_FADE_MS = 450
 
 /**
- * The lobby board: the join ticket on the left, the race card on the right, the
- * seat dock along the bottom, and the middle deliberately EMPTY — that gap is
- * where the track preview is meant to be seen, and it is the reason the two are
- * rails rather than a centred stack.
+ * The lobby board: the join ticket on the left, the race card on the right, and
+ * the seat dock hanging from the bottom of the middle. What is left of that
+ * middle is where the track preview is meant to be seen, and it is the reason
+ * the two side cards are rails rather than a centred stack.
  *
  * **THERE IS NO START BUTTON ON THIS BOARD, and its absence is the design.** The
  * host already has the affordance: the phone they picked the cup on has a START
@@ -133,7 +133,15 @@ fun LobbyScreen(state: GameState) {
         )
         if (paper > 0f) PaperStage(Modifier.alpha(paper))
 
-        Column(
+        // ONE BAND, and the dock is BESIDE the rails rather than under them —
+        // the web's `grid-template-areas: "ticket dock race"`. It used to be the
+        // second row of a Column, which made the board's height the tallest rail
+        // plus the dock and, on the web where the viewport is not fixed at 1080p,
+        // pushed the cars off the bottom edge. The box never overflowed (a TV
+        // board is one known size) but the composition is the same one on three
+        // platforms, so it follows the same way: the middle is the space the
+        // rails leave, and the dock hangs from the bottom of it.
+        Row(
             Modifier
                 .fillMaxSize()
                 // A TV's own overscan margin, from the token the web's CSS is
@@ -142,44 +150,44 @@ fun LobbyScreen(state: GameState) {
                 // knows which cell edges are screen edges — but a full-screen
                 // board runs to the bezel and has to keep clear of it itself.
                 .padding(horizontal = Tokens.safeMarginX, vertical = Tokens.safeMarginY),
-            verticalArrangement = Arrangement.spacedBy(24.dp),
+            horizontalArrangement = Arrangement.spacedBy(36.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                Modifier.fillMaxWidth().weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(36.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            Box(Modifier.width(TICKET_WIDTH)) { JoinTicket(state) }
+            Box(
+                Modifier.weight(1f).fillMaxHeight(),
+                contentAlignment = Alignment.BottomCenter,
+            ) { SeatDock(state) }
+            // THE RACE RAIL IS A COLUMN: the pick floats in the middle of its free
+            // space and the shelf keeps the floor, which is `.cup-slot { margin:
+            // auto 0 }`. The spacer BELOW the pick is the load-bearing half — the
+            // pick is absent until the host chooses, and a `space-between` rail
+            // would park the lone shelf at the top pre-pick and then drop it when
+            // the pick arrived, which is the one movement the arrangement exists
+            // to stop. Two spacers over nothing still leave the shelf on the floor.
+            Column(
+                Modifier
+                    .width(RACE_RAIL_WIDTH)
+                    .fillMaxHeight()
+                    // CLEAR THE ⓘ, which is fixed over this board's top-right
+                    // corner and would otherwise sit on the pick card. Both
+                    // siblings measure from the same safe edge, so the rail
+                    // owes only the badge's size plus its air — the overscan
+                    // margin is already in the Row's padding above and must not
+                    // be counted twice. The web says the same thing as
+                    // `.race-rail { padding-top: ... }` and tvOS as
+                    // `.padding(.top, InfoGlyph.diameter + 10)`.
+                    .padding(top = RACE_RAIL_TOP_CLEAR),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Box(Modifier.width(TICKET_WIDTH)) { JoinTicket(state) }
                 Spacer(Modifier.weight(1f))
-                // THE RACE RAIL IS A COLUMN, and its two cards go to opposite ends:
-                // `.cup-slot { margin-bottom: auto }` pins the pick to the TOP and
-                // leaves the shelf the floor. A `space-between` rail would park the
-                // lone shelf at the top pre-pick and then drop it when the pick
-                // arrived, which is the one movement the arrangement exists to stop.
-                Column(
-                    Modifier
-                        .width(RACE_RAIL_WIDTH)
-                        .fillMaxHeight()
-                        // CLEAR THE ⓘ, which is fixed over this board's top-right
-                        // corner and would otherwise sit on the pick card. Both
-                        // siblings measure from the same safe edge, so the rail
-                        // owes only the badge's own offset plus its size — the
-                        // overscan margin is already in the Column's padding above
-                        // and must not be counted twice. The web says the same
-                        // thing as `.race-rail { padding-top: ... }` and tvOS as
-                        // `.padding(.top, InfoGlyph.diameter + 10)`.
-                        .padding(top = RACE_RAIL_TOP_CLEAR),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    // HIDDEN ENTIRELY pre-pick — not an empty card, not a
-                    // placeholder. The model answers null until the host has picked,
-                    // and an empty sticker would promise a card with nothing to say.
-                    state.cupSlot?.let { CupCard(it, state.cups) }
-                    Spacer(Modifier.weight(1f))
-                    if (state.cups.isNotEmpty()) CupShelf(state.cups)
-                }
+                // HIDDEN ENTIRELY pre-pick — not an empty card, not a
+                // placeholder. The model answers null until the host has picked,
+                // and an empty sticker would promise a card with nothing to say.
+                state.cupSlot?.let { CupCard(it, state.cups) }
+                Spacer(Modifier.weight(1f))
+                if (state.cups.isNotEmpty()) CupShelf(state.cups)
             }
-            SeatDock(state)
         }
 
         // THE INFO CORNER, and the only control on this board.
@@ -201,14 +209,17 @@ fun LobbyScreen(state: GameState) {
         // second stop to absorb that this badge is what opens lit. It brightens
         // when a viewer actually presses Up, and the room reads the join code off
         // an unlit board until then.
-        // Inside the overscan margin, and then the authored offset — this badge is
-        // a sibling of the padded Column above, not a child of it, so it takes its
-        // own. tvOS gets the same for free from the system safe area.
+        // ON the overscan margin, with no offset of its own: this badge is a
+        // sibling of the padded Row above, not a child of it, so it takes the
+        // same margin itself and its edges line up with the cards it floats over.
+        // It carried an extra 16dp until the web's corner row lost the matching
+        // `--corner-inset` — an inset there put the buttons OUTSIDE the content,
+        // and one here put the badge inside it. tvOS takes neither: the system
+        // safe area it reports is already bigger than this token.
         InfoBadge(
             Modifier
                 .align(Alignment.TopEnd)
-                .padding(end = Tokens.safeMarginX + 16.dp,
-                         top = Tokens.safeMarginY + INFO_BADGE_TOP)
+                .padding(end = Tokens.safeMarginX, top = Tokens.safeMarginY)
         ) {
             state.infoPath = listOf(GameState.InfoRoute.Info)
         }
@@ -776,10 +787,11 @@ private fun HostStar(modifier: Modifier = Modifier) {
 
 // -- the board's grid -------------------------------------------------------
 //
-// `#lobby` is a three-column grid whose MIDDLE CELL IS DELIBERATELY EMPTY — that
-// gap is where the live track preview is seen, and it is why the two cards are
-// rails rather than a centred stack. The two rail widths below are the CSS's,
-// resolved at 1920x1080: `min(clamp(240px, 26vw, 440px), 38vh)` and
+// `#lobby` is a three-column grid: two rails, and a middle column that carries
+// nothing but the seat dock along its floor. The gap above that dock is where
+// the live track preview is seen, and it is why the two cards are rails rather
+// than a centred stack. The two rail widths below are the CSS's, resolved at
+// 1920x1080: `min(clamp(240px, 26vw, 440px), 38vh)` and
 // `min(clamp(220px, 24vw, 460px), 32vh)`.
 //
 // Both rails' cards are `width: 100%` of their column, which is what makes the QR
@@ -797,14 +809,12 @@ private val RACE_RAIL_WIDTH = 346.dp
  */
 private val INFO_BADGE_DIAMETER = 54.dp
 
-/** The ⓘ's offset from the SAFE top edge — its own, and the rail's to clear. */
-private val INFO_BADGE_TOP = 12.dp
-
 /**
  * What the rail keeps clear at the top so the ⓘ never lands on the pick card.
- * The badge's own top offset, plus the badge, plus a gap.
+ * The badge sits on the safe edge and so does the rail, so this is the badge
+ * plus a gap and nothing else.
  */
-private val RACE_RAIL_TOP_CLEAR = INFO_BADGE_TOP + INFO_BADGE_DIAMETER + 10.dp
+private val RACE_RAIL_TOP_CLEAR = INFO_BADGE_DIAMETER + 10.dp
 
 /** `.ticket`'s `padding: 0.85rem` — a thin paper margin, so the QR fills the card. */
 private val TICKET_PAD = 14.dp

@@ -7,7 +7,7 @@ import SwiftUI
 /// **The layout is identical in both states** — that is the web's own rule
 /// (`display.css`, `#lobby`) and the reason nothing here is conditional on the
 /// backdrop: the ticket stays on the left rail, the cup slot on the right, the
-/// seat dock across the foot, and only what is BEHIND them crossfades. Chrome
+/// seat dock at the foot of the middle, and only what is BEHIND them crossfades. Chrome
 /// over the live 3D view floats bare (no paper, no panel), which falls out of
 /// this composition for free.
 ///
@@ -29,7 +29,6 @@ struct LobbyView: View {
     @ObservedObject var state: GameState
 
     private static let railGap: CGFloat = 36
-    private static let bandGap: CGFloat = 24
 
     /// Where the remote is. `parked` is a stop that draws nothing — see
     /// `focusPark`.
@@ -40,10 +39,7 @@ struct LobbyView: View {
     var body: some View {
         ZStack {
             backdrop
-            VStack(spacing: Self.bandGap) {
-                topBand
-                SeatDock(seats: state.seats)
-            }
+            band
             // Inside the safe area, unlike the backdrop. tvOS's own margins are
             // ~90 points on a side, which is already the web's 4.5vw gutter, so
             // this adds only enough to keep the sticker tilts and their hard
@@ -149,12 +145,12 @@ struct LobbyView: View {
             .accessibilityHidden(true)
     }
 
-    // MARK: - Bands
+    // MARK: - The band
 
-    /// Ticket left, cup slot right, and the middle deliberately EMPTY — that gap
-    /// is where the track preview is meant to be seen, and it is the reason the
-    /// two rails are rails rather than a centred stack.
-    private var topBand: some View {
+    /// Ticket left, cup slot right, and the middle left to the track preview
+    /// but for the seat dock along its floor — that gap is the reason the two
+    /// rails are rails rather than a centred stack.
+    private var band: some View {
         HStack(alignment: .center, spacing: Self.railGap) {
             // Each rail sizes its own card (see `LobbyViewMetrics`) rather than
             // being framed here: the scan hint is deliberately allowed to hang
@@ -162,26 +158,41 @@ struct LobbyView: View {
             // (`max-width: 120%`), and a frame at this level would wrap it
             // instead.
             JoinTicket(joinURL: state.joinURL, roomCode: state.roomCode, qr: state.joinQR)
-            Spacer(minLength: 0)
+            // THE DOCK IS BESIDE THE RAILS, NOT BELOW THEM — the web's
+            // `grid-template-areas: "ticket dock race"`. It used to be the second
+            // row of a VStack, which made the board's height the tallest rail
+            // plus the dock and, on the web where the viewport is not fixed at
+            // 1080p, pushed the cars off the bottom edge. Here it never overflowed
+            // (a TV board is one known size) but the composition is the same one
+            // on three platforms, so it follows the same way: the middle is the
+            // space the rails leave, and the dock hangs from the bottom of it.
+            SeatDock(seats: state.seats)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
             raceRail
         }
         .frame(maxHeight: .infinity)
     }
 
-    /// Tonight's race over the long game: the pick hangs from the TOP of the
-    /// rail, the cups shelf from the BOTTOM.
+    /// Tonight's race over the long game: the pick floats in the middle of the
+    /// rail, the cups shelf hangs from the BOTTOM.
     ///
-    /// The `Spacer` between them is `.cup-slot { margin-bottom: auto }`, and it
-    /// is load-bearing for the same reason the web spells it that way rather
-    /// than with `space-between`: the pick is ABSENT until the host chooses, and
-    /// a rail that distributed its children would park the lone shelf in the
-    /// middle of the rail and then drop it when the pick arrived. Pinned to the
-    /// bottom, the shelf never moves.
+    /// A `Spacer` EITHER SIDE of the pick is `.cup-slot { margin: auto 0 }`.
+    /// Top-aligned it clung under the ⓘ with the whole surplus dropped in one
+    /// hole between it and the shelf; two spacers split that surplus and it
+    /// reads as air instead.
+    ///
+    /// The one below is also what pins the SHELF to the floor, and that is the
+    /// half that must not become a distributed arrangement: the pick is ABSENT
+    /// until the host chooses, and a rail that spread its children would park
+    /// the lone shelf in the middle and then drop it when the pick arrived.
+    /// Two spacers over nothing still leave the shelf on the floor, so it never
+    /// moves.
     ///
     /// The rail is framed once, here, so both cards share the width the metrics
     /// authored for the right rail.
     private var raceRail: some View {
         VStack(spacing: 14) {
+            Spacer(minLength: 0)
             // HIDDEN ENTIRELY pre-pick — not an empty card, not a placeholder.
             // The model answers null until the host has picked, and an empty
             // sticker would promise a card that has nothing to say.
@@ -201,7 +212,7 @@ struct LobbyView: View {
         // stack, so nothing about layout keeps it off a card that now hangs from
         // the top of the rail — photographed on the device, it sat on the pick
         // card's corner. The web pads its race rail for exactly this
-        // (`.race-rail { padding-top: corner-top + corner-btn + 0.5rem }`,
+        // (`.race-rail { padding-top: corner-btn + 0.5rem }`,
         // clearing the fixed mute/fullscreen row), and this is that padding.
         .padding(.top, InfoGlyph.diameter + 10)
     }
@@ -756,7 +767,7 @@ private struct StarRow: View {
 
 // MARK: - (c) Seat dock
 
-/// The roster across the foot of the board.
+/// The roster along the foot of the board's middle, between the two rails.
 ///
 /// **ALREADY PADDED.** `ttp_ui_seat_grid_json` fills the row out to
 /// `maxPlayers` with open placeholders, and the padding is the MODEL's job
@@ -771,10 +782,10 @@ private struct SeatDock: View {
         HStack(spacing: 18) {
             ForEach(seats) { SeatCard(seat: $0) }
         }
-        // THE DOCK KEEPS ITS OWN HEIGHT. The band above it is `maxHeight:
-        // .infinity` — deliberately, so the middle of the board stays empty for
-        // the track preview — and a greedy sibling means a VStack under pressure
-        // takes the space back out of THIS one. It came out of the only flexible
+        // THE DOCK KEEPS ITS OWN HEIGHT. It sits in a `maxHeight: .infinity`
+        // frame — deliberately, so the middle of the board stays empty for the
+        // track preview above it — and a greedy child of that frame would take
+        // the space back out of THIS one. It came out of the only flexible
         // thing in a seat card, the name box, so every label on the dock was
         // clipped at the baseline: "Open" on an empty lobby, and every player's
         // name on a full one.
@@ -941,9 +952,9 @@ private struct SeatCard: View {
 /// reservation exists to avoid.
 ///
 /// The rails are NARROWER than the web's clamps, and the reason is vertical, not
-/// horizontal: this board has to fit the ticket band and the seat dock inside
-/// tvOS's ~960 points of safe height, and the QR is square, so every point of
-/// ticket width is also a point of ticket height.
+/// horizontal: a rail has to fit inside tvOS's ~960 points of safe height, and
+/// the QR is square, so every point of ticket width is also a point of ticket
+/// height.
 private enum LobbyViewMetrics {
     static let cardPadding: CGFloat = 16
     static let ticketWidth: CGFloat = 340
