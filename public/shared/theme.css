@@ -439,9 +439,14 @@ body {
    above the roof. The two must stay in step: the stills are object-fit:contain,
    so a box that disagrees with the asset letterboxes it and shrinks the car. */
 .carthumb { position: relative; width: 100%; aspect-ratio: 5 / 4; }
+/* No transition on the opacity: the turntable's frame 0 IS this still, so the
+   handoff in carThumbs.js is a CUT. Fading between them looked like a safe
+   dissolve and is not — both layers carry the car's soft ground shadow, and
+   compositing two translucent copies of it darkens the shadow for the whole
+   fade. Nothing else moves this opacity. */
 .carthumb__still {
   position: absolute; inset: 0; width: 100%; height: 100%;
-  object-fit: contain; display: block; transition: opacity 0.2s ease;
+  object-fit: contain; display: block;
 }
 .carthumb__spin {
   position: absolute; inset: 0;

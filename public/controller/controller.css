@@ -400,11 +400,15 @@ input[type=text]:disabled { opacity: 0.6; }
 .car-opt .carthumb__spin { bottom: auto; height: 108.7%; }
 
 /* Picking a car swaps that tile's render for a spinning one (and the tile you
-   left for a still), and the swap CROSS-FADES: the outgoing one lies over the
-   incoming one and fades off it, so a tile never shows an empty frame and the
-   arriving render never has to come from blank. (It used to be a cut — worse
-   than a cut, since a rebuilt thumb re-ran its own still→spin handoff and
-   flashed a static frame before settling.)
+   left for a still). The swap you SEE here is the second one: the outgoing
+   turntable lies over the incoming still and fades off it, so a tile never
+   shows an empty frame and the arriving render never has to come from blank.
+   (It used to be a cut — worse than a cut, since a rebuilt thumb re-ran its own
+   still→spin handoff and flashed a static frame before settling.)
+   The other direction does not reach this class at all: a turntable opens on
+   frame 0, which is the still it is replacing, and fading identical translucent
+   layers over each other only doubles the car's ground shadow. carPicker.js
+   holds that rule.
    Laid out exactly as the live render is — same letterboxed width (it carries
    .carthumb, so the sizing rules above are its too), centred, and sitting on the
    view's floor like the live one — so the two sit on top of each other rather

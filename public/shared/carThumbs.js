@@ -11,6 +11,10 @@
 // Spin sync: ALL spinning cars are driven by ONE shared requestAnimationFrame
 // clock, so they read the same frame index every tick and rotate in lockstep
 // (the display shows several cars pointing the same way, not a random jumble).
+// The clock RESTARTS at frame 0 whenever it spins up from idle, so a car that
+// starts turning with nothing else on the turntable — the phone, where only
+// your own pick spins — begins at the hero pose it was already showing and
+// steps on from there. Joining a clock already running keeps the lockstep.
 import { assetUrl } from './assetUrl.js';
 
 const BASE = assetUrl('/assets/toycar/thumbs/');
@@ -60,13 +64,34 @@ function _tick(t) {
 }
 function registerSpin(el) {
   if (typeof requestAnimationFrame !== 'function') return; // old browser → static hero
+  // Nothing is turning, so there is no phase to keep: rewind the clock and let
+  // this car pick up from the still it is standing on. Gated on the SET, not on
+  // `_raf` — a tick can still be scheduled for a set the last car just left.
+  if (!_spins.size) _start = 0;
   _spins.add(el);
   if (!_raf) _raf = requestAnimationFrame(_tick);
 }
 
+// Take a thumb off the clock — called when a tile's render is retired. A layer
+// that is fading out still counts as a turning car, and the replacement
+// registering behind it would adopt the outgoing car's angle instead of
+// starting from its own still. `spinOff` also cancels a strip that is still
+// loading, so a retired layer cannot rejoin after the fade.
+export function releaseSpin(box) {
+  const overlay = box.querySelector('.carthumb__spin');
+  if (!overlay) return;                          // a still-mode thumb has none
+  overlay.dataset.spinOff = '1';
+  _spins.delete(overlay);
+}
+
 // Build a car thumbnail node: a 5:4 box showing the still hero, plus (in spin
-// mode) a synchronized turntable overlay that fades in once its strip loads — so
-// there's never a blank frame and the static hero never ghosts behind the spin.
+// mode) a synchronized turntable overlay that takes over once its strip is
+// DECODED — so there's never a blank frame and the static hero never ghosts
+// behind the spin. The takeover is a cut, not a fade: frame 0 is the still, so
+// there is nothing to dissolve between, and holding both up at once composites
+// the car's translucent ground shadow twice and visibly darkens it. Waiting for
+// decode() rather than load is what makes the cut safe — a loaded image is not
+// yet a paintable one, and the fade used to be what covered that gap.
 // The caller sizes it (the box is width:100% of its container).
 export function carThumbNode(model, { spin = false } = {}) {
   const box = document.createElement('div');
@@ -87,12 +112,16 @@ export function carThumbNode(model, { spin = false } = {}) {
     box.appendChild(overlay);
     const url = carStrip(model);
     const pre = new Image();
-    pre.onload = () => {
-      if (!overlay.isConnected) return;            // tile was replaced before load
+    const takeOver = () => {
+      if (!overlay.isConnected || overlay.dataset.spinOff) return;  // tile was replaced before load
       overlay.style.backgroundImage = `url("${url}")`;
-      still.style.opacity = '0';                   // hand off to the spin (frame 0 == hero)
+      still.style.opacity = '0';                   // one flush: the cut has no frame showing both
       registerSpin(overlay);
     };
+    // decode() resolves when the pixels are ready to paint; either outcome hands
+    // over, since a decode that failed on a strip the browser already loaded is
+    // no reason to sit on the still forever.
+    pre.onload = () => { if (pre.decode) pre.decode().then(takeOver, takeOver); else takeOver(); };
     pre.src = url;
   }
   return box;

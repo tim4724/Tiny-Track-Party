@@ -27,7 +27,7 @@ export function renderSeats(listEl, seats) {
   // Runs on EVERY roster push (any player's car pick, ready toggle, join…), so
   // each seat carries a value signature and only the seats that actually changed
   // rebuild — recreating an unchanged seat re-runs its thumb's still→spin
-  // cross-fade, a visible flicker across the whole grid. Mirrors the sig guard
+  // handoff, a visible flicker across the whole grid. Mirrors the sig guard
   // on the lobby demo (main.js refreshLobbyDemo). The index.html placeholders
   // carry no signature, so the first render replaces them as before.
   const grid = seatGrid(seats);

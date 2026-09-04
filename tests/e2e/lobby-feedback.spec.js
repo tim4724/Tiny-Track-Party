@@ -194,7 +194,7 @@ test('one cup tap moves the mark and rebuilds nothing', async ({ page, browser }
   'the pressed tile must be the same element afterwards').toBe(true);
 });
 
-test('picking a car re-dresses its tile and cross-fades the render', async ({ page }) => {
+test('picking a car re-dresses its tile, and only the render it replaces fades', async ({ page }) => {
   // The car page's half of the same rule. Every tile used to be rebuilt whenever
   // the selection moved, so the names, the stat bars and the renders all cut at
   // once — and a fresh thumbnail re-ran its own still→spin handoff, flashing a
@@ -229,10 +229,14 @@ test('picking a car re-dresses its tile and cross-fades the render', async ({ pa
 
   await page.locator('#carpick .car-opt').nth(3).click();
   await expect(page.locator('#carpick .car-opt--mine')).not.toHaveAttribute('aria-label', before.mine);
-  // Two renders for a beat in each tile that changed mode — the one you had,
-  // over the one you picked. The tile you LEFT gives up its turntable at the
-  // same moment the one you took gains one.
-  await expect(page.locator('#carpick .carthumb--out')).toHaveCount(2);
+  // A pick changes the render mode of two tiles, and only ONE of them fades.
+  // The tile you LEFT gives up a turntable stopped at whatever angle it
+  // reached, so that swap is a real change of image and its outgoing render
+  // fades off the incoming still. The tile you TOOK cuts: a turntable opens on
+  // frame 0, which is the very still already under it, and fading identical
+  // layers would only composite the car's translucent ground shadow twice.
+  await expect(page.locator('#carpick .carthumb--out')).toHaveCount(1);
+  await expect(page.locator('#carpick .car-opt--mine .carthumb--out')).toHaveCount(0);
 
   const after = await page.evaluate(() => {
     const grid = document.getElementById('carpick');
@@ -247,7 +251,7 @@ test('picking a car re-dresses its tile and cross-fades the render', async ({ pa
   });
   expect(after.adds, 'the tiles are dressed, never rebuilt').toBe(0);
   expect(after.sameTiles, 'the tile you pressed must survive its own tap').toBe(true);
-  expect(after.fades, 'the outgoing render fades off the incoming one').toContain('swap-out');
+  expect(after.fades, 'the render you left fades off the still replacing it').toContain('swap-out');
   expect(after.samePips, 'the pips must survive the pick, or they cannot light').toBe(true);
   expect(after.moves, 'a re-rated pip has to fade rather than cut').toContain('background');
 

@@ -17,7 +17,7 @@
 // data of its own), and the gallery falls back to the window globals. Thumbnails
 // load by id from the web host (carThumbs.js), never over the relay.
 
-import { carThumbNode } from './carThumbs.js';
+import { carThumbNode, releaseSpin } from './carThumbs.js';
 
 // Retire a layer by fading it OVER its replacement instead of cutting to it.
 // NOT a fade toward the paper: the replacement is already underneath at full
@@ -29,7 +29,14 @@ import { carThumbNode } from './carThumbs.js';
 // and the rest hold their still, so a pick changes the render mode of two tiles.
 // The tile itself is never rebuilt, which is what lets the one under the thumb
 // outlive its own press.
+//
+// Only the spin→still direction comes through here; see the caller for why the
+// other one cuts.
 function retireLayer(old, outClass) {
+  // Off the shared spin clock first: a layer that is still registered while it
+  // fades keeps the clock turning, and the incoming turntable would then pick
+  // up the outgoing car's ANGLE instead of starting from its own still.
+  releaseSpin(old);
   old.classList.add(outClass);
   old.setAttribute('aria-hidden', 'true');
   const done = () => old.remove();
@@ -208,7 +215,14 @@ export function buildCarPicker({ gridEl, selected, onPick, canPick = true, cars 
       const fresh = carThumbNode(idOf(i), { spin: mine });
       fresh.dataset.spin = String(mine);
       view.insertBefore(fresh, view.firstChild);
-      if (shown) retireLayer(shown, 'carthumb--out');
+      // Only ONE direction has anything to cross-fade. Going to the turntable
+      // the incoming layer opens on frame 0, which is the very still the
+      // outgoing layer is holding — identical pixels, so a fade dissolves
+      // nothing and merely composites the car's translucent ground shadow
+      // twice, darkening the tile for its length. Coming back the outgoing
+      // turntable is stopped at whatever angle it reached, so that swap is a
+      // real change of image and still fades.
+      if (shown) { if (mine) shown.remove(); else retireLayer(shown, 'carthumb--out'); }
     }
   }
 }
