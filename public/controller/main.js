@@ -96,11 +96,10 @@ let trackCatalogRaw = '';  // the packed snapshot.tracks it was decoded from (sk
 let carCatalog = [];       // [{id,name,stats}] — snapshot.cars
 let colorPalette = (window.CAR_COLORS || []).slice(); // snapshot.colors (bundled palette = pre-snapshot fallback)
 const liveryOf = (i) => colorPalette[i] || '#888';
-let selectedMode = null;   // current pick {mode:'track'|'cup'|'random'|'tour', trackId?, cupId?} (host-controlled, echoed to all)
+let selectedMode = null;   // current pick {mode:'cup'|'random'|'tour', cupId?, randomRaces?} (host-controlled, echoed to all)
 let displayMode = null;    // pick the display last reported (LOBBY_UPDATE snapshot); null = it has none
 let progressData = null;   // snapshot.progress — the couch's stars/locks (lobby only; cached like tracks)
 let lobbyTab = 'car';      // the host's lobby page: 'car' | 'race' (non-hosts only ever see 'car')
-let raceCursor = null;     // which race-list row the detail panel describes; null follows the pick
 let amReady = false;       // my lobby ready flag (optimistic; LOBBY_UPDATE confirms)
 // The host's Start press, held until the display answers it. Unlike every other
 // optimistic flag here it needs a way OUT on its own: the display validates
@@ -388,7 +387,7 @@ function renderLobby() {
   maybeAutoSelectMode();    // host: leave the display's plain diorama for the 3D preview right away
   el('me-name').textContent = myName || 'Racer'; // who you are, up top (livery dot is var(--car))
   renderLobbyPage();
-  buildCarPicker({ heroEl: el('car-hero'), stripEl: el('carpick'), selected: myCarIndex, onPick: chooseCar, canPick: !amReady, cars: carCatalog });
+  buildCarPicker({ gridEl: el('carpick'), selected: myCarIndex, onPick: chooseCar, canPick: !amReady, cars: carCatalog });
   renderModePicker();
   const hostP = roster.find((p) => p.peerIndex === hostPeerIndex);
   if (waitingForNextRace) {
@@ -445,23 +444,18 @@ function renderLobbyPage() {
 }
 el('lobby-back').addEventListener('click', () => setLobbyPage('car'));
 
-// Mode picker — host only: one tile per cup then 🎲 Random (a cup pick runs its
-// 4-race Grand Prix and its open panel offers exact single-track picks; Random's
-// panel offers the run's length instead). Sent as SELECT_MODE. Everyone else gets no picker at all — the big screen
-// shows the host's pick. Also hidden until the catalog arrives (older display /
-// no snapshot yet). Layout in shared/trackPicker.js.
+// Mode picker — host only: one tile per cup (which runs its 4-race Grand Prix)
+// then the three random runs. Sent as SELECT_MODE. Everyone else gets no picker
+// at all — the big screen shows the host's pick. Also hidden until the catalog
+// arrives (no snapshot yet). Layout in shared/trackPicker.js.
 function renderModePicker() {
   const wrap = el('trackpick');
   if (!amHost || !trackCatalog.length || lobbyTab !== 'race') { wrap.classList.add('hidden'); return; }
   wrap.classList.remove('hidden');
   buildModePicker({
-    stripEl: el('track-strip'),
+    gridEl: el('track-strip'), keyEl: el('race-key'),
     catalog: trackCatalog, progress: progressData,
-    selection: selectedMode, highlight: raceCursor,
-    canPick: true, onPickMode: chooseMode,
-    // A tapped row moves the detail cursor; a LOCKED row moves only it — the
-    // panel becomes the unlock pitch without touching the pick.
-    onHighlight: (rowId) => { raceCursor = rowId; renderModePicker(); }
+    selection: selectedMode, canPick: true, onPickMode: chooseMode
   });
 }
 
@@ -474,19 +468,19 @@ function lockedCupIds() {
 }
 
 // A stored pick is only worth re-asserting if this catalog still backs it
-// (tracks/cups can churn between visits; 'random' always resolves) AND the
-// couch hasn't got it locked (a progress reset can re-lock a cup this phone
-// once raced).
+// (cups can churn between visits; 'random' always resolves) AND the couch hasn't
+// got it locked (a progress reset can re-lock a cup this phone once raced).
+//
+// 'track' — an exact single-race pick — is deliberately NOT here. The picker
+// stopped offering it, so a phone still holding one in localStorage from an
+// earlier version must fall through to the first cup rather than re-assert a
+// pick no tile can show as picked.
 function modeInCatalog(m) {
   if (!m) return false;
   const locked = lockedCupIds();
   if (m.mode === 'random') return true;
   if (m.mode === 'tour') return trackCatalog.some((t) => t.cup); // needs cups to tour
   if (m.mode === 'cup') return !locked.has(m.cupId) && trackCatalog.some((t) => t.cup === m.cupId);
-  if (m.mode === 'track') {
-    const t = trackCatalog.find((x) => x.id === m.trackId);
-    return !!t && !locked.has(t.cup);
-  }
   return false;
 }
 
@@ -505,9 +499,8 @@ function maybeAutoSelectMode() {
     // display silently refuses, stranding the Start gate.
     const locked = lockedCupIds();
     const firstCup = trackCatalog.find((t) => t.cup && !locked.has(t.cup));
-    selectedMode = modeInCatalog(stored) ? stored
-      : firstCup ? { mode: 'cup', cupId: firstCup.cup }
-        : { mode: 'track', trackId: trackCatalog[0].id }; // cup-less catalog (older display)
+    if (!modeInCatalog(stored) && !firstCup) return;   // nothing pickable to assert
+    selectedMode = modeInCatalog(stored) ? stored : { mode: 'cup', cupId: firstCup.cup };
     net.send(MSG.SELECT_MODE, selectedMode); // optimistic; LOBBY_UPDATE is the source of truth
     return;
   }
@@ -524,17 +517,14 @@ function maybeAutoSelectMode() {
 function chooseMode(pick) {
   const cur = selectedMode || {};
   const same = cur.mode === pick.mode
-    && (pick.mode === 'cup' ? cur.cupId === pick.cupId
-      : pick.mode === 'track' ? cur.trackId === pick.trackId
-        // The random family is never filtered: a tap that changes the run
-        // changes the pick, and EVERY tap — same pick included — deals fresh
-        // track(s). Both need the display.
-        : false);
+    // The random family is never filtered: a tap that changes the run changes
+    // the pick, and EVERY tap — same pick included — deals fresh track(s). Both
+    // need the display.
+    && (pick.mode === 'cup' ? cur.cupId === pick.cupId : false);
   if (same) return;
   selectedMode = { ...pick };  // optimistic; LOBBY_UPDATE is the source of truth
-  raceCursor = null;           // the detail panel follows the pick again
   saveMode(pick);              // remember it so the next lobby auto-picks this mode
-  renderModePicker();          // move the mark (and swap the detail panel) now
+  renderModePicker();          // move the mark now
   net.send(MSG.SELECT_MODE, pick);
   buzz(15);
 }

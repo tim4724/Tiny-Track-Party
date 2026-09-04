@@ -109,24 +109,35 @@ test('phone cup final: reports the CUP once the TV has revealed it', async ({ pa
 // The RACE page's progression dressings — same contract as the boards above:
 // each assertion pins something only the right `progress` payload can produce
 // (a renamed field degrades to a starless, lock-less picker rather than throw).
-test('phone race page: the pick list carries stars; the first cup detail is open', async ({ page }) => {
+test('phone race page: the grid carries stars and the lock, and the ribbon the key', async ({ page }) => {
   await page.goto(`${CONTROLLER}lobby-race&color=1`);
   await page.waitForSelector('.racelist .mode-opt');
-  // Cups in ladder order plus Random last — 6 rows for a 5-cup catalogue.
-  await expect(page.locator('.racelist .mode-opt')).toHaveCount(6);
+  // Cups in ladder order plus the three random runs — 8 tiles for a 5-cup
+  // catalogue, and nothing else on the page: this page IS the grid.
+  await expect(page.locator('.racelist .mode-opt')).toHaveCount(8);
+  await expect(page.locator('.mode-opt', { hasText: 'World Tour' })).toHaveCount(1);
+  await expect(page.locator('.mode-opt', { hasText: 'Endless Run' })).toHaveCount(1);
   // Stars only the payload can produce: Beach earned 3, Canyon none.
   await expect(page.locator('.racelist .mode-opt', { hasText: 'Beach' })
     .locator('.star:not(.star--off)')).toHaveCount(3);
   await expect(page.locator('.racelist .mode-opt', { hasText: 'Canyon' })
     .locator('.star:not(.star--off)')).toHaveCount(0);
-  // The locked row trails its unlock progress, not stars.
+  // The locked tile trails its unlock progress, not stars — and it is not a
+  // choice, so it takes no tap at all. The count IS the explanation now: a
+  // sentence under the grid said the same thing a page-width lower down.
   await expect(page.locator('.mode-opt--locked')).toContainText('3/4');
-  // The auto-picked first cup's detail: header name + its four named maps.
-  await expect(page.locator('.racedetail .raceinfo__name')).toHaveText('Beach Cup');
-  await expect(page.locator('.modepick__tracks .track-opt')).toHaveCount(4);
+  expect(await page.locator('.mode-opt--locked').evaluate((e) => !!e.onclick)).toBe(false);
+  // The star key lives in the page's top ribbon, and ONLY on this page — the car
+  // page's ratings name themselves in the tile, so a shared ribbon carrying a
+  // race-page key onto it would be explaining a badge that isn't there.
+  await expect(page.locator('#race-key .star-legend')).toBeVisible();
+  await expect(page.locator('#race-key')).toContainText('win');
+  await page.goto(`${CONTROLLER}lobby-host&color=1`);
+  await page.waitForSelector('#carpick .car-opt');
+  await expect(page.locator('#race-key')).toBeHidden();
 });
 
-test('phone race page: waiting on the grid gates Start and clears the legend from under the chip', async ({ page }) => {
+test('phone race page: waiting on the grid gates Start, and the note clears the tiles', async ({ page }) => {
   // The host's own waiting state: Start needs everyone, so it sits disabled
   // with the floating note explaining why. Only a roster with an unready player
   // produces this — an all-ready one renders a live button and no chip at all.
@@ -137,40 +148,27 @@ test('phone race page: waiting on the grid gates Start and clears the legend fro
   await expect(page.locator('#ready-btn')).toBeDisabled();
   await expect(page.locator('#ready-note')).toHaveText(/Waiting for all players/);
 
-  // The chip is out of flow and lands on the RACE page's taller card, where the
-  // star legend used to stick out either side of it. The legend stands down —
-  // by VISIBILITY, so the card keeps the exact geometry it has with the chip
-  // gone and nothing moves when the last player readies up.
+  // The note shares the action row with the buttons rather than hanging over
+  // them, so it has to clear the grid on its own — and the buttons must not move
+  // when it arrives or goes, which is what `margin-inline: auto` buys: an auto
+  // margin on EACH side eats all the free space, centring the note in whatever
+  // the buttons leave while they stay pinned right.
   const box = async (sel) => page.locator(sel).evaluate((e) => {
     const r = e.getBoundingClientRect();
-    return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, vis: getComputedStyle(e).visibility };
+    return { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
   });
-  const waiting = { legend: await box('.star-legend'), card: await box('.racedetail'), note: await box('#ready-note') };
-  expect(waiting.legend.vis).toBe('hidden');
-  // …and it was genuinely in the way: the two boxes do intersect.
-  expect(waiting.note.top).toBeLessThan(waiting.legend.bottom);
-  expect(waiting.note.bottom).toBeGreaterThan(waiting.legend.top);
+  const note = await box('#ready-note');
+  const gridBottom = await page.evaluate(() => Math.max(
+    ...[...document.querySelectorAll('.racelist .mode-opt')].map((e) => e.getBoundingClientRect().bottom)));
+  expect(note.top, 'the note must not land on the tiles').toBeGreaterThanOrEqual(gridBottom);
+  const btnLeft = await box('#ready-btn');
+  expect(note.right, 'the note sits LEFT of the buttons').toBeLessThanOrEqual(btnLeft.left);
 
+  const waiting = { grid: await box('.racelist'), btn: await box('#ready-btn'), back: await box('#lobby-back') };
   await page.goto(`${CONTROLLER}lobby-race&color=1`);
   await page.waitForSelector('.racelist .mode-opt');
-  const ready = { legend: await box('.star-legend'), card: await box('.racedetail') };
-  expect(ready.legend.vis).toBe('visible');
-  expect(ready.legend).toEqual(expect.objectContaining({
-    top: waiting.legend.top, bottom: waiting.legend.bottom, left: waiting.legend.left, right: waiting.legend.right
-  }));
-  expect(ready.card.bottom).toBe(waiting.card.bottom);
-});
-
-test('phone race page: examining the locked cup swaps the detail for the unlock pitch', async ({ page }) => {
-  await page.goto(`${CONTROLLER}lobby-race-locked&color=1`);
-  await page.waitForSelector('.modepick__tracks--locked');
-  await expect(page.locator('.racedetail .raceinfo__name')).toHaveText('Playroom Cup');
-  await expect(page.locator('.racedetail .raceinfo__meta')).toContainText('Finish every cup');
-  // Per-cup checks: three done, one to go — only the payload knows which.
-  await expect(page.locator('.unlock-rules__row')).toHaveCount(4);
-  await expect(page.locator('.unlock-rules__row--todo')).toHaveCount(1);
-  await expect(page.locator('.unlock-rules__row--todo')).toContainText('Canyon');
-  await expect(page.locator('.unlock-rules__foot')).toHaveText('3 of 4 done');
-  // The pick itself is untouched: the locked row is the CURSOR, not the pick.
-  await expect(page.locator('.mode-opt--locked')).toHaveClass(/mode-opt--cursor/);
+  await expect(page.locator('#ready-note')).toBeEmpty();
+  expect(await box('.racelist')).toEqual(waiting.grid);
+  expect(await box('#ready-btn')).toEqual(waiting.btn);
+  expect(await box('#lobby-back')).toEqual(waiting.back);
 });

@@ -54,7 +54,7 @@ export function runControllerScenario(opts) {
   function renderCarPicker(selected = carSel, canPick = true) {
     carSel = selected;
     buildCarPicker({
-      heroEl: el('car-hero'), stripEl: el('carpick'),
+      gridEl: el('carpick'),
       selected: carSel, canPick, onPick: (i) => renderCarPicker(i, canPick)
     });
   }
@@ -86,15 +86,14 @@ export function runControllerScenario(opts) {
 
   // Mode picker — mirrors main.js renderModePicker: host only (non-host lobby
   // has no picker at all), on the RACE page. Taps re-render so the gallery
-  // shows the pick move / the detail panel swap live, cursor included.
-  function renderModePicker(selection, canPick, highlight = null) {
+  // shows the pick move live.
+  function renderModePicker(selection, canPick) {
     if (!canPick) { el('trackpick').classList.add('hidden'); return; }
     el('trackpick').classList.remove('hidden');
     buildModePicker({
-      stripEl: el('track-strip'), catalog: PREVIEW_TRACKS, progress: PREVIEW_PROGRESS,
-      selection, highlight, canPick: true,
-      onPickMode: (pick) => renderModePicker(pick, true),
-      onHighlight: (rowId) => renderModePicker(selection, true, rowId)
+      gridEl: el('track-strip'), keyEl: el('race-key'),
+      catalog: PREVIEW_TRACKS, progress: PREVIEW_PROGRESS,
+      selection, canPick: true, onPickMode: (pick) => renderModePicker(pick, true)
     });
   }
   // The auto-picked default a host lobby opens with (mirrors maybeAutoSelectMode).
@@ -202,9 +201,10 @@ export function runControllerScenario(opts) {
       break;
 
     case 'lobby-race':
-      // The host's RACE page: the pick grid with its stars, the auto-picked
-      // first cup's detail open, everyone ready so Start is live — and the
-      // corner's back chip, which is the only way home now the tabs are gone.
+      // The host's RACE page: every race as a tile — the five cups with their
+      // stars (the Playroom still locked, its unlock line in the foot), then the
+      // three random runs — the first cup picked, everyone ready so Start is
+      // live, and the corner's back chip, which is the only way home.
       show('lobby');
       el('me-name').textContent = FAKE_NAMES[color];
       setLobbyPage('race', true);
@@ -229,18 +229,6 @@ export function runControllerScenario(opts) {
       renderReadyPreview(true, false, null, [
         { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], color: COLORS[(color + 1) % COLORS.length], ready: true },
         { name: FAKE_NAMES[(color + 2) % FAKE_NAMES.length], color: COLORS[(color + 2) % COLORS.length], ready: false }
-      ], 'race');
-      break;
-
-    case 'lobby-race-locked':
-      // The locked Playroom examined: the detail panel is the unlock pitch
-      // (rules + per-cup checks), the pick itself untouched.
-      show('lobby');
-      el('me-name').textContent = FAKE_NAMES[color];
-      setLobbyPage('race', true);
-      renderModePicker(DEFAULT_MODE, true, 'rooftop');
-      renderReadyPreview(true, false, null, [
-        { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], color: COLORS[(color + 1) % COLORS.length], ready: true }
       ], 'race');
       break;
 

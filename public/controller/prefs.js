@@ -8,8 +8,7 @@
 // name the standalone browser offers (CONTRACT.md §1). See launcher.js.
 
 const NAME_KEY = 'tinytrack_name';
-const MODE_KEY = 'tinytrack_mode';     // host's last pick, JSON {mode, trackId?, cupId?, randomRaces?}
-const TRACK_KEY = 'tinytrack_track';   // legacy pre-mode key (bare track id) — read-only fallback
+const MODE_KEY = 'tinytrack_mode';     // host's last pick, JSON {mode, cupId?, randomRaces?}
 const CAR_KEY = 'tinytrack_car';       // last-picked car model index
 const HELP_SEEN_KEY = 'tinytrack_seen_help';
 const INPUT_KEY = 'tinytrack_input';   // steering input mode: 'tilt' (default) | 'buttons'
@@ -35,9 +34,11 @@ export const storedInputMode = () => (read(INPUT_KEY) === 'buttons' ? 'buttons' 
 export const saveInputMode = (m) => write(INPUT_KEY, m === 'buttons' ? 'buttons' : 'tilt');
 
 export const saveMode = (m) => write(MODE_KEY, JSON.stringify(m));
+// A stored pick the CALLER still has to validate against the live catalogue
+// (main.js modeInCatalog): cups churn, a progress reset re-locks one, and a
+// phone that last raced when the picker offered exact single tracks has a
+// `{mode:'track'}` in here that nothing can pick any more.
 export function storedMode() {
   try { const v = JSON.parse(read(MODE_KEY) || 'null'); if (v && v.mode) return v; } catch (_) {}
-  // Upgrade path: a phone that last picked before modes existed keeps its favourite track.
-  const id = read(TRACK_KEY);
-  return id ? { mode: 'track', trackId: id } : null;
+  return null;
 }

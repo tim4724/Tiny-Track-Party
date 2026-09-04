@@ -3,15 +3,24 @@
 // of the suite cannot see this class of defect at all.
 //
 // Every other spec runs on Chromium (playwright.config.js declares no
-// projects), and the phone's real audience is iOS Safari — where the car card
-// was broken outright for as long as it has shipped: the render's column was an
-// `auto` grid track left to derive its own width from a height:100% thumb, and
-// WebKit does not resolve an aspect-ratio box's width from a percentage height
-// when it measures an intrinsic track. Safari sized that column from the title
-// text instead, so the bars took the rest of the card and the car hung outside
-// it, and every pick re-measured and moved them again.
+// projects), and the phone's real audience is iOS Safari — where the car
+// picker's render was broken outright for as long as it had shipped: the
+// render is an ASPECT-RATIO BOX asked to derive its size from a box it does not
+// own, and WebKit resolves that differently from Chromium. On the old hero card
+// it was a percentage height inside an intrinsic grid track, and Safari sized
+// the column from the title text instead, so the bars took the rest of the card
+// and the car hung outside it. The card is gone; the shape is not. Every car
+// tile now sizes its render from its view box's two axes at once, which is the
+// same question asked a second way.
 //
-// So this gates GEOMETRY, not dressing — what the card is, in the engine that
+// The RATIO assertion below is the load-bearing one, and it is not academic on
+// either engine: sizing from a height with a max-width cap does not letterbox,
+// it keeps the height, takes the capped width and quietly stops being 5:4 —
+// which the still inside it survives (object-fit: contain) and the turntable,
+// a percentage-sized background, does not. That is a distorted spinning car on
+// any tile taller than 5:4 is wide.
+//
+// So this gates GEOMETRY, not dressing — what the tile is, in the engine that
 // got it wrong. It is deliberately DOM-only (a gallery scenario, no relay and
 // no display), which is what keeps a second browser cheap. The press paint is
 // here for the same reason: `:active` is the thing WebKit will not promise, so
@@ -22,59 +31,94 @@ test.use({ browserName: 'webkit', viewport: { width: 844, height: 390 } });
 
 const LOBBY = '/controller/index.html?scenario=lobby-host';
 
-const box = (page, sel) => page.locator(sel).evaluate((e) => {
-  const r = e.getBoundingClientRect();
-  return { x: r.x, y: r.y, w: r.width, h: r.height, right: r.right, bottom: r.bottom };
-});
-
-async function cardReady(page) {
+async function tilesReady(page) {
   await page.waitForFunction(() => {
-    const t = document.querySelector('.car-hero__view .carthumb');
-    return !!t && t.getBoundingClientRect().width > 0;
+    const t = document.querySelectorAll('#carpick .car-opt .carthumb');
+    return t.length === 4 && [...t].every((e) => e.getBoundingClientRect().width > 0);
   }, null, { timeout: 30000 });
 }
 
-test('webkit: the hero render sits INSIDE its card, sized from the row it shares with the bars', async ({ page }) => {
+// BOTH viewports, because they are different failures. At 844x390 a tile is
+// wider than its render is tall and the HEIGHT decides; at 932x430 the tiles
+// grow taller than 5:4 is wide and the WIDTH does — which is the axis a
+// max-width cap silently wins, taking the ratio with it. One viewport can only
+// ever see one of the two.
+for (const vp of [{ width: 844, height: 390 }, { width: 932, height: 430 }]) {
+test(`webkit ${vp.width}x${vp.height}: every car render sits INSIDE its tile at its own ratio`, async ({ page }) => {
+  await page.setViewportSize(vp);
   await page.goto(LOBBY);
-  await cardReady(page);
+  await tilesReady(page);
 
-  const hero = await box(page, '#car-hero');
-  const view = await box(page, '.car-hero__view');
-  const thumb = await box(page, '.car-hero__view .carthumb');
-  const stats = await box(page, '.car-opt__stats');
+  const tiles = await page.$$eval('#carpick .car-opt', (els) => els.map((e) => {
+    const r = (n) => { const b = n.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height, right: b.right, bottom: b.bottom }; };
+    return {
+      tile: r(e),
+      view: r(e.querySelector('.car-opt__view')),
+      thumb: r(e.querySelector('.carthumb')),
+      stats: r(e.querySelector('.car-opt__stats')),
+      name: r(e.querySelector('.car-opt__name'))
+    };
+  }));
+  expect(tiles).toHaveLength(4);
 
-  // The whole failure in one assertion: the render escaped the card to the LEFT,
-  // over the tap strip, because its column had collapsed behind it.
-  expect(thumb.x).toBeGreaterThanOrEqual(hero.x);
-  expect(thumb.right).toBeLessThanOrEqual(hero.right + 1);
-  expect(stats.right).toBeLessThanOrEqual(hero.right + 1);
-
-  // The render fills its column at the thumbnail's own 5:4 — the ratio is what
-  // decides the column's width, so a column sized from anything else shows up
-  // here as a thumb that no longer matches it.
-  expect(thumb.w).toBeCloseTo(view.w, 0);
-  expect(thumb.w / thumb.h).toBeCloseTo(5 / 4, 2);
-
-  // Neither half is a sliver: the bars exist to be compared, and the car is the
-  // one thing the card is for. Safari gave the render 50px of 410.
-  expect(view.w).toBeGreaterThan(hero.w * 0.3);
-  expect(stats.w).toBeGreaterThan(hero.w * 0.3);
+  for (const t of tiles) {
+    // The whole failure in one assertion: the render escaping its own tile
+    // because the box it is sized from collapsed behind it.
+    expect(t.thumb.x).toBeGreaterThanOrEqual(t.tile.x - 1);
+    expect(t.thumb.right).toBeLessThanOrEqual(t.tile.right + 1);
+    expect(t.thumb.bottom).toBeLessThanOrEqual(t.view.bottom + 1);
+    // At the tile's own window ratio — the 5:4 frame less the baked dead space
+    // the tile crops from under the wheels (.car-opt .carthumb) — and it must
+    // never merely be CLOSE: a box that has been capped on one axis keeps the
+    // other, so the ratio is where the capping shows. A collapsed box shows up as
+    // both this and the floor below.
+    expect(t.thumb.w / t.thumb.h).toBeCloseTo(125 / 92, 2);
+    // …and it fits its box on BOTH axes, which is what "letterboxed" means and
+    // what the ratio alone cannot say. The HEIGHT is held to a sub-pixel: the
+    // box is capped at exactly the render's own height (.car-opt__view
+    // max-height), so these two are equal by construction, and a slack pixel
+    // here is what let a hand-worked reciprocal (137.36 for 125/92, a percent
+    // too tall) push the render past its box on the short tiers unnoticed.
+    expect(t.thumb.w).toBeLessThanOrEqual(t.view.w + 1);
+    expect(t.thumb.h).toBeLessThanOrEqual(t.view.h + 0.5);
+    // Not a sliver. The model is what a car tile is FOR, so it gets the height
+    // the name and the bars leave — Safari once gave the render 50px of 410.
+    expect(t.thumb.h).toBeGreaterThan(t.tile.h * 0.3);
+    // …and the ratings keep their own width, which is the tile's.
+    expect(t.stats.w).toBeGreaterThan(t.tile.w * 0.7);
+    // The tile reads top to bottom: render, name, ratings — and the render sits
+    // on its box's FLOOR, which is what keeps the gap before the name from
+    // growing by whatever height the tile happens to have spare.
+    expect(t.thumb.bottom).toBeCloseTo(t.view.bottom, 0);
+    expect(t.view.bottom).toBeLessThanOrEqual(t.name.y + 1);
+    expect(t.name.bottom).toBeLessThanOrEqual(t.stats.y + 1);
+  }
+  // One shape for all four: the grid's tracks are equal, so any tile measuring
+  // itself from its OWN contents (a longer name, a taller render) shows here.
+  const spread = (f) => Math.max(...tiles.map(f)) - Math.min(...tiles.map(f));
+  expect(spread((t) => t.thumb.h)).toBeLessThanOrEqual(1);
+  expect(spread((t) => t.stats.y)).toBeLessThanOrEqual(1);
 });
+}
 
-test('webkit: picking a car moves nothing but the render and the bar fills', async ({ page }) => {
+test('webkit: picking a car moves nothing but the render and the lit pips', async ({ page }) => {
   await page.goto(LOBBY);
-  await cardReady(page);
+  await tilesReady(page);
 
-  const layout = async () => ({
-    hero: await box(page, '#car-hero'),
-    view: await box(page, '.car-hero__view'),
-    stats: await box(page, '.car-opt__stats')
-  });
+  // offsetLeft/Top/Width/Height, not getBoundingClientRect: the tile IS the
+  // pressed element here, and its press is a transform (.car-opt:active). A
+  // client rect includes that, so the 40ms sample below would read every tap's
+  // own animation as a re-layout. The offset box is what the tile was GIVEN,
+  // which is the only thing a pick may not change.
+  const layout = () => page.$$eval('#carpick .car-opt', (els) => els.map((e) => {
+    const r = (n) => [n.offsetLeft, n.offsetTop, n.offsetWidth, n.offsetHeight];
+    return [r(e), r(e.querySelector('.car-opt__view')), r(e.querySelector('.car-opt__stats'))];
+  }));
   const before = await layout();
 
-  // Every other car, and the way back. A card whose columns are re-measured from
-  // its own contents re-lays out on each of these — which is what the flicker
-  // was: the bars and the render jumping on every pick, and again when the
+  // Every other car, and the way back. A tile whose box is re-measured from its
+  // own contents re-lays out on each of these — which is what the flicker was:
+  // the ratings and the render jumping on every pick, and again when the
   // outgoing render's layer retired.
   for (const i of [3, 1, 2, 0]) {
     await page.locator('#carpick .car-opt').nth(i).click();
@@ -89,7 +133,7 @@ test('webkit: picking a car moves nothing but the render and the bar fills', asy
 
 test('webkit: a finger down paints the button pressed, and lifting it unpaints', async ({ page }) => {
   await page.goto(LOBBY);
-  await cardReady(page);
+  await tilesReady(page);
 
   // Chromium's :active would answer this on its own; WebKit's will not, which
   // is why the paint is a class driven by pointer events (controller/press.js).

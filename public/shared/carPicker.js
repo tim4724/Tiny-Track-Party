@@ -1,11 +1,16 @@
 // Car picker UI — the controller's "pick your ride" layout, shared by the live
 // controller (controller/main.js) and its gallery preview (TestHarness) so the
-// two can't drift. Two parts:
-//   • a big HERO preview of the SELECTED car — a spinning render, its name, and
-//     handling stat bars (so only the chosen car's stats are shown, not all at
-//     once);
-//   • a compact STRIP of every model as a small still thumbnail you tap to pick.
-// Styling lives in controller.css (.car-hero / .carpick / .car-opt).
+// two can't drift. ONE grid: every car is a tile carrying its render, its name
+// and its four stat ratings, each named in its own row. Tap one. Styling lives
+// in controller.css (.carpick / .car-opt).
+//
+// It used to be a HERO card — one big spinning render of the SELECTED car with
+// its stats beside it — over a strip of small stills. That shape came from the
+// two-column lobby and cost the page half its width to show four thumbnails and
+// then a fifth, bigger copy of one of them. Worse, it could only ever show ONE
+// car's stats, so choosing between four cars meant tapping through all four and
+// holding the ratings in your head. They exist to be COMPARED, and the grid is
+// the first layout on this phone that lets you compare them.
 //
 // Content is passed in as `cars: [{ id, name, stats }]` — the live controller
 // feeds it straight from the relay's room snapshot (so the phone bundles no car
@@ -13,7 +18,28 @@
 // load by id from the web host (carThumbs.js), never over the relay.
 
 import { carThumbNode } from './carThumbs.js';
-import { detailHeader, dressHead, retireLayer } from './trackPicker.js';
+
+// Retire a layer by fading it OVER its replacement instead of cutting to it.
+// NOT a fade toward the paper: the replacement is already underneath at full
+// opacity, so the pixel beneath the fade is never the page. `outClass` takes the
+// layer out of the flow (controller.css) so the incoming one owns the layout
+// from its first frame and nothing below either of them moves.
+//
+// What is swapped here is a tile's RENDER — the picked car turns on a turntable
+// and the rest hold their still, so a pick changes the render mode of two tiles.
+// The tile itself is never rebuilt, which is what lets the one under the thumb
+// outlive its own press.
+function retireLayer(old, outClass) {
+  old.classList.add(outClass);
+  old.setAttribute('aria-hidden', 'true');
+  const done = () => old.remove();
+  // Its OWN fade ending, not a child's: animationend bubbles, so anything that
+  // animates inside the layer would otherwise cut the fade short.
+  old.addEventListener('animationend', (e) => { if (e.target === old) done(); });
+  // Reduced motion runs no animation, so there is no end to wait for — and a
+  // layer left lying over the live one would eat every tap.
+  setTimeout(done, 400);
+}
 
 // Resolve the car list from the window globals (gallery / no-snapshot fallback).
 function carsFromWindow() {
@@ -23,14 +49,26 @@ function carsFromWindow() {
   return models.map((id, i) => ({ id, name: names[i] || ('Car ' + (i + 1)), stats: resolve ? resolve(i) : {} }));
 }
 
-// Stat bars read in the player's livery. Each bar is normalised across the WHOLE
-// roster — the engine stats are multipliers/weights with awkward absolute ranges,
-// so the roster-lowest car shows a 2/3 bar and a CLEAR leader a full one. Every row
-// is "more = more" (a full Weight bar = heaviest) so they read consistently. The
-// floor sits high (66%, not 0) on purpose: these are all hero cars — every one
-// should read as genuinely capable at everything, with the real spread shown as
-// the top third of the bar, never as an empty/"broken" stat.
-const STAT_BAR_FLOOR = 0.66;
+// Stats read as a RATING — a named row and five pips, so many of them lit.
+// Normalised across the WHOLE roster: the engine stats are multipliers/weights
+// with awkward absolute ranges, so what a pip count says is "against the other
+// three", never an absolute. Every row is "more = more" (a full Weight rating =
+// heaviest) so they read consistently.
+//
+// Five pips, two to five of them lit — the scale is chosen for the ROSTER it
+// has to describe. Every car is built around exactly one hole (protocol.js:
+// Bolt cannot turn, Carve cannot top out, Rumble cannot launch, Dash has none),
+// so a scale that cannot say "weak" cannot say what a car IS. A floor of three
+// could not: it left three rungs, and Weight rated three of the four cars
+// identically. Two of five reads weak, which is true and is the pick's whole
+// point; nothing rates one or zero, so no car reads broken.
+//
+// Five is also the resolution the format can carry. The reason to leave a
+// continuous fill was that a bar between 66% and 100%, on four separate tiles,
+// is a difference the eye has to MEASURE — pips are counted instead, and past
+// six or seven of them counting turns back into measuring.
+const STAT_PIPS = 5;
+const STAT_PIP_FLOOR = 2;
 const STAT_ROWS = [
   { lab: 'Speed', key: 'vmax' },
   { lab: 'Accel', key: 'accel' },
@@ -44,51 +82,65 @@ function statDomain(cars) {
     const sorted = vals.slice().sort((a, b) => b - a);
     const lo = sorted[sorted.length - 1];
     const span = (sorted[0] - lo) || 1;
-    // A full bar means CLEARLY the roster's best, not best by a pricing step:
+    // A full rating means CLEARLY the roster's best, not best by a pricing step:
     // unless the leader is ahead of second place by ≥30% of the row's spread,
-    // pad the top of the scale so a near-tied lead renders tall but not full.
+    // pad the top of the scale so a near-tied lead rates high but not full.
     const gap = sorted.length > 1 ? sorted[0] - sorted[1] : span;
     return { lo, span: span + Math.max(0, 0.3 * span - gap) };
   });
 }
-// STAT_BAR_FLOOR..100%: the weakest stat still reads as half-full, not empty.
-function statPct(stats, row, d) {
-  return Math.round((STAT_BAR_FLOOR + (1 - STAT_BAR_FLOOR) * (((stats[row.key] || d.lo) - d.lo) / d.span)) * 100);
+// STAT_PIP_FLOOR..STAT_PIPS: the roster's weakest in a row lights two of five.
+function statPips(stats, row, d) {
+  const norm = ((stats[row.key] || d.lo) - d.lo) / d.span;
+  return STAT_PIP_FLOOR + Math.round(norm * (STAT_PIPS - STAT_PIP_FLOOR));
 }
-// The bars' SHAPE — four labelled, empty rows. Every car has the same four, so
-// the block is built once per roster and only its fills move (dressStatBars).
-// That is what lets switching cars SLIDE each bar from the old car's value to
-// the new one (controller.css transitions the width): the comparison the block
-// exists to make, which a rebuilt bar could only cut to.
-function buildStatBars() {
+// The block's SHAPE — four NAMED rows, each a label and five unlit pips. Every
+// car has the same four in the same order, so it is built once per roster and
+// only the lit count moves (dressStatPips), which is what lets the tile you
+// pressed outlive its own press.
+//
+// The name rides IN the row. It was a key in the page's foot for a while, on
+// the theory that a quarter-width tile has no room to head each row — it has,
+// at this size, and the foot's version made the reader carry four words from
+// the bottom of the page up to four unlabelled bars on four separate tiles. A
+// label on its own row costs a few characters and answers on the spot.
+function buildStatPips() {
   const wrap = document.createElement('div');
   wrap.className = 'car-opt__stats';
   for (const row of STAT_ROWS) {
-    const r = document.createElement('div'); r.className = 'stat';
-    const lab = document.createElement('span'); lab.className = 'stat__lab'; lab.textContent = row.lab;
-    const bar = document.createElement('span'); bar.className = 'stat__bar';
-    bar.appendChild(document.createElement('i'));
-    r.appendChild(lab); r.appendChild(bar);
-    wrap.appendChild(r);
+    const lab = document.createElement('span');
+    lab.className = 'stat__lab';
+    lab.textContent = row.lab;
+    wrap.appendChild(lab);
+    // The row's value is the pip COUNT, so the rating is announced as one label
+    // rather than as five anonymous boxes; dressStatPips rewrites it.
+    const pips = document.createElement('span');
+    pips.className = 'stat__pips';
+    pips.setAttribute('role', 'img');
+    for (let k = 0; k < STAT_PIPS; k++) pips.appendChild(document.createElement('i'));
+    wrap.appendChild(pips);
   }
   return wrap;
 }
-// A car with no stats at all (an older display's roster) empties the bars
-// rather than leaving the last car's showing.
-function dressStatBars(wrap, stats, dom) {
-  const fills = wrap.querySelectorAll('.stat__bar > i');
+// A car with no stats at all (an older display's roster) rates every row at the
+// floor rather than leaving the last car's showing.
+function dressStatPips(wrap, stats, dom) {
+  const rows = wrap.querySelectorAll('.stat__pips');
   STAT_ROWS.forEach((row, k) => {
-    fills[k].style.width = stats ? statPct(stats, row, dom[k]) + '%' : '0%';
+    const lit = stats ? statPips(stats, row, dom[k]) : STAT_PIP_FLOOR;
+    rows[k].setAttribute('aria-label', `${row.lab} ${lit} of ${STAT_PIPS}`);
+    rows[k].querySelectorAll('i').forEach((pip, n) => pip.classList.toggle('is-on', n < lit));
   });
 }
 
-// Render the picker into the given elements. heroEl gets the big selected-car
-// preview + stats; stripEl gets the tap-to-pick thumbnails. Tapping a strip tile
-// calls onPick(i). Either element may be omitted. `canPick: false` renders the
-// strip read-only (tiles disabled) — a READY player's car is locked until they
-// un-ready, mirroring the trackPicker's gate. `cars` is the display-authoritative
-// roster; omit to fall back to the window globals (gallery).
-export function buildCarPicker({ heroEl, stripEl, selected, onPick, canPick = true, cars }) {
+// Render the picker into `gridEl` — one tile per car, each carrying its render,
+// its name and its four stat ratings. Tapping one calls onPick(i). `canPick: false`
+// renders it read-only (tiles disabled) — a READY player's car is locked until
+// they un-ready, mirroring the race picker's gate. `cars` is the
+// display-authoritative roster; omit to fall back to the window globals
+// (gallery).
+export function buildCarPicker({ gridEl, selected, onPick, canPick = true, cars }) {
+  if (!gridEl) return;
   const list = (cars && cars.length) ? cars : carsFromWindow();
   const count = list.length || 4;
   const sel = Math.max(0, Math.min(selected | 0, count - 1));
@@ -101,74 +153,62 @@ export function buildCarPicker({ heroEl, stripEl, selected, onPick, canPick = tr
   // room touches anything.
   const listSig = JSON.stringify(list.map((c) => [c.id, c.name, c.stats]));
 
-  // The card is BUILT per roster and DRESSED per pick — the same split the race
-  // page's detail panel uses (shared/trackPicker.js), and here for the same
-  // reason: picking a car rebuilt this whole card, so the name, the bars and the
-  // render all cut at once, and the fresh thumb re-ran its still→spin handoff
-  // from a blank frame. Every car has the same anatomy, so a pick only ever
-  // retitles it, slides the bars, and cross-fades the render.
-  if (heroEl && heroEl.dataset.sig !== listSig) {
-    heroEl.dataset.sig = listSig;
-    heroEl.innerHTML = '';
-    // Head first, from the trackPicker's OWN builder: the car card and the cup
-    // card are the same object on the two lobby pages, and sharing the builder
-    // is what stops their titles drifting apart. No meta line — the cup's says
-    // something its tiles don't ("Grand Prix · 4 races"), where a car's would
-    // say nothing the stat bars right there don't say better.
-    heroEl.appendChild(detailHeader({ title: nameOf(sel) }));
-    const view = document.createElement('div'); view.className = 'car-hero__view';
-    heroEl.appendChild(view); heroEl.appendChild(buildStatBars());
-  }
-  if (heroEl) {
-    dressHead(heroEl, nameOf(sel));
-    dressStatBars(heroEl.querySelector('.car-opt__stats'), list[sel] && list[sel].stats, statDomain(list));
-    // The render is the one part that cannot be re-dressed — it is a different
-    // car — so it is swapped, and the swap cross-fades: the outgoing car lies
-    // over the incoming one and fades off it. `data-car` is what makes that a
-    // change of CAR rather than of render mode; the live node is the one not on
-    // its way out.
-    const view = heroEl.querySelector('.car-hero__view');
-    const shown = view.querySelector('.carthumb:not(.carthumb--out)');
-    if (!shown || shown.dataset.car !== String(idOf(sel))) {
-      const fresh = carThumbNode(idOf(sel), { spin: true }); // only the chosen car spins
-      fresh.dataset.car = String(idOf(sel));
-      view.insertBefore(fresh, view.firstChild);
-      if (shown) retireLayer(shown, 'carthumb--out');
+  // BUILT per roster, DRESSED per pick — the same split the race page's grid
+  // uses (shared/trackPicker.js), and here for the same reason: a render is
+  // driven by a room snapshot arriving, which is to say by the network, at a
+  // moment the player's finger is on the glass. A tile that is rebuilt is the
+  // tile you are pressing being destroyed by its own tap. `canPick` is in the
+  // signature because it changes the tiles' `disabled`, which is shape.
+  if (gridEl.dataset.sig !== listSig + '|' + !!canPick) {
+    gridEl.dataset.sig = listSig + '|' + !!canPick;
+    gridEl.innerHTML = '';
+    for (let i = 0; i < count; i++) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'car-opt';
+      btn.disabled = !canPick;
+      btn.setAttribute('aria-label', nameOf(i));
+      // The render hangs off a box of its own so the outgoing one has something
+      // to be absolutely positioned in while it fades (.carthumb--out).
+      const view = document.createElement('div');
+      view.className = 'car-opt__view';
+      btn.appendChild(view);
+      const nm = document.createElement('span');
+      nm.className = 'car-opt__name';
+      nm.textContent = nameOf(i);
+      btn.appendChild(nm);
+      btn.appendChild(buildStatPips());
+      if (canPick && onPick) btn.addEventListener('click', () => onPick(i));
+      gridEl.appendChild(btn);
     }
   }
 
-  if (stripEl) {
-    // Tiles change only with the catalogue or the ready lock; a selection move
-    // is just the ring, toggled in place below so the stills never rebuild.
-    const stripSig = listSig + '|' + !!canPick;
-    if (stripEl.dataset.sig !== stripSig) {
-      stripEl.dataset.sig = stripSig;
-      stripEl.innerHTML = '';
-      for (let i = 0; i < count; i++) {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'car-opt';
-        btn.disabled = !canPick;
-        btn.setAttribute('aria-label', nameOf(i));
-        btn.appendChild(carThumbNode(idOf(i), { spin: false })); // strip tiles are stills (cheap; hero draws the eye)
-        // The name rides every tile and the CSS decides whether there is room
-        // to show it (controller.css .car-opt__name): down the rail a tile is a
-        // wide row and reads like a cup tile, name and all; in the square tiers
-        // it is a thumbnail with no width to spare. aria-label above carries
-        // the name either way, so hiding it costs nothing to a screen reader.
-        const nm = document.createElement('span');
-        nm.className = 'car-opt__name';
-        nm.textContent = nameOf(i);
-        btn.appendChild(nm);
-        if (canPick && onPick) btn.addEventListener('click', () => onPick(i));
-        stripEl.appendChild(btn);
-      }
-    }
-    for (let i = 0; i < stripEl.children.length; i++) {
-      const btn = stripEl.children[i];
-      btn.classList.toggle('car-opt--mine', i === sel);
-      if (i === sel) btn.setAttribute('aria-current', 'true');
-      else btn.removeAttribute('aria-current');
+  const dom = statDomain(list);
+  for (let i = 0; i < gridEl.children.length; i++) {
+    const btn = gridEl.children[i];
+    const mine = i === sel;
+    btn.classList.toggle('car-opt--mine', mine);
+    if (mine) btn.setAttribute('aria-current', 'true');
+    else btn.removeAttribute('aria-current');
+    dressStatPips(btn.querySelector('.car-opt__stats'), list[i] && list[i].stats, dom);
+    // Only YOUR car turns; the rest hold their calm still. That is the roster's
+    // own rule (carThumbs.js) and it is also what keeps the strips off the wire:
+    // a spin downloads a 24-frame sprite sheet, so four spinning tiles would
+    // fetch four of them over the room's wifi to say one thing.
+    //
+    // A render cannot be re-dressed — a still and a turntable are different
+    // nodes — so it is SWAPPED, and the swap cross-fades: the outgoing one lies
+    // over the incoming one and fades off it, so a tile never shows an empty
+    // frame. `data-spin` is what makes that a change of MODE; the live node is
+    // the one not on its way out. The tile around it is untouched, which is why
+    // the tile you pressed still gets to finish its press.
+    const view = btn.querySelector('.car-opt__view');
+    const shown = view.querySelector('.carthumb:not(.carthumb--out)');
+    if (!shown || shown.dataset.spin !== String(mine)) {
+      const fresh = carThumbNode(idOf(i), { spin: mine });
+      fresh.dataset.spin = String(mine);
+      view.insertBefore(fresh, view.firstChild);
+      if (shown) retireLayer(shown, 'carthumb--out');
     }
   }
 }

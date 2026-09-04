@@ -1,26 +1,21 @@
 // @ts-check
-// The race page is two grids of equal boxes, and both have read as ragged for
+// The race page is one grid of equal boxes, and it has read as ragged for
 // reasons no other test can see — nothing overflows, nothing overlaps, every
 // element is where its own rule puts it, and the page still looks unfinished.
 //
-//   • The cup tiles centre their content, and the names WRAPPED — short ones on
+//   • The tiles centre their content, and the names WRAPPED — short ones on
 //     one line, long ones on two — so a tile built a taller or shorter block
 //     than its neighbour and centred THAT, landing its stars half a line off.
-//     Six tiles, four baselines, and no alignment could fix it because the
+//     Four baselines across the grid, and no alignment could fix it because the
 //     tiles were not the same shape. Every name is now SET to two lines, the
 //     last word below the rest (shared/trackPicker.js), over a row that
 //     reserves both whether they are used or not (.mode-opt grid rows).
 //   • The padlock had a grid column of its own, which pinned it to the tile's
 //     edge while the count it qualifies centred away from it. It rides inside
 //     the trail element now, so the pair centres as one thing.
-//   • The four track tiles were stretched to their share of the card while the
-//     schematic inside them was capped, so the slack piled up INSIDE each tile
-//     as side gutters four times its top padding. The cure is that the cap sits
-//     on the TILE (--track-tile) and the row spreads what is left over.
 //
 // Both are one declaration away from coming back, and both are invisible to a
-// screenshot diff at a single size, so they are measured here at two: one where
-// the width cap binds and one where the height term does.
+// screenshot diff at a single size, so they are measured here at two.
 const { test, expect } = require('./helpers');
 
 const AT = [{ width: 932, height: 430 }, { width: 844, height: 300 }];
@@ -50,7 +45,7 @@ for (const vp of AT) {
       };
     }));
     expect(tiles.length).toBeGreaterThan(2);
-    // One shape for all six, which is the thing the alignment rests on: lose
+    // One shape for all of them, which is what the alignment rests on: lose
     // the forced break and the short names fall back to one line, at which
     // point no amount of centring makes the grid read straight.
     for (const t of tiles) expect(t.lines, 'every name is set to two lines').toBe(2);
@@ -68,26 +63,5 @@ for (const vp of AT) {
       expect(Math.abs(t.nameOffCentre), 'the name is centred').toBeLessThanOrEqual(1);
       expect(Math.abs(t.trailOffCentre), 'and so is the trail, padlock included').toBeLessThanOrEqual(2);
     }
-  });
-
-  test(`track tiles ${at}: the schematic sits in even padding`, async ({ page }) => {
-    await page.setViewportSize(vp);
-    await page.goto('/controller/index.html?scenario=lobby-race&color=0');
-    await page.waitForSelector('.racedetail .track-map');
-
-    const tiles = await page.$$eval('.modepick__tracks .track-opt', (els) => els.map((e) => {
-      const t = e.getBoundingClientRect();
-      const m = e.querySelector('.track-map').getBoundingClientRect();
-      return { l: m.left - t.left, r: t.right - m.right, top: m.top - t.top, w: Math.round(m.width) };
-    }));
-    expect(tiles).toHaveLength(4);
-
-    for (const t of tiles) {
-      expect(Math.abs(t.l - t.r), 'the schematic is centred in its tile').toBeLessThanOrEqual(1);
-      // The side gutter is the one that ran away: 26px against a 6px top.
-      expect(Math.abs(t.l - t.top), 'and its sides match its top').toBeLessThanOrEqual(2);
-    }
-    // One cap for all four, so the row cannot go ragged the other way either.
-    expect(new Set(tiles.map((t) => t.w)).size, 'four maps of one size').toBe(1);
   });
 }

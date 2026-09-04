@@ -174,15 +174,12 @@ test('Random runs an endless series of drawn tracks until the host ends it', asy
   await page.addInitScript(() => { window.__intermissionMs = 60000; });
   const roomCode = await openDisplay(page);
   const alice = await joinController(browser, roomCode, 'Alice');
-  // The Beach auto-pick lands first (fresh phone); then the host taps 🎲, which
-  // lands on the World Tour (the tile's default), and opens the panel for the
-  // endless run.
+  // The Beach auto-pick lands first (fresh phone); then the host taps the
+  // endless run, which is a tile of the same grid — no panel to open.
   await page.waitForFunction(() => window.__net.mode === 'cup', null, { timeout: 10000 });
   await alice.click('#ready-btn');  // "Select race" — the corner steps to the picker page
-  await alice.locator('.mode-opt', { hasText: 'Random' }).click();
-  await page.waitForFunction(() => window.__net.mode === 'tour' && window.__net.trackId != null, null, { timeout: 10000 });
-  await alice.locator('.modepick__tracks .track-opt', { hasText: 'Endless' }).click();
-  await page.waitForFunction(() => window.__net.randomRaces === 0, null, { timeout: 10000 });
+  await alice.locator('.mode-opt', { hasText: 'Endless Run' }).click();
+  await page.waitForFunction(() => window.__net.mode === 'random' && window.__net.randomRaces === 0, null, { timeout: 10000 });
   const first = await page.evaluate(() => window.__net.trackId);
   // An endless card promises nothing at all: one grey box carrying ∞ — no
   // track layout, no boxes it can't count, no extra badge.
@@ -218,20 +215,18 @@ test('Random runs an endless series of drawn tracks until the host ends it', asy
     .toEqual({ series: null, mode: 'random' });
 });
 
-// The fixed random cards: a cup made of tracks nobody chose — numbered "of N",
-// and it ENDS. The 🎲 tile itself lands on the World Tour, so a length is
-// always an explicit second tap — and EVERY family tap deals fresh track(s),
-// a re-tap of the same option included.
-test('every random tap deals a fresh draw; the fixed cards stay secret', async ({ page, browser }) => {
+// The fixed random card: a cup made of tracks nobody chose — numbered "of N",
+// and it ENDS. It is one tile of the picker's grid, beside the tour and the
+// endless run — and EVERY random-family tap deals fresh track(s), a re-tap of
+// the same tile included.
+test('every random tap deals a fresh draw; the fixed card stays secret', async ({ page, browser }) => {
   await page.addInitScript(() => { window.__intermissionMs = 60000; });
   const roomCode = await openDisplay(page);
   const alice = await joinController(browser, roomCode, 'Alice');
   const trackNow = () => page.evaluate(() => window.__net.trackId);
   await page.waitForFunction(() => window.__net.mode === 'cup', null, { timeout: 10000 });
   await alice.click('#ready-btn');  // "Select race" — the corner steps to the picker page
-  await alice.locator('.mode-opt', { hasText: 'Random' }).click();
-  await page.waitForFunction(() => window.__net.mode === 'tour', null, { timeout: 10000 });
-  await alice.locator('.modepick__tracks .track-opt', { hasText: '4 races' }).click();
+  await alice.locator('.mode-opt', { hasText: 'Races' }).click();
   await page.waitForFunction(() => window.__net.mode === 'random' && window.__net.randomRaces === 4, null, { timeout: 10000 });
   const drawn = await trackNow();
   expect(drawn).not.toBe(null);
@@ -240,34 +235,20 @@ test('every random tap deals a fresh draw; the fixed cards stay secret', async (
   await expect(page.locator('.cup-maps .cup-maps__tile--q')).toHaveCount(4);
   await expect(page.locator('.cup-maps .track-map')).toHaveCount(0);
 
-  // A length change deals a fresh draw (the bag never repeats back-to-back).
-  await alice.locator('.modepick__tracks .track-opt', { hasText: 'Endless' }).click();
+  // A change of run deals a fresh draw (the bag never repeats back-to-back).
+  await alice.locator('.mode-opt', { hasText: 'Endless Run' }).click();
   await page.waitForFunction(() => window.__net.randomRaces === 0, null, { timeout: 10000 });
   const endlessDraw = await trackNow();
   expect(endlessDraw).not.toBe(drawn);
 
-  // The LONG card (the manifest's MAX worn as an option): fresh draw again,
-  // and the card grows to 8 grey "?" boxes.
-  await alice.locator('.modepick__tracks .track-opt', { hasText: '8 races' }).click();
-  await page.waitForFunction(() => window.__net.randomRaces === 8, null, { timeout: 10000 });
-  const longDraw = await trackNow();
-  expect(longDraw).not.toBe(endlessDraw);
-  await expect(page.locator('.cup-races')).toHaveText('8 races');
-  await expect(page.locator('.cup-maps .cup-maps__tile--q')).toHaveCount(8);
-
-  await alice.locator('.modepick__tracks .track-opt', { hasText: '4 races' }).click();
+  await alice.locator('.mode-opt', { hasText: 'Races' }).click();
   await page.waitForFunction(() => window.__net.randomRaces === 4, null, { timeout: 10000 });
   const back4 = await trackNow();
 
-  // Re-tapping the SAME length deals again too — nothing on the pick changes
+  // Re-tapping the SAME tile deals again too — nothing on the pick changes
   // except the draw itself.
-  await alice.locator('.modepick__tracks .track-opt', { hasText: '4 races' }).click();
+  await alice.locator('.mode-opt', { hasText: 'Races' }).click();
   await page.waitForFunction((prev) => window.__net.trackId !== prev, back4, { timeout: 10000 });
-
-  // ...and so does the main 🎲 tile, which re-sends the current pick.
-  const beforeDice = await trackNow();
-  await alice.locator('.mode-opt', { hasText: 'Random' }).first().click();
-  await page.waitForFunction((prev) => window.__net.trackId !== prev, beforeDice, { timeout: 10000 });
   const rerolled = await trackNow();
 
   await startRace(alice, []);
@@ -289,16 +270,17 @@ test('World Tour draws one track per cup and races them in cup order', async ({ 
   const alice = await joinController(browser, roomCode, 'Alice');
   await page.waitForFunction(() => window.__net.mode === 'cup', null, { timeout: 10000 });
   await alice.click('#ready-btn');  // "Select race" — the corner steps to the picker page
-  // The auto-picked cup's detail panel is open; remember its height — Random's
-  // run panel must occupy the exact same space (same header, same grid, same
-  // tile anatomy), so switching rows moves nothing on the phone.
-  await alice.waitForSelector('.modepick__tracks .track-opt');
-  const cupPanelH = await alice.evaluate(() => document.querySelector('.modepick__tracks').offsetHeight);
-  // The 🎲 tile's DEFAULT is the tour — one tap from a cup lands on it.
-  await alice.locator('.mode-opt', { hasText: 'Random' }).first().click();
+  // A cup and a random run are tiles of the SAME grid and the same shape, so
+  // moving between them moves nothing on the phone.
+  await alice.waitForSelector('.racelist .mode-opt');
+  const cupTileH = await alice.evaluate(() =>
+    document.querySelector('.mode-opt').getBoundingClientRect().height);
+  await alice.locator('.mode-opt', { hasText: 'World Tour' }).click();
   await page.waitForFunction(() => window.__net.mode === 'tour' && window.__net.trackId != null, null, { timeout: 10000 });
-  const rndPanelH = await alice.evaluate(() => document.querySelector('.modepick__tracks').offsetHeight);
-  expect(Math.abs(rndPanelH - cupPanelH)).toBeLessThanOrEqual(1);
+  const tourTileH = await alice.evaluate(() =>
+    [...document.querySelectorAll('.mode-opt')].find((n) => n.textContent.includes('World Tour'))
+      .getBoundingClientRect().height);
+  expect(Math.abs(tourTileH - cupTileH)).toBeLessThanOrEqual(1);
   const first = await page.evaluate(() => window.__net.trackId);
   expect(BEACH).toContain(first); // race 1 is drawn from the FIRST cup
 

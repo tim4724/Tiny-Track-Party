@@ -55,35 +55,39 @@
 
   <!-- Lobby — who you are, your car, the track (the shared display owns the
        player roster). -->
-  <!-- ONE landscape grammar for both lobby pages: the CHOICES as a tile grid on
-       the left, the SELECTED thing as a card on the right that wraps what it
-       holds, and the action corner beneath it. The car page and the race page
-       differ only in what fills those two slots, so stepping between them moves
+  <!-- ONE landscape grammar for both lobby pages: a slim ribbon on top (name,
+       the page's key, settings), the CHOICES as a tile grid taking every pixel
+       between, and a slim action row along the bottom. The car page and the race
+       page differ only in what fills the grid, so stepping between them moves
        nothing structural. Layout in controller.css (#lobby). -->
   <section id="lobby" class="hidden">
     <!-- Identity ribbon — your NAME as a livery sticker on the left (visible in
          the CouchPad shell too: the launcher's own chip lives in a top bar that
-         landscape hides), the Settings gear pinned far right. A slim row of its
-         own, so neither has to squat on the car card. Nothing else lives here:
-         the lobby's navigation is the action corner at the bottom. -->
+         landscape hides), the Settings gear pinned far right, and between them
+         whatever KEY the page below needs. Today that is the race page's star
+         key (filled once by buildModePicker; hidden on the car page, whose
+         ratings name themselves in the tile). It rides up here because the
+         ribbon is the one row that is not the choices — the grid gets every
+         pixel below it. Nothing else lives here: the lobby's navigation is the
+         action corner at the bottom. -->
     <div class="lobby-top">
       <div class="lobby-me"><span id="me-name" class="lobby-me__name"></span></div>
+      <div id="race-key" class="race-key"></div>
       <button id="settings-btn" class="settings-btn icon-btn" type="button" aria-label="Settings" aria-haspopup="dialog"><svg class="gear-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#gear"/></svg></button>
     </div>
 
     <div class="lobby-car">
-      <!-- your car — no section header; the card speaks for itself. -->
-      <div class="car-card">
-        <div id="car-hero" class="car-hero"></div>
-      </div>
+      <!-- your car — no section header; the tiles speak for themselves. Each
+           carries its render, its name and its four stat ratings, every rating
+           named in its own row (buildCarPicker). -->
       <div id="carpick" class="carpick"></div>
     </div>
 
     <div class="lobby-race">
-      <!-- what to race — host only: 🎲 Random / a cup (4-race Grand Prix) / an
-           exact track from the open cup's panel. Everyone else sees the pick on
+      <!-- what to race — host only: one grid of tiles, a cup (4-race Grand
+           Prix) or one of the three random runs. Everyone else sees the pick on
            the big screen instead. No header — the tiles say it, and dropping
-           the kicker keeps this column's top level with the hero card's.
+           the kicker keeps this page's top level with the car page's.
            Hidden until the catalog arrives (it rides the room snapshot); see
            renderModePicker — the wrappers are display:contents, so a hidden
            #trackpick leaves both grid areas to the car half (the "No picker"
@@ -93,16 +97,19 @@
       </div>
     </div>
 
-    <!-- The ACTION CORNER — every control that moves you on, gathered bottom
-         right under the detail card. Non-hosts ready up here; the host's button
-         is the stepper, "Select race" on the car page and "Start race" on the
-         race page (renderReadyFoot, ui.js), with the ghost chip beside it as
-         the way back. There is no tab strip: this pair IS the navigation, which
-         is why the chip is a real control and not decoration. -->
+    <!-- The ACTION CORNER — one slim row along the bottom: the note far LEFT,
+         the buttons far RIGHT. Non-hosts ready up here; the host's button is the
+         stepper, "Select race" on the car page and "Start race" on the race page
+         (renderReadyFoot, ui.js), with the ghost chip beside it as the way back.
+         There is no tab strip: this pair IS the navigation, which is why the
+         chip is a real control and not decoration.
+         The note used to hang ABOVE the button as a floating chip, which cost
+         the row its own height again in reserved paper; in the row it takes the
+         width nothing else wants and the grid keeps the height. -->
     <div class="lobby-go">
+      <div id="ready-note"></div>
       <button id="lobby-back" class="btn btn--ghost lobby-back hidden" type="button">‹ Car</button>
       <button id="ready-btn" class="btn btn--brand hidden">I’m ready</button>
-      <div id="ready-note"></div>
     </div>
   </section>
 

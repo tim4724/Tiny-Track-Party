@@ -76,25 +76,48 @@ for (const vp of LOBBY) {
     for (const b of go) expect(b.bottom).toBeLessThanOrEqual(vp.height);
   });
 
-  test(`short viewport ${at}: the cup panel stays off the corner`, async ({ page }) => {
+  test(`short viewport ${at}: the race grid stays off the corner`, async ({ page }) => {
     await page.setViewportSize(vp);
     await page.goto('/controller/index.html?scenario=lobby-race&color=0');
-    await page.waitForSelector('.racedetail .track-map');
+    await page.waitForSelector('.racelist .mode-opt');
 
-    // The DEEPEST painted descendant, not the card's own box: the panel and the
-    // legend under it are what run on, and a card that has already overflowed
-    // still reports its own bottom where the grid put it.
+    // The DEEPEST painted descendant, not the grid's own box: a grid that has
+    // already overflowed still reports its own bottom where #lobby put it.
     const clear = await page.evaluate(() => {
-      const card = document.querySelector('.racedetail');
-      const btn = document.querySelector('.lobby-go .btn:not(.hidden)');
-      let deepest = card.getBoundingClientRect().bottom;
-      for (const el of card.querySelectorAll('*')) {
+      const grid = document.querySelector('.racelist');
+      const go = document.querySelector('.lobby-go');
+      let deepest = grid.getBoundingClientRect().bottom;
+      for (const el of grid.querySelectorAll('*')) {
         const r = el.getBoundingClientRect();
         if (r.width && r.height) deepest = Math.max(deepest, r.bottom);
       }
-      return btn.getBoundingClientRect().top - deepest;
+      return go.getBoundingClientRect().top - deepest;
     });
     expect(clear).toBeGreaterThanOrEqual(0);
+  });
+
+  test(`short viewport ${at}: the note shares the action row without pushing it`, async ({ page }) => {
+    // A host waiting on the grid — the one state that renders the note. It sits
+    // IN the row now rather than hanging over it, which is what lets the tiles
+    // have the height the reservation above it used to cost; so what has to hold
+    // is that the row stays one row, and the note stays left of the buttons.
+    await page.setViewportSize(vp);
+    await page.goto('/controller/index.html?scenario=lobby-race-waiting&color=0');
+    await page.waitForSelector('.racelist .mode-opt');
+    await expect(page.locator('#ready-note')).not.toBeEmpty();
+
+    const seen = await page.evaluate(() => {
+      const note = document.getElementById('ready-note').getBoundingClientRect();
+      const btn = document.querySelector('.lobby-go .btn:not(.hidden)').getBoundingClientRect();
+      let deepest = 0;
+      for (const t of document.querySelectorAll('.racelist .mode-opt')) {
+        deepest = Math.max(deepest, t.getBoundingClientRect().bottom);
+      }
+      return { overTiles: note.top - deepest, pastButtons: btn.left - note.right, bottom: note.bottom };
+    });
+    expect(seen.overTiles, 'the note must not land on the tiles').toBeGreaterThanOrEqual(0);
+    expect(seen.pastButtons, 'the note must not reach the buttons').toBeGreaterThanOrEqual(0);
+    expect(seen.bottom, 'and it must stay on screen').toBeLessThanOrEqual(vp.height);
   });
 }
 
@@ -137,33 +160,65 @@ test('very short viewport: Settings opens at its title even once the card must s
   expect(head.top).toBeGreaterThanOrEqual(0);
 });
 
+// The OTHER end, and the only test here that is not about a shortage of height.
+// A tablet, a desktop window, a CouchPad shell on a big panel: above roughly
+// 430px the render runs out of WIDTH first — it already has all the tile has —
+// and every further pixel of tile height is space the render cannot use. It all
+// used to pool ABOVE the car (90px at 1024x500, 182px at 1180x620) because the
+// render sits on its box's floor. The cap on that box (.car-opt__view
+// max-height) hands the height back to the tile, which centres the group.
+//
+// Measured as a BALANCE rather than as an amount: how much air there is depends
+// on the viewport, but it has to be the same above and below whatever the
+// viewport, and no reading at one size can say that.
+for (const vp of [{ width: 1024, height: 500 }, { width: 1180, height: 620 }]) {
+  test(`tall viewport ${vp.width}x${vp.height}: a tile's spare height splits evenly`, async ({ page }) => {
+    await page.setViewportSize(vp);
+    await page.goto('/controller/index.html?scenario=lobby-host&color=0');
+    await page.waitForSelector('#carpick .car-opt .carthumb');
+
+    const air = await page.$$eval('#carpick .car-opt', (els) => els.map((e) => {
+      const tile = e.getBoundingClientRect();
+      const thumb = e.querySelector('.carthumb').getBoundingClientRect();
+      const stats = e.querySelector('.car-opt__stats').getBoundingClientRect();
+      return { above: thumb.top - tile.top, below: tile.bottom - stats.bottom };
+    }));
+    expect(air).toHaveLength(4);
+    for (const a of air) {
+      // The render's box holds nothing but the render, so nothing is hiding
+      // between the car and the name either.
+      expect(Math.abs(a.above - a.below), 'the air above and below must match').toBeLessThanOrEqual(2);
+    }
+  });
+}
+
 // Narrow enough to stack (controller.css @media max-width: 620px). The page
-// scrolls here, so the only thing holding the three blocks in a sensible order
-// is the grid-template-areas list.
-test('narrow viewport: the stack reads choices, then the pick, then the way on', async ({ page }) => {
+// scrolls here, so the only thing holding the blocks in a sensible order is the
+// grid-template-areas list.
+test('narrow viewport: the stack reads ribbon, then choices, then the way on', async ({ page }) => {
   await page.setViewportSize({ width: 568, height: 320 });
   await page.goto('/controller/index.html?scenario=lobby-host&color=0');
   await page.waitForSelector('#carpick .car-opt');
 
   const top = (sel) => page.locator(sel).evaluate((e) => e.getBoundingClientRect().top);
-  const [strip, card, go] = await Promise.all([top('#carpick'), top('.car-card'), top('.lobby-go')]);
+  const [ribbon, grid, go] = await Promise.all([top('.lobby-top'), top('#carpick'), top('.lobby-go')]);
 
-  // The same order the wide layout reads left-to-right, so stepping between the
-  // two shapes is not a re-learn. It used to be sel, go, pick.
-  expect(strip).toBeLessThan(card);
-  expect(card).toBeLessThan(go);
+  // The same order the wide layout reads, so stepping between the two shapes is
+  // not a re-learn.
+  expect(ribbon).toBeLessThan(grid);
+  expect(grid).toBeLessThan(go);
 
-  // ONE shape at every size: four rows down a single column, here as in the
-  // landscape layout. This tier used to lie the strip down as a row of four and
-  // the landscape one used to be a 2x2, which made the picker a thing you had
-  // to re-read on a different phone.
+  // A 2x2 here, where the landscape layout runs four across: a quarter of this
+  // tier's width is not a tap target for a tile carrying a render, a name and
+  // four rated rows. What must NOT happen is the shape changing per car — every
+  // tile is one of two columns and one of two rows.
   const boxes = await page.$$eval('#carpick .car-opt', (els) => els.map((e) => {
     const r = e.getBoundingClientRect();
     return { top: Math.round(r.top), left: Math.round(r.left) };
   }));
   expect(boxes).toHaveLength(4);
-  expect(new Set(boxes.map((b) => b.top)).size, 'four rows, not one').toBe(4);
-  expect(new Set(boxes.map((b) => b.left)).size, 'one column').toBe(1);
+  expect(new Set(boxes.map((b) => b.top)).size, 'two rows').toBe(2);
+  expect(new Set(boxes.map((b) => b.left)).size, 'two columns').toBe(2);
 });
 
 // The name chip and the corner buttons are the same controls in the same corner

@@ -107,11 +107,11 @@ input[type=text]:disabled { opacity: 0.6; }
 #name-status { color: var(--ink-2); font-weight: 700; margin-top: 1rem; min-height: 1.4em; }
 
 /* ---- lobby: one grammar for both pages ---- */
-/* Ribbon top, ACTION CORNER bottom right. Between them the lobby is always the
-   same two things: the CHOICES as a tile grid on the left, and the SELECTED
-   thing as a card on the right that wraps what it holds. The car page and the
-   race page fill those two slots with different content and differ in nothing
-   else, so stepping between them moves no structure.
+/* Three rows, and the middle one is the page: a slim RIBBON on top (name, the
+   page's key, settings), the CHOICES as a tile grid taking everything between,
+   and a slim ACTION ROW along the bottom — note far left, buttons far right.
+   The car page and the race page fill the grid with different tiles and differ
+   in nothing else, so stepping between them moves no structure.
 
    There is no tab strip and no full-width GO bar. Both were full-width chrome
    rows on a screen whose scarce axis is height, and between them they took
@@ -119,180 +119,145 @@ input[type=text]:disabled { opacity: 0.6; }
    than it wanted to be. The corner is the navigation now: the primary button
    steps forward, #lobby-back steps back (renderReadyFoot owns both).
 
-   The section is clamped to the viewport so the corner is ALWAYS on screen;
-   the left column scrolls by itself when it doesn't fit. */
+   ONE COLUMN. It was 16rem + the rest for a while, cut for a foot that held
+   each page's key under its grid; the keys have gone to the ribbon and to the
+   tiles themselves, and with nothing left to sit in track 1 the split only
+   narrowed the tiles. What that means for the tiles is real height: the foot's
+   row and the paper the note chip used to hang in were together the best part
+   of 5rem, and every one of those pixels is now the renders'.
+
+   The section is clamped to the viewport so the action row is ALWAYS on screen;
+   the grid scrolls by itself when it doesn't fit. */
 #lobby {
   display: grid;
   height: 100dvh; box-sizing: border-box;
-  /* The choices track WRAPS: a fixed width holding what the choices need, with
-     every remaining pixel going to the card. A share of the page (it was
-     1fr / 1.05fr) gave the card only ever half, and the choices more than they
-     could use.
-
-     Fixed, not `max-content`, and the SAME on both pages — that is the whole
-     constraint here. The corner button is one element that changes its face
-     between the two pages, and it is centred in the second track, so anything
-     that sizes track 1 from the page's own content slides the button out from
-     under the thumb that just pressed it (tests/e2e/lobby-feedback.spec.js pins
-     this to the pixel).
-
-     16rem is the CUP list's number, it being the wider of the two: two columns
-     of cup tiles need ~15.1rem to hold their longest WORD ("Playroom"), the
-     names wrapping to a second line rather than demanding their full length,
-     where the car rail wants under 12. In rem, so it steps down with the root
-     font on the small tiers, which is where it is tightest.
-     It is also comfortably under half the page at every width this layout runs
-     at, so the card is never the narrower half. scripts/lobby-fit-check.mjs is
-     the gate on both — a cup named later outgrowing the track, and the two
-     sides swapping order. */
-  grid-template-columns: 16rem minmax(0, 1fr);
-  /* The render on a rail tile. A definite width, NOT a height-driven one: the
-     thumb is an aspect-ratio box, and WebKit will not resolve such a box's
-     width from a percentage height inside an intrinsic track (the same trap
-     .car-hero documents at length). */
-  --rail-thumb: clamp(4.25rem, 9vw, 6rem);
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
-  /* `pick` spans both content rows: the choices run the full height while the
-     card + corner stack down the right. */
   grid-template-areas:
-    'top  top'
-    'pick sel'
-    'pick go';
-  column-gap: 1rem; row-gap: 0.5rem;
+    'top'
+    'pick'
+    'go';
+  row-gap: 0.5rem;
 }
 .lobby-top { grid-area: top; display: flex; align-items: center; gap: 0.8rem; }
+/* The race page's star key, in the ribbon's middle. Hidden on the car page,
+   whose ratings name themselves in the tile — the ribbon is shared, so what
+   sits in it is the page's, not the lobby's. */
+.race-key { display: none; min-width: 0; overflow: hidden; margin-left: auto; }
+#lobby.lobby--race .race-key { display: flex; }
 
-/* Both pages hand their two halves to the SAME grid areas, so the wrappers the
-   markup needs for hiding are display:contents here and lay out nothing. That
-   is the whole streamline: .carpick and .racelist are one slot, .car-card and
-   .racedetail are the other. */
+/* The wrappers the markup needs for hiding are display:contents here and lay
+   out nothing: both pages hand their parts straight to #lobby's own areas. */
 .lobby-car, .lobby-race,
-.trackpick, .trackpick__strip, .racecols { display: contents; }
+.trackpick, .trackpick__strip { display: contents; }
 /* RACE page: the car half stands down (and vice versa — a hidden #trackpick
    takes .lobby-race's whole subtree with it). */
 #lobby.lobby--race .lobby-car { display: none; }
 
-/* -- the left slot: the choices ------------------------------------------- */
+/* -- the middle row: the choices ------------------------------------------ */
 /* Both grids are scroll containers, so they carry the shadow room themselves:
    padding + matching negative margin (content stays on the grid track, the
    tiles' shadow-pop lands in the padding instead of being clipped). A bleed on
-   a child instead makes the column scroll sideways by the bleed's width. */
+   a child instead makes the row scroll sideways by the bleed's width. */
 .carpick, .racelist {
   grid-area: pick; align-self: stretch; min-width: 0; min-height: 0;
   overflow-y: auto; padding: 0.4rem; margin: -0.4rem;
 }
-/* Cars: four wide ROWS down a single column, filling the track. ONE shape, at
-   every size — a car picker that is a 2x2 here and a rail there is a picker the
-   player has to re-read on a different phone, and the shapes it used to take
-   were each solving a problem this one does not have.
+/* Cars: four tiles across the page, the same grid the race page's races run in.
+   ONE shape for both pages and at every size — a picker that is a 2x2 here and a
+   rail there is a picker the player has to re-read on a different phone.
 
-   It is the CUP page's own shape. A rail row is a render with the car's NAME
-   beside it exactly as a cup tile is a name with its stars beneath, both filling
-   the same track, with the same card in the same place to their right — so
-   stepping between the two lobby pages moves nothing but the content.
-
-   And it is what puts the pick in front. The four cars and the hero draw the
-   SAME model, so nothing but SIZE can rank them; as a 2x2 in half the page each
-   tile grew with the viewport where --hero-h did not, and the four alternatives
-   won. A row is short, so the hero renders around 3x it.
-
-   The rows are minmax(0, 1fr), not 1fr: a bare 1fr carries an automatic
-   MIN-CONTENT floor, which is a tile's 5:4 thumbnail at the track's full width —
-   four of those would demand more height than a landscape phone has and push
-   the last cars into a scroll nobody would guess was there. With the floor
-   lifted the rows take the height there is and the thumbs shrink to fit (see
-   .car-opt .carthumb). */
+   The rows are minmax(0, 1fr), not 1fr, for the reason .racelist's are: a bare
+   1fr carries a MIN-CONTENT floor, which here is a 5:4 render at the column's
+   full width plus a name and a stat block, and that is more height than a
+   landscape phone has. With the floor lifted the row takes the height there is
+   and the render shrinks to fit (see .car-opt__view). */
 .carpick {
-  display: grid; grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: repeat(4, minmax(0, 1fr));
-  gap: 0.5rem;
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  gap: 0.55rem;
 }
-/* Cups: the same 2-column grid, rows sized to fit however many there are. */
+/* Every race there is, in one grid: five cups then three random runs, four
+   across and two down. Four columns rather than the two this had while it was a
+   list in half the page — the page's whole width is the grid's now, and at two
+   columns the eight tiles wanted four rows out of a track that has three.
+   The rows are minmax(0, 1fr), not 1fr, for the reason .carpick's are: a bare
+   1fr carries a min-content floor, and here that floor is two lines of name plus
+   a star row, which on a short phone would push the last row into a scroll
+   nobody would guess was there. */
 .racelist {
-  display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr;
-  gap: 0.55rem; align-content: start;
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  gap: 0.55rem;
 }
 
-/* -- the right slot: the selected thing ------------------------------------
-   It WRAPS. Filling the track left the card mostly empty, and an empty card
-   reads as a bug where the same emptiness as paper around a smaller card reads
-   as intentional — this is a die-cut sticker language, not a panel language. */
-.car-card, .racedetail {
-  grid-area: sel; align-self: start; min-width: 0;
-  display: flex; flex-direction: column;
-}
+/* -- the action row -------------------------------------------------------- */
+/* One slim row along the bottom: the note far LEFT, the buttons far RIGHT. The
+   corner is where the thumb already is in landscape, and buttons sized to their
+   labels rather than a full-width bar is what let the choices take the width.
 
-/* -- the action corner ----------------------------------------------------- */
-/* Buttons sized to their labels and hung on the bottom-right, not a bar: the
-   corner is where the thumb already is in landscape, and freeing the full width
-   is what let the left column become a grid of real tap targets.
-   position: relative anchors the floating #ready-note chip. */
+   FLUSH RIGHT, which it could not be while it was the only thing on this row:
+   the latency chip has held the bottom-right on every screen since before this
+   layout, so the row reserves the chip's own strip (.latency is
+   max(--safe-x, 3.4rem) wide) and butts up against it. The page's side gutter
+   already pays part of that, so only the difference is added here.
+   scripts/lobby-fit-check.mjs is what keeps the two from ever meeting.
+
+   Right-aligned is also what pins the primary button: it is the SAME element on
+   both lobby pages with a different face, so anything that centres it moves it
+   when the back chip appears beside it — you press "Select race" and "Start
+   race" lands somewhere your thumb isn't. Anchored to the right edge, nothing
+   arriving on its left can shift it (tests/e2e/lobby-feedback.spec.js pins this
+   to the pixel). */
 .lobby-go {
-  grid-area: go; position: relative;
-  /* CENTRED under the card it acts on, not pushed to the far edge. Flush right
-     is the other defensible answer, but the latency chip has held that corner
-     on every screen since before this layout — centring keeps the chip's home
-     and stops the button reading as "nearly right-aligned".
-     scripts/lobby-fit-check.mjs is what keeps the two from ever meeting.
-
-     A 3-column grid, not a centred flex row: the primary button is the SAME
-     element on both lobby pages, and centring the PAIR moved it sideways the
-     moment the back chip joined it — you press "Select race" and "Start race"
-     lands somewhere your thumb isn't. With the chip in a track of its
-     own, the middle column is centred by construction and the primary button
-     does not move between the steps. */
-  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items: end;
+  grid-area: go;
+  display: flex; align-items: center; justify-content: flex-end; gap: 0.6rem;
+  padding-right: max(0px, calc(max(var(--safe-x), 3.4rem) + 0.3rem - var(--edge-x)));
 }
 .lobby-go .btn {
-  grid-column: 2; width: auto; min-width: 11rem; padding-inline: 1.5rem; margin: 0;
+  flex: none; width: auto; min-width: 11rem; padding-inline: 1.5rem; margin: 0;
 }
 /* the chip is sized by its label, not by the forward button's floor — it has to
-   read as the smaller, quieter half of the pair — and it hangs off the primary
-   button's left rather than displacing it */
-.lobby-go .lobby-back {
-  grid-column: 1; justify-self: end; margin-right: 0.6rem;
-  min-width: 0; padding-inline: 1.1rem;
-}
+   read as the smaller, quieter half of the pair */
+.lobby-go .lobby-back { min-width: 0; padding-inline: 1.1rem; }
 /* The stepper's forward face ("Select race") — blue, so brand green stays "go". */
 .btn--step { --btn-bg: var(--blue); }
 
 /* No picker (non-host, or the catalog hasn't landed) needs no rule of its own:
-   a hidden #trackpick takes .lobby-race's whole subtree with it, the `sel` and
-   `pick` areas are filled by the car half, and renderReadyFoot leaves the back
-   chip hidden. The grammar is the same one; only the stepper collapses. */
+   a hidden #trackpick takes .lobby-race's whole subtree with it, the `pick` area
+   is filled by the car half, and renderReadyFoot leaves the back chip hidden.
+   The grammar is the same one; only the stepper collapses. */
 
-/* Narrow screens: two columns leave both cramped — stack, and go back to PAGE
-   scrolling (a pinned corner would leave the stacked middle almost no height).
-
-   The stack keeps the landscape grammar's own order: CHOOSE, then the thing you
-   chose, then the way on. Read left-to-right the wide layout is already
-   pick → sel → go, so stacking it any other way makes stepping between the two
-   shapes a re-learn. It used to put the corner second (sel, go, pick) to keep
-   the action near the fold, but that inverted the reading order to buy a scroll
-   position, and the scroll is better bought by making the CHOICES compact —
-   which is what the strip rule below does. */
+/* Narrow screens: the landscape row heights leave everything cramped — go back
+   to PAGE scrolling (a pinned action row would leave the middle almost no
+   height). The order is the landscape one, which is already top to bottom:
+   ribbon, choices, the way on. */
 @media (max-width: 620px) {
   #lobby {
     height: auto;
-    grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto;      /* every row sizes to content when the page scrolls */
-    grid-template-areas:
-      'top'
-      'pick'
-      'sel'
-      'go';
     row-gap: 1rem;
   }
+  /* The note gets a line of its own rather than competing with the buttons for
+     a width that isn't there — and it can wrap, the page having height to spare
+     once it scrolls. */
+  .lobby-go { flex-wrap: wrap; }
+  #ready-note {
+    flex: 1 1 100%; margin-inline: 0; text-align: center;
+    white-space: normal; text-overflow: clip;
+  }
   .carpick, .racelist { overflow-y: visible; }
-  /* The rows size to CONTENT here, the page having gone from a fixed height to
-     a scrolling one — `1fr` rows against an auto-height track collapse. The
-     shape does not change: four rows, same as everywhere else.
-     Which flips the render back to being sized by its COLUMN — see the rule
-     under .car-opt .carthumb, which has to sit after the base one to win. */
-  .carpick { grid-template-rows: auto; }
-  .lobby-go { grid-template-columns: auto minmax(0, 1fr); }
-  .lobby-go .btn { justify-self: stretch; }
+  /* Three across, not four: this tier is a phone held the wrong way round or a
+     narrow window, roughly half the width the landscape layout is drawn for,
+     and a quarter of that is not a tap target. The rows size to CONTENT here,
+     the page having gone from a fixed height to a scrolling one — 1fr rows
+     against an auto-height track collapse. */
+  .racelist { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: auto; }
+  /* Two across, not four, and one fewer than the race page's three: a quarter of
+     this tier's width is not a tap target for a tile carrying a render, a name
+     AND four rated rows, where a race tile is text and takes less. The rows size
+     to CONTENT — `1fr` rows against an auto-height track collapse. */
+  .carpick { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: auto; }
 }
 
 /* Stepping between the two lobby pages. The primary button is the same element
@@ -304,15 +269,13 @@ input[type=text]:disabled { opacity: 0.6; }
 
 #lobby.lobby--step .carpick,
 #lobby.lobby--step .racelist,
-#lobby.lobby--step .car-card,
-#lobby.lobby--step .racedetail {
+#lobby.lobby--step .race-key {
   animation: lobby-step-in 0.16s ease-out;
 }
 @media (prefers-reduced-motion: reduce) {
   #lobby.lobby--step .carpick,
   #lobby.lobby--step .racelist,
-  #lobby.lobby--step .car-card,
-  #lobby.lobby--step .racedetail { animation: none; }
+  #lobby.lobby--step .race-key { animation: none; }
 }
 
 /* Player identity — your name as a livery-tinted sticker (coloured bg, white
@@ -325,7 +288,7 @@ input[type=text]:disabled { opacity: 0.6; }
    are closest together. The padding is tuned so the sticker's height lands on
    the icon buttons beside it (.settings-btn / .hud-btns, sized by one rule for
    the same reason). */
-.lobby-me { display: flex; max-width: 70%; }
+.lobby-me { display: flex; min-width: 0; max-width: 70%; }
 .lobby-me__name, .hud-name {
   font-family: var(--font-display); font-weight: 700; font-size: 1.4rem; line-height: 1;
   color: #fff; background: var(--car, var(--brand));
@@ -336,115 +299,123 @@ input[type=text]:disabled { opacity: 0.6; }
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* THE TILE PRESS, for all three of them. A car row, a cup tile and a track tile
-   are different components with one press: the sticker goes down onto the paper
-   and its drop closes up, instantly, exactly like the theme's own .btn — with a
-   scale the theme's buttons do not take, because these are cards and a card that
-   only slid would not read as pushed. It was three byte-identical blocks until
-   the duration moved and all three had to be found; one rule is one place to
-   change it. (.mode-card in Settings presses without the scale, so it keeps its
-   own rule.) */
+/* THE TILE PRESS, for both of them. A car row and a race tile are different
+   components with one press: the sticker goes down onto the paper and its drop
+   closes up, instantly, exactly like the theme's own .btn — with a scale the
+   theme's buttons do not take, because these are cards and a card that only slid
+   would not read as pushed. It was byte-identical blocks until the duration
+   moved and every one of them had to be found; one rule is one place to change
+   it. (.mode-card in Settings presses without the scale, so it keeps its own
+   rule.) */
 .car-opt:active:not(:disabled), .car-opt.held,
-.mode-opt:active:not(:disabled), .mode-opt.held,
-.track-opt:active:not(:disabled), .track-opt.held {
+.mode-opt:active:not(:disabled), .mode-opt.held {
   transform: translate(2px, 2px) scale(0.98); box-shadow: none;
   transition: transform 0s, box-shadow 0s, background 0.08s;   /* down NOW; see theme.css .btn */
 }
 
-/* Car picker = a big HERO (selected car + stats) over a compact tap STRIP. */
+/* ---- car picker: the CAR page ----
+   Every car as a TILE in one grid, the same grid the race page's races run in:
+   the render on top, the name under it, its four named stat ratings at the foot
+   of the tile (shared/carPicker.js).
 
-/* Card wrapper — wraps only #car-hero, which buildCarPicker rewrites. It keeps
-   the `sel` track whole, which is what puts it in the same place as the race
-   page's .racedetail; the rail below is sized to leave it there. */
-.car-card { position: relative; }
+   The render's box. It wears NO card of its own and takes whatever height the
+   tile has left once the name and the bars have theirs, which is what lets one
+   grid shape serve a 430px screen and a 232px one — the render is the part with
+   give. `relative` is what the outgoing render hangs off while it fades.
 
-/* The chosen car's card. It shares the cup card's ANATOMY — a surface with no
-   outline or drop, because it is a surface and not a sticker, headed by
-   .raceinfo built from the trackPicker's own markup (shared/carPicker.js) so
-   the two pages' titles cannot drift.
-   It does NOT share the cup card's colour wash. A cup panel wears its cup's
-   colour because the cup has no other way to show what it is; a car's identity
-   is the render sitting on the card, and every wash tried behind it — the
-   player's livery at any strength, a neutral ink mix — either fought the
-   render or dulled it. White is the theme's own card surface, it reads clearly
-   against the warm paper, and it is the same white the strip's tiles wear.
-
-   The name heads the STATS column rather than the whole card: as a full-width
-   header it sat far from both things it labels, with the card's two halves
-   drifting apart under it. Here the render takes the left column outright and
-   the name + bars read as one block. */
-.car-hero {
-  /* The render's height, stated ONCE — the car's row is sized from it and the
-     car's column is that height through the thumb's 5:4 ratio. Both have to be
-     written out: the column USED to be an `auto` track left to work its own
-     width out from a height:100% thumb, and WebKit does not resolve an
-     aspect-ratio box's width from a percentage height when it measures an
-     intrinsic track. Safari sized that column from the title text instead, so
-     the bars took the rest of the card and the car hung outside it — and every
-     pick re-measured and moved them again, which is what the flicker was.
-
-     It stays a DEFINITE length for that same reason — a percentage of the row
-     would put WebKit straight back there — so it scales with the VIEWPORT
-     rather than with the row: dvh is definite, `100%` of a track is not. It
-     used to be a flat 9rem, which is what let a picker tile out-grow the hero
-     on a tall phone; that value is now the floor, so nothing shrinks on the
-     short screens that never had the height to spare.
-
-     Bounded on BOTH axes. The render's row comes from this height but its
-     column is 5/4 of it, so on a screen short of WIDTH rather than height (a
-     667x375 SE in landscape is the case that bit) a height-only figure took the
-     card's width off the stat block until "Handling" no longer fitted its own
-     label. The vw term only ever binds there.
-
-     The third term is the same guard on the other side: below ~275px of
-     viewport the card is the only thing between the ribbon and the action
-     corner, and a render sized off dvh alone grew just past the row and sat on
-     the button. It drops the render back to its floor there and binds nowhere
-     else. */
-  --hero-h: clamp(9rem, min(46dvh, 24vw, calc(100dvh - 148px)), 15rem);
-  display: grid; grid-template-columns: calc(var(--hero-h) * 5 / 4) minmax(0, 1fr);
-  /* The name belongs to the CAR, so it sits on top of it in the left column
-     rather than off in the stats column, where it hung above everything with
-     white space either side and read as belonging to nothing.
-     The stats span both rows, so the render and the name + bars share a top and
-     a bottom edge, and the car takes only the width its ratio asks for — which
-     is what hands the rest back to the bars, the thing they were short of. */
-  grid-template-areas:
-    'head stats'
-    'view stats';
-  /* --hero-h is the render's row, and a FLOOR rather than a fixed height: a
-     stat block taller than the car (the small-screen font tiers get close)
-     grows the row instead of overflowing it, and the car centres in it. The
-     floor is what stops the picked car rendering SMALLER than the thumbnail on
-     an unpicked strip tile, which is backwards for the one car the card exists
-     to show. */
-  grid-template-rows: auto minmax(var(--hero-h), auto);
-  align-items: stretch; gap: 0.45rem 0.9rem;
-  background: var(--surface); border-radius: var(--r-sm); padding: 0.55rem;
-}
-.car-hero .raceinfo { grid-area: head; align-self: start; min-width: 0; }
-/* The render wears NO card of its own. The white tiles on this page are the
-   things you TAP — the strip's models, the panel's tracks — and the hero render
-   is the one thing here that isn't one, so framing it dressed a readout as a
-   control. It centres in whatever height the column has. */
-.car-hero__view {
-  grid-area: view; align-self: stretch;
-  display: flex; align-items: center; justify-content: center;
-  /* what the outgoing car hangs off while it fades — see .carthumb--out */
+   The basis is ZERO rather than `auto` so this box is the leftover height and
+   nothing else. On `auto` its basis would be its own CONTENT — the thumbnail,
+   an aspect-ratio box that takes its height FROM this box — and the two would
+   be sizing each other. Both engines currently settle that loop the same way
+   and the geometry spec passes either spelling, so this is not a bug fix; it is
+   the one of the two that isn't circular. */
+.car-opt__view {
+  flex: 1 1 0; min-height: 0; align-self: stretch;
+  /* BOTTOM-aligned, not centred, for the pixel or two the cap below can leave:
+     slack under the wheels is the gap before the name, where the same slack
+     above the roof is just the tile's own air. */
+  display: flex; align-items: flex-end; justify-content: center;
   position: relative;
 }
-/* Picking a car swaps this render for a different one, and that swap CROSS-FADES
-   on the same terms as the cup panel on the next page: the car you had lies over
-   the one you picked and fades off it, so the card never shows an empty frame
-   and the incoming still never has to arrive from blank. (It used to be a cut —
-   worse than a cut, since a rebuilt thumb re-ran its own still→spin handoff, so
-   a pick flashed a static hero before settling.)
-   Laid out exactly as the live render is — the column's full width, centred in
-   the row — so the two sit on top of each other rather than one jumping.
-   `swap-out` is declared with the cup panel's own retiring layer further down —
-   ONE keyframe, because both are the same event at the same speed. */
+/* The render is sized by the ROW and capped by its column, so it shrinks with
+   the tile on a short screen instead of setting a floor the tile cannot go
+   under. That cap is the whole difficulty: `aspect-ratio` with a height AND a
+   max-width does not letterbox, it OBEYS BOTH — the box keeps the full height,
+   takes the capped width, and stops being 5:4. The still inside it is
+   object-fit: contain and rides that out; the TURNTABLE is a background-image
+   sized in percentages (carThumbs.js writes SPIN_FRAMES * 100%), so it stretches
+   with the box. The spinning car went visibly narrow on exactly the shapes where
+   a tile is taller than 5:4 is wide, which is most of them once the page's foot
+   went and the tiles got its height.
+   So the box is sized from BOTH of its container's axes at once and is never
+   capped afterwards: whichever of the two runs out first decides, and the ratio
+   holds. cq units are the only way to ask a flex item's own box that question;
+   the @supports is the fallback path (the cap, and its stretch) for an engine
+   without them.
+
+   The ratio is the CROPPED one below, not the frame's own 5:4. */
+.car-opt .carthumb { height: 100%; width: auto; max-width: 100%; }
+@supports (width: 1cqh) {
+  .car-opt__view {
+    container-type: size;
+    /* …AND NEVER TALLER THAN THE RENDER CAN USE. Above about 430px of viewport
+       height the render is WIDTH-bound — it has all of the tile's width and
+       cannot take more — so every further pixel of tile height was landing in
+       this box as dead space: 90px of it at 1024x500, 182px at 1180x620, all of
+       it above the car. The cap hands that height back to the TILE, which
+       centres the whole group in it (.car-opt), so the air ends up split evenly
+       above and below three blocks that stay snug — rather than pooling in one
+       hole at the top.
+       The number is the render's own: at 125:92 a full-width render is
+       0.736 of the tile's content width, and `cqw` here is .car-opt's content
+       box (the tile's padding is already out of it). Below that height the cap
+       never binds and the render is height-bound exactly as before. */
+    max-height: calc(100cqw * 92 / 125);
+  }
+  /* The crop ratio the other way up, and SPELLED rather than transcribed: this
+     is the reciprocal of the max-height above it, and a hand-worked decimal is
+     how the two drift. It was 137.36 for a while, which is 125/91 — a percent
+     too tall, enough to push the render a pixel past its box on the short
+     tiers, where the box is what the tile has left. */
+  .car-opt .carthumb { width: min(100cqw, calc(100cqh * 125 / 92)); height: auto; max-width: none; }
+}
+
+/* The tile CROPS the frame's baked bottom padding. Every thumbnail is a 5:4
+   transparent PNG with the car fitted inside it by the bake
+   (scripts/capture-car-thumbs.js: horizontal from the bounding SPHERE so a yaw
+   spin doesn't jitter, vertical from the bbox with slack), and what that leaves
+   under the wheels is 9% of the frame on the tightest roster car and 17% on the
+   loosest. On a tile that is a gap between the car and its name — an uneven one,
+   which is what makes it read as a mistake rather than as spacing.
+   8% comes off the bottom, which is all the tightest car has to give; the rest
+   of the roster keeps a few percent. Cropping here rather than re-baking is
+   deliberate: the frames are shared with the display's lobby and the shelf art,
+   the horizontal fit is already tight (2.3% on Bolt), and re-fitting the
+   vertical would re-judge the whole roster's framing for a phone's tile.
+   The window is 125:92 and both layers are drawn at the full frame INSIDE it,
+   anchored top — so the still keeps object-fit: contain and the turntable keeps
+   its percentage cells, and neither knows it has been cropped. */
+.car-opt .carthumb { aspect-ratio: 125 / 92; overflow: hidden; }
+.car-opt .carthumb__still,
+.car-opt .carthumb__spin { bottom: auto; height: 108.7%; }
+
+/* Picking a car swaps that tile's render for a spinning one (and the tile you
+   left for a still), and the swap CROSS-FADES: the outgoing one lies over the
+   incoming one and fades off it, so a tile never shows an empty frame and the
+   arriving render never has to come from blank. (It used to be a cut — worse
+   than a cut, since a rebuilt thumb re-ran its own still→spin handoff and
+   flashed a static frame before settling.)
+   Laid out exactly as the live render is — same letterboxed width (it carries
+   .carthumb, so the sizing rules above are its too), centred, and sitting on the
+   view's floor like the live one — so the two sit on top of each other rather
+   than one jumping. Stretching it edge to edge was near enough while the box
+   filled its column and is not now.
+   NOT a fade toward the paper: the replacement is already underneath at full
+   opacity, so the pixel beneath the fade is never the page. That was tried on
+   the race page's old cup panel and read as a white flash between two cups. */
+@keyframes swap-out { from { opacity: 1; } to { opacity: 0; } }
 .carthumb--out {
-  position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
+  position: absolute; left: 50%; bottom: 0; transform: translateX(-50%);
   pointer-events: none;
   animation: swap-out 0.14s ease-out forwards;
 }
@@ -452,80 +423,93 @@ input[type=text]:disabled { opacity: 0.6; }
   .carthumb--out { animation: none; opacity: 0; }
 }
 
-/* Handling stat bars — one chunky rounded pill per stat, filled in the player's
-   livery so the panel reads as "theirs". Normalised across the roster in JS.
+/* The stat ratings — four NAMED rows, each five die-cut pips with the earned
+   ones filled in the player's livery so the block reads as "theirs". Normalised
+   across the roster in JS (shared/carPicker.js).
 
-   Label ABOVE its bar, not beside it: side by side, the widest label
-   ("HANDLING") set the column for all four, so every bar started a third of the
-   way across and none of them had the length to show a difference. Stacked, the
-   bar gets the full width and the label needs no column at all. */
+   A two-column GRID, not four flex rows: the labels are different lengths and
+   the pips have to start on one line down the tile, or the block reads as four
+   unrelated things. Every tile has the same four words, so the label column
+   lands at the same width on all of them without being told to.
+
+   Pips, not a continuous fill, and that is the second answer here. The first was
+   full-width bars with the fill floored at 66% (every car reads as capable, the
+   real spread in the top third) and their names as a key in the page's foot: two
+   problems, one shape. A fill between 66% and 100%, on four separate tiles, is a
+   difference the eye has to MEASURE — pips are counted. And a key in the foot
+   made the reader carry four words up the page to four unlabelled bars, which
+   only ever worked because the key was a column in the bars' own order. Named
+   rows of countable pips need neither trick. */
 .car-opt__stats {
-  /* centred against the car, which is taller: the block stays tight rather
-     than spreading to fill, so the row gap below stays the authored one */
-  grid-area: stats; align-self: center;
-  display: flex; flex-direction: column; gap: 0.3rem;
+  flex: none; align-self: stretch; width: 100%;
+  display: grid; grid-template-columns: auto minmax(0, 1fr);
+  align-items: center; gap: 0.2rem 0.3rem;
 }
-/* the label sits ON its bar, so the pair reads as one row: the gap WITHIN a
-   stat has to stay clearly tighter than the gap between two of them */
-.car-opt__stats .stat { display: flex; flex-direction: column; gap: 0.12rem; }
-.car-opt__stats .stat__lab {
-  font-size: 0.78rem; font-weight: 800; color: var(--ink-2);
-  text-transform: uppercase; letter-spacing: 0.03em; text-align: left;
+.stat__lab {
+  min-width: 0; white-space: nowrap; line-height: 1;
+  font-weight: 800; font-size: 0.72rem; color: var(--ink-2);
+  text-transform: lowercase;
+  /* Ragged LEFT, flush against the pips: the tile centres its text (the name is
+     centred on the render) and a centred label leaves a gap that reads as a
+     column break between a word and the row it names. */
+  text-align: right;
 }
-.car-opt__stats .stat__bar {
-  height: 12px; border-radius: 999px; overflow: hidden;
+/* The pips share the row's leftover width evenly, so a longer label narrows all
+   five rather than pushing the last one off the tile. */
+.stat__pips { display: flex; gap: 2px; min-width: 0; }
+.stat__pips > i {
+  flex: 1 1 0; min-width: 0; height: 9px;
+  border: 2px solid var(--ink); border-radius: 3px;
   background: var(--surface);
-  border: 2.5px solid var(--ink);
+  /* Picking a car RE-RATES all four rows, and the pips light rather than cut:
+     the block exists to be compared, and a change you can see happen is the
+     comparison. Only possible because the block is dressed rather than rebuilt
+     (shared/carPicker.js). Slower than the render's cross-fade above it on
+     purpose: the fade is covering a change, this one IS the change. */
+  transition: background 0.22s ease-out;
 }
-.car-opt__stats .stat__bar > i {
-  display: block; height: 100%; border-radius: 999px;
-  background: var(--car);
-  /* The bars SLIDE between cars rather than cutting. They exist to be compared,
-     and a cut leaves the comparison to memory — where a bar visibly growing or
-     shrinking IS the comparison. Only possible now the block is dressed rather
-     than rebuilt (shared/carPicker.js); a fresh node has nothing to move from.
-     Slower than the render's cross-fade beside it on purpose: the fade is
-     covering a change, this one is the point. */
-  transition: width 0.22s ease-out;
-}
+.stat__pips > i.is-on { background: var(--car); }
 @media (prefers-reduced-motion: reduce) {
-  .car-opt__stats .stat__bar > i { transition: none; }
+  .stat__pips > i { transition: none; }
 }
 
-/* One model as a tap target: a ROW filling the track's width — the render in a
-   track of its own, the name taking the rest. Padded tighter on the render's
-   side than the name's, so the model sits in the corner of the sticker rather
-   than floating in the middle of it. */
+/* One model as a tap target: a COLUMN — the render taking whatever height is
+   left, the name under it, the rated rows at the foot. The same sticker a race tile
+   is, and in the same grid, so stepping between the two lobby pages moves
+   nothing structural. */
 .car-opt {
-  position: relative; cursor: pointer;
-  display: grid; grid-template-columns: var(--rail-thumb) minmax(0, 1fr);
-  align-items: center; justify-items: start; gap: 0.7rem;
-  padding: 0.4rem 0.9rem 0.4rem 0.5rem;
+  position: relative; cursor: pointer; min-width: 0; min-height: 0;
+  /* An inline-size container so the render's box can be capped against the
+     TILE's width (see .car-opt__view). Inline-size only: the tile's width is a
+     grid track and never depends on its contents, where its HEIGHT is what the
+     contents are being measured against. */
+  container-type: inline-size;
+  /* CENTRED, which is what the cap above is for: whatever height the tile has
+     over what its three blocks need is split evenly above and below them,
+     instead of all of it sitting on top of the car. */
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 0.3rem;
+  padding: 0.4rem 0.45rem 0.5rem;
   background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r-sm);
   box-shadow: var(--shadow-pop);
   transition: transform var(--press-up), box-shadow var(--press-up), background 0.08s;
 }
-/* The render is sized by the ROW and capped by its column, so it shrinks with
-   the rows on a short screen instead of setting a floor they cannot go under —
-   four rows on a 300px-tall phone are shorter than --rail-thumb's own 5:4, and
-   a render that would not give way pushed the strip into a scroll.
-   Height-driven is safe HERE and nowhere else on this page: the column is
-   --rail-thumb, a definite length, so nothing has to measure an aspect-ratio box
-   to size a track (the trap .car-hero documents). max-width keeps it inside that
-   column once the rows are tall enough to want more.
-   Only the HERO spins, so no sprite strip is ever stretched by this: a spin's
-   background-size assumes the box kept its ratio. */
-.car-opt .carthumb { height: 100%; width: auto; max-width: 100%; }
 /* Stacked (max-width: 620px), .carpick's rows are `auto`: a height:100% render
    and the row that contains it would each be waiting on the other, and both
-   settle at nothing. Sized by its column there instead. */
+   settle at nothing. Sized by its column there instead — and the size container
+   has to go with it, since size containment means the box CANNOT be measured
+   from what is in it, which is the only thing left to measure it from here. */
 @media (max-width: 620px) {
-  .car-opt .carthumb { height: auto; width: 100%; }
+  /* max-height goes too: the render IS the box's content here, so a cap at its
+     own height is at best a no-op and at worst a rounding error's worth of clip. */
+  .car-opt__view { flex: none; container-type: normal; max-height: none; }
+  .car-opt .carthumb { height: auto; width: 100%; max-width: 100%; }
 }
-/* The car's name. Sized and clipped exactly like a cup tile's name, because on
-   this page it IS one. */
+/* The car's name. Sized and clipped exactly like a race tile's name, because on
+   this page it IS one — one line, though, since a car's name is one word and
+   there is no second line to reserve. */
 .car-opt__name {
-  min-width: 0; max-width: 100%;
+  flex: none; min-width: 0; max-width: 100%;
   font-family: var(--font-display); font-weight: 700; font-size: 1.25rem;
   color: var(--ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -536,8 +520,8 @@ input[type=text]:disabled { opacity: 0.6; }
    presses like every other control on the page. The duration was never the
    reason this read as missing: the tile was being destroyed mid-animation by
    its own tap (see buildModePicker). */
-/* locked strip (player is READY): the pick stands, the alternatives recede.
-   pointer-events off so a tap on a locked tile falls through to the strip
+/* locked grid (player is READY): the pick stands, the alternatives recede.
+   pointer-events off so a tap on a locked tile falls through to the grid
    container, where main.js answers with the "tap Ready ✓ to change" hint —
    a dead tap on a visible control otherwise just reads as broken. */
 .car-opt:disabled { cursor: default; pointer-events: none; }
@@ -550,7 +534,7 @@ input[type=text]:disabled { opacity: 0.6; }
   75% { transform: translate(5px, var(--btn-sink)); }
 }
 .btn--nudge { animation: btn-nudge 0.2s 2; }
-/* selected strip tile: filled with YOUR livery, loud. The drop is NOT the mark —
+/* selected tile: filled with YOUR livery, loud. The drop is NOT the mark —
    every tile wears the same one, because every tile is equally pressable; the
    fill alone says which is yours (the pale-blue highlight didn't fit the warm
    palette).
@@ -562,16 +546,24 @@ input[type=text]:disabled { opacity: 0.6; }
    own background. 55% is the loudest fill that keeps every model against every
    livery. */
 .car-opt--mine { background: color-mix(in srgb, var(--car, var(--brand)) 55%, #fff); }
-/* over the corner's button: why it's gated / who we're waiting on. A floating
-   sticker chip OUT OF FLOW (so text coming and going never moves the button,
-   and an empty note costs no height), hung above the corner and centred on
-   it. It lands in the paper gap the wrapped card leaves. Hidden by :empty
-   (renderReadyFoot clears it rather than toggling a class), which is also the
-   hook the star legend reads below. */
+/* Beside the corner's buttons, on the action row: why it's gated / who we're
+   waiting on. A sticker chip in the row's own flow, taking the width the buttons
+   don't want — it used to hang ABOVE them, out of flow, which kept it from
+   moving the button but made the row reserve a second row's worth of paper for a
+   note that is usually absent. On the row, an empty note costs nothing and a
+   long one has the whole left half rather than one button's width.
+
+   CENTRED in that leftover width, by an auto margin on EACH side: flush left it
+   sat under the first tile of the grid with a page of paper between it and the
+   thing it explains, and a chip alone against the left edge reads as a fifth
+   corner rather than as part of the row. The two autos are also what keep the
+   buttons pinned right — auto margins eat all the free space, so the note
+   growing or vanishing moves nothing but itself. Hidden by :empty
+   (renderReadyFoot clears it rather than toggling a class). */
 #ready-note {
-  position: absolute; bottom: calc(100% + 0.4rem); left: 50%; transform: translateX(-50%);
-  max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  color: var(--ink-2); font-weight: 700; font-size: 1.05rem; text-align: center;
+  margin-inline: auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--ink-2); font-weight: 700; font-size: 1.05rem;
   background: var(--surface); border: 2.5px solid var(--ink); border-radius: var(--r-pill);
   padding: 0.2em 0.9em; box-shadow: var(--shadow-pop);
 }
@@ -580,17 +572,17 @@ input[type=text]:disabled { opacity: 0.6; }
    CAR_COLORS), heavier weight so the colour reads as intentional. */
 .host-name { font-weight: 800; }
 
-/* ---- mode picker: the RACE page (pick grid + detail card) ----
-   The host's second lobby page: every pick as a TILE on the left (cups in
-   ladder order with their stars, the locked Playroom in place, 🎲 Random
-   last), and a detail card on the right describing whatever the cursor rests
-   on. Host only (everyone else sees the pick on the big screen).
+/* ---- mode picker: the RACE page ----
+   The host's second lobby page, and the whole of it: every race as a TILE in one
+   grid — the cups in ladder order with their stars, the locked Playroom in
+   place, the three random runs after them. Nothing under it; what the stars mean
+   is a key up in the ribbon (.star-legend). Host only (everyone else sees the
+   pick on the big screen).
 
-   Its two halves land in #lobby's `pick` and `sel` areas directly — the
-   wrappers between are display:contents — which is what makes this page and
-   the car page the same page. The one cost of the grid over the list it
-   replaced: the cups are a difficulty ladder, and two columns make that order
-   zigzag instead of running straight down. */
+   It lands in #lobby's `pick` area directly, the wrappers between being
+   display:contents. The one cost of a grid over a single column: the cups are a
+   difficulty ladder, and columns make that order zigzag instead of running
+   straight down. */
 
 /* A tile is plain white paper in a thick ink outline, like an unpicked car
    tile; the picked one fills with its own colour (painted inline — the fill IS
@@ -627,9 +619,6 @@ input[type=text]:disabled { opacity: 0.6; }
   transition: transform var(--press-up), box-shadow var(--press-up), background 0.08s;
 }
 .mode-opt:disabled { cursor: default; }
-/* The CURSOR (whose detail shows) when it is not also the pick — the one case
-   is a locked row being examined. Same outline mark as the car strip's .sel. */
-.mode-opt--cursor:not(.mode-opt--mine) { outline: 3px solid var(--ink); outline-offset: 2px; }
 /* Locked: sunken paper, the name recedes, the trail shows unlock progress. */
 .mode-opt--locked { background: var(--surface-2); }
 .mode-opt--locked .mode-opt__name { opacity: 0.85; }
@@ -675,174 +664,19 @@ input[type=text]:disabled { opacity: 0.6; }
 @media (max-height: 360px), (max-width: 700px) {
   .mode-opt__name, .car-opt__name { font-size: 1.12rem; }
 }
-/* Moving the cursor to another row swaps this panel for a different one — a new
-   colour, name and four new maps — and that is the one abrupt moment left on
-   the page now that neither the list below the finger nor the panel's own tiles
-   are rebuilt by a pick (trackPicker.js). It CROSS-FADES: the outgoing panel is
-   lifted out of the flow, laid over its replacement and faded out, so what
-   shows through the fade is the new panel rather than the page.
-   Two ways this has been got wrong. Fading the panel itself thinned its tint
-   toward the paper behind it and read as a white flash between two cups. Fading
-   its CONTENT in instead left the card blank on its bare wash for a beat, which
-   on the pale cups reads as the same flash — and took the tile you had just
-   pressed out from under your thumb. Under a cross-fade there is an opaque
-   panel under the fade at every frame, and nothing arrives from nothing.
-   The incoming panel does not animate at all, so a pick that only re-dresses
-   what is there (which is most of them) moves exactly what it changed. */
-/* ONE fade for both lobby cards: the cup panel here and the car render on the
-   page before it are the same event — a pick swapping one surface for another —
-   so they retire at one speed (shared/trackPicker.js retireLayer). */
-@keyframes swap-out { from { opacity: 1; } to { opacity: 0; } }
-.modepick__tracks--out {
-  position: absolute; top: 0; left: 0; right: 0;
-  pointer-events: none;   /* it is on TOP for a beat, and it is already stale */
-  animation: swap-out 0.14s ease-out forwards;
-}
-@media (prefers-reduced-motion: reduce) {
-  /* No fade to wait for: the swap is a cut, which is what the setting asks for.
-     (retireLayer's timer is what removes the node.) */
-  .modepick__tracks--out { animation: none; opacity: 0; }
-}
-
-/* the detail card: sized by its content, not by the column (see .racedetail in
-   the lobby block) — the panel used to run on past the last track tile.
-   `relative` is what the retiring panel above hangs off, so the card's height
-   is the INCOMING panel's from the first frame and the legend never moves. */
-.racedetail { position: relative; }
-.racedetail .modepick__tracks { flex: none; display: flex; flex-direction: column; gap: 0.6rem; }
-/* the panel's header: name (+stars), meter far right, one meta line — the SAME
-   height for the cup and random families, so switching rows moves nothing */
-.raceinfo { display: flex; flex-direction: column; gap: 0.15rem; }
-.raceinfo__title { display: flex; align-items: center; gap: 0.5rem; min-height: 1.5rem; }
-.raceinfo__name { font-family: var(--font-display); font-weight: 700; font-size: 1.4rem; color: var(--ink); }
-.raceinfo__title .starrow { font-size: 1rem; }
-.raceinfo__title .trackpick__cup-meter { margin-left: auto; }
-.raceinfo__meta { font-weight: 700; font-size: 0.92rem; color: var(--ink-2); }
-/* the locked cup's unlock pitch, in place of the track grid */
-.modepick__tracks--locked { background: var(--surface-2); }
-.unlock-rules { display: flex; flex-direction: column; gap: 0.35rem; }
-.unlock-rules__row {
-  display: flex; align-items: center; gap: 0.5rem;
-  background: var(--surface); border: 2.5px solid var(--ink); border-radius: 10px;
-  padding: 0.22rem 0.7rem;
-  font-family: var(--font-display); font-weight: 700; font-size: 0.8rem; color: var(--ink);
-}
-.unlock-rules__row--todo { opacity: 0.55; }
-.unlock-rules__row b { margin-left: auto; }
-.unlock-rules__foot { font-weight: 800; font-size: 0.72rem; color: var(--ink-2); text-align: right; }
-/* the star key under the detail panel, bottom right — what the badges mean */
-.star-legend {
-  display: flex; gap: 1rem; justify-content: flex-end;
-  margin-top: 0.5rem; flex: none;
-}
-/* The legend stands down while the corner is explaining itself. On the CAR page
-   the note chip lands in the paper the wrapped card leaves and overlaps nothing;
-   on the RACE page the card is taller and this legend is exactly what is under
-   the chip, so a host waiting on the grid read a sentence with the legend
-   sticking out either side of it (gallery: lobby-race-waiting, the screen that
-   found this). VISIBILITY, not display: the card keeps its height, so the legend
-   coming back when the last player readies up moves nothing — least of all the
-   button, which is the whole reason the chip is out of flow. */
-#lobby:has(#ready-note:not(:empty)) .star-legend { visibility: hidden; }
+/* the star key in the race page's top RIBBON — what the badges mean. It has
+   been under a detail card and then under the grid; both cost the tiles a row of
+   their own height to explain a badge that means the same thing all evening. The
+   ribbon is a row the page already spends, and the key fits in what the name
+   chip and the gear leave.
+   Kept at 0.82rem: at the 0.92rem it wore under the old detail card, "top 3"
+   wrapped under its own stars and the key read as four items instead of three. */
+.star-legend { display: flex; gap: 0.55rem; flex: none; min-width: 0; max-width: 100%; }
 .star-legend__item {
-  display: flex; align-items: center; gap: 0.35rem;
-  font-weight: 800; font-size: 0.92rem; color: var(--ink-2);
+  display: flex; align-items: center; gap: 0.3rem; white-space: nowrap;
+  font-weight: 800; font-size: 0.82rem; color: var(--ink-2);
 }
 .star-legend .starrow { font-size: 0.8rem; }
-/* the open cup's exact-pick panel — an inset under the mode tiles. One compact
-   4-across row so the lobby stays a single screen. The background is painted inline
-   in its cup's colour (buildModePicker), deeper than the cup tiles so it reads as a
-   surface BEHIND cards; that colour is the whole point of the panel, since it's what
-   ties these four tracks back to the cup they came from. No outline: it's a surface,
-   not a sticker, and at PANEL_TINT the colour draws its own edge against the paper
-   (the hairline this used to carry was a crutch from when the tint was far fainter). */
-.modepick__tracks {
-  padding: 0.55rem;
-  border-radius: var(--r-sm);
-}
-.modepick__tracks .trackpick__grid { grid-template-columns: repeat(4, minmax(0, var(--track-tile))); gap: 0.45rem; justify-content: space-evenly; }
-/* The maps are SQUARE and take the width they are given, so the panel's height
-   is set by the card's width — widen the card and the four schematics push the
-   panel down into the action corner. (The corner is out of this card's flow, so
-   nothing stops them; there was 3px of clearance at 844x300 before the card was
-   widened, and -23px after.) So the schematic is capped — and the cap is on the
-   TILE, not on the map inside it.
-   That distinction is the whole rule. Capping the map left the tile stretched
-   to its 1fr share of the card, so the slack piled up as side gutters INSIDE
-   the tile: 26px left and right against 6px top, which is what a tile with
-   uneven padding is. Capping the tile hands the slack to the row instead, where
-   space-evenly spreads it as equal gaps, and the map fills the tile it is in.
-   5.5rem holds the width-driven growth: past that a schematic is only bigger,
-   not clearer, and the card is free to widen without the panel chasing it. It is
-   also all the vertical budget there is — the clearance the panel leaves the
-   action corner falls PIXEL FOR PIXEL with the cap, and 5.5rem is what leaves
-   the tightest sweep point its 2px. It was 6rem until the page's gutter went to
-   14px and the gear grew to a 44px touch target: 16px of new furniture, and this
-   is where the vertical half of it comes from. The dvh term holds the other end — 100dvh less the page furniture the maps share the
-   screen with (the identity ribbon, the action corner, this card's own title
-   and its legend, and the gaps between) — and binds only under ~290px, where
-   the fixed furniture, not the card's width, is what leaves no room.
-   And it needs a FLOOR, because that dvh term is a subtraction and subtractions
-   go negative: a 232px-tall viewport (Z Fold cover, landscape, browser bar up)
-   made it -4px, so the four tiles collapsed to 10px slivers while the
-   schematics inside them, sized by their own aspect box, spilled 100px past the
-   bottom of the page. A cliff, not a degradation. 3rem is what the tightest
-   viewport in the gallery (Z Fold cover, landscape, bar up: 653x232) can hold
-   while the corner still clears this card — and it only clears because the tier
-   at the foot of this file has already spent the legend and the tile labels.
-   Under the floor the maps stop shrinking and the card runs out of room, which
-   is the honest failure and not a collapse.
-   max-WIDTH for all three, because a square that meets a max-HEIGHT keeps its
-   width and letterboxes the schematic inside a wide, short box; capping the
-   width shrinks the square as a square. The tile's own padding and border ride
-   along on top of the map's cap, since the cap is the size the SCHEMATIC may
-   reach. tests/e2e/controller-short-viewport.spec.js is the gate. */
-.modepick__tracks { --track-tile: calc(max(3rem, min(5.5rem, 100dvh - 236px)) + 0.5rem + 4px); }
-/* Random's panel holds RUNS, not tracks, but wears the exact same grid and tile
-   anatomy — a "?" square (.track-map--q) where a schematic would sit — so
-   swapping a cup for Random moves nothing below the picker. */
-.modepick__tracks .track-opt { padding: 0.25rem 0.25rem 0.3rem; gap: 0.25rem; border-width: 2px; }
-/* 0.76rem, not the 0.82 it was: the tile narrowed with its cap (above) and the
-   longest track name no longer fit, and an ellipsised name on a tile whose whole
-   job is to say which track this is costs more than the two points do. */
-.modepick__tracks .track-opt__name { font-size: 0.76rem; }
-/* difficulty TENDENCY meter — 4 pips, the first `data-level` filled RED
-   (matching the display's cup slot; the old green→amber ramp died with amber
-   chrome); a lean for the whole cup, not a per-track badge. */
-.trackpick__cup-meter { display: inline-flex; align-items: center; gap: 3px; }
-.trackpick__cup-meter > i {
-  width: 7px; height: 7px; border-radius: 999px;
-  border: 1.5px solid color-mix(in srgb, var(--ink), transparent 45%);
-  background: transparent;
-}
-.trackpick__cup-meter > i.is-on { background: var(--red); border-color: var(--red); }
-.trackpick__grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
-  gap: 0.55rem;
-}
-.track-opt {
-  display: flex; flex-direction: column; align-items: center; gap: 0.3rem;
-  cursor: pointer; padding: 0.45rem 0.4rem 0.5rem;
-  background: var(--surface); border: 3px solid var(--ink); border-radius: var(--r-sm);
-  box-shadow: var(--shadow-pop);
-  transition: transform var(--press-up), box-shadow var(--press-up), background 0.08s;
-}
-.track-opt:disabled { cursor: default; }
-/* picked tile — the identical fill a picked cup wears (and the same unchanged
-   drop), so "picked" looks the same wherever it lands in the picker. The fill (its
-   cup's colour, loud) is painted inline by dressTile — which is also what makes
-   the `background` transition above a real fade from the old fill to the new,
-   since the tile now outlives the pick that marks it. Here the class only darkens
-   the name to full ink, the tile no longer being white paper under the text. */
-.track-opt--mine .track-opt__name { color: var(--ink); }
-.track-opt__name {
-  font-weight: 800; font-size: 0.74rem; color: var(--ink-2);
-  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-
-/* the schematic SVG (.track-map) now lives in the theme kit (shared with the
-   display's lobby cup slot) */
-
 /* ---- game / driving HUD ---- */
 /* No countdown here — the full HUD shows immediately so players can pre-steer
    while the display counts down 3..2..1..GO. Same paper backdrop as the lobby;
@@ -1675,25 +1509,24 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 
 /* Below here a cup tile cannot hold two lines of name, its stars AND its own
-   padding: the left column is three rows of ~43px and the content wants 72. The
-   step is STRUCTURAL rather than another font trim — the name drops to ONE line
-   (the <br> shared/trackPicker.js sets is what makes every tile the same shape
-   at every other size, and here it is the thing that has to go) and ellipsises
-   instead. It fits: this column is ~115px wide per tile, and the longest cup
+   padding: the grid is three rows of ~43px and the content wants 72. The step is
+   STRUCTURAL rather than another font trim — the name drops to ONE line (the
+   <br> shared/trackPicker.js sets is what makes every tile the same shape at
+   every other size, and here it is the thing that has to go) and ellipsises
+   instead. It fits: a tile is ~150px wide at four across, and the longest cup
    name is well inside that at this tier's type size. */
 @media (max-height: 270px) {
-  /* The legend is the one thing on this card that is a nicety: it explains the
-     stars, it never changes, and at this height its 22px is exactly what stands
-     between the detail card and the action corner landing on top of it. Gone,
-     not hidden — here the space is the point. */
+  /* The star key is a nicety: it explains a badge that means the same thing all
+     evening, and the badges are on the tiles either way. Gone, not hidden — at
+     this height the ribbon's own row is worth more than the explanation. */
   .star-legend { display: none; }
-  /* A schematic tile drops its NAME and spends the height on the map instead.
-     At this size the label could only ever be "Tid…" — and a 47px schematic
-     that reads is worth more than a 30px one under four clipped words. The
-     button keeps its aria-label (shared/trackPicker.js), so nothing is lost to
-     a screen reader. Random's panel is exempt: its tiles carry a "?" and the
-     label IS the choice ("3 races"), so there the name is the content. */
-  .modepick__tracks .track-opt:has(.track-map:not(.track-map--q)) .track-opt__name { display: none; }
+  /* And the CAR page spends its ratings. Below this height a car tile cannot
+     hold a render, a name AND four rated rows: the row is under 90px and the
+     ratings would leave the render about ten of them, which inverts the tile —
+     the model is the thing a car tile is for, and the stats are what the tile
+     can be read without. They come back the moment there is room, which on a
+     phone is putting the browser bar away. */
+  .car-opt__stats { display: none; }
   .mode-opt { row-gap: 0.3rem; padding: 0.3rem 0.35rem; }
   .mode-opt__name br { display: none; }
   .mode-opt__name {

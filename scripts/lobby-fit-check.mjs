@@ -2,7 +2,8 @@
 // controller.css. "Bigger text if space allows" needs a limit that is checked
 // rather than eyeballed: this walks every element in the lobby at every landscape
 // viewport below and reports anything outside its own box, plus how close the
-// cup names are to being clipped and whether the two halves are still in order.
+// cup names are to being clipped and how much room is left between the action
+// row and the latency chip it shares the bottom-right with.
 //
 // The cup-name reading is VERTICAL. The names wrap to two lines and then
 // ellipsise (controller.css .mode-opt__name), so a name can no longer outgrow
@@ -46,7 +47,7 @@ const b = await launchBrowser({ realUser: false });
 let bad = 0;
 for (const [label, w, h] of VIEWPORTS) {
   const p = await b.page({ viewport: { width: w, height: h }, deviceScaleFactor: 1 });
-  for (const s of ['lobby-host', 'lobby-race', 'lobby-race-waiting', 'lobby-waiting', 'lobby-race-locked']) {
+  for (const s of ['lobby-host', 'lobby-race', 'lobby-race-waiting', 'lobby-waiting']) {
     await p.goto(`http://127.0.0.1:${app.port}/controller/index.html?scenario=${s}&color=0`, { waitUntil: 'networkidle' });
     await p.waitForTimeout(900);
     const found = await p.evaluate(() => {
@@ -67,8 +68,9 @@ for (const [label, w, h] of VIEWPORTS) {
             `l${Math.round(r.left)} t${Math.round(r.top)} r${Math.round(r.right)} b${Math.round(r.bottom)}`]);
         }
       }
-      // The action corner is centred rather than inset, so nothing in the layout
-      // keeps it off the latency chip's bottom-right home — this does. The chip
+      // The action row is flush RIGHT and the latency chip's home is the
+      // bottom-right corner, so the two are one padding declaration apart
+      // (.lobby-go reserves the chip's strip) — this is what proves it. The chip
       // only appears once a reading lands, so force it visible to measure.
       const chip = document.getElementById('latency');
       chip.classList.remove('hidden');
@@ -79,15 +81,6 @@ for (const [label, w, h] of VIEWPORTS) {
         if (!(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom)) {
           out.push(['CORNER/CHIP', btn.id, btn.textContent.trim().slice(0, 20), `overlap ${-clear}px`]);
         }
-      }
-      // The choices track must never be the WIDER half: the card is what the
-      // page is about, and a picker that outgrows it inverts the page. One
-      // declaration feeds both lobby pages, so this reads on all four scenarios.
-      const cols = getComputedStyle(document.getElementById('lobby'))
-        .gridTemplateColumns.split(' ').map((x) => parseFloat(x));
-      if (cols.length === 2 && cols[1] < cols[0]) {
-        out.push(['SIDES', 'lobby', 'choices wider than the card',
-          `${Math.round(cols[0])} > ${Math.round(cols[1])}`]);
       }
       // Cup names clamp at two lines. What is worth printing is how many lines
       // the longest name actually takes — 2 means the clamp is the only thing
