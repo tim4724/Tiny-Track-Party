@@ -85,7 +85,13 @@ vertex {
                 vec4(0.0, s.y, 0.0, 0.0),
                 vec4(0.0, 0.0, 0.0, 0.0),                // z flat at 0: never clipped
                 vec4(-1.0 - cell.x * s.x, -1.0 - cell.y * s.y, 0.0, 1.0));
-        material.clipSpaceTransform = toClip * getWorldFromModelMatrix();
+        // getWorldFromModelMatrix() is in Filament's RENDER world, which is
+        // rebased at the camera every frame; getUserWorldFromWorldMatrix()
+        // undoes that, and the quad's canvas pixels are in the user world.
+        // Without it the chrome followed each cell's camera — the divider
+        // wandered by the camera's own x on a phone before anyone saw it.
+        material.clipSpaceTransform = toClip
+                * getUserWorldFromWorldMatrix() * getWorldFromModelMatrix();
         // Carrying the local PIXEL coordinate is what lets every measurement
         // below be a CSS number straight off display.css.
         material.uv.xy = getPosition().xy * materialParams.size;

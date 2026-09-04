@@ -652,7 +652,13 @@ with no present pass the same quads draw inside each cell's own pass and the
 overlay view does not render; with the antialias pass (the web), or the
 ribbon tint owning the globals, they stay in the overlay view as before.
 Same pixels on the box's own screenshots; folded: tidepool 14.53 / 14.93,
-vista 16.0 / 16.3; glacier 21.45 / 21.12 against 21.84 / 21.39.
+vista 16.0 / 16.3; glacier 21.45 / 21.12 against 21.84 / 21.39. One fix
+followed on a Pixel 7: the vertex stage read `getWorldFromModelMatrix()`,
+which is in Filament's render world, rebased at each view's camera every
+frame, so the chrome drifted with the camera — a divider a hundred pixels
+off and wandering on the phone, and right on the box only by the moment of
+its shot. `getUserWorldFromWorldMatrix()` undoes the rebasing; the rules
+now sit on the cell boundaries on both devices.
 
 Two tail sources besides the vista showed on the same timelines and one is
 fixed: the rubber mip refresh landed every level's copies in one frame
