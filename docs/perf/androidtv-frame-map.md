@@ -664,16 +664,27 @@ after the scene build, so the surface RESIZES (`setFixedSize`) inside the
 first race second. A bench artifact, not a race-frame cost — a track can
 read 39 of 40 at best on this harness.
 
-**A FORK PATCH, SHIPPED AS THE `ttp-1.76.1` PIN (2026-09-04):** Filament's
-Vulkan backend opened every view's render pass with the render area set to
-the WHOLE attachment (`VulkanDriver::beginRenderPass`), so four cells
-sharing one swapchain image loaded and stored its colour four times over.
-The fork constrains the render area to the pass viewport (sixteen lines,
-upstream material: everything a pass draws is scissored inside its
-viewport, and a clear applies to the region the view overwrites). Paired on
-the box: tidepool 14.89 / 15.32 → 14.81 / 14.23, glacier 21.22 / 21.64 →
-20.59 / 20.88. The web and tvOS legs render through other backends and are
-unchanged by it beyond the pin.
+**THE VULKAN RENDER AREA IS A NULL HERE, AND A PATCH FOR IT SHIPPED FOR AN
+HOUR AS A BLACK PICTURE (2026-09-04).** Filament's Vulkan backend opens
+every view's render pass with the render area set to the whole attachment
+(`VulkanDriver::beginRenderPass`), so four cells sharing one swapchain
+image nominally load and store its colour four times over. A fork patch
+constraining the area to the pass viewport paired tidepool 14.89 / 15.32 →
+14.81 / 14.23 and was pinned as ttp-1.76.1 — and the box's screen capture
+showed the race chrome over BLACK: the patch flipped the viewport to
+top-left itself and `transformClientRectToPlatform` flipped it again, so
+each cell's area was the mirrored quadrant, its draws fell outside it, and
+the store covered a region nothing drew into. The bench could not see that,
+because the GPU still drew every frame; the "win" was the broken store.
+Reverted (af78978a). The corrected patch (client rect handed unflipped,
+constrained only when no colour attachment is cleared and depth/stencil is
+discarded on entry, in-pass scissors clamped to the area) renders every
+cell and pairs NULL: tidepool 14.84 / 15.22 against 14.93 / 14.57, glacier
+21.50 / 21.56 against 21.48 / 21.68. This GPU only touches the tiles a draw
+reaches, so the render area buys nothing on it; the branch is kept in the
+fork's scratch checkout for a device that shows otherwise. **Two rules from
+it: a Vulkan-backend change is verified by a screen capture on the box, and
+client rects go to `transformClientRectToPlatform` in GL bottom-left form.**
 
 Note what "clean" says: a heavy p50 under the budget is not a held 60 —
 tidepool at 15.7 still skips in a quarter of its seconds, because the p95
