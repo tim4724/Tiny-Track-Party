@@ -8,12 +8,13 @@
 # force-pushed, and the commit a branch used to point at then belongs to no ref:
 # `git clone` stops fetching it and every fresh worktree and CI run fails to
 # resolve the pin. A tag is fetched by a plain clone and never moves. The
-# current one is `ttp-1.76.0` (the tvOS PR branch + our emscripten build fix,
-# which is NOT going upstream with it).
+# current one is `ttp-1.76.1` (the tvOS PR branch + our emscripten build fix,
+# which is NOT going upstream with it, + the Vulkan render area constrained to
+# the pass viewport, which is upstream material — docs/perf/androidtv-frame-map.md).
 #
 # To upgrade Filament: tag the new fork commit and push the TAG, change
 # FILAMENT_COMMIT, run native/scripts/build-runtime-web.sh, and commit pin +
 # .filamat blobs + wasm TOGETHER — materials are MATERIAL_VERSION-locked to the
 # tree, so a half upgrade fails at load time in the browser.
 FILAMENT_REMOTE=https://github.com/tim4724/filament.git
-FILAMENT_COMMIT=9c4f7bfd8e3da6d825be1bb54fe6f68271b21e33
+FILAMENT_COMMIT=4623c423f44b0dcac0d3523aa4871c31ca57c0fa
