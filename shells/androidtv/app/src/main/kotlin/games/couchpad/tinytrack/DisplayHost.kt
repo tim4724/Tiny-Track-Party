@@ -661,6 +661,15 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
      */
     private val cellScratch = FloatArray(MAX_CELLS * CELL_RECT_STRIDE)
 
+    /**
+     * The authored canvas's height on THIS window: 1920 wide by the window's
+     * aspect. [CellRect.toAuthored] scales a rect's y and h by it — see
+     * [AUTHORED_HEIGHT] for why the 16:9 constant is the wrong one.
+     */
+    fun authoredHeight(): Float =
+        if (view.width > 0 && view.height > 0) AUTHORED_WIDTH * view.height / view.width
+        else AUTHORED_HEIGHT
+
     fun cellRects(): List<CellRect> {
         val n = Ttp.ttp_display_cell_rects(cellScratch, MAX_CELLS)
         if (n <= 0) return emptyList()

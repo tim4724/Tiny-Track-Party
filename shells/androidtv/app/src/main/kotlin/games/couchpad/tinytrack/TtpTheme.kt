@@ -63,25 +63,30 @@ fun TtpTheme(windowWidthPx: Int, content: @Composable () -> Unit) {
 const val AUTHORED_WIDTH = 1920f
 
 /**
- * The other axis of that same space. Only the cell rects need it — everything
- * else this tree lays out is width-relative under the density override — but a
- * rect's y and h are fractions of the surface's HEIGHT and 16:9 is not a thing
- * to re-derive at the one call site.
+ * The other axis of that same space ON A 16:9 PANEL, which is what the tokens
+ * were authored against (the overscan margins are fractions of it). It is NOT
+ * the canvas's height on the device: under the width-derived density the
+ * canvas is 1920 wide and as tall as the window's aspect makes it — 864 on a
+ * 20:9 phone — which is why the cell rects take the window's own height
+ * ([DisplayHost.authoredHeight]) rather than this constant. Scaled by this, the
+ * lower row of a four-way split landed a fifth of the screen too low on a
+ * Pixel 7, and no 16:9 television could ever show the difference.
  */
 const val AUTHORED_HEIGHT = 1080f
 
 /**
  * A cell rectangle as the ABI answers it — FRACTIONS of the surface — scaled to
- * the authored canvas this tree lays out in.
+ * the authored canvas this tree lays out in: 1920 wide, [authoredHeight] tall.
  *
  * NOTHING ABOUT THE BUFFER IS NEEDED, which is the point. The rects used to come
  * back in surface pixels and be divided by the buffer width, and that width
  * reached Compose as a plain field through a `staticCompositionLocalOf` —
  * invisible to it. On a scale move the rects updated and the width did not, and
  * a 1920-wide layout landed at half size in a corner until something unrelated
- * recomposed. There is no second value here to go stale.
+ * recomposed. The window's aspect is the one thing taken here, and a render
+ * scale move cannot change it.
  */
-fun CellRect.toAuthored(): CellRect = CellRect(
-    x * AUTHORED_WIDTH, y * AUTHORED_HEIGHT, w * AUTHORED_WIDTH, h * AUTHORED_HEIGHT,
-    sx * AUTHORED_WIDTH, sy * AUTHORED_HEIGHT, sw * AUTHORED_WIDTH, sh * AUTHORED_HEIGHT,
+fun CellRect.toAuthored(authoredHeight: Float): CellRect = CellRect(
+    x * AUTHORED_WIDTH, y * authoredHeight, w * AUTHORED_WIDTH, h * authoredHeight,
+    sx * AUTHORED_WIDTH, sy * authoredHeight, sw * AUTHORED_WIDTH, sh * authoredHeight,
 )
