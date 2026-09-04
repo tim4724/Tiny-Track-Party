@@ -704,7 +704,7 @@ input[type=text]:disabled { opacity: 0.6; }
      CENTRED in it — sizing that row to its content instead would pin the bar to
      the top of the screen, level with the name sticker, which is the one thing
      this must not do. */
-  grid-template-rows: minmax(0, 1fr) 64%;
+  grid-template-rows: minmax(0, 1fr) 60%;
 }
 #game.mode-tilt #drive-hud {
   grid-template-columns: 1fr 1fr;
@@ -756,29 +756,46 @@ input[type=text]:disabled { opacity: 0.6; }
    player nameless on every screen (they were dropped as duplicates once; that
    assumed the portrait chrome). */
 
-/* MID row — the steer indicator over its one-line mode hint, centred on the
-   TOTAL screen width with the row's free height spaced around the pair. The
-   bar deliberately echoes the DISPLAY's own bar: the same 270:34 composition
-   (border and centre tick scaled with it), at roughly the share of screen the
-   display gives one player, so the phone's indicator reads as a miniature of
-   the one on the TV. */
+/* MID row — the steer indicator centred on the TOTAL screen width, with the
+   BAR ALONE centred in the row's free height: the two spacer tracks are equal
+   and the text hangs into the lower one, so the hint (and the motion chip under
+   it) never pull the bar off centre, and a screen too short for them lets them
+   overflow toward the controls rather than shift the thing you are watching.
+   The bar deliberately echoes the DISPLAY's own bar: the same 270:34 shape at
+   roughly the share of screen the display gives one player, so the phone's
+   indicator reads as a miniature of the one on the TV. The stroke is the one
+   number that does NOT follow from that ratio; .steer__track says why. */
 .hud-mid {
-  grid-area: mid; align-self: center;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 0.45rem; min-width: 0;
+  grid-area: mid;
+  display: grid; grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr);
+  justify-items: center; min-width: 0;
 }
-.steer { width: clamp(13rem, 38vw, 21rem); }
+.hud-under {
+  grid-row: 3; align-self: start;
+  display: flex; flex-direction: column; align-items: center;
+  margin-top: 0.45rem;
+}
+.steer { grid-row: 2; width: clamp(13rem, 38vw, 21rem); }
 /* the mode hint — one line under the strip; the #game mode class picks which
    span shows. ink-2 at 1rem: it's the only steering instruction on the screen,
    so it must survive glare, not whisper. */
 .hud-hint { color: var(--ink-2); font-weight: 800; font-size: 1rem; line-height: 1; }
 #game.mode-tilt .hud-hint__buttons { display: none; }
 #game.mode-buttons .hud-hint__tilt { display: none; }
+/* 5 and 4, not the composition's 4 and 3. The TV scales all four numbers of the
+   270:34:4:3 shape together (BAR_SCALE, TtpRendererFrame.cpp) while this bar is
+   sized in vw, so flat authored ink read THINNER here than on the TV beside it.
+   Cut for the wide end of what the two .steer clamps hand out (the short-height
+   tier further down narrows the bar again): the proportional stroke is about 5px
+   there and about 3px at the narrow end, and 5 is kept for both. Ink that reads
+   is worth more on a small screen than an exact ratio, and border-width could
+   not split the difference anyway — Chromium floors it to whole css px, which is
+   why this is a number and not a calc off the width. */
 .steer__track {
   position: relative; aspect-ratio: 270 / 34; overflow: hidden;
-  background: var(--surface); border: 4px solid var(--ink); border-radius: var(--r-pill);
+  background: var(--surface); border: 5px solid var(--ink); border-radius: var(--r-pill);
 }
-.steer__track::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 3px; background: color-mix(in srgb, var(--ink) 40%, transparent); }
+.steer__track::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 4px; background: color-mix(in srgb, var(--ink) 40%, transparent); }
 #steer-fill { position: absolute; left: 50%; top: 0; bottom: 0; width: 50%; margin-left: -25%; background: var(--car); border-radius: var(--r-pill); transition: transform 0.05s linear; }
 
 /* The big controls. All four share the sticker-button anatomy; the grid areas
@@ -831,6 +848,12 @@ input[type=text]:disabled { opacity: 0.6; }
    so it reads as actionable on a touch screen. Lives in the mid column under the
    hint; tilt mode only, while motion isn't granted (driveSurface.refreshMotionTip). */
 .motion-tip {
+  /* It is the LAST thing in the mid row and the bar above it is centred, not the
+     stack, so on a short screen the chip reaches past the row onto the controls.
+     It stays on top there rather than being clipped by them: a sticker lapping
+     over a button is the theme's own language, and this one has to stay tappable
+     wherever it lands. */
+  position: relative; z-index: 3;
   margin: 0.1rem 0 0; padding: 0.4rem 0.9rem;
   background: var(--surface); border: 2px solid var(--hairline); border-radius: var(--r-pill);
   color: var(--ink-2); font-family: var(--font-body); font-weight: 800; font-size: 0.85rem;

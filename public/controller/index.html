@@ -140,11 +140,13 @@
         <div class="steer">
           <div class="steer__track"><div id="steer-fill"></div></div>
         </div>
-        <div class="hud-hint">
-          <span class="hud-hint__tilt">Tilt your phone to steer</span>
-          <span class="hud-hint__buttons">Hold left + right to brake</span>
+        <div class="hud-under">
+          <div class="hud-hint">
+            <span class="hud-hint__tilt">Tilt your phone to steer</span>
+            <span class="hud-hint__buttons">Hold left + right to brake</span>
+          </div>
+          <button id="motion-tip" class="motion-tip hidden" type="button">Tilt steering is off. Tap to fix.</button>
         </div>
-        <button id="motion-tip" class="motion-tip hidden" type="button">Tilt steering is off. Tap to fix.</button>
       </div>
       <div class="drive-controls">
         <button id="steer-left" class="steerbtn" aria-label="Steer left"><span class="steer-glyph steer-glyph--l"></span></button>
