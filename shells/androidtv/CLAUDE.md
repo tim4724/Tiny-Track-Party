@@ -714,6 +714,20 @@ for good. What this shell owes is the pair of numbers the model is fitted from �
 `prevScale`/`prevCostMs`, the last observation at a different scale, dropped on a
 scene build because a slope measured across two scenes belongs to neither.
 
+**THE BUFFER'S WIDTH IS A MULTIPLE OF 64** (`applyScale`), so a two-column
+split puts every cell's right edge on a 32-pixel boundary. A Pixel 7's Mali
+dropped the last 16-pixel sub-tile column of a cell whose edge was 16- but not
+32-aligned — a few unshaded 16x16 tiles a frame, on the frame's last pass,
+in the horizon band, all race long — and they read as black squares against
+the divider (2026-09-04: 2400x1080 and 1440x648 showed them in three
+quarters of frames, 1920x864 never; a clear-to-magenta probe proved them
+unshaded rather than drawn). Neither the folded overlay nor a constrained
+render area moved them, and the box's PowerVR never had them. A 16:9 panel's
+buffers were multiples of 64 already; a 20:9 phone gives up under three
+percent of its width to the composer's scaling. The check is a screen
+RECORDING scanned for 16x16 blocks of the clear colour (session history); a
+screenshot every few seconds missed it twenty times running.
+
 ## Multiview: tried, measured, REMOVED
 
 Every split renders the classic one-`render()`-per-cell frame here, on both

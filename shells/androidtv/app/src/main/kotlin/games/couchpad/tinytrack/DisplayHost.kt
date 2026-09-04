@@ -833,7 +833,15 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
         // 0.667 on a 1080p panel rounded to 1281x720 — while every buffer this
         // band describes is a line count. 720 lines IS 1280 wide; ask for that.
         val h = maxOf(1, Math.round(view.height * scale).toInt())
-        val w = maxOf(1, Math.round(h.toDouble() * view.width / view.height).toInt())
+        // WIDTH ROUNDED DOWN TO A MULTIPLE OF 64, so a two-column split puts
+        // every cell's right edge on a 32-pixel boundary. On a Pixel 7's Mali
+        // the last 16-pixel column of a cell whose edge is 16- but not
+        // 32-aligned came back unshaded on the frame's last pass, a few tiles
+        // a frame, all race long (2400x1080 and 1440x648 both; 1920x864 never)
+        // — read as black squares against the divider. A 16:9 panel's buffers
+        // are multiples of 64 already; a 20:9 one loses up to 63 columns to
+        // the composer's scaling, which is under three percent of width.
+        val w = maxOf(64, (Math.round(h.toDouble() * view.width / view.height).toInt() / 64) * 64)
         if (w == surfaceWidth && h == surfaceHeight) {
             pendingW = 0; pendingH = 0; pendingSent = false
             return
