@@ -5,6 +5,8 @@
 
 #include <utils/Log.h>
 
+#include <algorithm>
+
 
 // The silhouette store for the road-shader shadow decals: one array layer per
 // car MODEL (claimMaskLayer keys them by the GLB's bytes, so the eight-car
@@ -64,6 +66,8 @@ void TtpRenderer::clearSkidLayer() {
     // GPU chain, and the two must agree before the next incremental refresh.
     for (auto& level : mSkidMips) std::fill(level.begin(), level.end(), (uint8_t) 0);
     mSkidMipDirty.clear();
+    mSkidMipRects.clear();
+    mSkidMipLevel = 0;
     const size_t bytes = mSkidPix.size();
     auto* zeros = new uint8_t[bytes]();
     mSkidTex->setImage(*mEngine, 0,
@@ -135,13 +139,54 @@ void TtpRenderer::rasterSkidTri(const float2* p, const float* ink) {
     }
 }
 
+// UPLOAD EVENTS ARE THE COST, NOT UPLOAD BYTES. On the Android box's Vulkan
+// driver every setImage is its own kick, and a 4P frame was issuing a dozen
+// or two of them across the two deck layers (counted on the device log: 400
+// to 870 rubber copies and 300 to 490 shadow copies per 60 frames, a few
+// hundred texels each) for ~1.7 ms of a 17 ms 540-line frame. Sending every
+// rubber rect of a frame as ONE copy — a hundred times the bytes — took a
+// millisecond of that back. The barrier's stage masks (a fork arm that
+// skipped the fragment-read wait), an in-flight reader (uploads into a twin
+// that nothing samples) and the texture's shape (one level, no mip usage,
+// half the rows) all measured null first. So a frame's rects are merged
+// here by arclength until a merge would exceed a byte budget: cars in a
+// pack share a copy, a lone car gets its own. The budget is the ONLY
+// test — two rects need not touch to share a copy, unlike the eight-texel
+// neighbourhood the shadow layer used to require — because bytes were free
+// at the sizes the one-copy arm reached (up to 650 KB in a frame); it is
+// set where a merged copy stays a block of the layer rather than a strip of
+// the whole lap.
+static constexpr size_t kUploadEventTexels = 512 * 512;
+
+void TtpRenderer::mergeUploadRects(std::vector<SkidRect>& rects) {
+    if (rects.size() < 2) return;
+    std::sort(rects.begin(), rects.end(),
+            [](const SkidRect& a, const SkidRect& b) { return a.x0 < b.x0; });
+    std::vector<SkidRect> out;
+    out.reserve(rects.size());
+    out.push_back(rects[0]);
+    for (size_t i = 1; i < rects.size(); i++) {
+        SkidRect& m = out.back();
+        const SkidRect& r = rects[i];
+        const SkidRect u{ std::min(m.x0, r.x0), std::min(m.y0, r.y0),
+                          std::max(m.x1, r.x1), std::max(m.y1, r.y1) };
+        if ((size_t) (u.x1 - u.x0) * (size_t) (u.y1 - u.y0) <= kUploadEventTexels) {
+            m = u;
+        } else {
+            out.push_back(r);
+        }
+    }
+    rects.swap(out);
+}
+
 // Push this frame's dirty rects into the texture. Each rect is a tight copy
 // with its own free callback — the CPU buffer is mutated again next frame,
 // and native drivers read uploads asynchronously, so handing them a pointer
-// into mSkidPix would race. Rects are a few hundred texels; the copies are
-// noise. Unwrapped x splits at the lap seam here, once per rect.
+// into mSkidPix would race. Unwrapped x splits at the lap seam here, once
+// per rect. Merged first: see kUploadEventTexels.
 void TtpRenderer::uploadSkidRects() {
     const int W = (int) mSkidTexW, H = (int) mSkidTexH;
+    mergeUploadRects(mSkidDirty);
     for (const SkidRect& r : mSkidDirty) {
         const int y0 = std::max(0, r.y0), y1 = std::min(H, r.y1);
         if (y0 >= y1) continue;
@@ -203,13 +248,33 @@ void TtpRenderer::uploadSkidRects() {
 // consistent by construction, so what they hold is exactly what the filter
 // wants. The seam is deliberately NOT wrapped — generateMipmaps never wrapped
 // either, and the marks the stamper lays keep clear of the clamp rows.
+//
+// ONE LEVEL PER CALL. A pass used to land every level's copies in one frame,
+// and on the Android box each copy is its own kick (kUploadEventTexels): the
+// pass was the p95 of otherwise-quiet seconds — GPU p50 13.4 with p95 17.4
+// and three skips in the second — twice a second at four cells. Spread over
+// the chain's dozen frames it is a couple of copies a frame, like any other.
+// The chain stays consistent: a level is always the filter of the level
+// above as of an earlier frame, and the next pass recomputes every level
+// under whatever changed since.
 void TtpRenderer::refreshSkidMips() {
-    if (!mSkidTex || mSkidMips.empty()) { mSkidMipDirty.clear(); return; }
+    if (!mSkidTex || mSkidMips.empty()) {
+        mSkidMipDirty.clear(); mSkidMipRects.clear(); mSkidMipLevel = 0;
+        return;
+    }
+    if (mSkidMipLevel == 0) {                    // start a pass
+        if (mSkidMipDirty.empty()) return;
+        mSkidMipRects.swap(mSkidMipDirty);
+        mSkidMipDirty.clear();
+        mSkidMipLevel = 1;
+    }
     const int W0 = (int) mSkidTexW, H0 = (int) mSkidTexH;
-    std::vector<SkidRect> rects = mSkidMipDirty;
-    mSkidMipDirty.clear();
-    for (size_t li = 0; li < mSkidMips.size() && !rects.empty(); li++) {
-        const int l = (int) li + 1;
+    std::vector<SkidRect> rects = std::move(mSkidMipRects);
+    mSkidMipRects.clear();
+    {
+        const size_t li = (size_t) mSkidMipLevel - 1;
+        if (li >= mSkidMips.size() || rects.empty()) { mSkidMipLevel = 0; return; }
+        const int l = mSkidMipLevel;
         const int sw = std::max(1, W0 >> (l - 1)), sh = std::max(1, H0 >> (l - 1));
         const int dw = std::max(1, W0 >> l), dh = std::max(1, H0 >> l);
         const uint8_t* src = li == 0 ? mSkidPix.data() : mSkidMips[li - 1].data();
@@ -231,6 +296,7 @@ void TtpRenderer::refreshSkidMips() {
             }
             if (!merged) next.push_back(d);
         }
+        mergeUploadRects(next);
         for (const SkidRect& d : next) {
             for (int y = d.y0; y < d.y1; y++) {
                 const uint8_t* row0 = src + (size_t) std::min(2 * y, sh - 1) * sw;
@@ -256,7 +322,9 @@ void TtpRenderer::refreshSkidMips() {
                             [](void* b, size_t, void*) { delete[] (uint8_t*) b; },
                             nullptr));
         }
-        rects = std::move(next);
+        mSkidMipRects = std::move(next);
+        mSkidMipLevel = (mSkidMipRects.empty() || (size_t) mSkidMipLevel >= mSkidMips.size())
+                ? 0 : mSkidMipLevel + 1;
     }
 }
 
@@ -1008,25 +1076,17 @@ void TtpRenderer::uploadCarShadow() {
                         [](void* b, size_t, void*) { delete[] (uint8_t*) b; },
                         nullptr));
     } else {
-        // The union of the three frames, merged so a pack does not issue one
-        // event per car. Merging is what keeps this a couple of events.
+        // The union of the three frames, merged under the copy budget
+        // (kUploadEventTexels): a pack shares one event.
         std::vector<SkidRect> rects;
         const auto add = [&](const SkidRect& r) {
-            if (r.x1 <= r.x0 || r.y1 <= r.y0) return;
-            for (SkidRect& m : rects) {
-                if (r.x0 <= m.x1 + 8 && m.x0 <= r.x1 + 8
-                        && r.y0 <= m.y1 + 8 && m.y0 <= r.y1 + 8) {
-                    m.x0 = std::min(m.x0, r.x0); m.y0 = std::min(m.y0, r.y0);
-                    m.x1 = std::max(m.x1, r.x1); m.y1 = std::max(m.y1, r.y1);
-                    return;
-                }
-            }
-            rects.push_back(r);
+            if (r.x1 > r.x0 && r.y1 > r.y0) rects.push_back(r);
         };
         for (const SkidRect& r : mCarShadowDirty) add(r);
         for (const auto& list : mCarShadowWas) {
             for (const SkidRect& r : list) add(r);
         }
+        mergeUploadRects(rects);
         for (const SkidRect& r : rects) {
             const int y0 = std::max(0, r.y0), y1 = std::min(H, r.y1);
             if (y0 >= y1) continue;

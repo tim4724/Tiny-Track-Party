@@ -1585,6 +1585,8 @@ void TtpRenderer::releaseScene() {
     std::vector<uint8_t>().swap(mSkidPix); // megabytes — actually release
     std::vector<std::vector<uint8_t>>().swap(mSkidMips); // likewise, ~a third more
     mSkidMipDirty.clear();
+    mSkidMipRects.clear();
+    mSkidMipLevel = 0;
     mSkidDirty.clear();
     mSkidTexW = mSkidTexH = 0;
     mSkidLatHalf = 0;

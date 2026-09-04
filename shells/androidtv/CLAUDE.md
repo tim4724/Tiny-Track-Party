@@ -500,18 +500,20 @@ bake) — are `native/renderer/CLAUDE.md`'s, each with its measured worth.
   players / pinned 720 / Vulkan (2026-08-26, three whole-race reps an arm):
   ablating the layer whole is 43 -> 48 fps, 20.08 -> 19.33 ms of GPU median and
   17 -> 13 skips/s, with no overlap between the two sets of runs.
-  **The EVENT RATE is not what that costs.** Throttling the level-0 uploads to
-  ~30 Hz — which this file used to name as "the half that pays" — measures a
-  clean null on the same sweep: 43 fps both arms, 20.08 vs 19.87 ms, 17 skips/s
-  both, a gap inside the ~0.2 ms repeat resolution and smaller than either arm's
-  own spread; and at the shipping 4-player point (432), where a throttle bites
-  hardest at 60 events/s against its 35, both arms lock 60 with zero drops. The
-  throttle is GONE from `renderSkids` and the trail's head now sits at the tyre.
-  What remains of the layer is the TAP and the CPU raster. Rect COUNT was
-  already measured as noise (the coalescing arm), and the mip blits moved
-  nothing on their own either (replacing the ~7 Hz full-chain `generateMipmaps`
-  with CPU box-filtered per-level sub-rect uploads is kept anyway — it completes
-  the layer's no-passes design). The earlier attribution was taken before
+  Throttling the level-0 uploads to ~30 Hz — which this file used to name as
+  "the half that pays" — measured a clean null on that sweep (43 fps both
+  arms, 20.08 vs 19.87 ms, 17 skips/s both), so the throttle is GONE from
+  `renderSkids` and the trail's head sits at the tyre. **That verdict was
+  the 20 ms frame's, not the driver's.** Re-priced at four players pinned
+  540 on the far-ribbon build (2026-09-03, `docs/perf/androidtv-frame-map.md`),
+  the two deck layers' `setImage` calls were 1.7 ms of a 17 ms frame at a
+  few kilobytes a frame, and the count was the whole of it: every copy is
+  its own kick on this driver, bytes are nearly free. Both layers now merge
+  a frame's rects under a byte budget (`kUploadEventTexels`). The mip blits
+  moved nothing on their own (replacing the ~7 Hz full-chain
+  `generateMipmaps` with CPU box-filtered per-level sub-rect uploads is kept
+  anyway — it completes the layer's no-passes design). The earlier
+  attribution was taken before
   `kMaskedBlobCells` zeroed the masked shadow budget at four cells, which was
   ~7 ms of the frame it was measured in; **re-price a lever whose frame has
   changed under it rather than inheriting its verdict.** A cost that is
@@ -523,7 +525,7 @@ re-derive them:
 
 | arm | result |
 |---|---|
-| coalescing the frame's ~16 skid dirty rects into 4 by area | within noise; the tail is not the number of `setImage` calls |
+| coalescing the frame's ~16 skid dirty rects into 4 by area | within noise UNDER THAT 20 ms 720-line frame — re-priced at 540 on 2026-09-03 the count is ~1.7 ms and the merge ships (`kUploadEventTexels`, the paragraph above) |
 | `doubleSided : false` on vroad | within noise; Filament already drops the normal varying once the fragment stage stops reading it |
 | `culling : back` on vroad | 0.2 ms, and the deck's underside is deliberately visible on loops |
 | road ring step 0.48 -> 0.72 u | 0.3 ms for real chord sag on every track |

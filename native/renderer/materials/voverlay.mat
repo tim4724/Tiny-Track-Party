@@ -24,9 +24,11 @@
 // can be mixed here in sRGB — exactly the arithmetic the browser did — instead
 // of being blended against the framebuffer in whatever space it happens to be.
 //
-// COLOUR SPACE. This draws AFTER the present pass (see TtpRenderer::drawOverlay),
-// straight onto the swap chain, with post-processing off — so a value written
-// here IS the on-panel sRGB value, and the only real framebuffer blend left (the
+// COLOUR SPACE. This draws straight onto the swap chain with post-processing
+// off — after the present pass where there is one, and otherwise inside each
+// race cell's own pass, last in its blend order (TtpRenderer::drawOverlay has
+// the fold) — so a value written here IS the on-panel sRGB value, and the only
+// real framebuffer blend left (the
 // divider's 0.88 and the shapes' antialiased edges) blends sRGB against sRGB,
 // like CSS compositing. Authoring in the scene's linear space and letting
 // vpresent grade it would blend in LINEAR instead, which is a visibly different
@@ -57,14 +59,35 @@ material {
     blending : transparent,
     culling : none,
     depthWrite : false,
-    depthCulling : false
+    depthCulling : false,
+    // DEVICE domain: the vertex stage maps the quad's canvas pixels into the
+    // DRAWING VIEW's cell itself (getMaterialGlobal3, below), so the same
+    // quads draw inside each race cell's own pass on the platforms that
+    // have no present pass — the separate overlay pass over the finished
+    // frame was 1.2 ms of a 540-line four-player frame on the Android box,
+    // a load and a store of the whole canvas for a few rounded rects.
+    vertexDomain : device
 }
 
 vertex {
     void materialVertex(inout MaterialVertexInputs material) {
-        // The mesh is a unit quad; the transform scales it to `size`. Carrying
-        // the local PIXEL coordinate is what lets every measurement below be a
-        // CSS number straight off display.css.
+        // The mesh is a unit quad; the model transform places it in CANVAS
+        // pixels (bottom-left origin, like a GL viewport). getMaterialGlobal3
+        // is the drawing view's rect in the same pixels — a race cell, or the
+        // whole canvas for the overlay view — and this maps canvas px into
+        // that view's clip space. A quad outside the cell lands outside the
+        // clip volume and costs nothing; a divider that straddles two cells
+        // is drawn by both, each its own half, over disjoint pixels.
+        highp vec4 cell = getMaterialGlobal3();
+        highp vec2 s = 2.0 / max(cell.zw, vec2(1.0));
+        highp mat4 toClip = mat4(
+                vec4(s.x, 0.0, 0.0, 0.0),
+                vec4(0.0, s.y, 0.0, 0.0),
+                vec4(0.0, 0.0, 0.0, 0.0),                // z flat at 0: never clipped
+                vec4(-1.0 - cell.x * s.x, -1.0 - cell.y * s.y, 0.0, 1.0));
+        material.clipSpaceTransform = toClip * getWorldFromModelMatrix();
+        // Carrying the local PIXEL coordinate is what lets every measurement
+        // below be a CSS number straight off display.css.
         material.uv.xy = getPosition().xy * materialParams.size;
     }
 }

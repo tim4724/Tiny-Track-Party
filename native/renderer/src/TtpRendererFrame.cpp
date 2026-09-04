@@ -416,12 +416,19 @@ MaterialInstance* TtpRenderer::overlayQuad(float x, float y, float w, float h) {
                 .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
                         mOverlayVB, mOverlayIB, 0, 6)
                 .culling(false)
+                // Last in a cell's blend pass, over everything the cell drew.
+                .priority(7)
+                // On every feature layer but the shadow casters', so a folded
+                // overlay stays on screen whatever group an ablation hides.
+                .layerMask(0xff, 0xfd)
                 .castShadows(false).receiveShadows(false)
                 .build(*mEngine, q.entity);
         mOverlayQuads.push_back(q);
     }
     OverlayQuad& q = mOverlayQuads[mOverlayUsed++];
-    if (!q.inScene) { mOverlayScene->addEntity(q.entity); q.inScene = true; }
+    Scene* const want = mOverlayFolded ? mScene : mOverlayScene;
+    if (q.scene && q.scene != want) { q.scene->remove(q.entity); q.scene = nullptr; }
+    if (!q.scene) { want->addEntity(q.entity); q.scene = want; }
     // ttp_grid_cell measures from the TOP left, like the DOM and like every
     // consumer of the answer; the ortho camera below is ordinary GL, measuring
     // from the bottom. This is the one flip — the same one the cell viewports
@@ -438,6 +445,7 @@ MaterialInstance* TtpRenderer::overlayQuad(float x, float y, float w, float h) {
 void TtpRenderer::drawOverlay(const TtpFrameInput& input) {
     const uint32_t before = mOverlayUsed;
     mOverlayUsed = 0;
+    mOverlayFolded = !mAntialias && !mDeckLodTint;
     if (mOverlayMaterial && input.hudCount && mWidth && mHeight) {
         // Every size here is a fraction of something this function can measure:
         // the cell and the canvas for the bar, the canvas alone for the rules.
@@ -604,14 +612,16 @@ void TtpRenderer::drawOverlay(const TtpFrameInput& input) {
     // Retire what this frame did not claim. Scene membership, not a parked
     // transform: the pool outlives every split it ever drew.
     for (uint32_t i = mOverlayUsed; i < before && i < mOverlayQuads.size(); i++) {
-        if (!mOverlayQuads[i].inScene) continue;
-        mOverlayScene->remove(mOverlayQuads[i].entity);
-        mOverlayQuads[i].inScene = false;
+        OverlayQuad& q = mOverlayQuads[i];
+        if (!q.scene) continue;
+        q.scene->remove(q.entity);
+        q.scene = nullptr;
     }
-    if (mOverlayUsed && mOverlayView) {
+    if (mOverlayUsed && mOverlayView && !mOverlayFolded) {
         mOverlayView->setViewport({ 0, 0, mWidth, mHeight });
         mOverlayCamera->setProjection(Camera::Projection::ORTHO,
                 0, (double) mWidth, 0, (double) mHeight, 0, 2);
+        mOverlayView->setMaterialGlobal(3, float4{ 0.0f, 0.0f, (float) mWidth, (float) mHeight });
     }
 }
 
@@ -2360,17 +2370,14 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
         // the full-chain generateMipmaps this used to be measured ~10 dropped
         // frames/s on the reference Android box, invisible in the GPU median.
         // The ~7 Hz throttle stays: a fresh mark is under the car at mip 0
-        // for those 150 ms, where no one can see the difference. FOUR CELLS
-        // SLOW THIS HALF AND ONLY THIS HALF (2 Hz), because it is the bursty
-        // one — refreshSkidMips lands several level uploads in ONE frame —
-        // and because a quarter cell is where its far field is smallest.
-        // Cells decide, never cost: the same gate family as kMaskedBlobCells.
-        const bool splitFour = input.viewCount >= kMaskedBlobCells;
-        if (mSkidMipsDirty && mSkidTex
-                && mTime - mSkidMipsAt > (splitFour ? 0.50f : 0.15f)) {
+        // for those 150 ms, where no one can see the difference. A pass then
+        // runs ONE LEVEL PER FRAME (refreshSkidMips says why), so the four-cell
+        // slowdown this used to carry against the pass's burst is gone with
+        // the burst.
+        if (mSkidTex && (mSkidMipLevel > 0
+                || (mSkidMipsDirty && mTime - mSkidMipsAt > 0.15f))) {
+            if (mSkidMipLevel == 0) { mSkidMipsDirty = false; mSkidMipsAt = mTime; }
             refreshSkidMips();
-            mSkidMipsDirty = false;
-            mSkidMipsAt = mTime;
         }
     }
 
@@ -2425,6 +2432,9 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
             && (input.flags & TTP_FRAME_OVERVIEW) == 0;
     if (!deckLod) chooseDeckLod(nullptr, float3{ 0 }, 0.0f, false);
     if (input.viewCount == 0) {
+        if (mOverlayFolded) {
+            mView->setMaterialGlobal(3, float4{ 0.0f, 0.0f, (float) mWidth, (float) mHeight });
+        }
         mRenderer->render(mView);
     } else {
         // Split-screen: same cell grid as the display (bestGrid ≈ square-ish,
@@ -2460,6 +2470,11 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
             // per-cell viewport + scissor.
             v->setRenderTarget(post ? mSceneRT : nullptr);
             v->setViewport({ rect.x, rect.y, rect.w, rect.h });
+            // The folded overlay's cell, in canvas pixels — voverlay.mat.
+            if (mOverlayFolded) {
+                v->setMaterialGlobal(3, float4{ (float) rect.x, (float) rect.y,
+                        (float) rect.w, (float) rect.h });
+            }
             mat4f world;
             std::memcpy(&world, views[i].world, sizeof(world));
             cam->setModelMatrix(world);
@@ -2501,7 +2516,7 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
     }
     // The cell overlay goes on LAST, over the graded canvas — see voverlay.mat
     // for why it is past the grade and not inside it.
-    if (mOverlayUsed && mOverlayView) mRenderer->render(mOverlayView);
+    if (mOverlayUsed && mOverlayView && !mOverlayFolded) mRenderer->render(mOverlayView);
 }
 
 // ---------------------------------------------------------------------------

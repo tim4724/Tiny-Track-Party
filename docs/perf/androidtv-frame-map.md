@@ -229,7 +229,12 @@ cancels out of every row.
   (a blob's footprint is projected by `stampSL` under `overscan`, which is not
   the reach `maskRect` carries). It works mechanically — real box on the chunk
   holding cars, empty box everywhere else — and bought 0.60 ms against a
-  1.12 ms between-build drift. **Reverted; do not rebuild it.**
+  1.12 ms between-build drift. **Reverted; do not rebuild it** — it was
+  rebuilt once more on 12 u chunks (2026-09-03, `blobBounds`), "measured"
+  half a millisecond, and the half-millisecond was the shadow not drawing:
+  the box went out after the chunk upload's early return. With the write
+  ahead of the return it paired null (the 540 section below), and it is gone
+  again.
 
 The last one has a mechanism worth keeping: at a 10.5 degree chase pitch the
 expensive fragments are the near ones at the bottom of the frame, and those are
@@ -511,6 +516,172 @@ deadline is missed on every real frame and the +70 slot is what the 49 ms
 is. Making +53 needs the GPU finished within ~6 ms of the callback; a
 self-timed loop starting the frame at the vsync would make it, but samples
 input that much earlier — a net ~5 ms for a drift-prone loop. Not built.
+
+## 540 at four players: the deck layers' UPLOAD EVENTS (2026-09-03)
+
+The next rung up. Same bench, pinned 960x540, heavy seconds, the far-ribbon +
+bakes build as the base: **17.35-17.5 ms, 26 clean seconds of 40**, so 540
+missed 60 by about a millisecond on the vista. Every arm below is that base
+minus the feature, tidepool unless named:
+
+| arm | heavy p50 | reading |
+|---|---|---|
+| decal channel off | 15.1 | -2.2 — and `NO_DECAL_BLOB` alone is 15.12: the whole channel is the car-shadow blob |
+| profile loop / statics / caps-half | 17.2 / 17.4 / 17.6 | -0.3 / 0 / 0 |
+| rubber layer off | 15.9 | -1.4 |
+| paint, grade, road shadow, fog in the vertex stage | ≤ -0.3 | nothing |
+| shadow tap knobs: bicubic off, 8 texels/u + 128 rows, both | 17.55 / 17.51 / 17.05 | null |
+| isotropic sand / rubber filters | 17.46 / 17.44 | null |
+
+The other cups at the same point: powder 21.8 (2 clean of 39), ribbon 20.0
+(14), wash 18.3 (21); the playroom tracks (skyline, gauntlet) 9.9 with 40 of
+40 — the cheapest scenes in the game, not the dearest.
+
+**The blob channel's 2.4 ms was one thing, and it was not the tap's
+arithmetic.** A per-chunk box round the stamps (`blobBounds`, the 1080-era
+`shadowBounds` rebuilt on 12 u chunks) went in first and read 16.92 at 540,
+13.16 at 432, "byte-identical frozen frames" — and was a NULL wearing a
+bug: its box was written after the chunk upload's decal-list early return,
+so a chunk nothing dynamic crossed kept an empty box and drew no shadow, and
+the frozen frame that passed it had the car on a boost disc whose aura
+composites over the blob. Written before the return, the gate paired
+tidepool 14.91 / 15.63 against 15.05 / 14.91 and glacier 21.59 / 21.73
+against 21.46 / 21.63 with no gate (2026-09-04). Removed; the 1080-era
+verdict stands. **Verify a car-shadow change on a frame where the shadow is
+VISIBLE** (frame 2400 of the 1P tidepool bake, a clear road) **and against
+the pre-change artifacts**, never on frame 900.
+
+What the channel actually pays is **THE UPLOADS — AND THE COST IS PER COPY,
+NOT PER BYTE.**
+Probe keys that skipped each layer's `setImage` calls (rasters, taps and binds
+all still running; session history) read: shadow uploads skipped 16.31,
+rubber uploads skipped 15.24, both 15.39 — a few kilobytes a frame worth
+1.7 ms. Four mechanisms were then built and refuted in turn, each on the
+device:
+
+- **the barrier's stage masks** — a scratch Filament that transitions a
+  sampled texture for its copy without waiting on prior fragment reads
+  (`srcStage TOP_OF_PIPE`): 17.13 / 17.23, null;
+- **an in-flight reader** — the rubber copies routed into a twin texture
+  that nothing ever samples: 16.90 / 16.81, null;
+- **the texture's shape** — twins with one level, with the chain but no
+  mip-generation usage, with half the rows: 16.67 / 16.44 / 16.30, null;
+- **the count** — counted on the device log, a 4P frame issued 400-870
+  rubber copies and 300-490 shadow copies per 60 frames (21-139 KB/s of
+  rubber); every rubber rect of a frame sent as ONE copy, a hundred times the
+  bytes (bursts to 40 MB/s): 16.12 / 15.55.
+
+So each `setImage` is its own kick on this driver, and the cure is fewer of
+them: both layers now merge a frame's rects by arclength under a byte budget
+(`kUploadEventTexels`, TtpRendererDecals.cpp — a pack shares a copy, a lone
+car keeps its own) and the rubber's mip refresh merges per level the same
+way. **540 with the gate and the merge: 15.43 / 15.88 ms, 35 / 32 clean
+seconds of 40; 432: 12.67, 37 of 40; powder at 540: 20.41 (16 of 40, from
+2).** The beach vista holds 60 at 540 now; the powder- and ribbon-class cups
+are still three to four milliseconds over it there, and their overage is
+fill (terrain and deck), not anything a copy count reaches.
+
+The Android shell notes recorded the rubber layer's event rate as a null
+under a 20 ms 720-line frame in August; that verdict does not transfer to
+this frame, and it is amended there.
+
+**A rubber-tap gate in the same per-chunk-box shape is a NULL too (2026-09-04):** a
+per-chunk u span from the raster's own ink bins, the tap skipped where the
+lap is blank. Same-session pairs: tidepool 15.55 → 15.63, ribbon 18.11 →
+18.60, powder 18.74 → 20.3-20.5 (powder itself repeats 18.7-20.4 across
+runs on ONE build — it is the noisiest track of the twenty, pair on ribbon
+or tidepool instead). Once eight cars have scrubbed the corners, ink sits
+within the tap's footprint margin of nearly every chunk, so the gate
+rejects almost nothing. Not shipped; session history has the patch.
+
+**EVERY TRACK at 540, four players (2026-09-04, the merge build → the
+build with the spread refresh and the folded overlay, same day):**
+
+| cup | tracks | heavy p50 | clean s of 40 |
+|---|---|---|---|
+| beach | tidepool, cove, driftwood, riptide | 14.5-16.8 → 13.7-16.1 | 28-33 → 28-33 |
+| snow | powder, flurry, glacier, avalanche | 18.9-20.1 → 19.5-21.0 | 11-21 → 7-18 |
+| lawn | ribbon, pretzel, tangle, cloverleaf | 18.1-19.3 → 17.5-18.8 | 18-23 → 17-25 |
+| redrock | wash, gulch, crag, sidewinder | 16.0-17.7 → 15.0-16.7 | 23-28 → 27-32 |
+| playroom | skysnake, skyline, helix, gauntlet | 9.6 | 40 |
+
+(Snow's spread across runs is a millisecond on one build; read its two
+columns as the same picture.)
+
+**The heightfield relief is NOT a cost either (2026-09-04).** Powder with
+its amplitude zeroed read 18.96 against 20.43 in one session, which looked
+like 1.5 ms of hills; a far-only flatten (full height to 30 u past the road
+edge, flat by 70 u) then paired null on the stable tracks — ribbon
+18.15 / 18.11 → 18.07 / 18.17, glacier 21.62 / 21.65 → 21.83 / 21.49 — and
+the 1.5 was powder's own spread. The snow cup's overage over the beach is
+its flat sheet and its dressing, not its hills. Reverted.
+
+**THE VISTA IS GEOMETRY, THE QUIET SECONDS ARE FILL (2026-09-04).** Read
+per second, tidepool's quiet seconds sit at 11.5-13 ms and its three vista
+seconds at 17-21, with the SAME pixel count — so the vista's extra is what
+comes into view, four cells over, not fill. Priced on those three seconds
+alone (`vista3`, the mean of a run's three dearest seconds; this metric
+repeats within ±0.7, so pair two reps): road hidden −5.0, dressing hidden
+−3.3, terrain hidden −2.7, cars −0.7; the fine ribbon everywhere +4. The
+road's per-pixel channels are null there (rubber, decals, paint, sun-vis
+each within the band), and the geometry is SMALL — the whole fine deck is
+26k triangles, the far ribbon 6k, the merged dressing 3-8k (a device-log
+probe, session history) — so what the road pays on the vista is not its
+shading and not its vertex count. Half the dressing copies is null; the
+one-renderable SHEETS read 2.3 on tidepool and 0 on glacier, one rep each.
+
+Two more structural arms on the vista, both NULL and reverted: the deck at
+13 and 52 rings a chunk (draw count halved or doubled: 16.0 / 17.3 and
+17.3 / 18.3 against 17.0 / 17.0 — draws are not the road's vista cost), and
+the static sheets (hills, ground, boulders, landmarks, structures, berms)
+uploaded as 2000-triangle range chunks so a cell can frustum-cull them
+(tidepool 15.47 / 15.51 against 15.39 / 15.37, glacier 21.63 / 21.11 against
+21.29 / 21.34, vista unchanged). What the vista's road and dressing pay is
+therefore neither their draws, nor their vertices, nor their channels, and
+the one instrument that could split it further is a GPU profiler this box
+does not offer.
+
+**THE OVERLAY PASS WAS 1.2 ms, AND IT IS FOLDED INTO THE CELLS (2026-09-04).**
+The renderer's 2D chrome (dividers, steer bars: `voverlay.mat`) was its own
+View rendered after the cells — a load and a store of the whole canvas for a
+handful of rounded rects. Skipping it read tidepool 14.08 / 14.37 against
+15.63 / 15.15 on the heavy seconds (vista 15.0 / 16.0 against 17.7 / 16.7).
+The material is device-domain now: its vertex stage maps the quad's canvas
+pixels into the drawing view's cell from a view global, so on a platform
+with no present pass the same quads draw inside each cell's own pass and the
+overlay view does not render; with the antialias pass (the web), or the
+ribbon tint owning the globals, they stay in the overlay view as before.
+Same pixels on the box's own screenshots; folded: tidepool 14.53 / 14.93,
+vista 16.0 / 16.3; glacier 21.45 / 21.12 against 21.84 / 21.39.
+
+Two tail sources besides the vista showed on the same timelines and one is
+fixed: the rubber mip refresh landed every level's copies in one frame
+twice a second (p50 13.4, p95 17.4, three skips in an otherwise quiet
+second) and now lands ONE level per frame (`refreshSkidMips`), 28 / 31 → 31 /
+34 clean seconds; the launch second skips 7 every run with a clean GPU
+median, and the device log says why: the bench's scale pin is applied
+after the scene build, so the surface RESIZES (`setFixedSize`) inside the
+first race second. A bench artifact, not a race-frame cost — a track can
+read 39 of 40 at best on this harness.
+
+**A FORK PATCH, SHIPPED AS THE `ttp-1.76.1` PIN (2026-09-04):** Filament's
+Vulkan backend opened every view's render pass with the render area set to
+the WHOLE attachment (`VulkanDriver::beginRenderPass`), so four cells
+sharing one swapchain image loaded and stored its colour four times over.
+The fork constrains the render area to the pass viewport (sixteen lines,
+upstream material: everything a pass draws is scissored inside its
+viewport, and a clear applies to the region the view overwrites). Paired on
+the box: tidepool 14.89 / 15.32 → 14.81 / 14.23, glacier 21.22 / 21.64 →
+20.59 / 20.88. The web and tvOS legs render through other backends and are
+unchanged by it beyond the pin.
+
+Note what "clean" says: a heavy p50 under the budget is not a held 60 —
+tidepool at 15.7 still skips in a quarter of its seconds, because the p95
+of the vista is what the panel sees. A track holds 540 when its vista p50
+is around 14 (the playroom's 9.6 is 40 of 40). By that standard the
+outdoor cups are two (beach) to six (snow) milliseconds short, and the
+group ablations put that in the terrain (relief 1.5 on snow, the sheet
+2.0), the dressing (1-2) and the road (3.4-4), every one of them fill.
 
 What remains is per-fragment: the two deck taps at
 ~1.5 ms each on the heavy seconds, the copies 1.3, the sheets 2.5 (they are lit

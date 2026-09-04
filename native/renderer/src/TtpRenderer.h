@@ -972,10 +972,15 @@ private:
     struct OverlayQuad {
         utils::Entity entity;
         filament::MaterialInstance* mi = nullptr;
-        bool inScene = false;
+        filament::Scene* scene = nullptr;   // where it currently lives (null = nowhere)
     };
     std::vector<OverlayQuad> mOverlayQuads;
     uint32_t mOverlayUsed = 0;
+    // FOLDED: the quads live in the main scene and each race cell draws its
+    // own inside its pass (voverlay.mat says how), and mOverlayView does not
+    // render. Unfolded — a present pass (antialias) or the ribbon tint, which
+    // owns the view globals — they live in mOverlayScene as before.
+    bool mOverlayFolded = false;
     void ensureOverlay();
     // Next pooled quad, placed at (x, y, w, h) in DEVICE pixels with a TOP-LEFT
     // origin (the units ttp_grid_cell answers in). Returns its instance for the
@@ -1383,11 +1388,16 @@ private:
     // segment, merged when they touch.
     struct SkidRect { int x0, y0, x1, y1; };      // half-open [x0,x1)×[y0,y1)
     std::vector<SkidRect> mSkidDirty;
+    static void mergeUploadRects(std::vector<SkidRect>& rects);   // TtpRendererDecals.cpp
     // The mip chain's CPU truth, levels 1.. (level 0 is mSkidPix), plus the
     // PHYSICAL-x rects awaiting the throttled per-level refresh — see
     // refreshSkidMips for why generateMipmaps could not stay.
     std::vector<std::vector<uint8_t>> mSkidMips;
     std::vector<SkidRect> mSkidMipDirty;
+    // A refresh pass in flight: the rects the NEXT level is filtered under,
+    // and that level (0 = idle). One level per frame — see refreshSkidMips.
+    std::vector<SkidRect> mSkidMipRects;
+    int mSkidMipLevel = 0;
     float mSkidLatHalf = 0;                       // half the lat span the texture covers
     // Texel edges in world units per axis. The stamp feather is sized from
     // the texel footprint along the mark's own width direction, so straights
