@@ -366,38 +366,47 @@ input[type=text]:disabled { opacity: 0.6; }
        centres the whole group in it (.car-opt), so the air ends up split evenly
        above and below three blocks that stay snug — rather than pooling in one
        hole at the top.
-       The number is the render's own: at 125:92 a full-width render is
-       0.736 of the tile's content width, and `cqw` here is .car-opt's content
+       The number is the render's own: at 125:97 a full-width render is
+       0.776 of the tile's content width, and `cqw` here is .car-opt's content
        box (the tile's padding is already out of it). Below that height the cap
        never binds and the render is height-bound exactly as before. */
-    max-height: calc(100cqw * 92 / 125);
+    max-height: calc(100cqw * 97 / 125);
   }
   /* The crop ratio the other way up, and SPELLED rather than transcribed: this
      is the reciprocal of the max-height above it, and a hand-worked decimal is
      how the two drift. It was 137.36 for a while, which is 125/91 — a percent
      too tall, enough to push the render a pixel past its box on the short
      tiers, where the box is what the tile has left. */
-  .car-opt .carthumb { width: min(100cqw, calc(100cqh * 125 / 92)); height: auto; max-width: none; }
+  .car-opt .carthumb { width: min(100cqw, calc(100cqh * 125 / 97)); height: auto; max-width: none; }
 }
 
 /* The tile CROPS the frame's baked bottom padding. Every thumbnail is a 5:4
    transparent PNG with the car fitted inside it by the bake
    (scripts/capture-car-thumbs.js: horizontal from the bounding SPHERE so a yaw
    spin doesn't jitter, vertical from the bbox with slack), and what that leaves
-   under the wheels is 9% of the frame on the tightest roster car and 17% on the
-   loosest. On a tile that is a gap between the car and its name — an uneven one,
-   which is what makes it read as a mistake rather than as spacing.
-   8% comes off the bottom, which is all the tightest car has to give; the rest
-   of the roster keeps a few percent. Cropping here rather than re-baking is
-   deliberate: the frames are shared with the display's lobby and the shelf art,
-   the horizontal fit is already tight (2.3% on Bolt), and re-fitting the
-   vertical would re-judge the whole roster's framing for a phone's tile.
-   The window is 125:92 and both layers are drawn at the full frame INSIDE it,
+   under the wheels is air. On a tile that is a gap between the car and its name
+   — an uneven one, which is what makes it read as a mistake rather than as
+   spacing. Cropping here rather than re-baking is deliberate: the frames are
+   shared with the display's lobby and the shelf art, the horizontal fit is
+   already tight (2.3% on Bolt), and re-fitting the vertical would re-judge the
+   whole roster's framing for a phone's tile.
+
+   HOW DEEP the crop may go is set by the TURNTABLE, not by the hero still, and
+   that is the whole subtlety. The ground shadow is the car's top-down
+   silhouette parented to the spin, so it sweeps: a car is far longer than it is
+   wide, and side-on its shadow reaches much further down the frame than it does
+   at the hero's front-3/4. Every car therefore leaves more air under its still
+   than under its worst turntable frame, so a crop fitted to the stills — which
+   is what this was, and why the shadow came off — severs it every time that
+   frame comes round. Measure the STRIPS before touching this number (lowest
+   non-transparent row, every cell) and leave a little under the roster's worst
+   frame: the still is the one case that cannot be the binding one.
+   The window is 125:97 and both layers are drawn at the full frame INSIDE it,
    anchored top — so the still keeps object-fit: contain and the turntable keeps
    its percentage cells, and neither knows it has been cropped. */
-.car-opt .carthumb { aspect-ratio: 125 / 92; overflow: hidden; }
+.car-opt .carthumb { aspect-ratio: 125 / 97; overflow: hidden; }
 .car-opt .carthumb__still,
-.car-opt .carthumb__spin { bottom: auto; height: 108.7%; }
+.car-opt .carthumb__spin { bottom: auto; height: 103.093%; }
 
 /* Picking a car swaps that tile's render for a spinning one (and the tile you
    left for a still). The swap you SEE here is the second one: the outgoing

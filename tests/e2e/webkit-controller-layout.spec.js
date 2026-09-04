@@ -72,13 +72,14 @@ test(`webkit ${vp.width}x${vp.height}: every car render sits INSIDE its tile at 
     // never merely be CLOSE: a box that has been capped on one axis keeps the
     // other, so the ratio is where the capping shows. A collapsed box shows up as
     // both this and the floor below.
-    expect(t.thumb.w / t.thumb.h).toBeCloseTo(125 / 92, 2);
+    expect(t.thumb.w / t.thumb.h).toBeCloseTo(125 / 97, 2);
     // …and it fits its box on BOTH axes, which is what "letterboxed" means and
     // what the ratio alone cannot say. The HEIGHT is held to a sub-pixel: the
     // box is capped at exactly the render's own height (.car-opt__view
     // max-height), so these two are equal by construction, and a slack pixel
-    // here is what let a hand-worked reciprocal (137.36 for 125/92, a percent
-    // too tall) push the render past its box on the short tiers unnoticed.
+    // here is what once let a hand-worked reciprocal of the crop ratio — a
+    // percent too tall — push the render past its box on the short tiers
+    // unnoticed.
     expect(t.thumb.w).toBeLessThanOrEqual(t.view.w + 1);
     expect(t.thumb.h).toBeLessThanOrEqual(t.view.h + 0.5);
     // Not a sliver. The model is what a car tile is FOR, so it gets the height
