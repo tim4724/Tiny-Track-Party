@@ -45,7 +45,7 @@
 
 #include "ttp/ai_driver.h"
 #include "ttp/game.h"
-#include "ttp/grand_prix.h"   // POINTS_BY_RANK
+#include "ttp/grand_prix.h"   // POINTS_BY_RANK, POINTS_RANKS
 #include "ttp/protocol.h"
 #include "ttp/race_track.h"
 
@@ -334,7 +334,7 @@ int runPacked(const std::string& only, uint32_t seed, bool noBrake) {
         }
         if (slot < 0 || slot >= (double)N) continue;
         const size_t car = order[(size_t)slot];
-        if (rank >= 1 && rank <= 4) points[car] += POINTS_BY_RANK[(int)rank - 1];
+        if (rank >= 1 && rank <= POINTS_RANKS) points[car] += POINTS_BY_RANK[(int)rank - 1];
         if ((int)rank == 1) wins[car]++;
         if (fin) { timeSum[car] += time; finishes[car]++; }
       }

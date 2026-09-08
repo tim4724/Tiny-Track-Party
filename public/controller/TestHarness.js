@@ -16,6 +16,14 @@ import { setInputMode } from './driveSurface.js';
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
 
+// Cup points per finishing rank, for the intermission/podium previews. Mirrors the
+// series layer's ladder (native/libttp-sim/ttp/grand_prix.cc POINTS_BY_RANK) and is
+// pinned to it by tests/harness-mirrors.test.js.
+const POINTS_BY_RANK = [15, 12, 10, 8, 6, 4, 2, 1];
+// A preview row takes its gain FROM its finishing place, so a fixture can never pay
+// a place it did not take — the one thing a reader cannot check from a screenshot.
+const scored = (racePlace, row) => ({ racePlace, gained: POINTS_BY_RANK[racePlace - 1] ?? 0, ...row });
+
 // Track catalog for the no-relay gallery preview. In a real game the controller
 // renders whatever rides the room snapshot: pack/unpackSchematic(trackSchematic(geom))
 // — an RDP-simplified, uint8-packed path, NOT the full-res map. The gallery has no
@@ -387,20 +395,19 @@ export function runControllerScenario(opts) {
 
     case 'intermission':
       // Mid-cup standings between two series races, viewed as the host: points
-      // board in cup order (the +6 row leads on total despite this race's +9)
+      // board in cup order (the +12 row leads on total despite this race's +15)
       // and the host's "Next race ▸".
       setLatency(20, true);
       showBoard([
-        { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, gained: 6, points: 21, racePlace: 2 },
-        { name: FAKE_NAMES[color],                           colorIndex: color,                       gained: 9, points: 19, me: true, racePlace: 1 },
-        { name: 'Bolt',                                      colorIndex: (color + 2) % COLORS.length, gained: 3, points: 9, ai: true, racePlace: 3 },
-        { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, gained: 0, points: 3, racePlace: 5 },
-        ...[4, 5, 6, 7].map((i) => ({
+        scored(2, { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, points: 27 }),
+        scored(1, { name: FAKE_NAMES[color],                           colorIndex: color,                       points: 25, me: true }),
+        scored(3, { name: 'Bolt',                                      colorIndex: (color + 2) % COLORS.length, points: 20, ai: true }),
+        scored(5, { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, points: 14 }),
+        ...[4, 5, 6, 7].map((i) => scored([4, 6, 7, 8][i - 4], {
           name: FAKE_NAMES[(color + i) % FAKE_NAMES.length],
           colorIndex: (color + i) % COLORS.length, ai: true,
-          // cup order is sorted by TOTAL — the tail must not out-point row 4's 3 pts
-          gained: i === 4 ? 1 : 0, points: [3, 2, 1, 0][i - 4],
-          racePlace: i === 4 ? 4 : i + 2
+          // cup order is sorted by TOTAL — the tail must not out-point row 4's 14
+          points: [13, 9, 5, 3][i - 4]
         }))
       ], { over: true, series: { final: false, raceIndex: 1, raceCount: 4, cupName: PREVIEW_TRACKS[0].cupName } });
       break;
@@ -417,13 +424,13 @@ export function runControllerScenario(opts) {
       // happened to match.
       setLatency(20, true);
       showBoard([
-        { name: FAKE_NAMES[color],                           colorIndex: color,                       gained: 3, points: 36, me: true, racePlace: 3 },
-        { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, gained: 9, points: 24, racePlace: 1 },
-        { name: 'Bolt',                                      colorIndex: (color + 2) % COLORS.length, gained: 6, points: 12, ai: true, racePlace: 2 },
-        { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, gained: 1, points: 4, racePlace: 4 },
-        ...[4, 5, 6, 7].map((i) => ({
+        scored(3, { name: FAKE_NAMES[color],                           colorIndex: color,                       points: 52, me: true }),
+        scored(1, { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, points: 48 }),
+        scored(2, { name: 'Bolt',                                      colorIndex: (color + 2) % COLORS.length, points: 40, ai: true }),
+        scored(4, { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, points: 30 }),
+        ...[4, 5, 6, 7].map((i) => scored(i + 1, {
           name: FAKE_NAMES[(color + i) % FAKE_NAMES.length],
-          colorIndex: (color + i) % COLORS.length, ai: true, gained: 0, points: 8 - i, racePlace: i + 1
+          colorIndex: (color + i) % COLORS.length, ai: true, points: [22, 15, 9, 4][i - 4]
         }))
       ], {
         over: true, settled: scenario === 'cup-podium-settled',

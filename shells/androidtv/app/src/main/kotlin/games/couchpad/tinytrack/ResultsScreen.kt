@@ -476,11 +476,16 @@ private fun BoardRow(rank: Int, live: LiveRow, settled: Boolean, modifier: Modif
                 // goes ragged — but ONLY zero. `.res-gain` is `--brand` green and
                 // `.res-gain.is-zero` is the quiet `--ink-3`: the whole point of the
                 // column is that the eye picks out who scored, and painting every
-                // gain the quiet colour handed a "+9" the exact role the design
+                // gain the quiet colour handed a "+15" the exact role the design
                 // reserves for "+0".
+                //
+                // The width holds the WIDEST gain the ladder pays, not the settled
+                // "+0" the tally ends on: this cell is a hard width, so a gain that
+                // outgrows it clips rather than pushing the board wider.
+                // `.res-gain`'s min-width in display.css carries the same number.
                 CellText(
                     row.gained?.let { Copy.gained(it) } ?: "",
-                    ROW_TYPE * 1.8f, size = ROW_TYPE,
+                    ROW_TYPE * 2.7f, size = ROW_TYPE,
                     color = when {
                         spent -> Color.Transparent
                         (row.gained ?: 0) > 0 -> Tokens.brand

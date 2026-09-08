@@ -483,14 +483,14 @@ test('a live cup board stays in race order; only the final board re-sorts', asyn
     'mid-race the drama is who crossed the line');
   assert.ok(live.order.every((r) => r.gained === undefined), 'gains only appear on the final board');
 
-  // Run it out for real: the drain banks Bo's 9 and Ada's 6 against the room's
-  // series before the final board is composed, which is the order the corpus
-  // pins. Ada still leads, so the final board re-sorts away from the race.
+  // Run it out for real: the drain banks Bo's win and Ada's second against
+  // the room's series before the final board is composed, which is the order
+  // the corpus pins. Ada still leads, so the board re-sorts away from the race.
   p.finish([BO, ADA]);
   const final = p.board({ over: true });
   assert.deepEqual(final.order.map((r) => r.playerId), [ADA, BO],
     'the final board tells the cup story');
-  assert.deepEqual(final.order.map((r) => r.gained), [6, 9]);
+  assert.deepEqual(final.order.map((r) => r.gained), [12, 15]);
   // …and the RACE the re-sort just hid survives on the rows, which is the only
   // way the board's first phase can still show who actually crossed first.
   assert.deepEqual(final.order.map((r) => r.racePlace), [2, 1]);
@@ -505,11 +505,11 @@ test('a live cup board stays in race order; only the final board re-sorts', asyn
   // the running total alone. A phase 1 of plain `time` rows is what made every
   // row change size the instant the shell started animating the re-sort.
   assert.deepEqual(v.listRows.map((r) => r.kind), ['points', 'points']);
-  // Two races of 9/6 to Ada, then this one's 6/9 — so the totals climb 18→24
-  // and 12→21 while the rows hold their order. pointsBefore is the count-up's
-  // start, so no shell subtracts `gained` itself.
-  assert.deepEqual(v.listRows.map((r) => r.pointsBefore), [18, 12]);
-  assert.deepEqual(v.listRows.map((r) => r.points), [24, 21]);
+  // Two races of 15/12 to Ada, then this one's 12/15 — so the totals climb
+  // 30→42 and 24→39 while the rows hold their order. pointsBefore is the
+  // count-up's start, so no shell subtracts `gained` itself.
+  assert.deepEqual(v.listRows.map((r) => r.pointsBefore), [30, 24]);
+  assert.deepEqual(v.listRows.map((r) => r.points), [42, 39]);
 });
 
 test('the results overlay lists the whole field and medals the cup top three', async () => {

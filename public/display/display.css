@@ -838,12 +838,16 @@ html.cam-free #race { pointer-events: none; }
   font-size: clamp(1.1rem, 2vw, 1.6rem); color: var(--ink-2);
   margin: -0.4rem 0 1.3rem;
 }
-/* cup boards trade the race time for points: this race's gain + the cup total */
-/* margin-left is the TRAIL's now (all three cells sit in it), not this cell's:
+/* Cup boards trade the race time for points: this race's gain + the cup total.
+   margin-left is the TRAIL's now (all three cells sit in it), not this cell's:
    an `auto` here would push the gain away from the time by whatever slack the
-   row has, which differs per row and per phase. */
+   row has, which differs per row and per phase. The width holds the WIDEST gain
+   the ladder pays (POINTS_BY_RANK[0]), not the "+0" the count-up empties it to
+   while filling the total — a min-width fitting only the settled state lets the
+   cell, and so the whole board, shrink under the re-sort. Both TV shells lay
+   this cell out at the same multiple; tests/points-ladder.test.js pins them. */
 .res-gain { color: var(--brand); font-weight: 800; font-variant-numeric: tabular-nums;
-            min-width: 1.8em; text-align: right; }
+            min-width: 2.7em; text-align: right; }
 .res-gain.is-zero { color: var(--ink-3); }
 /* Spent once the last point has landed. The gain would otherwise rest on "+0",
    which reads as "scored nothing" on a board that stays up for the rest of the

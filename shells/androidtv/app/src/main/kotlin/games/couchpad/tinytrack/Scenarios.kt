@@ -100,8 +100,9 @@ object Scenarios {
     /** Banked cup points, so the standings table beats this race's finishing order. */
     private val BANKED = listOf(10, 15, 6, 3, 2, 1, 0, 0)
 
-    /** `native/libttp-sim/ttp/grand_prix.cc`'s ladder, for the fabricated podium. */
-    private val POINTS_BY_RANK = listOf(9, 6, 3, 1)
+    /** `native/libttp-sim/ttp/grand_prix.cc`'s ladder, for the fabricated podium.
+     *  Pinned to it by `tests/harness-mirrors.test.js`. */
+    private val POINTS_BY_RANK = listOf(15, 12, 10, 8, 6, 4, 2, 1)
 
     /** The 2x2 grid the web's `racing` card photographs, and every gallery card here. */
     private const val DEFAULT_PLAYERS = 4
@@ -491,8 +492,8 @@ object Scenarios {
                 game.state.results = view
                 if (id == "intermission") game.state.intermissionSecs = 5
                 // phase 1 + the tally + a beat. The tally is bounded at the winner's
-                // gain (9 points) times a tick that is itself a fraction of phase 1,
-                // so twice the phase plus a second clears it however slow the board.
+                // gain times a tick that is itself a fraction of phase 1, so twice
+                // the phase plus a second clears it however slow the board.
                 val settleMs = if (view?.twoPhase == true)
                     (view.racePhaseMs * 2 + 1_000).toLong() else 0L
                 after(settleMs, done)

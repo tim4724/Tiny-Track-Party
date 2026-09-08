@@ -468,8 +468,12 @@ private struct BoardRow: View {
                 // Zero is still printed ("+0") and styled quiet, so the column
                 // never goes ragged — but ONLY zero: the whole point of the
                 // column is that the eye picks out who scored.
+                // The width holds the WIDEST gain the ladder pays, not the settled
+                // "+0" the tally ends on: this cell is a hard width, so a gain
+                // that outgrows it clips rather than pushing the board wider.
+                // `.res-gain`'s min-width in display.css carries the same number.
                 cell(Copy.gained(row.gained ?? 0),
-                     width: Self.type * 1.8,
+                     width: Self.type * 2.7,
                      color: spent ? Color.clear : ((row.gained ?? 0) > 0 ? Tokens.brand : Tokens.ink3))
                 // FILLED IN BOTH PHASES and differing only in value: the race
                 // phase shows what this row had coming in, the standings phase

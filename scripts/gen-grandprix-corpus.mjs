@@ -39,6 +39,10 @@ import { canonicalStringify } from './oracle-lib.mjs';
 // the oracle. To do that, restore the JS twin first:
 //   git show f7859b0^:public/display/GrandPrix.js > public/display/GrandPrix.js
 // (find the retirement commit with: git log --diff-filter=D -- public/display/GrandPrix.js)
+// THE RESTORED TWIN CARRIES THE TABLE OF ITS OWN ERA. It was retired on a
+// four-rung ladder and the table has widened since, so re-record only after
+// copying the CURRENT POINTS_BY_RANK into it — otherwise the fixture silently
+// regenerates the old one.
 const { CupSeries, makeShuffleBag, POINTS_BY_RANK } =
   await import('../public/display/GrandPrix.js');
 
@@ -55,6 +59,12 @@ const FIELD = [
   { peerIndex: 'ai-0', name: 'Bolt', colorIndex: 1, ai: true },
   { peerIndex: 'ai-1', name: 'Pixel', colorIndex: 2, ai: true },
 ];
+
+// Bot seats past the four-seat FIELD, for the scripts that need a full grid (or
+// more than one). Names follow AI_PERSONALITIES so a fixture reads like a race.
+const FILL = ['Rusty', 'Zippy', 'Turbo', 'Gizmo', 'Scoot'].map((name, n) => (
+  { peerIndex: `ai-${n + 2}`, name, colorIndex: (n + 4) % 8, ai: true }));
+const grid = (n) => [...FIELD, ...FILL].slice(0, n);
 
 const res = (playerId, rank, finished = true) => ({ playerId, rank, finished });
 
@@ -118,10 +128,16 @@ function runScript(script) {
 // The scripts. Each documents the behaviour it pins.
 // ---------------------------------------------------------------------------
 const SCRIPTS = [
-  // The points table itself, on a full finishing field.
+  // The points table itself, one row per rung: a FULL grid, every car home, so
+  // each of the eight values is pinned by a finisher that earned it.
   {
     name: 'points-table-full-field',
-    ops: [{ op: 'applyRace', results: [res(0, 1), res('ai-0', 2), res(1, 3), res('ai-1', 4)] }],
+    ops: [{
+      op: 'applyRace',
+      results: [res(0, 1), res('ai-0', 2), res(1, 3), res('ai-1', 4),
+                res('ai-2', 5), res('ai-3', 6), res('ai-4', 7), res('ai-5', 8)],
+      field: grid(8),
+    }],
   },
 
   // DNF earns nothing regardless of rank, and still records lastRank (so it
@@ -131,16 +147,18 @@ const SCRIPTS = [
     ops: [{ op: 'applyRace', results: [res(0, 1), res(1, 2, false), res('ai-0', 3), res('ai-1', 4, false)] }],
   },
 
-  // A rank outside the 4-entry table scores 0 — a 5+ car field is reachable
-  // (traces race five bots), and JS reads POINTS_BY_RANK[4] === undefined || 0.
+  // The table pays every one of the 8 grid slots, and a rank PAST it scores 0.
+  // Nine cars is more than FIELD_SIZE, deliberately: the guard is what stops a
+  // rank the table cannot answer for, and only a field larger than the table
+  // reaches it. JS reads POINTS_BY_RANK[8] === undefined || 0; C++ bounds-checks
+  // against POINTS_RANKS. Both must answer 0 for the 9th.
   {
     name: 'rank-past-the-table-scores-zero',
     ops: [{
       op: 'applyRace',
-      results: [res(0, 1), res(1, 2), res('ai-0', 3), res('ai-1', 4), res('ai-2', 5), res('ai-3', 6)],
-      field: [...FIELD,
-        { peerIndex: 'ai-2', name: 'Rusty', colorIndex: 4, ai: true },
-        { peerIndex: 'ai-3', name: 'Zippy', colorIndex: 5, ai: true }],
+      results: [res(0, 1), res(1, 2), res('ai-0', 3), res('ai-1', 4), res('ai-2', 5),
+                res('ai-3', 6), res('ai-4', 7), res('ai-5', 8), res('ai-6', 9)],
+      field: grid(9),
     }],
   },
 
@@ -156,14 +174,21 @@ const SCRIPTS = [
   },
 
   // Sitting a race out shows "+0" and LOSES the tie-break (latest → Infinity),
-  // while the banked points stay on the board.
+  // while the banked points stay on the board. The second race is ENGINEERED to
+  // reach that comparison: Alice banks a 2nd and leaves, and Bolt's 3rd plus a
+  // 7th land on exactly her total. Without a real tie the script pins the "+0"
+  // half and the comparison its name promises never runs.
   {
     name: 'absentee-gains-zero-and-loses-the-tiebreak',
     ops: [
-      { op: 'applyRace', results: [res(0, 2), res(1, 1), res('ai-0', 3), res('ai-1', 4)] },
+      { op: 'applyRace', results: [res(1, 1), res(0, 2), res('ai-0', 3), res('ai-1', 4)] },
       { op: 'advance' },
-      // Alice is gone this race; Bob's 6 + nothing ties her 6 from race 1.
-      { op: 'applyRace', results: [res(1, 4), res('ai-0', 1), res('ai-1', 2)] },
+      {
+        op: 'applyRace',
+        results: [res(1, 1), res('ai-1', 2), res('ai-2', 3), res('ai-3', 4),
+                  res('ai-4', 5), res('ai-5', 6), res('ai-0', 7)],
+        field: grid(8).filter((f) => f.peerIndex !== 0),
+      },
     ],
   },
 

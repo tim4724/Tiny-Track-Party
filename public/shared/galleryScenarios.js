@@ -116,10 +116,14 @@ export const GALLERY_SCENARIOS = [
   // "Cup podium" card that has not yet crowned anybody. Per entry, not a rule
   // about stills, because the countdown wants the opposite: its banner settles
   // on the first frame and never turns.
+  //
+  // The two cup budgets are phase 1 (RACE_PHASE_MS) plus the tally, which runs
+  // one tick per point the WINNER owes — so WIDENING POINTS_BY_RANK LENGTHENS
+  // THEM, and the slack left over is what absorbs a capture machine under load.
   { id: 'results', key: 'results', title: 'Results', settleMs: 1200 },
-  { id: 'intermission', key: 'intermission', title: 'Cup intermission', settleMs: 4500 },
+  { id: 'intermission', key: 'intermission', title: 'Cup intermission', settleMs: 5200 },
   { id: 'chain', key: 'chain', title: 'Cup: race → next race', animated: true },
-  { id: 'podium', key: 'podium', title: 'Cup podium', settleMs: 4500 }
+  { id: 'podium', key: 'podium', title: 'Cup podium', settleMs: 5200 }
 ];
 
 // The scenarios a CAMERA sees, which is every screen minus the instruments.

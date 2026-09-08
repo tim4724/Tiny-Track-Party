@@ -339,8 +339,9 @@ enum Scenarios {
     private static let times = [28.4, 30.7, 33.1, 35.8, 38.2, 41.0, 44.3, 47.6]
     private static let banked = [10, 15, 6, 3, 2, 1, 0, 0]
     /// `native/libttp-sim/ttp/grand_prix.cc`'s ladder, for the fabricated cup
-    /// boards. Not on any ABI, and hand-copied in all three harnesses.
-    private static let pointsByRank = [9, 6, 3, 1]
+    /// boards. Not on any ABI, and hand-copied in all three harnesses —
+    /// `tests/harness-mirrors.test.js` pins the copies to it.
+    private static let pointsByRank = [15, 12, 10, 8, 6, 4, 2, 1]
 
     /// A finished BOARD, fabricated in the shape `ttp_ui_standings_live_json`
     /// answers (`{over, hostPeerIndex, [series], order:[row…]}`), then run

@@ -32,7 +32,7 @@ import { TRACK_SCHEMATICS } from '../shared/trackSchematics.js';
 
 // Cup points per finishing rank, for the intermission/podium previews. Mirrors the
 // series layer's ladder (native/libttp-sim/ttp/grand_prix.cc POINTS_BY_RANK).
-const POINTS_BY_RANK = [9, 6, 3, 1];
+const POINTS_BY_RANK = [15, 12, 10, 8, 6, 4, 2, 1];
 
 // One countdown beat as the banner takes it — race_flow.cc's countdownTick,
 // which is the only thing about a beat that is a decision: numerals slap in, GO

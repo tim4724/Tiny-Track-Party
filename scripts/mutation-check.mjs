@@ -138,8 +138,8 @@ const MUTATIONS = [
   {
     name: 'gp/points-table-changed',
     file: 'native/libttp-sim/ttp/grand_prix.cc',
-    find: 'POINTS_BY_RANK[4] = {9, 6, 3, 1}',
-    replace: 'POINTS_BY_RANK[4] = {9, 6, 4, 1}',
+    find: 'POINTS_BY_RANK[8] = {15, 12, 10, 8, 6, 4, 2, 1}',
+    replace: 'POINTS_BY_RANK[8] = {15, 12, 10, 8, 6, 4, 1, 1}',
     expect: 'grandprix',
   },
   {

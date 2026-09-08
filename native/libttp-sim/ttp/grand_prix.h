@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <functional>
+#include <iterator>
 #include <string>
 #include <utility>
 #include <vector>
@@ -15,8 +16,13 @@
 
 namespace ttp {
 
-// Points by finish rank (1st..4th). DNF earns nothing.
-extern const int POINTS_BY_RANK[4];
+// Points by finish rank, as many rungs as a full grid has seats: every place a
+// racer can FINISH in scores, so a mid-pack board still moves between races. A
+// DNF earns nothing, which is the only thing separating it from crossing the
+// line last, and so does a rank past the table's end. Winning outranks a
+// consistent second, which is what the 1st->2nd gap buys.
+extern const int POINTS_BY_RANK[8];
+inline constexpr int POINTS_RANKS = (int)std::size(POINTS_BY_RANK);
 
 // Endless track draw with no repeats until every id is seen (Fisher-Yates, no
 // boundary repeat). rng() -> [0,1) is injected.

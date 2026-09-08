@@ -6,7 +6,7 @@
 
 namespace ttp {
 
-const int POINTS_BY_RANK[4] = {9, 6, 3, 1};
+const int POINTS_BY_RANK[8] = {15, 12, 10, 8, 6, 4, 2, 1};
 
 ShuffleBag::ShuffleBag(std::vector<std::string> ids, std::function<double()> rng)
     : all_(std::move(ids)), rng_(std::move(rng)) {}
@@ -53,7 +53,7 @@ void CupSeries::applyRace(const std::vector<GpResult>& results, const std::vecto
       meta_.emplace_back(res.playerId, nm);
       m = &meta_.back().second;
     }
-    m->gained = res.finished ? (res.rank >= 1 && res.rank <= 4 ? POINTS_BY_RANK[res.rank - 1] : 0) : 0;
+    m->gained = res.finished ? (res.rank >= 1 && res.rank <= POINTS_RANKS ? POINTS_BY_RANK[res.rank - 1] : 0) : 0;
     m->points += m->gained;
     m->lastRankNull = false;
     m->lastRank = res.rank;

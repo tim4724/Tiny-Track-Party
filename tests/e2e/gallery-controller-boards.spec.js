@@ -102,7 +102,7 @@ test('phone cup final: reports the CUP once the TV has revealed it', async ({ pa
   // title and the card move together onto the cup.
   await expect(page.locator('#results-title')).toHaveText(/ · Final$/);
   await expect(page.locator('#result-place')).toHaveText('1st');
-  await expect(page.locator('#result-time')).toHaveText('36 pts');
+  await expect(page.locator('#result-time')).toHaveText('52 pts');
   await expect(page.locator('#newgame-btn')).toHaveText('New game');
 });
 

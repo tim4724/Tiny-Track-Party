@@ -227,8 +227,9 @@ function paintNext(v, show) {
 // Discreteness is what makes that legible. Interpolating the same totals
 // continuously reaches the same place, but every rank change lands mid-blur with
 // nothing to attribute it to; one point at a time gives each overtake its own
-// beat. It also bounds the work: the winner owes 9 points, so the whole tally is
-// 9 ticks however big the field is.
+// beat. It also bounds the work: the tally runs as many ticks as the WINNER owes
+// points, however big the field is — widening the ladder lengthens it, so the
+// gallery's settle budgets are what feel a change to POINTS_BY_RANK first.
 //
 // The first tick re-ranks hard, because phase 1 was ordered by the RACE while
 // its totals were the cup's. That movement is honest — it is the board catching
