@@ -20,8 +20,19 @@ let steerRaf = null;
 
 // The motion chip only means something while TILT is the steering mode — a
 // buttons phone never needs the sensor.
+//
+// Read on the steer beat below rather than off a state change: motionState resolves
+// in stages (the permission answer, then the settle window, then a late sample
+// that takes the verdict back), so a chip rendered once at any one of those
+// moments is a snapshot of a value that keeps moving — which is how it came to
+// sit over a phone whose tilt was working fine. `haveTilt` is the honest test:
+// permission is not delivery, and it is a granted-but-silent sensor — the dead
+// wheel — that this chip exists to explain.
+let motionTipUp = false;   // last painted state; the beat writes only on a change
 function refreshMotionTip() {
-  const show = steerRaf && _mode === 'tilt' && _tilt.motionState !== 'granted';
+  const show = !!steerRaf && _mode === 'tilt' && !_tilt.haveTilt;
+  if (show === motionTipUp) return;
+  motionTipUp = show;
   el('motion-tip').classList.toggle('hidden', !show);
 }
 
@@ -32,9 +43,9 @@ export function startDriving(playerName) {
   const fill = el('steer-fill');
   steerRaf = requestAnimationFrame(function loop() {
     fill.style.transform = `translateX(${_tilt.state.steer * 50}%)`;
+    refreshMotionTip();
     steerRaf = requestAnimationFrame(loop);
   });
-  refreshMotionTip();
 }
 
 export function stopDriving() {
@@ -43,6 +54,7 @@ export function stopDriving() {
   if (steerRaf) cancelAnimationFrame(steerRaf);
   steerRaf = null;
   releaseSteerButtons();
+  refreshMotionTip();   // the beat has stopped; leave the chip down and the flag honest
 }
 
 // --- input mode ---
@@ -56,7 +68,6 @@ export function setInputMode(mode) {
   game.classList.toggle('mode-tilt', _mode === 'tilt');
   game.classList.toggle('mode-buttons', _mode === 'buttons');
   releaseSteerButtons();
-  refreshMotionTip();
 }
 
 // --- held item / ACTION gating ---

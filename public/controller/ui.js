@@ -50,8 +50,10 @@ export function renderWaitNote(waitEl, { name, color } = {}, suffix) {
 // granted on the Join tap) needs no recovery, so the popup stays shut. 'unsupported'
 // has no case: a device with no sensor is forced onto button steering at startup
 // (main.js) and the settings card's Tilt row reads "Not available" — nothing to
-// recover, so it never reaches this popup. 'unknown' (the gallery / pre-prompt
-// edge) is the one state where a fresh request CAN still prompt.
+// recover, so it never reaches this popup. 'unknown' is the one state where a
+// fresh request CAN still prompt — and it is not only the gallery's pre-prompt
+// edge: a request the platform refused to even put for want of a gesture (a
+// launcher join, see TiltInput._askOnNextGesture) lands a real phone here too.
 export function motionHelpCopy(state) {
   switch (state) {
     case 'granted':
@@ -63,7 +65,7 @@ export function motionHelpCopy(state) {
         status: 'Steering uses your phone’s tilt, which is switched off.',
         fix: 'Still off after reloading? Turn on <em>Settings → Apps → Safari → Motion &amp; Orientation Access</em>, then rejoin.'
       };
-    default: // 'unknown' — before the Join tap resolved permission (e.g. the gallery)
+    default: // 'unknown' — nothing has asked yet (the gallery), or the ask was refused a hearing
       return {
         show: true, allow: true, action: 'request', allowText: 'Allow motion',
         title: 'Turn on motion access',

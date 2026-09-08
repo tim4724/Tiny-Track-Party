@@ -27,7 +27,7 @@
 // tap handler). HTTPS is required for sensors. Permission is not delivery,
 // though: enableMotion() also waits for a first real sample before it answers,
 // because a granted-but-silent sensor is the common failure and it used to
-// present as a dead steering wheel (see _settle / sensorPolicyBlocked).
+// present as a dead steering wheel (see _settle).
 //
 // Braking: a held BRAKE button. Held → brake = BRAKE_LEVEL; the engine reads it
 // as a target speed of (1 - BRAKE_LEVEL) × top speed, so a full hold (1) bleeds
@@ -75,26 +75,6 @@ const BRAKE_LEVEL = 1.0;   // held brake decelerates the car to a full stop
 // pays none of this window; it only has to outlast a slow first sample.
 const SENSOR_SETTLE_MS = 600;
 
-// Does this document's permissions policy allow the motion sensors?
-// false = the embedder withheld them, null = this browser cannot say.
-//
-// A cross-origin iframe is granted the sensors only if its embedder spends an
-// `allow` attribute on them, and where it doesn't, DeviceOrientationEvent still
-// EXISTS on window and simply never fires. The presence of the constructor
-// therefore proves nothing, which is why this is asked separately.
-//
-// Blink-only (`document.featurePolicy`; there is no `document.permissionsPolicy`
-// despite the rename of the header). WebKit and Gecko expose no equivalent, so
-// they get no early answer and fall back to SENSOR_SETTLE_MS. Only the
-// accelerometer is consulted: it is required for any gravity reading at all,
-// while a gyroscope-only withholding is left to the settle check rather than
-// risking a false "no sensor" on a phone that would have worked.
-function sensorPolicyBlocked() {
-  const fp = typeof document !== 'undefined' && document.featurePolicy;
-  if (!fp || typeof fp.allowsFeature !== 'function') return null;
-  try { return !fp.allowsFeature('accelerometer'); } catch (_) { return null; }
-}
-
 const DEG = Math.PI / 180;
 const RAD = 180 / Math.PI;
 const clamp1 = (v) => Math.max(-1, Math.min(1, v));
@@ -121,12 +101,14 @@ export class TiltInput {
     // act on the difference: startup falls back to buttons (main.js) and the
     // settings card disables Tilt (modals.js) either way.
     //
-    // Two ways in need no gesture, so both resolve right here, before any
-    // permission flow: no DeviceOrientationEvent constructor (no sensor, ever),
-    // or a permissions policy that withholds the sensors from this document.
-    // The THIRD way can only be found by listening — see _settle.
-    this.motionState = (typeof window !== 'undefined'
-      && (!window.DeviceOrientationEvent || sensorPolicyBlocked() === true))
+    // Only the absent constructor resolves here, without a gesture: no
+    // DeviceOrientationEvent means no sensor, ever. Every other route to
+    // 'unsupported' — a withheld sensor, a missing gyroscope — can only be found
+    // by listening, and _settle finds them all by the one test that matters,
+    // whether samples ARRIVE. (A permissions-policy probe used to answer the
+    // withheld case ~600 ms sooner on Blink alone; it was a second mechanism for
+    // the same question, able to disagree with the delivery it was predicting.)
+    this.motionState = (typeof window !== 'undefined' && !window.DeviceOrientationEvent)
       ? 'unsupported' : 'unknown';
 
     // latest gravity unit vector in the device frame (overwritten each event;
@@ -144,6 +126,7 @@ export class TiltInput {
     this._actKeyDown = false;
     this._actionEnabled = false; // gate: ACTION does nothing unless the slot holds an item (set via setActionEnabled)
     this._timer = null;
+    this._gestureAsk = false;  // a re-request is already armed (see _askOnNextGesture)
 
     this._onOrient = this._onOrient.bind(this);
     this._bindKeys();
@@ -151,8 +134,10 @@ export class TiltInput {
   }
 
   // Call from a user gesture (e.g. the Join tap). Resolves once the sensor has
-  // been proved to deliver or not, so the returned state is final: callers can
-  // switch steering mode off it without a second round.
+  // been proved to deliver or not, so the returned state is final and callers
+  // can switch steering mode off it without a second round — with the one
+  // exception that it CANNOT be final: a request the platform refused to even
+  // put (no gesture behind it) leaves 'unknown' and re-asks on the next tap.
   async enableMotion() {
     const DOE = window.DeviceOrientationEvent;
     if (!DOE) return this.motionState; // 'unsupported' since the constructor — nothing to request
@@ -164,13 +149,36 @@ export class TiltInput {
         this.motionState = 'granted'; // Android/desktop: just attach
       }
     } catch (_) {
-      this.motionState = 'denied';
+      // A REJECTION is not a denial. iOS rejects requestPermission() when the
+      // call did not come from a user gesture — which is exactly what a launcher
+      // join produces, since the shell owns identity and joins at boot with no
+      // tap (main.js). Recording 'denied' there is a ONE-WAY DOOR: the recovery
+      // popup's only offer for it is a reload, and the reload re-runs the same
+      // gestureless boot. So leave the state unresolved (whose popup face still
+      // offers a working "Allow motion") and supply the thing that was actually
+      // missing — a gesture.
+      this._askOnNextGesture();
     }
     if (this.motionState === 'granted') {
       window.addEventListener('deviceorientation', this._onOrient);
       await this._settle();
     }
     return this.motionState;
+  }
+
+  // Re-request on the next tap anywhere, for the pages that join without one.
+  // `click` rather than a pointer event: it is what WebKit counts as activation,
+  // and it survives the pointerdown-preventDefault every drive control does.
+  // Capture phase so a stopPropagation upstream can't eat it, and ONE shot — a
+  // request that fails again with a real gesture behind it is a real refusal.
+  _askOnNextGesture() {
+    if (this._gestureAsk || typeof window === 'undefined') return;
+    this._gestureAsk = true;
+    const once = () => {
+      window.removeEventListener('click', once, true);
+      this.enableMotion();
+    };
+    window.addEventListener('click', once, true);
   }
 
   // Permission is not delivery. A page can hold a granted listener that never
