@@ -28,8 +28,8 @@
 // off — after the present pass where there is one, and otherwise inside each
 // race cell's own pass, last in its blend order (TtpRenderer::drawOverlay has
 // the fold) — so a value written here IS the on-panel sRGB value, and the only
-// real framebuffer blend left (the
-// divider's 0.88 and the shapes' antialiased edges) blends sRGB against sRGB,
+// real framebuffer blend left (the shapes' antialiased edges; the divider
+// itself is opaque black) blends sRGB against sRGB,
 // like CSS compositing. Authoring in the scene's linear space and letting
 // vpresent grade it would blend in LINEAR instead, which is a visibly different
 // answer: ink at 40 % over white is 0.67 in sRGB and 0.81 in linear.

@@ -457,7 +457,7 @@ void TtpRenderer::drawOverlay(const TtpFrameInput& input) {
         const float3 surface = hudRgb(TTP_HUD_SURFACE);
         const uint32_t n = input.hudCount;
 
-        // .cell-divider — a 4 px ink rule down every seam that has cells on both
+        // .cell-divider — a 7 px black rule down every seam that has cells on both
         // sides, SPANNING THE WHOLE CANVAS, deduplicated exactly as the DOM's
         // loop was: one rule per distinct cell edge, not one per cell.
         //
@@ -497,8 +497,11 @@ void TtpRenderer::drawOverlay(const TtpFrameInput& input) {
                 for (uint32_t k = 0; k < ny; k++) seen = seen || ys[k] == r.y;
                 if (r.y > y0 && !seen && ny < 8) ys[ny++] = r.y;
             }
-            // rgba(42, 39, 53, 0.88) — the ink, let through by the tiniest bit.
-            const float4 rule{ ink.xyz, 0.88f };
+            // Pure opaque black, NOT the theme ink: the rule is the join between
+            // two players' pictures rather than chrome on one of them, and the
+            // warm ink at 0.88 read as a tinted stripe over whatever the two
+            // scenes put behind it.
+            const float4 rule{ 0.0f, 0.0f, 0.0f, 1.0f };
             // Weight off the CANVAS, like the span: the rule belongs to the
             // whole surface, not to one cell. The floor is rasterization — a
             // sub-pixel rule fades out rather than thinning.

@@ -262,13 +262,18 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
       for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) if (changed(x, y)) n++;
       return n / (w * h);
     };
-    // Every scanline's changed fraction. Only the ink rule spans the whole
-    // width; a bar covers barW/W of a line, which is 0.17 here.
+    // Every scanline's changed fraction, over the PICTURE's width. The rule
+    // spans the whole canvas, but it is opaque black over side bars the swap
+    // chain also clears to black, so a difference test sees it only inside the
+    // picture. The rule is the one thing that spans the picture; a bar covers
+    // barW/picture of a line, which is 0.26 here.
+    const px0 = Math.round(Math.min(...cells.map((c) => c.x)));
+    const px1 = Math.round(Math.max(...cells.map((c) => c.x + c.w)));
     const rows = [];
     for (let y = 0; y < H; y++) {
       let n = 0;
-      for (let x = 0; x < W; x++) if (changed(x, y)) n++;
-      rows.push(n / W);
+      for (let x = px0; x < px1; x++) if (changed(x, y)) n++;
+      rows.push(n / (px1 - px0));
     }
     return {
       barsChanged: boxes.map(boxFrac),
@@ -276,7 +281,7 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
       // a full bar height of clearance sits between them. Any less and at 0.25
       // DPR this measures the quad's antialiased edge rather than the bar.
       abovesChanged: boxes.map((b) => boxFrac({ ...b, y: b.y - b.h * 2 })),
-      // The rule is CENTRED on the seam and 4/1080 of the surface thick, which
+      // The rule is CENTRED on the seam and 7/1080 of the surface thick, which
       // at this DPR is ONE device row landing on one side of the boundary or the
       // other — so ask
       // which rows near the seam carry it, not which exact one.
@@ -294,9 +299,9 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
   // …and nothing clear of it, which is where a bar sized or centred off the raw
   // surface grid instead of the band-fitted cell would sit.
   for (const frac of paint.abovesChanged) expect(frac).toBe(0);
-  // The ink rule runs the full width at the one interior seam…
+  // The rule runs the full picture width at the one interior seam…
   expect(Math.max(...paint.seamRows)).toBeGreaterThan(0.9);
-  // …and NOWHERE else on the canvas: every full-width scanline the overlay owns
+  // …and NOWHERE else on the canvas: every picture-wide scanline the overlay owns
   // sits within a couple of pixels of that seam. A rule per CELL rather than per
   // SEAM, or one measured in the wrong units, shows up here as an extra row.
   expect(paint.wideRows.length).toBeGreaterThan(0);
