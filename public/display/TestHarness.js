@@ -24,8 +24,8 @@ import { renderSeats, renderLobbyPick, renderCupShelf } from './lobbySeats.js';
 // of both in template literals, and the lobby's twin had already drifted to a
 // screen that no longer existed by the time anyone noticed.
 import { renderResults, hideResults, showCountdownBanner } from './raceOverlays.js';
-import { resultsView } from './NativeUiModel.js';
-import { benchField, intermissionMs } from './NativeRaceFlow.js';
+import { resultsView, intermissionSecs } from './NativeUiModel.js';
+import { benchField, intermissionMs, flourishMs } from './NativeRaceFlow.js';
 import { LobbyDemo } from './LobbyDemo.js';
 import { CUPS, TRACKS, TRACK_LIST } from '../shared/tracks.js';
 import { TRACK_SCHEMATICS } from '../shared/trackSchematics.js';
@@ -830,20 +830,25 @@ export function runDisplayScenario(opts, ctx) {
   }
 
   // ---- the cup's chained start (scenario=chain) ----
-  // The one transition in the game with no lobby step to hide behind: a cup race
-  // ends, the intermission board goes up, and the next circuit has to already be
-  // on screen when the board comes down. Live play meshes it UNDER the board
-  // (main.js prepareNextTrack → Stage.prepare) so the chained start has nothing
-  // left to build; done at the start instead, the countdown ticks over the
-  // OUTGOING circuit and then hitches. This preview loops that transition around
-  // a cup's four tracks so the whole thing can be watched, which no still can
-  // show and no assertion reads as well as an eye does.
+  // THE WHOLE END-OF-RACE BEAT, on a loop: the flag, the frozen finish frame
+  // wearing its place cards, the board fading up over it a flourish later, and
+  // then the next circuit's countdown with no lobby step in between. Every one
+  // of those is a MOMENT rather than a picture — no still shows a board arriving
+  // late, and no assertion reads the join between them as well as an eye does.
+  //
+  // The chained start is the part with nothing to hide behind: the next circuit
+  // has to already be on screen when the board comes down. Live play meshes it
+  // UNDER the board (main.js prepareNextTrack → Stage.prepare) so the start has
+  // nothing left to build; done at the start instead, the countdown ticks over
+  // the OUTGOING circuit and then hitches. This loops the lot around a cup's
+  // four tracks.
   //
   // NOTHING HERE KEEPS ITS OWN COPY OF THE SEQUENCE. showBoard is the real
   // results renderer, showCountdownBanner the real banner, the scene work is
   // Stage.prepare / setTrack / rebuild IN THE ORDER THE WALKS EMIT IT
   // (place-track, hide-results, reset-scene-cars, create-session, bind-session,
-  // start-countdown), the board sits up for the layer's own intermissionMs, and
+  // start-countdown), the flag freezes and paints in endRace's order, the two
+  // waits are the layer's own flourishMs and intermissionMs, and
   // the countdown is a REAL countdown-mode session: it ticks at the sim's 1 Hz
   // and flips `racing` inside the n=0 beat, so the field leaves on GO because
   // the game says so and not because this file agreed to. A hand-rolled beat
@@ -1088,8 +1093,13 @@ export function runDisplayScenario(opts, ctx) {
 
       let leg = Math.max(0, cup.tracks.indexOf(ctx.track.trackId));  // which of the cup's tracks is racing
       let engine = null;
-      let onBoard = false;  // the intermission is up; the sim is done
-      let boardMs = 0, raceMs = 0, lastHud = 0;
+      // race → flourish (the frozen finish frame) → board → race. `phaseMs` is
+      // the clock of whichever of the last two is up; the race keeps its own.
+      let phase = 'race';
+      let phaseMs = 0, raceMs = 0, lastHud = 0;
+      // The seats the sim treats as PEOPLE — the ones whose crossing is the flag,
+      // and the only ones with a split-screen cell to carry a place card.
+      const humanIds = new Set(field.filter((f) => !f.ai).map((f) => f.peerIndex));
 
       // The launch, performed in the walks' own order. The two rebuild triggers
       // (setTrack, rebuild) come out as no-ops when the board above already
@@ -1116,25 +1126,69 @@ export function runDisplayScenario(opts, ctx) {
         // reads — not a 3 retyped here.
         engine.startCountdown(window.__countdownSeconds || window.COUNTDOWN_SECONDS);
         for (const c of engine.getSnapshot().cars) scene.setCarHud(c.id, c);
-        onBoard = false; raceMs = 0;
+        phase = 'race'; raceMs = 0;
       }
 
-      // End of a leg: the board goes up and the NEXT circuit is meshed behind it.
-      function intermission() {
-        showBoard(cupBoard(field, leg, false));
+      // THE FLAG, in main.js's order: freeze the picture BEFORE running the sim
+      // on, or the just-finished car's chase camera whips off after a pose the
+      // screen no longer shows. Then one HUD paint — the same one endRace emits
+      // — and that paint is the whole point of this leg: it is what puts the
+      // "nth place" card in every human's cell.
+      //
+      // Live the flag IS every human home; a preview leg is cut on the clock
+      // instead, so bring them in in the order they are running and let the
+      // fast-forward resolve the CPU fill exactly as the live one does.
+      //
+      // NO BOARD HERE. That is the beat this preview exists to show.
+      function flag() {
+        scene.hold(true);                                     // hold-cars
+        const home = engine.getSnapshot().cars
+          .filter((c) => humanIds.has(c.id) && !c.finished)
+          .sort((a, b) => a.position - b.position);
+        home.forEach((c, i) => engine.forceFinish(c.id, raceMs / 1000 + i * 0.4));
+        engine.fastForwardToEnd();
+        for (const c of engine.getSnapshot().cars) scene.setCarHud(c.id, c);   // paint-hud
+        phase = 'flourish'; phaseMs = 0;                      // arm-results
+      }
+
+      // The board arrives a flourish later, fading up over the held finish frame
+      // (display.css) — and the NEXT circuit is meshed behind it.
+      function board() {
+        showBoard(cupBoard(field, leg, false));               // show-results
         leg = (leg + 1) % cup.tracks.length;
         scene.prepare(entry(cup.tracks[leg]));
-        onBoard = true; boardMs = 0;
+        phase = 'board'; phaseMs = 0;                         // arm-intermission
+      }
+
+      // The board's "starting in N…", ticked exactly as the live shell ticks it
+      // (main.js renderIntermissionCountdown): a fresh ceil off the ui model
+      // every beat rather than a counter this side decrements, so it cannot
+      // drift and it cannot disagree with the live footer.
+      //
+      // Off the FRAME clock, not main.js's setInterval, for the reason every
+      // other clock in this preview is: a gallery card's pause has to freeze the
+      // footer along with the picture, and an interval would march on behind a
+      // still. The span only exists once the board turns to its cup phase — the
+      // race phase has no footer — so a null here is "not up yet", not a fault.
+      function tickNextSecs(remainMs) {
+        const secs = el('results-next-secs');
+        if (secs) secs.textContent = String(intermissionSecs(remainMs, 0));
       }
 
       launch();
       scene.onFrame = (dt) => {
         const ms = dt * 1000;
-        if (onBoard) {
-          // The board sits for the layer's OWN budget, which is also the number
-          // it is at that moment printing in its "starting in N…" footer.
-          boardMs += ms;
-          if (boardMs >= intermissionMs()) launch();
+        if (phase !== 'race') {
+          // Both waits are the layer's OWN numbers, not this file's: the finish
+          // flourish the flag arms the board with, then the intermission budget
+          // the board is at that moment printing in its "starting in N…" footer.
+          phaseMs += ms;
+          if (phase === 'flourish') { if (phaseMs >= flourishMs()) board(); }
+          else {
+            const remain = intermissionMs() - phaseMs;
+            tickNextSecs(remain);
+            if (remain <= 0) launch();
+          }
           return;
         }
         // Countdown and race are ONE path here exactly as they are in main.js:
@@ -1148,7 +1202,7 @@ export function runDisplayScenario(opts, ctx) {
         }
         if (!engine.racing) return;   // still counting down
         raceMs += ms;
-        if (raceMs >= CHAIN_RACE_MS || raceOver(engine.getSnapshot())) intermission();
+        if (raceMs >= CHAIN_RACE_MS || raceOver(engine.getSnapshot())) flag();
       };
       holdFrame(true);   // gallery: the card's ▶ runs the loop; a standalone tab just runs
     }

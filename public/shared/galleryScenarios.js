@@ -122,7 +122,7 @@ export const GALLERY_SCENARIOS = [
   // THEM, and the slack left over is what absorbs a capture machine under load.
   { id: 'results', key: 'results', title: 'Results', settleMs: 1200 },
   { id: 'intermission', key: 'intermission', title: 'Cup intermission', settleMs: 5200 },
-  { id: 'chain', key: 'chain', title: 'Cup: race → next race', animated: true },
+  { id: 'chain', key: 'chain', title: 'Cup: finish → results → next race', animated: true },
   { id: 'podium', key: 'podium', title: 'Cup podium', settleMs: 5200 }
 ];
 
