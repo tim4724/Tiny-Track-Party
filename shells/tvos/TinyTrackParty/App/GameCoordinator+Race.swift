@@ -59,12 +59,13 @@ extension GameCoordinator {
         sessionHandle = 0
     }
 
-    func paintInitialHUD() {
-        // The renderer reads the grid poses straight off the engine; there is
-        // nothing to copy across. The web's version of this op exists because
-        // its Stage cached a per-car HUD row, and the packed HUD poll replaced
-        // that. Kept as a named no-op rather than dropped, so the op stays
-        // performable and a future HUD that DOES need priming has a home.
+    func paintHUD() {
+        // The renderer reads the poses straight off the engine; there is nothing
+        // to copy across, at the grid or at the flag. The web's version of this
+        // op exists because its Stage cached a per-car HUD row, and the packed
+        // HUD poll replaced that. Kept as a named no-op rather than dropped, so
+        // the op stays performable and a future HUD that DOES need priming has
+        // a home.
     }
 
     /// The manual overlay pause/resume, as walks. The verdicts
@@ -293,6 +294,25 @@ extension GameCoordinator {
 
     // MARK: - Timers the effects arm
 
+    /// THE FINISH FLOURISH. The race's end arms the board rather than showing
+    /// it: the sim raises the last car's finish and raceOver in one update, so a
+    /// board painted at the flag lands on the same frame the flag does and the
+    /// finisher never sees the place card their own cell just earned. This holds
+    /// the frozen finish frame for `ms` (race_flow.h FINISH_FLOURISH_MS) and
+    /// then asks the walk for the reveal — which is the only place show-results
+    /// and the intermission arm come from now.
+    func armResults(ms: Double) {
+        resultsTask?.cancel()
+        resultsTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(ms * 1_000_000))
+            guard !Task.isCancelled else { return }
+            self.resultsTask = nil
+            self.run(TTP.obj(ttp_race_reveal_live_json(self.net.roomHandle,
+                                                       ttp_race_intermission_ms(),
+                                                       self.nowMs())))
+        }
+    }
+
     func armIntermission(ms: Double, deadline: Double) {
         clearIntermission()
         intermissionDeadline = deadline
@@ -313,7 +333,13 @@ extension GameCoordinator {
         }
     }
 
+    /// Every exit from the results screen lands here, and the flourish's hold is
+    /// one of the timers it kills: a reveal still pending when the host jumps to
+    /// the next race (or back to the lobby) would paint the board over a
+    /// countdown.
     func clearIntermission() {
+        resultsTask?.cancel()
+        resultsTask = nil
         intermissionTask?.cancel()
         intermissionTicker?.cancel()
         intermissionTask = nil

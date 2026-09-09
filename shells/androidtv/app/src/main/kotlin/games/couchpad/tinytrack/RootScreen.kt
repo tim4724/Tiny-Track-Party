@@ -1,6 +1,7 @@
 package games.couchpad.tinytrack
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -120,7 +121,17 @@ fun RootScreen(game: GameCoordinator) {
             enter = fadeIn(tween(120)), exit = fadeOut(tween(200)),
         ) { CountdownBanner(lastCount) }
 
-        if (state.results != null) ResultsScreen(state, game)
+        // THE BOARD FADES UP, because it no longer arrives at the flag: the race's
+        // end holds the frozen finish frame for the flourish (race_flow.h
+        // FINISH_FLOURISH_MS) while everyone reads the place cards, and cutting to
+        // the board throws away the beat that hold exists to buy. ENTER ONLY —
+        // ResultsScreen returns early on a null board, so an exit fade would need
+        // the countdown's held-value dance to have anything to draw, and the board
+        // leaves under a launch's own scene change anyway.
+        AnimatedVisibility(
+            visible = state.results != null,
+            enter = fadeIn(tween(320)), exit = ExitTransition.None,
+        ) { ResultsScreen(state, game) }
 
         if (state.screen == GameState.Screen.RACE && state.paused && state.results == null) {
             PauseOverlay(game)

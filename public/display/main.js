@@ -563,7 +563,7 @@ scene.onFrame = (dt) => {
   // The other half of the slow tick hoisted above — and it runs through the
   // COUNTDOWN too: the grid already carries ranks and displayLap clamps to 1,
   // so each cell reads its start position and "Lap 1/N" while the lights count.
-  // The walk's one-shot paint-initial-hud fires before reset-scene-cars' async
+  // The walk's one-shot paint-hud fires before reset-scene-cars' async
   // rebuild has landed the new slot table, so this poll is what actually fills
   // the countdown chrome (and a new session's outbox is empty, so every phone's
   // ITEM is resent on this first tick, countdown or not).
@@ -773,6 +773,7 @@ function renamePlayer(peerIndex, name) {
 // the room's stored series, holds the room in RESULTS for an intermission, then
 // chains straight into the next race (advanceSeriesRace) — the lobby only
 // returns after the podium (or on any quit path, which cancels the series).
+let resultsTimer = null;        // the finish flourish: the hold before the board
 let seriesTimer = null;         // auto-advance timeout (armed per intermission)
 let seriesDeadline = 0;         // when it fires — the countdown label reads this
 let intermissionTicker = null;  // ½ s "starting in N…" refresh
@@ -874,8 +875,10 @@ const RACE_PERFORMERS = {
     audioDecide.bind(session.h);
   },
   // Off the packed HUD rows — the last snapshot parse on this path went with
-  // the welcome relight's.
-  'paint-initial-hud': () => {
+  // the welcome relight's. Emitted twice: to dress the grid at final size before
+  // the countdown, and at the flag, where it is the only paint the finisher's
+  // place card gets (the freeze that follows stops this loop's HUD tick).
+  'paint-hud': () => {
     for (const row of scene.hudRows()) scene.setCarHud(row.id, row);
   },
   'start-countdown': (e) => session.startCountdown(e.seconds),
@@ -897,6 +900,10 @@ const RACE_PERFORMERS = {
   // — nothing about it crosses to this side, and the op is now bare. What is
   // left to perform is the republish that carries it to the phones.
   'broadcast-standings': () => net.syncState(),
+  // THE FINISH FLOURISH. The board is armed here, not shown: the frozen finish
+  // frame keeps the screen — every cell wearing the place card the op above just
+  // painted — for the hold the walk names, and revealResults() lands the board.
+  'arm-results': (e) => { resultsTimer = setTimeout(revealResults, e.ms); },
   'show-results': () => showResults(),
   'arm-intermission': (e) => {
     seriesDeadline = e.deadline;
@@ -1076,8 +1083,21 @@ function advanceSeriesRace() {
   armCountdown(d.countdownEffects);
 }
 
+// The flourish's far end. Nothing is decided here: the walk answers the board
+// and — mid-cup — the intermission arm, whose clock therefore starts NOW rather
+// than at the flag, so a chained race keeps its whole budget.
+function revealResults() {
+  resultsTimer = null;
+  perform(flow.revealResults(net.flow.handle,
+                             { intermissionMs: intermissionMs(), nowMs: Date.now() }).effects);
+}
+
+// Every exit from the results screen clears these, and the flourish timer is one
+// of them: a reveal still pending when the host jumps to the next race (or back
+// to the lobby) would paint the board over a countdown.
 function clearSeriesTimers() {
   clearTimeout(seriesTimer); seriesTimer = null;
+  clearTimeout(resultsTimer); resultsTimer = null;
   clearInterval(intermissionTicker); intermissionTicker = null;
 }
 

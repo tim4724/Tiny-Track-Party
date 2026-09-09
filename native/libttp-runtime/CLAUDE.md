@@ -66,6 +66,18 @@ load-bearing AND silent when wrong. Four constraints live in the order alone:
 3. Cup points are banked BEFORE the final board goes out.
 4. The session is disposed BEFORE the flow flips to LOBBY.
 
+**The flag is not the board.** The sim raises the last car's finish and
+`raceOver` in ONE update, so anything `endRace` emits lands on the frame the flag
+does — a board there replaces a race that was being driven a moment ago, and the
+finisher never sees the place card their own cell just earned. So `endRace` paints
+the HUD one last time (before the freeze that stops the shells' own HUD tick),
+hands the phones their board, and ARMS the TV's; `revealResults` is the far end of
+the hold and the only place `show-results` and the intermission arm come from. The
+intermission clock therefore starts at the REVEAL, so a chained race keeps its
+whole budget. `FINISH_FLOURISH_MS` is the one taste knob and lives in
+`race_flow.h`; nothing waits on it and no phone is told about it, which is why it
+is emitted rather than passed in the way the intermission is.
+
 **The countdown is GATED on the scene, not on the build returning.** A launch
 answers with two effect lists: the walk, and `start-countdown` alone, held until
 `countdownReady` says the scene has stopped assembling. The wait is measured in

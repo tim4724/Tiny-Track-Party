@@ -750,6 +750,17 @@ html.cam-free #race { pointer-events: none; }
   align-items: center; justify-content: center;
   background: rgba(255, 246, 235, 0.92); backdrop-filter: blur(10px);
 }
+/* THE BOARD FADES UP, because it no longer arrives at the flag. The race's end
+   arms it and the frozen finish frame holds the screen for the flourish
+   (race_flow.h FINISH_FLOURISH_MS) while everyone reads the place cards — so
+   the paper glass has something to fade OVER, and cutting to it throws away the
+   beat the hold exists to buy. The pieces keep their own slap-ins below and
+   land on the glass as it arrives; the fade restarts on its own every time
+   because showing the board is a display:none → shown flip. */
+@media (prefers-reduced-motion: no-preference) {
+  #results { animation: results-fade 320ms ease-out both; }
+  @keyframes results-fade { from { opacity: 0; } to { opacity: 1; } }
+}
 #results h2 {
   font-family: var(--font-display); font-weight: 700;
   font-size: clamp(2.4rem, 6vw, 4.6rem); margin: 0 0 1rem; color: var(--ink);

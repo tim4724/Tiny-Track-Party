@@ -111,11 +111,11 @@ class RaceFlowPerformer(private val game: GameCoordinator) {
                 game.audio.bind(game.sessionHandle)
             }
 
-            // The renderer reads the grid poses straight off the engine; there is
-            // nothing to copy across. Kept as a named no-op rather than dropped, so
-            // the op stays performable and a future HUD that DOES need priming has
-            // a home.
-            "paint-initial-hud" -> Unit
+            // The renderer reads the poses straight off the engine; there is
+            // nothing to copy across, at the grid or at the flag. Kept as a named
+            // no-op rather than dropped, so the op stays performable and a future
+            // HUD that DOES need priming has a home.
+            "paint-hud" -> Unit
 
             // ---- the countdown ----------------------------------------------
             "start-countdown" ->
@@ -161,6 +161,10 @@ class RaceFlowPerformer(private val game: GameCoordinator) {
 
             // The points banking (constraint 3: BEFORE the final board goes out)
             // happens inside the event drain's executor — no op crosses.
+            // THE FINISH FLOURISH: the flag ARMS the board, it does not show it.
+            // The frozen finish frame keeps the screen for the hold the walk
+            // names, and the reveal walk is what answers show-results.
+            "arm-results" -> game.armResults(e.optDouble("ms", 0.0))
             "show-results" -> game.showResults()
 
             "arm-intermission" ->
@@ -232,11 +236,11 @@ class RaceFlowPerformer(private val game: GameCoordinator) {
             "show-screen", "hide-results", "set-race-flags", "set-pause-overlay",
             "set-pause-button", "reveal-chrome", "hold-chrome",
             "reset-scene-cars", "create-session", "transition", "bind-session",
-            "paint-initial-hud", "start-countdown", "show-countdown",
+            "paint-hud", "start-countdown", "show-countdown",
             "broadcast-countdown", "refresh-auto-pause", "persist-progression",
             "start-music", "stop-music", "stop-voices",
             "stop-car-audio", "item-pickup", "rocket-impact", "rocket-expire",
-            "broadcast-standings", "show-results",
+            "broadcast-standings", "arm-results", "show-results",
             "arm-intermission", "clear-intermission", "place-track",
             "dispose-session", "fade-to-lobby", "remove-scene-car",
             "sync-state", "rekey-scene-car", "set-auto-paused", "sync-frozen",

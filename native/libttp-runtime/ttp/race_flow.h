@@ -86,11 +86,11 @@ enum class Op {
   STOP_LOBBY_DEMO, SET_FIELD, CLEAR_ITEM_CACHE, SHOW_SCREEN,
   HIDE_RESULTS, SET_RACE_FLAGS, SET_PAUSE_OVERLAY, SET_PAUSE_BUTTON,
   REVEAL_CHROME, HOLD_CHROME, RESET_SCENE_CARS, CREATE_SESSION, TRANSITION,
-  BIND_SESSION, PAINT_INITIAL_HUD, START_COUNTDOWN, SHOW_COUNTDOWN,
+  BIND_SESSION, PAINT_HUD, START_COUNTDOWN, SHOW_COUNTDOWN,
   BROADCAST_COUNTDOWN, REFRESH_AUTO_PAUSE, START_MUSIC, STOP_MUSIC,
   STOP_VOICES, ITEM_PICKUP, ROCKET_IMPACT, ROCKET_EXPIRE,
-  BROADCAST_STANDINGS, APPLY_RACE_POINTS, SHOW_RESULTS, ARM_INTERMISSION,
-  CLEAR_INTERMISSION, SERIES_ADVANCE,
+  BROADCAST_STANDINGS, APPLY_RACE_POINTS, ARM_RESULTS, SHOW_RESULTS,
+  ARM_INTERMISSION, CLEAR_INTERMISSION, SERIES_ADVANCE,
   CLEAR_SERIES, SET_TRACK_FROM_SERIES, PLACE_TRACK, SET_TRACK, DISPOSE_SESSION,
   CLEAR_FIELD, FADE_TO_LOBBY, REMOVE_SCENE_CAR, STOP_CAR_AUDIO, SYNC_STATE,
   SERIES_REKEY, REKEY_SCENE_CAR, REKEY_FIELD, SET_AUTO_PAUSED, SYNC_FROZEN,
@@ -486,10 +486,35 @@ Effects raceEvent(const RaceEvent& e, bool fastForwarding, bool humansAllDone);
 struct EndRaceInput {
   bool hasSeries = false;
   bool seriesFinished = false;
+};
+// The flag. Freezes the finish frame, banks the cup points, hands the phones
+// the final board — and then ARMS the results board rather than showing it. See
+// FINISH_FLOURISH_MS: the reveal is revealResults(), a flourish later.
+Effects endRace(const EndRaceInput& in);
+
+// THE FINISH FLOURISH. The sim raises the last car's finish and raceOver in ONE
+// update, so a board shown off endRace lands on the same frame the flag does:
+// the finisher never sees the place card their own cell just earned, and a race
+// that was still being driven a moment ago is replaced mid-breath. So the flag
+// holds the frozen finish frame — every cell's FINISHED / place / time card up —
+// for this long, and the board comes after it.
+//
+// A DURATION, not a budget: nothing waits on it and no phone is told about it,
+// which is why it is emitted from here rather than passed in the way the
+// intermission is. Long enough to read your own place, short enough that a
+// party never feels stalled.
+inline constexpr double FINISH_FLOURISH_MS = 3000;
+
+struct RevealResultsInput {
+  bool hasSeries = false;
+  bool seriesFinished = false;
   double intermissionMs = 0;
   double nowMs = 0;
 };
-Effects endRace(const EndRaceInput& in);
+// The flourish is over: reveal the board, and — mid-cup — start the
+// intermission clock, which is measured from HERE so a chained race gets its
+// full budget rather than the flourish eating into it.
+Effects revealResults(const RevealResultsInput& in);
 
 // ---- the cup chain -----------------------------------------------------------
 
@@ -561,8 +586,8 @@ struct PauseResult {
 PauseResult pauseRace(const PauseInput& in);
 PauseResult resumeRace(const PauseInput& in);
 
-// The game-timing budget endRace takes as an input. It lives HERE — the layer
-// that arms the timer's effect — and shells read it through the ABI (main.js
+// The game-timing budget revealResults takes as an input. It lives HERE — the
+// layer that arms the timer's effect — and shells read it through the ABI (main.js
 // used to own the number, which made it a game timing a second shell had to
 // re-author). The E2E override (__intermissionMs) stays a shell-side override
 // of this default; the raceflow corpus header records the value it was driven

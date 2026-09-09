@@ -885,6 +885,11 @@ jbyteArray n_ttp_race_events_live_json(JNIEnv* env, jclass, jint a0, jint a1, jb
     return toBytes(env, ttp_race_events_live_json((int) a0, (int) a1, s2.get(), (int) a3, (int) a4, (double) a5, (double) a6));
 }
 
+jdouble n_ttp_race_flourish_ms(JNIEnv* env, jclass) {
+    (void) env;
+    return (jdouble) ttp_race_flourish_ms();
+}
+
 jbyteArray n_ttp_race_forfeit_live_json(JNIEnv* env, jclass, jint a0, jbyteArray a1) {
     CStr s1(env, a1);
     return toBytes(env, ttp_race_forfeit_live_json((int) a0, s1.get()));
@@ -919,6 +924,11 @@ jbyteArray n_ttp_race_resume_live_json(JNIEnv* env, jclass, jint a0, jint a1, ji
 jbyteArray n_ttp_race_return_live_json(JNIEnv* env, jclass, jint a0) {
     (void) env;
     return toBytes(env, ttp_race_return_live_json((int) a0));
+}
+
+jbyteArray n_ttp_race_reveal_live_json(JNIEnv* env, jclass, jint a0, jdouble a1, jdouble a2) {
+    (void) env;
+    return toBytes(env, ttp_race_reveal_live_json((int) a0, (double) a1, (double) a2));
 }
 
 jbyteArray n_ttp_race_series_state_json(JNIEnv* env, jclass, jint a0) {
@@ -1429,6 +1439,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_race_effect_ops_json", "()[B", (void*) n_ttp_race_effect_ops_json },
     { "ttp_race_end_party_json", "()[B", (void*) n_ttp_race_end_party_json },
     { "ttp_race_events_live_json", "(II[BIIDD)[B", (void*) n_ttp_race_events_live_json },
+    { "ttp_race_flourish_ms", "()D", (void*) n_ttp_race_flourish_ms },
     { "ttp_race_forfeit_live_json", "(I[B)[B", (void*) n_ttp_race_forfeit_live_json },
     { "ttp_race_intermission_ms", "()D", (void*) n_ttp_race_intermission_ms },
     { "ttp_race_pause_live_json", "(IIIII)[B", (void*) n_ttp_race_pause_live_json },
@@ -1436,6 +1447,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_race_rekey_live_json", "(II[B[B)[B", (void*) n_ttp_race_rekey_live_json },
     { "ttp_race_resume_live_json", "(IIIII)[B", (void*) n_ttp_race_resume_live_json },
     { "ttp_race_return_live_json", "(I)[B", (void*) n_ttp_race_return_live_json },
+    { "ttp_race_reveal_live_json", "(IDD)[B", (void*) n_ttp_race_reveal_live_json },
     { "ttp_race_series_state_json", "(I)[B", (void*) n_ttp_race_series_state_json },
     { "ttp_race_start_live_json", "(IIDD[B[B)[B", (void*) n_ttp_race_start_live_json },
     { "ttp_racing", "(I)I", (void*) n_ttp_racing },

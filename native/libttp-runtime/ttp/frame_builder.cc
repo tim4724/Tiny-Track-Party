@@ -17,6 +17,14 @@ void atRest(TtpCarInput& c) {
     c.boostMul = 1;
 }
 
+// The pose a HELD car is drawn at, read back out of the frame's own car input so
+// the chase rig can follow the picture rather than the simulation.
+ttp::Pose heldPose(const TtpCarInput& c) {
+    return { { c.pos.x, c.pos.y, c.pos.z },
+             { c.forward.x, c.forward.y, c.forward.z },
+             { c.up.x, c.up.y, c.up.z } };
+}
+
 std::vector<ScalarId> parseIds(const char* json) {
     std::vector<ScalarId> out;
     if (!json) return out;
@@ -205,10 +213,26 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
                     break;
                 }
             }
-            if (c) cam.update(c->pose, c->vmax != 0 ? (float) (c->v / c->vmax) : 0, dt);
+            // THE RIG FOLLOWS THE PICTURE, NOT THE SIM. While the field is
+            // held, the live pose is not what is on screen: the end-of-race hold
+            // is taken at the flag and the sim then runs ON to the flag for the
+            // AI, with the just-finished human driving a victory lap — so a
+            // camera fed `c->pose` sails away down the track leaving the parked
+            // body behind it. The finish flourish (race_flow.h) holds that frame
+            // for seconds, which is how this became visible; a held car is at
+            // rest, so the rig settles into its parked shot and stays there.
+            if (c) {
+                cam.update(fromHeld ? heldPose(outCars[subject]) : c->pose,
+                           fromHeld ? 0 : c->vmax != 0 ? (float) (c->v / c->vmax) : 0, dt);
+            }
             TtpViewInput& v = outViews[i];
             v.car = subject;
-            lookAtWorld(v.world, cam.pos, cam.target, c ? v3(c->pose.up) : V3{ 0, 1, 0 });
+            // …and the roll comes off the same pose, for the same reason.
+            const V3 up = !c ? V3{ 0, 1, 0 }
+                    : fromHeld ? V3{ outCars[subject].up.x, outCars[subject].up.y,
+                                     outCars[subject].up.z }
+                    : v3(c->pose.up);
+            lookAtWorld(v.world, cam.pos, cam.target, up);
             // The rig's own authored vertical fov, whatever the layout. A cell
             // is a SMALL SCREEN, not a crop — see the note on buildFrame.
             v.fov = cam.fov;

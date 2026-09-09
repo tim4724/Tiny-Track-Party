@@ -60,7 +60,7 @@ bool g_autopilotPlayers = false;
 // single buffer would hand the second call's bytes to a caller still holding the
 // first's pointer.
 std::string g_bufPersonas, g_bufOps, g_bufDemo, g_bufStart, g_bufLaunch,
-    g_bufEvents, g_bufAdvance, g_bufReturn, g_bufEndParty,
+    g_bufEvents, g_bufReveal, g_bufAdvance, g_bufReturn, g_bufEndParty,
     g_bufPause, g_bufResume,
     g_bufForfeit, g_bufRekey, g_bufAutoPause, g_bufBench;
 
@@ -278,6 +278,7 @@ Value effectVal(const race::Effect& e) {
       v.set("s", Value::Num(e.s));
       v.set("lat", Value::Num(e.lat));
       break;
+    case race::Op::ARM_RESULTS: v.set("ms", Value::Num(e.num)); break;
     case race::Op::ARM_INTERMISSION:
       v.set("ms", Value::Num(e.num));
       v.set("deadline", Value::Num(e.deadline));
@@ -300,7 +301,7 @@ Value effectVal(const race::Effect& e) {
     case race::Op::REVEAL_CHROME:
     case race::Op::HOLD_CHROME:
     case race::Op::BIND_SESSION:
-    case race::Op::PAINT_INITIAL_HUD:
+    case race::Op::PAINT_HUD:
     case race::Op::STOP_MUSIC:
     case race::Op::STOP_VOICES:
     case race::Op::APPLY_RACE_POINTS:
@@ -755,8 +756,6 @@ const char* ttp_race_events_live_json(int sessionHandle, int roomHandle,
         ei.seriesFinished =
             series && (series->finished() ||
                        (!series->endless() && series->raceIndex() + 1 >= series->raceCount()));
-        ei.intermissionMs = intermissionMs;
-        ei.nowMs = nowMs;
         // endRace's OWN ranked board, which no effect can carry and which now
         // never leaves C++: the points bank against it (against the retained
         // field, BEFORE the board is composed — the order the corpus pins) and
@@ -780,6 +779,23 @@ const char* ttp_race_events_live_json(int sessionHandle, int roomHandle,
   Value v = Value::Obj();
   v.set("effects", std::move(fx));
   return put(g_bufEvents, v);
+}
+
+const char* ttp_race_reveal_live_json(int roomHandle, double intermissionMs,
+                                      double nowMs) {
+  const ttp::CupSeries* s = ttp_gp_series(ttp_room_series(roomHandle));
+  race::RevealResultsInput in;
+  in.hasSeries = s != nullptr;
+  // Already banked by the drain's APPLY_RACE_POINTS, so the plain read is final
+  // here — the endRace arm's look-ahead exists only because it runs BEFORE that.
+  in.seriesFinished = s && s->finished();
+  in.intermissionMs = intermissionMs;
+  in.nowMs = nowMs;
+  Value fx = Value::Arr();
+  executeAndSpell(roomHandle, race::revealResults(in), {}, fx);
+  Value v = Value::Obj();
+  v.set("effects", std::move(fx));
+  return put(g_bufReveal, v);
 }
 
 // ---- the cup chain / the way out ---------------------------------------------
@@ -901,6 +917,7 @@ const char* ttp_race_resume_live_json(int sessionHandle, int roomHandle,
 }
 
 double ttp_race_intermission_ms(void) { return race::INTERMISSION_MS; }
+double ttp_race_flourish_ms(void) { return race::FINISH_FLOURISH_MS; }
 
 // ---- the countdown gate ------------------------------------------------------
 

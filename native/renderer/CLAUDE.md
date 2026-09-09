@@ -79,6 +79,16 @@ pair is stacked on 16:9 and side by side on an ultrawide, so the same two player
 got different cameras depending on the window. All three agree at one player on
 16:9, which is why no fixture and no TV would ever have shown it.
 
+**A HELD field's chase rig follows the PICTURE, not the sim.** `ttp_display_hold`
+parks the bodies at the pose they were last drawn at; the camera has to be parked
+against the same pose, because the two are not the same thing at a race's end. The
+hold is taken AT the flag and the sim then runs on — the AI to the flag, the
+just-finished human around a victory lap — so a rig fed the live car sails off
+down the track and leaves the parked body behind it. That was invisible for as
+long as the results board covered the frame within a frame or two of the flag;
+the finish flourish (`native/libttp-runtime/CLAUDE.md`) holds it for seconds.
+`frame_builder`'s held-camera case is the gate.
+
 ## The deck is a ruled surface, and the car sits on it
 
 Every DECK point of the road's cross-section is at `y == 0` in the frame, so at

@@ -2,7 +2,7 @@
 // Core session flow: lobby → ready/start → countdown → racing → pause →
 // "New game" → back to the lobby, asserted across the display and both phones.
 const { test, expect, openDisplay, joinController, startRace, waitForRacing, visible,
-  recordSnapshots, midRaceSeated } = require('./helpers');
+  recordSnapshots, midRaceSeated, finishHumans, inResults } = require('./helpers');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -337,4 +337,30 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
   await expect(bob.locator('#ready-btn')).toHaveClass(/is-pressed/);
   await expect(bob.locator('.car-opt').first()).toBeDisabled();
   await expect(alice.locator('#ready-btn')).toBeEnabled();
+});
+
+test('the flag holds the finish frame, and the board arrives a flourish later', async ({ page, browser }) => {
+  // THE FINISH FLOURISH (race_flow.h). The sim raises the last car's finish and
+  // raceOver in ONE update, so a board shown off endRace lands on the same frame
+  // the flag does: the finisher never sees the place card their own cell just
+  // earned, and a race that was being driven a moment ago is replaced
+  // mid-breath. The end ARMS the board instead, and this is the gate on that —
+  // no clock is asserted, only the order, so the hold's length stays a taste
+  // knob in one place.
+  const roomCode = await openDisplay(page);
+  const alice = await joinController(browser, roomCode, 'Alice');
+  await startRace(alice, []);
+  await waitForRacing(page);
+
+  await finishHumans(page);
+  await inResults(page);   // the FLAG, not the board
+
+  // The card the flourish is for, over a frame that is still the race.
+  await expect(page.locator('.cell-finish').first()).toBeVisible();
+  await expect(page.locator('.cell-finish__place').first()).toHaveText(/^\d+(st|nd|rd|th)$/);
+  await expect(page.locator('#results')).toBeHidden();
+
+  // …and nobody touches anything: the board comes on its own.
+  await expect(page.locator(visible('#results'))).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('#results-list')).toContainText('Alice');
 });

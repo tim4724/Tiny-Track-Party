@@ -7,24 +7,9 @@
 // TestHarness 'finished' scenario): humansAllDone then fast-forwards the AI to
 // the flag and endRace fires on the next frame.
 const { test, expect, openDisplay, joinController, startRace, waitForRacing, visible,
-  recordSnapshots, midRaceSeated } = require('./helpers');
+  recordSnapshots, midRaceSeated, finishHumans, inResults } = require('./helpers');
 
 const BEACH = ['tidepool', 'cove', 'driftwood', 'riptide']; // CUPS order (race 1..4)
-
-// Mark every human car finished with a synthetic time (the sanctioned
-// forceFinish staging hook); the engine's next frame does the rest
-// (fast-forward → endRace).
-const finishHumans = (display) => display.evaluate(() => {
-  const session = window.__session();
-  let t = 20;
-  for (const id of session.carIds()) {
-    if (String(id).startsWith('ai-')) continue;
-    session.forceFinish(id, (t += 5.3));
-  }
-});
-
-const inResults = (display, timeout = 30000) =>
-  display.waitForFunction(() => window.__net.roomState === 'results', null, { timeout });
 
 test('a cup chains through all 4 races to the podium (host advancing early)', async ({ page, browser }) => {
   // Intermission effectively OFF (60 s) — every advance in this test is the host's tap.

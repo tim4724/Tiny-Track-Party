@@ -188,4 +188,22 @@ function midRaceSeated(page, seated) {
   }, seated);
 }
 
-module.exports = { test, expect: base.expect, openDisplay, joinController, startRace, waitForRacing, visible, recordSnapshots, midRaceSeated };
+// End the race: mark every human car finished with a synthetic time (the
+// sanctioned forceFinish staging hook) and let the engine's next frame do the
+// rest — humansAllDone fast-forwards the AI to the flag and endRace fires.
+const finishHumans = (displayPage) => displayPage.evaluate(() => {
+  const session = window.__session();
+  let t = 20;
+  for (const id of session.carIds()) {
+    if (String(id).startsWith('ai-')) continue;
+    session.forceFinish(id, (t += 5.3));
+  }
+});
+
+// The flag has landed. NOT the results BOARD: the race's end holds the frozen
+// finish frame for the flourish first (race_flow.h FINISH_FLOURISH_MS), so a
+// test that wants the board waits for the board.
+const inResults = (displayPage, timeout = 30000) =>
+  displayPage.waitForFunction(() => window.__net.roomState === 'results', null, { timeout });
+
+module.exports = { test, expect: base.expect, openDisplay, joinController, startRace, waitForRacing, visible, recordSnapshots, midRaceSeated, finishHumans, inResults };

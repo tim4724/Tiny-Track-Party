@@ -91,6 +91,8 @@ final class GameCoordinator: ObservableObject {
     /// is only the value before `boot()` runs, never what a race launches with.
     var laps: Int32 = 3
 
+    /// The finish flourish: the hold between the flag and the results board.
+    var resultsTask: Task<Void, Never>?
     var intermissionTask: Task<Void, Never>?
     var intermissionTicker: Task<Void, Never>?
     var intermissionDeadline: Double = 0

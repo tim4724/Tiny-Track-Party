@@ -196,6 +196,16 @@ TTP_ABI const char* ttp_race_events_live_json(int sessionHandle, int roomHandle,
                                               int audioReady, int fastForwarding,
                                               double intermissionMs, double nowMs);
 
+/* THE FINISH FLOURISH'S far end. The race's end arms `arm-results` (its `ms` is
+ * race_flow.h's FINISH_FLOURISH_MS) instead of showing the board; a shell waits
+ * that long over the frozen finish frame and then calls this, which answers the
+ * reveal — show-results, plus the intermission arm mid-cup, whose deadline is
+ * therefore measured from the REVEAL and not from the flag. hasSeries and
+ * seriesFinished come off the room. Same trailing arguments as the drain.
+ *   -> {"effects":[...]} */
+TTP_ABI const char* ttp_race_reveal_live_json(int roomHandle, double intermissionMs,
+                                              double nowMs);
+
 /* ---- the cup chain / the way out ----------------------------------------- */
 
 /* Chain into the cup's next race straight from the intermission — RESULTS →
@@ -241,6 +251,12 @@ TTP_ABI const char* ttp_race_resume_live_json(int sessionHandle, int roomHandle,
 /* The game-timing budget (race_flow.h INTERMISSION_MS). Read it; the number has
  * no shell home anymore. */
 TTP_ABI double ttp_race_intermission_ms(void);
+
+/* How long the frozen finish frame keeps the screen before the board fades up
+ * (race_flow.h FINISH_FLOURISH_MS). A live shell never needs this — the flag's
+ * own 'arm-results' effect carries it — so the reader is the gallery's chained
+ * preview, which stages the beat without a room to walk. */
+TTP_ABI double ttp_race_flourish_ms(void);
 
 /* ---- the countdown gate --------------------------------------------------- */
 

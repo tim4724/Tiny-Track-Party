@@ -47,6 +47,7 @@ export async function init() {
     events: c('ttp_race_events_live_json', 'string',
               ['number', 'number', 'string', 'number', 'number',
                'number', 'number']),
+    reveal: c('ttp_race_reveal_live_json', 'string', ['number', 'number', 'number']),
     advance: c('ttp_race_advance_live_json', 'string',
                ['number', 'number', 'number', 'number', 'string', 'string']),
     ret: c('ttp_race_return_live_json', 'string', ['number']),
@@ -57,6 +58,7 @@ export async function init() {
     resumeRace: c('ttp_race_resume_live_json', 'string',
                   ['number', 'number', 'number', 'number', 'number']),
     intermissionMs: c('ttp_race_intermission_ms', 'number', []),
+    flourishMs: c('ttp_race_flourish_ms', 'number', []),
     countdownReady: c('ttp_race_countdown_ready', 'number', ['number', 'number', 'number']),
     forfeit: c('ttp_race_forfeit_live_json', 'string', ['number', 'string']),
     rekey: c('ttp_race_rekey_live_json', 'string', ['number', 'number', 'string', 'string']),  // (session, room)
@@ -115,6 +117,13 @@ export function drainEvents(sessionHandle, roomHandle,
                      intermissionMs, nowMs));
 }
 
+// The finish flourish's far end: the board the flag ARMED. Everything the
+// reveal decides (whether a cup intermission starts, and when it ends) is read
+// off the room inside.
+export function revealResults(roomHandle, { intermissionMs, nowMs }) {
+  return P(fn.reveal(roomHandle, intermissionMs, nowMs));
+}
+
 export function advanceSeriesRace(roomHandle, sceneReady, { seed, countdownSeconds, forceItem, botCap }) {
   return P(fn.advance(roomHandle, sceneReady ? 1 : 0,
                       seed, countdownSeconds, forceItem || null, id(botCap)));
@@ -136,6 +145,11 @@ export function resumeRace(sessionHandle, roomHandle, { paused, autoPaused, race
 }
 
 export function intermissionMs() { return fn.intermissionMs(); }
+
+// The finish flourish: how long the frozen finish frame holds before the board.
+// A live race is TOLD this by the flag's own 'arm-results' effect and never asks;
+// the gallery's chained preview, which has no room to walk, asks.
+export function flourishMs() { return fn.flourishMs(); }
 
 // May the launch's held-back countdown start? The facts only a shell has go in —
 // whether its scene build has returned, whether it is feeding the frame monitor

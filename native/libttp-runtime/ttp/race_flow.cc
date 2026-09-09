@@ -29,7 +29,7 @@ const char* key(Op op) {
     case Op::CREATE_SESSION: return "create-session";
     case Op::TRANSITION: return "transition";
     case Op::BIND_SESSION: return "bind-session";
-    case Op::PAINT_INITIAL_HUD: return "paint-initial-hud";
+    case Op::PAINT_HUD: return "paint-hud";
     case Op::START_COUNTDOWN: return "start-countdown";
     case Op::SHOW_COUNTDOWN: return "show-countdown";
     case Op::BROADCAST_COUNTDOWN: return "broadcast-countdown";
@@ -42,6 +42,7 @@ const char* key(Op op) {
     case Op::ROCKET_EXPIRE: return "rocket-expire";
     case Op::BROADCAST_STANDINGS: return "broadcast-standings";
     case Op::APPLY_RACE_POINTS: return "apply-race-points";
+    case Op::ARM_RESULTS: return "arm-results";
     case Op::SHOW_RESULTS: return "show-results";
     case Op::ARM_INTERMISSION: return "arm-intermission";
     case Op::CLEAR_INTERMISSION: return "clear-intermission";
@@ -534,7 +535,7 @@ LaunchResult launchRace(const LaunchInput& in) {
   // away; the lobby's attract race is never bound, which is why it is silent.
   out.effects.push_back(mk(Op::BIND_SESSION));
   // chrome at final size through the countdown, no pop-in at GO
-  out.effects.push_back(mk(Op::PAINT_INITIAL_HUD));
+  out.effects.push_back(mk(Op::PAINT_HUD));
   // …and the last op is the one that has to wait: see countdownReady. It rides
   // its OWN list, so the walk above stays whole.
   e = mk(Op::START_COUNTDOWN); e.num = in.countdownSeconds;
@@ -622,6 +623,11 @@ Effects endRace(const EndRaceInput& in) {
   // A finished series banks the couch's star record — AFTER the points, so the
   // standings the executor reads are final.
   if (in.hasSeries && in.seriesFinished) out.push_back(mk(Op::PERSIST_PROGRESSION));
+  // The cards the flourish is FOR, and they have to be painted BEFORE the freeze
+  // below: the shells that cache a HUD row repaint it on a tick the next op
+  // stops. Without this the last car across never wears the place it just won —
+  // its finish and the race's end arrive in one update.
+  out.push_back(mk(Op::PAINT_HUD));
   // hold the finish frame behind the translucent results overlay
   e = mk(Op::SET_RACE_FLAGS);
   e.paused = false; e.autoPaused = false; e.raceEnded = true;
@@ -634,6 +640,14 @@ Effects endRace(const EndRaceInput& in) {
   out.push_back(mk(Op::HOLD_CHROME));
   // final board → phones show the full results overlay
   e = mk(Op::BROADCAST_STANDINGS); e.over = true; out.push_back(e);
+  // …and the TV holds the finish frame for the flourish before its own board.
+  e = mk(Op::ARM_RESULTS); e.num = FINISH_FLOURISH_MS; out.push_back(e);
+  return out;
+}
+
+Effects revealResults(const RevealResultsInput& in) {
+  Effects out;
+  Effect e;
   out.push_back(mk(Op::SHOW_RESULTS));
   // The host ends the results screen with "New game", and nothing here overrides
   // that on a clock: an ABANDONED podium is recovered by RoomFlow::graceTick's

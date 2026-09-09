@@ -4923,8 +4923,6 @@ void raceLiveWalks() {
           race::EndRaceInput ei;
           ei.hasSeries = hasSeries;
           ei.seriesFinished = seriesFinished;
-          ei.intermissionMs = kInterMs;
-          ei.nowMs = nowMs;
           es = race::endRace(ei);
         } else {
           const bool allDone = type == "finish" && !fastForwarding &&
@@ -4996,8 +4994,11 @@ void raceLiveWalks() {
     sameOps(ended, expectedFor(drained, "beach", 1, 0, 10000), "events_live effects at the flag");
     check(!ended.has("results"),
           "the answer carries no results rider — the rows never leave C++");
-    check(opsOf(ended).find("show-results") != std::string::npos,
-          "…and the endRace composition is in the effects");
+    check(opsOf(ended).find("arm-results") != std::string::npos,
+          "…and the endRace composition is in the effects: the board is ARMED, "
+          "not shown — the finish flourish holds the frame first");
+    check(opsOf(ended).find("show-results") == std::string::npos,
+          "…and nothing reveals it at the flag");
 
     // The rows the executor had to hand: the _raceEnd beat's own results object,
     // off the twin's drain. Both halves of the end-of-race walk are gated
@@ -5036,6 +5037,24 @@ void raceLiveWalks() {
               "\n  got  " + canonical_stringify(ttp_room_board_value(room)));
     check(!ttp_room_board_value(room).has("settled"),
           "…and it carries no `settled` until the reveal lands");
+
+    // THE FLOURISH'S FAR END. The flag armed the board; this is what a shell
+    // calls when the hold is over, and it is the only place show-results and
+    // the intermission arm can come from now. The deadline is measured from
+    // HERE, not from the flag — a chained race gets its whole budget.
+    {
+      const Value rev = parseOrNull(ttp_race_reveal_live_json(room, kInterMs, 20000),
+                                    "reveal");
+      const std::string ops = opsOf(rev);
+      check(ops.find("show-results") != std::string::npos &&
+                ops.find("arm-intermission") != std::string::npos,
+            "the reveal walk shows the board and arms the intermission (" + ops + ")");
+      for (const Value& e : at(rev, "effects").arr) {
+        if (json::str_field(e, "op") != "arm-intermission") continue;
+        check(json::num_field(e, "deadline") == 20000 + kInterMs,
+              "…off the REVEAL's clock, not the flag's");
+      }
+    }
 
     // The lobby frame INJECTS it: no shell mirrors the board, so `standings` on
     // the wire is the room's slot and nothing else. A `standings` key handed in

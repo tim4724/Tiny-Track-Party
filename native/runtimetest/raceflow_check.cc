@@ -320,6 +320,7 @@ Value effectVal(const race::Effect& e) {
       v.set("lat", Value::Num(e.lat));
       break;
     case race::Op::BROADCAST_STANDINGS: v.set("over", Value::Bool(e.over)); break;
+    case race::Op::ARM_RESULTS: v.set("ms", Value::Num(e.num)); break;
     case race::Op::ARM_INTERMISSION:
       v.set("ms", Value::Num(e.num));
       v.set("deadline", Value::Num(e.deadline));
@@ -340,7 +341,7 @@ Value effectVal(const race::Effect& e) {
     case race::Op::REVEAL_CHROME:
     case race::Op::HOLD_CHROME:
     case race::Op::BIND_SESSION:
-    case race::Op::PAINT_INITIAL_HUD:
+    case race::Op::PAINT_HUD:
     case race::Op::STOP_MUSIC:
     case race::Op::STOP_VOICES:
     case race::Op::APPLY_RACE_POINTS:
@@ -465,7 +466,7 @@ void applyEffect(Shell& s, const race::Effect& e) {
     // No state of their own — the corpus records them only through `ops`.
     case race::Op::CLEAR_ITEM_CACHE:
     case race::Op::HIDE_RESULTS:
-    case race::Op::PAINT_INITIAL_HUD:
+    case race::Op::PAINT_HUD:
     case race::Op::BROADCAST_COUNTDOWN:
     case race::Op::REFRESH_AUTO_PAUSE:
     case race::Op::STOP_VOICES:
@@ -684,9 +685,19 @@ Value runStep(Shell& s, const std::string& op, const Value& in) {
     race::EndRaceInput ei;
     ei.hasSeries = json::truthy(in.find("hasSeries"));
     ei.seriesFinished = json::truthy(in.find("seriesFinished"));
-    ei.intermissionMs = json::num_field(in, "intermissionMs");
-    ei.nowMs = json::num_field(in, "nowMs");
     race::Effects es = race::endRace(ei);
+    applyAll(s, es);
+    Value v = Value::Obj();
+    v.set("effects", effectsVal(es));
+    return v;
+  }
+  if (op == "revealResults") {
+    race::RevealResultsInput ri;
+    ri.hasSeries = json::truthy(in.find("hasSeries"));
+    ri.seriesFinished = json::truthy(in.find("seriesFinished"));
+    ri.intermissionMs = json::num_field(in, "intermissionMs");
+    ri.nowMs = json::num_field(in, "nowMs");
+    race::Effects es = race::revealResults(ri);
     applyAll(s, es);
     Value v = Value::Obj();
     v.set("effects", effectsVal(es));

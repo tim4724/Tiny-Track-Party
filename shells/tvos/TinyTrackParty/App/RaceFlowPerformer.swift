@@ -116,8 +116,8 @@ struct RaceFlowPerformer {
             game.display.bind(session: game.sessionHandle)
             game.audio.bind(session: game.sessionHandle)
 
-        case "paint-initial-hud":
-            game.paintInitialHUD()
+        case "paint-hud":
+            game.paintHUD()
 
         // ---- the countdown ----------------------------------------------
         case "start-countdown":
@@ -180,6 +180,12 @@ struct RaceFlowPerformer {
 
         // The points banking (constraint 3: BEFORE the final board goes out)
         // happens inside the event drain's executor now — no op crosses.
+        // THE FINISH FLOURISH: the flag ARMS the board, it does not show it.
+        // The frozen finish frame keeps the screen for the hold the walk names,
+        // and `revealResults` (the far end) is what answers show-results.
+        case "arm-results":
+            game.armResults(ms: e["ms"] as? Double ?? 0)
+
         case "show-results":
             game.showResults()
 
@@ -276,11 +282,11 @@ struct RaceFlowPerformer {
         "show-screen", "hide-results", "set-race-flags", "set-pause-overlay",
         "set-pause-button", "reveal-chrome", "hold-chrome",
         "reset-scene-cars", "create-session", "transition", "bind-session",
-        "paint-initial-hud", "start-countdown", "show-countdown",
+        "paint-hud", "start-countdown", "show-countdown",
         "broadcast-countdown", "refresh-auto-pause", "persist-progression",
         "start-music", "stop-music", "stop-voices",
         "stop-car-audio", "item-pickup", "rocket-impact", "rocket-expire",
-        "broadcast-standings", "show-results",
+        "broadcast-standings", "arm-results", "show-results",
         "arm-intermission", "clear-intermission", "place-track",
         "dispose-session", "fade-to-lobby", "remove-scene-car",
         "sync-state", "rekey-scene-car", "set-auto-paused", "sync-frozen",

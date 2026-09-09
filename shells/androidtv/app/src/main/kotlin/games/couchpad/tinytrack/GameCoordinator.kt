@@ -131,6 +131,8 @@ class GameCoordinator(
     /** Laps per race — the manifest's TOTAL_LAPS, assigned at boot. */
     private var laps = 3
 
+    /** The finish flourish: the hold between the flag and the results board. */
+    private var resultsTask: Runnable? = null
     private var intermissionTask: Runnable? = null
     private var intermissionTicker: Runnable? = null
     private var intermissionDeadline = 0.0
@@ -1610,6 +1612,26 @@ class GameCoordinator(
 
     // -- timers the effects arm ------------------------------------------------
 
+    /**
+     * THE FINISH FLOURISH. The race's end arms the board rather than showing it:
+     * the sim raises the last car's finish and raceOver in one update, so a board
+     * painted at the flag lands on the same frame the flag does and the finisher
+     * never sees the place card their own cell just earned. This holds the frozen
+     * finish frame for [ms] (race_flow.h FINISH_FLOURISH_MS) and then asks the
+     * walk for the reveal — the only place show-results and the intermission arm
+     * come from now.
+     */
+    fun armResults(ms: Double) {
+        resultsTask?.let { main.removeCallbacks(it) }
+        val reveal = Runnable {
+            resultsTask = null
+            run(TtpJson.obj(Ttp.ttp_race_reveal_live_json(
+                net.roomHandle, Ttp.ttp_race_intermission_ms(), nowMs())))
+        }
+        resultsTask = reveal
+        main.postDelayed(reveal, ms.toLong())
+    }
+
     fun armIntermission(ms: Double, deadline: Double) {
         clearIntermission()
         intermissionDeadline = deadline
@@ -1630,7 +1652,14 @@ class GameCoordinator(
         main.post(ticker)
     }
 
+    /**
+     * Every exit from the results screen lands here, and the flourish's hold is
+     * one of the timers it kills: a reveal still pending when the host jumps to
+     * the next race (or back to the lobby) would paint the board over a countdown.
+     */
     fun clearIntermission() {
+        resultsTask?.let { main.removeCallbacks(it) }
+        resultsTask = null
         intermissionTask?.let { main.removeCallbacks(it) }
         intermissionTicker?.let { main.removeCallbacks(it) }
         intermissionTask = null
