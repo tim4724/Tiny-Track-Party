@@ -94,13 +94,14 @@ test('gallery cup intermission: the race board becomes the cup table', async ({ 
   expect(p1.title).toBe('Results');
   expect(p1.subHidden).toBe(false);
   expect(p1.rows.length).toBe(8);
-  // Lap time, the place's score, AND the cup total coming in — all three, so the
-  // standings phase changes one VALUE rather than materialising a column, and
-  // the climb has a before state that was on screen long enough to read.
-  // (row.textContent runs the cells together: "1Mia28.4s+915 pts")
+  // THE RACE PHASE IS THE RACE: a lap time, and no cup number anywhere on the
+  // row. The score for the place and the total it lands on are the standings'
+  // to state, and the standings get their own beat to state them in.
+  // (row.textContent runs the cells together: "1Mia28.4s" — the cup's two cells
+  // are BUILT and EMPTY, which is what the width assertion below is about.)
   expect(p1.rows.every((r) => /\d\.\ds/.test(r)), 'every row shows a lap time').toBe(true);
-  expect(p1.rows.every((r) => /\+\d/.test(r)), 'every row shows its score').toBe(true);
-  expect(p1.rows.every((r) => / pts$/.test(r)), 'every row shows a cup total').toBe(true);
+  expect(p1.rows.some((r) => /\+\d/.test(r)), 'no row states a score yet').toBe(false);
+  expect(p1.rows.some((r) => / pts$/.test(r)), 'no row states a cup total yet').toBe(false);
   // The next-up footer belongs to the standings; announcing the next circuit
   // over the finishing order would step on the result being read. But it is
   // HELD, not removed — its box stays reserved so its arrival in phase 2 cannot
@@ -112,13 +113,16 @@ test('gallery cup intermission: the race board becomes the cup table', async ({ 
   // PHASE 2 — the cup table. "Standings" is only reachable with a series.
   await settled(page, 'Standings');
   await expect(page.locator('#results-list li .res-pts').first()).toHaveText(/\d+ pts/);
-  // Both race columns RETIRE once the last point has landed: a settled board is
-  // the cup's, and a lap time between a cup rank and a cup total is the only
-  // number still talking about the race. They fade rather than being removed, so
-  // the cells are still there holding the layout — which is why this asserts the
-  // state and not the count.
+  // NEITHER RACE NUMBER SURVIVES ONTO THE CUP TABLE, and they leave by different
+  // routes. The lap time went at the CUT — the standings phase never states one,
+  // so its cell has stood empty since — while the gain is spent at settle,
+  // because it was still owed up to the last point and would otherwise rest on
+  // "+0", reading as "scored nothing" for the rest of the intermission.
+  //
+  // BOTH CELLS ARE STILL THERE either way, which is the layout invariant this
+  // board lives by: empty, or faded, but never removed. Hence the counts.
   await expect(page.locator('#results-list li .res-time')).toHaveCount(8);
-  await expect(page.locator('#results-list li .res-time.is-spent')).toHaveCount(8);
+  await expect(page.locator('#results-list li .res-time')).toHaveText(['', '', '', '', '', '', '', '']);
   await expect(page.locator('#results-list li .res-gain.is-spent')).toHaveCount(8);
   // The footer names the next circuit and counts down to the auto-advance. The
   // seconds come from the engine's own intermission budget, so pin the shape
@@ -128,9 +132,10 @@ test('gallery cup intermission: the race board becomes the cup table', async ({ 
   // Every racer is still on the board — the phases re-order the SAME rows.
   await expect(page.locator('#results-list li')).toHaveCount(8);
   // AND THE BOARD NEVER RESIZED. The two phases lay out the same cells at the
-  // same widths, so the only thing that moved is the rows — which is what the
-  // shell animates. The first cut swapped the trailing cell instead and the list
-  // jumped 48px sideways and grew 130px mid-slide.
+  // same widths — a beat with nothing to say in a cell leaves it EMPTY rather
+  // than leaving it out, so the row is one size throughout. This is the
+  // assertion that catches a cell being dropped: the first cut swapped the
+  // trailing cell outright and the list jumped 48px sideways and grew 130px.
   const listBox = await page.evaluate(
     () => JSON.stringify(document.getElementById('results-list').getBoundingClientRect()));
   expect(listBox).toBe(p1.listBox);

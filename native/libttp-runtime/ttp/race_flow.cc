@@ -634,7 +634,10 @@ Effects endRace(const EndRaceInput& in) {
   out.push_back(e);
   // the frozen frame must not hold wind/squeal voices open
   out.push_back(mk(Op::STOP_VOICES));
-  out.push_back(mk(Op::STOP_MUSIC));           // race over → results screen is quiet
+  // NOT the music. The race is over but the moment is not: the flourish is a
+  // held frame with every place card up, and cutting the song at the flag left
+  // three seconds of silence under it. The song carries the beat and stops with
+  // the BOARD instead — see revealResults.
   e = mk(Op::SET_PAUSE_OVERLAY); e.on = false; out.push_back(e);   // results aren't pausable
   e = mk(Op::SET_PAUSE_BUTTON); e.shown = false; out.push_back(e);
   out.push_back(mk(Op::HOLD_CHROME));
@@ -648,6 +651,9 @@ Effects endRace(const EndRaceInput& in) {
 Effects revealResults(const RevealResultsInput& in) {
   Effects out;
   Effect e;
+  // The song has played the flourish out; the board is where the race stops
+  // being the thing on screen, so it is where the race's music stops.
+  out.push_back(mk(Op::STOP_MUSIC));
   out.push_back(mk(Op::SHOW_RESULTS));
   // The host ends the results screen with "New game", and nothing here overrides
   // that on a clock: an ABANDONED podium is recovered by RoomFlow::graceTick's

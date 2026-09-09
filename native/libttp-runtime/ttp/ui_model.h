@@ -589,24 +589,31 @@ Board standingsPayload(const std::vector<ResultRow>& results,
 // cup's story is legible. A shell that paints only `listRows` states the delta
 // and never shows the change.
 //
-// The two phases carry the SAME CELLS on purpose, and the ONLY difference is
-// which value sits in the total: the race phase shows what the row had coming
-// in, the standings phase shows what it banked. Nothing appears, nothing
-// disappears, nothing resizes — one number moves and the rows re-order, which is
-// the whole animation.
+// THE TWO PHASES CARRY THE SAME CELLS AT THE SAME WIDTHS. What differs is which
+// of them a beat FILLS: the race phase fills the lap clock, the standings phase
+// fills what the place scored and the total climbing to it. The cells a beat has
+// nothing to say in are still there, holding their width, saying nothing.
 //
-// Both halves of that are load-bearing and were learned the hard way. A phase
-// that swaps its trailing cell for a differently-sized one re-flows the board
-// while the shell is animating row POSITIONS, which reads as a glitch rather
-// than as a re-sort. And a total that only APPEARS in phase 2 has no visible
-// before state — it lands and starts climbing in the same frame, so the change
-// it is meant to show is the one thing nobody can see.
+// That is a width rule and a legibility rule, and both were learned the hard
+// way. A trailing cell that changes SHAPE between the phases re-flows the board
+// — the first cut swapped the cell outright and the list jumped 48px sideways
+// and grew 130px. And a number that first APPEARS in the beat that changes it
+// has no before state: it lands and starts moving in the same frame, so the
+// change it exists to show is the one thing nobody can see. The standings phase
+// answers that by holding its own totals still for a beat before running them.
+//
+// The row KINDS say which cells carry a value, not which exist. A shell paints
+// the rest reserved.
 enum class TitleKey { RESULTS, STANDINGS, CUP_CHAMPS };
 enum class SubKey { CUP_RACE, CUP_RACE_OF };
-// TIME       a single race: the lap clock alone
-// TIME_GAIN  a cup's race phase: the lap clock, what the place scored, and the
-//            cup total the row held COMING IN (pointsBefore)
-// POINTS     a cup's standings phase: the same three, with the total now banked
+// TIME       a single race: the lap clock alone, and no cup cells at all
+// TIME_GAIN  a cup's RACE phase: the lap clock. The cup's two cells are RESERVED
+//            on this row — same width as the standings phase — and carry no
+//            value: what the place scored and what the row is standing on are
+//            the standings' to say, and it gets its own beat to say them in.
+// POINTS     a cup's STANDINGS phase: what the place scored and the total
+//            counting up from pointsBefore. The lap clock's cell is reserved
+//            here in its turn — a cup table is not the place for a race number.
 // JOINING    a seat with no car this round
 enum class RowKind { TIME, TIME_GAIN, POINTS, JOINING };
 enum class NewGameKey { NEW_GAME, NEXT_RACE };
