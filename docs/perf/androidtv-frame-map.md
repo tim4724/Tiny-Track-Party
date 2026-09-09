@@ -608,13 +608,16 @@ build with the spread refresh and the folded overlay, same day):**
 (Snow's spread across runs is a millisecond on one build; read its two
 columns as the same picture.)
 
-**The heightfield relief is NOT a cost either (2026-09-04).** Powder with
-its amplitude zeroed read 18.96 against 20.43 in one session, which looked
-like 1.5 ms of hills; a far-only flatten (full height to 30 u past the road
-edge, flat by 70 u) then paired null on the stable tracks — ribbon
-18.15 / 18.11 → 18.07 / 18.17, glacier 21.62 / 21.65 → 21.83 / 21.49 — and
-the 1.5 was powder's own spread. The snow cup's overage over the beach is
-its flat sheet and its dressing, not its hills. Reverted.
+**The heightfield relief's HEIGHT is not a cost, its MESH is (2026-09-04,
+corrected 2026-09-09).** Powder with its amplitude zeroed read 18.96 against
+20.43 in one session, which looked like 1.5 ms of hills; a far-only flatten
+(full height to 30 u past the road edge, flat by 70 u) then paired null on
+the stable tracks — ribbon 18.15 / 18.11 → 18.07 / 18.17, glacier
+21.62 / 21.65 → 21.83 / 21.49 — and the 1.5 was written off as powder's
+spread. That arm kept the relief GRID and only moved its heights; the
+amplitude-zero arm swaps the ~18k-triangle grid for the ~3k-triangle flat
+sheet, and re-run on the stable tracks (2026-09-09 section) it is worth
+0.8-1.5 ms at four cells. Vertex work, not shape.
 
 **THE VISTA IS GEOMETRY, THE QUIET SECONDS ARE FILL (2026-09-04).** Read
 per second, tidepool's quiet seconds sit at 11.5-13 ms and its three vista
@@ -778,3 +781,82 @@ one full-cell quad with two or three taps costs about what the grade LUT
 does, so it is not cheaper than the scaled cloud and gives up depth, settle
 and parallax. The next cut on the cloud, if one is needed, is the floor-fade
 vertex tap at four cells.
+
+## Layout against biome, on ONE circuit (2026-09-09, evening)
+
+`debug.ttp.biome` (the web's ?biome= override, read by SceneStaging at build;
+`perf-race --biome`) builds any circuit in any look. 4P pinned 720, Vulkan,
+60 s, typical GPU / heavy 30% p50, build `49ebba9c`:
+
+| circuit | biome | typical | heavy |
+|---|---|---|---|
+| tidepool | beach (its own; four reps earlier the same evening) | 18.5-18.8 | 20.5-21.2 |
+| tidepool | grass | 19.6 | 22.2 |
+| tidepool | canyon | 19.3 | 20.9 |
+| tidepool | snow | 19.7 | 22.2 |
+| glacier | beach | 19.4 | 22.5 |
+| glacier | snow (its own) | 20.3 | 23.7 |
+
+So after the flake fix the two halves are the same size and they add: the
+biome's content is worth about a millisecond on a given circuit (grass and
+snow +1.0 typical / +1.4 heavy, canyon +0.6 / 0), and the circuit's layout
+is worth about a millisecond in a given biome (glacier over tidepool +0.8 /
++1.5, the vista down its straight). The group sweeps of the same evening
+(ribbon 20.0, wash 19.5, tidepool 18.4 at 720) put no single group behind
+lawn's or redrock's premium — the road is CHEAPER on ribbon (3.5 against
+5.1), the terrain +1.0, the dressing +0.1 — which is what sent the relief
+mesh back for a clean test:
+
+| 4P pinned 720 | relief (shipped) | flat sheet | delta |
+|---|---|---|---|
+| ribbon | 21.0 / 23.4 | 19.6 / 21.9 | −1.4 / −1.5 |
+| glacier | 20.5 / 24.1 | 19.7 / 23.2 | −0.8 / −0.8 |
+
+One rep each, same build, the flat arm `mTerrainAmp = 0` for lawn and snow
+(the sand path). The relief grid is sampled at 4.5 u (up to 97x97 verts) and
+drawn once per cell; ~40k vertices a frame at four cells at the box's
+~20-28 ns each is exactly this. The hills' SHAPE is free; their vertex count
+is not, and the grid is far finer than hills of 4-6 u amplitude need.
+
+What still separates the cups at 540, and why it decides the rung: beach's
+heavy seconds fit the 16.7 ms budget at 540 (14-15) and the other three
+outdoor cups do not (17.5-19), so a two-to-three millisecond gap flips a
+whole rung, 540 against 360. The remaining levers, in order: the relief
+grid coarsened (0.8-1.5 at four cells, a look-neutral change if the step
+follows the amplitude), the settled rung remembered per track so the climb
+does not spend 90 s reaching it, and the four-cell cosmetic trade
+(car-shadow blob and rubber taps, ~3.5 ms) as the product call it is.
+
+**The relief grid at 9 u (shipped the same evening).** The grid's 4.5 u
+step was ~18k triangles a cell for hills of 4-6 u on 34 and 92 u
+wavelengths; at 9 u it is a quarter of that and the hills read the same at
+solo. 4P pinned 720, one rep each: ribbon 21.0 / 23.4 → 20.3 / 22.5,
+glacier 20.5 / 24.1 → 20.3 / 23.9 — about half of the flat sheet's gain,
+which puts the other half in the pixels the hills lift into view where the
+flat world shows sky. Inherent to having hills.
+
+**A knob sweep at 540 on ribbon and glacier** (single reps; the level
+drifts ~1 ms over half an hour, the first run after an idle box reads a
+cold 2 ms low — pair arms, never trust a lone base): sky 0-0.5, effects
+0-1.1 (the lite cloud on glacier), fog params 0, fog vertex 0, grade 0.4,
+dressing sheets 0.2-1.3, half the copies 0.3-0.6; the whole dressing group
+1.5-2.1, the whole terrain group 2.2-2.3. Every material in the scene is
+already unlit with one albedo tap, so nothing per-pixel is left to strip
+without changing the look. Not doubling the flake sprite at a split: null
+(14.3 / 16.8 against 14.5 / 17.1), reverted. The car-shadow blob and the
+rubber taps stay: an immersion call, decided 2026-09-09.
+
+**Adaptive 4P after the grid, 120 s, seconds per operating point:**
+
+| track | before (this morning) | after |
+|---|---|---|
+| ribbon | 360 for 106 s | 360 → 432 → 480 → 540, ~33 s a rung |
+| glacier | 360 for 91 s, 22 s at the 30 fps backstop | 360 → 432 → 480 → 540, no backstop |
+| wash | 360 for 84 s, 18 s at the backstop | 432 for 83 s → 480 → 540, no backstop |
+
+So the three outdoor cups now climb the way the beach does; what they
+still pay is the climb itself, 28 s a rung from the floor the lobby left
+them at. **The rule remembers where a biome settled** (RenderScaleController
+key/scene: the point held longest per biome and cell count, in-process;
+`render_scale_check`), so races two to four of a cup start there. A bench
+force-stops the app between runs and so cannot see it; a played cup can.

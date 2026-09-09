@@ -65,6 +65,9 @@ const TAG = 'TtpPerf';
  *   --vk 1           the Vulkan backend — the SHIPPING default, but an
  *                    unflagged arm pins GL so readings stay comparable to
  *                    every GL-era ledger; see shells/androidtv/CLAUDE.md.
+ *   --biome snow     build the track in this biome whatever its cup — the
+ *                    web's ?biome= override: one circuit in every look splits
+ *                    what the LAYOUT costs from what the biome's content does
  *   --serial <id>    an explicit adb device
  */
 export function makeAndroidBackend() {
@@ -99,6 +102,7 @@ export function makeAndroidBackend() {
       setprop('debug.ttp.features', 0);   // 0 = "not set", i.e. draw everything
       setprop('debug.ttp.aa', 0);
       setprop('debug.ttp.hz', 0);
+      setprop('debug.ttp.biome', '""');   // quoted: launch() says why
       setprop('debug.ttp.perf', 0);
       setprop('debug.ttp.vk', 0);         // a leftover 1 flips the ENGINE's backend
     } catch { /* the box went away; nothing to restore it on */ }
@@ -174,6 +178,9 @@ export function makeAndroidBackend() {
       setprop('debug.ttp.scale', arg('pin', 0));
       setprop('debug.ttp.aa', arg('aa', 0));
       setprop('debug.ttp.hz', arg('hz', 0));
+      // An empty value does not survive adb's shell join, so the clear is a
+      // quoted empty string, which the device's shell unwraps.
+      setprop('debug.ttp.biome', arg('biome', '') || '""');   // unset = the cup decides
       // The READOUT stays down whatever a previous session left behind. The
       // scenario benches it (`PerfMonitor.bench`), which logs the line this
       // parser reads without drawing anything — and drawing it is four Compose

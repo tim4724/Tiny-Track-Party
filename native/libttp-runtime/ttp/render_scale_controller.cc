@@ -3,9 +3,52 @@
 namespace ttp {
 namespace rt {
 
+// Add the current tenure span to the point in force, and start the next.
+void RenderScaleController::credit(double untilMs) {
+  const double ms = untilMs - tenureMs_;
+  tenureMs_ = untilMs;
+  if (ms <= 0) return;
+  for (int i = 0; i < tenures_; i++) {
+    if (tenure_[i].point.scale == point_.scale && tenure_[i].point.divisor == point_.divisor) {
+      tenure_[i].ms += ms;
+      return;
+    }
+  }
+  if (tenures_ < (int) (sizeof(tenure_) / sizeof(tenure_[0]))) {
+    tenure_[tenures_++] = Tenure{point_, ms};
+  }
+}
+
 void RenderScaleController::scene(double tMs) {
+  // THE SCENE THAT JUST ENDED is remembered by the point it held longest —
+  // only if its frames ever declared a grid, so a build the shell abandoned
+  // before a frame does not overwrite a real memory with the point it
+  // inherited.
+  if (sceneKey_ != 0 && cellsKnown_ && cells_ > 0) {
+    credit(tMs);
+    int best = -1;
+    for (int i = 0; i < tenures_; i++) {
+      if (best < 0 || tenure_[i].ms > tenure_[best].ms) best = i;
+    }
+    if (best >= 0) {
+      int slot = -1;
+      for (int i = 0; i < memories_; i++) {
+        if (memory_[i].key == sceneKey_ && memory_[i].cells == cells_) { slot = i; break; }
+      }
+      if (slot < 0) {
+        if (memories_ < kMemories) slot = memories_++;
+        else { slot = memoryNext_; memoryNext_ = (memoryNext_ + 1) % kMemories; }
+      }
+      memory_[slot] = Memory{sceneKey_, cells_, tenure_[best].point};
+    }
+  }
+  tenures_ = 0;
+  tenureMs_ = tMs;
   sceneMs_ = tMs;
   prev_ = RenderScaleSample{0.0, 0.0};
+  sceneKey_ = nextKey_;
+  recall_ = sceneKey_ != 0;
+  cellsKnown_ = false;   // the grid is the new scene's frames' to declare
 }
 
 bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
@@ -27,6 +70,30 @@ bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
   // The cell count is the frame builder's, not the shell's, so it reaches the
   // rule from here rather than through the poll's arguments — see cells().
   limits.cells = cells_;
+
+  // A SCENE SEEN BEFORE STARTS WHERE IT SETTLED — once its frames have said
+  // how many cells it has, since a solo memory is the wrong answer for a
+  // split of the same track. The window describes the old buffer and goes,
+  // exactly as on any other move.
+  if (recall_ && cellsKnown_) {
+    recall_ = false;
+    for (int i = 0; i < memories_; i++) {
+      if (memory_[i].key != sceneKey_ || memory_[i].cells != cells_) continue;
+      RenderScalePoint p = memory_[i].point;
+      if (limits.max > 0.0 && p.scale > limits.max) p.scale = limits.max;
+      if (limits.min > 0.0 && p.scale < limits.min) p.scale = limits.min;
+      if (p.scale == point_.scale && p.divisor == point_.divisor) break;
+      // The span before the recall belongs to the inherited point, not to
+      // this scene: the ledger starts here.
+      tenureMs_ = tMs;
+      point_ = p;
+      prev_ = RenderScaleSample{0.0, 0.0};
+      movedMs_ = tMs;
+      mon.reset();
+      if (out) *out = point_;
+      return true;
+    }
+  }
 
   const perf::Readout r = mon.fold();
 
@@ -73,6 +140,7 @@ bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
   // measurement prices another's. Only on a RESOLUTION move — two points at one
   // scale determine nothing.
   if (next.scale != point_.scale) prev_ = RenderScaleSample{point_.scale, cost.gpuP95Ms};
+  credit(tMs);
   point_ = next;
   movedMs_ = tMs;
   mon.reset();

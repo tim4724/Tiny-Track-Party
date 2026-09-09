@@ -170,12 +170,19 @@ float TtpRenderer::terrainY(const TrackBin& tb, float x, float z) const {
 // Sample the analytic field once at the mesh's own resolution. Runs after
 // buildLandmarks (whose spots carve the clearings) and before every builder
 // that stands anything on the ground.
+//
+// THE STEP IS A COST, NOT A LOOK. The field's shortest wavelength is 34 u
+// (terrainY), so a 9 u step still puts nearly four samples on every swell;
+// the 4.5 u it used to be drew ~18k triangles per cell for hills a few units
+// tall, ~1 ms of vertex work at four cells on the Android box
+// (docs/perf/androidtv-frame-map.md, 2026-09-09).
 void TtpRenderer::buildTerrainGrid(const TrackBin& tb) {
     if (mTerrainAmp <= 0) return;
-    mTerrainCols = std::min(96, std::max(12,
-            (int) std::ceil((mTerrainX1 - mTerrainX0) / 4.5f)));
-    mTerrainRows = std::min(96, std::max(12,
-            (int) std::ceil((mTerrainZ1 - mTerrainZ0) / 4.5f)));
+    constexpr float STEP = 9.0f;
+    mTerrainCols = std::min(48, std::max(12,
+            (int) std::ceil((mTerrainX1 - mTerrainX0) / STEP)));
+    mTerrainRows = std::min(48, std::max(12,
+            (int) std::ceil((mTerrainZ1 - mTerrainZ0) / STEP)));
     mTerrainSx = (mTerrainX1 - mTerrainX0) / mTerrainCols;
     mTerrainSz = (mTerrainZ1 - mTerrainZ0) / mTerrainRows;
     mTerrainHs.resize((size_t) (mTerrainCols + 1) * (mTerrainRows + 1));

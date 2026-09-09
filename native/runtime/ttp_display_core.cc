@@ -265,6 +265,19 @@ int ttp_display_build(const char* trackId, const char* rosterJson) {
     // showcase is in because it swaps the whole palette, and therefore the
     // scenery that casts.
     g_disp->renderer->setBakeKey(bakeKeyFor(trackId, biome).c_str());
+    // The render-scale rule's memory (RenderScaleController::key) is keyed on
+    // the BIOME, not the track: a cup's four circuits cost within a couple of
+    // milliseconds of each other while its biome decides the rest
+    // (docs/perf/androidtv-frame-map.md, 2026-09-09), and each track is raced
+    // once per cup, so a track-keyed memory would help nobody until a rematch.
+    // Keyed on the biome, races two to four of a cup start where race one
+    // settled. A shell that pins the scale never polls, so a bench cannot
+    // poison it.
+    {
+        const uint32_t h = ttp::fnv1a(std::string(biome ? biome : "")
+                + "|" + (g_disp->showcase ? "1" : "0"));
+        ttp::rt::renderScale().key(h ? h : 1u);
+    }
     if (!g_disp->renderer->buildScene(geo, theme, roster.cars, wear)) return 0;
     g_disp->built = true;
     g_disp->roster = roster.ids;

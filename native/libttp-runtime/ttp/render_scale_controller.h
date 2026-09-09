@@ -26,6 +26,7 @@
 // tick series beside it.
 #pragma once
 
+#include <cstdint>
 #include "ttp/perf_stats.h"
 #include "ttp/render_scale.h"
 
@@ -73,14 +74,35 @@ class RenderScaleController {
   // straddle a scene change measures a slope belonging to neither — and
   // restamps the tenure the rule shortens its up-hold against
   // (kScaleUpRecoverHoldSec). The window itself is the shell's to drop, with
-  // ttp_perf_reset, for the reason ttp_perf.h names.
+  // ttp_perf_reset, for the reason ttp_perf.h names. It also closes the
+  // ledger of the scene that just ended — the point it held longest is
+  // remembered under its key (see key()) — and arms the recall for the one
+  // beginning, which fires on the first poll after that scene's frames have
+  // declared their grid (cells()).
   void scene(double tMs);
+  // WHICH scene the next build is, so a scene seen before can start where it
+  // settled last time. Any stable hash of what decides a scene's cost — the
+  // display core hashes the biome and the showcase flag (its comment says why
+  // not the track). Set BEFORE scene(); a key of 0 is "no memory for this one".
+  //
+  // WHY. The climb is lap-sized by design (kScaleUpHoldSec), and a race starts
+  // on its own vista — every cell down the start straight — so the recovery
+  // window after a build sees only late seconds and climbs nothing; the
+  // reference Android box then spent 90 s of a 150 s race reaching the 540
+  // it held for the rest (docs/perf/androidtv-frame-map.md, 2026-09-09). The
+  // point a scene held LONGEST is remembered per key and cell count, and the
+  // next build of that scene starts there. A wrong memory costs one down
+  // hold (kScaleDownHoldSec); no memory costs the climb.
+  void key(uint32_t k) { nextKey_ = k; }
 
   // HOW MANY CELLS the surface is split into, which is what gates the floor
   // escape (`kScaleEscapeCells`). It is not part of `limits` as a shell passes
   // them because it is not a shell's fact: the grid belongs to the frame
   // builder, so `ttp_display_frame` declares it here and the poll folds it in.
-  void cells(int n) { cells_ = n < 0 ? 0 : n; }
+  void cells(int n) {
+    cells_ = n < 0 ? 0 : n;
+    cellsKnown_ = true;   // the first frame after a build says what the grid is
+  }
 
   // Re-decide, at most once per kScalePollMs. Answers whether the point MOVED,
   // and writes the new one to `out`.
@@ -109,7 +131,30 @@ class RenderScaleController {
   // observation — and its first move would halve the canvas nobody asked it to
   // touch. Both TV shells have a ceiling of 1.0 and see no difference.
   int cells_ = 0;
+  bool cellsKnown_ = false;
   bool adopted_ = false;
+  // The scene's tenure ledger: how long each point was in force since the
+  // build, so scene() can remember the one it held longest. A scene runs
+  // under one band, so it can visit at most the band's operating points; a
+  // recalled point outside them (the band moved) takes one more slot.
+  struct Tenure { RenderScalePoint point; double ms; };
+  Tenure tenure_[kScaleMaxPoints + 1] = {};
+  int tenures_ = 0;
+  // The start of the current tenure span. Separate from movedMs_ on purpose:
+  // the ledger restarts at a scene build, the rule's own holds do not — a
+  // scene that opens on something hopeless retreats on the same clock it
+  // always did.
+  double tenureMs_ = 0;
+  void credit(double untilMs);
+  // The memory itself: one entry per (key, cells), replaced round-robin.
+  // Sized for every biome at every split, several times over; in-process
+  // only — a fresh launch climbs once.
+  struct Memory { uint32_t key; int cells; RenderScalePoint point; };
+  static constexpr int kMemories = 32;
+  Memory memory_[kMemories] = {};
+  int memories_ = 0, memoryNext_ = 0;
+  uint32_t sceneKey_ = 0, nextKey_ = 0;
+  bool recall_ = false;
   RenderScalePoint point_{1.0, 1};
   RenderScaleSample prev_{0.0, 0.0};
   double floorMs_ = 0;     // presentBaseline's running answer

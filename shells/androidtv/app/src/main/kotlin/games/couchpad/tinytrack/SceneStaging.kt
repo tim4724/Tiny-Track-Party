@@ -184,7 +184,14 @@ object SceneStaging {
 
         // 2. THE BIOME, BEFORE ANY FETCHING. The scenery list is a function of
         //    it, so a fetch that runs first is a fetch of the wrong models.
-        val resolved = TtpJson.strOrEmpty(Ttp.ttp_theme_biome_for_track(TtpJson.arg(trackId)))
+        //    `debug.ttp.biome` is the web's ?biome= inspector override over adb
+        //    (PerfDebug lists the knobs): one circuit built in every look is
+        //    what splits the cost of a track's LAYOUT from its biome's content.
+        //    An unknown name falls through to the cup.
+        val forced = PerfDebug.getprop("debug.ttp.biome")
+            ?.takeIf { Ttp.ttp_theme_has_biome(TtpJson.arg(it)) != 0 }
+        val resolved = forced
+            ?: TtpJson.strOrEmpty(Ttp.ttp_theme_biome_for_track(TtpJson.arg(trackId)))
         Ttp.ttp_display_biome(TtpJson.arg(resolved))
         step(1)
 
