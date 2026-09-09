@@ -129,6 +129,13 @@ TTP_ABI int ttp_force_remove_car(int h, const char* idJson);                 // 
 TTP_ABI int ttp_rekey_car(int h, const char* oldJson, const char* newJson);  // rekeyCar
 TTP_ABI void ttp_force_finish(int h, const char* idJson, double time);       // forceFinish (synthetic time)
 TTP_ABI void ttp_fast_forward(int h);                                        // fastForwardToEnd (drives bots internally)
+// THE FINISH FLOURISH: hold the race's END off while the sim keeps stepping, so
+// the shell can show a few seconds of live picture with the place cards up. Set
+// it when every human is home and clear it when the flourish is over — the shell
+// then fast-forwards and the race ends as it always did. Without it the last
+// human across is often the last car, raceOver() is true on that frame, and the
+// race is over before a single frame of the flourish can be drawn.
+TTP_ABI void ttp_hold_end(int h, int on);                                    // RaceSession::holdEnd
 
 // ---- pause / state ----------------------------------------------------------
 

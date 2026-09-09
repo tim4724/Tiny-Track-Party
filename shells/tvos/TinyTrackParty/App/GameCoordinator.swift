@@ -66,6 +66,11 @@ final class GameCoordinator: ObservableObject {
     /// dispatch, which must not spawn visuals for a race that is being SKIPPED
     /// rather than watched.
     var fastForwarding = false
+    /// THE FLAG FIRES ONCE. The race runs on through the flourish, so `racing`
+    /// and humans-all-done are both still true on every poll inside it — without
+    /// this the arm re-fires six times a second and leaves stale timers that then
+    /// freeze the NEXT race.
+    var flourishing = false
 
     /// Whether the app is off screen with its party wound up. Guards `suspend`
     /// and `resume` against being run twice: tvOS delivers `.inactive` between

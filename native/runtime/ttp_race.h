@@ -196,15 +196,12 @@ TTP_ABI const char* ttp_race_events_live_json(int sessionHandle, int roomHandle,
                                               int audioReady, int fastForwarding,
                                               double intermissionMs, double nowMs);
 
-/* THE FINISH FLOURISH'S far end. The race's end arms `arm-results` (its `ms` is
- * race_flow.h's FINISH_FLOURISH_MS) instead of showing the board; a shell waits
- * that long over the frozen finish frame and then calls this, which answers the
- * reveal — show-results, plus the intermission arm mid-cup, whose deadline is
- * therefore measured from the REVEAL and not from the flag. hasSeries and
- * seriesFinished come off the room. Same trailing arguments as the drain.
+/* THE FLAG: every human is home. Perform this, set ttp_hold_end(session, 1), and
+ * keep updating — the race runs on for the flourish with the place cards up. The
+ * `arm-results` effect it emits carries how long; when that fires, clear the
+ * hold, fast-forward and drain, and the _raceEnd arm above lands the board.
  *   -> {"effects":[...]} */
-TTP_ABI const char* ttp_race_reveal_live_json(int roomHandle, double intermissionMs,
-                                              double nowMs);
+TTP_ABI const char* ttp_race_flag_live_json(int roomHandle);
 
 /* ---- the cup chain / the way out ----------------------------------------- */
 

@@ -344,13 +344,13 @@ test('lobby → race → pause → new game returns everyone to the lobby', asyn
   await expect(alice.locator('#ready-btn')).toBeEnabled();
 });
 
-test('the flag holds the finish frame, and the board arrives a flourish later', async ({ page, browser }) => {
+test('the flag keeps the race running, and the board arrives a flourish later', async ({ page, browser }) => {
   // THE FINISH FLOURISH (race_flow.h). The sim raises the last car's finish and
-  // raceOver in ONE update, so a board shown off endRace lands on the same frame
+  // raceOver in ONE update, so a board shown at the flag lands on the same frame
   // the flag does: the finisher never sees the place card their own cell just
   // earned, and a race that was being driven a moment ago is replaced
-  // mid-breath. The end ARMS the board instead, and this is the gate on that —
-  // no clock is asserted, only the order, so the hold's length stays a taste
+  // mid-breath. The flag paints the cards and the race KEEPS RUNNING instead.
+  // No clock is asserted, only the order, so the hold's length stays a taste
   // knob in one place.
   const roomCode = await openDisplay(page);
   const alice = await joinController(browser, roomCode, 'Alice');
@@ -358,14 +358,25 @@ test('the flag holds the finish frame, and the board arrives a flourish later', 
   await waitForRacing(page);
 
   await finishHumans(page);
-  await inResults(page);   // the FLAG, not the board
 
-  // The card the flourish is for, over a frame that is still the race.
-  await expect(page.locator('.cell-finish').first()).toBeVisible();
+  // THE FLAG is the card, not the room: the race has not ended, so the room is
+  // still PLAYING and stays that way for the whole flourish.
+  await expect(page.locator('.cell-finish').first()).toBeVisible({ timeout: 20000 });
   await expect(page.locator('.cell-finish__place').first()).toHaveText(/^\d+(st|nd|rd|th)$/);
   await expect(page.locator('#results')).toBeHidden();
+  expect(await page.evaluate(() => window.__net.roomState)).toBe('playing');
+  // …and the sim is still stepping: the field moves while the cards are up.
+  const a = await page.evaluate(() => window.__session().getSnapshot().cars.map((c) => c.totalS));
+  await page.waitForTimeout(400);
+  const b = await page.evaluate(() => window.__session().getSnapshot().cars.map((c) => c.totalS));
+  expect(b.some((v, i) => v > a[i] + 0.5), 'the field is still driving').toBe(true);
 
-  // …and nobody touches anything: the board comes on its own.
-  await expect(page.locator(visible('#results'))).toBeVisible({ timeout: 15000 });
+  // The PHONE, though, goes to the board at the flag — its owner crossed the
+  // line and is out of control, so there is nothing left for it to spoil.
+  await expect(alice.locator(visible('#results'))).toBeVisible();
+
+  // …and nobody touches anything: the TV's board comes on its own.
+  await expect(page.locator(visible('#results'))).toBeVisible({ timeout: 20000 });
   await expect(page.locator('#results-list')).toContainText('Alice');
+  await inResults(page);   // …and only NOW is the room in results
 });

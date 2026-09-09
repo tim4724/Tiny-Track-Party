@@ -180,9 +180,11 @@ struct RaceFlowPerformer {
 
         // The points banking (constraint 3: BEFORE the final board goes out)
         // happens inside the event drain's executor now — no op crosses.
-        // THE FINISH FLOURISH: the flag ARMS the board, it does not show it.
-        // The frozen finish frame keeps the screen for the hold the walk names,
-        // and `revealResults` (the far end) is what answers show-results.
+        // THE FINISH FLOURISH: when this arrives the race is STILL RUNNING —
+        // the cards are up, the song is playing and the field is moving. This
+        // arms the END of it; `endFlourish` drops the hold, freezes the picture
+        // and resolves what is left, and the sim's own _raceEnd answers
+        // show-results.
         case "arm-results":
             game.armResults(ms: e["ms"] as? Double ?? 0)
 

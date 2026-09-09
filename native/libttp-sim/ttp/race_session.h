@@ -38,6 +38,19 @@ class RaceSession {
   void pause();
   void resume();
   void fastForwardToEnd(const std::function<void()>& stepBots, double dtMs = 1000.0 / 30.0);
+  // THE FINISH FLOURISH. Every human is home, so the shell wants a few seconds
+  // of live picture — the place cards up, the field still moving — before the
+  // board. Without this it cannot have them: when the last human is ALSO the
+  // last car, raceOver() is already true on the frame they cross and update()
+  // ends the race on the very next tick. This holds that end off; the sim keeps
+  // stepping, and Game already drives a finished car (its victory-lap
+  // autopilot). The shell ends it by calling this with `false`, and then
+  // resolves whatever is still running the way it always did.
+  //
+  // No duration and no clock: how long a flourish lasts is the race-flow
+  // layer's, and this only has to not end while one is running.
+  void holdEnd(bool on) { holdingEnd_ = on; }
+  bool holdingEnd() const { return holdingEnd_; }
   bool forceRemoveCar(const Id& id);
   bool rekeyCar(const Id& oldId, const Id& newId) { return engine_->rekeyCar(oldId, newId); }
   Value getResults() { return engine_->getResults(); }
@@ -74,6 +87,7 @@ class RaceSession {
   double lastCarAt_ = -1;
   bool ended_ = false;
   bool paused_ = false;
+  bool holdingEnd_ = false;   // see holdEnd: the flourish is running
 };
 
 }  // namespace ttp

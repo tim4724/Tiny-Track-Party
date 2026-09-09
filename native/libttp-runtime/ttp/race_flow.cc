@@ -613,47 +613,58 @@ Effects raceEvent(const RaceEvent& ev, bool fastForwarding, bool humansAllDone) 
   return out;
 }
 
-Effects endRace(const EndRaceInput& in) {
+Effects flagRace() {
   Effects out;
   Effect e;
-  e = mk(Op::TRANSITION); e.str = "results"; out.push_back(e);
-  // Bank the cup points FIRST — the final board broadcast below must already
-  // carry this race's gains, and the intermission/podium read them too.
-  if (in.hasSeries) out.push_back(mk(Op::APPLY_RACE_POINTS));
-  // A finished series banks the couch's star record — AFTER the points, so the
-  // standings the executor reads are final.
-  if (in.hasSeries && in.seriesFinished) out.push_back(mk(Op::PERSIST_PROGRESSION));
-  // The cards the flourish is FOR, and they have to be painted BEFORE the freeze
-  // below: the shells that cache a HUD row repaint it on a tick the next op
-  // stops. Without this the last car across never wears the place it just won —
-  // its finish and the race's end arrive in one update.
+  // The cards the flourish is FOR, painted the moment the last human is home.
+  // The shells that cache a HUD row repaint it on a tick, and the last car
+  // across earns its place on the same update the race is decided on — so this
+  // one-shot paint is what puts the card up.
   out.push_back(mk(Op::PAINT_HUD));
-  // hold the finish frame behind the translucent results overlay
-  e = mk(Op::SET_RACE_FLAGS);
-  e.paused = false; e.autoPaused = false; e.raceEnded = true;
-  out.push_back(e);
-  // the frozen frame must not hold wind/squeal voices open
-  out.push_back(mk(Op::STOP_VOICES));
-  // NOT the music. The race is over but the moment is not: the flourish is a
-  // held frame with every place card up, and cutting the song at the flag left
-  // three seconds of silence under it. The song carries the beat and stops with
-  // the BOARD instead — see revealResults.
-  e = mk(Op::SET_PAUSE_OVERLAY); e.on = false; out.push_back(e);   // results aren't pausable
-  e = mk(Op::SET_PAUSE_BUTTON); e.shown = false; out.push_back(e);
-  out.push_back(mk(Op::HOLD_CHROME));
-  // final board → phones show the full results overlay
+  // The phones go to the board NOW rather than with the TV. Everyone holding
+  // one has already crossed the line, so they are out of control and there is
+  // nothing left for an early board to spoil — and the alternative is four
+  // people staring at a dead steering screen through the whole flourish.
   e = mk(Op::BROADCAST_STANDINGS); e.over = true; out.push_back(e);
-  // …and the TV holds the finish frame for the flourish before its own board.
+  // NOTHING ELSE. The race is still running: the field keeps moving, the song
+  // keeps playing, the voices keep sounding, and the cars that are home drive
+  // themselves (Game's victory-lap autopilot). This only arms the end.
   e = mk(Op::ARM_RESULTS); e.num = FINISH_FLOURISH_MS; out.push_back(e);
   return out;
 }
 
-Effects revealResults(const RevealResultsInput& in) {
+Effects endRace(const EndRaceInput& in) {
   Effects out;
   Effect e;
+  e = mk(Op::TRANSITION); e.str = "results"; out.push_back(e);
+  // THE FREEZE IS NOT HERE, and cannot be. This walk runs off the _raceEnd
+  // event, and that event is raised BY the burst that resolves the cars still
+  // running — so by the time anything here is performed the teleport has already
+  // happened. Holding the picture has to bracket the burst, which only the shell
+  // can do; see main.js's finish branch.
+  // Bank the cup points FIRST — the board below must already carry this race's
+  // gains, and the intermission/podium read them too.
+  if (in.hasSeries) out.push_back(mk(Op::APPLY_RACE_POINTS));
+  // A finished series banks the couch's star record — AFTER the points, so the
+  // standings the executor reads are final.
+  if (in.hasSeries && in.seriesFinished) out.push_back(mk(Op::PERSIST_PROGRESSION));
+  // Repaint: the flourish has been running live, so the rows moved after the
+  // flag's paint and the frozen frame must carry the final ones.
+  out.push_back(mk(Op::PAINT_HUD));
+  e = mk(Op::SET_RACE_FLAGS);
+  e.paused = false; e.autoPaused = false; e.raceEnded = true;
+  out.push_back(e);
+  // a frozen frame must not hold wind/squeal voices open
+  out.push_back(mk(Op::STOP_VOICES));
   // The song has played the flourish out; the board is where the race stops
   // being the thing on screen, so it is where the race's music stops.
   out.push_back(mk(Op::STOP_MUSIC));
+  e = mk(Op::SET_PAUSE_OVERLAY); e.on = false; out.push_back(e);   // results aren't pausable
+  e = mk(Op::SET_PAUSE_BUTTON); e.shown = false; out.push_back(e);
+  out.push_back(mk(Op::HOLD_CHROME));
+  // The phones already have this board (flagRace) — republish, because the
+  // flourish raced on and the places behind the humans are only settled now.
+  e = mk(Op::BROADCAST_STANDINGS); e.over = true; out.push_back(e);
   out.push_back(mk(Op::SHOW_RESULTS));
   // The host ends the results screen with "New game", and nothing here overrides
   // that on a clock: an ABANDONED podium is recovered by RoomFlow::graceTick's

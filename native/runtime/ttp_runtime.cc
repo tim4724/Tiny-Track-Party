@@ -1178,6 +1178,11 @@ void ttp_force_finish(int h, const char* idJson, double time) {
   rs->eng->forceFinish(parse_scalar_id(idJson), true, time);
 }
 
+void ttp_hold_end(int h, int on) {
+  RuntimeSession* rs = get(h);
+  if (rs && rs->session) rs->session->holdEnd(on != 0);
+}
+
 void ttp_fast_forward(int h) {
   RuntimeSession* rs = get(h);
   if (!rs || !rs->eng) return;

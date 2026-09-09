@@ -66,17 +66,30 @@ load-bearing AND silent when wrong. Four constraints live in the order alone:
 3. Cup points are banked BEFORE the final board goes out.
 4. The session is disposed BEFORE the flow flips to LOBBY.
 
-**The flag is not the board.** The sim raises the last car's finish and
-`raceOver` in ONE update, so anything `endRace` emits lands on the frame the flag
-does — a board there replaces a race that was being driven a moment ago, and the
-finisher never sees the place card their own cell just earned. So `endRace` paints
-the HUD one last time (before the freeze that stops the shells' own HUD tick),
-hands the phones their board, and ARMS the TV's; `revealResults` is the far end of
-the hold and the only place `show-results` and the intermission arm come from. The
-intermission clock therefore starts at the REVEAL, so a chained race keeps its
-whole budget. `FINISH_FLOURISH_MS` is the one taste knob and lives in
-`race_flow.h`; nothing waits on it and no phone is told about it, which is why it
-is emitted rather than passed in the way the intermission is.
+**The flag is not the end of the race.** The sim raises the last car's finish and
+`raceOver` in ONE update, so a board shown when every human is home lands on the
+frame the flag does — it replaces a race that was being driven a moment ago, and
+the finisher never sees the place card their own cell just earned. So the two are
+separate walks. `flagRace` paints the HUD (the one paint that card gets) and hands
+the phones their board — everyone holding one has already crossed, so there is
+nothing left for an early board to spoil — and arms the end. Between them the race
+KEEPS RUNNING: the shell sets `ttp_hold_end`, which stops `RaceSession` finishing
+itself, and the field carries on (`Game` already drives a finished car round a
+victory lap). `endRace` is the far end — it banks the points, lands the board and
+arms the intermission, whose clock therefore starts AFTER the flourish so a
+chained race keeps its whole budget.
+
+The freeze is deliberately NOT an effect. `endRace` runs off the `_raceEnd` event,
+and that event is raised BY the burst that resolves the cars still running, so a
+hold emitted here would land after the teleport it exists to hide; bracketing the
+burst is the shell's (`main.js`'s finish branch). And the flag must fire ONCE —
+`racing` and humans-all-done are both still true on every poll inside the
+flourish, so each shell latches it or the arm re-fires six times a second and
+leaves stale timers that freeze the NEXT race.
+
+`FINISH_FLOURISH_MS` is the one taste knob and lives in `race_flow.h`; nothing
+waits on it and no phone is told about it, which is why it is emitted rather than
+passed in the way the intermission is.
 
 **The countdown is GATED on the scene, not on the build returning.** A launch
 answers with two effect lists: the walk, and `start-countdown` alone, held until

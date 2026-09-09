@@ -294,22 +294,18 @@ extension GameCoordinator {
 
     // MARK: - Timers the effects arm
 
-    /// THE FINISH FLOURISH. The race's end arms the board rather than showing
-    /// it: the sim raises the last car's finish and raceOver in one update, so a
-    /// board painted at the flag lands on the same frame the flag does and the
-    /// finisher never sees the place card their own cell just earned. This holds
-    /// the frozen finish frame for `ms` (race_flow.h FINISH_FLOURISH_MS) and
-    /// then asks the walk for the reveal — which is the only place show-results
-    /// and the intermission arm come from now.
+    /// THE FINISH FLOURISH. When this arrives the race is STILL RUNNING — the
+    /// place cards are up, the song is playing and the field is moving. This is
+    /// the timer that ends it: after `ms` (race_flow.h FINISH_FLOURISH_MS),
+    /// endFlourish() drops the hold, freezes the picture and resolves whatever
+    /// is left, and the sim's own _raceEnd lands the board.
     func armResults(ms: Double) {
         resultsTask?.cancel()
         resultsTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: UInt64(ms * 1_000_000))
             guard !Task.isCancelled else { return }
             self.resultsTask = nil
-            self.run(TTP.obj(ttp_race_reveal_live_json(self.net.roomHandle,
-                                                       ttp_race_intermission_ms(),
-                                                       self.nowMs())))
+            self.endFlourish()
         }
     }
 
@@ -338,6 +334,7 @@ extension GameCoordinator {
     /// the next race (or back to the lobby) would paint the board over a
     /// countdown.
     func clearIntermission() {
+        flourishing = false
         resultsTask?.cancel()
         resultsTask = nil
         intermissionTask?.cancel()

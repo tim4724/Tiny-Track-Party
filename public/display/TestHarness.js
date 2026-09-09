@@ -49,9 +49,27 @@ const COUNTDOWN_STILL = { n: 3, slap: false, go: false };
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
 const FAKE_TIMES = [28.4, 30.7, 33.1, 35.8, 38.2, 41.0, 44.3, 47.6];
-// Banked cup points per row for the intermission/podium previews: leader swap
-// drama (row 2 leads the cup despite row 1 winning this race).
-const FAKE_POINTS = [10, 15, 6, 3, 2, 1, 0, 0];
+// Banked cup points per row COMING INTO each race of a cup, by race index — and
+// every number here is doing a job.
+//
+// RACE 1 IS ALL ZEROS, because that is what a first race is: nobody has scored,
+// so the standings before it are flat, and since the ladder pays monotonically
+// by finishing place the standings after it ARE the finishing order. Its board
+// counts up without a single row moving, and that is correct rather than dull.
+// A fabricated non-zero spread there showed a cup table no real race 1 can
+// produce, and staged its "drama" in the one board that cannot have any.
+//
+// FROM RACE 2 THE GAPS ARE ONES, on purpose. This race pays 15/12/10/8/6/4/2/1
+// down the finishing order, so a row one point behind a row that scores three
+// fewer overtakes it PART WAY THROUGH the count — which is the whole thing the
+// standings phase exists to show. Ava leads the cup from third place, Mia takes
+// the lead off Theo mid-tally, and Bolt takes Pixel a beat later.
+const FAKE_POINTS_BY_RACE = [
+  [0, 0, 0, 0, 0, 0, 0, 0],
+  [12, 13, 20, 9, 4, 5, 1, 0],
+  [26, 27, 32, 21, 12, 13, 5, 2],
+  [40, 41, 48, 33, 20, 21, 9, 4]
+];
 // Held items per slot for the frozen previews (reconnect / finished) so the cell
 // item indicator shows populated — a mix of boost/banana with some empty slots,
 // rather than a field of empty squares. null = that slot is carrying nothing.
@@ -307,11 +325,12 @@ export function runDisplayScenario(opts, ctx) {
     // is what carries the first one through the sort. Without it the board's
     // race phase would replay the cup table and the preview would show a leader
     // swap that never happened.
+    const banked = FAKE_POINTS_BY_RACE[Math.min(raceIdx, FAKE_POINTS_BY_RACE.length - 1)];
     const order = humansFirst(field).map((f, i) => ({
       playerId: f.peerIndex, name: f.name, colorIndex: f.colorIndex, finished: true, time: FAKE_TIMES[i],
       racePlace: i + 1,
       gained: POINTS_BY_RANK[i] || 0,
-      points: (FAKE_POINTS[i] || 0) + (POINTS_BY_RANK[i] || 0)
+      points: (banked[i] || 0) + (POINTS_BY_RANK[i] || 0)
     })).sort((a, b) => b.points - a.points);
     return {
       over: true, hostPeerIndex: order[0].playerId, order,
@@ -1134,12 +1153,7 @@ export function runDisplayScenario(opts, ctx) {
         });
         window.__engine = engine;
         scene.bindSession(engine.h);                          // bind-session
-        if (audible) {
-          window.__audioDecide.bind(engine.h);
-          // The biome's own pool, off the scene the launch just placed — the
-          // start-music effect a live launch performs.
-          sfx(window.__audioDecide.startMusic(scene.biome()));
-        }
+        if (audible) window.__audioDecide.bind(engine.h);
         // The manifest's own count, and the same E2E override the live launch
         // reads — not a 3 retyped here.
         engine.startCountdown(window.__countdownSeconds || window.COUNTDOWN_SECONDS);
@@ -1159,17 +1173,33 @@ export function runDisplayScenario(opts, ctx) {
       //
       // NO BOARD HERE. That is the beat this preview exists to show.
       function flag() {
-        scene.hold(true);                                     // hold-cars
+        // Live the flag IS every human home; a preview leg is cut on the clock
+        // instead, so bring them in in the order they are running.
         const home = engine.getSnapshot().cars
           .filter((c) => humanIds.has(c.id) && !c.finished)
           .sort((a, b) => a.position - b.position);
         home.forEach((c, i) => engine.forceFinish(c.id, raceMs / 1000 + i * 0.4));
+        // AND NOTHING STOPS. Hold the sim's own end open so the race runs on
+        // through the flourish — the cars that are home drive themselves, the
+        // ones that are not race on, the song keeps playing and the voices keep
+        // sounding. Without the hold the session would end on the very next
+        // update, because these humans were the last cars still running.
+        engine.holdEnd(true);
+        for (const c of engine.getSnapshot().cars) scene.setCarHud(c.id, c);   // paint-hud
+        phase = 'flourish'; phaseMs = 0;                      // arm-results
+      }
+
+      // The flourish's far end, in main.js's order: drop the hold, freeze the
+      // picture, THEN resolve whatever is still running — the burst draws no
+      // frames, so every remaining car teleports to the line and the freeze is
+      // what keeps that off screen. Then the board.
+      function endFlourish() {
+        engine.holdEnd(false);
+        scene.hold(true);
         engine.fastForwardToEnd();
         for (const c of engine.getSnapshot().cars) scene.setCarHud(c.id, c);   // paint-hud
-        // A frozen frame must not hold wind and squeal voices open — but the
-        // SONG plays on, which is the whole point of this card having one.
-        sfx(window.__audioDecide.stopVoices());
-        phase = 'flourish'; phaseMs = 0;                      // arm-results
+        sfx(window.__audioDecide.stopVoices());   // a frozen frame holds no voices open
+        board();
       }
 
       // The board arrives a flourish later, fading up over the held finish frame
@@ -1200,18 +1230,21 @@ export function runDisplayScenario(opts, ctx) {
       launch();
       scene.onFrame = (dt) => {
         const ms = dt * 1000;
-        if (phase !== 'race') {
-          // Both waits are the layer's OWN numbers, not this file's: the finish
-          // flourish the flag arms the board with, then the intermission budget
-          // the board is at that moment printing in its "starting in N…" footer.
+        if (phase === 'board') {
+          // The board sits for the layer's own budget, which is also the number
+          // it is at that moment printing in its "starting in N…" footer.
           phaseMs += ms;
-          if (phase === 'flourish') { if (phaseMs >= flourishMs()) board(); }
-          else {
-            const remain = intermissionMs() - phaseMs;
-            tickNextSecs(remain);
-            if (remain <= 0) launch();
-          }
+          const remain = intermissionMs() - phaseMs;
+          tickNextSecs(remain);
+          if (remain <= 0) launch();
           return;
+        }
+        if (phase === 'flourish') {
+          // STILL RACING. The only difference from the beat above is that the
+          // clock is now counting the flourish out; everything else — the sim,
+          // the HUD, the mix — carries on exactly as it did a moment ago.
+          phaseMs += ms;
+          if (phaseMs >= flourishMs()) { endFlourish(); return; }
         }
         // Countdown and race are ONE path here exactly as they are in main.js:
         // the session is updated from the first countdown frame on (cars drawn
@@ -1223,7 +1256,12 @@ export function runDisplayScenario(opts, ctx) {
           lastHud = now;
           for (const c of engine.getSnapshot().cars) scene.setCarHud(c.id, c);
         }
-        if (!engine.racing) return;   // still counting down
+        if (!engine.racing) return;   // still counting down (never true past the flag)
+        if (phase === 'flourish') return;   // the race clock stopped at the flag
+        // THE SONG STARTS ON GO, not at the launch. That is where the live walk
+        // puts it (race_flow's raceStart, not launchRace), so the countdown beats
+        // play over silence and the music arrives with the field.
+        if (!raceMs && audible) sfx(window.__audioDecide.startMusic(scene.biome()));
         raceMs += ms;
         if (raceMs >= CHAIN_RACE_MS || raceOver(engine.getSnapshot())) flag();
       };

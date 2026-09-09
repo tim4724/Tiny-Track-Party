@@ -40,6 +40,7 @@ export async function init() {
     hasCar: c('ttp_has_car', 'number', ['number', 'string']),
     carIds: c('ttp_car_ids_json', 'string', ['number']),
     forceFinish: c('ttp_force_finish', null, ['number', 'string', 'number']),
+    holdEnd: c('ttp_hold_end', null, ['number', 'number']),
     fastForward: c('ttp_fast_forward', null, ['number']),
     pause: c('ttp_pause', null, ['number']),
     resume: c('ttp_resume', null, ['number']),
@@ -140,6 +141,12 @@ export class NativeRaceSession {
   }
 
   forceFinish(id, time) { if (this.h) fn.forceFinish(this.h, idJson(id), time); }
+
+  // THE FINISH FLOURISH: keep stepping past the point the race would otherwise
+  // end, so the shell can show a few live seconds with the place cards up. Set
+  // it when every human is home, clear it when the flourish is over — and then
+  // fastForwardToEnd() as usual. See ttp_hold_end.
+  holdEnd(on) { if (this.h) fn.holdEnd(this.h, on ? 1 : 0); }
 
   pause() { if (this.h) fn.pause(this.h); }
   resume() {

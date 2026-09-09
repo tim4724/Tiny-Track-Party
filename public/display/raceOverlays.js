@@ -181,8 +181,10 @@ function buildRow(row, colors, i) {
 // model's (ui_model.h):
 //   time_gain  the race: the lap clock. Cup cells reserved, empty.
 //   points     the cup:  the score and the total. Lap clock reserved, empty.
-//   time       a single race, no cup anywhere: the lap clock ALONE, and none of
-//              this reserving — there is no second beat to line up with.
+//   time       a single race, no cup anywhere: the lap clock, with the same two
+//              cells reserved beside it. There is no second beat for THIS board
+//              to line up with — it lines up with the OTHER boards, so a race
+//              result, a cup table and a podium are all one width.
 function fillTrail(trail, row) {
   trail.innerHTML = '';
   const cell = (cls, text) => {
@@ -196,10 +198,6 @@ function fillTrail(trail, row) {
     return;
   }
   const lap = row.finished ? `${row.time.toFixed(1)}s` : 'DNF';
-  if (row.kind === 'time') {
-    trail.appendChild(cell('res-time', lap));   // single race: the lap clock alone
-    return;
-  }
   const cup = row.kind === 'points';
   const time = cell('res-time', cup ? '' : lap);
   const gain = cell('res-gain' + (cup && !row.gained ? ' is-zero' : ''),
@@ -392,13 +390,23 @@ function tally(v) {
 // started. Joining rows raced nothing and stay under the field; everything else
 // is total-desc with the model's own order breaking ties, so the last tick
 // cannot land anywhere but on what the model said.
-function reflow(live, flipMs) {
+function reflow(live, flipMs, final) {
   const list = el('results-list');
+  // WHERE EACH ROW IS RIGHT NOW, which is the tie-break for every tick but the
+  // last. Breaking a tie by `seat` — the FINAL order — makes a level score
+  // display the finish early: two rows whose totals leapfrog each other tie on
+  // one beat, the lower one jumps ahead because it is going to end up there,
+  // and the next beat takes it back. That twitch is not a thing that happened.
+  // A row moves when it is genuinely AHEAD; a tie moves nobody.
+  const at = new Map([...list.children].map((li, i) => [li.dataset.pid, i]));
+  const here = (r) => at.get(String(r.row.playerId)) ?? r.seat;
   const want = [...live].sort((a, b) => {
     const aj = a.row.kind === 'joining', bj = b.row.kind === 'joining';
     if (aj !== bj) return aj ? 1 : -1;
     if (!aj && a.total !== b.total) return b.total - a.total;
-    return a.seat - b.seat;
+    // ...except at settle, where the totals are final and the board has to land
+    // exactly on the order the model composed, ties and all.
+    return final ? a.seat - b.seat : here(a) - here(b);
   });
   if (want.every((r, i) => list.children[i] === r.li)) return;   // nothing moved
 
@@ -442,7 +450,7 @@ function reflow(live, flipMs) {
 // it is. The spent "+0" empties rather than resting on a figure that reads as
 // "scored nothing" for the rest of the intermission.
 function settle(v, live, flipMs) {
-  reflow(live, flipMs);
+  reflow(live, flipMs, true);
   el('results').classList.toggle('is-podium', v.podium);
   el('results-title').textContent = TITLE_COPY[v.titleKey](v);
   // HELD, not hidden — same reason as the footer. A podium drops the "Race 4 of

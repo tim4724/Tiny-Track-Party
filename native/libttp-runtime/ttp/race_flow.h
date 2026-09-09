@@ -483,21 +483,13 @@ struct RaceEvent {
 };
 Effects raceEvent(const RaceEvent& e, bool fastForwarding, bool humansAllDone);
 
-struct EndRaceInput {
-  bool hasSeries = false;
-  bool seriesFinished = false;
-};
-// The flag. Freezes the finish frame, banks the cup points, hands the phones
-// the final board — and then ARMS the results board rather than showing it. See
-// FINISH_FLOURISH_MS: the reveal is revealResults(), a flourish later.
-Effects endRace(const EndRaceInput& in);
-
 // THE FINISH FLOURISH. The sim raises the last car's finish and raceOver in ONE
-// update, so a board shown off endRace lands on the same frame the flag does:
-// the finisher never sees the place card their own cell just earned, and a race
-// that was still being driven a moment ago is replaced mid-breath. So the flag
-// holds the frozen finish frame — every cell's FINISHED / place / time card up —
-// for this long, and the board comes after it.
+// update, so a board shown the moment every human is home lands on the same
+// frame the flag does: the finisher never sees the place card their own cell
+// just earned, and a race that was being driven a moment ago is replaced
+// mid-breath. So the flag paints the cards and the race KEEPS RUNNING for this
+// long — the field still moving, finished cars on the sim's own victory-lap
+// autopilot — and only then does it end and the board arrive.
 //
 // A DURATION, not a budget: nothing waits on it and no phone is told about it,
 // which is why it is emitted from here rather than passed in the way the
@@ -505,16 +497,24 @@ Effects endRace(const EndRaceInput& in);
 // party never feels stalled.
 inline constexpr double FINISH_FLOURISH_MS = 3000;
 
-struct RevealResultsInput {
+// THE FLAG: every human is home. The cards go up and the phones are handed the
+// standings — the people holding them are out of control the moment they cross,
+// so there is nothing left to spoil — and the race is told to keep running.
+// Nothing here freezes anything and nothing here ends anything: `arm-results`
+// is a timer for endRace, which is where both of those happen.
+Effects flagRace();
+
+struct EndRaceInput {
   bool hasSeries = false;
   bool seriesFinished = false;
   double intermissionMs = 0;
   double nowMs = 0;
 };
-// The flourish is over: reveal the board, and — mid-cup — start the
-// intermission clock, which is measured from HERE so a chained race gets its
-// full budget rather than the flourish eating into it.
-Effects revealResults(const RevealResultsInput& in);
+// The flourish is over. NOW the field freezes, the cup banks its points, the
+// board goes up — and, mid-cup, the intermission clock starts, measured from
+// here so a chained race gets its full budget rather than the flourish eating
+// into it.
+Effects endRace(const EndRaceInput& in);
 
 // ---- the cup chain -----------------------------------------------------------
 
@@ -586,7 +586,7 @@ struct PauseResult {
 PauseResult pauseRace(const PauseInput& in);
 PauseResult resumeRace(const PauseInput& in);
 
-// The game-timing budget revealResults takes as an input. It lives HERE — the
+// The game-timing budget endRace takes as an input. It lives HERE — the
 // layer that arms the timer's effect — and shells read it through the ABI (main.js
 // used to own the number, which made it a game timing a second shell had to
 // re-author). The E2E override (__intermissionMs) stays a shell-side override

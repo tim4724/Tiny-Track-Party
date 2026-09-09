@@ -82,11 +82,12 @@ got different cameras depending on the window. All three agree at one player on
 **A HELD field's chase rig follows the PICTURE, not the sim.** `ttp_display_hold`
 parks the bodies at the pose they were last drawn at; the camera has to be parked
 against the same pose, because the two are not the same thing at a race's end. The
-hold is taken AT the flag and the sim then runs on — the AI to the flag, the
-just-finished human around a victory lap — so a rig fed the live car sails off
-down the track and leaves the parked body behind it. That was invisible for as
-long as the results board covered the frame within a frame or two of the flag;
-the finish flourish (`native/libttp-runtime/CLAUDE.md`) holds it for seconds.
+the hold is taken at the END of the finish flourish and the burst that follows
+resolves every car still running — the AI to the flag, the just-finished human
+around a victory lap — so a rig fed the live car sails off down the track and
+leaves the parked body behind it. That was invisible for as long as the results
+board covered the frame within a frame or two of the flag; now the board fades up
+over that held frame and the discrepancy is on screen.
 `frame_builder`'s held-camera case is the gate.
 
 ## The deck is a ruled surface, and the car sits on it

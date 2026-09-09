@@ -530,7 +530,7 @@ scene.onFrame = (dt) => {
   // remaining race instantly.
   // Named for what it is, not `flow` — that is the orchestration MODULE in this
   // scope, and a local of the same name shadowed it for the whole branch below.
-  const finish = (slowTick && session.racing) ? raceFlow() : null;
+  const finish = (slowTick && session.racing && !flourishing) ? raceFlow() : null;
   if (finish && finish.allDone) {
     // A dropped racer's ghost can never cross the line — forfeit any such car now
     // that every connected human is home, so the burst (and the race) ends
@@ -538,18 +538,20 @@ scene.onFrame = (dt) => {
     // fresh array — safe while forfeitCar removes cars
     for (const id of finish.forfeit) forfeitCar(id);
     if (!session.racing) return; // forfeiting the last unfinished car already ended the race
-    // Freeze the field at the finish moment BEFORE the burst. fastForwardToEnd
-    // advances the deterministic sim with NO rendering, and the just-finished
-    // human keeps driving a victory lap — so without this the chase camera is
-    // seen whipping across the track to that far-away pose through the
-    // translucent results glass. raceEnded then holds this frame until the next
-    // race (see the onFrame guard above).
-    freezeCars();
-    fastForwarding = true;
-    session.fastForwardToEnd(); // runs to raceOver, queueing the end events
-    drainRaceEvents();          // ...decided muted: the burst is skipping, not racing
-    fastForwarding = false;
-    return;                               // session ended; the results overlay covers the scene
+    // THE FLAG — and the race does NOT stop here. The cards go up, the phones
+    // get the board, and the sim is told to hold its own end open so the field
+    // keeps moving for the flourish: the cars that are home drive themselves
+    // (Game's victory-lap autopilot) and the ones that are not race on. Without
+    // the hold there is nothing to watch — when the last human is also the last
+    // car, raceOver() is true on this very frame and the next update would end
+    // the race under us.
+    //
+    // The walk's arm-results says how long, and endFlourish() below is what runs
+    // when it fires.
+    flourishing = true;
+    session.holdEnd(true);
+    perform(flow.flagRace(net.flow.handle).effects);
+    return;
   }
   // NOTHING about the race is read out per frame any more. The renderer has
   // every car's pose, lean, monster state, item props AND its steer bar — it
@@ -773,7 +775,12 @@ function renamePlayer(peerIndex, name) {
 // the room's stored series, holds the room in RESULTS for an intermission, then
 // chains straight into the next race (advanceSeriesRace) — the lobby only
 // returns after the podium (or on any quit path, which cancels the series).
-let resultsTimer = null;        // the finish flourish: the hold before the board
+let resultsTimer = null;        // the finish flourish: the timer that ends it
+// THE FLAG FIRES ONCE. The race is still running through the flourish, so
+// `session.racing` and humans-all-done are BOTH still true on every slow tick
+// inside it — without this latch the arm re-fires six times a second, each one
+// re-arming the end and leaving stale timers that then freeze the NEXT race.
+let flourishing = false;
 let seriesTimer = null;         // auto-advance timeout (armed per intermission)
 let seriesDeadline = 0;         // when it fires — the countdown label reads this
 let intermissionTicker = null;  // ½ s "starting in N…" refresh
@@ -900,10 +907,10 @@ const RACE_PERFORMERS = {
   // — nothing about it crosses to this side, and the op is now bare. What is
   // left to perform is the republish that carries it to the phones.
   'broadcast-standings': () => net.syncState(),
-  // THE FINISH FLOURISH. The board is armed here, not shown: the frozen finish
-  // frame keeps the screen — every cell wearing the place card the op above just
-  // painted — for the hold the walk names, and revealResults() lands the board.
-  'arm-results': (e) => { resultsTimer = setTimeout(revealResults, e.ms); },
+  // THE FINISH FLOURISH. The race is still running when this arrives: the cards
+  // are up, the song is playing and the field is moving. This is the timer that
+  // ENDS it — endFlourish() freezes, resolves and lets the board land.
+  'arm-results': (e) => { resultsTimer = setTimeout(endFlourish, e.ms); },
   'show-results': () => showResults(),
   'arm-intermission': (e) => {
     seriesDeadline = e.deadline;
@@ -1083,21 +1090,38 @@ function advanceSeriesRace() {
   armCountdown(d.countdownEffects);
 }
 
-// The flourish's far end. Nothing is decided here: the walk answers the board
-// and — mid-cup — the intermission arm, whose clock therefore starts NOW rather
-// than at the flag, so a chained race keeps its whole budget.
-function revealResults() {
+// THE FLOURISH'S FAR END. The live part is over: stop holding the race open,
+// freeze the picture, and resolve whatever is still running.
+//
+// THE ORDER IS THE WHOLE FUNCTION. fastForwardToEnd advances the deterministic
+// sim with NO rendering, so every car still running teleports to the line — the
+// freeze has to bracket that burst or the just-finished human's chase camera is
+// seen whipping across the track to a pose the screen never showed. That is why
+// the hold is not an effect: this walk's own _raceEnd event is raised BY the
+// burst, so anything it emitted would land too late.
+//
+// The drain is what runs endRace, which banks the points, lands the board and —
+// mid-cup — arms the intermission off the clock as it stands HERE, so a chained
+// race keeps its whole budget rather than the flourish eating into it.
+function endFlourish() {
   resultsTimer = null;
-  perform(flow.revealResults(net.flow.handle,
-                             { intermissionMs: intermissionMs(), nowMs: Date.now() }).effects);
+  if (!flourishing || !session) return;
+  flourishing = false;
+  session.holdEnd(false);
+  freezeCars();
+  fastForwarding = true;
+  session.fastForwardToEnd(); // runs to raceOver, queueing the end events
+  drainRaceEvents();          // ...decided muted: the burst is skipping, not racing
+  fastForwarding = false;
 }
 
 // Every exit from the results screen clears these, and the flourish timer is one
-// of them: a reveal still pending when the host jumps to the next race (or back
-// to the lobby) would paint the board over a countdown.
+// of them: a race still being held open when the host jumps to the next race (or
+// back to the lobby) would end itself over a countdown.
 function clearSeriesTimers() {
   clearTimeout(seriesTimer); seriesTimer = null;
   clearTimeout(resultsTimer); resultsTimer = null;
+  flourishing = false;
   clearInterval(intermissionTicker); intermissionTicker = null;
 }
 

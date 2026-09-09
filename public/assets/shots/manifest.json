@@ -77,9 +77,9 @@
       "file": "tvos-sim/countdown.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 54070,
-      "capturedAt": "2026-07-30T15:50:16.862Z",
-      "gitSha": "ee6fdee",
+      "bytes": 50822,
+      "capturedAt": "2026-09-09T19:28:29.456Z",
+      "gitSha": "72dc210c",
       "deviceName": "Apple TV 4K (3rd generation)",
       "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
     },
@@ -131,6 +131,18 @@
     },
     {
       "scenario": "finished",
+      "platform": "tvos-sim",
+      "file": "tvos-sim/finished.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 48032,
+      "capturedAt": "2026-09-09T19:28:30.471Z",
+      "gitSha": "72dc210c",
+      "deviceName": "Apple TV 4K (3rd generation)",
+      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+    },
+    {
+      "scenario": "finished",
       "platform": "web",
       "file": "web/finished.webp",
       "w": 1280,
@@ -174,6 +186,18 @@
       "gitSha": "ab95c4ef",
       "deviceName": "Spielzimmer",
       "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
+    },
+    {
+      "scenario": "intermission",
+      "platform": "tvos-sim",
+      "file": "tvos-sim/intermission.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 17794,
+      "capturedAt": "2026-09-09T19:28:30.685Z",
+      "gitSha": "72dc210c",
+      "deviceName": "Apple TV 4K (3rd generation)",
+      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
     },
     {
       "scenario": "intermission",
@@ -227,9 +251,9 @@
       "file": "tvos-sim/lobby-empty.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 35128,
-      "capturedAt": "2026-09-04T05:55:52.091Z",
-      "gitSha": "82224f4c",
+      "bytes": 35170,
+      "capturedAt": "2026-09-09T19:28:28.871Z",
+      "gitSha": "72dc210c",
       "deviceName": "Apple TV 4K (3rd generation)",
       "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
     },
@@ -286,8 +310,8 @@
       "w": 1280,
       "h": 720,
       "bytes": 17090,
-      "capturedAt": "2026-09-04T05:55:51.923Z",
-      "gitSha": "82224f4c",
+      "capturedAt": "2026-09-09T19:28:28.727Z",
+      "gitSha": "72dc210c",
       "deviceName": "Apple TV 4K (3rd generation)",
       "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
     },
@@ -343,9 +367,9 @@
       "file": "tvos-sim/lobby-random.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 46702,
-      "capturedAt": "2026-09-04T05:55:52.611Z",
-      "gitSha": "82224f4c",
+      "bytes": 46846,
+      "capturedAt": "2026-09-09T19:28:29.308Z",
+      "gitSha": "72dc210c",
       "deviceName": "Apple TV 4K (3rd generation)",
       "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
     },
@@ -401,9 +425,9 @@
       "file": "tvos-sim/lobby-tour.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 47050,
-      "capturedAt": "2026-09-04T05:55:52.437Z",
-      "gitSha": "82224f4c",
+      "bytes": 46642,
+      "capturedAt": "2026-09-09T19:28:29.163Z",
+      "gitSha": "72dc210c",
       "deviceName": "Apple TV 4K (3rd generation)",
       "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
     },
@@ -459,9 +483,9 @@
       "file": "tvos-sim/lobby-track.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 56986,
-      "capturedAt": "2026-09-04T05:55:52.266Z",
-      "gitSha": "82224f4c",
+      "bytes": 56696,
+      "capturedAt": "2026-09-09T19:28:29.019Z",
+      "gitSha": "72dc210c",
       "deviceName": "Apple TV 4K (3rd generation)",
       "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
     },
@@ -513,6 +537,18 @@
     },
     {
       "scenario": "monster",
+      "platform": "tvos-sim",
+      "file": "tvos-sim/monster.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 54130,
+      "capturedAt": "2026-09-09T19:28:30.056Z",
+      "gitSha": "72dc210c",
+      "deviceName": "Apple TV 4K (3rd generation)",
+      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+    },
+    {
+      "scenario": "monster",
       "platform": "web",
       "file": "web/monster.webp",
       "w": 1280,
@@ -556,6 +592,18 @@
       "gitSha": "ab95c4ef",
       "deviceName": "Spielzimmer",
       "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
+    },
+    {
+      "scenario": "paused",
+      "platform": "tvos-sim",
+      "file": "tvos-sim/paused.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 9532,
+      "capturedAt": "2026-09-09T19:28:30.175Z",
+      "gitSha": "72dc210c",
+      "deviceName": "Apple TV 4K (3rd generation)",
+      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
     },
     {
       "scenario": "paused",
@@ -605,6 +653,18 @@
     },
     {
       "scenario": "podium",
+      "platform": "tvos-sim",
+      "file": "tvos-sim/podium.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 18860,
+      "capturedAt": "2026-09-09T19:28:30.796Z",
+      "gitSha": "72dc210c",
+      "deviceName": "Apple TV 4K (3rd generation)",
+      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+    },
+    {
+      "scenario": "podium",
       "platform": "web",
       "file": "web/podium.webp",
       "w": 1280,
@@ -651,6 +711,18 @@
     },
     {
       "scenario": "racing",
+      "platform": "tvos-sim",
+      "file": "tvos-sim/racing.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 55054,
+      "capturedAt": "2026-09-09T19:28:29.605Z",
+      "gitSha": "72dc210c",
+      "deviceName": "Apple TV 4K (3rd generation)",
+      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+    },
+    {
+      "scenario": "racing",
       "platform": "web",
       "file": "web/racing.webp",
       "w": 1280,
@@ -682,6 +754,18 @@
       "gitSha": "193864fc",
       "deviceName": "Television_4K_Android_TV",
       "deviceId": "emulator-5554"
+    },
+    {
+      "scenario": "racing-sidewinder",
+      "platform": "tvos-sim",
+      "file": "tvos-sim/racing-sidewinder.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 46386,
+      "capturedAt": "2026-09-09T19:28:29.754Z",
+      "gitSha": "72dc210c",
+      "deviceName": "Apple TV 4K (3rd generation)",
+      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
     },
     {
       "scenario": "racing-sidewinder",
@@ -731,6 +815,18 @@
     },
     {
       "scenario": "reconnect",
+      "platform": "tvos-sim",
+      "file": "tvos-sim/reconnect.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 47378,
+      "capturedAt": "2026-09-09T19:28:30.322Z",
+      "gitSha": "72dc210c",
+      "deviceName": "Apple TV 4K (3rd generation)",
+      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+    },
+    {
+      "scenario": "reconnect",
       "platform": "web",
       "file": "web/reconnect.webp",
       "w": 1280,
@@ -777,6 +873,18 @@
     },
     {
       "scenario": "results",
+      "platform": "tvos-sim",
+      "file": "tvos-sim/results.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 15440,
+      "capturedAt": "2026-09-09T19:28:30.578Z",
+      "gitSha": "72dc210c",
+      "deviceName": "Apple TV 4K (3rd generation)",
+      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+    },
+    {
+      "scenario": "results",
       "platform": "web",
       "file": "web/results.webp",
       "w": 1280,
@@ -820,6 +928,18 @@
       "gitSha": "ab95c4ef",
       "deviceName": "Spielzimmer",
       "deviceId": "63279d5dda4654a947d3833529c86c98b05a483e"
+    },
+    {
+      "scenario": "rocket",
+      "platform": "tvos-sim",
+      "file": "tvos-sim/rocket.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 46908,
+      "capturedAt": "2026-09-09T19:28:29.902Z",
+      "gitSha": "72dc210c",
+      "deviceName": "Apple TV 4K (3rd generation)",
+      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
     },
     {
       "scenario": "rocket",

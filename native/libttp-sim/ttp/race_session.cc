@@ -53,7 +53,11 @@ void RaceSession::update(double dtMs) {
   if (!wasRacing) return;
   engine_->update(dtMs);
   raceMs_ += dtMs;
-  if (engine_->raceOver() || timedOut()) finish();
+  // holdEnd is the flourish: keep stepping, do not end. It suppresses the
+  // TIMEOUT too — a flourish is bounded by the shell's own clock, and a race
+  // that reached the DNF cap on the same frame the last human crossed would
+  // otherwise still end underneath it.
+  if (!holdingEnd_ && (engine_->raceOver() || timedOut())) finish();
 }
 
 // The DNF ladder: once the first car is home the rest get 30 s, once only one

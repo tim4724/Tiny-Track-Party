@@ -15,7 +15,7 @@ import java.nio.ByteBuffer
 
 @Suppress("FunctionName", "unused")
 object Ttp {
-    /** Registers all 226 natives via JNI_OnLoad; a mismatch fails here. */
+    /** Registers all 227 natives via JNI_OnLoad; a mismatch fails here. */
     fun load() { System.loadLibrary("ttp_runtime_android") }
 
     external fun ttp_add_bot(h: Int, idJson: ByteArray?, caution: Double, laneBias: Double, aiSeed: Int, statsJsonOrNull: ByteArray?)
@@ -115,6 +115,7 @@ object Ttp {
     external fun ttp_gp_rekey(h: Int, oldIdJson: ByteArray?, newIdJson: ByteArray?)
     external fun ttp_gp_state_json(h: Int): ByteArray?
     external fun ttp_has_car(h: Int, idJson: ByteArray?): Int
+    external fun ttp_hold_end(h: Int, on: Int)
     external fun ttp_item_id(code: Int): ByteArray?
     external fun ttp_last_error(): ByteArray?
     external fun ttp_link_create(): Int
@@ -167,6 +168,7 @@ object Ttp {
     external fun ttp_race_effect_ops_json(): ByteArray?
     external fun ttp_race_end_party_json(): ByteArray?
     external fun ttp_race_events_live_json(sessionHandle: Int, roomHandle: Int, biome: ByteArray?, audioReady: Int, fastForwarding: Int, intermissionMs: Double, nowMs: Double): ByteArray?
+    external fun ttp_race_flag_live_json(roomHandle: Int): ByteArray?
     external fun ttp_race_flourish_ms(): Double
     external fun ttp_race_forfeit_live_json(sessionHandle: Int, peerIdJson: ByteArray?): ByteArray?
     external fun ttp_race_intermission_ms(): Double
@@ -175,7 +177,6 @@ object Ttp {
     external fun ttp_race_rekey_live_json(sessionHandle: Int, roomHandle: Int, oldIdJson: ByteArray?, newIdJson: ByteArray?): ByteArray?
     external fun ttp_race_resume_live_json(sessionHandle: Int, roomHandle: Int, paused: Int, autoPaused: Int, raceEnded: Int): ByteArray?
     external fun ttp_race_return_live_json(roomHandle: Int): ByteArray?
-    external fun ttp_race_reveal_live_json(roomHandle: Int, intermissionMs: Double, nowMs: Double): ByteArray?
     external fun ttp_race_series_state_json(roomHandle: Int): ByteArray?
     external fun ttp_race_start_live_json(roomHandle: Int, sceneReady: Int, seed: Double, countdownSeconds: Double, forceItemOrNull: ByteArray?, botCapJson: ByteArray?): ByteArray?
     external fun ttp_racing(h: Int): Int

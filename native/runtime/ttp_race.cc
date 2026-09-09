@@ -60,7 +60,7 @@ bool g_autopilotPlayers = false;
 // single buffer would hand the second call's bytes to a caller still holding the
 // first's pointer.
 std::string g_bufPersonas, g_bufOps, g_bufDemo, g_bufStart, g_bufLaunch,
-    g_bufEvents, g_bufReveal, g_bufAdvance, g_bufReturn, g_bufEndParty,
+    g_bufEvents, g_bufFlag, g_bufAdvance, g_bufReturn, g_bufEndParty,
     g_bufPause, g_bufResume,
     g_bufForfeit, g_bufRekey, g_bufAutoPause, g_bufBench;
 
@@ -756,6 +756,11 @@ const char* ttp_race_events_live_json(int sessionHandle, int roomHandle,
         ei.seriesFinished =
             series && (series->finished() ||
                        (!series->endless() && series->raceIndex() + 1 >= series->raceCount()));
+        // The intermission is measured from HERE — the flourish has already run
+        // live, so a chained race gets its full budget rather than the flourish
+        // eating into it.
+        ei.intermissionMs = intermissionMs;
+        ei.nowMs = nowMs;
         // endRace's OWN ranked board, which no effect can carry and which now
         // never leaves C++: the points bank against it (against the retained
         // field, BEFORE the board is composed — the order the corpus pins) and
@@ -781,21 +786,12 @@ const char* ttp_race_events_live_json(int sessionHandle, int roomHandle,
   return put(g_bufEvents, v);
 }
 
-const char* ttp_race_reveal_live_json(int roomHandle, double intermissionMs,
-                                      double nowMs) {
-  const ttp::CupSeries* s = ttp_gp_series(ttp_room_series(roomHandle));
-  race::RevealResultsInput in;
-  in.hasSeries = s != nullptr;
-  // Already banked by the drain's APPLY_RACE_POINTS, so the plain read is final
-  // here — the endRace arm's look-ahead exists only because it runs BEFORE that.
-  in.seriesFinished = s && s->finished();
-  in.intermissionMs = intermissionMs;
-  in.nowMs = nowMs;
+const char* ttp_race_flag_live_json(int roomHandle) {
   Value fx = Value::Arr();
-  executeAndSpell(roomHandle, race::revealResults(in), {}, fx);
+  executeAndSpell(roomHandle, race::flagRace(), {}, fx);
   Value v = Value::Obj();
   v.set("effects", std::move(fx));
-  return put(g_bufReveal, v);
+  return put(g_bufFlag, v);
 }
 
 // ---- the cup chain / the way out ---------------------------------------------

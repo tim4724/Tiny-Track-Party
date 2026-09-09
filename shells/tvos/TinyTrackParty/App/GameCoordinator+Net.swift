@@ -213,17 +213,27 @@ extension GameCoordinator {
         // dropped-but-reconnectable racer six times a second, and with one phone
         // down the auto-pause freeze turns into a return to the lobby.
         let flow = raceFlow()
-        if flow["allDone"] as? Bool == true, !raceEnded {
+        if flow["allDone"] as? Bool == true, !raceEnded, !flourishing {
             for id in (flow["forfeit"] as? [Any] ?? []).compactMap(EngineIdentity.from) {
                 forfeit(id)
             }
-            // A forfeit can end the race under us; fastForwardToEnd's
-            // `ttp_racing` guard is the web's `if (!session.racing) return`.
-            fastForwardToEnd()
+            // A forfeit can end the race under us; the `ttp_racing` guard is
+            // the web's `if (!session.racing) return`.
+            guard sessionHandle != 0, ttp_racing(sessionHandle) != 0 else { return }
+            // THE FLAG — and the race does NOT stop here. Hold the sim's own end
+            // open so the field keeps moving for the flourish (the cars that are
+            // home drive themselves; Game's victory-lap autopilot), then let the
+            // walk paint the cards and hand the phones the board. Without the
+            // hold there is nothing to watch: when the last human is also the
+            // last car, raceOver() is already true on this frame.
+            flourishing = true
+            ttp_hold_end(sessionHandle, 1)
+            run(TTP.obj(ttp_race_flag_live_json(net.roomHandle)))
         }
     }
 
-    /// Every human is home: resolve the rest of the race at once.
+    /// THE FLOURISH'S FAR END: stop holding the race open and resolve the rest
+    /// of it at once.
     ///
     /// NOT COSMETIC, which is what made this worth porting rather than shrugging
     /// at. Calling `endRace()` straight from here — which is what this shell did
@@ -242,8 +252,10 @@ extension GameCoordinator {
     /// `fastForwarding` is read by `dispatch`: the burst is SKIPPING, not
     /// racing, so its events must not spawn visuals. The muting is already the
     /// wasm's (ttp_fast_forward runs silent).
-    func fastForwardToEnd() {
-        guard sessionHandle != 0, ttp_racing(sessionHandle) != 0 else { return }
+    func endFlourish() {
+        guard flourishing, sessionHandle != 0, ttp_racing(sessionHandle) != 0 else { return }
+        flourishing = false
+        ttp_hold_end(sessionHandle, 0)
         display.hold(true)
         fastForwarding = true
         ttp_fast_forward(sessionHandle)

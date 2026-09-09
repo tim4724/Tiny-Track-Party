@@ -4923,6 +4923,8 @@ void raceLiveWalks() {
           race::EndRaceInput ei;
           ei.hasSeries = hasSeries;
           ei.seriesFinished = seriesFinished;
+          ei.intermissionMs = kInterMs;
+          ei.nowMs = nowMs;
           es = race::endRace(ei);
         } else {
           const bool allDone = type == "finish" && !fastForwarding &&
@@ -4994,11 +4996,12 @@ void raceLiveWalks() {
     sameOps(ended, expectedFor(drained, "beach", 1, 0, 10000), "events_live effects at the flag");
     check(!ended.has("results"),
           "the answer carries no results rider — the rows never leave C++");
-    check(opsOf(ended).find("arm-results") != std::string::npos,
-          "…and the endRace composition is in the effects: the board is ARMED, "
-          "not shown — the finish flourish holds the frame first");
-    check(opsOf(ended).find("show-results") == std::string::npos,
-          "…and nothing reveals it at the flag");
+    check(opsOf(ended).find("show-results") != std::string::npos,
+          "…and the endRace composition is in the effects: by the time the race "
+          "ENDS the flourish has already been raced, so the board goes up here");
+    check(opsOf(ended).find("hold-cars") == std::string::npos,
+          "…and the freeze is NOT an effect: this walk runs off the event the "
+          "resolving burst raises, so a hold here would land after the teleport");
 
     // The rows the executor had to hand: the _raceEnd beat's own results object,
     // off the twin's drain. Both halves of the end-of-race walk are gated
@@ -5038,21 +5041,33 @@ void raceLiveWalks() {
     check(!ttp_room_board_value(room).has("settled"),
           "…and it carries no `settled` until the reveal lands");
 
-    // THE FLOURISH'S FAR END. The flag armed the board; this is what a shell
-    // calls when the hold is over, and it is the only place show-results and
-    // the intermission arm can come from now. The deadline is measured from
-    // HERE, not from the flag — a chained race gets its whole budget.
+    // …and the intermission is armed off the END's clock, which is the far side
+    // of the flourish — a chained race gets its whole budget rather than the
+    // flourish eating into it.
+    for (const Value& e : at(ended, "effects").arr) {
+      if (json::str_field(e, "op") != "arm-intermission") continue;
+      check(json::num_field(e, "deadline") == 10000 + kInterMs,
+            "the intermission deadline is measured from the race's END");
+    }
+
+    // THE FLAG, the near side of the flourish: the cards go up and the phones
+    // get the board, and NOTHING freezes or ends. A shell performs this, holds
+    // the session's end open, and keeps updating.
     {
-      const Value rev = parseOrNull(ttp_race_reveal_live_json(room, kInterMs, 20000),
-                                    "reveal");
-      const std::string ops = opsOf(rev);
-      check(ops.find("show-results") != std::string::npos &&
-                ops.find("arm-intermission") != std::string::npos,
-            "the reveal walk shows the board and arms the intermission (" + ops + ")");
-      for (const Value& e : at(rev, "effects").arr) {
-        if (json::str_field(e, "op") != "arm-intermission") continue;
-        check(json::num_field(e, "deadline") == 20000 + kInterMs,
-              "…off the REVEAL's clock, not the flag's");
+      const Value flag = parseOrNull(ttp_race_flag_live_json(room), "flag");
+      const std::string ops = opsOf(flag);
+      check(ops.find("paint-hud") != std::string::npos &&
+                ops.find("broadcast-standings") != std::string::npos &&
+                ops.find("arm-results") != std::string::npos,
+            "the flag paints the cards, hands the phones the board and arms the end (" +
+                ops + ")");
+      check(ops.find("show-results") == std::string::npos &&
+                ops.find("stop-music") == std::string::npos,
+            "…and freezes nothing, shows nothing and silences nothing (" + ops + ")");
+      for (const Value& e : at(flag, "effects").arr) {
+        if (json::str_field(e, "op") != "arm-results") continue;
+        check(json::num_field(e, "ms") == ttp::rt::race::FINISH_FLOURISH_MS,
+              "…for the layer's own flourish");
       }
     }
 

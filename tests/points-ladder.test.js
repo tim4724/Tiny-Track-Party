@@ -83,7 +83,7 @@ test('the gain column fits the widest gain the ladder pays', () => {
     ['shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/ResultsScreen.kt',
       'row.gained?.let { Copy.gained(it) }', /ROW_TYPE \* ([\d.]+)f/],
     ['shells/tvos/TinyTrackParty/Screens/ResultsView.swift',
-      'cell(Copy.gained(row.gained ?? 0)', /Self\.type \* ([\d.]+)/]
+      'Copy.gained(row.gained ?? 0)', /Self\.type \* ([\d.]+)/]
   ]) {
     const src = read(rel);
     const i = src.indexOf(anchor);

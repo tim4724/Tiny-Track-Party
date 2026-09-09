@@ -75,6 +75,9 @@ struct RaceResultsView: View {
     @State private var standings = false
     /// How much of each row's "+N" has moved into its total, 0...1.
     @State private var accounted: Double = 0
+    /// The CUT's fade. The race table dips out and the cup's comes back in its
+    /// place — see runPhases.
+    @State private var listOpacity: Double = 1
 
     private enum Control: Hashable { case primary }
     @FocusState private var focus: Control?
@@ -107,38 +110,64 @@ struct RaceResultsView: View {
 
     // MARK: - The two phases
 
-    /// Hold phase 1, then account the points out against the CLOCK.
+    /// THE CUP ANSWERS IN THREE BEATS: the race, then the cup as it stood before
+    /// this race, then the points landing and the rows moving because of them.
     ///
-    /// Driven from elapsed time and not from accumulated nominal sleeps: a sleep
-    /// is a floor, so summing `tickMs` stretches the tally under a starved main
-    /// thread — on this box, exactly when the next circuit is meshing — and it
-    /// can still be counting when the intermission advances. Reading elapsed
-    /// time lets a starved frame skip ahead and land inside the budget, which is
-    /// why the web drives its `k` off `performance.now()`.
+    /// A cup board carries three orders — the race that just ended (A), the cup
+    /// BEFORE these points (B) and the cup after them (C) — and re-sorting on
+    /// the totals being shown means passing through B, which is uncorrelated
+    /// with the race just watched. The board snapped sideways into the pre-race
+    /// table before a single point had moved, with nothing on screen to account
+    /// for it. So A -> B is a CUT: the list dips out, the heading turns over to
+    /// "Standings", and the cup's own table comes back in its place. Nothing
+    /// travels, so nothing has to be justified. Only B -> C is animated, and
+    /// there every row moves BECAUSE A POINT LANDED.
+    ///
+    /// The tally is driven from elapsed time and not from accumulated nominal
+    /// sleeps: a sleep is a floor, so summing `tickMs` stretches it under a
+    /// starved main thread — on this box, exactly when the next circuit is
+    /// meshing — and it can still be counting when the intermission advances.
     private func runPhases() async {
         standings = !view.twoPhase
         accounted = view.twoPhase ? 0 : 1
+        listOpacity = 1
         // A single-phase board never settles, exactly as on the web: `settle()`
         // there is reachable only from phase 2.
         guard view.twoPhase else { return }
 
         guard await sleep(ms: view.racePhaseMs) else { return }
-        withAnimation(.easeInOut(duration: 0.35)) { standings = true }
 
-        // The beats are FRACTIONS of the model's phase-1 hold, proportional
-        // rather than fixed because racePhaseMs is itself scaled off the
-        // intermission budget — a fixed duration would leave the tally still
-        // running after the next race had started.
+        // THE CUT.
+        let fadeMs = view.racePhaseMs * Self.fadeOfPhase
+        withAnimation(.easeIn(duration: fadeMs / 1000)) { listOpacity = 0 }
+        guard await sleep(ms: fadeMs) else { return }
+        standings = true
+        accounted = 0
+        withAnimation(.easeOut(duration: fadeMs / 1000)) { listOpacity = 1 }
+        // Let the cup's table finish arriving before its numbers start moving.
+        guard await sleep(ms: fadeMs) else { return }
+
+        // THE TALLY. A FIXED NUMBER OF BEATS, whatever the ladder pays: it used
+        // to take one per point the WINNER owed, which tied the length of the
+        // board to the top of POINTS_BY_RANK — widening that from 9 to 15
+        // stretched it by two thirds with nothing here changing. A row still
+        // moves WHOLE POINTS; it just moves as many as the clock has reached.
         let most = view.listRows.map(\.owed).max() ?? 0
         guard most > 0 else { accounted = 1; onSettled(); return }
         let tickMs = max(16.0, view.racePhaseMs * Self.tickOfPhase)
-        let runMs = Double(most) * tickMs
+        let runMs = Double(Self.tallyBeats) * tickMs
         let startedAt = CACurrentMediaTime()
         while true {
-            guard await sleep(ms: tickMs) else { return }
+            guard await sleep(ms: tickMs / 4) else { return }
             let elapsed = (CACurrentMediaTime() - startedAt) * 1000
-            withAnimation(.easeInOut(duration: 0.2)) {
-                accounted = min(1, elapsed / runMs)
+            // QUANTISED TO THE BEAT. Rows owe different amounts, so on a
+            // continuous clock their totals cross a whole number at different
+            // instants — and a row that gains one just before the row under it
+            // does overtakes and is overtaken back inside a frame. Every total
+            // moves on the same beat instead.
+            let beat = min(Self.tallyBeats, Int(elapsed / tickMs))
+            withAnimation(.easeInOut(duration: tickMs / 1000)) {
+                accounted = Double(beat) / Double(Self.tallyBeats)
             }
             if elapsed >= runMs { break }
         }
@@ -163,24 +192,33 @@ struct RaceResultsView: View {
     /// Crowning a champion while rows can still overtake would mark the wrong one.
     private var settled: Bool { standings && accounted >= 1 }
 
-    /// The rows as they stand RIGHT NOW: phase 1 is the race's order untouched;
-    /// phase 2 is the cup table with each row's total part-way to what it banked,
-    /// re-sorted on the totals being shown.
+    /// The rows as they stand RIGHT NOW: the race phase is the race's order and
+    /// states NO cup number at all; the standings phase is the cup table with
+    /// each row's total part-way to what it banked, re-sorted on the totals
+    /// being shown.
     private var rows: [LiveRow] {
         guard standings else {
-            return view.raceRows.map { LiveRow(row: $0, total: $0.pointsBefore ?? $0.points, seat: 0) }
+            return view.raceRows.map { LiveRow(row: $0, total: nil, seat: 0) }
         }
         return view.listRows.enumerated()
             .map { seat, r in
                 let done = Int((accounted * Double(r.owed)).rounded())
                 return LiveRow(row: r, total: (r.pointsBefore ?? 0) + done, seat: seat)
             }
-            // Sorted on the total it is SHOWING, with the model's own final order
-            // as the tie-break — which is what guarantees the last point lands
-            // the board exactly on it.
             .sorted { a, b in
+                if a.row.joining != b.row.joining { return b.row.joining }
                 let ta = a.total ?? -1, tb = b.total ?? -1
-                return ta == tb ? a.seat < b.seat : ta > tb
+                if ta != tb { return ta > tb }
+                // A TIE MOVES NOBODY until the very end. Breaking one by `seat`
+                // — the FINAL order — makes a level score display the finish
+                // early: two rows whose totals leapfrog tie on one beat, the
+                // lower jumps ahead because it is going to end up there, and the
+                // next beat takes it back. Mid-tally a tie keeps the order the
+                // rows came in on; only the settled board sorts on the model's,
+                // which is what lands it exactly where the model said.
+                if accounted >= 1 { return a.seat < b.seat }
+                let pa = a.row.pointsBefore ?? 0, pb = b.row.pointsBefore ?? 0
+                return pa == pb ? a.seat < b.seat : pa > pb
             }
     }
 
@@ -241,10 +279,11 @@ struct RaceResultsView: View {
     private var board: some View {
         let live = rows
         let perColumn = live.count > Self.oneColumnMax ? (live.count + 1) / 2 : live.count
-        // ONE WIDTH PER KIND, decided by the board rather than by the row: a
-        // single-race row has no cup columns at all (the model returns before
-        // them), so it needs neither their width nor their gutter.
-        let width = (view.twoPhase || view.podium) ? Self.boardWidthCup : Self.boardWidthRace
+        // ONE WIDTH, FULL STOP. Every row builds the same three trailing cells
+        // whichever beat it is for, and a beat with nothing to say in one leaves
+        // it EMPTY rather than leaving it out — so a race result, a cup table
+        // and a podium are all the same size, on this shell and on the web.
+        let width = Self.boardWidthCup
         let columns = perColumn > 0 ? (live.count + perColumn - 1) / perColumn : 0
         return HStack(alignment: .top, spacing: Self.columnGap) {
             ForEach(Array(0..<columns), id: \.self) { col in
@@ -262,6 +301,7 @@ struct RaceResultsView: View {
         // whole point of phase 2 — the rows re-ordering under the points that
         // moved them is the only place a player can see what the race DID.
         .frame(height: Self.rowsHeight(perColumn), alignment: .top)
+        .opacity(listOpacity)
     }
 
     // MARK: - The intermission footer
@@ -316,19 +356,28 @@ struct RaceResultsView: View {
     /// Android's drifts from it, which is the substitute for the `pointTickMs`
     /// the model does not answer.
     private static let tickOfPhase = 0.035
+    /// The cut's dip, as a fraction of the model's phase-1 hold.
+    private static let fadeOfPhase = 0.055
+    /// How many beats the tally takes, whatever the ladder pays. See runPhases.
+    private static let tallyBeats = 8
 
     /// `#results h2` (4.6rem) and `.is-champs h2` (3.4rem) on a 1080p board.
     private static let titleSizePlain: CGFloat = 74
     private static let titleSize: CGFloat = 54
 
-    /// The board's width, one number per KIND.
+    /// ONE ROW WIDTH FOR EVERY BOARD, sized by the name column and measured
+    /// against the web.
     ///
-    /// CONTENT-SIZED ON THE WEB (`#results-list` is `min-width: 24rem` over
-    /// shrink-wrapping grid columns), which lands a single-race row near 245
-    /// authored px and a cup row near 410. Fixed rather than measured, because
-    /// the two PHASES must not re-measure between them.
-    private static let boardWidthRace: CGFloat = 250
-    private static let boardWidthCup: CGFloat = 410
+    /// Every beat builds the same three trailing cells and leaves the ones it has
+    /// nothing to say in EMPTY, so a race result, a cup table and a podium are all
+    /// this wide — there is no longer a number per KIND. A row is rank (1.6em) +
+    /// gap + NAME + gap + the three cells (3.6 + 2.7 + 4.2em with two gaps) + 12pt
+    /// padding either side; at the old 410 that left the name about 52pt and every
+    /// eight-row cup board truncated to "Th…", for as long as the board has had two
+    /// columns. The web gives the same 24pt type a ~147pt name column on a 502pt
+    /// row. Fixed rather than measured, because the beats must not re-measure
+    /// between them.
+    private static let boardWidthCup: CGFloat = 502
 
     /// Up to this many rows the board stays one column; above it, two.
     private static let oneColumnMax = 5
@@ -452,37 +501,63 @@ private struct BoardRow: View {
         if row.joining {
             cell(Copy.nextRace, width: Self.type * 8, color: Tokens.ink3)
         } else {
-            // BOTH RACE COLUMNS RETIRE TOGETHER once the cup board settles. The
-            // settled board is the CUP's — its rank is a cup rank and its total
-            // a cup total — and a lap time left sitting between them is the one
-            // number still talking about the race. Faded, never removed: the
-            // cells hold their width so nothing re-measures under the re-sort.
-            let spent = settled && row.kind == "points"
-            cell(row.finished ? Copy.seconds(row.time ?? 0) : Copy.dnf,
-                 width: Self.type * 3.6,
-                 color: spent ? Color.clear : (row.finished ? Tokens.ink2 : Tokens.ink3))
-            // A TIME-ONLY row (a single race) has no cup columns at all — the
-            // model returns before them. Laying them out anyway leaves dead
-            // gutter down the right and narrows the name column by as much.
-            if row.kind != "time" {
-                // Zero is still printed ("+0") and styled quiet, so the column
-                // never goes ragged — but ONLY zero: the whole point of the
-                // column is that the eye picks out who scored.
-                // The width holds the WIDEST gain the ladder pays, not the settled
-                // "+0" the tally ends on: this cell is a hard width, so a gain
-                // that outgrows it clips rather than pushing the board wider.
-                // `.res-gain`'s min-width in display.css carries the same number.
-                cell(Copy.gained(row.gained ?? 0),
-                     width: Self.type * 2.7,
-                     color: spent ? Color.clear : ((row.gained ?? 0) > 0 ? Tokens.brand : Tokens.ink3))
-                // FILLED IN BOTH PHASES and differing only in value: the race
-                // phase shows what this row had coming in, the standings phase
-                // counts up to what it banked. A total that merely APPEARED in
-                // phase 2 would have no readable starting point for the climb.
-                cell(live.total.map(Copy.points) ?? "",
-                     width: Self.type * 4.2, color: Tokens.ink2)
+            // WHICH CELL A BEAT SPEAKS IN is the row's KIND, and the cells it
+            // has nothing to say in are still THERE, empty, holding their width:
+            //   time_gain  the race:  the lap clock. Cup cells reserved.
+            //   points     the cup:   the score and the total. Clock reserved.
+            //   time       a single race: the clock, cup cells reserved too — it
+            //              has no second beat of its own to line up with, so it
+            //              lines up with the OTHER boards.
+            //
+            // THE ROW'S LAST NUMBER SITS AT THE RIGHT EDGE in both beats, which
+            // is why the order differs: the standings end on the total, so the
+            // race ends on the lap clock and keeps its two reserved cells to the
+            // LEFT of it. A row whose one figure floated in the middle read as a
+            // column that had lost its heading.
+            let cup = row.kind == "points"
+            if cup {
+                timeCell("")
+                gainCell(shown: true)
+                ptsCell(shown: true)
+            } else {
+                gainCell(shown: false)
+                ptsCell(shown: false)
+                timeCell(row.finished ? Copy.seconds(row.time ?? 0) : Copy.dnf)
             }
         }
+    }
+
+    private func timeCell(_ text: String) -> some View {
+        // `.res-time { color: var(--ink-2) }` — quieter than the name. At full
+        // ink the lap time competed with the one word that says whose row it is.
+        cell(text, width: Self.type * 3.6,
+             color: row.finished ? Tokens.ink2 : Tokens.ink3)
+    }
+
+    /// Zero is still printed ("+0") and styled quiet, so the column never goes
+    /// ragged — but ONLY zero: the whole point of the column is that the eye
+    /// picks out who scored.
+    ///
+    /// The width holds the WIDEST gain the ladder pays, not the settled "+0" the
+    /// tally ends on: this cell is a hard width, so a gain that outgrows it clips
+    /// rather than pushing the board wider. `.res-gain`'s min-width in
+    /// display.css carries the same number.
+    ///
+    /// It retires at settle — it would otherwise rest on "+0", which reads as
+    /// "scored nothing" on a board that stays up for the rest of the
+    /// intermission. The lap clock needs no retiring: it went at the CUT.
+    private func gainCell(shown: Bool) -> some View {
+        cell(shown ? Copy.gained(row.gained ?? 0) : "",
+             width: Self.type * 2.7,
+             color: settled ? Color.clear : ((row.gained ?? 0) > 0 ? Tokens.brand : Tokens.ink3))
+    }
+
+    /// On screen from the standings phase's FIRST frame, holding the value the
+    /// row came in with: a total that merely APPEARED in the beat that changes it
+    /// would have no readable starting point for the climb.
+    private func ptsCell(shown: Bool) -> some View {
+        cell(shown ? (live.total.map(Copy.points) ?? "") : "",
+             width: Self.type * 4.2, color: Tokens.ink2)
     }
 
     private func cell(_ text: String, width: CGFloat, color: Color) -> some View {

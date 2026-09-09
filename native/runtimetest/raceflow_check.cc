@@ -681,23 +681,20 @@ Value runStep(Shell& s, const std::string& op, const Value& in) {
     v.set("effects", effectsVal(es));
     return v;
   }
-  if (op == "endRace") {
-    race::EndRaceInput ei;
-    ei.hasSeries = json::truthy(in.find("hasSeries"));
-    ei.seriesFinished = json::truthy(in.find("seriesFinished"));
-    race::Effects es = race::endRace(ei);
+  if (op == "flagRace") {
+    race::Effects es = race::flagRace();
     applyAll(s, es);
     Value v = Value::Obj();
     v.set("effects", effectsVal(es));
     return v;
   }
-  if (op == "revealResults") {
-    race::RevealResultsInput ri;
-    ri.hasSeries = json::truthy(in.find("hasSeries"));
-    ri.seriesFinished = json::truthy(in.find("seriesFinished"));
-    ri.intermissionMs = json::num_field(in, "intermissionMs");
-    ri.nowMs = json::num_field(in, "nowMs");
-    race::Effects es = race::revealResults(ri);
+  if (op == "endRace") {
+    race::EndRaceInput ei;
+    ei.hasSeries = json::truthy(in.find("hasSeries"));
+    ei.seriesFinished = json::truthy(in.find("seriesFinished"));
+    ei.intermissionMs = json::num_field(in, "intermissionMs");
+    ei.nowMs = json::num_field(in, "nowMs");
+    race::Effects es = race::endRace(ei);
     applyAll(s, es);
     Value v = Value::Obj();
     v.set("effects", effectsVal(es));

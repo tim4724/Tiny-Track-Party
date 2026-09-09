@@ -105,6 +105,13 @@ class GameCoordinator(
      * watched.
      */
     private var fastForwarding = false
+    /**
+     * THE FLAG FIRES ONCE. The race runs on through the flourish, so `racing` and
+     * humans-all-done are both still true on every poll inside it — without this
+     * the arm re-fires six times a second and leaves stale callbacks that then
+     * freeze the NEXT race.
+     */
+    private var flourishing = false
 
     /**
      * Whether any CONTROL has actually reached a car this session, and whether the
@@ -1025,15 +1032,27 @@ class GameCoordinator(
         // dropped-but-reconnectable racer six times a second, and with one phone
         // down the auto-pause freeze turns into a return to the lobby.
         val flow = TtpJson.obj(Ttp.ttp_ui_race_flow_live_json(sessionHandle, net.roomHandle))
-        if (flow.optBoolean("allDone") && !raceEnded) {
+        if (flow.optBoolean("allDone") && !raceEnded && !flourishing) {
             val f = flow.optJSONArray("forfeit") ?: JSONArray()
             for (i in 0 until f.length()) EngineId.from(f.opt(i))?.let { forfeit(it) }
-            fastForwardToEnd()
+            // A forfeit can end the race under us; this guard is the web's
+            // `if (!session.racing) return`.
+            if (sessionHandle == 0 || Ttp.ttp_racing(sessionHandle) == 0) return
+            // THE FLAG — and the race does NOT stop here. Hold the sim's own end
+            // open so the field keeps moving for the flourish (the cars that are
+            // home drive themselves; Game's victory-lap autopilot), then let the
+            // walk paint the cards and hand the phones the board. Without the
+            // hold there is nothing to watch: when the last human is also the
+            // last car, raceOver() is already true on this frame.
+            flourishing = true
+            Ttp.ttp_hold_end(sessionHandle, 1)
+            run(TtpJson.obj(Ttp.ttp_race_flag_live_json(net.roomHandle)))
         }
     }
 
     /**
-     * Every human is home: resolve the rest of the race at once.
+     * The flourish's far end: stop holding the race open and resolve the rest of
+     * it at once.
      *
      * NOT COSMETIC. Ending the race straight from here would end it with the BOTS
      * STILL MID-LAP, so they reach the results board unfinished and the standings a
@@ -1046,8 +1065,10 @@ class GameCoordinator(
      * the field at the finish moment the chase camera is seen whipping across the
      * track to a far-away pose, through the translucent results glass.
      */
-    private fun fastForwardToEnd() {
-        if (sessionHandle == 0 || Ttp.ttp_racing(sessionHandle) == 0) return
+    private fun endFlourish() {
+        if (!flourishing || sessionHandle == 0 || Ttp.ttp_racing(sessionHandle) == 0) return
+        flourishing = false
+        Ttp.ttp_hold_end(sessionHandle, 0)
         display.hold(true)
         fastForwarding = true
         Ttp.ttp_fast_forward(sessionHandle)
@@ -1615,21 +1636,20 @@ class GameCoordinator(
     /**
      * THE FINISH FLOURISH. The race's end arms the board rather than showing it:
      * the sim raises the last car's finish and raceOver in one update, so a board
-     * painted at the flag lands on the same frame the flag does and the finisher
-     * never sees the place card their own cell just earned. This holds the frozen
-     * finish frame for [ms] (race_flow.h FINISH_FLOURISH_MS) and then asks the
-     * walk for the reveal — the only place show-results and the intermission arm
-     * come from now.
+     * painted at the flag would land on the same frame the flag does and the
+     * finisher would never see the place card their own cell just earned. When
+     * this arrives the race is STILL RUNNING; after [ms] (race_flow.h
+     * FINISH_FLOURISH_MS) endFlourish drops the hold, freezes the picture and
+     * resolves what is left, and the sim's own _raceEnd lands the board.
      */
     fun armResults(ms: Double) {
         resultsTask?.let { main.removeCallbacks(it) }
-        val reveal = Runnable {
+        val end = Runnable {
             resultsTask = null
-            run(TtpJson.obj(Ttp.ttp_race_reveal_live_json(
-                net.roomHandle, Ttp.ttp_race_intermission_ms(), nowMs())))
+            endFlourish()
         }
-        resultsTask = reveal
-        main.postDelayed(reveal, ms.toLong())
+        resultsTask = end
+        main.postDelayed(end, ms.toLong())
     }
 
     fun armIntermission(ms: Double, deadline: Double) {
@@ -1658,6 +1678,7 @@ class GameCoordinator(
      * the next race (or back to the lobby) would paint the board over a countdown.
      */
     fun clearIntermission() {
+        flourishing = false
         resultsTask?.let { main.removeCallbacks(it) }
         resultsTask = null
         intermissionTask?.let { main.removeCallbacks(it) }

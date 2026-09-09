@@ -77,9 +77,14 @@ test('gallery results board: plain finishes plus the joining row, in two columns
   // Nine rows do not fit a 720p TV in one column — the title and the button used
   // to be pushed off the screen edges.
   await expect(page.locator('#results-list')).toHaveClass(/is-two-col/);
-  // A single race has ONE phase: it is already what it will be.
+  // A single race has ONE phase: it is already what it will be. It STATES only
+  // the lap time — there are no cup points anywhere in it — but it still builds
+  // the two cells that would carry them, EMPTY, so a race board, a cup table and
+  // a podium are all one row width. (Eight, not nine: the joining row says
+  // "Next race" and carries nothing else.)
   await expect(page.locator('#results-list li .res-time').first()).toBeVisible();
-  await expect(page.locator('#results-list li .res-pts')).toHaveCount(0);
+  await expect(page.locator('#results-list li .res-pts')).toHaveCount(8);
+  await expect(page.locator('#results-list li .res-pts')).toHaveText(new Array(8).fill(''));
   await expect(page.locator('#results-sub')).toBeHidden();
 });
 

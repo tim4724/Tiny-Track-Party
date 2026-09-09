@@ -1,6 +1,9 @@
 package games.couchpad.tinytrack
 
 import android.os.SystemClock
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,6 +36,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
@@ -66,6 +70,13 @@ fun ResultsScreen(state: GameState, game: GameCoordinator) {
     var standings by remember(results) { mutableStateOf(!results.twoPhase) }
     // How many points each row has moved out of its "+N" and into its total.
     var accounted by remember(results) { mutableStateOf(0f) }
+    // The CUT's fade: the race table dips out and the cup's comes back in its
+    // place. See the LaunchedEffect below.
+    var listVisible by remember(results) { mutableStateOf(true) }
+    val listAlpha by animateFloatAsState(
+        if (listVisible) 1f else 0f,
+        tween(((results.racePhaseMs * FADE_OF_PHASE).toInt()).coerceAtLeast(1)),
+        label = "results-cut")
 
     // THE SETTLE STAMP IS THIS SHELL'S OWN BEAT. The phones are handed the board
     // the instant the race ends, which is the instant this screen STARTS its
@@ -84,15 +95,33 @@ fun ResultsScreen(state: GameState, game: GameCoordinator) {
     LaunchedEffect(results) {
         if (!results.twoPhase) return@LaunchedEffect
         delay(results.racePhaseMs.toLong())
+
+        // THE CUT. A cup board carries three orders — the race that just ended
+        // (A), the cup BEFORE these points (B) and the cup after them (C) — and
+        // re-sorting on the totals being shown means passing through B, which is
+        // uncorrelated with the race just watched: the board snapped sideways
+        // into the pre-race table before a single point had moved, with nothing
+        // on screen to account for it. So A -> B is a CUT, not a move: the list
+        // dips out, the heading turns over to "Standings", and the cup's own
+        // table comes back in its place. Only B -> C is animated, and there
+        // every row moves BECAUSE A POINT LANDED.
+        val fadeMs = (results.racePhaseMs * FADE_OF_PHASE).toLong()
+        listVisible = false
+        delay(fadeMs)
         standings = true
-        // The beats are FRACTIONS of the model's phase-1 hold, proportional rather
-        // than fixed because racePhaseMs is itself scaled off the intermission
-        // budget — a fixed duration would leave the tally still running after the
-        // next race had started.
+        accounted = 0f
+        listVisible = true
+        delay(fadeMs)   // let the cup's table arrive before its numbers move
+
+        // THE TALLY. A FIXED NUMBER OF BEATS, whatever the ladder pays: it used
+        // to take one per point the WINNER owed, which tied the length of the
+        // board to the top of POINTS_BY_RANK — widening that from 9 to 15
+        // stretched it by two thirds with nothing here changing. A row still
+        // moves WHOLE POINTS; it just moves as many as the clock has reached.
         val most = results.listRows.maxOfOrNull { it.owed() } ?: 0
         if (most == 0) { accounted = 1f; game.settleStandings(); return@LaunchedEffect }
         val tickMs = max(16.0, results.racePhaseMs * TICK_OF_PHASE)
-        val runMs = most * tickMs
+        val runMs = TALLY_BEATS * tickMs
         // Driven from the CLOCK, not from accumulated nominal delays. `delay` is a
         // floor, so summing tickMs stretches the tally under a starved main thread
         // — on this GPU, exactly when the next circuit is meshing — and it can still
@@ -101,9 +130,15 @@ fun ResultsScreen(state: GameState, game: GameCoordinator) {
         // drives `k` off performance.now().
         val startedAt = SystemClock.uptimeMillis()
         while (true) {
-            delay(tickMs.toLong())
+            delay((tickMs / 4).toLong())
             val elapsed = (SystemClock.uptimeMillis() - startedAt).toDouble()
-            accounted = (elapsed / runMs).toFloat().coerceIn(0f, 1f)
+            // QUANTISED TO THE BEAT. Rows owe different amounts, so on a
+            // continuous clock their totals cross a whole number at different
+            // instants — and a row that gains one just before the row under it
+            // does overtakes and is overtaken back inside a frame. Every total
+            // moves on the same beat instead.
+            val beat = min(TALLY_BEATS, (elapsed / tickMs).toInt())
+            accounted = beat.toFloat() / TALLY_BEATS
             if (elapsed >= runMs) break
         }
         accounted = 1f
@@ -111,21 +146,28 @@ fun ResultsScreen(state: GameState, game: GameCoordinator) {
         game.settleStandings()
     }
 
-    // The rows as they stand RIGHT NOW: phase 1 is the race's order untouched;
-    // phase 2 is the cup table with each row's total part-way to what it banked,
-    // re-sorted on the totals being shown.
+    // The rows as they stand RIGHT NOW: the race phase is the race's order and
+    // states NO cup number at all; the standings phase is the cup table with each
+    // row's total part-way to what it banked, re-sorted on the totals being shown.
     val rows: List<LiveRow> = if (!standings) {
-        results.raceRows.map { LiveRow(it, it.pointsBefore ?: it.points) }
+        results.raceRows.map { LiveRow(it, null) }
     } else {
         results.listRows
             .mapIndexed { seat, r ->
                 val done = (accounted * r.owed()).roundToInt()
                 LiveRow(r, (r.pointsBefore ?: 0) + done, seat = seat)
             }
-            // Sorted on the total it is SHOWING, with the model's own final order as
-            // the tie-break — which is what guarantees the last point lands the
-            // board exactly on it.
-            .sortedWith(compareByDescending<LiveRow> { it.total ?: -1 }.thenBy { it.seat })
+            // A TIE MOVES NOBODY until the very end. Breaking one by `seat` — the
+            // FINAL order — makes a level score display the finish early: two rows
+            // whose totals leapfrog tie on one beat, the lower jumps ahead because
+            // it is going to end up there, and the next beat takes it back.
+            // Mid-tally a tie keeps the order the rows came IN on; only the settled
+            // board sorts on the model's, which is what lands it exactly there.
+            .sortedWith(
+                compareBy<LiveRow> { it.row.joining }
+                    .thenByDescending { it.total ?: -1 }
+                    .thenByDescending { if (accounted >= 1f) 0 else (it.row.pointsBefore ?: 0) }
+                    .thenBy { it.seat })
     }
 
     // The title, the medals and the footer all wait for the last point. Crowning a
@@ -211,13 +253,13 @@ fun ResultsScreen(state: GameState, game: GameCoordinator) {
                 // and the rest the right: the same reading order the phone's board
                 // uses, so two screens rank alike.
                 val perColumn = if (rows.size > ONE_COL_MAX) (rows.size + 1) / 2 else rows.size
-                // ONE WIDTH PER KIND, decided by the board rather than by the row:
-                // a single-race row has no cup columns at all (the model returns
-                // before them), so it needs neither their width nor their gutter.
-                val boardWidth =
-                    if (results.twoPhase || results.podium) BOARD_WIDTH_CUP else BOARD_WIDTH_RACE
+                // ONE WIDTH, FULL STOP. Every row builds the same three trailing
+                // cells whichever beat it is for, and a beat with nothing to say in
+                // one leaves it EMPTY rather than leaving it out — so a race result,
+                // a cup table and a podium are all the same size, here and on the web.
+                val boardWidth = BOARD_WIDTH_CUP
                 Row(
-                    Modifier.width(
+                    Modifier.alpha(listAlpha).width(
                         if (rows.size > ONE_COL_MAX) boardWidth * 2 + COL_GAP else boardWidth),
                     horizontalArrangement = Arrangement.spacedBy(COL_GAP),
                 ) {
@@ -299,6 +341,10 @@ fun ResultsScreen(state: GameState, game: GameCoordinator) {
 
 /** One point accounted for, per row, per tick — as a fraction of phase 1's hold. */
 private const val TICK_OF_PHASE = 0.035
+/** The cut's dip, as a fraction of the model's phase-1 hold. */
+private const val FADE_OF_PHASE = 0.055
+/** How many beats the tally takes, whatever the ladder pays. See the cut above. */
+private const val TALLY_BEATS = 8
 
 /**
  * The two title sizes, and which one a board takes is decided by whether it is a
@@ -323,19 +369,19 @@ private data class LiveRow(
 )
 
 /**
- * The board's width. Every band inside it matches, so the column wraps to one
- * number.
+ * ONE ROW WIDTH FOR EVERY BOARD, sized by the name column and measured against
+ * the web.
  *
- * CONTENT-SIZED ON THE WEB (`#results-list` is `min-width: 24rem` over
- * shrink-wrapping grid columns), which lands a single-race row near 245 authored px
- * and a cup row near 410 — the trailing numbers sit a few characters after the
- * name. At 940 the name and the time were separated by a third of the screen, and
- * a full eight-row board went bezel to bezel. Fixed rather than measured, because
- * the two PHASES must not re-measure between them; one number per KIND is what
- * gives both properties at once.
+ * Every beat builds the same three trailing cells and leaves the ones it has
+ * nothing to say in EMPTY, so a race result, a cup table and a podium are all this
+ * wide — there is no longer a number per KIND. A row is rank (1.6em) + gap + NAME
+ * + gap + the three cells (3.6 + 2.7 + 4.2em with two gaps) + 12dp padding either
+ * side; at the old 410 that left the name about 52dp and every eight-row cup board
+ * truncated to "Th…", for as long as the board has had two columns. The web gives
+ * the same 24dp type a ~147dp name column on a 502dp row. Fixed rather than
+ * measured, because the beats must not re-measure between them.
  */
-private val BOARD_WIDTH_RACE = 250.dp
-private val BOARD_WIDTH_CUP = 410.dp
+private val BOARD_WIDTH_CUP = 502.dp
 
 /** Up to this many rows the board stays one column; above it, two. */
 private const val ONE_COL_MAX = 5
@@ -445,66 +491,69 @@ private fun BoardRow(rank: Int, live: LiveRow, settled: Boolean, modifier: Modif
         if (row.joining) {
             CellText(Copy.nextRace, ROW_TYPE * 8f, size = ROW_TYPE, color = Tokens.ink3)
         } else {
-            // BOTH RACE COLUMNS RETIRE TOGETHER once the cup board settles. The
-            // settled board is the CUP's — its rank is a cup rank and its total a
-            // cup total — and a lap time left sitting between them is the one
-            // number still talking about the race. It had the whole race phase to
-            // be read in. Faded, never removed: the cells hold their width so
-            // nothing re-measures under the re-sort.
-            val spent = settled && row.kind == "points"
-            CellText(
-                // `time` is explicitly null for a car that did not finish, so null
-                // IS the DNF signal — there is no separate flag.
-                row.time?.let { Copy.seconds(it) } ?: Copy.dnf,
-                ROW_TYPE * 3.6f, size = ROW_TYPE,
-                color = when {
-                    spent -> Color.Transparent
-                    row.time == null -> Tokens.ink3
-                    // `.res-time { color: var(--ink-2) }` — quieter than the name.
-                    // At full ink the lap time competed with the one word on the
-                    // row that says whose it is.
-                    else -> Tokens.ink2
-                },
-            )
-            // A TIME-ONLY row (a single race) has no cup columns at all — the model
-            // returns before them. Laying them out anyway leaves ~184 authored px of
-            // dead gutter down the right and narrows the name column by as much. The
-            // fixed widths are load-bearing only BETWEEN THE TWO PHASES of a cup
-            // board, where a single-race board has none.
-            if (row.kind != "time") {
-                // Zero is still printed ("+0") and styled quiet, so the column never
-                // goes ragged — but ONLY zero. `.res-gain` is `--brand` green and
-                // `.res-gain.is-zero` is the quiet `--ink-3`: the whole point of the
-                // column is that the eye picks out who scored, and painting every
-                // gain the quiet colour handed a "+15" the exact role the design
-                // reserves for "+0".
-                //
-                // The width holds the WIDEST gain the ladder pays, not the settled
-                // "+0" the tally ends on: this cell is a hard width, so a gain that
-                // outgrows it clips rather than pushing the board wider.
-                // `.res-gain`'s min-width in display.css carries the same number.
+            // WHICH CELL A BEAT SPEAKS IN is the row's KIND, and the cells it has
+            // nothing to say in are still THERE, empty, holding their width:
+            //   time_gain  the race:  the lap clock. Cup cells reserved.
+            //   points     the cup:   the score and the total. Clock reserved.
+            //   time       a single race: the clock, cup cells reserved too — it
+            //              has no second beat of its own to line up with, so it
+            //              lines up with the OTHER boards.
+            //
+            // THE ROW'S LAST NUMBER SITS AT THE RIGHT EDGE in both beats, which is
+            // why the order differs: the standings end on the total, so the race
+            // ends on the lap clock and keeps its two reserved cells to the LEFT of
+            // it. A row whose one figure floated in the middle read as a column
+            // that had lost its heading.
+            val cup = row.kind == "points"
+            // `time` is explicitly null for a car that did not finish, so null IS
+            // the DNF signal — there is no separate flag. `.res-time` is --ink-2,
+            // quieter than the name: at full ink it competed with the one word on
+            // the row that says whose it is.
+            val time = @Composable {
                 CellText(
-                    row.gained?.let { Copy.gained(it) } ?: "",
+                    if (cup) "" else (row.time?.let { Copy.seconds(it) } ?: Copy.dnf),
+                    ROW_TYPE * 3.6f, size = ROW_TYPE,
+                    color = if (row.time == null) Tokens.ink3 else Tokens.ink2,
+                )
+            }
+            // Zero is still printed ("+0") and styled quiet, so the column never
+            // goes ragged — but ONLY zero. `.res-gain` is `--brand` green and
+            // `.res-gain.is-zero` the quiet `--ink-3`: the point of the column is
+            // that the eye picks out who scored, and painting every gain the quiet
+            // colour handed a "+15" the exact role the design reserves for "+0".
+            //
+            // The width holds the WIDEST gain the ladder pays, not the settled "+0"
+            // the tally ends on: this cell is a hard width, so a gain that outgrows
+            // it clips rather than pushing the board wider. `.res-gain`'s min-width
+            // in display.css carries the same number.
+            //
+            // It retires at settle — it would rest on "+0", reading as "scored
+            // nothing". The lap clock needs no retiring: it went at the CUT.
+            val gain = @Composable {
+                CellText(
+                    if (cup) row.gained?.let { Copy.gained(it) } ?: "" else "",
                     ROW_TYPE * 2.7f, size = ROW_TYPE,
                     color = when {
-                        spent -> Color.Transparent
+                        settled -> Color.Transparent
                         (row.gained ?: 0) > 0 -> Tokens.brand
                         else -> Tokens.ink3
                     },
                 )
-                // FILLED IN BOTH PHASES and differing only in value: the race phase
-                // shows what this row had coming in, the standings phase counts up to
-                // what it banked. A total that merely APPEARED in phase 2 would have
-                // no readable starting point for the climb.
-                // `.res-pts { color: var(--ink-2) }`. Purple is the ITEMS role in
-                // this palette and appears nowhere on the web's board — it made the
-                // total the loudest thing in the row, which is backwards: the total
-                // is data, and what the row is ABOUT is whose it is.
+            }
+            // On screen from the standings phase's FIRST frame, holding the value
+            // the row came in with: a total that merely APPEARED in the beat that
+            // changes it would have no readable starting point for the climb.
+            // `.res-pts` is --ink-2. Purple is the ITEMS role in this palette and
+            // appears nowhere on the web's board — it made the total the loudest
+            // thing in the row, which is backwards: the total is data, and what the
+            // row is ABOUT is whose it is.
+            val pts = @Composable {
                 CellText(
-                    live.total?.let { Copy.points(it) } ?: "",
+                    if (cup) live.total?.let { Copy.points(it) } ?: "" else "",
                     ROW_TYPE * 4.2f, size = ROW_TYPE, color = Tokens.ink2,
                 )
             }
+            if (cup) { time(); gain(); pts() } else { gain(); pts(); time() }
         }
     }
 }
