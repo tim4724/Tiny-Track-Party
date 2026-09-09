@@ -74,7 +74,9 @@ const ONE_COL_MAX = 5;
 // budget, which E2E shrinks to milliseconds: fixed durations would leave the
 // animation still running after the next race had started.
 const TICK_OF_PHASE = 0.035;  // one point accounted for, per row, per tick
-const FLIP_OF_PHASE = 0.055;  // a rank change glides over rather than snapping
+// The fallback for a board with nothing to count. Every other board's move is as
+// long as its own tally (most * tickMs), so the list arrives with the numbers.
+const FLIP_OF_PHASE = 0.055;
 
 let phaseTimer = null;
 let countTimer = null;
@@ -218,35 +220,47 @@ function paintNext(v, show) {
   next.append(b, ' · starting in ', secs, '…');
 }
 
-// ---- phase 2: the points are accounted for, one at a time -------------------
-// Every tick, each row that still has points owing moves ONE of them out of its
-// "+N" and into its total — and the board immediately re-ranks on the totals it
-// is now showing. So a row overtakes another AT the point that does it, and the
-// swap has a visible cause instead of being a re-sort you are asked to trust.
+// ---- phase 2: the race order becomes the cup order --------------------------
+// TWO THINGS RUN TOGETHER AND NEITHER DRIVES THE OTHER. The totals climb, one
+// whole point at a time, from what each row held coming in to what it banked;
+// and the list glides, ONCE, from the race's finishing order straight into the
+// cup's. The intermediate totals do not position anything.
 //
-// Discreteness is what makes that legible. Interpolating the same totals
-// continuously reaches the same place, but every rank change lands mid-blur with
-// nothing to attribute it to; one point at a time gives each overtake its own
-// beat. It also bounds the work: the tally runs as many ticks as the WINNER owes
-// points, however big the field is — widening the ladder lengthens it, so the
-// gallery's settle budgets are what feel a change to POINTS_BY_RANK first.
+// THERE ARE THREE ORDERS ON A CUP BOARD, and that is the whole reason this is
+// choreography rather than a live sort:
+//   A  the race that just ended      (phase 1's order)
+//   B  the cup BEFORE these points   (what the totals on screen say at t=0)
+//   C  the cup AFTER them            (the model's listRows — where we land)
+// Sorting on the totals being shown means passing through B, and B is
+// uncorrelated with the race the viewer has just watched: the board would snap
+// sideways into the pre-race table before a single point had moved, which is a
+// jump with no cause on screen. Worse, B is where it spends the FIRST TICK —
+// 32 ms in, before any of the climbing that is supposed to explain it.
 //
-// The first tick re-ranks hard, because phase 1 was ordered by the RACE while
-// its totals were the cup's. That movement is honest — it is the board catching
-// up to figures it was already showing — and it happens once, before any of the
-// small crossings.
+// The totals still step WHOLE POINTS, because the display only ever shows
+// integers and a total that ticks is one the eye can follow. That also sets the
+// length of the whole phase, movement included: the tally runs as many ticks as
+// the WINNER owes points, however big the field is — widening the ladder
+// lengthens it, so the gallery's settle budgets are what feel a change to
+// POINTS_BY_RANK first.
+//
+// So the order is the model's from the first frame of this phase and no shell
+// sorts anything. What is animated is the row's journey to the seat it already
+// has. (Race 1 of a cup is the degenerate case and it is free: everyone comes in
+// on zero, the ladder is monotonic in finishing rank, so A = B = C and nothing
+// moves at all.)
 //
 // The title, the medals and the next-up footer all wait for the last point.
-// Crowning a champion, or moving the CHAMPS sticker in, while rows can still
-// overtake would mark the wrong row.
+// Crowning a champion, or moving the CHAMPS sticker in, while rows can still be
+// travelling would mark the wrong row.
 function toStandings(v) {
   phaseTimer = null;
   const nodes = new Map();
   for (const li of el('results-list').children) nodes.set(li.dataset.pid, li);
 
-  // Live state per row, seeded from the model. `seat` is the row's index in the
-  // model's FINAL order and is the tie-break, which is what guarantees the last
-  // point lands the board exactly on it.
+  // Live state per row, IN THE MODEL'S FINAL ORDER. `seat` is the row's index in
+  // it, and it is the whole ranking: nothing here re-derives a position from the
+  // numbers, so the board cannot land anywhere but on what the model said.
   const live = v.listRows.map((row, seat) => ({
     row, seat, li: nodes.get(String(row.playerId)),
     owed0: row.kind === 'points' ? Math.max(0, Math.round(row.points - row.pointsBefore)) : 0,
@@ -257,7 +271,9 @@ function toStandings(v) {
   const tickMs = Math.max(16, v.racePhaseMs * TICK_OF_PHASE);
   const flipMs = v.racePhaseMs * FLIP_OF_PHASE;
   const most = live.reduce((m, r) => Math.max(m, r.owed0), 0);
-  if (!most) return settle(v, live, flipMs);
+  // A board with nothing to count still has to become the cup's: the move gets
+  // the bare flip duration, since there is no tally for it to keep pace with.
+  if (!most) { glide(live, flipMs); return settle(v, live); }
 
   // Driven by ELAPSED TIME, not by counting ticks. Each row still steps whole
   // points — the display only ever shows integers, which is what makes an
@@ -266,6 +282,9 @@ function toStandings(v) {
   // then skips ahead and still finishes inside its budget, where a fixed point
   // per firing would stretch the tally for as long as the contention lasted.
   const runMs = most * tickMs;
+  // The journey takes exactly as long as the counting, so the board arrives all
+  // at once: the last point lands on a list that has just stopped moving.
+  glide(live, runMs);
   const t0 = performance.now();
   countTimer = setInterval(() => {
     const k = Math.min(1, (performance.now() - t0) / runMs);
@@ -278,29 +297,26 @@ function toStandings(v) {
       r.li.querySelector('.res-gain').textContent = `+${r.owed}`;
       r.li.querySelector('.res-pts').textContent = `${r.total} pts`;
     }
-    reflow(live, flipMs);
-    if (k >= 1) { clearInterval(countTimer); countTimer = null; settle(v, live, flipMs); }
+    if (k >= 1) { clearInterval(countTimer); countTimer = null; settle(v, live); }
   }, Math.min(tickMs, 32));
 }
 
-// Rank on the totals CURRENTLY SHOWN, and FLIP anything that moved. Joining rows
-// raced nothing and stay under the field; everything else is total-desc with the
-// model's own order breaking ties, so the final tick cannot land anywhere but on
-// what the model said.
-function reflow(live, flipMs) {
+// THE ONE MOVE: put the rows in the model's order and slide each from wherever
+// it is to where it now belongs. A FLIP — re-order first, invert the difference,
+// then ease the inversion out — so the browser lays the list out once and every
+// row travels on the compositor.
+//
+// Called ONCE per board, not per tick, which is what makes the slides readable:
+// a glide re-issued every 91 ms was cut off at two-thirds of its own travel and
+// restarted from mid-flight, stacking ease-out on ease-out. It is also why the
+// order is a straight `seat` sort with no numbers in it — the model ranked this
+// board, and re-deriving that rank here from figures that are still climbing is
+// how the pre-race table (B, above) got on screen.
+function glide(live, ms) {
   const list = el('results-list');
-  const want = [...live].sort((a, b) => {
-    const aj = a.row.kind === 'joining', bj = b.row.kind === 'joining';
-    if (aj !== bj) return aj ? 1 : -1;
-    if (!aj && a.total !== b.total) return b.total - a.total;
-    return a.seat - b.seat;
-  });
-  if (want.every((r, i) => list.children[i] === r.li)) return;   // nothing moved
+  const want = [...live].sort((a, b) => a.seat - b.seat);
+  if (want.every((r, i) => list.children[i] === r.li)) return;   // nothing to move
 
-  // Measured mid-flight on purpose: a rect taken while a previous slide is still
-  // running is where the row VISUALLY is, which is exactly what the next
-  // inversion has to start from. Without that an overtake landing on top of one
-  // still settling would jump.
   const before = new Map();
   for (const li of list.children) before.set(li.dataset.pid, li.getBoundingClientRect());
   for (const r of want) {
@@ -311,6 +327,7 @@ function reflow(live, flipMs) {
     r.li.style.animation = 'none';
     list.appendChild(r.li);                 // appendChild MOVES an existing child
   }
+  const moving = [];
   for (const li of list.children) {
     const from = before.get(li.dataset.pid);
     if (!from) continue;
@@ -319,10 +336,20 @@ function reflow(live, flipMs) {
     if (!dx && !dy) continue;
     li.style.transition = 'none';
     li.style.transform = `translate(${dx}px, ${dy}px)`;
+    // Two rows swapping occupy the same strip of screen halfway through, and
+    // over a whole tally that overlap is on show rather than gone in a frame.
+    // The row climbing passes IN FRONT — an overtake reads as one thing going
+    // past another, not as two things dissolving through each other.
+    li.style.position = 'relative';
+    li.style.zIndex = dy > 0 ? '2' : '1';
+    moving.push(li);
   }
   void list.offsetWidth;        // commit the inverted positions before easing them out
-  for (const li of list.children) {
-    li.style.transition = `transform ${flipMs}ms cubic-bezier(0.2, 0.9, 0.25, 1)`;
+  for (const li of moving) {
+    // Eased at BOTH ends, unlike the old snap: this move now lasts as long as
+    // the counting beside it, so it should set off and arrive with the numbers
+    // rather than lunging away from the start.
+    li.style.transition = `transform ${ms}ms cubic-bezier(0.45, 0.05, 0.25, 1)`;
     li.style.transform = '';
   }
 }
@@ -330,8 +357,7 @@ function reflow(live, flipMs) {
 // The last point has landed: the order is final, so the board can now say what
 // it is. The spent "+0" empties rather than resting on a figure that reads as
 // "scored nothing" for the rest of the intermission.
-function settle(v, live, flipMs) {
-  reflow(live, flipMs);
+function settle(v, live) {
   el('results').classList.toggle('is-podium', v.podium);
   el('results-title').textContent = TITLE_COPY[v.titleKey](v);
   // HELD, not hidden — same reason as the footer. A podium drops the "Race 4 of
