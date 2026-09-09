@@ -2400,6 +2400,29 @@ void TtpRenderer::renderAmbient(const TtpFrameInput& input) {
         mPollenMat->setParameter("halfSize",
                 mAmbSize * (float) rows * std::tan(fov * (float) M_PI / 360.0f));
         mPollenMat->setParameter("time", mTime); // drives the shader-side drift
+        // The COUNT is per camera too: every cell draws its own box, so a
+        // split multiplies the cloud's vertex work by its cells — and on the
+        // Android box that work was the whole of the snow cup's cost over
+        // the beach (docs/perf/androidtv-frame-map.md). A cell draws the
+        // first count/cells particles in a box shrunk by sqrt(cells): the
+        // same flakes per unit of world as the solo view has, nearest the
+        // camera, and the far ones — a few pixels in a quarter-size cell —
+        // are what goes. `lite` then drops the floor tap and the fog from
+        // the vertex stage in those cells: the shrunk box ends inside the
+        // fog's onset, and a flake failing to settle is under what the eye
+        // resolves there (vpoint.mat).
+        if (vc && vc != mAmbCells) {
+            mAmbCells = vc;
+            auto& rcm = mEngine->getRenderableManager();
+            const auto ri = rcm.getInstance(mPollen.entity);
+            const uint32_t particles = (uint32_t) mPollen.idx.size() / 3;
+            if (ri && particles) {
+                rcm.setGeometryAt(ri, 0, RenderableManager::PrimitiveType::TRIANGLES,
+                        mPollen.vb, mPollen.ib, 0, std::max(1u, particles / vc) * 3);
+            }
+            mPollenMat->setParameter("boxXZ", kAmbBox / std::sqrt((float) vc));
+            mPollenMat->setParameter("lite", vc >= 3 ? 1.0f : 0.0f);
+        }
     }
 
     // Frame pacing. beginFrame() drops a frame when the GPU is behind — it waits

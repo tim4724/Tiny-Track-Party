@@ -1615,6 +1615,7 @@ void TtpRenderer::releaseScene() {
     for (auto& m : mBurstMeshes) destroyMesh(m);
     for (auto& m : mBurstBalls) destroyMesh(m);
     destroyMesh(mPollen);
+    mAmbCells = 0; // the next build's cloud is fitted to its cells on its first frame
     for (auto& m : mRockets) destroyMesh(m);
     for (auto& m : mRocketFlames) destroyMesh(m);
     // PARKED, NOT DESTROYED — see mBodyPool. The next build's field is usually

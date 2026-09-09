@@ -3,11 +3,15 @@
 // texture, which is billboarded per camera and perfectly round; a world-space
 // polyhedron can be neither, and a diamond is exactly what it looked like.
 //
-// So the quad is spun toward the camera IN THE VERTEX SHADER: every particle is
-// four vertices carrying the same world centre, and uv0 is the corner in
-// [-1,1], pushed out along the camera's right/up. That makes it correct per
-// VIEW for free — the split-screen cells all look in different directions, and
-// one CPU billboard can only ever face one of them.
+// So the sprite is spun toward the camera IN THE VERTEX SHADER: every particle
+// is THREE vertices carrying the same world centre, and uv0 is the corner of a
+// triangle circumscribing the unit circle (radius 2 from the centre), pushed
+// out along the camera's right/up. The fragment cuts the circle out of it, so
+// a triangle draws the same round sprite a quad did for three quarters of the
+// vertex work — and on the Android box the cloud is vertex-bound, every corner
+// running the whole of this stage. Per VIEW for free — the split-screen cells
+// all look in different directions, and one CPU billboard can only ever face
+// one of them.
 //
 // THE CLOUD IS A CHEAT, fully evaluated here in the vertex shader. The mesh
 // holds only immutable SEEDS in a boxXZ-wide column; each frame this shader
@@ -23,7 +27,10 @@
 // dissolves instead of popping in, and the flake-floor fade — a max-height
 // grid of terrain + road deck, sampled as a texture — so snow settles onto an
 // elevated deck instead of depth-slicing through it. Other kinds bind a 1x1
-// "floor at -1000" texel and are untouched by it.
+// "floor at -1000" texel and are untouched by it. `lite` skips that tap and
+// the fog term: the renderer sets it for a split's quarter-size cells, where
+// the box is shrunk to well inside the fog's onset and a flake failing to
+// settle is under the size the eye resolves (TtpRenderer::renderAmbient).
 //
 // The fragment then rebuilds the sprite texture's radial gradient from the same
 // uv (opaque core, 0.9 at 0.4r, out to nothing at the rim), so the silhouette
@@ -51,6 +58,7 @@ material {
         { type : float, name : bob },
         { type : float, name : bandH, precision : high },
         { type : float, name : boxXZ, precision : high },
+        { type : float, name : lite },
         { type : float2, name : floorOrigin, precision : high },
         { type : float, name : floorInvSpan, precision : high },
         { type : sampler2d, name : floorTex },
@@ -70,13 +78,13 @@ vertex {
         highp vec3 seed = material.worldPosition.xyz + off;
         highp vec3 camU = w[3].xyz + off;
         highp float t = materialParams.time;
-        // Per-particle fall speed and bob phase, from the VERTEX INDEX (all
-        // four corners of particle i are indices 4i..4i+3, so >>2 lands the
-        // quad on one value). NOT a hash of the seed position: worldPosition
+        // Per-particle fall speed and bob phase, from the VERTEX INDEX (the
+        // three corners of particle i are indices 3i..3i+2, so /3 lands the
+        // sprite on one value). NOT a hash of the seed position: worldPosition
         // reconstructs through the per-frame camera-relative origin, and a
         // sin-fract hash amplifies that reconstruction's fp noise into a NEW
         // random number every frame — the flakes strobed. The index is exact.
-        highp float h1 = fract(float(getVertexIndex() >> 2) * 0.6180339887);
+        highp float h1 = fract(float(getVertexIndex() / 3) * 0.6180339887);
         highp float speed = 1.1 + 1.4 * h1;
         // Height: the old CPU drift verbatim — absolute band above the world
         // floor, per-particle fall, shared sinusoidal bob.
@@ -93,15 +101,18 @@ vertex {
         // the seam), and fade out against the local surface — an alpha fade
         // only, the vertex is never repositioned — instead of clipping it.
         float edge = 1.0 - smoothstep(0.8, 1.0, max(abs(rel.x), abs(rel.y)) / (0.5 * bx));
-        highp vec2 uv = (posU.xz - materialParams.floorOrigin) * materialParams.floorInvSpan;
-        float land = clamp(y - textureLod(materialParams_floorTex, uv, 0.0).r, 0.0, 1.0);
-        material.color.a *= edge * land;
+        material.color.a *= edge;
         material.worldPosition.xyz = posU - off
                 + (w[0].xyz * material.uv0.x + w[1].xyz * material.uv0.y)
                         * materialParams.halfSize;
-        // LAST: this stage moves worldPosition, and the fog factor has to be
-        // measured from where the vertex actually ends up.
-        material.fog = vec4(ttpFogFactor(material.worldPosition.xyz), 0.0, 0.0, 0.0);
+        material.fog = vec4(0.0);
+        if (materialParams.lite < 0.5) {
+            highp vec2 uv = (posU.xz - materialParams.floorOrigin) * materialParams.floorInvSpan;
+            material.color.a *= clamp(y - textureLod(materialParams_floorTex, uv, 0.0).r, 0.0, 1.0);
+            // LAST: this stage moves worldPosition, and the fog factor has to
+            // be measured from where the vertex actually ends up.
+            material.fog.x = ttpFogFactor(material.worldPosition.xyz);
+        }
     }
 }
 

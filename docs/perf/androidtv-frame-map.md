@@ -720,3 +720,61 @@ What remains is per-fragment: the two deck taps at
   appending, so a file re-read later carries later arms under later pids, and a
   caller piping the sweep's output waits forever on the pipe the orphan still
   holds. Capture with a plain child, kill it by PID, filter afterwards.
+
+## The snow cup's premium over the beach was its FLAKE CLOUD (2026-09-09)
+
+Same box, Vulkan, `1.0-b6a5843f`, 4P, both tracks pinned 1280x720 so neither
+paces (`perf-frame.mjs`, whole-run p50; a group's cost is the full scene minus
+the arm that hides it):
+
+| group | glacier | tidepool |
+|---|---|---|
+| whole scene | 22.2 | 18.7 |
+| road | 3.7 | 5.3 |
+| terrain | 2.1 | 2.5 |
+| dressing | 0.9 | 1.6 |
+| cars | 0.4 | 0.9 |
+| effects (the ambient cloud) | **3.0** | 0.4 |
+| decal channel | 1.9 | 2.4 |
+| empty scene | 5.0 | 5.0 |
+
+Every group is cheaper on the snow track except one. The road's shader has no
+biome branch and reads DEARER on the beach, so what the road costs follows
+how much road a circuit's sightlines put in front of four cameras, not the
+biome. Glacier's premium was `theme.cc`'s 6000 flakes per camera (beach: 240
+sand motes; lawn: 7 pollen), four vertices each with a floor-fade texture
+tap in the vertex stage — 96k vertices a frame at four cells.
+
+**The cloud now draws `count / cells` particles** (`renderAmbient`, a
+`setGeometryAt` on the cell count). The sprite size already scaled with the
+row count for three.js parity, so a 4P cell was laying four times the flakes
+per pixel of a solo view; the solo density is what it shows now. Pinned 540,
+4P, 75 s, before → after (the "before" is this morning's run on the same
+build):
+
+| track | typical / worst GPU | fps typical / worst | heavy 30% p50 | clean s |
+|---|---|---|---|---|
+| glacier | 18.4 / 25.6 → 16.1 / 23.0 | 51 / 36 → 59 / 40 | 19.5-21.0 → 18.8 | 34 of 75 |
+| tidepool | 12.6 / 18.8 → 12.6 / 17.9 | 60 / 53 → 60 / 53 | 15.5 → 14.4 | 62 of 75 |
+
+**Then the cloud's own vertex work, the same day:** three vertices a sprite
+instead of four (the fragment cuts the circle out of a triangle whose corners
+sit at radius 2), the box shrunk by sqrt(cells) so a split cell keeps the
+solo view's flakes per unit of world nearest the camera and drops the far
+ones, and `lite` skipping the floor-fade texture tap and the fog term in the
+vertex stage at three cells and up (the shrunk box ends inside the fog's
+onset). Glacier 4P/540: typical 16.1 → 15.5, heavy p50 18.8 → 18.3,
+35 clean seconds of 75; tidepool unchanged (15.1 heavy, inside the ±0.7
+band). Across the day glacier's typical GPU went 18.4 → 15.5 ms. What the
+cloud still costs at four cells is a few tenths; the look at four cells is
+near flakes, large and soft, rather than a field of far specks.
+
+Glacier still misses 60 at 540 on its vista; what is left there is the
+frame every outdoor cup pays. Not built, priced only: culling road chunks
+past the fog — the road's pixel count falls with the square of distance, so
+everything past 60 u is ~11% of its pixels (~0.5 ms of tidepool's road) and
+60 u is inside the fog's visible band; a screen-space snow layer "on top" —
+one full-cell quad with two or three taps costs about what the grade LUT
+does, so it is not cheaper than the scaled cloud and gives up depth, settle
+and parallax. The next cut on the cloud, if one is needed, is the floor-fade
+vertex tap at four cells.

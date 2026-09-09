@@ -1774,10 +1774,13 @@ private:
 
     // Ambient particles (theme.ambient): immutable SEEDS in a kAmbBox-wide
     // column; vpoint.mat evaluates the motion and wraps x/z around each view's
-    // camera per frame, so after the build the CPU never touches this mesh —
-    // the only per-frame work is the `time` uniform (renderAmbient).
+    // camera per frame, so after the build the CPU touches this mesh only
+    // when the cell count changes (renderAmbient re-fits the draw range, the
+    // box and `lite`); otherwise the per-frame work is the `time` and
+    // `halfSize` uniforms.
     Mesh mPollen;
     float mAmbSize = 0.15f; // half the authored sprite size; re-fitted per frame
+    uint32_t mAmbCells = 0; // the cell count the draw range, box and lite were fitted to
     // Flake floor (FLAKE kind only): a coarse max-height grid of terrain + road
     // ribbon over the whole track, uploaded as an R16F texture the vertex
     // shader taps so a falling flake fades out ONTO the surface instead of

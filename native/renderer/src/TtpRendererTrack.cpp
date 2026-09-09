@@ -1,6 +1,7 @@
 // The track scene build: terrain, ground sheet, road chunks, gantry and the
 // hill ring. TtpRendererImpl.h carries what the topic files share.
 #include <chrono>
+#include <numeric>
 #include <utility>
 
 #include <utils/Log.h>
@@ -1682,7 +1683,8 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         const int AMB_COUNT = (int) std::min(tb.ambCount, 9600u);
         constexpr float AMB_H = 34.0f;
         // Half the JS Points sprite size — the material pushes each corner out
-        // by this along the camera axes, so the quad spans the full `size`.
+        // by this along the camera axes, and the fragment's inscribed circle
+        // spans the full `size` (vpoint.mat).
         mAmbSize = tb.ambSize * 0.5f;
         const float bandH = std::max(2.0f, AMB_H * tb.ambBand);
         uint32_t s74 = 74747;
@@ -1739,24 +1741,28 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
                     }, px));
         }
         const uint32_t tint = packLinear(srgbToLinear(tb.ambTint), 1.0f, tb.ambOpacity);
-        // Four vertices per particle, all carrying the SAME seed: the corner in
-        // uv0 is what vpoint.mat spreads along the camera's right/up, so the
-        // sprite faces every cell's camera and comes out round — and the seed
-        // hash lands identically on all four, keeping the quad rigid.
-        mPollen.verts.resize(AMB_COUNT * 4);
-        mPollen.uvs.resize(AMB_COUNT * 4);
-        mPollen.idx.resize(AMB_COUNT * 6);
-        static const math::float2 CORNER[4] = { { -1, -1 }, { 1, -1 }, { 1, 1 }, { -1, 1 } };
-        static const uint32_t QUAD[6] = { 0, 1, 2, 0, 2, 3 };
+        // THREE vertices per particle, all carrying the SAME seed: the corner
+        // in uv0 is what vpoint.mat spreads along the camera's right/up, so the
+        // sprite faces every cell's camera — and the fragment cuts the unit
+        // circle out of the triangle (its corners sit at radius 2), so it comes
+        // out as round as the quad it replaced for three quarters of the
+        // vertices. The seed hash lands identically on all three, keeping the
+        // sprite rigid.
+        mPollen.verts.resize(AMB_COUNT * 3);
+        mPollen.uvs.resize(AMB_COUNT * 3);
+        mPollen.idx.resize(AMB_COUNT * 3);
+        static const math::float2 CORNER[3] = { { 0, 2 }, { -1.7320508f, -1 }, { 1.7320508f, -1 } };
         for (int i = 0; i < AMB_COUNT; i++) {
             const Vertex seed = { (float) arnd() * kAmbBox, (float) arnd() * AMB_H,
                                   (float) arnd() * kAmbBox, tint };
-            for (int k = 0; k < 4; k++) {
-                mPollen.verts[i * 4 + k] = seed;
-                mPollen.uvs[i * 4 + k] = CORNER[k];
+            for (int k = 0; k < 3; k++) {
+                mPollen.verts[i * 3 + k] = seed;
+                mPollen.uvs[i * 3 + k] = CORNER[k];
             }
-            for (int k = 0; k < 6; k++) mPollen.idx[i * 6 + k] = i * 4 + QUAD[k];
         }
+        // No vertex is shared, so the index buffer is the identity; it exists
+        // to satisfy buildMesh.
+        std::iota(mPollen.idx.begin(), mPollen.idx.end(), 0u);
         mPollenMat = sceneInstance(mPointMaterial);
         mPollenMat->setParameter("halfSize", mAmbSize); // re-fitted per frame, below
         mPollenMat->setParameter("time", 0.0f);         // advanced per frame
@@ -1764,7 +1770,10 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         mPollenMat->setParameter("wind", tb.ambWind);
         mPollenMat->setParameter("bob", tb.ambBob);
         mPollenMat->setParameter("bandH", bandH);
+        // Shrunk per cell count below — and what an overview frame (viewCount
+        // 0) keeps, since renderAmbient's refit only runs for an active view.
         mPollenMat->setParameter("boxXZ", kAmbBox);
+        mPollenMat->setParameter("lite", 0.0f);
         mPollenMat->setParameter("floorOrigin", math::float2{ -kAmbR, -kAmbR });
         mPollenMat->setParameter("floorInvSpan", 1.0f / (2 * kAmbR));
         mPollenMat->setParameter("floorTex", mAmbFloorTex,
