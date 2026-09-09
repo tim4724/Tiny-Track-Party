@@ -1101,6 +1101,18 @@ export function runDisplayScenario(opts, ctx) {
       // and the only ones with a split-screen cell to carry a place card.
       const humanIds = new Set(field.filter((f) => !f.ai).map((f) => f.peerIndex));
 
+      // SOUND, and this is the one preview that carries MUSIC. Standalone only,
+      // the same rule the race previews follow: a grid of gallery iframes all
+      // playing at once is cacophony, and a card whose frames holdFrame idles
+      // would queue beats forever. It earns the song because it is the only card
+      // that plays the beat the song has to survive — the flag, the flourish,
+      // and the board landing on top of it.
+      //
+      // Decided by the production layer off the bound session, exactly as
+      // main.js does it: nothing here picks a cue or a track.
+      const audible = !inIframe && !!window.__audio && !!window.__audioDecide;
+      const sfx = (cmds) => { if (audible) window.__audio.apply(cmds); };
+
       // The launch, performed in the walks' own order. The two rebuild triggers
       // (setTrack, rebuild) come out as no-ops when the board above already
       // prepared this circuit — which is the whole point of the preview.
@@ -1122,6 +1134,12 @@ export function runDisplayScenario(opts, ctx) {
         });
         window.__engine = engine;
         scene.bindSession(engine.h);                          // bind-session
+        if (audible) {
+          window.__audioDecide.bind(engine.h);
+          // The biome's own pool, off the scene the launch just placed — the
+          // start-music effect a live launch performs.
+          sfx(window.__audioDecide.startMusic(scene.biome()));
+        }
         // The manifest's own count, and the same E2E override the live launch
         // reads — not a 3 retyped here.
         engine.startCountdown(window.__countdownSeconds || window.COUNTDOWN_SECONDS);
@@ -1148,12 +1166,16 @@ export function runDisplayScenario(opts, ctx) {
         home.forEach((c, i) => engine.forceFinish(c.id, raceMs / 1000 + i * 0.4));
         engine.fastForwardToEnd();
         for (const c of engine.getSnapshot().cars) scene.setCarHud(c.id, c);   // paint-hud
+        // A frozen frame must not hold wind and squeal voices open — but the
+        // SONG plays on, which is the whole point of this card having one.
+        sfx(window.__audioDecide.stopVoices());
         phase = 'flourish'; phaseMs = 0;                      // arm-results
       }
 
       // The board arrives a flourish later, fading up over the held finish frame
       // (display.css) — and the NEXT circuit is meshed behind it.
       function board() {
+        sfx(window.__audioDecide.stopMusic());                // …with the board
         showBoard(cupBoard(field, leg, false));               // show-results
         leg = (leg + 1) % cup.tracks.length;
         scene.prepare(entry(cup.tracks[leg]));
@@ -1196,6 +1218,7 @@ export function runDisplayScenario(opts, ctx) {
         // and steerable, physics held), and IT decides when they are racing.
         engine.update(ms);
         const now = performance.now();
+        sfx(window.__audioDecide.frame(now));   // one frame of the mix
         if (now - lastHud > HUD_TICK_MS) {
           lastHud = now;
           for (const c of engine.getSnapshot().cars) scene.setCarHud(c.id, c);
