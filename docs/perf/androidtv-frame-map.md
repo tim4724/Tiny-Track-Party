@@ -917,3 +917,27 @@ parameter buffer), which only a vendor profiler could confirm and which
 this box does not expose. What would test it indirectly is fewer, larger
 primitives in the vista's view; the far ribbon was exactly that and was
 the one thing that ever moved the vista.
+
+**The blob and the ribbon, priced for a cheaper version (2026-09-10,
+afternoon; ribbon 4P pinned 540, two interleaved reps an arm, each number
+below is `all` minus the arm for rep one / rep two).** The decal channel's
+parts, typical / heavy: the car-shadow blob 1.2, 1.15 / 0.8, 1.1; the
+profile loop 0.3, 1.05 / 0.25, 0.6; the rubber tap 0.24, 0.42 / 0.35,
+0.65. The blob's heavy share sits under its typical one because the vista
+puts every car far down the straight, where its stamps cover few road
+fragments. Blob plus profile plus statics is the `-road_decals` arm the fit
+above calls 1.5 ms of fill at 540; the older "~3.5 ms" trade was blob and
+rubber on the pre-merge build. Inside the blob: its uploads skipped
+entirely (a property-gated arm, session history) 0.25, 0.41 / 0.31, 0.09;
+the upload merge budget raised to one copy a frame, null (13.07, 13.43 /
+16.49, 16.58 against 13.22, 13.51 / 16.60, 16.72). Its probe fetch shares
+the rubber tap's coordinate, so one two-channel layer would drop one fetch
+a fragment — ESTIMATED, not built, at ~0.5 ms at best, for a merge of two
+layers five times apart in texel density under a user-tuned look. The
+ribbon's chord bound tightened to 0.005 u (a tenth of a pixel anywhere):
+gated 13.68, 14.16 / 18.69, 18.28 and ungated 13.64, 13.35 / 18.35, 18.52,
+against the shipped 0.08 u's 16.6-16.7 heavy — the far ribbon's value is
+the LOOSE chord merging gently curved far rings, and merging the near
+straight under the cars on top is worth nothing, so there is no invisible
+version of "no gate", only the visible 1.2 ms one. Among the arms tried
+here, neither lever has a cheaper form.
