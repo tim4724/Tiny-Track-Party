@@ -941,3 +941,13 @@ the LOOSE chord merging gently curved far rings, and merging the near
 straight under the cars on top is worth nothing, so there is no invisible
 version of "no gate", only the visible 1.2 ms one. Among the arms tried
 here, neither lever has a cheaper form.
+
+**Two more nulls the same afternoon (ribbon 4P pinned 540, two reps):** the
+ribbon's pixel gate at 4 px instead of 2 (13.03, 13.11 / 16.54, 16.63
+against 13.2-13.5 / 16.6-16.7) — chunks swap whole and are 12 u long, so
+the camera's own chunk is fine whatever the gate says; no gate at all on
+this build 12.43, 12.52 / 15.73, 15.38, the visible millisecond. And the
+chase camera's base field of view at 48 against 55 degrees (ribbon 13.53,
+13.62 / 16.68, 16.39; glacier 13.20 / 17.04 against 13.1 / 17.5): fewer
+primitives in the frustum, each covering more tiles — a wash, which is
+what the tiler reading predicts.
