@@ -85,7 +85,7 @@ jobs:
           # Only native/scripts/build-runtime-android.sh's JNI codegen needs Node,
           # and it imports node: builtins only — there is no npm ci here.
           node-version: 26
-      - uses: gradle/actions/setup-gradle@v5
+      - uses: gradle/actions/setup-gradle@v6
 
       # OUTSIDE THE WORKSPACE, unlike actions/checkout's path:, which refuses to
       # leave it. A 1.6 GB tree inside the repo would also make every
