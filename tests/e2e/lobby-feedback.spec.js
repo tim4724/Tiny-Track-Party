@@ -26,6 +26,7 @@ const { test, expect, openDisplay, joinController } = require('./helpers');
 // exactly that gap.
 async function joinByTouch(browser, roomCode, name) {
   const ctx = await browser.newContext({ viewport: { width: 844, height: 390 }, hasTouch: true });
+  await ctx.grantPermissions(['accelerometer', 'gyroscope', 'magnetometer']); // as joinController
   await ctx.addInitScript(() => {
     try { localStorage.setItem('tinytrack_seen_help', '1'); } catch (_) {}
     setInterval(() => window.dispatchEvent(

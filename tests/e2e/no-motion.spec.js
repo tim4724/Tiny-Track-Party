@@ -57,13 +57,16 @@ test('no DeviceOrientationEvent at all: buttons forced, Settings shows Tilt as N
 test('a sensor that is granted but silent lands in the same place', async ({ page, browser }) => {
   const roomCode = await openDisplay(page);
 
-  // Nothing is faked here: a plain headless Chromium HAS DeviceOrientationEvent
-  // and simply never fires it, which is the real shape of an embedder that
-  // withholds the sensors from its frame, and of a phone with no gyroscope.
-  // Permission resolves 'granted' and the wheel would sit dead, so this is the
-  // case the constructor check alone could never catch. joinController is
-  // bypassed precisely because it installs the level-sensor feed.
+  // No feed is faked here: a headless Chromium HAS DeviceOrientationEvent and,
+  // once the sensor permission is GRANTED, simply never fires it — the real
+  // shape of an embedder that withholds the sensors from its frame, and of a
+  // phone with no gyroscope. The wheel would sit dead, so this is the case the
+  // constructor check alone could never catch. joinController is bypassed
+  // precisely because it installs the level-sensor feed; the grant is kept,
+  // because without it Chromium answers 'prompt' and that is a different
+  // state (unknown, re-asked on the next tap), not this one.
   const context = await browser.newContext({ viewport: { width: 844, height: 390 } });
+  await context.grantPermissions(['accelerometer', 'gyroscope', 'magnetometer']);
   const phone = await context.newPage();
   await phone.goto(`/${roomCode}`);
   await phone.fill('#name-input', 'Silent');

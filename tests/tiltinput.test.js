@@ -339,6 +339,29 @@ test("a requestPermission the platform would not even put leaves 'unknown', and 
   });
 });
 
+test("Chromium's 'prompt' resolution is no answer either: 'unknown', re-asked on the next tap", async () => {
+  await withFakeBrowser(async ({ emit, tap, clicks }) => {
+    // Chromium 153 gained requestPermission() and, where it does not put the
+    // question (no gesture, or a headless browser), resolves 'prompt' instead
+    // of rejecting. Mapping every non-'granted' answer to 'denied' turned that
+    // into the "Motion sensor is blocked" popup on every E2E phone.
+    let gesture = false;
+    globalThis.window.DeviceOrientationEvent.requestPermission = () =>
+      Promise.resolve(gesture ? 'granted' : 'prompt');
+
+    const t = new TiltInput({});
+    assert.equal(await t.enableMotion(), 'unknown', "'prompt' is not a decision");
+    assert.equal(clicks.size, 1, 'waits for the gesture that lets the platform ask');
+
+    gesture = true;
+    tap();
+    await Promise.resolve(); await Promise.resolve();
+    emit({ beta: 10, gamma: 15 });
+    assert.equal(t.motionState, 'granted');
+    assert.ok(t.haveTilt);
+  });
+});
+
 test("an actual 'denied' answer is still a denial", async () => {
   await withFakeBrowser(async ({ clicks }) => {
     globalThis.window.DeviceOrientationEvent.requestPermission = () => Promise.resolve('denied');

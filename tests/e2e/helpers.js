@@ -91,6 +91,11 @@ async function joinController(browser, roomCode, name) {
   // LANDSCAPE — the controller is landscape-only; a portrait viewport gets the
   // full-screen rotate overlay, which would sit over every button these specs click.
   const context = await browser.newContext({ viewport: { width: 844, height: 390 } });
+  // Chromium (153+) gates the sensors behind a permission and, headless, answers
+  // requestPermission() with 'prompt' — no decision, so the phone would sit in
+  // 'unknown' with no listener attached. Grant it, as the player of a normal
+  // phone did; the feed below is then what a granted sensor delivers.
+  await context.grantPermissions(['accelerometer', 'gyroscope', 'magnetometer']);
   // Pre-seed the Settings popup's seen-flag so its first-run auto-show
   // doesn't cover the lobby and block ready/start clicks. These specs drive the
   // game flow (a returning player who's already dismissed it); the popup's own

@@ -143,10 +143,14 @@ export class TiltInput {
     if (!DOE) return this.motionState; // 'unsupported' since the constructor — nothing to request
     try {
       if (typeof DOE.requestPermission === 'function') {
-        const res = await DOE.requestPermission(); // iOS
-        this.motionState = res === 'granted' ? 'granted' : 'denied';
+        // iOS, and Chromium since 153. Only the two ANSWERS are recorded: a
+        // 'prompt' resolution (Chromium's, when it could not or did not put the
+        // question to the player) is the same non-event as the rejection below.
+        const res = await DOE.requestPermission();
+        if (res === 'granted' || res === 'denied') this.motionState = res;
+        else this._askOnNextGesture();
       } else {
-        this.motionState = 'granted'; // Android/desktop: just attach
+        this.motionState = 'granted'; // older Chromium: just attach
       }
     } catch (_) {
       // A REJECTION is not a denial. iOS rejects requestPermission() when the
