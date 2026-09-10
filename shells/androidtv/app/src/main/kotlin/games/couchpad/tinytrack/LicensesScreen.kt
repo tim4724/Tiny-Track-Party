@@ -301,8 +301,15 @@ private fun LicenseText(text: String) {
 private fun LegalBoard(title: String, content: @Composable () -> Unit) {
     Box(Modifier.fillMaxSize()) {
         PaperStage()
+        // tvOS's inset FIRST (`Tokens.legalInsetX`), then the board's own
+        // 60 x 28. The tvOS twin pads by the same 60 x 28, but SwiftUI lays that
+        // inside the system's safe area on its own; Compose has no such floor,
+        // so a bare 60 x 28 here put the list within the overscan band, and the
+        // two columns of the screens gallery disagreed about where a board starts.
         Column(
-            Modifier.fillMaxSize().padding(horizontal = 60.dp, vertical = 28.dp),
+            Modifier.fillMaxSize()
+                .padding(horizontal = Tokens.legalInsetX, vertical = Tokens.legalInsetY)
+                .padding(horizontal = 60.dp, vertical = 28.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             StickerBadge(title, tint = Tokens.red, size = 40.dp, rotation = -1.2f)

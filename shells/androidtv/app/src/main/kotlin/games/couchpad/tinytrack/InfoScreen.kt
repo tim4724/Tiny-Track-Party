@@ -59,9 +59,11 @@ fun InfoScreen(state: GameState) {
         // attract race keeps running underneath and is simply not seen.
         PaperStage()
 
+        // Laid out from tvOS's system safe area (`Tokens.legalInsetX`), like the
+        // licenses list behind this board, so the two shells' boards share edges.
         Column(
             Modifier.fillMaxSize()
-                .padding(horizontal = Tokens.safeMarginX, vertical = Tokens.safeMarginY),
+                .padding(horizontal = Tokens.legalInsetX, vertical = Tokens.legalInsetY),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
@@ -95,10 +97,13 @@ fun InfoScreen(state: GameState) {
         // player reads back when something is wrong, and the only string here that
         // needs no translation. It carries the build's short sha (see
         // app/build.gradle.kts), which is what makes "which build is on the box?"
-        // answerable from the sofa rather than over adb.
+        // answerable from the sofa rather than over adb. tvOS's 12 pt sits on
+        // its system safe area; the column above gets that inset from its own
+        // padding and this overlay has to add it.
         StickerText(
             BuildConfig.VERSION_NAME,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
+            modifier = Modifier.align(Alignment.BottomCenter)
+                .padding(bottom = Tokens.legalInsetY + 12.dp),
             size = 20.dp,
             weight = Fonts.semibold,
             color = Tokens.ink3,

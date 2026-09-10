@@ -968,6 +968,15 @@ it BEFORE asking `ttp_ui_back_effect`. Ask the model first and a viewer reading 
 license text gets dropped into the lobby, because what it answers is the lobby's
 answer.
 
+**The boards are laid out from tvOS's safe area, not the token's.** Every
+other full-screen board takes `Tokens.safeMarginX/Y`; these three take
+`Tokens.legalInsetX/Y`, the 90 x 60 pt system safe area SwiftUI gives every
+pushed page on tvOS, under the same 60 x 28 board padding and 12 pt version
+line the tvOS twin uses. The screens gallery reads the two shells' boards
+side by side, and at the token's 2.5% this shell's list and version line sat
+visibly nearer the bezel than the Apple TV's for no reason a viewer could
+name. It is a hand-typed pair because its source is Apple's platform.
+
 **The ⓘ is TOP-LEFT here and top-right on tvOS**, because `RootScreen` draws the
 perf readout over the top-right corner of every board, where tvOS keeps its own
 out of the way at the bottom. The readout is off until asked for, so this is not

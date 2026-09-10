@@ -224,6 +224,24 @@ object Tokens {
     val safeMarginX: Dp get() = ((number("safe-frac-x") ?: 0f) * AUTHORED_WIDTH).dp
     val safeMarginY: Dp get() = ((number("safe-frac-y") ?: 0f) * AUTHORED_HEIGHT).dp
 
+    /**
+     * The inset the LEGAL BOARDS (the ⓘ's info board, the licenses list and a
+     * license's text) are laid out from: what tvOS gets for free on every
+     * pushed page, its system safe area of 90 x 60 pt on an always-1920x1080
+     * layout. Both shells' boards start at that edge so they land on the same
+     * pixels, which is what makes their columns in the screens gallery
+     * comparable.
+     *
+     * DELIBERATELY NOT [safeMarginX]. That token is the 2.5% the chrome over
+     * the 3D keeps clear, chosen against Google's 5% so it reads as cornered
+     * rather than floating; these boards are paper with nothing to corner, and
+     * tvOS already draws them a system safe area in. A hand-typed pair rather
+     * than a token because its source is Apple's platform, not `theme.css`
+     * (`shells/androidtv/CLAUDE.md`, "The info board").
+     */
+    val legalInsetX: Dp = 90.dp
+    val legalInsetY: Dp = 60.dp
+
     fun shadow(name: String): Shadow =
         shadows[name] ?: Shadow(0.dp, 0.dp, 0.dp, Color.Transparent).also {
             tokenRequire(false) { "no shadow token --$name" }
