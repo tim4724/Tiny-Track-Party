@@ -39,12 +39,13 @@ import java.net.ServerSocket
  * AP-isolated and guest networks, so every failure here is logged and swallowed,
  * and the on-screen QR and room code remain the universal way in.
  *
- * NO PERMISSION IS DECLARED, and that is a `targetSdk` fact rather than a
- * permanent one: Local Network Protections are enforced only for apps targeting
- * API 37, and this one targets 36. **Re-check when targetSdk moves** — if
- * registration needs `ACCESS_LOCAL_NETWORK` there, discovery of this display
- * stops with nothing but the warning below to say so. The fastlane's ICE host
- * candidates sit behind the same gate.
+ * `ACCESS_LOCAL_NETWORK` gates this on an API 37+ box (Local Network
+ * Protections, enforced for apps targeting 37). MainActivity asks for it at
+ * launch and re-syncs through [GameCoordinator.localNetworkGranted] once the
+ * viewer answers, because the first registration may already have gone out and
+ * failed — which is why a failed registration is FORGOTTEN below rather than
+ * held as the live record: the next sync must try again. The fastlane's ICE
+ * host candidates sit behind the same gate.
  *
  * MAIN THREAD ONLY, like everything else in this shell. Both entry points are
  * reached through `GameCoordinator.syncAdvertisement`, whose callers are the
@@ -85,6 +86,12 @@ class RoomAdvertiser(context: Context) {
 
             override fun onRegistrationFailed(info: NsdServiceInfo, errorCode: Int) {
                 Log.w(TAG, "advertise failed: $errorCode")
+                // Not a live record: let the next sync register afresh (a grant
+                // of the LAN permission arrives after the first attempt).
+                if (listener === this) {
+                    listener = null; advertisedRoom = null
+                    runCatching { socket?.close() }; socket = null
+                }
             }
 
             override fun onServiceUnregistered(info: NsdServiceInfo) {}

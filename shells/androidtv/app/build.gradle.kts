@@ -53,7 +53,7 @@ android {
         // and Filament's GLES3 path 18+, so this floor is about what Android TV
         // boxes actually run rather than about either of those.
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 37
         // versionCode stays PINNED at 1 for every build made here. Deriving it
         // from the commit count is the usual trick and it is wrong for this tree:
         // Android refuses an install whose versionCode is lower than the

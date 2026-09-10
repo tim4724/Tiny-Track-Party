@@ -1,5 +1,8 @@
 package games.couchpad.tinytrack
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.Gravity
@@ -11,6 +14,7 @@ import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalConfiguration
@@ -35,6 +39,8 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         const val TAG = "TinyTrackParty"
+        /** Android 17: the first release with ACCESS_LOCAL_NETWORK to ask for. */
+        const val LOCAL_NETWORK_API = 37
     }
 
     private lateinit var game: GameCoordinator
@@ -98,7 +104,7 @@ class MainActivity : ComponentActivity() {
         // flag is that request; the box's HDMI output turns it into the
         // signal. Whether the CONNECTED display honours it is the display's
         // answer, logged so a box with a set that ignores it says so.
-        if (android.os.Build.VERSION.SDK_INT >= 30) {
+        if (Build.VERSION.SDK_INT >= 30) {
             val lp = window.attributes
             lp.preferMinimalPostProcessing = true
             window.attributes = lp
@@ -127,6 +133,10 @@ class MainActivity : ComponentActivity() {
         }
 
         game = GameCoordinator(this, surfaceView)
+        // The order against the boot below is NOT load-bearing: the dialog lands
+        // whenever the system shows it, and the grant handler re-publishes what
+        // the boot tried to advertise in the meantime.
+        requestLocalNetwork()
         // NOTHING SWITCHES THE PERF READOUT ON HERE, on purpose: it is off until a
         // developer asks for it, by property or by key. `PerfOverlay.kt` carries
         // the argument, and this line used to be `if (!Scenarios.active)
@@ -278,6 +288,27 @@ class MainActivity : ComponentActivity() {
      * calling onDestroy, so a destroy hook alone would miss the ordinary case (the
      * viewer presses Home). See [PartyNet.shutdown] for why this must be wired.
      */
+    /**
+     * The LAN permission, on the boxes that have one. Local Network Protections
+     * (API 37, enforced because this app targets 37) put the CouchPad room record
+     * and the fastlane's host candidates behind a runtime grant; the relay and the
+     * QR need nothing, so a refusal costs same-network discovery and P2P steering,
+     * never the party. Asked once — the system remembers the answer — and on a
+     * grant the record that already went out before the dialog is re-published.
+     */
+    private val askLocalNetwork =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            Log.i(TAG, "local network permission ${if (granted) "granted" else "refused"}")
+            if (granted) game.localNetworkGranted()
+        }
+
+    private fun requestLocalNetwork() {
+        if (Build.VERSION.SDK_INT < LOCAL_NETWORK_API) return
+        if (checkSelfPermission(Manifest.permission.ACCESS_LOCAL_NETWORK) ==
+            PackageManager.PERMISSION_GRANTED) return
+        askLocalNetwork.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
+    }
+
     override fun onStop() {
         super.onStop()
         game.suspend()
