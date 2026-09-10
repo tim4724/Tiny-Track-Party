@@ -31,7 +31,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 source "$ROOT/native/scripts/filament-checkout.sh"   # sets FILAMENT_SRC + FILAMENT_COMMIT
 require_local_install wasm-
 EMSDK_DIR="${EMSDK_DIR:-${EMSDK:-$HOME/emsdk}}"
-EMSDK_VERSION="6.0.4"   # first green build 2026-07-24; bump deliberately
+EMSDK_VERSION="6.0.9"   # 6.0.4 was the first green build (2026-07-24); bump deliberately, and REBUILD the Filament wasm SDK with it
 BUILD="$ROOT/native/build/web"
 OUTDIR="$ROOT/public/display/engine/native"
 

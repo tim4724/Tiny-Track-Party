@@ -59,7 +59,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: emscripten-core/setup-emsdk@v16
         with:
-          version: 6.0.4    # the artifact toolchain (native/scripts/build-runtime-web.sh); f64 semantics are version-independent, so this only needs to be recent
+          version: 6.0.9    # the artifact toolchain (native/scripts/build-runtime-web.sh); f64 semantics are version-independent, so this only needs to be recent
       - name: Configure (emscripten)
         run: emcmake cmake -S native -B native/build/wasm -DCMAKE_BUILD_TYPE=Release -DCMAKE_CROSSCOMPILING_EMULATOR=$(which node)
       - name: Build
