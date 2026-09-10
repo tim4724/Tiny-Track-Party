@@ -306,7 +306,7 @@ dependencies {
     // The netcode is NOT in this dependency — ttp::fastlane::Link is, behind
     // the ttp_link_* walks — so what it buys is the PeerConnection and the
     // DataChannel and nothing else.
-    implementation("io.github.webrtc-sdk:android:144.7559.15")
+    implementation("io.github.webrtc-sdk:android:150.7871.01")
 
     // The join QR. Policy is copied from public/shared/qr.js — EC level L, a
     // one-module quiet zone — not the library.
