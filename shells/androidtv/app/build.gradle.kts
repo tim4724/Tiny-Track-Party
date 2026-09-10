@@ -228,23 +228,26 @@ val stageAssets = tasks.register<Exec>("stageAssets") {
 val checkEngine = tasks.register("checkEngine") {
     group = "verification"
     description = "Fail if the engine .so are missing or older than native/."
+    // Everything that reaches `project` is resolved HERE, at configuration time:
+    // Gradle 10 makes Task.project an error inside a task action.
+    //
+    // The CI leg builds the Kotlin half only — no NDK, no Filament SDK, so
+    // no .so and nothing to be stale against. It says so with this flag.
+    val noEngine = project.hasProperty("ttpNoEngine")
+    val sources = fileTree("$rootDir/../../native") {
+        include("**/*.cc", "**/*.h", "**/*.cpp", "**/*.hpp", "**/*.inc")
+        include("**/CMakeLists.txt", "**/*.cmake")
+        exclude("build/**")     // per-worktree build trees, gitignored
+    }
+    val libFiles = listOf("armeabi-v7a", "arm64-v8a")
+        .map { file("$rootDir/app/src/main/jniLibs/$it/libttp_runtime_android.so") }
     doLast {
-        // The CI leg builds the Kotlin half only — no NDK, no Filament SDK, so
-        // no .so and nothing to be stale against. It says so with this flag.
-        if (project.hasProperty("ttpNoEngine")) {
+        if (noEngine) {
             logger.lifecycle("checkEngine: -PttpNoEngine — the APK will carry no engine.")
             return@doLast
         }
-        val nativeDir = file("$rootDir/../../native")
-        val sources = fileTree(nativeDir) {
-            include("**/*.cc", "**/*.h", "**/*.cpp", "**/*.hpp", "**/*.inc")
-            include("**/CMakeLists.txt", "**/*.cmake")
-            exclude("build/**")     // per-worktree build trees, gitignored
-        }
         val newest = sources.files.maxOfOrNull { it.lastModified() } ?: 0L
-        val libs = listOf("armeabi-v7a", "arm64-v8a")
-            .map { file("$rootDir/app/src/main/jniLibs/$it/libttp_runtime_android.so") }
-            .filter { it.exists() }
+        val libs = libFiles.filter { it.exists() }
         val how = "  native/scripts/build-runtime-android.sh   " +
             "(or shells/androidtv/scripts/build.sh, which owns the whole order)"
         if (libs.isEmpty()) {
@@ -264,7 +267,7 @@ val checkEngine = tasks.register("checkEngine") {
 tasks.named("preBuild") { dependsOn(checkEngine, stageAssets) }
 
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2026.08.00")
+    val composeBom = platform("androidx.compose:compose-bom:2026.09.00")
     implementation(composeBom)
 
     implementation("androidx.core:core-ktx:1.19.0")
@@ -275,7 +278,7 @@ dependencies {
     // first frame. Without it the launch window is whatever the system infers
     // from the theme — which for a dark Material parent is near-black, in front
     // of an app whose first frame is warm paper.
-    implementation("androidx.core:core-splashscreen:1.0.1")
+    implementation("androidx.core:core-splashscreen:1.2.0")
     implementation("androidx.activity:activity-compose:1.13.0")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
@@ -287,7 +290,7 @@ dependencies {
     // FOCUS system, and that is in foundation.
 
     // The relay socket.
-    implementation("com.squareup.okhttp3:okhttp:5.4.0")
+    implementation("com.squareup.okhttp3:okhttp:5.5.0")
 
     // The input fastlane's transport (Fastlane.kt). Android ships no system
     // WebRTC, so this is a prebuilt libwebrtc (org.webrtc.*) — the same
@@ -303,7 +306,7 @@ dependencies {
     // The netcode is NOT in this dependency — ttp::fastlane::Link is, behind
     // the ttp_link_* walks — so what it buys is the PeerConnection and the
     // DataChannel and nothing else.
-    implementation("io.github.webrtc-sdk:android:144.7559.12")
+    implementation("io.github.webrtc-sdk:android:144.7559.15")
 
     // The join QR. Policy is copied from public/shared/qr.js — EC level L, a
     // one-module quiet zone — not the library.

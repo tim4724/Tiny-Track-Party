@@ -131,7 +131,7 @@ packages:
     exactVersion: "0.29.0"
   LiveKitWebRTC:
     url: https://github.com/livekit/webrtc-xcframework
-    exactVersion: "144.7559.11"
+    exactVersion: "144.7559.15"
 
 targets:
   TinyTrackParty:
