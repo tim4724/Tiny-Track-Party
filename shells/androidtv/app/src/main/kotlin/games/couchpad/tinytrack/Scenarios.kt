@@ -208,6 +208,12 @@ object Scenarios {
             Log.i(TAG, "unsupported $id")
             return
         }
+        // A board on paper never presents, so its boot must not count against
+        // the Vulkan driver (`VulkanPolicy.withdrawAttempt`). Three cards are
+        // such boards — the loading lobby and the two behind the ⓘ — and the
+        // latter two close the table back to back, which is two strikes in a
+        // row and put the box on GL for every capture after them.
+        if (!plan.needsScene) game.display.noVerdict()
         after(RELEASE_BEAT_MS) {
             waitFor("a scene", SCENE_TIMEOUT_MS, { !plan.needsScene || game.display.hasScene }) { ok ->
                 after(SETTLE_MS) {
@@ -284,6 +290,21 @@ object Scenarios {
                 state.seats.clear()
                 state.seats.addAll((0 until game.proto.maxPlayers).map { GameState.Seat.open(it) })
                 state.cupSlot = null
+                return Plan(needsScene = false)
+            }
+
+            // THE INFO BRANCH, which the web does not have as a screen (its legal
+            // links are the welcome board's footer, its licenses a page): the
+            // gallery reads these two TV against TV. They are pages over the lobby
+            // (`RootScreen`) and opaque paper, so nothing of the lobby under them
+            // is dressed: no circuit (the surface is released, as `lobby-loading`
+            // does), no room, no seats. The path is written the way the ⓘ writes
+            // it: one page for the board, two for the list behind it.
+            "info", "licenses" -> {
+                game.show(GameState.Screen.LOBBY)
+                game.releaseScene()
+                state.infoPath = if (id == "info") listOf(GameState.InfoRoute.Info)
+                    else listOf(GameState.InfoRoute.Info, GameState.InfoRoute.Licenses)
                 return Plan(needsScene = false)
             }
 

@@ -15,7 +15,10 @@
 //
 // `id` is the screenshot's filename stem and must be unique across the table;
 // `key` is the TestHarness scenario the display page actually runs, and several
-// cards deliberately share one (the lobby, four ways).
+// cards deliberately share one (the lobby, four ways). A card without one is
+// either a `page` (a standalone web URL rather than a display-page scenario) or
+// `tvOnly` (a screen the web deliberately does not have — the TV harnesses
+// decide their own gaps by refusing an id, and this flag is the web's refusal).
 
 export const GALLERY_SCENARIOS = [
   { id: 'welcome', key: 'welcome', title: 'Welcome' },
@@ -123,7 +126,17 @@ export const GALLERY_SCENARIOS = [
   { id: 'results', key: 'results', title: 'Results', settleMs: 1200 },
   { id: 'intermission', key: 'intermission', title: 'Cup intermission', settleMs: 5200 },
   { id: 'chain', key: 'chain', title: 'Cup: finish → results → next race', animated: true },
-  { id: 'podium', key: 'podium', title: 'Cup podium', settleMs: 5200 }
+  { id: 'podium', key: 'podium', title: 'Cup podium', settleMs: 5200 },
+  // THE INFO BRANCH: the two boards behind the lobby's ⓘ on both TVs. Neither
+  // is a screen the WEB DISPLAY has. Its legal links sit in the welcome board's
+  // footer, which the `welcome` card already carries, so `info` is `tvOnly`:
+  // no web shot, and the web pane shows the gap — the same honest record the
+  // TV panes give `welcome`. Its licenses are a PAGE of their own rather than
+  // a board, so `licenses` names the URL the web camera opens instead of a
+  // harness key. Neither runs the sim, and neither is a card on the LIVE
+  // gallery, which mounts the display page and nothing else.
+  { id: 'info', title: 'Info board', tvOnly: true },
+  { id: 'licenses', title: 'Licenses', page: '/licenses.html' }
 ];
 
 // The scenarios a CAMERA sees, which is every screen minus the instruments.

@@ -122,5 +122,24 @@ internal object VulkanPolicy {
         canaryFile(context).delete()
     }
 
+    /**
+     * This boot draws nothing on purpose, so it is no verdict on the driver:
+     * take back the attempt [markAttempt] registered, and only that one.
+     *
+     * `ttp_display_frame` declines without a built scene, so a boot that never
+     * builds one can never present and never reach [markGood]. A real boot
+     * always previews the lobby; the screenshot harness's paper boards over a
+     * released surface are the one caller. Two of those in a row (the info
+     * board, then its licenses) read as two dead Vulkan boots and put the
+     * reference box on GL for every later launch of that build — where the
+     * gallery then photographed a four-cell race drawn one cell over the
+     * whole surface.
+     */
+    fun withdrawAttempt(context: Context) {
+        val n = readCount(context) - 1
+        if (n <= 0) canaryFile(context).delete()
+        else canaryFile(context).writeText("${build(context)}\n$n")
+    }
+
     private fun canaryFile(context: Context) = File(context.filesDir, CANARY)
 }

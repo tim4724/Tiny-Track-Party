@@ -949,6 +949,17 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
     fun burst(id: EngineId?, s: Double, lat: Double) =
         Ttp.ttp_display_burst(id?.let { TtpJson.arg(it.json) }, s, lat)
 
+    /**
+     * This process will never build a scene (a harness board on paper), so its
+     * Vulkan boot is no verdict on the driver — see [VulkanPolicy.withdrawAttempt].
+     * A no-op once a frame has presented or the engine is GL.
+     */
+    fun noVerdict() {
+        if (!vkCanaryArmed) return
+        vkCanaryArmed = false
+        VulkanPolicy.withdrawAttempt(view.context)
+    }
+
     /** Tear the scene down; the engine, views, materials and assets live on. */
     fun release() {
         Ttp.ttp_display_release()

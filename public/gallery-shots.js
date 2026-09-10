@@ -52,6 +52,9 @@ const captureHint = (p) => CAPTURE_COMMAND[p] || `a capture for ${p}`;
 const state = {
   left: 'web',
   right: 'tvos-device',
+  // A third column, or '' for the two-column default. It is always a whole
+  // picture: the compare modes are about the first two.
+  third: '',
   mode: 'split'
 };
 
@@ -60,6 +63,19 @@ let servedSha = null;
 
 function shotFor(scenario, platform) {
   return manifest.shots.find((s) => s.scenario === scenario && s.platform === platform) || null;
+}
+
+/** A gap the TABLE declares (`tvOnly`: the web has no such screen), as opposed
+ *  to a capture nobody has run yet. Only the web's gaps are declared; a TV's
+ *  are decided by its harness at capture time and look like any other absence. */
+function declaredGap(scenario, platform) {
+  return platform === 'web' && !!scenario.tvOnly;
+}
+
+/** Why a pane is empty. */
+function absence(scenario, platform) {
+  if (declaredGap(scenario, platform)) return 'no such screen on Web';
+  return `no ${PLATFORM_LABEL[platform] || platform} shot`;
 }
 
 function el(tag, className, text) {
@@ -99,18 +115,29 @@ function makeCard(scenario) {
   const card = el('article', 'card');
   card.appendChild(el('h2', null, scenario.title));
 
-  const a = shotFor(scenario.id, state.left);
-  const b = shotFor(scenario.id, state.right);
-  card.appendChild(state.mode === 'split' ? sideBySide(scenario, a, b)
-                                          : overlaid(scenario, a, b));
+  // The columns, resolved once: '' for the third means two columns.
+  const columns = [state.left, state.right, state.third].filter(Boolean)
+    .map((platform) => [platform, shotFor(scenario.id, platform)]);
+  const [[, a], [, b], third] = columns;
+  const row = el('div', 'shot-row');
+  if (state.mode === 'split') {
+    row.appendChild(pane(scenario, a, state.left));
+    row.appendChild(pane(scenario, b, state.right));
+  } else {
+    row.appendChild(overlaid(scenario, a, b));
+  }
+  // The third column rides beside whatever the first two made — two panes or
+  // one overlay — as one more whole picture.
+  if (third) row.appendChild(pane(scenario, third[1], third[0]));
+  row.style.setProperty('--panes', row.childElementCount);
+  card.appendChild(row);
 
   const foot = el('div', 'card-foot');
-  const left = metaLine(a);
-  left.prepend(el('strong', null, PLATFORM_LABEL[state.left] || state.left));
-  const right = metaLine(b);
-  right.prepend(el('strong', null, PLATFORM_LABEL[state.right] || state.right));
-  foot.appendChild(left);
-  foot.appendChild(right);
+  for (const [platform, shot] of columns) {
+    const line = metaLine(shot);
+    line.prepend(el('strong', null, PLATFORM_LABEL[platform] || platform));
+    foot.appendChild(line);
+  }
   card.appendChild(foot);
 
   return card;
@@ -130,25 +157,23 @@ function pane(scenario, shot, platform) {
   } else {
     // Said per PANE rather than across the pair: "no Apple TV shot" written
     // over a composite left you guessing which half you were looking at.
-    frame.appendChild(el('div', 'missing', `no ${PLATFORM_LABEL[platform] || platform} shot`));
+    frame.appendChild(el('div', 'missing', absence(scenario, platform)));
   }
   box.appendChild(frame);
   return box;
 }
 
-/** The default: both screens, whole, next to each other. */
-function sideBySide(scenario, a, b) {
-  const pair = el('div', 'shot-pair');
-  pair.appendChild(pane(scenario, a, state.left));
-  pair.appendChild(pane(scenario, b, state.right));
-  return pair;
-}
-
 /** Swipe / difference / one-only: the two images stacked in ONE frame, which is
  *  what those three modes are for — they answer "has it drifted by a pixel",
- *  and that question needs the images superimposed rather than adjacent. */
+ *  and that question needs the images superimposed rather than adjacent. A pane
+ *  like the whole-picture ones, captioned with both platforms, so a third
+ *  column beside it lines up. */
 function overlaid(scenario, a, b) {
+  const box = el('div', 'shot-pane');
+  box.appendChild(el('div', 'cap',
+    `${PLATFORM_LABEL[state.left] || state.left} / ${PLATFORM_LABEL[state.right] || state.right}`));
   const frame = el('div', `shot-frame mode-${state.mode}`);
+  box.appendChild(frame);
   for (const [shot, cls] of [[a, 'shot-a'], [b, 'shot-b']]) {
     if (!shot) continue;
     const img = el('img', cls);
@@ -157,13 +182,15 @@ function overlaid(scenario, a, b) {
     img.loading = 'lazy';
     frame.appendChild(img);
   }
-  if (!a && !b) {
-    frame.appendChild(el('div', 'missing',
-      `no shots yet — run ${captureHint(state.left)} and ${captureHint(state.right)}`));
-  } else if (!b) {
-    frame.appendChild(el('div', 'missing',
-      `no ${PLATFORM_LABEL[state.right]} shot for "${scenario.id}"`));
+  const missing = [[a, state.left], [b, state.right]].filter(([shot]) => !shot).map(([, p]) => p);
+  const gaps = missing.map((p) => absence(scenario, p));
+  // Nothing at all: say what fills the frame — for the sides a capture CAN
+  // fill. A declared gap has no command that would fill it.
+  const capturable = missing.filter((p) => !declaredGap(scenario, p));
+  if (missing.length === 2 && capturable.length) {
+    gaps.push(`run ${capturable.map(captureHint).join(' and ')}`);
   }
+  if (gaps.length) frame.appendChild(el('div', 'missing', gaps.join(' · ')));
 
   // The swipe handle. Pointer-driven rather than a slider control, because the
   // useful gesture is "scrub across the seam and watch the chrome move".
@@ -175,7 +202,7 @@ function overlaid(scenario, a, b) {
       frame.style.setProperty('--x', `${pct}%`);
     });
   }
-  return frame;
+  return box;
 }
 
 function render() {
@@ -189,10 +216,10 @@ function render() {
   for (const scenario of CAPTURED_SCENARIOS) strip.appendChild(makeCard(scenario));
   host.appendChild(strip);
 
-  // Counted for BOTH columns, because either one can now be a TV. Said only when
-  // there is a gap: a complete pair should not carry a sentence about absence.
+  // Counted for EVERY column, because any one can be a TV. Said only when
+  // there is a gap: a complete row should not carry a sentence about absence.
   const captured = new Set(manifest.shots.map((s) => `${s.scenario}:${s.platform}`));
-  const gaps = [state.left, state.right]
+  const gaps = [state.left, state.right, state.third].filter(Boolean)
     .map((p) => [p, CAPTURED_SCENARIOS.filter((s) => !captured.has(`${s.id}:${p}`)).length])
     .filter(([, n]) => n > 0)
     .map(([p, n]) => `${n} missing on ${PLATFORM_LABEL[p] || p}`);
@@ -203,12 +230,18 @@ function render() {
 }
 
 function fillPlatformSelects() {
-  for (const [id, key] of [['left-platform', 'left'], ['right-platform', 'right']]) {
+  // The third select carries one extra option, the two-column default, and
+  // says "Third:" on each platform so the header reads as three columns rather
+  // than three unlabelled lists of the same five names.
+  const columns = [['left-platform', 'left', ''], ['right-platform', 'right', ''],
+                   ['third-platform', 'third', 'Third: ']];
+  for (const [id, key, prefix] of columns) {
     const sel = document.getElementById(id);
-    for (const p of SHOT_PLATFORMS) {
+    const platforms = key === 'third' ? ['', ...SHOT_PLATFORMS] : SHOT_PLATFORMS;
+    for (const p of platforms) {
       const opt = document.createElement('option');
       opt.value = p;
-      opt.textContent = PLATFORM_LABEL[p] || p;
+      opt.textContent = p ? prefix + (PLATFORM_LABEL[p] || p) : 'Two columns';
       if (p === state[key]) opt.selected = true;
       sel.appendChild(opt);
     }

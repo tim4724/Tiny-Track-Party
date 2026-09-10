@@ -53,12 +53,16 @@ const ctx = async () => (_ctx ??= await (async () => {
   };
 })());
 
-test('the scenario table has unique ids and a live harness key for each', async () => {
+test('the scenario table has unique ids and says how the web reaches each', async () => {
   const { GALLERY_SCENARIOS } = await ctx();
   const ids = GALLERY_SCENARIOS.map((s) => s.id);
   assert.equal(new Set(ids).size, ids.length, 'duplicate scenario id');
   for (const s of GALLERY_SCENARIOS) {
-    assert.ok(s.key, `${s.id}: no harness key`);
+    // A harness key, a standalone page, or a declared gap — exactly one. An
+    // entry with none is a card the web camera cannot open; one with two is a
+    // card whose web picture is ambiguous.
+    const ways = [s.key, s.page, s.tvOnly].filter(Boolean).length;
+    assert.equal(ways, 1, `${s.id}: needs exactly one of key / page / tvOnly`);
     assert.ok(s.title, `${s.id}: no title`);
   }
 });
@@ -97,9 +101,11 @@ test('every CAPTURED scenario has a web reference shot', async () => {
   // Nothing has been captured yet — the coverage claims below would be vacuous.
   if (!captured) return;
   // The web column is the reference the other two are read against, so a gap
-  // there makes the whole card meaningless rather than half-full.
+  // there makes the whole card meaningless rather than half-full — except where
+  // the table itself says the web has no such screen, which is a TV-only card
+  // read TV against TV.
   const web = new Set(manifest.shots.filter((s) => s.platform === 'web').map((s) => s.scenario));
-  const missing = CAPTURED_SCENARIOS.filter((s) => !web.has(s.id)).map((s) => s.id);
+  const missing = CAPTURED_SCENARIOS.filter((s) => !s.tvOnly && !web.has(s.id)).map((s) => s.id);
   assert.deepEqual(missing, [], `no web shot for: ${missing.join(', ')} — run npm run shots:web`);
 });
 

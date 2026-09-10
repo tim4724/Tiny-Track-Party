@@ -29,9 +29,13 @@
      screens agree", because you never see either of them whole. That gesture
      is still here, as `swipe`, where it belongs.
 
-     Each pane then gets half the width instead of the card getting all of it,
-     so a scenario is ~500px tall and three fit on screen rather than one. */
-  .shot-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+     Each pane then gets a share of the width instead of the card getting all
+     of it, so a scenario is ~500px tall and three fit on screen rather than
+     one. A THIRD COLUMN is one more whole pane on the same row — the third
+     platform, always whole, whatever the first two are doing (side by side,
+     or stacked in one overlay frame) — because the question it answers is
+     "all three at once", and that only needs pictures. */
+  .shot-row { display: grid; grid-template-columns: repeat(var(--panes, 2), 1fr); gap: 8px; }
   .shot-pane { min-width: 0; }
   .shot-pane > .cap {
     font: 600 10px/1.6 system-ui, sans-serif; letter-spacing: .08em;
@@ -74,6 +78,9 @@
   </div>
   <div class="group">
     <select id="right-platform"></select>
+  </div>
+  <div class="group">
+    <select id="third-platform"></select>
   </div>
   <div class="group">
     <select id="compare-mode">

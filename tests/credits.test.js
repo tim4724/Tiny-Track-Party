@@ -189,11 +189,14 @@ async function thirdPartySurfaces() {
   const found = new Set();
 
   const assets = path.join(PUBLIC_DIR, 'assets');
+  // public/assets/licenses/ is OUR served copies, not an arriving asset, and
+  // public/assets/shots/ is our own photographs of the screens — one of which
+  // is the licenses board, and is named after it.
+  const ours = new Set([path.join(assets, 'licenses'), path.join(assets, 'shots')]);
   const walk = (dir) => {
     for (const d of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, d.name);
-      // public/assets/licenses/ is OUR served copies, not an arriving asset.
-      if (d.isDirectory()) { if (full !== path.join(assets, 'licenses')) walk(full); }
+      if (d.isDirectory()) { if (!ours.has(full)) walk(full); }
       else if (/licen[cs]e|^OFL|COPYING/i.test(d.name)) found.add(path.relative(ROOT, full));
     }
   };

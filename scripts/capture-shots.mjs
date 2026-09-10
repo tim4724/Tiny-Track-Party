@@ -66,17 +66,30 @@ async function main() {
 
     const sha = gitSha(ROOT);
     for (const scenario of scenarios) {
+      // A screen the web does not have (the TVs' info board): said, not
+      // silently skipped, so `--only info` does not look like a capture that
+      // wrote nothing. The TV runners report their own gaps the same way.
+      if (scenario.tvOnly) {
+        console.log(`  ${scenario.id.padEnd(14)} (no web screen)`);
+        continue;
+      }
       // dpr=1 IS LOAD-BEARING. Without it Stage.js sees `navigator.webdriver` and
       // renders the scene at a QUARTER of the layout size; capture.mjs's browser
       // also presents the page as an ordinary tab, which is what brings the sun's
       // shadow bake back. This gallery compares a browser against photographs of
       // real televisions, so a quarter-scale shadowless web column was not a
       // slightly worse picture — it was the wrong picture to judge the TVs by.
-      const q = scenarioQuery(scenario, { players: PLAYERS });
-      await page.goto(`http://127.0.0.1:${server.port}/?test=1&dpr=1&${q}`, { waitUntil: 'networkidle' });
+      //
+      // A `page` card is a standalone URL (the licenses page), not a display-page
+      // scenario, so it takes neither the harness flag nor the dpr pin.
+      const url = scenario.page
+        ? `http://127.0.0.1:${server.port}${scenario.page}`
+        : `http://127.0.0.1:${server.port}/?test=1&dpr=1&${scenarioQuery(scenario, { players: PLAYERS })}`;
+      await page.goto(url, { waitUntil: 'networkidle' });
       // Waits for the harness's scene signal and the self-hosted Fredoka face:
       // without the latter a shot can catch a system fallback and every label is
-      // subtly the wrong shape.
+      // subtly the wrong shape. A page without a harness passes the first wait
+      // straight through and only waits on the fonts.
       await waitForScene(page, { timeout: 20000 });
       // A scenario's own `settleMs` wins: it names WHICH MOMENT of that screen the
       // card is about, which for the two cup boards is after the re-sort has run.

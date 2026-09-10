@@ -153,6 +153,20 @@ enum Scenarios {
             state.seats = []
             state.cupSlot = nil
 
+        case "info", "licenses":
+            // THE INFO BRANCH, which the web does not have as a screen (its
+            // legal links are the welcome board's footer, its licenses a page):
+            // the gallery reads these two TV against TV. They are pushed
+            // destinations over the lobby and opaque paper, so nothing of the
+            // lobby under them is dressed: no circuit (the surface is released,
+            // as `lobby-loading` does), no room, no seats. The path is written
+            // the way the ⓘ writes it, one page for the board and two for the
+            // list behind it.
+            game.show(.lobby)
+            game.trackId = ""
+            game.display.release()
+            state.infoPath = id == "info" ? [.info] : [.info, .licenses]
+
         case "lobby-empty":
             game.show(.lobby)
             // `maxPlayers`, which is what the seat grid PADS TO, and not how
