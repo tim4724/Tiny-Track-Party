@@ -65,7 +65,7 @@ jobs:
       TV_AAB: shells/androidtv/app/build/outputs/bundle/release/app-release.aab
       PHONE_AAB: shells/androidtv/app/build/outputs/bundle/phoneTest/app-phoneTest.aab
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Read the Filament pin
         id: pin
@@ -75,17 +75,17 @@ jobs:
           echo "commit=$FILAMENT_COMMIT" >> "$GITHUB_OUTPUT"
           echo "remote=$FILAMENT_REMOTE" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           # 17 is what app/build.gradle.kts targets for both source and jvmTarget.
           java-version: 17
           distribution: temurin
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           # Only native/scripts/build-runtime-android.sh's JNI codegen needs Node,
           # and it imports node: builtins only — there is no npm ci here.
           node-version: 26
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v5
 
       # OUTSIDE THE WORKSPACE, unlike actions/checkout's path:, which refuses to
       # leave it. A 1.6 GB tree inside the repo would also make every
@@ -132,7 +132,7 @@ jobs:
       # after the build instead, so the artifact survives whatever happens later.
       - name: Restore the Filament Android SDK
         id: filament-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: |
             ${{ runner.temp }}/filament/out/android-release
@@ -183,7 +183,7 @@ jobs:
       # restore misses and rebuilds what this just saved.
       - name: Save the Filament Android SDK
         if: steps.filament-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: |
             ${{ runner.temp }}/filament/out/android-release
@@ -294,7 +294,7 @@ jobs:
       # the artifact, which is the only thing telling them apart once
       # downloaded.
       - name: Upload .aab artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tinytrack-bundles
           path: |
@@ -412,7 +412,7 @@ jobs:
       EXPORT_DIR: ${{ github.workspace }}/build/export
       IPA: ${{ github.workspace }}/build/export/TinyTrackParty.ipa
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Read the Filament pin
         id: pin
@@ -422,7 +422,7 @@ jobs:
           echo "commit=$FILAMENT_COMMIT" >> "$GITHUB_OUTPUT"
           echo "remote=$FILAMENT_REMOTE" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           # Only the two staging generators need Node, and they import node:
           # builtins plus this repo's own ESM — there is no npm ci here.
@@ -457,7 +457,7 @@ jobs:
       # CMakeCache would trip require_local_install), and no restore-keys.
       - name: Restore the Filament tvOS SDK
         id: filament-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: |
             ${{ runner.temp }}/filament/out/tvos-release/filament-appletvos
@@ -483,7 +483,7 @@ jobs:
       # is enough. The Android job lost a completed hour-long build that way.
       - name: Save the Filament tvOS SDK
         if: steps.filament-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: |
             ${{ runner.temp }}/filament/out/tvos-release/filament-appletvos
@@ -667,7 +667,7 @@ jobs:
       # Before publishing, so an upload rejection still leaves the build
       # downloadable from the run.
       - name: Upload the .ipa artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tinytrack-tvos-ipa
           path: ${{ env.IPA }}
@@ -715,8 +715,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 26
           cache: npm
@@ -773,7 +773,7 @@ jobs:
           ls -l store-shots
 
       - name: Upload screenshots
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tinytrack-store-screenshots
           path: store-shots/*.png

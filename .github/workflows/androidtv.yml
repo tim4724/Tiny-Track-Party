@@ -90,13 +90,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           # 17 is what app/build.gradle.kts targets for both source and jvmTarget.
           java-version: 17
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v5
       # RELEASE, not debug: it is the variant with R8, the proguard rules and the
       # signing config, so it is the one where a keep rule going missing shows up.
       # Debug would compile the same Kotlin and prove none of that.

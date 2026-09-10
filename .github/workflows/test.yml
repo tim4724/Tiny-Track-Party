@@ -14,8 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           # Plain reproducibility pin. Nothing here depends on the Node major:
           # every sim and track number is produced inside the wasm, which
@@ -34,8 +34,8 @@ jobs:
     # 5-minute budget had zero headroom and flaked on exactly that.
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           # Plain reproducibility pin. Nothing here depends on the Node major:
           # every sim and track number is produced inside the wasm, which
@@ -99,8 +99,8 @@ jobs:
     # moves with the sharding.
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           # Plain reproducibility pin. Nothing here depends on the Node major:
           # every sim and track number is produced inside the wasm, which
@@ -110,7 +110,7 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - name: Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           # Keyed on the lockfile, so bumping @playwright/test invalidates it
@@ -131,9 +131,9 @@ jobs:
         run: npx playwright test --shard=${{ matrix.shard }}/6
       - name: Upload traces on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          # Unique per shard — upload-artifact@v4 rejects a duplicate name.
+          # Unique per shard — upload-artifact rejects a duplicate name.
           name: playwright-traces-${{ matrix.shard }}
           path: test-results/
           retention-days: 7

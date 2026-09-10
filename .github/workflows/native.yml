@@ -38,7 +38,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Configure (clang, strict FP)
         run: cmake -S native -B native/build/ci -DCMAKE_BUILD_TYPE=Release
         env:
@@ -56,10 +56,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
-      - uses: mymindstorm/setup-emsdk@v14
+      - uses: actions/checkout@v7
+      - uses: emscripten-core/setup-emsdk@v16
         with:
-          version: 4.0.10   # any recent emsdk; wasm f64 semantics are version-independent
+          version: 6.0.4    # the artifact toolchain (native/scripts/build-runtime-web.sh); f64 semantics are version-independent, so this only needs to be recent
       - name: Configure (emscripten)
         run: emcmake cmake -S native -B native/build/wasm -DCMAKE_BUILD_TYPE=Release -DCMAKE_CROSSCOMPILING_EMULATOR=$(which node)
       - name: Build
@@ -91,7 +91,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Boot Apple TV simulator
         run: |
           UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(dev['udid'] for k,v in d.items() if 'tvOS' in k for dev in v))")
@@ -130,7 +130,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Configure (NDK, ${{ matrix.abi }})
         run: cmake -S native -B native/build/android -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_LATEST_HOME/build/cmake/android.toolchain.cmake -DANDROID_ABI=${{ matrix.abi }} -DANDROID_PLATFORM=android-24
       - name: Build
@@ -159,11 +159,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 150
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Read the Filament pin
         id: pin
         run: sed -n 's/^FILAMENT_COMMIT=/commit=/p' native/filament.pin >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         id: sdk
         with:
           path: filament-sdk
