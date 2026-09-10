@@ -39,13 +39,14 @@ import java.net.ServerSocket
  * AP-isolated and guest networks, so every failure here is logged and swallowed,
  * and the on-screen QR and room code remain the universal way in.
  *
- * `ACCESS_LOCAL_NETWORK` gates this on an API 37+ box (Local Network
- * Protections, enforced for apps targeting 37). MainActivity asks for it at
- * launch and re-syncs through [GameCoordinator.localNetworkGranted] once the
- * viewer answers, because the first registration may already have gone out and
- * failed — which is why a failed registration is FORGOTTEN below rather than
- * held as the live record: the next sync must try again. The fastlane's ICE
- * host candidates sit behind the same gate.
+ * NO PERMISSION IS DECLARED, and that is a `targetSdk` fact rather than a
+ * permanent one: Local Network Protections gate this behind ACCESS_LOCAL_NETWORK
+ * only for apps targeting API 37, and this one targets 36 on purpose
+ * (build.gradle.kts). **Re-check when targetSdk moves** — the manifest names
+ * what the move needs. A failed registration is FORGOTTEN below rather than held
+ * as the live record, so the next roster sync tries again; that is what lets a
+ * late grant (or a network that came up late) take effect without a restart.
+ * The fastlane's ICE host candidates sit behind the same gate.
  *
  * MAIN THREAD ONLY, like everything else in this shell. Both entry points are
  * reached through `GameCoordinator.syncAdvertisement`, whose callers are the
@@ -86,8 +87,7 @@ class RoomAdvertiser(context: Context) {
 
             override fun onRegistrationFailed(info: NsdServiceInfo, errorCode: Int) {
                 Log.w(TAG, "advertise failed: $errorCode")
-                // Not a live record: let the next sync register afresh (a grant
-                // of the LAN permission arrives after the first attempt).
+                // Not a live record: let the next sync register afresh.
                 if (listener === this) {
                     listener = null; advertisedRoom = null
                     runCatching { socket?.close() }; socket = null

@@ -53,7 +53,14 @@ android {
         // and Filament's GLES3 path 18+, so this floor is about what Android TV
         // boxes actually run rather than about either of those.
         minSdk = 24
-        targetSdk = 37
+        // 36, DELIBERATELY: 37 makes ACCESS_LOCAL_NETWORK a runtime permission for
+        // the room record and the fastlane's host candidates, and its prompt
+        // ("find, connect to, and determine the relative position of nearby
+        // devices") lands over the lobby on first launch. Play's TV bar is API 34
+        // (no 36/37 deadline announced), and no Android 17 TV exists yet. Moving
+        // to 37 is a UX decision, not a bump: see AndroidManifest.xml for what it
+        // needs, and commit a97798e5 for a working version of it.
+        targetSdk = 36
         // versionCode stays PINNED at 1 for every build made here. Deriving it
         // from the commit count is the usual trick and it is wrong for this tree:
         // Android refuses an install whose versionCode is lower than the

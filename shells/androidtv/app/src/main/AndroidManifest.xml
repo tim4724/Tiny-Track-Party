@@ -8,15 +8,17 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-    <!-- THE LAN. Two features here touch the local network — the CouchPad room
-         record over NsdManager (RoomAdvertiser.kt) and the fastlane's ICE host
-         candidates (Fastlane.kt) — and Local Network Protections gate both
-         behind this RUNTIME permission for apps targeting API 37, which this one
-         does. MainActivity asks for it on an API 37+ box; below that the
-         declaration is inert. Without the grant both features fail SILENTLY
-         (the QR still works and CONTROL still rides the relay), which is the
-         shape nobody notices. -->
-    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+    <!-- NOTHING IS DECLARED FOR THE LAN, and that is a targetSdk fact rather
+         than a permanent one. Two features here touch the local network — the
+         CouchPad room record over NsdManager (RoomAdvertiser.kt) and the
+         fastlane's ICE host candidates (Fastlane.kt) — and Local Network
+         Protections gate both behind the ACCESS_LOCAL_NETWORK runtime permission
+         only for apps targeting API 37. This one targets 36 on purpose
+         (build.gradle.kts says why). When targetSdk moves: declare it here, ask
+         at runtime on API 37+, and re-publish the room record on the grant —
+         commit a97798e5 is a verified version of all three. Without the grant
+         both features fail SILENTLY (the QR still works and CONTROL still rides
+         the relay), which is the shape nobody notices. -->
 
     <!-- A TV, and only a TV. leanback REQUIRED is what keeps this off phones in
          the Play listing; touchscreen NOT required is what lets it onto a TV at

@@ -699,17 +699,6 @@ class GameCoordinator(
     }
 
     /**
-     * The viewer granted ACCESS_LOCAL_NETWORK (MainActivity, API 37+). The record
-     * the boot tried to publish went out before the grant, so it is withdrawn and
-     * re-registered rather than trusted; the fastlane needs nothing, its next
-     * PeerConnection simply gets host candidates.
-     */
-    fun localNetworkGranted() {
-        advertiser.withdraw()
-        syncAdvertisement()
-    }
-
-    /**
      * Back on screen, with a fresh room.
      *
      * Any race that was running belongs to a party that no longer exists — its
