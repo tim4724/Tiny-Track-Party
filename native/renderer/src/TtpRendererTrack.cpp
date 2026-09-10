@@ -1586,6 +1586,9 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
                 if (ri) rcm.setLayerMask(ri, 0x01, 0x00);
             }
         }
+        // The sheet is the size of the world; cut per tile so a cell submits
+        // the tiles in its frustum rather than all of it, four times over.
+        tileMajor(mGround, kSheetTile, kSheetMinTris);
         if (mGroundMaterial) {
             mGroundTex = buildGroundTexture(tb.groundKind);
             MaterialInstance* gmi = sceneInstance(mGroundMaterial);
@@ -1879,6 +1882,10 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
                           r0 + (uint32_t) j, r1 + (uint32_t) j + 1, r0 + (uint32_t) j + 1 });
             }
         }
+        // Cut per tile like the ground. Overlapping discs across a tile seam
+        // may now blend in either order, which is the same picture: they are
+        // one colour, and `over` with one colour commutes.
+        tileMajor(mGroundShadows, kSheetTile, kSheetMinTris);
         buildMesh(mGroundShadows, true, mBlendMaterial->getDefaultInstance());
     }
 

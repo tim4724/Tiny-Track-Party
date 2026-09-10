@@ -612,7 +612,28 @@ private:
         // (blobs, streaks, rockets, bursts) leave the scene when they go idle
         // rather than parking underground — see setMeshInScene.
         bool inScene = false;
+        // SPATIAL chunk ranges, in triangles, from tileMajor(): buildMesh
+        // draws each range as its own renderable with its own box, instead of
+        // cutting `chunkTris` off the triangle ORDER. Empty = by order.
+        std::vector<uint32_t> tileStarts;
     };
+
+    // Reorder a static sheet's triangles by the ground tile their centroid
+    // falls in and record the tile ranges in `tileStarts`, so every renderable
+    // buildMesh makes of it covers ONE tile and a cell's frustum can reject
+    // the rest. A sheet the size of the world in one renderable is drawn whole
+    // by every cell however little of it is on screen; cut on triangle ORDER
+    // a row-major grid gives bands that cross every frustum exactly like the
+    // whole — which is what the 2026-09-04 "range chunk" arm measured, and
+    // why it read null (docs/perf/androidtv-frame-map.md). Tiles with fewer
+    // than `minTris` triangles are merged into the next, so a sparse sheet
+    // does not become hundreds of renderables.
+    static void tileMajor(Mesh& m, float tile, uint32_t minTris);
+    // 48 u tiles: a 4P cell's frustum to the fog is a wedge a few tiles wide,
+    // and the world is ±400 u, so a sheet is at most a few hundred ranges;
+    // a range under 64 triangles is not worth a renderable of its own.
+    static constexpr float kSheetTile = 48.0f;
+    static constexpr uint32_t kSheetMinTris = 64;
 
     struct TrackBin; // one scene's roster + theme + geometry (defined in the .cpp)
 

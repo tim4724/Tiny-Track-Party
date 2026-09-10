@@ -860,3 +860,60 @@ them at. **The rule remembers where a biome settled** (RenderScaleController
 key/scene: the point held longest per biome and cell count, in-process;
 `render_scale_check`), so races two to four of a cup start there. A bench
 force-stops the app between runs and so cannot see it; a played cup can.
+
+## The resolution-independent cost, re-fitted (2026-09-10)
+
+Ribbon, 4P, Vulkan, the shipped build. Three pins that all saturate
+(0.667 / 0.833 / 1.0), two reps each, fitted to `fixed + fill · s²`:
+
+| | typical | heavy 30% |
+|---|---|---|
+| fixed | 7.5 | 9.5 |
+| fill at 1080 | 26.8 | 29.3 |
+| predicted at 540 | 14.2 (measured 14.1-14.7) | 16.8 (measured 16.4-17.4) |
+
+So at 540 more than half the frame is resolution-independent, and the
+vista adds two milliseconds to that half. Split per group by the same
+extrapolation from a group sweep at 0.667 and 1.0:
+
+| group | fixed | fill at 540 |
+|---|---|---|
+| terrain (ground, hills, structures, ground shadows, berms, gantry) | 2.1 | 0 |
+| dressing | 1.4 | 0.2 |
+| road | 0.5 (+~2 on the vista) | 2.2 |
+| cars | 0.5 | 0.2 |
+| decal channel | 0 | 1.5 |
+| remainder (the empty frame, interactions) | ~3 | ~2.5 |
+
+**Two suspects closed.** The Compose HUD window is a null at a SATURATED
+pin too (ribbon 720, hud on/off pairs: 19.9 / 19.9, 19.3 / 20.0). The
+"empty frame" (mask 0x2) reads 6.3 ms at 1P/1080 and 10.5 at 4P/1080,
+the same on GL (5.2) — but every empty frame HOLDS 60, so those are
+downclocked readings, not costs; the saturated fit above puts the empty
+frame's real fixed share near 3 ms at four cells. Four cells at 1.7x the
+solo empty frame says the cell passes do not each touch the whole
+attachment.
+
+**The sheets cut TILE-MAJOR (`tileMajor`, kSheetTile 48 u): ground,
+ground shadows, structures, berms, landmarks, boulders each became one
+renderable per spatial tile.** The 2026-09-04 "range chunk" arm cut them
+on triangle ORDER, which for a row-major grid is bands crossing every
+frustum — null by construction. Per tile:
+
+| 4P | typical | heavy 30% |
+|---|---|---|
+| ribbon 720 | 19.4 → 19.0 | 22.4 → 22.4 |
+| ribbon 540 | 14.3 → 13.5 | 16.8 → 16.8 |
+| glacier 720 | 20.3 → 19.2 | 23.7 → 22.8 |
+| glacier 540 | 14.4 → 13.1 | 17.1 → 17.5 |
+
+Frame thread +0.5 ms (4.3 → 4.8 typical; the renderable count, as
+before). A millisecond off the quiet seconds and nothing off the vista,
+which is consistent: on the vista every cell looks down the same straight
+and every tile is in every frustum. The vista's cost is the primitives IN
+VIEW, and neither draws, vertices, channels nor culling reach it — the
+remaining hypothesis is the tiler's per-primitive-per-tile work (the
+parameter buffer), which only a vendor profiler could confirm and which
+this box does not expose. What would test it indirectly is fewer, larger
+primitives in the vista's view; the far ribbon was exactly that and was
+the one thing that ever moved the vista.

@@ -1,6 +1,7 @@
 // Engine and scene lifecycle: materials, mesh build/teardown, releaseScene and
 // the ablation plumbing. TtpRendererImpl.h carries what the topic files share.
 #include <algorithm>
+#include <utility>
 #include <chrono>
 
 #include "TtpRendererImpl.h"
@@ -348,8 +349,20 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
     // worth of vertices every frame, in every split-screen cell, however little
     // of it is on screen. Three chunks its ribbon for the same reason.
     const size_t perChunk = chunkTris ? std::min<size_t>(chunkTris, triCount) : triCount;
-    for (size_t t0 = 0; t0 < triCount; t0 += perChunk) {
-        const size_t n = std::min(perChunk, triCount - t0);
+    // The ranges: the tile ranges tileMajor() left, or `perChunk` off the order.
+    std::vector<std::pair<size_t, size_t>> ranges;
+    if (!m.tileStarts.empty()) {
+        for (size_t i = 0; i < m.tileStarts.size(); i++) {
+            const size_t t0 = m.tileStarts[i];
+            const size_t t1 = i + 1 < m.tileStarts.size() ? m.tileStarts[i + 1] : triCount;
+            if (t1 > t0) ranges.emplace_back(t0, t1 - t0);
+        }
+    } else {
+        for (size_t t0 = 0; t0 < triCount; t0 += perChunk) {
+            ranges.emplace_back(t0, std::min(perChunk, triCount - t0));
+        }
+    }
+    for (const auto& [t0, n] : ranges) {
         utils::Entity e = utils::EntityManager::get().create();
         RenderableManager::Builder(1)
                 .boundingBox(boundsOf(t0 * 3, n * 3))
@@ -376,6 +389,45 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
     }
     m.inScene = addToScene;
     return true;
+}
+
+void TtpRenderer::tileMajor(Mesh& m, float tile, uint32_t minTris) {
+    m.tileStarts.clear();
+    const size_t triCount = m.idx.size() / 3;
+    if (triCount < 2 * minTris) return;   // one renderable is the right answer
+    // Tile key per triangle: row-major over the tile grid, so the sort walks
+    // tiles in rows and a merged run of small tiles is a short strip of one
+    // row rather than a scatter.
+    std::vector<std::pair<int64_t, uint32_t>> keyed(triCount);
+    float x0 = 1e30f, z0 = 1e30f;
+    for (const Vertex& v : m.verts) { x0 = std::min(x0, v.px); z0 = std::min(z0, v.pz); }
+    for (size_t t = 0; t < triCount; t++) {
+        const Vertex& a = m.verts[m.idx[t * 3]];
+        const Vertex& b = m.verts[m.idx[t * 3 + 1]];
+        const Vertex& c = m.verts[m.idx[t * 3 + 2]];
+        const float cx = (a.px + b.px + c.px) / 3 - x0, cz = (a.pz + b.pz + c.pz) / 3 - z0;
+        const int64_t tx = (int64_t) (cx / tile), tz = (int64_t) (cz / tile);
+        keyed[t] = { tz * 65536 + tx, (uint32_t) t };
+    }
+    std::stable_sort(keyed.begin(), keyed.end(),
+            [](const auto& p, const auto& q) { return p.first < q.first; });
+    std::vector<uint32_t> idx(m.idx.size());
+    for (size_t t = 0; t < triCount; t++) {
+        for (int k = 0; k < 3; k++) idx[t * 3 + k] = m.idx[(size_t) keyed[t].second * 3 + k];
+    }
+    m.idx.swap(idx);
+    // Ranges: the open range keeps absorbing tiles until it holds minTris,
+    // and only then does the next tile change open a new one — small tiles
+    // merge forward into the next.
+    uint32_t openTris = 0;
+    for (size_t t = 0; t < triCount; t++) {
+        const bool newTile = t == 0 || keyed[t].first != keyed[t - 1].first;
+        if (t == 0 || (newTile && openTris >= minTris)) {
+            m.tileStarts.push_back((uint32_t) t);
+            openTris = 0;
+        }
+        openTris++;
+    }
 }
 
 // Called from releaseScene() and the car-slot rebuild paths, with no flush
@@ -427,7 +479,7 @@ void TtpRenderer::buryMeshBuffers(Mesh& m) {
     // A moved-from vector is valid but unspecified; these are re-used by the
     // next build, so they are put back to a known empty rather than trusted.
     m.verts = {}; m.idx = {}; m.normals = {};
-    m.quats = {}; m.uvs = {}; m.custom0 = {};
+    m.quats = {}; m.uvs = {}; m.custom0 = {}; m.tileStarts = {};
 }
 
 void TtpRenderer::ageGraves() {
