@@ -847,7 +847,8 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
             return
         }
         // Locale.ROOT: a German box prints "0,80" otherwise, which is the same
-        // trap Copy.seconds carries.
+        // trap Copy.seconds carries. capture-shots-androidtv.mjs READS THIS LINE:
+        // a shot with a move under it is the glitch below, so it re-shoots.
         Log.i(TAG, "render scale -> ${String.format(java.util.Locale.ROOT, "%.2f", scale)} (${w}x$h)")
         // ARMED, NOT PERFORMED, and it must stay that way whichever mechanism
         // does the moving.

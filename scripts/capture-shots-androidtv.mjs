@@ -42,6 +42,10 @@ const OUT_W = parseInt(args.outWidth, 10) || 1280;
 // bakes a 2048x2048 shadow map before the first frame, and the chained-start card
 // races most of a lap before it signals.
 const READY_TIMEOUT_MS = parseInt(args.timeout, 10) || 90_000;
+// Shots retaken when the render scale moved under the camera (scaleMoveCount).
+// Two: the rule holds a rung for a few seconds, so a second retake is already
+// clear of the move that spoiled the first.
+const RETAKES = 2;
 
 const ADB = process.env.ADB
   || path.join(os.homedir(), 'Library/Android/sdk/platform-tools/adb');
@@ -166,6 +170,23 @@ async function stand(serial, scenario) {
   return 'timeout';
 }
 
+/**
+ * How many times the render scale has moved since `logcat -c`.
+ *
+ * THE CAMERA MUST NOT LAND ON A RUNG MOVE. The adaptive scale moves the buffer
+ * while the engine's backend thread may still hold a frame recorded for the OLD
+ * size, and that frame lands in the new, smaller buffer as the bottom-left
+ * corner of the picture blown up to the screen — one cell of a four-cell race
+ * over the whole surface, which reads as a rendering bug and is not one
+ * (DisplayHost.kt, the frame callback: the shell accepts that one-vsync flash
+ * rather than pay for a drain at every step). The race cards' first move lands
+ * where `ready` does, so the shot would catch it. The move is logged; a shot
+ * with a move under it is retaken.
+ */
+function scaleMoveCount(serial) {
+  return (adb(serial, ['logcat', '-d', '-s', 'DisplayHost:I']).match(/render scale ->/g) || []).length;
+}
+
 async function main() {
   const serial = resolveSerial();
   const name = deviceName(serial);
@@ -203,7 +224,18 @@ async function main() {
       console.warn(`  ${scenario.id.padEnd(18)} ${verdict}`);
       continue;
     }
-    fs.writeFileSync(tmp, adb(serial, ['exec-out', 'screencap', '-p'], { buffer: true }));
+    let moves = scaleMoveCount(serial);
+    for (let take = 0; ; take++) {
+      fs.writeFileSync(tmp, adb(serial, ['exec-out', 'screencap', '-p'], { buffer: true }));
+      const now = scaleMoveCount(serial);
+      if (now === moves) break;
+      const gaveUp = take === RETAKES;
+      console.warn(`  ${scenario.id.padEnd(18)} ${gaveUp
+        ? 'still moving after the retakes — this shot may be on a move'
+        : 're-shot: the render scale moved under the camera'}`);
+      if (gaveUp) break;
+      moves = now;
+    }
     const file = `${scenario.id}.webp`;
     const dest = path.join(dir, file);
     toWebp(tmp, dest, OUT_W);

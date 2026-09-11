@@ -1051,6 +1051,12 @@ Three consequences of that:
   exactly this, and the script now refuses to shoot a box that disagrees with the
   tree. A dirty tree can only be checked as far as its commit; that is the honest
   limit, not a reason to skip.
+- **A MOVING SCALE PHOTOGRAPHS A GLITCH.** A render-scale move can land under
+  the shot, and the frame it catches — laid out for the old buffer, drawn into
+  the new one — is one cell blown up over the whole surface: the one-vsync
+  flash `DisplayHost` accepts at every step, not a driver fault. The script
+  counts `DisplayHost`'s `render scale ->` line around each screencap and
+  retakes when it moved.
 - **`am start -S`** (force-stop first) is REQUIRED, not tidy: the activity is
   `singleTask`, so without it a second launch reaches `onNewIntent`, `onCreate`
   never re-runs, and every scenario after the first photographs the first one's
