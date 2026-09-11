@@ -166,6 +166,7 @@ export class Display {
       shadows: mod.cwrap('ttp_display_shadows', null, ['number']),
       hold: mod.cwrap('ttp_display_hold', null, ['number']),
       frame: mod.cwrap('ttp_display_frame', 'number', ['number']),
+      advance: mod.cwrap('ttp_display_advance', 'number', ['number']),
       burst: mod.cwrap('ttp_display_burst', null, ['string', 'number', 'number']),
       profileNames: mod.cwrap('ttp_display_profile_names', 'string', []),
       // The two GLB container reads (native/runtime/ttp_glb.h). They were JS
@@ -699,6 +700,10 @@ export class Display {
   // One frame. Returns false when the renderer skipped it and the canvas still
   // holds the previous one.
   frame(dt) { return !!this._fn.frame(dt); }
+
+  // One frame WITHOUT A DRAW (ttp_display_advance): the renderer's own state moves
+  // on — chase rigs, seating, props, skid stamps — and nothing is submitted.
+  advance(dt) { return !!this._fn.advance(dt); }
 
   // Re-present the LAST frame unchanged (dt 0 steps nothing and fires no queued
   // burst). Used by the lobby crossfade's still capture: a canvas readback only

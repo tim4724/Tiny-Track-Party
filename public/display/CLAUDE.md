@@ -279,7 +279,17 @@ capture whose start point still drifts, because the scene free-runs between page
 load and the first call. Together they are what `scripts/trailer/` renders video
 with, and what lets its browser editor show the frame the renderer will produce.
 The gate drives CSS animations from the same clock too — otherwise a one-second
-fade finishes inside three captured frames. Nothing in normal play sets either.
+fade finishes inside three captured frames. The sound has the same seam:
+`?offlineaudio=<seconds>` (`RaceAudio`) puts the game's graph on an
+`OfflineAudioContext` the driver renders one frame boundary at a time, so a
+capture carries the mix the game would have played over exactly those frames.
+Nothing in normal play sets any of the three. `Stage.setUndrawn(on)` makes the
+same loop step without the draw — the sim, the bookkeeping and
+`ttp_display_advance`, which runs the frame's CPU half (chase rigs, seating,
+props, skid stamps) and submits nothing — so a driver can wind a race in a
+fraction of the drawn cost and the next drawn frame is what every-frame drawing
+would have shown. `onFrame(dt, nowMs)` carries the loop's own clock, dt summed,
+which under a gate is the sim's time rather than the wall's.
 
 The capture scripts must run HEADED: headless Chromium is SwiftShader, headed gets
 ANGLE-on-Metal, and that gap is the whole reason `capture-artwork.js` races at a

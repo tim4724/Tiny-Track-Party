@@ -456,6 +456,10 @@ public:
     // roster. The engine, views, materials and provided asset bytes survive.
     void releaseScene();
     bool render(const TtpFrameInput& input); // false = beginFrame skipped (stale canvas)
+    // The frame's CPU half alone — the seating, the props, the skid stamps, the
+    // ambient clocks — with nothing submitted and the stamps' uploads deferred
+    // to the next render(). ttp_display_advance says what for.
+    bool advance(const TtpFrameInput& input);
 
     // The rect view i actually RENDERS into, in GL viewport terms (bottom-left
     // origin) — a tile of the split-screen grid, after that grid has been
@@ -799,6 +803,8 @@ private:
             std::vector<filament::math::float3>& carPosW, std::vector<DeckDecal>& auraDecals);
     void renderWorld(const TtpFrameInput& input, const TtpCarInput* cars, uint32_t nCars,
             const std::vector<filament::math::float3>& carPosW, std::vector<DeckDecal>& auraDecals);
+    // render() and advance() are one body: `draw` is where they part.
+    bool frame(const TtpFrameInput& input, bool draw);
     void renderSkids(const TtpFrameInput& input, const TtpCarInput* cars, uint32_t nCars);
     void renderAmbient(const TtpFrameInput& input);
     void renderCells(const TtpFrameInput& input, double& tMark);
@@ -924,6 +930,7 @@ private:
     void rasterSkidTri(const filament::math::float2* p, const float* ink);
     // Push this frame's dirty rects to the texture as sub-rect uploads.
     void uploadSkidRects();
+    void flushSkidLayer();      // a drawn frame's uploads + mips (TtpRendererFrame.cpp)
     void refreshSkidMips();
     filament::math::float3 mBoostDiskLin{};
     // The one vlit instance that SAMPLES the baked sun map. Three's receiver set
@@ -1409,6 +1416,8 @@ private:
     // segment, merged when they touch.
     struct SkidRect { int x0, y0, x1, y1; };      // half-open [x0,x1)×[y0,y1)
     std::vector<SkidRect> mSkidDirty;
+    static constexpr size_t kSkidDirtyMax = 32;   // past this the list is one union rect
+    bool mSkidCatchUp = false;                    // undrawn frames stamped; refresh all mips
     static void mergeUploadRects(std::vector<SkidRect>& rects);   // TtpRendererDecals.cpp
     // The mip chain's CPU truth, levels 1.. (level 0 is mSkidPix), plus the
     // PHYSICAL-x rects awaiting the throttled per-level refresh — see

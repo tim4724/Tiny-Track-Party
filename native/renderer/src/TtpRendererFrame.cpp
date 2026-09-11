@@ -2344,46 +2344,76 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
                 st.last = cur;
             }
         }
-        // The upload: every frame that commits a stamp, at every cell count.
-        // It runs BEFORE beginFrame, so ink stamped this frame is drawn this
-        // frame and the ribbon's visible head is the tyre's own position.
-        //
-        // THERE WAS A ~30 Hz THROTTLE HERE AND IT BOUGHT NOTHING, which is
-        // why there is no rate limit to find. It cost the half a player can
-        // SEE — a trail's head lags the tyre by upload latency times road
-        // speed, up to half a car length of bare road at VMAX — on the theory
-        // that the driver pays per upload EVENT on this in-flight texture.
-        // Measured against no throttle it is a null, and ablating the layer
-        // WHOLE is not: the layer's cost is the tap and the CPU raster.
-        // `shells/androidtv/CLAUDE.md` has the sweep and its controls.
-        // Do not reintroduce one without re-running that sweep — the reading
-        // the throttle originally came from predates kMaskedBlobCells zeroing
-        // the masked shadow budget at four cells, which was ~7 ms of the
-        // frame it was taken in.
-        if (!mSkidDirty.empty()) {
-            uploadSkidRects();
-            mSkidMipsDirty = true;
-        }
-        // Refresh the rubber layer's mip chain, throttled. The tap filters
-        // trilinear (bindSkidLayer): without mips, the deck ahead minifies a
-        // 8k-wide layer through single-texel lookups and every mark
-        // SCINTILLATES in motion, which the eye reads as the track itself
-        // flickering. The refresh is INCREMENTAL — CPU box-filter under the
-        // dirty rects, per-level sub-rect uploads (refreshSkidMips) — because
-        // the full-chain generateMipmaps this used to be measured ~10 dropped
-        // frames/s on the reference Android box, invisible in the GPU median.
-        // The ~7 Hz throttle stays: a fresh mark is under the car at mip 0
-        // for those 150 ms, where no one can see the difference. A pass then
-        // runs ONE LEVEL PER FRAME (refreshSkidMips says why), so the four-cell
-        // slowdown this used to carry against the pass's burst is gone with
-        // the burst.
-        if (mSkidTex && (mSkidMipLevel > 0
-                || (mSkidMipsDirty && mTime - mSkidMipsAt > 0.15f))) {
-            if (mSkidMipLevel == 0) { mSkidMipsDirty = false; mSkidMipsAt = mTime; }
-            refreshSkidMips();
+        // Dirty rects are uploaded by the drawn frame (flushSkidLayer). A frame stepped
+        // undrawn (advance) leaves them here, and a wind is thousands of those before a
+        // drawn one — so the list is bounded: past kSkidDirtyMax it collapses to its
+        // union, one upload of at most the layer. uploadSkidRects wraps and clamps it
+        // like any other.
+        if (mSkidDirty.size() > kSkidDirtyMax) {
+            for (size_t i = 1; i < mSkidDirty.size(); i++) {
+                mSkidDirty[0].x0 = std::min(mSkidDirty[0].x0, mSkidDirty[i].x0);
+                mSkidDirty[0].y0 = std::min(mSkidDirty[0].y0, mSkidDirty[i].y0);
+                mSkidDirty[0].x1 = std::max(mSkidDirty[0].x1, mSkidDirty[i].x1);
+                mSkidDirty[0].y1 = std::max(mSkidDirty[0].y1, mSkidDirty[i].y1);
+            }
+            mSkidDirty.resize(1);
         }
     }
+}
 
+// The rubber layer's GPU side, for a DRAWN frame: this frame's stamps up into the
+// texture, then the mip chain. Before beginFrame, so ink stamped this frame is drawn
+// this frame.
+void TtpRenderer::flushSkidLayer() {
+    if (!mSkidTex) return;
+        // The upload: every frame that commits a stamp, at every cell count.
+    // It runs BEFORE beginFrame, so ink stamped this frame is drawn this
+    // frame and the ribbon's visible head is the tyre's own position.
+    //
+    // THERE WAS A ~30 Hz THROTTLE HERE AND IT BOUGHT NOTHING, which is
+    // why there is no rate limit to find. It cost the half a player can
+    // SEE — a trail's head lags the tyre by upload latency times road
+    // speed, up to half a car length of bare road at VMAX — on the theory
+    // that the driver pays per upload EVENT on this in-flight texture.
+    // Measured against no throttle it is a null, and ablating the layer
+    // WHOLE is not: the layer's cost is the tap and the CPU raster.
+    // `shells/androidtv/CLAUDE.md` has the sweep and its controls.
+    // Do not reintroduce one without re-running that sweep — the reading
+    // the throttle originally came from predates kMaskedBlobCells zeroing
+    // the masked shadow budget at four cells, which was ~7 ms of the
+    // frame it was taken in.
+        if (!mSkidDirty.empty()) {
+        uploadSkidRects();
+        mSkidMipsDirty = true;
+    }
+    // Frames went by undrawn (advance) since the last draw: the throttle's premise
+    // below — a fresh mark sits under the car for its 150 ms — does not hold for
+    // marks laid a lap ago, so refresh every level now and the first drawn frame
+    // after a wind is complete.
+    if (mSkidCatchUp) {
+        mSkidCatchUp = false;
+        mSkidMipsDirty = false; mSkidMipsAt = mTime;
+        do { refreshSkidMips(); } while (mSkidMipLevel != 0 || !mSkidMipDirty.empty());
+        return;
+    }
+        // Refresh the rubber layer's mip chain, throttled. The tap filters
+    // trilinear (bindSkidLayer): without mips, the deck ahead minifies a
+    // 8k-wide layer through single-texel lookups and every mark
+    // SCINTILLATES in motion, which the eye reads as the track itself
+    // flickering. The refresh is INCREMENTAL — CPU box-filter under the
+    // dirty rects, per-level sub-rect uploads (refreshSkidMips) — because
+    // the full-chain generateMipmaps this used to be measured ~10 dropped
+    // frames/s on the reference Android box, invisible in the GPU median.
+    // The ~7 Hz throttle stays: a fresh mark is under the car at mip 0
+    // for those 150 ms, where no one can see the difference. A pass then
+    // runs ONE LEVEL PER FRAME (refreshSkidMips says why), so the four-cell
+    // slowdown this used to carry against the pass's burst is gone with
+    // the burst.
+    if (mSkidTex && (mSkidMipLevel > 0
+            || (mSkidMipsDirty && mTime - mSkidMipsAt > 0.15f))) {
+        if (mSkidMipLevel == 0) { mSkidMipsDirty = false; mSkidMipsAt = mTime; }
+        refreshSkidMips();
+    }
 }
 
 void TtpRenderer::renderAmbient(const TtpFrameInput& input) {
@@ -2753,7 +2783,10 @@ void TtpRenderer::orientCellBillboards(const float3& camPos) {
     }
 }
 
-bool TtpRenderer::render(const TtpFrameInput& input) {
+bool TtpRenderer::render(const TtpFrameInput& input) { return frame(input, true); }
+bool TtpRenderer::advance(const TtpFrameInput& input) { return frame(input, false); }
+
+bool TtpRenderer::frame(const TtpFrameInput& input, bool draw) {
     if (input.version != TTP_FRAME_INPUT_VERSION) return false;
     // Every wall-clock cosmetic phases off the DRIVING scene's clock — an own
     // accumulated clock would drift by the boot-time difference between the
@@ -2788,6 +2821,19 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
     mProfile[kProfSkids] = ttpNowMs() - tMark; tMark += mProfile[kProfSkids];
     renderAmbient(input);
     mProfile[kProfAmbient] = ttpNowMs() - tMark; tMark += mProfile[kProfAmbient];
+    if (!draw) {
+        // Undrawn, and done: the merge, the blob readbacks and the GPU frame
+        // are a drawn frame's. The phases above still queued driver work (the
+        // decal uniform writes, the ambient buffers) that no endFrame will
+        // flush, so drain it here — the single-threaded backends execute on
+        // flush(), and a wind of thousands of these frames would otherwise
+        // fill the command buffer with nothing ever coming to empty it.
+        mEngine->flush();
+        mSkidCatchUp = true;   // the next drawn frame owes the rubber layer a full refresh
+        mProfile[kProfTotal] = ttpNowMs() - tFrame0;
+        return true;
+    }
+    flushSkidLayer();
     // Merged draw groups: regroup lazily — a roster lands one slot at a time
     // and the dressing stages model by model, so grouping at each call site
     // would rebuild many times for one launch — then mirror this frame's node

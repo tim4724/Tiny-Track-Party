@@ -157,6 +157,8 @@ export class Stage {
     this._last = 0;
     this._timeScale = 1;
     this._fixedDt = 0;       // >0: ignore the rAF clock entirely (see setFixedStep)
+    this._undrawn = false;   // step everything but the draw (see setUndrawn)
+    this._clockMs = 0;       // the frame clock: dt summed, handed to onFrame
     this._track = null;
     this._biome = 'grass';   // resolved from the track's cup, or forced by biomeOverride
     this.display = null;     // set by boot()
@@ -1286,8 +1288,19 @@ export class Stage {
     const dt = (this._fixedDt || Math.min(Math.max(rawMs, 0) / 1000, 0.05)) * this._timeScale;
     this._last = t;
     if (rawMs > 0 && rawMs < 1000) this.perf.tick(t, rawMs); // skip absurd post-stall deltas
-    if (this.onFrame) this.onFrame(dt);
+    // The frame clock rides along: dt summed, so under a capture gate it is the sim's
+    // time and not the wall's, which a frame drawn in 300 ms would otherwise be.
+    this._clockMs += dt * 1000;
+    if (this.onFrame) this.onFrame(dt, this._clockMs);
     if (!this.display) { this._scheduleNext(); return; }
+    if (this._undrawn) {
+      // Everything a frame does before the GPU — the sim above, the bookkeeping, the
+      // renderer's own state — and no draw. See setUndrawn.
+      this._syncCells();
+      this.display.advance(dt);
+      this._scheduleNext();
+      return;
+    }
     this._adaptScale(t);
     // Derived bytes the last frame landed. HERE and not at the end of a build:
     // a WebGL readback cannot complete inside the call that issues it, so the
@@ -1299,22 +1312,7 @@ export class Stage {
     // unhandled rejection from the frame loop.
     this.display.writeReadyBlobs().catch(() => {});
 
-    const ids = this.soloCam ? [] : this._order.filter((id) => this.cars.has(id));
-    if (ids.length) this._hudHidden = false; // cells are back; the HUD gets placed below
-    // Which cars own cells, and which camera rig is running, change on a seat
-    // edit — not per frame. Push them only when they actually move, so the
-    // steady-state frame really is one call with a dt.
-    const cellSig = ids.join(',');
-    if (cellSig !== this._cellSig) { this._cellSig = cellSig; this.display.cells(ids); }
-    // …and the same for the cell overlay's two flags, BEFORE the frame draws
-    // with them: a mask pushed afterwards would leave the bar under a fresh
-    // FINISHED card for one frame.
-    if (ids.length) this._syncOverlay(ids);
-    const mode = ids.length ? null
-        : this._free ? CAM.FREE
-        : this.bboxOrbit ? CAM.BBOX
-        : this.orbit ? CAM.ORBIT : CAM.STILL;
-    if (mode !== null && mode !== this._camMode) { this._camMode = mode; this.display.camera(mode); }
+    const ids = this._syncCells();
 
     // THE PACING GATE. Everything above is the sim and the scene's bookkeeping
     // and runs every callback; everything below draws. dt is ACCUMULATED across
@@ -1346,7 +1344,7 @@ export class Stage {
     // ~40 style writes below latch on a signature of exactly those inputs and
     // the steady-state frame writes no DOM (this file's own rule).
     const cells = this._cellRects(ids.length);
-    const hudSig = cellSig + '|'
+    const hudSig = this._cellSig + '|'
         + cells.map((r) => [r.x, r.y, r.w, r.h,
                             r.safe.x, r.safe.y, r.safe.w, r.safe.h].join(',')).join(';') + '|'
         + ids.map((id) => {
@@ -1402,6 +1400,36 @@ export class Stage {
     });
     this._scheduleNext();
   }
+
+  // Which cars own cells, which overlay flags, and which camera rig is running
+  // change on a seat edit — not per frame. Push them only when they actually
+  // move, so the steady-state frame really is one call with a dt. Returns the
+  // cell owners, in order.
+  _syncCells() {
+    const ids = this.soloCam ? [] : this._order.filter((id) => this.cars.has(id));
+    if (ids.length) this._hudHidden = false; // cells are back; the HUD gets placed below
+    const cellSig = ids.join(',');
+    if (cellSig !== this._cellSig) { this._cellSig = cellSig; this.display.cells(ids); }
+    // …and the same for the cell overlay's two flags, BEFORE the frame draws
+    // with them: a mask pushed afterwards would leave the bar under a fresh
+    // FINISHED card for one frame.
+    if (ids.length) this._syncOverlay(ids);
+    const mode = ids.length ? null
+        : this._free ? CAM.FREE
+        : this.bboxOrbit ? CAM.BBOX
+        : this.orbit ? CAM.ORBIT : CAM.STILL;
+    if (mode !== null && mode !== this._camMode) { this._camMode = mode; this.display.camera(mode); }
+    return ids;
+  }
+
+  // UNDRAWN: every frame runs the sim and the scene's bookkeeping exactly as it
+  // does, then the renderer's own state (Display.advance) and no draw — everything
+  // a frame does before the GPU, at a fraction of its cost. For a driver winding a
+  // race faster than it can draw it (the trailer editor): the next drawn frame then
+  // shows the state drawing every frame would have reached, rubber and chase rigs
+  // included. The loop is the same loop, so the gate's clock and the animations it
+  // drives keep step too. Pacing and the perf meter are a drawn frame's business.
+  setUndrawn(on) { this._undrawn = !!on; }
 
   // The frame itself, and the only place the perf HUD instruments. The GPU timer
   // brackets THIS call and nothing else: the HUD's own DOM writes and the cell

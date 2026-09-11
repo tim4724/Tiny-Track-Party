@@ -756,18 +756,25 @@ void ttp_display_burst(const char* idJson, double s, double lat) {
 // ---------------------------------------------------------------------------
 // The frame.
 // ---------------------------------------------------------------------------
+namespace {
+// The frame's input, built off the bound session — the drawn frame's and the
+// undrawn advance's alike. The one seam into the sim half of the runtime
+// (ttp_session.h): the display reads the bound session's live Game instead of
+// being handed a serialized copy of it back from the shell. The cell aspect
+// matches the renderer's own viewport exactly, or the projection disagrees with
+// the rect it lands in; it comes from the renderer (cellAspect) rather than
+// being worked out here, since it is a function of the LETTERBOXED grid and a
+// shell deriving it would be a copy that could drift.
+const TtpFrameInput* frameInput(DisplayCore& d, double dtSeconds) {
+    const Game* eng = d.session ? ttp_session_engine(d.session) : nullptr;
+    return ttp::rt::buildFrame(d, eng, (float) dtSeconds,
+                               d.renderer->cellAspect((uint32_t) d.cells.size()));
+}
+}  // namespace
+
 int ttp_display_frame(double dtSeconds) {
     if (!g_disp || !g_disp->built) return 0;
     DisplayCore& d = *g_disp;
-    const float dt = (float) dtSeconds;
-    // The one seam into the sim half of the runtime (ttp_session.h): the display
-    // reads the bound session's live Game instead of being handed a serialized
-    // copy of it back from the shell.
-    const Game* eng = d.session ? ttp_session_engine(d.session) : nullptr;
-    // Match the renderer's own viewport exactly, or the projection disagrees with
-    // the rect it lands in. The number comes from the renderer (cellAspect)
-    // rather than being worked out here: it is a function of the LETTERBOXED
-    // grid, and a shell deriving it would be a copy of it that could drift.
     const uint32_t nCells = (uint32_t) d.cells.size();
     // THE GRID IS THIS SIDE'S FACT, and the render-scale rule needs it for one
     // decision: whether the floor escape exists (ttp/render_scale.h,
@@ -780,11 +787,18 @@ int ttp_display_frame(double dtSeconds) {
     // profile array is what lets a scripted sweep attribute a CPU spike to the
     // input build without a second ABI call. Same steady_clock as ttpNowMs.
     const auto tBuild = std::chrono::steady_clock::now();
-    const TtpFrameInput* head =
-            ttp::rt::buildFrame(d, eng, dt, d.renderer->cellAspect(nCells));
+    const TtpFrameInput* head = frameInput(d, dtSeconds);
     d.renderer->noteBuildMs(std::chrono::duration<double, std::milli>(
             std::chrono::steady_clock::now() - tBuild).count());
     return d.renderer->render(*head) ? 1 : 0;
+}
+
+int ttp_display_advance(double dtSeconds) {
+    if (!g_disp || !g_disp->built) return 0;
+    // The frame's own input build — it is where the chase rigs and every cosmetic
+    // clock advance — with the render-scale rule left out: nothing is presented,
+    // so there is nothing for it to pace.
+    return g_disp->renderer->advance(*frameInput(*g_disp, dtSeconds)) ? 1 : 0;
 }
 
 int ttp_display_settled(void) {

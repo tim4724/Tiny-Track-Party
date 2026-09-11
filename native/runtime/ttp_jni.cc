@@ -167,6 +167,11 @@ jint n_ttp_car_world_pos(JNIEnv* env, jclass, jint a0, jbyteArray a1, jdoubleArr
     return rc;
 }
 
+jint n_ttp_display_advance(JNIEnv* env, jclass, jdouble a0) {
+    (void) env;
+    return (jint) ttp_display_advance((double) a0);
+}
+
 void n_ttp_display_antialias(JNIEnv* env, jclass, jint a0) {
     (void) env;
     ttp_display_antialias((int) a0);
@@ -1315,6 +1320,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_car_finished", "(I[B)I", (void*) n_ttp_car_finished },
     { "ttp_car_ids_json", "(I)[B", (void*) n_ttp_car_ids_json },
     { "ttp_car_world_pos", "(I[B[D)I", (void*) n_ttp_car_world_pos },
+    { "ttp_display_advance", "(D)I", (void*) n_ttp_display_advance },
     { "ttp_display_antialias", "(I)V", (void*) n_ttp_display_antialias },
     { "ttp_display_asset", "([B[B)I", (void*) n_ttp_display_asset },
     { "ttp_display_asset_plan", "([B)[B", (void*) n_ttp_display_asset_plan },

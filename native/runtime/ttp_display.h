@@ -666,6 +666,15 @@ TTP_ABI void ttp_display_hold(int held);
  * readback needs (pixels only survive inside the task that drew them). */
 TTP_ABI int ttp_display_frame(double dtSeconds);
 
+/* One frame WITHOUT A DRAW: everything ttp_display_frame does before the GPU —
+ * the scene clock, the chase rigs, the car seating, the props, the skid
+ * stamps — and nothing submitted. For a driver winding a race faster than it
+ * can draw it (the trailer editor): what the next drawn frame shows is then
+ * the state drawing every frame would have reached, rubber included, at a
+ * fraction of a drawn frame's cost. The stamps' texture uploads wait for that
+ * frame. Returns 1 when there was a scene to advance. */
+TTP_ABI int ttp_display_advance(double dtSeconds);
+
 /* 1 once a frame of the CURRENT scene has FINISHED on the GPU. Not the same
  * fact as ttp_display_frame's 1, which only says the frame was submitted: on a
  * queueing backend the first frames after a build sit behind Vulkan's pipeline
