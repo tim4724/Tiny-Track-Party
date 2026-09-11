@@ -41,6 +41,7 @@
 // ttp_runtime.h is here for the gp accessors the series twins gather from —
 // C ABI functions of this same module, called directly.
 #include "ttp_live.h"
+#include "ttp_net.h"  // ttp_net_link_down — the auto-pause gather's second "all gone"
 #include "ttp_progress.h"
 #include "ttp_room.h"
 #include "ttp_runtime.h"
@@ -893,8 +894,12 @@ Value ttp_live_auto_pause_decision(int sessionHandle, int roomHandle, int raceEn
   const Value aiV = ttp_session_ai_ids(sessionHandle);
   in.aiIds = idSetOf(&aiV);
   in.seatedIds = idSetWhere(carIdsV, ttp_room_has_flags(roomHandle, carIdsV));
+  // "Every participant is gone" has two readings and one answer: the seats all
+  // dropped, or OUR link is down and none of them can reach us. Either freezes
+  // the race rather than letting it run blind (ttp_net.h, the seam).
   const bool allDisc = ui::autoPauseAsksParticipants(in) &&
-      ttp_room_all_participants_disconnected_synced(roomHandle, sessionHandle) != 0;
+      (ttp_net_link_down(roomHandle) ||
+       ttp_room_all_participants_disconnected_synced(roomHandle, sessionHandle) != 0);
   const ui::AutoPauseDecision d = ui::autoPause(in, allDisc);
   Value o = Value::Obj();
   o.set("action", Value::Str(ui::key(d.action)));

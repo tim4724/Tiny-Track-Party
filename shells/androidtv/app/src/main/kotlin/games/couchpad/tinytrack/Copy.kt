@@ -231,6 +231,13 @@ object Copy {
      */
     const val disconnected = "Disconnected"
 
+    // -- connection overlay (the display's own link) -------------------------
+
+    const val reconnecting = "Reconnecting…"
+    /** "Attempt N of M", N clamped to M as the web spells it. */
+    fun attempt(n: Int, of: Int): String = "Attempt ${minOf(n, of)} of $of"
+    const val reconnectLabel = "Reconnect"
+
     // -- pause overlay ------------------------------------------------------
 
     const val paused = "Paused"

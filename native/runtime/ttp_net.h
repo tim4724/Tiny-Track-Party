@@ -249,6 +249,17 @@ TTP_ABI const char* ttp_net_controller_action(int roomHandle, int sessionHandle,
  *                                            from/data — nothing re-crosses)
  *   race-abandoned                           the onRaceAbandoned callback
  *   track-change {trackId}                   the onTrackChange callback
+ *   set-link {state,attempt,max,button}      the display's OWN link, for the
+ *                                            connection overlay: "connected"
+ *                                            (no overlay) | "reconnecting"
+ *                                            ("Attempt N of M"; attempt 0 is
+ *                                            heading-only) | "disconnected"
+ *                                            (button => a RECONNECT control
+ *                                            that calls ttp_net_reconnect_json).
+ *                                            The shell also re-asks the
+ *                                            auto-pause rule here: a link that
+ *                                            is down freezes a live race
+ *                                            (ttp_net_link_down below).
  *
  * NO clear-standings. The results board is room-retained (ttp_room.h), so the
  * statechange walk drops it with a store and lets its own `publish` carry the
@@ -284,8 +295,19 @@ TTP_ABI const char* ttp_net_on_protocol_json(int roomHandle, const char* type,
  * sends no peer_lefts, so the old roster would haunt the fresh lobby), and
  * only then dial fresh. That order is load-bearing. The reconnect BACKOFF is
  * not here: it lives in the connection kit (PartyConnection), which stays
- * platform code by design. */
-TTP_ABI const char* ttp_net_on_close_json(int roomHandle, int roomClosed);
+ * platform code by design — which is why the kit's OWN counters come in as
+ * arguments: `replaced` is the meta's 4000 flag, `attempt`/`maxAttempts` the
+ * close outcome's closeAttempt/closeMax. From those the walk answers what the
+ * viewer sees (`set-link`, the rule is session.h's link_after_close). */
+TTP_ABI const char* ttp_net_on_close_json(int roomHandle, int roomClosed, int replaced,
+                                          double attempt, double maxAttempts);
+
+/* The overlay's RECONNECT button. Answers effects only from the gave-up state
+ * (`set-link` disconnected WITH a button): reset the kit's attempt counter so
+ * the full budget runs again, raise the heading-only reconnecting overlay,
+ * dial. Anything else answers nothing — a stray press must not drop a healthy
+ * socket. */
+TTP_ABI const char* ttp_net_reconnect_json(int roomHandle);
 
 /* A relay message. Routes slot-0 echoes (the heartbeat closes its loop here),
  * lifts a dropped seat back, and walks the peer switch: hello (cross-device claim,
@@ -369,6 +391,14 @@ TTP_ABI const char* ttp_net_state_change_apply_json(int roomHandle, const char* 
 
 #ifdef __cplusplus
 }
+
+/* THE SEAM (C++ only, no ABI): is the display's own link anything but
+ * connected? Read by the auto-pause gather (ttp_live_auto_pause_decision): a
+ * link that is down means every participant is unreachable, so a live race
+ * freezes exactly as it does when every seat has dropped, and thaws on the
+ * relay's created/joined. A shell never reads this — it re-asks the auto-pause
+ * rule while performing `set-link`. */
+bool ttp_net_link_down(int roomHandle);
 #endif
 
 #endif /* TTP_NET_H */

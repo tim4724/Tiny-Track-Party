@@ -3826,7 +3826,7 @@ void netWalksMatchMultiCallPath() {
 
   // --- close with the room gone: forget, expire EVERY seat, then re-dial ----
   {
-    Value w = walkOf(ttp_net_on_close_json(walkRoom, 1), "close roomClosed");
+    Value w = walkOf(ttp_net_on_close_json(walkRoom, 1, 0, 0, 0), "close roomClosed");
     twin.reset();
     twin.expected.push(bareEffect("clear-create-timer"));
     twin.expected.push(bareEffect("forget-room"));
@@ -3849,6 +3849,48 @@ void netWalksMatchMultiCallPath() {
     Value wantErr = Value::Arr();
     wantErr.push(bareEffect("fail-attempt"));
     literalEffects(err, wantErr, "error/create-rejected");
+  }
+
+  // --- the display's own link: what a PLAIN close shows, and the button ------
+  {
+    const auto linkEffect = [](const char* state, double attempt, double max, bool button) {
+      Value e = bareEffect("set-link");
+      e.set("state", Value::Str(state));
+      e.set("attempt", Value::Num(attempt));
+      e.set("max", Value::Num(max));
+      e.set("button", Value::Bool(button));
+      return e;
+    };
+    // A budgeted drop: the kit's counters, verbatim, under RECONNECTING.
+    Value want = Value::Arr();
+    want.push(bareEffect("clear-create-timer"));
+    want.push(linkEffect("reconnecting", 1, 5, false));
+    literalEffects(walkOf(ttp_net_on_close_json(walkRoom, 0, 0, 1, 5), "close attempt 1"),
+                   want, "close/attempt-1");
+    // The button does nothing while the kit is still retrying.
+    literalEffects(walkOf(ttp_net_reconnect_json(walkRoom), "reconnect while retrying"),
+                   Value::Arr(), "reconnect/while-retrying");
+    // Past the cap: DISCONNECTED with the button.
+    want = Value::Arr();
+    want.push(bareEffect("clear-create-timer"));
+    want.push(linkEffect("disconnected", 6, 5, true));
+    literalEffects(walkOf(ttp_net_on_close_json(walkRoom, 0, 0, 6, 5), "close attempt 6"),
+                   want, "close/budget-spent");
+    // The press: re-arm the budget, heading-only overlay, dial — in that order.
+    want = Value::Arr();
+    want.push(bareEffect("reset-reconnect-count"));
+    want.push(linkEffect("reconnecting", 0, 0, false));
+    want.push(bareEffect("reconnect"));
+    literalEffects(walkOf(ttp_net_reconnect_json(walkRoom), "reconnect pressed"),
+                   want, "reconnect/pressed");
+    // Evicted (4000): terminal, and no button to start a takeover war with.
+    want = Value::Arr();
+    want.push(bareEffect("clear-create-timer"));
+    want.push(linkEffect("disconnected", 0, 0, false));
+    literalEffects(walkOf(ttp_net_on_close_json(walkRoom, 0, 1, 0, 0), "close replaced"),
+                   want, "close/replaced");
+    literalEffects(walkOf(ttp_net_reconnect_json(walkRoom), "reconnect after eviction"),
+                   Value::Arr(), "reconnect/after-eviction");
   }
 
   ttp_room_dispose(twin.room);
@@ -4764,7 +4806,8 @@ void raceLiveWalks() {
       }
       if (s) in.aiIds.add(ui::Id::Str("ai-0"));
       const bool allDisc = ui::autoPauseAsksParticipants(in) &&
-                           ttp_room_all_participants_disconnected_synced(room, s) != 0;
+                           (ttp_net_link_down(room) ||
+                            ttp_room_all_participants_disconnected_synced(room, s) != 0);
       const ui::AutoPauseDecision d = ui::autoPause(in, allDisc);
       race::AutoPauseDecision rd;
       rd.present = true;
@@ -4783,6 +4826,32 @@ void raceLiveWalks() {
     sameAutoPause(0, 0, "no session");
     flow->markReconnected(PeerId::Num(1));
     ttp_room_events_json(room);
+    // OUR OWN link down reads as every participant gone: the race freezes
+    // rather than running blind, and thaws on the relay's answer.
+    {
+      check(!ttp_net_link_down(room), "premise: the link is up");
+      const Value plain = parseOrNull(ttp_net_on_close_json(room, 0, 0, 1, 5), "plain close");
+      check(json::str_field(plain.find("effects")->arr[1], "op") == "set-link",
+            "a plain close raises set-link");
+      check(ttp_net_link_down(room), "a plain close marks the link down");
+      const Value frozen = parseOrNull(ttp_race_auto_pause_live_json(sess, room, 0),
+                                       "auto_pause with the link down");
+      bool pausedOn = false;
+      for (const Value& e : frozen.find("effects")->arr)
+        if (json::str_field(e, "op") == "set-auto-paused") pausedOn = json::truthy(e.find("on"));
+      check(pausedOn, "auto_pause_live freezes the race while the link is down");
+      sameAutoPause(sess, 0, "playing, link down");
+      const Value back = parseOrNull(
+          ttp_net_on_protocol_json(room, "created", "{\"room\":\"LINK\"}", 0), "created");
+      bool relinked = false;
+      for (const Value& e : back.find("effects")->arr)
+        if (json::str_field(e, "op") == "set-link")
+          relinked = json::str_field(e, "state") == "connected";
+      check(relinked, "created answers set-link connected once the link was down");
+      check(!ttp_net_link_down(room), "created marks the link up");
+      sameAutoPause(sess, 0, "playing, link back");
+      ttp_room_events_json(room);
+    }
     ttp_dispose(sess);
   }
 

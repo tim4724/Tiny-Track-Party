@@ -636,6 +636,7 @@ const net = new DisplayNet({
   },
   onRosterChange: renderRoster,
   onReconnectChange: renderReconnect,   // dropped seats awaiting a rejoin → QR cards
+  onLinkChange: renderLink,             // the display's OWN link → the connection overlay
   onPlayerRekey: rekeyCarPlayer,        // cross-device rejoin: move their car to the new slot
   onPlayerRenamed: renamePlayer,        // live rename: move the copies a race froze
   // The live race itself, as a native handle: the party layer works out its own
@@ -1293,6 +1294,26 @@ function setPauseOverlay(on) {
   el('pause-overlay').classList.toggle('hidden', !on);
 }
 
+// The display's OWN link, from the set-link effect. The overlay is the kit's
+// attempt counter made visible, and RECONNECT is the one way out of the gave-up
+// state (net.reconnect re-arms the budget before it dials). The auto-pause rule
+// is re-asked here because a link that is down reads as every participant gone
+// (ttp_net.h's seam): a race must not run blind behind this glass.
+function renderLink(link) {
+  const on = link.state !== 'connected';
+  el('link-overlay').classList.toggle('hidden', !on);
+  if (on) {
+    el('link-heading').textContent = link.state === 'disconnected' ? 'Disconnected' : 'Reconnecting…';
+    // Attempt 0 is the heartbeat's unnumbered immediate retry: heading only.
+    el('link-status').textContent = (link.state === 'reconnecting' && link.attempt > 0)
+      ? `Attempt ${Math.min(link.attempt, link.max)} of ${link.max}` : '';
+    const btn = el('link-reconnect');
+    btn.classList.toggle('hidden', !link.button);
+    if (link.button) btn.focus();
+  }
+  refreshAutoPause();
+}
+
 // ---- audio unlock + the sound hint ----
 // Unlock audio on the first real gesture (pointermove is not a user activation,
 // so it can't resume a suspended AudioContext — only clicks/keys count).
@@ -1323,6 +1344,7 @@ if (!_isTestMode && _audioSupported) {
 el('pause-btn').addEventListener('click', () => { paused ? resumeRace() : pauseRace(); });
 el('pause-continue').addEventListener('click', resumeRace);
 el('pause-newgame').addEventListener('click', returnToLobby); // mid-race quit — cancels a cup too
+el('link-reconnect').addEventListener('click', () => net.reconnect());
 // On the results board the same button is "Next race ▸" during a cup
 // intermission and "New Game" otherwise (label swapped by showResults). The
 // ACTION behind the click is the model's too — label and branch can no longer

@@ -94,6 +94,40 @@
       "gitSha": "662cd1b3"
     },
     {
+      "scenario": "disconnected",
+      "platform": "androidtv-emu",
+      "file": "androidtv-emu/disconnected.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 25810,
+      "capturedAt": "2026-09-11T12:00:38.161Z",
+      "gitSha": "1c464d9d",
+      "deviceName": "TTP_link_5590",
+      "deviceId": "emulator-5590"
+    },
+    {
+      "scenario": "disconnected",
+      "platform": "tvos-sim",
+      "file": "tvos-sim/disconnected.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 7928,
+      "capturedAt": "2026-09-11T12:00:57.162Z",
+      "gitSha": "1c464d9d",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
+    },
+    {
+      "scenario": "disconnected",
+      "platform": "web",
+      "file": "web/disconnected.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 11510,
+      "capturedAt": "2026-09-11T11:59:32.998Z",
+      "gitSha": "1c464d9d"
+    },
+    {
       "scenario": "finished",
       "platform": "androidtv-device",
       "file": "androidtv-device/finished.webp",
@@ -986,6 +1020,40 @@
       "bytes": 36992,
       "capturedAt": "2026-09-11T07:19:18.257Z",
       "gitSha": "13943ae2"
+    },
+    {
+      "scenario": "reconnecting",
+      "platform": "androidtv-emu",
+      "file": "androidtv-emu/reconnecting.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 26126,
+      "capturedAt": "2026-09-11T12:00:14.291Z",
+      "gitSha": "1c464d9d",
+      "deviceName": "TTP_link_5590",
+      "deviceId": "emulator-5590"
+    },
+    {
+      "scenario": "reconnecting",
+      "platform": "tvos-sim",
+      "file": "tvos-sim/reconnecting.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 7474,
+      "capturedAt": "2026-09-11T12:00:57.091Z",
+      "gitSha": "1c464d9d",
+      "deviceName": "Apple TV 4K (3rd generation) (at 1080p)",
+      "deviceId": "621EB8EE-9379-4EC0-AC4A-5C96768D0D24"
+    },
+    {
+      "scenario": "reconnecting",
+      "platform": "web",
+      "file": "web/reconnecting.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 11430,
+      "capturedAt": "2026-09-11T11:59:19.979Z",
+      "gitSha": "1c464d9d"
     },
     {
       "scenario": "results",

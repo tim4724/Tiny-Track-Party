@@ -321,6 +321,29 @@ struct HeartbeatTick {
 };
 HeartbeatTick heartbeat_tick(bool inRoom, bool hbPending, double hbSentAt, double now);
 
+// ---- the display's own link ---------------------------------------------------
+
+// What the DISPLAY shows about its OWN relay socket. The retry budget itself is
+// the connection kit's (relay_framing.h close_outcome); this is what one close
+// outcome means for the viewer:
+//
+//   CONNECTED     nothing to show — the initial state, and created/joined
+//   RECONNECTING  the kit is retrying: "Attempt N of M" (attempt 0 is an
+//                 unnumbered immediate retry, heading only)
+//   DISCONNECTED  the budget is spent, and the RECONNECT button re-arms it —
+//                 or the slot was taken over (4000), where there is no button
+//                 because rejoining would evict the other display right back
+//
+// A ROOM close (4001) changes nothing: the display dials a fresh room at once,
+// and only that dial's own failure raises the overlay.
+enum class LinkState { CONNECTED, RECONNECTING, DISCONNECTED };
+struct LinkPlan {
+  bool change = false;
+  LinkState state = LinkState::CONNECTED;
+  bool button = false;
+};
+LinkPlan link_after_close(bool replaced, bool roomClosed, double attempt, double maxAttempts);
+
 // ---- claims + reconciliation ---------------------------------------------------
 
 // A different DEVICE claims a dropped seat by carrying its old peerIndex as the
@@ -370,6 +393,7 @@ const char* key(LeaveAction a);
 const char* key(InboundRoute r);
 const char* key(MessageAction a);
 const char* key(HeartbeatAct a);
+const char* key(LinkState s);
 
 }  // namespace session
 }  // namespace ttp

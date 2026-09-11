@@ -39,6 +39,23 @@ import Foundation
 /// the phone, not here). Counted rather than named, this list was wrong within
 /// two commits of being written — a timer arriving in one file renumbered the
 /// comments in another.
+/// The `set-link` payload, as the connection overlay reads it: the display's
+/// OWN relay link. `state` is connected | reconnecting | disconnected; the
+/// counter is the kit's; `button` is whether a RECONNECT is on offer.
+struct LinkView {
+    let state: String
+    let attempt: Int
+    let max: Int
+    let button: Bool
+
+    init(_ e: [String: Any]) {
+        state = e["state"] as? String ?? "connected"
+        attempt = (e["attempt"] as? NSNumber)?.intValue ?? 0
+        max = (e["max"] as? NSNumber)?.intValue ?? 0
+        button = e["button"] as? Bool ?? false
+    }
+}
+
 @MainActor
 final class PartyNet {
 
@@ -60,6 +77,9 @@ final class PartyNet {
     var onRaceAbandoned: (() -> Void)?
     /// The socket closed. `true` means the ROOM died (4001) rather than the link.
     var onClose: ((Bool) -> Void)?
+    /// The `set-link` effect: the display's OWN link as the viewer should see
+    /// it. `connected` takes the overlay down.
+    var onLink: ((LinkView) -> Void)?
 
     /// The `game-message` effect: a message the session policy does not name —
     /// START_GAME, CONTROL, the pause requests, SERIES_NEXT.
@@ -155,7 +175,8 @@ final class PartyNet {
     // schedules it, and the walks never see it (the web's PartyConnection keeps
     // it platform-side by design).
     private var reconnectAttempt: Double = 0
-    private let maxReconnectAttempts: Double = 5
+    // READ, never re-typed (ttp_party.h says so): the budget is stated once.
+    private let maxReconnectAttempts: Double = ttp_framing_max_reconnect_attempts()
     private var shouldReconnect = true
 
     /// Dropped seats currently offering a reconnect QR. An ARRAY rather than a
@@ -327,13 +348,18 @@ final class PartyNet {
 
         let meta = o["meta"] as? [String: Any]
         let roomClosed = meta?["roomClosed"] as? Bool == true
+        let replaced = meta?["replaced"] as? Bool == true
 
         if !shuttingDown {
             // The ROOM half is the walk's: on roomClosed it forgets the room,
             // expires every seat (close_room sends no peer_lefts, so the old
             // roster would haunt the fresh lobby) and answers connect-fresh —
-            // that order is load-bearing and lives in C++ now.
-            walk(TTP.strOrEmpty(ttp_net_on_close_json(roomHandle, roomClosed ? 1 : 0)))
+            // that order is load-bearing and lives in C++ now. The kit's own
+            // counters go in verbatim: what the viewer sees (`set-link`) is
+            // answered off them, never re-derived here.
+            walk(TTP.strOrEmpty(ttp_net_on_close_json(roomHandle, roomClosed ? 1 : 0,
+                                                      replaced ? 1 : 0, reconnectAttempt,
+                                                      maxReconnectAttempts)))
         }
         // AFTER the walk, deliberately: the coordinator's room-closed landing
         // seeds a fresh default pick, and the seed's null sender is only the
@@ -403,7 +429,14 @@ final class PartyNet {
         reconnectAttempt = 0
         // The suspension closed every RTC link (shutdown); the phones' kits
         // re-offer on their next `joined`. Nothing to restore here.
-        walk(TTP.strOrEmpty(ttp_net_on_close_json(roomHandle, 1)))
+        walk(TTP.strOrEmpty(ttp_net_on_close_json(roomHandle, 1, 0, 0, 0)))
+    }
+
+    /// The connection overlay's RECONNECT. The walk decides — only the gave-up
+    /// state answers anything — and its effects re-arm the budget before the
+    /// dial, so a second outage gets the full budget again.
+    func reconnect() {
+        walk(TTP.strOrEmpty(ttp_net_reconnect_json(roomHandle)))
     }
 
     /// The app going away IS the party ending.
@@ -548,6 +581,9 @@ final class PartyNet {
         case "reconnect":
             reconnectNow()
 
+        case "set-link":
+            onLink?(LinkView(e))
+
         // The frame data arrives composed (PONG, the self-heartbeat) — this
         // side puts it on the socket and adds nothing.
         case "send-to":
@@ -639,7 +675,7 @@ final class PartyNet {
         "reset-reconnect-count", "connect-fresh", "fail-attempt", "reconnect",
         "send-to", "publish", "announce", "close-fastlane", "show-reconnect",
         "clear-reconnect", "rekey-player", "player-renamed", "welcome-item",
-        "game-message", "race-abandoned", "track-change",
+        "game-message", "race-abandoned", "track-change", "set-link",
     ]
 
     private func announceRoomReady() {

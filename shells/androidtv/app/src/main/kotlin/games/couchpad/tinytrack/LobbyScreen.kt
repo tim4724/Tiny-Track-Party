@@ -110,8 +110,12 @@ fun LobbyScreen(state: GameState) {
         // up on a board the room is reading a join code off.
         val park = remember { FocusRequester() }
         val boardOnTop = state.infoPath.isNotEmpty()
-        LaunchedEffect(state.cover, boardOnTop) {
-            if (state.cover != "boot" && !boardOnTop) park.requestFocus()
+        // ...and again when the connection overlay leaves: its RECONNECT held
+        // focus, and Compose hands a vanished focus target's place to the next
+        // focusable in traversal order, which is the ⓘ — seen lit blue on the
+        // emulator the moment a reconnect landed.
+        LaunchedEffect(state.cover, boardOnTop, state.link == null) {
+            if (state.cover != "boot" && !boardOnTop && state.link == null) park.requestFocus()
         }
         Box(
             Modifier

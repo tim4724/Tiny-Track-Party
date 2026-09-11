@@ -363,7 +363,14 @@ identically (both are commented where they bite, in `TtpRendererBakes.cpp`):
    launch bugs lived). Drain the room's event queue before performing a walk's
    effects. When your shell gains a SEND path, add a case to
    `scripts/wire-mutations.mjs` — that was the suite's one historical blind
-   spot.
+   spot. The close walk takes the kit's own counters (the 4000 flag, the
+   attempt, the cap) and answers `set-link`: you owe a full-screen connection
+   overlay over EVERYTHING, the boot cover included, whose RECONNECT control
+   calls `ttp_net_reconnect_json` and takes focus when it appears (nothing else
+   on the glass is focusable then). While performing `set-link`, re-ask the
+   auto-pause rule — a link that is down freezes a live race through the same
+   seam a dropped roster does. The three shipped overlays are `#link-overlay`,
+   `LinkOverlay.swift` and `LinkOverlay.kt`.
 7. **The audio device.** A player over the command stream. The cue palette is
    pre-baked (`public/assets/audio/cues/` — WAVs plus a manifest carrying each
    cue's detune spread; see `scripts/bake-cues.mjs` for why the jitter is the

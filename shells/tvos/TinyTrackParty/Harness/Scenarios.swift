@@ -177,6 +177,19 @@ enum Scenarios {
             state.cupSlot = nil
             fakeJoin(state, code: "TEST")
 
+        case "reconnecting", "disconnected":
+            // The display's OWN link over the empty lobby: the two states of
+            // `LinkOverlay` (the `set-link` effect), fabricated as the view the
+            // effect would have set. The spent budget shows the button, which
+            // takes focus as it does live — the card that shows the focus ring.
+            game.show(.lobby)
+            state.seats = (0..<game.proto.maxPlayers).map(GameState.Seat.open(at:))
+            state.cupSlot = nil
+            fakeJoin(state, code: "TEST")
+            let gaveUp = id == "disconnected"
+            state.link = LinkView(["state": gaveUp ? "disconnected" : "reconnecting",
+                                   "attempt": gaveUp ? 0 : 3, "max": 5, "button": gaveUp])
+
         case "lobby-tour", "lobby-track", "lobby-random":
             game.show(.lobby)
             fakeJoin(state, code: "TEST")

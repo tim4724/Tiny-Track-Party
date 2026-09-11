@@ -75,7 +75,7 @@ const char* const NET_EFFECT_OPS[] = {
     "reset-reconnect-count", "connect-fresh", "fail-attempt", "reconnect",
     "send-to", "publish", "announce", "close-fastlane", "show-reconnect",
     "clear-reconnect", "rekey-player", "player-renamed", "welcome-item",
-    "game-message", "race-abandoned", "track-change"};
+    "game-message", "race-abandoned", "track-change", "set-link"};
 
 const char* put(std::string& buf, const Value& v) {
   canonical_stringify_into(v, buf);
@@ -288,6 +288,13 @@ struct NetState {
   bool inRoom = false;
   bool hbPending = false;
   double hbSentAt = 0;
+  // The display's own link, as the viewer sees it (session.h LinkState). The
+  // four fields are exactly the `set-link` payload; a shell mirrors them only
+  // to draw the overlay.
+  ns::LinkState link = ns::LinkState::CONNECTED;
+  double linkAttempt = 0;
+  double linkMax = 0;
+  bool linkButton = false;
 };
 std::map<int, NetState> g_netStates;
 NetState& netStateOf(int roomHandle) { return g_netStates[roomHandle]; }
@@ -295,7 +302,7 @@ NetState& netStateOf(int roomHandle) { return g_netStates[roomHandle]; }
 // One scratch buffer per walk, the file's own rule (see the block above).
 std::string g_bufOpen, g_bufCreateTimeout, g_bufProtocol, g_bufClose, g_bufPeerMsg,
     g_bufSelectDraw, g_bufSetTrack, g_bufLiveness, g_bufSeen, g_bufHostApply,
-    g_bufStateApply, g_bufPick;
+    g_bufStateApply, g_bufPick, g_bufReconnect;
 
 const Value kUndef;  // JS `undefined`, for absent-key comparisons
 const Value& orUndef(const Value* v) { return v ? *v : kUndef; }
@@ -351,6 +358,22 @@ const char* answer(std::string& buf, Value effects) {
   out.set("effects", std::move(effects));
   canonical_stringify_into(out, buf);
   return buf.c_str();
+}
+
+// Store the link view and tell the shell. The ONE writer of the four fields,
+// so the effect and the store can never disagree.
+void setLink(NetState& st, ns::LinkState state, double attempt, double max, bool button,
+             Value& effects) {
+  st.link = state;
+  st.linkAttempt = attempt;
+  st.linkMax = max;
+  st.linkButton = button;
+  Value e = effectOp("set-link");
+  e.set("state", Value::Str(ns::key(state)));
+  e.set("attempt", Value::Num(attempt));
+  e.set("max", Value::Num(max));
+  e.set("button", Value::Bool(button));
+  effects.push(std::move(e));
 }
 
 // ---- the old shell's private methods, one each -----------------------------
@@ -768,6 +791,12 @@ const char* ttp_net_on_protocol_json(int roomHandle, const char* type, const cha
     effects.push(std::move(s));
     st.hbPending = false;
     pushOp(effects, "start-liveness");
+    // The overlay comes down HERE, on the relay's answer, never on the raw
+    // socket open: a dial that opens and is then refused would flash the
+    // lobby between two overlays. Only on a change, so the common case's
+    // effect list is exactly what it always was.
+    if (st.link != ns::LinkState::CONNECTED)
+      setLink(st, ns::LinkState::CONNECTED, 0, 0, false, effects);
     Value r = effectOp("room-ready");
     r.set("room", Value::Str(st.roomCode));
     r.set("instance", st.instance.empty() ? Value::Null() : Value::Str(st.instance));
@@ -853,12 +882,21 @@ const char* ttp_net_on_protocol_json(int roomHandle, const char* type, const cha
   return answer(g_bufProtocol, std::move(effects));
 }
 
-const char* ttp_net_on_close_json(int roomHandle, int roomClosed) {
+const char* ttp_net_on_close_json(int roomHandle, int roomClosed, int replaced, double attempt,
+                                  double maxAttempts) {
   RoomFlow* flow = ttp_room_flow(roomHandle);
   NetState& st = netStateOf(roomHandle);
   st.inRoom = false;
   Value effects = Value::Arr();
   pushOp(effects, "clear-create-timer");
+  // What this close means for the viewer — the rule is session.h's. The
+  // attempt and the cap are the kit's own counters, handed through untouched
+  // so the overlay's "Attempt N of M" is the budget that is actually running.
+  {
+    const ns::LinkPlan plan = ns::link_after_close(replaced != 0, roomClosed != 0, attempt,
+                                                   maxAttempts);
+    if (plan.change) setLink(st, plan.state, attempt, maxAttempts, plan.button, effects);
+  }
   // The room itself is gone — our own closeRoom() echoing back, or the relay
   // tore it down. Terminal for the room but not for the display: forget it and
   // open a fresh one (new code/QR), same fallback as a "Room not found" join.
@@ -1135,6 +1173,9 @@ const char* ttp_net_liveness_json(int roomHandle, int sessionHandle, double nowM
   st.hbSentAt = tick.hbSentAt;
   if (tick.act == ns::HeartbeatAct::RECONNECT) {
     // The relay can no longer reach us: force the reconnect it cannot ask for.
+    // An unnumbered retry (attempt 0): the overlay's heading and nothing else
+    // until the redial's own outcome numbers it.
+    setLink(st, ns::LinkState::RECONNECTING, 0, 0, false, effects);
     pushOp(effects, "reconnect");
   } else if (tick.act == ns::HeartbeatAct::SEND) {
     Value data = Value::Obj();
@@ -1157,6 +1198,26 @@ const char* ttp_net_liveness_json(int roomHandle, int sessionHandle, double nowM
   ttp_room_sync_active_order(roomHandle, sessionHandle);
   if (flow->graceTick(nowMs)) pushOp(effects, "race-abandoned");
   return answer(g_bufLiveness, std::move(effects));
+}
+
+const char* ttp_net_reconnect_json(int roomHandle) {
+  NetState& st = netStateOf(roomHandle);
+  Value effects = Value::Arr();
+  // Only the gave-up state offers the button; anything else is a stray press
+  // (or a shell re-firing a stale one) and must not drop a healthy socket.
+  if (st.link != ns::LinkState::DISCONNECTED || !st.linkButton)
+    return answer(g_bufReconnect, std::move(effects));
+  // Re-arm the FULL budget before the dial: a bare reconnect would leave the
+  // counter past the cap, and the next drop would fall straight back to
+  // DISCONNECTED after one attempt instead of five.
+  pushOp(effects, "reset-reconnect-count");
+  setLink(st, ns::LinkState::RECONNECTING, 0, 0, false, effects);
+  pushOp(effects, "reconnect");
+  return answer(g_bufReconnect, std::move(effects));
+}
+
+bool ttp_net_link_down(int roomHandle) {
+  return netStateOf(roomHandle).link != ns::LinkState::CONNECTED;
 }
 
 const char* ttp_net_on_seen_json(int roomHandle, const char* peerIdJson, double nowMs) {

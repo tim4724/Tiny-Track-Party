@@ -109,6 +109,13 @@ export const GALLERY_SCENARIOS = [
   { id: 'rocket', key: 'rocket', title: 'Rocket strike', animated: true },
   { id: 'monster', key: 'monster', title: 'Monster truck', animated: true },
   { id: 'paused', key: 'paused', title: 'Paused' },
+  // THE DISPLAY'S OWN LINK, over the empty lobby: the two states of the
+  // connection overlay (the `set-link` effect). `reconnecting` is the kit's
+  // counter mid-backoff; `disconnected` is the spent budget with the one
+  // focusable control on the glass, which is the card that shows each
+  // platform's focus ring.
+  { id: 'reconnecting', key: 'reconnecting', title: 'Reconnecting' },
+  { id: 'disconnected', key: 'disconnected', title: 'Disconnected' },
   // The reconnect QR is sized off the CELL (display.css .cell-reconnect): half
   // the screen's height for one player, most of the cell in a split. Two cards,
   // because a capture shoots every card at four players unless the table pins

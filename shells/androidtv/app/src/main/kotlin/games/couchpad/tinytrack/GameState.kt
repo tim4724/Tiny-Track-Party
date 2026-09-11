@@ -391,6 +391,23 @@ class GameState {
     var paused by mutableStateOf(false)
 
     /**
+     * The `set-link` payload: the display's OWN relay link as the viewer should
+     * see it. `state` is connected | reconnecting | disconnected; the counter is
+     * the kit's; `button` is whether a RECONNECT is on offer.
+     */
+    data class LinkView(val state: String, val attempt: Int, val max: Int, val button: Boolean) {
+        companion object {
+            fun from(e: JSONObject) = LinkView(
+                e.optString("state", "connected"), e.optInt("attempt", 0),
+                e.optInt("max", 0), e.optBoolean("button", false))
+        }
+    }
+
+    /** The link while anything but connected, else null. Drawn by [LinkOverlay]
+     *  over everything, the boot cover included: a boot with no relay must say so. */
+    var link by mutableStateOf<LinkView?>(null)
+
+    /**
      * The BOOST item icon's chevron accent for the biome the current scene
      * resolved to. `ttp_theme_boost_icon(biome)` answers it, and it is one of
      * exactly two colours a shell may ask the theme for. Wanting a third means the

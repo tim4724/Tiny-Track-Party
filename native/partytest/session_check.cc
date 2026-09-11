@@ -209,6 +209,18 @@ bool applyOp(Shell& st, const std::string& op, const Value& in, Value& out, std:
     out.set("tick", std::move(tick));
     return true;
   }
+  if (op == "link") {
+    const ns::LinkPlan p = ns::link_after_close(json::truthy(field(in, "replaced")),
+                                                json::truthy(field(in, "roomClosed")),
+                                                json::num_field(in, "attempt"),
+                                                json::num_field(in, "max"));
+    Value plan = Value::Obj();
+    plan.set("change", Value::Bool(p.change));
+    plan.set("state", Value::Str(ns::key(p.state)));
+    plan.set("button", Value::Bool(p.button));
+    out.set("plan", std::move(plan));
+    return true;
+  }
   if (op == "claim") {
     const Value* token = json::truthy(field(in, "absent")) ? nullptr : field(in, "rejoinToken");
     const ns::ClaimPlan p = ns::claim_plan(json::num_field(in, "fromId"), token,

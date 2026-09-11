@@ -869,6 +869,9 @@ class GameCoordinator(
     fun rekey(old: EngineId, new: EngineId) = run(TtpJson.obj(Ttp.ttp_race_rekey_live_json(
         sessionHandle, net.roomHandle, TtpJson.arg(old.json), TtpJson.arg(new.json))))
 
+    /** The connection overlay's RECONNECT button. */
+    fun reconnectLink() = net.reconnect()
+
     fun refreshAutoPause() {
         // The input, the consult gate, the synced participants read AND the effects
         // are one walk. `raceEnded` is the one input that stays: the results-overlay
@@ -912,6 +915,14 @@ class GameCoordinator(
                 clearJoinTicket()
                 landOnFreshLobby()
             }
+        }
+        // The display's OWN link (`set-link`): the overlay, and a re-ask of the
+        // auto-pause rule, which reads the link through its own seam — a link that
+        // is down freezes a live race rather than letting it run blind, and the
+        // relay's created/joined thaws it.
+        net.onLink = { link ->
+            state.link = if (link.state == "connected") null else link
+            refreshAutoPause()
         }
         net.onControllerMessage = { from, msg -> handleControllerMessage(from, msg) }
         net.onPlayerWelcomed = { id -> relightItem(id); refreshLobby() }

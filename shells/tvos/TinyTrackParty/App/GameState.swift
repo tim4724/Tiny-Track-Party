@@ -37,6 +37,11 @@ final class GameState: ObservableObject {
     /// it has to because SwiftUI draws that body before `boot()` runs.
     @Published var cover: String = "none"
 
+    /// The display's OWN relay link, from the `set-link` effect, or nil while
+    /// connected. Drawn by `LinkOverlay` over everything, the boot cover
+    /// included: a boot with no relay must say so.
+    @Published var link: LinkView?
+
     /// What the 3D surface is doing behind the chrome. The welcome board is
     /// always over the paper diorama; the lobby crossfades to the live track
     /// preview once a scene is built.

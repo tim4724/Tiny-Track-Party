@@ -180,6 +180,10 @@ fun RootScreen(game: GameCoordinator) {
             }
         }
 
+        // The display's OWN link, over the cover too: a boot with no relay must say
+        // so instead of sitting on the launch picture.
+        state.link?.let { LinkOverlay(it, game) }
+
         // The perf readout is NOT here: it is a plain View beside this whole
         // ComposeView ([PerfOverlayView] has the argument and the measured
         // numbers — its Compose form cost ~9× the frame-thread time per

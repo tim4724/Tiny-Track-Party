@@ -213,6 +213,13 @@ enum Copy {
     /// web's for no gain.
     static let newGameLabel = "New game"
 
+    // MARK: - Connection overlay (the display's own link)
+
+    static let reconnecting = "Reconnecting…"
+    /// "Attempt N of M", N clamped to M as the web spells it.
+    static func attempt(_ n: Int, of m: Int) -> String { "Attempt \(min(n, m)) of \(m)" }
+    static let reconnectLabel = "Reconnect"
+
     // MARK: - Results
 
     /// A car that did not finish inside the race's own time cap.

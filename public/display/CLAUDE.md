@@ -80,6 +80,12 @@ asks `net.pick` or `flow.seriesState` when it needs one. Walks go through
 `flow.runWalk`, which keeps NativeRoomFlow's event-drain discipline around a
 mutation the class's own methods didn't make.
 
+The display's OWN link is drawn, never decided, here: the `set-link` effect
+carries the whole view (`renderLink` in `main.js` fills `#link-overlay` and
+re-asks the auto-pause rule), and the overlay's RECONNECT is `net.reconnect()`,
+one walk. There is no "reconnecting" latch on this side — a stale one is exactly
+the kind of second authority the retained room replaced.
+
 **The RESULTS BOARD is the newest of those, and it went last because it looked
 like a message rather than like state.** It is composed and retained by the race
 walk, injected under `standings` by `ttp_net_lobby_frame`, patched in place by

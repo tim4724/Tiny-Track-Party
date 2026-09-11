@@ -739,9 +739,9 @@ jbyteArray n_ttp_net_lobby_frame(JNIEnv* env, jclass, jint a0, jint a1, jbyteArr
     return toBytes(env, ttp_net_lobby_frame((int) a0, (int) a1, s2.get()));
 }
 
-jbyteArray n_ttp_net_on_close_json(JNIEnv* env, jclass, jint a0, jint a1) {
+jbyteArray n_ttp_net_on_close_json(JNIEnv* env, jclass, jint a0, jint a1, jint a2, jdouble a3, jdouble a4) {
     (void) env;
-    return toBytes(env, ttp_net_on_close_json((int) a0, (int) a1));
+    return toBytes(env, ttp_net_on_close_json((int) a0, (int) a1, (int) a2, (double) a3, (double) a4));
 }
 
 jbyteArray n_ttp_net_on_open_json(JNIEnv* env, jclass, jint a0) {
@@ -775,6 +775,11 @@ jbyteArray n_ttp_net_reconnect_card_json(JNIEnv* env, jclass, jbyteArray a0, jby
     CStr s0(env, a0);
     CStr s1(env, a1);
     return toBytes(env, ttp_net_reconnect_card_json(s0.get(), s1.get()));
+}
+
+jbyteArray n_ttp_net_reconnect_json(JNIEnv* env, jclass, jint a0) {
+    (void) env;
+    return toBytes(env, ttp_net_reconnect_json((int) a0));
 }
 
 void n_ttp_net_restore_room(JNIEnv* env, jclass, jint a0, jbyteArray a1, jbyteArray a2) {
@@ -1416,13 +1421,14 @@ const JNINativeMethod kMethods[] = {
     { "ttp_net_join_url", "([B[B[B[B)[B", (void*) n_ttp_net_join_url },
     { "ttp_net_liveness_json", "(IID)[B", (void*) n_ttp_net_liveness_json },
     { "ttp_net_lobby_frame", "(II[B)[B", (void*) n_ttp_net_lobby_frame },
-    { "ttp_net_on_close_json", "(II)[B", (void*) n_ttp_net_on_close_json },
+    { "ttp_net_on_close_json", "(IIIDD)[B", (void*) n_ttp_net_on_close_json },
     { "ttp_net_on_open_json", "(I)[B", (void*) n_ttp_net_on_open_json },
     { "ttp_net_on_peer_message_json", "(II[B[BID)[B", (void*) n_ttp_net_on_peer_message_json },
     { "ttp_net_on_protocol_json", "(I[B[BD)[B", (void*) n_ttp_net_on_protocol_json },
     { "ttp_net_on_seen_json", "(I[BD)[B", (void*) n_ttp_net_on_seen_json },
     { "ttp_net_pick_json", "(I)[B", (void*) n_ttp_net_pick_json },
     { "ttp_net_reconnect_card_json", "([B[B)[B", (void*) n_ttp_net_reconnect_card_json },
+    { "ttp_net_reconnect_json", "(I)[B", (void*) n_ttp_net_reconnect_json },
     { "ttp_net_restore_room", "(I[B[B)V", (void*) n_ttp_net_restore_room },
     { "ttp_net_set_track_json", "(I[B)[B", (void*) n_ttp_net_set_track_json },
     { "ttp_net_state_change_apply_json", "(I[BD)[B", (void*) n_ttp_net_state_change_apply_json },

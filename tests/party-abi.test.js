@@ -302,7 +302,9 @@ test('party ABI: the session choreography walks run against the shipped wasm', a
     onOpen: cw('ttp_net_on_open_json', 'string', ['number']),
     createTimeout: cw('ttp_net_create_timeout_json', 'string', ['number']),
     onProtocol: cw('ttp_net_on_protocol_json', 'string', ['number', 'string', 'string', 'number']),
-    onClose: cw('ttp_net_on_close_json', 'string', ['number', 'number']),
+    onClose: cw('ttp_net_on_close_json', 'string',
+      ['number', 'number', 'number', 'number', 'number']),
+    reconnect: cw('ttp_net_reconnect_json', 'string', ['number']),
     onPeerMessage: cw('ttp_net_on_peer_message_json', 'string',
       ['number', 'number', 'string', 'string', 'number', 'number']),
     setTrack: cw('ttp_net_set_track_json', 'string', ['number', 'string']),
@@ -462,8 +464,18 @@ test('party ABI: the session choreography walks run against the shipped wasm', a
   assert.equal(JSON.parse(room.list(h)).some((p) => p.peerIndex === 7), true);
   drain();
 
+  // The display's OWN link: a plain drop shows the kit's counter, past the cap
+  // the button appears, and only then does a press re-arm the budget and dial.
+  assert.deepEqual(walk(net.onClose(h, 0, 0, 2, 5)).effects, [
+    { op: 'clear-create-timer' },
+    { op: 'set-link', state: 'reconnecting', attempt: 2, max: 5, button: false }]);
+  assert.deepEqual(ops(net.reconnect(h)), [], 'no button while the kit is still retrying');
+  assert.deepEqual(walk(net.onClose(h, 0, 0, 6, 5)).effects.at(-1),
+    { op: 'set-link', state: 'disconnected', attempt: 6, max: 5, button: true });
+  assert.deepEqual(ops(net.reconnect(h)), ['reset-reconnect-count', 'set-link', 'reconnect']);
+
   // close with the room gone: forget → expire EVERY seat → only then re-dial.
-  const closed = walk(net.onClose(h, 1));
+  const closed = walk(net.onClose(h, 1, 0, 0, 0));
   const closedOps = closed.effects.map((e) => e.op);
   assert.equal(closedOps[0], 'clear-create-timer');
   assert.equal(closedOps[1], 'forget-room');

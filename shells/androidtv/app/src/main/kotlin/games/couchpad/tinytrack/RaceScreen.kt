@@ -554,4 +554,4 @@ fun PauseOverlay(game: GameCoordinator) {
 internal val BUTTON_SIZE = 18.dp
 
 /** `.pause-card__btns .btn { min-width: 9rem }`, so the pair reads as a matched set. */
-private val BUTTON_MIN_WIDTH = 144.dp
+internal val BUTTON_MIN_WIDTH = 144.dp

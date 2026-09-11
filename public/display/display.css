@@ -971,6 +971,27 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
 .pause-card__btns { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; }
 .pause-card__btns .btn { min-width: 9rem; }
 
+/* ---- Connection overlay ---- the display's own link (#link-overlay). The
+   pause glass at one z-step up: above the boot cover (15) and the pause
+   overlay (20), under the device chooser (30). */
+#link-overlay {
+  position: fixed; inset: 0; z-index: 25;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255, 246, 235, 0.72); backdrop-filter: blur(10px);
+}
+.link-card {
+  display: flex; flex-direction: column; align-items: center;
+  gap: clamp(1rem, 2vw, 1.6rem); text-align: center;
+  padding: clamp(1.8rem, 4vw, 3rem) clamp(2.2rem, 5vw, 4rem);
+}
+.link-card h2 {
+  font-family: var(--font-display); font-weight: 700;
+  font-size: clamp(2rem, 5vw, 3.4rem); margin: 0; color: var(--ink);
+}
+.link-status { font-size: clamp(1.1rem, 2.2vw, 1.5rem); color: var(--ink); opacity: 0.7; }
+.link-status:empty { display: none; }
+.link-card .btn { min-width: 11rem; }
+
 /* ---- Device chooser ---- the display URL opened on a phone-sized screen
    (see #device-choice in index.html). Hidden by default; the media query below
    surfaces it on cramped viewports until a choice is made. Size-only triggers

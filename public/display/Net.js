@@ -135,7 +135,11 @@ const NET_PERFORMERS = {
   'welcome-item': (n, e) => n.onPlayerWelcomed(e.peerIndex),
   'game-message': (n, e, ctx) => n.onControllerMessage(ctx.from, ctx.data),
   'race-abandoned': (n) => n.onRaceAbandoned(),
-  'track-change': (n, e) => n.onTrackChange(e.trackId)
+  'track-change': (n, e) => n.onTrackChange(e.trackId),
+  // The display's OWN link, for the connection overlay. The payload is the
+  // whole view ({state, attempt, max, button}); the game layer draws it and
+  // re-asks the auto-pause rule, which reads the link through its own seam.
+  'set-link': (n, e) => n.onLinkChange(e)
   // NO clear-standings. The results board is room-retained (ttp_room.h), so the
   // statechange walk drops it with a store and its own `publish` carries the
   // change — this shell holds no board to null out.
@@ -189,6 +193,10 @@ export class DisplayNet extends GameNet {
     // ABANDONED_RACE_GRACE_MS): the race has no racer left and someone is waiting
     // for the next one. The game layer returns to the lobby.
     this.onRaceAbandoned = opts.onRaceAbandoned || (() => {});
+    // Fired by the set-link effect: the display's own relay link as the viewer
+    // should see it — {state: connected|reconnecting|disconnected, attempt,
+    // max, button}. "connected" takes the overlay down.
+    this.onLinkChange = opts.onLinkChange || (() => {});
 
     // Dropped seats currently offering a reconnect QR. peerIndex -> {peerIndex,
     // name, colorIndex, url}. Held for the whole race (no give-up timer); freed
@@ -368,8 +376,11 @@ export class DisplayNet extends GameNet {
       this._walk(this.flow.runWalk(() => session.onOpen(this.flow.handle)));
     };
     this.party.onClose = (attempt, max, meta) => {
+      // The kit's own counters go in verbatim: the walk answers what the
+      // viewer sees (set-link) off them, and never re-derives the budget.
       this._walk(this.flow.runWalk(() =>
-        session.onClose(this.flow.handle, !!(meta && meta.roomClosed))));
+        session.onClose(this.flow.handle, !!(meta && meta.roomClosed),
+          !!(meta && meta.replaced), attempt, max)));
     };
     this.party.onProtocol = (type, msg) => {
       if (type === 'error') console.warn('[relay]', msg.message);
@@ -528,6 +539,14 @@ export class DisplayNet extends GameNet {
   // room (the room-closed walk). For a page exit use shutdown() instead,
   // which suppresses that self-heal.
   closeRoom() { if (this.party) this.party.closeRoom(); }
+
+  // The connection overlay's RECONNECT. The walk decides — only the gave-up
+  // state answers anything — and its effects re-arm the kit's budget before
+  // the dial, so a second outage gets the full budget again.
+  reconnect() {
+    if (!this.party) return;
+    this._walk(this.flow.runWalk(() => session.reconnect(this.flow.handle)));
+  }
 
   // Page-exit teardown (pagehide): the party is over for everyone, so tear the
   // room down (phones bail terminally instead of waiting out the relay's ~2 min

@@ -317,6 +317,22 @@ object Scenarios {
                 game.net.fakeRoom(ROOM_CODE)
             }
 
+            // The display's OWN link over the empty lobby: the two states of
+            // [LinkOverlay] (the `set-link` effect), fabricated as the view the effect
+            // would have set. The spent budget shows the button, which takes focus as
+            // it does live — the card that shows the focus ring.
+            "reconnecting", "disconnected" -> {
+                fakeProgress(game)
+                game.show(GameState.Screen.LOBBY)
+                state.seats.clear()
+                state.seats.addAll((0 until game.proto.maxPlayers).map { GameState.Seat.open(it) })
+                state.cupSlot = null
+                game.net.fakeRoom(ROOM_CODE)
+                val gaveUp = id == "disconnected"
+                state.link = GameState.LinkView(
+                    if (gaveUp) "disconnected" else "reconnecting", if (gaveUp) 0 else 3, 5, gaveUp)
+            }
+
             // THROUGH THE PICK WALK, not around it. A harness may fabricate its
             // INPUTS — a scripted roster, a named cup, WHICH random draw (its
             // privilege: a real one would make this a different circuit every

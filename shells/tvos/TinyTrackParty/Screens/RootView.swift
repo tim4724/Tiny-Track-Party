@@ -150,6 +150,14 @@ struct RootView: View {
             // launch.
             CoverView(cover: state.cover)
 
+            // The display's OWN link, over the cover too: a boot with no relay
+            // must say so instead of sitting on the launch picture. Below the
+            // perf readout, which measures this boot like any other.
+            if let link = state.link {
+                LinkOverlay(link: link, onReconnect: { game.reconnectLink() })
+                    .transition(.opacity)
+            }
+
             // Inert while hidden — it instruments nothing and draws nothing
             // until `game.display.perf.show()` is called. ABOVE the cover on
             // purpose: it is an instrument, and a boot it cannot see is the boot
@@ -158,6 +166,7 @@ struct RootView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
         }
         .animation(.easeInOut(duration: 0.35), value: state.screen)
+        .animation(.easeOut(duration: 0.2), value: state.link == nil)
         .task {
             await game.boot()
             // The frame loop, started once the engine is configured.

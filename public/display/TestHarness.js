@@ -545,7 +545,7 @@ export function runDisplayScenario(opts, ctx) {
     return;
   }
 
-  if (scenario === 'lobby-empty') {
+  if (scenario === 'lobby-empty' || scenario === 'reconnecting' || scenario === 'disconnected') {
     // The lobby the instant NEW GAME reveals it, before anyone joins: open
     // seats, empty cup slot, the room's join URL + QR — over the boot-time
     // attract race (all-CPU field: no one has joined).
@@ -556,6 +556,18 @@ export function runDisplayScenario(opts, ctx) {
     renderQR(el('qr'), buildQRMatrix(location.origin || 'https://tinytrack.party'));
     renderCupShelf(el('cup-shelf'), PREVIEW_SHELF);
     startAttractDemo([]);
+    if (scenario !== 'lobby-empty') {
+      // The display's OWN link over that board: the overlay main.js fills off
+      // the set-link effect, filled here off a fabricated view. Mid-backoff
+      // shows the kit's counter; the spent budget shows the button, focused,
+      // as it is live — nothing else on the glass takes focus then.
+      const gaveUp = scenario === 'disconnected';
+      el('link-overlay').classList.remove('hidden');
+      el('link-heading').textContent = gaveUp ? 'Disconnected' : 'Reconnecting…';
+      el('link-status').textContent = gaveUp ? '' : 'Attempt 3 of 5';
+      el('link-reconnect').classList.toggle('hidden', !gaveUp);
+      if (gaveUp) el('link-reconnect').focus();
+    }
     return;
   }
 

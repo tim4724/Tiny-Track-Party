@@ -15,7 +15,7 @@ import java.nio.ByteBuffer
 
 @Suppress("FunctionName", "unused")
 object Ttp {
-    /** Registers all 227 natives via JNI_OnLoad; a mismatch fails here. */
+    /** Registers all 228 natives via JNI_OnLoad; a mismatch fails here. */
     fun load() { System.loadLibrary("ttp_runtime_android") }
 
     external fun ttp_add_bot(h: Int, idJson: ByteArray?, caution: Double, laneBias: Double, aiSeed: Int, statsJsonOrNull: ByteArray?)
@@ -139,13 +139,14 @@ object Ttp {
     external fun ttp_net_join_url(base: ByteArray?, room: ByteArray?, instance: ByteArray?, platform: ByteArray?): ByteArray?
     external fun ttp_net_liveness_json(roomHandle: Int, sessionHandle: Int, nowMs: Double): ByteArray?
     external fun ttp_net_lobby_frame(roomHandle: Int, sessionHandle: Int, fieldsJson: ByteArray?): ByteArray?
-    external fun ttp_net_on_close_json(roomHandle: Int, roomClosed: Int): ByteArray?
+    external fun ttp_net_on_close_json(roomHandle: Int, roomClosed: Int, replaced: Int, attempt: Double, maxAttempts: Double): ByteArray?
     external fun ttp_net_on_open_json(roomHandle: Int): ByteArray?
     external fun ttp_net_on_peer_message_json(roomHandle: Int, sessionHandle: Int, fromJson: ByteArray?, msgJson: ByteArray?, isSignal: Int, nowMs: Double): ByteArray?
     external fun ttp_net_on_protocol_json(roomHandle: Int, type: ByteArray?, msgJson: ByteArray?, nowMs: Double): ByteArray?
     external fun ttp_net_on_seen_json(roomHandle: Int, peerIdJson: ByteArray?, nowMs: Double): ByteArray?
     external fun ttp_net_pick_json(roomHandle: Int): ByteArray?
     external fun ttp_net_reconnect_card_json(seatJson: ByteArray?, url: ByteArray?): ByteArray?
+    external fun ttp_net_reconnect_json(roomHandle: Int): ByteArray?
     external fun ttp_net_restore_room(roomHandle: Int, code: ByteArray?, instance: ByteArray?)
     external fun ttp_net_set_track_json(roomHandle: Int, trackId: ByteArray?): ByteArray?
     external fun ttp_net_state_change_apply_json(roomHandle: Int, to: ByteArray?, nowMs: Double): ByteArray?

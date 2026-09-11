@@ -254,6 +254,19 @@
     </div>
   </section>
 
+  <!-- The display's OWN relay link (the set-link effect): "Reconnecting" with
+       the kit's attempt counter while the backoff runs, then "Disconnected"
+       with a RECONNECT once the budget is spent. OUTSIDE every screen section,
+       because show() hides all but one and this must stand over any of them,
+       the boot cover included: a boot with no relay must say so. -->
+  <div id="link-overlay" class="hidden">
+    <div class="link-card card">
+      <h2 id="link-heading">Reconnecting…</h2>
+      <div id="link-status" class="link-status"></div>
+      <button id="link-reconnect" class="btn btn--brand hidden">Reconnect</button>
+    </div>
+  </div>
+
   <!-- Transient "Copied" confirmation, shown when the join box is clicked. -->
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 

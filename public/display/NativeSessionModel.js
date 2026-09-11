@@ -45,7 +45,9 @@ export async function init() {
     onOpen: c('ttp_net_on_open_json', 'string', ['number']),
     createTimeout: c('ttp_net_create_timeout_json', 'string', ['number']),
     onProtocol: c('ttp_net_on_protocol_json', 'string', ['number', 'string', 'string', 'number']),
-    onClose: c('ttp_net_on_close_json', 'string', ['number', 'number']),
+    onClose: c('ttp_net_on_close_json', 'string',
+      ['number', 'number', 'number', 'number', 'number']),
+    reconnect: c('ttp_net_reconnect_json', 'string', ['number']),
     onPeerMessage: c('ttp_net_on_peer_message_json', 'string',
       ['number', 'number', 'string', 'string', 'number', 'number']),
     controllerAction: c('ttp_net_controller_action', 'string',
@@ -146,9 +148,15 @@ export function createTimeout(roomHandle) { return fn.createTimeout(roomHandle |
 export function onProtocol(roomHandle, type, msg, nowMs) {
   return fn.onProtocol(roomHandle | 0, type || '', J(msg || {}), nowMs);
 }
-export function onClose(roomHandle, roomClosed) {
-  return fn.onClose(roomHandle | 0, roomClosed ? 1 : 0);
+// The kit's own counters go in verbatim (attempt, max); the walk answers what
+// the viewer sees off them. A missing counter is 0, never NaN — a NaN would
+// come back out as invalid JSON.
+export function onClose(roomHandle, roomClosed, replaced, attempt, max) {
+  return fn.onClose(roomHandle | 0, roomClosed ? 1 : 0, replaced ? 1 : 0,
+    Number(attempt) || 0, Number(max) || 0);
 }
+// The connection overlay's RECONNECT: answers effects only from the gave-up state.
+export function reconnect(roomHandle) { return fn.reconnect(roomHandle | 0); }
 export function onPeerMessage(roomHandle, sessionHandle, from, msg, isSignal, nowMs) {
   return fn.onPeerMessage(roomHandle | 0, sessionHandle | 0, idJson(from), J(msg || {}),
     isSignal ? 1 : 0, nowMs);

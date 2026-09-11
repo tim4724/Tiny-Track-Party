@@ -88,7 +88,7 @@ class PartyNet(
             "reset-reconnect-count", "connect-fresh", "fail-attempt", "reconnect",
             "send-to", "publish", "announce", "close-fastlane", "show-reconnect",
             "clear-reconnect", "rekey-player", "player-renamed", "welcome-item",
-            "game-message", "race-abandoned", "track-change",
+            "game-message", "race-abandoned", "track-change", "set-link",
         )
 
     }
@@ -120,6 +120,8 @@ class PartyNet(
 
     /** The socket closed. `true` means the ROOM died (4001) rather than the link. */
     var onClose: ((Boolean) -> Unit)? = null
+    /** The `set-link` effect: the display's OWN link as the viewer should see it. */
+    var onLink: ((GameState.LinkView) -> Unit)? = null
 
     /**
      * The `game-message` effect: a message the session policy does not name —
@@ -492,27 +494,32 @@ class PartyNet(
     private fun handleClose(hasCode: Boolean, code: Double) {
         cancel(createWatchdog); createWatchdog = null
 
+        // READ, never re-typed: ttp_party.h declares this export so the kit's
+        // budget is stated once (root rule 1). Called here rather than cached in
+        // the companion, whose initializer can run before System.loadLibrary.
+        val maxAttempts = Ttp.ttp_framing_max_reconnect_attempts()
         // The KIT half: what this close code means for the reconnect budget.
         val o = TtpJson.obj(Ttp.ttp_framing_close_outcome(
-            // READ, never re-typed: ttp_party.h declares this export so the kit's
-            // budget is stated once (root rule 1). Called here rather than cached in
-            // the companion, whose initializer can run before System.loadLibrary.
-            if (hasCode) 1 else 0, code, reconnectAttempt,
-            Ttp.ttp_framing_max_reconnect_attempts(),
+            if (hasCode) 1 else 0, code, reconnectAttempt, maxAttempts,
             if (shouldReconnect) 1 else 0))
         if (o.optBoolean("stopReconnect")) shouldReconnect = false
         // 0 for the terminal codes, matching the kit.
         reconnectAttempt = o.optDouble("closeAttempt", 0.0)
 
-        val roomClosed = o.optJSONObject("meta")?.optBoolean("roomClosed") == true
+        val meta = o.optJSONObject("meta")
+        val roomClosed = meta?.optBoolean("roomClosed") == true
+        val replaced = meta?.optBoolean("replaced") == true
 
         if (!shuttingDown) {
             // The ROOM half is the walk's: on roomClosed it forgets the room,
             // expires every seat (close_room sends no peer_lefts, so the old roster
             // would haunt the fresh lobby) and answers connect-fresh — that order
-            // is load-bearing and lives in C++ now.
+            // is load-bearing and lives in C++ now. The kit's own counters go in
+            // verbatim: what the viewer sees (`set-link`) is answered off them,
+            // never re-derived here.
             walk(TtpJson.strOrEmpty(Ttp.ttp_net_on_close_json(
-                roomHandle, if (roomClosed) 1 else 0)))
+                roomHandle, if (roomClosed) 1 else 0, if (replaced) 1 else 0,
+                reconnectAttempt, maxAttempts)))
         }
         // AFTER the walk, deliberately: the coordinator's room-closed landing seeds
         // a fresh default pick, and the seed's null sender is only the host once
@@ -581,7 +588,16 @@ class PartyNet(
         shuttingDown = false
         shouldReconnect = true
         reconnectAttempt = 0.0
-        walk(TtpJson.strOrEmpty(Ttp.ttp_net_on_close_json(roomHandle, 1)))
+        walk(TtpJson.strOrEmpty(Ttp.ttp_net_on_close_json(roomHandle, 1, 0, 0.0, 0.0)))
+    }
+
+    /**
+     * The connection overlay's RECONNECT. The walk decides — only the gave-up
+     * state answers anything — and its effects re-arm the budget before the dial,
+     * so a second outage gets the full budget again.
+     */
+    fun reconnect() {
+        walk(TtpJson.strOrEmpty(Ttp.ttp_net_reconnect_json(roomHandle)))
     }
 
     /**
@@ -739,6 +755,8 @@ class PartyNet(
             "fail-attempt" -> failAttempt()
 
             "reconnect" -> reconnectNow()
+
+            "set-link" -> onLink?.invoke(GameState.LinkView.from(e))
 
             // The frame data arrives composed (PONG, the self-heartbeat) — this
             // side puts it on the socket and adds nothing.

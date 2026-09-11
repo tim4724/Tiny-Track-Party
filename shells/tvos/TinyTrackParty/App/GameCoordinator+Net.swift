@@ -50,6 +50,16 @@ extension GameCoordinator {
             self.landOnFreshLobby()
         }
 
+        // The display's OWN link (the `set-link` effect): the overlay, and a
+        // re-ask of the auto-pause rule, which reads the link through its own
+        // seam — a link that is down freezes a live race rather than letting
+        // it run blind, and the relay's created/joined thaws it.
+        net.onLink = { [weak self] link in
+            guard let self else { return }
+            self.state.link = link.state == "connected" ? nil : link
+            self.refreshAutoPause()
+        }
+
         // A phone said something. The ROUTING already happened (PartyNet asked
         // `ttp_net_message_action`); what arrives here is the "game" bucket.
         net.onControllerMessage = { [weak self] from, msg in
@@ -152,6 +162,9 @@ extension GameCoordinator {
             }
         }
     }
+
+    /// The connection overlay's RECONNECT button.
+    func reconnectLink() { net.reconnect() }
 
     // MARK: - The two loops
 

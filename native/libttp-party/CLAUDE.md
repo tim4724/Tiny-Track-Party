@@ -69,6 +69,19 @@ ours. It uses an **in-flight flag, never an echo age**, so a throttled
 background tab cannot misread its own starvation as a dead link. The shell owns
 only the interval and the calls the tick asks for.
 
+**What the viewer sees of our own link is a rule here too** (`link_after_close`,
+the `link` corpus op): the connection kit's retry budget stays platform code, but
+its counters come into the close walk and out as the `set-link` effect, so every
+shell draws the same overlay off the same answer — the kit's "Attempt N of M"
+while it retries, then DISCONNECTED with a RECONNECT once the budget is spent,
+and no button after a 4000 (rejoining under the same id would evict the other
+display right back). The button is `ttp_net_reconnect_json`, which re-arms the
+budget before it dials; before it existed the budget was one-shot, and a Wi-Fi
+blip that outlasted ~13 s parked the display forever with nothing on screen. A
+link that is down also reads as "every participant is gone" to the auto-pause
+rule (through `ttp_net_link_down`), so a live race freezes instead of running
+blind and thaws on the relay's created/joined — never on the raw socket open.
+
 **The abandoned-room policy** rides that same tick and has TWO arms on ONE grace
 deadline, both firing once. Mid-race: every participant gone while someone waits.
 On the RESULTS board: **no connected peer at all** — the same "the room is empty"

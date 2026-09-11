@@ -327,6 +327,25 @@ HeartbeatTick heartbeat_tick(bool inRoom, bool hbPending, double hbSentAt, doubl
   return t;
 }
 
+// ---- the display's own link ---------------------------------------------------
+
+LinkPlan link_after_close(bool replaced, bool roomClosed, double attempt, double maxAttempts) {
+  LinkPlan p;
+  if (roomClosed) return p;   // the fresh dial's own outcome decides
+  p.change = true;
+  if (replaced) {             // 4000: terminal, and no button
+    p.state = LinkState::DISCONNECTED;
+    return p;
+  }
+  if (attempt <= maxAttempts) {
+    p.state = LinkState::RECONNECTING;
+    return p;
+  }
+  p.state = LinkState::DISCONNECTED;
+  p.button = true;
+  return p;
+}
+
 // ---- claims + reconciliation ---------------------------------------------------
 
 ClaimPlan claim_plan(double fromId, const Value* rejoinToken, bool hasOld,
@@ -392,6 +411,15 @@ const char* key(HeartbeatAct a) {
     case HeartbeatAct::WAIT: return "wait";
   }
   return "idle";
+}
+
+const char* key(LinkState s) {
+  switch (s) {
+    case LinkState::CONNECTED: return "connected";
+    case LinkState::RECONNECTING: return "reconnecting";
+    case LinkState::DISCONNECTED: return "disconnected";
+  }
+  return "connected";
 }
 
 std::string clean_name_json(const std::string& valueJson) {
