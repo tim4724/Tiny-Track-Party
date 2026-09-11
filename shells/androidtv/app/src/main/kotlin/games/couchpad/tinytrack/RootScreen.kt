@@ -128,8 +128,15 @@ fun RootScreen(game: GameCoordinator) {
         // ResultsScreen returns early on a null board, so an exit fade would need
         // the countdown's held-value dance to have anything to draw, and the board
         // leaves under a launch's own scene change anyway.
+        //
+        // SCOPED TO THE RACE SCREEN, as tvOS nests it in `raceChrome` and the web
+        // keeps `#results` inside the race section. `state.results` is nulled by
+        // `hide-results`, which only a LAUNCH emits — a return to the lobby does
+        // not — so gated on the board alone this stood opaque over the lobby
+        // after the podium's New game, with its own button now a no-op and BACK
+        // meaning leave the app. Seen on the emulator; a launch still clears it.
         AnimatedVisibility(
-            visible = state.results != null,
+            visible = state.screen == GameState.Screen.RACE && state.results != null,
             enter = fadeIn(tween(320)), exit = ExitTransition.None,
         ) { ResultsScreen(state, game) }
 
