@@ -83,8 +83,14 @@ private fun CellChrome(cell: GameState.CellHUD, state: GameState) {
     // FINISHED wins the cell if a car is somehow both finished and dropped. The
     // coordinator already resolves that when it builds the row; this is the rule
     // stated a second time where the card is actually drawn.
+    //
+    // Only the FINISHED card OWNS its cell: the race is over for them, so the live
+    // chrome has nothing left to say. The reconnect QR does not — their car is
+    // still in the race and the HUD keeps reporting it around the card. (The
+    // steer bar is the one thing that hides under both, one layer down: the
+    // coordinator's cellCards mask, because the bar reports a phone that is gone.)
     val showsReconnect = cell.reconnecting && !cell.finished
-    val cardInCell = cell.finished || showsReconnect
+    val cardInCell = cell.finished
 
     // TWO BOXES, on the cell's two rects. The chips hang off a CORNER, and a
     // corner is what a television that overscans crops, so they are laid out in
@@ -101,22 +107,17 @@ private fun CellChrome(cell: GameState.CellHUD, state: GameState) {
         // is in under the root density override.
         val margin = 11.dp
 
-        if (!cell.reconnecting) {
-            // Hidden under the reconnect card because that card already shows the
-            // name, so the chip would just repeat it. The FINISHED card carries no
-            // name, so it keeps the chip.
-            Column(
-                Modifier.padding(margin).align(Alignment.TopStart),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                NameChip(cell.name, cell.colorIndex)
-                ItemSlot(
-                    item = cell.item,
-                    accent = state.boostAccent,
-                    carIndex = cell.carIndex,
-                    tick = state.itemPickupTick[cell.car] ?: 0,
-                )
-            }
+        Column(
+            Modifier.padding(margin).align(Alignment.TopStart),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            NameChip(cell.name, cell.colorIndex)
+            ItemSlot(
+                item = cell.item,
+                accent = state.boostAccent,
+                carIndex = cell.carIndex,
+                tick = state.itemPickupTick[cell.car] ?: 0,
+            )
         }
 
         if (!cardInCell) {
@@ -370,10 +371,20 @@ private fun FinishedCard(cell: GameState.CellHUD) {
  *
  * The URL is composed in C++ and carries `?claim=<peerIndex>`, which is what lets
  * a DIFFERENT device take the seat over. Only the bitmap is this platform's.
+ *
+ * No name on it: the corner chip stays up beside the card and already says whose
+ * cell this is.
  */
 @Composable
 private fun ReconnectCard(cell: GameState.CellHUD) {
-    val qrSide: Dp = 132.dp
+    // The QR is BIG, and sized off the CELL — `.cell-reconnect`'s `--qr`: half
+    // the screen's height for one player, and most of a split cell, because half
+    // of a half-screen cell was too small to scan from the couch and the cell has
+    // nothing better to show while its driver is gone. The width cap only bites
+    // on a portrait cell. AUTHORED units, like the rect: `50vh` is 540.
+    val qrSide: Dp = minOf(540f, cell.rect.h * 0.6f, cell.rect.w * 0.6f).dp
+    // The title scales with the QR (`clamp(0.9rem, 8% of the QR, 2.6rem)`).
+    val titleSize: Dp = (qrSide.value * 0.08f).coerceIn(14.4f, 41.6f).dp
     // Rendered once per URL rather than per recomposition. This view is rebuilt by
     // the ~6 Hz HUD poll, and a QR encode is not something to run six times a
     // second in a layout pass.
@@ -381,31 +392,25 @@ private fun ReconnectCard(cell: GameState.CellHUD) {
     StickerCard(rotation = -1.5f, padding = 18.dp) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(qrSide * 0.04f),
         ) {
-            StickerText(cell.name, size = 22.dp, modifier = Modifier.widthIn(max = qrSide + 44.dp))
-            // `.rc-card__sub` is BODY type at 0.72rem — a quiet caption under the
-            // name. In the display face at 16 dp it measured a third wider and half
-            // again taller, and at that weight the warm ink-3 read as a solid tan
-            // label competing with the name above it.
-            StickerText(
-                Copy.disconnected.uppercase(), size = 12.dp,
-                color = Tokens.ink3, tracking = 0.02f, body = true,
-            )
+            StickerText(Copy.disconnected.uppercase(), size = titleSize, tracking = 0.06f)
             if (bitmap != null) {
                 Image(
                     bitmap = bitmap.asImageBitmap(),
                     contentDescription = null,
                     modifier = Modifier.size(qrSide),
-                    // FILTERED, for the reason the lobby ticket's QR is: this is a
-                    // heavy downscale, and point-sampling one throws away most of
-                    // the source. A thinned module is unrecoverable by a decoder; a
+                    // FILTERED, for the reason the lobby ticket's QR is: the bitmap
+                    // and the frame are never an integer multiple apart (a split
+                    // cell's QR is a downscale of it, a solo cell's at 4K about
+                    // 1:1), and point-sampling a downscale throws away most of the
+                    // source. A thinned module is unrecoverable by a decoder; a
                     // softened edge is not.
                     filterQuality = FilterQuality.High,
                 )
             }
-            // Never a blank card: a dropped seat with no URL yet still says whose
-            // it is and that they are gone.
+            // Never a blank card: a dropped seat with no URL yet still says that
+            // they are gone.
         }
     }
 }

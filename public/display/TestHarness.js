@@ -1426,7 +1426,7 @@ export function runDisplayScenario(opts, ctx) {
       // needed — the matrix is built in-browser).
       const dropped = humansFirst(field)[players - 1];
       scene.setCarReconnect(dropped.peerIndex, buildReconnectCard({
-        name: dropped.name, colorIndex: dropped.colorIndex,
+        colorIndex: dropped.colorIndex,
         url: (location.origin || 'https://tinytrack.party') + '/TEST?claim=' + dropped.peerIndex
       }));
     } else if (kind === 'finished') {

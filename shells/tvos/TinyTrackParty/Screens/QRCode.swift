@@ -31,10 +31,10 @@ enum QRCode {
     ///
     /// A ballpark rather than a contract: the real scale is the largest INTEGER
     /// multiple of the module count that fits under it (see below), so the
-    /// answer lands somewhere in `[target/2, target]`. 800 covers the lobby
-    /// ticket at 4K — the ticket's QR is ~380 POINTS and `nativeScale` is 2 on a
-    /// 4K box — without making a bitmap nothing can use.
-    private static let targetPixels: CGFloat = 800
+    /// answer lands somewhere in `[target/2, target]`. 1100 covers the biggest
+    /// QR drawn — a solo cell's reconnect card at 540 POINTS, `nativeScale` 2 on
+    /// a 4K box — without making a bitmap nothing can use.
+    private static let targetPixels: CGFloat = 1100
 
     /// The QR for `string`, or nil if Core Image would not make one (an empty
     /// message, or a string too long for the chosen correction level).

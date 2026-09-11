@@ -212,7 +212,7 @@ enum Scenarios {
             state.seats = padded(players(playerCount, track: game.trackId))
 
         case "countdown", "racing", "racing-sidewinder",
-             "rocket", "monster", "paused", "reconnect", "finished":
+             "rocket", "monster", "paused", "reconnect", "reconnect-solo", "finished":
             // `racing-sidewinder` is the deck-decal card: the same race on a
             // circuit whose hairpins force scrub skids onto the racing line, and
             // the gallery entry pins it with a `track` param the web reads off
@@ -296,6 +296,24 @@ enum Scenarios {
         case "countdown":
             try? await Task.sleep(nanoseconds: 1_200_000_000)
             game.state.countdown = "3"
+        case "reconnect", "reconnect-solo":
+            // Float a reconnect QR over one racer's cell — the last one, so the
+            // leader's card is not the one obscured. AFTER the field has spread
+            // out, so it reads mid-race. THROUGH THE PERFORMER, not around it:
+            // `show-reconnect` is the net-vocabulary effect the walk emits when
+            // a seat drops, and what is fabricated is only the INPUT (which
+            // seat); the claim URL, the card payload and the diff over the
+            // shown set all stay C++'s. The Android twin does exactly this.
+            // (This column photographed a plain race under this name before.)
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard let dropped = game.sceneCars.filter(\.cell).last else { return }
+            game.net.performNetEffect([
+                "op": "show-reconnect",
+                "seat": ["peerIndex": dropped.id.numericOrString,
+                         "name": dropped.name, "colorIndex": dropped.colorIndex] as [String: Any]
+            ])
+            // One HUD poll, so the card is painted before the shutter.
+            try? await Task.sleep(nanoseconds: 400_000_000)
         case "results", "intermission", "podium":
             // `twoPhase` is the model's own word for it; `racePhaseMs > 0` is
             // this shell re-deriving the same answer from a number that only

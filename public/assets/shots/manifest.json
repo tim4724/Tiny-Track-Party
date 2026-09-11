@@ -913,9 +913,9 @@
       "file": "androidtv-emu/reconnect.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 80584,
-      "capturedAt": "2026-09-10T15:10:22.167Z",
-      "gitSha": "662cd1b3",
+      "bytes": 69162,
+      "capturedAt": "2026-09-11T07:28:48.914Z",
+      "gitSha": "13943ae2",
       "deviceName": "Television_4K_Android_TV",
       "deviceId": "emulator-5554"
     },
@@ -937,9 +937,9 @@
       "file": "tvos-sim/reconnect.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 45708,
-      "capturedAt": "2026-09-10T15:10:08.678Z",
-      "gitSha": "662cd1b3",
+      "bytes": 53964,
+      "capturedAt": "2026-09-11T07:28:53.742Z",
+      "gitSha": "13943ae2",
       "deviceName": "Apple TV 4K (3rd generation)",
       "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
     },
@@ -949,9 +949,43 @@
       "file": "web/reconnect.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 58412,
-      "capturedAt": "2026-09-10T15:09:30.478Z",
-      "gitSha": "662cd1b3"
+      "bytes": 63618,
+      "capturedAt": "2026-09-11T07:19:12.572Z",
+      "gitSha": "13943ae2"
+    },
+    {
+      "scenario": "reconnect-solo",
+      "platform": "androidtv-emu",
+      "file": "androidtv-emu/reconnect-solo.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 49090,
+      "capturedAt": "2026-09-11T07:30:19.029Z",
+      "gitSha": "13943ae2",
+      "deviceName": "Television_4K_Android_TV",
+      "deviceId": "emulator-5554"
+    },
+    {
+      "scenario": "reconnect-solo",
+      "platform": "tvos-sim",
+      "file": "tvos-sim/reconnect-solo.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 33880,
+      "capturedAt": "2026-09-11T07:28:53.926Z",
+      "gitSha": "13943ae2",
+      "deviceName": "Apple TV 4K (3rd generation)",
+      "deviceId": "BBB6AE86-6F9B-4D20-8966-3E9CDBF38632"
+    },
+    {
+      "scenario": "reconnect-solo",
+      "platform": "web",
+      "file": "web/reconnect-solo.webp",
+      "w": 1280,
+      "h": 720,
+      "bytes": 36992,
+      "capturedAt": "2026-09-11T07:19:18.257Z",
+      "gitSha": "13943ae2"
     },
     {
       "scenario": "results",

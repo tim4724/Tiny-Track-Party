@@ -617,32 +617,32 @@ export function renderQR(canvas, qr, px = 480, bg = '#ffffff') {
   canvas.classList.add('is-in'); // see renderJoinUrl — inert everywhere but the ticket
 }
 
-// Build a dropped-player reconnect card — name + "scan to rejoin" + the rejoin QR
-// — to be centred in that player's split-screen cell by the renderer (see
+// Build a dropped-player reconnect card — "Disconnected" + the rejoin QR — to
+// be centred in that player's split-screen cell by the renderer (see
 // Stage.setCarReconnect / _loop). Reuses the .cell-finish chrome (frosted
 // card, livery top-border, centred placement) so it matches the FINISHED card.
-// `seat` is {name, colorIndex, url}. Shared by the live display (main.js) and the
-// gallery harness so the markup stays in one place.
+// No name on it: the cell's corner label stays up around the card and already
+// says whose cell this is. `seat` is {colorIndex, url} (the live caller hands
+// the whole seat record, which carries more). Shared by the live display
+// (main.js) and the gallery harness so the markup stays in one place.
 export function buildReconnectCard(seat) {
   const card = document.createElement('div');
   card.className = 'cell-finish cell-reconnect'; // .cell-finish = positioning + card chrome
   card.style.setProperty('--c', (CAR_COLORS && CAR_COLORS[seat.colorIndex]) || '#888');
 
-  const head = document.createElement('div');
-  head.className = 'rc-card__head';
-  const nm = document.createElement('span'); nm.className = 'rc-card__name'; nm.textContent = seat.name;
-  head.append(nm);
-
-  const sub = document.createElement('div');
-  sub.className = 'rc-card__sub'; sub.textContent = 'Disconnected';
+  const title = document.createElement('div');
+  title.className = 'rc-card__title'; title.textContent = 'Disconnected';
 
   const qr = document.createElement('canvas');
   qr.className = 'rc-card__qr';
 
-  card.append(head, sub, qr);
+  card.append(title, qr);
 
   // Transparent QR background → black modules sit straight on the frosted card.
-  renderQR(qr, buildQRMatrix(seat.url), 220, null);
+  // Rendered big: CSS scales it to half the cell's height, which on a 4K
+  // display with one player is over 1000px, and a pixelated upscale of a
+  // small canvas gives uneven modules.
+  renderQR(qr, buildQRMatrix(seat.url), 1080, null);
 
   return card;
 }

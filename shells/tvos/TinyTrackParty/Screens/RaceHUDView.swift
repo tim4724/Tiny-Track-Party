@@ -76,9 +76,8 @@ struct RaceHUDView: View {
 /// rect. Each element's anchor is then an alignment rather than an arithmetic
 /// offset, which is the same contract §3.4 states in coordinates:
 ///
-///   name chip + item slot   (r.x, r.y) top-left      unless reconnecting
-///   place / lap             (r.x + r.w - 12, r.y + 11) top-right,
-///                                                    unless finished || reconnecting
+///   name chip + item slot   (r.x, r.y) top-left      always
+///   place / lap             (r.x + r.w - 12, r.y + 11) top-right, unless finished
 ///   FINISHED card           centre of r              when finished
 ///   reconnect QR card       centre of r              when reconnecting && !finished
 private struct CellChrome: View {
@@ -97,8 +96,15 @@ private struct CellChrome: View {
     /// back `reconnecting && !finished`), so this is the rule stated a second
     /// time where the card is actually drawn rather than a second decision — and
     /// it is what keeps this view correct if it is ever handed a raw row.
+    ///
+    /// Only the FINISHED card OWNS its cell: the race is over for them, so the
+    /// live chrome has nothing left to say. The reconnect QR does not — their
+    /// car is still in the race and the HUD keeps reporting it around the
+    /// card. (The steer bar is the one thing that hides under both, one layer
+    /// down: the coordinator's `cellCards` mask, because the bar reports a
+    /// phone that is gone.)
     private var showsReconnect: Bool { cell.reconnecting && !cell.finished }
-    private var cardInCell: Bool { cell.finished || showsReconnect }
+    private var cardInCell: Bool { cell.finished }
 
     /// TWO BOXES, on the cell's two rects, because the chrome divides cleanly
     /// into two kinds and they want different ones.
@@ -112,12 +118,7 @@ private struct CellChrome: View {
     var body: some View {
         ZStack {
             ZStack(alignment: .topLeading) {
-                if !cell.reconnecting {
-                    // Hidden under the reconnect card because that card already
-                    // shows the name, so the chip would just repeat it. The
-                    // FINISHED card carries no name, so it keeps the chip.
-                    cornerLabel.padding(Self.margin)
-                }
+                cornerLabel.padding(Self.margin)
                 if !cardInCell {
                     rankReadout
                         .padding(.top, Self.margin)
@@ -134,7 +135,7 @@ private struct CellChrome: View {
                 FinishedCard(cell: cell)
                     .position(x: cell.rect.midX, y: cell.rect.midY)
             } else if showsReconnect {
-                ReconnectCard(name: cell.name, url: cell.reconnectURL)
+                ReconnectCard(cell: cell)
                     .position(x: cell.rect.midX, y: cell.rect.midY)
             }
         }
@@ -480,11 +481,23 @@ private struct FinishedCard: View {
 /// `ttp_net_claim_url`) and carries `?claim=<peerIndex>`, which is what lets a
 /// DIFFERENT device take the seat over. Only the bitmap is this platform's, and
 /// that is decision D3, not a gap.
+///
+/// No name on it: the corner chip stays up beside the card and already says
+/// whose cell this is.
 private struct ReconnectCard: View {
-    let name: String
-    let url: String?
+    let cell: GameState.CellHUD
 
-    private static let qrSide: CGFloat = 132
+    /// The QR is BIG, and sized off the CELL — `.cell-reconnect`'s `--qr`: half
+    /// the screen's height for one player, and most of a split cell, because
+    /// half of a half-screen cell was too small to scan from the couch and the
+    /// cell has nothing better to show while its driver is gone. The width cap
+    /// only bites on a portrait cell. Points: tvOS is 1920x1080 points whatever
+    /// the box outputs, so `50vh` is 540.
+    private var qrSide: CGFloat {
+        min(540, cell.rect.height * 0.6, cell.rect.width * 0.6)
+    }
+    /// The title scales with the QR (`clamp(0.9rem, 8% of the QR, 2.6rem)`).
+    private var titleSize: CGFloat { min(max(qrSide * 0.08, 14.4), 41.6) }
 
     /// Rendered once per URL rather than per body. This view is rebuilt by the
     /// ~6 Hz HUD poll, and `CIQRCodeGenerator` is not something to run six times
@@ -493,39 +506,34 @@ private struct ReconnectCard: View {
 
     var body: some View {
         StickerCard(tint: Tokens.surface, rotation: -1.5, padding: 18) {
-            VStack(spacing: 8) {
-                Text(name)
-                    .font(Fonts.display(22, weight: .semibold))
-                    .foregroundStyle(Tokens.ink)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: Self.qrSide + 44)
+            VStack(spacing: qrSide * 0.04) {
                 Text(Copy.disconnected.uppercased())
-                    .font(Fonts.display(16, weight: .semibold))
-                    .tracking(0.4)
-                    .foregroundStyle(Tokens.ink3)
+                    .font(Fonts.display(titleSize, weight: .bold))
+                    .tracking(titleSize * 0.06)
+                    .foregroundStyle(Tokens.ink)
                 if let code {
                     Image(decorative: code, scale: 1)
                         // FILTERED, for the reason spelled out at the lobby
-                        // ticket's own QR: this bitmap is ~800 px and the card
-                        // is 160 points, so what happens to it is a heavy
-                        // DOWNSCALE, and point-sampling a downscale throws away
-                        // most of the source rather than preserving it. A
-                        // thinned or merged module is unrecoverable by a
-                        // decoder; a softened edge is not.
+                        // ticket's own QR: the bitmap and the frame are never
+                        // an integer multiple apart (a split cell's QR is a
+                        // DOWNSCALE of it, a solo cell's at 4K about 1:1), and
+                        // point-sampling a downscale throws away most of the
+                        // source rather than preserving it. A thinned or merged
+                        // module is unrecoverable by a decoder; a softened edge
+                        // is not.
                         .interpolation(.high)
                         .antialiased(true)
                         .resizable()
-                        .frame(width: Self.qrSide, height: Self.qrSide)
+                        .frame(width: qrSide, height: qrSide)
                         .clipShape(RoundedRectangle(cornerRadius: Sticker.radiusSmall,
                                                     style: .continuous))
                 } else {
                     // Never a blank card: a dropped seat with no URL yet still
-                    // says whose it is and that they are gone.
-                    Color.clear.frame(width: Self.qrSide, height: 0)
+                    // says that they are gone.
+                    Color.clear.frame(width: qrSide, height: 0)
                 }
             }
         }
-        .task(id: url) { code = url.flatMap { QRCode.image(for: $0) } }
+        .task(id: cell.reconnectURL) { code = cell.reconnectURL.flatMap { QRCode.image(for: $0) } }
     }
 }

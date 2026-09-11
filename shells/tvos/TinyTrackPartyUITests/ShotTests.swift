@@ -42,9 +42,12 @@ final class ShotTests: XCTestCase {
     /// full-table capture.
     ///
     /// Not named `test…`, or XCTest would run it with no scenario at all.
-    func capture(_ id: String) {
+    func capture(_ id: String, players: Int? = nil) {
         let app = XCUIApplication()
         app.launchArguments = ["-ttpScenario", id]
+        // The card's seat count, when the table pins one (`params.players`);
+        // the harness reads it the way it reads the scenario.
+        if let players { app.launchArguments += ["-ttpPlayers", String(players)] }
         // PHOTOGRAPH A NON-NATIVE BUFFER, when asked. The adaptive render scale
         // moves the drawable under a chrome layer that is laid out in POINTS, and
         // every shot in this gallery is taken at 1.0 — which is why a `uiScale`

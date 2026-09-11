@@ -25,10 +25,11 @@ object QRCode {
      *
      * A ballpark rather than a contract: the real scale is the largest INTEGER
      * multiple of the module count that fits under it, so the answer lands
-     * somewhere in `[target/2, target]`. 800 covers the lobby ticket at 4K without
+     * somewhere in `[target/2, target]`. 1100 covers the biggest QR drawn — a solo
+     * cell's reconnect card at 540 authored px, which is 1080 px at 4K — without
      * making a bitmap nothing can use.
      */
-    private const val TARGET_PIXELS = 800
+    private const val TARGET_PIXELS = 1100
 
     /** The QR for [text], or null if it will not encode (empty, or too long). */
     fun bitmap(text: String): Bitmap? {

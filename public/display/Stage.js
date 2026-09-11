@@ -45,11 +45,14 @@ const ITEM_ICONS = {};
 // id having an icon; a missing entry would flash an empty chip).
 const ITEM_KEYS = [...ITEM_IDS];
 
-// A centred card (FINISHED banner or reconnect QR) owns this car's cell. ONE
-// spelling: it feeds both the renderer's per-cell mask (steer bar hides, one
-// layer down) and the DOM chrome around it — two consumers that must agree or
-// the bar shows under a card.
-const cardOwnsCell = (c) => !!(c.finished || c.reconnecting);
+// The renderer's per-cell mask, one layer down: which cells drop the STEER BAR.
+// Under either centred card. The FINISHED cell because the race is over for
+// them; the reconnect cell because the bar reports a phone that is gone — it
+// would freeze on the last tilt it heard and read as live input — and because
+// the card sits on top of it in a split cell. The DOM chrome in _loop hides
+// LESS: only the FINISHED card owns its cell (place and lap go), while the
+// reconnect QR leaves the HUD reporting a car that is still in the race.
+const cellDropsSteerBar = (c) => !!(c.finished || c.reconnecting);
 
 // A unitless `:root` token as a number, or null when the stylesheet that
 // declares it did not load. NULL RATHER THAN A DEFAULT: the one fallback for a
@@ -929,7 +932,7 @@ export class Stage {
     let mask = 0;
     ids.forEach((id, i) => {
       const c = this.cars.get(id);
-      if (c && cardOwnsCell(c)) mask |= 1 << i;
+      if (c && cellDropsSteerBar(c)) mask |= 1 << i;
     });
     if (mask !== this._cardMask) { this._cardMask = mask; this.display.cellCards(mask); }
     if (this._dividers !== this._divPushed) {
@@ -1356,23 +1359,21 @@ export class Stage {
       const c = this.cars.get(id);
       const r = cells[i];
       if (!r) return; // more cells than rects: only if the two lists disagree
-      // The corner label is hidden while the reconnect card owns the cell — that
-      // card already shows the name, so the label would just duplicate it. (The
-      // FINISHED card has no name, so it keeps the label.)
-      // EDGE-ANCHORED, so it measures from the SAFE rect: the corner it hangs
-      // in may be under a television's bezel, and a name nobody can read is the
-      // same as no name. The centred cards below keep the picture rect.
+      // The corner label is EDGE-ANCHORED, so it measures from the SAFE rect:
+      // the corner it hangs in may be under a television's bezel, and a name
+      // nobody can read is the same as no name. The centred cards below keep
+      // the picture rect.
       if (c.label) {
-        c.label.style.display = c.reconnecting ? 'none' : 'block';
+        c.label.style.display = 'block';
         c.label.style.left = r.safe.x + 'px';
         c.label.style.top = r.safe.y + 'px';
       }
-      // place/lap is hidden while a centred card owns the cell; the steer bar
-      // goes with it, one layer down — cardOwnsCell is the one predicate both
-      // consumers read (pushed as _syncOverlay's bitmask above).
-      const cardInCell = cardOwnsCell(c);
+      // place/lap is hidden only under the FINISHED card — the race is over for
+      // them. The reconnect card leaves them up (the steer bar is
+      // _syncOverlay's, one layer down, and hides under both — cellDropsSteerBar
+      // above).
       if (c.placeEl) {
-        c.placeEl.style.display = cardInCell ? 'none' : 'block';
+        c.placeEl.style.display = c.finished ? 'none' : 'block';
         c.placeEl.style.left = (r.safe.x + r.safe.w - 12) + 'px';
         c.placeEl.style.top = (r.safe.y + 11) + 'px';
       }
@@ -1385,12 +1386,17 @@ export class Stage {
       }
       // Reconnect QR: centred exactly like FINISHED, while their car keeps its
       // place on track. FINISHED wins the cell if both.
+      // The card also learns its cell's size: the QR is sized off the cell (half
+      // its height, see .cell-reconnect in display.css), so one player's card
+      // fills the screen while a split cell's stays inside its own quarter.
       if (c.reconnectEl) {
         const showRc = c.reconnecting && !c.finished;
         c.reconnectEl.style.display = showRc ? 'flex' : 'none';
         if (showRc) {
           c.reconnectEl.style.left = (r.x + r.w / 2) + 'px';
           c.reconnectEl.style.top = (r.y + r.h / 2) + 'px';
+          c.reconnectEl.style.setProperty('--cell-w', r.w + 'px');
+          c.reconnectEl.style.setProperty('--cell-h', r.h + 'px');
         }
       }
     });

@@ -175,10 +175,20 @@ extension GameCoordinator {
     /// is currently shown — which is one of the three pieces of state the model
     /// threads but does not hold.
     func applyReconnectCards(_ seats: [[String: Any]]) {
-        let seatIds = seats.compactMap { EngineIdentity.from($0["id"]) }
+        // `peerIndex`, NOT `id`. These are ttp_net_reconnect_card_json answers
+        // and that payload is {peerIndex,name,colorIndex,url} — session.cc's
+        // copyKey names the three keys and `id` is not among them. Reading `id`
+        // matched no seat, so the diff answered an empty `add` and a dropped
+        // racer's cell never showed its reconnect QR: their car kept racing
+        // with no way to rejoin it, silently. Android fixed the same bug; the
+        // WEB is the correct twin.
+        //
+        // Built POSITIONALLY, nulls included, because `add` carries POSITIONS
+        // into this list — a compacted array would shift them.
+        let wanted: [Any] = seats.map { EngineIdentity.from($0["peerIndex"])?.numericOrString ?? NSNull() }
         let diff = TTP.obj(ttp_ui_reconnect_diff_json(
             TTP.json(shownReconnectIds.map { $0.numericOrString }),
-            TTP.json(seatIds.map { $0.numericOrString })))
+            TTP.json(wanted)))
 
         for id in (diff["remove"] as? [Any] ?? []).compactMap(EngineIdentity.from) {
             shownReconnectIds.remove(id)
@@ -191,13 +201,14 @@ extension GameCoordinator {
         // empty card frame with nothing to scan.
         for i in (diff["add"] as? [Any] ?? []).compactMap({ ($0 as? NSNumber)?.intValue }) {
             guard seats.indices.contains(i),
-                  let id = EngineIdentity.from(seats[i]["id"]) else { continue }
-            // The per-seat claim URL carries ?claim=<peerIndex>, which is what
-            // lets a DIFFERENT device take the seat over. Composed in C++; only
-            // the bitmap is ours.
-            let card = TTP.obj(ttp_net_reconnect_card_json(TTP.json(seats[i]), state.joinURL))
+                  let id = EngineIdentity.from(seats[i]["peerIndex"]) else { continue }
+            // The card is used AS HANDED. Re-composing it here overwrote its
+            // `url` with the generic join URL and threw away the per-seat
+            // `?claim=<peerIndex>` PartyNet spliced in — so the QR would drop
+            // the player into a NEW seat instead of reclaiming theirs, leaving
+            // their still-racing car unrekeyed.
             shownReconnectIds.insert(id)
-            reconnectURLs[id] = card["url"] as? String
+            reconnectURLs[id] = seats[i]["url"] as? String
         }
     }
 

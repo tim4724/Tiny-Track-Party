@@ -370,7 +370,7 @@ object Scenarios {
             // answers `unsupported` for every card that shares one — which is silent,
             // because unsupported is a legitimate answer.
             "countdown", "racing", "racing-sidewinder", "rocket", "monster",
-            "paused", "reconnect", "finished" -> {
+            "paused", "reconnect", "reconnect-solo", "finished" -> {
                 game.show(GameState.Screen.RACE)
                 game.startDemoRace(trackPick(), forceItem(id), players)
             }
@@ -479,7 +479,10 @@ object Scenarios {
                 done()
             }
 
-            "reconnect" -> after(SPIN_MS) {
+            // `reconnect-solo` is the same card with one seat (`--ei ttpPlayers 1`
+            // from the table's `players` param): the QR is sized off the CELL,
+            // and the two arms of that rule are two pictures.
+            "reconnect", "reconnect-solo" -> after(SPIN_MS) {
                 dropOneSeat(game)
                 done()
             }
@@ -630,7 +633,7 @@ object Scenarios {
     private fun forceItem(id: String): String? = when (id) {
         "rocket" -> "rocket"
         "monster" -> "monster"
-        "reconnect", "finished" -> "boost"
+        "reconnect", "reconnect-solo", "finished" -> "boost"
         else -> null
     }
 

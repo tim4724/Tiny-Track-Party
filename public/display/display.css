@@ -1107,19 +1107,27 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
 /* ---- Reconnect card ---- a QR for a dropped player, centred in their own
    split-screen cell exactly like the FINISHED card. It REUSES .cell-finish for
    placement + chrome (absolute, translate(-50%,-50%), frosted card, livery
-   top-border); _loop sets left/top and toggles display. .cell-reconnect only adds
-   the spacing the QR content wants. */
-.cell-reconnect { gap: 0.5rem; }
-.rc-card__head {
-  display: flex; align-items: center; max-width: 11rem;
-  font-weight: 800; font-size: clamp(0.9rem, 1.1vw, 1.1rem); color: var(--ink);
+   top-border); _loop sets left/top and toggles display, and hands the card its
+   cell's size as --cell-w/--cell-h.
+
+   The QR is BIG: a phone has to read it from the couch, and a fixed ~9vw square
+   was a postage stamp on a television. Half the screen's height for one
+   player; a split cell gives it most of its height instead, because half of a
+   half-screen cell was too small to scan and the cell has nothing better to
+   show while its driver is gone. Sized off the CELL, not the viewport, so the
+   card stays inside its own half or quarter. The width cap only bites on a
+   portrait cell (one player on a phone held upright). The type scales with the
+   QR so the card reads as one sticker at every size. */
+.cell-reconnect {
+  --qr: min(50vh, calc(var(--cell-h, 100vh) * 0.6), calc(var(--cell-w, 100vw) * 0.6));
+  gap: calc(var(--qr) * 0.04);
 }
-.rc-card__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rc-card__sub {
-  font-weight: 700; font-size: 0.72rem; letter-spacing: 0.02em;
-  text-transform: uppercase; color: var(--ink-3);
+.rc-card__title {
+  font-family: var(--font-display); font-weight: 700;
+  font-size: clamp(0.9rem, calc(var(--qr) * 0.08), 2.6rem); letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--ink);
 }
 .rc-card__qr {
-  display: block; width: clamp(96px, 9vw, 132px); aspect-ratio: 1 / 1;
+  display: block; width: var(--qr); aspect-ratio: 1 / 1;
   border-radius: var(--r-sm); image-rendering: pixelated;
 }

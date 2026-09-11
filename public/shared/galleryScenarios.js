@@ -109,7 +109,13 @@ export const GALLERY_SCENARIOS = [
   { id: 'rocket', key: 'rocket', title: 'Rocket strike', animated: true },
   { id: 'monster', key: 'monster', title: 'Monster truck', animated: true },
   { id: 'paused', key: 'paused', title: 'Paused' },
+  // The reconnect QR is sized off the CELL (display.css .cell-reconnect): half
+  // the screen's height for one player, most of the cell in a split. Two cards,
+  // because a capture shoots every card at four players unless the table pins
+  // a count — the solo case is the other arm of the rule, and a column that
+  // photographs only the split arm never shows it.
   { id: 'reconnect', key: 'reconnect', title: 'Reconnect' },
+  { id: 'reconnect-solo', key: 'reconnect', title: 'Reconnect (one player)', params: { players: 1 } },
   { id: 'finished', key: 'finished', title: 'Player finished' },
   // `settleMs` — WHICH MOMENT of a still card is the card. A capture waits this
   // long after the screen stands up before it shoots, and the three board cards
