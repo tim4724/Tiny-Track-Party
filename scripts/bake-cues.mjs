@@ -63,6 +63,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { launchBrowser, serveApp } from './lib/capture.mjs';
+import { toFloats, interleave, quantize, wav } from './lib/wav.mjs';
 import {
   LEVEL_PROBES, evalLevelExpr, rolledJitter, sourceHashes, variantBlock, voiceSet,
 } from './lib/cue-source.mjs';
@@ -234,33 +235,6 @@ function parseArgs(argv) {
   return out;
 }
 
-// base64 → Float32Array (copied into a fresh, aligned ArrayBuffer).
-function toFloats(b64) {
-  const bytes = Buffer.from(b64, 'base64');
-  const ab = new ArrayBuffer(bytes.length);
-  Buffer.from(ab).set(bytes);
-  return new Float32Array(ab);
-}
-
-function interleave(channels) {
-  const n = channels[0].length, c = channels.length;
-  if (c === 1) return channels[0];
-  const out = new Float32Array(n * c);
-  for (let i = 0; i < n; i++) for (let k = 0; k < c; k++) out[i * c + k] = channels[k][i];
-  return out;
-}
-
-function quantize(floats) {
-  const out = new Int16Array(floats.length);
-  let clipped = 0;
-  for (let i = 0; i < floats.length; i++) {
-    let v = Math.round(floats[i] * 32767);
-    if (v > 32767) { v = 32767; clipped++; } else if (v < -32768) { v = -32768; clipped++; }
-    out[i] = v;
-  }
-  return { pcm: out, clipped };
-}
-
 // Every metric is measured on the QUANTISED samples, so the test can recompute
 // them from the committed file and land on the same numbers exactly.
 function metrics(pcm, channels, sampleRate) {
@@ -314,25 +288,6 @@ function trimTail(floats, channels) {
   }
   if (end >= frames - 1) throw new Error('render window too short — the cue is still sounding at the end');
   return floats.subarray(0, (end + 1) * channels);
-}
-
-function wav(pcm, channels, sampleRate) {
-  const data = Buffer.from(pcm.buffer, pcm.byteOffset, pcm.length * 2);
-  const head = Buffer.alloc(44);
-  head.write('RIFF', 0);
-  head.writeUInt32LE(36 + data.length, 4);
-  head.write('WAVE', 8);
-  head.write('fmt ', 12);
-  head.writeUInt32LE(16, 16);
-  head.writeUInt16LE(1, 20);                              // PCM
-  head.writeUInt16LE(channels, 22);
-  head.writeUInt32LE(sampleRate, 24);
-  head.writeUInt32LE(sampleRate * channels * 2, 28);       // byte rate
-  head.writeUInt16LE(channels * 2, 32);                    // block align
-  head.writeUInt16LE(16, 34);                              // bits
-  head.write('data', 36);
-  head.writeUInt32LE(data.length, 40);
-  return { file: Buffer.concat([head, data]), pcmBytes: data };
 }
 
 const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');

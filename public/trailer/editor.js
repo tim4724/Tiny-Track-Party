@@ -14,13 +14,18 @@
 // Speed multiplies STEPS PER ANIMATION FRAME, never the step size. A bigger dt would be
 // a different simulation, and the in-point would land somewhere else in the render.
 //
-// The shot list lives in localStorage and is exported by copy/paste. Writing it to disk
-// would need a mutating endpoint, and server/index.js serves static files and JSON
-// reads only — see CLAUDE.md.
+// The shot list lives in localStorage and is exported by copy/paste; the committed
+// scripts/trailer/shots.js comes back in through a read-only JSON endpoint. Writing it
+// to disk would need a mutating endpoint, and server/index.js serves static files and
+// JSON reads only — see CLAUDE.md.
 
 import { CUPS, TRACK_LIST } from '/shared/tracks.js';
 
-const SCENARIOS = ['racing', 'rocket', 'monster', 'chain'];
+// The harness's two item showcases ('rocket', 'monster') are deliberately not offered:
+// they force the roulette and hand the item to whoever is armed — a monster truck in
+// second place included — which is not a race the game would run. A real race's items
+// land where the catch-up rules put them, and the timeline marks where (see survey).
+const SCENARIOS = ['racing', 'chain'];
 const SPLITS = [1, 2, 4];
 const STORE = 'ttp-trailer-edit';
 // Sim time is COUNTED IN STEPS and divided, never accumulated. Adding 1/60 repeatedly
@@ -29,18 +34,11 @@ const STORE = 'ttp-trailer-edit';
 // seconds into steps with Math.round(seconds * FPS), and this has to agree exactly.
 const FPS = 60;
 const STEP = 1 / FPS;
-// TWO buffer scales, because the monitor is doing two different jobs.
-//
-// Watching is real time, and the engine holds 60 fps at a full 3840x2160 — a monitor a
-// thousand-odd CSS px wide at 2x is a fraction of that, so there is no reason to look at
-// a soft picture. 2 is also the renderer's own pixel-ratio cap.
-//
-// Winding to an in-point is the opposite: every one of those steps is a real draw and
-// none of them is looked at, so the buffer drops to a sixth of the width for the wind and
-// goes straight back after. setRenderScale changes it live — the same knob, for the same
-// reason, as scripts/capture-artwork.js racing cheap and shooting sharp.
+// The monitor's buffer scale. The engine holds 60 fps at a full 3840x2160, and a monitor
+// a thousand-odd CSS px wide at 2x is a fraction of that, so there is no reason to look
+// at a soft picture; 2 is also the renderer's own pixel-ratio cap. A wind draws only its
+// last frame (spend), so there is no cheaper scale left to drop to for it.
 const VIEW_DPR = 2;
-const WIND_DPR = 0.35;
 
 const NAME_OF = new Map(TRACK_LIST.map((t) => [t.id, t.name]));
 const CUP_OF = new Map(TRACK_LIST.map((t) => [t.id, t.cupName]));
@@ -50,8 +48,8 @@ const el = {
   shots: $('#shots'), add: $('#add'), total: $('#total'), status: $('#status'),
   wrap: $('#frame-wrap'), clock: $('#clock'), marks: $('#marks'),
   play: $('#play'), toIn: $('#to-in'), setIn: $('#set-in'),
-  playCut: $('#play-cut'), export: $('#export'),
-  rec: $('#rec'), barIn: $('#bar-in'), barNow: $('#bar-now'), bar: $('#bar'),
+  playCut: $('#play-cut'), export: $('#export'), import: $('#import'),
+  rec: $('#rec'), barIn: $('#bar-in'), barNow: $('#bar-now'), bar: $('#bar'), events: $('#bar-events'),
   followBox: $('#follow'), slowmo: $('#slowmo'),
 };
 
@@ -59,16 +57,14 @@ const el = {
 
 const DEFAULT_SHOT = { track: 'ribbon', players: 4, scenario: 'racing', warmup: 20, seconds: 3 };
 
+// The edit in progress, or nothing: a fresh editor starts from the COMMITTED cut
+// (loadCommitted below), so there is no second starter list to drift from shots.js.
 function load() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORE));
     if (Array.isArray(saved) && saved.length) return saved;
-  } catch (_) { /* corrupt or absent: fall through to the starter cut */ }
-  return [
-    { track: 'tidepool', players: 4, scenario: 'chain', warmup: 0, seconds: 3.5 },
-    { track: 'sidewinder', players: 4, scenario: 'racing', warmup: 22, seconds: 3 },
-    { track: 'helix', players: 1, scenario: 'rocket', warmup: 47.2, seconds: 3 },
-  ];
+  } catch (_) { /* corrupt or absent */ }
+  return [];
 }
 
 let shots = load();
@@ -119,6 +115,7 @@ function mount(shot) {
   el.wrap.appendChild(iframe);
   const frame = {
     iframe, shot, scene: null, steps: 0, ready: false,
+    events: [],                   // the race's moments, from the survey
     // What this race was actually dealt with. The shot object it came from is mutable —
     // changing its track edits it in place — so a frame has to remember its own terms
     // rather than be asked to re-read them.
@@ -132,8 +129,9 @@ function mount(shot) {
       const w = iframe.contentWindow;
       const scene = w && w.__scene;
       // __engine too: the harness builds the field after the GLBs land, and a scene
-      // without cars steps a race that has not been dealt yet.
-      if (scene && w.__engine && w.__pump && scene.cars && scene.cars.size) {
+      // without cars steps a race that has not been dealt yet. __preview is the
+      // harness's restart and event log (TestHarness.js previewControl).
+      if (scene && w.__engine && w.__pump && w.__preview && scene.cars && scene.cars.size) {
         clearInterval(poll);
         scene.stop();                 // the gate means nothing has drawn yet anyway
         scene.setFixedStep(STEP);
@@ -147,8 +145,44 @@ function mount(shot) {
         resolve(frame);               // ready stays false; the caller reports it
       }
     }, 120);
-  });
+  }).then(async (f) => { if (f.ready) await survey(f); return f; });
   return frame;
+}
+
+// THE WHOLE RACE, SURVEYED UP FRONT. A freshly booted frame runs its race to the end
+// without drawing and deals it again — so the timeline is the whole race at one fixed
+// scale, every rocket, transform and hit already on it, before the first frame is looked
+// at. The moments are the harness's own event log (window.__preview.events): the sim's
+// word on when a rocket went, a truck grew or a camera car was struck, frame-exact, with
+// no snapshot to diff. A survey is the sim alone at a fraction of a millisecond a step,
+// so a three-lap race is a couple of seconds; it takes the slices a wind takes, so a shot
+// already playing keeps its frame rate. The end is the harness dealing the NEXT race —
+// its endless preview re-deals at the flag, and the chain preview launches the next leg
+// after its board — so the surveyed race is exactly what the monitor can show.
+const SURVEY_CAP = 300 * FPS;   // a race that never ends still gets a bar
+async function survey(frame) {
+  const w = frame.iframe.contentWindow;
+  const deal = w.__preview.deal();
+  const same = () => w.__preview.deal() === deal && frame.steps < SURVEY_CAP;
+  while (same()) {
+    const until = performance.now() + (playing ? PREWIND_MS : WIND_MS);
+    while (same() && performance.now() < until) step(frame, false);
+    if (frame === liveFrame) setStatus(`surveying the race — ${frame.time.toFixed(0)}s`);
+    // A macrotask, not an animation frame: the browser stops animation frames for a
+    // window another window covers — the video player just opened over this one, say —
+    // and a survey paced by them then crawls at one slice a second.
+    await new Promise((r) => setTimeout(r, 0));
+  }
+  frame.raceLen = frame.time;
+  // A hit is a rocket landing on a CAMERA car: that is the shot; one passing by is not.
+  const cells = new Set(frame.scene._order);
+  frame.events = w.__preview.events().filter((e) => e.deal === deal).flatMap((e) => {
+    if (e.type === 'item_use' && (e.item === 'rocket' || e.item === 'monster')) return [{ t: e.t, kind: e.item }];
+    if (e.type === 'spin' && e.cause === 'rocket' && cells.has(e.id)) return [{ t: e.t, kind: 'hit' }];
+    return [];
+  });
+  restart(frame);
+  if (frame === liveFrame) paintEvents(frame);
 }
 
 // Redraw the frame that is on screen WITHOUT advancing anything. The display's WebGL
@@ -168,13 +202,28 @@ function repaint(frame) {
 // exactly 2x, which put every in-point at twice the race it claimed. Pumping makes one
 // call mean one frame, and lets a wind run many frames per animation frame instead of
 // being capped at the monitor's refresh rate.
-function step(frame) {
+//
+// UNDRAWN (`draw` false) is the same step through the same loop with the GPU left out
+// (Stage.setUndrawn): the sim lands bit-identical, the renderer's own state — chase
+// rigs, props, the skid stamps — moves on with it, and it costs a fiftieth of a drawn
+// step, because the cost of a step is the GPU. A wind draws only the frame it arrives
+// on; the renderer catches its rubber layer up on that frame.
+function step(frame, draw = true) {
   const s = frame.scene;
   if (!s || !frame.pump) return;
+  s.setUndrawn(!draw);
   s.start();
   s.pauseAfterFrame();
   frame.pump(STEP * 1000);
   frame.steps++;
+}
+
+// Deal the frame's race again, in place. The harness exposes exactly the re-deal it
+// runs when a preview race laps, so this is the same race from zero without a page boot.
+// The timeline stays: it is the survey's, and the same race puts the same events back.
+function restart(frame) {
+  frame.iframe.contentWindow.__preview.restart();
+  frame.steps = 0;
 }
 
 function stopPump() {
@@ -252,14 +301,31 @@ function paintClock() {
   el.barNow.style.left = `${Math.min((t / span) * 100, 100)}%`;
 }
 
+// The race's moments over the scrub bar, from the survey, on the bar's own fixed scale.
+// Built when a frame takes the monitor and when its survey answers; a marker clicked
+// seeks to its frame.
+const EVENT_GLYPH = { rocket: '🚀', monster: '🛻', hit: '💥' };
+function paintEvents(frame) {
+  const span = barSpan();
+  el.events.replaceChildren(...frame.events.map((ev) => {
+    const m = document.createElement('button');
+    m.className = 'bar-events__ev';
+    m.style.left = `${Math.min((ev.t / span) * 100, 100)}%`;
+    m.textContent = EVENT_GLYPH[ev.kind];
+    m.title = `${ev.kind} at ${ev.t.toFixed(2)}s — click to seek`;
+    m.onclick = () => seekTo(ev.t);
+    return m;
+  }));
+}
+
 const outAt2 = (s) => +s.warmup + +s.seconds;
 
-// The scrub bar is a seek target, so its span must not move under the pointer every
-// frame: it is the shot's own end plus a margin, and only grows if the race is run past
-// that while scouting.
+// THE BAR IS THE WHOLE RACE, at one scale: the length the survey found, from the grid
+// to the harness's next deal. It does not grow with the playhead or move with the
+// in-point, so a marker stays where it was and a click means the same second it did
+// a moment ago. Before the survey has answered there is nothing to scale to yet.
 function barSpan() {
-  if (!liveFrame) return 1;
-  return Math.max(outAt2(liveFrame.shot) + 15, liveFrame.time + 5, 20);
+  return (liveFrame && liveFrame.raceLen) || 60;
 }
 
 function setStatus(text) {
@@ -295,14 +361,10 @@ async function show(index, { preloadNext = true, wind = follow, swapFirst = fals
   // SCOUTING STARTS AT ZERO. With follow off you are looking for a moment, so the race
   // has to begin at the beginning — landing wherever the cached race happened to be left
   // is useless for that. A simulation only runs forward, so "back to 0" means dealing it
-  // again; the cached one is dropped rather than kept, since it is at the wrong place.
+  // again; the cached frame stays and deals it in place.
   const cached = frames.get(keyOf(shot));
-  if (!wind && cached && cached.steps > 0) {
-    frames.delete(keyOf(shot));
-    if (cached === liveFrame) liveFrame = null;
-    if (cached === nextFrame) nextFrame = null;
-    destroy(cached);
-  } else if (liveFrame && liveFrame.ready && sameShot(liveFrame.mounted, shot)) {
+  if (!wind && cached && cached.ready && cached.steps > 0) restart(cached);
+  if (liveFrame && liveFrame.ready && sameShot(liveFrame.mounted, shot)) {
     // Already showing this exact race, and not resetting: keep it, move the playhead.
     // Frames are cached by track|players|scenario, so this can be a DIFFERENT shot
     // than the one the frame was mounted for — repoint it, or the clock, the kept
@@ -361,17 +423,16 @@ function swapTo(frame, index) {
   liveFrame = frame;
   liveIndex = index;
   frame.iframe.classList.add('is-live');
-  if (frame.scene) frame.scene.setRenderScale(VIEW_DPR);
   if (outgoing && outgoing !== frame) shelve(outgoing);
   paintShots();
   paintClock();
+  paintEvents(frame);
 }
 
 // Run a HIDDEN frame up to its in-point, off screen, while whatever is on the monitor
 // stays there. No status overlay: from the viewer's side the previous shot is simply
 // holding its last frame, which reads as a hold rather than as a stall.
 async function windHidden(frame, goal) {
-  frame.scene.setRenderScale(WIND_DPR);
   // Nothing on the monitor is moving — it holds the outgoing shot's last frame — so stop
   // the pump rather than let it keep stepping a frozen frame and a second wind alongside
   // this one. That contention was most of the frame-rate collapse at a join.
@@ -455,21 +516,17 @@ function preload(shot) {
   const frame = acquire(shot);
   nextFrame = frame;
   frame.windGoal = Math.round((+shot.warmup || 0) * FPS);
-  frame.boot.then((f) => {
-    if (f.ready && f.scene && f !== liveFrame) f.scene.setRenderScale(WIND_DPR);
-  });
 }
 
 // Give the waiting frame a slice of this animation frame. Budget rather than a fixed
 // count: what matters is arriving before the cut does, and a shot with a 47 s in-point
 // needs far more per tick than one with 5 s. Capped so a distant in-point cannot starve
 // the picture that is actually on screen.
-// BUDGETED IN MILLISECONDS, not steps, because a step is not cheap and its cost is not
-// something this file can predict. Measured on an M1 Max, one step costs ~2.4 ms and is
-// almost entirely SIMULATION: shrinking the hidden frame's buffer 625-fold (dpr 2 down to
-// 0.08) moves it only 3.6 ms to 2.4 ms. So there is no resolution at which a step becomes
-// free, and a fixed count of them is a fixed gamble on the machine — sixteen steps came
-// to 38 ms of a 16 ms frame, which is what dropped the editor to 25 fps.
+// BUDGETED IN MILLISECONDS, not steps, because a step's cost is not something this file
+// can predict: an undrawn one is a tenth of a millisecond, a drawn one is a few, and
+// which a wind is doing changes as it nears its goal. A fixed count of them is a fixed
+// gamble on the machine — sixteen drawn steps came to 38 ms of a 16 ms frame, which is
+// what dropped the editor to 25 fps.
 //
 // A time slice self-limits instead: whatever a step costs, the tick stays inside its
 // budget and the page stays at 60.
@@ -477,23 +534,23 @@ const PREWIND_MS = 2;    // per animation frame, while something is playing
 const WIND_MS = 30;      // while the picture is held and only the wind is happening
 
 // What a step actually costs here, learned rather than assumed — it varies with the
-// track, the split and the machine, and the decision below is only as good as this.
+// track, the split, the machine and the drawn/undrawn mix, and the decision below is
+// only as good as this.
 let msPerStep = 3;
 
+// Undrawn but for the last step, the one that is looked at (see step).
 function spend(frame, goal, ms) {
   const t0 = performance.now();
   const from = frame.steps;
   const until = t0 + ms;
-  while (frame.steps < goal && performance.now() < until) step(frame);
+  while (frame.steps < goal && performance.now() < until) step(frame, frame.steps + 1 === goal);
   const n = frame.steps - from;
   if (n > 0) msPerStep = msPerStep * 0.8 + ((performance.now() - t0) / n) * 0.2;
 }
 
-// Pre-winding only pays if it FINISHES. A step costs ~2.4 ms and is simulation-bound —
-// no buffer size makes it cheap — so a 40 s in-point is some six CPU-seconds that cannot
-// be hidden inside a three-second shot. Winding part of the way there does not shorten
+// Pre-winding only pays if it FINISHES. Winding part of the way there does not shorten
 // the hold at the join by anything anyone notices; it just spends the shot's own frames
-// doing it, which measured as 60 fps falling to 29.
+// doing it, which measured as 60 fps falling to 29 back when every step was drawn.
 //
 // So: work out whether the remaining shot can cover it at the budget we are willing to
 // spend, and if it cannot, do nothing and let the join take an honest hold. Paused is the
@@ -510,11 +567,10 @@ function prewindTick() {
 }
 
 // Take a frame off the monitor. It STAYS in the cache — that is the whole point — so
-// this only hides it and drops it back to the wind buffer.
+// this only hides it.
 function shelve(frame) {
   if (!frame || frame === liveFrame) return;
   frame.iframe.classList.remove('is-live');
-  try { frame.scene && frame.scene.setRenderScale(WIND_DPR); } catch (_) { /* torn down */ }
 }
 
 // Actually destroy one, releasing its WebGL context. Only eviction and a failed boot do
@@ -526,13 +582,12 @@ function destroy(frame) {
 }
 
 // SEEKING A SIMULATION. There is no seek — a race has no frame to jump to, only a state
-// reached by stepping. So forward is a fast wind, and backward is a fresh race wound
-// forward again from zero. Both run at a sixth of the buffer width, because none of
-// those frames is looked at; the wind is what the whole thing costs.
+// reached by stepping. So forward is a wind, and backward is the same race dealt again
+// in place (restart) and wound forward from zero. A wind is undrawn but for the frame
+// it arrives on (step), so either direction is a fraction of a second.
 //
-// That asymmetry is the honest limit of this design: forward is roughly free, backward
-// costs a re-simulation. Making backward instant would mean the C++ Game serialising and
-// restoring its own state, which nothing in the ABI does today.
+// Nothing in the ABI serialises a session, and nothing needs to: a re-simulation is
+// cheaper than a restore would be to prove bit-exact.
 let winding = false;
 
 async function windTo(target) {
@@ -543,28 +598,14 @@ async function windTo(target) {
   // few frames past its own in-point.
   stopPump();
   try {
-    if (liveFrame.steps > Math.round(target * FPS)) {
-      // Backward: only way is to deal the race again and re-run it.
-      const i = liveIndex;
-      const shot = shots[i];
-      setStatus('restarting the race…');
-      // A rewind is a NEW race; the old one is at the wrong place, so it goes for good.
-      frames.delete(keyOf(shot));
-      destroy(liveFrame);
-      liveFrame = acquire(shot);
-      await liveFrame.boot;
-      if (liveIndex !== i || !liveFrame.ready) return;
-      liveFrame.iframe.classList.add('is-live');
-    }
+    // Backward: deal the race again and re-run it.
+    if (liveFrame.steps > Math.round(target * FPS)) restart(liveFrame);
     // Steps, not seconds — the same conversion render.js makes, so both land on the
     // identical frame rather than within a step of each other.
     const goal = Math.round(target * FPS);
-    // A preloaded shot arrives already wound. Returning here is not just a saving: the
-    // scale changes below reallocate the drawing buffer, which would flash the cut.
-    if (liveFrame.steps === goal) return;
+    if (liveFrame.steps === goal) return;   // a preloaded shot arrives already wound
     const from = liveFrame.steps;
     const t0 = Date.now();
-    liveFrame.scene.setRenderScale(WIND_DPR);
     while (liveFrame.steps < goal) {
       spend(liveFrame, goal, WIND_MS);
       prewindTick();      // the pump is stopped in here, so keep the next shot moving too
@@ -574,7 +615,6 @@ async function windTo(target) {
       await new Promise((r) => requestAnimationFrame(r));
       if (Date.now() - t0 > 120000) break;
     }
-    liveFrame.scene.setRenderScale(VIEW_DPR);
     setStatus('');
     paintClock();
   } finally {
@@ -784,18 +824,45 @@ el.followBox.onchange = () => {
   if (liveIndex >= 0) show(liveIndex, { swapFirst: true });
 };
 
-// Click the scrub bar to seek. Forward is a wind; backward re-deals the race and winds
-// again (see windTo), so it costs a moment and says so.
-el.bar.onclick = async (e) => {
+// Seek to a moment. Forward is a wind; backward re-deals the race and winds again (see
+// windTo). A manual seek is scouting, by definition, so following comes off.
+async function seekTo(target) {
   if (!liveFrame || !liveFrame.ready) return;
-  const r = el.bar.getBoundingClientRect();
-  const target = Math.max(0, ((e.clientX - r.left) / r.width) * barSpan());
   const wasFollowing = follow;
-  follow = false;                 // a manual seek is scouting, by definition
+  follow = false;
   el.followBox.checked = false;
   outAt = Infinity;
   await windTo(target);
   if (wasFollowing) paintPlay();
+}
+
+// Click the scrub bar to seek.
+el.bar.onclick = (e) => {
+  const r = el.bar.getBoundingClientRect();
+  seekTo(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * barSpan());
+};
+
+// The other direction: replace the edit with the committed cut. The monitor keeps
+// whatever it holds; the list under it is simply new, so the live row is cleared.
+async function loadCommitted() {
+  const res = await fetch('/api/trailer-shots');
+  const { shots: loaded, error } = await res.json();
+  if (!res.ok) throw new Error(error);
+  shots = loaded.map(({ track, players, scenario, warmup, seconds }) =>
+    ({ track, players, scenario, warmup, seconds }));
+  liveIndex = -1;
+  save(); paintShots(); paintTotal();
+}
+
+el.import.onclick = async () => {
+  try {
+    await loadCommitted();
+    el.import.textContent = `Loaded ${shots.length}`;
+  } catch (err) {
+    console.error(err);
+    el.import.textContent = 'Failed';
+  }
+  setTimeout(() => { el.import.textContent = 'Load shots.js'; }, 1400);
 };
 
 el.export.onclick = async () => {
@@ -813,6 +880,7 @@ el.export.onclick = async () => {
 
 paintShots();
 paintTotal();
+if (!shots.length) loadCommitted().catch((err) => { console.error(err); setStatus('could not load shots.js'); });
 paintPlay();
 // Open on the first shot's in-point, paused: the monitor shows frame one of the trailer
 // rather than a race that has not started.

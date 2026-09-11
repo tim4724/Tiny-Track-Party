@@ -100,9 +100,20 @@ main {
 .shot__body label { display: inline-flex; align-items: center; gap: 0.22rem; font-size: 0.7rem; color: var(--ink-3); }
 
 /* -- the monitor ----------------------------------------------------------- */
-.monitor { display: flex; flex-direction: column; gap: 0.6rem; min-width: 0; }
+/* Sticky so a long rack scrolls past a monitor that stays put. */
+.monitor { display: flex; flex-direction: column; gap: 0.6rem; min-width: 0; position: sticky; top: 1rem; }
 
+/* The picture is 16:9 whatever the window is, and may not push the transport
+   under it off the screen: on a wide, short window a column-wide stage is taller
+   than the viewport. So cap its HEIGHT by what the viewport has left once the
+   bar, the scrub, the transport and the marks line have their rows (the legend
+   below may scroll), and let the width follow the ratio from there. The cap is
+   an explicit width, not max-height: a stretched grid item keeps its column
+   width under a max-height and only loses its shape. */
 .stage {
+  --stage-max-h: calc(100dvh - 15rem);
+  width: min(100%, max(18rem, calc(var(--stage-max-h) * 16 / 9)));
+  margin-inline: auto;
   position: relative;
   background: var(--ink);
   border: 3px solid var(--ink);
@@ -147,7 +158,16 @@ main {
   @keyframes rec-pulse { 50% { opacity: 0.25; } }
 }
 
-/* Scrub bar: the whole run so far, with the kept span marked on it. */
+/* The event strip over the scrub bar: one glyph per moment, on the bar's own scale. */
+.bar-events { position: relative; height: 1.2rem; margin-bottom: -0.2rem; }
+.bar-events__ev {
+  position: absolute; top: 0; transform: translateX(-50%);
+  border: 0; background: none; padding: 0; cursor: pointer;
+  font-size: 0.85rem; line-height: 1.2rem;
+}
+.bar-events__ev:hover { transform: translateX(-50%) scale(1.3); }
+
+/* Scrub bar: the whole race, with the kept span marked on it. */
 .bar-scrub {
   position: relative; height: 0.85rem;
   background: var(--surface-2);

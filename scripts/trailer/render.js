@@ -6,7 +6,7 @@
 //   node scripts/trailer/render.js --shot 02-canyon-4p  # one shot (repeatable)
 //   node scripts/trailer/render.js --shot 02-canyon-4p --seed 12   # re-roll a take
 //   node scripts/trailer/render.js --preview            # 960x540, fast, for pacing
-//   node scripts/trailer/render.js --cuesonly           # re-derive the SOUND only
+//   node scripts/trailer/render.js --soundonly          # re-render the SOUND only
 //
 // WHY FRAME-BY-FRAME, and not a screen recording. The display can be driven by a
 // FIXED timestep (Stage.setFixedStep) instead of the rAF clock, so the sim advances
@@ -22,13 +22,23 @@
 // the window just has to exist. Measured on an M1 Max at 3840x2160: the scene itself
 // runs at 60 fps, and a PNG readback is the whole per-frame cost.
 //
+// THE SOUND IS RENDERED THE SAME WAY. The display's mix is a Web Audio graph, and Web
+// Audio can run one on an OfflineAudioContext that only advances when told to: `?offlineaudio`
+// (RaceAudio) puts the game's graph on one, and after every frame stepped here the
+// context is rendered up to the next frame boundary and halted. The commands that frame
+// applied were scheduled at the context's own clock, so what comes out is the mix the
+// game would have played over exactly these frames — engines, cornering, rockets at
+// their distance, the countdown — without a speaker anywhere. The music is not in it:
+// that is a streamed element outside the graph, and cut.js lays the bed itself.
+//
 // Output: frames under artwork/trailer/frames/<id>/, one clip per shot at
-// artwork/trailer/clips/<id>.mp4. cut.js stitches them.
+// artwork/trailer/clips/<id>.mp4 with its sound beside it as <id>.wav. cut.js stitches them.
 
 const path = require('path');
 const fs = require('fs');
 const { spawnSync } = require('child_process');
-const { ROOT, STEP_ONE } = require('./harness.js');
+
+const ROOT = path.join(__dirname, '..', '..');
 
 function parseArgs(argv) {
   const out = { shot: [] };
@@ -36,7 +46,7 @@ function parseArgs(argv) {
     const a = argv[i];
     if (!a.startsWith('--')) continue;
     const key = a.slice(2);
-    if (key === 'preview' || key === 'keepframes' || key === 'cuesonly') { out[key] = true; continue; }
+    if (key === 'preview' || key === 'keepframes' || key === 'soundonly') { out[key] = true; continue; }
     if (key === 'shot') { out.shot.push(argv[++i]); continue; }
     out[key] = argv[++i];
   }
@@ -61,7 +71,7 @@ const CRF = args.crf || (args.preview ? '23' : '16');
 // this run only. Sweep them until the action lands, then write the numbers into
 // shots.js — the render is deterministic, so what you scouted is what you get back.
 // `warmup` is the knob worth sweeping; see the seed note in shots.js for why the seed
-// mostly is not. scripts/trailer/scout.js finds a warmup without rendering anything.
+// mostly is not. /trailer.html's timeline marks where a race's items land.
 const OVERRIDE = {};
 for (const k of ['seed', 'warmup', 'seconds']) if (args[k] != null) OVERRIDE[k] = parseFloat(args[k]);
 
@@ -73,80 +83,78 @@ const shots = args.shot.length
     })
   : SHOTS;
 
-// A frame's worth of "what is happening", read straight from the sim. Offline rendering
-// produces NO audio — the display's sound is a Web Audio graph running in real time, and
-// this steps at a few frames a second — so the soundtrack cannot be recorded, only
-// RECONSTRUCTED. Determinism is what makes that exact: the sim time an event lands on
-// here is the frame it lands on in the picture, so cut.js can place the cue on it rather
-// than anyone lining sound up by ear.
+// ONE FIXED STEP, with its sound. Advance the scene by exactly one step and return once
+// the frame has been drawn: start() re-arms the loop and pauseAfterFrame() tells it to
+// halt after the next iteration, so the pair is a single-step primitive; __pump (the
+// gate's — the display installs it itself from `?gate=1`, before it draws anything; see
+// public/display/frameGate.js) then actually runs it, and onAfterFrame fires with the
+// drawing buffer still holding the frame. The trailer EDITOR mirrors this stepping and
+// deliberately does not share it: it runs same-realm against an <iframe>, with none of
+// the cross-realm evaluate boundary this is built around.
 //
-// Only the captured frames are probed. Events during the warm-up happened before the clip
-// starts and belong to nobody.
-const PROBE = () => {
-  const snap = window.__engine.getSnapshot();
-  const cd = document.getElementById('countdown');
-  return {
-    rockets: (snap.rockets || []).map((r) => r.id),
-    spinning: snap.cars.filter((c) => c.spin).map((c) => c.id),
-    monsters: snap.cars.filter((c) => c.monster).map((c) => c.id),
-    holding: snap.cars.filter((c) => c.item).map((c) => c.id),
-    laps: snap.cars.reduce((n, c) => n + (c.totalLaps || 0), 0),
-    banner: cd && getComputedStyle(cd).display !== 'none' ? (cd.textContent || '').trim() : '',
-  };
+// Then the sound: the frame just stepped applied its commands at the context's current
+// time, so render up to the next boundary and halt there. Boundaries are absolute
+// (i / fps), not accumulated: suspend() rounds to the 128-sample render quantum, and an
+// absolute time keeps that rounding from adding up. The first frame starts the render;
+// every later one resumes it.
+const STEP_ONE = async ([i, fps]) => {
+  await new Promise((done, fail) => {
+    const s = window.__scene;
+    const t = setTimeout(() => fail(new Error('frame never presented')), 30000);
+    s.onAfterFrame = () => { s.onAfterFrame = null; clearTimeout(t); done(); };
+    s.start();
+    s.pauseAfterFrame();
+    window.__pump(1000 / fps);
+  });
+  const ctx = window.__audio.ctx;
+  const halt = ctx.suspend((i + 1) / fps);
+  if (i === 0) window.__audioRendered = ctx.startRendering();
+  else await ctx.resume();
+  await halt;
 };
 
-// Turn the frame-by-frame probe into cue instances. Everything is a RISING EDGE: a state
-// that was not there last frame and is now.
-//
-// These name WHAT HAPPENED, not what it sounds like. Which sample plays and how loud is
-// cut.js's business (its CUE_MIX), so re-balancing the sound is a re-cut of seconds
-// rather than a re-derive of the whole race.
-function cuesFrom(samples, scenario, fps) {
-  const cues = [];
-  const at = (i) => +(i / fps).toFixed(3);
-  const fresh = (now, before) => now.filter((id) => !before.includes(id));
+// Run the context out and hand back the captured span — the `total` frames after the
+// `warm` ones — one Float32Array per channel; Playwright carries typed arrays across.
+const AUDIO_FINISH = async ([warm, total, fps]) => {
+  const ctx = window.__audio.ctx;
+  await ctx.resume();
+  const buf = await window.__audioRendered;
+  const from = Math.round(warm * ctx.sampleRate / fps);
+  const n = Math.max(0, Math.min(Math.round(total * ctx.sampleRate / fps), buf.length - from));
+  const channels = [];
+  for (let c = 0; c < buf.numberOfChannels; c++) channels.push(buf.getChannelData(c).slice(from, from + n));
+  return { sampleRate: ctx.sampleRate, channels };
+};
 
-  // The banner is the one thing worth catching mid-beat. A shot cut to open ON the launch
-  // starts a hair after GO lit, so the rising edge falls outside the clip and the loudest
-  // moment in the trailer would land silent. Nothing else gets this treatment: a rocket
-  // already in flight when the clip opens was fired earlier and must not re-fire.
-  if (samples.length && samples[0].banner) {
-    cues.push({ t: 0, kind: samples[0].banner === 'GO!' ? 'countdown_go' : 'countdown_tick' });
-  }
-  for (let i = 1; i < samples.length; i++) {
-    const now = samples[i];
-    const before = samples[i - 1];
-    for (const _ of fresh(now.rockets, before.rockets)) cues.push({ t: at(i), kind: 'rocket_fire' });
-    for (const _ of fresh(now.monsters, before.monsters)) cues.push({ t: at(i), kind: 'monster_inflate' });
-    for (const _ of fresh(now.holding, before.holding)) cues.push({ t: at(i), kind: 'pickup' });
-    // A spin is a hit. In the rocket showcase that is a rocket landing; otherwise it is
-    // a car being knocked about, which is a scrape rather than a bang.
-    for (const _ of fresh(now.spinning, before.spinning)) {
-      cues.push({ t: at(i), kind: scenario === 'rocket' ? 'rocket_hit' : 'screech' });
-    }
-    if (now.laps > before.laps) cues.push({ t: at(i), kind: 'lap' });
-    if (now.banner !== before.banner && now.banner) {
-      cues.push({ t: at(i), kind: now.banner === 'GO!' ? 'countdown_go' : 'countdown_tick' });
-    }
-  }
-  return cues;
-}
+let wavLib;   // scripts/lib/wav.mjs, loaded in main (ESM, from this CJS script)
+
+// The colour the clips are encoded in, written into the H.264 stream's VUI — cut.js
+// stamps the same on the master. Through x264's own parameters: ffmpeg's codec-level
+// colour flags reach the matrix and range but not the primaries and transfer, which
+// then read as unknown. See the encode below for why none of it is left implicit.
+const COLOR_TAGS = ['-x264-params', 'colorprim=bt709:transfer=bt709:colormatrix=bt709:range=tv'];
 
 async function renderShot(page, shot, port) {
-  // --cuesonly re-runs the same race and writes the cue sheet, skipping the screenshots
-  // and the encode. The sound is derived from the sim, not from the pictures, so it can
-  // be rebuilt in seconds without touching clips that are already correct — a readback is
+  // --soundonly re-runs the same race and writes the wav, skipping the screenshots and
+  // the encode. The sound comes from the sim, not from the pictures, so it can be
+  // rebuilt in seconds without touching clips that are already correct — a readback is
   // two orders of magnitude dearer than a step.
-  const cuesOnly = !!args.cuesonly;
+  const soundOnly = !!args.soundonly;
   const frameDir = path.join(OUT, 'frames', shot.id);
-  if (!cuesOnly) {
+  if (!soundOnly) {
     fs.rmSync(frameDir, { recursive: true, force: true });
     fs.mkdirSync(frameDir, { recursive: true });
   }
 
+  const warm = Math.round((shot.warmup || 0) * FPS);
+  const total = Math.round(shot.seconds * FPS);
+
   const q = new URLSearchParams({
     test: '1',
-    gate: '1',            // the display hands us the frame clock — see harness.js
+    gate: '1',            // the display hands us the frame clock — see STEP_ONE
+    // …and the sound's clock too: a context long enough for the warmup, the shot and
+    // the boundary after the last frame (suspend() cannot land on the very end).
+    offlineaudio: String((warm + total + 1) / FPS),
     scenario: shot.scenario,
     players: String(shot.players),
     track: shot.track,
@@ -182,22 +190,23 @@ async function renderShot(page, shot, port) {
 
   await page.evaluate((fps) => window.__scene.setFixedStep(1 / fps), FPS);
 
-  // Warmup: stepped, not shot. Cars leave the grid stacked, and a clip that opens on
-  // three cars nose-to-tail is a starting line, not a race.
-  const stepMs = 1000 / FPS;
-  const warm = Math.round((shot.warmup || 0) * FPS);
-  for (let i = 0; i < warm; i++) await page.evaluate(STEP_ONE, stepMs);
+  // Open the sound: the context, and the recorded cues decoded into it. Live, a gesture
+  // does this and the decode lands during the lobby; here the first frame is next.
+  await page.evaluate(() => { window.__audio.resume(); return window.__audio.samplesReady; });
 
-  const total = Math.round(shot.seconds * FPS);
-  const samples = [];
-  const t0 = Date.now();
-  for (let i = 0; i < total; i++) {
-    await page.evaluate(STEP_ONE, stepMs);
-    samples.push(await page.evaluate(PROBE));
-    if (!cuesOnly) await page.screenshot({ path: path.join(frameDir, String(i).padStart(5, '0') + '.png') });
-    if (i && i % 60 === 0) {
-      const rate = i / ((Date.now() - t0) / 1000);
-      process.stdout.write(`    ${i}/${total} frames (${rate.toFixed(1)}/s)\r`);
+  // Warmup: stepped and sounded, not shot. Cars leave the grid stacked, and a clip that
+  // opens on three cars nose-to-tail is a starting line, not a race. The sound runs
+  // through it so every voice is where the game would have it when the clip opens.
+  let t0 = Date.now();
+  for (let i = 0; i < warm + total; i++) {
+    await page.evaluate(STEP_ONE, [i, FPS]);
+    if (i < warm) continue;
+    const k = i - warm;
+    if (k === 0) t0 = Date.now();
+    if (!soundOnly) await page.screenshot({ path: path.join(frameDir, String(k).padStart(5, '0') + '.png') });
+    if (k && k % 60 === 0) {
+      const rate = k / ((Date.now() - t0) / 1000);
+      process.stdout.write(`    ${k}/${total} frames (${rate.toFixed(1)}/s)\r`);
     }
   }
 
@@ -213,34 +222,44 @@ async function renderShot(page, shot, port) {
     throw new Error(`render surface is ${surface.w}x${surface.h}, wanted ${want} wide — the display clamped its resolution`);
   }
 
-  // The cue sheet rides beside the clip: cut.js reads it to build the sound.
-  const cues = cuesFrom(samples, shot.scenario, FPS);
+  // The sound rides beside the clip: cut.js lays it under the bed.
   const clip = path.join(OUT, 'clips', `${shot.id}.mp4`);
   fs.mkdirSync(path.dirname(clip), { recursive: true });
-  fs.writeFileSync(clip.replace(/\.mp4$/, '.cues.json'), JSON.stringify(cues));
+  const sound = await page.evaluate(AUDIO_FINISH, [warm, total, FPS]);
+  const { pcm } = wavLib.quantize(wavLib.interleave(sound.channels));
+  fs.writeFileSync(clip.replace(/\.mp4$/, '.wav'), wavLib.wav(pcm, sound.channels.length, sound.sampleRate).file);
 
   const secs = ((Date.now() - t0) / 1000).toFixed(0);
-  if (cuesOnly) {
-    console.log(`  ${shot.id}: ${cues.length} cues in ${secs}s (picture untouched)`);
+  if (soundOnly) {
+    console.log(`  ${shot.id}: ${shot.seconds}s of sound in ${secs}s (picture untouched)`);
     return;
   }
 
+  // BT.709, SAID SO. The frames are sRGB PNGs and the clip is HD video, and the two
+  // meet in the RGB→YUV conversion: left to itself ffmpeg converts with the BT.601
+  // matrix and tags nothing, while every HD player assumes BT.709 — and QuickTime, given
+  // no tags, adds a gamma assumption of its own on top, which read as a bright, washed
+  // picture. So the conversion uses the 709 matrix and the stream carries the full set
+  // of tags (primaries, transfer, matrix, limited range) it was made with (COLOR_TAGS).
   const ff = spawnSync('ffmpeg', [
     '-y', '-framerate', String(FPS),
     '-i', path.join(frameDir, '%05d.png'),
+    '-vf', 'scale=out_color_matrix=bt709:out_range=tv,format=yuv420p',
+    ...COLOR_TAGS,
     '-c:v', 'libx264', '-preset', 'slow', '-crf', String(CRF),
-    '-pix_fmt', 'yuv420p', '-movflags', '+faststart',
+    '-movflags', '+faststart',
     clip,
   ], { stdio: ['ignore', 'ignore', 'pipe'] });
   if (ff.status !== 0) throw new Error(`ffmpeg failed for ${shot.id}:\n${ff.stderr}`);
   if (!args.keepframes) fs.rmSync(frameDir, { recursive: true, force: true });
 
-  console.log(`  ${shot.id}: ${total} frames @ ${surface.w}x${surface.h} in ${secs}s, ${cues.length} cues → ${path.relative(ROOT, clip)}`);
+  console.log(`  ${shot.id}: ${total} frames @ ${surface.w}x${surface.h} in ${secs}s, with sound → ${path.relative(ROOT, clip)}`);
 }
 
 async function main() {
   fs.mkdirSync(OUT, { recursive: true });
   const { serveApp, launchBrowser } = await import('../lib/capture.mjs');
+  wavLib = await import('../lib/wav.mjs');
   const app = await serveApp({ port: args.port ? parseInt(args.port, 10) : undefined });
 
   let b;
