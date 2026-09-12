@@ -57,6 +57,16 @@ jobs:
 
           kubectl get ns "$NS" >/dev/null 2>&1 || kubectl create ns "$NS"
 
+          # What is serving right now, for the rollback step below. Read it before
+          # the apply overwrites it, and note the deployer SA can `get` and `patch`
+          # deployments but NOT list replicasets, so `kubectl rollout undo` is not
+          # available to us: rolling the image back by name is. Empty on a
+          # namespace's first deploy, which the rollback step treats as "nothing to
+          # go back to".
+          PREV_IMAGE=$(kubectl get deployment tinytrack -n "$NS" \
+            -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null || true)
+          echo "PREV_IMAGE=${PREV_IMAGE}" >> "$GITHUB_ENV"
+
           # Grant deployer SA namespace-scoped permissions via RoleBinding.
           cat <<RBAC | kubectl apply -n "$NS" -f -
           apiVersion: rbac.authorization.k8s.io/v1
@@ -239,6 +249,36 @@ jobs:
           # image is even pulled, and a crash-looping pod still reads as a
           # successful deploy (same pattern as HexStacker's production deploy).
           kubectl rollout status deployment/tinytrack -n "$NS" --timeout=180s
+
+      # The readinessProbe keeps a broken image from ever going live, so the old pod
+      # is still serving when we get here. Put the spec back on the image it was
+      # serving anyway: otherwise the namespace is left half rolled out, with a
+      # crash-looping surge pod burning restarts until someone notices. The job stays
+      # failed either way, so nothing here may mask the error that got us here.
+      - name: Roll back to the previously serving image
+        if: failure()
+        env:
+          BRANCH_RAW: ${{ github.ref_name }}
+          IMAGE: ${{ needs.build.outputs.sha_tag }}
+        run: |
+          SAFE_BRANCH=$(echo "$BRANCH_RAW" | tr '[:upper:]' '[:lower:]' | sed 's#[^a-z0-9-]#-#g' | cut -c1-50 | sed 's/-*$//')
+          NS="tinytrack-${SAFE_BRANCH}"
+          if [ -z "${PREV_IMAGE:-}" ]; then
+            echo "No previously serving image (first deploy to $NS, or the deploy failed before it could be read). Nothing to roll back."
+            exit 0
+          fi
+          if [ "$PREV_IMAGE" = "$IMAGE" ]; then
+            echo "Already on $PREV_IMAGE. Nothing to roll back."
+            exit 0
+          fi
+          echo "Rolling $NS back: $IMAGE -> $PREV_IMAGE"
+          kubectl set image deployment/tinytrack tinytrack="$PREV_IMAGE" -n "$NS" || true
+          kubectl rollout status deployment/tinytrack -n "$NS" --timeout=120s || true
+          {
+            echo "### Deploy failed, rolled back"
+            echo "- Attempted: \`${IMAGE}\`"
+            echo "- Restored: \`${PREV_IMAGE}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish preview URL
         env:
