@@ -24,7 +24,12 @@ const PARTYPLUG_DIR = path.join(__dirname, '..', 'partyplug');
 // is allowed to 404 — the gallery reads that as "not fetched" and says so.
 const KITS_DIR = path.join(__dirname, '..', '.cache', 'kenney-kits');
 const APP_VERSION = require('../package.json').version;
-const TRAILER_SHOTS = require('../scripts/trailer/shots.js');
+// `scripts/` is dockerignored like the kits cache above, so a deployed image
+// carries no shot list and the route below 404s. Test for the file rather than
+// catching the require: a MODULE_NOT_FOUND raised from INSIDE the shot list is a
+// defect in it, and must still be loud.
+const TRAILER_SHOTS_PATH = path.join(__dirname, '..', 'scripts', 'trailer', 'shots.js');
+const TRAILER_SHOTS = fs.existsSync(TRAILER_SHOTS_PATH) ? require(TRAILER_SHOTS_PATH) : null;
 const APP_ENV = String(process.env.APP_ENV || (process.env.NODE_ENV === 'production' ? 'production' : 'development')).toLowerCase();
 const IS_PROD = APP_ENV === 'production';
 
@@ -195,6 +200,7 @@ const server = http.createServer((req, res) => {
   // cut instead of the browser's localStorage. Data, required once with the server:
   // `npm run dev` restarts on an edit to it (--watch follows requires).
   if (urlPath === '/api/trailer-shots' && req.method === 'GET') {
+    if (!TRAILER_SHOTS) { sendJson(res, 404, { error: 'no shot list in this build' }); return; }
     sendJson(res, 200, { shots: TRAILER_SHOTS });
     return;
   }

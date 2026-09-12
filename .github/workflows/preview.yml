@@ -143,6 +143,12 @@ jobs:
           spec:
             revisionHistoryLimit: 3
             replicas: 1
+            # Pinned, not left to the 25% default: with the readinessProbe below
+            # this is what keeps the old pod serving through a deploy that cannot
+            # boot, instead of taking the host down with it.
+            strategy:
+              rollingUpdate:
+                maxUnavailable: 0
             selector:
               matchLabels:
                 app: tinytrack
@@ -164,6 +170,17 @@ jobs:
                     ports:
                       - containerPort: 4000
                         name: http
+                    # Without this the container counts as Ready the instant it
+                    # starts, so `rollout status` below greenlights a server that
+                    # dies a second later. The Service then loses its only ready
+                    # endpoint, traefik drops the route, and the host serves a
+                    # bare 404 while CI reports a green deploy.
+                    readinessProbe:
+                      httpGet:
+                        path: /health
+                        port: 4000
+                      periodSeconds: 5
+                      failureThreshold: 3
           ---
           apiVersion: v1
           kind: Service
