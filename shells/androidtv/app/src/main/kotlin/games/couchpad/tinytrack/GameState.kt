@@ -201,13 +201,17 @@ class GameState {
      */
     val cups = mutableStateListOf<CupRow>()
 
+    /** The catalogue's `stars`: the couch's total over every cup, and the most it can hold. */
+    var starsEarned by mutableStateOf(0)
+    var starsTotal by mutableStateOf(0)
+
     data class CupRow(
         val id: String,
         val name: String,
         /** 0..3. */
         val stars: Int,
         val locked: Boolean,
-        /** Only on a locked row: how far along its unlock is. */
+        /** Only on a locked row: how far along its unlock is, in stars. */
         val unlockDone: Int,
         val unlockNeed: Int,
     ) {

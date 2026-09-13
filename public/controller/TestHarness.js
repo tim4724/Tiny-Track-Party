@@ -5,7 +5,7 @@
 //
 // Pure DOM: the controller has no 3D scene, so nothing async to await.
 import { buildCarPicker } from '../shared/carPicker.js';
-import { buildModePicker } from '../shared/trackPicker.js';
+import { buildModePicker, renderStarsCard } from '../shared/trackPicker.js';
 import { TRACK_LIST } from '../shared/tracks.js';
 import { TRACK_SCHEMATICS } from '../shared/trackSchematics.js';
 import { packSchematic, unpackSchematic } from '../shared/schematicCodec.js';
@@ -68,17 +68,18 @@ export function runControllerScenario(opts) {
   }
 
   // The couch progression a preview lobby carries — the snapshot's `progress`
-  // shape, synthesized mid-game: two starred cups, the Playroom still locked.
+  // shape, synthesized mid-game: five stars, one short of the Playroom.
   // (gallery-controller-boards.spec pins the dressings only this shape can
   // produce, per the harness rule.)
   const PREVIEW_PROGRESS = {
     cups: [
       { id: 'beach', stars: 3, locked: false },
       { id: 'snow', stars: 2, locked: false },
-      { id: 'backyard', stars: 1, locked: false },
+      { id: 'backyard', stars: 0, locked: false },
       { id: 'canyon', stars: 0, locked: false },
-      { id: 'rooftop', stars: 0, locked: true, unlockDone: 3, unlockNeed: 4 }
-    ]
+      { id: 'rooftop', stars: 0, locked: true, unlockDone: 5, unlockNeed: 6 }
+    ],
+    stars: { earned: 5, total: 15 }
   };
 
   // Which lobby page this scenario shows — mirrors main.js renderLobbyPage.
@@ -101,9 +102,18 @@ export function runControllerScenario(opts) {
     buildModePicker({
       gridEl: el('track-strip'), keyEl: el('race-key'),
       catalog: PREVIEW_TRACKS, progress: PREVIEW_PROGRESS,
-      selection, canPick: true, onPickMode: (pick) => renderModePicker(pick, true)
+      selection, canPick: true, onPickMode: (pick) => renderModePicker(pick, true),
+      onStarsInfo: showStarsPopup
     });
   }
+  // The stars popup, off the same renderer modals.js opens it with.
+  function showStarsPopup() {
+    renderStarsCard({ countEl: el('stars-count'), rulesEl: el('stars-rules'),
+      unlockEl: el('stars-unlock'), progress: PREVIEW_PROGRESS, catalog: PREVIEW_TRACKS });
+    el('stars-overlay').classList.remove('hidden');
+    el('stars-done').focus({ preventScroll: true });
+  }
+  el('stars-done').onclick = () => el('stars-overlay').classList.add('hidden');
   // The auto-picked default a host lobby opens with (mirrors maybeAutoSelectMode).
   const DEFAULT_MODE = { mode: 'cup', cupId: PREVIEW_TRACKS[0].cup };
 

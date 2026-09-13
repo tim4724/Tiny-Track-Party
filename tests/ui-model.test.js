@@ -262,8 +262,9 @@ test('the shipped catalogue in the wasm is the one shared/tracks.js authors', as
     id: c.id, name: c.name, tracks: c.tracks,
     color: parseInt(CUP_COLOR[c.id].slice(1), 16),
     stars: 0, locked: c.id === 'rooftop',
-    ...(c.id === 'rooftop' ? { unlockDone: 0, unlockNeed: CUPS.length - 1 } : {})
+    ...(c.id === 'rooftop' ? { unlockDone: 0, unlockNeed: 6 } : {})
   })), 'cups, their display names, track order, paper colour and fresh progression come out as authored');
+  assert.deepEqual(got.stars, { earned: 0, total: 3 * CUPS.length }, 'a fresh couch holds none of the stars');
   assert.ok(!('tour' in got), 'the tour earns no badge — stars are the cups\' reward arc');
   assert.deepEqual(got.catalog, TRACK_LIST.map((t) => ({
     id: t.id, name: t.name, cup: t.cup, cupDifficulty: t.cupDifficulty
@@ -288,7 +289,7 @@ test('the shipped catalogue in the wasm is the one shared/tracks.js authors', as
 // The progression exports through the SHIPPED wasm — the abi ctest gates the
 // same agreement on every leg, but only this file exercises the artifact the
 // browser actually loads. Values here restate the decided rules (won=3,
-// podium=2, finished=1; the Playroom opens on four finished cups) rather than
+// podium=2, finished=1; the Playroom opens on six stars from the other cups) rather than
 // deriving them, so a wasm that drifts from the decision fails loudly.
 test('a loaded record stamps stars and the unlock onto the catalogue', async () => {
   const u = await ui_();
@@ -304,8 +305,9 @@ test('a loaded record stamps stars and the unlock onto the catalogue', async () 
     assert.equal(byId.backyard.stars, 1, 'a finish is one star');
     assert.equal(byId.canyon.stars, 1);
     assert.ok(!('tour' in got), 'a stored "tour" row (the brief era it banked) derives nothing');
-    assert.equal(byId.rooftop.locked, false, 'four finished cups unlock the Playroom');
+    assert.equal(byId.rooftop.locked, false, 'seven stars (3+2+1+1) unlock the Playroom');
     assert.ok(!('unlockDone' in byId.rooftop), 'unlock progress exists only while locked');
+    assert.deepEqual(got.stars, { earned: 7, total: 15 }, 'the couch total counts every cup');
     assert.equal(u.progressJson(), JSON.stringify({
       cups: {
         backyard: { best: 6 }, beach: { best: 1 }, canyon: { best: 8 },

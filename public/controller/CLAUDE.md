@@ -21,7 +21,7 @@ here earns its evidence from the real app, not from a replay.
 which screen we belong on) and the routing that holds it in step with the
 display's retained snapshot. Everything self-contained sits beside it —
 `launcher.js` (the whole CouchPad shell contract, so the rest reads as a plain
-web page), `modals.js` (both popups plus the ordering rules that only make sense
+web page), `modals.js` (the popups plus the ordering rules that only make sense
 against each other), `driveSurface.js`, `linkStatus.js`, `resultsBoard.js`,
 `prefs.js`, `press.js`.
 

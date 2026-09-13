@@ -122,11 +122,13 @@ test('phone race page: the grid carries stars and the lock, and the ribbon the k
     .locator('.star:not(.star--off)')).toHaveCount(3);
   await expect(page.locator('.racelist .mode-opt', { hasText: 'Canyon' })
     .locator('.star:not(.star--off)')).toHaveCount(0);
-  // The locked tile trails its unlock progress, not stars — and it is not a
-  // choice, so it takes no tap at all. The count IS the explanation now: a
-  // sentence under the grid said the same thing a page-width lower down.
-  await expect(page.locator('.mode-opt--locked')).toContainText('3/4');
-  expect(await page.locator('.mode-opt--locked').evaluate((e) => !!e.onclick)).toBe(false);
+  // The locked tile trails its unlock progress in stars. It is not a choice: a
+  // tap opens the stars popup (what unlocks it) and leaves the pick where it was.
+  await expect(page.locator('.mode-opt--locked .starcount')).toHaveText('5/6');
+  await page.click('.mode-opt--locked');
+  await expect(page.locator('#stars-unlock')).toHaveText('Collect 6 stars to unlock the Playroom Cup.');
+  await page.click('#stars-done');
+  await expect(page.locator('.mode-opt--locked')).not.toHaveClass(/mode-opt--mine/);
   // The World Tour wears one BAND PER UNLOCKED CUP, in the ladder's own order —
   // the same thing the TV's card says with one tinted chip per cup
   // (native ui_model.cc PickMode::TOUR). The preview has five cups with the
@@ -141,11 +143,19 @@ test('phone race page: the grid carries stars and the lock, and the ribbon the k
     'one band per unlocked cup').toBe(4);
   expect(await bg('Endless Run'), 'the other random runs stay flat').toBe('none');
 
-  // The star key lives in the page's top ribbon, and ONLY on this page — the car
-  // page's ratings name themselves in the tile, so a shared ribbon carrying a
-  // race-page key onto it would be explaining a badge that isn't there.
-  await expect(page.locator('#race-key .star-legend')).toBeVisible();
-  await expect(page.locator('#race-key')).toContainText('win');
+  // The star count lives in the page's top ribbon, and ONLY on this page (the
+  // car page's ribbon has no stars to count). It is the ribbon's only star copy:
+  // what a star is worth lives in the popup the count opens, with the unlock
+  // spelled out while a cup is locked.
+  await expect(page.locator('#race-key .race-key__total')).toHaveText('5/15');
+  await page.click('#race-key .race-key__total');
+  await expect(page.locator('#stars-overlay')).toBeVisible();
+  await expect(page.locator('#stars-count')).toHaveText('5 of 15 collected');
+  await expect(page.locator('#stars-rules li')).toHaveCount(3);
+  await expect(page.locator('#stars-rules li').last()).toContainText('Win');
+  await expect(page.locator('#stars-unlock')).toHaveText('Collect 6 stars to unlock the Playroom Cup.');
+  await page.click('#stars-done');
+  await expect(page.locator('#stars-overlay')).toBeHidden();
   await page.goto(`${CONTROLLER}lobby-host&color=1`);
   await page.waitForSelector('#carpick .car-opt');
   await expect(page.locator('#race-key')).toBeHidden();

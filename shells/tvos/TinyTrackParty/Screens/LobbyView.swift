@@ -204,7 +204,7 @@ struct LobbyView: View {
             // catalogue means boot has not read one yet, and an outlined card
             // with no rows in it is a blank slab of paper.
             if !state.cups.isEmpty {
-                CupShelf(cups: state.cups)
+                CupShelf(cups: state.cups, earned: state.starsEarned, total: state.starsTotal)
             }
         }
         .frame(width: LobbyViewMetrics.cupWidth)
@@ -649,6 +649,8 @@ private struct QuestionTile: View {
 @MainActor
 private struct CupShelf: View {
     let cups: [GameState.CupProgress]
+    let earned: Int
+    let total: Int
 
     var body: some View {
         StickerCard(tint: Tokens.surface, rotation: 0, padding: 12) {
@@ -667,7 +669,9 @@ private struct CupShelf: View {
         // label ROW is height this rail cannot spare — the web found that at
         // 720p, where it pushed the fifth cup off the shelf.
         .overlay(alignment: .topLeading) {
-            StickerPill(Copy.cupsShelf, size: 15).offset(x: 14, y: -13)
+            StickerPill(Copy.cupsShelf(earned: earned, of: total), size: 15)
+                .accessibilityLabel(Copy.cupsShelfSpoken(earned: earned, of: total))
+                .offset(x: 14, y: -13)
         }
         // The tilt is applied out here, not by `StickerCard`, so the label tab
         // leans WITH the card instead of standing square against it.
@@ -697,14 +701,17 @@ private struct CupShelf: View {
                 .minimumScaleFactor(0.7)
             Spacer(minLength: 6)
             if cup.locked {
-                // The unlock bar, as a count. The RULE behind it is the phones'
-                // to explain (their locked detail panel spells it out); on the
-                // television it is a progress fact next to four cups that show
-                // stars, which is the same sentence said shorter.
-                Text("\(cup.unlockDone)/\(cup.unlockNeed)")
-                    .font(Fonts.display(20, weight: .bold))
-                    .foregroundStyle(Tokens.ink2)
-                    .accessibilityLabel(Copy.cupsLocked(done: cup.unlockDone, need: cup.unlockNeed))
+                // The unlock bar, as a star count ("★ 4/6"). On the television
+                // it is a progress fact next to four cups that show stars, which
+                // is the rule said shorter.
+                HStack(spacing: 5) {
+                    StarRow(earned: 1, total: 1)
+                    Text("\(cup.unlockDone)/\(cup.unlockNeed)")
+                        .font(Fonts.display(20, weight: .bold))
+                        .foregroundStyle(Tokens.ink2)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Copy.cupsLocked(done: cup.unlockDone, need: cup.unlockNeed))
             } else {
                 StarRow(earned: cup.stars)
             }
@@ -742,14 +749,14 @@ private struct CupShelf: View {
 @MainActor
 private struct StarRow: View {
     let earned: Int
-    static let total = 3
+    var total = 3
 
     var body: some View {
         HStack(spacing: 3) {
-            ForEach(0..<Self.total, id: \.self) { i in star(filled: i < earned) }
+            ForEach(0..<total, id: \.self) { i in star(filled: i < earned) }
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Copy.stars(earned: earned, of: Self.total))
+        .accessibilityLabel(Copy.stars(earned: earned, of: total))
     }
 
     private func star(filled: Bool) -> some View {

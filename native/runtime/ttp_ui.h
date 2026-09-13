@@ -111,7 +111,7 @@ TTP_ABI int ttp_ui_configure(const char* json);
 
 /* The SHIPPED catalogue, in the shape ttp_ui_configure takes it:
  *
- *   {"cups": [...], "catalog": [...]}
+ *   {"cups": [...], "catalog": [...], "stars": {"earned": n, "total": n}}
  *
  * This is data, not a decision, and it is here because a shell has to DRAW the
  * thing — the lobby's mode picker is a list of cup names with a difficulty
@@ -124,16 +124,19 @@ TTP_ABI int ttp_ui_configure(const char* json);
  * here would let a test's fiction reach a picker.
  *
  * Each cup row additionally carries the couch's DERIVED progression — `stars`
- * (0..3), `locked`, and on a locked row `unlockDone`/`unlockNeed`. Derived from
- * whatever ttp_ui_progress_load installed (nothing loaded = a fresh couch: zero
- * stars everywhere, the Playroom locked), so a shell reads ONE catalogue and
- * never re-implements a star threshold or the unlock rule.
+ * (0..3), `locked`, and on a locked row `unlockDone`/`unlockNeed`, counted in
+ * stars. The top-level `stars` object is the couch's total over every cup,
+ * `earned` out of `total`: the "X of Y" a shell shows.
  *
- * TWO KEYS AND NO MORE: `cups` and `catalog`. There is no top-level `tour`
- * badge — the World Tour earns no stars (decided 2026-08-13, the run is a
- * shuffle of other cups' circuits and banking it would double-count them), and
- * a save still holding a `tour` row loads and derives nothing from it. Fifteen
- * stars total, five cups. */
+ * All of it is derived from whatever ttp_ui_progress_load installed (nothing
+ * loaded = a fresh couch: zero stars everywhere, the Playroom locked), so a
+ * shell reads ONE catalogue and never re-implements a star threshold or the
+ * unlock rule.
+ *
+ * There is no top-level `tour` badge — the World Tour earns no stars (decided
+ * 2026-08-13, the run is a shuffle of other cups' circuits and banking it would
+ * double-count them), and a save still holding a `tour` row loads and derives
+ * nothing from it. */
 TTP_ABI const char* ttp_ui_catalogue_json(void);
 
 /* ---- the couch's progression record -----------------------------------------

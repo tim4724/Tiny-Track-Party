@@ -240,6 +240,19 @@ export function starRow(n, max = 3) {
   return row;
 }
 
+// "★ n/of": the couch's star total, or a locked cup's unlock progress (both
+// counted in stars). One drawn star, not a row of them — the counts run past 3.
+export function starCount(n, of) {
+  const s = document.createElement('span');
+  s.className = 'starcount';
+  s.setAttribute('aria-label', `${n} of ${of} stars`);
+  const star = starRow(1, 1);
+  star.removeAttribute('aria-label');
+  star.setAttribute('aria-hidden', 'true');
+  s.append(star, `${n}/${of}`);
+  return s;
+}
+
 // A drawn padlock (no emoji: platform lock glyphs are coloured and clash with
 // the sticker ink). Shared with the display's shelf, like starRow.
 export function lockGlyph() {
@@ -259,7 +272,7 @@ export function lockGlyph() {
 }
 
 // One TILE of the grid: the name over its trail (stars for a cup, the run's
-// shape for a random tile, unlock progress for a locked cup).
+// shape for a random tile, unlock progress in stars for a locked cup).
 //
 // Split into BUILD and DRESS on purpose. The whole picker used to be rebuilt
 // from scratch on every render, which meant the tile you were pressing was
@@ -273,7 +286,10 @@ function buildTile(label, locked) {
   btn.type = 'button';
   btn.className = 'mode-opt';
   btn.setAttribute('aria-label', label);
-  if (locked) btn.appendChild(lockGlyph());
+  if (locked) {
+    btn.appendChild(lockGlyph());
+    btn.setAttribute('aria-haspopup', 'dialog');   // it opens the stars popup
+  }
   const lab = document.createElement('span');
   lab.className = 'mode-opt__name';
   // SET as two lines, not wrapped into them: the last word goes below the rest,
@@ -328,42 +344,57 @@ const subSpan = (text) => {
   s.textContent = text;
   return s;
 };
+const lockTrail = (done, need) => {
+  const s = subSpan('');
+  s.appendChild(starCount(done, need));
+  return s;
+};
 
-// What the badges mean, as a quiet key in the page's TOP RIBBON: one star for
-// finishing the cup, two for a top-3 human, three for a win. Built once and
-// never touched again — the stars mean the same thing whatever is picked.
-function starLegend() {
-  const legend = document.createElement('div');
-  legend.className = 'star-legend';
-  for (const [n, word] of [[1, 'finish'], [2, 'top 3'], [3, 'win']]) {
-    const item = document.createElement('span');
-    item.className = 'star-legend__item';
-    item.appendChild(starRow(n));
+// What a star is worth, one row per tier. Shared by the stars popup's two
+// renderers (the live page and the gallery).
+const STAR_RULES = [[1, 'Finish the Grand Prix'], [2, 'Finish in the top 3'], [3, 'Win the cup']];
+
+// Fill the stars popup from the snapshot's `progress` and the track catalogue:
+// the couch's count, the three tiers, and while a cup is locked, what opens it.
+// Every number is the engine's; the catalogue only lends the locked cup a name.
+export function renderStarsCard({ countEl, rulesEl, unlockEl, progress, catalog }) {
+  const total = (progress && progress.stars) || { earned: 0, total: 0 };
+  countEl.textContent = `${total.earned} of ${total.total} collected`;
+  rulesEl.textContent = '';
+  for (const [n, text] of STAR_RULES) {
+    const li = document.createElement('li');
+    li.appendChild(starRow(n));
     const t = document.createElement('span');
-    t.textContent = word;
-    item.appendChild(t);
-    legend.appendChild(item);
+    t.textContent = text;
+    li.appendChild(t);
+    rulesEl.appendChild(li);
   }
-  return legend;
+  const locked = ((progress && progress.cups) || []).find((c) => c.locked);
+  unlockEl.classList.toggle('hidden', !locked);
+  if (!locked) return;
+  const entry = (catalog || []).find((t) => t.cup === locked.id);
+  const name = (entry && entry.cupName) || locked.id;
+  unlockEl.textContent = `Collect ${locked.unlockNeed || 0} stars to unlock the ${name}.`;
 }
 
 // Render the picker into `gridEl` — ONE grid of tiles, nothing under it. Each
 // tile is a race the host can start: the cups in ladder order (each runs its own
 // 4-race Grand Prix, the locked one in place and unpickable), then the three
 // random runs.
-//   keyEl     : where the star key goes — the page's top ribbon, filled once
+//   keyEl     : where the star count goes — the page's top ribbon
 //   catalog   : [{ id, name, svg, cup, cupName, cupDifficulty }] (from the display)
 //   progress  : the snapshot's progress key — {cups:[{id,stars,locked,
-//               unlockDone?,unlockNeed?}]} | null (absent = a
+//               unlockDone?,unlockNeed?}], stars:{earned,total}} | null (absent = a
 //               fresh couch drawn starless and nothing locked phone-side; the
 //               display enforces the real lock either way)
 //   selection : {mode:'cup'|'random'|'tour', cupId?, randomRaces?} | null
 //   canPick   : whether taps are live (host only)
+//   onStarsInfo: () => void — the star count was tapped (open the stars popup)
 //   onPickMode: ({mode, cupId?, randomRaces?}) => void — every random-family tap
 //               fires, same pick or not: each one deals fresh track(s) on the
 //               display, so don't filter them.
 export function buildModePicker({ gridEl, keyEl, catalog, progress, selection,
-                                  canPick, onPickMode }) {
+                                  canPick, onPickMode, onStarsInfo }) {
   if (!gridEl) return;
   // This runs on EVERY room snapshot push (any player's car pick or ready
   // toggle re-renders the host's lobby), so skip when nothing it renders
@@ -420,15 +451,14 @@ export function buildModePicker({ gridEl, keyEl, catalog, progress, selection,
     return {
       key: g.id, label: g.name, locked,
       // A locked tile trails its unlock progress; an open one its stars.
-      trail: () => (locked ? subSpan(`${(p && p.unlockDone) || 0}/${(p && p.unlockNeed) || 0}`)
+      trail: () => (locked ? lockTrail((p && p.unlockDone) || 0, (p && p.unlockNeed) || 0)
         : starRow(starsOf(g.id))),
       mine: !locked && sel.mode === 'cup' && sel.cupId === g.id,
       tint: cupTint(g.id, REST_TINT),
       pickTint: cupTint(g.id, PICK_TINT),
-      // A locked cup is not a choice: it takes no tap at all. It used to open an
-      // unlock pitch in the detail panel; with the panel gone that pitch is one
-      // line in the foot, which needs no tap to read.
-      onTap: locked ? null : () => pick({ mode: 'cup', cupId: g.id })
+      // A locked cup is not a choice, but it is the tile a curious player taps:
+      // it opens the stars popup, which says what unlocks it. It never picks.
+      onTap: locked ? onStarsInfo : () => pick({ mode: 'cup', cupId: g.id })
     };
   });
   // The random runs sit AFTER the cups: the cups are the game's own ladder and
@@ -475,14 +505,24 @@ export function buildModePicker({ gridEl, keyEl, catalog, progress, selection,
   }
   tiles.forEach((t, i) => dressTile(grid.children[i], { ...t, trail: t.trail(), canPick }));
 
-  // ---- the key ----------------------------------------------------------------
-  // Built ONCE into the page's top ribbon and never touched again: the stars
-  // mean the same thing whatever is picked, so it is the one thing on this page
-  // that is not a function of the room. Up there rather than under the grid
-  // because the grid is what the page is for and the ribbon already exists.
-  //
-  // A prose line explaining how to open the locked cup used to sit beside it.
-  // The locked tile already wears a padlock and its own count, which is the
-  // whole of what the sentence added, one page-width lower down.
-  if (keyEl && !keyEl.firstChild) keyEl.appendChild(starLegend());
+  // ---- the star count ---------------------------------------------------------
+  // The couch's "X/Y" in the page's top ribbon, and the ONLY star copy on the
+  // page: tapping it opens the popup that explains the tiers and the unlock.
+  // (A finish / top 3 / win key used to sit beside it, and the count read as
+  // part of the key.) Built once and re-dressed, like the tiles, so a snapshot
+  // landing under the finger never cancels its press.
+  if (!keyEl) return;
+  const total = progress && progress.stars;
+  let chip = keyEl.querySelector('.race-key__total');
+  if (!total) { if (chip) chip.remove(); return; }
+  if (!chip) {
+    chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'icon-btn race-key__total';
+    chip.setAttribute('aria-haspopup', 'dialog');
+    keyEl.appendChild(chip);
+  }
+  chip.textContent = '';
+  chip.appendChild(starCount(total.earned, total.total));
+  chip.onclick = onStarsInfo || null;
 }

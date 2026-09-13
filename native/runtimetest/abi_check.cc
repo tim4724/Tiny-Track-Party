@@ -1983,7 +1983,7 @@ void uiProgression() {
   check(std::string(ttp_ui_progress_json()) == "{\"cups\":{},\"v\":1}",
         "…as the empty record, canonically spelled");
 
-  const char* blob = "{\"v\":1,\"cups\":{\"beach\":{\"best\":1},\"snow\":{\"best\":2},"
+  const char* blob = "{\"v\":1,\"cups\":{\"beach\":{\"best\":1},\"snow\":{\"best\":4},"
                      "\"backyard\":{\"best\":7},\"tour\":{\"best\":3}}}";
   check(ttp_ui_progress_load(blob, 0) == 1, "a real record loads");
   bool ok = false;
@@ -2009,7 +2009,7 @@ void uiProgression() {
       if (locked) {
         sawLocked = true;
         if (json::num_field(c, "unlockDone") != prog::unlockDone(rec, id, ids) ||
-            json::num_field(c, "unlockNeed") != prog::unlockNeed(id, ids))
+            json::num_field(c, "unlockNeed") != prog::unlockNeed(id))
           rowsAgree = false;
       } else if (c.has("unlockDone") || c.has("unlockNeed")) {
         rowsAgree = false;   // the keys exist only while locked
@@ -2017,7 +2017,11 @@ void uiProgression() {
     }
   }
   check(rowsAgree, "every cup row's stars/locked/unlock progress is the composed answer");
-  check(sawLocked, "premise: this record leaves a cup locked (canyon unfinished)");
+  check(sawLocked, "premise: this record leaves a cup locked (5 of 6 stars)");
+  const Value* stars = cat.find("stars");
+  check(stars && json::num_field(*stars, "earned") == prog::starsEarned(rec, ids) &&
+            json::num_field(*stars, "total") == prog::starsTotal(ids),
+        "the catalogue's star total is the composed answer");
   // The tour earns no badge, but a save carrying its old "tour" row (the blob
   // above) must still round-trip: parse keeps unknown ids, the catalogue just
   // derives nothing from them.
@@ -5300,8 +5304,8 @@ void raceLiveWalks() {
   // The seam asks the SHIPPED cup list (a synthetic chooser cup can never lock),
   // so this chooser names the real locked id: on a fresh couch 'rooftop' is
   // locked, its cup and exact-track picks are silently refused, the tour skips
-  // it, and the global bag deals around it. Loading a record with every other
-  // shipped cup finished opens all of it back up.
+  // it, and the global bag deals around it. Loading a record with enough stars
+  // on the other shipped cups opens all of it back up.
   {
     ttp_ui_progress_load(nullptr, 0);   // a fresh couch
     ttp_net_configure(
@@ -5382,7 +5386,7 @@ void raceLiveWalks() {
     check(json::str_field(pick, "mode") == "cup" &&
               json::str_field(pick, "cupId") == "rooftop" &&
               json::str_field(pick, "trackId") == "skyline",
-          "four finished cups open the Playroom to the pick walk");
+          "an unlocking record opens the Playroom to the pick walk");
 
     ttp_ui_progress_load(nullptr, 0);   // leave a fresh couch for later cases
     ttp_room_dispose(lroom);

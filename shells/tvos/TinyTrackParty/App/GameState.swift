@@ -132,6 +132,10 @@ final class GameState: ObservableObject {
     /// and re-reading it per lobby redraw would be a JSON parse per frame for an
     /// answer that cannot have changed.
     @Published var cups: [CupProgress] = []
+    /// The catalogue's `stars`: the couch's total over every cup, and the most
+    /// it can hold. Refreshed alongside `cups`.
+    @Published var starsEarned = 0
+    @Published var starsTotal = 0
 
     struct CupProgress: Identifiable {
         let id: String
@@ -146,7 +150,7 @@ final class GameState: ObservableObject {
         /// 0...3.
         let stars: Int
         let locked: Bool
-        /// Only meaningful while `locked` — how many cups of the bar are done.
+        /// Only meaningful while `locked` — the unlock bar, counted in stars.
         let unlockDone: Int
         let unlockNeed: Int
     }

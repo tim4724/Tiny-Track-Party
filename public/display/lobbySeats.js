@@ -4,7 +4,7 @@
 // first paint — keep its `seat--open` placeholders in sync with the open branch
 // here; this module is the source of truth.)
 import { carThumbNode } from '../shared/carThumbs.js';
-import { schematicSvg, cupTint, neutralTint, FIELD_TINT, starRow, lockGlyph } from '../shared/trackPicker.js';
+import { schematicSvg, cupTint, neutralTint, FIELD_TINT, starRow, starCount, lockGlyph } from '../shared/trackPicker.js';
 import { seatGrid, cupSlot } from './NativeUiModel.js';
 
 const { CAR_COLORS, CAR_MODELS } = window;
@@ -213,18 +213,20 @@ export function renderLobbyPick(slotEl, pick, trackCatalog, progress) {
 }
 
 // The "Cups" shelf at the bottom of the lobby's race rail — one row per cup
-// with the couch's stars, the locked cup trailing its unlock progress instead.
-// `cups` is the wasm-stamped catalogue's cups list (or a preview's synthesis):
-// [{id, name, stars, locked, unlockDone?, unlockNeed?}]. It shares the rail
+// with the couch's stars, the locked cup trailing its unlock progress (in
+// stars) instead. `cups` is the wasm-stamped catalogue's cups list (or a
+// preview's synthesis): [{id, name, stars, locked, unlockDone?, unlockNeed?}];
+// `stars` is its {earned, total}, worn on the label tab. It shares the rail
 // with the "Up next" card so the stars read beside the pick they dress.
-export function renderCupShelf(shelfEl, cups) {
+export function renderCupShelf(shelfEl, cups, stars) {
   if (!shelfEl) return;
   shelfEl.textContent = '';
   if (!cups || !cups.length) { shelfEl.classList.add('hidden'); return; }
   shelfEl.classList.remove('hidden');
   const label = document.createElement('span');
   label.className = 'pill cup-shelf__label';
-  label.textContent = 'Cups';
+  label.textContent = stars ? `Cups ★ ${stars.earned}/${stars.total}` : 'Cups';
+  if (stars) label.setAttribute('aria-label', `Cups, ${stars.earned} of ${stars.total} stars`);
   shelfEl.appendChild(label);
   for (const c of cups) {
     const row = document.createElement('div');
@@ -244,9 +246,7 @@ export function renderCupShelf(shelfEl, cups) {
     nm.textContent = (c.name || '').replace(/ Cup$/, '');
     row.appendChild(nm);
     if (c.locked) {
-      const b = document.createElement('b');
-      b.textContent = `${c.unlockDone || 0}/${c.unlockNeed || 0}`;
-      row.appendChild(b);
+      row.appendChild(starCount(c.unlockDone || 0, c.unlockNeed || 0));
     } else {
       row.appendChild(starRow(c.stars || 0));
     }

@@ -169,8 +169,8 @@ object Copy {
      */
     const val loading = "Loading…"
 
-    /** The cups shelf's tab (`.cup-shelf__label`), riding its top-left corner. */
-    const val cupsShelf = "Cups"
+    /** The cups shelf's tab (`.cup-shelf__label`), riding its top-left corner with the couch's star total. */
+    fun cupsShelf(earned: Int, total: Int) = "Cups ★ $earned/$total"
 
     /**
      * A cup's name on the SHELF drops a trailing " Cup" — the tab already says

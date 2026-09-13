@@ -82,17 +82,27 @@ int main() {
     check(progression::unlocked(r, "beach", SHIPPED), "ordinary cups are never locked");
     check(!progression::unlocked(r, "rooftop", SHIPPED), "a fresh couch has the Playroom locked");
     check(progression::unlockDone(r, "rooftop", SHIPPED) == 0 &&
-              progression::unlockNeed("rooftop", SHIPPED) == 4,
-          "fresh unlock progress is 0 of 4");
-    for (const char* id : {"beach", "snow", "backyard"}) {
-      std::vector<bool> ai = {true, false, true};   // best human 2nd
-      progression::bank(r, id, ai);
-    }
-    check(!progression::unlocked(r, "rooftop", SHIPPED), "three of four is still locked");
-    check(progression::unlockDone(r, "rooftop", SHIPPED) == 3, "unlock progress counts finishes");
-    std::vector<bool> ai = {true, true, true, true, true, true, true, false};
-    progression::bank(r, "canyon", ai);
-    check(progression::unlocked(r, "rooftop", SHIPPED), "all four finished unlocks the Playroom");
+              progression::unlockNeed("rooftop") == 6,
+          "fresh unlock progress is 0 of 6 stars");
+    check(progression::starsEarned(r, SHIPPED) == 0 && progression::starsTotal(SHIPPED) == 15,
+          "a fresh couch holds 0 of 15 stars");
+    const std::vector<bool> last = {true, true, true, true, true, true, true, false};
+    for (const char* id : {"beach", "snow", "backyard", "canyon"}) progression::bank(r, id, last);
+    check(!progression::unlocked(r, "rooftop", SHIPPED),
+          "finishing every other cup (4 stars) is no longer enough");
+    check(progression::unlockDone(r, "rooftop", SHIPPED) == 4, "unlock progress counts stars");
+    const std::vector<bool> won = {false};
+    progression::bank(r, "beach", won);   // 1 -> 3 stars
+    check(progression::unlockDone(r, "rooftop", SHIPPED) == 6 &&
+              progression::unlocked(r, "rooftop", SHIPPED),
+          "six stars unlock the Playroom, without a podium in every cup");
+    check(progression::starsEarned(r, SHIPPED) == 6, "the total counts every cup's stars");
+    progression::Record own;
+    progression::bank(own, "rooftop", won);
+    progression::bank(own, "beach", won);
+    check(!progression::unlocked(own, "rooftop", SHIPPED) &&
+              progression::unlockDone(own, "rooftop", SHIPPED) == 3,
+          "the Playroom's own stars never count toward its unlock");
     // A synthetic conformance world carries no 'rooftop': nothing locks.
     check(progression::unlocked(progression::Record(), "cup-a", {"cup-a", "cup-b"}),
           "synthetic worlds lock nothing");

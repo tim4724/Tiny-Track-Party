@@ -190,7 +190,7 @@ fun LobbyScreen(state: GameState) {
                 // and an empty sticker would promise a card with nothing to say.
                 state.cupSlot?.let { CupCard(it, state.cups) }
                 Spacer(Modifier.weight(1f))
-                if (state.cups.isNotEmpty()) CupShelf(state.cups)
+                if (state.cups.isNotEmpty()) CupShelf(state.cups, state.starsEarned, state.starsTotal)
             }
         }
 
@@ -564,7 +564,7 @@ private fun MapTile(map: GameState.CupSlot.Map, cardTint: Color?) {
  * copied a rule that will drift.
  */
 @Composable
-private fun CupShelf(cups: List<GameState.CupRow>) {
+private fun CupShelf(cups: List<GameState.CupRow>, starsEarned: Int, starsTotal: Int) {
     Box(Modifier.fillMaxWidth()) {
         StickerCard(Modifier.fillMaxWidth(), rotation = -1f, padding = 12.dp) {
             Column(Modifier.fillMaxWidth()) {
@@ -593,6 +593,8 @@ private fun CupShelf(cups: List<GameState.CupRow>) {
                             modifier = Modifier.weight(1f),
                         )
                         if (cup.locked) {
+                            // The unlock bar, counted in stars: "★ 4/6".
+                            StarRow(1, size = 16.dp, max = 1)
                             StickerText(
                                 "${cup.unlockDone}/${cup.unlockNeed}",
                                 size = 18.dp, color = Tokens.ink2,
@@ -616,7 +618,7 @@ private fun CupShelf(cups: List<GameState.CupRow>) {
         // The `.pill` tab riding the card's top-left corner, drawn OVER it so the
         // card's own outline runs behind the label.
         Box(Modifier.align(Alignment.TopStart).offset(x = 14.dp, y = (-13).dp)) {
-            StickerPill(Copy.cupsShelf, tint = Tokens.ink, size = 14.dp)
+            StickerPill(Copy.cupsShelf(starsEarned, starsTotal), tint = Tokens.ink, size = 14.dp)
         }
     }
 }

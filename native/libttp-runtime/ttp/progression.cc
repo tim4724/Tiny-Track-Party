@@ -6,6 +6,10 @@ namespace progression {
 
 namespace {
 const char* kLockedCup = "rooftop";
+const int kMaxStars = 3;
+// Six of the twelve the other cups hold: more than finishing each once (4),
+// short of a podium in every one (8), and reachable without ever winning a cup.
+const int kUnlockStars = 6;
 }
 
 int Record::bestOf(const std::string& cupId) const {
@@ -47,34 +51,37 @@ Value serialize(const Record& r) {
 
 int stars(int best) {
   if (best < 1) return 0;
-  if (best == 1) return 3;
+  if (best == 1) return kMaxStars;
   if (best <= 3) return 2;
   return 1;
+}
+
+int starsEarned(const Record& r, const std::vector<std::string>& cupIds) {
+  int n = 0;
+  for (const std::string& id : cupIds) n += stars(r.bestOf(id));
+  return n;
+}
+
+int starsTotal(const std::vector<std::string>& cupIds) {
+  return kMaxStars * static_cast<int>(cupIds.size());
 }
 
 bool unlocked(const Record& r, const std::string& cupId,
               const std::vector<std::string>& allCupIds) {
   if (cupId != kLockedCup) return true;
-  for (const std::string& id : allCupIds) {
-    if (id == kLockedCup) continue;
-    if (r.bestOf(id) == 0) return false;
-  }
-  return true;
+  return unlockDone(r, cupId, allCupIds) >= unlockNeed(cupId);
 }
 
 int unlockDone(const Record& r, const std::string& cupId,
                const std::vector<std::string>& allCupIds) {
   int done = 0;
   for (const std::string& id : allCupIds)
-    if (id != cupId && r.bestOf(id) > 0) done++;
+    if (id != cupId) done += stars(r.bestOf(id));
   return done;
 }
 
-int unlockNeed(const std::string& cupId, const std::vector<std::string>& allCupIds) {
-  int need = 0;
-  for (const std::string& id : allCupIds)
-    if (id != cupId) need++;
-  return need;
+int unlockNeed(const std::string& cupId) {
+  return cupId == kLockedCup ? kUnlockStars : 0;
 }
 
 bool bankEligible(const std::string& cupId, const std::vector<std::string>& allCupIds) {

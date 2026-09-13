@@ -376,11 +376,13 @@ final class GameCoordinator: ObservableObject {
     static let progressKey = "ttpProgress"
 
     /// The chooser's `progress` key, `boot.js progressChooser`'s shape: the
-    /// per-cup stars and locks the phones' picker draws. Composition only —
-    /// every number was derived inside the engine, off the stamped catalogue.
+    /// per-cup stars and locks the phones' picker draws, and the star total.
+    /// Composition only — every number was derived inside the engine, off the
+    /// stamped catalogue.
     func progressChooser() -> [String: Any] {
-        let cups = TTP.obj(ttp_ui_catalogue_json())["cups"] as? [[String: Any]] ?? []
-        return ["cups": cups.map { c -> [String: Any] in
+        let catalogue = TTP.obj(ttp_ui_catalogue_json())
+        let cups = catalogue["cups"] as? [[String: Any]] ?? []
+        return ["stars": catalogue["stars"] ?? [:], "cups": cups.map { c -> [String: Any] in
             var e: [String: Any] = ["id": c["id"] ?? "",
                                     "stars": c["stars"] ?? 0,
                                     "locked": c["locked"] ?? false]
@@ -401,6 +403,9 @@ final class GameCoordinator: ObservableObject {
     /// called at exactly its two points — boot, and the persist performer.
     func refreshCupShelf(_ catalogue: [String: Any]) {
         state.cups = (catalogue["cups"] as? [[String: Any]] ?? []).map(GameState.CupProgress.init)
+        let stars = catalogue["stars"] as? [String: Any] ?? [:]
+        state.starsEarned = Int(stars["earned"] as? Double ?? 0)
+        state.starsTotal = Int(stars["total"] as? Double ?? 0)
     }
 
     /// `persist-progression`: the walk banked a finished cup's stars; the shell

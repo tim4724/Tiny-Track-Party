@@ -348,7 +348,7 @@ const char* ttp_ui_catalogue_json(void) {
     v.set("locked", Value::Bool(locked));
     if (locked) {
       v.set("unlockDone", Value::Num(progression::unlockDone(g_progress, c.id, cupIds)));
-      v.set("unlockNeed", Value::Num(progression::unlockNeed(c.id, cupIds)));
+      v.set("unlockNeed", Value::Num(progression::unlockNeed(c.id)));
     }
     cups.push(std::move(v));
   }
@@ -363,6 +363,10 @@ const char* ttp_ui_catalogue_json(void) {
   }
   out.set("cups", std::move(cups));
   out.set("catalog", std::move(cat));
+  Value stars = Value::Obj();
+  stars.set("earned", Value::Num(progression::starsEarned(g_progress, cupIds)));
+  stars.set("total", Value::Num(progression::starsTotal(cupIds)));
+  out.set("stars", std::move(stars));
   return put(g_bufCatalogue, out);
 }
 

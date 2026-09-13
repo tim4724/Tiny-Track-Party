@@ -90,17 +90,20 @@ test('a cup chains through all 4 races to the podium (host advancing early)', as
   await expect(alice.locator(visible('#lobby'))).toBeVisible();
 
   // …and the couch SEES the bank: the shelf's Beach row wears the won cup's
-  // three stars, the locked Playroom's unlock count moved to 1/4, and the
-  // host's RACE page draws the same stars off the republished snapshot —
-  // engine record → localStorage → chooser → both screens, end to end.
+  // three stars, the locked Playroom's unlock count moved to 3 of its 6, the
+  // couch total to 3 of 15, and the host's RACE page draws the same off the
+  // republished snapshot — engine record → localStorage → chooser → both
+  // screens, end to end.
   await expect(page.locator('.cup-shelf__row', { hasText: 'Beach' })
     .locator('.star:not(.star--off)')).toHaveCount(3);
-  await expect(page.locator('.cup-shelf__row--locked')).toContainText('1/4');
+  await expect(page.locator('.cup-shelf__row--locked .starcount')).toHaveText('3/6');
+  await expect(page.locator('.cup-shelf__label')).toHaveText('Cups ★ 3/15');
   // The corner button IS the stepper — there is no tab strip; on the car page
   // its forward face reads "Select race".
   await alice.click('#ready-btn');
   await expect(alice.locator('.mode-opt', { hasText: 'Beach Cup' })
     .locator('.star:not(.star--off)')).toHaveCount(3);
+  await expect(alice.locator('#race-key .race-key__total')).toHaveText('3/15');
 });
 
 test('an untouched intermission auto-advances into the next race', async ({ page, browser }) => {

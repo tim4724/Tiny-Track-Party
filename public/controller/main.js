@@ -28,7 +28,7 @@ import { cleanName } from '../shared/names.js';
 import { inShell, shellName, endSession, terminalReason, setAccentColor, installRenameHook, armSystemBack, installBackHook } from './launcher.js';
 import { storedName, saveName, storedMode, saveMode, storedCarIndex, saveCarIndex, storedInputMode, saveInputMode } from './prefs.js';
 import { showConn, hideConn, linkCopy, initLinkStatus } from './linkStatus.js';
-import { initModals, onEnterLobby, closeAnyModal, anyModalOpen, closeTopModal, refreshHelpName, refreshSettingsState } from './modals.js';
+import { initModals, onEnterLobby, closeAnyModal, anyModalOpen, closeTopModal, refreshHelpName, refreshSettingsState, openStarsPopup } from './modals.js';
 import { renderResultsBoard } from './resultsBoard.js';
 import { initDriveSurface, startDriving, stopDriving, setInputMode, setHeldItem, resetHeldItem } from './driveSurface.js';
 import { initOrientation } from './orientation.js';
@@ -471,7 +471,8 @@ function renderModePicker() {
   buildModePicker({
     gridEl: el('track-strip'), keyEl: el('race-key'),
     catalog: trackCatalog, progress: progressData,
-    selection: selectedMode, canPick: true, onPickMode: chooseMode
+    selection: selectedMode, canPick: true, onPickMode: chooseMode,
+    onStarsInfo: () => { buzz(15); openStarsPopup(progressData, trackCatalog); }
   });
 }
 

@@ -380,11 +380,12 @@ class GameCoordinator(
 
     /**
      * The chooser's `progress` key, `boot.js progressChooser`'s shape: the per-cup
-     * stars and locks the phones' picker draws. Composition only — every number was
-     * derived inside the engine, off the stamped catalogue.
+     * stars and locks the phones' picker draws, and the star total. Composition only —
+     * every number was derived inside the engine, off the stamped catalogue.
      */
     private fun progressChooser(): JSONObject {
-        val cups = TtpJson.obj(Ttp.ttp_ui_catalogue_json()).optJSONArray("cups") ?: JSONArray()
+        val catalogue = TtpJson.obj(Ttp.ttp_ui_catalogue_json())
+        val cups = catalogue.optJSONArray("cups") ?: JSONArray()
         val out = JSONArray()
         for (i in 0 until cups.length()) {
             val c = cups.optJSONObject(i) ?: continue
@@ -398,7 +399,7 @@ class GameCoordinator(
             }
             out.put(e)
         }
-        return JSONObject().put("cups", out)
+        return JSONObject().put("cups", out).put("stars", catalogue.optJSONObject("stars") ?: JSONObject())
     }
 
     /**
@@ -473,7 +474,11 @@ class GameCoordinator(
      * would re-read a table that changes once a cup, on every roster twitch.
      */
     private fun refreshCupShelf() {
-        val cups = TtpJson.obj(Ttp.ttp_ui_catalogue_json()).optJSONArray("cups") ?: JSONArray()
+        val catalogue = TtpJson.obj(Ttp.ttp_ui_catalogue_json())
+        val cups = catalogue.optJSONArray("cups") ?: JSONArray()
+        val stars = catalogue.optJSONObject("stars")
+        state.starsEarned = stars?.optInt("earned") ?: 0
+        state.starsTotal = stars?.optInt("total") ?: 0
         state.cups.clear()
         for (i in 0 until cups.length()) {
             cups.optJSONObject(i)?.let { GameState.CupRow.from(it)?.let(state.cups::add) }

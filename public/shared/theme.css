@@ -409,6 +409,7 @@ body {
    one — SF Symbols there, since that glyph cannot be shipped to the web). */
 .starrow { display: inline-flex; gap: 0.14em; line-height: 1; }
 .starrow .star { width: 1em; height: 1em; }
+.starcount { display: inline-flex; align-items: center; gap: 0.3em; white-space: nowrap; line-height: 1; }
 .starrow .star path {
   fill: var(--red); stroke: var(--ink); stroke-width: 2.4; stroke-linejoin: round;
   paint-order: stroke fill;

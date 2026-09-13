@@ -164,7 +164,7 @@ async function bringUpRealDisplay(relayOpts = {}, opts = {}) {
     carChooser: [{ id: 'vehicle-racer-low', name: 'Dash' }, { id: 'vehicle-speedster', name: 'Bolt' }],
     colorPalette: ['#e6492d', '#f2b134', '#2bb673', '#2d9cdb'],
     trackChooser: [{ id: 'tidepool', name: 'Tidepool', cup: 'beach' }],
-    progressChooser: { cups: [{ id: 'beach', stars: 2, locked: false }] },
+    progressChooser: { cups: [{ id: 'beach', stars: 2, locked: false }], stars: { earned: 2, total: 15 } },
     defaultTrackId: 'tidepool',
     onRoomReady: (r) => seen.roomReady.push(r),
     onRosterChange: (r, host) => seen.roster.push({ r, host }),
@@ -424,7 +424,7 @@ test('wire: the LOBBY_UPDATE the display AUTHORS survives the round trip, field 
   // The progression chooser crosses OPAQUELY (like tracks): the phone draws
   // stars/locks straight off it, so its shape is part of the wire contract.
   assert.deepEqual(snap.progress,
-    { cups: [{ id: 'beach', stars: 2, locked: false }] },
+    { cups: [{ id: 'beach', stars: 2, locked: false }], stars: { earned: 2, total: 15 } },
     'the couch progression rides the lobby snapshot verbatim');
 
   // 2. THE ROSTER, whose every field crosses from C++ (RoomFlow) through JS

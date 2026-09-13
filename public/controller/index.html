@@ -65,8 +65,8 @@
          the CouchPad shell too: the launcher's own chip lives in a top bar that
          landscape hides), the Settings gear pinned far right, and between them
          whatever KEY the page below needs. Today that is the race page's star
-         key (filled once by buildModePicker; hidden on the car page, whose
-         ratings name themselves in the tile). It rides up here because the
+         count, a chip that opens #stars-overlay (buildModePicker; hidden on the
+         car page, whose ratings name themselves in the tile). It rides up here because the
          ribbon is the one row that is not the choices — the grid gets every
          pixel below it. Nothing else lives here: the lobby's navigation is the
          action corner at the bottom. -->
@@ -330,6 +330,21 @@
       <button id="motion-allow" class="btn btn--brand" type="button">Reload &amp; ask again</button>
       <p id="motion-fix" class="help-copy help-motion-fix hidden"></p>
       <button id="motion-done" class="btn btn--ghost" type="button">Got it</button>
+    </div>
+  </div>
+
+  <!-- Stars popup — opened by the race page's star count chip. The couch's
+       count, what each tier of stars takes, and while a cup is locked, what
+       opens it. Same shape and layer as #motion-overlay (never both at once:
+       each opens only from a tap on the lobby). Filled by renderStarsCard
+       (shared/trackPicker.js); wiring in modals.js. -->
+  <div id="stars-overlay" class="hidden" role="dialog" aria-modal="true" aria-labelledby="stars-title">
+    <div class="settings-card motion-card">
+      <h2 id="stars-title">Stars</h2>
+      <p id="stars-count" class="help-copy"></p>
+      <ul id="stars-rules" class="stars-rules"></ul>
+      <p id="stars-unlock" class="help-copy"></p>
+      <button id="stars-done" class="btn btn--ghost" type="button">Got it</button>
     </div>
   </div>
 

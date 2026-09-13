@@ -321,7 +321,8 @@ html {
    short-name rows (renderCupShelf strips the " Cup" suffix) rather than a
    stack of separate pills: five pills with five outlines, five drops and a gap
    between each read as five things scattered down the corner, and the shelf is
-   one thing. The locked cup trails its unlock count. */
+   one thing. The locked cup trails its unlock count in stars, and the label
+   tab carries the couch's total. */
 /* Ships .hidden (index.html) because the shelf is a CARD now, and an unfilled
    one paints a blank white slab for the whole first paint. renderCupShelf owns
    the class from there. */
@@ -353,7 +354,8 @@ html {
 /* locked: the row recedes in place. It can't take the sunken fill any more —
    inside one card that would read as a hole punched in the paper. */
 .cup-shelf__row--locked { color: var(--ink-2); }
-.cup-shelf__row--locked b { margin-left: auto; font-size: 0.85em; }
+.cup-shelf__row--locked .starcount { margin-left: auto; font-size: 0.85em; }
+.cup-shelf__row--locked .starrow { margin-left: 0; font-size: 1em; }
 /* the cup slot's star badge, between the sticker and the minis */
 .cup-stars { font-size: clamp(14px, 1.5vw, 20px); }
 

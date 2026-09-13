@@ -382,15 +382,16 @@ export function runDisplayScenario(opts, ctx) {
   // The lobby's cup slot, off the same renderLobbyPick the live lobby calls: a
   // PICK goes in, the model decides the whole card. null empties the slot.
   // The synthesized progression dresses the card's stars and the shelf below —
-  // mid-game numbers (three cups starred, the Playroom still locked), so
+  // mid-game numbers (five stars, one short of the Playroom), so
   // gallery-lobby.spec can pin dressings only the right payload produces.
   const PREVIEW_SHELF = CUPS.map((c, i) => ({
     id: c.id, name: c.name,
-    stars: [3, 2, 1, 0, 0][i] || 0,
+    stars: [3, 2, 0, 0, 0][i] || 0,
     locked: c.id === 'rooftop',
-    ...(c.id === 'rooftop' ? { unlockDone: 3, unlockNeed: 4 } : {})
+    ...(c.id === 'rooftop' ? { unlockDone: 5, unlockNeed: 6 } : {})
   }));
-  const PREVIEW_PROGRESS = { cups: PREVIEW_SHELF };
+  const PREVIEW_STARS = { earned: 5, total: 15 };
+  const PREVIEW_PROGRESS = { cups: PREVIEW_SHELF, stars: PREVIEW_STARS };
   const previewCatalog = TRACK_LIST.map((t) => ({ id: t.id, svg: TRACK_SCHEMATICS[t.id] }));
   const showPick = (pick) => renderLobbyPick(el('cup-slot'), pick || {}, previewCatalog, PREVIEW_PROGRESS);
 
@@ -579,7 +580,7 @@ export function runDisplayScenario(opts, ctx) {
     // here, the two lobby cards that show no pick were the only ones in the
     // gallery missing a card the live lobby always has, and every TV column
     // compared against them looked like it had grown one.
-    renderCupShelf(el('cup-shelf'), PREVIEW_SHELF);
+    renderCupShelf(el('cup-shelf'), PREVIEW_SHELF, PREVIEW_STARS);
     return;
   }
 
@@ -592,7 +593,7 @@ export function runDisplayScenario(opts, ctx) {
     renderJoinUrl(el('joinurl'), (location.host || 'tinytrack.party'), null); // stamps the fade-in class
     showPick(null);   // no pick yet → empty slot
     renderQR(el('qr'), buildQRMatrix(location.origin || 'https://tinytrack.party'));
-    renderCupShelf(el('cup-shelf'), PREVIEW_SHELF);
+    renderCupShelf(el('cup-shelf'), PREVIEW_SHELF, PREVIEW_STARS);
     startAttractDemo([]);
     if (scenario !== 'lobby-empty') {
       // The display's OWN link over that board: the overlay main.js fills off
@@ -634,7 +635,7 @@ export function runDisplayScenario(opts, ctx) {
     // preview shows the circuit the card names.
     showPick(opts.picked ? previewPick(opts.picked) : null);
     // The star shelf under it, off the same renderer as live play.
-    renderCupShelf(el('cup-shelf'), PREVIEW_SHELF);
+    renderCupShelf(el('cup-shelf'), PREVIEW_SHELF, PREVIEW_STARS);
     return;
   }
 
