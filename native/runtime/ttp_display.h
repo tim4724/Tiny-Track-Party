@@ -568,6 +568,20 @@ TTP_ABI int ttp_display_cell_rects(float* out, int maxCells);
  * it: one bit, not a description. */
 TTP_ABI void ttp_display_cell_cards(uint32_t mask);
 
+/* The OTHER players' name tags, per cell, for the frame last drawn: the one
+ * HUD element placed PER FRAME, because it rides a moving car. The text is the
+ * shell's, drawn at native resolution rather than into the scaled 3D buffer;
+ * where it goes is this (ttp/name_tags.h). Read it right after
+ * ttp_display_frame and paint in the same frame, or the tags trail their cars.
+ *
+ * Writes 6 floats per tag — the cell it is drawn in, the cell whose car it
+ * names (so the shell reads the name off its own cell list), x and y as
+ * FRACTIONS of the surface with a top-left origin (ttp_display_cell_rects'
+ * units), a scale and an alpha — grouped by cell and far to near, so painting
+ * in order stacks the nearer name on top. Returns how many TAGS it wrote:
+ * min(tags, maxTags), 0 with no cells, no drawn frame or out null. */
+TTP_ABI int ttp_display_name_tags(float* out, int maxTags);
+
 /* WHAT that HUD says: the bound session's per-player race values, packed, one
  * entry per roster slot in ttp_display_build order (ttp_hud.h). Place, lap,
  * total laps, the held item as a CODE, finished, finish time — the six values

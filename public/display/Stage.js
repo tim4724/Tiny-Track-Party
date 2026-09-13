@@ -24,7 +24,7 @@
 // size themselves off the cell, which is already a C++ answer.
 import { ordinal } from '../shared/format.js';
 import { cssHex, loadBiomes } from '../shared/biomes.js';
-import { CAM, Display, RECT_STRIDE, assetCache } from './render/Display.js';
+import { CAM, Display, RECT_STRIDE, TAG_STRIDE, assetCache } from './render/Display.js';
 import { PerfHud } from './render/PerfHud.js';
 import { ITEM_IDS } from './engine/contract.js';
 import { loadItemIcons, CAR_BODY_COLORS } from '../shared/itemIcons.js';
@@ -414,6 +414,12 @@ export class Stage {
     o.style.cssText = 'position:fixed;inset:0;pointer-events:none;';
     this.container.appendChild(o);
     this.overlay = o;
+    // Name tags sit UNDER every cell's chrome: the first child, so the chips and
+    // the centred cards appended after it paint over a tag that drifts beneath.
+    this._tagLayer = document.createElement('div');
+    o.appendChild(this._tagLayer);
+    this._tags = [];         // pooled .name-tag elements, reused in paint order
+    this._tagsShown = 0;
   }
 
   // ---- track ----------------------------------------------------------------
@@ -947,6 +953,7 @@ export class Stage {
   // same elements 60 times a second is a style write per car per frame for a
   // HUD that is already hidden.
   _hideCellHud() {
+    this._paintNameTags([]);
     if (this._hudHidden) return;
     this._hudHidden = true;
     this._hudSig = null; // the labels are display:none now — re-place on return
@@ -955,6 +962,43 @@ export class Stage {
         if (el) el.style.display = 'none';
       }
     }
+  }
+
+  // The other players' names over their cars, placed by C++ off the frame just
+  // drawn (ttp_display_name_tags). THE ONE PER-FRAME DOM WRITE in this loop, and
+  // on purpose: a tag rides a moving car, and drawing its text here keeps it at
+  // the panel's resolution while the 3D buffer is scaled down. Only transform and
+  // opacity move per frame — compositor properties, no layout — and the text and
+  // colour are written only when a pooled element changes whose name it shows.
+  _paintNameTags(ids) {
+    let n = 0;
+    if (ids.length > 1) {
+      const packed = this.display.nameTags(ids.length * (ids.length - 1));
+      const cw = this.container.clientWidth, ch = this.container.clientHeight;
+      for (let i = 0; i + TAG_STRIDE - 1 < packed.length; i += TAG_STRIDE) {
+        const id = ids[packed[i + 1]];
+        const c = this.cars.get(id);
+        if (!c) continue;
+        let el = this._tags[n];
+        if (!el) {
+          el = document.createElement('div');
+          el.className = 'name-tag';
+          this._tagLayer.appendChild(el);
+          this._tags.push(el);
+        }
+        const name = c.name || ('P' + id);
+        if (el._name !== name) { el._name = name; el.textContent = name; }
+        const col = this.colors[c.colorIndex % this.colors.length] || '#fff';
+        if (el._col !== col) { el._col = col; el.style.setProperty('--c', col); }
+        el.style.transform = `translate3d(${packed[i + 2] * cw}px, ${packed[i + 3] * ch}px, 0) `
+            + `scale(${packed[i + 4]}) translate(-50%, -100%) rotate(-2deg)`;
+        el.style.opacity = packed[i + 5];
+        if (n >= this._tagsShown) el.style.display = 'block';
+        n++;
+      }
+    }
+    for (let j = n; j < this._tagsShown; j++) this._tags[j].style.display = 'none';
+    this._tagsShown = n;
   }
 
   // ---- effects the renderer can't infer ---------------------------------------
@@ -1337,6 +1381,7 @@ export class Stage {
     }
 
     this._renderFrame(frameDt, ids.length);
+    this._paintNameTags(ids);
 
     // Place this frame's HUD over the cells the renderer just drew — ASKING it
     // where they are (_cellRects) instead of scoring the same grid again here.

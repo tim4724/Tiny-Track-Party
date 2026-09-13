@@ -387,6 +387,16 @@ void n_ttp_display_model_variant(JNIEnv* env, jclass, jbyteArray a0, jint a1) {
     ttp_display_model_variant(s0.get(), (int) a1);
 }
 
+jint n_ttp_display_name_tags(JNIEnv* env, jclass, jfloatArray outArr, jint maxCells) {
+    if (!outArr) return 0;
+    const jint cap = env->GetArrayLength(outArr) / 6;
+    const jint want = maxCells < cap ? maxCells : cap;
+    std::vector<float> tmp((size_t) (want > 0 ? want : 0) * 6, 0.0f);
+    const jint n = (jint) ttp_display_name_tags(tmp.data(), (int) want);
+    if (n > 0) env->SetFloatArrayRegion(outArr, 0, n * 6, tmp.data());
+    return n;
+}
+
 jobject n_ttp_display_profile(JNIEnv* env, jclass) {
     const auto* p = ttp_display_profile();
     if (!p) return nullptr;
@@ -1386,6 +1396,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_display_kit_field_layout", "()[B", (void*) n_ttp_display_kit_field_layout },
     { "ttp_display_look", "(DDDDDD)V", (void*) n_ttp_display_look },
     { "ttp_display_model_variant", "([BI)V", (void*) n_ttp_display_model_variant },
+    { "ttp_display_name_tags", "([FI)I", (void*) n_ttp_display_name_tags },
     { "ttp_display_profile", "()Ljava/nio/ByteBuffer;", (void*) n_ttp_display_profile },
     { "ttp_display_profile_names", "()[B", (void*) n_ttp_display_profile_names },
     { "ttp_display_release", "()V", (void*) n_ttp_display_release },

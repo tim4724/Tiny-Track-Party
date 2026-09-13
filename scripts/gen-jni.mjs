@@ -89,6 +89,8 @@ const OVERRIDES = {
   // Kotlin side sizes its array by it, and a shim that kept an old one would
   // read cells past the end of what C++ wrote.
   ttp_display_cell_rects: { kind: 'floatOut', stride: 8 },
+  // Same shape, one tag at a time (ttp_display.h).
+  ttp_display_name_tags: { kind: 'floatOut', stride: 6 },
   // Self-describing packed blocks: version + count + STRIDE, designed so a
   // reader can decode without having compiled the struct (ttp_hud.h). A direct
   // ByteBuffer is therefore the intended read and costs no copy. Scratch
