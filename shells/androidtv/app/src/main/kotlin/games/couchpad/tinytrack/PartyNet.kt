@@ -246,11 +246,11 @@ class PartyNet(
     /**
      * The input fastlane's transport half ([Fastlane]); its netcode is C++'s.
      * Constructed here rather than injected because the only thing it needs from
-     * outside is the STUN pair, which is the manifest's.
+     * outside is the STUN server, which is the manifest's.
      */
     private val fastlane = Fastlane(
         context,
-        listOf(proto.stunUrl, proto.stunFallbackUrl),
+        listOf(proto.stunUrl),
     ) { idx, data -> sendTo(EngineId.number(idx), data.toString()) }
 
     private var livenessTick: Runnable? = null

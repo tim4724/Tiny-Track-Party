@@ -231,7 +231,7 @@ final class PartyNet {
         // The fastlane: signalling out over this socket, input in through the
         // SAME funnel a relay game-message takes (the CONTROL short-circuit
         // and the button verdict stay single-sourced in the coordinator).
-        fastlane = Fastlane(iceServers: [proto.stunURL, proto.stunFallbackURL],
+        fastlane = Fastlane(iceServers: [proto.stunURL],
                             sendSignal: { [weak self] idx, data in
                                 self?.sendTo(EngineIdentity.number(idx), TTP.json(data))
                             })

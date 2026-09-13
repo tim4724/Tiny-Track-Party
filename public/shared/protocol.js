@@ -26,11 +26,10 @@ if (typeof document !== 'undefined') {
 // VERIFIED 2026-07-29: an eturnal server answers Binding Requests here on both
 // A and AAAA (it is STUN ONLY — no TURN relay is configured, so a symmetric NAT
 // on both ends still has no path and falls back to the relay).
+// The ONLY STUN server, deliberately: no third-party fallback, so no outside
+// party sees a player's address. A stun.couchpad.games outage costs
+// cross-network play its fastlane, and input rides the relay instead.
 var STUN_URL = 'stun:stun.couchpad.games:3478';
-// The public fallback GameNet lists AFTER ours, so a stun.couchpad.games
-// outage costs cross-network play nothing. Part of the manifest so a TV shell
-// offers the same candidate set, in the same order.
-var STUN_FALLBACK_URL = 'stun:stun.l.google.com:19302';
 
 // Message types carried inside the Party-Server `data` field. Every message is
 // a plain object with a `.type` drawn from here.
@@ -327,7 +326,7 @@ function carStats(carIndex) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     MSG, FASTLANE_TYPES, ROOM_STATE,
-    RELAY_URL, STUN_URL, STUN_FALLBACK_URL,
+    RELAY_URL, STUN_URL,
     MAX_PLAYERS, FIELD_SIZE, TOTAL_LAPS, COUNTDOWN_SECONDS, SCHEMATIC_EPS, STEER, LIVENESS, RANDOM_RACES,
     CAR_COLORS, CAR_MODELS, CAR_NAMES,
     CAR_STATS, carStats

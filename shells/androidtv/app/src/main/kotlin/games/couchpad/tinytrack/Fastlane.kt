@@ -59,7 +59,7 @@ import java.nio.ByteBuffer
  */
 class Fastlane(
     context: Context,
-    /** The manifest's STUN pair. No TURN anywhere — a symmetric NAT falls back to the relay. */
+    /** The manifest's STUN server. No TURN anywhere — a symmetric NAT falls back to the relay. */
     iceServers: List<String>,
     /** Ship an `__rtc` envelope to a controller over the relay. */
     private val sendSignal: (Int, JSONObject) -> Unit,

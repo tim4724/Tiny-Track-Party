@@ -85,7 +85,7 @@ test('the transport carries its platform obligations', () => {
     + 'App Store upload with ITMS-90683');
 });
 
-test('the STUN pair comes from the manifest, not a Swift literal', () => {
+test('the STUN server comes from the manifest, not a Swift literal', () => {
   const proto = shell('shells/tvos/TinyTrackParty/Net/Protocol.swift');
   if (proto === null) return;
   assert.match(proto, /STUN_URL/, 'the manifest key is not read');

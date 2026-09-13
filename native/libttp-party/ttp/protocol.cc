@@ -51,7 +51,6 @@ Value manifest() {
 
   m.set("RELAY_URL", Value::Str(RELAY_URL));
   m.set("STUN_URL", Value::Str(STUN_URL));
-  m.set("STUN_FALLBACK_URL", Value::Str(STUN_FALLBACK_URL));
   m.set("MAX_PLAYERS", Value::Num(MAX_PLAYERS));
   m.set("FIELD_SIZE", Value::Num(FIELD_SIZE));
   m.set("TOTAL_LAPS", Value::Num(TOTAL_LAPS));

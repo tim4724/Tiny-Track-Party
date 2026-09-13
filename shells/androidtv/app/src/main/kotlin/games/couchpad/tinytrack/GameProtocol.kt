@@ -36,12 +36,11 @@ class GameProtocol private constructor(
     val relayUrl: String,
 
     /**
-     * The fastlane's ICE pair: first-party STUN, then the public fallback so a
-     * `stun.*` outage costs nothing. STUN ONLY — no TURN is configured anywhere,
-     * so a symmetric NAT falls back to the relay, which is the design.
+     * The fastlane's one ICE server: first-party STUN, no third-party fallback.
+     * STUN ONLY — no TURN is configured anywhere, so a symmetric NAT falls back
+     * to the relay, which is the design.
      */
     val stunUrl: String,
-    val stunFallbackUrl: String,
 
     /**
      * The wire vocabulary, flat rather than nested so a call site reads
@@ -153,7 +152,6 @@ class GameProtocol private constructor(
                 baseUrl = baseUrl,
                 relayUrl = str(m, "RELAY_URL", "manifest"),
                 stunUrl = str(m, "STUN_URL", "manifest"),
-                stunFallbackUrl = str(m, "STUN_FALLBACK_URL", "manifest"),
 
                 msgControl = str(msg, "CONTROL", "MSG"),
                 msgItem = str(msg, "ITEM", "MSG"),

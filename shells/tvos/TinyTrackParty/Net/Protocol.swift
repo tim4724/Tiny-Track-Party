@@ -38,11 +38,10 @@ struct GameProtocol {
     // MARK: - Transport
 
     let relayURL: URL
-    /// The fastlane's ICE pair: first-party STUN, then the public fallback so a
-    /// stun.* outage costs nothing. STUN only — no TURN is configured anywhere,
-    /// so a symmetric NAT falls back to the relay by design.
+    /// The fastlane's one ICE server: first-party STUN, no third-party fallback.
+    /// STUN only — no TURN is configured anywhere, so a symmetric NAT falls back
+    /// to the relay by design.
     let stunURL: String
-    let stunFallbackURL: String
 
     // MARK: - The wire vocabulary (MSG)
 
@@ -163,7 +162,6 @@ struct GameProtocol {
             baseURL: baseURL,
             relayURL: relay,
             stunURL: str(m, "STUN_URL", "manifest"),
-            stunFallbackURL: str(m, "STUN_FALLBACK_URL", "manifest"),
 
             msgControl: str(msg, "CONTROL", "MSG"),
             msgItem: str(msg, "ITEM", "MSG"),

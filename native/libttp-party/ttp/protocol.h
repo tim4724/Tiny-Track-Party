@@ -56,7 +56,6 @@ inline const std::vector<std::pair<std::string, std::string>> ROOM_STATE = {
 
 inline const std::string RELAY_URL = "wss://ws.couchpad.games";
 inline const std::string STUN_URL = "stun:stun.couchpad.games:3478";
-inline const std::string STUN_FALLBACK_URL = "stun:stun.l.google.com:19302";
 
 inline constexpr int MAX_PLAYERS = 4;
 // Cars in every race (humans + the CPU fill); humans start from the back.

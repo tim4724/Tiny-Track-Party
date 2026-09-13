@@ -90,11 +90,10 @@ test('the close-fastlane performer actually closes something', () => {
     'close-fastlane is a no-op again — a left seat\'s link must die with it');
 });
 
-test('the STUN pair comes from the manifest, not a Kotlin literal', () => {
+test('the STUN server comes from the manifest, not a Kotlin literal', () => {
   const proto = shell(`${KOTLIN}/GameProtocol.kt`);
   if (proto === null) return;
   assert.match(proto, /STUN_URL/, 'the manifest key is not read');
-  assert.match(proto, /STUN_FALLBACK_URL/, 'the fallback is not read — a stun.* outage is then fatal');
   for (const rel of [FASTLANE, NET, `${KOTLIN}/GameProtocol.kt`]) {
     const src = shell(rel);
     if (src === null) continue;
