@@ -80,6 +80,8 @@ const EMPTY_RECTS = new Float32Array(0);
 // each. Declared once here because the allocation and the read-back must agree,
 // and they are twenty lines apart.
 export const RECT_STRIDE = 8;
+// ttp_display_name_tags: cell, target cell, x, y, scale, alpha.
+export const TAG_STRIDE = 6;
 // hud()'s, for the same reason.
 const EMPTY_HUD = [];
 
@@ -118,6 +120,7 @@ export class Display {
     this.m = mod;
     this.built = false;
     this._rectPtr = 0;       // cellRects' heap scratch, grown on demand
+    this._tagPtr = 0;        // nameTags' heap scratch, likewise
     this._rectBytes = 0;
     this._pollPtr = 0;       // step()'s two-double out array; allocated on first use
     this._showcase = false;  // the asset gallery's showroom; see showcase()
@@ -158,6 +161,7 @@ export class Display {
       cells: mod.cwrap('ttp_display_cells', null, ['string']),
       cellRects: mod.cwrap('ttp_display_cell_rects', 'number', ['number', 'number']),
       cellCards: mod.cwrap('ttp_display_cell_cards', null, ['number']),
+      nameTags: mod.cwrap('ttp_display_name_tags', 'number', ['number', 'number']),
       slotIds: mod.cwrap('ttp_display_slot_ids_json', 'string', []),
       dividers: mod.cwrap('ttp_display_dividers', null, ['number']),
       camera: mod.cwrap('ttp_display_camera', null, ['number']),
@@ -606,6 +610,21 @@ export class Display {
     // from under any view held across an allocation.
     return this.m.HEAPF32.subarray(this._rectPtr >> 2,
                                    (this._rectPtr >> 2) + got * RECT_STRIDE);
+  }
+
+  // The other players' name tags for the frame just drawn, TAG_STRIDE floats
+  // each (ttp_display.h). Read after frame() and painted in the same rAF, so the
+  // DOM and the canvas reach the screen together. A view over scratch reused by
+  // the next call, for cellRects' reason.
+  nameTags(maxTags) {
+    const bytes = maxTags * TAG_STRIDE * 4;
+    if (!this._tagPtr || this._tagBytes < bytes) {
+      if (this._tagPtr) this.m._free(this._tagPtr);
+      this._tagPtr = this.m._malloc(bytes);
+      this._tagBytes = bytes;
+    }
+    const got = this._fn.nameTags(this._tagPtr, maxTags);
+    return this.m.HEAPF32.subarray(this._tagPtr >> 2, (this._tagPtr >> 2) + got * TAG_STRIDE);
   }
 
   // WHAT the HUD says: place, lap, total laps, the held item, finished and the

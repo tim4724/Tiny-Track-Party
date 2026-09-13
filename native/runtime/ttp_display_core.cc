@@ -38,6 +38,7 @@
 #include "ttp/render_scale_controller.h"
 #include "ttp/game.h"
 #include "ttp/hud.h"
+#include "ttp/name_tags.h"
 #include "ttp/race_track.h"
 #include "ttp/roster.h"
 #include "ttp/scalar_id.h"
@@ -684,6 +685,39 @@ int ttp_display_cell_rects(float* out, int maxCells) {
 
 void ttp_display_cell_cards(uint32_t mask) {
     if (g_disp) g_disp->cardMask = mask;
+}
+
+int ttp_display_name_tags(float* out, int maxTags) {
+    if (!g_disp || !g_disp->built || !out || maxTags <= 0) return 0;
+    const DisplayCore& d = *g_disp;
+    const uint32_t n = (uint32_t) d.cells.size();
+    if (n < 2 || d.frame.size() < sizeof(TtpFrameInput)) return 0;
+    const TtpFrameInput& f = *(const TtpFrameInput*) d.frame.data();
+    if (f.viewCount != n) return 0;
+    // The picture rects, in the units ttp_display_cell_rects answers in, so a
+    // tag and the chip beside it are placed on the same grid.
+    const double sw = d.width > 0 ? (double) d.width : 1.0;
+    const double sh = d.height > 0 ? (double) d.height : 1.0;
+    std::vector<float> pictures(4 * n);
+    for (uint32_t i = 0; i < n; i++) {
+        const TtpCellRect r = d.renderer->cellRectTopLeft(n, i);
+        pictures[4 * i + 0] = (float) (r.x / sw);
+        pictures[4 * i + 1] = (float) (r.y / sh);
+        pictures[4 * i + 2] = (float) (r.w / sw);
+        pictures[4 * i + 3] = (float) (r.h / sh);
+    }
+    const std::vector<ttp::rt::NameTag> tags = ttp::rt::nameTags(f, pictures.data());
+    const int want = (int) tags.size() < maxTags ? (int) tags.size() : maxTags;
+    for (int i = 0; i < want; i++) {
+        const ttp::rt::NameTag& t = tags[(size_t) i];
+        out[i * 6 + 0] = (float) t.cell;
+        out[i * 6 + 1] = (float) t.target;
+        out[i * 6 + 2] = t.x;
+        out[i * 6 + 3] = t.y;
+        out[i * 6 + 4] = t.scale;
+        out[i * 6 + 5] = t.alpha;
+    }
+    return want;
 }
 
 const char* ttp_display_slot_ids_json(void) {

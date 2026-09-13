@@ -593,6 +593,9 @@ add_library(libttp_runtime STATIC
   # Game through the same roster slots — but for the shell's ~6 Hz poll, not
   # for the renderer's frame.
   libttp-runtime/ttp/hud.cc
+  # Where each cell draws the other players' name tags, projected off the frame
+  # the renderer was handed. The shell draws the text, at native resolution.
+  libttp-runtime/ttp/name_tags.cc
   # The rest of uiModel.js — the seat grid, the lobby rules, the race card, the
   # ITEM-push gate, the reconnect diff, the flow predicates, the pause
   # arbitration, the standings board and the results overlay, plus the screen
@@ -1045,6 +1048,8 @@ set(TTP_APP_SOURCES
   # rather than what the renderer draws, so an SDK-less leg still has every line
   # of it in the link.
   libttp-runtime/ttp/hud.cc
+  # The name tags ttp_display_name_tags answers with, likewise read by the shell.
+  libttp-runtime/ttp/name_tags.cc
   # The rest of the UI model: every shell's boards are rendered from this.
   libttp-runtime/ttp/ui_model.cc
   # The cup star record's derivations (stars, the lock, the bank).
