@@ -649,13 +649,15 @@ html.cam-free #race { pointer-events: none; }
   padding: 0.25em 0.5em;
 }
 /* The tail: one die-cut piece with the tag, not a second sticker. A diamond in
-   the livery, outlined on its two outer sides only, centred on the tag's bottom
-   edge so its fill covers that stretch of outline and the ink runs unbroken from
-   the tag round the tip. The tip is softened like every sticker corner. When two
+   the livery, outlined on its two outer sides only, centred on the OUTER edge of
+   the tag's bottom outline (bottom: -3px, the border's width) so it hangs clear of
+   the chip while its fill still covers that stretch of outline, and the ink runs
+   unbroken from the tag round the tip. Centred on the inner edge it sank half
+   inside the chip at race size. The tip is softened like every sticker corner. When two
    tags overlap, it is what says which car each name belongs to. */
 .name-tag::after {
-  content: ''; position: absolute; left: 50%; bottom: 0;
-  width: 0.6em; height: 0.6em;
+  content: ''; position: absolute; left: 50%; bottom: -3px;
+  width: 0.7em; height: 0.7em;
   background: var(--c, var(--brand));
   border-right: 3px solid var(--ink); border-bottom: 3px solid var(--ink);
   border-bottom-right-radius: 0.12em;
