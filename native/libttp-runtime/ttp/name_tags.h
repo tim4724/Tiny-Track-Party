@@ -29,9 +29,11 @@ namespace rt {
 constexpr float NAME_TAG_LIFT = 0.45f;
 // Eye distance at which a tag starts to fade, and past which it is gone.
 constexpr float NAME_TAG_FADE = 18.0f, NAME_TAG_FAR = 26.0f;
-// The scale a tag has reached at NAME_TAG_FAR, from 1 at the eye: a far rival's
-// tag reads as further away without shrinking below legibility.
-constexpr float NAME_TAG_FAR_SCALE = 0.7f;
+// Full size out to NAME_TAG_NEAR, then shrinking linearly to NAME_TAG_FAR_SCALE
+// at NAME_TAG_FAR. Slower than perspective on purpose: the car shrinks as 1/d,
+// and a tag doing the same is unreadable exactly where a rival is worth naming.
+constexpr float NAME_TAG_NEAR = 4.0f;
+constexpr float NAME_TAG_FAR_SCALE = 0.5f;
 
 struct NameTag {
     int32_t cell;    // the cell the tag is drawn in

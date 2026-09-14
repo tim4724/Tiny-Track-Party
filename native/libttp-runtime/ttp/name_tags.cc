@@ -44,7 +44,8 @@ std::vector<NameTag> nameTags(const TtpFrameInput& f, const float* pictures) {
             t.target = (int32_t) j;
             t.x = r[0] + (nx + 1) * 0.5f * r[2];
             t.y = r[1] + (1 - ny) * 0.5f * r[3];
-            t.scale = 1 - (1 - NAME_TAG_FAR_SCALE) * (dist / NAME_TAG_FAR);
+            const float k = std::max(0.0f, dist - NAME_TAG_NEAR) / (NAME_TAG_FAR - NAME_TAG_NEAR);
+            t.scale = 1 - (1 - NAME_TAG_FAR_SCALE) * k;
             t.alpha = std::min(1.0f, fade);
             cell.push_back({ dist, t });
         }
