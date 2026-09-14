@@ -612,8 +612,16 @@ export class Display {
                                    (this._rectPtr >> 2) + got * RECT_STRIDE);
   }
 
-  // The other players' name tags for the frame just drawn, TAG_STRIDE floats
-  // each (ttp_display.h). Read after frame() and painted in the same rAF, so the
+  // Slot i's car id, off the built scene's own roster.
+  // LATCHED per build: the list only changes when a scene is built (reroster
+  // refuses id changes), so the per-frame tags and the ~6 Hz HUD poll must not
+  // re-parse JSON that cannot have moved.
+  slotIds() {
+    return this._slotIdCache || (this._slotIdCache = JSON.parse(this._fn.slotIds()));
+  }
+
+  // Name tags over every other car, per cell, for the frame just drawn,
+  // TAG_STRIDE floats each (ttp_display.h); the second float is a roster slot. Read after frame() and painted in the same rAF, so the
   // DOM and the canvas reach the screen together. A view over scratch reused by
   // the next call, for cellRects' reason.
   nameTags(maxTags) {
@@ -664,13 +672,9 @@ export class Display {
     }
     const count = u32[head + 1];
     const stride = u32[head + 2];
-    // Slot i's car id, off the built scene's own roster (the one owner —
-    // this side used to keep a copy and a drifted index was silently skipped).
-    // LATCHED per build: the list only changes when a scene is built (reroster
-    // refuses id changes), so the ~6 Hz HUD poll must not re-parse JSON that
-    // cannot have moved — that parse was the one JSON crossing left inside the
-    // packed-readback path.
-    const slotIds = this._slotIdCache || (this._slotIdCache = JSON.parse(this._fn.slotIds()));
+    // Slot i's car id (slotIds) — the one owner; this side used to keep a copy
+    // and a drifted index was silently skipped.
+    const slotIds = this.slotIds();
     const rows = [];
     for (let i = 0; i < count; i++) {
       const id = slotIds[i];

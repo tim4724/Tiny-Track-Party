@@ -568,14 +568,15 @@ TTP_ABI int ttp_display_cell_rects(float* out, int maxCells);
  * it: one bit, not a description. */
 TTP_ABI void ttp_display_cell_cards(uint32_t mask);
 
-/* The OTHER players' name tags, per cell, for the frame last drawn: the one
+/* Name tags over every other car in each cell, CPU included, for the frame last
+ * drawn: the one
  * HUD element placed PER FRAME, because it rides a moving car. The text is the
  * shell's, drawn at native resolution rather than into the scaled 3D buffer;
  * where it goes is this (ttp/name_tags.h). Read it right after
  * ttp_display_frame and paint in the same frame, or the tags trail their cars.
  *
- * Writes 6 floats per tag — the cell it is drawn in, the cell whose car it
- * names (so the shell reads the name off its own cell list), x and y as
+ * Writes 6 floats per tag — the cell it is drawn in, the roster SLOT of the car
+ * it names (ttp_display_slot_ids_json maps it to a car id), x and y as
  * FRACTIONS of the surface with a top-left origin (ttp_display_cell_rects'
  * units), a scale and an alpha — grouped by cell and far to near, so painting
  * in order stacks the nearer name on top. Returns how many TAGS it wrote:
