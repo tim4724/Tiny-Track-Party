@@ -34,6 +34,7 @@
 // does. Nothing in this file needs the 4-significant-digit treatment
 // runtime_check's corpus needs, so nothing in it takes it.
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -1510,7 +1511,9 @@ void testNameTags() {
                                          + ", want " + std::to_string(want));
   };
   auto scaleAt = [](float dist) {
-    return 1 - (1 - ttp::rt::NAME_TAG_FAR_SCALE) * (dist / ttp::rt::NAME_TAG_FAR);
+    const float k = std::max(0.0f, dist - ttp::rt::NAME_TAG_NEAR)
+                    / (ttp::rt::NAME_TAG_FAR - ttp::rt::NAME_TAG_NEAR);
+    return 1 - (1 - ttp::rt::NAME_TAG_FAR_SCALE) * k;
   };
 
   const std::vector<ttp::rt::NameTag> tags = ttp::rt::nameTags(*f, pictures);
@@ -1528,6 +1531,7 @@ void testNameTags() {
   near(tags[1].x, 0.3125f, "tag 1 x: a quarter right of centre");
   near(tags[1].alpha, 1, "tag 1 is fully up close");
   near(tags[1].scale, scaleAt(std::sqrt(17.0f)), "tag 1 scale");
+  near(scaleAt(3), 1, "a rival inside NAME_TAG_NEAR is full size");
   // Cell 2 looks back down -Z's other way: car 0 (8 away) before car 1 (~6).
   checkU(tags[2].cell, 2, "tag 2 cell");
   checkU(tags[2].target, 0, "tag 2 names car 0");
