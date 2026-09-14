@@ -1,5 +1,6 @@
 // Photograph the Android TV app, one shot per gallery scenario, into
-// public/assets/shots/androidtv-device/ (or androidtv-emu/).
+// public/assets/shots/androidtv/ — from the box or the AVD, whichever ran last;
+// each row records which (`deviceKind`).
 //
 //   npm run shots:androidtv                 # the paired TV box
 //   npm run shots:androidtv-emu             # the Television_4K_Android_TV AVD
@@ -9,10 +10,10 @@
 // and why `am start -S` is safe here and nowhere else — is
 // shells/androidtv/CLAUDE.md §The screenshot harness.
 //
-// WEBP AT 1280 WIDE, matching the other three columns exactly (see
-// scripts/lib/shots.mjs's toWebp for why not PNG). The 4K AVD screencaps at
-// 3840x2160 and a TV box at its own panel size; both land on the same stored
-// geometry, so side-by-side and difference mode line up with no rescale in the page.
+// WEBP AT 1280 WIDE (store cards: STORE_SHOT), matching the other two columns
+// exactly (see scripts/lib/shots.mjs). The 4K AVD screencaps at 3840x2160 and a
+// TV box at its own panel size; both land on the same stored geometry, so
+// side-by-side and difference mode line up with no rescale in the page.
 
 import path from 'node:path';
 import fs from 'node:fs';
@@ -24,8 +25,8 @@ import { CAPTURED_SCENARIOS } from '../public/shared/galleryScenarios.js';
 // The launch vocabulary (Scenarios.kt's spellings; no manifest to read them
 // from) has one script-side home: lib/androidtv-bench.mjs. A rename touches
 // Scenarios.kt and that module, nothing here.
-import { ACTIVITY, EXTRA_PLAYERS, EXTRA_SCENARIO, EXTRA_TRACK, PACKAGE } from './lib/androidtv-bench.mjs';
-import { gitSha, mergeShots, shotDir, toWebp } from './lib/shots.mjs';
+import { ACTIVITY, EXTRA_HOLD, EXTRA_PLAYERS, EXTRA_SCENARIO, EXTRA_SEED, EXTRA_TRACK, PACKAGE } from './lib/androidtv-bench.mjs';
+import { gitSha, mergeShots, writeShot } from './lib/shots.mjs';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -36,7 +37,8 @@ const args = Object.fromEntries(
 );
 
 const EMU = !!args.emu;
-const PLATFORM = EMU ? 'androidtv-emu' : 'androidtv-device';
+const PLATFORM = 'androidtv';
+const LEG = EMU ? 'androidtv-emu' : 'androidtv-device';
 const OUT_W = parseInt(args.outWidth, 10) || 1280;
 // Generous, and it is the SCENE that needs it: a cold launch compiles shaders and
 // bakes a 2048x2048 shadow map before the first frame, and the chained-start card
@@ -151,9 +153,14 @@ async function stand(serial, scenario) {
   if (scenario.params?.players) {
     extras.push('--ei', EXTRA_PLAYERS, String(scenario.params.players));
   }
+  if (scenario.params?.seed != null) extras.push('--ei', EXTRA_SEED, String(scenario.params.seed));
+  // The card's race moment. adb joins its arguments into ONE remote shell line,
+  // so the JSON goes single-quoted or the device shell eats its quotes and braces.
+  if (scenario.hold) extras.push('--es', EXTRA_HOLD, `'${JSON.stringify(scenario.hold)}'`);
   adb(serial, ['shell', 'am', 'start', '-S', '-n', ACTIVITY, ...extras]);
 
-  const deadline = Date.now() + READY_TIMEOUT_MS;
+  // A held card waits for its race moment inside the app (up to its own 180 s).
+  const deadline = Date.now() + (scenario.hold ? Math.max(READY_TIMEOUT_MS, 200_000) : READY_TIMEOUT_MS);
   // `TtpShot:V` — ONE filterspec, and the level is the lowest rather than `I`,
   // because both of those cost a whole capture the first time round. Passing
   // several specs after `-s` (`-s TtpShot:I TtpShot:W TtpShot:E`) makes adb print
@@ -190,7 +197,7 @@ function scaleMoveCount(serial) {
 async function main() {
   const serial = resolveSerial();
   const name = deviceName(serial);
-  console.log(`==> ${PLATFORM}: ${serial} (${name})`);
+  console.log(`==> ${LEG}: ${serial} (${name})`);
   assertBuildMatchesTree(serial);
 
   // A SLEEPING BOX NEVER CREATES A SURFACE: the app boots, logs its version and
@@ -209,50 +216,55 @@ async function main() {
   // there.
   if (EMU) adb(serial, ['shell', 'setprop', 'debug.ttp.vk', '-1']);
 
-  const dir = shotDir(ROOT, PLATFORM);
-  fs.mkdirSync(dir, { recursive: true });
+  // A STILL IS SHOT AT THE PANEL'S OWN SIZE. The adaptive render scale exists to
+  // hold 60 fps, which a photograph does not need, and on a slow box or an
+  // emulator it steps the buffer down (and moves it under the camera) mid-card.
+  // `debug.ttp.scale` pins it (PerfDebug.kt, polled live); whatever the box had
+  // before is put back, so a capture never leaves a real TV pinned.
+  const scaleWas = adb(serial, ['shell', 'getprop', 'debug.ttp.scale']).trim();
+  adb(serial, ['shell', 'setprop', 'debug.ttp.scale', '1.0']);
+
   const sha = gitSha(ROOT);
-  const tmp = path.join(os.tmpdir(), `ttp-shot-${PLATFORM}.png`);
+  const tmp = path.join(os.tmpdir(), `ttp-shot-${LEG}.png`);
   const entries = [];
 
-  for (const scenario of scenarios) {
-    const verdict = await stand(serial, scenario);
-    if (verdict !== 'ready') {
-      // Not a throw. `unsupported` is a screen this platform deliberately does not
-      // have; a timeout or a failure is worth shouting about but must not cost the
-      // fifteen boards that would have worked.
-      console.warn(`  ${scenario.id.padEnd(18)} ${verdict}`);
-      continue;
+  try {
+    for (const scenario of scenarios) {
+      const verdict = await stand(serial, scenario);
+      if (verdict !== 'ready') {
+        // Not a throw. `unsupported` is a screen this platform deliberately does not
+        // have; a timeout or a failure is worth shouting about but must not cost the
+        // fifteen boards that would have worked.
+        console.warn(`  ${scenario.id.padEnd(18)} ${verdict}`);
+        continue;
+      }
+      let moves = scaleMoveCount(serial);
+      for (let take = 0; ; take++) {
+        fs.writeFileSync(tmp, adb(serial, ['exec-out', 'screencap', '-p'], { buffer: true }));
+        const now = scaleMoveCount(serial);
+        if (now === moves) break;
+        const gaveUp = take === RETAKES;
+        console.warn(`  ${scenario.id.padEnd(18)} ${gaveUp
+          ? 'still moving after the retakes — this shot may be on a move'
+          : 're-shot: the render scale moved under the camera'}`);
+        if (gaveUp) break;
+        moves = now;
+      }
+      const shot = writeShot(ROOT, PLATFORM, scenario, tmp, OUT_W);
+      entries.push({
+        scenario: scenario.id,
+        platform: PLATFORM,
+        ...shot,
+        capturedAt: new Date().toISOString(),
+        gitSha: sha,
+        deviceName: name,
+        deviceKind: EMU ? 'emulator' : 'device',
+        deviceId: serial
+      });
+      console.log(`  ${scenario.id.padEnd(18)} ${String(shot.bytes).padStart(7)} B`);
     }
-    let moves = scaleMoveCount(serial);
-    for (let take = 0; ; take++) {
-      fs.writeFileSync(tmp, adb(serial, ['exec-out', 'screencap', '-p'], { buffer: true }));
-      const now = scaleMoveCount(serial);
-      if (now === moves) break;
-      const gaveUp = take === RETAKES;
-      console.warn(`  ${scenario.id.padEnd(18)} ${gaveUp
-        ? 'still moving after the retakes — this shot may be on a move'
-        : 're-shot: the render scale moved under the camera'}`);
-      if (gaveUp) break;
-      moves = now;
-    }
-    const file = `${scenario.id}.webp`;
-    const dest = path.join(dir, file);
-    toWebp(tmp, dest, OUT_W);
-    const { size } = fs.statSync(dest);
-    entries.push({
-      scenario: scenario.id,
-      platform: PLATFORM,
-      file: `${PLATFORM}/${file}`,
-      w: OUT_W,
-      h: Math.round((OUT_W * 1080) / 1920),
-      bytes: size,
-      capturedAt: new Date().toISOString(),
-      gitSha: sha,
-      deviceName: name,
-      deviceId: serial
-    });
-    console.log(`  ${scenario.id.padEnd(18)} ${String(size).padStart(7)} B`);
+  } finally {
+    adb(serial, ['shell', 'setprop', 'debug.ttp.scale', scaleWas || '0']);
   }
 
   fs.rmSync(tmp, { force: true });

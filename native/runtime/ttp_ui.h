@@ -159,6 +159,26 @@ TTP_ABI const char* ttp_ui_catalogue_json(void);
 TTP_ABI int ttp_ui_progress_load(const char* jsonOrNull, int unlockAll);
 TTP_ABI const char* ttp_ui_progress_json(void);
 
+/* ---- the screens gallery's fabrications (harness only) ----------------------
+ *
+ * A gallery screen stands up with no party behind it, so its couch and its
+ * finished race are FABRICATED — once, here (ttp/preview.h), for all three
+ * harnesses, which used to type their own and drifted.
+ *
+ * ttp_ui_preview_progress_json: the record to hand ttp_ui_progress_load, so the
+ * shelf and the cup card derive their stars and lock like any couch's.
+ *
+ * ttp_ui_preview_board_json: a finished board for `kind` ("results" |
+ * "intermission" | "podium") over the race `ttp_race_bench_field_json` composes
+ * for the same track, players and seed — the race a harness launches behind it —
+ * against the first shipped cup. `raceIndex` >= 0 picks the cup race a cup
+ * dressing stands after (a preview walking the cup); -1 is the card's own. It is
+ * a board INPUT: run it through ttp_ui_results_view_json like the live one. Null
+ * for an unknown kind. */
+TTP_ABI const char* ttp_ui_preview_progress_json(void);
+TTP_ABI const char* ttp_ui_preview_board_json(const char* kind, const char* trackId, int players,
+                                              double seed, int raceIndex);
+
 /* ---- cup paper colours ------------------------------------------------------
  *
  * The picker's five surface colours. They are AUTHORED — not derived from the

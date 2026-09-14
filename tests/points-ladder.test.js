@@ -3,11 +3,11 @@
 // to fit in.
 //
 // `grand_prix.cc`'s POINTS_BY_RANK is the source, and every LIVE board takes its
-// gains from it through the wire. What this file exists for is the surfaces that
-// do not: the three harnesses fabricate cup boards with no series behind them
-// (there is no room, and no race), so each carries a hand-typed copy of the
-// ladder — and the results board's gain cell carries a hand-typed WIDTH sized to
-// the ladder's biggest rung.
+// gains from it through the wire, and so do the TV harnesses' fabricated boards
+// (ttp_ui_preview_board_json). What this file exists for is the surfaces that do
+// not: the phone's harness carries a hand-typed copy of the ladder, and the
+// results board's gain cell carries a hand-typed WIDTH sized to the ladder's
+// biggest rung.
 //
 // WHY IT MATTERS THAT THEY AGREE. The gallery puts the same board from three
 // platforms side by side, so a column scoring the old ladder differs in a way
@@ -51,13 +51,9 @@ function ladder() {
   return out;
 }
 
-test('every harness fabricates its cup boards on the shipped ladder', () => {
+test('the phone harness fabricates its cup boards on the shipped ladder', () => {
   for (const [rel, anchor] of [
-    ['public/display/TestHarness.js', 'const POINTS_BY_RANK'],
-    ['public/controller/TestHarness.js', 'const POINTS_BY_RANK'],
-    ['shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/Scenarios.kt',
-      'private val POINTS_BY_RANK'],
-    ['shells/tvos/TinyTrackParty/Harness/Scenarios.swift', 'private static let pointsByRank']
+    ['public/controller/TestHarness.js', 'const POINTS_BY_RANK']
   ]) {
     assert.deepEqual(numbers(rel, anchor), ladder(),
       `${rel} disagrees with grand_prix.cc POINTS_BY_RANK`);

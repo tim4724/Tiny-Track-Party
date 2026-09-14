@@ -32,6 +32,7 @@
 #include "ttp/grand_prix.h"
 #include "ttp/json_parse.h"
 #include "ttp/json_read.h"
+#include "ttp/preview.h"
 #include "ttp/progression.h"
 #include "ttp/scalar_id.h"
 #include "ttp/ui_model.h"
@@ -43,6 +44,7 @@
 #include "ttp_live.h"
 #include "ttp_net.h"  // ttp_net_link_down — the auto-pause gather's second "all gone"
 #include "ttp_progress.h"
+#include "ttp_race.h"  // the preview board races the bench field
 #include "ttp_room.h"
 #include "ttp_runtime.h"
 #include "ttp_session.h"
@@ -50,6 +52,7 @@
 using namespace ttp;
 namespace ui = ttp::rt::ui;
 namespace progression = ttp::rt::progression;
+namespace preview = ttp::rt::preview;
 
 namespace {
 
@@ -84,7 +87,7 @@ std::string g_bufSeats, g_bufGrid, g_bufConnected, g_bufSlot, g_bufDiff,
     g_bufPushes, g_bufWelcome, g_bufFlow, g_bufAutoPause, g_bufSeries,
     g_bufView, g_bufCatalogue, g_bufFlowLive, g_bufAutoLive,
     g_bufSeriesGp, g_bufBoardLive, g_bufViewLive, g_bufFreeze, g_bufResultsAction,
-    g_bufProgress;
+    g_bufProgress, g_bufPreviewProgress, g_bufPreviewBoard;
 
 const char* put(std::string& buf, const Value& v) {
   canonical_stringify_into(v, buf);
@@ -386,6 +389,63 @@ const char* ttp_ui_progress_json(void) {
   // persistence payload, and byte-stability for a given record is the point.
   g_bufProgress = canonical_stringify(progression::serialize(g_progress));
   return g_bufProgress.c_str();
+}
+
+// ---- the screens gallery's fabrications ----------------------------------------
+
+const char* ttp_ui_preview_progress_json(void) {
+  g_bufPreviewProgress =
+      canonical_stringify(progression::serialize(preview::progressRecord(shippedCupIds())));
+  return g_bufPreviewProgress.c_str();
+}
+
+const char* ttp_ui_preview_board_json(const char* kind, const char* trackId, int players,
+                                      double seed, int raceIndex) {
+  preview::Kind k;
+  if (!kind || !preview::parseKind(kind, &k)) return nullptr;
+
+  // The race behind the board is the bench field the harness launched, so the
+  // board names the cars the HUD under it is drawing. The late joiner is the next
+  // seat that roster would hand out.
+  auto racers = [](const char* json) {
+    bool ok = false;
+    const Value v = json::parse(json ? json : "", &ok);
+    std::vector<preview::Racer> out;
+    const Value* field = ok ? v.find("field") : nullptr;
+    if (!field || field->type != Value::ARR) return out;
+    for (const Value& f : field->arr) {
+      preview::Racer r;
+      const Value* id = f.find("peerIndex");
+      if (id && id->type == Value::NUM) r.id = ScalarId::Num(id->num);
+      else if (id && id->type == Value::STR) r.id = ScalarId::Str(id->str);
+      r.name = json::str_field(f, "name");
+      r.colorIndex = (int) json::num_field(f, "colorIndex");
+      r.ai = json::truthy(f.find("ai"));
+      out.push_back(std::move(r));
+    }
+    return out;
+  };
+  const std::vector<preview::Racer> field = racers(ttp_race_bench_field_json(trackId, players, seed));
+  preview::Racer joiner;
+  for (const preview::Racer& r : racers(ttp_race_bench_field_json(trackId, players + 1, seed))) {
+    if (!r.ai) joiner = r;
+  }
+
+  preview::CupRef cup;
+  const std::vector<ui::Cup> cups = ui::shippedCups();
+  const std::vector<ui::CatalogEntry> catalog = ui::shippedCatalog();
+  if (!cups.empty()) {
+    cup.id = cups[0].id;
+    cup.name = cups[0].name;
+    cup.tracks = cups[0].tracks;
+    for (const std::string& t : cup.tracks) {
+      std::string name;
+      for (const ui::CatalogEntry& e : catalog) if (e.id == t) name = e.name;
+      cup.trackNames.push_back(name);
+    }
+  }
+  return put(g_bufPreviewBoard,
+             preview::board(k, field, joiner, cup, ttp_race_intermission_ms(), raceIndex));
 }
 
 // ---- the ttp_progress.h seam (the store's other readers live in sibling shims)

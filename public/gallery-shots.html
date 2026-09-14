@@ -59,6 +59,11 @@
   .shot-meta { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; font-size: 11px; color: #8b88a0; }
   .shot-meta .stale { color: #14131c; background: #ffb703; border-radius: 4px; padding: 1px 6px; font-weight: 700; }
   .shot-meta .fresh { color: #7ee08a; }
+  .store-chip {
+    margin-left: .5rem; padding: 1px 6px; border-radius: 4px; vertical-align: middle;
+    font: 700 10px/1.6 system-ui, sans-serif; letter-spacing: .06em; text-transform: uppercase;
+    color: #fff; background: #5060c0;
+  }
 
   /* `.legend` is absolutely positioned in gallery.css for the tracks gallery's
      side panel. Here it is one sentence, and pinned to the top-right it landed
@@ -82,6 +87,7 @@
   <div class="group">
     <select id="third-platform"></select>
   </div>
+  <div class="group" id="store-zips"></div>
   <div class="group">
     <select id="compare-mode">
       <option value="split" selected>Side by side</option>

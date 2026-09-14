@@ -620,6 +620,11 @@ add_library(libttp_runtime STATIC
   # AND executes it. The device half (AudioContext / the baked cue palette) is
   # per-platform and stays out of this tree entirely.
   libttp-runtime/ttp/audio.cc
+  # The screenshot harnesses' race freeze: when a gallery card's sim moment has
+  # come. Pure over plain inputs; ttp_runtime.cc gathers them from the Game.
+  libttp-runtime/ttp/shot_hold.cc
+  # The screens gallery's fabricated couch and boards (ttp/preview.h).
+  libttp-runtime/ttp/preview.cc
   # The per-cup biome palettes and the rules that resolve one. Data, not
   # rendering: it was authored in the browser (public/shared/themes.js +
   # render/trackPayload.js) until the shells stopped being one.
@@ -770,6 +775,19 @@ add_executable(progression_check runtimetest/progression_check.cc)
 target_link_libraries(progression_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(progression_check)
 add_test(NAME progression COMMAND progression_check)
+
+# ---- Behaviour: the screenshot hold -----------------------------------------
+# Assertions, for progression's reason: ttp/shot_hold.h is new and has no oracle.
+add_executable(shot_hold_check runtimetest/shot_hold_check.cc)
+target_link_libraries(shot_hold_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(shot_hold_check)
+add_test(NAME shot_hold COMMAND shot_hold_check)
+
+# ---- Behaviour: the gallery's fabrications ----------------------------------
+add_executable(preview_check runtimetest/preview_check.cc)
+target_link_libraries(preview_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(preview_check)
+add_test(NAME preview COMMAND preview_check)
 
 # ---- Behaviour: the adaptive render scale -----------------------------------
 # Assertions again, and for the same reason: ttp/render_scale.h is a NEW layer
@@ -1035,6 +1053,10 @@ set(TTP_APP_SOURCES
   # event and half of what it answers is text, so there is nothing to pack.
   runtime/ttp_ui.cc
   runtime/ttp_error.cc
+  # The screenshot harnesses' race freeze, which ttp_update consults.
+  libttp-runtime/ttp/shot_hold.cc
+  # The gallery's fabricated couch and boards, behind ttp_ui_preview_*.
+  libttp-runtime/ttp/preview.cc
   # The race ORCHESTRATION and its ABI — the state machine that calls the
   # predicates above IN ORDER.
   libttp-runtime/ttp/race_flow.cc

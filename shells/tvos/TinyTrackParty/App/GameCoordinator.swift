@@ -702,11 +702,12 @@ final class GameCoordinator: ObservableObject {
     /// launch effects.
     func startRace(countdownSeconds: Int? = nil,
                    forceItem: String? = nil,
-                   sceneReady: Bool? = nil) {
+                   sceneReady: Bool? = nil,
+                   seed: UInt32? = nil) {
         let d = TTP.obj(ttp_race_start_live_json(
             net.roomHandle,
             (sceneReady ?? display.hasScene) ? 1 : 0,
-            Double(UInt32.random(in: .min ... .max)),
+            Double(seed ?? UInt32.random(in: .min ... .max)),
             Double(countdownSeconds ?? proto.countdownSeconds),
             forceItem, nil))
         guard d["action"] as? String == "launch" else {

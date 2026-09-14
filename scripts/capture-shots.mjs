@@ -21,15 +21,16 @@
 //
 // WEBP, NOT PNG. The whole table across three platforms at 1080p PNG is tens of
 // megabytes, which would undo the deliberate 170 -> 87 MB asset work; at 1280x720
-// WebP q80 it is a few. Byte-exactness buys nothing here, because
-// nothing diffs these programmatically: this is a human-judgement surface, and
-// the automated half is coverage and freshness (tests/shots-manifest.test.js).
+// WebP q80 it is a few. The store cards alone are 1080p JPEG (STORE_SHOT).
+// Byte-exactness buys nothing here, because nothing diffs these
+// programmatically: this is a human-judgement surface, and the automated half is
+// coverage and freshness (tests/shots-manifest.test.js).
 
 import path from 'node:path';
 import fs from 'node:fs';
 
-import { CAPTURED_SCENARIOS, scenarioQuery } from '../public/shared/galleryScenarios.js';
-import { gitSha, mergeShots, shotDir } from './lib/shots.mjs';
+import { CAPTURED_SCENARIOS, STORE_SHOT, scenarioQuery } from '../public/shared/galleryScenarios.js';
+import { gitSha, mergeShots, shotDir, shotFile } from './lib/shots.mjs';
 import {
   ROOT, args as parseArgs, serveApp, launchBrowser, waitForScene, encode
 } from './lib/capture.mjs';
@@ -84,7 +85,8 @@ async function main() {
       // scenario, so it takes neither the harness flag nor the dpr pin.
       const url = scenario.page
         ? `http://127.0.0.1:${server.port}${scenario.page}`
-        : `http://127.0.0.1:${server.port}/?test=1&dpr=1&${scenarioQuery(scenario, { players: PLAYERS })}`;
+        : `http://127.0.0.1:${server.port}/?test=1&dpr=1&${scenarioQuery(scenario, { players: PLAYERS })}`
+          + (scenario.hold ? `&hold=${encodeURIComponent(JSON.stringify(scenario.hold))}` : '');
       await page.goto(url, { waitUntil: 'networkidle' });
       // Waits for the harness's scene signal and the self-hosted Fredoka face:
       // without the latter a shot can catch a system fallback and every label is
@@ -93,23 +95,38 @@ async function main() {
       await waitForScene(page, { timeout: 20000 });
       // A scenario's own `settleMs` wins: it names WHICH MOMENT of that screen the
       // card is about, which for the two cup boards is after the re-sort has run.
-      await page.waitForTimeout(scenario.settleMs ?? (scenario.animated ? SETTLE_MS : 400));
+      // A card with a `hold` is a RACE moment, and the engine stops there itself:
+      // wait for it to say so (however long this renderer takes to get there),
+      // then long enough for the DOM chrome dressed at that moment to finish
+      // arriving — an item landing in a cell slot pops in from 1.8x over 0.5 s
+      // (`cellItemPop`), and a 300 ms beat photographed it half-grown.
+      if (scenario.hold) {
+        await page.waitForFunction(() => window.__engine?.shotHeld, null, { timeout: 180000, polling: 100 });
+        await page.waitForTimeout(800);
+      } else {
+        await page.waitForTimeout(scenario.settleMs ?? (scenario.animated ? SETTLE_MS : 400));
+      }
 
       const png = await page.screenshot();
-      const webp = await encode(page, png, { width: OUT_W, height: OUT_H, type: 'image/webp', quality: 0.8 });
-      const file = `${scenario.id}.webp`;
-      fs.writeFileSync(path.join(dir, file), webp);
+      // A store card is STORE_SHOT (the size and format the stores take), the
+      // rest the gallery's WebP.
+      const [w, h, type, quality] = scenario.store
+        ? [STORE_SHOT.w, STORE_SHOT.h, 'image/jpeg', 0.9]
+        : [OUT_W, OUT_H, 'image/webp', 0.8];
+      const bytes = await encode(page, png, { width: w, height: h, type, quality });
+      const file = shotFile(scenario);
+      fs.writeFileSync(path.join(dir, file), bytes);
       entries.push({
         scenario: scenario.id,
         platform: 'web',
         file: `web/${file}`,
-        w: OUT_W,
-        h: OUT_H,
-        bytes: webp.length,
+        w,
+        h,
+        bytes: bytes.length,
         capturedAt: new Date().toISOString(),
         gitSha: sha
       });
-      console.log(`  ${scenario.id.padEnd(14)} ${String(webp.length).padStart(7)} B`);
+      console.log(`  ${scenario.id.padEnd(14)} ${String(bytes.length).padStart(7)} B`);
     }
   } finally {
     if (chrome) await chrome.close();

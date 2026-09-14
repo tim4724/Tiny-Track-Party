@@ -46,6 +46,8 @@ export async function init() {
     catalogue: c('ttp_ui_catalogue_json', 'string', []),
     progressLoad: c('ttp_ui_progress_load', 'number', ['string', 'number']),
     progressJson: c('ttp_ui_progress_json', 'string', []),
+    previewProgress: c('ttp_ui_preview_progress_json', 'string', []),
+    previewBoard: c('ttp_ui_preview_board_json', 'string', ['string', 'string', 'number', 'number', 'number']),
     screenStep: c('ttp_ui_screen_step', 'number', ['string', 'string']),
     backEffect: c('ttp_ui_back_effect', 'string', ['string', 'number', 'number']),
     cover: c('ttp_ui_cover', 'string', ['string', 'number']),
@@ -111,6 +113,14 @@ export function catalogue() { return JSON.parse(fn.catalogue()); }
 // catalogue() above. `unlockAll` is the ?unlockAll=1 dev/test override.
 export function progressLoad(json, unlockAll) { fn.progressLoad(json || '', unlockAll ? 1 : 0); }
 export function progressJson() { return fn.progressJson(); }
+
+// The screens gallery's fabrications (ttp_ui.h): the couch record a preview
+// loads, and a finished board over the bench race the harness launched.
+// `raceIndex` -1 is the card's own cup race.
+export function previewProgress() { return fn.previewProgress(); }
+export function previewBoard(kind, trackId, players, seed, raceIndex = -1) {
+  return JSON.parse(fn.previewBoard(kind, trackId, players, seed, raceIndex));
+}
 
 // ---- screens ---------------------------------------------------------------
 // >0 = a forward step, <0 = a retreat, 0 = same level. WALKING the stack is the

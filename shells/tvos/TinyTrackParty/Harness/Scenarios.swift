@@ -38,6 +38,32 @@ enum Scenarios {
         UserDefaults.standard.string(forKey: "ttpScenario")
     }
 
+    /// A card's race moment, from an optional `-ttpHold <json>` — the table's
+    /// `hold` (`galleryScenarios.js`), which `ttp_shot_hold` arms on the race.
+    ///
+    /// READ OFF THE RAW ARGUMENTS, not `UserDefaults` like its neighbours: the
+    /// argument domain parses a value as a property list, so `{"simMs":5000}`
+    /// arrives as a dictionary and `string(forKey:)` answers nil — every held
+    /// card then shot on the old clock with nothing saying why.
+    static var hold: String? {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-ttpHold"), i + 1 < args.count,
+              !args[i + 1].isEmpty else { return nil }
+        return args[i + 1]
+    }
+
+    /// The circuit a card names (`params.track`), from an optional `-ttpTrack`.
+    static var track: String? {
+        UserDefaults.standard.string(forKey: "ttpTrack").flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    /// The race seed a card pins (`params.seed`), from an optional `-ttpSeed N`;
+    /// nil lets the launch draw its own, as live play does.
+    static var seed: UInt32? {
+        let n = UserDefaults.standard.integer(forKey: "ttpSeed")
+        return n > 0 ? UInt32(n) : nil
+    }
+
     /// How many PLAYER seats a scenario stands up, from an optional
     /// `-ttpPlayers N` (read the same way `-ttpScenario` and `-ttpTrack` are).
     ///
@@ -146,6 +172,7 @@ enum Scenarios {
             // up), no room, no seats, no pick. `release()` drops any scene a
             // previous boot left in the renderer, so the backdrop is deciding
             // this picture rather than an empty 3D view happening to be black.
+            previewProgress(game)
             game.show(.lobby)
             game.trackId = ""
             game.display.release()
@@ -168,11 +195,13 @@ enum Scenarios {
             state.infoPath = id == "info" ? [.info] : [.info, .licenses]
 
         case "lobby-empty":
+            previewProgress(game)
             game.show(.lobby)
             // `maxPlayers`, which is what the seat grid PADS TO, and not how
             // many this launch seats: a two-player couch still shows a full
             // dock, so `-ttpPlayers 2` here would photograph a two-placeholder
             // lobby the game never draws.
+            if let track { game.net.setTrack(track) }
             state.seats = (0..<game.proto.maxPlayers).map(GameState.Seat.open(at:))
             state.cupSlot = nil
             fakeJoin(state, code: "TEST")
@@ -182,7 +211,9 @@ enum Scenarios {
             // `LinkOverlay` (the `set-link` effect), fabricated as the view the
             // effect would have set. The spent budget shows the button, which
             // takes focus as it does live — the card that shows the focus ring.
+            previewProgress(game)
             game.show(.lobby)
+            if let track { game.net.setTrack(track) }
             state.seats = (0..<game.proto.maxPlayers).map(GameState.Seat.open(at:))
             state.cupSlot = nil
             fakeJoin(state, code: "TEST")
@@ -191,6 +222,7 @@ enum Scenarios {
                                    "attempt": gaveUp ? 0 : 3, "max": 5, "button": gaveUp])
 
         case "lobby-tour", "lobby-track", "lobby-random":
+            previewProgress(game)
             game.show(.lobby)
             fakeJoin(state, code: "TEST")
             // THROUGH THE PICK WALK, not around it. A harness may fabricate its
@@ -209,7 +241,7 @@ enum Scenarios {
                 id == "lobby-tour"
                     ? ["mode": "tour"]
                     : id == "lobby-track"
-                    ? ["mode": "track", "trackId": "driftwood"]
+                    ? ["mode": "track", "trackId": track ?? "driftwood"]
                     : ["mode": "random", "randomRaces": 4])
             // The RANDOM FAMILY's draw is the ROOM BAG's now (entropy-seeded),
             // and the World Tour is in it — so the harness pins the photographed
@@ -217,7 +249,7 @@ enum Scenarios {
             // advance takes. The mode stays what was picked; only the preview is
             // made deterministic, which is what stops the gallery churning a
             // different card every capture.
-            if id != "lobby-track" { game.net.setTrack("powder") }
+            if id != "lobby-track" { game.net.setTrack(track ?? "powder") }
             // The scripted seats go on LAST: the pick's track-change refreshes
             // the lobby off the (empty, relay-less) room, and a refresh after
             // this write would photograph four Open placeholders instead of the
@@ -225,22 +257,41 @@ enum Scenarios {
             state.seats = padded(players(playerCount, track: game.trackId))
 
         case "countdown", "racing", "racing-sidewinder",
+             "race-beach", "race-snow", "race-backyard", "race-canyon", "race-playroom",
              "rocket", "monster", "paused", "reconnect", "reconnect-solo", "finished":
-            // `racing-sidewinder` is the deck-decal card: the same race on a
-            // circuit whose hairpins force scrub skids onto the racing line, and
-            // the gallery entry pins it with a `track` param the web reads off
-            // the query string. This column had no case for it at all.
-            if id == "racing-sidewinder" { game.trackId = "sidewinder" }
+            // `racing-sidewinder` (the deck-decal card) and the store's cup
+            // races are all this race on another circuit. The gallery table pins
+            // it with a `track` param, which the runner passes as `-ttpTrack`.
+            //
+            // UNLOCKED FIRST: the launch goes through the pick walk, which
+            // silently refuses a track in a locked cup, and a fresh install has
+            // the Playroom locked — so its card photographed the attract race
+            // instead. `unlockAll` is the engine's own dev override (the web's
+            // `?unlockAll=1`), not a rule of the harness's.
+            _ = ttp_ui_progress_load(nil, 1)
             pinTrack(game)
             game.show(.race)
-            game.startDemoRace(forceItem: forceItem(for: id), humans: playerCount)
-            state.paused = id == "paused"
+            game.startDemoRace(forceItem: forceItem(for: id), humans: playerCount, seed: seed)
+            // The engine gives and fires the item (the showcase rule, shared with the
+            // web preview), so an item card is the same event on every platform.
+            _ = ttp_item_showcase(game.sessionHandle, forceItem(for: id))
+            if let hold, ttp_shot_hold(game.sessionHandle, hold) == 0 {
+                state.lastError = "the engine refused hold \(hold)"
+            }
+            state.paused = false
             state.pauseButtonShown = true
 
         case "results", "intermission", "podium":
+            pinTrack(game)
             game.show(.race)
-            game.startDemoRace(forceItem: nil, humans: playerCount)
-            state.results = fakeResults(kind: id, game: game)
+            game.startDemoRace(forceItem: nil, humans: playerCount, seed: seed)
+            // The board is the engine's fabrication over the same bench race
+            // (`ttp_ui_preview_board_json`), run through the real results view. Only
+            // the intermission dressing carries a deadline.
+            let board = previewBoard(id, game: game)
+            let intermissionMs: Double = id == "intermission" ? ttp_race_intermission_ms() : 0
+            state.results = GameState.ResultsView(
+                TTP.obj(ttp_ui_results_view_json(TTP.json(board), intermissionMs)))
             if id == "intermission" { state.intermissionSecs = 5 }
 
         case "bench":
@@ -309,6 +360,23 @@ enum Scenarios {
         case "countdown":
             try? await Task.sleep(nanoseconds: 1_200_000_000)
             game.state.countdown = "3"
+        case "paused":
+            // The overlay goes up AFTER the hold: raised at stand-up it stopped the
+            // race before the card's moment, so the hold was never reached.
+            game.state.paused = true
+        case "finished":
+            // One PLAYER home while the field races on: the best-placed car that
+            // owns a cell, with the boards' winning time — the web preview's and
+            // `Scenarios.kt`'s twin. This column had no finish at all, so the
+            // card was a plain race. After the hold, so the field is spread out.
+            let hud = game.display.hud()
+            let celled = game.sceneCars.enumerated().filter { $0.element.cell }
+            guard let lead = celled.min(by: {
+                (hud[safe: $0.offset]?.place ?? .max) < (hud[safe: $1.offset]?.place ?? .max)
+            }) else { return }
+            let order = previewBoard("results", game: game)["order"] as? [[String: Any]]
+            let time = (order?.first?["time"] as? NSNumber)?.doubleValue ?? 0
+            ttp_force_finish(game.sessionHandle, lead.element.id.json, time)
         case "reconnect", "reconnect-solo":
             // Float a reconnect QR over one racer's cell — the last one, so the
             // leader's card is not the one obscured. AFTER the field has spread
@@ -359,8 +427,7 @@ enum Scenarios {
     /// and is the bench's circuit axis. An id the catalogue does not contain
     /// fails inside ttp_session_begin, same as every other wrong pick.
     private static func pinTrack(_ game: GameCoordinator) {
-        guard let track = UserDefaults.standard.string(forKey: "ttpTrack"),
-              !track.isEmpty else { return }
+        guard let track else { return }
         game.trackId = track
     }
 
@@ -374,124 +441,17 @@ enum Scenarios {
         }
     }
 
-    /// Lap times and banked cup points for the fabricated boards.
-    /// `public/display/TestHarness.js`'s FAKE_TIMES and FAKE_POINTS, and
-    /// `Scenarios.kt`'s TIMES and BANKED — the same numbers on purpose, so three
-    /// columns of the same board differ only where the UI differs. The banked
-    /// points carry a LEADER SWAP (row 2 leads the cup despite row 1 winning
-    /// this race), which is the only thing on a cup board that shows what the
-    /// race did.
-    private static let times = [28.4, 30.7, 33.1, 35.8, 38.2, 41.0, 44.3, 47.6]
-    private static let banked = [10, 15, 6, 3, 2, 1, 0, 0]
-    /// `native/libttp-sim/ttp/grand_prix.cc`'s ladder, for the fabricated cup
-    /// boards. Not on any ABI, and hand-copied in all three harnesses —
-    /// `tests/harness-mirrors.test.js` pins the copies to it.
-    private static let pointsByRank = [15, 12, 10, 8, 6, 4, 2, 1]
-
-    /// A finished BOARD, fabricated in the shape `ttp_ui_standings_live_json`
-    /// answers (`{over, hostPeerIndex, [series], order:[row…]}`), then run
-    /// through the REAL results view so the podium slicing, the AI suffix, the
-    /// two phases and the time column are the model's answers rather than this
-    /// file's guesses.
-    ///
-    /// The board is fabricated rather than gathered because its gatherer reads
-    /// LIVE handles (the session's ranked rows, the room-retained field) and a
-    /// screenshot scenario has neither — the same privilege the web and Android
-    /// harnesses take. What is NOT fabricated is the view: every key below is a
-    /// board-row key `resultsView` reads, so a renamed field fails the shot.
-    ///
-    /// THE WHOLE FIELD, off the race standing behind the board — not four
-    /// invented rows. The demo launch tops the grid up to the field size with
-    /// CPUs, so `sceneCars` already holds the cars the HUD behind this glass is
-    /// drawing, with the engine's own names and liveries.
-    private static func fakeResults(kind: String, game: GameCoordinator) -> GameState.ResultsView? {
-        // `results` is a plain single race; `intermission` and `podium` are the
-        // two CUP dressings of the same overlay, and until now this shell sent
-        // no series at all — so all three photographed the same plain board and
-        // two thirds of that gallery row said nothing.
-        let cup = kind != "results"
-        var rows: [[String: Any]] = game.sceneCars.enumerated().map { i, car in
-            var row: [String: Any] = [
-                "playerId": car.id.numericOrString,
-                "name": car.name,
-                "colorIndex": car.colorIndex,
-                // The CPU fill, so the board draws the model's AI suffix. A
-                // bot's id is a STRING in this ABI (`ai-0`) and a seat's is a
-                // number (ttp_race.h), which is the whole test — and it beats
-                // the row index, since the scene roster is captured before the
-                // grid is ordered and nothing here should depend on that.
-                "ai": !(car.id.numericOrString is Int),
-                "finished": true,
-                "time": times[i % times.count],
-                // LOAD-BEARING ON THE ROUND TRIP, not just here: racePlace is
-                // what carries the FINISHING order through the cup re-sort
-                // below, and a board that drops it collapses phase 1 into a
-                // table where everyone came first. This shell dropped it.
-                "racePlace": i + 1
-            ]
-            if cup {
-                let gained = i < pointsByRank.count ? pointsByRank[i] : 0
-                row["gained"] = gained
-                row["points"] = banked[i % banked.count] + gained
-            }
-            return row
-        }
-        // Built in FINISHING order, then sorted into CUP order — the two orders
-        // `standingsPayload` produces.
-        if cup {
-            rows.sort { (($0["points"] as? Int) ?? 0) > (($1["points"] as? Int) ?? 0) }
-        } else if let joiner = benchRoster(playerCount + 1, track: game.trackId).last {
-            // The LATE JOINER riding along under the field, which is a row shape
-            // nothing else on the board has: `rowValue` returns early for it, so
-            // every other cell is absent and the card says "Next race" instead
-            // of a time. Only the single-race card carries one, matching the
-            // web's — and their seat is simply the next one the bench roster
-            // would have handed out.
-            rows.append(["playerId": rows.count + 1,
-                         "name": joiner["name"] as? String ?? "",
-                         "colorIndex": int(joiner["colorIndex"]) ?? playerCount,
-                         "joining": true])
-        }
-        var board: [String: Any] = [
-            "over": true,
-            "hostPeerIndex": rows.first?["playerId"] ?? NSNull(),
-            "order": rows
-        ]
-        if cup { board["series"] = fakeSeries(final: kind == "podium") }
-        // Only the intermission dressing carries a deadline; a plain results
-        // board and a cup podium do not. The budget is the layer's number.
-        let intermissionMs: Double = kind == "intermission" ? ttp_race_intermission_ms() : 0
-        return GameState.ResultsView(TTP.obj(ttp_ui_results_view_json(TTP.json(board), intermissionMs)))
+    /// The couch the lobby cards dress: `ttp_ui_preview_progress_json`, loaded like
+    /// a saved record, then through the live road that re-reads the catalogue
+    /// (`persistProgression(nil)` writes no preference).
+    private static func previewProgress(_ game: GameCoordinator) {
+        _ = ttp_ui_progress_load(ttp_ui_preview_progress_json(), 0)
+        game.persistProgression(nil)
     }
 
-    /// The cup half of a fabricated board: the shipped catalogue's first cup,
-    /// mid-run for the intermission and on its last race for the podium.
-    ///
-    /// `nextTrackName` is resolved HERE rather than by the model: the live
-    /// gatherer builds this block off the room's series and hands the resolved
-    /// name over, so `boardOf` takes it as given.
-    private static func fakeSeries(final: Bool) -> [String: Any] {
-        let catalogue = TTP.obj(ttp_ui_catalogue_json())
-        let cupRow = (catalogue["cups"] as? [[String: Any]] ?? []).first ?? [:]
-        let tracks = (cupRow["tracks"] as? [String]) ?? []
-        let raceIndex = final ? max(tracks.count - 1, 0) : 1
-        let next = final ? nil : tracks[safe: raceIndex + 1]
-        let catalog = catalogue["catalog"] as? [[String: Any]] ?? []
-        let nextName = next.flatMap { id in
-            catalog.first { $0["id"] as? String == id }?["name"] as? String
-        }
-        return [
-            "cupId": cupRow["id"] ?? NSNull(),
-            "cupName": cupRow["name"] ?? NSNull(),
-            "endless": false,
-            "raceIndex": raceIndex,
-            "raceCount": max(tracks.count, 1),
-            "nextTrackId": next ?? NSNull(),
-            "nextTrackName": nextName ?? NSNull(),
-            // `final` on the wire, `isFinal` in C++, and it is what BOTH the
-            // podium and the intermission dressings are derived from.
-            "final": final,
-            "autoAdvanceMs": ttp_race_intermission_ms()
-        ]
+    /// A finished board over the bench race this card launched — the engine's
+    /// fabrication, shared with the web and Android harnesses.
+    private static func previewBoard(_ kind: String, game: GameCoordinator) -> [String: Any] {
+        TTP.obj(ttp_ui_preview_board_json(kind, game.trackId, Int32(playerCount), Double(seed ?? 1), -1))
     }
 }

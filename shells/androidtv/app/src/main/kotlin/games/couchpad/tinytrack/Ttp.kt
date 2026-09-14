@@ -15,7 +15,7 @@ import java.nio.ByteBuffer
 
 @Suppress("FunctionName", "unused")
 object Ttp {
-    /** Registers all 229 natives via JNI_OnLoad; a mismatch fails here. */
+    /** Registers all 234 natives via JNI_OnLoad; a mismatch fails here. */
     fun load() { System.loadLibrary("ttp_runtime_android") }
 
     external fun ttp_add_bot(h: Int, idJson: ByteArray?, caution: Double, laneBias: Double, aiSeed: Int, statsJsonOrNull: ByteArray?)
@@ -118,6 +118,7 @@ object Ttp {
     external fun ttp_has_car(h: Int, idJson: ByteArray?): Int
     external fun ttp_hold_end(h: Int, on: Int)
     external fun ttp_item_id(code: Int): ByteArray?
+    external fun ttp_item_showcase(h: Int, kind: ByteArray?): Int
     external fun ttp_last_error(): ByteArray?
     external fun ttp_link_create(): Int
     external fun ttp_link_dispose(h: Int)
@@ -201,6 +202,8 @@ object Ttp {
     external fun ttp_session_begin_field(trackId: ByteArray?, seed: Int, laps: Int, forceItemOrNull: ByteArray?, fieldJson: ByteArray?, botsJson: ByteArray?): Int
     external fun ttp_session_start(h: Int, countdownSeconds: Int)
     external fun ttp_set_steer_expo(v: Double)
+    external fun ttp_shot_held(h: Int): Int
+    external fun ttp_shot_hold(h: Int, holdJson: ByteArray?): Int
     external fun ttp_showcase_inventory_json(): ByteArray?
     external fun ttp_snapshot_json(h: Int): ByteArray?
     external fun ttp_theme_biome_count(): Int
@@ -232,6 +235,8 @@ object Ttp {
     external fun ttp_ui_intermission_secs(deadlineMs: Double, nowMs: Double): Double
     external fun ttp_ui_item_pushes_live_json(sessionHandle: Int): ByteArray?
     external fun ttp_ui_neutral_tint_rgb(pct: Double): Int
+    external fun ttp_ui_preview_board_json(kind: ByteArray?, trackId: ByteArray?, players: Int, seed: Double, raceIndex: Int): ByteArray?
+    external fun ttp_ui_preview_progress_json(): ByteArray?
     external fun ttp_ui_progress_json(): ByteArray?
     external fun ttp_ui_progress_load(jsonOrNull: ByteArray?, unlockAll: Int): Int
     external fun ttp_ui_race_flow_live_json(sessionHandle: Int, roomHandle: Int): ByteArray?

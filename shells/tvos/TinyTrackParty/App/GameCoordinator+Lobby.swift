@@ -218,7 +218,7 @@ extension GameCoordinator {
     /// screenshot scenarios. It is the same session the real race uses — a
     /// harness that faked the field would photograph a screen the game cannot
     /// produce.
-    func startDemoRace(forceItem: String?, humans: Int) {
+    func startDemoRace(forceItem: String?, humans: Int, seed: UInt32? = nil) {
         let catalogue = TTP.obj(ttp_ui_catalogue_json())
         if trackId.isEmpty {
             // No literal fallback: a hardcoded track id that the catalogue does
@@ -283,6 +283,6 @@ extension GameCoordinator {
         // but it must not own a second copy of the road: the start below is
         // `ttp_race_start_live_json`, the one the live game runs, so a break in
         // the launch breaks the shots too.
-        startRace(countdownSeconds: 0, forceItem: forceItem, sceneReady: true)
+        startRace(countdownSeconds: 0, forceItem: forceItem, sceneReady: true, seed: seed)
     }
 }

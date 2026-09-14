@@ -46,6 +46,9 @@ export async function init() {
     resume: c('ttp_resume', null, ['number']),
     racing: c('ttp_racing', 'number', ['number']),
     paused: c('ttp_paused', 'number', ['number']),
+    shotHold: c('ttp_shot_hold', 'number', ['number', 'string']),
+    shotHeld: c('ttp_shot_held', 'number', ['number']),
+    itemShowcase: c('ttp_item_showcase', 'number', ['number', 'string']),
     dispose: c('ttp_dispose', null, ['number']),
     setSteerExpo: c('ttp_set_steer_expo', null, ['number']),
     getSteerExpo: c('ttp_get_steer_expo', 'number', [])
@@ -118,6 +121,15 @@ export class NativeRaceSession {
     this._racingCache = true;
     this._drain();
   }
+
+  // The screenshot hold (ttp_shot_hold): the race stops at the card's moment.
+  // False when the engine refused the hold.
+  shotHold(hold) { return !!(this.h && fn.shotHold(this.h, JSON.stringify(hold))); }
+  get shotHeld() { return !!(this.h && fn.shotHeld(this.h)); }
+
+  // The item previews' showcase (ttp_item_showcase): the engine gives and fires
+  // the item itself. 'rocket' | 'monster'; null turns it off.
+  itemShowcase(kind) { if (this.h) fn.itemShowcase(this.h, kind || null); }
 
   update(dtMs) {
     if (this._ended || !this.h) return;

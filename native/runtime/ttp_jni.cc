@@ -629,6 +629,11 @@ jbyteArray n_ttp_item_id(JNIEnv* env, jclass, jint a0) {
     return toBytes(env, ttp_item_id((int) a0));
 }
 
+jint n_ttp_item_showcase(JNIEnv* env, jclass, jint a0, jbyteArray a1) {
+    CStr s1(env, a1);
+    return (jint) ttp_item_showcase((int) a0, s1.get());
+}
+
 jbyteArray n_ttp_last_error(JNIEnv* env, jclass) {
     (void) env;
     return toBytes(env, ttp_last_error());
@@ -1065,6 +1070,16 @@ void n_ttp_set_steer_expo(JNIEnv* env, jclass, jdouble a0) {
     ttp_set_steer_expo((double) a0);
 }
 
+jint n_ttp_shot_held(JNIEnv* env, jclass, jint a0) {
+    (void) env;
+    return (jint) ttp_shot_held((int) a0);
+}
+
+jint n_ttp_shot_hold(JNIEnv* env, jclass, jint a0, jbyteArray a1) {
+    CStr s1(env, a1);
+    return (jint) ttp_shot_hold((int) a0, s1.get());
+}
+
 jbyteArray n_ttp_showcase_inventory_json(JNIEnv* env, jclass) {
     (void) env;
     return toBytes(env, ttp_showcase_inventory_json());
@@ -1221,6 +1236,17 @@ jbyteArray n_ttp_ui_item_pushes_live_json(JNIEnv* env, jclass, jint a0) {
 jint n_ttp_ui_neutral_tint_rgb(JNIEnv* env, jclass, jdouble a0) {
     (void) env;
     return (jint) ttp_ui_neutral_tint_rgb((double) a0);
+}
+
+jbyteArray n_ttp_ui_preview_board_json(JNIEnv* env, jclass, jbyteArray a0, jbyteArray a1, jint a2, jdouble a3, jint a4) {
+    CStr s0(env, a0);
+    CStr s1(env, a1);
+    return toBytes(env, ttp_ui_preview_board_json(s0.get(), s1.get(), (int) a2, (double) a3, (int) a4));
+}
+
+jbyteArray n_ttp_ui_preview_progress_json(JNIEnv* env, jclass) {
+    (void) env;
+    return toBytes(env, ttp_ui_preview_progress_json());
 }
 
 jbyteArray n_ttp_ui_progress_json(JNIEnv* env, jclass) {
@@ -1405,6 +1431,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_has_car", "(I[B)I", (void*) n_ttp_has_car },
     { "ttp_hold_end", "(II)V", (void*) n_ttp_hold_end },
     { "ttp_item_id", "(I)[B", (void*) n_ttp_item_id },
+    { "ttp_item_showcase", "(I[B)I", (void*) n_ttp_item_showcase },
     { "ttp_last_error", "()[B", (void*) n_ttp_last_error },
     { "ttp_link_create", "()I", (void*) n_ttp_link_create },
     { "ttp_link_dispose", "(I)V", (void*) n_ttp_link_dispose },
@@ -1488,6 +1515,8 @@ const JNINativeMethod kMethods[] = {
     { "ttp_session_begin_field", "([BII[B[B[B)I", (void*) n_ttp_session_begin_field },
     { "ttp_session_start", "(II)V", (void*) n_ttp_session_start },
     { "ttp_set_steer_expo", "(D)V", (void*) n_ttp_set_steer_expo },
+    { "ttp_shot_held", "(I)I", (void*) n_ttp_shot_held },
+    { "ttp_shot_hold", "(I[B)I", (void*) n_ttp_shot_hold },
     { "ttp_showcase_inventory_json", "()[B", (void*) n_ttp_showcase_inventory_json },
     { "ttp_snapshot_json", "(I)[B", (void*) n_ttp_snapshot_json },
     { "ttp_theme_biome_count", "()I", (void*) n_ttp_theme_biome_count },
@@ -1519,6 +1548,8 @@ const JNINativeMethod kMethods[] = {
     { "ttp_ui_intermission_secs", "(DD)D", (void*) n_ttp_ui_intermission_secs },
     { "ttp_ui_item_pushes_live_json", "(I)[B", (void*) n_ttp_ui_item_pushes_live_json },
     { "ttp_ui_neutral_tint_rgb", "(D)I", (void*) n_ttp_ui_neutral_tint_rgb },
+    { "ttp_ui_preview_board_json", "([B[BIDI)[B", (void*) n_ttp_ui_preview_board_json },
+    { "ttp_ui_preview_progress_json", "()[B", (void*) n_ttp_ui_preview_progress_json },
     { "ttp_ui_progress_json", "()[B", (void*) n_ttp_ui_progress_json },
     { "ttp_ui_progress_load", "([BI)I", (void*) n_ttp_ui_progress_load },
     { "ttp_ui_race_flow_live_json", "(II)[B", (void*) n_ttp_ui_race_flow_live_json },

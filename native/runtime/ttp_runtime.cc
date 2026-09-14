@@ -11,6 +11,7 @@
 #include "ttp_audio.h"
 #include "ttp_session.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <map>
@@ -28,6 +29,7 @@
 #include "ttp/game.h"
 #include "ttp/jsonnum.h"
 #include "ttp/race_track.h"
+#include "ttp/shot_hold.h"
 #include "ttp/race_track_json.h"
 #include "ttp/schematic.h"
 #include "ttp/json_parse.h"
@@ -284,6 +286,16 @@ struct RuntimeSession {
   bool racingBare = false;
   bool pausedBare = false;
 
+  // A screenshot card's freeze (ttp/shot_hold.h). Armed only by the gallery
+  // harnesses, through ttp_shot_hold.
+  bool holdArmed = false;
+  ttp::rt::shot_hold::Spec hold;
+  ttp::rt::shot_hold::State holdState;
+  double holdAccumMs = 0;  // frame time not yet spent in fixed steps
+  // The preview's item showcase (ttp_item_showcase).
+  ttp::rt::shot_hold::Showcase showcase = ttp::rt::shot_hold::Showcase::None;
+  ttp::rt::shot_hold::ShowcaseState showcaseState;
+
   std::unique_ptr<Game> game;            // bare-mode owner
   std::unique_ptr<RaceSession> session;  // countdown-mode owner
   Game* eng = nullptr;
@@ -318,6 +330,25 @@ static int g_next = 1;
 static RuntimeSession* get(int h) {
   auto it = g_sessions.find(h);
   return it == g_sessions.end() ? nullptr : it->second.get();
+}
+
+// ---- the screenshot hold's inputs (ttp/shot_hold.h decides) ----
+// A viewer is every car that is not a non-player bot — the audio's listener
+// rule (audioAiIds), so "near the viewer" means near a car with a camera.
+static std::vector<ttp::rt::shot_hold::CarView> holdCars(const RuntimeSession& rs) {
+  std::vector<ttp::rt::shot_hold::CarView> out;
+  out.reserve(rs.eng->cars().size());
+  for (const auto& cp : rs.eng->cars()) {
+    bool ai = false;
+    for (const auto& b : rs.bots) if (!b.player && b.id == cp->id) ai = true;
+    out.push_back({cp->totalS, cp->monsterT > 0, !ai, cp->finished});
+  }
+  return out;
+}
+
+static void noteHoldEvent(RuntimeSession& rs, const Event& e) {
+  if (rs.holdArmed && rs.eng && e.type == "spin" && e.cause == "rocket")
+    ttp::rt::shot_hold::noteRocketHit(rs.hold, rs.holdState, rs.eng->elapsed());
 }
 
 // Track assembly is shared (ttp/race_track.h) so the ABI, the replay/record CLI
@@ -373,6 +404,7 @@ static void buildSession(RuntimeSession* rs) {
   auto onEvent = [self](const Event& e) {
       self->outQueue.push_back(e.toValue());
       audio_tap_event(self->handle, e);
+      noteHoldEvent(*self, e);
     };
   auto onTick = [self](int n) {
       Value c = Value::Obj();
@@ -1017,6 +1049,7 @@ void ttp_session_start(int h, int countdownSeconds) {
     auto onEvent = [self](const Event& e) {
       self->outQueue.push_back(e.toValue());
       audio_tap_event(self->handle, e);
+      noteHoldEvent(*self, e);
     };
     rs->game = std::make_unique<Game>(players, rs->track, onEvent, rs->forceItem);
     rs->eng = rs->game.get();
@@ -1029,19 +1062,54 @@ void ttp_session_start(int h, int countdownSeconds) {
   rs->session->startCountdown(countdownSeconds);
 }
 
-void ttp_update(int h, double dtMs) {
-  RuntimeSession* rs = get(h);
-  if (!rs || !rs->started) return;
+// One step of dtMs, then the item showcase's decision for that step.
+static void stepSession(RuntimeSession* rs, double dtMs) {
+  bool racing;
   if (rs->bare) {
     if (rs->pausedBare) return;
-    if (rs->racingBare) {
+    racing = rs->racingBare;
+    if (racing) {
       rs->driveBots();
       rs->eng->update(dtMs);
     }
   } else {
     if (rs->session->paused()) return;
-    if (rs->session->racing()) rs->driveBots();  // drive-then-update, only while racing
+    racing = rs->session->racing();
+    if (racing) rs->driveBots();  // drive-then-update, only while racing
     rs->session->update(dtMs);
+  }
+  if (!racing || rs->showcase == ttp::rt::shot_hold::Showcase::None) return;
+  const auto cars = holdCars(*rs);
+  const int pick = ttp::rt::shot_hold::showcasePick(rs->showcase, rs->showcaseState, dtMs / 1000, cars);
+  if (pick < 0) return;
+  const Id id = rs->eng->cars()[pick]->id;
+  rs->eng->giveItem(id, rs->showcase == ttp::rt::shot_hold::Showcase::Monster ? "monster" : "rocket",
+                    false, 0);
+  rs->eng->useItem(id);
+}
+
+void ttp_update(int h, double dtMs) {
+  RuntimeSession* rs = get(h);
+  if (!rs || !rs->started) return;
+  if (!rs->holdArmed || !rs->eng) {
+    stepSession(rs, dtMs);
+    return;
+  }
+  // A HELD race steps in fixed increments (ttp/shot_hold.h), so the card is
+  // the same race at any frame rate. A backlog past a few steps is dropped: a
+  // slow renderer then takes longer to reach the moment, never a different one.
+  namespace sh = ttp::rt::shot_hold;
+  constexpr int MAX_STEPS = 6;
+  rs->holdAccumMs = std::min(rs->holdAccumMs + dtMs, MAX_STEPS * sh::FIXED_STEP_MS);
+  while (rs->holdAccumMs >= sh::FIXED_STEP_MS) {
+    rs->holdAccumMs -= sh::FIXED_STEP_MS;
+    const double ms = 1000 * sh::allow(rs->hold, rs->holdState, rs->eng->elapsed(),
+                                       sh::FIXED_STEP_MS / 1000, holdCars(*rs));
+    if (ms <= 0) {
+      rs->holdAccumMs = 0;
+      return;
+    }
+    stepSession(rs, ms);
   }
 }
 
@@ -1218,6 +1286,39 @@ int ttp_racing(int h) {
   if (!rs || !rs->started) return 0;
   if (rs->session) return rs->session->racing() ? 1 : 0;
   return rs->racingBare ? 1 : 0;
+}
+
+int ttp_shot_hold(int h, const char* holdJson) {
+  RuntimeSession* rs = get(h);
+  if (!rs || !holdJson) return 0;
+  bool ok = false;
+  const Value blob = json::parse(holdJson, &ok);
+  ttp::rt::shot_hold::Spec spec;
+  if (!ok || !ttp::rt::shot_hold::parse(blob, &spec)) return 0;
+  rs->hold = spec;
+  rs->holdState = {};
+  rs->holdArmed = true;
+  // A plain hold a STARTED race already stands at is held now, not on the next
+  // step: a still preview (the countdown grid) never steps at all. Not before the
+  // start — a TV launch arms before its countdown gate releases, and a hold held
+  // then let the harness shoot before the launch's GO beat had been performed.
+  if (spec.on == ttp::rt::shot_hold::On::None && rs->started && rs->eng
+      && rs->eng->elapsed() >= spec.simS)
+    rs->holdState.held = true;
+  return 1;
+}
+
+int ttp_item_showcase(int h, const char* kind) {
+  RuntimeSession* rs = get(h);
+  if (!rs) return 0;
+  rs->showcase = ttp::rt::shot_hold::parseShowcase(kind);
+  rs->showcaseState = {};
+  return 1;
+}
+
+int ttp_shot_held(int h) {
+  RuntimeSession* rs = get(h);
+  return rs && rs->holdArmed && rs->holdState.held ? 1 : 0;
 }
 
 int ttp_paused(int h) {

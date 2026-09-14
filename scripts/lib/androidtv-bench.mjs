@@ -43,6 +43,8 @@ export const SCENARIO = 'bench';
 export const EXTRA_SCENARIO = 'ttpScenario';
 export const EXTRA_TRACK = 'ttpTrack';
 export const EXTRA_PLAYERS = 'ttpPlayers';
+export const EXTRA_HOLD = 'ttpHold';
+export const EXTRA_SEED = 'ttpSeed';
 
 /** A cold launch builds a scene and bakes a shadow map before it says so. */
 export const READY_TIMEOUT_MS = 120_000;

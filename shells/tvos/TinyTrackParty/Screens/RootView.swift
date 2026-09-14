@@ -246,6 +246,15 @@ struct RootView: View {
             try? await Task.sleep(nanoseconds: 50_000_000)
         }
         try? await Task.sleep(nanoseconds: 1_000_000_000)
+        // A HELD card is a race moment, not a settle: the engine stops the race
+        // there itself (`ttp_shot_hold`), so wait until it says so, then one beat
+        // for the held frame to reach the panel.
+        if Scenarios.hold != nil {
+            for _ in 0..<1800 where ttp_shot_held(game.sessionHandle) == 0 {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
         // Last, on a settled screen: see `Scenarios.settle` for the one thing
         // that cannot be written any earlier.
         await Scenarios.settle(id, to: game)

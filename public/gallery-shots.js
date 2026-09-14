@@ -17,24 +17,27 @@
 // hand-maintained lists of "what screens exist" is how a gallery ends up silently
 // missing a screen somebody added six months ago.
 //
+// THE STORE LISTING IS A SET OF THESE CARDS (`store` in the table), so the
+// header offers each TV's set as a zip in listing order, ready for the App Store
+// and Play consoles. There is no other copy of the store pictures.
+//
 // THE STALENESS CHIP IS NOT DECORATION. A gallery of silently out-of-date
 // screenshots is worse than no gallery: it reads as evidence while being a
 // photograph of a build nobody is running. Each card carries the short SHA it was
 // captured at, and says so plainly when that is not the SHA being served.
 
-import { CAPTURED_SCENARIOS, SHOT_PLATFORMS } from '/shared/galleryScenarios.js';
+import { CAPTURED_SCENARIOS, SHOT_PLATFORMS, STORE_SCENARIOS } from '/shared/galleryScenarios.js';
+import { zipStored } from '/gallery-zip.js';
 
 const SHOTS_BASE = '/assets/shots';
 
 // Human names for the ids in SHOT_PLATFORMS. Every read falls back to the raw id,
-// so a platform missing from here renders as "androidtv-emu" rather than breaking —
+// so a platform missing from here renders as "androidtv" rather than breaking —
 // which is the failure mode you want, but it is still worth a name.
 const PLATFORM_LABEL = {
   web: 'Web',
-  'tvos-device': 'Apple TV (device)',
-  'tvos-sim': 'Apple TV (simulator)',
-  'androidtv-device': 'Android TV (device)',
-  'androidtv-emu': 'Android TV (emulator)'
+  tvos: 'Apple TV',
+  androidtv: 'Android TV'
 };
 
 // The command that fills each column, said in full where a column is empty —
@@ -42,16 +45,14 @@ const PLATFORM_LABEL = {
 // npm script names and string surgery over them would rot without failing.
 const CAPTURE_COMMAND = {
   web: 'npm run shots:web',
-  'tvos-device': 'npm run shots:tvos',
-  'tvos-sim': 'npm run shots:tvos-sim',
-  'androidtv-device': 'npm run shots:androidtv',
-  'androidtv-emu': 'npm run shots:androidtv-emu'
+  tvos: 'npm run shots:tvos (or shots:tvos-sim)',
+  androidtv: 'npm run shots:androidtv (or shots:androidtv-emu)'
 };
 const captureHint = (p) => CAPTURE_COMMAND[p] || `a capture for ${p}`;
 
 const state = {
   left: 'web',
-  right: 'tvos-device',
+  right: 'tvos',
   // A third column, or '' for the two-column default. It is always a whole
   // picture: the compare modes are about the first two.
   third: '',
@@ -99,7 +100,11 @@ function metaLine(shot) {
   }
   line.appendChild(el('span', null, `${shot.w}x${shot.h}`));
   line.appendChild(el('span', null, `${Math.round(shot.bytes / 1024)} KB`));
-  if (shot.deviceName) line.appendChild(el('span', null, shot.deviceName));
+  // One column per TV holds device and simulator shots alike, so say which.
+  if (shot.deviceName) {
+    line.appendChild(el('span', null,
+      shot.deviceKind ? `${shot.deviceName} (${shot.deviceKind})` : shot.deviceName));
+  }
   // COMPARED AS A PREFIX, not for equality. Both sides are abbreviations of the
   // same 40-char sha, and neither picked its own length: the server slices 7
   // (`getShortSha`, shared with the version badge) while the capture scripts take
@@ -113,7 +118,9 @@ function metaLine(shot) {
 
 function makeCard(scenario) {
   const card = el('article', 'card');
-  card.appendChild(el('h2', null, scenario.title));
+  const title = el('h2', null, scenario.title);
+  if (scenario.store) title.appendChild(el('span', 'store-chip', `store #${scenario.store}`));
+  card.appendChild(title);
 
   // The columns, resolved once: '' for the third means two columns.
   const columns = [state.left, state.right, state.third].filter(Boolean)
@@ -253,6 +260,42 @@ function fillPlatformSelects() {
   });
 }
 
+/** The TVs' store sets, one button each: the files zipped in listing order. */
+function fillStoreButtons() {
+  const host = document.getElementById('store-zips');
+  host.textContent = '';
+  for (const platform of SHOT_PLATFORMS.filter((p) => p !== 'web')) {
+    const shots = STORE_SCENARIOS.map((s) => [s, shotFor(s.id, platform)]).filter(([, shot]) => shot);
+    const label = PLATFORM_LABEL[platform] || platform;
+    const count = shots.length === STORE_SCENARIOS.length
+      ? `${shots.length}` : `${shots.length} of ${STORE_SCENARIOS.length}`;
+    const btn = el('button', 'ctrl', `${label} store shots (${count}) .zip`);
+    btn.disabled = shots.length === 0;
+    btn.title = `The ${label} store listing, numbered in store order`;
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      try {
+        const files = [];
+        for (const [scenario, shot] of shots) {
+          const res = await fetch(`${SHOTS_BASE}/${shot.file}`);
+          if (!res.ok) throw new Error(`${shot.file}: HTTP ${res.status}`);
+          const ext = shot.file.split('.').pop();
+          files.push({ name: `${scenario.store}-${scenario.id}.${ext}`,
+                       data: new Uint8Array(await res.arrayBuffer()) });
+        }
+        const a = el('a');
+        a.href = URL.createObjectURL(zipStored(files));
+        a.download = `tinytrack-${platform}-store-screenshots.zip`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+    host.appendChild(btn);
+  }
+}
+
 async function main() {
   fillPlatformSelects();
   try {
@@ -264,6 +307,7 @@ async function main() {
   // Empty in a production image (no SHA to compare against), which just means no
   // staleness chip rather than a broken page.
   servedSha = document.querySelector('meta[name="ttp-git-sha"]')?.content || null;
+  fillStoreButtons();
   render();
 }
 

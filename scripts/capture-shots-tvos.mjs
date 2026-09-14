@@ -1,5 +1,6 @@
 // Photograph the Apple TV, one shot per gallery scenario, into
-// public/assets/shots/tvos-device/ (or tvos-sim/).
+// public/assets/shots/tvos/ — from the device or the simulator, whichever ran
+// last; each row records which (`deviceKind`).
 //
 //   npm run shots:tvos          # the paired device, "Spielzimmer"
 //   npm run shots:tvos-sim      # the Apple TV 4K simulator
@@ -37,7 +38,7 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 import { CAPTURED_SCENARIOS } from '../public/shared/galleryScenarios.js';
-import { gitSha, mergeShots, shotDir, toWebp } from './lib/shots.mjs';
+import { gitSha, mergeShots, writeShot } from './lib/shots.mjs';
 import { shotTestMethod } from '../shells/tvos/scripts/gen-scenarios.mjs';
 import { sh, resolveDestination, resolveDevicectlId, signingArgs, assertAwake } from './lib/tvos-device.mjs';
 
@@ -51,7 +52,7 @@ const args = Object.fromEntries(
 );
 
 const SIM = !!args.sim;
-const PLATFORM = SIM ? 'tvos-sim' : 'tvos-device';
+const PLATFORM = 'tvos';
 const OUT_W = parseInt(args.outWidth, 10) || 1280;
 
 const only = typeof args.only === 'string' ? new Set(args.only.split(',')) : null;
@@ -72,9 +73,8 @@ const scenarios = CAPTURED_SCENARIOS.filter((s) => !only || only.has(s.id));
 
 
 
-// `gitSha` and `toWebp` are in `lib/shots.mjs` — every leg that photographs a real
-// device arrives holding a PNG and needs the same two, and the Android capture is
-// the third caller.
+// `gitSha` and `writeShot` are in `lib/shots.mjs` — every leg that photographs a
+// real device arrives holding a PNG and needs the same two.
 
 // The signing identity and the device lookup both live in `lib/tvos-device.mjs`
 // now, shared with the lifecycle gate. A team ID is deliberately NOT in
@@ -97,9 +97,10 @@ async function main() {
 
   const destination = resolveDestination({ sim: SIM, device: args.device });
   if (!SIM) assertAwake(resolveDevicectlId());
-  console.log(`==> ${PLATFORM}: ${destination}`);
+  const leg = SIM ? 'tvos-sim' : 'tvos-device';
+  console.log(`==> ${leg}: ${destination}`);
 
-  const bundle = path.join(os.tmpdir(), `ttp-shots-${PLATFORM}.xcresult`);
+  const bundle = path.join(os.tmpdir(), `ttp-shots-${leg}.xcresult`);
   fs.rmSync(bundle, { recursive: true, force: true });
 
   // ONE `xcodebuild test`: the build, sign and install dominate the wall clock,
@@ -131,7 +132,7 @@ async function main() {
     '-scheme', 'TinyTrackParty',
     '-destination', destination,
     '-resultBundlePath', bundle,
-    '-derivedDataPath', path.join(os.tmpdir(), `ttp-dd-${PLATFORM}`),
+    '-derivedDataPath', path.join(os.tmpdir(), `ttp-dd-${leg}`),
     ...(only
       ? scenarios.map((s) => `-only-testing:TinyTrackPartyShots/ShotTests/${shotTestMethod(s.id)}`)
       : ['-only-testing:TinyTrackPartyShots/ShotTests']),
@@ -142,7 +143,7 @@ async function main() {
   // Attachments come out named by the XCTAttachment's own `name`, prefixed onto
   // suggestedHumanReadableName — which is why the test names each one after its
   // scenario and the rename below is a lookup rather than a guess.
-  const exported = path.join(os.tmpdir(), `ttp-att-${PLATFORM}`);
+  const exported = path.join(os.tmpdir(), `ttp-att-${leg}`);
   fs.rmSync(exported, { recursive: true, force: true });
   sh('xcrun', ['xcresulttool', 'export', 'attachments',
     '--path', bundle, '--output-path', exported]);
@@ -150,8 +151,6 @@ async function main() {
   const manifestJson = JSON.parse(fs.readFileSync(path.join(exported, 'manifest.json'), 'utf8'));
   const attachments = manifestJson.flatMap((t) => t.attachments || []);
 
-  const dir = shotDir(ROOT, PLATFORM);
-  fs.mkdirSync(dir, { recursive: true });
   const sha = gitSha(ROOT);
   const entries = [];
 
@@ -163,24 +162,18 @@ async function main() {
     // not a failure; a scenario the app genuinely failed to reach shows up as
     // an XCTFail in the test output above.
     if (!att) { console.warn(`  ${scenario.id}: no attachment (unsupported here, or see test failures above)`); continue; }
-    const src = path.join(exported, att.exportedFileName);
-    const file = `${scenario.id}.webp`;
-    const dest = path.join(dir, file);
-    toWebp(src, dest, OUT_W);
-    const { size } = fs.statSync(dest);
+    const shot = writeShot(ROOT, PLATFORM, scenario, path.join(exported, att.exportedFileName), OUT_W);
     entries.push({
       scenario: scenario.id,
       platform: PLATFORM,
-      file: `${PLATFORM}/${file}`,
-      w: OUT_W,
-      h: Math.round((OUT_W * 1080) / 1920),
-      bytes: size,
+      ...shot,
       capturedAt: new Date().toISOString(),
       gitSha: sha,
       deviceName: att.deviceName,
+      deviceKind: SIM ? 'simulator' : 'device',
       deviceId: att.deviceId
     });
-    console.log(`  ${scenario.id.padEnd(14)} ${String(size).padStart(7)} B  ${att.deviceName || ''}`);
+    console.log(`  ${scenario.id.padEnd(14)} ${String(shot.bytes).padStart(7)} B  ${att.deviceName || ''}`);
   }
 
   mergeShots(ROOT, PLATFORM, entries);

@@ -727,11 +727,11 @@ class GameCoordinator(
      * effects.
      */
     fun startRace(countdownSeconds: Int? = null, forceItem: String? = null,
-                  sceneReady: Boolean? = null) {
+                  sceneReady: Boolean? = null, seed: UInt? = null) {
         val d = TtpJson.obj(Ttp.ttp_race_start_live_json(
             net.roomHandle,
             if (sceneReady ?: display.hasScene) 1 else 0,
-            Random.nextInt().toUInt().toDouble(),
+            (seed ?: Random.nextInt().toUInt()).toDouble(),
             (countdownSeconds ?: proto.countdownSeconds).toDouble(),
             TtpJson.arg(forceItem), null))
         if (d.optString("action") != "launch") {
@@ -775,17 +775,27 @@ class GameCoordinator(
      * the post-GO auto-pause re-check walked straight past it, read an empty room as
      * a race with nobody in it, and returned every shot to the lobby.
      */
-    fun startDemoRace(pick: JSONObject, forceItem: String?, humans: Int) {
+    fun startDemoRace(pick: JSONObject, forceItem: String?, humans: Int, seed: UInt? = null) {
         net.applyPick(pick)
-        for (i in 0 until humans) {
+        // WHO the seats are is the engine's BENCH ROSTER (race_flow.h
+        // benchPlayers), as on tvOS and the web preview: a car model carries its
+        // stats, so a seat on its own model here raced a different race than the
+        // same card on the other two platforms.
+        val bench = TtpJson.obj(Ttp.ttp_race_bench_field_json(
+            TtpJson.arg(TtpJson.optStr(pick, "trackId")), humans, 0.0))
+        val rows = bench.optJSONArray("field") ?: JSONArray()
+        var seat = 0
+        for (r in 0 until rows.length()) {
+            val row = rows.optJSONObject(r) ?: continue
+            if (row.optBoolean("ai")) continue
             // A NUMERIC peer index, which is what a phone's seat really is —
             // `EngineId.string("1")` and `EngineId.number(1)` are two different
             // players to `ttp::parse_scalar_id`.
-            val id = EngineId.number(i + 1)
+            val id = EngineId.number(++seat)
             Ttp.ttp_room_add_player(net.roomHandle, TtpJson.arg(id.json), TtpJson.arg(JSONObject()
-                .put("name", Scenarios.nameFor(i))
-                .put("colorIndex", i)
-                .put("carIndex", i)
+                .put("name", TtpJson.optStr(row, "name") ?: "")
+                .put("colorIndex", row.optInt("colorIndex", seat - 1))
+                .put("carIndex", row.optInt("carIndex", seat - 1))
                 .put("ready", false)
                 .toString()))
         }
@@ -795,7 +805,7 @@ class GameCoordinator(
         // launch directly, so it photographed a countdown the only real road could
         // not produce. `sceneReady` is vouched for because the launch's own
         // reset-scene-cars is what builds the scene.
-        startRace(countdownSeconds = 0, forceItem = forceItem, sceneReady = true)
+        startRace(countdownSeconds = 0, forceItem = forceItem, sceneReady = true, seed = seed)
     }
 
     /**

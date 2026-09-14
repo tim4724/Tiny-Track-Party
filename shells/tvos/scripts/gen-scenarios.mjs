@@ -56,13 +56,19 @@ export function generate() {
       `scenario ids must be [a-z0-9-] to become Swift method names: ${bad.map((s) => s.id).join(', ')}`);
   }
 
-  // A card's `players` param rides along as `-ttpPlayers`, the way the Android
-  // runner passes it as an intent extra: the solo reconnect card is the same
-  // harness key as the split one with one seat.
+  // A card's `players` and `track` params ride along as `-ttpPlayers` and
+  // `-ttpTrack`, the way the Android runner passes them as intent extras: the
+  // solo reconnect card is the same harness key as the split one with one seat,
+  // and each store race is the `racing` card on its cup's circuit. A card's
+  // `hold` (its race moment) rides as `-ttpHold`.
   const methods = GALLERY_SCENARIOS
     .map((s) => {
       const players = s.params?.players ? `, players: ${s.params.players}` : '';
-      return `    func ${shotTestMethod(s.id)}() { capture("${s.id}"${players}) }`;
+      const track = s.params?.track ? `, track: "${s.params.track}"` : '';
+      const seed = s.params?.seed != null ? `, seed: ${s.params.seed}` : '';
+      // A raw string, so the JSON's quotes need no escaping.
+      const hold = s.hold ? `, hold: #"${JSON.stringify(s.hold)}"#` : '';
+      return `    func ${shotTestMethod(s.id)}() { capture("${s.id}"${players}${track}${seed}${hold}) }`;
     })
     .join('\n');
 

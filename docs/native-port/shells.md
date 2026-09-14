@@ -653,8 +653,10 @@ re-open them as work.
   runner.** Its jobs are independent, take the same pin-keyed Filament cache the
   per-shell workflow warms on `main`, and publish only on a tag — a dispatch
   builds and hands back an artifact. What a runner cannot do either way is see a
-  frame: the store pictures come from the WEB display (`screenshots`), and the
-  first machine to render a shipped build is a television.
+  frame: a hosted macOS runner's paravirtual GPU crashes Filament in the tvOS
+  simulator, so the store pictures are the screens gallery's `store` cards,
+  captured on a dev machine and committed, and the first machine to render a
+  shipped build is a television or a developer's simulator.
 
 ## What conformance does and does not cover you for
 

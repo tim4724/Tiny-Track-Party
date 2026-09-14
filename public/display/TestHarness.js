@@ -24,15 +24,11 @@ import { renderSeats, renderLobbyPick, renderCupShelf } from './lobbySeats.js';
 // of both in template literals, and the lobby's twin had already drifted to a
 // screen that no longer existed by the time anyone noticed.
 import { renderResults, hideResults, showCountdownBanner } from './raceOverlays.js';
-import { resultsView, intermissionSecs } from './NativeUiModel.js';
+import { resultsView, intermissionSecs, previewBoard, previewProgress, progressLoad, catalogue } from './NativeUiModel.js';
 import { benchField, intermissionMs, flourishMs } from './NativeRaceFlow.js';
 import { LobbyDemo } from './LobbyDemo.js';
 import { CUPS, TRACKS, TRACK_LIST } from '../shared/tracks.js';
 import { TRACK_SCHEMATICS } from '../shared/trackSchematics.js';
-
-// Cup points per finishing rank, for the intermission/podium previews. Mirrors the
-// series layer's ladder (native/libttp-sim/ttp/grand_prix.cc POINTS_BY_RANK).
-const POINTS_BY_RANK = [15, 12, 10, 8, 6, 4, 2, 1];
 
 // One countdown beat as the banner takes it — race_flow.cc's countdownTick,
 // which is the only thing about a beat that is a decision: numerals slap in, GO
@@ -48,28 +44,6 @@ const countdownBeat = (n) => ({ n, slap: n > 0, go: n === 0 });
 const COUNTDOWN_STILL = { n: 3, slap: false, go: false };
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
-const FAKE_TIMES = [28.4, 30.7, 33.1, 35.8, 38.2, 41.0, 44.3, 47.6];
-// Banked cup points per row COMING INTO each race of a cup, by race index — and
-// every number here is doing a job.
-//
-// RACE 1 IS ALL ZEROS, because that is what a first race is: nobody has scored,
-// so the standings before it are flat, and since the ladder pays monotonically
-// by finishing place the standings after it ARE the finishing order. Its board
-// counts up without a single row moving, and that is correct rather than dull.
-// A fabricated non-zero spread there showed a cup table no real race 1 can
-// produce, and staged its "drama" in the one board that cannot have any.
-//
-// FROM RACE 2 THE GAPS ARE ONES, on purpose. This race pays 15/12/10/8/6/4/2/1
-// down the finishing order, so a row one point behind a row that scores three
-// fewer overtakes it PART WAY THROUGH the count — which is the whole thing the
-// standings phase exists to show. Ava leads the cup from third place, Mia takes
-// the lead off Theo mid-tally, and Bolt takes Pixel a beat later.
-const FAKE_POINTS_BY_RACE = [
-  [0, 0, 0, 0, 0, 0, 0, 0],
-  [12, 13, 20, 9, 4, 5, 1, 0],
-  [26, 27, 32, 21, 12, 13, 5, 2],
-  [40, 41, 48, 33, 20, 21, 9, 4]
-];
 // Held items per slot for the frozen previews (reconnect / finished) so the cell
 // item indicator shows populated — a mix of boost/banana with some empty slots,
 // rather than a field of empty squares. null = that slot is carrying nothing.
@@ -348,50 +322,14 @@ export function runDisplayScenario(opts, ctx) {
   // how a capture waits for the phase it wants.
   const showBoard = (board) => renderResults(resultsView(board, { intermissionMs: intermissionMs() }), COLORS);
 
-  // A board for the first cup, as it stands after its race `raceIdx`: real cup
-  // and track names, fake points, with a leader swap so the table shows cup
-  // order beating this race's finish order. `final` is the only thing the two
-  // dressings (mid-cup intermission, closing podium) differ by — the model
-  // decides the rest. Shared by the frozen previews and the chained-start loop.
-  function cupBoard(field, raceIdx, final) {
-    const cup = CUPS[0];
-    const nextId = cup.tracks[raceIdx + 1] || null;
-    // Built in FINISHING order (times and gains ride the index), then sorted into
-    // cup order — the same two orders the C++ board composes, and `racePlace`
-    // is what carries the first one through the sort. Without it the board's
-    // race phase would replay the cup table and the preview would show a leader
-    // swap that never happened.
-    const banked = FAKE_POINTS_BY_RACE[Math.min(raceIdx, FAKE_POINTS_BY_RACE.length - 1)];
-    const order = humansFirst(field).map((f, i) => ({
-      playerId: f.peerIndex, name: f.name, colorIndex: f.colorIndex, finished: true, time: FAKE_TIMES[i],
-      racePlace: i + 1,
-      gained: POINTS_BY_RANK[i] || 0,
-      points: (banked[i] || 0) + (POINTS_BY_RANK[i] || 0)
-    })).sort((a, b) => b.points - a.points);
-    return {
-      over: true, hostPeerIndex: order[0].playerId, order,
-      series: {
-        cupId: cup.id, cupName: cup.name, endless: false,
-        raceIndex: raceIdx, raceCount: cup.tracks.length,
-        nextTrackId: nextId, nextTrackName: nextId ? TRACKS[nextId].name : null,
-        final, autoAdvanceMs: intermissionMs()
-      }
-    };
-  }
-
   // The lobby's cup slot, off the same renderLobbyPick the live lobby calls: a
   // PICK goes in, the model decides the whole card. null empties the slot.
-  // The synthesized progression dresses the card's stars and the shelf below —
-  // mid-game numbers (five stars, one short of the Playroom), so
+  // The fabricated couch dresses the card's stars and the shelf below, so
   // gallery-lobby.spec can pin dressings only the right payload produces.
-  const PREVIEW_SHELF = CUPS.map((c, i) => ({
-    id: c.id, name: c.name,
-    stars: [3, 2, 0, 0, 0][i] || 0,
-    locked: c.id === 'rooftop',
-    ...(c.id === 'rooftop' ? { unlockDone: 5, unlockNeed: 6 } : {})
-  }));
-  const PREVIEW_STARS = { earned: 5, total: 15 };
-  const PREVIEW_PROGRESS = { cups: PREVIEW_SHELF, stars: PREVIEW_STARS };
+  // The couch is ttp_ui_preview_progress_json's, loaded like a saved record so
+  // the shelf and the card derive their stars and lock exactly as live play does.
+  progressLoad(previewProgress(), false);
+  const PREVIEW_PROGRESS = catalogue();
   const previewCatalog = TRACK_LIST.map((t) => ({ id: t.id, svg: TRACK_SCHEMATICS[t.id] }));
   const showPick = (pick) => renderLobbyPick(el('cup-slot'), pick || {}, previewCatalog, PREVIEW_PROGRESS);
 
@@ -580,7 +518,7 @@ export function runDisplayScenario(opts, ctx) {
     // here, the two lobby cards that show no pick were the only ones in the
     // gallery missing a card the live lobby always has, and every TV column
     // compared against them looked like it had grown one.
-    renderCupShelf(el('cup-shelf'), PREVIEW_SHELF, PREVIEW_STARS);
+    renderCupShelf(el('cup-shelf'), PREVIEW_PROGRESS.cups, PREVIEW_PROGRESS.stars);
     return;
   }
 
@@ -593,7 +531,7 @@ export function runDisplayScenario(opts, ctx) {
     renderJoinUrl(el('joinurl'), (location.host || 'tinytrack.party'), null); // stamps the fade-in class
     showPick(null);   // no pick yet → empty slot
     renderQR(el('qr'), buildQRMatrix(location.origin || 'https://tinytrack.party'));
-    renderCupShelf(el('cup-shelf'), PREVIEW_SHELF, PREVIEW_STARS);
+    renderCupShelf(el('cup-shelf'), PREVIEW_PROGRESS.cups, PREVIEW_PROGRESS.stars);
     startAttractDemo([]);
     if (scenario !== 'lobby-empty') {
       // The display's OWN link over that board: the overlay main.js fills off
@@ -635,7 +573,7 @@ export function runDisplayScenario(opts, ctx) {
     // preview shows the circuit the card names.
     showPick(opts.picked ? previewPick(opts.picked) : null);
     // The star shelf under it, off the same renderer as live play.
-    renderCupShelf(el('cup-shelf'), PREVIEW_SHELF, PREVIEW_STARS);
+    renderCupShelf(el('cup-shelf'), PREVIEW_PROGRESS.cups, PREVIEW_PROGRESS.stars);
     return;
   }
 
@@ -747,6 +685,10 @@ export function runDisplayScenario(opts, ctx) {
       const newSession = () => {
         if (engine) engine.dispose();
         engine = bareSession(field, track, { bots, forceItem });
+        // Every box rolls the forced item, and the engine gives and fires it on a
+        // loop (the rocket's flight and burst, the monster truck's grow-in)
+        // instead of once a lap: the showcase rule, ttp_item_showcase.
+        engine.itemShowcase(forceItem);
         window.__engine = engine;
         scene.bindSession(engine.h);
         scene.hold(!driving);
@@ -762,29 +704,10 @@ export function runDisplayScenario(opts, ctx) {
                                            MODEL_NAMES[f.carIndex] || `Car ${i + 1}`,
                                            { cell: false, carIndex: f.carIndex }));
 
-      // Spending the held item from out here rather than on the bot's own hold,
-      // so a forced roulette actually SHOWS the thing on a loop (the rocket's
-      // flight and burst, the monster truck's grow-in) instead of once a lap.
-      // The car furthest back fires, which is both the most dramatic and what
-      // the catch-up items are for. Lifted from the race previews above.
-      let useSeq = 0, fireCd = 1.2;
-      function spendHeldItem(snap, dt) {
-        fireCd -= dt;
-        if (fireCd > 0) return;
-        if (forceItem === 'monster' && snap.cars.some((c) => c.monster)) return;
-        const armed = snap.cars.filter((c) => c.item && !c.finished);
-        if (!armed.length) return;
-        armed.sort((a, b) => a.totalS - b.totalS);
-        engine.processInput(armed[0].id, { u: ++useSeq });
-        fireCd = forceItem === 'monster' ? 1.6 : 1.3;
-      }
-
       scene.onFrame = (dt) => {
         if (!driving) return;   // parked: the renderer holds the grid at rest
         engine.update(dt * 1000);
-        const snap = engine.getSnapshot();
-        if (forceItem) spendHeldItem(snap, dt);
-        if (raceOver(snap)) newSession();   // endless: back to the grid, lap again
+        if (raceOver(engine.getSnapshot())) newSession();   // endless: back to the grid, lap again
       };
 
       // The gallery chrome's control surface. Same-origin, so the page reaches
@@ -1260,7 +1183,7 @@ export function runDisplayScenario(opts, ctx) {
       // (display.css) — and the NEXT circuit is meshed behind it.
       function board() {
         sfx(window.__audioDecide.stopMusic());                // …with the board
-        showBoard(cupBoard(field, leg, false));               // show-results
+        showBoard(previewBoard('intermission', ctx.track.trackId, players, seedOpt.seed ?? 1, leg));   // show-results
         leg = (leg + 1) % cup.tracks.length;
         scene.prepare(entry(cup.tracks[leg]));
         phase = 'board'; phaseMs = 0;                         // arm-intermission
@@ -1383,7 +1306,22 @@ export function runDisplayScenario(opts, ctx) {
     // this one item (the same knob as the debug ?item=). Cars still have to collect it,
     // so the first showcase shot lands a box-run into the race rather than at 0.8s.
     const forceItem = (kind === 'rocket' || kind === 'monster') ? kind : null;
-    const newSession = () => bareSession(field, track, { bots, onRaceEvent, forceItem, ...seedOpt });
+    // `?hold=` — a screenshot card's race moment (galleryScenarios.js `hold`),
+    // re-armed on every deal so a redealt race stops at the same moment.
+    const holdParam = new URLSearchParams(location.search).get('hold');
+    const hold = holdParam ? JSON.parse(holdParam) : null;
+    // The engine then GIVES the item and fires it on a loop, so the preview shows
+    // its showcase (rocket flight + impact burst; the monster's grow-in and the
+    // field it ploughs through) every couple of seconds instead of whenever a car
+    // happens through a box. WHO fires and when is ttp_item_showcase's rule, shared
+    // with both TV harnesses — it lived here alone once, which is why the item
+    // cards never agreed across platforms.
+    const newSession = () => {
+      const s = bareSession(field, track, { bots, onRaceEvent, forceItem, ...seedOpt });
+      s.itemShowcase(forceItem);
+      if (hold && !s.shotHold(hold)) console.error(`[harness] the engine refused hold ${holdParam}`);
+      return s;
+    };
     let engine = newSession();
     window.__engine = engine;
 
@@ -1403,31 +1341,6 @@ export function runDisplayScenario(opts, ctx) {
     // carrying a split-screen cell.
     const humanIds = new Set(field.filter((f) => !f.ai).map((f) => f.peerIndex));
 
-    // The forced item (above) is then SPENT from out here rather than on the bot's own
-    // 1.5–4s hold, so the preview loops its showcase (rocket flight + impact burst; the
-    // monster's grow-in and the field it ploughs through) instead of showing one event a
-    // lap. The car furthest BACK fires — the most dramatic user, and the one the catch-up
-    // items are for — on a cooldown so it doesn't become a barrage. processInput's use
-    // flag is sticky (a changed `u` arms the car there and then), which is what lets the
-    // host spend a wasm-side bot's item at all.
-    const FIRST_FIRE_S = 0.8;     // first showcase shot as soon as someone is armed
-    let useSeq = 0, fireCd = FIRST_FIRE_S;
-    function spendHeldItem(snap, dt) {
-      fireCd -= dt;
-      if (fireCd > 0) return;
-      if (kind === 'monster' && snap.cars.some((c) => c.monster)) return; // one transform at a time
-      // A monster handed to a CPU seat transforms in SILENCE — the decision
-      // layer voices non-AI cars only — so that demo fires from a player seat.
-      // The rocket needs no such rule: its jet and burst are world cues, heard
-      // from wherever they happen.
-      const armed = snap.cars.filter((c) => c.item && !c.finished
-                                       && (kind !== 'monster' || humanIds.has(c.id)));
-      if (!armed.length) return;
-      armed.sort((a, b) => a.totalS - b.totalS);
-      engine.processInput(armed[0].id, { u: ++useSeq });
-      fireCd = kind === 'monster' ? 1.6 : 1.3; // gap before the next one (monsters last, so give them room)
-    }
-
     let lastHud = -Infinity;   // the first frame paints
 
     // Deal the race again from the grid. The end of a preview race does this to lap
@@ -1446,7 +1359,6 @@ export function runDisplayScenario(opts, ctx) {
       window.__engine = engine;
       scene.bindSession(engine.h);
       if (audible) window.__audioDecide.bind(engine.h);
-      useSeq = 0; fireCd = FIRST_FIRE_S;
       logDeal(log);
     }
 
@@ -1459,7 +1371,6 @@ export function runDisplayScenario(opts, ctx) {
       // update plus the shell's own business below.
       engine.update(dt * 1000);
       const snap = engine.getSnapshot();
-      if (forceItem) spendHeldItem(snap, dt); // arms the next frame's use (post-snapshot)
       const now = nowMs;
       // One frame of the mix, decided off the bound session — the same call
       // main.js makes, and the flush point for whatever the events that fired
@@ -1514,33 +1425,17 @@ export function runDisplayScenario(opts, ctx) {
       // cell, and the CPU fill has none.
       const leadId = engine.getSnapshot().cars.filter((c) => humanIds.has(c.id))
         .reduce((a, b) => (a.position <= b.position ? a : b)).id;
-      engine.forceFinish(leadId, FAKE_TIMES[0]); // promote the finisher to P1; the rest keep racing for position
+      // Promote the finisher to P1 at the winning time the boards show; the rest keep racing.
+      engine.forceFinish(leadId, previewBoard('results', track.trackId, players, seedOpt.seed ?? 1).order[0].time);
       const fnCars = engine.getSnapshot().cars;
       dressItems(fnCars, field); // the still-racing cells carry items (setCarHud clears the finisher's own slot)
       for (const c of fnCars) scene.setCarHud(c.id, c);
       scene.hold(true);
-    } else if (kind === 'results') {
-      // Freeze the grid behind the blurred results overlay. Every row is a plain
-      // finish; the late joiner riding along under the field gets the model's
-      // `joining` shape (no rank, no time — they race the next one).
-      const roster = humansFirst(field);
-      const order = roster.map((f, i) => ({
-        playerId: f.peerIndex, name: f.name, colorIndex: f.colorIndex, finished: true,
-        time: FAKE_TIMES[i], racePlace: i + 1
-      }));
-      // The late joiner riding along under the field. Its seat colour can repeat
-      // a CPU livery — exactly as live, where a mid-race join takes a free SEAT,
-      // not a free livery in the running race.
-      const j = players % FAKE_NAMES.length;
-      order.push({ playerId: j, name: FAKE_NAMES[j], colorIndex: j, joining: true });
-      showBoard({ over: true, hostPeerIndex: roster[0].peerIndex, order });
-    } else if (kind === 'intermission' || kind === 'podium') {
-      // Cup dressings of the same overlay: frozen grid behind either the mid-cup
-      // intermission (points board + "next up" footer) or the final podium.
-      // WHICH dressing is the model's call off `final` — the two previews differ
-      // only in the board handed to it.
-      const final = kind === 'podium';
-      showBoard(cupBoard(field, final ? CUPS[0].tracks.length - 1 : 1, final));
+    } else if (kind === 'results' || kind === 'intermission' || kind === 'podium') {
+      // Freeze the grid behind the board. Both kinds of board — a single race
+      // with a late joiner, and the cup's mid-way break or its podium — are
+      // ttp_ui_preview_board_json's, over the bench race launched here.
+      showBoard(previewBoard(kind, track.trackId, players, seedOpt.seed ?? 1));
     }
     // The bench races the same loop everything else does — that is the point of
     // measuring it — and then runs on under the readout instead of holding a

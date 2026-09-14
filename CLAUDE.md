@@ -41,8 +41,9 @@ npm run build:androidtv -- [release|debug] [install]   # The Android TV app, lik
 npm run bake:shelf                    # The Apple TV shelf art: nine carousel frames +
                                       # the four catalogue strips, all captured GAMEPLAY
 npm run shots:web                     # Freeze the reference column of /gallery-shots.html
-npm run shots:tvos / shots:tvos-sim   # Photograph the Apple TV, one shot per gallery scenario
-npm run shots:androidtv[-emu]         # …and the Android TV box, or the AVD
+npm run shots:tvos / shots:tvos-sim   # Photograph the Apple TV (device or sim), one shot per scenario
+npm run shots:androidtv[-emu]         # …and the Android TV box, or the AVD. The `store` cards
+                                      # ARE the store listings: that page zips each TV's set
 ```
 
 `npm run setup` is the only command a fresh worktree needs, and it prints the

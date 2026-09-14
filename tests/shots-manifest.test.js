@@ -48,6 +48,8 @@ const ctx = async () => (_ctx ??= await (async () => {
     GALLERY_SCENARIOS: g.GALLERY_SCENARIOS,
     CAPTURED_SCENARIOS: g.CAPTURED_SCENARIOS,
     SHOT_PLATFORMS: g.SHOT_PLATFORMS,
+    STORE_SCENARIOS: g.STORE_SCENARIOS,
+    STORE_SHOT: g.STORE_SHOT,
     manifest,
     captured: manifest.shots.length > 0
   };
@@ -154,11 +156,73 @@ test('no image file is unreferenced by the manifest', async () => {
   if (!captured) return;
   const referenced = new Set(manifest.shots.map((s) => s.file));
   const onDisk = [];
-  for (const platform of SHOT_PLATFORMS) {
-    const dir = path.join(SHOTS, platform);
-    if (!existsSync(dir)) continue;
-    for (const f of readdirSync(dir)) onDisk.push(`${platform}/${f}`);
+  for (const entry of readdirSync(SHOTS, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    // A directory for a platform id that no longer exists (the old per-leg
+    // `tvos-sim/`) is dead weight the per-platform walk would never look in.
+    assert.ok(SHOT_PLATFORMS.includes(entry.name), `${entry.name}/ is not a shot platform`);
+    for (const f of readdirSync(path.join(SHOTS, entry.name))) onDisk.push(`${entry.name}/${f}`);
   }
   const orphans = onDisk.filter((f) => !referenced.has(f));
   assert.deepEqual(orphans, [], `image files nothing references: ${orphans.join(', ')}`);
+});
+
+test('the store listing is a gapless order the stores accept', async () => {
+  const { STORE_SCENARIOS, GALLERY_SCENARIOS } = await ctx();
+  // 1..n with no gap or repeat, so the zip's filenames are the listing order.
+  assert.deepEqual(STORE_SCENARIOS.map((s) => s.store), STORE_SCENARIOS.map((_, i) => i + 1),
+    'store positions must run 1..n');
+  // Play takes at most eight screenshots per device type (the App Store ten).
+  assert.ok(STORE_SCENARIOS.length >= 1 && STORE_SCENARIOS.length <= 8,
+    `${STORE_SCENARIOS.length} store cards — Play accepts 1 to 8`);
+  // A liveOnly card is never photographed, so it could never be in the listing.
+  const lost = GALLERY_SCENARIOS.filter((s) => s.store && s.liveOnly).map((s) => s.id);
+  assert.deepEqual(lost, [], `store cards no camera sees: ${lost.join(', ')}`);
+});
+
+// Pixel dimensions from the JPEG's first SOF marker (tests/artwork-manifest.test.js
+// has the same walk, and says why it is not an image dependency).
+function jpegSize(buf) {
+  assert.ok(buf[0] === 0xff && buf[1] === 0xd8, 'not a JPEG');
+  let i = 2;
+  while (i < buf.length) {
+    if (buf[i] !== 0xff) { i++; continue; }
+    const marker = buf[i + 1];
+    if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) {
+      return { h: buf.readUInt16BE(i + 5), w: buf.readUInt16BE(i + 7) };
+    }
+    i += 2 + buf.readUInt16BE(i + 2);
+  }
+  throw new Error('no SOF marker');
+}
+
+test('a store card is shot as STORE_SHOT and every other card as WebP', async () => {
+  const { GALLERY_SCENARIOS, STORE_SHOT, manifest, captured } = await ctx();
+  if (!captured) return;
+  const byId = new Map(GALLERY_SCENARIOS.map((s) => [s.id, s]));
+  for (const shot of manifest.shots) {
+    const scenario = byId.get(shot.scenario);
+    if (!scenario) continue;   // the retired-scenario gate above names it
+    if (!scenario.store) {
+      assert.match(shot.file, /\.webp$/, `${shot.file}: a gallery card is WebP`);
+      continue;
+    }
+    // The stores check the pixels, so the header is read rather than the row.
+    assert.match(shot.file, new RegExp(`\\.${STORE_SHOT.ext}$`), `${shot.file}: a store card is ${STORE_SHOT.ext}`);
+    const got = jpegSize(readFileSync(path.join(SHOTS, shot.file)));
+    assert.deepEqual(got, { w: STORE_SHOT.w, h: STORE_SHOT.h }, `${shot.file}: ${got.w}x${got.h}`);
+    assert.deepEqual({ w: shot.w, h: shot.h }, got, `${shot.file}: the manifest's size is not the file's`);
+  }
+});
+
+test('a TV shot says which device took it', async () => {
+  const { manifest, captured } = await ctx();
+  if (!captured) return;
+  // One column per TV holds device and simulator shots side by side, so this
+  // is the only record of which one a picture came from.
+  for (const shot of manifest.shots.filter((s) => s.platform !== 'web')) {
+    assert.ok(shot.deviceName, `${shot.file}: no deviceName`);
+    assert.ok(['device', 'simulator', 'emulator'].includes(shot.deviceKind),
+      `${shot.file}: deviceKind ${shot.deviceKind}`);
+  }
 });

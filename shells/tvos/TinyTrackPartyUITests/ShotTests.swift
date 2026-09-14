@@ -42,12 +42,19 @@ final class ShotTests: XCTestCase {
     /// full-table capture.
     ///
     /// Not named `test…`, or XCTest would run it with no scenario at all.
-    func capture(_ id: String, players: Int? = nil) {
+    func capture(_ id: String, players: Int? = nil, track: String? = nil, seed: Int? = nil,
+                 hold: String? = nil) {
         let app = XCUIApplication()
         app.launchArguments = ["-ttpScenario", id]
-        // The card's seat count, when the table pins one (`params.players`);
-        // the harness reads it the way it reads the scenario.
+        // The card's seat count and circuit, when the table pins them
+        // (`params.players`, `params.track`); the harness reads both the way it
+        // reads the scenario.
         if let players { app.launchArguments += ["-ttpPlayers", String(players)] }
+        if let track { app.launchArguments += ["-ttpTrack", track] }
+        if let seed { app.launchArguments += ["-ttpSeed", String(seed)] }
+        // The card's race moment (`hold`): the app freezes the race there and
+        // signals ready only once the engine reports it held.
+        if let hold { app.launchArguments += ["-ttpHold", hold] }
         // PHOTOGRAPH A NON-NATIVE BUFFER, when asked. The adaptive render scale
         // moves the drawable under a chrome layer that is laid out in POINTS, and
         // every shot in this gallery is taken at 1.0 — which is why a `uiScale`
@@ -81,7 +88,9 @@ final class ShotTests: XCTestCase {
         let verdict = app.otherElements.matching(
             NSPredicate(format: "identifier IN %@", ["ttp-ready", "ttp-unsupported"])
         ).firstMatch
-        if !verdict.waitForExistence(timeout: 30) {
+        // A held card waits for its race moment (an item card, for its item), so
+        // it gets longer than a screen that only has to stand up.
+        if !verdict.waitForExistence(timeout: hold == nil ? 30 : 120) {
             XCTFail("\(id): the app never signalled ready")
             app.terminate()
             return

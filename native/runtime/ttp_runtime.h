@@ -145,6 +145,22 @@ TTP_ABI int ttp_racing(int h);
 TTP_ABI int ttp_paused(int h);
 TTP_ABI void ttp_dispose(int h);
 
+// ---- the screenshot hold (gallery harnesses only) ---------------------------
+// Arm a freeze: ttp_update stops stepping at the race moment the hold names, and
+// lands its last step exactly on it. `holdJson` is {simMs, on?, afterMs?, capMs?}
+// (ttp/shot_hold.h). 1 = armed; 0 = unknown handle or a malformed hold, which
+// arms nothing. Re-arming replaces the hold and its progress. A plain hold whose
+// moment the race has already reached is held immediately.
+TTP_ABI int ttp_shot_hold(int h, const char* holdJson);
+// 1 once the armed hold has been reached; the race will not step again.
+TTP_ABI int ttp_shot_held(int h);
+
+// The rocket/monster previews' item showcase (ttp/shot_hold.h): after each step,
+// the engine gives the item to the car the rule picks and fires it. `kind` is
+// "rocket" | "monster"; null or anything else turns it off. 1 = set, 0 = unknown
+// handle.
+TTP_ABI int ttp_item_showcase(int h, const char* kind);
+
 // ---- global tunable (affects every session, like Game.js _steerExpo) --------
 
 TTP_ABI void ttp_set_steer_expo(double v);

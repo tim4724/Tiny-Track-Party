@@ -71,6 +71,8 @@ object Scenarios {
     const val EXTRA_SCENARIO = "ttpScenario"
     const val EXTRA_TRACK = "ttpTrack"
     const val EXTRA_PLAYERS = "ttpPlayers"
+    const val EXTRA_HOLD = "ttpHold"
+    const val EXTRA_SEED = "ttpSeed"
 
     /** The scenario this launch was asked for. Null in every normal launch. */
     var requested: String? = null
@@ -83,26 +85,29 @@ object Scenarios {
      */
     private var trackOverride: String? = null
 
+    /**
+     * `--es ttpHold <json>`: a card's race moment — the table's `hold`
+     * (`galleryScenarios.js`), which `ttp_shot_hold` arms on the race. The shot
+     * waits for the engine to report it held.
+     */
+    private var hold: String? = null
+
+    /** `--ei ttpSeed N`: the race seed a card pins (`params.seed`); null lets the
+     *  launch draw its own, as live play does. */
+    private var seed: UInt? = null
+
     /** True while a scenario owns this launch, which is what gates the relay. */
     val active: Boolean get() = requested != null
 
     private val main = Handler(Looper.getMainLooper())
 
-    // The fake party, identical to `public/display/TestHarness.js`'s FAKE_NAMES and
-    // FAKE_TIMES. NOT a fresh set of names: the gallery exists to put this shell's
+    // The fake party, identical to `public/display/TestHarness.js`'s FAKE_NAMES.
+    // NOT a fresh set of names: the gallery exists to put this shell's
     // screen beside the browser's, and a column that renamed the players would
     // differ in a way that has nothing to do with the UI under inspection. (The
     // tvOS harness picked its own — Ann/Bo/Cy/Di — and every side-by-side since has
     // carried that as noise.)
     private val NAMES = listOf("Mia", "Theo", "Ava", "Leo", "Zoe", "Max", "Ivy", "Sam")
-    private val TIMES = listOf(28.4, 30.7, 33.1, 35.8, 38.2, 41.0, 44.3, 47.6)
-
-    /** Banked cup points, so the standings table beats this race's finishing order. */
-    private val BANKED = listOf(10, 15, 6, 3, 2, 1, 0, 0)
-
-    /** `native/libttp-sim/ttp/grand_prix.cc`'s ladder, for the fabricated podium.
-     *  Pinned to it by `tests/harness-mirrors.test.js`. */
-    private val POINTS_BY_RANK = listOf(15, 12, 10, 8, 6, 4, 2, 1)
 
     /** The 2x2 grid the web's `racing` card photographs, and every gallery card here. */
     private const val DEFAULT_PLAYERS = 4
@@ -146,7 +151,9 @@ object Scenarios {
      * a perfectly drawn HUD over a BLACK surface. Screenshotting on a clock cannot
      * see that; screenshotting after N PRESENTS cannot miss it. The timeout is
      * therefore generous on purpose: it has to outlast the stall rather than expire
-     * inside it, and expiring inside it is what produced the black boards.
+     * inside it, and expiring inside it is what produced the black boards. A host-GPU
+     * 1080p AVD has been measured stalling 37 s after a four-cell scene build, and a
+     * timeout is a FAILED shot rather than a ready one.
      *
      * (`display.hold(true)` appears nowhere in this file. The web's frozen previews
      * hold so wheels stop spinning in a preview that runs forever; a screenshot is
@@ -155,12 +162,17 @@ object Scenarios {
      * two more cards black, which is what identified the stall.)
      */
     private const val PRESENT_FRAMES = 4
-    private const val PRESENT_TIMEOUT_MS = 15_000L
+    private const val PRESENT_TIMEOUT_MS = 120_000L
+
+    /** An item card waits for its item, which can take a few box-runs. */
+    private const val HOLD_TIMEOUT_MS = 180_000L
 
     /** Read the launch request. Called from `MainActivity.onCreate`, before anything. */
     fun read(intent: Intent?) {
         requested = intent?.getStringExtra(EXTRA_SCENARIO)?.ifEmpty { null }
         trackOverride = intent?.getStringExtra(EXTRA_TRACK)?.ifEmpty { null }
+        hold = intent?.getStringExtra(EXTRA_HOLD)?.ifEmpty { null }
+        seed = intent?.getIntExtra(EXTRA_SEED, 0)?.takeIf { it > 0 }?.toUInt()
         players = (intent?.getIntExtra(EXTRA_PLAYERS, DEFAULT_PLAYERS) ?: DEFAULT_PLAYERS)
             .coerceIn(1, NAMES.size)
     }
@@ -217,21 +229,31 @@ object Scenarios {
         after(RELEASE_BEAT_MS) {
             waitFor("a scene", SCENE_TIMEOUT_MS, { !plan.needsScene || game.display.hasScene }) { ok ->
                 after(SETTLE_MS) {
-                    settle(id, game) {
-                        // AND THEN WAIT FOR THE GLASS. A scene that is BUILT is not
-                        // a scene that has been PRESENTED, and the last thing most
-                        // of these do is `hold(true)` — after which no further frame
-                        // is submitted, so whatever the compositor happened to have
-                        // is what the screenshot gets. Two boards came back with a
-                        // black surface under a perfectly drawn HUD, reproducibly,
-                        // while a shot taken by hand a second later was correct.
-                        presented(game, PRESENT_FRAMES) {
-                            // A scene that never arrived is a FAILED shot, not a
-                            // ready one. The capture reads this word, so saying
-                            // "ready" over a board with a black hole where the
-                            // circuit should be would put that picture in the
-                            // gallery as evidence.
-                            Log.i(TAG, "${if (ok) "ready" else "failed"} $id")
+                    // A HELD card is a race moment, not a settle: the engine stops
+                    // the race there itself, so wait until it says so.
+                    val isHeld = { hold == null || Ttp.ttp_shot_held(game.sessionHandle) != 0 }
+                    waitFor("the held race moment", HOLD_TIMEOUT_MS, isHeld) { held ->
+                        settle(id, game) {
+                            // AND THEN WAIT FOR THE GLASS. A scene that is BUILT is not
+                            // a scene that has been PRESENTED, and the last thing most
+                            // of these do is `hold(true)` — after which no further frame
+                            // is submitted, so whatever the compositor happened to have
+                            // is what the screenshot gets. Two boards came back with a
+                            // black surface under a perfectly drawn HUD, reproducibly,
+                            // while a shot taken by hand a second later was correct.
+                            // A board on paper never presents (see noVerdict above), so
+                            // it owes no frames: waiting for them only outlasts the
+                            // capture's own timeout.
+                            if (!plan.needsScene) {
+                                Log.i(TAG, "${if (ok && held) "ready" else "failed"} $id")
+                            } else presented(game, PRESENT_FRAMES) { shown ->
+                                // A scene that never arrived is a FAILED shot, not a
+                                // ready one. The capture reads this word, so saying
+                                // "ready" over a board with a black hole where the
+                                // circuit should be would put that picture in the
+                                // gallery as evidence.
+                                Log.i(TAG, "${if (ok && held && shown) "ready" else "failed"} $id")
+                            }
                         }
                     }
                 }
@@ -239,11 +261,11 @@ object Scenarios {
         }
     }
 
-    /** Wait until the engine has presented [n] more frames. */
-    private fun presented(game: GameCoordinator, n: Int, then: () -> Unit) {
+    /** Wait until the engine has presented [n] more frames; false if it never did. */
+    private fun presented(game: GameCoordinator, n: Int, then: (Boolean) -> Unit) {
         val target = game.display.framesPresented + n
         waitFor("$n presented frames", PRESENT_TIMEOUT_MS,
-            { game.display.framesPresented >= target }) { _ -> then() }
+            { game.display.framesPresented >= target }) { ok -> then(ok) }
     }
 
     /** What [apply] answers: the screen is standing, and whether it owns 3D. */
@@ -276,7 +298,7 @@ object Scenarios {
             // (which is what `refreshBackdrop` reads to keep the paper up), no room,
             // no seats, no pick.
             "lobby-loading" -> {
-                fakeProgress(game)
+                previewProgress(game)
                 game.show(GameState.Screen.LOBBY)
                 game.releaseScene()
                 // A FULL DOCK OF OPEN SEATS, not an empty one. `display/index.html`
@@ -309,8 +331,11 @@ object Scenarios {
             }
 
             "lobby-empty" -> {
-                fakeProgress(game)
+                previewProgress(game)
                 game.show(GameState.Screen.LOBBY)
+                // The card's circuit (`--es ttpTrack`), or the saved pick of whatever
+                // launched before it.
+                trackOverride?.let { game.net.setTrack(it) }
                 state.seats.clear()
                 state.seats.addAll((0 until game.proto.maxPlayers).map { GameState.Seat.open(it) })
                 state.cupSlot = null
@@ -322,8 +347,9 @@ object Scenarios {
             // would have set. The spent budget shows the button, which takes focus as
             // it does live — the card that shows the focus ring.
             "reconnecting", "disconnected" -> {
-                fakeProgress(game)
+                previewProgress(game)
                 game.show(GameState.Screen.LOBBY)
+                trackOverride?.let { game.net.setTrack(it) }
                 state.seats.clear()
                 state.seats.addAll((0 until game.proto.maxPlayers).map { GameState.Seat.open(it) })
                 state.cupSlot = null
@@ -344,7 +370,7 @@ object Scenarios {
             // floating on PAPER, and would hide the defect that costs most: a picked
             // lobby with no 3D preview behind it.
             "lobby-track", "lobby-tour", "lobby-random" -> {
-                fakeProgress(game)
+                previewProgress(game)
                 game.show(GameState.Screen.LOBBY)
                 game.net.fakeRoom(ROOM_CODE)
                 // WHICH circuit each card names is the SHARED TABLE's
@@ -364,7 +390,7 @@ object Scenarios {
                 // the photographed circuit is pinned AFTER the pick, through the same
                 // set-track walk a cup advance takes: the MODE stays random, only the
                 // preview is made deterministic.
-                if (id == "lobby-random") game.net.setTrack(trackOverride ?: "powder")
+                if (id != "lobby-track") game.net.setTrack(trackOverride ?: "powder")
                 // The scripted seats go on LAST. The pick's track-change refreshes
                 // the lobby off the (empty, relay-less) room, and a refresh after
                 // this write would photograph four Open placeholders instead of the
@@ -385,10 +411,24 @@ object Scenarios {
             // switch is reached with the id. A case list that names only the keys
             // answers `unsupported` for every card that shares one — which is silent,
             // because unsupported is a legitimate answer.
-            "countdown", "racing", "racing-sidewinder", "rocket", "monster",
-            "paused", "reconnect", "reconnect-solo", "finished" -> {
+            "countdown", "racing", "racing-sidewinder",
+            "race-beach", "race-snow", "race-backyard", "race-canyon", "race-playroom",
+            "rocket", "monster", "paused", "reconnect", "reconnect-solo", "finished" -> {
+                // UNLOCKED FIRST: the pick walk silently refuses a track in a
+                // locked cup, and a fresh install has the Playroom locked, so its
+                // card would photograph the attract race. `unlockAll` is the
+                // engine's own dev override (the web's `?unlockAll=1`).
+                Ttp.ttp_ui_progress_load(null, 1)
                 game.show(GameState.Screen.RACE)
-                game.startDemoRace(trackPick(), forceItem(id), players)
+                game.startDemoRace(trackPick(), forceItem(id), players, seed)
+                // The engine gives and fires the item (the showcase rule, shared with
+                // the web preview), so an item card is the same event everywhere.
+                Ttp.ttp_item_showcase(game.sessionHandle, TtpJson.arg(forceItem(id)))
+                hold?.let {
+                    if (Ttp.ttp_shot_hold(game.sessionHandle, TtpJson.arg(it)) == 0) {
+                        Log.e(TAG, "the engine refused hold $it")
+                    }
+                }
             }
 
             // The boards. Fabricated rather than raced, and both halves of that are
@@ -399,15 +439,12 @@ object Scenarios {
             //   races apart in a real cup, and a gallery that took ten minutes to
             //   capture would not be captured;
             //
-            //   the VIEW is real. Every key below is one `ttp_ui_results_view_json`
-            //   reads, so the podium split, the AI suffix, the two phases, the row
+            //   the VIEW is real. The board (`ttp_ui_preview_board_json`, the engine's
+            //   fabrication over this same bench race) goes through
+            //   `ttp_ui_results_view_json`, so the podium split, the AI suffix, the two phases, the row
             //   kinds and the footer are all the model's answers — a renamed field
             //   breaks the shot rather than quietly drawing a different board.
             //
-            // This is also where the tvOS twin is wrong and worth not copying: its
-            // fabricated board carries no `series`, and BOTH `podium` and
-            // `intermission` are derived from one, so all three of its cards
-            // photograph the same plain results board.
             // THE BOARD IS BUILT IN `settle`, NOT HERE, and that is not tidiness: it
             // is composed from the RACE'S OWN FIELD, and the launch's grid top-up has
             // not run at this point in the walk — `sceneCars` still holds the four
@@ -416,7 +453,7 @@ object Scenarios {
             // two-column split and the late-joiner row were never drawn at all.
             "results", "intermission", "podium" -> {
                 game.show(GameState.Screen.RACE)
-                game.startDemoRace(trackPick(), forceItem = null, humans = players)
+                game.startDemoRace(trackPick(), forceItem = null, humans = players, seed = seed)
             }
 
             // THE ONE CARD THAT IS A BEHAVIOUR RATHER THAN A PICTURE: results
@@ -512,8 +549,7 @@ object Scenarios {
                 done()
             }
 
-            // The board goes up over a race that has spread out, and it is built
-            // HERE because only now does `sceneCars` hold the whole grid.
+            // The board goes up over a race that has spread out.
             //
             // A PODIUM WAITS FOR ITS OWN REVEAL. `ResultsScreen` holds phase 1 for
             // `racePhaseMs` and then accounts the points out one at a time, and the
@@ -524,7 +560,7 @@ object Scenarios {
                 val view = GameState.ResultsView.from(
                     TtpJson.obj(
                         Ttp.ttp_ui_results_view_json(
-                            TtpJson.arg(board(id, game).toString()),
+                            previewBoard(id),
                             Ttp.ttp_race_intermission_ms()
                         )
                     )
@@ -587,46 +623,16 @@ object Scenarios {
     }
 
     /**
-     * A MID-GAME couch: three cups starred, the fourth blank, the Playroom still
-     * locked and part-way to its unlock.
-     *
-     * A fresh couch has nothing to show, so the star shelf and the race card's star
-     * badge would photograph as five empty rows — the two dressings the gallery
-     * exists to check would be invisible, and every column would agree about
-     * nothing. The web harness fabricates the same shape and for the same reason
-     * (`PREVIEW_SHELF`: 3/2/1/0 stars, the Playroom locked at 3 of 4).
-     *
-     * FABRICATED AS AN INPUT, at the seam the live shell uses: the stored blob
-     * `ttp_ui_progress_load` takes at boot. The stars, the lock and the unlock
-     * counts are all still DERIVED from it in C++, so this cannot photograph a
-     * record the game could not reach — and it touches no preference, so the next
-     * ordinary launch is the couch it always was.
+     * The couch the lobby cards dress: `ttp_ui_preview_progress_json`, loaded like a
+     * saved record at the seam the live shell uses, so the stars and the lock are
+     * still derived in C++ — and it touches no preference.
      */
-    private fun fakeProgress(game: GameCoordinator) {
-        val cups = TtpJson.obj(Ttp.ttp_ui_catalogue_json()).optJSONArray("cups") ?: return
-        val record = JSONObject()
-        for (i in 0 until cups.length()) {
-            val id = cups.optJSONObject(i)?.optString("id")?.ifEmpty { null } ?: continue
-            PREVIEW_BEST.getOrNull(i)?.let { record.put(id, JSONObject().put("best", it)) }
-        }
-        Ttp.ttp_ui_progress_load(
-            TtpJson.arg(JSONObject().put("v", 1).put("cups", record).toString()), 0)
+    private fun previewProgress(game: GameCoordinator) {
+        Ttp.ttp_ui_progress_load(Ttp.ttp_ui_preview_progress_json(), 0)
         // Through the LIVE road, which is the one place that re-reads the catalogue
         // and re-publishes the chooser. `null` skips the preference write.
         game.persistProgression(null)
     }
-
-    /**
-     * `best` is a FINISHING RANK, not a star count — the record stores where the
-     * couch placed and `progression.cc` derives the stars (1st -> 3, 2nd/3rd -> 2,
-     * anything else -> 1). Writing 3/2/1 here as if they were stars produced a
-     * shelf reading 2/2/3, which is a rule this side does not get to have an
-     * opinion about.
-     *
-     * 1st / 2nd / 4th on the first three cups is the web's `PREVIEW_SHELF` — three
-     * stars, two, one, then two blank cups and the Playroom part-way to its unlock.
-     */
-    private val PREVIEW_BEST = listOf(1, 2, 4)
 
     /** The shipped catalogue's first cup. */
     private fun firstCupId(): String? {
@@ -653,8 +659,7 @@ object Scenarios {
         else -> null
     }
 
-    /** The scripted party's name for seat [i]. Read by [GameCoordinator.startDemoRace]
-     *  too, so the racing HUD and the lobby dock name the same players. */
+    /** The scripted party's name for lobby seat [i]. */
     fun nameFor(i: Int): String = NAMES[i % NAMES.size]
 
     /** One scripted player per seat, each on its own livery and car model, so a
@@ -690,105 +695,17 @@ object Scenarios {
         }
     }
 
-    /**
-     * A finished BOARD in the shape `ttp_ui_standings_live_json` answers, then run
-     * through the REAL results view.
-     *
-     * Fabricated because its gatherer reads LIVE handles — the session's ranked rows
-     * and the room-retained field — and neither holds a finished race a second after
-     * a demo launch. The same privilege the web harness takes, and the same fake
-     * numbers, so the two columns differ only where the UI differs.
-     */
-    private fun board(kind: String, game: GameCoordinator): JSONObject {
-        val cup = kind != "results"
-        // THE WHOLE FIELD, off the race that is standing behind the board — not four
-        // invented rows. The demo launch tops the grid up to FIELD_SIZE with CPUs, so
-        // `sceneCars` already holds the eight cars the HUD behind this glass is
-        // drawing, with the engine's own names and liveries. Four rows would have
-        // photographed a board the game cannot produce, and would have compared badly
-        // against the web card, whose fake board is the full grid.
-        val field = game.sceneCars
-        val order = JSONArray()
-        val rows = field.mapIndexed { i, car ->
-            JSONObject()
-                .put("playerId", car.id.boxed())
-                .put("name", car.name)
-                .put("colorIndex", car.colorIndex)
-                .put("finished", true)
-                .put("time", TIMES[i % TIMES.size])
-                // LOAD-BEARING ON THE ROUND TRIP, not just here: racePlace is what
-                // carries the FINISHING order through the cup re-sort below, and a
-                // board that drops it collapses phase 1 into a table where everyone
-                // came first.
-                .put("racePlace", i + 1)
-                .apply {
-                    if (cup) {
-                        put("gained", POINTS_BY_RANK.getOrElse(i) { 0 })
-                        put("points", BANKED[i % BANKED.size] + POINTS_BY_RANK.getOrElse(i) { 0 })
-                    }
-                }
-        }
-        // Built in FINISHING order, then sorted into CUP order — the two orders
-        // `standingsPayload` produces. The leader swap (row 2 leads the cup despite
-        // row 1 winning this race) is the whole point of photographing phase 2: it
-        // is the only thing on the board that shows what the race DID.
-        val sorted = if (cup) rows.sortedByDescending { it.optInt("points") } else rows
-        for (r in sorted) order.put(r)
-        // The LATE JOINER riding along under the field, which is a row shape nothing
-        // else on the board has: `rowValue` returns early for it, so every other cell
-        // is absent and the card says "Next race" instead of a time. Only the
-        // single-race card carries one, matching the web's.
-        if (!cup) {
-            order.put(JSONObject()
-                .put("playerId", field.size + 1)
-                .put("name", NAMES[players % NAMES.size])
-                .put("colorIndex", players)
-                .put("joining", true))
-        }
-
-        val b = JSONObject()
-            .put("over", true)
-            .put("hostPeerIndex", sorted.firstOrNull()?.opt("playerId") ?: JSONObject.NULL)
-            .put("order", order)
-        if (cup) {
-            val final = kind == "podium"
-            val cupRow = TtpJson.obj(Ttp.ttp_ui_catalogue_json())
-                .optJSONArray("cups")?.optJSONObject(0) ?: JSONObject()
-            val tracks = cupRow.optJSONArray("tracks") ?: JSONArray()
-            val raceIndex = if (final) maxOf(tracks.length() - 1, 0) else 1
-            val next = if (final) null else tracks.optString(raceIndex + 1).ifEmpty { null }
-            b.put(
-                "series", JSONObject()
-                    .put("cupId", cupRow.optString("id"))
-                    // optStr, not optString: a cup's `name` is a nullable engine key,
-                    // and org.json reads an explicit JSON null back as the STRING
-                    // "null" — so the podium's headline would read "null CHAMPS!".
-                    // tests/androidtv-nullable-json.test.js derives that key set from
-                    // the C++ writers and caught this line on its first run.
-                    .put("cupName", TtpJson.optStr(cupRow, "name") ?: JSONObject.NULL)
-                    .put("endless", false)
-                    .put("raceIndex", raceIndex)
-                    .put("raceCount", maxOf(tracks.length(), 1))
-                    .put("nextTrackId", next ?: JSONObject.NULL)
-                    .put("nextTrackName", next?.let { trackName(it) } ?: JSONObject.NULL)
-                    // `final` on the wire, `isFinal` in C++, and it is what BOTH the
-                    // podium and the intermission dressings are derived from.
-                    .put("final", final)
-                    .put("autoAdvanceMs", Ttp.ttp_race_intermission_ms())
-            )
-        }
-        return b
+    /** A finished board over the bench race this card launched — the engine's
+     *  fabrication, shared with the web and tvOS harnesses. */
+    private fun previewBoard(kind: String): ByteArray? {
+        val track = trackOverride ?: firstTrackId() ?: ""
+        return Ttp.ttp_ui_preview_board_json(
+            TtpJson.arg(kind), TtpJson.arg(track), players, (seed ?: 1u).toDouble(), -1)
     }
 
-    private fun trackName(trackId: String): String? {
-        val catalog = TtpJson.obj(Ttp.ttp_ui_catalogue_json()).optJSONArray("catalog")
-            ?: return null
-        for (i in 0 until catalog.length()) {
-            val t = catalog.optJSONObject(i) ?: continue
-            if (t.optString("id") == trackId) return TtpJson.optStr(t, "name")
-        }
-        return null
-    }
+    /** The preview boards' finishing time for place [i] (0 = the winner). */
+    private fun finishTime(i: Int): Double =
+        TtpJson.obj(previewBoard("results")).optJSONArray("order")?.optJSONObject(i)?.optDouble("time") ?: 0.0
 
     // -- the frozen previews' dressing ----------------------------------------
 
@@ -814,20 +731,20 @@ object Scenarios {
 
     /** The leading car that owns a cell, home with a plausible time. */
     private fun finishLeader(game: GameCoordinator) {
-        val celled = game.sceneCars.filter { it.cell }
-        if (celled.isEmpty()) return
+        val cars = game.sceneCars
         val hud = game.display.hud()
-        // The HUD's slot index is the ROSTER's, so the leading celled car is the one
-        // whose slot has the lowest place among them.
-        val best = celled.indices.minByOrNull { i -> hud.getOrNull(i)?.place ?: Int.MAX_VALUE }
-            ?: return
-        Ttp.ttp_force_finish(game.sessionHandle, TtpJson.arg(celled[best].id.json), TIMES[0])
+        // The HUD's slot index is the ROSTER's (players grid at the back, behind the
+        // CPU fill), so the celled cars are looked up by their roster index — not by
+        // their index among themselves, which named some CPU's place.
+        val best = cars.indices.filter { cars[it].cell }
+            .minByOrNull { i -> hud.getOrNull(i)?.place ?: Int.MAX_VALUE } ?: return
+        Ttp.ttp_force_finish(game.sessionHandle, TtpJson.arg(cars[best].id.json), finishTime(0))
     }
 
     /** Everybody home: the state the live `allDone` road watches for. */
     private fun finishEveryHuman(game: GameCoordinator) {
         for ((i, car) in game.sceneCars.filter { it.cell }.withIndex()) {
-            Ttp.ttp_force_finish(game.sessionHandle, TtpJson.arg(car.id.json), TIMES[i % TIMES.size])
+            Ttp.ttp_force_finish(game.sessionHandle, TtpJson.arg(car.id.json), finishTime(i))
         }
     }
 

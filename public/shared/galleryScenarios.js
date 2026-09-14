@@ -23,14 +23,17 @@
 export const GALLERY_SCENARIOS = [
   { id: 'welcome', key: 'welcome', title: 'Welcome' },
   { id: 'lobby-loading', key: 'lobby-loading', title: 'Lobby (loading)' },
-  { id: 'lobby-empty', key: 'lobby-empty', title: 'Lobby (waiting)', animated: true },
+  // EVERY card that shows a circuit names it (`track`), or each TV shows whatever
+  // its previous launch left as the saved pick — a different biome per platform.
+  { id: 'lobby-empty', key: 'lobby-empty', title: 'Lobby (waiting)', animated: true,
+    params: { track: 'tidepool' } },
   {
     id: 'lobby-track', key: 'lobby', title: 'Lobby (track picked)',
     hostVariant: true, animated: true, params: { picked: 'track', track: 'driftwood' }
   },
   {
     id: 'lobby-tour', key: 'lobby', title: 'Lobby (tour picked)',
-    hostVariant: true, animated: true, params: { picked: 'tour' }
+    hostVariant: true, animated: true, params: { picked: 'tour', track: 'tidepool' }
   },
   {
     id: 'lobby-random', key: 'lobby', title: 'Lobby (random picked)',
@@ -49,14 +52,19 @@ export const GALLERY_SCENARIOS = [
   // hold and what a reduced-motion visitor sees on the first paint. There is no
   // replay surface: a card that offered one was a button whose only job was to
   // show an entrance a second time.
-  { id: 'countdown', key: 'countdown', title: 'Countdown' },
-  { id: 'racing', key: 'racing', title: 'Race', animated: true },
+  // Held at race time 0: the grid, frozen, on every platform. A TV launch races
+  // from GO, and its own GO clear one race-second later used to erase the banner
+  // on a slow machine; a race that never steps never clears it.
+  { id: 'countdown', key: 'countdown', title: 'Countdown', store: 7,
+    params: { track: 'powder', seed: 1 }, hold: { simMs: 0 } },
+  { id: 'racing', key: 'racing', title: 'Race', animated: true,
+    params: { track: 'tidepool', seed: 1 }, hold: { simMs: 5000 } },
   // Deck-decal check: hairpins force scrub skids and the pads sit on the racing
   // line, so one card shows every road-shader decal (contact shadows, boost
   // aura, rubber) accumulating under driving cars on a bendy road.
   {
     id: 'racing-sidewinder', key: 'racing', title: 'Deck decals',
-    animated: true, params: { track: 'sidewinder' }
+    animated: true, params: { track: 'sidewinder', seed: 1 }, hold: { simMs: 5000 }
   },
   // THE ADAPTIVE SCALE, WATCHABLE — an instrument rather than a screen.
   //
@@ -106,24 +114,69 @@ export const GALLERY_SCENARIOS = [
     animated: true, liveOnly: true,
     params: { players: 4, dpr: null, supersample: 3 }
   },
-  { id: 'rocket', key: 'rocket', title: 'Rocket strike', animated: true },
-  { id: 'monster', key: 'monster', title: 'Monster truck', animated: true },
-  { id: 'paused', key: 'paused', title: 'Paused' },
+  // THE STORE LISTING. `store: n` puts a card at position n of the App Store and
+  // Play screenshot set: its shots are captured as STORE_SHOT (JPEG, the size
+  // both stores take) instead of the gallery's WebP, and the screens gallery
+  // zips them per platform. So the listing IS these gallery cards, and there is
+  // no second set of store pictures to fall out of step with them.
+  //
+  // One race per cup, because five cups are five looks and a listing that shows
+  // one of them sells a smaller game; the seat counts vary for the same reason.
+  //
+  // `hold` — WHICH RACE MOMENT the card is, frozen by the engine itself
+  // (native/libttp-runtime/ttp/shot_hold.h, armed through ttp_shot_hold). A wall-
+  // clock settle landed each platform at a different race time, and the chase
+  // camera's distance depends on speed, so the same card came back with a
+  // different camera per platform. Every capture passes the hold through
+  // unchanged and shoots once the engine reports it held.
+  //
+  // `seed` pins the race's item/wander seed on every platform (the TV launches
+  // are otherwise random), and a held race steps in fixed increments, so a card
+  // is the SAME race everywhere, not merely the same moment of one.
+  { id: 'race-beach', key: 'racing', title: 'Beach Cup race', animated: true, store: 1,
+    params: { track: 'tidepool', players: 4, seed: 1 }, hold: { simMs: 5000 } },
+  { id: 'race-snow', key: 'racing', title: 'Snow Cup race', animated: true, store: 2,
+    params: { track: 'glacier', players: 2, seed: 1 }, hold: { simMs: 5000 } },
+  { id: 'race-backyard', key: 'racing', title: 'Backyard Cup race', animated: true, store: 3,
+    params: { track: 'pretzel', players: 4, seed: 1 }, hold: { simMs: 5000 } },
+  { id: 'race-canyon', key: 'racing', title: 'Canyon Cup race', animated: true, store: 4,
+    params: { track: 'crag', players: 1, seed: 1 }, hold: { simMs: 5000 } },
+  { id: 'race-playroom', key: 'racing', title: 'Playroom Cup race', animated: true, store: 5,
+    params: { track: 'skyline', players: 4, seed: 1 }, hold: { simMs: 5000 } },
+  // The item cards hold on the EVENT: a rocket crosses the road in a few frames,
+  // so the card is the hit car spun out (sim state, which the freeze keeps — the
+  // burst ring is the renderer's and fades on its own clock), and the monster
+  // card is a player's own car grown into the truck. The cap stops a run whose
+  // item never lands instead of hanging the capture.
+  // Each names its circuit too, or every platform races its own default track.
+  { id: 'rocket', key: 'rocket', title: 'Rocket strike', animated: true, store: 6,
+    params: { track: 'powder', seed: 1 }, hold: { simMs: 1500, on: 'rocket', afterMs: 400, capMs: 30000 } },
+  { id: 'monster', key: 'monster', title: 'Monster truck', animated: true, store: 8,
+    params: { track: 'driftwood', seed: 1 }, hold: { simMs: 1500, on: 'monster', afterMs: 600, capMs: 30000 } },
+  // The scripted-beat cards (pause, a dropped seat, a finisher) hold too, and the
+  // beat runs AFTER the hold: a wall-clock delay put a slow TV's beat at the start
+  // line with GO still up. The moments sit just under the web preview's own spin
+  // (90 or 160 steps of 33 ms), so its fixed steps reach them.
+  { id: 'paused', key: 'paused', title: 'Paused', params: { track: 'tidepool', seed: 1 },
+    hold: { simMs: 2900 } },
   // THE DISPLAY'S OWN LINK, over the empty lobby: the two states of the
   // connection overlay (the `set-link` effect). `reconnecting` is the kit's
   // counter mid-backoff; `disconnected` is the spent budget with the one
   // focusable control on the glass, which is the card that shows each
   // platform's focus ring.
-  { id: 'reconnecting', key: 'reconnecting', title: 'Reconnecting' },
-  { id: 'disconnected', key: 'disconnected', title: 'Disconnected' },
+  { id: 'reconnecting', key: 'reconnecting', title: 'Reconnecting', params: { track: 'tidepool' } },
+  { id: 'disconnected', key: 'disconnected', title: 'Disconnected', params: { track: 'tidepool' } },
   // The reconnect QR is sized off the CELL (display.css .cell-reconnect): half
   // the screen's height for one player, most of the cell in a split. Two cards,
   // because a capture shoots every card at four players unless the table pins
   // a count — the solo case is the other arm of the rule, and a column that
   // photographs only the split arm never shows it.
-  { id: 'reconnect', key: 'reconnect', title: 'Reconnect' },
-  { id: 'reconnect-solo', key: 'reconnect', title: 'Reconnect (one player)', params: { players: 1 } },
-  { id: 'finished', key: 'finished', title: 'Player finished' },
+  { id: 'reconnect', key: 'reconnect', title: 'Reconnect', params: { track: 'tidepool', seed: 1 },
+    hold: { simMs: 2900 } },
+  { id: 'reconnect-solo', key: 'reconnect', title: 'Reconnect (one player)',
+    params: { players: 1, track: 'tidepool', seed: 1 }, hold: { simMs: 2900 } },
+  { id: 'finished', key: 'finished', title: 'Player finished', params: { track: 'tidepool', seed: 1 },
+    hold: { simMs: 5200 } },
   // `settleMs` — WHICH MOMENT of a still card is the card. A capture waits this
   // long after the screen stands up before it shoots, and the three board cards
   // are the only ones that want a later one: a cup board is TWO PHASES, and its
@@ -136,10 +189,13 @@ export const GALLERY_SCENARIOS = [
   // The two cup budgets are phase 1 (RACE_PHASE_MS) plus the tally, which runs
   // one tick per point the WINNER owes — so WIDENING POINTS_BY_RANK LENGTHENS
   // THEM, and the slack left over is what absorbs a capture machine under load.
-  { id: 'results', key: 'results', title: 'Results', settleMs: 1200 },
-  { id: 'intermission', key: 'intermission', title: 'Cup intermission', settleMs: 5200 },
-  { id: 'chain', key: 'chain', title: 'Cup: finish → results → next race', animated: true },
-  { id: 'podium', key: 'podium', title: 'Cup podium', settleMs: 5200 },
+  { id: 'results', key: 'results', title: 'Results', settleMs: 1200, params: { track: 'tidepool', seed: 1 } },
+  { id: 'intermission', key: 'intermission', title: 'Cup intermission', settleMs: 5200,
+    params: { track: 'tidepool', seed: 1 } },
+  // LIVE ONLY: a SEQUENCE (finish, the board, the next launch), and any one frame
+  // of it is a picture of whichever beat the shutter caught.
+  { id: 'chain', key: 'chain', title: 'Cup: finish → results → next race', animated: true, liveOnly: true },
+  { id: 'podium', key: 'podium', title: 'Cup podium', settleMs: 5200, params: { track: 'tidepool', seed: 1 } },
   // THE INFO BRANCH: the two boards behind the lobby's ⓘ on both TVs. Neither
   // is a screen the WEB DISPLAY has. Its legal links sit in the welcome board's
   // footer, which the `welcome` card already carries, so `info` is `tvOnly`:
@@ -166,15 +222,21 @@ export const CAPTURED_SCENARIOS = GALLERY_SCENARIOS.filter((s) => !s.liveOnly);
 // other column is allowed to be partial, because a screen a platform deliberately
 // does not have (the welcome board on a TV) is a gap the gallery should SHOW.
 //
-// Each TV platform carries both of its legs, and the pair is not redundant: the
-// simulator/emulator is what a laptop can capture on demand, and the physical box
-// is the only thing that answers for the panel, the output mode and the GPU. A
-// column that silently mixed the two would make "has the TV drifted?" unanswerable.
-export const SHOT_PLATFORMS = [
-  'web',
-  'tvos-device', 'tvos-sim',
-  'androidtv-device', 'androidtv-emu'
-];
+// ONE COLUMN PER TV, whichever machine took the shot. A scenario keeps its most
+// recent capture, from the physical box or the simulator/emulator alike, and each
+// manifest row names the device and its `deviceKind` so the gallery can say which.
+// Two columns per TV used to mean two photographs of every screen to keep fresh,
+// and in practice one of them was always older than the other.
+export const SHOT_PLATFORMS = ['web', 'tvos', 'androidtv'];
+
+// What a `store` card is captured as: the one size and format both the App Store
+// (tvOS) and Play (Android TV) accept, neither of which takes WebP.
+export const STORE_SHOT = { w: 1920, h: 1080, ext: 'jpg' };
+
+// The listing, in store order.
+export const STORE_SCENARIOS = CAPTURED_SCENARIOS
+  .filter((s) => s.store)
+  .sort((a, b) => a.store - b.store);
 
 // The display page's query string for a scenario — the CAPTURE script's URL
 // builder. The live gallery builds its iframe URLs itself (cardURL in
