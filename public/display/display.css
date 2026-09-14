@@ -635,8 +635,8 @@ html.cam-free #race { pointer-events: none; }
 
 /* A rival's name over their car, in your cell. Placed per frame by Stage's
    _paintNameTags from ttp_display_name_tags: the transform anchors the tag's
-   bottom centre on the point C++ projected, half an em above it, so nothing here
-   may set transform. The same filled livery sticker as the chip, smaller, and
+   tail's tip just above the point C++ projected, so nothing here may set
+   transform. The same filled livery sticker as the chip, smaller, and
    with NO offset shadow: over the live 3D view a paper shadow reads as a smeared
    second outline pointing away from the scene's own light. */
 .name-tag {
@@ -647,6 +647,19 @@ html.cam-free #race { pointer-events: none; }
   background: var(--c, var(--brand));
   border: 3px solid var(--ink); border-radius: var(--r-sm);
   padding: 0.25em 0.5em;
+}
+/* The tail: one die-cut piece with the tag, not a second sticker. A diamond in
+   the livery, outlined on its two outer sides only, centred on the tag's bottom
+   edge so its fill covers that stretch of outline and the ink runs unbroken from
+   the tag round the tip. The tip is softened like every sticker corner. When two
+   tags overlap, it is what says which car each name belongs to. */
+.name-tag::after {
+  content: ''; position: absolute; left: 50%; bottom: 0;
+  width: 0.6em; height: 0.6em;
+  background: var(--c, var(--brand));
+  border-right: 3px solid var(--ink); border-bottom: 3px solid var(--ink);
+  border-bottom-right-radius: 0.12em;
+  transform: translate(-50%, 50%) rotate(45deg);
 }
 
 /* Place + lap — top-right of the cell: a white sticker badge for the ordinal
