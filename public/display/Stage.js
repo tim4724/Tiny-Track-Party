@@ -964,7 +964,7 @@ export class Stage {
     }
   }
 
-  // The other players' names over their cars, placed by C++ off the frame just
+  // Every other car's name over it, CPU included, placed by C++ off the frame just
   // drawn (ttp_display_name_tags). THE ONE PER-FRAME DOM WRITE in this loop, and
   // on purpose: a tag rides a moving car, and drawing its text here keeps it at
   // the panel's resolution while the 3D buffer is scaled down. Only transform and
@@ -972,11 +972,12 @@ export class Stage {
   // colour are written only when a pooled element changes whose name it shows.
   _paintNameTags(ids) {
     let n = 0;
-    if (ids.length > 1) {
-      const packed = this.display.nameTags(ids.length * (ids.length - 1));
+    if (ids.length) {
+      const slots = this.display.slotIds();
+      const packed = this.display.nameTags(ids.length * Math.max(0, slots.length - 1));
       const cw = this.container.clientWidth, ch = this.container.clientHeight;
       for (let i = 0; i + TAG_STRIDE - 1 < packed.length; i += TAG_STRIDE) {
-        const id = ids[packed[i + 1]];
+        const id = slots[packed[i + 1]];
         const c = this.cars.get(id);
         if (!c) continue;
         let el = this._tags[n];

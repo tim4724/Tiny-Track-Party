@@ -10,7 +10,7 @@ namespace rt {
 
 std::vector<NameTag> nameTags(const TtpFrameInput& f, const float* pictures) {
     std::vector<NameTag> out;
-    if ((f.flags & TTP_FRAME_OVERVIEW) || f.viewCount < 2 || !pictures) return out;
+    if ((f.flags & TTP_FRAME_OVERVIEW) || f.viewCount == 0 || !pictures) return out;
     const TtpCarInput* cars = ttp_frame_cars(&f);
     const TtpViewInput* views = ttp_frame_views(&f);
     std::vector<std::pair<float, NameTag>> cell;  // (eye distance, tag)
@@ -24,10 +24,13 @@ std::vector<NameTag> nameTags(const TtpFrameInput& f, const float* pictures) {
         const float tx = ty * v.aspect;
         const float* r = pictures + 4 * i;
         cell.clear();
-        for (uint32_t j = 0; j < f.viewCount; j++) {
-            const int32_t slot = views[j].car;
-            if (j == i || slot < 0 || (uint32_t) slot >= f.carCount || slot == v.car) continue;
-            const TtpCarInput& c = cars[slot];
+        if (v.car < 0) continue;  // a cell whose car is not in this scene yet
+        for (uint32_t s = 0; s < f.carCount; s++) {
+            if ((int32_t) s == v.car) continue;
+            const TtpCarInput& c = cars[s];
+            // A slot no live car claims is zeroed by the frame builder, pose and
+            // all, so a zero up axis is the frame's own "nobody here".
+            if (c.up.x == 0 && c.up.y == 0 && c.up.z == 0) continue;
             const V3 anchor = V3{ c.pos.x, c.pos.y, c.pos.z }
                     + V3{ c.up.x, c.up.y, c.up.z } * NAME_TAG_LIFT;
             const V3 d = anchor - eye;
@@ -41,7 +44,7 @@ std::vector<NameTag> nameTags(const TtpFrameInput& f, const float* pictures) {
             const float fade = (NAME_TAG_FAR - dist) / (NAME_TAG_FAR - NAME_TAG_FADE);
             NameTag t;
             t.cell = (int32_t) i;
-            t.target = (int32_t) j;
+            t.target = (int32_t) s;
             t.x = r[0] + (nx + 1) * 0.5f * r[2];
             t.y = r[1] + (1 - ny) * 0.5f * r[3];
             const float k = std::max(0.0f, dist - NAME_TAG_NEAR) / (NAME_TAG_FAR - NAME_TAG_NEAR);

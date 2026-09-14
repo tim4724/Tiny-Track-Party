@@ -1,6 +1,6 @@
-// name_tags — where each split-screen cell shows the OTHER players' names.
+// name_tags — where each split-screen cell shows the other cars' names.
 //
-// A tag floats over a rival human's car in your cell. The TEXT is drawn by the
+// A tag floats over every other car in your cell, CPU included. The TEXT is drawn by the
 // shell's UI toolkit at the panel's native resolution, because the renderer's
 // buffer is scaled down under load (ttp/render_scale.h) and type rendered into
 // it goes soft exactly on the box that needs it most. So this decides WHERE and
@@ -11,8 +11,7 @@
 // shell that draws the tag in the same frame it presents that picture keeps the
 // two together; one that projected on its own clock would trail its car.
 //
-// Only cars that own a cell get a tag: those are the humans, and a cell never
-// tags its own car. No occlusion test — a tag behind a hill still shows, which
+// A cell never tags the car it follows. No occlusion test — a tag behind a hill still shows, which
 // for a rival's name is the useful answer.
 #pragma once
 
@@ -37,7 +36,7 @@ constexpr float NAME_TAG_FAR_SCALE = 0.5f;
 
 struct NameTag {
     int32_t cell;    // the cell the tag is drawn in
-    int32_t target;  // the cell whose car it names
+    int32_t target;  // the roster slot of the car it names
     float x, y;      // anchor, fractions of the surface, top-left origin
     float scale;     // 1 near .. NAME_TAG_FAR_SCALE far
     float alpha;     // 0..1
@@ -47,7 +46,7 @@ struct NameTag {
 // that cell's picture rect as fractions of the surface, top-left origin
 // (ttp_display_cell_rects' first rect). Tags come back grouped by cell in cell
 // order and, within a cell, FAR TO NEAR, so a shell stacking them in order puts
-// the nearer name on top. Empty for an overview frame.
+// the nearer name on top. Empty for an overview frame; a solo race tags the CPU.
 std::vector<NameTag> nameTags(const TtpFrameInput& f, const float* pictures);
 
 }  // namespace rt

@@ -1476,11 +1476,12 @@ void testOverviewOwnsTheSurface(const GameTrack& track) {
 
 }  // namespace
 
-// nameTags over a hand-built three-cell frame: each cell tags the OTHER cell
-// cars in front of its camera, fades them out by distance, and lists them far
-// to near. Plain float projection, so it is checked to a tolerance.
+// nameTags over a hand-built three-cell frame: each cell tags every OTHER live
+// car in front of its camera (cell cars and CPU alike), by roster slot, fades
+// them out by distance, and lists them far to near. Plain float projection, so
+// it is checked to a tolerance.
 void testNameTags() {
-  const uint32_t nCars = 3, nViews = 3;
+  const uint32_t nCars = 5, nViews = 3;
   std::vector<uint8_t> buf(sizeof(TtpFrameInput) + nCars * sizeof(TtpCarInput)
                            + nViews * sizeof(TtpViewInput));
   TtpFrameInput* f = (TtpFrameInput*) buf.data();
@@ -1489,10 +1490,13 @@ void testNameTags() {
   f->viewCount = nViews;
   TtpCarInput* cars = (TtpCarInput*) (f + 1);
   const float lift = ttp::rt::NAME_TAG_LIFT;
+  // Slots 0-2 own the three cells, slot 3 is a CPU car with no cell, and slot 4
+  // is a seat with no live car: zeroed, exactly as the frame builder leaves it.
   cars[0].pos = { 0, -lift, -2 };
   cars[1].pos = { 1, -lift, -4 };
   cars[2].pos = { 0, -lift, -22 };
-  for (uint32_t i = 0; i < nCars; i++) cars[i].up = { 0, 1, 0 };
+  cars[3].pos = { -1, -lift, -12 };
+  for (uint32_t i = 0; i < 4; i++) cars[i].up = { 0, 1, 0 };
   TtpViewInput* views = (TtpViewInput*) (cars + nCars);
   using ttp::rt::V3;
   ttp::rt::lookAtWorld(views[0].world, V3{ 0, 0, 0 }, V3{ 0, 0, -1 }, V3{ 0, 1, 0 });
@@ -1517,9 +1521,9 @@ void testNameTags() {
   };
 
   const std::vector<ttp::rt::NameTag> tags = ttp::rt::nameTags(*f, pictures);
-  checkU((uint32_t) tags.size(), 4, "nameTags: cell 1 sees everything behind it");
-  if (tags.size() != 4) return;
-  // Cell 0, far to near: car 2 dead ahead in its fade band, then car 1.
+  checkU((uint32_t) tags.size(), 5, "nameTags: cell 1 sees everything behind it, slot 4 is nobody");
+  if (tags.size() != 5) return;
+  // Cell 0, far to near: car 2 dead ahead in its fade band, the CPU, then car 1.
   checkU(tags[0].cell, 0, "tag 0 cell");
   checkU(tags[0].target, 2, "tag 0 names the far car first");
   near(tags[0].x, 0.25f, "tag 0 x centred in cell 0");
@@ -1527,18 +1531,26 @@ void testNameTags() {
   near(tags[0].alpha, (ttp::rt::NAME_TAG_FAR - 22) / (ttp::rt::NAME_TAG_FAR - ttp::rt::NAME_TAG_FADE),
        "tag 0 fades inside the band");
   near(tags[0].scale, scaleAt(22), "tag 0 scale");
-  checkU(tags[1].target, 1, "tag 1 names the near car last, on top");
-  near(tags[1].x, 0.3125f, "tag 1 x: a quarter right of centre");
-  near(tags[1].alpha, 1, "tag 1 is fully up close");
-  near(tags[1].scale, scaleAt(std::sqrt(17.0f)), "tag 1 scale");
+  checkU(tags[1].target, 3, "tag 1 names the CPU car, which owns no cell");
+  near(tags[1].x, 0.25f - 0.25f / 12, "tag 1 x: a twelfth left of centre");
+  checkU(tags[2].target, 1, "tag 2 names the near car last, on top");
+  near(tags[2].x, 0.3125f, "tag 2 x: a quarter right of centre");
+  near(tags[2].alpha, 1, "tag 2 is fully up close");
+  near(tags[2].scale, scaleAt(std::sqrt(17.0f)), "tag 2 scale");
   near(scaleAt(3), 1, "a rival inside NAME_TAG_NEAR is full size");
-  // Cell 2 looks back down -Z's other way: car 0 (8 away) before car 1 (~6).
-  checkU(tags[2].cell, 2, "tag 2 cell");
-  checkU(tags[2].target, 0, "tag 2 names car 0");
-  near(tags[2].x, 0.25f, "tag 2 x in cell 2");
-  near(tags[2].y, 0.75f, "tag 2 y in cell 2");
-  checkU(tags[3].target, 1, "tag 3 names car 1");
-  near(tags[3].x, 0.25f - 0.25f / 6, "tag 3 x mirrors: the camera faces +Z");
+  // Cell 2 faces +Z from z=-10: car 0 (8 away) before car 1 (~6); the CPU is behind.
+  checkU(tags[3].cell, 2, "tag 3 cell");
+  checkU(tags[3].target, 0, "tag 3 names car 0");
+  near(tags[3].x, 0.25f, "tag 3 x in cell 2");
+  near(tags[3].y, 0.75f, "tag 3 y in cell 2");
+  checkU(tags[4].target, 1, "tag 4 names car 1");
+  near(tags[4].x, 0.25f - 0.25f / 6, "tag 4 x mirrors: the camera faces +Z");
+
+  // A solo race: one cell, and the CPU field still gets its names.
+  f->viewCount = 1;
+  f->carCount = nCars;
+  std::memmove((uint8_t*) (cars + nCars), views, sizeof(TtpViewInput));  // view 0 stays first
+  checkU((uint32_t) ttp::rt::nameTags(*f, pictures).size(), 3, "nameTags: a solo race tags its rivals");
 
   f->flags = TTP_FRAME_OVERVIEW;
   check(ttp::rt::nameTags(*f, pictures).empty(), "nameTags: an overview tags nobody");

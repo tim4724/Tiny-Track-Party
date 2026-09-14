@@ -568,8 +568,8 @@ below. The first two are owed by BOTH TV shells; the last is Android's.
   then hitches. The web reference is `prepareNextTrack()` plus `Stage.prepare`;
   there is no `prepare` call anywhere in either shell. On Android's GPU a build
   is seconds, which makes it the most visible item here.
-- **Rival name tags** — NEITHER TV shell draws them. `ttp_display_name_tags`
-  answers where each cell shows the other players' names, per frame; the shell
+- **Name tags** — NEITHER TV shell draws them. `ttp_display_name_tags`
+  answers where each cell shows every other car's name, CPU included, per frame; the shell
   reads it right after `ttp_display_frame` and draws the text in its own UI
   toolkit, at native resolution, in the SAME frame the picture presents, or
   each tag trails its car. Web reference: `Stage._paintNameTags`.

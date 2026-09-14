@@ -691,7 +691,7 @@ int ttp_display_name_tags(float* out, int maxTags) {
     if (!g_disp || !g_disp->built || !out || maxTags <= 0) return 0;
     const DisplayCore& d = *g_disp;
     const uint32_t n = (uint32_t) d.cells.size();
-    if (n < 2 || d.frame.size() < sizeof(TtpFrameInput)) return 0;
+    if (n == 0 || d.frame.size() < sizeof(TtpFrameInput)) return 0;
     const TtpFrameInput& f = *(const TtpFrameInput*) d.frame.data();
     if (f.viewCount != n) return 0;
     // The picture rects, in the units ttp_display_cell_rects answers in, so a

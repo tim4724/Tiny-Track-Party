@@ -243,7 +243,7 @@ device-pixel rects divided back out by the same number.
 anything tempted onto the per-frame path must actually CHANGE per frame. See
 `native/renderer/CLAUDE.md` for what the frame itself costs.
 
-The one element that does is the **rival name tags** (`_paintNameTags`), because
+The one element that does is the **name tags** over every other car (`_paintNameTags`), because
 a tag rides a moving car. They are DOM rather than renderer geometry so the text
 stays at the panel's resolution while the 3D buffer is scaled down; C++ decides
 where each goes (`ttp/name_tags.h`) off the frame it was just handed. Two rules
