@@ -648,21 +648,23 @@ html.cam-free #race { pointer-events: none; }
   border: 3px solid var(--ink); border-radius: var(--r-sm);
   padding: 0.25em 0.5em;
 }
-/* The tail: one die-cut piece with the tag, not a second sticker. A diamond in
-   the livery, outlined on its two outer sides only, centred on the OUTER edge of
-   the tag's bottom outline (bottom: -3px, the border's width) so it hangs clear of
-   the chip while its fill still covers that stretch of outline, and the ink runs
-   unbroken from the tag round the tip. Centred on the inner edge it sank half
-   inside the chip at race size. The tip is softened like every sticker corner. When two
-   tags overlap, it is what says which car each name belongs to. */
-.name-tag::after {
-  content: ''; position: absolute; left: 50%; bottom: -3px;
-  width: 0.7em; height: 0.7em;
-  background: var(--c, var(--brand));
-  border-right: 3px solid var(--ink); border-bottom: 3px solid var(--ink);
-  border-bottom-right-radius: 0.12em;
-  transform: translate(-50%, 50%) rotate(45deg);
+/* The tail: one die-cut piece with the tag, not a second sticker. TWO stacked
+   triangles, not a bordered square: an ink triangle hung from the inner edge of
+   the chip's bottom outline, then the same triangle in the livery lifted by the
+   outline's width times sqrt(2). With 45-degree sides that lift is exactly one
+   outline width perpendicular to each side, so the ink runs as one band of one
+   thickness from the chip round the tip and back. A rotated square with two
+   borders could not do that: its border ends met the chip's outline at their
+   own mitre and left a notch at each join. The flat tip softens the point like
+   every sticker corner. When two tags overlap, the tail says whose car is whose. */
+.name-tag::before, .name-tag::after {
+  content: ''; position: absolute; left: 50%; top: 100%;
+  width: calc(0.9em + 6px); height: calc(0.45em + 3px);
+  transform: translateX(-50%);
+  clip-path: polygon(0 0, 100% 0, 54% 92%, 46% 92%);
 }
+.name-tag::before { background: var(--ink); }
+.name-tag::after { top: calc(100% - 4.243px); background: var(--c, var(--brand)); }
 
 /* Place + lap — top-right of the cell: a white sticker badge for the ordinal
    over an ink "LAP 2/3" pill, the pair leaning +1.5°. Positioned by _loop; the
