@@ -237,10 +237,13 @@ enum Tokens {
     /// this palette and nowhere else in the UI. Do not reach for `car(1)`
     /// because a button wants to be yellow; that veto is the whole reason the
     /// two palettes are separate groups in `theme.css`.
-    static func car(_ index: Int) -> Color {
-        guard !liveries.isEmpty else { return Color(uiColor: missing) }
+    static func car(_ index: Int) -> Color { Color(uiColor: uiCar(index)) }
+
+    /// `car(_:)` as a UIColor, for the name tags' layer images.
+    static func uiCar(_ index: Int) -> UIColor {
+        guard !liveries.isEmpty else { return missing }
         let n = liveries.count
-        return Color(uiColor: liveries[((index % n) + n) % n])
+        return liveries[((index % n) + n) % n]
     }
 
     // There is deliberately no hex parser for authored strings in this file —

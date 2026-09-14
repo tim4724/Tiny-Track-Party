@@ -131,6 +131,27 @@ final class DisplayHost {
     /// Filament takes the layer as its native window (see `MetalSurfaceView`).
     lazy var surface = MetalSurfaceView(host: self)
 
+    // MARK: - Name tags
+
+    /// The tags over every other car (`NameTags.swift`), a subview of the surface
+    /// so the SwiftUI chips stay above them. Added on first use, since the
+    /// surface is lazy too.
+    private lazy var tagView: NameTagView = {
+        let v = NameTagView(frame: surface.bounds)
+        surface.addSubview(v)
+        return v
+    }()
+
+    /// Who each car is, by id, as the coordinator last said.
+    private var tagLabels: [EngineIdentity: NameTagLabel] = [:]
+
+    /// The same, by roster SLOT — what `ttp_display_name_tags` names a car by.
+    /// Rebuilt when either the roster or the labels move, never per frame.
+    private var slotTagLabels: [NameTagLabel?] = []
+
+    /// `ttp_display_name_tags`' scratch, grown on demand and reused.
+    private var tagBuffer: [Float] = []
+
     // MARK: - The adaptive render scale
 
     // THE BUFFER IS NOT THE PANEL. `ttp/render_scale.h` decides how big it
@@ -542,6 +563,10 @@ final class DisplayHost {
             onFirstPaint?()
         }
 
+        // After the frame they were read off, and only when one reached the
+        // panel: a skipped frame leaves the last picture up, and its tags with it.
+        if presented { placeNameTags() } else if !hasScene { tagView.clear() }
+
         perf.record(now: link.timestamp, interval: elapsed, presented: presented,
                     cells: cellCount, pixels: surfacePixels, dpr: uiScale)
 
@@ -705,6 +730,7 @@ final class DisplayHost {
     func sceneBuilt(rosterIds: [EngineIdentity], biome: String) {
         hasScene = true
         roster = rosterIds
+        slotTagLabels = roster.map { tagLabels[$0] }
         biomeName = biome
         // THE SCENE CLOCK THE SCALE RULE IS HANDED, stamped where a scene
         // actually becomes true. `SceneStaging` calls `ttp_display_build` itself
@@ -743,6 +769,27 @@ final class DisplayHost {
     func release() {
         ttp_display_release()
         hasScene = false
+    }
+
+    /// Who the scene's cars are, for their name tags. The coordinator calls this
+    /// whenever its scene cars change — a build, a rename, a leave.
+    func setNameTagLabels(_ labels: [EngineIdentity: NameTagLabel]) {
+        guard labels != tagLabels else { return }
+        tagLabels = labels
+        tagView.keepImages(for: Array(labels.values))
+        slotTagLabels = roster.map { tagLabels[$0] }
+    }
+
+    /// This frame's tags, from `ttp_display_name_tags`. At most every other car
+    /// in every cell, so the buffer only grows with the field.
+    private func placeNameTags() {
+        let maxTags = cellCount * max(0, roster.count - 1)
+        guard maxTags > 0 else { tagView.clear(); return }
+        if tagBuffer.count < maxTags * 6 { tagBuffer = [Float](repeating: 0, count: maxTags * 6) }
+        tagBuffer.withUnsafeMutableBufferPointer { buf in
+            let got = Int(ttp_display_name_tags(buf.baseAddress, Int32(maxTags)))
+            tagView.place(UnsafeBufferPointer(buf), count: max(0, min(got, maxTags)), labels: slotTagLabels)
+        }
     }
 
     // MARK: - What to draw
