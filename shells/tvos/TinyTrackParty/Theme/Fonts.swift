@@ -40,9 +40,14 @@ enum Fonts {
     /// UIFont rather than SwiftUI's Font: only the UIKit side exposes
     /// `lineHeight`, and this shell already loads the faces through it.
     static func lineHeight(_ size: CGFloat, weight: Font.Weight = .bold) -> CGFloat {
+        uiDisplay(size, weight: weight).lineHeight
+    }
+
+    /// `display(size, weight)` as a UIFont, for the one place type is drawn
+    /// outside SwiftUI: the name tags, rasterized once into a layer image.
+    static func uiDisplay(_ size: CGFloat, weight: Font.Weight = .bold) -> UIFont {
         let name = fredoka.face(for: cssWeight(weight))
-        let font = UIFont(name: name, size: size) ?? UIFont.systemFont(ofSize: size)
-        return font.lineHeight
+        return UIFont(name: name, size: size) ?? UIFont.systemFont(ofSize: size)
     }
 
     /// Nunito. Running text — the welcome tagline, the info board's prose.

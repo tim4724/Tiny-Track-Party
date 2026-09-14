@@ -80,7 +80,15 @@ class GameCoordinator(
     /** Which reconnect cards actually attached, so the diff has a previous. */
     private val shownReconnectIds = LinkedHashSet<EngineId>()
 
+    /**
+     * The cars in the scene, roster order. Every write re-dresses the name tags,
+     * which is what keeps a rename or a re-pick on them without a frame-path read.
+     */
     var sceneCars: List<SceneCar> = emptyList()
+        set(value) {
+            field = value
+            display.nameTags?.setField(value)
+        }
 
     /** The claim URL each reconnecting seat's card shows. Composed in C++. */
     private val reconnectUrls = HashMap<EngineId, String>()
@@ -1607,8 +1615,7 @@ class GameCoordinator(
      * walk's own `announce` republishes it). What is left here is the one copy no
      * handle knows about: the cell chip.
      *
-     * The car's REAR NAME PLATE is untouched and stays stale until the next scene
-     * build: it is geometry baked from the build roster. Same on the web.
+     * The name tag over the car follows through [sceneCars]' setter.
      */
     private fun renamePlayer(id: EngineId, name: String) {
         sceneCars = sceneCars.map { if (it.id == id) it.copy(name = name) else it }

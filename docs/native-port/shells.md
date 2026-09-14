@@ -556,23 +556,30 @@ identically (both are commented where they bite, in `TtpRendererBakes.cpp`):
     browser show the URL as a QR for the phone already in the room. Read those
     two URLs out of the display's own footer rather than typing them.
 
+17. **Name tags, placed per frame and drawn natively.** `ttp_display_name_tags`
+    answers where each cell shows every other car's name; read it right after a
+    PRESENTED `ttp_display_frame` and move the tags in that same callback. Draw
+    the text in the platform's own toolkit, not the renderer, so it stays at the
+    panel's resolution under a scaled buffer — but below that toolkit's layout
+    layer: rasterize each car's sticker ONCE (on a name or livery change) and per
+    frame only move, scale and fade it. Nothing waits on the other layer (no
+    `presentsWithTransaction`, no surface sync); that was decided for simplicity.
+    References: `Stage._paintNameTags` (web), `Render/NameTags.swift` (a pooled
+    CALayer per tag under the SwiftUI chips), `NameTags.kt` (one plain View under
+    the ComposeView, for the Compose-on-the-frame-thread reason in its header).
+
 ## Still owed by the TV shells
 
 This list is an audit walked against the shells' code, not a wishlist: each row
 is a real item, not a simplification. A row leaves it two ways — a shell does
 the work, or the work is decided against and moves to **Decided, not owed**
-below. The first two are owed by BOTH TV shells; the last is Android's.
+below. The first is owed by BOTH TV shells; the second is Android's.
 
 - **Meshing the next circuit at the intermission** (item 13) — NEITHER TV shell
   does it: a cup's chained start shows the outgoing circuit under the count and
   then hitches. The web reference is `prepareNextTrack()` plus `Stage.prepare`;
   there is no `prepare` call anywhere in either shell. On Android's GPU a build
   is seconds, which makes it the most visible item here.
-- **Name tags** — NEITHER TV shell draws them. `ttp_display_name_tags`
-  answers where each cell shows every other car's name, CPU included, per frame; the shell
-  reads it right after `ttp_display_frame` and draws the text in its own UI
-  toolkit, at native resolution, in the SAME frame the picture presents, or
-  each tag trails its car. Web reference: `Stage._paintNameTags`.
 - **An app baseline profile** — the release APK carries only library-supplied
   profiles, so this shell's own composables and boot path are not AOT-compiled;
   the tail it would move is the half the GPU readout cannot see, and it costs a

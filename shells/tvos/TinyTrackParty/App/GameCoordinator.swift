@@ -46,7 +46,15 @@ final class GameCoordinator: ObservableObject {
 
     /// Which reconnect cards actually attached, so the diff has a previous.
     var shownReconnectIds: Set<EngineIdentity> = []
-    var sceneCars: [SceneCar] = []
+    var sceneCars: [SceneCar] = [] {
+        // The name tags read who a car is per frame; hand them the table now
+        // rather than letting the frame loop reach back into this.
+        didSet {
+            display.setNameTagLabels(Dictionary(sceneCars.map {
+                ($0.id, NameTagLabel(name: $0.name, colorIndex: $0.colorIndex))
+            }, uniquingKeysWith: { a, _ in a }))
+        }
+    }
     /// The claim URL each reconnecting seat's card shows. Composed in C++
     /// (`ttp_net_claim_url`); only the QR bitmap is per-platform.
     var reconnectURLs: [EngineIdentity: String] = [:]

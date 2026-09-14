@@ -174,6 +174,16 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+        // The name tags, UNDER the ComposeView so the cell chips and cards paint
+        // over a tag that drifts beneath them. The surface still goes in below
+        // both at index 0 (see the post at the end). A plain View, for the cost
+        // argument in NameTags.kt.
+        val tagView = NameTagView(this).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        }
+        game.display.nameTags = tagView
+        root.addView(tagView)
         root.addView(compose)
         // The perf readout, OVER the ComposeView and outside it — a plain View,
         // for the cost argument in PerfOverlay.kt. Its corner and margins are

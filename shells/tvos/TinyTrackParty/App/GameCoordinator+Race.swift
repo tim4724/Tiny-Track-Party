@@ -238,11 +238,8 @@ extension GameCoordinator {
     ///
     /// What is left here is the one copy no handle knows about: the cell chip
     /// (`sceneCars`, which the HUD poll reads). A no-op for a seat with no car,
-    /// since a late joiner is in neither.
-    ///
-    /// The car's REAR NAME PLATE is untouched and stays stale until the next
-    /// scene build: it is geometry baked from the build roster, so moving it
-    /// needs a per-plate rebuild in the renderer and a new ABI. Same on the web.
+    /// since a late joiner is in neither. The name tags follow on the same
+    /// write: `sceneCars`' observer hands the display the new label.
     func renamePlayer(_ id: EngineIdentity, _ name: String) {
         sceneCars = sceneCars.map {
             guard $0.id == id else { return $0 }
