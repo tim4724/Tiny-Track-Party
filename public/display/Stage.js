@@ -991,7 +991,7 @@ export class Stage {
         const col = this.colors[c.colorIndex % this.colors.length] || '#fff';
         if (el._col !== col) { el._col = col; el.style.setProperty('--c', col); }
         el.style.transform = `translate3d(${packed[i + 2] * cw}px, ${packed[i + 3] * ch}px, 0) `
-            + `scale(${packed[i + 4]}) translate(-50%, -100%) translateY(-0.75em) rotate(-2deg)`;
+            + `scale(${packed[i + 4]}) translate(-50%, -100%) translateY(-0.55em) rotate(-2deg)`;
         el.style.opacity = packed[i + 5];
         if (n >= this._tagsShown) el.style.display = 'block';
         n++;
