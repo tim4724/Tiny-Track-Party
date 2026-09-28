@@ -106,6 +106,7 @@ class MainActivity : ComponentActivity() {
             Log.i("TtpDisplay", "minimal post-processing requested; display supports it: " +
                     (display?.isMinimalPostProcessingSupported ?: false))
         }
+        PerfDebug.requestPanelHz(this)
 
         // NO INPUT WHILE THE COVER IS UP, cleared the moment it lifts (the
         // LaunchedEffect below). This is not about the remote, it is about the

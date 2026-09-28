@@ -24,6 +24,9 @@ import androidx.compose.runtime.setValue
  *                                            # unset = VulkanPolicy (Vulkan when it can)
  * adb shell setprop debug.ttp.hud 0          # compose NO race chrome (1/unset = shown):
  *                                            # prices the Compose window's own GPU share
+ * adb shell setprop debug.ttp.panelhz 50    # ask the display for this refresh at the
+ *                                            # current size (read at launch; unset = the
+ *                                            # system's mode). Probes a 50 Hz race.
  * adb shell setprop debug.ttp.tags 0         # no name tags: neither the per-frame read
  *                                            # nor the tag View's draw (1/unset = shown)
  * adb shell setprop debug.ttp.biome snow     # build every scene in this biome, whatever
@@ -219,6 +222,27 @@ object PerfDebug {
      * Internal because [VulkanPolicy] reads its override (`debug.ttp.vk` — not a
      * knob this poll can act on: a backend exists only at engine creation).
      */
+    /**
+     * `debug.ttp.panelhz <hz>`: request the display mode at this refresh rate and
+     * the current resolution, through the window's public `preferredDisplayModeId`
+     * (the shell may not switch modes itself). A probe for racing at 50 Hz; a
+     * mode the panel does not offer is logged and ignored.
+     */
+    fun requestPanelHz(activity: android.app.Activity) {
+        val hz = getprop("debug.ttp.panelhz")?.toFloatOrNull() ?: return
+        val d = activity.display ?: return
+        val now = d.mode
+        val want = d.supportedModes.firstOrNull {
+            it.physicalWidth == now.physicalWidth && it.physicalHeight == now.physicalHeight &&
+                kotlin.math.abs(it.refreshRate - hz) < 0.5f
+        }
+        if (want == null) { Log.i(TAG, "panel hz $hz: no such mode at ${now.physicalWidth}x${now.physicalHeight}"); return }
+        val lp = activity.window.attributes
+        lp.preferredDisplayModeId = want.modeId
+        activity.window.attributes = lp
+        Log.i(TAG, "panel hz -> requested mode ${want.modeId} (${want.refreshRate} Hz)")
+    }
+
     internal fun getprop(key: String): String? = try {
         val cls = Class.forName("android.os.SystemProperties")
         (cls.getMethod("get", String::class.java).invoke(null, key) as? String)
