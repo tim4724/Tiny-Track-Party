@@ -62,6 +62,16 @@ const DERIVED = [
     gen: 'scripts/gen-track-defs-header.mjs',
     then: 'node scripts/gen-trackbuilder-corpus.mjs && native/scripts/build-runtime-web.sh',
   },
+  // The kit's per-vertex atlas colours, which the renderer folds a static
+  // copy's light into at scene build. A stale bake here is not a desync but a
+  // MISS: the key is the GLB's bytes, so a changed model falls back to live
+  // lighting and silently gives its milliseconds back.
+  {
+    what: 'native/renderer/generated/kit_colors.h',
+    from: 'public/assets/toycar/*.glb + Textures/*.png',
+    gen: 'scripts/gen-kit-colors.mjs',
+    then: 'native/scripts/build-runtime-web.sh',
+  },
   {
     what: 'tests/fixtures/protocol-corpus.jsonl',
     from: 'public/shared/protocol.js',
@@ -93,13 +103,13 @@ const DERIVED = [
     then: 'node --test tests/design-tokens.test.js',
   },
   // Also not a C++ input: the baked waypoints + auto-placed furniture for the 16
-  // seeded tracks. Slow (~12 s) and it earns it — every other entry re-derives in
-  // milliseconds because it just re-reads a JS file, while this one re-runs the
-  // whole search: 16 elevation solves and grid-anchor shortlists, each building
-  // real geometry through the native builder. That IS the check. A cheaper
-  // version (one track per profile, say) would prove the pipeline executes and
-  // then read like it proved the bake, which is the failure this file's header
-  // is about.
+  // seeded tracks. It dominates this file's runtime and it earns it — every other
+  // entry re-derives in milliseconds because it just re-reads a JS file, while
+  // this one re-runs the whole search: 16 elevation solves and grid-anchor
+  // shortlists, each building real geometry through the native builder. That IS
+  // the check. A cheaper version (one track per profile, say) would prove the
+  // pipeline executes and then read like it proved the bake, which is the
+  // failure this file's header is about.
   {
     what: 'public/shared/genTracks.js',
     from: 'scripts/track-gen.mjs + the native builder',

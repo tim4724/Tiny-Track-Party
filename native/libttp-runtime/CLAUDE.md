@@ -17,8 +17,12 @@ catch.
 
 `render_scale` is here for a different reason: it decides how big the drawing
 buffer should be from what the last window of frames cost, and every platform
-meets the same spread of devices. A shell hands over MEASUREMENTS — it may not
-judge them, and the header says which judgements are the rule's.
+meets the same spread of devices. It is TWO files — `render_scale.h`, the pure
+rule, and `render_scale_controller.{h,cc}`, the state around it: the window it
+folds off the readout's monitor, the running fastest present, the cost model's
+observation and the tenure clocks. A shell names its BAND and its panel period
+and performs the answer; it holds nothing else, because three shells that held
+that state by hand had already drifted to three different percentile formulas.
 
 ## The UI model
 
@@ -62,6 +66,51 @@ load-bearing AND silent when wrong. Four constraints live in the order alone:
 3. Cup points are banked BEFORE the final board goes out.
 4. The session is disposed BEFORE the flow flips to LOBBY.
 
+**The flag is not the end of the race.** The sim raises the last car's finish and
+`raceOver` in ONE update, so a board shown when every human is home lands on the
+frame the flag does — it replaces a race that was being driven a moment ago, and
+the finisher never sees the place card their own cell just earned. So the two are
+separate walks. `flagRace` paints the HUD (the one paint that card gets) and hands
+the phones their board — everyone holding one has already crossed, so there is
+nothing left for an early board to spoil — and arms the end. Between them the race
+KEEPS RUNNING: the shell sets `ttp_hold_end`, which stops `RaceSession` finishing
+itself, and the field carries on (`Game` already drives a finished car round a
+victory lap). `endRace` is the far end — it banks the points, lands the board and
+arms the intermission, whose clock therefore starts AFTER the flourish so a
+chained race keeps its whole budget.
+
+The freeze is deliberately NOT an effect. `endRace` runs off the `_raceEnd` event,
+and that event is raised BY the burst that resolves the cars still running, so a
+hold emitted here would land after the teleport it exists to hide; bracketing the
+burst is the shell's (`main.js`'s finish branch). And the flag must fire ONCE —
+`racing` and humans-all-done are both still true on every poll inside the
+flourish, so each shell latches it or the arm re-fires six times a second and
+leaves stale timers that freeze the NEXT race.
+
+`FINISH_FLOURISH_MS` is the one taste knob and lives in `race_flow.h`; nothing
+waits on it and no phone is told about it, which is why it is emitted rather than
+passed in the way the intermission is.
+
+**The countdown is GATED on the scene, not on the build returning.** A launch
+answers with two effect lists: the walk, and `start-countdown` alone, held until
+`countdownReady` says the scene has stopped assembling. The wait is measured in
+FRAMES because that is what pays a scene's staging cost — `render_scale.h`'s
+scene grace records an A10X presenting at 7-25 fps for ~2.6 s *after* the build
+call came back — and the test is SPREAD (p95 over p50 of the present series), not
+speed, because a 4-cell race on the weakest box is steadily over budget and
+should still start. There is no other shape: EVERY launch answers with both
+lists, and a shell that walks only the first starts a race that never counts
+down.
+
+**Three launch knobs were baked in and are now the layer's only behaviour** —
+the humans-at-back grid, the deferred countdown and the finished series banking
+progression. Each was default-OFF purely so the raceflow corpus's recorded lines
+stayed byte-identical, which meant every shipping caller hard-coded it true and
+the OFF branch was dead code exercised only by the fixture. The corpus was
+re-recorded instead (and demoted to class 2 for it — `tests/CLAUDE.md`), so the
+shipped grid and countdown finally have a fixture. `autopilotPlayers` below is
+the one flag that survives, for the reason stated there.
+
 **A draw cannot be put back**, which is why the start/return walks ask the
 rules for the verdict BEFORE drawing: a refused start must not advance the
 shuffle bag, or "random" repeats sooner and silently skips a track nobody saw.
@@ -79,6 +128,60 @@ host's mode pick and the shuffle bag crossed into the net walks
 walks in `runtime/ttp_race.cc` are EXECUTORS over this layer: they perform the
 series/field/pick ops themselves and answer only platform ops, while this
 layer keeps emitting the full corpus-pinned lists.
+
+## The bench: an autopiloted PLAYER seat
+
+A seat that IS a participant and ALSO carries a controller (`BotSpec::player`).
+It exists because a perf bench, a screenshot run and an attract race all need a
+field that DRIVES with nobody holding a phone, and neither of the two buckets
+could express it: throttle is automatic, so an unsteered seat does not sit on
+the grid — it accelerates away, never turns, and piles into the first corner
+(45.7 units of track in 900 frames against a driving car's 151).
+
+**The tempting spelling does not survive the walk.** Specifying every seat as a
+bot works only in BARE mode, where no session counts participants. Through the
+real walk those entries file under `bots` and not `humans`, the session has no
+players left, and the race is torn down a second after it starts. So the marker
+files the seat under BOTH, and `ttp_session_ai_ids` and the audio's AI set ask
+the FLAG rather than the bucket — a marked seat keeps its split-screen cell, is
+heard, and is counted by `ui::autoPause`.
+
+`LaunchInput::autopilotPlayers` is default-OFF, and unlike the three flags baked
+in above it CANNOT be: OFF is what a shipping race does — a real party steers
+from phones — and `ttp_race_autopilot_players` sets a runtime latch the live
+launch path reads. `ttp_race.cc` emits the marker key only when it is set, so no
+recorded launch gains a byte. `benchPlayers` decides the bench
+roster (names, liveries, cars) once, because three shells photographing the same
+screen side by side must differ in the UI under inspection and in nothing else.
+
+The gate is on the OUTCOME (`abi_check.cc`, `autopilotedPlayerSeats`): the cars
+RACE, against an unmarked control arm that proves the assertion can fail. An
+earlier attempt at this feature asserted the create-session PAYLOAD and passed
+green while nothing on the grid moved.
+
+## The frame-cost readout
+
+`ttp/perf_stats.{h,cc}` behind `runtime/ttp_perf.h` owns the ring, its trim, the
+warm-up filter, the percentile formula, the two rates (`hz` counts ticks, `fps`
+counts presents), the drop and skip counts and the health verdict. A shell hands
+over MEASUREMENTS — its own clocks, its profile buffer, whatever GPU timer its
+backend has — and may not judge them. Same contract as `render_scale`, and the
+same WINDOW: `perf::monitor()` is the process's one ring and the scale
+controller folds off it, so a shell cannot steer its resolution off numbers its
+overlay disagrees with. It carries two present series for that — `frame` is the
+tick cadence and `present` the gaps between frames that reached the panel, which
+are one measurement on rAF and two on a display link.
+
+It is here because the three shells had already drifted while **all three
+carried a comment saying they had not**: each said "the web's thresholds, kept so
+the readouts mean the same thing", and by the time this was written tvOS folded
+skipped presents into its verdict and the other two did not. A run a television
+called amber a browser called green, on the same numbers.
+
+`ttp_perf_readout_json` is ONE canonical line, and it is deliberately the same
+bytes the overlay draws from, so a screenshot and a logged number cannot
+disagree. **An absent series is `null`, never 0** — a platform with no GPU timer
+has no signal, not a free frame.
 
 ## Audio decisions
 
@@ -121,6 +224,23 @@ moulded plastic plans none, because a patch on it reads as a stain rather than
 as a season of racing. Two siblings were built and removed by decision (git
 history has both): a pre-rubbered racing groove, and left/right turn chevrons —
 parked for a later revisit of how sharp turns announce themselves.
+
+## Shapes the renderer draws with
+
+`ttp/car_footprint.h` makes the car contact shadow's mask: the generic
+superellipse, and a per-model FOOTPRINT rasterized from the car's own triangles.
+Header-only for the `kitfield.h` reason above — the renderer consumes it and may
+not link this library — and the `carfootprint` ctest executes it on every leg,
+which matters more here than usual: the shape is something a person judges by
+eye on a television, so the parts that are NOT taste (the frame, the
+orientation, that two outlines in one bounding box come out different, that a
+failed bake answers empty rather than blank) are the parts a check has to hold.
+
+**It takes geometry, not an asset.** The caller applies the node transforms and
+hands over flat (x, z) triangles, because a scene hierarchy is the renderer's
+to know and the rest is arithmetic. `native/renderer/CLAUDE.md` carries the two
+traps that live on the renderer's side of that line — the v-axis sign, and that
+the capture only means anything at the asset's rest pose.
 
 ## The asset gallery and the model bench
 

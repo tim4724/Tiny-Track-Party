@@ -190,11 +190,15 @@ test("InputGate's dead-band derivation still closes over the manifest", () => {
 // ---------------------------------------------------------------------------
 // The presence contract: protocol.js LIVENESS vs the files that spend it.
 //
-// "A seat silent past 3 s is dropped" is only true because phones ping at 1 Hz,
-// and those two numbers lived in two different files with nothing but a comment
-// between them — the exact failure mode the steering manifest above was built to
-// end. A tvOS shell would have picked its own 3 s and nobody would have noticed
-// until a party.
+// The phone's ping cadence and the window it judges a missing PONG against are
+// one design, and those two numbers lived in two different files with nothing
+// but a comment between them — the exact failure mode the steering manifest
+// above was built to end. A tvOS shell would have picked its own and nobody
+// would have noticed until a party.
+//
+// The block also carries a DECISION: presence is the relay's answer, so no
+// window in it drops a seat. The last test here is what keeps a second opinion
+// from growing back.
 //
 // Four links, and the first three are here:
 //   1. controller/Net.js + display/Net.js == the manifest   (source text)
@@ -214,9 +218,11 @@ test('the two shells read their presence windows off the manifest', () => {
   const disp = fs.readFileSync(DISPLAY_NET, 'utf8');
   const pairs = [
     [ctrl, 'controller/Net.js', 'PING_INTERVAL_MS', 'LIVENESS.PING_INTERVAL_MS'],
-    [ctrl, 'controller/Net.js', 'PONG_TIMEOUT_MS', 'LIVENESS.TIMEOUT_MS'],
-    [disp, 'display/Net.js', 'LIVENESS_TIMEOUT_MS', 'LIVENESS.TIMEOUT_MS'],
+    [ctrl, 'controller/Net.js', 'PONG_TIMEOUT_MS', 'LIVENESS.PONG_TIMEOUT_MS'],
     [disp, 'display/Net.js', 'LIVENESS_TICK_MS', 'LIVENESS.TICK_MS'],
+    // No drop window on this list: presence is the relay's answer, so the
+    // display reads no per-controller timeout at all. The assertion that it
+    // reads none is below.
     // CREATE_TIMEOUT_MS no longer appears here: the create watchdog's delay
     // rides the arm-create-watchdog effect, read from protocol.h's
     // LIVENESS_CREATE_TIMEOUT_MS inside the wasm — which link 3 gates.
@@ -259,22 +265,41 @@ test('the RANDOM run length is read off the manifest by both ends', () => {
 
 test('the presence windows still describe one design', () => {
   const L = protocol.LIVENESS;
-  // The drop window must swallow at least two missed pings, or one dropped
-  // packet kicks a live phone mid-corner.
-  assert.ok(L.TIMEOUT_MS >= 3 * L.PING_INTERVAL_MS,
-    `a ${L.TIMEOUT_MS}ms drop window is under three ${L.PING_INTERVAL_MS}ms pings — a single hiccup would kick a live seat`);
-  // The display re-checks at least as often as it is willing to wait.
-  assert.ok(L.TICK_MS <= L.TIMEOUT_MS,
-    'the liveness tick is slower than the window it enforces');
-  // The display's own canary must be SLACKER than a controller's, because with
-  // the fastlane carrying inputs its socket sees only the heartbeat itself.
-  assert.ok(L.HEARTBEAT_DEAD_MS > L.TIMEOUT_MS,
-    'the display self-heartbeat window must be wider than the per-controller one');
+  // The phone's chip must swallow at least two missed pings, or one dropped
+  // packet blinks "no signal" at a player who never left.
+  assert.ok(L.PONG_TIMEOUT_MS >= 3 * L.PING_INTERVAL_MS,
+    `a ${L.PONG_TIMEOUT_MS}ms pong window is under three ${L.PING_INTERVAL_MS}ms pings — a single hiccup would read as a dead link`);
+  // The display's own canary must be SLACKER than the phone's chip, because
+  // with the fastlane carrying inputs its socket sees only the heartbeat
+  // itself, and its answer is a forced reconnect rather than a repaint.
+  assert.ok(L.HEARTBEAT_DEAD_MS > L.PONG_TIMEOUT_MS,
+    'the display self-heartbeat window must be wider than the phone-side pong window');
+  // The self-heartbeat is the only detector left, so the tick has to be at
+  // least as fast as the one window it enforces.
+  assert.ok(L.TICK_MS <= L.HEARTBEAT_DEAD_MS,
+    'the liveness tick is slower than the self-heartbeat window it enforces');
   // The abandoned-race grace only starts once every racer has already been
-  // dropped, so it has to outlast the drop window by a wide margin or the room
-  // bounces to the lobby before a returning party can scan back in.
-  assert.ok(L.ABANDONED_RACE_GRACE_MS >= 4 * L.TIMEOUT_MS,
-    'the abandoned-race grace is too close to the drop window to be a grace at all');
+  // dropped, so it has to outlast the relay's own idle timeout by a margin or
+  // the room bounces to the lobby before a returning party can scan back in.
+  // The relay's number is not ours to declare, so this holds it against the
+  // slowest window we DO declare.
+  assert.ok(L.ABANDONED_RACE_GRACE_MS >= 2 * L.HEARTBEAT_DEAD_MS,
+    'the abandoned-race grace is too close to the detection windows to be a grace at all');
+});
+
+test('the display runs no silence detector of its own', () => {
+  // THE RULE: presence is the relay's answer, from peer_joined to peer_left.
+  // This is the assertion that the display did not quietly grow a second
+  // opinion again — a per-seat silence window here and Party-Sockets' cap
+  // (which counts LIVE SOCKETS) disagree about who is in the room, and the
+  // half that is wrong is always ours: a seat we dropped still fills a relay
+  // slot, so the reconnect QR we offer for it is answered "Room is full".
+  const disp = fs.readFileSync(DISPLAY_NET, 'utf8');
+  assert.doesNotMatch(disp, /LIVENESS\.TIMEOUT_MS|timeoutMs\s*:/,
+    'display/Net.js: a per-controller drop window is back — presence belongs to the relay');
+  const netCc = fs.readFileSync(path.join(ROOT, 'native/runtime/ttp_net.cc'), 'utf8');
+  assert.doesNotMatch(netCc, /flow->expiredPeers\(/,
+    'ttp_net.cc: the silence sweep is back — a seat is dropped by peer_left and by nothing else');
 });
 
 test('the C++ mirror of the presence contract matches the manifest', () => {

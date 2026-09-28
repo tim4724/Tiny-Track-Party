@@ -5,15 +5,24 @@
 //
 // Pure DOM: the controller has no 3D scene, so nothing async to await.
 import { buildCarPicker } from '../shared/carPicker.js';
-import { buildModePicker } from '../shared/trackPicker.js';
+import { buildModePicker, renderStarsCard } from '../shared/trackPicker.js';
 import { TRACK_LIST } from '../shared/tracks.js';
 import { TRACK_SCHEMATICS } from '../shared/trackSchematics.js';
 import { packSchematic, unpackSchematic } from '../shared/schematicCodec.js';
-import { applyLatencyChip, renderReadyFoot, motionHelpCopy } from './ui.js';
+import { applyLatencyChip, renderReadyFoot, motionHelpCopy, NEXT_RACE_NOTE } from './ui.js';
 import { renderResultsBoard } from './resultsBoard.js';
+import { linkCopy, showConn } from './linkStatus.js';
 import { setInputMode } from './driveSurface.js';
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
+
+// Cup points per finishing rank, for the intermission/podium previews. Mirrors the
+// series layer's ladder (native/libttp-sim/ttp/grand_prix.cc POINTS_BY_RANK) and is
+// pinned to it by tests/harness-mirrors.test.js.
+const POINTS_BY_RANK = [15, 12, 10, 8, 6, 4, 2, 1];
+// A preview row takes its gain FROM its finishing place, so a fixture can never pay
+// a place it did not take — the one thing a reader cannot check from a screenshot.
+const scored = (racePlace, row) => ({ racePlace, gained: POINTS_BY_RANK[racePlace - 1] ?? 0, ...row });
 
 // Track catalog for the no-relay gallery preview. In a real game the controller
 // renders whatever rides the room snapshot: pack/unpackSchematic(trackSchematic(geom))
@@ -45,8 +54,6 @@ export function runControllerScenario(opts) {
   const myColor = COLORS[color % COLORS.length];
   document.documentElement.style.setProperty('--car', myColor);
 
-  window.__TEST__ = window.__TEST__ || {};
-
   // Car picker — the real shared layout (hero preview + stats + tap strip). Taps
   // re-render so the gallery shows the selection updating the big preview live.
   // The selection is remembered so the ready toggle (below) can re-render the
@@ -55,46 +62,58 @@ export function runControllerScenario(opts) {
   function renderCarPicker(selected = carSel, canPick = true) {
     carSel = selected;
     buildCarPicker({
-      heroEl: el('car-hero'), stripEl: el('carpick'),
+      gridEl: el('carpick'),
       selected: carSel, canPick, onPick: (i) => renderCarPicker(i, canPick)
     });
   }
 
   // The couch progression a preview lobby carries — the snapshot's `progress`
-  // shape, synthesized mid-game: two starred cups, the Playroom still locked.
+  // shape, synthesized mid-game: five stars, one short of the Playroom.
   // (gallery-controller-boards.spec pins the dressings only this shape can
   // produce, per the harness rule.)
   const PREVIEW_PROGRESS = {
     cups: [
       { id: 'beach', stars: 3, locked: false },
       { id: 'snow', stars: 2, locked: false },
-      { id: 'backyard', stars: 1, locked: false },
+      { id: 'backyard', stars: 0, locked: false },
       { id: 'canyon', stars: 0, locked: false },
-      { id: 'rooftop', stars: 0, locked: true, unlockDone: 3, unlockNeed: 4 }
-    ]
+      { id: 'rooftop', stars: 0, locked: true, unlockDone: 5, unlockNeed: 6 }
+    ],
+    stars: { earned: 5, total: 15 }
   };
 
-  // The CAR | RACE tab strip + page state — mirrors main.js renderLobbyTabs.
+  // Which lobby page this scenario shows — mirrors main.js renderLobbyPage.
+  // The back chip is NOT set here: renderReadyFoot owns it, exactly as on the
+  // live page, so a scenario can't show a corner the real phone wouldn't.
   function setLobbyPage(tab, isHost) {
-    el('lobby-tabs').classList.toggle('hidden', !isHost);
     el('lobby').classList.toggle('lobby--race', isHost && tab === 'race');
-    el('tab-car').setAttribute('aria-selected', String(tab === 'car'));
-    el('tab-race').setAttribute('aria-selected', String(tab === 'race'));
   }
+  // The chip has to actually step back, or the gallery is showing a dead
+  // control — the same reason a locked car tile stops taking pointer events
+  // instead of sitting there looking pressable.
+  el('lobby-back').onclick = () => runControllerScenario({ scenario: 'lobby-host', color: color });
 
   // Mode picker — mirrors main.js renderModePicker: host only (non-host lobby
   // has no picker at all), on the RACE page. Taps re-render so the gallery
-  // shows the pick move / the detail panel swap live, cursor included.
-  function renderModePicker(selection, canPick, highlight = null) {
+  // shows the pick move live.
+  function renderModePicker(selection, canPick) {
     if (!canPick) { el('trackpick').classList.add('hidden'); return; }
     el('trackpick').classList.remove('hidden');
     buildModePicker({
-      stripEl: el('track-strip'), catalog: PREVIEW_TRACKS, progress: PREVIEW_PROGRESS,
-      selection, highlight, canPick: true,
-      onPickMode: (pick) => renderModePicker(pick, true),
-      onHighlight: (rowId) => renderModePicker(selection, true, rowId)
+      gridEl: el('track-strip'), keyEl: el('race-key'),
+      catalog: PREVIEW_TRACKS, progress: PREVIEW_PROGRESS,
+      selection, canPick: true, onPickMode: (pick) => renderModePicker(pick, true),
+      onStarsInfo: showStarsPopup
     });
   }
+  // The stars popup, off the same renderer modals.js opens it with.
+  function showStarsPopup() {
+    renderStarsCard({ countEl: el('stars-count'), rulesEl: el('stars-rules'),
+      unlockEl: el('stars-unlock'), progress: PREVIEW_PROGRESS, catalog: PREVIEW_TRACKS });
+    el('stars-overlay').classList.remove('hidden');
+    el('stars-done').focus({ preventScroll: true });
+  }
+  el('stars-done').onclick = () => el('stars-overlay').classList.add('hidden');
   // The auto-picked default a host lobby opens with (mirrors maybeAutoSelectMode).
   const DEFAULT_MODE = { mode: 'cup', cupId: PREVIEW_TRACKS[0].cup };
 
@@ -104,7 +123,8 @@ export function runControllerScenario(opts) {
   // picker locked while ready (mirrors main.js renderLobby); the host's "Start
   // race" button just renders (no race to start here).
   function renderReadyPreview(amHost, amReady, host, others, tab = 'car') {
-    renderReadyFoot(el('ready-btn'), el('ready-note'), { amHost, amReady, tab, canStart: true, host, others });
+    renderReadyFoot(el('ready-btn'), el('ready-note'),
+      { amHost, amReady, tab, canStart: true, host, others, backEl: el('lobby-back') });
     if (!amHost) {
       renderCarPicker(carSel, !amReady);
       el('ready-btn').onclick = () => renderReadyPreview(amHost, !amReady, host, others, tab);
@@ -185,8 +205,8 @@ export function runControllerScenario(opts) {
       break;
 
     case 'lobby-host':
-      // The host's CAR page: tabs up top, the picker waiting on the RACE tab,
-      // the stepper saying "Select race".
+      // The host's CAR page: the picker waiting one step on, the stepper's
+      // forward face saying "Select race", no back chip (nothing behind it).
       show('lobby');
       el('me-name').textContent = FAKE_NAMES[color];
       setLobbyPage('car', true);
@@ -199,8 +219,10 @@ export function runControllerScenario(opts) {
       break;
 
     case 'lobby-race':
-      // The host's RACE page: the pick list with its stars, the auto-picked
-      // first cup's detail open, everyone ready so Start is live.
+      // The host's RACE page: every race as a tile — the five cups with their
+      // stars (the Playroom still locked, its unlock line in the foot), then the
+      // three random runs — the first cup picked, everyone ready so Start is
+      // live, and the corner's back chip, which is the only way home.
       show('lobby');
       el('me-name').textContent = FAKE_NAMES[color];
       setLobbyPage('race', true);
@@ -211,15 +233,20 @@ export function runControllerScenario(opts) {
       ], 'race');
       break;
 
-    case 'lobby-race-locked':
-      // The locked Playroom examined: the detail panel is the unlock pitch
-      // (rules + per-cup checks), the pick itself untouched.
+    case 'lobby-race-waiting':
+      // The host's RACE page with the grid NOT yet ready: Start is the one
+      // control on this page that needs everyone else, so it sits disabled with
+      // the floating note chip explaining why (renderReadyFoot). Its own screen
+      // because it is the state a host actually waits in — 'lobby-race' shows
+      // the moment after, and the chip only ever appeared on the CAR page in
+      // this gallery, which is the busier corner of the two.
       show('lobby');
       el('me-name').textContent = FAKE_NAMES[color];
       setLobbyPage('race', true);
-      renderModePicker(DEFAULT_MODE, true, 'rooftop');
+      renderModePicker(DEFAULT_MODE, true);
       renderReadyPreview(true, false, null, [
-        { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], color: COLORS[(color + 1) % COLORS.length], ready: true }
+        { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], color: COLORS[(color + 1) % COLORS.length], ready: true },
+        { name: FAKE_NAMES[(color + 2) % FAKE_NAMES.length], color: COLORS[(color + 2) % COLORS.length], ready: false }
       ], 'race');
       break;
 
@@ -263,7 +290,7 @@ export function runControllerScenario(opts) {
       el('tv-seg').classList.remove('hidden');
       el('sound-toggle').setAttribute('aria-checked', 'true');
       el('settings-overlay').classList.remove('hidden');
-      el('settings-done').focus();   // seed focus inside the dialog (mirrors openSettings)
+      el('settings-done').focus({ preventScroll: true });   // seed focus inside the dialog (mirrors openSettings)
       break;
     }
 
@@ -288,7 +315,7 @@ export function runControllerScenario(opts) {
       fix.classList.toggle('hidden', !copy.fix);
       if (copy.fix) fix.innerHTML = copy.fix;
       el('motion-overlay').classList.remove('hidden');
-      el('motion-done').focus();
+      el('motion-done').focus({ preventScroll: true });
       break;
     }
 
@@ -302,7 +329,7 @@ export function runControllerScenario(opts) {
       renderCarPicker(color);
       renderModePicker(null, false);
       el('ready-btn').classList.add('hidden');
-      el('ready-note').textContent = 'You’re in the next race!'; // keep in sync with main.js renderLobby
+      el('ready-note').textContent = NEXT_RACE_NOTE;
       break;
 
     case 'countdown':
@@ -378,20 +405,19 @@ export function runControllerScenario(opts) {
 
     case 'intermission':
       // Mid-cup standings between two series races, viewed as the host: points
-      // board in cup order (the +6 row leads on total despite this race's +9)
+      // board in cup order (the +12 row leads on total despite this race's +15)
       // and the host's "Next race ▸".
       setLatency(20, true);
       showBoard([
-        { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, gained: 6, points: 21, racePlace: 2 },
-        { name: FAKE_NAMES[color],                           colorIndex: color,                       gained: 9, points: 19, me: true, racePlace: 1 },
-        { name: 'Bolt',                                      colorIndex: (color + 2) % COLORS.length, gained: 3, points: 9, ai: true, racePlace: 3 },
-        { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, gained: 0, points: 3, racePlace: 5 },
-        ...[4, 5, 6, 7].map((i) => ({
+        scored(2, { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, points: 27 }),
+        scored(1, { name: FAKE_NAMES[color],                           colorIndex: color,                       points: 25, me: true }),
+        scored(3, { name: 'Bolt',                                      colorIndex: (color + 2) % COLORS.length, points: 20, ai: true }),
+        scored(5, { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, points: 14 }),
+        ...[4, 5, 6, 7].map((i) => scored([4, 6, 7, 8][i - 4], {
           name: FAKE_NAMES[(color + i) % FAKE_NAMES.length],
           colorIndex: (color + i) % COLORS.length, ai: true,
-          // cup order is sorted by TOTAL — the tail must not out-point row 4's 3 pts
-          gained: i === 4 ? 1 : 0, points: [3, 2, 1, 0][i - 4],
-          racePlace: i === 4 ? 4 : i + 2
+          // cup order is sorted by TOTAL — the tail must not out-point row 4's 14
+          points: [13, 9, 5, 3][i - 4]
         }))
       ], { over: true, series: { final: false, raceIndex: 1, raceCount: 4, cupName: PREVIEW_TRACKS[0].cupName } });
       break;
@@ -408,13 +434,13 @@ export function runControllerScenario(opts) {
       // happened to match.
       setLatency(20, true);
       showBoard([
-        { name: FAKE_NAMES[color],                           colorIndex: color,                       gained: 3, points: 36, me: true, racePlace: 3 },
-        { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, gained: 9, points: 24, racePlace: 1 },
-        { name: 'Bolt',                                      colorIndex: (color + 2) % COLORS.length, gained: 6, points: 12, ai: true, racePlace: 2 },
-        { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, gained: 1, points: 4, racePlace: 4 },
-        ...[4, 5, 6, 7].map((i) => ({
+        scored(3, { name: FAKE_NAMES[color],                           colorIndex: color,                       points: 52, me: true }),
+        scored(1, { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, points: 48 }),
+        scored(2, { name: 'Bolt',                                      colorIndex: (color + 2) % COLORS.length, points: 40, ai: true }),
+        scored(4, { name: FAKE_NAMES[(color + 3) % FAKE_NAMES.length], colorIndex: (color + 3) % COLORS.length, points: 30 }),
+        ...[4, 5, 6, 7].map((i) => scored(i + 1, {
           name: FAKE_NAMES[(color + i) % FAKE_NAMES.length],
-          colorIndex: (color + i) % COLORS.length, ai: true, gained: 0, points: 8 - i, racePlace: i + 1
+          colorIndex: (color + i) % COLORS.length, ai: true, points: [22, 15, 9, 4][i - 4]
         }))
       ], {
         over: true, settled: scenario === 'cup-podium-settled',
@@ -426,23 +452,19 @@ export function runControllerScenario(opts) {
     case 'conn-lost':
     case 'conn-screen-gone':
     case 'conn-replaced': {
-      // Connection overlay terminal states (copy mirrors main.js's onStatus
-      // handlers), previewed over the drive HUD — the mid-race drop is the
-      // case the overlay exists for. All three show the "Exit to start"
-      // escape hatch; only 'lost' also offers a manual retry.
+      // Connection overlay terminal states, previewed over the drive HUD — the
+      // mid-race drop is the case the overlay exists for. Rendered through the
+      // LIVE copy + overlay (linkCopy/showConn), the same pair main.js's
+      // onStatus uses, so the gallery can't drift from the real text.
       showDriveHud();
       setSteer(0);
       setHudName();
-      const [title, msg, retry] = {
-        'conn-lost': ['Connection lost', 'Scan the QR on the big screen to take your seat back — or try again here.', true],
-        'conn-screen-gone': ['Waiting for the big screen…', 'The host’s screen dropped — hang tight, it’ll reconnect you.', false],
-        'conn-replaced': ['Opened on another tab', 'This seat is now controlled from another tab or device.', false]
+      const state = {
+        'conn-lost': 'lost',
+        'conn-screen-gone': 'display_gone',
+        'conn-replaced': 'replaced'
       }[scenario];
-      el('conn-title').textContent = title;
-      el('conn-msg').textContent = msg;
-      el('conn-retry').classList.toggle('hidden', !retry);
-      el('conn-leave').classList.remove('hidden');
-      el('conn').classList.remove('hidden');
+      showConn(linkCopy(state).conn);
       break;
     }
 

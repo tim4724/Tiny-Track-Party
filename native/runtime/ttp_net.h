@@ -1,8 +1,8 @@
 /* ttp_net.h — the SESSION-POLICY half of the party C ABI: every room decision
  * the display owns that is not a socket, a timer, a storage key or a canvas.
  * Sibling of ttp_party.h (RoomFlow + relay framing + fastlane), ttp_ui.h (the
- * screens) and ttp_runtime.h (the sim), same conventions (ttp_abi.h) except for
- * the one stated below.
+ * screens) and ttp_runtime.h (the sim), same conventions (ttp_abi.h), with no
+ * exception.
  *
  * WHAT IS BEHIND IT. libttp-party/ttp/session.{h,cc} — the retained room
  * snapshot and its `players` projection, the four URLs a room's identity is
@@ -22,12 +22,11 @@
  * handles) and two stateless kits beside it (framing, fastlane). This layer is
  * the POLICY over that machine: what an inbound trigger means, in order.
  *
- * THE ONE DEVIATION FROM ttp_abi.h, and it is ttp_ui.h's. Returned JSON here is
- * NOT canonical: keys come out in the MODEL'S OWN order. That matters for
- * exactly one answer and it matters a lot — the retained LOBBY_UPDATE inside
- * ttp_net_lobby_frame IS the message every phone parses, and sorting its keys
- * would silently re-spell bytes that have shipped since the JS wrote them
- * (the frame itself is canonicalized; the model order stops at framing).
+ * KEY ORDER IS NOT A CONTRACT, and this header used to claim otherwise — the
+ * claim being that the retained LOBBY_UPDATE inside ttp_net_lobby_frame is the
+ * message every phone parses, so its key order was shipped bytes. The frame
+ * encoder canonicalizes, so the model order stopped at framing and never
+ * reached a phone. Returned JSON is canonical, like every other ABI's.
  *
  * WHAT STAYS WITH THE SHELL, deliberately: the WebSocket and RTCPeerConnection,
  * sessionStorage, setInterval/setTimeout, the QR module bitmap (decision D3 —
@@ -36,12 +35,10 @@
  * The random pick's shuffle bag moved BEHIND THE ROOM (2026-07-31): the shell
  * seeds it once with page entropy and the walks own every draw.
  *
- * NULL IS NOT ZERO, and ABSENT IS NOT NULL. The rejoinToken normalizer (inside
- * the hello walk) turns on that difference: JS Number(null) is 0 while
- * Number(undefined) is NaN, so a HELLO carrying an explicit null claims seat 0
- * while one carrying no token at all claims nothing. Pass NULL or "" for an
- * absent value; pass "null" for an explicit JSON null. This is a FROZEN quirk,
- * not a rough edge — see session.h.
+ * A rejoinToken IS AN INTEGER OR IT IS NOTHING. The normalizer inside the hello
+ * walk takes a finite, integral, non-negative JSON NUMBER and refuses every
+ * other shape, so absent and null are the same answer and a client spelling the
+ * seat as a string silently claims nothing — see session.h.
  */
 #ifndef TTP_NET_H
 #define TTP_NET_H
@@ -83,10 +80,12 @@ TTP_ABI int ttp_net_configure(const char* chooserJson);
  *                  host and the room phase
  *   sessionHandle  a ttp_session_begin handle, or 0 for no live race — supplies
  *                  every seat's inRace, read off the Game itself
- *   fieldsJson     {"paused":bool,"standings":obj|null} — the two things only
- *                  the game layer knows. The PICK is not among them: the frame
- *                  reads the stored one off the room handle (see the stored
- *                  pick section below), so a pick key passed here is dead.
+ *   fieldsJson     {"paused":bool,"soundOn":bool} — the two LATCHES only the
+ *                  game layer knows. Neither the PICK nor the STANDINGS BOARD
+ *                  is among them: the frame reads both off the room handle
+ *                  (see the stored pick section below and ttp_room.h), so a
+ *                  `pick` or `standings` key passed here is dead.
+ *                  tests/shell-parity.test.js pins this list across the shells.
  *   ->             {"data":{...the LOBBY_UPDATE...},"type":"set_state"}
  *
  * The snapshot composer + ttp_framing_encode_set_state are the two halves
@@ -163,14 +162,20 @@ TTP_ABI const char* ttp_net_reconnect_card_json(const char* seatJson, const char
 /* ---- controller messages --------------------------------------------------- */
 
 /* The verdict on a GAME message (what a `game-message` effect hands the
- * coordinator): "start-race" | "series-next" | "pause" | "resume" |
- * "return-to-lobby" | "control" | "none" — with the authorization inside.
+ * coordinator): "start-race" | "series-next" | "set-sound" | "pause" |
+ * "resume" | "return-to-lobby" | "control" | "none" — with the authorization
+ * inside.
  * START_GAME must come from the host AND every other racer must be ready (the
- * same readiness gate the lobby's Start button shows); SERIES_NEXT is
- * host-only; pause/resume/new-game are any player's; CONTROL needs a live
- * race. A shell dispatches on the verdict and re-derives none of the gates —
- * the if-chain this replaces existed in two shells with the gates spelled
- * twice.
+ * same readiness gate the lobby's Start button shows); SERIES_NEXT and
+ * SET_SOUND are host-only; pause/resume/new-game are any player's; CONTROL
+ * needs a live race. A shell dispatches on the verdict and re-derives none of
+ * the gates — the if-chain this replaces existed in two shells with the gates
+ * spelled twice.
+ *
+ * "set-sound" carries the display's MUTE, which is one state with two
+ * flippers: this message and whatever switch the platform's own chrome has.
+ * A shell that drops the verdict leaves the host phone's Sound row showing a
+ * setting it cannot change — see the `soundOn` field on the lobby frame.
  *
  * A shell MAY keep CONTROL on its own short-circuit ahead of this call (the
  * web does): CONTROL is the relay-fallback INPUT path, sensor-rate when the
@@ -244,7 +249,23 @@ TTP_ABI const char* ttp_net_controller_action(int roomHandle, int sessionHandle,
  *                                            from/data — nothing re-crosses)
  *   race-abandoned                           the onRaceAbandoned callback
  *   track-change {trackId}                   the onTrackChange callback
- *   clear-standings                          drop the mirrored results board */
+ *   set-link {state,attempt,max,button}      the display's OWN link, for the
+ *                                            connection overlay: "connected"
+ *                                            (no overlay) | "reconnecting"
+ *                                            ("Attempt N of M"; attempt 0 is
+ *                                            heading-only) | "disconnected"
+ *                                            (button => a RECONNECT control
+ *                                            that calls ttp_net_reconnect_json).
+ *                                            The shell also re-asks the
+ *                                            auto-pause rule here: a link that
+ *                                            is down freezes a live race
+ *                                            (ttp_net_link_down below).
+ *
+ * NO clear-standings. The results board is room-retained (ttp_room.h), so the
+ * statechange walk drops it with a store and lets its own `publish` carry the
+ * change — three shells each holding a mirror to null out is exactly what the
+ * retained slot removed. The session PLAN still carries the flag: it is
+ * session::StateChangePlan's rule and the frozen session corpus pins it. */
 
 /* The walks' effect vocabulary, as a JSON array of op keys in a stable order —
  * the table above as data. A shell walks it at boot and asserts its performer
@@ -274,11 +295,22 @@ TTP_ABI const char* ttp_net_on_protocol_json(int roomHandle, const char* type,
  * sends no peer_lefts, so the old roster would haunt the fresh lobby), and
  * only then dial fresh. That order is load-bearing. The reconnect BACKOFF is
  * not here: it lives in the connection kit (PartyConnection), which stays
- * platform code by design. */
-TTP_ABI const char* ttp_net_on_close_json(int roomHandle, int roomClosed);
+ * platform code by design — which is why the kit's OWN counters come in as
+ * arguments: `replaced` is the meta's 4000 flag, `attempt`/`maxAttempts` the
+ * close outcome's closeAttempt/closeMax. From those the walk answers what the
+ * viewer sees (`set-link`, the rule is session.h's link_after_close). */
+TTP_ABI const char* ttp_net_on_close_json(int roomHandle, int roomClosed, int replaced,
+                                          double attempt, double maxAttempts);
+
+/* The overlay's RECONNECT button. Answers effects only from the gave-up state
+ * (`set-link` disconnected WITH a button): reset the kit's attempt counter so
+ * the full budget runs again, raise the heading-only reconnecting overlay,
+ * dial. Anything else answers nothing — a stray press must not drop a healthy
+ * socket. */
+TTP_ABI const char* ttp_net_reconnect_json(int roomHandle);
 
 /* A relay message. Routes slot-0 echoes (the heartbeat closes its loop here),
- * stamps liveness, and walks the peer switch: hello (cross-device claim,
+ * lifts a dropped seat back, and walks the peer switch: hello (cross-device claim,
  * seating, rename-vs-first-hello, welcome), leave, set_car, set_ready,
  * select_mode, ping (the PONG is composed here), default -> game-message.
  * `isSignal` is the shell's "the fastlane consumed this as an RTC signal" —
@@ -323,22 +355,25 @@ TTP_ABI const char* ttp_net_pick_json(int roomHandle);
 /* The 1 Hz liveness tick: the self-heartbeat state machine (in-flight pair
  * internal — it also resets under created/joined, BEFORE the shell's timer
  * guard can matter, so a heartbeat left in flight by a dropped socket cannot
- * survive into the fresh connection), then on a sweep the expiry drops, the
- * active-order re-sync and the abandoned-race deadline, in that order on the
- * one clock reading.
+ * survive into the fresh connection), then the active-order re-sync and the
+ * abandoned-race deadline, in that order on the one clock reading.
  *
- * TWO EDGES A NEW SHELL HITS. The sweep is GATED on the heartbeat: a shell
- * that polls this without wiring the relay's `_heartbeat` echo back through
- * the message walk reads its own socket as dead and silently stops expiring
- * seats. And the walk always re-syncs the active order off sessionHandle —
- * 0 WIPES the participant set (the sync is the set's definition, not a
- * refinement), so a room with no live race never answers "every participant
- * is gone", which is exactly what the abandoned-race policy wants. */
+ * IT DROPS NO SEAT. Presence is the relay's answer — peer_joined to peer_left
+ * — so this tick watches exactly one socket, our own. The detector it used to
+ * carry is gone; native/libttp-party/CLAUDE.md has why, and what it cost.
+ *
+ * THE EDGE A NEW SHELL HITS: the walk always re-syncs the active order off
+ * sessionHandle — 0 WIPES the participant set (the sync is the set's
+ * definition, not a refinement), so a room with no live race never answers
+ * "every participant is gone", which is exactly what the abandoned-race
+ * policy wants. */
 TTP_ABI const char* ttp_net_liveness_json(int roomHandle, int sessionHandle, double nowMs);
 
-/* Proof of life outside the message path (fastlane input): stamp, and lift a
- * dropped seat back to connected — the SINGLE writer that lifts disconnection;
- * ttp_net_on_peer_message_json runs this same walk internally. */
+/* Traffic outside the message path (fastlane input): lift a dropped seat back
+ * to connected — the SINGLE writer that lifts disconnection;
+ * ttp_net_on_peer_message_json runs this same walk internally. It records no
+ * clock: nothing expires, so `nowMs` is carried for the shells' convenience
+ * and spent by nothing. */
 TTP_ABI const char* ttp_net_on_seen_json(int roomHandle, const char* peerIdJson, double nowMs);
 
 /* The drained hostchange event's body, taking the event's own hostPeerIndex:
@@ -347,14 +382,23 @@ TTP_ABI const char* ttp_net_on_seen_json(int roomHandle, const char* peerIdJson,
  * forever), then announce. */
 TTP_ABI const char* ttp_net_host_change_apply_json(int roomHandle, const char* hostPeerIdJson);
 
-/* The drained statechange event's body: restamp connected seats on a race
- * start (never a blanket clear-disconnected — it would orphan a grace-pending
- * seat's QR), free disconnected seats on LOBBY, clear-standings, publish. */
+/* The drained statechange event's body: free disconnected seats on LOBBY, drop
+ * the room's retained standings board, publish. Only the publish is a shell's
+ * to perform. `nowMs` is spent by nothing — the race-start re-stamp it fed
+ * belonged to the silence sweep that no longer exists. */
 TTP_ABI const char* ttp_net_state_change_apply_json(int roomHandle, const char* to,
                                                     double nowMs);
 
 #ifdef __cplusplus
 }
+
+/* THE SEAM (C++ only, no ABI): is the display's own link anything but
+ * connected? Read by the auto-pause gather (ttp_live_auto_pause_decision): a
+ * link that is down means every participant is unreachable, so a live race
+ * freezes exactly as it does when every seat has dropped, and thaws on the
+ * relay's created/joined. A shell never reads this — it re-asks the auto-pause
+ * rule while performing `set-link`. */
+bool ttp_net_link_down(int roomHandle);
 #endif
 
 #endif /* TTP_NET_H */

@@ -17,7 +17,7 @@ export class GameNet {
   // All PartyFastlane constructor options (onInput, onPeerReady, onPeerClosed,
   // emitIdleHeartbeat, …) can be passed through `opts`.
   _initFastlane(selfIndex, opts = {}) {
-    const { PartyFastlane, STUN_URL, STUN_FALLBACK_URL } = window;
+    const { PartyFastlane, STUN_URL } = window;
     // The display injects a subclass whose NETCODE runs in wasm (the WebRTC
     // handshake is inherited from the kit). Unset, this is the kit class.
     const Impl = this.FastlaneImpl || PartyFastlane;
@@ -29,9 +29,7 @@ export class GameNet {
     if (typeof RTCPeerConnection === 'undefined') return;
     this.fastlane = new Impl({
       selfIndex,
-      // Ours first, the manifest's public fallback second — same candidate
-      // set in the same order on every shell.
-      iceServers: [{ urls: STUN_URL }, { urls: STUN_FALLBACK_URL }],
+      iceServers: [{ urls: STUN_URL }],
       sendSignal: (peerIdx, sig) => { if (this.party) this.party.sendTo(peerIdx, sig); },
       ...opts,
     });

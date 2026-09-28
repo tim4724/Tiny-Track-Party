@@ -1,7 +1,57 @@
-// Split from the original single-file TtpRenderer.cpp along its subsystem
-// seams; TtpRendererImpl.h carries what the topic files share. Pure code
-// motion — behaviour, member set and ABI are unchanged.
+// Engine and scene lifecycle: materials, mesh build/teardown, releaseScene and
+// the ablation plumbing. TtpRendererImpl.h carries what the topic files share.
+#include <algorithm>
+#include <utility>
+#include <chrono>
+
 #include "TtpRendererImpl.h"
+#include "../generated/kit_colors.h"
+
+#include "ttp/glb.h"
+
+#include <utils/Log.h>
+
+// __has_include on bluevk, not just __ANDROID__: CI's android link leg
+// compiles against a BARE SDK install with no fork checkout beside it, so the
+// bluevk headers VulkanPlatform.h includes are absent there and the override
+// must compile away. Every build that reaches a device is made beside the
+// checkout (FilamentSdk.cmake resolves the include path from it), so the
+// shipped engine always carries the fix; only the compile-only leg loses it.
+#if defined(__ANDROID__)
+// mVkPlatform's unique_ptr needs the BASE type complete here for its reset()
+// whether or not the override below compiles in.
+#include <backend/Platform.h>
+#endif
+#if defined(__ANDROID__) && __has_include(<bluevk/BlueVK.h>)
+#define TTP_VK_PLATFORM_OVERRIDE 1
+#include <backend/platforms/VulkanPlatformAndroid.h>
+
+namespace {
+// The default VulkanPlatform evicts an unused VkFramebuffer after THREE
+// frames — and a triple-buffered swapchain reuses each image's framebuffers
+// exactly every third frame, so the cache sits on the eviction edge and any
+// jitter in acquire order (ordinary at 4P, where frames skip) pushes a gap
+// past it. Measured with simpleperf on the reference box (4P, Vulkan, 540):
+// ~VulkanFramebuffer alone was 7.4% of the backend thread, getFramebuffer
+// re-created what gc had just destroyed, and each fresh VkFramebuffer made
+// the PowerVR ICD rebuild its kernel render-target dataset at every
+// vkCmdEndRenderPass (RGXAddRenderTarget, 9.3%). Sixty frames keeps a
+// framebuffer alive across any realistic swapchain rotation for a few KB of
+// idle handles — the FrameGraph transient-cache age fix (Engine::Config
+// below), one layer down.
+// VulkanPlatformAndroid, not the base VulkanPlatform: the Android surface
+// and AHardwareBuffer plumbing live in the subclass, and a base-class
+// platform here would build an engine with no way to make a VkSurfaceKHR.
+class TtpVulkanPlatform : public filament::backend::VulkanPlatformAndroid {
+public:
+    Customization getCustomization() const noexcept override {
+        Customization c = VulkanPlatformAndroid::getCustomization();
+        c.timeBeforeEvictionFbo = 60;
+        return c;
+    }
+};
+}  // namespace
+#endif
 
 TtpRenderer::TtpRenderer() = default;
 
@@ -16,10 +66,40 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
     // later.
     Engine::Config engineConfig{};
     engineConfig.resourceAllocatorCacheMaxAge = 4;
-    mEngine = Engine::Builder()
-            .backend(backend)
+    Engine::Builder builder;
+    builder.backend(backend)
             .config(&engineConfig)
-            .build();
+            // The gpu-complete metric costs a glFenceSync EVERY FRAME plus a
+            // dedicated thread blocked in fenceWait on it, and nothing reads
+            // it — readGpuTimer consumes gpuFrameDuration, which is the TIMER
+            // QUERY and survives this. A per-frame fence is exactly the kind
+            // of kick-boundary pin that stops a tiler overlapping frame N+1's
+            // vertex work with frame N's fill.
+            .feature("engine.frame_info.disable_gpu_complete_metric", true)
+            // VULKAN, and inert on every other backend. Filament's default is a
+            // staging allocation, a vkCmdCopyBuffer and a pipeline barrier
+            // either side of it for every buffer write that follows a read in
+            // the same command buffer; on a UNIFIED-MEMORY device the buffer is
+            // already mapped, so the bypass writes it with a plain memcpy and
+            // the barrier pair — a pipeline drain on a tiler — goes away. That
+            // pair is paid PER CELL, so a four-way split pays it four times:
+            // measured -1.5 ms of a 40 ms 4P/1080 frame on the reference box,
+            // interleaved, with the boards pixel-identical either way.
+            //
+            // Filament ships this OFF and calls it experimental. It is enabled
+            // here as a MEASURED decision about one device family, not a
+            // statement that the feature is finished upstream.
+            .feature("backend.vulkan.enable_staging_buffer_bypass", true);
+#if defined(TTP_VK_PLATFORM_OVERRIDE)
+    // The framebuffer-eviction override above. A provided platform is
+    // caller-owned and must outlive the engine, so it is a member destroyed
+    // after Engine::destroy in shutdown; only the Vulkan backend takes it.
+    if (backend == backend::Backend::VULKAN) {
+        mVkPlatform = std::make_unique<TtpVulkanPlatform>();
+        builder.platform(mVkPlatform.get());
+    }
+#endif
+    mEngine = builder.build();
     if (mEngine) {
         // The scenery is dozens of copies of a handful of GLBs — trees, boxes,
         // cones — and each instance was its own draw call. Filament can merge
@@ -30,6 +110,17 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
         mEngine->setAutomaticInstancingEnabled(true);
     }
     if (!mEngine) return false;
+    // The driver's texture ceiling can sit UNDER the conservative default:
+    // this box's GL driver reports 8192 while its Vulkan driver caps 2D
+    // images at 4096, and a skid layer built past the cap is a
+    // Texture::build PreconditionPanic in the middle of a scene build (which
+    // the ARM EHABI unwinder then turns into a silent 100%-CPU hang rather
+    // than an abort). Clamp rather than assign: mMaxTextureDim is the policy
+    // ceiling and a driver answering more than it must not raise it. No floor
+    // under the min — a driver answering even less just gets a coarser rubber
+    // grid, which is the same quality trade this box already takes.
+    mMaxTextureDim = (uint32_t) std::min<size_t>(mMaxTextureDim,
+            Texture::getMaxTextureSize(*mEngine, Texture::Sampler::SAMPLER_2D));
     mSwapChain = mEngine->createSwapChain(nativeWindow);
     mRenderer = mEngine->createRenderer();
     // Clear the colour buffer at the start of a frame. It costs nothing (a load
@@ -51,6 +142,10 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
     return true;
 }
 
+void TtpRenderer::drain() {
+    if (mEngine) mEngine->flushAndWait();
+}
+
 void TtpRenderer::resize(uint32_t width, uint32_t height) {
     mWidth = width;
     mHeight = height;
@@ -59,7 +154,11 @@ void TtpRenderer::resize(uint32_t width, uint32_t height) {
     // Called between frames, which is the only safe place to swap the scene
     // buffer: render() must never find a size mismatch, so rebuild it here.
     destroySceneTarget();
-    ensureSceneTarget();
+    // Only where the antialias pass will actually read it: with AA off (the
+    // Android shell) this allocated a full-surface RGBA8+depth on EVERY
+    // adaptive-scale move, for nothing — the frame path re-ensures it lazily
+    // whenever post-processing is on (renderCells).
+    if (mAntialias) ensureSceneTarget();
 }
 
 void TtpRenderer::updateCamera() {
@@ -73,7 +172,63 @@ bool TtpRenderer::provideAsset(const char* name, const uint8_t* bytes,
         uint32_t len) {
     if (!name || (!bytes && len)) return false;
     mAssets[name].assign(bytes, bytes + len);
+    // Stamp what the last plan said these bytes would be a function of. An asset
+    // handed over WITHOUT a plan (the .filamat blobs at boot) has no provenance
+    // this class can vouch for, so it keeps none and a plan would always ask for
+    // it again — which is the safe direction to be wrong in.
+    const auto want = mAssetWantTag.find(name);
+    if (want != mAssetWantTag.end()) mAssetTag[name] = want->second;
+    else mAssetTag.erase(name);
+    // …and whatever was memoised ABOUT the old bytes goes with them. This is the
+    // one place an asset's content changes, which is what lets assetTextures key
+    // its memo by name instead of by a hash of every byte.
+    mAssetUriCache.erase(name);
     return true;
+}
+
+std::vector<std::string> TtpRenderer::assetPlan(const std::vector<AssetWant>& want) {
+    std::vector<std::string> need;
+    for (const AssetWant& w : want) {
+        if (w.name.empty()) continue;
+        mAssetWantTag[w.name] = w.tag;
+        const auto held = mAssetTag.find(w.name);
+        if (held != mAssetTag.end() && held->second == w.tag
+                && mAssets.count(w.name)) {
+            continue;
+        }
+        need.push_back(w.name);
+    }
+    // A wanted DERIVATIVE brings its source: the shell makes a ghost out of the
+    // model's bytes, and those bytes are exactly what it would otherwise have
+    // been told not to fetch.
+    for (const AssetWant& w : want) {
+        if (w.from.empty()) continue;
+        if (std::find(need.begin(), need.end(), w.name) == need.end()) continue;
+        if (std::find(need.begin(), need.end(), w.from) != need.end()) continue;
+        need.push_back(w.from);
+    }
+    return need;
+}
+
+std::vector<std::string> TtpRenderer::assetTextures() {
+    std::vector<std::string> out;
+    for (const auto& [name, bytes] : mAssets) {
+        if (bytes.empty()) continue;
+        if (name.size() < 4 || name.compare(name.size() - 4, 4, ".glb") != 0) continue;
+        auto it = mAssetUriCache.find(name);
+        if (it == mAssetUriCache.end()) {
+            it = mAssetUriCache.emplace(name,
+                    ttp::rt::glb_image_uris(bytes.data(), bytes.size())).first;
+        }
+        for (const std::string& uri : it->second) {
+            if (mAssets.count(uri)) continue;
+            if (std::find(out.begin(), out.end(), uri) == out.end()) out.push_back(uri);
+        }
+    }
+    // Stable, so two builds of the same scene ask in the same order and a shell
+    // logging its fetches reads the same either time.
+    std::sort(out.begin(), out.end());
+    return out;
 }
 
 const std::vector<uint8_t>* TtpRenderer::asset(const char* name) const {
@@ -85,12 +240,35 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
         MaterialInstance* materialInstance, uint8_t priority, uint32_t chunkTris) {
     if (m.verts.empty() || m.idx.empty() || m.idx.size() % 3) return false;
     static_assert(sizeof(Vertex) == 16, "unexpected vertex layout");
-    const bool lit = !m.normals.empty() && mLitMaterial != nullptr;
+    // BAKED per-vertex light (the road under the baked-light vroad): CUSTOM0
+    // replaces TANGENTS — the material reads no normal at draw time, and the
+    // qtangent was a 16-byte fetch per vertex on the scene's biggest mesh.
+    // m.normals stays populated; fillRoadLight reads it on the CPU instead.
+    const bool baked = !m.custom0.empty();
+    // A static sheet folds its light into its colours and draws unlit (see
+    // Mesh::bakeLight). Measured on the Android box the lit vertex was the
+    // dressing's cost — ~28 ns against the deck's ~7 baked — not the fragment.
+    const bool fold = m.bakeLight && !baked && !m.normals.empty()
+            && materialInstance == nullptr && mBakeRig.valid;
+    if (fold) {
+        m.normals.resize(m.verts.size(), float3{ 0, 1, 0 });
+        for (size_t i = 0; i < m.verts.size(); i++) {
+            Vertex& v = m.verts[i];
+            const float3 lin{ (float) (v.abgr & 0xff) / 255.0f,
+                              (float) ((v.abgr >> 8) & 0xff) / 255.0f,
+                              (float) ((v.abgr >> 16) & 0xff) / 255.0f };
+            const float alpha = (float) (v.abgr >> 24) / 255.0f;
+            v.abgr = packLinear(lin * bakedMatteLight(m.normals[i]), 1.0f, alpha);
+        }
+    }
+    const bool lit = !baked && !fold && !m.normals.empty() && mLitMaterial != nullptr;
     const bool uv = !m.uvs.empty();
     const uint8_t uvSlot = lit ? 2 : 1;
+    const uint8_t customSlot = (uint8_t) (1 + (lit ? 1 : 0) + (uv ? 1 : 0));
     VertexBuffer::Builder vbb;
     vbb.vertexCount((uint32_t) m.verts.size())
-            .bufferCount((uint8_t) (1 + (lit ? 1 : 0) + (uv ? 1 : 0)))
+            .bufferCount((uint8_t)
+                    (1 + (lit ? 1 : 0) + (uv ? 1 : 0) + (baked ? 1 : 0)))
             .attribute(VertexAttribute::POSITION, 0,
                     VertexBuffer::AttributeType::FLOAT3, 0, sizeof(Vertex))
             .attribute(VertexAttribute::COLOR, 0,
@@ -106,6 +284,10 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
         vbb.attribute(VertexAttribute::TANGENTS, 1,
                 VertexBuffer::AttributeType::FLOAT4, 0, sizeof(math::quatf));
     }
+    if (baked) {
+        vbb.attribute(VertexAttribute::CUSTOM0, customSlot,
+                VertexBuffer::AttributeType::HALF4, 0, sizeof(math::half4));
+    }
     m.vb = vbb.build(*mEngine);
     m.vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
             m.verts.data(), m.verts.size() * sizeof(Vertex), nullptr));
@@ -113,6 +295,13 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
         m.uvs.resize(m.verts.size(), math::float2{ 0, 0 });
         m.vb->setBufferAt(*mEngine, uvSlot, VertexBuffer::BufferDescriptor(
                 m.uvs.data(), m.uvs.size() * sizeof(math::float2), nullptr));
+    }
+    if (baked) {
+        m.custom0.resize(m.verts.size(), math::half4{ 1.0f, 1.0f, 1.0f, 1.0f });
+        m.custom0Slot = customSlot;
+        m.vb->setBufferAt(*mEngine, customSlot, VertexBuffer::BufferDescriptor(
+                m.custom0.data(), m.custom0.size() * sizeof(math::half4),
+                nullptr));
     }
     if (lit) {
         m.normals.resize(m.verts.size(), float3{ 0, 1, 0 });
@@ -151,7 +340,8 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
         return filament::Box{ (lo + hi) * 0.5f, max((hi - lo) * 0.5f, float3{ 1e-3f }) };
     };
     MaterialInstance* const mi = materialInstance ? materialInstance
-            : lit ? mLitMaterial->getDefaultInstance()
+            : lit ? (mLitPlainMaterial ? mLitPlainMaterial : mLitMaterial)
+                            ->getDefaultInstance()
                   : mMaterial->getDefaultInstance();
     const size_t triCount = m.idx.size() / 3;
     // One renderable, or a chain of them over ranges of the SAME buffers. The
@@ -159,8 +349,20 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
     // worth of vertices every frame, in every split-screen cell, however little
     // of it is on screen. Three chunks its ribbon for the same reason.
     const size_t perChunk = chunkTris ? std::min<size_t>(chunkTris, triCount) : triCount;
-    for (size_t t0 = 0; t0 < triCount; t0 += perChunk) {
-        const size_t n = std::min(perChunk, triCount - t0);
+    // The ranges: the tile ranges tileMajor() left, or `perChunk` off the order.
+    std::vector<std::pair<size_t, size_t>> ranges;
+    if (!m.tileStarts.empty()) {
+        for (size_t i = 0; i < m.tileStarts.size(); i++) {
+            const size_t t0 = m.tileStarts[i];
+            const size_t t1 = i + 1 < m.tileStarts.size() ? m.tileStarts[i + 1] : triCount;
+            if (t1 > t0) ranges.emplace_back(t0, t1 - t0);
+        }
+    } else {
+        for (size_t t0 = 0; t0 < triCount; t0 += perChunk) {
+            ranges.emplace_back(t0, std::min(perChunk, triCount - t0));
+        }
+    }
+    for (const auto& [t0, n] : ranges) {
         utils::Entity e = utils::EntityManager::get().create();
         RenderableManager::Builder(1)
                 .boundingBox(boundsOf(t0 * 3, n * 3))
@@ -171,13 +373,13 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
                 .material(0, mi)
                 .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
                         m.vb, m.ib, t0 * 3, n * 3)
-                // Frustum culling for everything. The bounds are real now, and
-                // the few meshes that rewrite their vertices in world space
-                // every frame (the ambient band) refresh theirs
-                // in the same breath — see refreshBounds.
-                // Pointing the camera at empty sky used to still cost 69 draw
-                // calls; per-draw GPU cost is ~18 µs, so that was over a
-                // millisecond of drawing nothing.
+                // Frustum culling for everything. Pointing the camera at empty
+                // sky used to still cost 69 draw calls; per-draw GPU cost is
+                // ~18 µs, so that was over a millisecond of drawing nothing —
+                // and off-screen scenery drawn in every cell made a 4-way
+                // split pay for the whole circuit four times. A mesh the
+                // shader expands past its build-time bounds (the burst ring)
+                // opts OUT via setMeshCulling.
                 .culling(true)
                 .receiveShadows(false)
                 .castShadows(false)
@@ -189,11 +391,51 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
     return true;
 }
 
-// Only ever called from releaseScene(), which flushes first — so dropping the
-// CPU copies here is safe even though their BufferDescriptors carry no release
-// callback. Clearing them is not optional: every builder push_backs, so a mesh
-// rebuilt over stale vectors comes out with its previous contents still in it
-// (doubled geometry AND a leak, ~14 MB a race).
+void TtpRenderer::tileMajor(Mesh& m, float tile, uint32_t minTris) {
+    m.tileStarts.clear();
+    const size_t triCount = m.idx.size() / 3;
+    if (triCount < 2 * minTris) return;   // one renderable is the right answer
+    // Tile key per triangle: row-major over the tile grid, so the sort walks
+    // tiles in rows and a merged run of small tiles is a short strip of one
+    // row rather than a scatter.
+    std::vector<std::pair<int64_t, uint32_t>> keyed(triCount);
+    float x0 = 1e30f, z0 = 1e30f;
+    for (const Vertex& v : m.verts) { x0 = std::min(x0, v.px); z0 = std::min(z0, v.pz); }
+    for (size_t t = 0; t < triCount; t++) {
+        const Vertex& a = m.verts[m.idx[t * 3]];
+        const Vertex& b = m.verts[m.idx[t * 3 + 1]];
+        const Vertex& c = m.verts[m.idx[t * 3 + 2]];
+        const float cx = (a.px + b.px + c.px) / 3 - x0, cz = (a.pz + b.pz + c.pz) / 3 - z0;
+        const int64_t tx = (int64_t) (cx / tile), tz = (int64_t) (cz / tile);
+        keyed[t] = { tz * 65536 + tx, (uint32_t) t };
+    }
+    std::stable_sort(keyed.begin(), keyed.end(),
+            [](const auto& p, const auto& q) { return p.first < q.first; });
+    std::vector<uint32_t> idx(m.idx.size());
+    for (size_t t = 0; t < triCount; t++) {
+        for (int k = 0; k < 3; k++) idx[t * 3 + k] = m.idx[(size_t) keyed[t].second * 3 + k];
+    }
+    m.idx.swap(idx);
+    // Ranges: the open range keeps absorbing tiles until it holds minTris,
+    // and only then does the next tile change open a new one — small tiles
+    // merge forward into the next.
+    uint32_t openTris = 0;
+    for (size_t t = 0; t < triCount; t++) {
+        const bool newTile = t == 0 || keyed[t].first != keyed[t - 1].first;
+        if (t == 0 || (newTile && openTris >= minTris)) {
+            m.tileStarts.push_back((uint32_t) t);
+            openTris = 0;
+        }
+        openTris++;
+    }
+}
+
+// Called from releaseScene() and the car-slot rebuild paths, with no flush
+// anywhere — the BufferDescriptors carry no release callback, so the CPU
+// copies are BURIED rather than dropped (buryMeshBuffers / MeshGrave has the
+// argument). Clearing them is not optional: every builder push_backs, so a
+// mesh rebuilt over stale vectors comes out with its previous contents still
+// in it (doubled geometry AND a leak, ~14 MB a race).
 void TtpRenderer::destroyMesh(Mesh& m) {
     for (utils::Entity e : m.chunks) {
         mScene->remove(e);
@@ -210,12 +452,53 @@ void TtpRenderer::destroyMesh(Mesh& m) {
     if (m.vb) { mEngine->destroy(m.vb); m.vb = nullptr; }
     if (m.ib) { mEngine->destroy(m.ib); m.ib = nullptr; }
     m.inScene = false;
-    m.verts = {};
-    m.idx = {};
-    m.normals = {};
-    m.quats = {};
-    m.uvs = {};
+    // The CPU copies are BURIED, not dropped — the driver may still be reading
+    // them. See MeshGrave for the whole argument.
+    buryMeshBuffers(m);
+    m.custom0Slot = 0;
     m.local = {};
+}
+
+void TtpRenderer::buryMeshBuffers(Mesh& m) {
+    // An empty mesh buries nothing: most of what releaseScene walks was never
+    // built for this scene, and a grave per never-used slot would age a hundred
+    // empty vectors every frame.
+    if (m.verts.empty() && m.idx.empty() && m.normals.empty()
+            && m.quats.empty() && m.uvs.empty() && m.custom0.empty()) {
+        return;
+    }
+    MeshGrave g;
+    g.verts = std::move(m.verts);
+    g.idx = std::move(m.idx);
+    g.normals = std::move(m.normals);
+    g.quats = std::move(m.quats);
+    g.uvs = std::move(m.uvs);
+    g.custom0 = std::move(m.custom0);
+    g.grace = kGraveGraceFrames;
+    mGraves.push_back(std::move(g));
+    // A moved-from vector is valid but unspecified; these are re-used by the
+    // next build, so they are put back to a known empty rather than trusted.
+    m.verts = {}; m.idx = {}; m.normals = {};
+    m.quats = {}; m.uvs = {}; m.custom0 = {}; m.tileStarts = {};
+}
+
+void TtpRenderer::ageGraves() {
+    if (mGraves.empty()) return;
+    for (MeshGrave& g : mGraves) {
+        if (g.grace) g.grace--;
+    }
+    mGraves.erase(std::remove_if(mGraves.begin(), mGraves.end(),
+            [](const MeshGrave& g) { return g.grace == 0; }), mGraves.end());
+}
+
+void TtpRenderer::drainGravesBlocking() {
+    if (mGraves.empty()) return;
+    // The one place the old fence still belongs: nobody is going to present the
+    // frames these graves are waiting for, so waiting is the only way to know
+    // the driver is done with them. Called on engine teardown, where a stall
+    // costs nothing anyone can see.
+    if (mEngine) mEngine->flushAndWait();
+    mGraves.clear();
 }
 
 // The roster half of TrackBin, copied off the slots the shell handed over.
@@ -519,6 +802,12 @@ void TtpRenderer::appendSphere(Mesh& mesh, int wseg, int hseg,
 
 // Area-weighted per-vertex normal accumulation: soup faces come out flat,
 // shared-ring surfaces smooth — the toy read either way.
+float3 TtpRenderer::bakedMatteLight(const float3& n) const {
+    const float NoL = std::min(1.0f, std::max(0.0f, dot(n, kToSun)));
+    return max(mBakeRig.sh0 + mBakeRig.sh1 * n.y, float3{ 0.0f }) * mBakeRig.hemiPre
+            + mBakeRig.sunPre * NoL;
+}
+
 void TtpRenderer::accumulateNormals(Mesh& m) {
     m.normals.assign(m.verts.size(), float3{ 0, 0, 0 });
     for (size_t i = 0; i + 2 < m.idx.size(); i += 3) {
@@ -560,48 +849,6 @@ void TtpRenderer::setMeshShadows(Mesh& m, bool cast, bool receive) {
     if (m.entity.isNull()) return;
     setShadows(&m.entity, 1, cast, receive);
     if (!m.chunks.empty()) setShadows(m.chunks.data(), m.chunks.size(), cast, receive);
-}
-
-// Re-derive a mesh's bounds from its CPU vertices. Cheap (these pools are
-// thousands of verts, not the road's hundred thousand) and the price of letting
-// a mesh whose geometry moves every frame still be frustum-culled.
-void TtpRenderer::refreshBounds(Mesh& m) {
-    if (m.entity.isNull() || m.verts.empty()) return;
-    auto& rcm = mEngine->getRenderableManager();
-    const auto range = [&](utils::Entity e, size_t i0, size_t n) {
-        const auto ri = rcm.getInstance(e);
-        if (!ri) return;
-        float3 lo{ 1e30f }, hi{ -1e30f };
-        for (size_t k = i0; k < i0 + n && k < m.idx.size(); k++) {
-            const Vertex& v = m.verts[m.idx[k]];
-            lo = min(lo, float3{ v.px, v.py, v.pz });
-            hi = max(hi, float3{ v.px, v.py, v.pz });
-        }
-        if (hi.x < lo.x) return;
-        rcm.setAxisAlignedBoundingBox(ri,
-                { (lo + hi) * 0.5f, max((hi - lo) * 0.5f, float3{ 1e-3f }) });
-    };
-    if (m.chunks.empty()) {
-        // One renderable = every vertex belongs to it, so walk `verts` directly.
-        // Going through `idx` visits each vertex once per triangle that uses it
-        // — 840 scattered loads for the car blob's 165 points — and buys nothing
-        // when there is no index range to respect. (Measured 15.6 µs vs 2.7 µs
-        // per blob in wasm, and every conformDecal ends in one of these.)
-        const auto ri = rcm.getInstance(m.entity);
-        if (!ri) return;
-        float3 lo{ 1e30f }, hi{ -1e30f };
-        for (const Vertex& v : m.verts) {
-            lo = min(lo, float3{ v.px, v.py, v.pz });
-            hi = max(hi, float3{ v.px, v.py, v.pz });
-        }
-        if (hi.x < lo.x) return;
-        rcm.setAxisAlignedBoundingBox(ri,
-                { (lo + hi) * 0.5f, max((hi - lo) * 0.5f, float3{ 1e-3f }) });
-    } else {
-        const size_t per = m.idx.size() / (m.chunks.size() + 1);
-        range(m.entity, 0, per);
-        for (size_t c = 0; c < m.chunks.size(); c++) range(m.chunks[c], (c + 1) * per, per);
-    }
 }
 
 void TtpRenderer::setMeshCulling(Mesh& m, bool enable) {
@@ -671,11 +918,655 @@ void TtpRenderer::setShadows(const utils::Entity* e, size_t n, bool cast, bool r
     }
 }
 
+// ---------------------------------------------------------------------------
+// Merged draw groups — the design note is in TtpRenderer.h. This file holds
+// the shared machinery; what to merge is decided beside what it merges
+// (rebuildCarMerge in TtpRendererCars.cpp, buildDressingMerge in
+// TtpRendererDressing.cpp).
+// ---------------------------------------------------------------------------
+
+uint64_t TtpRenderer::glbBytesKey(const std::vector<uint8_t>& glb) {
+    // FNV-1a over the bytes: the same bytes are the same model, which is the
+    // whole grouping rule. Never 0 — every caller reserves 0 for "none".
+    uint64_t key = 14695981039346656037ull;
+    for (const uint8_t b : glb) { key ^= b; key *= 1099511628211ull; }
+    return key ? key : 1;
+}
+
+const std::vector<ttp::rt::GlbMeshNode>* TtpRenderer::glbMeshes(uint64_t key,
+        const std::vector<uint8_t>& glb) {
+    auto it = mGlbMeshCache.find(key);
+    if (it == mGlbMeshCache.end()) {
+        it = mGlbMeshCache.emplace(key,
+                ttp::rt::read_glb_meshes(glb.data(), glb.size())).first;
+        if (it->second.empty()) {
+            // The fallback is silent on the glass (the originals keep drawing),
+            // so say it here: a kit model this reader cannot decode is a model
+            // whose copies stay one draw each.
+            utils::slog.w << "glbMeshes: undecodable GLB (" << glb.size()
+                    << " bytes) — its copies stay unmerged" << utils::io::endl;
+        }
+    }
+    return it->second.empty() ? nullptr : &it->second;
+}
+
+// The baked form of one run (MergedGroup::baked): every copy's vertices in
+// world space, coloured with the kit table's texture colour times the LIVE
+// instance's baseColorFactor (the biome's recolour lands there, not in the
+// GLB) times the matte light of the copy's own world normal, as one unlit
+// mesh. Refuses — and the caller falls back to the instanced draw — when the
+// table and the decoded geometry disagree about a count, so a regenerated GLB
+// can never be drawn with another model's colours.
+bool TtpRenderer::bakeMergedRun(MergedGroup& g,
+        const std::vector<ttp::rt::GlbMeshPrim>& prims,
+        const ttp::kitcolors::Mesh& colors, utils::Entity src0) {
+    if (colors.primCount != prims.size()) return false;
+    auto& tcm = mEngine->getTransformManager();
+    auto& rcm = mEngine->getRenderableManager();
+    const auto ri0 = rcm.getInstance(src0);
+    if (!ri0) return false;
+    std::vector<float3> factor(prims.size(), float3{ 1.0f });
+    for (size_t p = 0; p < prims.size(); p++) {
+        if (colors.prims[p].vertexCount * 3 != prims[p].pos.size()
+                || prims[p].normal.size() != prims[p].pos.size()) {
+            return false;
+        }
+        const MaterialInstance* mi = rcm.getMaterialInstanceAt(ri0, p);
+        if (!mi || !mi->getMaterial()->hasParameter("baseColorFactor")) return false;
+        factor[p] = mi->getParameter<float4>("baseColorFactor").xyz;
+    }
+    const uint8_t layer = rcm.getLayerMask(ri0);
+    Mesh& m = g.baked;
+    for (const utils::Entity src : g.sources) {
+        const auto ti = tcm.getInstance(src);
+        if (!ti) return false;
+        const mat4f xf = tcm.getWorldTransform(ti);
+        const mat3f nm = transpose(inverse(mat3f{ xf[0].xyz, xf[1].xyz, xf[2].xyz }));
+        for (size_t p = 0; p < prims.size(); p++) {
+            const ttp::rt::GlbMeshPrim& sp = prims[p];
+            const uint8_t* rgb = colors.prims[p].rgb;
+            const uint32_t base = (uint32_t) m.verts.size();
+            const size_t nv = sp.pos.size() / 3;
+            for (size_t i = 0; i < nv; i++) {
+                const float3 pw = (xf * float4{ sp.pos[i * 3], sp.pos[i * 3 + 1],
+                        sp.pos[i * 3 + 2], 1.0f }).xyz;
+                const float3 nw = normalize(nm * float3{ sp.normal[i * 3],
+                        sp.normal[i * 3 + 1], sp.normal[i * 3 + 2] });
+                const float3 lin = float3{ rgb[i * 3] / 255.0f, rgb[i * 3 + 1] / 255.0f,
+                        rgb[i * 3 + 2] / 255.0f } * factor[p];
+                m.verts.push_back({ pw.x, pw.y, pw.z,
+                        packLinear(lin * bakedMatteLight(nw), 1.0f) });
+            }
+            for (const uint32_t k : sp.idx) m.idx.push_back(base + k);
+        }
+    }
+    if (!buildMesh(m)) return false;
+    g.ent = m.entity;
+    // Whatever layer the originals sit on (a sweep may have tagged the scene).
+    if (const auto ri = rcm.getInstance(m.entity)) rcm.setLayerMask(ri, 0xFF, layer);
+    return true;
+}
+
+bool TtpRenderer::buildMergedGroup(std::vector<MergedGroup>& out,
+        const std::vector<utils::Entity>& sources,
+        const std::vector<ttp::rt::GlbMeshPrim>& prims, bool dynamic,
+        uint8_t feat, const ttp::kitcolors::Mesh* colors) {
+    if (sources.size() < 2 || prims.empty() || !mScene) return false;
+    auto& rcm = mEngine->getRenderableManager();
+    auto& tcm = mEngine->getTransformManager();
+    const auto ri0 = rcm.getInstance(sources[0]);
+    // The parsed geometry and the loaded renderable must agree about the
+    // primitive count, every primitive needs normals for vglb's TANGENTS, and
+    // every slot needs a material to share — any miss keeps the originals.
+    if (!ri0 || rcm.getPrimitiveCount(ri0) != prims.size()) return false;
+    for (const auto& p : prims) {
+        if (p.pos.empty() || p.normal.size() != p.pos.size()
+                || p.idx.empty() || p.idx.size() % 3) {
+            return false;
+        }
+    }
+    for (size_t p = 0; p < prims.size(); p++) {
+        if (!rcm.getMaterialInstanceAt(ri0, p)) return false;
+    }
+
+    const size_t maxInst =
+            std::min<size_t>(64, mEngine->getMaxAutomaticInstances());
+
+    // GROUP BY LOCALITY, NOT BY ARRAY ORDER. A merged group is ONE renderable
+    // carrying ONE bounding box that spans every instance in it, so a group
+    // whose copies are scattered around the whole circuit can never be rejected
+    // by a cell's frustum: every copy is submitted to every cell, and at four
+    // cells that is paid four times. Ordering by position and cutting a chunk
+    // when its span would exceed kMergeSpan keeps each box local, so the
+    // culling that merging used to defeat works on merged groups again.
+    //
+    // The cut is on SPAN rather than a fixed world grid: a grid splits two
+    // copies a unit apart across a boundary and merges nothing in a sparse
+    // region, while the span guard adapts to whatever density the track has.
+    // Dynamic groups (the cars, the cone pool) are grouped from their transforms
+    // at BUILD time and drift afterwards; mirrorMergedGroup re-folds their box
+    // every frame, so drift costs culling, never correctness.
+    static constexpr float kMergeSpan = 16.0f;
+    std::vector<std::vector<utils::Entity>> runs;
+    {
+        std::vector<size_t> order(sources.size());
+        for (size_t i = 0; i < order.size(); i++) order[i] = i;
+        std::vector<float3> at(sources.size(), float3{ 0 });
+        for (size_t i = 0; i < sources.size(); i++) {
+            const auto ti = tcm.getInstance(sources[i]);
+            if (ti) at[i] = tcm.getWorldTransform(ti)[3].xyz;
+        }
+        std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+            const int az = (int) std::floor(at[a].z / kMergeSpan);
+            const int bz = (int) std::floor(at[b].z / kMergeSpan);
+            if (az != bz) return az < bz;
+            return at[a].x < at[b].x;
+        });
+        // Cut into runs: maxInst instances, or the moment the run's own box
+        // would outgrow kMergeSpan on any axis.
+        std::vector<utils::Entity> run;
+        float3 rmn{ 0 }, rmx{ 0 };
+        for (const size_t i : order) {
+            const float3 pWorld = at[i];
+            const float3 nmn = run.empty() ? pWorld : min(rmn, pWorld);
+            const float3 nmx = run.empty() ? pWorld : max(rmx, pWorld);
+            const float3 span = nmx - nmn;
+            if (!run.empty() && (run.size() >= maxInst
+                    || std::max({ span.x, span.y, span.z }) > kMergeSpan)) {
+                runs.push_back(std::move(run));
+                run.clear();
+                rmn = pWorld; rmx = pWorld;
+            } else {
+                rmn = nmn; rmx = nmx;
+            }
+            run.push_back(sources[i]);
+        }
+        if (!run.empty()) runs.push_back(std::move(run));
+    }
+
+    for (const std::vector<utils::Entity>& chunk : runs) {
+        const size_t n = chunk.size();
+        if (n < 2) continue;   // a straggler of one keeps its original draw
+        MergedGroup g;
+        g.dynamic = dynamic;
+        g.feat = feat;
+        g.sources = chunk;
+        // A static run the kit colour table covers is BAKED (MergedGroup::baked):
+        // same draw count, no instancing, nothing lit at draw time.
+        if (!dynamic && colors && mBakeRig.valid
+                && bakeMergedRun(g, prims, *colors, sources[0])) {
+            for (size_t i = 0; i < n; i++) mScene->remove(g.sources[i]);
+            out.push_back(std::move(g));
+            continue;
+        }
+        g.xf.assign(n, mat4f{});
+        float r2 = 0;
+        for (const auto& sp : prims) {
+            MergedPrim mp;
+            const size_t nv = sp.pos.size() / 3;
+            mp.pos.resize(nv);
+            for (size_t i = 0; i < nv; i++) {
+                mp.pos[i] = { sp.pos[i * 3], sp.pos[i * 3 + 1], sp.pos[i * 3 + 2] };
+                r2 = std::max(r2, dot(mp.pos[i], mp.pos[i]));
+            }
+            std::vector<float3> normals(nv);
+            for (size_t i = 0; i < nv; i++) {
+                normals[i] = { sp.normal[i * 3], sp.normal[i * 3 + 1],
+                               sp.normal[i * 3 + 2] };
+            }
+            mp.quats.resize(nv);
+            geometry::SurfaceOrientation* so = geometry::SurfaceOrientation::Builder()
+                    .vertexCount(nv).normals(normals.data()).build();
+            if (so) {
+                so->getQuats(mp.quats.data(), nv);
+                delete so;
+            }
+            // UV0 is required by vglb; an untextured model rides its
+            // baseColorFactor over the provider's white 1x1, so zeros are
+            // exactly what gltfio's own dummy buffer would sample.
+            mp.uvs.assign(nv, math::float2{ 0, 0 });
+            if (sp.uv.size() == nv * 2) {
+                for (size_t i = 0; i < nv; i++) {
+                    mp.uvs[i] = { sp.uv[i * 2], sp.uv[i * 2 + 1] };
+                }
+            }
+            mp.idx = sp.idx;
+            mp.vb = VertexBuffer::Builder()
+                    .vertexCount((uint32_t) nv)
+                    .bufferCount(3)
+                    .attribute(VertexAttribute::POSITION, 0,
+                            VertexBuffer::AttributeType::FLOAT3)
+                    .attribute(VertexAttribute::TANGENTS, 1,
+                            VertexBuffer::AttributeType::FLOAT4)
+                    .attribute(VertexAttribute::UV0, 2,
+                            VertexBuffer::AttributeType::FLOAT2)
+                    .build(*mEngine);
+            mp.ib = IndexBuffer::Builder()
+                    .indexCount((uint32_t) mp.idx.size())
+                    .bufferType(IndexBuffer::IndexType::UINT)
+                    .build(*mEngine);
+            g.prims.push_back(std::move(mp));
+            // Descriptors AFTER the move: they point into the vectors' heap
+            // storage, which the move carried over intact.
+            MergedPrim& fp = g.prims.back();
+            fp.vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
+                    fp.pos.data(), fp.pos.size() * sizeof(float3), nullptr));
+            fp.vb->setBufferAt(*mEngine, 1, VertexBuffer::BufferDescriptor(
+                    fp.quats.data(), fp.quats.size() * sizeof(math::quatf), nullptr));
+            fp.vb->setBufferAt(*mEngine, 2, VertexBuffer::BufferDescriptor(
+                    fp.uvs.data(), fp.uvs.size() * sizeof(math::float2), nullptr));
+            fp.ib->setBuffer(*mEngine, IndexBuffer::BufferDescriptor(
+                    fp.idx.data(), fp.idx.size() * sizeof(uint32_t), nullptr));
+        }
+        g.radius = std::sqrt(r2);
+        // Initial transforms and box off the sources' CURRENT world transforms
+        // — final for the dressing, re-mirrored every frame for the cars.
+        float3 mn, mx;
+        mirrorMergedGroup(g, mn, mx);
+        g.ibuf = InstanceBuffer::Builder(n)
+                .localTransforms(g.xf.data())
+                .build(*mEngine);
+        g.ent = utils::EntityManager::get().create();
+        // Identity transform on the renderable itself: the instance transforms
+        // ARE world transforms, so the box below is world space too.
+        tcm.create(g.ent);
+        Box box;
+        box.set(mn, mx);
+        RenderableManager::Builder b(g.prims.size());
+        b.boundingBox(box)
+                .culling(true)
+                // Neither the cars nor the per-copy dressing are shadow casters
+                // (each carries its own baked ground blob; see setShadows at
+                // their load sites).
+                .castShadows(false)
+                .receiveShadows(false)
+                // Whatever layer the originals sit on — bit 0, or their
+                // feature-group bit when a sweep already tagged the scene.
+                .layerMask(0xFF, rcm.getLayerMask(ri0))
+                .instances(n, g.ibuf);
+        for (size_t p = 0; p < g.prims.size(); p++) {
+            b.geometry(p, RenderableManager::PrimitiveType::TRIANGLES,
+                    g.prims[p].vb, g.prims[p].ib);
+            b.material(p, rcm.getMaterialInstanceAt(ri0, p));
+        }
+        b.build(*mEngine, g.ent);
+        mScene->addEntity(g.ent);
+        // The originals leave the scene; their entities (and every transform
+        // behaviour riding them) stay.
+        for (size_t i = 0; i < n; i++) mScene->remove(g.sources[i]);
+        out.push_back(std::move(g));
+    }
+    return true;
+}
+
+// Mirror the sources' current world transforms into g.xf and fold the union
+// world box of the instances (each bounded by g.radius under its own scale).
+// A source mid-teardown keeps its last mirrored transform; the rebuild that
+// follows a roster change replaces the group.
+void TtpRenderer::mirrorMergedGroup(MergedGroup& g, float3& mn, float3& mx) {
+    auto& tcm = mEngine->getTransformManager();
+    mn = float3{ 1e30f, 1e30f, 1e30f };
+    mx = -mn;
+    for (size_t i = 0; i < g.sources.size(); i++) {
+        const auto ti = tcm.getInstance(g.sources[i]);
+        if (ti) g.xf[i] = tcm.getWorldTransform(ti);
+        const float3 t = g.xf[i][3].xyz;
+        const float s = std::sqrt(std::max({ dot(g.xf[i][0].xyz, g.xf[i][0].xyz),
+                dot(g.xf[i][1].xyz, g.xf[i][1].xyz),
+                dot(g.xf[i][2].xyz, g.xf[i][2].xyz) }));
+        const float r = g.radius * s;
+        mn = min(mn, t - float3{ r });
+        mx = max(mx, t + float3{ r });
+    }
+}
+
+void TtpRenderer::destroyMergedGroups(std::vector<MergedGroup>& groups) {
+    if (!mEngine) {
+        groups.clear();
+        return;
+    }
+    auto& em = utils::EntityManager::get();
+    for (MergedGroup& g : groups) {
+        if (!g.baked.entity.isNull() || g.baked.vb) {
+            destroyMesh(g.baked);   // owns g.ent: the mesh's entity
+            g.ent = {};
+        }
+        if (!g.ent.isNull()) {
+            mScene->remove(g.ent);
+            mEngine->destroy(g.ent);
+            em.destroy(g.ent);
+        }
+        for (MergedPrim& p : g.prims) {
+            if (p.vb) mEngine->destroy(p.vb);
+            if (p.ib) mEngine->destroy(p.ib);
+        }
+        // After the renderable — the buffer must outlive it.
+        if (g.ibuf) mEngine->destroy(g.ibuf);
+        // The originals come back: a REBUILD decides afresh what to merge, and
+        // whatever it leaves unmerged has to draw again.
+        for (utils::Entity e : g.sources) {
+            if (em.isAlive(e)) mScene->addEntity(e);
+        }
+    }
+    groups.clear();
+}
+
+// Mirror the gltfio nodes' world transforms into the instance buffers, and
+// keep each dynamic group's cull box honest. Runs once per frame after the
+// car seating, and again per CELL while a monster is on (the ghost swap parks
+// transforms per cell — renderCells).
+void TtpRenderer::updateMergedTransforms() {
+    if (mMergedCars.empty() && mMergedDress.empty()) return;
+    auto& rcm = mEngine->getRenderableManager();
+    for (auto* vec : { &mMergedCars, &mMergedDress }) {
+        for (MergedGroup& g : *vec) {
+            if (!g.dynamic || !g.ibuf) continue;
+            float3 mn, mx;
+            mirrorMergedGroup(g, mn, mx);
+            g.ibuf->setLocalTransforms(g.xf.data(), g.xf.size(), 0);
+            const auto ri = rcm.getInstance(g.ent);
+            if (ri && mx.x >= mn.x) {
+                Box box;
+                box.set(mn, mx);
+                rcm.setAxisAlignedBoundingBox(ri, box);
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Feature ablation (debugFeatureMask — see the header for why it is layers).
+// ---------------------------------------------------------------------------
+
+// Move a renderable off the default layer bit onto its feature's. It has to be
+// a MOVE: bit 0 is set on everything and every view draws it, so a renderable
+// keeping bit 0 would still draw with its own group hidden. mGroundProxy is the
+// one renderable that already clears bit 0 (it exists for the bake only) and is
+// deliberately in no group, so nothing here can hand it to a main view.
+void TtpRenderer::tagEntities(const utils::Entity* e, size_t n, uint8_t bit) {
+    auto& rcm = mEngine->getRenderableManager();
+    for (size_t i = 0; i < n; i++) {
+        const auto ri = rcm.getInstance(e[i]);
+        if (!ri) continue;
+        rcm.setLayerMask(ri, (uint8_t) (0x01 | bit), bit);
+    }
+}
+
+// THE DRESSING ABLATION. `ttp_display_debug_features` can hide the group whole
+// (kFeatDressing) but cannot split it, and the group's cost turned out to be
+// lopsided in a way that matters: its merged kit COPIES are lit models and its
+// SHEETS carry no normals, so on the reference Android box the copies hold
+// every millisecond the render scale cannot reach and the sheets, at twice the
+// vertices, hold none of it. Splitting the arm is what found that.
+//
+// The copies are thinned inside the merge (mergeInstancedSet); the sheets are
+// taken out by SCENE MEMBERSHIP, because every layer bit is spoken for and
+// because a hidden layer is still walked by FScene::prepare -- which is the
+// half a vertex question is asking about. Membership is safe here for the same
+// reason it is unsafe for the feature mask: these are static meshes, not pools
+// the frame rewrites.
+void TtpRenderer::setDressKeep(float frac) {
+    const float f = frac < 0.0f ? 0.0f : (frac > 1.0f ? 1.0f : frac);
+    if (f == mDressKeep) return;
+    mDressKeep = f;
+    mDressMergeDirty = true;   // the thin lives in the merge, so redo the merge
+}
+
+void TtpRenderer::setDressSheets(bool on) {
+    if (on == mDressSheets) return;
+    mDressSheets = on;
+    applyDressSheets();
+}
+
+// THE sheet set, written once: applyDressSheets and tagFeatures are both
+// measurement instruments over exactly these meshes, and a sheet added to one
+// list but not the other makes an ablation arm silently stop covering it —
+// which reads as "this feature is free".
+void TtpRenderer::forEachDressSheet(const std::function<void(const Mesh&)>& fn) const {
+    for (const Mesh* m : { &mBoulders, &mLandmarks, &mWindmill, &mClutter }) fn(*m);
+    for (const Mesh& m : mSmoke) fn(m);
+    for (const Mesh& m : mSignMeshes) fn(m);
+}
+
+// Re-stated after every build as well as on the knob: a build adds the sheets
+// back, so the flag is the DESIRED state rather than a record of one edit.
+void TtpRenderer::applyDressSheets() {
+    if (!mScene) return;
+    const bool on = mDressSheets;
+    forEachDressSheet([&](const Mesh& m) {
+        const auto one = [&](utils::Entity e) {
+            if (e.isNull()) return;
+            if (on) mScene->addEntity(e); else mScene->remove(e);
+        };
+        one(m.entity);
+        for (const utils::Entity e : m.chunks) one(e);
+    });
+}
+
+void TtpRenderer::tagMesh(const Mesh& m, uint8_t bit) {
+    if (!m.entity.isNull()) tagEntities(&m.entity, 1, bit);
+    if (!m.chunks.empty()) tagEntities(m.chunks.data(), m.chunks.size(), bit);
+}
+
+void TtpRenderer::tagFeatures() {
+    auto meshes = [&](std::initializer_list<const Mesh*> ms, uint8_t bit) {
+        for (const Mesh* m : ms) tagMesh(*m, bit);
+    };
+    auto meshVec = [&](const std::vector<Mesh>& v, uint8_t bit) {
+        for (const Mesh& m : v) tagMesh(m, bit);
+    };
+    auto instVec = [&](const std::vector<gltfio::FilamentInstance*>& v, uint8_t bit) {
+        for (gltfio::FilamentInstance* in : v) {
+            if (in) tagEntities(in->getEntities(), in->getEntityCount(), bit);
+        }
+    };
+
+    // The deck the race is driven on — decals, laid rubber and deck paint all
+    // ride its fragment shader, so this bit carries them too.
+    tagMesh(mRoad, kFeatRoad);
+
+    // The world the deck stands in. mGroundProxy stays out (see tagEntities).
+    meshes({ &mGround, &mHills, &mWater, &mWet, &mStructures, &mBerms,
+             &mGroundShadows, &mGantry }, kFeatTerrain);
+
+    // Set dressing: everything scattered beside the track. The sheets come
+    // through forEachDressSheet, the one statement of that set.
+    forEachDressSheet([&](const Mesh& m) { tagMesh(m, kFeatDressing); });
+    instVec(mConeInstances, kFeatDressing);
+    for (const auto& per : mSceneryInstances) instVec(per, kFeatDressing);
+    for (const auto& per : mPropInstances) instVec(per, kFeatDressing);
+
+    // The sky's moving furniture — all billboards, all re-aimed per cell.
+    meshVec(mClouds, kFeatSky);
+    meshVec(mHaze, kFeatSky);
+    meshVec(mBirds, kFeatSky);
+    meshVec(mKites, kFeatSky);
+    meshes({ &mPlane, &mBalloon }, kFeatSky);
+
+    // The field.
+    meshVec(mCars, kFeatCars);
+    meshVec(mStreakMeshes, kFeatCars);
+    for (gltfio::FilamentAsset* a : mCarAssets) {
+        if (a) tagEntities(a->getEntities(), a->getEntityCount(), kFeatCars);
+    }
+    for (gltfio::FilamentAsset* a : mCarGhostAssets) {
+        if (a) tagEntities(a->getEntities(), a->getEntityCount(), kFeatCars);
+    }
+    instVec(mMonsterInstances, kFeatCars);
+    instVec(mMonsterGhostInstances, kFeatCars);
+
+    // The merged draw groups carry their family's bit — each replaced a set of
+    // renderables that would have been tagged with exactly it.
+    for (const MergedGroup& g : mMergedCars) {
+        if (!g.ent.isNull()) tagEntities(&g.ent, 1, g.feat);
+    }
+    for (const MergedGroup& g : mMergedDress) {
+        if (!g.ent.isNull()) tagEntities(&g.ent, 1, g.feat);
+    }
+
+    // Items and the transient pools.
+    tagMesh(mPollen, kFeatEffects);
+    meshVec(mRockets, kFeatEffects);
+    meshVec(mRocketFlames, kFeatEffects);
+    for (const Mesh& m : mBurstMeshes) tagMesh(m, kFeatEffects);
+    for (const Mesh& m : mBurstBalls) tagMesh(m, kFeatEffects);
+    instVec(mBoxInstances, kFeatEffects);
+    instVec(mBoxFadeInstances, kFeatEffects);
+    instVec(mBananaInstances, kFeatEffects);
+}
+
+// The road shader's channels, switched by the uniforms that already gate them.
+// Called once per frame from uploadDeckDecals — after it, so the decal count it
+// just wrote is the one being overridden.
+void TtpRenderer::applyRoadDebug() {
+    if (mRoadMask == kFeatRoadAll && mDecalDebug == 0) return;
+    const float texel = mShadowMap ? mShadowTexel : 0.0f;
+    const auto set = [&](MaterialInstance* mi) {
+        if (!mi) return;
+        if (!(mRoadMask & kFeatRoadDecals)) {
+            // Both shadow halves ride this arm, each behind its own
+            // capability probe: the masked loop through maskCount, the
+            // carShadow tap through maskInk.w. The tap's raster + upload
+            // drop out on the same bit in renderCars.
+            if (roadHasMaskLoop()) mi->setParameter("maskCount", 0);
+            if (roadHasCarShadow()) mi->setParameter("maskInk", shadowInkParam(false));
+            mi->setParameter("profCount", 0);
+        }
+        if (!(mRoadMask & kFeatRoadPaint)) mi->setParameter("paintCount", 0);
+        if (!(mRoadMask & kFeatRoadRubber)) mi->setParameter("skidLatHalf", 0.0f);
+        // The decal sub-arms. MASKED and STATICS act upstream (the pick
+        // budget and the gather), so only the loops with a shader-side count
+        // and the tap need an override here.
+        if (mDecalDebug & kDebugNoDecalProfile) mi->setParameter("profCount", 0);
+        // kDebugDecalMaskCount0 is NOT applied here on purpose: this runs
+        // every frame over every chunk, and the probe's whole point is to
+        // keep the shipped WRITE schedule — uploadDeckDecals zeroes the count
+        // inline instead, on exactly the writes the baseline makes.
+        if ((mDecalDebug & kDebugNoDecalBlob) && roadHasCarShadow()) {
+            mi->setParameter("maskInk", shadowInkParam(false));
+        }
+        // THE ROAD HALF OF THIS ARM IS LIVE AGAIN. It was structurally zero
+        // while the deck's sun visibility was vertex data, and it is one
+        // bilinear tap of the track-space bake now (vroadvis.mat) — so the arm
+        // measures what it says again, and the tap this change ADDED is priced
+        // by the instrument that already exists. A 0 lat span is the shader's
+        // own "no map" path, so the ablated arm takes no tap at all rather
+        // than one against a white texture.
+        if (mi->getMaterial()->hasParameter("invSunVisLatSpan")) {
+            mi->setParameter("invSunVisLatSpan",
+                    (mRoadMask & kFeatRoadShadow) ? roadVisLatSpan() : 0.0f);
+        }
+        // An OLD vroad blob (live ESM decode per fragment) keeps the knob.
+        if (mi->getMaterial()->hasParameter("shadowTexel")) {
+            mi->setParameter("shadowTexel",
+                    (mRoadMask & kFeatRoadShadow) ? texel : 0.0f);
+        }
+    };
+    for (RoadChunk& ch : mRoadChunks) set(ch.mi);
+    set(mRoadInst);
+    // The GROUND's tap rides the same arm. Its only knob IS the texture —
+    // white reads as fully lit.
+    if (mGroundInst && mGroundMaterial && mGroundMaterial->hasParameter("visMap")
+            && !(mRoadMask & kFeatRoadShadow)) {
+        Texture* w = whiteTexture();
+        if (w) {
+            TextureSampler smp(TextureSampler::MinFilter::LINEAR,
+                    TextureSampler::MagFilter::LINEAR);
+            mGroundInst->setParameter("visMap", w, smp);
+        }
+    }
+}
+
+// Push the ablation globals onto a View. Called for EVERY view a frame renders
+// into, on every frame — Filament stores the globals per View, and a cell view
+// created after a mask was set would otherwise keep the zeros and render the
+// full picture while wearing an ablated label. That exact shape (state applied
+// once, to the views that happened to exist) is what made a feature mask read
+// as "this feature is free" before.
+void TtpRenderer::applyDebugGlobals(View* v) const {
+    if (v) v->setMaterialGlobal(0, mDebugGlobals);
+}
+
+void TtpRenderer::debugFeatureMask(uint32_t mask) {
+    mFeatureMask = (uint8_t) (mask & kFeatAll);
+    mRoadMask = mask & kFeatRoadAll;
+    mDecalDebug = mask & kDebugDecalAll;
+    mFogOn = (mask & kFeatFog) != 0;
+    // INVERTED on the way to the shaders: they read "ablate", so that a View
+    // nobody has touched draws the shipped picture (ttp_grade.inc's note).
+    mDebugGlobals.x = (mask & kFeatGrade) ? 0.0f : 1.0f;
+    mDebugGlobals.y = (mask & kFeatFogVertex) ? 0.0f : 1.0f;
+    // MASK_FLAT is the one non-inverted global: zero draws the shipped
+    // picture (the tap), set replaces it with constant coverage.
+    mDebugGlobals.z = (mask & kDebugDecalMaskFlat) ? 1.0f : 0.0f;
+    // The deck's far ribbon: renderCells reads these per frame (TtpRenderer.h
+    // says what each bit is for).
+    mDeckLodOff = (mask & kDebugNoDeckLod) != 0;
+    mDeckLodTint = (mask & kDebugDeckLodTint) != 0;
+    mDeckLodAll = (mask & kDebugDeckLodAll) != 0;
+    // The merge ablation: flipping it marks both families dirty and the lazy
+    // sites take the groups apart (restoring the originals) or regroup.
+    const bool mergeOff = (mask & kFeatNoMerge) != 0;
+    if (mergeOff != mMergeOff) {
+        mMergeOff = mergeOff;
+        mCarMergeDirty = true;
+        mDressMergeDirty = true;
+    }
+    // Re-tag on every call rather than once: a scene built after the first call
+    // (a Grand Prix's next track, a biome rebuild) arrives untagged, and an
+    // ablation sweep that silently stopped ablating would read as "this feature
+    // is free".
+    if (!mScene) return;
+    tagFeatures();
+    mFeatureTagged = true;
+    // uploadDeckDecals only writes a chunk whose folded list CHANGED, so a
+    // channel switched back on would stay off for the rest of the run. Forget
+    // what each chunk was last handed and let the next frame rewrite it.
+    //
+    // The whole-lap fallback instance goes through the same restore, because
+    // applyRoadDebug already overrides it alongside the chunks: leaving it out
+    // here would strand ITS channels off for good on the no-chunk path.
+    const auto restore = [&](MaterialInstance* mi, int paintN,
+            std::vector<DeckDecal>& lastMask, std::vector<DeckDecal>& lastProf) {
+        lastMask.clear();
+        lastProf.clear();
+        if (!mi) return;
+        mi->setParameter("skidLatHalf", mSkidTex ? mSkidLatHalf : 0.0f);
+        mi->setParameter("invSkidLatSpan",
+                (mSkidTex && mSkidLatHalf > 0.0f) ? 0.5f / mSkidLatHalf : 0.0f);
+        if (mi->getMaterial()->hasParameter("shadowTexel")) {
+            mi->setParameter("shadowTexel", mShadowMap ? mShadowTexel : 0.0f);
+        }
+        // The deck's sun-visibility tap likewise: applyRoadDebug forces its lat
+        // span to 0, and it has no per-frame writer, so nothing else would ever
+        // put it back — and applyRoadDebug returns early once the mask is whole.
+        if (mi->getMaterial()->hasParameter("invSunVisLatSpan")) {
+            mi->setParameter("invSunVisLatSpan", roadVisLatSpan());
+        }
+        // The carShadow tap back on (the masked arrays restore themselves
+        // through the cleared lastMask on the next uploadDeckDecals; the tap
+        // has no per-frame writer, so its restore is here).
+        if (roadHasCarShadow()) {
+            mi->setParameter("maskInk", shadowInkParam(mCarShadowTex[0] != nullptr));
+        }
+        mi->setParameter("paintCount", paintN);   // written once per track
+    };
+    for (RoadChunk& ch : mRoadChunks) restore(ch.mi, ch.paintN, ch.lastMask, ch.lastProf);
+    restore(mRoadInst, mRoadInstPaintN, mRoadInstLastMask, mRoadInstLastProf);
+    // The ground's map is overridden by the same arm (applyRoadDebug), so a
+    // mask switched back on has to restore it here too or it stays lit.
+    if (mGroundInst) bindVisMap(mGroundInst);
+}
+
 // A MaterialInstance owned by the scene: recorded for releaseScene().
 MaterialInstance* TtpRenderer::sceneInstance(Material* m) {
     MaterialInstance* mi = m->createInstance();
     mSceneMatInstances.push_back(mi);
     return mi;
+}
+
+int TtpRenderer::backendId() const {
+    return mEngine ? (int) mEngine->getBackend() : 0;
 }
 
 // Tear the scene down to bare engine + materials + provided bytes. The game
@@ -686,14 +1577,39 @@ MaterialInstance* TtpRenderer::sceneInstance(Material* m) {
 // glTF loaders and mAssets all survive.
 void TtpRenderer::releaseScene() {
     if (!mEngine) return;
-    // Retire every in-flight command first: the meshes' CPU copies go with
-    // them below, and the driver must not still be reading a BufferDescriptor
-    // that points into one.
-    mEngine->flushAndWait();
+    const auto tRelease = std::chrono::steady_clock::now();
+    // A released scene is unsettled by definition — the next build re-arms.
+    if (mSettleFence) { mEngine->destroy(mSettleFence); mSettleFence = nullptr; }
+    mSettled = false;
+    // NO FENCE HERE, and the danger it used to answer has not gone away: the
+    // meshes' CPU copies are handed to Filament as raw pointers, so the driver
+    // must not still be reading a BufferDescriptor into one when it is freed.
+    // This used to drain the whole pipeline to guarantee that — 24-205 ms on the
+    // Android box against 6-8 ms of actual teardown, paid on every rebuild.
+    // destroyMesh BURIES those buffers instead (see MeshGrave): same guarantee,
+    // and this returns immediately.
+    // Merged groups first, while their source entities are still alive to be
+    // handed back to the scene (the asset drops below take them out again,
+    // properly, on their own path). The parsed-geometry cache stays — it is
+    // keyed by the kit's bytes, which do not change between scenes.
+    destroyMergedGroups(mMergedCars);
+    destroyMergedGroups(mMergedDress);
+    mCarMergeDirty = false;
+    mDressMergeDirty = false;
+    // NOT mCarModelKey — the park below needs it to know what each body IS, and
+    // it is cleared with the slots at the end of this function instead. Clearing
+    // it here parked every body under key 0, which parkAsset reads as "unknown
+    // model" and destroys: the pool would have been silently inert.
+    mAssetMeshKey.clear();
     destroyMesh(mRoad);
+    if (mRoadFarIb) { mEngine->destroy(mRoadFarIb); mRoadFarIb = nullptr; }
+    {
+        Mesh far;
+        far.idx.swap(mRoadFarIdx);
+        buryMeshBuffers(far);
+    }
     destroyMesh(mGround);
     destroyMesh(mGroundProxy);
-    destroyMesh(mSky);
     destroyMesh(mHills);
     destroyMesh(mBalloon);
     for (auto& m : mCars) destroyMesh(m);
@@ -719,6 +1635,10 @@ void TtpRenderer::releaseScene() {
     // (sized by lap length); the 1x1 null tap texture is engine-lifetime.
     if (mSkidTex) { mEngine->destroy(mSkidTex); mSkidTex = nullptr; }
     std::vector<uint8_t>().swap(mSkidPix); // megabytes — actually release
+    std::vector<std::vector<uint8_t>>().swap(mSkidMips); // likewise, ~a third more
+    mSkidMipDirty.clear();
+    mSkidMipRects.clear();
+    mSkidMipLevel = 0;
     mSkidDirty.clear();
     mSkidTexW = mSkidTexH = 0;
     mSkidLatHalf = 0;
@@ -726,17 +1646,49 @@ void TtpRenderer::releaseScene() {
     mSkidMipsDirty = false;
     mSkidMipsAt = 0; // mTime restarts at 0 per scene; a stale stamp here would
                      // hold the refresh gate shut for the whole next race
+    // The car-shadow layer is per-track like the rubber (its width is the lap
+    // length); the CPU superellipse (mCarShadowMask) is engine-lifetime — the
+    // shape never changes.
+    for (auto*& t : mCarShadowTex) {
+        if (t) { mEngine->destroy(t); t = nullptr; }
+    }
+    std::vector<uint8_t>().swap(mCarShadowPix);
+    mCarShadowDirty.clear();
+    for (auto& l : mCarShadowWas) l.clear();
+    mCarShadowWasAt = 0;
+    mCarShadowW = mCarShadowH = 0;
+    mCarShadowPing = 0;
+    mCarShadowUpload = false;
+    // THE OUTLINES SURVIVE THE SCENE, exactly as the baked silhouette bits do
+    // and for the same argument: a footprint is a fact about the KIT, not about
+    // this race, so a cup's four races bake them once. Only the per-SLOT
+    // pointers into the store are per-roster.
+    mCarShadowMaskOfSlot.clear();
     for (auto& m : mBurstMeshes) destroyMesh(m);
     for (auto& m : mBurstBalls) destroyMesh(m);
     destroyMesh(mPollen);
+    mAmbCells = 0; // the next build's cloud is fitted to its cells on its first frame
     for (auto& m : mRockets) destroyMesh(m);
     for (auto& m : mRocketFlames) destroyMesh(m);
-    for (auto*& a : mCarAssets) dropAsset(a);
-    // The decalMask layers die with the roster that produced them: they keep
-    // their stale images but lose their baked bits, so the next scene's shadow
-    // decals ride the generic layer until they rebake.
-    mMaskLayerBakedBits &= (uint16_t) (1u << kMaskLayerGeneric);
-    for (auto*& a : mCarGhostAssets) dropAsset(a);
+    // PARKED, NOT DESTROYED — see mBodyPool. The next build's field is usually
+    // the same one, and parsing these back is the biggest phase it would pay.
+    for (size_t i = 0; i < mCarAssets.size(); i++) {
+        parkAsset(i < mCarModelKey.size() ? mCarModelKey[i] : 0, mCarAssets[i]);
+    }
+    // THE BAKED BITS SURVIVE THE SCENE. They used to die with the roster,
+    // because a layer belonged to a grid SLOT and the next race could put a
+    // different model in it. Layers belong to a MODEL now and are keyed by the
+    // GLB's own bytes, so a bake is a fact about the kit rather than about
+    // this race: claimMaskLayer re-checks the key and rebakes only what
+    // genuinely changed. A cup's four races therefore pay the silhouette
+    // bakes once — two render passes and a flushAndWait each — instead of
+    // once per race, and no car spends the opening of race 2 on the generic
+    // oval waiting for its rebake.
+    for (size_t i = 0; i < mCarGhostAssets.size(); i++) {
+        parkAsset(i < mCarGhostKey.size() ? mCarGhostKey[i] : 0, mCarGhostAssets[i]);
+    }
+    mCarModelKey.clear();   // both pools have what they need now
+    mCarGhostKey.clear();
     for (auto*& a : mSceneryAssets) dropAsset(a);
     for (auto*& a : mPropAssets) dropAsset(a);
     for (auto*& a : mKitAssets) dropAsset(a);
@@ -752,9 +1704,16 @@ void TtpRenderer::releaseScene() {
     mLitShadowInst = nullptr; // was one of those — never dangle into the next build
     mRoadInst = nullptr;      // ditto: the deck's own instance is scene-scoped too
     mRoadChunks.clear();      // and so is every per-chunk instance
-    mRoadInstLast.clear();
+    mRoadInstLastMask.clear();
+    mRoadInstLastProf.clear();
     mDeckDecals.clear();
-    if (mShadowMap) { mEngine->destroy(mShadowMap); mShadowMap = nullptr; }
+    // THE SUN BAKE SURVIVES THE SCENE, on the same argument as the silhouette
+    // layers above and for a bigger prize: its casters are the STATIC scene and
+    // cars cast nothing, so a rebuild that changed only the field re-renders a
+    // bit-identical map. Dropping them here is what made every join and every
+    // launch pay the 81-tap blur again (520 ms of a 700 ms build on the Android
+    // box). bakeShadowMap owns them now: it reuses them when its key says the
+    // statics did not move, and destroys them itself when it says they did.
     for (utils::Entity e : { mSun, mFill }) {
         if (!e.isNull()) {
             mScene->remove(e);
@@ -805,8 +1764,6 @@ void TtpRenderer::releaseScene() {
     mCarBasisInv.clear();
     mRockets.clear();
     mRocketFlames.clear();
-    mPrevRockets.clear();
-    mPrevRocketCount = 0;
     for (Burst& b : mBursts) b = {};
     // The instances themselves are scene-scoped (sceneInstance), already
     // destroyed above — just drop the dangling handles.
@@ -832,16 +1789,41 @@ void TtpRenderer::releaseScene() {
     mTime = 0;
     mLastCar0 = {};
     mLastCarN = {};
-    mMonsterFootW = mMonsterFootL = 0;
     mMonsterWheels.clear();
     mMonsterWheelRadius = 0;
     mMonsterSkidWidth = 0;
     mBoxScale = 1.0f;
+    // `graves` is the standing guard on the burial: it climbs during a build,
+    // which presents no frames, and must be back at 0 at rest. A number that
+    // stays up is CPU copies of whole scenes never being freed.
+    utils::slog.i << "ttp release: graves " << (int) mGraves.size() << " teardown "
+            << (int) (std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now() - tRelease).count() + 0.5)
+            << " ms" << utils::io::endl;
 }
 
 TtpRenderer::~TtpRenderer() {
     if (!mEngine) return;
     releaseScene();
+    // The engine is going away, so no frame will ever age these out. This is
+    // the one teardown that still has to pay the fence — and the only one where
+    // nobody can see it.
+    drainGravesBlocking();
+    // The parked bodies go with the loader that made them, and only here: a
+    // scene release parks, it does not destroy.
+    drainBodyPool();
+    // Engine-lifetime, like the parsed-kit cache: outlives every scene, so it
+    // is this destructor's to free and no releaseScene's.
+    for (const auto& [_, tex] : mSkyCubemaps) mEngine->destroy(tex);
+    mSkyCubemaps.clear();
+    // A staged blob's unlanded reads are LEAKED on purpose, and retireStaged
+    // already states the trade: the driver may still be writing into that
+    // buffer and there is no tick left to complete it. The textures they were
+    // reading from can simply go — the engine is going with them.
+    for (auto& s : mStaged) retireStaged(*s);
+    mStaged.clear();
+    for (Texture* t : mTexGraves) mEngine->destroy(t);
+    mTexGraves.clear();
     if (mBlendMaterial) mEngine->destroy(mBlendMaterial);
     if (mPointMaterial) mEngine->destroy(mPointMaterial);
     if (mCloudMaterial) mEngine->destroy(mCloudMaterial);
@@ -853,6 +1835,8 @@ TtpRenderer::~TtpRenderer() {
     if (mWhiteTex) mEngine->destroy(mWhiteTex);
     if (mDecalMaskArray) mEngine->destroy(mDecalMaskArray);
     if (mShadowMap) mEngine->destroy(mShadowMap);
+    if (mVisMap) mEngine->destroy(mVisMap);
+    if (mRoadVisMap) mEngine->destroy(mRoadVisMap);
     if (mGlbMaterial) mEngine->destroy(mGlbMaterial);
     if (mGlbFadeMaterial) mEngine->destroy(mGlbFadeMaterial);
     delete mResourceLoader;
@@ -893,6 +1877,9 @@ TtpRenderer::~TtpRenderer() {
     if (mOverlayMaterial) mEngine->destroy(mOverlayMaterial);
     if (mMaterial) mEngine->destroy(mMaterial);
     if (mLitMaterial) mEngine->destroy(mLitMaterial);
+    if (mLitPlainMaterial) mEngine->destroy(mLitPlainMaterial);
+    if (mVisMaterial) mEngine->destroy(mVisMaterial);
+    if (mRoadVisMaterial) mEngine->destroy(mRoadVisMaterial);
     if (mRoadMaterial) mEngine->destroy(mRoadMaterial);
     for (size_t i = 0; i < mCellViews.size(); i++) {
         mEngine->destroy(mCellViews[i]);
@@ -906,5 +1893,8 @@ TtpRenderer::~TtpRenderer() {
     mEngine->destroyCameraComponent(mCameraEntity);
     utils::EntityManager::get().destroy(mCameraEntity);
     Engine::destroy(&mEngine);
+#if defined(__ANDROID__)
+    mVkPlatform.reset();   // caller-owned platform, after the engine using it
+#endif
 }
 

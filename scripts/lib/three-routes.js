@@ -2,11 +2,11 @@
 // Serve three.js to a Playwright page from node_modules, under the /vendor/three/
 // paths the artwork capture scripts import.
 //
-// The GAME has no three.js — it renders with Filament in wasm — but two offline
-// tools still want a throwaway 3D scene in a browser: the car thumbnails and the
-// item icons, whose outputs are checked in. three is a devDependency for exactly
-// this (and for tests/vec3.test.js), so rather than shipping it on the server we
-// intercept the two paths and answer them from node_modules.
+// The GAME has no three.js — it renders with Filament in wasm — but one offline
+// tool still wants a throwaway 3D scene in a browser: capture-car-thumbs.js,
+// whose outputs are checked in. three is a devDependency for exactly that, so
+// rather than shipping it on the server we intercept the two paths and answer
+// them from node_modules.
 //
 // The pages these tools drive are same-origin on the dev server, whose CSP is
 // script-src 'self' — a routed /vendor/… URL is 'self', so it loads, where an
@@ -29,7 +29,7 @@ function fileFor(urlPath) {
 async function installThreeRoutes(page) {
   if (!fs.existsSync(THREE_DIR)) {
     throw new Error('three is not installed — run `npm install` (it is a devDependency, '
-      + 'used only by this tool and tests/vec3.test.js)');
+      + 'used only by capture-car-thumbs.js through these routes)');
   }
   await page.route('**/vendor/three/**', async (route) => {
     const file = fileFor(new URL(route.request().url()).pathname);

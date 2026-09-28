@@ -23,17 +23,38 @@ import { loadNativeRuntime, nativeError } from '../nativeRuntime.js';
 import { loadBiomes } from '../../shared/biomes.js';
 import { assetUrl } from '../../shared/assetUrl.js';
 import { ITEM_IDS } from '../engine/contract.js';
+import { BlobStores } from './BlobStore.js';
 
 // Camera modes for a surface with no split-screen cells — the C side's
 // TTP_CAM_* (ttp_display.h).
 export const CAM = { STILL: 0, ORBIT: 1, BBOX: 2, FREE: 3 };
 
+// Feature-ablation bits for debugFeatures() — the C side's TTP_FEAT_*
+// (ttp_display.h). DEBUG ONLY: the per-feature GPU cost map's instrument.
+// 0x2000 is TTP_DEBUG_NO_MERGE, an INVERTED knob outside FEAT on purpose: SET
+// takes the merged draw groups apart and restores the per-copy gltfio
+// renderables, so `ALL | 0x2000` is the unmerged arm of a sweep.
+export const FEAT = {
+  ROAD: 0x04, TERRAIN: 0x08, DRESSING: 0x10,
+  SKY: 0x20, CARS: 0x40, EFFECTS: 0x80,
+  // The road shader's own channels — these shade the same deck one channel
+  // shorter rather than hiding anything.
+  ROAD_DECALS: 0x100, ROAD_RUBBER: 0x200, ROAD_PAINT: 0x400, ROAD_SHADOW: 0x800,
+  FOG: 0x1000,
+  // Scene-wide, and neither is reachable by hiding a group: both ride a
+  // Filament view global (see ttp_grade.inc). GRADE is the three dependent LUT
+  // taps every shaded fragment pays; FOG_VERTEX is ttpFogFactor's own length()
+  // and exp(), which FOG cannot see because that bit only moves fog PARAMETERS.
+  GRADE: 0x4000, FOG_VERTEX: 0x8000,
+  ALL: 0xDFFC,
+};
+
 // `vskid` is GONE with `vdecal`, same story: the rubber layer is a CPU
 // raster + upload now (TtpRenderer::renderSkids), so there is no stamp
 // material to serve.
-const MATERIALS = ['vcolor', 'vblend', 'vlit', 'vroad', 'vglb', 'vglbfade', 'vpoint',
-                   'vcloud', 'vground', 'vpresent', 'vesm', 'vblur', 'vburst',
-                   'voverlay'];
+const MATERIALS = ['vcolor', 'vblend', 'vlit', 'vlitns', 'vroad', 'vglb', 'vglbfade',
+                   'vpoint', 'vcloud', 'vground', 'vvis', 'vroadvis', 'vpresent', 'vesm',
+                   'vblur', 'vburst', 'voverlay'];
 
 // The GLBs every scene needs whatever the track and the biome are: the track's
 // own furniture, and the truck a monster item turns a car into. Exported because
@@ -42,8 +63,23 @@ const MATERIALS = ['vcolor', 'vblend', 'vlit', 'vroad', 'vglb', 'vglbfade', 'vpo
 // (The scenery models are NOT here: those are the biome's, and C++ names them.)
 export const PROP_MODELS = ['item-box', 'item-banana', 'item-cone', 'vehicle-monster-truck'];
 
+// The ones that also need a translucent twin, and what it is called. A map
+// rather than a conditional so the fetch plan can name both in one pass.
+const PROP_GHOSTS = {
+  'item-box': 'item-box-fade.glb',
+  'vehicle-monster-truck': 'monster-ghost.glb'
+};
+
+// The toy-car kit's shared palette. Authored into some models and not others,
+// so it is asked for by name rather than discovered by the texture scan.
+const PALETTE_URI = 'Textures/colormap.png';
+
 // cellRects' "no cells" answer, so the caller's loop is the same shape either way.
 const EMPTY_RECTS = new Float32Array(0);
+// Floats per cell in that packed run: the picture rect and the safe rect, four
+// each. Declared once here because the allocation and the read-back must agree,
+// and they are twenty lines apart.
+export const RECT_STRIDE = 8;
 // hud()'s, for the same reason.
 const EMPTY_HUD = [];
 
@@ -83,6 +119,7 @@ export class Display {
     this.built = false;
     this._rectPtr = 0;       // cellRects' heap scratch, grown on demand
     this._rectBytes = 0;
+    this._pollPtr = 0;       // step()'s two-double out array; allocated on first use
     this._showcase = false;  // the asset gallery's showroom; see showcase()
     this._kitModels = [];    // …and its kit field; see kitField()
     // No slot→car-id list here anymore: the HUD block is indexed by slot and
@@ -92,16 +129,24 @@ export class Display {
       create: mod.cwrap('ttp_display_create', 'number', ['string', 'number', 'number']),
       asset: mod.cwrap('ttp_display_asset', 'number', ['string', 'number', 'number']),
       resize: mod.cwrap('ttp_display_resize', null, ['number', 'number']),
-      scaleStep: mod.cwrap('ttp_display_scale_step', 'number',
-                           ['number', 'number', 'number', 'number', 'number', 'number',
-                            'number', 'number', 'number']),
-      presentFloor: mod.cwrap('ttp_display_present_floor', 'number', ['number', 'number']),
+      safeInsets: mod.cwrap('ttp_display_safe_insets', null, ['number', 'number']),
+      scaleScene: mod.cwrap('ttp_display_scale_scene', null, ['number']),
+      scalePoll: mod.cwrap('ttp_display_scale_poll', 'number',
+                           ['number', 'number', 'number', 'number', 'number', 'number']),
+      scalePanelMs: mod.cwrap('ttp_display_scale_panel_ms', 'number', []),
       build: mod.cwrap('ttp_display_build', 'number', ['string', 'string']),
       reroster: mod.cwrap('ttp_display_reroster', 'number', ['string']),
       debugDecals: mod.cwrap('ttp_display_debug_decals', 'string', []),
       debugHideCars: mod.cwrap('ttp_display_debug_hide_cars', null, ['number']),
       debugWipeSkids: mod.cwrap('ttp_display_debug_wipe_skids', null, []),
       debugForceMaskLayer: mod.cwrap('ttp_display_debug_force_mask_layer', null, ['number']),
+      shadowTuning: mod.cwrap('ttp_display_shadow_tuning', null, ['string']),
+      shadowTuningJson: mod.cwrap('ttp_display_shadow_tuning_json', 'string', []),
+      shadowMaskJson: mod.cwrap('ttp_display_shadow_mask_json', 'string', ['number']),
+      shadowLayerJson: mod.cwrap('ttp_display_shadow_layer_json', 'string', ['number','number','number','number']),
+      debugFeatures: mod.cwrap('ttp_display_debug_features', null, ['number']),
+      dressKeep: mod.cwrap('ttp_display_dress_keep', null, ['number']),
+      dressSheets: mod.cwrap('ttp_display_dress_sheets', null, ['number']),
       biome: mod.cwrap('ttp_display_biome', null, ['string']),
       showcase: mod.cwrap('ttp_display_showcase', null, ['number']),
       modelVariant: mod.cwrap('ttp_display_model_variant', null, ['string', 'number']),
@@ -121,6 +166,7 @@ export class Display {
       shadows: mod.cwrap('ttp_display_shadows', null, ['number']),
       hold: mod.cwrap('ttp_display_hold', null, ['number']),
       frame: mod.cwrap('ttp_display_frame', 'number', ['number']),
+      advance: mod.cwrap('ttp_display_advance', 'number', ['number']),
       burst: mod.cwrap('ttp_display_burst', null, ['string', 'number', 'number']),
       profileNames: mod.cwrap('ttp_display_profile_names', 'string', []),
       // The two GLB container reads (native/runtime/ttp_glb.h). They were JS
@@ -130,7 +176,22 @@ export class Display {
       // ghost's chunk padding in particular is a trap that stays invisible until
       // cgltf rejects a whole model, and it is not worth having three times.
       glbGhost: mod.cwrap('ttp_glb_ghost', 'number', ['number', 'number', 'number']),
-      glbImageUris: mod.cwrap('ttp_glb_image_uris', 'string', ['number', 'number'])
+      // Derived bytes kept between runs (ttp_display.h). A WALK: this side names
+      // no blob kind, it asks which stores exist and performs the answers.
+      blobStores: mod.cwrap('ttp_display_blob_stores', 'string', []),
+      blobPlan: mod.cwrap('ttp_display_blob_plan', 'string',
+                          ['string', 'string', 'string', 'string']),
+      blobOffer: mod.cwrap('ttp_display_blob_offer', null, ['string', 'number', 'number']),
+      blobReady: mod.cwrap('ttp_display_blob_ready', 'number', []),
+      blobKeep: mod.cwrap('ttp_display_blob_keep', 'string', ['string']),
+      blobExport: mod.cwrap('ttp_display_blob_export', 'number',
+                            ['string', 'string', 'number']),
+      blobWrote: mod.cwrap('ttp_display_blob_wrote', null, ['string', 'string']),
+      // …and what still has to be fetched at all (ttp_display.h). Same argument
+      // as the walk above: which assets the engine is already holding is its own
+      // knowledge, not this side's to mirror.
+      assetPlan: mod.cwrap('ttp_display_asset_plan', 'string', ['string']),
+      assetTextures: mod.cwrap('ttp_display_asset_textures', 'string', [])
     };
   }
 
@@ -151,6 +212,16 @@ export class Display {
       const res = await fetch(assetUrl(`/display/engine/native/${name}.filamat`));
       if (res.ok) d.provide(`${name}.filamat`, new Uint8Array(await res.arrayBuffer()));
     }));
+    // The disk tier, one store per kind the engine lists. AUTOMATION GETS NONE,
+    // the same rule Android applies to its scenario launches: a suite that
+    // asserts what a build produces must not be served what a previous run left
+    // behind — and the E2E suite turns the sun bake off outright (see shadows()),
+    // so half of what there is to keep would not exist anyway.
+    if (!(typeof navigator !== 'undefined' && navigator.webdriver)) {
+      try {
+        d.blobs = new BlobStores(JSON.parse(d._fn.blobStores() || '[]'));
+      } catch { d.blobs = null; }
+    }
     return d;
   }
 
@@ -164,6 +235,62 @@ export class Display {
     const ok = this._fn.asset(name, ptr, bytes.length);
     m._free(ptr);
     if (!ok) throw new Error(`ttp_display_asset(${name}) failed`);
+  }
+
+  // Hand a store's blob back to the engine. The bytes go through the heap for
+  // the reason provide() gives: cwrap has no array type, and the engine copies
+  // before this returns.
+  blobOffer(store, bytes) {
+    const m = this.m;
+    const ptr = m._malloc(bytes.length);
+    m.HEAPU8.set(bytes, ptr);
+    try { this._fn.blobOffer(store, ptr, bytes.length); } finally { m._free(ptr); }
+  }
+
+  // …and out. slice(), not subarray(): the blob is C-owned and the write that
+  // follows is async, so a view would be reading a buffer the next walk may have
+  // moved. Null when that name is not waiting.
+  blobExport(store, name) {
+    const m = this.m;
+    const lenPtr = m._malloc(4);
+    try {
+      const out = this._fn.blobExport(store, name, lenPtr);
+      const n = m.HEAPU32[lenPtr >> 2];
+      return out && n ? m.HEAPU8.slice(out, out + n) : null;
+    } finally {
+      m._free(lenPtr);
+    }
+  }
+
+  // Write out whatever the engine has finished, on the FRAME BEAT rather than at
+  // the end of a build (ttp_display.h). A WebGL readback cannot complete inside
+  // the build that issues it, so the build only stages; this is where the bytes
+  // actually arrive. Gated on one integer, so an idle frame costs a single call.
+  //
+  // Re-entrancy matters here and nowhere else in the walk: the writes are
+  // IndexedDB and the frame loop will call this again long before they settle.
+  // A second pass would export the same names and race its own put.
+  async writeReadyBlobs() {
+    if (!this.blobs || this._writingBlobs) return;
+    if (!this._fn.blobReady()) return;
+    this._writingBlobs = true;
+    try {
+      await this.blobs.forEach(async (store, name) => {
+        let write;
+        try { write = JSON.parse(this._fn.blobKeep(name) || '{}').write; } catch { return; }
+        for (const blobName of write || []) {
+          const bytes = this.blobExport(name, blobName);
+          if (bytes) await store.write(blobName, bytes);
+          // ALWAYS, and after the await: the engine holds the bytes until the
+          // attempt is over, and a name that is never retired would be
+          // re-exported on every frame for the rest of the page's life. A store
+          // is a cache — the road out of a failed write is to make it again.
+          this._fn.blobWrote(name, blobName);
+        }
+      });
+    } finally {
+      this._writingBlobs = false;
+    }
   }
 
   // Run `bytes` through one of the ttp_glb_* readers. Both take (ptr, len) and
@@ -200,34 +327,48 @@ export class Display {
     });
   }
 
-  // Every images[].uri the container references. These have to be provided
-  // BEFORE the renderer parses the model, which is why they are read here rather
-  // than asked of the loaded asset.
-  _imageUris(bytes) {
-    const json = this._withGlb(bytes, (ptr, len) => this._fn.glbImageUris(ptr, len));
-    try {
-      return JSON.parse(json || '[]');
-    } catch {
-      return [];
-    }
-  }
-
   resize(w, h) {
     this.canvas.width = w;
     this.canvas.height = h;
     this._fn.resize(w, h);
   }
 
-  // What scale to render at next, given what the last window of frames cost, and
-  // the running fastest-present that feeds it. Both rules are C++'s
-  // (ttp/render_scale.h) — this side measures and performs, and passes the
-  // numbers over unjudged. See Stage._adaptScale.
-  scaleStep(current, cost, sinceChangeSec, min, max) {
-    return this._fn.scaleStep(current, cost.gpuShareP95, cost.gpuFrames, cost.presentP95Ms,
-                              cost.presentFloorMs, cost.presentFrames, sinceChangeSec, min, max);
+  // What a TV may be cropping off each edge, per side, as a fraction of the
+  // surface. Sticky in C++, so this is a boot-time call and not a per-resize
+  // one: a fraction does not change when the surface does.
+  //
+  // The browser cannot ask, and this page can be on a laptop plugged into a
+  // television as easily as on the laptop's own screen, so it reports the
+  // authored margin rather than a zero it cannot justify. The cost
+  // when it IS a monitor is a slightly tighter HUD; the cost of the other guess
+  // on a TV is a name chip nobody can read.
+  safeInsets(fx, fy) { this._fn.safeInsets(fx, fy); }
+
+  // A NEW SCENE, on the same clock the perf samples carry. The rule drops its
+  // cost model and restarts the scale's tenure; neither is ours to judge.
+  scaleScene(tMs) { this._fn.scaleScene(tMs); }
+
+  // Re-decide the operating point. `[scale, divisor]` when it MOVED, else null —
+  // which is also the answer while a hold or the poll cadence is running.
+  //
+  // ONE call for both halves because they are one decision: the rule trades
+  // frame rate against resolution around a desired 1080@60, so a caller taking
+  // one answer and ignoring the other would be arbitrating between them itself.
+  // Everything it decides FROM — the window, the percentiles, the fastest
+  // present, the cost model's observation, the clocks — is C++'s and folds off
+  // the same monitor PerfHud feeds. See ttp_display_scale_poll.
+  scalePoll(tMs, min, max, baseLines, panelMs) {
+    if (!this._pollPtr) this._pollPtr = this.m._malloc(16); // 2 doubles
+    if (!this._fn.scalePoll(tMs, min, max, baseLines, panelMs, this._pollPtr)) return null;
+    // HEAPF64 re-read every call: ALLOW_MEMORY_GROWTH swaps the buffer out from
+    // under any view held across an allocation (same rule as cellRects).
+    const i = this._pollPtr >> 3;
+    return [this.m.HEAPF64[i], this.m.HEAPF64[i + 1] | 0];
   }
 
-  presentFloor(prevFloorMs, p05Ms) { return this._fn.presentFloor(prevFloorMs, p05Ms); }
+  // The panel period the rule is judging against — declared or learned. For
+  // perf.pacing, so the readout's budget and the rule's are one number.
+  scalePanelMs() { return this._fn.scalePanelMs(); }
 
   // Build every scene from here on as the ASSET GALLERY's showroom: the picked
   // biome's palette carrying every biome's vocabulary (ttp_display_showcase).
@@ -281,63 +422,74 @@ export class Display {
     // function of it, and so is the scene the build call will produce.
     this._fn.biome(biome);
 
-    // Scenery GLBs, in the slot order C++ named them in: the renderer binds its
-    // instanced props by that index, and the biome's recolour — which keys on
-    // each model's own authored material colours — reads these same bytes back
-    // out on the C++ side.
+    // WHAT THIS SCENE IS MADE OF, as names paired with the kit model each one's
+    // bytes come from. Nothing is fetched yet: which of these the engine is
+    // already holding is its own knowledge (ttp_display_asset_plan), and asking
+    // is what turns a rebuild of a standing track from a full re-fetch into
+    // almost nothing.
     //
-    // In SHOWCASE mode the list is the union of every biome's (the same one for
-    // all of them, which is why it takes no biome argument) — see showcase().
+    // Scenery and props go in the slot order C++ named them in: the renderer
+    // binds its instanced props by that index, and the biome's recolour — which
+    // keys on each model's own authored material colours — reads these same
+    // bytes back out on the C++ side. In SHOWCASE mode the scenery list is the
+    // union of every biome's (the same one for all of them, which is why it
+    // takes no biome argument) — see showcase().
     const biomes = await loadBiomes();
+    const want = [];
     const scModels = this._showcase ? biomes.showcaseModels() : biomes.sceneryModels(biome);
-    const scBytes = await Promise.all(scModels.map((m) => assets.glb(m)));
-    scBytes.forEach((b, i) => { if (b) this.provide(`scenery${i}.glb`, b); });
-
-    // Trackside prop GLBs (scattered set dressing): the same slot contract
-    // one channel over, bound back as prop<i>.glb.
+    scModels.forEach((m, i) => want.push({ name: `scenery${i}.glb`, tag: m }));
     const prModels = this._showcase ? biomes.showcasePropModels() : biomes.propModels(biome);
-    const prBytes = await Promise.all(prModels.map((m) => assets.glb(m)));
-    prBytes.forEach((b, i) => { if (b) this.provide(`prop${i}.glb`, b); });
-
-    // The KIT FIELD's models (dev; empty in play). Fetched CONCURRENTLY because
-    // there are hundreds of them — one await each would turn a field into a
-    // minute of round trips — and provided in the order given, which is the
-    // order the layout comes back in and the order the chrome names them by.
-    const kitBytes = await Promise.all(this._kitModels.map((m) => assets.glb(m)));
-    kitBytes.forEach((b, i) => { if (b) this.provide(`kit${i}.glb`, b); });
-    this._fn.kitField(kitBytes.length);
-
-    // An unparseable model answers with an empty list and just renders
-    // untextured, which is what the try/catch here used to buy.
-    const texUris = new Set();
-    for (const bytes of [...scBytes, ...prBytes, ...kitBytes]) {
-      if (bytes) for (const uri of this._imageUris(bytes)) texUris.add(uri);
+    prModels.forEach((m, i) => want.push({ name: `prop${i}.glb`, tag: m }));
+    // The KIT FIELD's models (dev; empty in play). There are hundreds of them,
+    // in the order the layout comes back in and the order the chrome names them.
+    this._kitModels.forEach((m, i) => want.push({ name: `kit${i}.glb`, tag: m }));
+    want.push(...this._carWants(roster));
+    for (const name of PROP_MODELS) {
+      want.push({ name: `${name}.glb`, tag: name });
+      // A BLEND clone of the box, for the collect fade. The kit material is
+      // OPAQUE, so the solid instance cannot be faded at all — the renderer
+      // hands the grab over to this one and ramps its alpha down. The clone's
+      // baked 0.5 never shows: the renderer writes the alpha on every frame a
+      // box is dissolving, and parks these instances the rest of the time.
+      const ghostName = PROP_GHOSTS[name];
+      if (ghostName) want.push({ name: ghostName, tag: name, from: `${name}.glb` });
     }
-    texUris.add('Textures/colormap.png'); // the toy-car kit's shared palette
-    await Promise.all([...texUris].map(async (uri) => {
+    await this._fetchPlanned(want, assets);
+    this._fn.kitField(this._kitModels.length);
+
+    // The textures those models reference. The URI list comes from the ENGINE,
+    // off the bytes it is holding — so a model the plan skipped still
+    // contributes its textures, and nothing here re-reads a container it just
+    // handed over. The kit's shared palette is asked for by name because it is
+    // authored into some models and not others.
+    const texWant = [{ name: PALETTE_URI, tag: PALETTE_URI }];
+    for (const uri of this._json(this._fn.assetTextures())) texWant.push({ name: uri, tag: uri });
+    const texNeed = this._json(this._fn.assetPlan(JSON.stringify(texWant)));
+    await Promise.all(texNeed.map(async (uri) => {
       const bytes = await assets.raw(assetUrl(`/assets/toycar/${uri}`));
       if (bytes) this.provide(uri, bytes);
     }));
 
-    await Promise.all([
-      this._provideCars(roster, assets),
-      ...PROP_MODELS.map(async (name) => {
-        const bytes = await assets.glb(name);
-        if (!bytes) return;
-        this.provide(`${name}.glb`, bytes);
-        // A BLEND clone of the box, for the collect fade. The kit material is
-        // OPAQUE, so the solid instance cannot be faded at all — the renderer
-        // hands the grab over to this one and ramps its alpha down. The clone's
-        // baked 0.5 never shows: the renderer writes the alpha on every frame a
-        // box is dissolving, and parks these instances the rest of the time.
-        const ghostName = name === 'vehicle-monster-truck' ? 'monster-ghost.glb'
-                        : name === 'item-box' ? 'item-box-fade.glb' : null;
-        if (ghostName) {
-          const ghost = this._ghost(bytes);
-          if (ghost) this.provide(ghostName, ghost);
+    // THE BLOB WALKS, first half — AFTER provisioning and before the build, the
+    // one window that suits every store: the bake's key needs the biome (latched
+    // at the top of this method), the masks' are derived from the car GLBs handed
+    // over just above. NOTHING HERE NAMES A BLOB KIND; the engine lists its
+    // stores and this performs the answers. The second half is not here at all —
+    // it is a frame beat (writeReadyBlobs), for the reason ttp_display.h gives.
+    if (this.blobs) {
+      const gen = await this.blobs.generation();
+      await this.blobs.forEach(async (store, name) => {
+        let plan;
+        try {
+          plan = JSON.parse(this._fn.blobPlan(name, trackId, gen, await store.entriesJson()) || '{}');
+        } catch { return; }
+        for (const drop of plan.drop || []) await store.delete(drop);
+        for (const blobName of plan.read || []) {
+          const bytes = await store.read(blobName);
+          if (bytes) this.blobOffer(name, bytes);
         }
-      })
-    ]);
+      });
+    }
 
     // The roster goes across whole — id, carIndex and livery, in slot order.
     // `model` stays here: it named the GLBs fetched above, which is the only
@@ -359,25 +511,58 @@ export class Display {
   async reroster(roster, assets) {
     if (!this.built) return false;
     // Model swaps need their GLBs re-provided first — fetching is this side's
-    // one job in the exchange, exactly as at build.
-    await this._provideCars(roster, assets);
+    // one job in the exchange, exactly as at build. Through the same plan, which
+    // is what makes the common re-dress free: a ready toggle, a rename, a
+    // welcome and a seat expiry all move the roster without moving a byte.
+    await this._fetchPlanned(this._carWants(roster), assets);
     // A re-dress keeps the id list by contract (C++ refuses id changes there),
     // so the slot-id cache stands; a refusal falls back to build, which clears it.
     return !!this._fn.reroster(JSON.stringify(this._slots(roster)));
   }
 
-  // The per-slot car GLBs (and their 50%-alpha ghost twins), provided as
-  // car<slot>.glb in roster order — the fetch half of both setTrack and
-  // reroster. `model` names the file; it never crosses the ABI.
-  _provideCars(roster, assets) {
-    return Promise.all((roster || []).map(async (r, i) => {
-      if (!r.model) return;
-      const bytes = await assets.glb(r.model);
+  // The per-slot car GLBs and their 50%-alpha ghost twins, as the plan's
+  // vocabulary: car<slot>.glb tagged by the MODEL its bytes come from, since
+  // that is the only thing about a slot that changes them. A slot with no model
+  // tags as "" so a later pick reads as a change. `model` never crosses the ABI.
+  _carWants(roster) {
+    const want = [];
+    (roster || []).forEach((r, i) => {
+      want.push({ name: `car${i}.glb`, tag: r.model || '' });
+      if (r.model) {
+        want.push({ name: `car${i}-ghost.glb`, tag: r.model, from: `car${i}.glb` });
+      }
+    });
+    return want;
+  }
+
+  // Fetch and hand over exactly what the engine says it still needs, then derive
+  // the ghosts out of the models that came with them (a wanted derivative always
+  // brings its source — ttp_display.h).
+  async _fetchPlanned(want, assets) {
+    const need = new Set(this._json(this._fn.assetPlan(JSON.stringify(want))));
+    const fetched = new Map();
+    // Concurrently: one await each would turn a kit field into a minute of round
+    // trips, and the asset cache makes a repeat fetch free anyway.
+    await Promise.all(want.map(async (w) => {
+      if (w.from || !w.tag || !need.has(w.name)) return;
+      const bytes = await assets.glb(w.tag);
       if (!bytes) return;
-      this.provide(`car${i}.glb`, bytes);
-      const ghost = this._ghost(bytes);
-      if (ghost) this.provide(`car${i}-ghost.glb`, ghost);
+      fetched.set(w.name, bytes);
+      this.provide(w.name, bytes);
     }));
+    for (const w of want) {
+      if (!w.from || !need.has(w.name)) continue;
+      const src = fetched.get(w.from);
+      if (!src) continue;
+      const ghost = this._ghost(src);
+      if (ghost) this.provide(w.name, ghost);
+    }
+  }
+
+  // An ABI answer that is a JSON array, or [] — the same leniency every other
+  // JSON read on this side takes.
+  _json(s) {
+    try { return JSON.parse(s || '[]') || []; } catch { return []; }
   }
 
   // A roster as the ABI takes it, in slot order (see setTrack on the split
@@ -388,12 +573,6 @@ export class Display {
     }));
   }
 
-  release() {
-    if (!this.built) return;
-    this._fn.release();
-    this.built = false;
-  }
-
   // The session whose cars get drawn (0 = an empty track, which is what the
   // lobby's preview is before the attract race starts).
   bind(session) { this._fn.bind(session | 0); }
@@ -402,9 +581,11 @@ export class Display {
   // camera over the whole surface.
   cells(ids) { this._fn.cells(JSON.stringify(ids || [])); }
 
-  // WHERE those cells are, as a flat [x, y, w, h, x, y, w, h, …] in cell order —
-  // the rects the renderer splits its own viewports into, read back rather than
-  // recomputed here (the shell has no opinion on split-screen layout any more).
+  // WHERE those cells are, as a flat run of EIGHT floats per cell in cell order:
+  // the picture rect (x, y, w, h) and then the same cell inset by the TV
+  // overscan margin. Read back rather than recomputed here — the shell has no
+  // opinion on split-screen layout, and none on how far in the chrome goes
+  // either (ttp_display.h).
   //
   // Values are DRAWING-BUFFER pixels, like every other number this class passes
   // (resize, create); the caller scales to CSS pixels, since the DPR is its own.
@@ -414,7 +595,7 @@ export class Display {
   cellRects(maxCells) {
     const n = Math.max(0, maxCells | 0);
     if (!n) return EMPTY_RECTS;
-    const bytes = n * 4 * 4; // 4 floats per cell
+    const bytes = n * RECT_STRIDE * 4; // two rects per cell, 4 bytes a float
     if (!this._rectPtr || this._rectBytes < bytes) {
       if (this._rectPtr) this.m._free(this._rectPtr);
       this._rectPtr = this.m._malloc(bytes);
@@ -423,7 +604,8 @@ export class Display {
     const got = this._fn.cellRects(this._rectPtr, n);
     // HEAPF32 is re-read every call: ALLOW_MEMORY_GROWTH swaps the buffer out
     // from under any view held across an allocation.
-    return this.m.HEAPF32.subarray(this._rectPtr >> 2, (this._rectPtr >> 2) + got * 4);
+    return this.m.HEAPF32.subarray(this._rectPtr >> 2,
+                                   (this._rectPtr >> 2) + got * RECT_STRIDE);
   }
 
   // WHAT the HUD says: place, lap, total laps, the held item, finished and the
@@ -519,6 +701,10 @@ export class Display {
   // holds the previous one.
   frame(dt) { return !!this._fn.frame(dt); }
 
+  // One frame WITHOUT A DRAW (ttp_display_advance): the renderer's own state moves
+  // on — chase rigs, seating, props, skid stamps — and nothing is submitted.
+  advance(dt) { return !!this._fn.advance(dt); }
+
   // Re-present the LAST frame unchanged (dt 0 steps nothing and fires no queued
   // burst). Used by the lobby crossfade's still capture: a canvas readback only
   // sees pixels while the frame is still in the drawing buffer, i.e. in the task
@@ -538,7 +724,7 @@ export class Display {
     return this._profNames || (this._profNames = this._fn.profileNames().split(','));
   }
 
-  // Last frame's per-section wall clock, as { section: ms }.
+  // Per-decal diagnostic rows for the warp bench (see TestHarness.runWarpBench).
   debugDecals() { return JSON.parse(this._fn.debugDecals() || '[]'); }
   // Decal isolation — see ttp_display.h. Hiding the bodies and wiping the laid
   // rubber is what makes a contact shadow readable at all; without it every
@@ -546,14 +732,32 @@ export class Display {
   debugHideCars(on) { this._fn.debugHideCars(on ? 1 : 0); }
   debugWipeSkids() { this._fn.debugWipeSkids(); }
   debugForceMaskLayer(layer) { this._fn.debugForceMaskLayer(layer | 0); }
-
-  profile() {
-    const ptr = this.m._ttp_display_profile();
-    if (!ptr) return null;
-    const out = {};
-    this._profileNames().forEach((n, i) => { out[n] = this.m.HEAPF64[(ptr >> 3) + i]; });
-    return out;
+  // The car contact shadow's live knobs (/shadow-lab.html). A PARTIAL object:
+  // whatever is left out keeps its current value, so a page sends one knob per
+  // drag. `shadowTuning()` answers { current, defaults } — read the sliders'
+  // ranges and the reset button off THAT rather than re-typing the engine's
+  // numbers here, which is the drift root rule 1 exists to stop.
+  setShadowTuning(patch) { this._fn.shadowTuning(JSON.stringify(patch || {})); }
+  shadowTuning() { return JSON.parse(this._fn.shadowTuningJson() || '{}'); }
+  // The mask a car slot actually stamps — { w, h, model, generic, px } with px
+  // base64. The only way to tell a shape that is WRONG from one that is right
+  // and merely too small to read on the deck; those want opposite fixes.
+  shadowMask(slot) { return JSON.parse(this._fn.shadowMaskJson(slot | 0) || '{}'); }
+  // A window of the LAYER the raster wrote — { x, y, w, h, px } with px base64.
+  // The only view of this channel with no camera and no shader in the way, and
+  // therefore the one that says whether an artifact is the WRITE or the READ.
+  shadowLayer(x, y, w, h) {
+    return JSON.parse(this._fn.shadowLayerJson(x | 0, y | 0, w | 0, h | 0) || '{}');
   }
+  // Feature ablation for the per-feature GPU cost map (TTP_FEAT_* in
+  // ttp_display.h): a cleared bit hides that group of renderables, so the perf
+  // HUD's timer reads what it was costing to draw. FEATURES names the bits so a
+  // sweep script does not re-type them; DEBUG ONLY, nothing on a play path.
+  debugFeatures(mask) { this._fn.debugFeatures(mask >>> 0); }
+
+  dressKeep(f) { this._fn.dressKeep(f); }
+
+  dressSheets(on) { this._fn.dressSheets(on ? 1 : 0); }
 
   // Just the frame total, in ms — one heap read, no object. This is the CPU cost
   // of building and submitting the frame; what the GPU then does with it is a

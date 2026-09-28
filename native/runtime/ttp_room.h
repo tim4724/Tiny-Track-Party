@@ -106,6 +106,25 @@ void ttp_room_store_series(int roomHandle, int gpHandle);
 ttp::Value ttp_room_field_value(int roomHandle);
 void ttp_room_store_field(int roomHandle, ttp::Value field);
 
+// The composed STANDINGS BOARD — what the phones' results overlay reads, and
+// what the lobby frame carries under `standings`. Null when no board is out.
+// Same charter as the four above: walk-written shim state, so no shell mirrors
+// it (three of them used to, each with its own copy of the never-raise-a-first-
+// board gate).
+//
+// *** BEHIND THE ROOM, NOT THE SESSION, and this is the trap in the whole
+// arrangement. *** The results screen and the phones' copy of the board OUTLIVE
+// the race that made it. A cup's intermission holds both while the NEXT race's
+// session is stood up in place of the old one, and the way out of a podium
+// (race_flow's returnToLobby) disposes the session with the board still on the
+// glass. Keyed to a session handle the board would be freed — or, worse,
+// answered off the fresh empty session — on that beat, the next publish would
+// carry `standings: null`, and every phone would drop off the podium
+// mid-reveal. The room outlives every race in it, which is the lifetime a
+// results board actually has.
+ttp::Value ttp_room_board_value(int roomHandle);
+void ttp_room_store_board(int roomHandle, ttp::Value board);
+
 // The live machine behind a handle, or nullptr — for the choreography walks
 // (see the header note). Mutations through it still queue their events on the
 // handle exactly as the ttp_room_* mutators do, so a shell that drains

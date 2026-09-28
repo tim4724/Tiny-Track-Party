@@ -51,7 +51,6 @@ Value manifest() {
 
   m.set("RELAY_URL", Value::Str(RELAY_URL));
   m.set("STUN_URL", Value::Str(STUN_URL));
-  m.set("STUN_FALLBACK_URL", Value::Str(STUN_FALLBACK_URL));
   m.set("MAX_PLAYERS", Value::Num(MAX_PLAYERS));
   m.set("FIELD_SIZE", Value::Num(FIELD_SIZE));
   m.set("TOTAL_LAPS", Value::Num(TOTAL_LAPS));
@@ -71,7 +70,7 @@ Value manifest() {
 
   Value liveness = Value::Obj();
   liveness.set("PING_INTERVAL_MS", Value::Num(LIVENESS_PING_INTERVAL_MS));
-  liveness.set("TIMEOUT_MS", Value::Num(LIVENESS_TIMEOUT_MS));
+  liveness.set("PONG_TIMEOUT_MS", Value::Num(LIVENESS_PONG_TIMEOUT_MS));
   liveness.set("TICK_MS", Value::Num(LIVENESS_TICK_MS));
   liveness.set("HEARTBEAT_DEAD_MS", Value::Num(LIVENESS_HEARTBEAT_DEAD_MS));
   liveness.set("ABANDONED_RACE_GRACE_MS", Value::Num(LIVENESS_ABANDONED_RACE_GRACE_MS));
@@ -94,10 +93,6 @@ Value manifest() {
   Value names = Value::Arr();
   for (const auto& c : CAR_NAMES) names.push(Value::Str(c));
   m.set("CAR_NAMES", std::move(names));
-
-  Value yaw = Value::Arr();
-  for (double y : CAR_MODEL_YAW) yaw.push(Value::Num(y));
-  m.set("CAR_MODEL_YAW", std::move(yaw));
 
   Value stats = Value::Arr();
   for (const auto& s : CAR_STATS) stats.push(carStatValue(s));

@@ -29,12 +29,13 @@ Exports come from `TTP_ABI` on each declaration in the public headers; there is 
 export list to maintain. The C ABI is not on the replay path, so the `abi` ctest
 covers this marshalling layer — see `tests/CLAUDE.md`.
 
-**Returns are canonical JSON (key-sorted)** except `ttp_ui.h` and `ttp_net.h`,
-which return the model's own key order. That order is **not** a wire guarantee:
-every outbound frame is canonicalized before it leaves, so phones always receive
-sorted keys. It earns its keep only at the ABI boundary, where the `abi` ctest asserts
-exact bytes against corpora recorded from a JS oracle. Do not spend anything
-defending a key order the wire discards.
+**Returns are canonical JSON (key-sorted), with no exception.** `ttp_ui.h` and
+`ttp_net.h` used to answer in the model's own key order, on the theory that the
+standings board and the room snapshot were wire bytes; they never were — every
+outbound frame is canonicalized before it leaves, so the model order stopped at
+framing. Nothing anywhere may depend on the order a Value was built in. What IS
+contract is key PRESENCE: a null and an absent key are different answers, and
+`libttp-json`'s `ordered_stringify` survives for one caller (the glTF rewrite).
 
 **JSON or packed? Answer by call frequency.** A layer answering once per event
 returns JSON, especially when half its answer is unbounded text. A layer drained
@@ -50,9 +51,10 @@ synthetic world and needs no room machine, so it never needed the ABI. The
 state in the same run and demanding byte-identical answers.
 
 **Not every C++ entry point is exported.** The item, rocket and car-stat mutators
-are reachable only from `replay_cli`, which calls C++ directly. A scenario needing
-them cannot be driven from JS or wasm — write it in C++ rather than hunting for
-the export. The same restraint applies to reads: a rule two shims share crosses
+are reachable only from callers that hold the C++ objects — `replay_cli`, and a
+ctest staging a scenario through the session seam. A scenario needing them
+cannot be driven from JS or wasm — write it in C++ rather than hunting for the
+export. The same restraint applies to reads: a rule two shims share crosses
 as an internal seam (`ttp_room.h`, `ttp_session.h`, `ttp_live.h`), never as a
 second export.
 
@@ -95,10 +97,16 @@ The display ABI is two files. `runtime/ttp_display_core.cc` holds every extern
 create/destroy — and is compiled by EVERY platform module.
 `runtime/ttp_display_web.cc` is the WEB surface (the WebGL2 context and the
 `TtpRenderer` construction); tvOS and Android TV get siblings of that file
-only, never of the core or the library. Both need the Filament SDK, so they
-compile on one machine configuration and **no ctest sees them** — keep any
-decision a ctest should pin (the camera maths, the roster parse, the re-roster
-plan) down in libttp-runtime.
+only, never of the core or the library. `ttp_display_create` takes the surface
+as an opaque `const void*` so no platform needs an entry point of its own; each
+surface file casts it back to whatever its window is. Both need the Filament
+SDK, so they compile on one machine configuration and **no ctest sees them** —
+keep any decision a ctest should pin (the camera maths, the roster parse, the
+re-roster plan) down in libttp-runtime. What DOES watch them is
+`tests/display-surface-split.test.js`, which holds each surface file to
+create/destroy and nothing else: a copied body is not a duplicate symbol here
+(one surface file links per platform), so nothing but that gate notices when a
+shell stops tracking the core.
 
 **If a line names no platform API it belongs in libttp-runtime**, where ctests
 compile and execute it on every leg. Anything that must not drift silently goes in
@@ -152,6 +160,18 @@ absolute source path, two worktrees share nothing, and the cache becomes pure
 overhead. A ccache-populated build reproduces the committed wasm byte for byte,
 which is what makes `basedir` acceptable in a tree this conformance-bound. Ninja
 is chosen on a fresh build dir and is then fixed for that directory's life.
+
+**RESTORING A FILE CAN LEAVE THE BUILD STALE, silently.** Ninja decides what to
+recompile from MTIMES, and the usual ways of putting a file back — `mv
+foo.cc.bak foo.cc`, `git checkout -- foo.cc`, `git stash pop` — hand back the
+ORIGINAL timestamp, which is older than the `.o` built from the edited version.
+Ninja then reports "no work to do" and the next test run executes the code you
+just reverted. ccache cannot save you: the compiler is never invoked to consult
+it. It costs a debugging session because every symptom points at the source you
+are reading, which is correct, while the binary under test is not.
+`touch` anything you restore, or build with `ninja -B`. The artifact has a
+guard for its own version of this (`check:artifact` compares a stamped source
+hash); object files have none.
 
 Material compilation lives in `native/scripts/build-materials.sh`, **shared on
 purpose** so other platform legs inherit it. It is mtime-gated on the `.mat`

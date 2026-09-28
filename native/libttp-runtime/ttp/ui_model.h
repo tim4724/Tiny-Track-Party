@@ -121,8 +121,34 @@ int screenOrder(Screen s);
 // (pop one), 0 = same level.
 int screenStep(Screen prev, Screen next);
 
-enum class BackEffect { SWALLOW, END_PARTY, RETURN_TO_LOBBY };
-BackEffect backEffect(Screen s);
+// A RACE IS NOT ONE STATE, and back means a different thing in each of its
+// three: live, frozen behind the pause overlay, and finished behind the results
+// board. Back on a live race opens the overlay rather than navigating — the
+// overlay's own New game is the way out, so no single press can throw a race
+// away — and back on the overlay closes it again. Only the finished race, which
+// has nothing left to freeze, retreats a level.
+enum class BackEffect { SWALLOW, END_PARTY, PAUSE_RACE, RESUME_RACE, RETURN_TO_LOBBY };
+BackEffect backEffect(Screen s, bool paused, bool raceEnded);
+
+// ---- the cover ---------------------------------------------------------------
+//
+// A BOARD OVER A BOARD, and deliberately NOT a fourth Screen. The welcome board
+// is the only one that stands on its own: the lobby and the race are chrome over
+// a live 3D view, and until that view has put a frame on the panel they are
+// chrome over nothing — which is the "lobby appears, then the track fades in a
+// beat later" that this exists to remove.
+//
+// A cover is not navigable. It has no back gesture, pushes no history and cannot
+// be returned to, so giving it a Screen would put a rung in SCREEN_ORDER that
+// every step calculation then has to be told to ignore.
+//
+// `scenePainted` is A BUILT SCENE HAVING REACHED THE PANEL, not a build having
+// returned — the two are seconds apart on a television, and revealing on the
+// latter is the flash this removes. It latches once per process, so the cover is
+// a boot-time thing by construction and never blinks mid-party.
+enum class Cover { NONE, BOOT };
+const char* key(Cover c);
+Cover coverFor(Screen screen, bool scenePainted);
 const char* key(BackEffect e);
 
 // ---- the lobby --------------------------------------------------------------
@@ -185,13 +211,26 @@ std::vector<const RosterEntry*> connectedPlayers(const std::vector<RosterEntry>&
 int cupFieldTintPct();
 
 // A cup's colour mixed `pct` of the way toward white, packed 0xRRGGBB. An
-// unknown or absent cup gets the fallback (Random belongs to no cup).
+// unknown or absent cup gets the FALLBACK, which is itself a cup colour standing
+// in for a cup nobody recognised.
 //
 // THE MIX IS IN sRGB, on the ENCODED values — a straight per-channel lerp. That
 // is what CSS `color-mix(in srgb, …)` does, and it is the whole reason this is
 // shared rather than left to each shell: mixing the same pair in LINEAR light is
 // a one-line change that comes out visibly darker, and nothing would catch it.
 uint32_t cupTintRgb(const OptStr& cupId, double pct);
+
+// The wash for a selection that belongs to NO CUP — Random's tiles, and any
+// undrawn chip whose cup is not known either.
+//
+// NOT `cupTintRgb` with an absent id, and the distinction is a real one rather
+// than a naming preference: that answers the fallback, which is a CUP COLOUR
+// (the Backyard cup's lawn green), so a Random card painted with it is dressed
+// as a cup it has nothing to do with. "Any biome" has to look like none of them,
+// which is what the warm grey is for. `trackPicker.js` keeps the two apart as
+// `cupTint` and `neutralTint`; this is the second one, and it existed nowhere on
+// this side until a TV shell tried to draw the tile.
+uint32_t neutralTintRgb(double pct);
 
 // ---- the lobby's race card --------------------------------------------------
 struct Cup {
@@ -312,9 +351,10 @@ struct ItemVal {
   bool operator!=(const ItemVal& o) const { return !(*this == o); }
 };
 
-// What each phone was last told (main.js's `_lastItem`). Insertion-ordered
-// because it is a JS Map and the shell's own state dump is `[...entries()]`;
-// re-setting an existing key does not move it.
+// What each phone was last told. Insertion-ordered because the JS this was
+// recorded off held a Map and the corpus's state dump is `[...entries()]`;
+// re-setting an existing key does not move it. The live game's copy hangs off
+// the session handle (runtime/ttp_session.h); this layer only reads one.
 class LastItems {
  public:
   // Map.get: ABSENT when this phone was never told anything.
@@ -338,8 +378,9 @@ struct ItemPush {
   ItemVal item;
 };
 // Which phones need a push this tick. AI cars have no phone behind them. PURE:
-// the caller applies the answers to `lastItem`, exactly as the JS caller does,
-// and clears it per race so the first tick resends every empty slot.
+// the caller applies the answers to `lastItem`, exactly as the JS caller did,
+// and a race starts from an empty one so the first tick resends every empty
+// slot.
 std::vector<ItemPush> itemPushes(const std::vector<PushCar>& cars, const IdSet& aiIds,
                                  const LastItems& lastItem);
 
@@ -548,24 +589,31 @@ Board standingsPayload(const std::vector<ResultRow>& results,
 // cup's story is legible. A shell that paints only `listRows` states the delta
 // and never shows the change.
 //
-// The two phases carry the SAME CELLS on purpose, and the ONLY difference is
-// which value sits in the total: the race phase shows what the row had coming
-// in, the standings phase shows what it banked. Nothing appears, nothing
-// disappears, nothing resizes — one number moves and the rows re-order, which is
-// the whole animation.
+// THE TWO PHASES CARRY THE SAME CELLS AT THE SAME WIDTHS. What differs is which
+// of them a beat FILLS: the race phase fills the lap clock, the standings phase
+// fills what the place scored and the total climbing to it. The cells a beat has
+// nothing to say in are still there, holding their width, saying nothing.
 //
-// Both halves of that are load-bearing and were learned the hard way. A phase
-// that swaps its trailing cell for a differently-sized one re-flows the board
-// while the shell is animating row POSITIONS, which reads as a glitch rather
-// than as a re-sort. And a total that only APPEARS in phase 2 has no visible
-// before state — it lands and starts climbing in the same frame, so the change
-// it is meant to show is the one thing nobody can see.
+// That is a width rule and a legibility rule, and both were learned the hard
+// way. A trailing cell that changes SHAPE between the phases re-flows the board
+// — the first cut swapped the cell outright and the list jumped 48px sideways
+// and grew 130px. And a number that first APPEARS in the beat that changes it
+// has no before state: it lands and starts moving in the same frame, so the
+// change it exists to show is the one thing nobody can see. The standings phase
+// answers that by holding its own totals still for a beat before running them.
+//
+// The row KINDS say which cells carry a value, not which exist. A shell paints
+// the rest reserved.
 enum class TitleKey { RESULTS, STANDINGS, CUP_CHAMPS };
 enum class SubKey { CUP_RACE, CUP_RACE_OF };
-// TIME       a single race: the lap clock alone
-// TIME_GAIN  a cup's race phase: the lap clock, what the place scored, and the
-//            cup total the row held COMING IN (pointsBefore)
-// POINTS     a cup's standings phase: the same three, with the total now banked
+// TIME       a single race: the lap clock alone, and no cup cells at all
+// TIME_GAIN  a cup's RACE phase: the lap clock. The cup's two cells are RESERVED
+//            on this row — same width as the standings phase — and carry no
+//            value: what the place scored and what the row is standing on are
+//            the standings' to say, and it gets its own beat to say them in.
+// POINTS     a cup's STANDINGS phase: what the place scored and the total
+//            counting up from pointsBefore. The lap clock's cell is reserved
+//            here in its turn — a cup table is not the place for a race number.
 // JOINING    a seat with no car this round
 enum class RowKind { TIME, TIME_GAIN, POINTS, JOINING };
 enum class NewGameKey { NEW_GAME, NEXT_RACE };

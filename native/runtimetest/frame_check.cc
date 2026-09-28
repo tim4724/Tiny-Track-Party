@@ -520,6 +520,51 @@ void testHold(const GameTrack& track) {
 }
 
 // ---------------------------------------------------------------------------
+// 4b. THE CHASE RIG FOLLOWS THE HELD PICTURE, NOT THE SIM. The end-of-race hold
+//     is taken at the flag and the sim then runs ON — the AI to the flag, the
+//     just-finished human around a victory lap — so a rig fed the LIVE pose
+//     sails off down the track and leaves the parked body behind it. That was
+//     invisible while the results board covered the frame within a frame or
+//     two; the finish flourish holds it for seconds.
+// ---------------------------------------------------------------------------
+void testHeldChaseCam(const GameTrack& track) {
+  Game game(threePlayers(), track, nullptr);
+  dressCars(game);
+
+  DisplayState d = freshState();
+  d.roster = {P0, P1, P2};
+  d.cells = {P0};
+
+  Car& a = *game.cars()[0];
+  const Vec3 parked = a.pose.pos;
+  rt::buildFrame(d, &game, DT, caseAspect(d));   // a live frame to hold
+
+  // The victory lap: the sim carries this car a long way from where it is drawn.
+  a.pose.pos = Vec3(parked.x + 120.0, parked.y, parked.z + 120.0);
+  a.v = 30.0;
+
+  d.hold = true;
+  const TtpFrameInput* h = nullptr;
+  for (int i = 0; i < 90; i++) h = rt::buildFrame(d, &game, DT, caseAspect(d));
+
+  const float* w = ttp_frame_views(h)[0].world;
+  const V3 eye{ w[12], w[13], w[14] };
+  const V3 body{ ttp_frame_cars(h)[0].pos.x, ttp_frame_cars(h)[0].pos.y,
+                 ttp_frame_cars(h)[0].pos.z };
+  const V3 live{ (float) a.pose.pos.x, (float) a.pose.pos.y, (float) a.pose.pos.z };
+  const auto dist = [](V3 a, V3 b) { return std::sqrt(rt::dot(a - b, a - b)); };
+  const float toBody = dist(eye, body), toLive = dist(eye, live);
+  // A settled parked shot is CHASE_DIST behind and CHASE_HEIGHT above, so the
+  // eye sits within a couple of units of the body it is watching. The live pose
+  // is 170 units away: the two arms cannot both be satisfied by accident.
+  check(toBody < 3.0f,
+        "a held cell's camera settles on the body ON SCREEN (" +
+            std::to_string(toBody) + "u)");
+  check(toLive > 100.0f,
+        "…and not on the pose the sim moved on to (" + std::to_string(toLive) + "u)");
+}
+
+// ---------------------------------------------------------------------------
 // 5. The single overview view: all four camera modes, both fog arms, the
 //    aspect, and the near/far planes that differ between the fitted rigs and the
 //    free inspector cam.
@@ -645,6 +690,13 @@ void testRaceViews(const GameTrack& track) {
               d.framing.raceFogNear, d.framing.raceFogFar, "cell 0");
     checkView(views[1], wantC, refC.fov, cellAspect, rt::CAM_NEAR, rt::CAM_FAR,
               d.framing.raceFogNear, d.framing.raceFogFar, "cell 1");
+    // WHOSE camera it is, and it is a SLOT index, not the cell's position:
+    // the roster here is deliberately scrambled ({P2, P0, GHOST, P1} against
+    // cells {P0, P2}), so a builder that handed back the cell index would
+    // pass every other check in this function and still point the renderer at
+    // the wrong car. Anything budgeting a per-player resource reads this.
+    check(views[0].car == 1, "cell 0 follows P0, whose SLOT is 1");
+    check(views[1].car == 0, "cell 1 follows P2, whose SLOT is 0");
   }
   check(refA.pos.x != 0 || refA.pos.z != 0, "premise: the chase rig actually moved off the origin");
   check(d.framing.raceFogNear == rt::RACE_FOG_NEAR,
@@ -660,6 +712,7 @@ void testRaceViews(const GameTrack& track) {
     float wantC[16];
     rt::lookAtWorld(wantC, refC.pos, refC.target, rt::v3(c2.pose.up));
     checkMat(ttp_frame_views(h)[0].world, wantC, "swapped cells put cpu-bolt in cell 0");
+    check(ttp_frame_views(h)[0].car == 0, "…and cell 0 now follows P2's slot");
     check(d.chase.size() == 2, "one spring per cell car, keyed by id");
   }
 
@@ -677,6 +730,8 @@ void testRaceViews(const GameTrack& track) {
     rt::lookAtWorld(want, unseeded.pos, unseeded.target, V3{0, 1, 0});
     checkMat(ttp_frame_views(f)[1].world, want, "an unknown cell gets the unseeded rig");
     checkF(ttp_frame_views(f)[1].fov, rt::BASE_FOV, "…at the base FOV");
+    check(ttp_frame_views(f)[1].car == -1, "…and follows nobody");
+    check(ttp_frame_views(f)[0].car == 0, "while the racing cell still names its car");
   }
 
   // …but if NO cell has a car in this scene, fall back to the overview
@@ -690,6 +745,7 @@ void testRaceViews(const GameTrack& track) {
     checkU(f->viewCount, 1, "a cell list with no car in the field falls back to the overview");
     checkF(ttp_frame_views(f)[0].fov, rt::OVERVIEW_FOV, "…which is the overview rig");
     checkF(ttp_frame_views(f)[0].fogNear, m.framing.ovFogNear, "…on the overview fog band");
+    check(ttp_frame_views(f)[0].car == -1, "…and an overview follows nobody");
   }
 }
 
@@ -1434,6 +1490,7 @@ int main() {
   testAtRest();
   testCarsAndRoster(bt.game);
   testHold(bt.game);
+  testHeldChaseCam(bt.game);
   testOverviewViews(bt.game);
   testRaceViews(bt.game);
   testSplitLensIsLayoutInvariant(bt.game);

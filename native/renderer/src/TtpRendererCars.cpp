@@ -1,7 +1,8 @@
-// Split from the original single-file TtpRenderer.cpp along its subsystem
-// seams; TtpRendererImpl.h carries what the topic files share. Pure code
-// motion — behaviour, member set and ABI are unchanged.
+// The car field: slot bodies and the body pool, ghosts, mask layers and the
+// merged draws. TtpRendererImpl.h carries what the topic files share.
 #include "TtpRendererImpl.h"
+
+#include <utils/Log.h>
 
 
 // Repaint the monster truck's CHASSIS (only) to one flat neutral, per instance.
@@ -179,7 +180,11 @@ void TtpRenderer::ensureAssetLoader() {
     mAssetLoader = gltfio::AssetLoader::create(ac);
     gltfio::ResourceConfiguration rc{};
     rc.engine = mEngine;
-    rc.gltfPath = nullptr;
+    // No `gltfPath`: it only resolves RELATIVE uris against a base file and
+    // there is no filesystem here (the shell hands every byte over by name, see
+    // addResourceData below), so the `rc{}` zero is already the right answer.
+    // The field is UTILS_DEPRECATED upstream and scheduled for removal — setting
+    // it to nullptr bought nothing and cost a warning on every renderer build.
     rc.normalizeSkinningWeights = true;
     mResourceLoader = new gltfio::ResourceLoader(rc);
     mStbProvider = gltfio::createStbProvider(mEngine);
@@ -205,20 +210,36 @@ void TtpRenderer::registerAssetUris(filament::gltfio::FilamentAsset* asset) {
 
 bool TtpRenderer::loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb) {
     ensureAssetLoader();
-    gltfio::FilamentAsset* asset =
-            mAssetLoader->createAsset(glb.data(), (uint32_t) glb.size());
-    if (!asset) return false;
-    registerAssetUris(asset);
-    if (!mResourceLoader->loadResources(asset)) {
-        mAssetLoader->destroyAsset(asset);
-        return false;
+    // ALREADY PARSED? The body a previous scene left parked is this model's, is
+    // already uploaded, and needs no re-dressing (mBodyPool says why). Putting
+    // its entities back in the scene is the whole of the reuse — everything
+    // below this point runs identically for a fresh parse and a parked one,
+    // because all of it reads the asset rather than the bytes.
+    const uint64_t modelKey = glbBytesKey(glb);
+    gltfio::FilamentAsset* asset = takeAsset(modelKey);
+    if (!asset) {
+        asset = mAssetLoader->createAsset(glb.data(), (uint32_t) glb.size());
+        if (!asset) return false;
+        registerAssetUris(asset);
+        if (!mResourceLoader->loadResources(asset)) {
+            mAssetLoader->destroyAsset(asset);
+            return false;
+        }
+        asset->releaseSourceData();
+        snapshotRestPose(asset);
     }
-    asset->releaseSourceData();
     mScene->addEntities(asset->getEntities(), asset->getEntityCount());
     // Cars neither cast nor catch the sun shadow (they carry a ground blob) —
     // gltfio opts renderables in by default, the JS opts them out.
     setShadows(asset->getEntities(), asset->getEntityCount(), false, false);
     mCarAssets[index] = asset;
+    // The merged draw groups: remember which MODEL this slot wears (the bytes
+    // are the identity — same rule as the silhouette layers), decode its
+    // meshes once per model, and let the next frame regroup the field.
+    if (mCarModelKey.size() <= index) mCarModelKey.resize(index + 1, 0);
+    mCarModelKey[index] = modelKey;
+    glbMeshes(modelKey, glb);   // per-model mesh decode; already memoised by key
+    mCarMergeDirty = true;
 
     // Wheel handles for the per-frame steer/roll cosmetics. Original local
     // translations are kept so the animation rotates each wheel IN PLACE.
@@ -320,9 +341,29 @@ bool TtpRenderer::loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb) 
         w.footW = bb.max.x - bb.min.x;
         w.footL = bb.max.z - bb.min.z;
         // Ground-shadow silhouette, off THIS model, while it still sits at
-        // rest — into decalMask layer `index` for the road-shader shadow decal.
-        bakeSilhouette(asset, bb.min, bb.max,
-                index < (uint32_t) kMaskLayerMonster ? (int) index : -1);
+        // rest — into the decalMask layer this GLB owns. claimMaskLayer hands
+        // back a layer already holding these bytes (nothing to do: eight cars
+        // share four models) or a freshly claimed one with its baked bit
+        // cleared, which is the signal to bake.
+        const int ml = claimMaskLayer(index, glb);
+        if (ml >= 0 && ml < kMaskLayerMonster
+                && !((mMaskLayerBakedBits >> ml) & 1u)) {
+            bakeSilhouette(asset, bb.min, bb.max, ml);
+        }
+        // …and the CPU outline the carShadow LAYER stamps, which is what every
+        // car draws now. Keyed by the model exactly as the GPU layer is, and
+        // baked here for the same reason: the asset is at its parse pose, so
+        // the outline is a fact about the model rather than about this frame.
+        // A model whose bake fails is simply absent from the store and falls
+        // back to the superellipse.
+        const uint64_t key = mCarModelKey.size() > index ? mCarModelKey[index] : 0;
+        if (mCarShadowMaskOfSlot.size() <= index) {
+            mCarShadowMaskOfSlot.resize(index + 1, 0);
+        }
+        mCarShadowMaskOfSlot[index] = key;
+        if (key && !mCarShadowMasks.count(key)) {
+            bakeCarFootprint(key, glb, asset, bb.min, bb.max);
+        }
     }
     // Tyre-contact width for the skid ribbons: min(0.24, max(0.06,
     // min(wheelBox.x, wheelBox.z))) — SceneRenderer addCar's measurement.
@@ -335,6 +376,14 @@ bool TtpRenderer::loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb) 
             if (wx > 0 && wz > 0) {
                 w.skidWidth = std::min(0.24f, std::max(0.06f, std::min(wx, wz)));
             }
+            // Rolling radius — the tyre's reach AHEAD of its own contact patch,
+            // which is how far renderSkids may run the ribbon without the ink
+            // leaving the wheel's ground silhouette. Off the z half-extent (the
+            // rolling direction; x is the tread width), the monster rig's
+            // mMonsterWheelRadius measured the same quantity first.
+            if (box.halfExtent.z > 0) {
+                w.wheelRadius = std::max(0.04f, box.halfExtent.z);
+            }
         }
     }
     return true;
@@ -346,8 +395,82 @@ bool TtpRenderer::loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb) 
 void TtpRenderer::dropAsset(gltfio::FilamentAsset*& a) {
     if (!a) return;
     mScene->removeEntities(a->getEntities(), a->getEntityCount());
+    mBodyRest.erase(a);
     mAssetLoader->destroyAsset(a);
     a = nullptr;
+}
+
+// The parse pose, kept and put back — mBodyRest says why a reuse needs it.
+//
+// EVERY node, not the handful the frame loop currently writes: the question a
+// reuse has to answer is what a fresh createAsset would have guaranteed, and
+// that is the whole hierarchy. Costs one mat4 per node, once per parse.
+void TtpRenderer::snapshotRestPose(gltfio::FilamentAsset* a) {
+    if (!a) return;
+    auto& tcm = mEngine->getTransformManager();
+    RestPose rest;
+    rest.nodes.reserve(a->getEntityCount());
+    for (size_t i = 0; i < a->getEntityCount(); i++) {
+        const auto ti = tcm.getInstance(a->getEntities()[i]);
+        rest.nodes.push_back(ti ? tcm.getTransform(ti) : mat4f{});
+    }
+    const auto ri = tcm.getInstance(a->getRoot());
+    rest.root = ri ? tcm.getTransform(ri) : mat4f{};
+    mBodyRest[a] = std::move(rest);
+}
+
+void TtpRenderer::restoreRestPose(gltfio::FilamentAsset* a) {
+    const auto it = a ? mBodyRest.find(a) : mBodyRest.end();
+    // A miss is not a state to have an answer for: everything that reaches here
+    // came out of the pool, both parse paths snapshot, and both destroys erase.
+    if (it == mBodyRest.end()) return;
+    auto& tcm = mEngine->getTransformManager();
+    const RestPose& rest = it->second;
+    for (size_t i = 0; i < a->getEntityCount() && i < rest.nodes.size(); i++) {
+        const auto ti = tcm.getInstance(a->getEntities()[i]);
+        if (ti) tcm.setTransform(ti, rest.nodes[i]);
+    }
+    const auto ri = tcm.getInstance(a->getRoot());
+    if (ri) tcm.setTransform(ri, rest.root);
+}
+
+// Park a parsed body instead of destroying it — see mBodyPool.
+//
+// This is dropAsset minus the destroy: OUT OF THE SCENE, which is what makes a
+// parked body invisible and inert, but still owned by the loader that made it
+// and still holding its uploaded buffers — and minus the rest-pose erase, on
+// purpose: the snapshot is what takeAsset hands the body back with. A key of 0 means "we never learned
+// what model this was", which is not something to file under any model.
+void TtpRenderer::parkAsset(uint64_t key, gltfio::FilamentAsset*& a) {
+    if (!a) return;
+    if (!key || mBodyPoolCount >= kBodyPoolMax) { dropAsset(a); return; }
+    mScene->removeEntities(a->getEntities(), a->getEntityCount());
+    mBodyPool[key].push_back(a);
+    mBodyPoolCount++;
+    a = nullptr;
+}
+
+gltfio::FilamentAsset* TtpRenderer::takeAsset(uint64_t key) {
+    if (!key) return nullptr;
+    const auto it = mBodyPool.find(key);
+    if (it == mBodyPool.end() || it->second.empty()) return nullptr;
+    gltfio::FilamentAsset* a = it->second.back();
+    it->second.pop_back();
+    mBodyPoolCount--;
+    if (it->second.empty()) mBodyPool.erase(it);
+    // Parked is not parsed: the body still wears the last frame's pose, and
+    // every caller's next move assumes it does not (mBodyRest). One funnel, so
+    // that is answered here rather than at each reuse site.
+    restoreRestPose(a);
+    return a;
+}
+
+void TtpRenderer::drainBodyPool() {
+    for (auto& [key, list] : mBodyPool) {
+        for (gltfio::FilamentAsset* a : list) dropAsset(a);
+    }
+    mBodyPool.clear();
+    mBodyPoolCount = 0;
 }
 
 // Texture decodes ride the provider's async queue even on the synchronous
@@ -364,6 +487,55 @@ void TtpRenderer::pumpTextures() {
 // One car slot's body: the real GLB when the shell provided "car<c>.glb"
 // (gltfio + ubershaders, textures via stb), else a roster-coloured box
 // marker. Split out of buildTrackScene so reroster() can rebuild one slot.
+// Which silhouette layer slot `c` draws from, keyed by the BYTES of its GLB.
+//
+// A HASH, not a byte compare against the other slots' blobs, because the claim
+// has to outlive the slot the bytes first arrived on: a re-roster drops one
+// slot's asset and builds another, and a layer whose model is still being
+// driven elsewhere must not be rebaked or recycled underneath it.
+//
+// Leaves the baked bit CLEAR on a fresh claim — that is how the caller knows
+// to bake, and it is also the honest state if the bake then fails.
+int TtpRenderer::claimMaskLayer(uint32_t c, const std::vector<uint8_t>& glb) {
+    if (glb.empty()) return kMaskLayerGeneric;
+    const uint64_t key = glbBytesKey(glb);  // never 0 — 0 marks "never claimed"
+    if (mMaskLayerOfSlot.size() <= c) {
+        mMaskLayerOfSlot.resize(c + 1, kMaskLayerGeneric);
+    }
+    // Already baked, same model: share it. This is the common case — the grid
+    // is eight cars over four models — and it is also what makes a re-dress
+    // into a model someone else drives cost nothing at all.
+    for (int L = 0; L < kMaskLayerModels; L++) {
+        if (mMaskLayerKey[L] == key && ((mMaskLayerBakedBits >> L) & 1u)) {
+            mMaskLayerOfSlot[c] = L;
+            return L;
+        }
+    }
+    // Otherwise take a layer no OTHER live slot is reading. Unbaked layers
+    // qualify by construction; a stale one (its model left the roster on a
+    // re-dress) is recycled rather than leaked.
+    bool used[kMaskLayerModels] = {};
+    for (size_t k = 0; k < mMaskLayerOfSlot.size(); k++) {
+        if (k == c || k >= mCarAssets.size() || !mCarAssets[k]) continue;
+        const int L = mMaskLayerOfSlot[k];
+        if (L >= 0 && L < kMaskLayerModels) used[L] = true;
+    }
+    for (int L = 0; L < kMaskLayerModels; L++) {
+        if (used[L]) continue;
+        mMaskLayerKey[L] = key;
+        mMaskLayerBakedBits &= (uint16_t) ~(1u << L);
+        mMaskLayerOfSlot[c] = L;
+        return L;
+    }
+    // More distinct models live than there are layers. Can only happen if the
+    // roster outgrew kMaskLayerModels without the gate being raised, so say so
+    // once rather than let a generic oval pass for a silhouette.
+    utils::slog.w << "claimMaskLayer: no free layer for slot " << c
+            << " — falling back to the generic oval" << utils::io::endl;
+    mMaskLayerOfSlot[c] = kMaskLayerGeneric;
+    return kMaskLayerGeneric;
+}
+
 bool TtpRenderer::buildCarSlot(const TrackBin& tb, uint32_t c) {
     const auto glb = mAssets.find("car" + std::to_string(c) + ".glb");
     if (glb != mAssets.end() && loadCarAsset(c, glb->second)) return true;
@@ -387,14 +559,34 @@ bool TtpRenderer::buildCarSlot(const TrackBin& tb, uint32_t c) {
 // for one slot of a LIVE scene (reroster). Sizes are left alone — the field's
 // shape is the scene's, and a re-roster never changes it.
 void TtpRenderer::destroyCarSlot(uint32_t c) {
-    if (mCarAssets.size() > c) dropAsset(mCarAssets[c]);
-    if (mCarGhostAssets.size() > c) dropAsset(mCarGhostAssets[c]);
-    if (mCarGhostIn.size() > c) mCarGhostIn[c] = 0;
-    // The decalMask layer holds the OLD car until the re-dress rebakes it;
-    // clearing the bit sends the shadow decal to the generic layer meanwhile.
-    if (c < (uint32_t) kMaskLayerMonster) {
-        mMaskLayerBakedBits &= (uint16_t) ~(1u << c);
+    // The merged car groups may share this asset's material instances and hold
+    // its node entities as instance sources, so they go FIRST — the drop below
+    // would leave them referencing destroyed objects. The other cars' original
+    // renderables come back with the teardown and the next frame regroups.
+    destroyMergedGroups(mMergedCars);
+    mCarMergeDirty = true;
+    // PARKED, like a scene release — this is the CAR PICK path, so the body
+    // being dismissed is very often the one the next pick asks for back.
+    if (mCarAssets.size() > c) {
+        parkAsset(mCarModelKey.size() > c ? mCarModelKey[c] : 0, mCarAssets[c]);
     }
+    if (mCarGhostAssets.size() > c) {
+        parkAsset(mCarGhostKey.size() > c ? mCarGhostKey[c] : 0, mCarGhostAssets[c]);
+    }
+    if (mCarModelKey.size() > c) mCarModelKey[c] = 0;
+    if (mCarGhostKey.size() > c) mCarGhostKey[c] = 0;
+    if (mCarGhostIn.size() > c) mCarGhostIn[c] = 0;
+    // The baked bit STAYS. Layers are keyed by model now, so this slot's
+    // layer is very likely still being read by another car, and clearing it
+    // would drop that car to the generic oval for no reason. claimMaskLayer
+    // recycles a layer that really has gone unused; releaseScene clears the
+    // lot when the roster that produced them dies.
+    if (mMaskLayerOfSlot.size() > c) mMaskLayerOfSlot[c] = kMaskLayerGeneric;
+    // Same rule for the CPU outline, and for the same reason: the STORE is
+    // keyed by model and very likely still read by another slot, so only this
+    // slot's pointer into it is cleared. rebakeCarShadowMasks is what drops an
+    // outline no live slot names any more.
+    if (mCarShadowMaskOfSlot.size() > c) mCarShadowMaskOfSlot[c] = 0;
     if (mCars.size() > c) destroyMesh(mCars[c]);
     if (mCarWheels.size() > c) mCarWheels[c] = CarWheels{};
     if (mMonsterViews.size() > c) mMonsterViews[c] = MonsterView{};
@@ -431,15 +623,24 @@ void TtpRenderer::buildCarGhost(uint32_t c) {
     if (mCarGhostIn.size() > c) mCarGhostIn[c] = 1; // in scene below; frame 1 re-parks it
     const auto ghost = mAssets.find("car" + std::to_string(c) + "-ghost.glb");
     if (ghost == mAssets.end()) return;
-    gltfio::FilamentAsset* ga = mAssetLoader->createAsset(
-            ghost->second.data(), (uint32_t) ghost->second.size());
-    if (!ga) return;
-    registerAssetUris(ga);
-    if (!mResourceLoader->loadResources(ga)) {
-        mAssetLoader->destroyAsset(ga);
-        return;
+    // Keyed by the GHOST's own bytes, not the body's: it is a different
+    // container (the 50%-alpha clone), so it is a different model to the pool.
+    const uint64_t ghostKey = glbBytesKey(ghost->second);
+    gltfio::FilamentAsset* ga = takeAsset(ghostKey);
+    if (!ga) {
+        ga = mAssetLoader->createAsset(
+                ghost->second.data(), (uint32_t) ghost->second.size());
+        if (!ga) return;
+        registerAssetUris(ga);
+        if (!mResourceLoader->loadResources(ga)) {
+            mAssetLoader->destroyAsset(ga);
+            return;
+        }
+        ga->releaseSourceData();
+        snapshotRestPose(ga);
     }
-    ga->releaseSourceData();
+    if (mCarGhostKey.size() <= c) mCarGhostKey.resize(c + 1, 0);
+    mCarGhostKey[c] = ghostKey;
     mScene->addEntities(ga->getEntities(), ga->getEntityCount());
     setShadows(ga->getEntities(), ga->getEntityCount(), false, false);
     auto& tcmG = mEngine->getTransformManager();
@@ -448,6 +649,11 @@ void TtpRenderer::buildCarGhost(uint32_t c) {
     // The ghost body is only ever shown as the GRAFTED monster body, and
     // MonsterRig strips the car's wheels before seating it — collapse them
     // once here (this instance's wheels are never animated).
+    // Unconditional, and it has to be: a parked ghost comes back at its PARSE
+    // pose (takeAsset), so the collapse is undone on every reuse. The
+    // scale is absolute rather than relative, and the translation it preserves is
+    // read back out of the transform it is about to overwrite — which works only
+    // because the scale zeroes no row. Noted so nobody makes it relative.
     for (const char* wn : { "wheel-fl", "wheel-fr", "wheel-bl", "wheel-br", "axle" }) {
         const utils::Entity we = ga->getFirstEntityByName(wn);
         if (we.isNull()) continue;
@@ -457,8 +663,47 @@ void TtpRenderer::buildCarGhost(uint32_t c) {
         tcmG.setTransform(wi, local);
     }
     mCarGhostAssets[c] = ga;
-    if (mStbProvider) {
-        mStbProvider->waitForCompletion();
-        mResourceLoader->asyncUpdateLoad();
+    pumpTextures();
+}
+
+// Regroup the whole field into merged draws: per MODEL (the bytes are the
+// identity), per distinct MESH (the per-side wheel pairs share one, so all
+// four wheels of every car of a model land in two groups), one instanced
+// renderable whose transforms mirror the gltfio nodes every frame
+// (updateMergedTransforms). Runs lazily off mCarMergeDirty — addCar fires per
+// slot, and grouping mid-roster would rebuild eight times for one launch.
+//
+// The GHOST twins stay out: they are four assets on a different material
+// (vglbfade), parked at -1000 except while a monster is occluding someone.
+void TtpRenderer::rebuildCarMerge() {
+    destroyMergedGroups(mMergedCars);
+    if (!mScene || !mEngine) return;
+    auto& rcm = mEngine->getRenderableManager();
+    // Slots by model.
+    std::unordered_map<uint64_t, std::vector<uint32_t>> byModel;
+    for (uint32_t c = 0; c < mCarAssets.size(); c++) {
+        if (!mCarAssets[c] || c >= mCarModelKey.size() || !mCarModelKey[c]) continue;
+        byModel[mCarModelKey[c]].push_back(c);
+    }
+    for (const auto& [key, slots] : byModel) {
+        const auto it = mGlbMeshCache.find(key);
+        if (it == mGlbMeshCache.end() || it->second.empty()) continue;
+        // Node names by mesh, so shared-mesh nodes join one group.
+        std::unordered_map<int, std::vector<const ttp::rt::GlbMeshNode*>> byMesh;
+        for (const auto& n : it->second) {
+            if (!n.name.empty()) byMesh[n.mesh].push_back(&n);
+        }
+        for (const auto& [mesh, nodes] : byMesh) {
+            std::vector<utils::Entity> sources;
+            for (const uint32_t c : slots) {
+                for (const auto* n : nodes) {
+                    const utils::Entity e =
+                            mCarAssets[c]->getFirstEntityByName(n->name.c_str());
+                    if (!e.isNull() && rcm.getInstance(e)) sources.push_back(e);
+                }
+            }
+            buildMergedGroup(mMergedCars, sources, nodes[0]->prims,
+                    /*dynamic=*/true, kFeatCars);
+        }
     }
 }

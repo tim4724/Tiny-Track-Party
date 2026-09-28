@@ -29,23 +29,21 @@ const char* key(Op op) {
     case Op::CREATE_SESSION: return "create-session";
     case Op::TRANSITION: return "transition";
     case Op::BIND_SESSION: return "bind-session";
-    case Op::PAINT_INITIAL_HUD: return "paint-initial-hud";
+    case Op::PAINT_HUD: return "paint-hud";
     case Op::START_COUNTDOWN: return "start-countdown";
     case Op::SHOW_COUNTDOWN: return "show-countdown";
     case Op::BROADCAST_COUNTDOWN: return "broadcast-countdown";
     case Op::REFRESH_AUTO_PAUSE: return "refresh-auto-pause";
     case Op::START_MUSIC: return "start-music";
     case Op::STOP_MUSIC: return "stop-music";
-    case Op::SHOW_MUSIC_CREDIT: return "show-music-credit";
     case Op::STOP_VOICES: return "stop-voices";
     case Op::ITEM_PICKUP: return "item-pickup";
     case Op::ROCKET_IMPACT: return "rocket-impact";
     case Op::ROCKET_EXPIRE: return "rocket-expire";
     case Op::BROADCAST_STANDINGS: return "broadcast-standings";
     case Op::APPLY_RACE_POINTS: return "apply-race-points";
+    case Op::ARM_RESULTS: return "arm-results";
     case Op::SHOW_RESULTS: return "show-results";
-    case Op::ARM_RESULTS_FAILSAFE: return "arm-results-failsafe";
-    case Op::CLEAR_RESULTS_FAILSAFE: return "clear-results-failsafe";
     case Op::ARM_INTERMISSION: return "arm-intermission";
     case Op::CLEAR_INTERMISSION: return "clear-intermission";
     case Op::SERIES_ADVANCE: return "series-advance";
@@ -237,6 +235,29 @@ BuiltField buildField(const std::vector<Human>& humans, double seed, const Field
   return out;
 }
 
+// The bench roster's names. Eight, because FIELD_SIZE is eight and a bench that
+// seats every place must still name them all.
+static const char* const kBenchNames[] = {
+  "Mia", "Theo", "Ava", "Leo", "Zoe", "Max", "Ivy", "Sam",
+};
+
+std::vector<Human> benchPlayers(int n, const FieldWorld& w) {
+  const int names = static_cast<int>(sizeof(kBenchNames) / sizeof(kBenchNames[0]));
+  std::vector<Human> out;
+  for (int i = 0; i < n; i++) {
+    Human h;
+    h.peerIndex = Id::Num(i);
+    h.name = kBenchNames[i % names];
+    h.colorIndex = i;
+    // The livery's own model, exactly as an unpicked lobby seat resolves
+    // (buildDemoField's rule) — so a bench shows the spread of handling a real
+    // field has rather than eight of car 0.
+    h.carIndex = w.carCount > 0 ? OptNum::Of(i % w.carCount) : OptNum();
+    out.push_back(std::move(h));
+  }
+  return out;
+}
+
 std::vector<DemoEntry> buildDemoField(const std::vector<Human>& humans, const FieldWorld& w) {
   std::vector<DemoEntry> field;
   for (const Human& h : humans) {
@@ -381,16 +402,16 @@ StartResult startRace(const StartInput& in) {
   return r;
 }
 
-// launchRace's grid reorder — see LaunchInput. Pure permutation: livery, model,
-// persona and bot seed were all fixed by the fill above; only who starts where
-// moves. Stable throughout, so ties keep the built (join) order.
+// launchRace's grid reorder — see LaunchInput::gridOrder, this rule's ONE input
+// (a chained race's finish order, empty on a first race). Pure permutation:
+// livery, model, persona and bot seed were all fixed by the fill above; only who
+// starts where moves. Stable throughout, so ties keep the built (join) order.
 static std::vector<FieldEntry> orderGrid(std::vector<FieldEntry> field,
-                                         const LaunchInput& in) {
-  if (in.gridOrder.empty() && !in.humansAtBack) return field;
+                                         const std::vector<Id>& gridOrder) {
   std::vector<FieldEntry> ordered;
   ordered.reserve(field.size());
   std::vector<char> placed(field.size(), 0);
-  for (const Id& id : in.gridOrder) {
+  for (const Id& id : gridOrder) {
     for (size_t i = 0; i < field.size(); i++) {
       if (!placed[i] && field[i].peerIndex == id) {
         placed[i] = 1;
@@ -399,16 +420,15 @@ static std::vector<FieldEntry> orderGrid(std::vector<FieldEntry> field,
       }
     }
   }
-  // The leftovers start at the back — CPU ahead of humans when humansAtBack,
-  // which is also the whole rule for a first race (empty gridOrder).
+  // The leftovers start at the back, CPU ahead of humans — which is also the
+  // whole rule for a first race (empty gridOrder). Two passes over the same
+  // array, partitioned by `ai`, so nothing is placed twice.
   for (int wantAi = 1; wantAi >= 0; wantAi--) {
     for (size_t i = 0; i < field.size(); i++) {
-      if (placed[i]) continue;
-      if (in.humansAtBack && field[i].ai != (wantAi == 1)) continue;
+      if (placed[i] || field[i].ai != (wantAi == 1)) continue;
       placed[i] = 1;
       ordered.push_back(std::move(field[i]));
     }
-    if (!in.humansAtBack) break;  // one pass took everyone, in built order
   }
   return ordered;
 }
@@ -424,7 +444,39 @@ LaunchResult launchRace(const LaunchInput& in) {
   // into a full rebuild of the scene prepared under the intermission board,
   // and shuffle the players' split cells by finish order.
   const std::vector<FieldEntry> sceneRoster = built.field;
-  built.field = orderGrid(std::move(built.field), in);
+  built.field = orderGrid(std::move(built.field), in.gridOrder);
+  // AUTOPILOT: every player seat gains a controller, and nothing else about the
+  // launch moves. Appended AFTER the grid is ordered so the persona comes off
+  // the FINAL grid index, which spreads the personas across the players
+  // (buildDemoField's rule, and for the same reason: a bench whose four cars
+  // all drive the same line measures one car four times).
+  //
+  // THE WANDER SEEDS SIT PAST THE FILL'S, deliberately. The fill seeds off its
+  // bot ORDINAL (`base + s.n`, 0-based) and a player off its grid index, and
+  // those two spaces overlap the moment a grid is not humans-at-back — a
+  // chained cup race grids on the previous finish, so a player who finished in
+  // the top four lands on an index a CPU seat already used and the two then
+  // drive an identical wander stream for the whole leg. `fieldSize` is the
+  // width of the fill's space, so starting past it cannot collide.
+  //
+  // `aiIds` is deliberately untouched: these seats are participants. See
+  // BotSpec::player.
+  if (in.autopilotPlayers) {
+    const double base = (in.seed != 0 && !std::isnan(in.seed)) ? in.seed : 1.0;
+    for (size_t i = 0; i < built.field.size(); i++) {
+      if (built.field[i].ai) continue;
+      BotSpec b;
+      b.peerIndex = built.field[i].peerIndex;
+      b.player = true;
+      if (!in.world.personas.empty()) {
+        const Persona& persona = in.world.personas[i % in.world.personas.size()];
+        b.caution = persona.caution;
+        b.laneBias = persona.laneBias;
+      }
+      b.seed = toUint32(base + static_cast<double>(in.world.fieldSize) + static_cast<double>(i));
+      built.bots.push_back(std::move(b));
+    }
+  }
   out.field = built.field;
   out.aiIds = built.aiIds;
   out.bots = built.bots;
@@ -483,9 +535,22 @@ LaunchResult launchRace(const LaunchInput& in) {
   // away; the lobby's attract race is never bound, which is why it is silent.
   out.effects.push_back(mk(Op::BIND_SESSION));
   // chrome at final size through the countdown, no pop-in at GO
-  out.effects.push_back(mk(Op::PAINT_INITIAL_HUD));
-  e = mk(Op::START_COUNTDOWN); e.num = in.countdownSeconds; out.effects.push_back(e);
+  out.effects.push_back(mk(Op::PAINT_HUD));
+  // …and the last op is the one that has to wait: see countdownReady. It rides
+  // its OWN list, so the walk above stays whole.
+  e = mk(Op::START_COUNTDOWN); e.num = in.countdownSeconds;
+  out.countdownEffects.push_back(e);
   return out;
+}
+
+bool countdownReady(bool sceneBuilt, bool measuring, int frames, double p50Ms,
+                    double p95Ms, double sinceLaunchMs) {
+  if (sinceLaunchMs >= kSceneWarmCapMs) return true;   // the backstop, first
+  if (!sceneBuilt) return false;
+  if (!measuring) return true;      // no evidence is coming; the build is all there is
+  if (frames < kSceneWarmMinFrames) return false;
+  if (p50Ms <= 0) return false;                        // window not folded yet
+  return p95Ms <= p50Ms * kSceneWarmSpread;
 }
 
 Effects countdownTick(double n) {
@@ -511,7 +576,6 @@ Effects raceStart(const std::string& biome, bool audioReady) {
   // Background song for the whole race, from the biome's pool. The pick only
   // happens if the device can play it.
   if (audioReady) { e = mk(Op::START_MUSIC); e.str = biome; out.push_back(e); }
-  e = mk(Op::SHOW_MUSIC_CREDIT); e.on = true; out.push_back(e);
   return out;
 }
 
@@ -549,37 +613,64 @@ Effects raceEvent(const RaceEvent& ev, bool fastForwarding, bool humansAllDone) 
   return out;
 }
 
+Effects flagRace() {
+  Effects out;
+  Effect e;
+  // The cards the flourish is FOR, painted the moment the last human is home.
+  // The shells that cache a HUD row repaint it on a tick, and the last car
+  // across earns its place on the same update the race is decided on — so this
+  // one-shot paint is what puts the card up.
+  out.push_back(mk(Op::PAINT_HUD));
+  // The phones go to the board NOW rather than with the TV. Everyone holding
+  // one has already crossed the line, so they are out of control and there is
+  // nothing left for an early board to spoil — and the alternative is four
+  // people staring at a dead steering screen through the whole flourish.
+  e = mk(Op::BROADCAST_STANDINGS); e.over = true; out.push_back(e);
+  // NOTHING ELSE. The race is still running: the field keeps moving, the song
+  // keeps playing, the voices keep sounding, and the cars that are home drive
+  // themselves (Game's victory-lap autopilot). This only arms the end.
+  e = mk(Op::ARM_RESULTS); e.num = FINISH_FLOURISH_MS; out.push_back(e);
+  return out;
+}
+
 Effects endRace(const EndRaceInput& in) {
   Effects out;
   Effect e;
   e = mk(Op::TRANSITION); e.str = "results"; out.push_back(e);
-  // Bank the cup points FIRST — the final board broadcast below must already
-  // carry this race's gains, and the intermission/podium read them too.
+  // THE FREEZE IS NOT HERE, and cannot be. This walk runs off the _raceEnd
+  // event, and that event is raised BY the burst that resolves the cars still
+  // running — so by the time anything here is performed the teleport has already
+  // happened. Holding the picture has to bracket the burst, which only the shell
+  // can do; see main.js's finish branch.
+  // Bank the cup points FIRST — the board below must already carry this race's
+  // gains, and the intermission/podium read them too.
   if (in.hasSeries) out.push_back(mk(Op::APPLY_RACE_POINTS));
   // A finished series banks the couch's star record — AFTER the points, so the
   // standings the executor reads are final.
-  if (in.hasSeries && in.seriesFinished && in.bankProgression)
-    out.push_back(mk(Op::PERSIST_PROGRESSION));
-  // hold the finish frame behind the translucent results overlay
+  if (in.hasSeries && in.seriesFinished) out.push_back(mk(Op::PERSIST_PROGRESSION));
+  // Repaint: the flourish has been running live, so the rows moved after the
+  // flag's paint and the frozen frame must carry the final ones.
+  out.push_back(mk(Op::PAINT_HUD));
   e = mk(Op::SET_RACE_FLAGS);
   e.paused = false; e.autoPaused = false; e.raceEnded = true;
   out.push_back(e);
-  // the frozen frame must not hold wind/squeal voices open
+  // a frozen frame must not hold wind/squeal voices open
   out.push_back(mk(Op::STOP_VOICES));
-  out.push_back(mk(Op::STOP_MUSIC));           // race over → results screen is quiet
-  e = mk(Op::SHOW_MUSIC_CREDIT); e.on = false; out.push_back(e);
+  // The song has played the flourish out; the board is where the race stops
+  // being the thing on screen, so it is where the race's music stops.
+  out.push_back(mk(Op::STOP_MUSIC));
   e = mk(Op::SET_PAUSE_OVERLAY); e.on = false; out.push_back(e);   // results aren't pausable
   e = mk(Op::SET_PAUSE_BUTTON); e.shown = false; out.push_back(e);
   out.push_back(mk(Op::HOLD_CHROME));
-  // final board → phones show the full results overlay
+  // The phones already have this board (flagRace) — republish, because the
+  // flourish raced on and the places behind the humans are only settled now.
   e = mk(Op::BROADCAST_STANDINGS); e.over = true; out.push_back(e);
   out.push_back(mk(Op::SHOW_RESULTS));
-  // The host ends the results screen with "New game"; this is only a safety net
-  // so a room whose players all left mid-podium still recovers.
-  e = mk(Op::ARM_RESULTS_FAILSAFE); e.num = in.resultsFailsafeMs; out.push_back(e);
-  // Mid-cup: this results screen is an INTERMISSION — arm the auto-advance into
-  // the next race (the host can jump it early; advanceSeriesRace disarms the
-  // failsafe above).
+  // The host ends the results screen with "New game", and nothing here overrides
+  // that on a clock: an ABANDONED podium is recovered by RoomFlow::graceTick's
+  // RESULTS arm, which fires on the room being empty rather than on a timer.
+  // Mid-cup, though, this results screen is an INTERMISSION — arm the
+  // auto-advance into the next race (the host can jump it early).
   if (in.hasSeries && !in.seriesFinished) {
     e = mk(Op::ARM_INTERMISSION);
     e.num = in.intermissionMs;
@@ -600,8 +691,6 @@ AdvanceResult advanceSeriesRace(const AdvanceInput& in) {
   // Everyone left mid-intermission.
   if (in.players.empty()) { r.action = AdvanceAction::RETURN_TO_LOBBY; return r; }
   r.action = AdvanceAction::ADVANCE;
-  // endRace armed the back-to-lobby failsafe — it must not yank race N+1.
-  r.effects.push_back(mk(Op::CLEAR_RESULTS_FAILSAFE));
   r.effects.push_back(mk(Op::CLEAR_INTERMISSION));
   r.effects.push_back(mk(Op::SERIES_ADVANCE));
   // publishes + selects (track/totalLaps swap). Outside the lobby the select
@@ -638,8 +727,7 @@ ReturnResult returnToLobby(const ReturnInput& in) {
   }
 
   Effect e;
-  r.effects.push_back(mk(Op::CLEAR_RESULTS_FAILSAFE));
-  // every exit route cancels a running cup (quit, abandon, failsafe)
+  // every exit route cancels a running cup (quit, abandon, empty room)
   r.effects.push_back(mk(Op::CLEAR_SERIES));
   r.effects.push_back(mk(Op::CLEAR_INTERMISSION));
   if (r.trackSwap.has) { e = mk(Op::SET_TRACK); e.str = r.trackSwap.v; r.effects.push_back(e); }
@@ -650,7 +738,6 @@ ReturnResult returnToLobby(const ReturnInput& in) {
   // key) — kill any state voices or a boost wind would drone on in the lobby.
   r.effects.push_back(mk(Op::STOP_VOICES));
   r.effects.push_back(mk(Op::STOP_MUSIC));
-  e = mk(Op::SHOW_MUSIC_CREDIT); e.on = false; r.effects.push_back(e);
   e = mk(Op::SET_RACE_FLAGS);
   e.paused = false; e.autoPaused = false; e.raceEnded = false;
   r.effects.push_back(e);

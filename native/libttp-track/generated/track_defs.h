@@ -1764,10 +1764,15 @@ constexpr CupDef TTP_CUPS[] = {
 };
 constexpr int TTP_CUP_COUNT = 5;
 
-// The tint a cup-LESS selection wears (Random belongs to no cup), and how much
-// of a cup colour survives the mix with white on a schematic field. Both are
-// public/shared/trackPicker.js's.
+// TWO DIFFERENT ABSENCES, and they wear different colours.
+//   FALLBACK  an UNKNOWN cup id — a cup colour, standing in for a cup.
+//   NEUTRAL   a selection that belongs to NO cup (Random). A warm grey,
+//             because "any biome" must not look like one of them; dressed
+//             in the fallback it wore the Backyard cup's lawn green.
+// Plus how much of either survives the mix with white on a schematic
+// field. All three are public/shared/trackPicker.js's.
 constexpr uint32_t TTP_CUP_COLOR_FALLBACK = 0x7FBF63;
+constexpr uint32_t TTP_CUP_NEUTRAL_COLOR = 0x8C8398;
 constexpr int TTP_CUP_FIELD_TINT_PCT = 26;
 
 }  // namespace ttp

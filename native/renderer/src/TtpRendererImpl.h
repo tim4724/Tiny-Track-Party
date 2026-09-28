@@ -4,9 +4,11 @@
 #include <filament/Camera.h>
 #include <filament/Engine.h>
 #include <filament/Exposure.h>
+#include <filament/Fence.h>
 #include <filament/IndirectLight.h>
 #include <filament/LightManager.h>
 #include <filament/IndexBuffer.h>
+#include <filament/InstanceBuffer.h>
 #include <filament/Material.h>
 #include <filament/MaterialInstance.h>
 #include <filament/RenderableManager.h>
@@ -31,6 +33,7 @@
 #include <gltfio/AssetLoader.h>
 #include <gltfio/FilamentAsset.h>
 #include <gltfio/MaterialProvider.h>
+#include <gltfio/FilamentInstance.h>
 #include <gltfio/ResourceLoader.h>
 #include <gltfio/TextureProvider.h>
 #include <gltfio/materials/uberarchive.h>
@@ -73,6 +76,10 @@ namespace {
 // Bare-asphalt margin either side of a launch strip, so the road's dashes and
 // edge lines stop clear of the chevrons rather than grazing them.
 constexpr float kStripMargin = 0.12f;
+// The key light's axis — theme.key sits at (2, 12, 1.5), as the JS placed it.
+// ONE spelling for the sun entity (buildTrackScene), the shadow camera
+// (bakeShadowMap) and the road's baked vertex light (fillRoadLight).
+const float3 kToSun = normalize(float3{ 2.0f, 12.0f, 1.5f });
 // Cones per oil slick. Fixed: no shipped track authors a coned oil, and the
 // codegen refuses one rather than dropping the field silently.
 constexpr uint32_t kOilCones = 4;
@@ -80,15 +87,17 @@ constexpr uint32_t kOilCones = 4;
 // Lawn base — makeLawnTexture's flat ground colour (#6aa84f); the stripe/grain
 // texture detail is later work.
 constexpr uint32_t LAWN_SRGB = 0x6aa84f;
-// Sky-dome radius. The JS dome sits at 420, but Filament's fog is CAMERA-
-// relative: chase cams roam up to ~100u from the origin, so sky content in a
-// 405 band could pass within the 400 fog cutoff of a cell's camera and render
-// FOGGED (a pale wedge over the track — the JS clouds/balloon are fog:false).
-// The dome scales up (its gradient is directional — screen-identical) and the
-// unfogged band moves to SKY_BAND so no camera ever sees sky content closer
-// than the cutoff.
-constexpr float SKY_R = 600.0f;
-constexpr float SKY_BAND = 520.0f; // clouds/balloon push-out radius (min camera distance ≈ 420)
+// Clouds/balloon push-out radius. Filament's fog is CAMERA-relative and chase
+// cams roam up to ~100u from the origin, so sky content any nearer than this
+// could pass within the 400 fog cutoff of a cell's camera and render FOGGED (a
+// pale wedge over the track — the JS clouds/balloon are fog:false). 520 leaves
+// a minimum camera distance of ~420.
+//
+// THE DOME THAT USED TO SIT OUT HERE IS GONE (TtpRenderer.h, mSkyCubemaps).
+// Pushing it out to 600 for this same fog rule is what put it past CAM_FAR and
+// punched a moving circular hole in the sky; the gradient is a skybox now, drawn
+// at infinity, which this rule cannot reach and no far plane can clip.
+constexpr float SKY_BAND = 520.0f;
 
 // sRGB 0xrrggbb → linear float3, matching THREE.Color's conversion — the JS
 // ribbon feeds LINEAR vertex colours, and parity depends on doing the same.
@@ -101,9 +110,19 @@ inline float3 srgbToLinear(uint32_t rgb) {
              srgbChannel((rgb & 0xff) / 255.0f) };
 }
 
+// The sky's authored colours, decoded the way the shipped JS pipeline does:
+// TWICE. paintSky pre-linearises what the pipeline then linearises again, which
+// renders a deeper sky than the raw hexes — measured against the live pane.
+// Parity means reproducing the shipped transfer, quirk included. Shared because
+// the skybox bake and its flat fallback must not drift apart.
+inline float3 skyLinear(uint32_t rgb) {
+    const float3 once = srgbToLinear(rgb);
+    return float3{ srgbChannel(once.x), srgbChannel(once.y), srgbChannel(once.z) };
+}
+
 // Bind the silhouette array to a vroad instance, clamped bilinear. Every
 // instance of the road material needs this: a declared sampler must be bound
-// even while decalCount is 0.
+// even while maskCount is 0.
 inline void bindDecalMask(MaterialInstance* mi, Texture* arr) {
     TextureSampler ms(TextureSampler::MinFilter::LINEAR,
             TextureSampler::MagFilter::LINEAR);
@@ -666,42 +685,16 @@ struct TtpRenderer::TrackBin {
 // loop's hard cast shadow, not a wide soft ring", as the source puts it. That
 // is ~5% of the half-width, so the shape has to come from a texture.
 //
-// The one thing this does NOT reproduce is the outline: three's is the model's
-// real silhouette (cabin narrow, wheels poking out), ours a superellipse fitted
-// to the same footprint. Same size, same softness, rounder corners.
-// The pixels, at any resolution: a superellipse over 1/1.45 of the frame
-// (SHADOW_OVERSCAN) with the JS bake's blur.
+// THE PIXELS THEMSELVES ARE `ttp/car_footprint.h`'s, not this file's, because
+// the per-car footprint beside them has to be executed by a ctest on every leg
+// and the two shapes must agree about the frame they are drawn in. This is the
+// fallback half: a superellipse fitted to the same footprint — same size, same
+// softness, rounder corners than any real car.
 inline std::vector<float> superellipseMaskPixels(int TW, int TH) {
-    std::vector<float> a((size_t) TW * TH, 0.0f);
-    // Footprint occupies 1/1.45 of the quad (SHADOW_OVERSCAN), leaving the rest
-    // as room for the blur tail — exactly how the JS frames its bake.
-    const float hw = (TW * 0.5f) / 1.45f, hl = (TH * 0.5f) / 1.45f;
-    for (int y = 0; y < TH; y++) {
-        for (int x = 0; x < TW; x++) {
-            const float dx = std::fabs(x + 0.5f - TW * 0.5f) / hw;
-            const float dz = std::fabs(y + 0.5f - TH * 0.5f) / hl;
-            const float q = std::cbrt(dx * dx * dx + dz * dz * dz); // 1 at the edge
-            a[(size_t) y * TW + x] = q <= 1.0f ? 1.0f : 0.0f;
-        }
-    }
-    // Separable box blur ×3 ≈ the canvas filter's Gaussian, at the same radius.
-    const int R = std::max(2, (int) std::lround(TW * 0.022f));
-    std::vector<float> tmp(a.size());
-    const auto pass = [&](std::vector<float>& src, std::vector<float>& dst, bool horiz) {
-        for (int y = 0; y < TH; y++)
-            for (int x = 0; x < TW; x++) {
-                float s = 0; int n = 0;
-                for (int k = -R; k <= R; k++) {
-                    const int px = horiz ? x + k : x, py = horiz ? y : y + k;
-                    if (px < 0 || px >= TW || py < 0 || py >= TH) { n++; continue; } // outside = 0
-                    s += src[(size_t) py * TW + px];
-                    n++;
-                }
-                dst[(size_t) y * TW + x] = s / (float) n;
-            }
-    };
-    for (int i = 0; i < 3; i++) { pass(a, tmp, true); pass(tmp, a, false); }
-    return a;
+    ttp::rt::FootprintSpec spec;
+    spec.w = TW;
+    spec.h = TH;
+    return ttp::rt::superellipse_mask(spec);
 }
 
 
@@ -711,13 +704,31 @@ inline std::vector<float> superellipseMaskPixels(int TW, int TH) {
 constexpr float kBlobShadowAlpha = 0.4f;
 
 
-// The car ground shadow's ink (the JS UNDER_AO_COLOR) and base opacity, for
-// the masked road-shader decal. 0.35 is the measured 35% ambient dip: blocking
-// the sun leaves a surface its ambient, which on these rigs spans 32% to 36%
-// of lit (34% measured on skysnake). The JS's UNDER_AO_OPACITY 0.55 was a 56%
-// dip, picked when cast shadows were a vague haze; against a sharp one the car
-// looked pressed into a hole. It also sits the car between its siblings, the
-// prop blobs at 0.40 and the lawn discs at 0.30.
-inline const float3 kCarBlobInk = srgbToLinear(0x171513);
+// The car ground shadow's ink, opacity and coverage cap live in
+// CarShadowTuning (TtpRenderer.h) — the tuning ABI's one home for them; the
+// prop blobs at 0.40 and the lawn discs at 0.30 sit lighter on purpose.
 
-constexpr float kCarBlobAO = 0.35f;
+// The hybrid shadow LOD's band, in world units of distance to the closest
+// ACTIVE camera (renderCars). ONLY kShadowModeHybrid reads it now — the shipped
+// mode is BLOB for every car, and CarShadowTuning says why — but the band is
+// kept because that mode is the A/B arm the trade gets re-argued against.
+//
+// Inside kShadowLodNear a car's contact shadow is the true MASKED baked
+// silhouette; past kShadowLodFar it is the texture raster alone; between, the
+// two crossfade with complementary alphas. 14u keeps the own car (~2u) and
+// adjacent rivals silhouetted while bounding the masked list at [4].
+//
+// Note the two distances answer different questions and both are needed. The
+// band above is against the CLOSEST camera, because that is who the fade has
+// to look right to. WHICH cars get a masked entry at all is decided against
+// the camera doing the picking, taking turns — see TtpRenderer.h's
+// kMaxMaskedDeckDecals for why a single global rank is starvable.
+constexpr float kShadowLodNear = 10.0f;
+constexpr float kShadowLodFar = 14.0f;
+// FOUR CELLS, and it now gates only the RUBBER layer's MIP REFRESH
+// (TtpRendererFrame's `splitFour`). Both of its other jobs are gone: the level-0
+// upload throttle it also gated was measured a null and dropped, and the car
+// shadow no longer has a cell threshold at all — `CarShadowTuning::mode` ships
+// as kShadowModeBlob at EVERY count, so there is nothing left to cross. The
+// pricing that settled the shadow half is in kShadowModeBlob's comment.
+constexpr uint32_t kMaskedBlobCells = 4;

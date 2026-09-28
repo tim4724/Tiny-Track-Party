@@ -1,11 +1,16 @@
 // Race-orchestration conformance check — replays tests/fixtures/raceflow-corpus.jsonl
 // against native/libttp-runtime/ttp/race_flow.h.
 //
-// JS-RECORDED evidence, like the ui/audio/session corpora and unlike the
-// C++-authored ones: every line was taken off public/display/raceFlow.js (the
-// oracle, retired 2026-07-31 — git history has it) while it was live, so it
-// settles whether the port matches the JS it replaced. The fixture is FROZEN.
-// A disagreement is a bug in the C++, never in the fixture.
+// Every line was taken off public/display/raceFlow.js (the oracle, retired
+// 2026-07-31 — git history has it) while it was live, so these bytes began as
+// JS-RECORDED parity evidence. They no longer are: baking the three launch
+// flags into race_flow.h (humansAtBack, deferCountdown, bankProgression, whose
+// OFF paths had become dead code on every shipping path) DELIBERATELY
+// re-recorded the launch and podium lines, which DEMOTES the whole fixture to
+// class 2 — regression evidence (tests/fixtures/traces/README.md). The parity
+// claim stays with the bytes before that commit. The oracle is gone, so the
+// fixture is still FROZEN in the sense that matters: nothing can re-derive it,
+// and an UNEXPLAINED disagreement is a bug in the C++, never in the fixture.
 //
 // WHAT IT REPLAYS, AND WHY BOTH HALVES MATTER. Each step carries `out` (the
 // layer's answer) and `state` (the shell state the generator's driver threads).
@@ -32,8 +37,24 @@
 // while a random plan also carries cupName and tracks. Emitting a null where the
 // recording has no key at all is a failure, and diff_val treats it as one.
 //
-// There is NO --record mode, on the same grounds as session_check.cc: this
-// fixture's whole value is that C++ did not write it.
+// A LAUNCH ANSWERS WITH TWO EFFECT LISTS, AND THIS REPLAY WALKS BOTH. `effects`
+// is the launch; `countdownEffects` is `start-countdown`, held by the shell
+// until countdownReady() says the scene has settled. The obvious harness — the
+// one that predates the bake — serialized `effects` only, and the moment the
+// countdown stopped being optional that harness would have DELETED
+// start-countdown from every recorded launch and called it a clean diff: a
+// coverage loss wearing the shape of a simplification. So the op is serialized
+// under its own key AND applied, in the order a shell performs them. Applying
+// it is what keeps `countdownShown` meaning something for the rest of each
+// scenario; recording it separately is what keeps the two lists' CONTENTS
+// pinned rather than just their concatenation.
+//
+// There is NO --record mode. Not for session_check.cc's old reason — that check
+// has one now, and the session corpus was itself deliberately re-recorded — but
+// because this replay is STRUCTURAL: it rebuilds each answer from the layer and
+// diffs it, and never reproduces the file's own JSON spelling, so a re-emit
+// here would assert nothing a replay does not already assert. A deliberate
+// change edits the fixture by hand, green-first, diff read (tests/CLAUDE.md).
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -135,13 +156,12 @@ bool loadWorld(const Value& header, World& w) {
     std::fprintf(stderr, "the corpus header's `world` is not a world\n");
     return false;
   }
-  // The layer OWNS the game-timing budgets now (race_flow.h); the recorder
-  // still writes the values it drove with, so a drift between the oracle
-  // script and the constants fails here instead of shipping.
-  if (json::num_field(header, "intermissionMs") != race::INTERMISSION_MS ||
-      json::num_field(header, "resultsFailsafeMs") != race::RESULTS_FAILSAFE_MS) {
+  // The layer OWNS the game-timing budget now (race_flow.h); the recorder
+  // still writes the value it drove with, so a drift between the oracle
+  // script and the constant fails here instead of shipping.
+  if (json::num_field(header, "intermissionMs") != race::INTERMISSION_MS) {
     std::fprintf(stderr,
-                 "the corpus was recorded with different game-timing budgets "
+                 "the corpus was recorded with a different game-timing budget "
                  "than race_flow.h declares\n");
     return false;
   }
@@ -269,7 +289,6 @@ Value effectVal(const race::Effect& e) {
       v.set("raceEnded", Value::Bool(e.raceEnded));
       break;
     case race::Op::SET_PAUSE_OVERLAY:
-    case race::Op::SHOW_MUSIC_CREDIT:
     case race::Op::SET_AUTO_PAUSED: v.set("on", Value::Bool(e.on)); break;
     case race::Op::SET_PAUSE_BUTTON: v.set("shown", Value::Bool(e.shown)); break;
     case race::Op::RESET_SCENE_CARS: v.set("cars", arrOf(e.cars, carVal)); break;
@@ -301,7 +320,7 @@ Value effectVal(const race::Effect& e) {
       v.set("lat", Value::Num(e.lat));
       break;
     case race::Op::BROADCAST_STANDINGS: v.set("over", Value::Bool(e.over)); break;
-    case race::Op::ARM_RESULTS_FAILSAFE: v.set("ms", Value::Num(e.num)); break;
+    case race::Op::ARM_RESULTS: v.set("ms", Value::Num(e.num)); break;
     case race::Op::ARM_INTERMISSION:
       v.set("ms", Value::Num(e.num));
       v.set("deadline", Value::Num(e.deadline));
@@ -322,12 +341,11 @@ Value effectVal(const race::Effect& e) {
     case race::Op::REVEAL_CHROME:
     case race::Op::HOLD_CHROME:
     case race::Op::BIND_SESSION:
-    case race::Op::PAINT_INITIAL_HUD:
+    case race::Op::PAINT_HUD:
     case race::Op::STOP_MUSIC:
     case race::Op::STOP_VOICES:
     case race::Op::APPLY_RACE_POINTS:
     case race::Op::SHOW_RESULTS:
-    case race::Op::CLEAR_RESULTS_FAILSAFE:
     case race::Op::CLEAR_INTERMISSION:
     case race::Op::SERIES_ADVANCE:
     case race::Op::CLEAR_SERIES:
@@ -380,7 +398,6 @@ struct Shell {
   bool pauseOverlay = false, pauseButton = false;
   std::string chrome = "held";
   std::string music = "stopped";
-  bool musicCredit = false;
   race::OptStr trackId;
   race::OptNum trackSeed;
   race::OptNum countdownShown;
@@ -389,7 +406,6 @@ struct Shell {
   std::vector<race::FieldEntry> field;
   bool demoRunning = true;
   race::OptNum seriesRaceIndex;
-  race::OptNum resultsFailsafe;
   race::OptNum intermissionDeadline;
   race::OptStr lastBroadcast;
   std::vector<std::string> ops;
@@ -420,11 +436,8 @@ void applyEffect(Shell& s, const race::Effect& e) {
     case race::Op::SHOW_COUNTDOWN: s.countdownShown = race::OptNum::Of(e.num); break;
     case race::Op::START_MUSIC: s.music = "playing"; break;
     case race::Op::STOP_MUSIC: s.music = "stopped"; break;
-    case race::Op::SHOW_MUSIC_CREDIT: s.musicCredit = e.on; break;
     case race::Op::BROADCAST_STANDINGS:
       s.lastBroadcast = race::OptStr::Of(e.over ? "final" : "running"); break;
-    case race::Op::ARM_RESULTS_FAILSAFE: s.resultsFailsafe = race::OptNum::Of(e.num); break;
-    case race::Op::CLEAR_RESULTS_FAILSAFE: s.resultsFailsafe = race::OptNum::None(); break;
     case race::Op::ARM_INTERMISSION:
       s.intermissionDeadline = race::OptNum::Of(e.deadline); break;
     case race::Op::CLEAR_INTERMISSION:
@@ -453,7 +466,7 @@ void applyEffect(Shell& s, const race::Effect& e) {
     // No state of their own — the corpus records them only through `ops`.
     case race::Op::CLEAR_ITEM_CACHE:
     case race::Op::HIDE_RESULTS:
-    case race::Op::PAINT_INITIAL_HUD:
+    case race::Op::PAINT_HUD:
     case race::Op::BROADCAST_COUNTDOWN:
     case race::Op::REFRESH_AUTO_PAUSE:
     case race::Op::STOP_VOICES:
@@ -494,7 +507,6 @@ Value digest(const Shell& s) {
   v.set("pauseButton", Value::Bool(s.pauseButton));
   v.set("chrome", Value::Str(s.chrome));
   v.set("music", Value::Str(s.music));
-  v.set("musicCredit", Value::Bool(s.musicCredit));
   v.set("trackId", valOf(s.trackId));
   v.set("trackSeed", valOf(s.trackSeed));
   v.set("countdownShown", valOf(s.countdownShown));
@@ -502,7 +514,6 @@ Value digest(const Shell& s) {
   v.set("aiIds", idArr(s.aiIds));
   v.set("demoRunning", Value::Bool(s.demoRunning));
   v.set("seriesRaceIndex", valOf(s.seriesRaceIndex));
-  v.set("resultsFailsafe", valOf(s.resultsFailsafe));
   v.set("intermissionDeadline", valOf(s.intermissionDeadline));
   v.set("lastBroadcast", valOf(s.lastBroadcast));
   Value ops = Value::Arr();
@@ -625,8 +636,11 @@ Value runStep(Shell& s, const std::string& op, const Value& in) {
     li.forceItem = strOf(in.find("forceItem"));
     li.world = worldOf(in);
     race::LaunchResult r = race::launchRace(li);
+    // BOTH lists, applied in the order a shell performs them — see the header.
     applyAll(s, r.effects);
+    applyAll(s, r.countdownEffects);
     Value v = Value::Obj();
+    v.set("countdownEffects", effectsVal(r.countdownEffects));
     v.set("effects", effectsVal(r.effects));
     v.set("field", arrOf(r.field, fieldVal));
     v.set("aiIds", idArr(r.aiIds));
@@ -667,16 +681,19 @@ Value runStep(Shell& s, const std::string& op, const Value& in) {
     v.set("effects", effectsVal(es));
     return v;
   }
+  if (op == "flagRace") {
+    race::Effects es = race::flagRace();
+    applyAll(s, es);
+    Value v = Value::Obj();
+    v.set("effects", effectsVal(es));
+    return v;
+  }
   if (op == "endRace") {
     race::EndRaceInput ei;
     ei.hasSeries = json::truthy(in.find("hasSeries"));
     ei.seriesFinished = json::truthy(in.find("seriesFinished"));
     ei.intermissionMs = json::num_field(in, "intermissionMs");
     ei.nowMs = json::num_field(in, "nowMs");
-    ei.resultsFailsafeMs = json::num_field(in, "resultsFailsafeMs");
-    // Absent on every frozen line (they predate progression) — truthy reads
-    // that as false, which is what keeps them byte-identical.
-    ei.bankProgression = json::truthy(in.find("bankProgression"));
     race::Effects es = race::endRace(ei);
     applyAll(s, es);
     Value v = Value::Obj();

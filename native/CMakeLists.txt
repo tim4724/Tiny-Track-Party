@@ -108,6 +108,9 @@ add_library(ttp_mathlib STATIC ${TTP_FDLIBM_SOURCES})
 target_include_directories(ttp_mathlib PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/vendor/fdlibm/include
   ${CMAKE_CURRENT_SOURCE_DIR}/vendor/fdlibm/src
+  # ttp_fd.h — the ONE declaration site for the renamed entry points; PUBLIC so
+  # it propagates to everything that links the mathlib.
+  ${CMAKE_CURRENT_SOURCE_DIR}/mathlib
 )
 foreach(rename ${TTP_FDLIBM_RENAMES})
   target_compile_definitions(ttp_mathlib PRIVATE ${rename})
@@ -337,6 +340,15 @@ target_link_libraries(hazard_check PRIVATE libttp_sim ttp_strict_fp ttp_warnings
 ttp_emscripten_cli(hazard_check)
 add_test(NAME hazards COMMAND hazard_check)
 
+# ---- Behaviour: car-to-car contact ------------------------------------------
+# The traces PIN contact, they do not judge it — corner clipping and rear-end
+# chatter both lived under a green corpus. Judged against an oracle built from
+# Car::pose (what the renderer draws), which shares no code with the collider.
+add_executable(contact_check simtest/contact_check.cc)
+target_link_libraries(contact_check PRIVATE libttp_sim ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(contact_check)
+add_test(NAME contact COMMAND contact_check)
+
 # ---- Conformance: the golden-trace replay CLI -------------------------------
 # Replays a committed trace against libttp-sim: rebuilds the race,
 # replays recorded inputs (+ ai-live re-run, session driver, dt jitter, schedule
@@ -482,9 +494,10 @@ add_test(NAME framing
 #
 # It is the first oracle three of those units have EVER had: the claim URL, the
 # rejoinToken normalizer and the cross-device seat claim were exercised by
-# nothing in the tree — not one test built a claim URL or scanned a claim QR —
-# and the normalizer carries a frozen security-adjacent quirk (Number(null) is 0,
-# so every ordinary HELLO is a claim on seat 0). No --record mode on purpose.
+# nothing in the tree — not one test built a claim URL or scanned a claim QR.
+# It is also what pins the normalizer's rule (a token is an integer or it is
+# nothing, session.h) across every JSON shape a phone can send.
+# It re-emits through --record, held byte-identical by record_session below.
 add_executable(session_check partytest/session_check.cc)
 target_link_libraries(session_check PRIVATE libttp_party ttp_testsupport ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(session_check)
@@ -512,9 +525,12 @@ add_test(NAME fastlane
 # declaration, and moving those definitions into a static archive risks the linker
 # dropping unreferenced objects. Recompiling two files costs nothing and leaves the
 # artifact the browser runs bit-for-bit untouched.
+# ttp_perf.cc rides along for the COUNTDOWN GATE: ttp_race_countdown_ready reads
+# the frame window through a seam (perf::monitor()), so the only way to gate it
+# is to feed that window the samples a shell would.
 add_executable(abi_check runtimetest/abi_check.cc runtime/ttp_runtime.cc runtime/ttp_party.cc
   runtime/ttp_theme.cc runtime/ttp_ui.cc runtime/ttp_race.cc runtime/ttp_net.cc
-  runtime/ttp_error.cc)
+  runtime/ttp_perf.cc runtime/ttp_error.cc)
 target_include_directories(abi_check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/runtime)
 # libttp_runtime carries libttp_sim PUBLICly (and brings the biome tables
 # ttp_theme.cc marshals), so naming libttp_sim again here only makes the
@@ -562,6 +578,7 @@ add_test(NAME abi
 # RaceSession deliberately stays in libttp-sim: replay_cli has to keep linking
 # the sim alone.
 add_library(libttp_runtime STATIC
+  libttp-runtime/ttp/blobstore.cc
   libttp-runtime/ttp/camera.cc
   libttp-runtime/ttp/framing.cc
   libttp-runtime/ttp/frame_builder.cc
@@ -603,6 +620,11 @@ add_library(libttp_runtime STATIC
   # AND executes it. The device half (AudioContext / the baked cue palette) is
   # per-platform and stays out of this tree entirely.
   libttp-runtime/ttp/audio.cc
+  # The screenshot harnesses' race freeze: when a gallery card's sim moment has
+  # come. Pure over plain inputs; ttp_runtime.cc gathers them from the Game.
+  libttp-runtime/ttp/shot_hold.cc
+  # The screens gallery's fabricated couch and boards (ttp/preview.h).
+  libttp-runtime/ttp/preview.cc
   # The per-cup biome palettes and the rules that resolve one. Data, not
   # rendering: it was authored in the browser (public/shared/themes.js +
   # render/trackPayload.js) until the shells stopped being one.
@@ -623,6 +645,18 @@ add_library(libttp_runtime STATIC
   # are here for the same reason roster.cc is: no platform API, and the ghost's
   # padding rule is a trap that stays invisible until cgltf rejects a model.
   libttp-runtime/ttp/glb.cc
+  # The frame-cost readout's decisions — the percentile fold, the warm-up
+  # filter and the health ladder. Here rather than in each shell because three
+  # hand-written copies had already drifted while all three carried a comment
+  # saying they had not, and the bench's whole premise is that a browser, an
+  # Apple TV and an Android box can be compared on one race.
+  libttp-runtime/ttp/perf_stats.cc
+  # The adaptive render scale's STATE — the window it folds off the readout, the
+  # running present floor, the cost model's observation and the tenure clocks.
+  # The RULE beside it (ttp/render_scale.h) is header-only and pure; this is
+  # what three shells used to hold by hand, in three languages, with a
+  # percentile formula each.
+  libttp-runtime/ttp/render_scale_controller.cc
 )
 target_include_directories(libttp_runtime PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/libttp-runtime
@@ -672,9 +706,11 @@ add_test(NAME record_runtime
 # So byte identity proves the port reproduces every recorded answer and its exact
 # JSON spelling (key set, null-vs-absent, every number through
 # js_number_to_string) — strictly more than the structural replays assert. It
-# does NOT prove the port matches the JS; the committed bytes carry that, and the
-# JS wrote them. If one of these ever fails, the committed file is right and the
-# C++ is wrong. See tests/fixtures/traces/README.md.
+# does NOT prove the port matches the JS; only the committed bytes can carry
+# that, and only while the JS wrote them. An unexplained failure is a defect in
+# the change, and the committed file is right; a TRADED behaviour change
+# re-records green-first and demotes that fixture to class 2, as the session
+# corpus already is. See tests/fixtures/traces/README.md.
 add_test(NAME record_ui
   COMMAND ${CMAKE_COMMAND}
     -DCLI=$<TARGET_FILE:ui_check>
@@ -740,16 +776,40 @@ target_link_libraries(progression_check PRIVATE libttp_runtime ttp_strict_fp ttp
 ttp_emscripten_cli(progression_check)
 add_test(NAME progression COMMAND progression_check)
 
+# ---- Behaviour: the screenshot hold -----------------------------------------
+# Assertions, for progression's reason: ttp/shot_hold.h is new and has no oracle.
+add_executable(shot_hold_check runtimetest/shot_hold_check.cc)
+target_link_libraries(shot_hold_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(shot_hold_check)
+add_test(NAME shot_hold COMMAND shot_hold_check)
+
+# ---- Behaviour: the gallery's fabrications ----------------------------------
+add_executable(preview_check runtimetest/preview_check.cc)
+target_link_libraries(preview_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(preview_check)
+add_test(NAME preview COMMAND preview_check)
+
 # ---- Behaviour: the adaptive render scale -----------------------------------
 # Assertions again, and for the same reason: ttp/render_scale.h is a NEW layer
 # with no JS oracle. What it pins beyond the thresholds is CONVERGENCE — the
 # controller is a feedback loop, and a loop that chases its own tail shows up as
 # a picture that softens and sharpens forever rather than as a failing frame.
-# Header-only, so nothing new is linked; libttp_runtime carries the include path.
+# The RULE is header-only; the controller beside it is in libttp_runtime, which
+# also carries the include path.
 add_executable(render_scale_check runtimetest/render_scale_check.cc)
 target_link_libraries(render_scale_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(render_scale_check)
 add_test(NAME render_scale COMMAND render_scale_check)
+
+# ---- Behaviour: the frame-cost readout ---------------------------------------
+# Assertions, like render_scale above and for the same reason: ttp/perf_stats.h
+# is a NEW layer with no JS oracle to replay. What it pins beyond the ladder is
+# that the three platforms' readouts CANNOT drift again — the rule now exists
+# once, and this is where it is executed on every leg.
+add_executable(perf_check runtimetest/perf_check.cc)
+target_link_libraries(perf_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(perf_check)
+add_test(NAME perf COMMAND perf_check)
 
 # ---- Conformance: the per-player race HUD -----------------------------------
 # JS-RECORDED evidence, like the biome check below and unlike the two above: the
@@ -789,9 +849,13 @@ add_test(NAME ui_model
 )
 
 # ---- Conformance: the race orchestration ------------------------------------
-# JS-RECORDED evidence again: tests/fixtures/raceflow-corpus.jsonl was recorded
-# off the live public/display/raceFlow.js before ttp/race_flow.cc existed, so it
-# settles whether the state machine was ported right.
+# tests/fixtures/raceflow-corpus.jsonl was recorded off the live
+# public/display/raceFlow.js before ttp/race_flow.cc existed, so these bytes
+# began as JS-recorded parity evidence. Baking the three launch flags in
+# re-recorded the launch and podium lines and DEMOTED it to class 2 — regression
+# evidence (tests/fixtures/traces/README.md); the parity claim stays in git
+# history. What it still gates, on every leg, is that the state machine does not
+# move by accident.
 #
 # It checks TWO things per step and needs both. `out` is the answer; `state` is
 # the shell state the generator's driver threads, rebuilt here by walking each
@@ -862,6 +926,22 @@ add_executable(wear_check runtimetest/wear_check.cc)
 target_link_libraries(wear_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
 ttp_emscripten_cli(wear_check)
 add_test(NAME wear COMMAND wear_check)
+
+# The GLB mesh reader behind the renderer's merged draw groups. Header-inline in
+# libttp-runtime (ttp/glb_mesh.h) so the SDK-less legs can execute it — the
+# renderer that consumes it is compiled by no ctest at all.
+add_executable(glbmesh_check runtimetest/glbmesh_check.cc)
+target_link_libraries(glbmesh_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(glbmesh_check)
+add_test(NAME glbmesh COMMAND glbmesh_check)
+
+# The car contact shadow's SHAPE (ttp/car_footprint.h) — header-inline for the
+# same reason, and the picture depends on it: the four roster cars share a
+# bounding box, so the footprint is the only thing that tells them apart.
+add_executable(carfootprint_check runtimetest/carfootprint_check.cc)
+target_link_libraries(carfootprint_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(carfootprint_check)
+add_test(NAME carfootprint COMMAND carfootprint_check)
 
 # ---- Behavioural: the asset gallery's world ---------------------------------
 # NOT conformance evidence and no corpus — showcase_theme stages a scene that
@@ -947,10 +1027,14 @@ set(TTP_APP_SOURCES
   # not rendering, and CI's Filament-less wasm leg is where the browser's link
   # to it gets checked.
   runtime/ttp_theme.cc
-  # The adaptive render scale's shim. Deciding how big the buffer should be
-  # names neither a platform API nor the renderer, so it is here rather than
-  # beside ttp_display_core.cc — same argument as the biome ABI above.
+  # The adaptive render scale: the rule's STATE (the window it folds, the
+  # running present floor, the cost model's observation, the tenure clocks) and
+  # the shim over it. Deciding how big the buffer should be names neither a
+  # platform API nor the renderer, so both are here rather than beside
+  # ttp_display_core.cc — same argument as the biome ABI above.
+  libttp-runtime/ttp/render_scale_controller.cc
   runtime/ttp_render_scale.cc
+  libttp-runtime/ttp/blobstore.cc
   libttp-runtime/ttp/camera.cc
   libttp-runtime/ttp/framing.cc
   libttp-runtime/ttp/frame_builder.cc
@@ -969,6 +1053,10 @@ set(TTP_APP_SOURCES
   # event and half of what it answers is text, so there is nothing to pack.
   runtime/ttp_ui.cc
   runtime/ttp_error.cc
+  # The screenshot harnesses' race freeze, which ttp_update consults.
+  libttp-runtime/ttp/shot_hold.cc
+  # The gallery's fabricated couch and boards, behind ttp_ui_preview_*.
+  libttp-runtime/ttp/preview.cc
   # The race ORCHESTRATION and its ABI — the state machine that calls the
   # predicates above IN ORDER.
   libttp-runtime/ttp/race_flow.cc
@@ -991,7 +1079,137 @@ set(TTP_APP_SOURCES
   # PREPARATION, which a shell does with or without a Filament SDK in the build,
   # and keeping them here is what lets abi_check cover them on every leg.
   libttp-runtime/ttp/glb.cc
-  runtime/ttp_glb.cc)
+  runtime/ttp_glb.cc
+  # The frame-cost readout and its ABI. Outside the renderer gate for the same
+  # reason ttp_render_scale.cc is: folding a window of measurements names no
+  # platform API, and the shell hands the measurements over rather than judging
+  # them.
+  libttp-runtime/ttp/perf_stats.cc
+  runtime/ttp_perf.cc)
+
+# ---- tvOS module: the whole game, as a static library ----------------------
+# The Apple TV sibling of the browser module below. Same sources, same libraries,
+# same strict-FP contract; the ONLY difference is the shell file and the shape of
+# the artifact — a .a the Xcode app target links, where the web emits a .mjs the
+# page imports. `shells/tvos/` holds the app around it (XcodeGen project, Swift,
+# SwiftUI), and `native/scripts/build-runtime-tvos.sh` drives both halves.
+#
+# TWO SLICES, NOT A FAT BINARY. Apple TV device and simulator are BOTH arm64, so
+# lipo cannot combine them — this target is configured twice, once per SDK, into
+# build/tvos-appletvos and build/tvos-appletvsimulator, and the Xcode project
+# picks by $(PLATFORM_NAME). That is also why FILAMENT_SDK must name a per-SDK
+# install tree (filament-appletvos / filament-appletvsimulator) and never the
+# xcframework root: FilamentSdk.cmake globs lib/*/*.a, which under that root
+# matches both slices and puts them on one link line, both arm64, with nothing to
+# notice.
+#
+# Defined HERE rather than under shells/tvos/ for a reason that already bit a
+# probe: C++17 is set at this directory's scope, not per target, so a target in
+# another CMakeLists silently falls back to the compiler default and every
+# inline variable in libttp-runtime becomes an error. ccache's wiring is
+# directory-scoped too.
+if(CMAKE_SYSTEM_NAME STREQUAL "tvOS")
+  # project() at the top of this file is LANGUAGES C CXX; without this a .mm is
+  # compiled as C++ (or refused outright). Inside the branch so no other leg pays
+  # for the compiler probe.
+  enable_language(OBJCXX)
+
+  # The shared list plus this platform's shell — the same two lines as the web
+  # target, and for the same reason. If a second file ever has to be appended
+  # here, check first whether it names a platform API; if it does not, it belongs
+  # in TTP_APP_SOURCES.
+  set(TTP_TVOS_SOURCES ${TTP_APP_SOURCES})
+  if(TARGET ttp_renderer)
+    list(APPEND TTP_TVOS_SOURCES runtime/ttp_display_core.cc runtime/ttp_display_tvos.mm)
+  endif()
+  add_library(ttp_runtime_tvos STATIC ${TTP_TVOS_SOURCES})
+  target_include_directories(ttp_runtime_tvos PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime
+    ${CMAKE_CURRENT_SOURCE_DIR}/libttp-runtime
+    ${CMAKE_CURRENT_SOURCE_DIR}/renderer/include)
+  # ttp_strict_fp is named explicitly, exactly as ttp_runtime_web names it. It
+  # would arrive transitively through sim/party, but its own header calls this
+  # platform out by name: Apple clang defaults -ffp-contract to 'fast', and arm64
+  # FMA contraction is precisely the determinism the bit-exact traces exist to
+  # catch. A future refactor of the link graph must not be able to drop it
+  # silently.
+  target_link_libraries(ttp_runtime_tvos PRIVATE libttp_sim libttp_party
+    ttp_strict_fp ttp_warnings)
+  if(TARGET ttp_renderer)
+    target_link_libraries(ttp_runtime_tvos PRIVATE ttp_renderer)
+    # -fno-objc-exceptions is not optional and not obvious. ttp_renderer is built
+    # -fno-rtti -fno-exceptions (like Filament); an ObjC++ translation unit
+    # defines __EXCEPTIONS anyway, and robin-map's `throw` then becomes a hard
+    # error. On the source file rather than an interface, because it is the only
+    # ObjC++ in the tree.
+    set_source_files_properties(runtime/ttp_display_tvos.mm PROPERTIES
+      COMPILE_OPTIONS "-fno-rtti;-fno-exceptions;-fno-objc-exceptions")
+  endif()
+endif()
+
+# ---- Android TV module: the whole game, as a shared library ----------------
+# The third sibling. Same sources, same libraries, same strict-FP contract; the
+# only differences from the tvOS target are the shell file, the JNI bridge, and
+# the shape of the artifact — a .so Gradle packages into the APK, where tvOS
+# emits a .a Xcode links and the web a .mjs the page imports.
+#
+# SHARED, not STATIC, because that is what System.loadLibrary takes. It also
+# means JNI_OnLoad exists to be called, which is where the generated bridge
+# registers every generated native (runtime/ttp_jni.cc, from scripts/gen-jni.mjs).
+#
+# BOTH ABIS MATTER, and armeabi-v7a is not the legacy one. Android TV boxes ship
+# 32-bit userspace long past the point phones stopped: a Google TV Streamer on
+# Android 14 reports armeabi-v7a with no /system/bin/linker64 at all. Nothing
+# here selects an ABI — the NDK toolchain file does, and the build script
+# configures once per ABI, exactly as the tvOS script does once per SDK.
+#
+# Defined HERE rather than under shells/androidtv/ for the same reason the tvOS
+# target is: C++17 and the ccache wiring are set at THIS directory's scope, and
+# a target in another CMakeLists silently falls back to the compiler default,
+# turning every inline variable in libttp-runtime into an error.
+if(ANDROID)
+  set(TTP_ANDROID_SOURCES ${TTP_APP_SOURCES} runtime/ttp_jni.cc)
+  if(TARGET ttp_renderer)
+    list(APPEND TTP_ANDROID_SOURCES runtime/ttp_display_core.cc runtime/ttp_display_android.cc)
+    add_library(ttp_runtime_android SHARED ${TTP_ANDROID_SOURCES})
+  else()
+    # NO SDK, NO .so — an OBJECT library instead, and the difference is not
+    # cosmetic. The generated bridge takes the ADDRESS of every export in its
+    # RegisterNatives table, every ttp_display.h export included, so a SHARED
+    # target without the display bodies has an undefined symbol per display
+    # export — and the NDK links shared libraries with -Wl,--no-undefined, so
+    # it is a hard link error rather than a lazy symbol. The web target has no
+    # equivalent problem: its bridge is
+    # EMSCRIPTEN_KEEPALIVE on each declaration, so an absent body is simply not
+    # exported.
+    #
+    # CI is exactly this configure (.github/workflows/native.yml has no
+    # -DFILAMENT_SDK, because a runner has no Filament fork), and what that job
+    # exists to check is that the whole app COMPILES under NDK clang with the
+    # strict-FP flags. An object library checks precisely that and stops before
+    # the link that cannot succeed.
+    add_library(ttp_runtime_android OBJECT ${TTP_ANDROID_SOURCES})
+  endif()
+  target_include_directories(ttp_runtime_android PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/runtime
+    ${CMAKE_CURRENT_SOURCE_DIR}/libttp-runtime
+    ${CMAKE_CURRENT_SOURCE_DIR}/renderer/include)
+  # ttp_strict_fp is named explicitly, exactly as the other two modules name it.
+  # It would arrive transitively through sim/party, but fp-profile.md §6 calls
+  # this platform out by name — NDK clang contracts within statements by default,
+  # and an FMA is the determinism the bit-exact traces exist to catch. A future
+  # refactor of the link graph must not be able to drop it silently. What proves
+  # it holds is native/scripts/android-device-spawn.sh: the whole ctest suite,
+  # on a real box, over adb.
+  target_link_libraries(ttp_runtime_android PRIVATE libttp_sim libttp_party
+    ttp_strict_fp ttp_warnings)
+  # log for __android_log (Filament's own logging sink), android for the
+  # ANativeWindow calls in the surface file. EGL/GLESv3 come with the renderer.
+  target_link_libraries(ttp_runtime_android PRIVATE android log)
+  if(TARGET ttp_renderer)
+    target_link_libraries(ttp_runtime_android PRIVATE ttp_renderer EGL GLESv3)
+  endif()
+endif()
 
 # ---- Browser module: the whole game --------------------------------------
 # Emscripten-only. ONE module: libttp-sim + libttp-party behind their extern "C"

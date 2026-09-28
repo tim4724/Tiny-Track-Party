@@ -11,6 +11,7 @@
 #include "ttp_audio.h"
 #include "ttp_session.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <map>
@@ -28,6 +29,7 @@
 #include "ttp/game.h"
 #include "ttp/jsonnum.h"
 #include "ttp/race_track.h"
+#include "ttp/shot_hold.h"
 #include "ttp/race_track_json.h"
 #include "ttp/schematic.h"
 #include "ttp/json_parse.h"
@@ -35,11 +37,12 @@
 #include "ttp/grand_prix.h"
 #include "ttp/race_session.h"
 #include "ttp/trackbuilder.h"
+// ui::LastItems — the per-phone ITEM outbox a session carries for the ui twins.
+// A type only; no screen decision is taken in this file.
+#include "ttp/ui_model.h"
 #include "ttp/util.h"
 
 using namespace ttp;
-
-static const char* MATHLIB = "fdlibm-openlibm-0.8.7";
 
 // ---------------------------------------------------------------------------
 // Flat stats parsing (ids parse via ttp/scalar_id.h).
@@ -247,6 +250,11 @@ struct BotEntry {
   double caution = 1, laneBias = 0;
   uint32_t aiSeed = 0;
   std::unique_ptr<AiController> ai;  // built at start
+  // The autopilot marker (ttp/race_flow.h, BotSpec::player). This bucket is
+  // "who has a controller", NOT "who is a bot" — an autopiloted PLAYER is in
+  // both `bots` and `humans`, and every question about who the RACE is for
+  // (aiIds, the audio's listeners) must ask this flag rather than the bucket.
+  bool player = false;
 };
 
 // Forward declarations of the audio bus's two taps (defined in the audio
@@ -278,12 +286,27 @@ struct RuntimeSession {
   bool racingBare = false;
   bool pausedBare = false;
 
+  // A screenshot card's freeze (ttp/shot_hold.h). Armed only by the gallery
+  // harnesses, through ttp_shot_hold.
+  bool holdArmed = false;
+  ttp::rt::shot_hold::Spec hold;
+  ttp::rt::shot_hold::State holdState;
+  double holdAccumMs = 0;  // frame time not yet spent in fixed steps
+  // The preview's item showcase (ttp_item_showcase).
+  ttp::rt::shot_hold::Showcase showcase = ttp::rt::shot_hold::Showcase::None;
+  ttp::rt::shot_hold::ShowcaseState showcaseState;
+
   std::unique_ptr<Game> game;            // bare-mode owner
   std::unique_ptr<RaceSession> session;  // countdown-mode owner
   Game* eng = nullptr;
 
   std::vector<Value> outQueue;
   std::string scratch;
+
+  // What each phone was last told its held item was — the ITEM push's outbox,
+  // stamped by ttp_ui.cc as it answers. Empty here is what makes the race
+  // walk's clear-item-cache a no-op; see ttp_session.h.
+  ttp::rt::ui::LastItems itemOutbox;
 
   // Drive every bot's controller (a no-op for finished/removed cars). Add order.
   void driveBots() {
@@ -309,6 +332,25 @@ static RuntimeSession* get(int h) {
   return it == g_sessions.end() ? nullptr : it->second.get();
 }
 
+// ---- the screenshot hold's inputs (ttp/shot_hold.h decides) ----
+// A viewer is every car that is not a non-player bot — the audio's listener
+// rule (audioAiIds), so "near the viewer" means near a car with a camera.
+static std::vector<ttp::rt::shot_hold::CarView> holdCars(const RuntimeSession& rs) {
+  std::vector<ttp::rt::shot_hold::CarView> out;
+  out.reserve(rs.eng->cars().size());
+  for (const auto& cp : rs.eng->cars()) {
+    bool ai = false;
+    for (const auto& b : rs.bots) if (!b.player && b.id == cp->id) ai = true;
+    out.push_back({cp->totalS, cp->monsterT > 0, !ai, cp->finished});
+  }
+  return out;
+}
+
+static void noteHoldEvent(RuntimeSession& rs, const Event& e) {
+  if (rs.holdArmed && rs.eng && e.type == "spin" && e.cause == "rocket")
+    ttp::rt::shot_hold::noteRocketHit(rs.hold, rs.holdState, rs.eng->elapsed());
+}
+
 // Track assembly is shared (ttp/race_track.h) so the ABI, the replay/record CLI
 // and the probes cannot drift apart. The session owns the centerline the
 // GameTrack points at, so the built pair is moved onto it wholesale.
@@ -326,7 +368,68 @@ static bool buildTrack(RuntimeSession& rs, const std::string& trackId, int laps,
 static const char* NULL_JSON = "null";
 static const char* EMPTY_ARR = "[]";
 
-static void buildSession(RuntimeSession* rs);
+// Session construction. ABOVE the extern "C" block that holds most of its
+// callers, with ttp_session_engine's lazy build: a static helper declared on one
+// side of that block and defined on the other compiles under clang and is a hard
+// error under GCC.
+//
+// Build every bot's controller and, with them, the racing line they share. Both
+// session modes need exactly this; written out twice, a persona knob could be
+// dropped from one path with the other still covering it.
+//
+// The racing line is primed HERE rather than left to build on first use, because
+// first use is the first frame a bot drives — the GO! beat, the exact frame the
+// player first touches the throttle. Solving it costs 4.3-5.5 ms against a
+// 0.013 ms steady frame, so it read as a stutter on the start line. It is pure
+// precomputation over a centerline that cannot change, so every trace hashes
+// identically either way.
+static void buildBots(RuntimeSession& rs) {
+  for (auto& b : rs.bots)
+    b.ai = std::make_unique<AiController>(b.caution, LOOKAHEAD, STEER_GAIN, b.laneBias, b.aiSeed);
+  if (!rs.bots.empty()) rs.eng->racingLine();
+}
+
+// Construct the RaceSession + bot controllers WITHOUT firing the countdown.
+// Called from ttp_session_start, and LAZILY from any query on a begun-but-not-
+// started handle: the JS RaceSession builds its Game in the constructor, so
+// the display reads grid-pose snapshots BEFORE startCountdown — the ABI must
+// answer those (main.js launchRace paints the grid, then starts the count).
+static void buildSession(RuntimeSession* rs) {
+  if (rs->built || rs->bare) return;
+  rs->built = true;
+
+  std::vector<PlayerDesc> players = rs->gridPlayers();
+
+  RuntimeSession* self = rs;
+  auto onEvent = [self](const Event& e) {
+      self->outQueue.push_back(e.toValue());
+      audio_tap_event(self->handle, e);
+      noteHoldEvent(*self, e);
+    };
+  auto onTick = [self](int n) {
+      Value c = Value::Obj();
+      c.set("type", Value::Str("_countdown"));
+      c.set("n", Value::Num((double)n));
+      self->outQueue.push_back(std::move(c));
+      audio_tap_tick(self->handle, n);
+      if (n == 0) {  // GO beat: racing flips right after this tick (RaceSession.js)
+        Value s = Value::Obj();
+        s.set("type", Value::Str("_raceStart"));
+        self->outQueue.push_back(std::move(s));
+      }
+    };
+    auto onEnd = [self](const Value& r) {
+      Value e = Value::Obj();
+      e.set("type", Value::Str("_raceEnd"));
+      e.set("results", r);  // the getResults() object the adapter hands to onRaceEnd
+      self->outQueue.push_back(std::move(e));
+    };
+  rs->session = std::make_unique<RaceSession>(players, rs->track, onEvent, onEnd, onTick,
+                                              rs->forceItem);
+  rs->eng = &rs->session->engine();
+
+  buildBots(*rs);  // the field (and its cars) exist now
+}
 
 // ttp_session.h — the display's read-only seam onto the live engine. Same lazy
 // build every other query does, so binding a display to a begun-but-not-started
@@ -349,7 +452,12 @@ Value ttp_session_ai_ids(int h) {
   Value a = Value::Arr();
   RuntimeSession* rs = get(h);
   if (rs)
-    for (const auto& b : rs->bots) a.push(b.id.toValue());
+    // `bots` is who carries a CONTROLLER; this answers who is not a player.
+    // An autopiloted seat drives itself and is still somebody's car — reporting
+    // it here would give it no cell, drop it from the audio's listeners, and
+    // (through ui::autoPause's humanCars count) return the whole race to the
+    // lobby a second after it started.
+    for (const auto& b : rs->bots) if (!b.player) a.push(b.id.toValue());
   return a;
 }
 
@@ -387,6 +495,13 @@ Value ttp_session_item_cars(int h) {
     }
   }
   return a;
+}
+
+ttp::rt::ui::LastItems* ttp_session_item_outbox(int h) {
+  // No lazy build: the outbox is the session's, not the engine's, and a handle
+  // that has begun can be asked before its cars exist.
+  RuntimeSession* rs = get(h);
+  return rs ? &rs->itemOutbox : nullptr;
 }
 
 // ===========================================================================
@@ -485,7 +600,7 @@ au::Point audioTrackPoint(Game* eng, double s, double lat) {
 // neither listeners nor voices.
 au::AiIds audioAiIds(const RuntimeSession& rs) {
   au::AiIds ai;
-  for (const auto& b : rs.bots) ai.add(b.id);
+  for (const auto& b : rs.bots) if (!b.player) ai.add(b.id);
   return ai;
 }
 
@@ -894,8 +1009,17 @@ int ttp_session_begin_field(const char* trackId, uint32_t seed, int laps,
         b.caution = optNum(it->second, "caution", 1);
         b.laneBias = optNum(it->second, "laneBias", 0);
         b.aiSeed = jsToUint32(optNum(it->second, "seed", 1));
+        // THE THIRD BUCKET. `player` on a spec means this seat carries a
+        // controller AND is still a participant, so it is filed under `humans`
+        // as well — that is the whole of the autopilot marker, and the reason
+        // it cannot be spelled as "spec every seat as a bot": that arrangement
+        // leaves the session with no players and the race is torn down.
+        // See ttp/race_flow.h, BotSpec::player.
+        b.player = json::truthy(it->second->find("player"));
         if (st && st->type == Value::OBJ) { b.hasStats = true; b.stats = statsOf(*st); }
-        rs->seats.push_back(PlayerDesc{b.id, b.hasStats, b.stats});
+        const PlayerDesc pd{b.id, b.hasStats, b.stats};
+        rs->seats.push_back(pd);
+        if (b.player) rs->humans.push_back(pd);
         rs->bots.push_back(std::move(b));
       } else {
         PlayerDesc pd;
@@ -907,63 +1031,6 @@ int ttp_session_begin_field(const char* trackId, uint32_t seed, int laps,
     }
   }
   return h;
-}
-
-// Build every bot's controller and, with them, the racing line they share. Both
-// session modes need exactly this; written out twice, a persona knob could be
-// dropped from one path with the other still covering it.
-//
-// The racing line is primed HERE rather than left to build on first use, because
-// first use is the first frame a bot drives — the GO! beat, the exact frame the
-// player first touches the throttle. Solving it costs 4.3-5.5 ms against a
-// 0.013 ms steady frame, so it read as a stutter on the start line. It is pure
-// precomputation over a centerline that cannot change, so every trace hashes
-// identically either way.
-static void buildBots(RuntimeSession& rs) {
-  for (auto& b : rs.bots)
-    b.ai = std::make_unique<AiController>(b.caution, LOOKAHEAD, STEER_GAIN, b.laneBias, b.aiSeed);
-  if (!rs.bots.empty()) rs.eng->racingLine();
-}
-
-// Construct the RaceSession + bot controllers WITHOUT firing the countdown.
-// Called from ttp_session_start, and LAZILY from any query on a begun-but-not-
-// started handle: the JS RaceSession builds its Game in the constructor, so
-// the display reads grid-pose snapshots BEFORE startCountdown — the ABI must
-// answer those (main.js launchRace paints the grid, then starts the count).
-static void buildSession(RuntimeSession* rs) {
-  if (rs->built || rs->bare) return;
-  rs->built = true;
-
-  std::vector<PlayerDesc> players = rs->gridPlayers();
-
-  RuntimeSession* self = rs;
-  auto onEvent = [self](const Event& e) {
-      self->outQueue.push_back(e.toValue());
-      audio_tap_event(self->handle, e);
-    };
-  auto onTick = [self](int n) {
-      Value c = Value::Obj();
-      c.set("type", Value::Str("_countdown"));
-      c.set("n", Value::Num((double)n));
-      self->outQueue.push_back(std::move(c));
-      audio_tap_tick(self->handle, n);
-      if (n == 0) {  // GO beat: racing flips right after this tick (RaceSession.js)
-        Value s = Value::Obj();
-        s.set("type", Value::Str("_raceStart"));
-        self->outQueue.push_back(std::move(s));
-      }
-    };
-    auto onEnd = [self](const Value& r) {
-      Value e = Value::Obj();
-      e.set("type", Value::Str("_raceEnd"));
-      e.set("results", r);  // the getResults() object the adapter hands to onRaceEnd
-      self->outQueue.push_back(std::move(e));
-    };
-  rs->session = std::make_unique<RaceSession>(players, rs->track, onEvent, onEnd, onTick,
-                                              rs->forceItem);
-  rs->eng = &rs->session->engine();
-
-  buildBots(*rs);  // the field (and its cars) exist now
 }
 
 void ttp_session_start(int h, int countdownSeconds) {
@@ -982,6 +1049,7 @@ void ttp_session_start(int h, int countdownSeconds) {
     auto onEvent = [self](const Event& e) {
       self->outQueue.push_back(e.toValue());
       audio_tap_event(self->handle, e);
+      noteHoldEvent(*self, e);
     };
     rs->game = std::make_unique<Game>(players, rs->track, onEvent, rs->forceItem);
     rs->eng = rs->game.get();
@@ -994,32 +1062,74 @@ void ttp_session_start(int h, int countdownSeconds) {
   rs->session->startCountdown(countdownSeconds);
 }
 
-void ttp_update(int h, double dtMs) {
-  RuntimeSession* rs = get(h);
-  if (!rs || !rs->started) return;
+// One step of dtMs, then the item showcase's decision for that step.
+static void stepSession(RuntimeSession* rs, double dtMs) {
+  bool racing;
   if (rs->bare) {
     if (rs->pausedBare) return;
-    if (rs->racingBare) {
+    racing = rs->racingBare;
+    if (racing) {
       rs->driveBots();
       rs->eng->update(dtMs);
     }
   } else {
     if (rs->session->paused()) return;
-    if (rs->session->racing()) rs->driveBots();  // drive-then-update, only while racing
+    racing = rs->session->racing();
+    if (racing) rs->driveBots();  // drive-then-update, only while racing
     rs->session->update(dtMs);
+  }
+  if (!racing || rs->showcase == ttp::rt::shot_hold::Showcase::None) return;
+  const auto cars = holdCars(*rs);
+  const int pick = ttp::rt::shot_hold::showcasePick(rs->showcase, rs->showcaseState, dtMs / 1000, cars);
+  if (pick < 0) return;
+  const Id id = rs->eng->cars()[pick]->id;
+  rs->eng->giveItem(id, rs->showcase == ttp::rt::shot_hold::Showcase::Monster ? "monster" : "rocket",
+                    false, 0);
+  rs->eng->useItem(id);
+}
+
+void ttp_update(int h, double dtMs) {
+  RuntimeSession* rs = get(h);
+  if (!rs || !rs->started) return;
+  if (!rs->holdArmed || !rs->eng) {
+    stepSession(rs, dtMs);
+    return;
+  }
+  // A HELD race steps in fixed increments (ttp/shot_hold.h), so the card is
+  // the same race at any frame rate. A backlog past a few steps is dropped: a
+  // slow renderer then takes longer to reach the moment, never a different one.
+  namespace sh = ttp::rt::shot_hold;
+  constexpr int MAX_STEPS = 6;
+  rs->holdAccumMs = std::min(rs->holdAccumMs + dtMs, MAX_STEPS * sh::FIXED_STEP_MS);
+  while (rs->holdAccumMs >= sh::FIXED_STEP_MS) {
+    rs->holdAccumMs -= sh::FIXED_STEP_MS;
+    const double ms = 1000 * sh::allow(rs->hold, rs->holdState, rs->eng->elapsed(),
+                                       sh::FIXED_STEP_MS / 1000, holdCars(*rs));
+    if (ms <= 0) {
+      rs->holdAccumMs = 0;
+      return;
+    }
+    stepSession(rs, ms);
   }
 }
 
-void ttp_process_input(int h, const char* idJson, int mask, double s, double b, double u) {
+int ttp_process_input(int h, const char* idJson, int mask, double s, double b, double u) {
   RuntimeSession* rs = get(h);
-  if (!rs) return;
+  if (!rs) return -1;
   if (!rs->eng) buildSession(rs);
-  if (!rs->eng) return;
+  if (!rs->eng) return -1;
+  // Looked up before the apply so an identity that matches nothing is a -1
+  // rather than a well-formed no-op. Game::processInput finds the car itself;
+  // this second scan is over at most FIELD_SIZE cars at CONTROL rate, which is
+  // two orders off anything that matters here.
+  const Id id = parse_scalar_id(idJson);
+  if (!rs->eng->hasCar(id)) return -1;
   Input in;
   if (mask & 1) { in.hasS = true; in.s = s; }
   if (mask & 2) { in.hasB = true; in.b = b; }
   if (mask & 4) { in.hasU = true; in.u = u; }
-  rs->eng->processInput(parse_scalar_id(idJson), in);
+  rs->eng->processInput(id, in);
+  return mask & 7;
 }
 
 const char* ttp_snapshot_json(int h) {
@@ -1136,6 +1246,11 @@ void ttp_force_finish(int h, const char* idJson, double time) {
   rs->eng->forceFinish(parse_scalar_id(idJson), true, time);
 }
 
+void ttp_hold_end(int h, int on) {
+  RuntimeSession* rs = get(h);
+  if (rs && rs->session) rs->session->holdEnd(on != 0);
+}
+
 void ttp_fast_forward(int h) {
   RuntimeSession* rs = get(h);
   if (!rs || !rs->eng) return;
@@ -1171,6 +1286,39 @@ int ttp_racing(int h) {
   if (!rs || !rs->started) return 0;
   if (rs->session) return rs->session->racing() ? 1 : 0;
   return rs->racingBare ? 1 : 0;
+}
+
+int ttp_shot_hold(int h, const char* holdJson) {
+  RuntimeSession* rs = get(h);
+  if (!rs || !holdJson) return 0;
+  bool ok = false;
+  const Value blob = json::parse(holdJson, &ok);
+  ttp::rt::shot_hold::Spec spec;
+  if (!ok || !ttp::rt::shot_hold::parse(blob, &spec)) return 0;
+  rs->hold = spec;
+  rs->holdState = {};
+  rs->holdArmed = true;
+  // A plain hold a STARTED race already stands at is held now, not on the next
+  // step: a still preview (the countdown grid) never steps at all. Not before the
+  // start — a TV launch arms before its countdown gate releases, and a hold held
+  // then let the harness shoot before the launch's GO beat had been performed.
+  if (spec.on == ttp::rt::shot_hold::On::None && rs->started && rs->eng
+      && rs->eng->elapsed() >= spec.simS)
+    rs->holdState.held = true;
+  return 1;
+}
+
+int ttp_item_showcase(int h, const char* kind) {
+  RuntimeSession* rs = get(h);
+  if (!rs) return 0;
+  rs->showcase = ttp::rt::shot_hold::parseShowcase(kind);
+  rs->showcaseState = {};
+  return 1;
+}
+
+int ttp_shot_held(int h) {
+  RuntimeSession* rs = get(h);
+  return rs && rs->holdArmed && rs->holdState.held ? 1 : 0;
 }
 
 int ttp_paused(int h) {
@@ -1627,8 +1775,6 @@ const char* ttp_schematic_pack(const char* pathD, double eps) {
                              eps > 0 ? eps : ttp::schematic::EPS);
   return out.c_str();
 }
-
-int ttp_schematic_view_size(void) { return ttp::schematic::VIEW; }
 
 const char* ttp_schematic_points_json(const char* pathD) {
   static std::string out;

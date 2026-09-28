@@ -1,7 +1,8 @@
 /* Display — big shared screen. "Sticker Bash" look.
    Tokens + reusable bits live in /shared/theme.css; this file is layout +
-   display-only composition. Class/ID names are contracted with display/main.js
-   and SceneRenderer.js — don't rename without updating those. */
+   display-only composition. Class/ID names are contracted with display/main.js,
+   Stage.js and the render modules beside them — don't rename without updating
+   those. */
 
 html, body {
   margin: 0; height: 100%;
@@ -10,21 +11,62 @@ html, body {
   overflow: hidden;
 }
 
-/* The corner button row's geometry, declared once: it is FIXED over every
-   screen, so chrome that must not sit under it (the lobby's right rail) has to
-   derive its own clearance from these — see .race-rail. */
+/* THE SAFE ZONE, in the units this file lays out in. A television may crop the
+   edges of what it is handed and cannot be asked how much, so every edge-anchored
+   thing on this page measures from here rather than from the viewport — see the
+   token's own note in theme.css for where the figure comes from.
+
+   `env(safe-area-inset-*)` is NOT this and never was: it reports a notch or a
+   home indicator, it is zero in every TV browser and inside the AirConsole frame,
+   and it stays in the sum only because a phone-shaped display window is still a
+   thing this page can end up in. Overscan is the term it cannot see.
+
+   Per-cell HUD chrome does NOT come through here: those rects arrive already
+   inset from ttp_display_cell_rects, because only C++ knows which cell edges are
+   screen edges (a stacked pair's divider is not one). */
 html {
-  --corner-top: calc(1.1rem + env(safe-area-inset-top));
-  --corner-edge: 1.1rem;
+  --safe-x: calc(var(--safe-frac-x) * 100vw + env(safe-area-inset-left));
+  --safe-y: calc(var(--safe-frac-y) * 100vh + env(safe-area-inset-top));
+  /* The same margin measured from the BOTTOM, which is a separate value only
+     because of the env() term: a notch is on one edge and a home indicator on
+     the other, so a bottom-anchored thing that reached for `--safe-y` would
+     clear the wrong one. Both env() terms are zero on every television; this is
+     for the phone-shaped window the page can still end up in. */
+  --safe-y-b: calc(var(--safe-frac-y) * 100vh + env(safe-area-inset-bottom));
+}
+
+/* The corner button's SIZE, declared once: the row is FIXED over every screen,
+   so chrome that must not sit under it (the lobby's right rail) has to derive
+   its own clearance from this — see .race-rail.
+
+   There is no offset token beside it because THE ROW SITS ON THE SAFE EDGE and
+   `#corner-btns` reads `--safe-x/y` directly. Every edge-anchored thing on this
+   page lines up on that one rectangle, so the buttons, the lobby's rails and the
+   sound hint share a margin instead of each carrying its own guess at one. It
+   also fixes the order they used to sit in: the row carried a 1.1rem inset of
+   its own while the lobby carried a bigger authored gutter, which put the
+   buttons OUTSIDE the content they float over. */
+html {
   --corner-btn: 3.4rem;
 }
 
 /* ---- Lobby ---- */
 /* Sticker chrome FRAMING the board (paper stage OR live 3D preview behind —
    the layout is identical in both states): two rails that run the full height
-   of the content band, and a footer band (seat dock) that closes it. One top
-   line, one bottom line, two gutters, and the middle left open for the track.
-   The hand-slapped tilts stay playful because the grid beneath is straight.
+   of the board, and the seat dock hanging from the bottom of the middle.
+   Everything hangs off ONE bottom line. The hand-slapped tilts stay playful
+   because the grid beneath is straight.
+
+   THE DOCK IS BESIDE THE RAILS, NOT BELOW THEM, and that is what keeps the
+   cars on screen. It used to be a footer row under a `1fr auto` grid, which
+   made the board's height the sum of the tallest rail AND the dock — and the
+   race rail does not shrink: ~280px of it (the corner-button clearance and the
+   cup shelf's five text rows) is authored in rem, so it costs the same on a
+   720p board as on a 1080p one. The sum therefore only fitted at 1080, and on
+   every shorter board — 16:9 ones included — the dock, last in the column, was
+   what went over the edge. The middle column is the free space the rails leave,
+   the dock is narrower than it at every size the wide layout is used at, and
+   in its own column it cannot push anything anywhere.
 
    Both rails are capped by VIEWPORT HEIGHT as well as width (the `min()` in
    the columns): a rail's cards are sized by their column, so on a squat board
@@ -36,21 +78,32 @@ html {
   display: grid;
   grid-template-columns:
     min(clamp(240px, 26vw, 440px), 38vh)
-    1fr
+    minmax(0, 1fr)
     min(clamp(220px, 24vw, 460px), 32vh);
-  grid-template-rows: 1fr auto;
-  /* the middle cell is deliberately EMPTY — what shows there is #scene, behind
-     the whole grid, not an item in it */
-  grid-template-areas:
-    "ticket .    race"
-    "dock   dock dock";
+  /* ONE ROW, full height. The middle column carries only the dock, hung from
+     its bottom edge; the rest of it is left open for #scene, which is behind
+     the whole grid rather than an item in it.
+
+     `minmax(0, 1fr)` and not `1fr`: a bare 1fr floors at the dock's min-content,
+     so a wide roster would push the middle column past the space the rails left
+     and take the whole board with it. The dock overflows its own column instead,
+     centred, into the gutters it shares with nothing. */
+  grid-template-areas: "ticket dock race";
+  /* The row is CLAMPED to the board, not floored at its tallest item: on a
+     board squat enough that even a full-height race rail does not fit, an auto
+     floor would grow the row and carry the dock off the bottom with it — the
+     exact failure this layout exists to remove. Clamped, the dock keeps the
+     bottom line and the cup shelf is what runs past it instead, which is the
+     right thing to lose: it is the long game, and the cars are the room. */
+  grid-template-rows: minmax(0, 1fr);
   column-gap: clamp(16px, 2vw, 36px);
-  row-gap: clamp(10px, 1.6vh, 20px);
-  /* generous side gutters: the rails frame the centre without hugging the
-     bezel (the middle stays open for the live track preview) */
-  padding:
-    clamp(14px, 2.4vh, 26px) clamp(28px, 3.6vw, 72px)
-    clamp(16px, 2.6vh, 30px);
+  /* THE SAFE ZONE IS THE GUTTER. The rails used to add an authored gutter on
+     top of it, which framed the centre well on a set that crops nothing and
+     read as two different margins beside the corner buttons. One rectangle
+     now: the rails, the button row and the hint all measure from it. The
+     middle stays open for the live track preview either way — what sets that
+     is the column widths above, not this padding. */
+  padding: var(--safe-y) var(--safe-x) var(--safe-y-b);
 }
 
 /* Left rail — the join ticket, which carries its own scan hint. The rail
@@ -141,17 +194,24 @@ html {
   display: flex; flex-direction: column;
   gap: clamp(10px, 1.4vh, 18px);
   /* clear #corner-btns, which is FIXED over every screen — without this the
-     pick card would sit under the mute/fullscreen row. */
-  padding-top: calc(var(--corner-top) + var(--corner-btn) + 0.5rem);
+     pick card would sit under the mute/fullscreen row. The row and this rail
+     both start at the safe edge, so the clearance is the button plus air. */
+  padding-top: calc(var(--corner-btn) + 0.5rem);
 }
 
 /* Cup slot — empty pre-pick, the race card post-pick (renderCupSlot fills it).
-   The auto margin below it is what pins the SHELF to the rail's bottom: the
-   slot is empty (zero-height) until the host picks, and a `space-between`
-   rail would park the lone shelf at the TOP and then drop it when the pick
-   arrived. This way the shelf never moves. */
+   AUTO MARGINS BOTH SIDES: the pick floats in the middle of the rail's free
+   space and the shelf keeps the bottom line. Top-aligned, the card clung under
+   the corner buttons with the whole surplus dropped in one hole between it and
+   the shelf; split in two, the same surplus reads as air.
+
+   The margin below is also what pins the SHELF to the rail's bottom, and that
+   is the half that must not become `justify-content`: the slot is empty
+   (zero-height) until the host picks, and a `space-between` rail would park the
+   lone shelf at the TOP and then drop it when the pick arrived. This way the
+   shelf never moves. */
 .cup-slot {
-  margin-bottom: auto;
+  margin: auto 0;
   display: flex; justify-content: center;
 }
 /* the pick sits on its own white sticker card (mirroring the join ticket's
@@ -261,7 +321,8 @@ html {
    short-name rows (renderCupShelf strips the " Cup" suffix) rather than a
    stack of separate pills: five pills with five outlines, five drops and a gap
    between each read as five things scattered down the corner, and the shelf is
-   one thing. The locked cup trails its unlock count. */
+   one thing. The locked cup trails its unlock count in stars, and the label
+   tab carries the couch's total. */
 /* Ships .hidden (index.html) because the shelf is a CARD now, and an unfilled
    one paints a blank white slab for the whole first paint. renderCupShelf owns
    the class from there. */
@@ -293,7 +354,8 @@ html {
 /* locked: the row recedes in place. It can't take the sunken fill any more —
    inside one card that would read as a hole punched in the paper. */
 .cup-shelf__row--locked { color: var(--ink-2); }
-.cup-shelf__row--locked b { margin-left: auto; font-size: 0.85em; }
+.cup-shelf__row--locked .starcount { margin-left: auto; font-size: 0.85em; }
+.cup-shelf__row--locked .starrow { margin-left: 0; font-size: 1em; }
 /* the cup slot's star badge, between the sticker and the minis */
 .cup-stars { font-size: clamp(14px, 1.5vw, 20px); }
 
@@ -302,6 +364,8 @@ html {
    the dock never wraps. */
 .lobby-foot {
   grid-area: dock;
+  align-self: end;            /* the bottom line the rails also hang off */
+  min-width: 0;
   display: flex; flex-direction: column; align-items: center; gap: 0.8rem;
 }
 #players { display: flex; justify-content: center; gap: clamp(0.6rem, 1.1vw, 1.1rem); }
@@ -398,6 +462,30 @@ html {
   pointer-events: none; user-select: none;
 }
 .version-badge:empty { display: none; }
+
+/* ---- Boot cover ---- */
+/* The splash. Above every board AND the corner chrome (the mute/fullscreen
+   buttons are 12, the toast 13) — a board with a mute button floating over it
+   reads as a half-drawn screen rather than a cover. Below the pause overlay (20)
+   and the modals, because it covers the game rather than interrupting it.
+   DELIBERATELY STATIC: no spinner, no pulse, nothing that animates. A
+   full-screen animated overlay over a live 3D surface is the exact shape that
+   cost an Apple TV 60 -> 7 fps through the GO beat, and this one is up while
+   the renderer is at its busiest. Paper rather than transparent so it does not
+   depend on whatever is behind it having drawn. */
+#cover {
+  position: fixed; inset: 0; z-index: 15;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--paper);
+  /* INERT, like the tvOS board's allowsHitTesting(false). It is a picture, not a
+     modal: a full-screen element that eats clicks while it is up would make the
+     boot window swallow input on whatever it happens to be covering. */
+  pointer-events: none;
+}
+.cover__wordmark {
+  font-size: clamp(56px, 9vw, 130px);
+  text-align: center;
+}
 
 /* ---- Welcome ---- */
 /* Title board at boot: the wordmark at poster scale + NEW GAME, centred over
@@ -508,26 +596,36 @@ html.cam-free #race { pointer-events: none; }
   pointer-events: none;
 }
 /* "GO!" stays up the beat after the start (cars are already moving) and fades
-   out over that ~1s window. Added/removed by onCountdownTick on the n=0 beat. */
+   out over that ~1s window. Added/removed by onCountdownTick on the n=0 beat.
+   A PLAIN FADE, no grow: the scale was the expensive half everywhere the stroke
+   is faked by stamping copies of the glyph (SwiftUI and Compose both do — see
+   CountdownView.swift), and it earned nothing the fade does not. */
 #countdown.is-go { animation: countdown-go 1s ease-out forwards; }
 @keyframes countdown-go {
-  from { opacity: 1; transform: scale(1); }
-  to   { opacity: 0; transform: scale(1.35); }
+  from { opacity: 1; }
+  to   { opacity: 0; }
 }
 
 /* per-viewport (split-screen) label, anchored at each cell's top-left: the
-   player's name as a white sticker tag, the item slot beneath it. */
+   player's name as a LIVERY sticker tag, the item slot beneath it. */
 .cell-label {
   position: absolute; display: none; margin: 0.7rem; pointer-events: none;
 }
 /* name on top, the item slot stacked + left-aligned below it (place + lap
    moved out to the top-right .cell-rank readout) */
 .cell-label__row { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+/* FILLED with the player's livery, white text — the same tag the phone wears
+   (controller.css .lobby-me__name), so your name reads as one object across both
+   screens. Filled rather than livery text on white: across a 4-way split the
+   thing you hunt for is your cell, and a solid block of your car's colour is
+   found in peripheral vision where coloured GLYPHS are not. It also degrades
+   better on the palest liveries, where the name washes out either way round but
+   the tag still says whose cell this is. */
 .cell-label__name {
   font-family: var(--font-display); font-weight: 700; font-size: clamp(1.5rem, 2vw, 2.2rem);
   line-height: 1;
-  color: var(--c, var(--ink));
-  background: var(--surface);
+  color: #fff;
+  background: var(--c, var(--brand));
   border: 3px solid var(--ink); border-radius: var(--r-sm);
   padding: 0.3em 0.55em;
   transform: rotate(-2deg);
@@ -654,6 +752,17 @@ html.cam-free #race { pointer-events: none; }
   align-items: center; justify-content: center;
   background: rgba(255, 246, 235, 0.92); backdrop-filter: blur(10px);
 }
+/* THE BOARD FADES UP, because it no longer arrives at the flag. The race's end
+   arms it and the frozen finish frame holds the screen for the flourish
+   (race_flow.h FINISH_FLOURISH_MS) while everyone reads the place cards — so
+   the paper glass has something to fade OVER, and cutting to it throws away the
+   beat the hold exists to buy. The pieces keep their own slap-ins below and
+   land on the glass as it arrives; the fade restarts on its own every time
+   because showing the board is a display:none → shown flip. */
+@media (prefers-reduced-motion: no-preference) {
+  #results { animation: results-fade 320ms ease-out both; }
+  @keyframes results-fade { from { opacity: 0; } to { opacity: 1; } }
+}
 #results h2 {
   font-family: var(--font-display); font-weight: 700;
   font-size: clamp(2.4rem, 6vw, 4.6rem); margin: 0 0 1rem; color: var(--ink);
@@ -742,12 +851,16 @@ html.cam-free #race { pointer-events: none; }
   font-size: clamp(1.1rem, 2vw, 1.6rem); color: var(--ink-2);
   margin: -0.4rem 0 1.3rem;
 }
-/* cup boards trade the race time for points: this race's gain + the cup total */
-/* margin-left is the TRAIL's now (all three cells sit in it), not this cell's:
+/* Cup boards trade the race time for points: this race's gain + the cup total.
+   margin-left is the TRAIL's now (all three cells sit in it), not this cell's:
    an `auto` here would push the gain away from the time by whatever slack the
-   row has, which differs per row and per phase. */
+   row has, which differs per row and per phase. The width holds the WIDEST gain
+   the ladder pays (POINTS_BY_RANK[0]), not the "+0" the count-up empties it to
+   while filling the total — a min-width fitting only the settled state lets the
+   cell, and so the whole board, shrink under the re-sort. Both TV shells lay
+   this cell out at the same multiple; tests/points-ladder.test.js pins them. */
 .res-gain { color: var(--brand); font-weight: 800; font-variant-numeric: tabular-nums;
-            min-width: 1.8em; text-align: right; }
+            min-width: 2.7em; text-align: right; }
 .res-gain.is-zero { color: var(--ink-3); }
 /* Spent once the last point has landed. The gain would otherwise rest on "+0",
    which reads as "scored nothing" on a board that stays up for the rest of the
@@ -795,17 +908,26 @@ html.cam-free #race { pointer-events: none; }
 }
 
 /* ---- Corner buttons ---- */
-/* The top-right row over the scene: mute + fullscreen (everywhere but the
-   welcome board, see below) + pause (races only, .hidden off-race). .icon-btn
-   (theme.css) gives them the toy-button look; we only place them here. The row
-   shares the top-right corner with each cell's
-   place/lap readout, so it auto-fades once the race chrome goes idle (see
-   html.chrome-idle below). The fade is the ROW's transition, which leaves each
-   button's own .icon-btn hover/press transitions untouched. */
+/* The top-right row over the scene, on EVERY screen: mute + fullscreen
+   (everywhere but the welcome board, see below) + pause (races only, .hidden
+   off-race). .icon-btn (theme.css) gives them the toy-button look; we only place
+   them here. The row keeps this corner during a race too (user call): it is
+   where a viewer reaches for these controls, and moving it on the lobby -> race
+   change only means they are not there when someone reaches.
+
+   IT SHARES THE CORNER WITH A CELL'S PLACE/LAP BADGE, and simply draws over it:
+   the row is layered above #race's whole stacking context, and the cell overlay
+   lives inside that one, unlayered on #scene — so nothing the race paints can
+   reach over the row whatever z-index it is later given. Nothing is nudged out
+   of the way either: the badge is placed from its own cell and stays there.
+   What resolves the overlap is the auto-hide: a few seconds without a mouse or a
+   key and the row fades off the badge entirely (html.chrome-idle below). The
+   fade is the ROW's transition, which leaves each button's own .icon-btn
+   hover/press transitions untouched. */
 #corner-btns {
   position: fixed; z-index: 12;
-  top: var(--corner-top);
-  right: calc(var(--corner-edge) + env(safe-area-inset-right));
+  top: var(--safe-y);
+  right: var(--safe-x);
   display: flex; gap: 0.6rem;
   transition: opacity 0.4s ease;
 }
@@ -827,8 +949,8 @@ html.cam-free #race { pointer-events: none; }
    surface, and an arrow parked over the track is nothing but litter. Any input
    brings both straight back.
    `html.chrome-idle *` (0,1,1) is deliberately more specific than the .btn /
-   .icon-btn / .music-credit `cursor: pointer` rules (0,1,0), so hovering one of
-   those can't resurrect the arrow regardless of stylesheet order. */
+   .icon-btn `cursor: pointer` rules (0,1,0), so hovering one of those can't
+   resurrect the arrow regardless of stylesheet order. */
 html.chrome-idle, html.chrome-idle * { cursor: none; }
 html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
 
@@ -850,6 +972,27 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
 }
 .pause-card__btns { display: flex; gap: 1rem; flex-wrap: wrap; justify-content: center; }
 .pause-card__btns .btn { min-width: 9rem; }
+
+/* ---- Connection overlay ---- the display's own link (#link-overlay). The
+   pause glass at one z-step up: above the boot cover (15) and the pause
+   overlay (20), under the device chooser (30). */
+#link-overlay {
+  position: fixed; inset: 0; z-index: 25;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255, 246, 235, 0.72); backdrop-filter: blur(10px);
+}
+.link-card {
+  display: flex; flex-direction: column; align-items: center;
+  gap: clamp(1rem, 2vw, 1.6rem); text-align: center;
+  padding: clamp(1.8rem, 4vw, 3rem) clamp(2.2rem, 5vw, 4rem);
+}
+.link-card h2 {
+  font-family: var(--font-display); font-weight: 700;
+  font-size: clamp(2rem, 5vw, 3.4rem); margin: 0; color: var(--ink);
+}
+.link-status { font-size: clamp(1.1rem, 2.2vw, 1.5rem); color: var(--ink); opacity: 0.7; }
+.link-status:empty { display: none; }
+.link-card .btn { min-width: 11rem; }
 
 /* ---- Device chooser ---- the display URL opened on a phone-sized screen
    (see #device-choice in index.html). Hidden by default; the media query below
@@ -922,7 +1065,12 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
 /* ---- Narrow / portrait (e.g. someone opens the display on a phone) ----
    The rail layout is designed for a wide screen; on a narrow viewport stack
    the chrome in one scrolling column instead. (The device chooser covers most
-   of these visits anyway.) */
+   of these visits anyway.)
+
+   The lobby's padding below DROPS the safe zone, deliberately: a viewport this
+   shape is a phone or a small window and never a television, and 5vw of overscan
+   margin on a 380px-wide column is a quarter of the column. The per-cell HUD
+   keeps its inset regardless — that one is C++'s and this file cannot reach it. */
 @media (max-width: 860px) {
   html, body { overflow-y: auto; }
   #lobby {
@@ -939,12 +1087,21 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
   /* the stage clouds are placed for the wide layout — behind the stacked
      column they poke out from odd corners, so they sit this one out */
   .scene__cloud { display: none; }
+  /* The corner row measures from the safe zone, which this viewport has just
+     dropped: 2.5vw of a 380px window is 9px, and 9px is not a margin. Back to a
+     flat inset, matching the column's own side padding above. */
+  #corner-btns { top: 1rem; right: 1rem; }
 }
 
 /* ---- Toast ---- transient confirmation (e.g. "Copied"), bottom-centre.
    Hidden until .is-on is added; fades + slides in, then back out. */
 .toast {
-  position: fixed; left: 50%; bottom: 2.5rem; transform: translate(-50%, 1rem);
+  /* Clear of the safe edge rather than on it: the toast floats OVER the seat
+     dock, which now ends at that edge, so a flush pill would land on the last
+     row of seats. The flat 2.5rem it used to sit at was inside the crop margin
+     on a 4K board. */
+  position: fixed; left: 50%; bottom: calc(var(--safe-y-b) + 1rem);
+  transform: translate(-50%, 1rem);
   z-index: 10;
   font-family: var(--font-display); font-weight: 600; font-size: 1rem; color: #fff;
   background: var(--brand);
@@ -959,7 +1116,10 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
 /* ---- Sound hint ---- persistent pill while the browser still has audio
    locked (no user gesture yet); see #sound-hint in index.html. */
 .sound-hint {
-  position: fixed; left: 1rem; bottom: 1rem; z-index: 10;
+  /* On the safe edge with the rest of the edge-anchored chrome: this pill is up
+     on the welcome board and in the lobby, where a television that crops would
+     eat the flat 1rem it used to sit at. */
+  position: fixed; left: var(--safe-x); bottom: var(--safe-y-b); z-index: 10;
   font: inherit; font-weight: 800; font-size: 0.95rem; color: #fff;
   background: rgba(42, 39, 53, 0.7);
   border: 0; padding: 0.6rem 1.2rem; border-radius: var(--r-pill);
@@ -967,42 +1127,31 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
   cursor: pointer;
 }
 
-/* ---- Now-playing music credit ---- bottom-left link: the current track +
-   artist, linking to its source (also the on-screen CC-BY attribution). A dark
-   translucent pill so it reads over the bright 3D scene without grabbing focus.
-   Shares the sound-hint's corner, but they never show together (the hint is up
-   only while audio is locked; this only during a race). */
-.music-credit {
-  position: fixed; left: 1rem; bottom: 1rem; z-index: 9;
-  max-width: min(46vw, 24rem);
-  display: inline-block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  font: inherit; font-weight: 700; font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.92); text-decoration: none;
-  background: rgba(42, 39, 53, 0.55);
-  padding: 0.4rem 0.9rem; border-radius: var(--r-pill);
-  box-shadow: var(--shadow-float);
-  opacity: 0.78; transition: opacity 0.2s ease, background 0.2s ease;
-}
-.music-credit::before { content: "\266A\00a0\00a0"; opacity: 0.9; } /* ♪ */
-.music-credit:hover { opacity: 1; background: rgba(42, 39, 53, 0.72); }
-
 /* ---- Reconnect card ---- a QR for a dropped player, centred in their own
    split-screen cell exactly like the FINISHED card. It REUSES .cell-finish for
    placement + chrome (absolute, translate(-50%,-50%), frosted card, livery
-   top-border); _loop sets left/top and toggles display. .cell-reconnect only adds
-   the spacing the QR content wants. */
-.cell-reconnect { gap: 0.5rem; }
-.rc-card__head {
-  display: flex; align-items: center; max-width: 11rem;
-  font-weight: 800; font-size: clamp(0.9rem, 1.1vw, 1.1rem); color: var(--ink);
+   top-border); _loop sets left/top and toggles display, and hands the card its
+   cell's size as --cell-w/--cell-h.
+
+   The QR is BIG: a phone has to read it from the couch, and a fixed ~9vw square
+   was a postage stamp on a television. Half the screen's height for one
+   player; a split cell gives it most of its height instead, because half of a
+   half-screen cell was too small to scan and the cell has nothing better to
+   show while its driver is gone. Sized off the CELL, not the viewport, so the
+   card stays inside its own half or quarter. The width cap only bites on a
+   portrait cell (one player on a phone held upright). The type scales with the
+   QR so the card reads as one sticker at every size. */
+.cell-reconnect {
+  --qr: min(50vh, calc(var(--cell-h, 100vh) * 0.6), calc(var(--cell-w, 100vw) * 0.6));
+  gap: calc(var(--qr) * 0.04);
 }
-.rc-card__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rc-card__sub {
-  font-weight: 700; font-size: 0.72rem; letter-spacing: 0.02em;
-  text-transform: uppercase; color: var(--ink-3);
+.rc-card__title {
+  font-family: var(--font-display); font-weight: 700;
+  font-size: clamp(0.9rem, calc(var(--qr) * 0.08), 2.6rem); letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--ink);
 }
 .rc-card__qr {
-  display: block; width: clamp(96px, 9vw, 132px); aspect-ratio: 1 / 1;
+  display: block; width: var(--qr); aspect-ratio: 1 / 1;
   border-radius: var(--r-sm); image-rendering: pixelated;
 }
 

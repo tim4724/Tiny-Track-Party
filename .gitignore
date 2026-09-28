@@ -28,6 +28,11 @@ public/assets/audio/_music-pool/
 .claude/worktrees/
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+# Sibling git worktrees checked out INSIDE the repo, which this tree is worked
+# in many of. Each is another branch of this same repository, so it is local by
+# definition — there is nothing here a remote could want. Anchored, so a
+# `worktrees/` that means something else deeper in the tree is unaffected.
+/worktrees/
 native/build/
 # Trailer renders — frames, per-shot clips and the cut master (a 4K/60 master runs to
 # hundreds of MB). Wholly derived from scripts/trailer/shots.js, and the shot seeds are
@@ -39,6 +44,12 @@ artwork/trailer/
 # its gallery beside itself; captures land wherever they are pointed).
 scripts/.preview-tracks.html
 *.jpeg
+# One-off probes. A throwaway that drives Playwright has to live INSIDE the repo
+# — ESM resolves from the file's own directory, so a script in the system temp
+# dir cannot import @playwright/test — and the ones written at the root have
+# repeatedly outlived their session and then failed `npm run lint`. This is
+# where they go instead; eslint.config.js ignores it for the same reason.
+scratch/
 
 # AirConsole zip staging + packages (scripts/build-airconsole.sh). Anchored:
 # unanchored, it would also swallow any future nested build/ dir.

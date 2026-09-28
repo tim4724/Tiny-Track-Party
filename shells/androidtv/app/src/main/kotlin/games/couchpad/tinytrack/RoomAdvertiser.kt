@@ -1,0 +1,162 @@
+package games.couchpad.tinytrack
+
+import android.content.Context
+import android.net.nsd.NsdManager
+import android.net.nsd.NsdServiceInfo
+import android.os.Build
+import android.provider.Settings
+import android.util.Log
+import java.net.ServerSocket
+
+/**
+ * CouchPad room advertisement (launcher CONTRACT §8, `docs/native-port/shells.md`
+ * item 10): publishes the open room over DNS-SD so a launcher on a phone in the
+ * same house offers a one-tap join with no QR scan and no typed code. The tvOS
+ * twin is `Net/RoomAdvertiser.swift`.
+ *
+ * THE ROOM CODE IS THE ENTIRE PAYLOAD. The launcher resolves it against the
+ * relay — the same `GET {relayBase}/room/{code}` probe a typed code takes — and
+ * that answer, never the LAN, supplies the join URL, the display's platform tag
+ * and whether the room is still open. So an advertisement can NAME a room but
+ * cannot propose an origin: there is no host to re-validate and no way to point
+ * a launcher at an arbitrary page. That is why the record carries no URL, and
+ * why this display still declares itself in exactly one place — the
+ * controller-URL template `create-room` registers, with [PartyNet.CP_PLATFORM].
+ *
+ * No version key either: `_couchpad._tcp` plus a code some relay knows IS the
+ * gate, and a record without a usable `c` is ignored. A later revision adds keys
+ * that old launchers skip; a shape they must not read at all takes a new service
+ * type.
+ *
+ * The launcher never dials the SRV port. `NsdManager` needs a port to register,
+ * so a throwaway [ServerSocket] supplies one that nothing serves.
+ *
+ * The instance name is the TV's own name ("Spielzimmer"), which the launcher
+ * shows verbatim so a player with two boxes can tell the rooms apart. It never
+ * leaves the LAN: the relay is told the platform and nothing else.
+ *
+ * ALL OF IT IS AN ACCELERATOR, NEVER THE ONLY ROUTE IN. mDNS is blocked on
+ * AP-isolated and guest networks, so every failure here is logged and swallowed,
+ * and the on-screen QR and room code remain the universal way in.
+ *
+ * NO PERMISSION IS DECLARED, and that is a `targetSdk` fact rather than a
+ * permanent one: Local Network Protections gate this behind ACCESS_LOCAL_NETWORK
+ * only for apps targeting API 37, and this one targets 36 on purpose
+ * (build.gradle.kts). **Re-check when targetSdk moves** — the manifest names
+ * what the move needs. A failed registration is FORGOTTEN below rather than held
+ * as the live record, so the next roster sync tries again; that is what lets a
+ * late grant (or a network that came up late) take effect without a restart.
+ * The fastlane's ICE host candidates sit behind the same gate.
+ *
+ * MAIN THREAD ONLY, like everything else in this shell. Both entry points are
+ * reached through `GameCoordinator.syncAdvertisement`, whose callers are the
+ * Activity's lifecycle hooks and `PartyNet` — and `RelaySocket` posts every
+ * OkHttp callback onto Main before `PartyNet` sees it. The `NsdManager`
+ * callbacks below arrive on a binder thread and deliberately touch nothing but
+ * the log.
+ *
+ * (HexStacker's twin synchronizes both entry points, because ITS netcode really
+ * does run on a second thread. Transcribing that guard to here would document
+ * an architecture this shell does not have — the same trap the `optString` note
+ * in `shells/androidtv/CLAUDE.md` describes, one layer up.)
+ */
+class RoomAdvertiser(context: Context) {
+
+    private val appContext = context.applicationContext
+    private val nsd = appContext.getSystemService(Context.NSD_SERVICE) as? NsdManager
+    private var listener: NsdManager.RegistrationListener? = null
+    private var socket: ServerSocket? = null
+    private var advertisedRoom: String? = null
+
+    /**
+     * Publish [room], replacing any live record. IDEMPOTENT: the sync that drives
+     * this rides every roster movement, and re-registering the same code on each
+     * one would churn the network for nothing.
+     */
+    fun advertise(room: String) {
+        if (room == advertisedRoom && listener != null) return
+        withdraw()
+        val nsd = nsd ?: return
+        if (room.isEmpty()) return
+        val registration = object : NsdManager.RegistrationListener {
+            override fun onServiceRegistered(info: NsdServiceInfo) {
+                // NsdManager renames on a name clash, so this is the label
+                // actually on the wire.
+                Log.i(TAG, "advertising as ${info.serviceName}")
+            }
+
+            override fun onRegistrationFailed(info: NsdServiceInfo, errorCode: Int) {
+                Log.w(TAG, "advertise failed: $errorCode")
+                // Not a live record: let the next sync register afresh.
+                if (listener === this) {
+                    listener = null; advertisedRoom = null
+                    runCatching { socket?.close() }; socket = null
+                }
+            }
+
+            override fun onServiceUnregistered(info: NsdServiceInfo) {}
+            override fun onUnregistrationFailed(info: NsdServiceInfo, errorCode: Int) {}
+        }
+        runCatching {
+            val sock = ServerSocket(0)
+            val info = NsdServiceInfo().apply {
+                serviceName = deviceLabel()
+                serviceType = SERVICE_TYPE
+                port = sock.localPort
+                setAttribute(CODE_KEY, room)
+            }
+            nsd.registerService(info, NsdManager.PROTOCOL_DNS_SD, registration)
+            socket = sock
+            listener = registration
+            advertisedRoom = room
+        }.onFailure {
+            Log.w(TAG, "advertise refused to start: ${it.message}")
+            withdraw()
+        }
+    }
+
+    /**
+     * Withdraw the record (an mDNS goodbye — records at TTL 0). A record that
+     * outlives its room is harmless on its face — the code resolves to nothing
+     * and no card appears — but it costs a player a wasted tap, so there is no
+     * reason to leave one up.
+     */
+    fun withdraw() {
+        listener?.let { runCatching { nsd?.unregisterService(it) } }
+        listener = null
+        runCatching { socket?.close() }
+        socket = null
+        advertisedRoom = null
+    }
+
+    /**
+     * The TV's own name, as the owner set it; the model is the fallback on a box
+     * that has none — which includes every box below API 25, where the setting
+     * does not exist. `DEVICE_NAME` is a compile-time String constant, so it
+     * inlines and the minSdk-24 call is just a lookup that answers null.
+     */
+    private fun deviceLabel(): String {
+        val name = runCatching {
+            Settings.Global.getString(appContext.contentResolver, Settings.Global.DEVICE_NAME)
+        }.getOrNull()
+        return name?.trim()?.takeIf { it.isNotEmpty() } ?: Build.MODEL
+    }
+
+    private companion object {
+        const val TAG = "RoomAdvertiser"
+
+        /**
+         * The contract's service type. NsdManager's convention includes the
+         * trailing dot and Bonjour's omits it; same record on the wire.
+         *
+         * Not in `protocol.js`: that manifest is for numbers TWO layers of THIS
+         * game must agree on, and this one is owned by the launcher contract and
+         * read by no other layer here — the web display cannot advertise at all,
+         * which is why §6's typed code stays universal.
+         */
+        const val SERVICE_TYPE = "_couchpad._tcp."
+
+        /** TXT key for the room code (§8). The whole record. */
+        const val CODE_KEY = "c"
+    }
+}

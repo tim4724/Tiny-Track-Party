@@ -19,6 +19,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <functional>
 #include <memory>
 #include <string>
 #include <utility>
@@ -39,8 +40,6 @@
 
 using namespace ttp;
 using namespace ttp::corpus;
-
-static const char* MATHLIB = "fdlibm-openlibm-0.8.7";
 
 // ---------------------------------------------------------------------------
 // Trace-value builders (Id / Input / Stats from a corpus Value).
@@ -69,6 +68,38 @@ static Stats statsFrom(const Value& v) {
   if (const Value* x = v.find("halfLen")) st.halfLen = x->num;
   if (const Value* x = v.find("halfWid")) st.halfWid = x->num;
   return st;
+}
+
+// This frame's schedule ops, shared by record and verify mode so the two modes
+// cannot drift into reading the same fixture differently. Only the rekey
+// BOOKKEEPING differs (which id copies must follow the car), so each mode
+// passes its own onRekey. False (FAIL already printed) on an unknown op.
+static bool applyScheduleOps(Game* eng, const Value* schedule, int frame,
+                             const std::function<void(const Id&, const Id&)>& onRekey,
+                             const std::string& file) {
+  if (!schedule) return true;
+  for (const Value& op : schedule->arr) {
+    if ((int)op.find("frame")->num != frame) continue;
+    std::string o = op.find("op")->str;
+    Id id = idFrom(*op.find("id"));
+    if (o == "removeCar") eng->removeCar(id);
+    else if (o == "rekeyCar") {
+      Id newId = idFrom(*op.find("newId"));
+      eng->rekeyCar(id, newId);
+      onRekey(id, newId);
+    } else if (o == "setCarStats") eng->setCarStats(id, statsFrom(*op.find("stats")));
+    else if (o == "giveItem") {
+      std::string item = op.find("item")->str;
+      bool hasT = false; double t = 0;
+      if (const Value* opts = op.find("opts")) if (const Value* x = opts->find("tCatch")) { hasT = true; t = x->num; }
+      eng->giveItem(id, item, hasT, t);
+    } else if (o == "useItem") eng->useItem(id);
+    else if (o == "forceFinish") {
+      bool hasT = op.has("time"); double t = hasT ? op.find("time")->num : 0;
+      eng->forceFinish(id, hasT, t);
+    } else { std::fprintf(stderr, "FAIL %s: unknown schedule op '%s'\n", file.c_str(), o.c_str()); return false; }
+  }
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -286,33 +317,14 @@ static int runTrace(const std::string& file, bool recordMode, const std::string&
     std::vector<std::string> outLines;
     int written = 0;
     for (int frame = 0; frame < frames; frame++) {
-      // schedule ops run before inputs, with the same rekey bookkeeping the
-      // verifier does (controllers follow the car to its new id).
-      if (schedule) {
-        for (const Value& op : schedule->arr) {
-          if ((int)op.find("frame")->num != frame) continue;
-          std::string o = op.find("op")->str;
-          Id id = idFrom(*op.find("id"));
-          if (o == "removeCar") eng->removeCar(id);
-          else if (o == "rekeyCar") {
-            Id newId = idFrom(*op.find("newId"));
-            eng->rekeyCar(id, newId);
-            std::string ok = id.key();
-            for (auto& c : recBots) if (c.id.key() == ok) c.id = newId;
-            for (auto& h : humans) if (h.id.key() == ok) h.id = newId;
-          } else if (o == "setCarStats") eng->setCarStats(id, statsFrom(*op.find("stats")));
-          else if (o == "giveItem") {
-            std::string item = op.find("item")->str;
-            bool hasT = false; double t = 0;
-            if (const Value* opts = op.find("opts")) if (const Value* x = opts->find("tCatch")) { hasT = true; t = x->num; }
-            eng->giveItem(id, item, hasT, t);
-          } else if (o == "useItem") eng->useItem(id);
-          else if (o == "forceFinish") {
-            bool hasT = op.has("time"); double t = hasT ? op.find("time")->num : 0;
-            eng->forceFinish(id, hasT, t);
-          } else { std::fprintf(stderr, "FAIL %s: unknown schedule op '%s'\n", file.c_str(), o.c_str()); return 1; }
-        }
-      }
+      // schedule ops run before inputs; the drivers follow a rekeyed car to its
+      // new id.
+      if (!applyScheduleOps(eng, schedule, frame,
+                            [&](const Id& id, const Id& newId) {
+                              std::string ok = id.key();
+                              for (auto& c : recBots) if (c.id.key() == ok) c.id = newId;
+                              for (auto& h : humans) if (h.id.key() == ok) h.id = newId;
+                            }, file)) return 1;
 
       Value inputsV = Value::Obj();
       for (const HumanDrv& h : humans) {
@@ -411,38 +423,20 @@ static int runTrace(const std::string& file, bool recordMode, const std::string&
     int frame = (int)rec.find("frame")->num;
 
     // schedule ops (before inputs), with id-remap bookkeeping
-    if (schedule) {
-      for (const Value& op : schedule->arr) {
-        if ((int)op.find("frame")->num != frame) continue;
-        std::string o = op.find("op")->str;
-        Id id = idFrom(*op.find("id"));
-        if (o == "removeCar") eng->removeCar(id);
-        else if (o == "rekeyCar") {
-          Id newId = idFrom(*op.find("newId"));
-          eng->rekeyCar(id, newId);
-          // remap idByKey / botKeys / controllers, exactly as verify-trace's onRekey:
-          // DELETE the old key, SET the new key -> newId (not just rename the key,
-          // which would leave the stale Id value and drop the car's later inputs).
-          std::string ok = id.key(), nk = newId.key();
-          idByKey.erase(std::remove_if(idByKey.begin(), idByKey.end(),
-                                       [&](const std::pair<std::string, Id>& kv) { return kv.first == ok; }),
-                        idByKey.end());
-          idByKey.emplace_back(nk, newId);
-          for (auto& bk : botKeys) if (bk == ok) bk = nk;
-          for (auto& c : controllers) if (c.id.key() == ok) c.id = newId;
-        } else if (o == "setCarStats") { eng->setCarStats(id, statsFrom(*op.find("stats"))); }
-        else if (o == "giveItem") {
-          std::string item = op.find("item")->str;
-          bool hasT = false; double t = 0;
-          if (const Value* opts = op.find("opts")) if (const Value* x = opts->find("tCatch")) { hasT = true; t = x->num; }
-          eng->giveItem(id, item, hasT, t);
-        } else if (o == "useItem") eng->useItem(id);
-        else if (o == "forceFinish") {
-          bool hasT = op.has("time"); double t = hasT ? op.find("time")->num : 0;
-          eng->forceFinish(id, hasT, t);
-        } else { std::fprintf(stderr, "FAIL %s: unknown schedule op '%s'\n", file.c_str(), o.c_str()); return 1; }
-      }
-    }
+    if (!applyScheduleOps(eng, schedule, frame,
+                          [&](const Id& id, const Id& newId) {
+                            // remap idByKey / botKeys / controllers: DELETE the
+                            // old key, SET the new key -> newId (not just rename
+                            // the key, which would leave the stale Id value and
+                            // drop the car's later inputs).
+                            std::string ok = id.key(), nk = newId.key();
+                            idByKey.erase(std::remove_if(idByKey.begin(), idByKey.end(),
+                                                         [&](const std::pair<std::string, Id>& kv) { return kv.first == ok; }),
+                                          idByKey.end());
+                            idByKey.emplace_back(nk, newId);
+                            for (auto& bk : botKeys) if (bk == ok) bk = nk;
+                            for (auto& c : controllers) if (c.id.key() == ok) c.id = newId;
+                          }, file)) return 1;
 
     // recorded inputs
     const Value* inputs = rec.find("inputs");

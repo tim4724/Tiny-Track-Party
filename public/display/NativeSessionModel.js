@@ -13,7 +13,9 @@
 // No rule may live here. The fine-grained one-rule exports this file once
 // wrapped are gone from the ABI: the walks are the only spelling, the frozen
 // session corpus replays the rules at the C++ level (session_check), and
-// abi_check holds each walk to the same rules composed in-test.
+// abi_check holds each walk to the same rules composed in-test. The tvOS
+// shell (PartyNet.swift) walks the same entry points over the C header
+// directly.
 //
 // public/display/sessionModel.js is GONE — it was the ORACLE, now retired:
 // tests/fixtures/session-corpus.jsonl was recorded off it, native/partytest/
@@ -43,7 +45,9 @@ export async function init() {
     onOpen: c('ttp_net_on_open_json', 'string', ['number']),
     createTimeout: c('ttp_net_create_timeout_json', 'string', ['number']),
     onProtocol: c('ttp_net_on_protocol_json', 'string', ['number', 'string', 'string', 'number']),
-    onClose: c('ttp_net_on_close_json', 'string', ['number', 'number']),
+    onClose: c('ttp_net_on_close_json', 'string',
+      ['number', 'number', 'number', 'number', 'number']),
+    reconnect: c('ttp_net_reconnect_json', 'string', ['number']),
     onPeerMessage: c('ttp_net_on_peer_message_json', 'string',
       ['number', 'number', 'string', 'string', 'number', 'number']),
     controllerAction: c('ttp_net_controller_action', 'string',
@@ -86,7 +90,7 @@ export function configure({ cars, colors, tracks, progress }) {
 
 // ---- the retained room snapshot --------------------------------------------
 // THE WHOLE LOBBY_UPDATE, COMPOSED AND FRAMED IN C++. The shell's part is two
-// handles and the six fields only the game knows; the answer is the exact frame
+// handles and the two LATCHES only the game knows; the answer is the exact frame
  // TEXT for the socket. There is deliberately no parse here — a caller that
 // wants to look inside is asking for the snapshot, not the frame, and should
 // say so.
@@ -133,9 +137,8 @@ export function reconnectCard(seat, url) {
 // ---- the choreography walks -------------------------------------------------
 // Raw-string answers, deliberately: Net.js._walk owns the single JSON.parse,
 // and the _seen hot path skips it on the shared empty answer. The peer message
-// and the current pick cross as the shell's own objects; JSON.stringify keeps
-// the absent-vs-null distinction the claim logic turns on (an absent
-// rejoinToken drops out of the message text, exactly as the wasm expects).
+// and the current pick cross as the shell's own objects, stringified here —
+// the shell re-derives no rule from them, it just marshals.
 
 export function restoreRoom(roomHandle, code, instance) {
   fn.restoreRoom(roomHandle | 0, code || '', instance || '');
@@ -145,9 +148,15 @@ export function createTimeout(roomHandle) { return fn.createTimeout(roomHandle |
 export function onProtocol(roomHandle, type, msg, nowMs) {
   return fn.onProtocol(roomHandle | 0, type || '', J(msg || {}), nowMs);
 }
-export function onClose(roomHandle, roomClosed) {
-  return fn.onClose(roomHandle | 0, roomClosed ? 1 : 0);
+// The kit's own counters go in verbatim (attempt, max); the walk answers what
+// the viewer sees off them. A missing counter is 0, never NaN — a NaN would
+// come back out as invalid JSON.
+export function onClose(roomHandle, roomClosed, replaced, attempt, max) {
+  return fn.onClose(roomHandle | 0, roomClosed ? 1 : 0, replaced ? 1 : 0,
+    Number(attempt) || 0, Number(max) || 0);
 }
+// The connection overlay's RECONNECT: answers effects only from the gave-up state.
+export function reconnect(roomHandle) { return fn.reconnect(roomHandle | 0); }
 export function onPeerMessage(roomHandle, sessionHandle, from, msg, isSignal, nowMs) {
   return fn.onPeerMessage(roomHandle | 0, sessionHandle | 0, idJson(from), J(msg || {}),
     isSignal ? 1 : 0, nowMs);

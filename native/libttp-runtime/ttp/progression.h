@@ -6,8 +6,10 @@
 // unlock progress — is DERIVED here, never stored, so retuning a threshold can
 // never disagree with a written save.
 //
-// The one locked cup is 'rooftop' (the Playroom): it opens when every OTHER
-// shipped cup has been finished at least once. The rule names the id rather
+// The one locked cup is 'rooftop' (the Playroom): it opens once the OTHER
+// shipped cups hold six stars between them. (It used to open on finishing each
+// other cup once, which left the second and third stars unlocking nothing.)
+// Its own stars never count toward it. The rule names the id rather
 // than a position so the synthetic conformance worlds (which carry no
 // 'rooftop') lock nothing under replay.
 //
@@ -43,14 +45,18 @@ Value serialize(const Record& r);
 // 0 none, 1 finished, 2 podium, 3 won.
 int stars(int best);
 
+// The couch's stars across `cupIds` (the shipped list), and the most it can hold.
+int starsEarned(const Record& r, const std::vector<std::string>& cupIds);
+int starsTotal(const std::vector<std::string>& cupIds);
+
 // The lock. `allCupIds` is the shipped cup list; the rule is above.
 bool unlocked(const Record& r, const std::string& cupId,
               const std::vector<std::string>& allCupIds);
-// Progress toward a locked cup's unlock: how many of the required cups are
-// finished, out of how many. Meaningful only while locked(cupId).
+// Progress toward a locked cup's unlock, in STARS: how many the other cups hold,
+// out of how many it takes. Meaningful only while locked(cupId).
 int unlockDone(const Record& r, const std::string& cupId,
                const std::vector<std::string>& allCupIds);
-int unlockNeed(const std::string& cupId, const std::vector<std::string>& allCupIds);
+int unlockNeed(const std::string& cupId);
 
 // May this series id bank at all? Shipped cups only; "tour", "random" (and
 // anything else a future mode invents) do not.

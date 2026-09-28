@@ -29,11 +29,12 @@ var airconsole = new AirConsole({
 // allowlisted key reads null the first time BY CONSTRUCTION — it is worth
 // allowlisting only if something re-applies it once it lands. So the list is
 // exactly what main.js's AC branch re-applies through storage.onLoad, and the
-// display's other two keys stay out on purpose: the volume slider ships only
-// on the audition galleries (pruned from the zip, so the AC pages never write
-// it), and the last-track preview is one frame of lobby attract that the
-// catalogue's first track already fills. The mute switch is stored on no
-// platform at all — see audio/bus.js.
+// display's other keys stay out on purpose: the volume slider ships only on
+// the audition galleries (pruned from the zip, so the AC pages never write
+// it), the last-track preview is one frame of lobby attract that the
+// catalogue's first track already fills, and the mute switch is left
+// per-session here — a TV that boots silent because someone muted it last
+// week reads as broken hardware, and on AC the "TV" is often a stranger's.
 var _acStorage = AirConsoleStorage.install(airconsole, {
   allowlist: ['tinytrack_progress']   // cup stars + the Playroom unlock (main.js)
 });
@@ -122,11 +123,5 @@ window.__acParty = {
   masterProvider: function () {
     var id = airconsole.getMasterControllerDeviceId();
     return (id === undefined || id === null) ? null : id;
-  },
-  // AC owns connection tracking (onConnect/onDisconnect are authoritative and
-  // prompt). Our lastSeen expiry must stay out of it: the platform freezes the
-  // iframe on pause, and on resume every seat would read as silent-past-timeout
-  // and be dropped mid-race. Drop records (peer_left) still drive the
-  // abandoned-race grace — that path is not gated by this flag.
-  livenessEnabledProvider: function () { return false; }
+  }
 };

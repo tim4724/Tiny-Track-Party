@@ -38,7 +38,8 @@ function svgFor(t, label, note) {
   let lines = '';
   for (const i of order) {
     const a = ss[i], b = ss[(i + 1) % ss.length];
-    if (a.pos.distanceTo(b.pos) > 6) continue; // skip the seam jump on an unclosed track
+    // plain {x,y,z} samples (native-track.mjs) — no Vector3 methods
+    if (Math.hypot(a.pos.x - b.pos.x, a.pos.y - b.pos.y, a.pos.z - b.pos.z) > 6) continue; // skip the seam jump on an unclosed track
     lines += `<line x1="${px(a.pos.x).toFixed(1)}" y1="${pz(a.pos.z).toFixed(1)}" x2="${px(b.pos.x).toFixed(1)}" y2="${pz(b.pos.z).toFixed(1)}" stroke="${heightColor(a.pos.y, maxY)}" stroke-width="${(a.width * k).toFixed(1)}" stroke-linecap="round"/>`;
   }
   const s0 = ss[0];
@@ -57,7 +58,7 @@ for (const arg of args) {
         let note;
         try {
           const r = await compose(design);
-          note = `len ${r.grade.len} · lap ${r.ai.lapSec}s · strand ${r.grade.minStrand} @ ${r.grade.strandAt} · twist ${r.grade.twistRate}`;
+          note = `len ${r.grade.len} · strand ${r.grade.minStrand} @ ${r.grade.strandAt} · twist ${r.grade.twistRate}`;
         } catch (e) {
           for (const s of design.segs) { delete s._sweep; delete s._leg; }
           note = `UNSOLVED: ${e.message}`;

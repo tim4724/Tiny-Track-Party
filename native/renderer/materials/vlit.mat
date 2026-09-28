@@ -21,6 +21,8 @@
 // every split-screen cell, every frame, where the JS renders one and freezes it.
 material {
     name : TtpVlit,
+    // The per-vertex fog factor (ttp_fog.inc); .yzw unused.
+    variables : [ fog ],
     requires : [
         color,
         // the world normal the Lambert term needs (getWorldGeometricNormalVector)
@@ -38,7 +40,8 @@ material {
         // ESM exponent (kShadowEsmK), matching what vesm.mat baked in.
         { type : float, name : shadowK },
         // 1 / ortho depth range: turns a world-unit bias into normalised depth.
-        { type : float, name : shadowDepthScale }
+        { type : float, name : shadowDepthScale },
+        { type : sampler2d, name : gradeLut }
     ]
 }
 
@@ -49,6 +52,7 @@ fragment {
     // have drifted on the first fix.
     #include "ttp_shade.inc"
     #include "ttp_grade.inc"
+    #include "ttp_fog.inc"
 
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
@@ -56,7 +60,17 @@ fragment {
         // former so nothing else in the pipeline touches it.
         material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
         // emissive.w = 0 → no second exposure; both terms are pre-exposed.
-        material.emissive = vec4(ttpGrade(
-                ttpMatteShade(getColor().rgb, getWorldGeometricNormalVector())), 0.0);
+        material.emissive = vec4(ttpFogMix(ttpGrade(
+                ttpMatteShade(getColor().rgb, getWorldGeometricNormalVector())), variable_fog.x), 0.0);
+    }
+}
+
+vertex {
+    #include "ttp_fog.inc"
+
+    // The fog factor is the only thing this stage exists for: per vertex, so the
+    // fragment pays a mix instead of a sqrt and an exp. See ttp_fog.inc.
+    void materialVertex(inout MaterialVertexInputs material) {
+        material.fog = vec4(ttpFogFactor(material.worldPosition.xyz), 0.0, 0.0, 0.0);
     }
 }

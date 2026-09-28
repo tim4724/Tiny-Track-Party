@@ -43,7 +43,7 @@ import { TRACKS, CUPS, DIFF_LEVEL } from '../public/shared/tracks.js';
 // file and a phone has no wasm to ask; carried across here so a native shell
 // does not retype five hex literals (the first one did). trackPicker.js has no
 // imports of its own, so reading it from Node costs nothing.
-import { CUP_COLOR, CUP_COLOR_FALLBACK, FIELD_TINT } from '../public/shared/trackPicker.js';
+import { CUP_COLOR, CUP_COLOR_FALLBACK, NEUTRAL_COLOR, FIELD_TINT } from '../public/shared/trackPicker.js';
 import { DEV_TRACKS } from '../public/shared/devTracks.js';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -287,10 +287,15 @@ for (const c of CUPS) {
 out.push('};');
 out.push(`constexpr int TTP_CUP_COUNT = ${CUPS.length};`);
 out.push('');
-out.push('// The tint a cup-LESS selection wears (Random belongs to no cup), and how much');
-out.push('// of a cup colour survives the mix with white on a schematic field. Both are');
-out.push('// public/shared/trackPicker.js\'s.');
+out.push('// TWO DIFFERENT ABSENCES, and they wear different colours.');
+out.push('//   FALLBACK  an UNKNOWN cup id — a cup colour, standing in for a cup.');
+out.push('//   NEUTRAL   a selection that belongs to NO cup (Random). A warm grey,');
+out.push('//             because "any biome" must not look like one of them; dressed');
+out.push('//             in the fallback it wore the Backyard cup\'s lawn green.');
+out.push('// Plus how much of either survives the mix with white on a schematic');
+out.push('// field. All three are public/shared/trackPicker.js\'s.');
 out.push(`constexpr uint32_t TTP_CUP_COLOR_FALLBACK = ${hexColor(CUP_COLOR_FALLBACK)};`);
+out.push(`constexpr uint32_t TTP_CUP_NEUTRAL_COLOR = ${hexColor(NEUTRAL_COLOR)};`);
 out.push(`constexpr int TTP_CUP_FIELD_TINT_PCT = ${FIELD_TINT};`);
 out.push('');
 out.push('}  // namespace ttp');

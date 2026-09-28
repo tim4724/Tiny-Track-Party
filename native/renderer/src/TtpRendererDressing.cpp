@@ -1,7 +1,7 @@
-// Split from the original single-file TtpRenderer.cpp along its subsystem
-// seams; TtpRendererImpl.h carries what the topic files share. Pure code
-// motion — behaviour, member set and ABI are unchanged.
+// Trackside dressing: the scenery scatter, landmarks, water and clutter.
+// TtpRendererImpl.h carries what the topic files share.
 #include "TtpRendererImpl.h"
+#include "../generated/kit_colors.h"
 #include "TtpRendererKit.h"
 
 #include <cstdio>
@@ -191,6 +191,8 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
         mBoulders.idx.resize(mBoulders.verts.size());
         for (uint32_t i = 0; i < mBoulders.idx.size(); i++) mBoulders.idx[i] = i;
         accumulateNormals(mBoulders); // soup → flat faceted, the kit read
+        mBoulders.bakeLight = true;
+        tileMajor(mBoulders, kSheetTile, kSheetMinTris);
         buildMesh(mBoulders);
     }
 }
@@ -545,6 +547,7 @@ void TtpRenderer::buildClutter(const TrackBin& tb) {
     }
     if (!mClutter.verts.empty()) {
         accumulateNormals(mClutter);
+        mClutter.bakeLight = true;
         buildMesh(mClutter, true, nullptr, 4, 2000);
     }
 }
@@ -857,6 +860,8 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         }
         if (!mLandmarks.verts.empty()) {
             accumulateNormals(mLandmarks);
+            mLandmarks.bakeLight = true;
+            tileMajor(mLandmarks, kSheetTile, kSheetMinTris);
             buildMesh(mLandmarks);
         }
         return;
@@ -948,7 +953,11 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
                 0, 5.85f, -0.1f, 0xd94f3d);                            // masthead pennant
     }
 
-    if (has(ttp::rt::LM_HOODOO)) { // hoodoo — a balanced-rock family trackside (canyon)
+    // The whole block draws three-entry rock picks, and an empty (or short)
+    // rocks palette is a legal theme state (buildScenery guards it the same
+    // way) — skipping BEFORE any rnd() keeps the stream draws at zero.
+    if (has(ttp::rt::LM_HOODOO) && tb.scRocks.size() >= 3) {
+        // hoodoo — a balanced-rock family trackside (canyon)
         const uint32_t* rocks = tb.scRocks.data();
         const auto hoodoo = [&](float hx, float hz, float T) {
             const float radii[4] = { 0.20f * T, 0.15f * T, 0.115f * T, 0.095f * T };
@@ -1490,6 +1499,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         for (const auto& [idx, n] : smoothNormals) {
             if (idx < mLandmarks.normals.size()) mLandmarks.normals[idx] = n;
         }
+        tileMajor(mLandmarks, kSheetTile, kSheetMinTris);   // per vertex above: order-free
         buildMesh(mLandmarks);
     }
 }
@@ -1519,6 +1529,14 @@ gltfio::FilamentAsset* TtpRenderer::loadInstancedProp(const char* assetName,
         // floating prop carries its own baked contact blob instead).
         setShadows(inst->getEntities(), inst->getEntityCount(), false, false);
     }
+    // The merged draw groups: decode this model's meshes once (keyed by its
+    // bytes) and let the next frame regroup the dressing. Pools this covers
+    // that buildDressingMerge does NOT merge (the item boxes and their fade
+    // twins) just carry an unused cache entry.
+    const uint64_t meshKey = glbBytesKey(it->second);
+    mAssetMeshKey[asset] = meshKey;
+    glbMeshes(meshKey, it->second);
+    mDressMergeDirty = true;
     // Point every instance at instance 0's materials. gltfio hands each
     // FilamentInstance its own MaterialInstance so they can be tinted apart —
     // we tint per MODEL, not per instance (the box fade pool is the one
@@ -1609,7 +1627,24 @@ void TtpRenderer::buildWater(const TrackBin& tb) {
                 + SHORE_WOBBLE * (0.5f + 0.5f * harm(SHORE_H, 4, shorePh, a))
                 + SHORE_CRINKLE * harm(CRINKLE_H, 3, crinklePh, a);
     };
-    mShoreFn = shoreAt; // the sailboat anchors off the same curve
+    // The sailboat anchors off the same curve — but from buildLandmarks, AFTER
+    // this function's stack is gone, so the stored copy must OWN what it
+    // reads: the support points and the phase arrays are copied in, and
+    // `harm` is captureless. (shoreAt itself stays by-reference for the SEG
+    // loop below.)
+    std::vector<float2> shorePts;
+    shorePts.reserve(tb.samples.size());
+    for (const auto& s : tb.samples) shorePts.push_back({ s.pos.x, s.pos.z });
+    mShoreFn = [pts = std::move(shorePts), shorePh, crinklePh, harm](float a) {
+        const float cx = std::cos(a), cz = std::sin(a);
+        float support = 0;
+        for (const float2& p : pts) {
+            support = std::max(support, p.x * cx + p.y * cz);
+        }
+        return support + SHORE_MARGIN
+                + SHORE_WOBBLE * (0.5f + 0.5f * harm(SHORE_H, 4, shorePh, a))
+                + SHORE_CRINKLE * harm(CRINKLE_H, 3, crinklePh, a);
+    };
     std::vector<float> cosA(SEG + 1), sinA(SEG + 1), shoreR(SEG + 1), swashF(SEG + 1);
     float outer = 0;
     for (int si = 0; si <= SEG; si++) {
@@ -1857,6 +1892,7 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
     }
     if (!mStructures.verts.empty()) {
         accumulateNormals(mStructures);
+        tileMajor(mStructures, kSheetTile, kSheetMinTris);
         if (!buildMesh(mStructures, true, litShadowInstance())) return;
     }
 
@@ -1899,6 +1935,106 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
     }
     if (!mBerms.verts.empty()) {
         accumulateNormals(mBerms);
+        tileMajor(mBerms, kSheetTile, kSheetMinTris);
         buildMesh(mBerms, true, litShadowInstance());
     }
+}
+
+// One instanced-asset family (a scenery model, a prop model, the cone pool)
+// into merged draw groups: per distinct MESH, one instanced renderable over
+// every copy. Entity slots are consistent across gltfio instances — the
+// material sharing in loadInstancedProp already relies on exactly that — and
+// slots map to parsed geometry by the NODE NAME, refusing a model whose names
+// are ambiguous across meshes (nothing in the kit is; the refusal keeps a
+// future asset honest rather than half-merged).
+void TtpRenderer::mergeInstancedSet(const gltfio::FilamentAsset* asset,
+        const std::vector<gltfio::FilamentInstance*>& insts, bool dynamic) {
+    if (!asset || insts.size() < 2 || !mEngine) return;
+    const auto keyIt = mAssetMeshKey.find(asset);
+    if (keyIt == mAssetMeshKey.end()) return;
+    const auto meshIt = mGlbMeshCache.find(keyIt->second);
+    if (meshIt == mGlbMeshCache.end() || meshIt->second.empty()) return;
+    // A model with an animated "spin" node (the toy train) moves under a
+    // static merge; mirror it per frame instead. The node itself may carry no
+    // mesh, so ask the ASSET, not the parse.
+    if (!const_cast<gltfio::FilamentAsset*>(asset)
+                ->getFirstEntityByName("spin").isNull()) {
+        dynamic = true;
+    }
+    auto& rcm = mEngine->getRenderableManager();
+    const size_t nEnt = insts[0] ? insts[0]->getEntityCount() : 0;
+    if (!nEnt) return;
+    // The kit colour table for this model, keyed by the same bytes hash; a
+    // model it does not know keeps the instanced, live-lit draw.
+    const ttp::kitcolors::Model* const colorModel = ttp::kitcolors::find(keyIt->second);
+    for (auto* in : insts) {
+        if (!in || in->getEntityCount() != nEnt) return;
+    }
+    std::unordered_map<int, std::vector<size_t>> slotsByMesh;
+    for (size_t e = 0; e < nEnt; e++) {
+        const utils::Entity ent = insts[0]->getEntities()[e];
+        if (!rcm.getInstance(ent)) continue;
+        const char* nm = asset->getName(ent);
+        if (!nm) return;
+        const ttp::rt::GlbMeshNode* found = nullptr;
+        for (const auto& n : meshIt->second) {
+            if (n.name == nm) {
+                if (found && found->mesh != n.mesh) return;
+                found = &n;
+            }
+        }
+        if (!found) return;
+        slotsByMesh[found->mesh].push_back(e);
+    }
+    for (const auto& [mesh, slots] : slotsByMesh) {
+        const ttp::rt::GlbMeshNode* node = nullptr;
+        for (const auto& n : meshIt->second) {
+            if (n.mesh == mesh) { node = &n; break; }
+        }
+        std::vector<utils::Entity> sources;
+        for (auto* in : insts) {
+            for (const size_t e : slots) sources.push_back(in->getEntities()[e]);
+        }
+        // THE COPIES HALF OF THE DRESSING ABLATION (mDressKeep, 1 = every copy;
+        // ttp_display_dress_keep says what it is for). A dropped copy leaves the
+        // scene outright, because buildMergedGroup only takes the sources it is
+        // handed out of it -- one merely omitted from the merge would keep
+        // drawing exactly as gltfio loaded it.
+        if (mDressKeep < 1.0f) {
+            std::vector<utils::Entity> kept;
+            for (size_t i = 0; i < sources.size(); i++) {
+                const auto at = [&](size_t k) {
+                    return static_cast<size_t>(static_cast<float>(k) * mDressKeep);
+                };
+                if (at(i + 1) != at(i)) kept.push_back(sources[i]);
+                else mScene->remove(sources[i]);
+            }
+            sources.swap(kept);
+            if (sources.empty()) continue;
+        }
+        const ttp::kitcolors::Mesh* colors = (colorModel && node->mesh >= 0
+                && (uint32_t) node->mesh < colorModel->meshCount)
+                ? &colorModel->meshes[node->mesh] : nullptr;
+        buildMergedGroup(mMergedDress, sources, node->prims, dynamic,
+                kFeatDressing, colors);
+    }
+}
+
+// The per-copy dressing, regrouped: the instanced scenery and prop models
+// (static — their placements are the scene's), and the cone pool (dynamic — a
+// kicked cone tumbles through its root transform, which the mirror follows).
+// The merged boulder/landmark/clutter sheets are already one renderable each
+// and stay as they are; the item-box pools stay unmerged too — the fade twins
+// deliberately hold PER-INSTANCE materials, which is the one thing a shared
+// instanced draw cannot express.
+void TtpRenderer::buildDressingMerge() {
+    destroyMergedGroups(mMergedDress);
+    if (!mScene) return;
+    for (size_t m = 0; m < mSceneryAssets.size() && m < mSceneryInstances.size(); m++) {
+        mergeInstancedSet(mSceneryAssets[m], mSceneryInstances[m], false);
+    }
+    for (size_t m = 0; m < mPropAssets.size() && m < mPropInstances.size(); m++) {
+        mergeInstancedSet(mPropAssets[m], mPropInstances[m], false);
+    }
+    mergeInstancedSet(mConeAsset, mConeInstances, true);
 }

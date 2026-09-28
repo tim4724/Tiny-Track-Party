@@ -1,18 +1,11 @@
 // dmath — the SIX transcendentals
 // the sim routes through the vendored fdlibm instead of the platform libm, so
-// results are bit-identical to the WASM build the JS engine ships (fp-profile §2).
-// The entry points are the renamed ttp_fd_* symbols (native/CMakeLists.txt). sqrt
-// stays std::sqrt everywhere (correctly rounded); it is NOT routed here.
+// results are bit-identical to the WASM build the retired JS engine shipped
+// (fp-profile §2), which the math corpus was recorded against. sqrt stays
+// std::sqrt everywhere (correctly rounded); it is NOT routed here.
 #pragma once
 
-extern "C" {
-double ttp_fd_sin(double);
-double ttp_fd_cos(double);
-double ttp_fd_atan2(double, double);
-double ttp_fd_exp(double);
-double ttp_fd_pow(double, double);
-double ttp_fd_hypot(double, double);
-}
+#include "ttp_fd.h"
 
 namespace ttp {
 namespace dmath {

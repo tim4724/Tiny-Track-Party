@@ -14,6 +14,7 @@
     <div class="bar__spacer"></div>
     <span id="total" class="pill">0 shots · 0.0s</span>
     <button id="play-cut" class="btn btn--brand">Play cut</button>
+    <button id="import" class="btn btn--ghost">Load shots.js</button>
     <button id="export" class="btn btn--ghost">Copy shots.js</button>
   </header>
 
@@ -37,6 +38,9 @@
         <div id="status" class="status">No shot selected</div>
       </div>
 
+      <!-- What the race did, by the frame it did it on: a rocket fired, a car turned
+           monster truck, a camera car hit. Click one to seek to it. -->
+      <div id="bar-events" class="bar-events"></div>
       <!-- Where the playhead is, and which slice of the race the trailer keeps.
            Click to seek: forward winds, backward re-deals the race. -->
       <div id="bar" class="bar-scrub" title="Click to seek">

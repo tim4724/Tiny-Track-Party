@@ -7,6 +7,9 @@ API"); this says what that leaves you holding, and which parts are a decision
 rather than a task.
 
 Nothing here is Android- or tvOS-specific work. It is the state of the base.
+The tvOS shell is the shipped worked example: `shells/tvos/` (built by
+`shells/tvos/scripts/build.sh`), driven end to end by
+`scripts/tvos-party-check.mjs`, photographed by `npm run shots:tvos`.
 
 ## The shell set
 
@@ -24,7 +27,7 @@ audience:
   relay framing + fastlane kits, the net walks (`ttp_net_on_*`, liveness,
   stored pick), the race EXECUTOR walks (`ttp_race_*_live_json` +
   `configure` + `series_state`), the ui reads (`ttp_ui_*` — all of them),
-  audio, display, theme, glb. The cup series, the launched field and the
+  audio, display, theme, glb, and the frame-cost readout (`ttp_perf_*`). The cup series, the launched field and the
   random-track shuffle bag all live BEHIND THE ROOM HANDLE: the walks create,
   advance, bank, repair and draw internally, so a shell holds no series
   handle, curates no field rows and owns no draw protocol — a start, a cup
@@ -34,7 +37,10 @@ audience:
   authored JS source is already on its page, pinned by a Node test that sees
   both: `ttp_protocol_manifest_json` (protocol.js), `ttp_net_clean_name`
   (names.js), `ttp_ui_cup_tint_rgb` + `ttp_ui_cup_field_tint_pct`
-  (trackPicker.js), `ttp_schematic_points_json` (the SVG-path reader).
+  (trackPicker.js), `ttp_schematic_points_json` (the SVG-path reader),
+  `ttp_race_personas_json` (aiPersonas.js — and NO shell calls this one: the CPU
+  roster reaches every platform by `ttp_race_configure` being handed no
+  `personas` key at all, which the ABI reads as libttp-sim's own table).
 - **Authoring tools** — the `ttp_track_*` reads and the schematic decode half,
   banner-marked in `ttp_runtime.h`. Node scripts only; a shell binds none.
 - **Dev/gallery** — the display's showcase/bench/debug latches, documented in
@@ -77,6 +83,135 @@ Three properties of that surface matter more than the list:
   cupName}`, never composed English, so your platform's own string resources
   are the copy table. Do not compose copy in C++ to save a shell some work.
 
+## Optional: caching expensive derived bytes between runs
+
+Not owed. Skip it until you have measured that you need it, and **measure per
+platform** — the `ttp shadow bake` line the renderer already logs tells you which
+you are. The spread is wide enough that the same feature is obviously right on
+one box and obviously wrong on another:
+
+| | sun bake | of a build of |
+|---|---|---|
+| Android TV reference box (Google TV Streamer, Vulkan) | ~1250 ms | ~1870 ms |
+| Web (Chromium, desktop GPU) | 85–213 ms | 101–271 ms |
+| Apple TV 4K (A10X, Metal) | 64 ms | 199 ms |
+
+…and the silhouettes beside them, which are the other half of what a launch pays:
+
+| | five silhouette bakes | warm launch, both stores |
+|---|---|---|
+| Android TV reference box | ~330 ms | 1870 → **181 ms** |
+| Apple TV 4K | (inside `cars`) | 197 → **49 ms** |
+| Web (a reload is its fresh process) | (inside `cars`) | 154 → **18 ms** |
+
+**All three shells now hold both stores**, and the web one is the reason the
+export is allowed to answer LATER: on GL a readback cannot complete inside the
+build that asks for it, so the first ask only issues the reads and the next
+build's `keep` finds them waiting. A store therefore lands on every other build
+there — a cache missing a beat, which is a cache. Nothing about the shell loop
+changes for it, which is the test that the walk is really store- and
+platform-agnostic.
+
+(The Android figure is a first build in a fresh process, which is what a launch
+actually pays. An older 520 ms is quoted elsewhere in the tree from a different
+box and backend — measure yours rather than inheriting either number.)
+
+**tvOS refused this once, on those numbers, and the refusal did not survive a
+second blob kind.** 64 ms alone did not pay for a storage layer. Adding the
+SILHOUETTE layers — five GPU bakes, ~330 ms on the Android box and the bulk of a
+cold `cars` phase everywhere — changed the sum, and the Apple TV's warm launch
+went 197 ms to 49 ms. The lesson is about arithmetic rather than about tvOS: a
+store is worth writing when the STORES TOGETHER pay for it, so judge the shell
+half against every kind the engine lists, not against whichever one you are
+adding today.
+
+If your platform's number does justify it, **you write four primitives and no
+policy** — list names with last-used times, read by name, write by name, delete
+by name. All three are shipped and none is more than about 120 lines:
+`BlobStore.kt`, `BlobStore.swift`, `render/BlobStore.js`. Everything else is a
+WALK in `ttp_display.h` (`ttp_display_blob_stores` / `_plan` / `_offer` /
+`_ready` / `_keep` / `_export` / `_wrote`) that hands you names to act on:
+
+```
+for each store in ttp_display_blob_stores():        # after provisioning,
+    plan(store, trackId, generation, entries)       # before the build
+                       -> {"drop":[…], "read":[…]}
+    perform the drops; read each `read` name and offer(store, its bytes)
+ttp_display_build(...)
+
+# …and on EVERY FRAME, gated by one integer:
+if ttp_display_blob_ready():
+    for each store:
+        keep(store)    -> {"write":[…]}
+        for each name: export(store, name), write it, then wrote(store, name)
+```
+
+**The write half is a FRAME BEAT, not the build's tail, and that is not
+optional.** A readback does not complete inside the call that issues it on GL —
+the completion runs from `OpenGLDriver::tick()`, which `endFrame()` calls and
+`flushAndWait()` does not — so a build cannot finish its own blobs there. It
+STAGES them (metadata snapshotted, reads issued) and the frame loop lands them —
+on every backend, because staging deliberately does not pump the driver: the pump
+that would let Metal and Vulkan answer early is a synchronous GPU stall on the
+build's critical path. In practice the frame right after a build collects them. When the write half WAS
+the build's tail, the web could only ever store a blob whose track had been built
+twice in a row, and a Grand Prix's last three circuits were never cached at all.
+
+`read` and `write` are LISTS because a store may hold several things one build
+wants: a silhouette is one blob per car MODEL and a field uses up to four. The
+bake store answers zero or one.
+
+**Do not re-derive any of the decisions behind those names.** Whether the engine
+already holds this bake, whether the build actually baked, whether the store
+already has the blob, and the one window a bake key is even defined over are all
+facts about the ENGINE — they were a `BakeCache.kt` in this shell once, and every
+line of it was engine knowledge living in a shell, with a residency mirror the
+shell had to invalidate whenever a destroyed surface took the renderer away.
+Three shells re-deriving that is three chances to get it wrong, which is the same
+argument `ttp_net.h`'s choreography walks make one layer down.
+
+### The same argument, one layer up: your own provisioning
+
+Provided assets survive a `releaseScene`, so re-reading and re-handing the same
+GLBs and textures on every build is pure re-work. **Do not keep a memo of what
+the engine holds** — ask it, with `ttp_display_asset_plan`. State what you WOULD
+hand over as `[{"name","tag"}]`, the tag being whatever the bytes are a function
+of in your own vocabulary (a kit model's base name, a texture's authored URI),
+and you get back the subset still missing. `ttp_display_asset_textures` then
+answers the image URIs the models now held reference, off the bytes the engine
+has — so a model the plan skipped still contributes its textures and you never
+re-read a container you just handed over.
+
+This was a `provided` HashMap in the Android shell for a while, with an
+invalidation hook on the beat a destroyed surface takes the asset map away. Same
+argument as the blob walk above and the same conclusion: the fact lives beside
+the map, where it cannot outlive it.
+
+**What the re-work costs is entirely a fact about your storage**, and the shells
+differ by an order of magnitude — an APK is compressed, so Android re-inflated
+every model and copied it across JNI (39 ms of provisioning on the first build,
+8 ms once the plan holds), while a tvOS bundle is uncompressed (~5 ms of a
+~215 ms build) and the web's bytes are already in memory. That is a reason to
+expect different WINS, not a reason for different code.
+
+**GENERATION IS THE INVALIDATION, and it is the one thing you supply.** Give it
+something that changes whenever your binary could produce different bytes —
+Android uses the APK's install time, deliberately NOT its versionName, because a
+`-dirty` build keeps one version string across many edits. The engine folds it
+into the name, so a new binary cannot name the old one's blob at all. Do not add
+a second validity check beside it, and do not reuse a generation string across
+builds.
+
+Two traps that are Filament's, not any platform's, and will bite every shell
+identically (both are commented where they bite, in `TtpRendererBakes.cpp`):
+
+- A texture you `setImage` into must carry `Usage::UPLOADABLE`. Without it the
+  driver can HANG with no panic and no log.
+- `readPixels` and `setImage` disagree about Y on OpenGL — Filament's own header
+  says so. A blob read one way and uploaded the other is upside down, which
+  renders as a shadow that has moved to the wrong side of the circuit, not as
+  anything that looks broken.
+
 ## What every shell owes
 
 1. **The surface file.** A sibling of `native/runtime/ttp_display_web.cc`:
@@ -85,22 +220,72 @@ Three properties of that surface matter more than the list:
    `ttp::rt::displayCore()` (`ttp_display_core.h`). Every other display ABI
    body is shared in `runtime/ttp_display_core.cc`, which your module compiles
    as-is — a shell porting from a revision where those bodies lived in the web
-   file deletes its copies. The platform-free half below both is in
-   `libttp-runtime` and must stay there. If a line names no platform API, it
-   is in the wrong file.
+   file deletes its copies, and `tests/display-surface-split.test.js` is what
+   now fails if one comes back. `ttp_display_tvos.mm` is the Metal one — ObjC++,
+   because the `CAMetalLayer` must be produced ObjC-side. The platform-free
+   half below both is in `libttp-runtime` and must stay there. If a line names
+   no platform API, it is in the wrong file.
+   `ttp_display_create`'s surface is a `const void*` and means whatever your
+   platform's window is (an `ANativeWindow*` for Android TV); the cast back
+   belongs in your file, which is the one that knows. You owe NO entry point of
+   your own — tvOS carried one for a while, purely because the parameter used
+   to be typed as the web's CSS selector.
 2. **A module target.** Add it beside `ttp_runtime_web` in
    `native/CMakeLists.txt` and compile `${TTP_APP_SOURCES}` plus
    `runtime/ttp_display_core.cc` plus your surface file. Do not retype the
    list; it is a variable precisely because a second copy drifts on the first
    ABI added and fails as a link error on one platform only.
-3. **Materials.** `native/scripts/build-materials.sh <matc> <outdir> [api] [platform]`,
+3. **The frame-cost readout, bound not written.** A shell hands
+   `ttp_perf_sample` its own clocks, `ttp_display_profile`'s `total` and
+   whatever GPU timer its backend has, declares what it is aiming at through
+   `ttp_perf_pacing`, and draws `ttp_perf_readout_json`. It may not fold a
+   percentile, count a drop or pick a colour: three shells that each did had
+   already drifted apart while all three carried a comment saying they had not,
+   and a bench comparing them is worth nothing if "60 fps" and "amber" are
+   three different statements. `ttp_perf_reset` on a resize or a scene change —
+   the readout carries the buffer size it was measured at.
+   **FEED IT ON EVERY TICK, whether or not anything is drawing the readout.**
+   The render scale folds off this same monitor, so a window kept only while a
+   panel is up leaves the rule deciding a television's resolution off an empty
+   ring the moment someone presses the toggle. Both TV shells had that bug, and
+   it is what made them keep windows of their own. Gate the DRAWING and the
+   per-phase profile read; never the sample.
+
+   **THE PANEL ITSELF IS OFF UNTIL ASKED FOR, and the switch is a knob a
+   developer can reach on the shipped build** — `?perf=1` or "P" on the web,
+   `-ttpPerf 1` on tvOS, `setprop debug.ttp.perf 1` or `KEYCODE_INFO` on Android.
+   Live in release, off by default: those are two decisions and only the first
+   one is about being able to measure. A player gets no diagnostic block, and a
+   shot rig has nothing to remember to hide.
+
+   `intervalMs` is a TICK ("drawn or not"), so the readout's `frame` block is
+   tick intervals and `present` is the gaps between the ticks that actually
+   reached the panel. They are ONE series on a browser's rAF — a late present
+   delays the next callback — and TWO on a display link or a Choreographer, which
+   fire every vsync whatever the last frame did. That is why `hz` and `fps` are
+   both on the line, and why the scale rule reads `present` while the panel
+   period is learned off `frame`: on tvOS `frame.p95` is a flat vsync period
+   however badly the box is skipping, and a shell steering off it never moves at
+   all (measured: 4 players left at 40-55 fps, the rule never firing). Both
+   series are folded in C++, so this is a property to understand rather than one
+   to reimplement.
+
+4. **Materials.** `native/scripts/build-materials.sh <matc> <outdir> [api] [platform]`,
    using the FORK'S matc. `opengl mobile` (the default) is what the web ships
-   and what Android TV wants; tvOS needs `-a metal`.
-4. **The 2D UI**, in the platform's own toolkit, rendered from `ttp_ui.h`.
+   and what Android TV wants; tvOS needs `-a metal`. Every material the web
+   shell lists (`render/Display.js`'s `MATERIALS`) is required for a correct
+   picture, and only `vcolor` fails loudly — the rest degrade silently (no
+   `vroad` quietly reverts every road decal to the lifted fallback meshes; no
+   `voverlay` and the steer bar and dividers vanish). A shell loading from its
+   own bundle should assert on every blob, not copy the web's `if (res.ok)`
+   skip.
+5. **The 2D UI**, in the platform's own toolkit, rendered from `ttp_ui.h`.
    Bind the effect-op vocabularies at boot and assert your performer tables
    against them (see The shell set above) before anything else.
-   Sizing: `public/display/main.js` (1755 lines) + `lobbySeats.js` + roughly
-   1165 lines of CSS, of which the decisions are already gone. Consume
+   The web's rendering half is `public/display/main.js` + `lobbySeats.js` +
+   the display CSS (the decisions are already gone from all three); the
+   SwiftUI screens under `shells/tvos/TinyTrackParty/Screens/` are the second
+   implementation to crib from. Consume
    `public/shared/design-tokens.json` rather than re-authoring the sticker
    palette.
    The couch's PROGRESSION is part of this surface: read the persisted blob at
@@ -111,6 +296,35 @@ Three properties of that surface matter more than the list:
    (the web reference is `boot.js` `progressChooser()`). Stars, the Playroom
    lock and the unlock progress are all DERIVED in the wasm/lib — a shell that
    re-implements a threshold has copied a rule that will drift.
+   A FOURTH obligation, and the one those three do not imply: the lobby SHOWS
+   the record, as a cups shelf off `ttp_ui_catalogue_json`'s rows (web:
+   `refreshCupShelf`; tvOS: `CupShelf` in `LobbyView.swift`). A shell can bank,
+   persist and publish stars correctly and still never show the couch a single
+   one — the reward arc then exists only on the phones, which is where nobody
+   is looking. Refresh it where the record can MOVE and nowhere else: boot, and
+   the `persist-progression` performer.
+
+   **The frame loop is a LIFETIME, and it is not the party's.** A shell must stop
+   driving its GPU the moment the app leaves the screen and start again when it
+   returns. tvOS learned this the expensive way: the display link ran for the
+   life of the process, so the frame in flight when the system took the screen
+   never completed, Filament's pacing fence never signalled again, and the
+   surface was dead for good — `0/60 fps, 60 skips`, a race startable and
+   nothing ever drawn. Idle on the EARLIER phase (tvOS: `.inactive`, not
+   `.background`); by the time a platform says "backgrounded" the screen is
+   already gone. The party's own lifetime stays separate, because the transient
+   phase is also what a system dialog produces.
+
+   **Boot must not hold the first frame hostage.** Whatever the shell's boot does
+   — configure, stage assets, build the preview track, dial the relay — it runs
+   somewhere, and if that somewhere is the UI thread then the first layout pass
+   is what the room stares at for the whole of it. Put suspension points in.
+
+   `npm run check:tvos-lifecycle` is the gate for the first of those, on a real
+   Apple TV: it launches, waits for the lobby, presses Menu, comes back, and
+   fails if the picture has not changed. It cannot use a test-launched app — that
+   provably does not reproduce the fault — so it starts the app itself. No CI
+   runner has a television, so this one is run by hand.
    **The results board on a cup is TWO PHASES**, and a shell that paints only
    one of them has dropped the cup's whole story. `ttp_ui_results_view_json`
    answers `raceRows` (the race that just ended, finishing order, lap time +
@@ -128,11 +342,19 @@ Three properties of that surface matter more than the list:
    re-sort — which reads as a glitch, not as a ranking. The web reference is
    `raceOverlays.js`, and `tests/e2e/gallery-boards.spec.js` pins both phases
    plus the board's geometry across the transition.
-5. **Transport.** A WebSocket client, and optionally a WebRTC DataChannel. The
+6. **Transport.** A WebSocket client, and optionally a WebRTC DataChannel. The
    fastlane is an enhancement by design (CONTROL falls back to the relay), so
-   relay-only is a legitimate launch. The framing and packet codecs are already
-   C++, and so is the CHOREOGRAPHY: every inbound trigger (protocol frame, peer
-   message, close, the liveness tick, a drained room event) is one call into
+   relay-only is a legitimate launch — though no shipped shell is one any more,
+   and the transport half is small because the NETCODE is C++: `ttp_link_*` is
+   the whole of it, and a shell that reads a `ps`/`pa`/`h` field has started a
+   second one. Neither TV platform ships a system WebRTC, so both link a
+   prebuilt libwebrtc (`LiveKitWebRTC` on tvOS, `io.github.webrtc-sdk:android`
+   on Android — the same upstream build). `shells/tvos/.../Net/Fastlane.swift`
+   and `shells/androidtv/.../Fastlane.kt` are the two ports to compare, pinned
+   by `tests/tvos-fastlane.test.js` and `tests/androidtv-fastlane.test.js`.
+   The framing and packet codecs are already C++, and so is the CHOREOGRAPHY:
+   every inbound trigger (protocol frame, peer message, close, the liveness
+   tick, a drained room event) is one call into
    `ttp_net.h`'s walk entry points, which mutate the room in C++ and answer an
    ordered effect list. What you write is the socket, three timers, a small
    storage read/write, and the effect switch that performs the ops — never the
@@ -141,18 +363,40 @@ Three properties of that surface matter more than the list:
    launch bugs lived). Drain the room's event queue before performing a walk's
    effects. When your shell gains a SEND path, add a case to
    `scripts/wire-mutations.mjs` — that was the suite's one historical blind
-   spot.
-6. **The audio device.** A sample player over the command stream. There is no
-   DSP to port: `public/assets/audio/cues/` holds 28 pre-baked WAVs plus a
-   manifest carrying each cue's detune spread (see `scripts/bake-cues.mjs` for
-   why the jitter is the player's job).
-7. **A QR encoder.** Settled in [shared-cpp-plan.md](shared-cpp-plan.md) (§QR):
+   spot. The close walk takes the kit's own counters (the 4000 flag, the
+   attempt, the cap) and answers `set-link`: you owe a full-screen connection
+   overlay over EVERYTHING, the boot cover included, whose RECONNECT control
+   calls `ttp_net_reconnect_json` and takes focus when it appears (nothing else
+   on the glass is focusable then). While performing `set-link`, re-ask the
+   auto-pause rule — a link that is down freezes a live race through the same
+   seam a dropped roster does. The three shipped overlays are `#link-overlay`,
+   `LinkOverlay.swift` and `LinkOverlay.kt`.
+7. **The audio device.** A player over the command stream. The cue palette is
+   pre-baked (`public/assets/audio/cues/` — WAVs plus a manifest carrying each
+   cue's detune spread; see `scripts/bake-cues.mjs` for why the jitter is the
+   player's job), but the device is more than a sampler: the engine voice is a
+   live passthrough (rate/gain steered per command) and the master-bus
+   compressor is part of the mix contract. `public/display/Audio.js` and
+   `shells/tvos/TinyTrackParty/Audio/AudioDevice.swift` are the two
+   implementations to compare.
+   **The MUTE is one state with two flippers**, and only one of them is yours.
+   The host phone's Sound row sends SET_SOUND, which `ttp_net_controller_action`
+   answers as `set-sound`: perform it by muting the device, persisting the flag
+   and republishing — the snapshot's `soundOn` is what draws that switch, so a
+   shell that omits the field leaves the phone showing a setting it cannot
+   change, and one that ignores the verdict leaves the switch inert. Mute at the
+   MASTER GAIN, ahead of the limiter, and silence the music player separately:
+   it does not pass through the mix on any platform. The web's other flipper is
+   a corner button, and that half stays web-only on purpose — a viewer cannot
+   click a corner of a television (the same argument that puts the pause button
+   on the remote), and a TV has its own mute.
+8. **A QR encoder.** Settled in [shared-cpp-plan.md](shared-cpp-plan.md) (§QR):
    there is deliberately no C++ encoder, because the URL composition is shared
    and only the module bitmap is per-platform. `CIQRCodeGenerator` on tvOS,
    ZXing on Android, `public/shared/qr.js` in the browser — copy its policy (EC
    level L, a 1-module quiet zone), not its library. Every shell encodes
    locally: no display asks its own origin to draw its own join code.
-8. **A base URL, and this shell's `cpp` value.** `session.h`'s `join_url` needs
+9. **A base URL, and this shell's `cpp` value.** `session.h`'s `join_url` needs
    an origin serving the phone controller, and a native app has none of its own.
    The web deployment is therefore a runtime dependency of every TV app.
    `baseUrlOverride` is the existing seam. Pass your platform — `"tvos"` or
@@ -160,18 +404,26 @@ Three properties of that surface matter more than the list:
    and `controller_url_template`: the join URL is the only place a display
    declares which box it is to the CouchPad launcher, and the two must agree
    because a player may arrive by either.
-9. **A room advertisement, if you are native** (CouchPad CONTRACT §8). Publish
+10. **A room advertisement, if you are native** (CouchPad CONTRACT §8). Publish
    `_couchpad._tcp` in `.local` at room create, withdraw it at close, with the
    TV's human label as the DNS-SD instance name and the room code as TXT `c` —
    nothing else, and never TXT `cpr`, which is a launcher-to-launcher marker. The
    launcher resolves the code through the relay, so this only accelerates a join
    it could already make: keep showing the QR and the code regardless. The web
    display cannot do this at all (browsers cannot advertise mDNS), which is why
-   it has no counterpart here.
-10. **Back navigation.** The TABLE crossed (`ttp_ui_back_effect`); the walk did
+   it has no counterpart here. `NWListener` on tvOS, `NsdManager` on Android,
+   and the two things that make one silently useless are the same on both: the
+   record must track JOINABILITY (down when the room is full, backgrounded or
+   closed, not merely when the app dies), and the code must come from the net
+   layer rather than the display field a screenshot harness writes fixtures
+   into.
+11. **Back navigation.** The TABLE crossed (`ttp_ui_back_effect`); the walk did
    not. popstate, the tvOS Menu button and Android's back stack are three
-   different animals and the shell owns the traversal.
-11. **Asset bytes for the renderer.** The renderer asks for names; the shell
+   different animals and the shell owns the traversal. The table reads the two
+   race latches (`paused`, `raceEnded`) as well as the screen, and two of its
+   answers do not navigate at all — a live race freezes, the pause overlay thaws
+   — so a shell that only knows how to go UP a level is not done.
+12. **Asset bytes for the renderer.** The renderer asks for names; the shell
     fetches bytes and hands them over before the build (the web reference is
     `render/Display.js`). Cars and item props go over by their own file names;
     the biome's scenery goes over as `scenery<i>.glb` in the slot order
@@ -187,7 +439,7 @@ Three properties of that surface matter more than the list:
     livery, which never repaints a car body). A shell that cannot
     evaluate CSS vars substitutes those two tokens and rasterizes; the baked
     fallback colours are the pre-theme look.
-12. **WHEN the scene is built.** A build blocks the thread long enough to be
+13. **WHEN the scene is built.** A build blocks the thread long enough to be
     seen, and a cup's chained start (`advance`) performs `place-track` with the
     countdown already running — so a shell that meshes there shows the OUTGOING
     circuit under the count and then hitches. Mesh the next circuit when the
@@ -196,18 +448,156 @@ Three properties of that surface matter more than the list:
     connected humans, so the prepared scene is the one it wants. The web
     reference is `prepareNextTrack()` in `public/display/main.js` plus
     `Stage.prepare`/`rebuild`, and `tests/e2e/cup-series.spec.js` pins it.
-13. **The render scale, measured.** The buffer is not the panel: a shell polls
-    `ttp_display_scale_step` with what its last window of frames cost and
-    resizes to the answer, so the same build holds 60 fps on a weak TV and
-    stays sharp on a strong one. What a shell owes is the MEASUREMENT and the
-    band, and nothing else — percentiles of GPU time (as a share of the frame
-    budget) and of the frame interval, their sample counts, and the running
-    `ttp_display_present_floor`. Every judgement about those numbers is the
-    rule's: which signal decides, which way each may move, how many samples
-    count, the holds, the steps. If you find yourself writing an `if` around a
-    measurement before passing it, it belongs in `ttp/render_scale.h` instead —
-    that header also carries the reasoning, including why a dropped-frame count
-    is not a signal. Web reference: `Stage._adaptScale`.
+14. **Cell rects are FRACTIONS.** `ttp_display_cell_rects` answers 0..1 of the
+    surface, and a shell multiplies by whatever it lays out in — CSS pixels,
+    points, authored dp. Do NOT convert through the buffer size: it answered
+    physical pixels once, and pairing a rect with a surface size the adaptive
+    render scale moves underneath cost a bug on two of the three shells (tvOS
+    placed its whole HUD off a stale `uiScale`; Android divided fresh rects by a
+    width its UI framework could not see change). A fraction has no partner to
+    disagree with.
+
+15. **The operating point, measured.** Neither the buffer size nor the present
+    rate is the panel's: a shell polls `ttp_display_scale_poll` every frame and
+    takes back BOTH — a resolution and a present divisor, ordered around a
+    desired 1080@60 (below it resolution gives way, above it the rate goes
+    first). One call for the pair, because they are two ways of spending the
+    same milliseconds and a shell honouring one and not the other would be
+    arbitrating the trade itself.
+
+    **THE STATE IS NOT YOURS EITHER.** The window, the percentiles, the running
+    fastest present, the cost model's observation and the clocks the holds are
+    judged against all live in `ttp/render_scale_controller.h`, folded off the
+    same monitor item 3 describes. Three shells held that by hand once, in three
+    languages, and two of them had drifted to a different percentile formula than
+    the readout they were drawn beside. What a shell owes now is FOUR things:
+
+    - `ttp_perf_sample` on every tick, per item 3 — which it already owed;
+    - `ttp_display_scale_scene(tMs)` when a scene is built, plus `ttp_perf_reset`
+      beside it;
+    - `ttp_display_scale_poll(tMs, min, max, baseLines, panelMs)` every frame,
+      and PERFORM what it answers. `min` is 0 — the LADDER owns the floor — `max`
+      and `baseLines` are the surface's own, and `panelMs` is ONE VSYNC of the
+      panel, or 0 where the platform has no honest answer (a browser) and it is
+      learned off the tick series instead;
+    - `ttp_perf_pacing(ttp_display_scale_panel_ms(), divisor)`, so the readout's
+      budget is the operating point's.
+
+    If you find yourself writing an `if` around a measurement before passing it,
+    or holding a clock the rule could hold, it belongs in that header instead —
+    which also carries the reasoning, including why a dropped-frame count is not
+    a signal. Web reference: `Stage._adaptScale`, whose `_divisor` paces the
+    PICTURE and never the sim.
+
+    **OVERRIDING THE RATE? DECLARE A PERIOD, NOT A DIVISOR.** A sweep that pins a
+    present rate (Android's `debug.ttp.hz`) is overriding half of a decision the
+    rule made, so it must tell the rule what it actually presents at — `panelMs`
+    times the pinned divisor — or the rule prices a 33 ms budget as 16.7 and
+    shreds resolution to hold a rate nobody asked for. Android's
+    `rulePanelMs` is the reference.
+
+    **BOUND ON tvOS (`DisplayHost.adaptScale`).** Before it, an A10X ran 4
+    players at 50-53 fps with no window of the run scoring anything but bad;
+    after, the rule settles on the 1620 rung and holds 60/60 with no skips. What
+    made the case was an A/B at fixed scales: the knee is ~0.85, and the ladder's
+    existing rung below native (1620 = 3/4 on a 2160-line panel) sits inside it,
+    so binding was the whole job and no constant moved.
+
+    Two platform facts a reader needs, both measured on the box:
+
+    - **NO GPU TERM BOUND, so the scale is a ONE-WAY RATCHET here — and that is
+      FILAMENT'S limit, not Metal's.** `MetalTimerQueryFence` records
+      `clock::now()` in a fence completion callback, so what it returns is host
+      wall-clock between two callbacks; it tracks the present cadence (16.0 ms at
+      one pass, 18.0 ms at four) and is passed as absent. The rule's fallback may
+      then only step DOWN, so a scale lost to a bad stretch never comes back —
+      measured at 1 player, which holds 60 at native but drops to 1620 off the
+      scene-build frames and stays. Accepted for now: 60 fps at 3/4 beats a
+      stutter at native.
+      **The rule now refuses to spend that one mistake on a scene's ASSEMBLY**
+      (`kScaleSceneGraceSec`): staging keeps costing after the build returns, and
+      a solo race presented at 7-25 fps for ~2.6 s before settling. The guard is
+      the FALLBACK's alone — an arm that can climb back out of a premature drop
+      does not need it. Measured after: solo holds the panel's own resolution for
+      a whole race and drops only on a genuine sustained slowdown, while 4
+      players is still rescued to 60/60.
+      **The hardware answers, probed on an A10X / tvOS 26.6:**
+      `MTLCommandBuffer.gpuStartTime`/`gpuEndTime` gave 0.30 ms for a 4 MB blit
+      over three stable runs, and `counterSets` carries "timestamp" with
+      `supportsCounterSampling(.atStageBoundary)`. Filament already installs an
+      `addCompletedHandler` in `getPendingCommandBuffer`, which is where the
+      timestamps belong. A fork patch there unlocks the rule's climb branch on
+      every Apple platform at once; nothing in the shell needs to change.
+    - **Presents are their own series** — see the readout note in item 3 above.
+
+16. **An attribution surface.** The build ships CC-BY music, OFL fonts and
+    several notice-tier libraries, so a shell that shows nobody is in breach —
+    this is an obligation, not an About page. What it owes is a reachable list
+    of every credited work, and the license TEXT for the ones whose license
+    demands the notice travel with the build. Do NOT type that list: bake it
+    from `public/shared/credits.js` plus the live music catalogue (the same two
+    modules /licenses.html renders), applying only the delta between what a
+    browser ships and what your package does. **`scripts/shell-credits.mjs`
+    already does all of that**: hand it your package's own third-party list and
+    it answers the rows and the notice files to stage, so a third shell writes
+    only its half of the delta and an output format. The two `gen-legal.mjs`
+    beside it are the worked examples (a Swift bake for tvOS, a staged JSON asset
+    for Android), and `tests/{tvos,androidtv}-legal.test.js` are the shape of gate
+    that keeps a delta honest: the registry your platform declares dependencies
+    in — `project.yml`'s packages block, `build.gradle.kts`'s dependencies block —
+    is what a gate reads, so nothing can ship uncredited.
+    **Every row on a TV must OPEN**, which is more than the web owes: there each
+    licence chip is a link to the entry's terms, and a television can follow no
+    link at all. Rows under a notice-tier licence open the notice; the rest open
+    the licence's own text, one shared copy per id under `shells/licenses/`. The
+    shared module resolves both and throws on a row with neither, so this costs a
+    new shell nothing.
+    Privacy and imprint are couchpad.games pages for every game on the launcher: link them, never restate them, and on a box with no
+    browser show the URL as a QR for the phone already in the room. Read those
+    two URLs out of the display's own footer rather than typing them.
+
+## Still owed by the TV shells
+
+This list is an audit walked against the shells' code, not a wishlist: each row
+is a real item, not a simplification. A row leaves it two ways — a shell does
+the work, or the work is decided against and moves to **Decided, not owed**
+below. The first is owed by BOTH TV shells; the second is Android's.
+
+- **Meshing the next circuit at the intermission** (item 13) — NEITHER TV shell
+  does it: a cup's chained start shows the outgoing circuit under the count and
+  then hitches. The web reference is `prepareNextTrack()` plus `Stage.prepare`;
+  there is no `prepare` call anywhere in either shell. On Android's GPU a build
+  is seconds, which makes it the most visible item here.
+- **An app baseline profile** — the release APK carries only library-supplied
+  profiles, so this shell's own composables and boot path are not AOT-compiled;
+  the tail it would move is the half the GPU readout cannot see, and it costs a
+  macrobenchmark module plus a device run, which is why it is an investment and
+  not a build-file flag.
+
+### Decided, not owed
+
+Two web looks a TV shell will notice it lacks. Neither is coming; do not
+re-open them as work.
+
+- **Frosting behind the full-screen boards** (Android). The flat paper wash IS
+  the look. Compose cannot reach the picture it would blur — the frozen race is
+  a SurfaceView composited by SurfaceFlinger in a layer BELOW the app window —
+  so what is left is a whole-window blur toggled per board (API 31+, and off
+  outright on low-end boxes) or a renderer pass, and neither earns its cost
+  against what it buys: the results board's paper is nearly opaque, so almost
+  none of the race shows through and the board is near-indistinguishable from
+  the web's. The more translucent pause overlay is the one board where the
+  difference reads at all. The
+  mechanism is the durable half and lives in `shells/androidtv/CLAUDE.md`
+  (Look).
+- **The scene's edge vignette** — WEB-ONLY, permanently, and that is a
+  CROSS-SHELL decision: neither TV shell builds one. It is a DOM effect
+  (`#scene::after` in `public/display/display.css`, one radial gradient over the
+  canvas), and because it belongs under the chrome the only route on a TV is a
+  renderer pass — but `native/renderer` is shared C++ linked into all three
+  shells, so that pass would spend engine frame budget on every platform to
+  darken the edges of a picture no one has called too bright. The web keeps its
+  own; nothing else grows one.
 
 ## The asymmetries worth knowing before you start
 
@@ -224,22 +614,55 @@ Three properties of that surface matter more than the list:
   LIVENESS windows as one JSON object. A C++ layer can include
   `ttp/protocol.h` instead. Nothing else is a legitimate source, and
   `tests/config-drift.test.js` pins the export to `public/shared/protocol.js`.
-- **Asset delivery is unsolved.** `public/assets/` is ~170 MB, 164 MB of it
-  race music. The web streams it off an origin; a store build needs an asset
-  pack, a download-on-first-run, or a smaller shipped pool. Nobody has decided
-  which, and `ttp_audio_song_json`'s index has to resolve to whatever you pick.
-- **Only three legs execute the fixtures.** The Android NDK leg in
-  `.github/workflows/native.yml` compiles and does not run. `fp-profile.md`
-  §NDK flags the contraction risk specifically, so the first Android work
-  should be an emulator ctest leg modelled on
-  `native/scripts/tvos-sim-spawn.sh` (a `CMAKE_CROSSCOMPILING_EMULATOR` shim),
-  not a feature.
+- **Asset delivery: everything ships, including the music.** A fourth shell
+  stages a list rather than pointing a packager at `public/assets/` (see either
+  `stage-assets.sh`), and the race-music catalogue — ~62 MB, most of what it
+  stages — is now part of that list on both TV legs. It streamed from the origin
+  until 2026-08; the argument for that ("the app depends on the origin anyway")
+  conflated a page load at the start of a night with a continuous stream for the
+  length of every race.
+  **Bundling costs no ABI change, and that is the part worth copying.**
+  `audio.cc`'s SONG table bakes an ORIGIN-ABSOLUTE path including its `.mp3`
+  extension, and `audio-corpus.jsonl` froze those strings with its JS oracle
+  deleted. So a shell keeps the string exactly as given and only chooses what to
+  resolve it against: the staged root first (dropping the leading `/assets/`,
+  which the root already is), `baseURL` if nothing is staged. Keep that
+  fallback — it is what lets a build stage no music and still play.
+  What IS still corpus-locked (the R1 that was here): changing the extension, or
+  trimming the pool, which shifts every index. Both mean making `Song::file` a
+  stem, and `ttp_audio_song_json`'s index has to resolve to whatever you pick.
+  Moving off mp3 is worse than it looks besides — Apple decodes Opus only inside
+  CAF (ffmpeg cannot mux it) and `MediaPlayer` reads Ogg Opus only from API 29
+  against minSdk 24, so a stem buys three artifacts per song rather than one.
+  Changing the BITRATE is free of all of it: `SOURCES.json`'s `encode.args` plus
+  `npm run check:music-loudness`, and nothing in the corpus moves.
+- **CI's Android legs are compile/link-only** (`.github/workflows/native.yml` —
+  every other leg runs the full ctest suite, but no runner has a TV). The
+  fixtures do run on real hardware: `native/scripts/android-device-spawn.sh`
+  drives the whole ctest suite on a box over adb — a scripted-manual run, not
+  a CI gate, and the answer to `fp-profile.md`'s contraction risk.
+- **A shell's RENDERER is compiled by its own workflow, not by the conformance
+  matrix.** `native.yml` configures without `-DFILAMENT_SDK` on every leg, and
+  `native/CMakeLists.txt` gates `ttp_display_*.cc/.mm` and `ttp_renderer` behind
+  that, so the conformance jobs prove the engine and see none of the display
+  half. Each TV shell therefore owns a workflow that builds the real thing
+  against the pinned Filament fork, cached on the pin commit: `androidtv.yml`
+  plus `native.yml`'s `android-full`, and `tvos.yml`. A fourth shell owes one
+  too, and it is where its platform's only ObjC++/JNI/glue file first compiles.
+- **Both TV shells publish from `release.yml`, and NEITHER is device-tested by a
+  runner.** Its jobs are independent, take the same pin-keyed Filament cache the
+  per-shell workflow warms on `main`, and publish only on a tag — a dispatch
+  builds and hands back an artifact. What a runner cannot do either way is see a
+  frame: a hosted macOS runner's paravirtual GPU crashes Filament in the tvOS
+  simulator, so the store pictures are the screens gallery's `store` cards,
+  captured on a dev machine and committed, and the first machine to render a
+  shipped build is a television or a developer's simulator.
 
 ## What conformance does and does not cover you for
 
 The corpora prove that a LAYER agrees with the JS that recorded it. They say
-nothing about a shell. Two gates exist for the boundary a shell actually sits
-on, and a new platform should extend both rather than inventing a third:
+nothing about a shell. Three gates exist for the boundary a shell actually sits
+on, and a new platform should extend them rather than inventing a fourth:
 
 - `native/runtimetest/abi_check.cc` — every ABI, every leg, including the
   handle-taking exports whose only statement of correctness is that they agree
@@ -248,7 +671,14 @@ on, and a new platform should extend both rather than inventing a third:
 - `tests/wire-compat.test.js` + `tests/wire-fastlane.test.js` — the only place
   two LANGUAGES agree on bytes at runtime. Phones stay on the JS controller on
   all three TV platforms, so this suite is permanent and your sender belongs
-  in it.
+  in it. Note what it does NOT see: it drives the WEB display, so the lobby
+  frame's schema is pinned for one shell only.
+- `tests/shell-parity.test.js` — the three agreements that fail silently and
+  that no compiler checks: a declared performer table that has stopped matching
+  its own switch, a controller verdict the web acts on and a TV shell drops into
+  its default arm, and a fact the web puts on the lobby snapshot that a TV shell
+  omits (absent is a legal value, so the phone just shows the setting off). A
+  fourth shell adds its files to the tables at the top.
 
 ## The ABI is a PROTOCOL, and that is where a shell actually breaks
 
@@ -285,10 +715,16 @@ now UNREPRESENTABLE, because the entry point that permitted each is gone:
    depends on the active order (`auto-pause`, the standings board's late
    joiners) does the synced read inside the walk.
 
-There is no hand-assembled input left at all: the launch's field copy is
-retained behind the room and repaired by the rename/rekey walks, so the
-standings board is a pure read (`ttp_ui_standings_live_json(session, room,
-over, resultsOrNull, autoAdvanceMs)`).
+There is no hand-assembled input left at all, and the standings board is not
+even a read any more: the launch's field copy is retained behind the room and
+repaired by the rename/rekey walks, and the BOARD is retained beside it. The
+race walk composes and stores it, the rename walk and `ttp_ui_settle_standings`
+patch it in place, the statechange walk drops it, and `ttp_net_lobby_frame`
+puts it on the wire. What a shell owns is the republish and the moment the
+podium reveal lands. Its results screen reads
+`ttp_ui_results_view_live_json(room, intermissionMs)`; the board-taking
+`ttp_ui_results_view_json` survives for the screenshot harnesses, which stage a
+synthetic board with no room behind it.
 
 And one that is not an ABI call at all: **a method nothing invokes reads as
 implemented.** A room teardown shipped complete, documented as running "on
@@ -301,11 +737,32 @@ second instance on its first run.
 **The only detector for this class is an end-to-end test with a real peer.** A
 headless phone driven through a real party — join, HELLO, pick, ready, start,
 race, leave — against the real app over the real relay found four of the six,
-and no corpus, screenshot or unit test found any of them. That harness lands
-with the first TV shell (`scripts/lib/phone.mjs` is the platform-free half); a
-new shell should point it at itself before it trusts anything else.
+and no corpus, screenshot or unit test found any of them. That harness is
+`scripts/tvos-party-check.mjs` (`scripts/lib/phone.mjs` is the platform-free
+half); a new shell should point it at itself before it trusts anything else.
 
 **And a screenshot harness must not bypass the real entry points.** The first
 shell's shots reached `ttp_race_launch_json` directly, so fifteen race screens
 photographed perfectly for a build whose Start button had never worked once. A
-harness may fabricate its INPUTS; it must not own a second copy of the road.
+harness may fabricate its INPUTS; it must not own a second copy of the road
+(`scripts/capture-shots-tvos.mjs`, `npm run shots:tvos`, is the corrected
+one).
+
+**How MUCH harness a shell owes depends on what its platform can photograph.**
+tvOS needs a UI test on the device, because `devicectl` has no screenshot verb and
+`XCUIScreen.main.screenshot()` is the only thing that captures the CAMetalLayer
+composited with the chrome over it. Android has `adb exec-out screencap -p`, which
+photographs the SurfaceView under the Compose chrome from outside the process — so
+that shell owes a scenario applier and a readiness SIGNAL and nothing else: an
+intent extra in, a log line out, `scripts/capture-shots-androidtv.mjs` driving both
+from the far side. Read the two before writing a third; the second one is a third
+the size.
+
+**The columns are only comparable if the fixtures agree.** `/gallery-shots.html`
+puts any two platforms' shots of one screen side by side, and every difference in
+the FAKE DATA reads as a difference in the UI: player names, how many rows a board
+has, which circuit a race scenario races. Take the web harness's numbers
+(`public/display/TestHarness.js` — the names, the times, the banked points) rather
+than inventing a set, pin the raced circuit to something that does not depend on
+what a previous scenario left in preferences, and put a screen's own `settleMs` in
+`galleryScenarios.js` where a card is about a MOMENT rather than a state.

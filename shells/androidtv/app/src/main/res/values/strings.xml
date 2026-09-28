@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The launcher label ONLY.
+     Every string the game itself shows is answered as a KEY by ttp_ui.h and
+     resolved in Copy.kt, exactly as the tvOS shell resolves them in Copy.swift:
+     "Strings come out as KEYS ... so your platform's own string resources are
+     the copy table" (docs/native-port/shells.md). Adding game copy here would
+     split that table in two. -->
+<resources>
+    <string name="app_name">Tiny Track Party</string>
+</resources>

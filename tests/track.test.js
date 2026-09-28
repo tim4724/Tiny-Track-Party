@@ -25,12 +25,11 @@ const NATIVE_WASM = path.join(__dirname, '..', 'public/display/engine/native/ttp
 const NATIVE_SKIP = fs.existsSync(NATIVE_MJS) && fs.existsSync(NATIVE_WASM)
   ? false
   : 'ttp_runtime.mjs/.wasm not built — run native/scripts/build-runtime-web.sh';
-// [car id, caution, laneBias] — the first four AI_PERSONALITIES knob pairs from
-// native/libttp-sim/ttp/ai_driver.cc, under the traces' cpu-<name> id convention.
-const NATIVE_PERSONAS = [
-  ['cpu-bolt', 1.05, -0.6], ['cpu-pixel', 1.00, 0.6],
-  ['cpu-rusty', 0.97, -0.25], ['cpu-zippy', 0.94, 0.25]
-];
+// [car id, caution, laneBias] — the first four persona knob pairs, under the
+// traces' cpu-<name> id convention. Derived (in the before hook) from
+// public/display/aiPersonas.js, the one JS copy of the C++ table
+// (display-abi.test.js pins it to the wasm).
+let NATIVE_PERSONAS;
 async function loadNativeAbi() {
   const factory = (await import(pathToFileURL(NATIVE_MJS).href)).default;
   const Module = await factory();
@@ -49,6 +48,8 @@ let buildTrack, trackSweep, trackFrames, trackSupports;
 let TRACKS, TRACK_LIST, DEV_TRACKS, ALL_TRACKS, trackSchematic, TRACK_SCHEMATICS;
 let packSchematic, unpackSchematic, SCHEMATIC_EPS;
 test.before(async () => {
+  NATIVE_PERSONAS = (await import('../public/display/aiPersonas.js')).AI_PERSONALITIES
+    .slice(0, 4).map((p) => [`cpu-${p.name.toLowerCase()}`, p.caution, p.laneBias]);
   const nt = await import('../scripts/native-track.mjs');
   await nt.init();
   ({ buildTrack, trackSweep, trackFrames, trackSupports } = nt);
@@ -664,9 +665,7 @@ test('an off-centre car on a twisting road sits flush on the local (helicoid) su
     // Local surface normal at (s, lat): finite-difference the swept surface
     // S(s, l) = pos(s) + l·lateral(s) along s, crossed with the lateral direction.
     // f0.up is the CENTRE-frame up at the same s, which is what `naive` wants —
-    // `trackFrameAt(id, s)` is literally `trackFrames(id, [s])[0]`
-    // (scripts/native-track.mjs), so asking for it separately would be a second
-    // wasm call and JSON parse for a frame already in hand.
+    // the frame is already in hand from trackFrames, so no separate call.
     const D = 0.4;
     const surfaces = (fr, k, lat) => {
       const fm = fr[k * 3], f0 = fr[k * 3 + 1], fp = fr[k * 3 + 2];

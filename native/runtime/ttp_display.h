@@ -33,9 +33,53 @@ extern "C" {
 
 /* surface is platform-defined: a CSS selector for the target <canvas> on web,
  * a CAMetalLayer* on tvOS, an ANativeWindow* on Android. width/height are
- * physical pixels. Returns 1 on success, 0 on failure. */
-TTP_ABI int ttp_display_create(const char* surface, uint32_t width, uint32_t height);
+ * physical pixels. Returns 1 on success, 0 on failure.
+ *
+ * `const void*`, not `const char*`. Only ONE of the three platforms passes a
+ * string here — the web, whose selector is a `const char*` the surface file
+ * casts back on arrival — and the other two pass an opaque handle. Typing the
+ * parameter as the web's case made the majority spelling the wrong one: tvOS
+ * carried a whole extra header and forwarder whose only job was to keep a
+ * `CAMetalLayer*` -> `const char*` reinterpret out of the Swift call site, and
+ * Android would have owed the same for its ANativeWindow*. Nothing about the
+ * emscripten binding changes — cwrap's 'string' argument type marshals a JS
+ * string to a pointer regardless of how C spells the parameter. */
+TTP_ABI int ttp_display_create(const void* surface, uint32_t width, uint32_t height);
 TTP_ABI void ttp_display_resize(uint32_t width, uint32_t height);
+
+/* How much of each edge of this surface a TELEVISION may be cropping, as a
+ * FRACTION per side — fx of the width off the left AND the right, fy of the
+ * height off the top AND the bottom. Everything the shell then places from
+ * ttp_display_cell_rects lands this far inside its own cell.
+ *
+ * THE SHELL REPORTS IT, because only the shell can know it and the three do not
+ * agree. tvOS is handed a real safe area by the system (90 x 60 pt of a
+ * 1920 x 1080 screen, so not the same fraction on both axes) and passes that;
+ * the web and Android have nothing to ask and pass the authored `--safe-frac-x/y`
+ * from theme.css, whose note carries why 2.5% and not the 5% Google's TV guidance
+ * asks for. A platform that ever learns its true overscan reports it here and
+ * nothing else changes.
+ *
+ * Defaults to 2.5% per side, and that is deliberately not zero: a shell that
+ * forgets to call this gets the safe layout rather than the clipped one, which
+ * is the failure that can actually be seen from a sofa. tests/safe-zone.test.js
+ * pins the default to the token so the two cannot drift.
+ *
+ * Clamped to [0, 0.25): an inset of half the surface has no rect left to
+ * describe, and a negative one would push chrome off the picture entirely.
+ *
+ * NOT applied to the 3D, and NOT applied to the renderer's own steer bar. A
+ * background belongs edge to edge on every one of these platforms — Apple's HIG
+ * says so outright — so the camera keeps framing the whole surface. The bar's
+ * exemption is a judgement rather than a rule, and it is argued where the bar is
+ * placed (TtpRendererFrame.cpp). */
+TTP_ABI void ttp_display_safe_insets(float fx, float fy);
+/* Block until the renderer's driver thread has executed everything recorded so
+ * far. A shell calls this ONCE before resizing the window's buffer queue
+ * underneath a threaded backend: a frame recorded at the old size whose buffer
+ * is dequeued after the resize lands mis-scaled on the glass for one frame —
+ * the Android shell's rare "scene shrinks for a frame" flicker. */
+TTP_ABI void ttp_display_drain(void);
 TTP_ABI void ttp_display_destroy(void);
 
 /* NO ttp_display_ui_scale. There was one — physical pixels per UI point, so the
@@ -47,41 +91,100 @@ TTP_ABI void ttp_display_destroy(void);
  * (TtpRenderer::drawOverlay), and every number crossing this ABI is back in the
  * surface's own physical pixels. */
 
-/* HOW BIG that surface should be, decided from what the last window of frames
- * cost: pass the scale in force, the RAW measurements, how long the current
- * scale has been in force, and the band this shell allows; take back the scale
- * to render at next. The shell then sizes its buffer and calls
- * ttp_display_resize with the result.
+/* THE ADAPTIVE RENDER SCALE — how big the surface should be AND how often to
+ * present it, decided from what the last window of frames cost.
  *
- *   gpuShareP95 / gpuFrames        p95 GPU time as a fraction of the frame
- *                                  budget, from a timer query around the frame,
- *                                  and how many frames carried a result. Pass 0
- *                                  where the platform has no GPU timer.
- *   presentP95Ms / presentFrames   p95 frame interval, and its sample count.
- *   presentFloorMs                 ttp_display_present_floor's running answer.
+ * ONE DECISION FOR BOTH. Frame rate and resolution are two ways of spending the
+ * same GPU milliseconds, and ttp/render_scale.h lays them out as a single
+ * ordered list of operating points around a desired spot of 1080 lines at
+ * 60 Hz: below it resolution gives way and the rate does not, above it the rate
+ * goes first. A shell that could take one answer and skip the other would be
+ * arbitrating between them itself, which is the whole thing this layer exists
+ * to prevent.
  *
- * Everything JUDGED about those numbers — which signal decides, which
- * directions each may move in, how many samples a percentile needs, the holds
- * and the step sizes — is in ttp/render_scale.h, where every leg's ctest
- * executes it. Hand over measurements, not opinions, and honour the answer; a
- * shell that has measured nothing gets its current scale back, clamped.
+ * THE STATE IS NOT THE SHELL'S EITHER, and that is what these three calls are.
+ * The window the percentiles come from, the running fastest present, the
+ * observation the cost model fits from, when the point last moved and when the
+ * scene was built: all of it lives in ttp/render_scale_controller.h, where the
+ * `render_scale` ctest executes it on every leg. Three shells held it by hand
+ * once, in three languages, and their percentile formulas had already drifted
+ * from the one behind the readout they were drawn beside.
  *
- * Pure arithmetic, no display state: both of these answer before
- * ttp_display_create and after ttp_display_destroy. */
-TTP_ABI double ttp_display_scale_step(double current,
-                                      double gpuShareP95, int gpuFrames,
-                                      double presentP95Ms, double presentFloorMs,
-                                      int presentFrames, double sinceChangeSec,
-                                      double minScale, double maxScale);
+ * WHAT A SHELL OWES, and it is now only this:
+ *
+ *   1. ttp_perf_sample on EVERY tick, drawn or not — which it already did for
+ *      the readout. The rule folds off that same window, so a resolution can
+ *      never be steered off numbers the overlay disagrees with. Feed it whether
+ *      or not anything is watching.
+ *   2. ttp_display_scale_scene when a scene is built.
+ *   3. ttp_display_scale_poll every frame, and PERFORM what it answers.
+ *   4. ttp_perf_pacing with ttp_display_scale_panel_ms and the divisor below,
+ *      so the readout's budget is the operating point's.
+ *
+ * A shell writing an `if` around a measurement before passing it, or holding a
+ * clock the rule could hold, has taken a decision that must not differ between
+ * platforms. */
 
-/* The device's own fastest present, folded one window at a time: pass the value
- * this returned last time (0 to begin) and the window's p05 frame interval, keep
- * what comes back, and hand it to ttp_display_scale_step as presentFloorMs.
+/* A NEW SCENE was built, on the shell's own monotonic clock in milliseconds.
  *
- * The shell holds it because it is a MEASUREMENT — but WHICH samples may become
- * one, and the fact that it must outlive both the stats window and a resize, are
- * rules, and they are in ttp/render_scale.h with the rest. */
-TTP_ABI double ttp_display_present_floor(double prevFloorMs, double p05Ms);
+ * Two things follow, and neither is the shell's to judge. The cost model's
+ * previous observation is dropped, because a fit whose two points straddle a
+ * scene change measures a slope belonging to neither. And the scale's TENURE
+ * restarts, which is what lets the rule shorten its own up-hold for a scene the
+ * scale has not settled in yet — without it a race inherits the lobby's floor
+ * and thaws one rung per lap. Drop the readout's window with ttp_perf_reset
+ * alongside: the lobby attract and a race are different pictures. */
+TTP_ABI void ttp_display_scale_scene(double tMs);
+
+/* Re-decide the operating point. Returns 1 and writes {scale, presentDivisor}
+ * into `out2` when the point MOVED; 0 (touching nothing) otherwise, which is
+ * also the answer while the poll cadence or one of the rule's holds is still
+ * running. Call it every frame; the cadence is the controller's.
+ *
+ *   tMs                    any monotonic clock, milliseconds. Only differences
+ *                          are read, and it must be the same clock
+ *                          ttp_perf_sample is fed.
+ *   minScale / maxScale    the band, as scale factors on the surface's layout
+ *                          size. The ceiling is the panel's own resolution and
+ *                          whatever pixel budget the shell caps it at. Pass
+ *                          minScale 0 for no extra narrowing: THE LADDER OWNS
+ *                          THE FLOOR, and a shell may not reach below its
+ *                          bottom rung — a fraction here would mean 360 lines
+ *                          on one surface and 720 on another, which is not one
+ *                          decision.
+ *   baseLines              buffer lines a scale of 1.0 means on this surface —
+ *                          the view's height in physical pixels on a TV, the
+ *                          container's CSS height in a browser. The rungs are
+ *                          LINE COUNTS (720, 1080, …), so this is what makes
+ *                          one mean the same picture on every platform.
+ *   panelMs                the panel's own present period, ONE VSYNC: 16.7 on a
+ *                          60 Hz TV, 8.3 on a 120 Hz one. Without it the rule
+ *                          cannot know what a rate step is worth, and a fixed
+ *                          60 Hz budget spends a 120 Hz panel's headroom on
+ *                          pixels every time. Pass 0 where the platform has no
+ *                          honest answer (a browser has no refresh-rate API)
+ *                          and it is learned from the tick series instead.
+ *
+ * A shell that has measured nothing gets 0 and keeps what it has. THE POINT IN
+ * FORCE IS THE SHELL'S OWN COPY — it starts at {1.0, 1} and changes only when
+ * this answers, so there is no reader here: what a shell holds is the buffer it
+ * actually sized and the cadence it actually paced, which is a record of what
+ * it PERFORMED rather than a second opinion about what to do.
+ *
+ * A shell may override the divisor half (a sweep pinning a present rate) and
+ * still let the resolution adapt. The rule then prices lateness against the
+ * cadence IT chose rather than the pinned one — which on a 60 Hz panel is no
+ * divergence at all, because anchorDivisor is 1 there and the operating-point
+ * list holds no other. Above 60 Hz, pin both or neither. */
+TTP_ABI int ttp_display_scale_poll(double tMs, double minScale, double maxScale,
+                                   double baseLines, double panelMs, double* out2);
+
+/* The panel period the rule is judging against: what was last passed to
+ * ttp_display_scale_poll, or what has been learned from the frames where a
+ * shell passed 0. For ttp_perf_pacing, so the readout's budget and the rule's
+ * budget are one number. 0 before anything is known, which the readout reads as
+ * "assume 60". */
+TTP_ABI double ttp_display_scale_panel_ms(void);
 
 /* ---- scene -------------------------------------------------------------- */
 
@@ -89,6 +192,54 @@ TTP_ABI double ttp_display_present_floor(double prevFloorMs, double p05Ms);
  * owns fetching; the bytes are copied before this returns. 1 on success —
  * predicate polarity, like every int on the ABI. */
 TTP_ABI int ttp_display_asset(const char* name, const uint8_t* bytes, uint32_t len);
+
+/* ---- what still has to be fetched -------------------------------------------
+ *
+ * Provisioning is mostly RE-work. The engine's asset map survives a scene
+ * release, so across two builds the props are always the same bytes, the
+ * textures always are, the scenery is whenever the biome held, and the cars are
+ * unless somebody actually picked a different one. A re-dress is worse: the
+ * roster moves for a ready toggle, a rename, a welcome or a seat expiry, none of
+ * which change a single byte.
+ *
+ * WHICH ONES ARE STALE IS NOT A PLATFORM FACT. One shell used to answer it with
+ * a memo of its own beside the fetch loop — a mirror of the engine's asset map,
+ * which it then had to invalidate itself on the beat a destroyed surface took
+ * that map away. The other two shells simply re-read, re-derived and re-copied
+ * everything, every build. Both are the same bug in different directions, and it
+ * is the one `ttp_net.h` and the blob walk above already argue about: a shell
+ * that has to re-derive an engine rule from prose is the defect.
+ *
+ * So the shell says what it WOULD hand over and the engine says what it still
+ * needs. `wantJson` is, in fetch order:
+ *
+ *   [{"name":"scenery0.glb","tag":"tree"},
+ *    {"name":"car0.glb","tag":"vehicle-racer"},
+ *    {"name":"car0-ghost.glb","tag":"vehicle-racer","from":"car0.glb"}]
+ *
+ * THE TAG IS WHAT THE BYTES ARE A FUNCTION OF, in your own vocabulary — a kit
+ * model's base name, a texture's authored URI. Not the asset name: `car3.glb` is
+ * different bytes when slot 3 picks a different model, while
+ * `Textures/colormap.png` never is. A slot with no model tags as "" so a later
+ * pick reads as a change. `from` names what a DERIVED asset is made out of (a
+ * ghost's model), and a wanted derivative always brings its source back with it
+ * — otherwise the answer would ask you to derive from bytes it just told you not
+ * to fetch.
+ *
+ * The answer is the subset to fetch, as a JSON array of names, and the tags are
+ * REMEMBERED: the ttp_display_asset calls that follow stamp them, so nothing
+ * crosses twice and there is no second call to forget.
+ *
+ * ttp_display_asset_textures answers the images[].uri every model now held
+ * references and that the engine does not already have — sorted, deduplicated,
+ * relative as authored. Ask it AFTER the models are in, which is where the shells
+ * already scanned for themselves; the engine reads the bytes it is holding, so a
+ * model the plan skipped still contributes its textures, and the scan is cached
+ * by those bytes rather than repeated per build.
+ *
+ * Both are scratch, per ttp_abi.h. */
+TTP_ABI const char* ttp_display_asset_plan(const char* wantJson);
+TTP_ABI const char* ttp_display_asset_textures(void);
 
 /* Force a biome on every scene built from here on, regardless of the track's
  * cup — the ?biome= inspector override, which is how any track gets compared in
@@ -226,6 +377,106 @@ TTP_ABI int ttp_display_build(const char* trackId, const char* rosterJson);
  * the fallback: a full ttp_display_build. */
 TTP_ABI int ttp_display_reroster(const char* rosterJson);
 
+/* ---- derived bytes, kept between RUNS ---------------------------------------
+ *
+ * Two things a build makes are expensive to compute and small to store, which
+ * is the only profile that earns a file: the SUN BAKE (~1250 ms of GPU on the
+ * Android reference box) and the SILHOUETTE LAYERS (~330 ms for five of them,
+ * a render and a flushAndWait each). Both are already kept in memory across
+ * scenes; this is the tier below, across runs. Keeping something between runs
+ * means a FILE, and a file is the shell's job — ttp_abi.h puts transport on the
+ * host side, and wasm has no filesystem at all.
+ *
+ * A WALK, AND STORE-AGNOSTIC, which together are the point of this section. It
+ * was three getters per blob kind once, and every shell hand-wrote the same
+ * choreography: ask the key in the one window it is defined over, decide
+ * whether the engine already holds that thing, read only if it does not, write
+ * back only when the build actually made something the store lacks. None of
+ * that is platform knowledge — it is knowledge about the ENGINE, held in the
+ * engine — and a shell that mirrors it has to invalidate its mirror when a
+ * destroyed surface takes the renderer away. That is `ttp_net.h`'s argument for
+ * the choreography walks one layer down, where all six of the first TV shell's
+ * launch bugs lived.
+ *
+ * So a shell NAMES NO BLOB KIND. It asks which stores exist, and for each one
+ * performs four primitives it cannot avoid owning — list names with last-used
+ * times, read by name, write by name, delete by name:
+ *
+ *   BEFORE THE BUILD, once per store:
+ *       plan(store, trackId, generation, entries)
+ *                                -> {"drop":["…"], "read":["…"]}
+ *       perform the drops; read each `read` name and offer(store, its bytes)
+ *   ttp_display_build(...)
+ *
+ *   ON EVERY FRAME, gated by one integer:
+ *       if (ttp_display_blob_ready()) for each store:
+ *           keep(store)          -> {"write":["…"]}
+ *           for each name: export(store, name) and write those bytes under it,
+ *                          then wrote(store, name)
+ *
+ * A NAME LIST, NOT A NAME, because a store may hold several things one build
+ * wants: a silhouette is one blob per car MODEL and a field uses up to four.
+ * (Keying them by the model SET instead stored each layer once per subset it
+ * appeared in and then missed outright whenever a lobby covered fewer models
+ * than the blob that wrote it.) The bake store answers zero or one.
+ *
+ * A name is absent from `read` when the engine is already holding that thing,
+ * which is the commonest build of all and costs no read at all. A blob the
+ * engine does not fully trust is a cache MISS, not an error: it is dropped and
+ * the scene makes the thing again.
+ *
+ * THE PLAN WINDOW IS AFTER PROVISIONING AND BEFORE THE BUILD, for both stores.
+ * The bake's key needs the biome latched; the masks' keys are derived from the
+ * car GLBs the shell has already handed over, so they do not exist until they
+ * have been. One call site satisfies both.
+ *
+ * THE WRITE HALF IS A FRAME BEAT AND NOT THE BUILD'S TAIL, and that is the one
+ * thing here a shell must not shortcut. A readback does not complete inside the
+ * call that issues it on GL — the completion is executed from
+ * OpenGLDriver::tick(), which endFrame() calls and flushAndWait() does not, and
+ * in a browser a task cannot wait on the GPU at all. The build STAGES its blobs
+ * (metadata snapshotted, reads issued) and the FRAME LOOP finishes them, on
+ * every backend alike — staging deliberately does not pump the driver, because
+ * the pump that would let Metal and Vulkan answer early is a synchronous GPU
+ * stall on the build's critical path, and on Android a build IS the lobby's
+ * latency. In practice the frame after a build collects them.
+ * `ttp_display_blob_ready` is a bitmask over the store order, so the cost of
+ * asking every frame is one integer, and it is 0 on any frame where nothing
+ * landed — which is almost all of them.
+ *
+ * When this was the build's tail, the web could only ever write a blob whose
+ * track had been built TWICE IN A ROW: a Grand Prix's second, third and fourth
+ * circuits were never stored in any session, and nothing said so.
+ *
+ * GENERATION IS THE INVALIDATION and it stays yours, because only a shell knows
+ * what identifies its own binary — Android's install time, tvOS's bundle
+ * version, the web's BUILD_STAMP hash. It is folded into the NAME, so a new
+ * binary cannot name the old one's blob at all: a shader edit reproduces the
+ * same key and would otherwise serve bytes baked by the old material,
+ * invisibly and across restarts. (The BACKEND is in the key already — a blob's
+ * byte orientation is the writer's, so a device flipping between Vulkan and GL
+ * keeps a blob per backend.)
+ *
+ * `wrote` is what retires a name, and it is the shell's to say because only it
+ * knows when the write is OVER — which on one shell is several awaits after the
+ * export. Say it once the attempt has finished, succeeded or not: a store is a
+ * cache and every road out of a failed write is "make it again", so a name that
+ * is never retired would be re-exported on every frame for the rest of the run.
+ *
+ * Every JSON answer is scratch, per ttp_abi.h. export answers NULL for a name
+ * that is not waiting. `offer` COPIES the bytes before it returns, like
+ * ttp_display_asset: a shell may free its buffer the moment the call is over,
+ * and one that hands every offer the same scratch buffer is fine. */
+TTP_ABI const char* ttp_display_blob_stores(void);
+TTP_ABI const char* ttp_display_blob_plan(const char* store, const char* trackId,
+                                          const char* generation, const char* entriesJson);
+TTP_ABI void ttp_display_blob_offer(const char* store, const uint8_t* bytes, uint32_t len);
+TTP_ABI int ttp_display_blob_ready(void);
+TTP_ABI const char* ttp_display_blob_keep(const char* store);
+TTP_ABI const uint8_t* ttp_display_blob_export(const char* store, const char* name,
+                                               uint32_t* outLen);
+TTP_ABI void ttp_display_blob_wrote(const char* store, const char* name);
+
 /* Tear the scene down; the engine, views, materials and provided assets live
  * on, so the next ttp_display_build is cheap. */
 TTP_ABI void ttp_display_release(void);
@@ -248,16 +499,49 @@ TTP_ABI void ttp_display_cells(const char* idsJson);
  * it is not ceil(sqrt(n)): a racing cell wants to be wider than tall, so two
  * players on a 16:9 screen are STACKED rather than side by side.
  *
- * Writes 4 floats per cell — x, y, width, height, TOP-LEFT origin — and returns
- * how many cells it wrote: min(cells, maxCells), or 0 when no car owns one
- * (out null, or ttp_display_cells empty/never called). Neither an int PREDICATE
- * nor an OUTCOME (ttp_abi.h): a COUNT, like ttp_room_size and
- * ttp_room_connected_count.
+ * TWO RECTS PER CELL: the PICTURE, then the same cell inset by the safe margin
+ * ttp_display_safe_insets describes. A shell needs both, and needs them to
+ * agree:
  *
- * Units are the surface's PHYSICAL pixels, the same ones ttp_display_create and
- * ttp_display_resize take. A shell drawing its overlay in scaled units divides
- * by its own scale factor — the browser by devicePixelRatio, the one number the
- * C side is never told (CSS pixels are not a concept tvOS or Android shares).
+ *   - THE PICTURE is where the 3D actually is. A centred element (the FINISHED
+ *     card, the reconnect QR) centres on it, and it is the only rect that can
+ *     show the grid tiles the surface — the stacked pair's equal letterbox bars
+ *     are a property of the picture and of nothing else.
+ *   - THE SAFE RECT is where anything anchored to an EDGE goes: the name chip,
+ *     the item slot, the place badge, the lap pill. On a television that crops,
+ *     the outer cells' share of it is the part the viewer can be promised.
+ *
+ * INSET ON ALL FOUR EDGES, not only on the ones a television can actually crop.
+ * The tighter rule was built first and rejected on sight: in a four-cell grid it
+ * puts two different margins in one row, because the badge left of a divider is
+ * not at risk and the one right of the screen's edge is. A uniform inset is what
+ * a split-screen racer's HUD does, and it is argued where it is applied
+ * (ttp_display_core.cc). Applied HERE and not in the shells because three copies
+ * of it is three chances to get it wrong three different ways.
+ *
+ * ONE CALL, not two exports, for the reason the fractions below already exist:
+ * two rects that must describe the same cell must not travel by different roads.
+ *
+ * Writes 8 floats per cell — x, y, width, height of the picture, then the same
+ * four of the safe rect, TOP-LEFT origin — and returns how many CELLS it wrote:
+ * min(cells, maxCells), or 0 when no car owns one (out null, or
+ * ttp_display_cells empty/never called). Neither an int PREDICATE nor an OUTCOME
+ * (ttp_abi.h): a COUNT.
+ *
+ * UNITS ARE FRACTIONS OF THE SURFACE, 0..1 — x and w of its width, y and h of
+ * its height. A shell multiplies by whatever it lays out in: CSS pixels in a
+ * browser, points on tvOS, authored dp on Android. None of those is a concept
+ * the C side shares, and none of them has to be.
+ *
+ * NOT PIXELS, and the difference is a bug class rather than a unit. A rect in
+ * surface pixels means nothing without the surface SIZE beside it, and the
+ * adaptive render scale moves that size underneath the shell — so every HUD
+ * became a two-value read that had to be taken in one breath, from two values
+ * that travelled by different roads. Two of the three shells failed it: tvOS
+ * placed its whole HUD off a stale `uiScale`, and Android divided fresh rects by
+ * a `surfaceWidth` its UI framework could not see change, which parks a
+ * full-width layout at a fraction of its size in a corner. A fraction has no
+ * partner to disagree with, so the mistake cannot be spelled.
  *
  * Answers whether or not a scene is built: the layout is a function of the
  * surface and the cell list alone, so the HUD stays put while a Grand Prix
@@ -382,11 +666,62 @@ TTP_ABI void ttp_display_hold(int held);
  * readback needs (pixels only survive inside the task that drew them). */
 TTP_ABI int ttp_display_frame(double dtSeconds);
 
+/* One frame WITHOUT A DRAW: everything ttp_display_frame does before the GPU —
+ * the scene clock, the chase rigs, the car seating, the props, the skid
+ * stamps — and nothing submitted. For a driver winding a race faster than it
+ * can draw it (the trailer editor): what the next drawn frame shows is then
+ * the state drawing every frame would have reached, rubber included, at a
+ * fraction of a drawn frame's cost. The stamps' texture uploads wait for that
+ * frame. Returns 1 when there was a scene to advance. */
+TTP_ABI int ttp_display_advance(double dtSeconds);
+
+/* 1 once a frame of the CURRENT scene has FINISHED on the GPU. Not the same
+ * fact as ttp_display_frame's 1, which only says the frame was submitted: on a
+ * queueing backend the first frames after a build sit behind Vulkan's pipeline
+ * compilation for over a second, and the compositor has nothing to latch until
+ * they clear — a boot cover lifted on submission uncovers that gap as a black
+ * screen. Poll this beside the frame call and treat "submitted AND settled" as
+ * painted. Sticky per scene; a release re-arms it. */
+TTP_ABI int ttp_display_settled(void);
+
 /* A rocket detonation, queued for the NEXT frame. The renderer cannot infer
  * these: a rocket that hit a car detonates ON that car and rides it out, while
  * a whiff self-destructs at a track point. idJson names the victim, or is null
  * for a whiff at (s, lat). */
 TTP_ABI void ttp_display_burst(const char* idJson, double s, double lat);
+
+/* The full-screen antialias pass, ON by default. Off is a QUALITY TRADE a weak
+ * GPU may take: the cells then draw straight onto the swap chain, so the frame
+ * loses both the offscreen buffer's store and vpresent's full-screen read, and
+ * the picture keeps its stair-steps.
+ *
+ * IT IS NOT A SMALL SAVING, which is why it is a switch rather than a constant.
+ * Measured on a PowerVR GE9215 (Google TV Streamer) at 1920x1080 with the
+ * backend's own GPU timer: an empty frame costs 25.2 ms with the pass and
+ * 15.3 ms without, and a full lobby 91.2 against 78.5. A whole 60 Hz budget is
+ * 16.7 ms, so on that device the antialiasing alone is most of a frame.
+ *
+ * The shell decides, because affordability is a fact about ITS device. */
+TTP_ABI void ttp_display_antialias(int on);
+
+/* THE DRESSING ABLATION, split in two because the group's cost is.
+ * `ttp_display_debug_features` hides the group whole (TTP_FEAT_DRESSING) and
+ * every layer bit is spoken for, so these two take the halves apart instead.
+ *
+ * dress_keep is the fraction of each merged group's COPIES that is kept (1 =
+ * all of them); dress_sheets is whether the one-renderable SHEETS -- boulders,
+ * landmarks, windmill, clutter, smoke, signs -- are in the scene at all.
+ *
+ * WHY BOTH EXIST. Measured on the reference Android box at four players, the
+ * copies are 40k vertices a frame and hold ~1.1 ms that no render scale can
+ * reach; the sheets are 88k and hold none of it. The copies are the kit's LIT
+ * models and the sheets carry no normals, which is the same split fillRoadLight
+ * already exploits on the deck -- so the frame's resolution-independent half is
+ * per-vertex SHADING rather than vertex count, and an arm that cannot separate
+ * lit geometry from unlit cannot show that. Both take the fragments with them,
+ * so each reads as a ceiling rather than as a saving. */
+TTP_ABI void ttp_display_dress_keep(float frac);
+TTP_ABI void ttp_display_dress_sheets(int on);
 
 /* ---- diagnostics -------------------------------------------------------- */
 
@@ -395,8 +730,26 @@ TTP_ABI void ttp_display_burst(const char* idJson, double s, double lat);
 TTP_ABI const double* ttp_display_profile(void);
 TTP_ABI const char* ttp_display_profile_names(void);
 
-/* DEBUG: the deck decals packed for the road material last frame, as JSON
- * [{s,lat,halfS,halfLat,r,g,b,a,inner,ellipse,knee}]. Exists because a wrong
+/* The last resolved GPU duration for a frame, in milliseconds, straight off the
+ * backend's own timer. 0 means THERE IS NO NUMBER, and a caller must treat that
+ * as "no signal" rather than as a fast frame.
+ *
+ * WHERE IT IS REAL: the GL backend where EXT_disjoint_timer_query exists, which
+ * is every Android GL ES 3 device this ships to. WHERE IT IS 0: emscripten,
+ * because Filament's GL backend compiles the timer-query probe out there and
+ * lands on a fallback that measures CPU time and says so in its own comment —
+ * the web shell wraps its own WebGL timer query around the frame instead and
+ * this must not be mistaken for it.
+ *
+ * This is the ONE measurement that can see HEADROOM. A vsync-locked present
+ * cadence looks identical at 10 % and 95 % load, which is why the render scale
+ * rule (ttp/render_scale.h) may only step DOWN without this and can step both
+ * ways with it. */
+TTP_ABI double ttp_display_gpu_ms(void);
+
+/* DEBUG: the deck decals packed for the road material last frame, as a JSON
+ * array of one object per decal — the keys and their per-key caveats live on
+ * ttp_display_debug_decals in ttp_display_core.cc. Exists because a wrong
  * lateral coordinate survived several rounds of colour-coded shader probes —
  * reading the actual floats and comparing them against the car's own position
  * is one arithmetic check instead of a guess. */
@@ -413,6 +766,194 @@ TTP_ABI void ttp_display_debug_wipe_skids(void);
 // 9 is the generic superellipse — a shape correct by construction, so it
 // separates "the bake is wrong" from "everything downstream of it is wrong".
 TTP_ABI void ttp_display_debug_force_mask_layer(int layer);
+
+/* THE CAR CONTACT SHADOW'S TUNING — /shadow-lab.html's whole surface.
+ *
+ * JSON both ways, by the call-frequency rule: this is a once-per-drag event and
+ * never a frame path. The getter answers the CURRENT values beside the SHIPPED
+ * defaults under "defaults", so a tuning page builds its sliders from the
+ * engine's own numbers instead of re-typing them and drifting (root rule 1).
+ *
+ * The setter takes a partial object — any key absent keeps its current value —
+ * so a page may send one knob per drag. Unknown keys are ignored. Keys:
+ *
+ *   mode         0 blob (shipped: every car, every cell count), 1 silhouette
+ *                (the old masked loop for everyone), 2 hybrid (the old
+ *                distance LOD). 1 and 2 exist for the A/B and cost what
+ *                native/renderer/CLAUDE.md prices them at.
+ *   shape        0 each model's own outline, 1 the shared superellipse,
+ *                2 a rounded rect in CLOSED FORM (shipped), 3 a fitted convex
+ *                k-gon, likewise closed form. The four roster cars have the
+ *                SAME bounding box, so the per-model FIT is the only thing
+ *                that tells them apart — and 2/3 are the cheap arms, because
+ *                0 and 1 are masks the CPU raster samples sixteen times a
+ *                texel while an expression is evaluated once. Both are still
+ *                PER-CAR, fitted to each model's own outline at bake time.
+ *                `corner` SCALES the fitted radius (1 = as fitted, 0 = a hard
+ *                rectangle); `polyEdges` (3..12) is the k-gon arm's edge
+ *                budget.
+ *   ao           the stamp's peak opacity        cap    summed-coverage ceiling
+ *   loadGain     deepening at full body pitch    ink    colour, 0xRRGGBB
+ *   overscan     footprint's share of the quad   grow   dilate the outline
+ *   blur         the stored field's ramp         remapLo/remapHi  the edge band
+ *                (an EMPTY band, hi <= lo, means no cut at all)
+ *   smoothTap    bool: bicubic B-spline tap (shipped on) vs raw bilinear
+ *   remapInShader  bool A/B arm: where a non-empty band is cut
+ *   stampProject   bool A/B arm: project() vs deckFoot() stamp placement
+ *   uploadWhole    bool A/B arm: whole-level upload vs the stamps' own rects
+ *   texelsPerU   layer density along the lap     rows   layer rows across it
+ *
+ * The last two RE-ALLOCATE the layer pair and the shape knobs RE-BAKE the
+ * masks; everything else is free and lands on the next frame. Nothing on the
+ * shipping path calls either of these. */
+TTP_ABI void ttp_display_shadow_tuning(const char* json);
+TTP_ABI const char* ttp_display_shadow_tuning_json(void);
+
+/* DEBUG: the mask car slot `slot` actually stamps, as
+ * { w, h, model: "<hex>", generic: bool, px: "<base64 of w*h bytes>" }.
+ *
+ * Exists because "does this shape look like the car?" cannot be answered from
+ * the deck: the stamp lands in roughly 16 by 11 texels of the carShadow layer,
+ * under a car, on asphalt. Reading the mask back is the only way to separate a
+ * shape that is WRONG from a shape that is right and merely too small to read
+ * — and those two want opposite fixes. `generic` says the outline bake did not
+ * land and the superellipse is standing in, which is a state no screenshot can
+ * distinguish from a rounded car. */
+TTP_ABI const char* ttp_display_shadow_mask_json(int slot);
+
+/* DEBUG: a WINDOW OF THE LAYER ITSELF — w*h texels of the carShadow texture at
+ * (x, y), as { x, y, w, h, px: "<base64>" }. Clamped to the layer; an empty
+ * object when there is no layer.
+ *
+ * THIS IS THE INSTRUMENT THAT SEPARATES THE WRITE FROM THE READ, and three
+ * wrong diagnoses of one artifact went by without it. Everything else about
+ * this channel is judged from screen pixels, which have been through a camera,
+ * the road's shader, the tail cut, tone mapping and a lossy capture — so
+ * "banding" seen there could be the raster, the sampling, or the grade, and
+ * guessing which is how the last three attempts were spent. The layer is what
+ * the raster actually wrote. If an artifact is in here it is the WRITE side; if
+ * this is clean and the deck is not, it is the READ side. */
+TTP_ABI const char* ttp_display_shadow_layer_json(int x, int y, int w, int h);
+
+/* FEATURE ABLATION, for the per-feature cost map. Each bit KEEPS one group of
+ * renderables; a cleared bit hides it, so the GPU timer around the frame reads
+ * that group's draw cost directly. The frame is submission-bound (per-cell draw
+ * calls rather than fill), which is why the question is answered by removing
+ * groups and not by reading a shader.
+ *
+ * The mask is latched, and the first call also does the one-time tag pass, so
+ * nothing on the shipped path pays for this until something asks. Passing
+ * TTP_FEAT_ALL restores the full picture but leaves the tags in place — which
+ * is the intended way to run a sweep, since it keeps every arm on the same
+ * code path. What it CANNOT measure is a hidden group's FScene::prepare, which
+ * still runs: this is the draw half of a feature's cost.
+ *
+ * PRICE A GROUP BY ABLATING THAT GROUP. A MASK OF 0 IS NOT A FLOOR, and reading
+ * it as one is how the deck's cost stayed invisible. Hiding every renderable
+ * does not empty the frame: the skybox is not a renderable and still fills
+ * every pixel the world was covering, so an all-off arm measures the sky where
+ * the reader thinks it measures nothing. On a fill-bound backend that lands
+ * within noise of the FULL picture, which reads as "the content is free" and is
+ * not — on the Apple TV the deck alone is a fifth of the frame, and it went
+ * unseen for a session because FULL-vs-zero was the control. What an arm
+ * actually reports is the difference between the group and WHATEVER SHADES THE
+ * PIXELS IT WAS HIDING, which is the honest question and the only one this
+ * knob can answer. */
+#define TTP_FEAT_ROAD     0x04  /* the deck ribbon — decals, rubber and paint ride its shader */
+#define TTP_FEAT_TERRAIN  0x08  /* ground, sky dome, hills, water, pillars, berms, gantry */
+#define TTP_FEAT_DRESSING 0x10  /* scenery, props, landmarks, clutter, cones, signs */
+#define TTP_FEAT_SKY      0x20  /* clouds, dust banks, birds, kites, balloon */
+#define TTP_FEAT_CARS     0x40  /* car GLBs, monster rigs, boost streaks */
+#define TTP_FEAT_EFFECTS  0x80  /* item pools, rockets, bursts, ambient particles */
+/* The road turns out to BE the frame's cost, so it has a second set of bits:
+ * the four channels of its fragment shader, switched by the uniforms that
+ * already gate them. These hide nothing — the same deck is drawn, one channel
+ * shorter — which is the most any optimisation of that channel could be worth.
+ * The paint channel is static per track and is restored from what the build
+ * wrote, so an arm may turn it off and a later arm turn it back on. */
+#define TTP_FEAT_ROAD_DECALS 0x0100  /* the per-fragment decal loop (shadows, auras, statics) */
+#define TTP_FEAT_ROAD_RUBBER 0x0200  /* the laid-rubber texture tap */
+#define TTP_FEAT_ROAD_PAINT  0x0400  /* the deck's own paint (repairs, boost pads) */
+#define TTP_FEAT_ROAD_SHADOW 0x0800  /* the baked sun-vis taps: the DECK's
+                                        track-space one (vroadvis.mat) and the
+                                        GROUND's light-space one (vvis.mat) */
+/* SCENE-WIDE channels: the same picture with one per-fragment term skipped on
+ * every surface. Filament's fog is composited INSIDE each surface shader, so it
+ * cannot be ablated by hiding a group — it needs a bit of its own. */
+#define TTP_FEAT_FOG      0x1000 /* the distance fog every surface composites */
+/* Two more scene-wide channels, both of which had NO bit and so could not be
+ * ranked against anything (the 2026-08-23 plan's phase 2). They ride a Filament
+ * VIEW GLOBAL rather than a material parameter — eleven materials would each
+ * have had to declare and bind one otherwise; see ttp_grade.inc.
+ *
+ * FOG_VERTEX is NOT a finer TTP_FEAT_FOG. That bit moves the fog's PARAMETERS
+ * (density, onset), so ttpFogFactor's length() and exp() run in both of its
+ * arms and neither can see them; this one skips the function. Clearing both
+ * bits is the only arm that removes the fog term entirely. */
+#define TTP_FEAT_GRADE      0x4000 /* ttpGrade's three dependent LUT taps, per shaded fragment */
+#define TTP_FEAT_FOG_VERTEX 0x8000 /* ttpFogFactor's per-vertex length() + exp() */
+#define TTP_FEAT_ALL      0xDFFC
+/* An INVERTED ablation knob, deliberately outside the TTP_FEAT_ namespace
+ * (TTP_FEAT_ALL is gated to be the OR of every TTP_FEAT_* bit, and a bit that
+ * DISABLES something would poison every restore): setting it takes the merged
+ * draw groups apart and puts the per-copy gltfio renderables back, so a sweep
+ * can price the merging itself on one launch (TTP_FEAT_ALL |
+ * TTP_DEBUG_NO_MERGE is the unmerged arm). The shipped picture keeps the
+ * merge. */
+#define TTP_DEBUG_NO_MERGE 0x2000
+/* TTP_FEAT_ROAD_DECALS decomposed — inverted knobs like TTP_DEBUG_NO_MERGE,
+ * so none of them joins TTP_FEAT_ALL: `TTP_FEAT_ALL | one of these` ablates
+ * that sub-arm alone.
+ *   NO_DECAL_MASKED   the near cars' silhouette stamps. Zeroes the PICK
+ *                     budget rather than the shader's count, so every car
+ *                     rides the far blob at full alpha — the real fallback
+ *                     picture, not a field of shadowless near cars.
+ *   NO_DECAL_PROFILE  the profile loop: boost auras, oil slicks, item discs.
+ *   NO_DECAL_STATICS  only the statics (slicks, item discs); auras stay.
+ *   NO_DECAL_BLOB     the far carShadow layer — raster, upload and the
+ *                     whole-deck shader tap. Attribution only: far cars lose
+ *                     their shadows outright.
+ *   DECAL_CAPS_HALF   the masked pick budget and the per-chunk profile fold
+ *                     cap, both halved. The rank gate degrades the overflow
+ *                     to the blob, so nothing loses its shadow. */
+#define TTP_DEBUG_NO_DECAL_MASKED  0x10000
+#define TTP_DEBUG_NO_DECAL_PROFILE 0x20000
+#define TTP_DEBUG_NO_DECAL_BLOB    0x40000
+#define TTP_DEBUG_NO_DECAL_STATICS 0x80000
+#define TTP_DEBUG_DECAL_CAPS_HALF  0x100000
+/* The MECHANISM probe for NO_DECAL_MASKED's saving: fold and WRITE the masked
+ * uniforms exactly as shipped, but zero the shader-side count so the loop
+ * never executes. Reads like NO_DECAL_MASKED -> the cost is the loop's
+ * fragments; reads like the baseline -> the cost is the per-frame chunk-UBO
+ * rewrites themselves. Attribution only (near cars lose their shadows). */
+#define TTP_DEBUG_DECAL_MASK_COUNT0 0x200000
+/* The probe's twin: counts and writes exactly as shipped, but maskBounds is
+ * an impossible box, so the shader's box test rejects every fragment. COUNT0
+ * fast + BOUNDS0 slow = the masked path runs PREDICATED across the chunks
+ * that carry a stamp, whatever the branch says; both fast = the cost is the
+ * stamp's own covered fragments. Attribution only. */
+#define TTP_DEBUG_DECAL_MASK_BOUNDS0 0x400000
+/* The third probe: the masked loop runs in full — projection, feather, mix —
+ * but the silhouette tap answers a CONSTANT instead of sampling the decalMask
+ * array (a view-global uniform branch, the grade/fog idiom). Against the
+ * baseline it prices the FETCH'S EXECUTION alone; register pressure and the
+ * armed-path cost stay, which is what BOUNDS0 already prices. Attribution
+ * only: every near shadow draws as a feathered square. */
+#define TTP_DEBUG_DECAL_MASK_FLAT 0x800000
+/* SET keeps every road chunk on the fine ribbon in every cell — the deck's far
+ * ribbon off (TtpRenderer::chooseDeckLod) — so a sweep prices it as interleaved
+ * arms on one launch. Inverted like TTP_DEBUG_NO_MERGE, and SEVEN hex digits
+ * wide: the arm is TTP_FEAT_ALL | this = 0x100DFFC. (0x10DFFC is CAPS_HALF.) */
+#define TTP_DEBUG_NO_DECK_LOD 0x1000000
+/* SET paints the far ribbon magenta, per cell, so the swap can be seen — the
+ * far ribbon reuses the fine ribbon's vertices and colours and is otherwise
+ * invisible: TTP_FEAT_ALL | this = 0x400DFFC. */
+#define TTP_DEBUG_DECK_LOD_TINT 0x4000000
+/* SET draws EVERY road chunk with the far ribbon in a split, the near ones
+ * under the cars included — the trade where the eye can resolve it:
+ * TTP_FEAT_ALL | this = 0x800DFFC. */
+#define TTP_DEBUG_DECK_LOD_ALL 0x8000000
+TTP_ABI void ttp_display_debug_features(unsigned int mask);
 
 #ifdef __cplusplus
 }

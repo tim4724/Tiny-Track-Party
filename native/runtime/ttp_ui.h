@@ -1,7 +1,7 @@
 /* ttp_ui.h — the UI MODEL half of the runtime C ABI: every "what should the
  * screen say" decision the display owns. Sibling of ttp_runtime.h (sim),
  * ttp_party.h (party), ttp_display.h (renderer) and ttp_audio.h (sound), same
- * conventions (ttp_abi.h) except for the one stated below.
+ * conventions (ttp_abi.h), with no exception.
  *
  * WHAT IS BEHIND IT. libttp-runtime/ttp/ui_model.{h,cc} — the seat grid, the
  * lobby readiness rule, the lobby race card, the ITEM-push gate, the
@@ -20,22 +20,23 @@
  * packed record cannot hold a name without inventing a string table and a
  * second read, so the precedent that fits is ttp_room_events_json's: bursty,
  * string-shaped data, drained as JSON. The one call on anything like a cadence
- * (ttp_ui_item_pushes_live_json) is a live gather with one shell-owned input,
- * and the shell picks how often to ask — the web one folds it into the same
- * tick as the HUD read.
+ * (ttp_ui_item_pushes_live_json) is a live gather over state that is entirely
+ * the engine's, and the shell picks how often to ask — the web one folds it
+ * into the same tick as the HUD read.
  *
- * There is a second reason, and it is the deciding one for the standings board:
- * that answer IS a JSON message. The shell puts it on the relay verbatim, so a
- * JSON ABI hands it straight through instead of decoding a struct only to
- * re-encode the same object.
+ * There is a second reason, and it used to be the deciding one for the
+ * standings board: that answer becomes part of a JSON message, so a JSON ABI
+ * passed the tree through instead of decoding a struct only to re-encode it.
+ * The board does not pass through a shell at all any more — it is composed and
+ * RETAINED behind the room handle, and ttp_net_lobby_frame puts it on the wire
+ * from there. The reason survives for everything else this layer answers.
  *
- * THE ONE DEVIATION FROM ttp_abi.h. Returned JSON here is NOT canonical: keys
- * come out in the MODEL'S OWN order, not sorted. That is deliberate and it is
- * about those wire bytes — the board's key order is the order the phones have
- * received since the JS model wrote it, and sorting it would silently re-spell
- * a shipped message. Nothing hashes a UI answer, so the canonical convention
- * buys nothing here and costs that. (libttp-json's ordered_stringify is the
- * emitter; canonical_stringify keeps its sort and its evidence-only job.)
+ * KEY ORDER IS NOT A CONTRACT, and this header used to claim otherwise. Returned
+ * JSON is canonical (sorted keys) like every other ABI's. The claim was that the
+ * standings board's key order was the order the phones receive; it never was,
+ * because the board reaches a phone inside a frame the encoder canonicalizes, so
+ * the model order stopped at framing. What IS contract is key PRESENCE — see
+ * NULL IS NOT ZERO below.
  *
  * STRINGS ARE KEYS, NOT COPY. Nothing user-facing crosses as English. A title,
  * a subtitle, a row's trailing cell, a race count and the back gesture's
@@ -44,13 +45,18 @@
  * live in each shell, next to the elements they fill. A formatted sentence
  * coming out of here would be a defect.
  *
- * STATELESS, WITH ONE EXCEPTION. Every call is a pure function of its
- * arguments. The exception is the CATALOGUE (ttp_ui_configure): the cups, the
- * track list and the two field sizes are authored data that changes when the
- * game ships, not while it runs, so a shell sets it once at boot rather than
- * re-sending ~2 KB of it on every rename. ui_model.cc itself stays
- * catalogue-agnostic — it looks ids up in whatever list it is handed — which is
- * what lets the conformance corpus carry a synthetic world of its own.
+ * STATELESS, WITH TWO EXCEPTIONS, and neither is a rule. The first is the
+ * CATALOGUE (ttp_ui_configure): the cups, the track list and the two field
+ * sizes are authored data that changes when the game ships, not while it runs,
+ * so a shell sets it once at boot rather than re-sending ~2 KB of it on every
+ * rename. ui_model.cc itself stays catalogue-agnostic — it looks ids up in
+ * whatever list it is handed — which is what lets the conformance corpus carry
+ * a synthetic world of its own. The second is the ITEM OUTBOX, which the two
+ * item calls below WRITE; it hangs off the session handle rather than off this
+ * ABI, and its section says why. Neither is state of THIS file, and nor is the
+ * third writer added since — ttp_ui_settle_standings stamps the board behind
+ * the ROOM handle (ttp_room.h). The rule is the same one every time: shim state
+ * hangs off the handle whose lifetime it shares, never off the ABI.
  *
  * IDS. A player id crosses as a JSON scalar, exactly as in ttp_party.h: the
  * token `3` is the number 3 and `"3"` is the string "3", and they are different
@@ -105,7 +111,7 @@ TTP_ABI int ttp_ui_configure(const char* json);
 
 /* The SHIPPED catalogue, in the shape ttp_ui_configure takes it:
  *
- *   {"cups": [...], "catalog": [...]}
+ *   {"cups": [...], "catalog": [...], "stars": {"earned": n, "total": n}}
  *
  * This is data, not a decision, and it is here because a shell has to DRAW the
  * thing — the lobby's mode picker is a list of cup names with a difficulty
@@ -118,11 +124,19 @@ TTP_ABI int ttp_ui_configure(const char* json);
  * here would let a test's fiction reach a picker.
  *
  * Each cup row additionally carries the couch's DERIVED progression — `stars`
- * (0..3), `locked`, and on a locked row `unlockDone`/`unlockNeed` — and the
- * answer's top level carries `tour: {stars}` for the World Tour's own badge.
- * Derived from whatever ttp_ui_progress_load installed (nothing loaded = a
- * fresh couch: zero stars everywhere, the Playroom locked), so a shell reads
- * ONE catalogue and never re-implements a star threshold or the unlock rule. */
+ * (0..3), `locked`, and on a locked row `unlockDone`/`unlockNeed`, counted in
+ * stars. The top-level `stars` object is the couch's total over every cup,
+ * `earned` out of `total`: the "X of Y" a shell shows.
+ *
+ * All of it is derived from whatever ttp_ui_progress_load installed (nothing
+ * loaded = a fresh couch: zero stars everywhere, the Playroom locked), so a
+ * shell reads ONE catalogue and never re-implements a star threshold or the
+ * unlock rule.
+ *
+ * There is no top-level `tour` badge — the World Tour earns no stars (decided
+ * 2026-08-13, the run is a shuffle of other cups' circuits and banking it would
+ * double-count them), and a save still holding a `tour` row loads and derives
+ * nothing from it. */
 TTP_ABI const char* ttp_ui_catalogue_json(void);
 
 /* ---- the couch's progression record -----------------------------------------
@@ -145,6 +159,26 @@ TTP_ABI const char* ttp_ui_catalogue_json(void);
 TTP_ABI int ttp_ui_progress_load(const char* jsonOrNull, int unlockAll);
 TTP_ABI const char* ttp_ui_progress_json(void);
 
+/* ---- the screens gallery's fabrications (harness only) ----------------------
+ *
+ * A gallery screen stands up with no party behind it, so its couch and its
+ * finished race are FABRICATED — once, here (ttp/preview.h), for all three
+ * harnesses, which used to type their own and drifted.
+ *
+ * ttp_ui_preview_progress_json: the record to hand ttp_ui_progress_load, so the
+ * shelf and the cup card derive their stars and lock like any couch's.
+ *
+ * ttp_ui_preview_board_json: a finished board for `kind` ("results" |
+ * "intermission" | "podium") over the race `ttp_race_bench_field_json` composes
+ * for the same track, players and seed — the race a harness launches behind it —
+ * against the first shipped cup. `raceIndex` >= 0 picks the cup race a cup
+ * dressing stands after (a preview walking the cup); -1 is the card's own. It is
+ * a board INPUT: run it through ttp_ui_results_view_json like the live one. Null
+ * for an unknown kind. */
+TTP_ABI const char* ttp_ui_preview_progress_json(void);
+TTP_ABI const char* ttp_ui_preview_board_json(const char* kind, const char* trackId, int players,
+                                              double seed, int raceIndex);
+
 /* ---- cup paper colours ------------------------------------------------------
  *
  * The picker's five surface colours. They are AUTHORED — not derived from the
@@ -159,16 +193,29 @@ TTP_ABI const char* ttp_ui_progress_json(void);
  * A native TV shell reads these instead of hand-copying the table — the first
  * one copied it anyway, against a comment claiming no export existed. It does.
  *
- * The catalogue above carries each cup's `color` as packed 0xRRGGBB. These two
- * exist so that no shell re-implements the WASH:
+ * The catalogue above carries each cup's `color` as packed 0xRRGGBB. The three
+ * below exist so that no shell re-implements the WASH:
  *
  * `pct` is how much of the colour survives a mix with white. The mix is in sRGB
  * on the ENCODED values — a straight per-channel lerp, which is what CSS
  * `color-mix(in srgb, …)` does. Mixing the same pair in linear light is a
  * one-line difference that comes out visibly darker and would match nothing
- * else on screen. A null/empty cup id gets the cup-less fallback, which is what
- * Random wears. */
+ * else on screen. A null/empty cup id gets the cup-less FALLBACK, which is
+ * itself a cup colour standing in for a cup nobody recognised — NOT the wash a
+ * cup-less selection wants. Random takes ttp_ui_neutral_tint_rgb below. */
 TTP_ABI uint32_t ttp_ui_cup_tint_rgb(const char* cupIdOrNull, double pct);
+
+/* The wash for a selection that belongs to NO CUP: Random's tiles, and any
+ * undrawn chip whose own cup is unknown too.
+ *
+ * NOT the one above with a null id. That answers the FALLBACK, which is itself a
+ * cup colour standing in for a cup nobody recognised — so a Random card painted
+ * through it comes out in the Backyard cup's lawn green, dressed as a cup it has
+ * nothing to do with. "Any biome" has to look like none of them.
+ * `trackPicker.js` keeps the pair apart as `cupTint` and `neutralTint`; this is
+ * the second one, and there was no export for it until a TV shell drew the tile
+ * and had to choose between the wrong colour and re-typing the palette. */
+TTP_ABI uint32_t ttp_ui_neutral_tint_rgb(double pct);
 
 /* FIELD_TINT: how much colour a schematic's field keeps. Shared so the phone's
  * picker and every TV lobby wash the same map to the same shade. */
@@ -184,10 +231,33 @@ TTP_ABI int ttp_ui_cup_field_tint_pct(void);
 TTP_ABI int ttp_ui_screen_step(const char* prevScreen, const char* nextScreen);
 
 /* What the back gesture MEANS on a screen — the part every shell shares.
- * "swallow" | "end-party" | "return-to-lobby". HOW the gesture arrives
- * (popstate, the tvOS Menu button, Android's back stack) and how the stack is
- * WALKED are each shell's; only the table is here. */
-TTP_ABI const char* ttp_ui_back_effect(const char* screen);
+ * "swallow" | "end-party" | "pause-race" | "resume-race" | "return-to-lobby".
+ * HOW the gesture arrives (popstate, the tvOS Menu button, Android's back
+ * stack) and how the stack is WALKED are each shell's; only the table is here.
+ *
+ * A RACE IS THREE STATES, so the two latches no handle knows come in with it:
+ * `paused` is the overlay's own and `raceEnded` the results board's, the same
+ * two `ttp_race_pause_live_json` takes. Two of the answers do not NAVIGATE, so
+ * a shell that only knows how to go up a level is not done; see ttp/ui_model.h
+ * for why each state answers as it does. */
+TTP_ABI const char* ttp_ui_back_effect(const char* screen, int paused,
+                                       int raceEnded);
+
+/* Is a full-bleed COVER owed over this board, and which one — "none" | "boot".
+ *
+ * The lobby and the race are chrome over a live 3D view; until that view has put
+ * a frame on the panel they are chrome over nothing, and revealing them there is
+ * the "board first, track a beat later" flash. WELCOME is exempt by design: it
+ * stands on the paper diorama, so it is never waiting for anything.
+ *
+ *   scenePainted   has a BUILT scene reached the panel — not has a build
+ *                  returned, which on a television is seconds earlier. Only the
+ *                  shell knows it, and it latches once per process, so a cover
+ *                  is a boot-time thing by construction.
+ *
+ * A cover is deliberately not a fourth screen: it is not navigable, pushes no
+ * history and has no back gesture. See ttp/ui_model.h. */
+TTP_ABI const char* ttp_ui_cover(const char* screen, int scenePainted);
 
 /* ---- the lobby ----------------------------------------------------------- */
 
@@ -211,7 +281,7 @@ TTP_ABI const char* ttp_ui_roster_seats_room_json(int roomHandle, const char* ho
 /* The seat grid itself: those seats padded with OPEN placeholders up to
  * maxPlayers, so the lobby card keeps a fixed size as players trickle in and
  * never shrinks below the field that actually races. Takes the array
- * ttp_ui_roster_seats_json returned.
+ * ttp_ui_roster_seats_room_json returned.
  *   -> [{"open":true} | {"open":false,"name","colorIndex","carIndex",
  *       "modelIndex","off","host","ready"}, ...]
  * `off` is a held, dropped seat — dimmed, not removed. `modelIndex` wraps the
@@ -259,25 +329,39 @@ TTP_ABI const char* ttp_ui_reconnect_diff_json(const char* shownIdsJson, const c
 
 /* Which phones need an ITEM push this tick, off the LIVE race: the cars (id /
  * held item / finished — a finished car is on a victory lap with no usable
- * slot, so its item reads empty) and the CPU set come off the session handle;
- * the shell supplies only lastItem — what each phone was last told, in Map
- * insertion order — because the push rides its own message sent ONLY ON
- * CHANGE and the map is the shell's outbox state.
- *   lastItem  [{"id":id,"item":str|null}, ...]
- *   ->        [{"id":id,"item":str|null}, ...]
+ * slot, so its item reads empty) and the CPU set come off the session handle,
+ * and so does the OUTBOX — what each phone was last told, in the order the
+ * phones were first told — because the push rides its own message sent ONLY ON
+ * CHANGE. Nothing crosses but the handle.
+ *   ->  [{"id":id,"item":str|null}, ...]
  *
  * THREE STATES, not two: JS distinguishes a missing `item` key from an
  * explicit null and `!==` sees the difference, so a car whose slot went from
  * null to absent pushes again. The empty string is a fourth value and is NOT
- * folded to null here. PURE over the map: the caller applies the answers to
- * its own map, and clears it per race so the first tick resends every phone's
- * empty slot. */
-TTP_ABI const char* ttp_ui_item_pushes_live_json(int sessionHandle, const char* lastItemJson);
+ * folded to null here.
+ *
+ * THE OUTBOX IS THE SESSION'S (ttp_session.h's ttp_session_item_outbox), and
+ * this call STAMPS it as it answers. It used to be the shell's map, handed in
+ * and applied back out — the same two-writer coupling spelled in three
+ * languages, which is what the walk's clear-item-cache had to reach into. A
+ * new session's outbox is empty by construction, so the first tick of a race
+ * still resends every phone's empty slot.
+ *
+ * THE STAMP LANDS BEFORE THE SEND, and on two shells it did not. The web has
+ * always stamped first; both televisions sent and then stamped, so a sendTo
+ * that threw left the row unstamped and the next 6 Hz tick retried it. Stamped
+ * here, a failed send is a row the phone never receives until that seat's item
+ * changes again. Accepted — the failure window is one item change, and the web
+ * has shipped that behaviour throughout — but it IS a change to two platforms,
+ * so a shell must not be written as though a send can be retried by asking
+ * again. */
+TTP_ABI const char* ttp_ui_item_pushes_live_json(int sessionHandle);
 
 /* The same rule for the one-shot relight a (re)joining phone gets: the
  * welcome-item effect names a seat, this answers that seat's held item off
  * the live race as a bare JSON value — a quoted string, or null (no live car,
- * or an empty slot; the relight message carries `item` directly). */
+ * or an empty slot; the relight message carries `item` directly). It stamps
+ * the seat's outbox row, so the next push tick does not repeat it. */
 TTP_ABI const char* ttp_ui_welcome_item_live_json(int sessionHandle, const char* peerIdJson);
 
 /* ---- race flow ----------------------------------------------------------- */
@@ -316,8 +400,8 @@ TTP_ABI const char* ttp_ui_freeze_plan_json(int paused, int autoPaused, int sess
 
 
 /* THE SAME CHIP, READ STRAIGHT OFF A ttp_gp_create HANDLE — all eight input
- * fields come from the series state (cup id/name off the cup, "" from
- * ttp_gp_next_track spelling null), so no caller can omit one and ship a
+ * fields come from the series state (cup id/name off the cup, an empty
+ * CupSeries::nextTrackId spelling null), so no caller can omit one and ship a
  * board whose podium never says `final` (the first TV shell did, over the
  * old per-field route). NOT SHELL SURFACE: no shell holds a series handle —
  * a shell's chip rides the standings board's `cup.info`, and its series read
@@ -338,22 +422,62 @@ TTP_ABI const char* ttp_ui_results_action_json(int roomHandle);
 /* ---- the standings board ------------------------------------------------- */
 
 
-/* THE BOARD, GATHERED OFF THE LIVE HANDLES — every input:
- *   results      the race's own results OBJECT (the event drain's `results`
- *                answer, which no effect can carry), or "null"/NULL to read
- *                the live session — the same either-or broadcastStandings
- *                always had
+/* THE BOARD IS ROOM-RETAINED. The race walk composes it and stores it behind
+ * the room handle (ttp_room.h), the lobby frame injects it under `standings`,
+ * and the two things that happen to a board already out — a rename and the
+ * podium's settle stamp — PATCH the stored one. No shell holds a copy, and no
+ * shell composes one: what a shell does about a board is republish.
+ *
+ * THE BOARD, GATHERED OFF THE LIVE HANDLES — the same composition, answered as
+ * text rather than retained. Every input:
+ *   results      the race's own results OBJECT, or "null"/NULL to read the
+ *                live session — the same either-or broadcastStandings had
  * The race FIELD is the room-retained launch copy (rename/rekey repairs
  * applied by the walks), the cup half is the room's stored series, and
  * lateJoiners + the host come off the room seam — no shell assembles a row.
- * autoAdvanceMs as in ttp_ui_series_info_live_json. */
+ * autoAdvanceMs as in ttp_ui_series_info_live_json.
+ *
+ * NOT the live path any more: the walk retains through the internal seam
+ * (ttp_live.h's ttp_live_store_standings, this same composition). What this
+ * export is now is the CONFORMANCE surface — tests/ui-model.test.js pins the
+ * board rule against the shipped catalogue through it, and the abi ctest pins
+ * the retained board to it. */
 TTP_ABI const char* ttp_ui_standings_live_json(int sessionHandle, int roomHandle,
                                                int over,
                                                const char* resultsJsonOrNull,
                                                double autoAdvanceMs);
 
-/* The results overlay in its three dressings, as semantic values, off the board
- * above (pass its JSON straight back).
+/* THE PODIUM REVEAL HAS LANDED: stamp `settled` on the room's retained board.
+ * Returns 1 when it stamped and the snapshot must be republished, 0 otherwise.
+ *
+ * The phones were handed this board the moment the race ended, which is the
+ * moment the TV STARTS revealing what the cup did with it. `settled` is their
+ * cue to stop reporting the race and report the cup; ahead of it they would be
+ * crowning the champion on four screens while the TV was still counting points
+ * towards it. WHICH boards settle is decided here, not by a caller — only a
+ * cup's final one — so a shell arms this on every results screen and lets the
+ * answer decide.
+ *
+ * The TIMING is necessarily the shell's: it fires from the reveal's own
+ * completion callback, a fact no handle knows. Everything else is here.
+ *
+ * `settled` is stamped ONTO THE STORED VALUE, never recomposed onto a fresh
+ * board, and it never enters the board rule (ui::Board) — it is a wire cue for
+ * the phone, and the board's contracted key set is pinned by
+ * tests/ui-model.test.js and the frozen ui corpus. It appears only when true. */
+TTP_ABI int ttp_ui_settle_standings(int roomHandle);
+
+/* The results overlay in its three dressings, as semantic values, off the
+ * ROOM-RETAINED board — the live form, and the one the TV's results screen
+ * uses. `null` when no board is retained, which is not an empty overlay but
+ * NO overlay: paint nothing rather than a blank one. intermissionMs stays the
+ * caller's (the E2E override lives shell-side). Shape below. */
+TTP_ABI const char* ttp_ui_results_view_live_json(int roomHandle, double intermissionMs);
+
+/* THE SAME OVERLAY OFF A BOARD HANDED IN — kept for the three screenshot
+ * harnesses (public/display/TestHarness.js, the tvOS and Android TV Scenarios),
+ * which stage a SYNTHETIC board with no room and no race behind it. Not the
+ * live path; a shell painting a real results screen calls the form above.
  *   plain single-race board  titleKey "results",    rows carry a lap time
  *   cup intermission         titleKey "standings" + a sub + a "next up" footer
  *   cup podium               titleKey "cup_champs", the top three medalled

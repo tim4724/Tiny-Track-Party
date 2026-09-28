@@ -27,7 +27,7 @@
 // tap handler). HTTPS is required for sensors. Permission is not delivery,
 // though: enableMotion() also waits for a first real sample before it answers,
 // because a granted-but-silent sensor is the common failure and it used to
-// present as a dead steering wheel (see _settle / sensorPolicyBlocked).
+// present as a dead steering wheel (see _settle).
 //
 // Braking: a held BRAKE button. Held → brake = BRAKE_LEVEL; the engine reads it
 // as a target speed of (1 - BRAKE_LEVEL) × top speed, so a full hold (1) bleeds
@@ -74,26 +74,6 @@ const BRAKE_LEVEL = 1.0;   // held brake decelerates the car to a full stop
 // the listener attaches, so a real sensor answers within a frame or two and
 // pays none of this window; it only has to outlast a slow first sample.
 const SENSOR_SETTLE_MS = 600;
-
-// Does this document's permissions policy allow the motion sensors?
-// false = the embedder withheld them, null = this browser cannot say.
-//
-// A cross-origin iframe is granted the sensors only if its embedder spends an
-// `allow` attribute on them, and where it doesn't, DeviceOrientationEvent still
-// EXISTS on window and simply never fires. The presence of the constructor
-// therefore proves nothing, which is why this is asked separately.
-//
-// Blink-only (`document.featurePolicy`; there is no `document.permissionsPolicy`
-// despite the rename of the header). WebKit and Gecko expose no equivalent, so
-// they get no early answer and fall back to SENSOR_SETTLE_MS. Only the
-// accelerometer is consulted: it is required for any gravity reading at all,
-// while a gyroscope-only withholding is left to the settle check rather than
-// risking a false "no sensor" on a phone that would have worked.
-function sensorPolicyBlocked() {
-  const fp = typeof document !== 'undefined' && document.featurePolicy;
-  if (!fp || typeof fp.allowsFeature !== 'function') return null;
-  try { return !fp.allowsFeature('accelerometer'); } catch (_) { return null; }
-}
 
 // The complementary filter behind setGravity (the AirConsole sensor relay —
 // the DeviceOrientation path never touches these, the OS fused it already).
@@ -146,17 +126,20 @@ export class TiltInput {
     // act on the difference: startup falls back to buttons (main.js) and the
     // settings card disables Tilt (modals.js) either way.
     //
-    // Two ways in need no gesture, so both resolve right here, before any
-    // permission flow: no DeviceOrientationEvent constructor (no sensor, ever),
-    // or a permissions policy that withholds the sensors from this document.
-    // The THIRD way can only be found by listening — see _settle.
+    // Only the absent constructor resolves here, without a gesture: no
+    // DeviceOrientationEvent means no sensor, ever. Every other route to
+    // 'unsupported' — a withheld sensor, a missing gyroscope — can only be found
+    // by listening, and _settle finds them all by the one test that matters,
+    // whether samples ARRIVE. (A permissions-policy probe used to answer the
+    // withheld case ~600 ms sooner on Blink alone; it was a second mechanism for
+    // the same question, able to disagree with the delivery it was predicting.)
     //
-    // EXCEPT on AirConsole, where neither route means what it says: the SDK's
-    // device_motion relay is the sensor there (setGravity), and the frame is
-    // expected to fail both checks. Stay 'unknown' and let the first relayed
-    // sample resolve it to 'granted'.
+    // EXCEPT on AirConsole, where the constructor says nothing about the sensor:
+    // the SDK's device_motion relay is the sensor there (setGravity), so an app
+    // webview without the constructor still steers by tilt. Stay 'unknown' and
+    // let the first relayed sample resolve it.
     this.motionState = (typeof window !== 'undefined' && !window.airconsole
-      && (!window.DeviceOrientationEvent || sensorPolicyBlocked() === true))
+      && !window.DeviceOrientationEvent)
       ? 'unsupported' : 'unknown';
 
     // latest gravity unit vector in the device frame (overwritten each event;
@@ -180,6 +163,7 @@ export class TiltInput {
     this._actKeyDown = false;
     this._actionEnabled = false; // gate: ACTION does nothing unless the slot holds an item (set via setActionEnabled)
     this._timer = null;
+    this._gestureAsk = false;  // a re-request is already armed (see _askOnNextGesture)
 
     this._onOrient = this._onOrient.bind(this);
     this._bindKeys();
@@ -187,26 +171,55 @@ export class TiltInput {
   }
 
   // Call from a user gesture (e.g. the Join tap). Resolves once the sensor has
-  // been proved to deliver or not, so the returned state is final: callers can
-  // switch steering mode off it without a second round.
+  // been proved to deliver or not, so the returned state is final and callers
+  // can switch steering mode off it without a second round — with the one
+  // exception that it CANNOT be final: a request the platform refused to even
+  // put (no gesture behind it) leaves 'unknown' and re-asks on the next tap.
   async enableMotion() {
     const DOE = window.DeviceOrientationEvent;
     if (!DOE) return this.motionState; // 'unsupported' since the constructor — nothing to request
     try {
       if (typeof DOE.requestPermission === 'function') {
-        const res = await DOE.requestPermission(); // iOS
-        this.motionState = res === 'granted' ? 'granted' : 'denied';
+        // iOS, and Chromium since 153. Only the two ANSWERS are recorded: a
+        // 'prompt' resolution (Chromium's, when it could not or did not put the
+        // question to the player) is the same non-event as the rejection below.
+        const res = await DOE.requestPermission();
+        if (res === 'granted' || res === 'denied') this.motionState = res;
+        else this._askOnNextGesture();
       } else {
-        this.motionState = 'granted'; // Android/desktop: just attach
+        this.motionState = 'granted'; // older Chromium: just attach
       }
     } catch (_) {
-      this.motionState = 'denied';
+      // A REJECTION is not a denial. iOS rejects requestPermission() when the
+      // call did not come from a user gesture — which is exactly what a launcher
+      // join produces, since the shell owns identity and joins at boot with no
+      // tap (main.js). Recording 'denied' there is a ONE-WAY DOOR: the recovery
+      // popup's only offer for it is a reload, and the reload re-runs the same
+      // gestureless boot. So leave the state unresolved (whose popup face still
+      // offers a working "Allow motion") and supply the thing that was actually
+      // missing — a gesture.
+      this._askOnNextGesture();
     }
     if (this.motionState === 'granted') {
       window.addEventListener('deviceorientation', this._onOrient);
       await this._settle();
     }
     return this.motionState;
+  }
+
+  // Re-request on the next tap anywhere, for the pages that join without one.
+  // `click` rather than a pointer event: it is what WebKit counts as activation,
+  // and it survives the pointerdown-preventDefault every drive control does.
+  // Capture phase so a stopPropagation upstream can't eat it, and ONE shot — a
+  // request that fails again with a real gesture behind it is a real refusal.
+  _askOnNextGesture() {
+    if (this._gestureAsk || typeof window === 'undefined') return;
+    this._gestureAsk = true;
+    const once = () => {
+      window.removeEventListener('click', once, true);
+      this.enableMotion();
+    };
+    window.addEventListener('click', once, true);
   }
 
   // Permission is not delivery. A page can hold a granted listener that never
@@ -421,6 +434,10 @@ export class TiltInput {
     clearInterval(this._timer); this._timer = null;
     this._brakeBtn = 0;
     this._btnL = this._btnR = false; // a held ‹/› must not survive into the next race
+    // …and neither must a held key whose keyup the page missed (window blurred
+    // over race end): a stale _key/_brakeKey would steer/brake the next race.
+    this._keyL = this._keyR = false; this._key = 0;
+    this._brakeKey = 0;
     this._useCount = 0; // fresh race → restart the counter (display's useSeq resets too)
     this._actKeyDown = false; // clear held-key state so a missed keyup can't suppress the next race's first press
   }

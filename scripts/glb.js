@@ -3,9 +3,9 @@
 // Shared GLB geometry helpers for the dev inspection scripts — no 3D engine, no
 // build step. A GLB is a 12-byte header + length-prefixed chunks: the JSON chunk
 // describes nodes/meshes/accessors, the BIN chunk holds raw vertex data. These
-// scripts decode that directly to measure Kenney kit geometry (track-piece
-// connectors, car footprints) so the hardcoded numbers in TrackBuilder/protocol
-// can be re-derived when assets change.
+// scripts decode that directly to measure Kenney kit geometry (car footprints)
+// so the hardcoded numbers in TrackBuilder/protocol can be re-derived when
+// assets change.
 
 const fs = require('fs');
 

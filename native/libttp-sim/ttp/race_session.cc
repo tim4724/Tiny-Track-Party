@@ -25,7 +25,6 @@ void RaceSession::startCountdown(int seconds) {
   // with 0; every real race counts from 3, which is why no one had seen it).
   if (seconds <= 0) {
     racing_ = true;
-    onRaceStart();
     raceMs_ = 0;
   }
 }
@@ -39,7 +38,6 @@ void RaceSession::stepCountdown(double dtMs) {
     if (onCountdownTick_) onCountdownTick_(countdown_->n);  // 2, 1, 0 (GO!), then -1 (clear)
     if (countdown_->n == 0) {
       racing_ = true;
-      onRaceStart();
       raceMs_ = 0;
     } else if (countdown_->n < 0) {
       countdown_.reset();
@@ -55,7 +53,11 @@ void RaceSession::update(double dtMs) {
   if (!wasRacing) return;
   engine_->update(dtMs);
   raceMs_ += dtMs;
-  if (engine_->raceOver() || timedOut()) finish();
+  // holdEnd is the flourish: keep stepping, do not end. It suppresses the
+  // TIMEOUT too — a flourish is bounded by the shell's own clock, and a race
+  // that reached the DNF cap on the same frame the last human crossed would
+  // otherwise still end underneath it.
+  if (!holdingEnd_ && (engine_->raceOver() || timedOut())) finish();
 }
 
 // The DNF ladder: once the first car is home the rest get 30 s, once only one

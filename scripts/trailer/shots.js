@@ -19,11 +19,12 @@
 //                          3-2-1 banner and the launch are both live. Film it from
 //                          frame 0. It starts on `track` and then chains through the
 //                          rest of THAT track's cup, so a launch can be filmed anywhere.
-//               rocket   — every item box rolls a rocket, and the harness spends it
-//                          from the car furthest back on a cooldown, so the showcase
-//                          LOOPS instead of showing one hit a lap
-//               monster  — the same trick for the catch-up monster truck
 //
+//             NOT the harness's item showcases (`rocket`, `monster`): they force the
+//             roulette and spend the item from whoever is armed — a monster truck in
+//             second place included — which is not a race the game would run. Items
+//             are filmed where a real race puts them; the editor's timeline marks
+//             every rocket, transform and hit so those moments can be found.
 //             NOT `countdown`: that scenario is a frozen chrome preview (its `live`
 //             flag is false, so the scene never steps) and films as a still.
 //   players   1 | 2 | 4 — the HUMAN count, and so the split-screen grid. The field is
@@ -42,7 +43,7 @@
 //   warmup    seconds of sim to step through BEFORE the first captured frame, and the
 //             real choice of take. Cars leave the grid stacked three-deep; ~15-25 s is
 //             where the field has strung out and each cell frames its own piece of
-//             track, while an item beat wants whatever moment scout.js points at.
+//             track, while an item beat wants whatever moment the editor's timeline marks.
 //             Cheap — warmup frames are stepped but not screenshotted.
 //   seconds   captured length.
 //
@@ -57,12 +58,10 @@ module.exports = [
   // 3.02s, so an in-point just past it opens on the field breaking away rather than on
   // three seconds of stationary grid. `chain` is the only scenario that counts down, and
   // it starts on the track named here.
-  { id: '01-riptide-1p', scenario: 'chain', players: 1, track: 'riptide', warmup: 3.1, seconds: 1.5 },
-
-  { id: '02-driftwood-4p', scenario: 'racing', players: 4, track: 'driftwood', warmup: 9.5, seconds: 3.5 },
-  { id: '03-flurry-4p', scenario: 'racing', players: 4, track: 'flurry', warmup: 15, seconds: 3.5 },
-  { id: '04-pretzel-2p', scenario: 'rocket', players: 2, track: 'pretzel', warmup: 22, seconds: 4 },
-  { id: '05-wash-4p', scenario: 'rocket', players: 4, track: 'wash', warmup: 60, seconds: 4 },
-  { id: '06-skyline-4p', scenario: 'racing', players: 4, track: 'skyline', warmup: 11, seconds: 3 },
-  { id: '07-helix-4p', scenario: 'rocket', players: 4, track: 'helix', warmup: 30, seconds: 5 },
+  { id: '01-riptide-1p', scenario: 'chain', players: 1, track: 'riptide', warmup: 3.1, seconds: 3 },
+  { id: '02-riptide-1p', scenario: 'racing', players: 1, track: 'riptide', warmup: 22.483, seconds: 3 },
+  { id: '03-pretzel-1p', scenario: 'racing', players: 1, track: 'pretzel', warmup: 81, seconds: 6 },
+  { id: '04-flurry-2p', scenario: 'racing', players: 2, track: 'flurry', warmup: 53.517, seconds: 6 },
+  { id: '05-wash-4p', scenario: 'racing', players: 4, track: 'wash', warmup: 33, seconds: 6 },
+  { id: '06-helix-4p', scenario: 'racing', players: 4, track: 'helix', warmup: 30, seconds: 6 },
 ];

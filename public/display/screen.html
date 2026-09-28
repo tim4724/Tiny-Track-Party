@@ -78,6 +78,15 @@
        browser unlocks that need a user gesture: fullscreen + audio (the
        newgame-btn click handler in main.js). Back from the lobby returns
        here, ending the party (see the popstate handler in main.js). -->
+  <!-- Boot cover — the splash, and the ONE board that is not a screen. The
+       lobby and the race are chrome over a live 3D view; this holds over them
+       until that view has actually put a frame on the panel, so the track is
+       already there when the lobby is revealed instead of fading in a beat
+       later. Whether it is up is ttp_ui_cover's answer, never this page's. -->
+  <section id="cover" class="hidden" aria-hidden="true">
+    <div class="wordmark cover__wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></div>
+  </section>
+
   <section id="welcome">
     <div class="wordmark welcome__wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></div>
     <p class="welcome__tag">Race your friends! Everyone steers with their phone.</p>
@@ -105,10 +114,9 @@
 
   <!-- Lobby — Sticker Bash chrome framing the live 3D preview: the join
        ticket on the left rail, the race pick over the cup shelf on the right
-       rail, the seat dock across the bottom. Both rails run the full height of
-       the board and the dock closes it, so there is ONE top line, ONE bottom
-       line and two gutters — the tilts stay playful because the frame beneath
-       them is straight. The chrome sits at the SAME positions in both lobby
+       rail, and the seat dock hanging from the bottom of the middle. Both rails
+       run the full height of the board and everything hangs off ONE bottom line
+       — the tilts stay playful because the frame beneath them is straight. The chrome sits at the SAME positions in both lobby
        states: on the paper stage before the host picks, floating over the live
        preview after — nothing moves between the two. -->
   <section id="lobby" class="hidden">
@@ -177,7 +185,7 @@
       <!-- "Cups" — the couch's star shelf, the long game to the ticket's
            tonight. ONE card, one hairline-separated row per cup with its
            earned stars; the locked Playroom trails its unlock progress
-           instead. Filled by renderCupShelf (lobbySeats.js) from the
+           instead, and the label tab carries the couch's star total. Filled by renderCupShelf (lobbySeats.js) from the
            wasm-stamped catalogue, which owns the .hidden from the first render
            on — it ships hidden because an unfilled card is a blank white
            slab. -->
@@ -200,16 +208,17 @@
     </div>
   </section>
 
-  <!-- Corner buttons — pinned top-right over every screen, outside the sections
-       so the mute and fullscreen toggles survive lobby → race. Order: mute,
-       fullscreen, pause. The welcome board carries NONE of them (user call: the
-       title board stays clean, and NEW GAME is already the click that claims
-       fullscreen), so the row is empty there: mute ships hidden and is revealed
-       from the lobby on by main.js show()/newGameClick, while fullscreen is
-       dropped by a display.css rule instead — that rule says why. Pause joins
-       the row only during a race. All fade together while the race chrome is
-       idle (see display.css) so they stop covering each cell's place/lap
-       readout. -->
+  <!-- Corner buttons — pinned to the top-right over every screen, outside the
+       sections so the mute and fullscreen toggles survive lobby → race. Order:
+       mute, fullscreen, pause. The welcome board carries NONE of them (user
+       call: the title board stays clean, and NEW GAME is already the click that
+       claims fullscreen), so the row is empty there: mute ships hidden and is
+       revealed from the lobby on by main.js show()/newGameClick, while
+       fullscreen is dropped by a display.css rule instead — that rule says why.
+       Pause joins the row only during a race, where the row draws OVER the
+       place/lap badge it shares the corner with and then fades off it: all three
+       hide together after a few seconds without a mouse or a key (see
+       display.css). -->
   <div id="corner-btns">
     <button id="mute-btn" class="icon-btn hidden" aria-label="Mute sound" aria-pressed="false">
       <!-- Two glyphs, one shown at a time (theme.css picks by aria-pressed):
@@ -240,10 +249,6 @@
 
   <!-- Race: overlays over the persistent #scene backdrop -->
   <section id="race" class="hidden">
-    <!-- Now-playing credit (bottom-left): the current track + artist, linking to
-         its source. Doubles as the CC-BY attribution for the music. main.js fills
-         the label/href and toggles .hidden with the music lifecycle. -->
-    <a id="music-credit" class="music-credit hidden" target="_blank" rel="noopener"></a>
     <div id="countdown"></div>
     <!-- Pause overlay — frosted glass over the frozen race -->
     <div id="pause-overlay" class="hidden">
@@ -266,6 +271,19 @@
       <button id="results-newgame" class="btn btn--brand">New Game</button>
     </div>
   </section>
+
+  <!-- The display's OWN relay link (the set-link effect): "Reconnecting" with
+       the kit's attempt counter while the backoff runs, then "Disconnected"
+       with a RECONNECT once the budget is spent. OUTSIDE every screen section,
+       because show() hides all but one and this must stand over any of them,
+       the boot cover included: a boot with no relay must say so. -->
+  <div id="link-overlay" class="hidden">
+    <div class="link-card card">
+      <h2 id="link-heading">Reconnecting…</h2>
+      <div id="link-status" class="link-status"></div>
+      <button id="link-reconnect" class="btn btn--brand hidden">Reconnect</button>
+    </div>
+  </div>
 
   <!-- Transient "Copied" confirmation, shown when the join box is clicked. -->
   <div id="toast" class="toast" role="status" aria-live="polite"></div>

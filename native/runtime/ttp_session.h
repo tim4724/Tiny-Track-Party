@@ -2,11 +2,13 @@
 // ABI: the display shell reads the live Game of a session handle in C++ rather
 // than receiving a serialized copy of it back from the shell.
 //
-// One MUTATION path, deliberately: the sim ABI in ttp_runtime.h stays the only
-// way anything mutates a session. The Value accessors below are describe-only
-// reads for the ui twins (ttp_ui.cc's *_live_json exports), which gather the
-// role sets a shell used to loop the C boundary to build — see ttp_room.h for
-// the same rule on the room side.
+// One MUTATION path for the RACE, deliberately: the sim ABI in ttp_runtime.h
+// stays the only way anything mutates a session's Game. The Value accessors
+// below are describe-only reads for the ui twins (ttp_ui.cc's *_live_json
+// exports), which gather the role sets a shell used to loop the C boundary to
+// build — see ttp_room.h for the same rule on the room side. The one writable
+// accessor (the ITEM outbox) hands back state that is not the Game's at all;
+// its own comment says why it lives on the session.
 #ifndef TTP_SESSION_H
 #define TTP_SESSION_H
 
@@ -14,6 +16,7 @@ namespace ttp {
 class CupSeries;
 class Game;
 struct Value;
+namespace rt { namespace ui { class LastItems; } }
 }
 
 // The engine behind a ttp_session_begin handle, or nullptr for an unknown,
@@ -45,6 +48,20 @@ ttp::Value ttp_session_results_rows(int handle);
 // ([{"id","item":str|null,"finished"}], grid order) — the per-owner USE-button
 // gather, off the engine rather than a snapshot. Empty for an unknown handle.
 ttp::Value ttp_session_item_cars(int handle);
+
+// The per-phone ITEM OUTBOX — what each phone was last told its held item was,
+// in the order the phones were first told. WRITABLE, because the push rule and
+// the welcome relight both stamp it as they answer; nullptr for an unknown
+// handle, which the callers answer "nothing to push" for.
+//
+// PER SESSION, and that is a decision. It is not Game state (nothing in the sim
+// knows a phone exists) and it could as easily have been one map beside the ui
+// ABI's other statics — but a race IS its lifetime: the walk's clear-item-cache
+// fires as a race launches, and every launch builds a new session. Hanging it
+// here makes that clear a no-op by construction instead of a rule three shells
+// had to keep, and keeps concurrent sessions (the ABI checks run several) from
+// sharing one outbox.
+ttp::rt::ui::LastItems* ttp_session_item_outbox(int handle);
 
 // Drain the session's outbound event queue — race events verbatim plus the
 // reconstructed lifecycle beats — in fire order, and EMPTY it. The same queue

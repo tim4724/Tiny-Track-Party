@@ -186,10 +186,10 @@ function installBrowserGlobals() {
   globalThis.window.CAR_MODELS = proto.CAR_MODELS;
   globalThis.window.CAR_COLORS = proto.CAR_COLORS;
   globalThis.window.MAX_PLAYERS = proto.MAX_PLAYERS;
-  // The presence contract both ends spend: the phone's ping cadence and the
-  // display's drop/grace/canary windows. Real values, from the real manifest —
-  // "a seat silent past 3 s is dropped" only means anything against a 1 Hz ping,
-  // and this suite is where the two ends actually meet.
+  // The presence contract both ends spend: the phone's ping cadence and chip
+  // threshold, and the display's grace/canary windows. Real values, from the
+  // real manifest — they only mean anything as a set, and this suite is where
+  // the two ends actually meet.
   globalThis.window.LIVENESS = proto.LIVENESS;
   // The run length a RANDOM pick settles on. The display's clamp lives in the
   // wasm now (the select-mode walk, off protocol.h's RANDOM_RACES); the global

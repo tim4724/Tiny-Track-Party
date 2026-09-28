@@ -189,11 +189,14 @@ async function thirdPartySurfaces() {
   const found = new Set();
 
   const assets = path.join(PUBLIC_DIR, 'assets');
+  // public/assets/licenses/ is OUR served copies, not an arriving asset, and
+  // public/assets/shots/ is our own photographs of the screens — one of which
+  // is the licenses board, and is named after it.
+  const ours = new Set([path.join(assets, 'licenses'), path.join(assets, 'shots')]);
   const walk = (dir) => {
     for (const d of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, d.name);
-      // public/assets/licenses/ is OUR served copies, not an arriving asset.
-      if (d.isDirectory()) { if (full !== path.join(assets, 'licenses')) walk(full); }
+      if (d.isDirectory()) { if (!ours.has(full)) walk(full); }
       else if (/licen[cs]e|^OFL|COPYING/i.test(d.name)) found.add(path.relative(ROOT, full));
     }
   };
@@ -287,7 +290,11 @@ test('every served license text is intact', () => {
   }
   // Nothing but the texts and their provenance note lives in that directory —
   // a stray file there would be served as if it were a notice.
-  assert.deepEqual(fs.readdirSync(dir).sort(), [...Object.keys(marks), 'SOURCES.md'].sort());
+  // Dotfiles excluded for the reason artwork-manifest's sweep excludes them: this
+  // reads the FILESYSTEM, so a Finder visit leaves a .DS_Store here and fails the
+  // suite on a Mac, naming a file git is already ignoring.
+  const served = fs.readdirSync(dir).filter((n) => !n.startsWith('.'));
+  assert.deepEqual(served.sort(), [...Object.keys(marks), 'SOURCES.md'].sort());
 });
 
 // The legal footer is copied rather than built: on the welcome board, in the

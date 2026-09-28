@@ -118,11 +118,11 @@ struct Rocket {
   Point pos;
 };
 
-// A song descriptor. The credit-chip fields (title + artist, linking to
-// `source`) are also how the CC-BY attribution for Kevin MacLeod's tracks is
-// satisfied — see public/assets/audio/music/CREDITS.txt. `duration` is whole
-// seconds, baked so a gallery can show a song's length without loading its
-// metadata (the race itself never reads it).
+// A song descriptor. The attribution fields (title, artist, license, `source`)
+// are what the Licenses board is baked from — the CC-BY attribution for Kevin
+// MacLeod's tracks, see public/assets/audio/music/CREDITS.txt. Nothing shows
+// them during a race. `duration` is whole seconds, baked so a gallery can show
+// a song's length without loading its metadata (the race itself never reads it).
 struct Song {
   const char* file;
   const char* title;
@@ -254,10 +254,6 @@ class Decider {
   void pauseMusic(std::vector<Command>& out);
   void resumeMusic(std::vector<Command>& out);
 
-  // The picked song descriptor — read by the credit chip. Null before the first
-  // startMusic.
-  const Song* nowPlaying() const { return nowPlaying_; }
-
  private:
   void voice(std::vector<Command>& out, const char* cue, const Id& id, double level,
              const Mod* mod);
@@ -273,7 +269,6 @@ class Decider {
   double lastLap_;
   std::string musicFile_;             // last picked song's file ("" = none yet)
   int rosterCount_ = 0;
-  const Song* nowPlaying_ = nullptr;
 };
 
 // The C++ `Math.random`: the source Decider draws from when none is injected.

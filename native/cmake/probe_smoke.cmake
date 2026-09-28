@@ -49,3 +49,37 @@ if(NOT _rows EQUAL ${TRACKS})
     "a track that cannot be probed is a track no balance reading covers")
 endif()
 message(STATUS "probe smoke: ${_rows} tracks, all lap times plausible")
+
+# ---- cost ---------------------------------------------------------------------
+# Same argument, different instrument: `cost` is the only thing that can see what
+# a sim change costs, and a timer that prints zeroes has rotted exactly as badly
+# as one that crashes. One track, 0.12 s.
+set(_ccmd)
+if(EMULATOR)
+  list(APPEND _ccmd ${EMULATOR})
+endif()
+list(APPEND _ccmd "${CLI}" cost --track=tidepool)
+
+execute_process(COMMAND ${_ccmd} OUTPUT_VARIABLE _cout ERROR_VARIABLE _cerr RESULT_VARIABLE _crc)
+if(NOT _crc EQUAL 0)
+  message(FATAL_ERROR "probe_cli cost failed (exit ${_crc})\n${_cerr}")
+endif()
+
+# Every row must be there and every number must be a real measurement. The bounds
+# are deliberately enormous: this asserts the timer WORKS, it does not pin a
+# budget — a machine-dependent threshold here would fail on somebody's laptop and
+# teach everyone to ignore it.
+foreach(_row "bots \\(AI\\)" "step \\(sim\\)" "total")
+  if(NOT _cout MATCHES "${_row} +([0-9]+\\.[0-9]+)")
+    message(FATAL_ERROR "probe_cli cost printed no '${_row}' row:\n${_cout}")
+  endif()
+  set(_us "${CMAKE_MATCH_1}")
+  if(_us LESS_EQUAL 0)
+    message(FATAL_ERROR "probe_cli cost measured ${_us} us for '${_row}' — the timer is dead")
+  endif()
+  if(_us GREATER 10000)
+    message(FATAL_ERROR "probe_cli cost measured ${_us} us for '${_row}' — a sim frame "
+                        "costing over 10 ms is a runaway, not a reading")
+  endif()
+endforeach()
+message(STATUS "probe smoke: cost reports a live timer")

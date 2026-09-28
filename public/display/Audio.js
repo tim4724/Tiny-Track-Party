@@ -29,7 +29,7 @@
 // pointerdown/keydown. Every play method no-ops safely while locked.
 import { resolveVariant, loadSampleBuffers } from './audio/cues.js';
 import { assetUrl } from '../shared/assetUrl.js';
-import { createMasterBus, storedVolume } from './audio/bus.js';
+import { createMasterBus, storedVolume, storedMuted, saveMuted } from './audio/bus.js';
 import { storedPicks } from './audio/picks.js';
 
 // THIS FILE IMPORTS NO TABLE, and that is the whole of the device half's job
@@ -45,6 +45,11 @@ import { storedPicks } from './audio/picks.js';
 // race path reads. Those surfaces import audio/musicCatalogue.js directly now —
 // the catalogue outlived the oracle it was carved out of, as data.
 
+// The offline render's sample rate. Its driver reads the rate back off the context
+// rather than knowing this number, and nothing else has to match it: the recorded cues
+// are decoded INTO the context, whatever rate they were baked at.
+const OFFLINE_RATE = 48000;
+
 export class RaceAudio {
   constructor() {
     this.ctx = null;
@@ -53,15 +58,27 @@ export class RaceAudio {
     this._voices = new Map(); // 'cueId:carId' -> live state voice {set, stop}
     this._music = null;       // streamed background track (HTMLAudioElement)
     this._musicUrl = null;    // its current src, so we only reload on a track change
-    this.nowPlaying = null;   // the picked song descriptor — read by the credit chip
-    this._muted = false;      // the display's mute switch — per-session, never stored (see bus.js)
+    this._muted = storedMuted(); // the display's mute switch, persisted in bus.js
+    // ?offlineaudio=<seconds> — the trailer render's seam (scripts/trailer/render.js):
+    // the same graph on an OfflineAudioContext of that length, which the driver
+    // renders in lockstep with the gated frames and reads back as the clip's
+    // soundtrack. Read once, here, because the test harness asks `offline` at boot
+    // to decide whether a scenario is bound to the decision layer at all — before
+    // any context exists. Nothing in normal play sets it.
+    this._offlineSecs = parseFloat(new URLSearchParams(location.search).get('offlineaudio')) || 0;
+    this.samplesReady = null;    // the decode of the recorded cues, once a context exists
   }
+  get offline() { return this._offlineSecs > 0; }
 
   _ensure() {
     if (this.ctx) return;
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if (!AC) return;
-    this.ctx = new AC();
+    if (this.offline) {
+      this.ctx = new OfflineAudioContext(2, Math.ceil(this._offlineSecs * OFFLINE_RATE), OFFLINE_RATE);
+    } else {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      this.ctx = new AC();
+    }
     // Master gain + soft limiter, from audio/bus.js — the SAME bus the audition
     // galleries build, which is what makes their A/B a comparison of cues rather
     // than of mixes.
@@ -70,15 +87,18 @@ export class RaceAudio {
     // Decode the one recorded cue (the engine loop) up front, on the same
     // user-gesture that creates the context — so the buffer is ready by the
     // time the first race frame asks for an engine. Fire-and-forget: the voice
-    // stays silent until it resolves and never throws if the fetch fails.
-    loadSampleBuffers(this.ctx);
+    // stays silent until it resolves and never throws if the fetch fails. The
+    // offline driver awaits it instead, since its first frame comes at once.
+    this.samplesReady = loadSampleBuffers(this.ctx);
   }
 
   resume() {
     this._ensure();
-    if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+    if (this.ctx && !this.offline && this.ctx.state === 'suspended') this.ctx.resume();
   }
-  get ready() { return !!this.ctx && this.ctx.state === 'running'; }
+  // An offline context sits suspended between the frames its driver renders and is
+  // usable throughout: there, readiness is the driver's business, not a gesture's.
+  get ready() { return !!this.ctx && (this.offline || this.ctx.state === 'running'); }
 
   // The display's mute switch. Two silencers on purpose: the master gain covers
   // every bus-routed source, and the element's own `muted` covers the music's
@@ -86,6 +106,7 @@ export class RaceAudio {
   get muted() { return this._muted; }
   setMuted(on) {
     this._muted = !!on;
+    saveMuted(this._muted);
     if (this.master) this.master.gain.value = this._muted ? 0 : storedVolume();
     if (this._music) this._music.muted = this._muted;
   }
@@ -121,9 +142,11 @@ export class RaceAudio {
   }
 
   // ---- the command bus ----
-  // Perform a decision stream, in order. This is the ONLY path the race drives
-  // (NativeAudio.js hands it the wasm's answers); the named methods below exist
-  // for the gallery harness, which has no decision layer behind it.
+  // Perform a decision stream, in order. This is the ONLY way a sound starts:
+  // NativeAudio.js hands over the wasm's answers, and the gallery previews walk
+  // the same decision layer rather than firing cues of their own (they run a
+  // real sim with real player seats, so there is nothing for a bespoke surface
+  // to stand in for).
   apply(cmds) {
     for (const c of cmds) {
       if (c.cue !== undefined) {
@@ -164,6 +187,12 @@ export class RaceAudio {
   // live physics every frame (boost wind, cornering squeal, brake skid, the
   // engine loop, a rocket's jet). The decision layer owns when one starts and
   // stops; this just holds the live nodes.
+  //
+  // `mod` — {rateMul, gainMul, lpMul} — DEEPENS a voice into a heavy big-truck
+  // growl (pitch down, a touch louder, top end muffled). It rides the command as
+  // NUMBERS rather than as a flag this file resolves through a table of its own,
+  // so the monster truck's timbre is written down once, in the C++ layer that
+  // authored it (audio.cc's MONSTER_ENGINE_MOD).
   _stateVoice(cueId, id, level, mod) {
     if (!this.ready) return;
     const key = cueId + ':' + id;
@@ -175,7 +204,7 @@ export class RaceAudio {
       voice = v.start(this.ctx, this.master);
       this._voices.set(key, voice);
     }
-    voice.set(level, mod); // mod (optional) deepens the engine voice into a monster-truck growl
+    voice.set(level, mod);
   }
   _stopVoice(cueId, id) {
     const key = cueId + ':' + id;
@@ -196,26 +225,6 @@ export class RaceAudio {
     }
   }
 
-  // ---- gallery surface ----
-  // /gallery.html's scenarios (display/TestHarness.js) fire cues directly: they
-  // run a preview world with no players, so there is no distance model and no
-  // decision stream behind them. Full level, no gating.
-  spin(vol = 1) { this._play('banana_slip', vol); } // oil shares the comedy cue
-  monsterInflate(vol = 1) { this._play('monster_inflate', vol); }
-  monsterDeflate(vol = 1) { this._play('monster_deflate', vol); }
-  rocketFlight(id, level) { this._stateVoice('rocket_fire', id, Math.max(0, Math.min(1, level))); }
-  rocketHit(level = 1) { this._play('rocket_hit', Math.max(0, Math.min(1, level))); }
-  // `mod` DEEPENS the engine into a heavy big-truck growl (pitch down, a touch
-  // louder, top end muffled) — {rateMul, gainMul, lpMul}, or null for the stock
-  // voice. The CALLER supplies it rather than this file keeping a monster flag
-  // and a table to resolve it: on the race path that timbre already arrives as
-  // numbers on the voice command (NativeAudio's cmd.mod, authored in the C++
-  // decision layer), so a second copy here would be the one place the growl was
-  // written down twice. The gallery hands in MONSTER_ENGINE_MOD from the oracle.
-  engineDrive(id, level, mod = null) {
-    this._stateVoice('engine_putt', id, Math.max(0, Math.min(1, level)), mod);
-  }
-
   // ---- background music ----
   // Ambient, not a cue: the race song plays globally for the whole race. Unlike
   // the synth cues and the tiny engine loop (Web Audio buffers), the song is a
@@ -227,9 +236,12 @@ export class RaceAudio {
   // WHICH song and at WHAT level is decided in native/libttp-runtime/ttp/audio.cc
   // (pool by biome, no-repeat shuffle, per-song LUFS trim) and arrives as a
   // 'start' command.
+  //
+  // Not offline: the element is outside the graph, so a render would not carry it and
+  // it would merely play aloud on the machine doing the rendering. The trailer lays
+  // its own bed (scripts/trailer/cut.js).
   _startMusic(song, level) {
-    if (!this.ready) return;
-    this.nowPlaying = song;
+    if (!this.ready || this.offline) return;
     if (!this._music) {
       const el = new Audio();
       el.loop = true;

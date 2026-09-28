@@ -42,10 +42,17 @@ TTP_ABI void ttp_add_bot(int h, const char* idJson, double caution, double laneB
 // with a spec becomes a bot, everything else a human, field order kept,
 // humans gridded before bots).
 //   fieldJson  [{"peerIndex":<scalar>,"stats":{..}|null, ...extra keys ignored}, ...]
-//   botsJson   [{"peerIndex":<scalar>,"caution":n?,"laneBias":n?,"seed":n?}, ...]
+//   botsJson   [{"peerIndex":<scalar>,"caution":n?,"laneBias":n?,"seed":n?,
+//               "player":true?}, ...]
 // Absent or null persona knobs take the engine defaults (caution 1, laneBias 0,
 // seed 1) — a spec spells only what it means. Same 0-on-failure contract as
 // ttp_session_begin.
+//
+// `player:true` is the AUTOPILOT MARKER: the seat gets its controller AND stays
+// a participant (it is not in ttp_session_ai_ids, it keeps its cell, the audio
+// still hears it, and the auto-pause rule still counts it). That is the one
+// arrangement a bench or an attract race needs and the one no combination of
+// the two buckets could express — see ttp/race_flow.h, BotSpec::player.
 TTP_ABI int ttp_session_begin_field(const char* trackId, uint32_t seed, int laps,
                             const char* forceItemOrNull,
                             const char* fieldJson, const char* botsJson);
@@ -64,7 +71,34 @@ TTP_ABI void ttp_update(int h, double dtMs);
 
 // Inject a (possibly partial) CONTROL message for a car. mask bit 1 = s present,
 // 2 = b present, 4 = u present; absent fields are left untouched on the car.
-TTP_ABI void ttp_process_input(int h, const char* idJson, int mask, double s, double b, double u);
+//
+// THE MASK IS THE SHELL'S TO DERIVE, and it is never on the wire: the phone
+// sends {s, b, u} and the receiving shell reads off which of them arrived.
+// Leaving an absent field untouched is what makes a partial message SAFE —
+// defaulting `u` to 0 instead would look like a fresh use-counter and fire the
+// car's held item — so the mask is not going away.
+//
+// It is, however, the quietest thing in this ABI to get wrong, because a wrong
+// one is well-formed: pass 0 and every field is skipped, the call succeeds, and
+// the car simply never answers its phone (the first tvOS shell read a `mask`
+// key off the message, got 0 on every sample, and steered nothing for the life
+// of the port). Which is why this ANSWERS rather than returning void:
+//
+//   -1  no such car — the identity did not match any car in this session,
+//       which is the other silent way to steer nothing (ttp_car_finished uses
+//       -1 for the same "unknown car" and for the same reason).
+//    0  the car exists and the call carried nothing to apply.
+//   >0  the presence mask actually consumed (mask & 7, so a caller passing
+//       stray high bits is told which ones counted).
+//
+// A FINISHED car answers its mask: it exists and the call was well formed, the
+// sim simply ignores input past the flag. Nothing is obliged to read any of
+// this — the hot path deliberately has no error handling — but a shell bringing
+// up its input path can assert on it once instead of discovering the answer on
+// a television. `ttp_last_error` is deliberately NOT populated here: it clears
+// on entry by contract (ttp_error.h), and a call at sensor rate would wipe
+// every other refusal in the tree within a frame.
+TTP_ABI int ttp_process_input(int h, const char* idJson, int mask, double s, double b, double u);
 
 // ---- readback (canonical JSON; see buffer-lifetime note above) --------------
 
@@ -95,6 +129,13 @@ TTP_ABI int ttp_force_remove_car(int h, const char* idJson);                 // 
 TTP_ABI int ttp_rekey_car(int h, const char* oldJson, const char* newJson);  // rekeyCar
 TTP_ABI void ttp_force_finish(int h, const char* idJson, double time);       // forceFinish (synthetic time)
 TTP_ABI void ttp_fast_forward(int h);                                        // fastForwardToEnd (drives bots internally)
+// THE FINISH FLOURISH: hold the race's END off while the sim keeps stepping, so
+// the shell can show a few seconds of live picture with the place cards up. Set
+// it when every human is home and clear it when the flourish is over — the shell
+// then fast-forwards and the race ends as it always did. Without it the last
+// human across is often the last car, raceOver() is true on that frame, and the
+// race is over before a single frame of the flourish can be drawn.
+TTP_ABI void ttp_hold_end(int h, int on);                                    // RaceSession::holdEnd
 
 // ---- pause / state ----------------------------------------------------------
 
@@ -103,6 +144,22 @@ TTP_ABI void ttp_resume(int h);
 TTP_ABI int ttp_racing(int h);
 TTP_ABI int ttp_paused(int h);
 TTP_ABI void ttp_dispose(int h);
+
+// ---- the screenshot hold (gallery harnesses only) ---------------------------
+// Arm a freeze: ttp_update stops stepping at the race moment the hold names, and
+// lands its last step exactly on it. `holdJson` is {simMs, on?, afterMs?, capMs?}
+// (ttp/shot_hold.h). 1 = armed; 0 = unknown handle or a malformed hold, which
+// arms nothing. Re-arming replaces the hold and its progress. A plain hold whose
+// moment the race has already reached is held immediately.
+TTP_ABI int ttp_shot_hold(int h, const char* holdJson);
+// 1 once the armed hold has been reached; the race will not step again.
+TTP_ABI int ttp_shot_held(int h);
+
+// The rocket/monster previews' item showcase (ttp/shot_hold.h): after each step,
+// the engine gives the item to the car the rule picks and fires it. `kind` is
+// "rocket" | "monster"; null or anything else turns it off. 1 = set, 0 = unknown
+// handle.
+TTP_ABI int ttp_item_showcase(int h, const char* kind);
 
 // ---- global tunable (affects every session, like Game.js _steerExpo) --------
 
@@ -260,20 +317,6 @@ TTP_ABI const char* ttp_track_schematic_json(const char* trackId, int laps, uint
 // The simplification runs on the SMOOTH sub-integer path and only then rounds,
 // because rounding first would jitter straights by ±0.5 and defeat it.
 TTP_ABI const char* ttp_schematic_pack(const char* pathD, double eps);
-
-// The side of the square every schematic is projected into — 256, and the same
-// number the pack step's uint8 range is (a coordinate IS a byte).
-//
-// It exists because the projection also answers a `viewBox` STRING, "0 0 256
-// 256", which is an SVG attribute a browser assigns and is done with. That
-// string is CONSTANT: no track, lap count or seed changes it. So a shell that
-// parses it has written a parser for a literal — and then, inevitably, a
-// fallback constant for when the parse fails, which is the same 256 written a
-// second time. Ask for the number.
-//
-// The string stays in the projection's answer: it is a frozen corpus field and
-// the web assigns it directly.
-TTP_ABI int ttp_schematic_view_size(void);
 
 // A schematic path's POINTS, as [[x,y], ...] — the reader `pack` already runs
 // over a path, exposed so a shell does not write a second one.

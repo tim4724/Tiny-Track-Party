@@ -1,4 +1,4 @@
-// The controller's two popups and the plumbing they share.
+// The controller's popups and the plumbing they share.
 //
 // They are deliberately SEPARATE popups with separate triggers: Settings holds
 // the steering-mode switch plus the animated how-to-drive demo (auto-shows once
@@ -13,6 +13,7 @@
 // both.
 import { motionHelpCopy } from './ui.js';
 import { helpSeen, markHelpSeen } from './prefs.js';
+import { renderStarsCard } from '../shared/trackPicker.js';
 
 const el = (id) => document.getElementById(id);
 
@@ -28,7 +29,7 @@ let _setSoundOn = () => {};
 let _onModalToggle = () => {};
 
 // True in gallery/scenario mode — auto-popups stay shut there (the harness opens
-// the one it's previewing; a real WELCOME never fires anyway).
+// the one it's previewing; with no relay, no room snapshot ever arrives anyway).
 const inScenario = () => !!new URLSearchParams(location.search).get('scenario');
 
 // While a modal is up, mark the screens behind it inert so a screen reader's
@@ -95,7 +96,11 @@ function openSettings() {
   refreshSettingsCard();
   el('settings-overlay').classList.remove('hidden');
   setBackgroundInert(true);
-  el('settings-done').focus();   // keyboard-operable + announced; the trap keeps Tab inside
+  // keyboard-operable + announced; the trap keeps Tab inside. preventScroll
+  // because the seed is the card's LAST control: on a screen too short for the
+  // card, focusing it scrolled the card to the bottom, so Settings opened with
+  // its own title already off the top.
+  el('settings-done').focus({ preventScroll: true });
   _onModalToggle();
 }
 
@@ -157,7 +162,7 @@ function openMotionPopup() {
   refreshMotionPopup();
   el('motion-overlay').classList.remove('hidden');
   setBackgroundInert(true);
-  el('motion-done').focus();
+  el('motion-done').focus({ preventScroll: true });
   _onModalToggle();
 }
 
@@ -172,6 +177,31 @@ function maybeShowMotionAlert() {
   if (inScenario() || _motionAlertShown || motionOpen() || !motionBlocked()) return;
   _motionAlertShown = true;
   openMotionPopup();
+}
+
+// ---- Stars popup ----
+// Opened only by a tap on the race page's star count, so it never competes for
+// the lobby-entry beat. It takes the progress and catalogue at open time; a
+// cup banks between races, never while the lobby is up.
+let _starsReturnFocus = null;
+
+const starsOpen = () => !el('stars-overlay').classList.contains('hidden');
+
+export function openStarsPopup(progress, catalog) {
+  _starsReturnFocus = document.activeElement;
+  renderStarsCard({ countEl: el('stars-count'), rulesEl: el('stars-rules'),
+    unlockEl: el('stars-unlock'), progress, catalog });
+  el('stars-overlay').classList.remove('hidden');
+  setBackgroundInert(true);
+  el('stars-done').focus({ preventScroll: true });
+  _onModalToggle();
+}
+
+function closeStarsPopup() {
+  el('stars-overlay').classList.add('hidden');
+  setBackgroundInert(false);
+  restoreFocus(_starsReturnFocus); _starsReturnFocus = null;
+  _onModalToggle();
 }
 
 // ---- the rules that only make sense against each other ----
@@ -192,17 +222,20 @@ export function onEnterLobby() {
 export function closeAnyModal() {
   if (settingsOpen()) closeSettings();
   if (motionOpen()) closeMotionPopup();
+  if (starsOpen()) closeStarsPopup();
 }
 
 // Whether any popup is up — the shell's system-back sync reads this (an open
 // dialog is what back should close, even mid-race).
-export function anyModalOpen() { return settingsOpen() || motionOpen(); }
+export function anyModalOpen() { return settingsOpen() || motionOpen() || starsOpen(); }
 
 // Close the topmost popup, report whether one was there — the shell's
-// window.CouchPad.back handler (motion sits above settings, so it goes first).
+// window.CouchPad.back handler (motion sits above settings, so it goes first;
+// the stars popup only opens from a lobby tap, so it never stacks with either).
 export function closeTopModal() {
   if (motionOpen()) { closeMotionPopup(); return true; }
   if (settingsOpen()) { closeSettings(); return true; }
+  if (starsOpen()) { closeStarsPopup(); return true; }
   return false;
 }
 
@@ -255,6 +288,9 @@ export function initModals({ screens, tilt, buzz, playerName, getInputMode, setI
     refreshSettingsCard();
   });
 
+  el('stars-done').addEventListener('click', () => { _buzz(15); closeStarsPopup(); });
+  el('stars-overlay').addEventListener('keydown', (e) => trapTab(el('stars-overlay'), e));
+
   el('motion-done').addEventListener('click', () => { _buzz(15); closeMotionPopup(); });
   el('motion-overlay').addEventListener('keydown', (e) => trapTab(el('motion-overlay'), e));
   // The in-race "tilt is off" chip reopens the recovery popup (its only fix path,
@@ -297,5 +333,6 @@ export function initModals({ screens, tilt, buzz, playerName, getInputMode, setI
     if (e.key !== 'Escape') return;
     if (motionOpen()) { e.preventDefault(); e.stopPropagation(); closeMotionPopup(); }
     else if (settingsOpen()) { e.preventDefault(); e.stopPropagation(); closeSettings(); }
+    else if (starsOpen()) { e.preventDefault(); e.stopPropagation(); closeStarsPopup(); }
   });
 }

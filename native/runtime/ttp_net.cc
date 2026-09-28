@@ -19,9 +19,9 @@
 // the same scenarios through the old multi-call path in the same run and
 // asserts the mutations and effects agree.
 //
-// KEY ORDER IS OUTPUT for the snapshot: it is emitted with ordered_stringify so
-// the bytes the relay retains are the ones the phones have always parsed. See
-// ttp_net.h's deviation note.
+// KEY ORDER IS NOT A CONTRACT, the snapshot included: ttp_net_lobby_frame hands
+// its snapshot to the frame encoder, which canonicalizes, so the composed order
+// never reached a phone. Every answer here goes out canonical. See ttp_net.h.
 #include "ttp_error.h"
 #include "ttp_net.h"
 
@@ -75,10 +75,10 @@ const char* const NET_EFFECT_OPS[] = {
     "reset-reconnect-count", "connect-fresh", "fail-attempt", "reconnect",
     "send-to", "publish", "announce", "close-fastlane", "show-reconnect",
     "clear-reconnect", "rekey-player", "player-renamed", "welcome-item",
-    "game-message", "race-abandoned", "track-change", "clear-standings"};
+    "game-message", "race-abandoned", "track-change", "set-link"};
 
 const char* put(std::string& buf, const Value& v) {
-  ordered_stringify_into(v, buf);
+  canonical_stringify_into(v, buf);
   return buf.c_str();
 }
 const char* putStr(std::string& buf, std::string s) {
@@ -139,7 +139,9 @@ ns::RoomState stateOf(const char* s) { return ns::room_state_of(strOr(s)); }
 const char* ttp_net_effect_ops_json(void) {
   Value a = Value::Arr();
   for (const char* op : NET_EFFECT_OPS) a.push(Value::Str(op));
-  ordered_stringify_into(a, g_bufOps);
+  // Canonical sorts object KEYS; an array is left alone, so the table's own
+  // order is the answer's order and this is the same bytes either emitter gave.
+  canonical_stringify_into(a, g_bufOps);
   return g_bufOps.c_str();
 }
 
@@ -164,11 +166,13 @@ int ttp_net_configure(const char* chooserJson) {
 
 const char* ttp_net_lobby_frame(int roomHandle, int sessionHandle, const char* fieldsJson) {
   // The game-owned half — now only what the walks cannot know: the pause latch
-  // and the standings board. The PICK is the stored one (ttp_room.h) — the
-  // walks are its writers, so the frame reads it where it lives.
+  // and the mute latch. The PICK and the STANDINGS BOARD are both stored
+  // (ttp_room.h) — the walks are their writers, so the frame reads them where
+  // they live.
   Value input = json::parse_or(fieldsJson, Value::Obj());
   if (input.type != Value::OBJ) input = Value::Obj();
   setPickFields(roomHandle, input);
+  input.set("standings", ttp_room_board_value(roomHandle));
   // The room-owned half, read through the seam — the SAME four keys the shell
   // used to gather and hand back, so lobby_snapshot below is the untouched,
   // corpus-pinned rule and not a variant of it. The roster is built ONCE and
@@ -178,8 +182,6 @@ const char* ttp_net_lobby_frame(int roomHandle, int sessionHandle, const char* f
   input.set("roster", std::move(roster));
   input.set("hostPeerIndex", ttp_room_host_value(roomHandle));
   input.set("roomState", Value::Str(ttp_room_state_name(roomHandle)));
-  // Canonical, like every other frame encoder: g_bufFrame is framed output, not
-  // an ABI answer, so it takes ttp_party.cc's spelling and not this file's.
   g_bufFrame = canonical_stringify(framing::encode_set_state(ns::lobby_snapshot(input, g_chooser)));
   return g_bufFrame.c_str();
 }
@@ -216,28 +218,28 @@ const char* ttp_net_reconnect_card_json(const char* seatJson, const char* url) {
 
 // ---- controller messages ------------------------------------------------------
 
-// protocol.h's MSG table, by NAME — the wire spellings live there alone.
-static const std::string& msgType(const char* name) {
+// The wire spelling of a MSG key, off the shared manifest — never a literal
+// here, so this file cannot drift from what protocol.js told the phone.
+static const char* msgOf(const char* key) {
   for (const auto& kv : protocol::MSG)
-    if (kv.first == name) return kv.second;
-  static const std::string none;
-  return none;
+    if (kv.first == key) return kv.second.c_str();
+  return "";
 }
 
 const char* ttp_net_controller_action(int roomHandle, int sessionHandle,
                                       const char* fromJson, const char* type) {
   const std::string t = strOr(type);
   const char* verdict = "none";
-  if (t == msgType("CONTROL")) {
+  if (t == msgOf("CONTROL")) {
     if (ttp_session_engine(sessionHandle)) verdict = "control";
-  } else if (t == msgType("PAUSE_GAME")) {
+  } else if (t == msgOf("PAUSE_GAME")) {
     verdict = "pause";
-  } else if (t == msgType("RESUME_GAME")) {
+  } else if (t == msgOf("RESUME_GAME")) {
     verdict = "resume";
-  } else if (t == msgType("RETURN_TO_LOBBY")) {
+  } else if (t == msgOf("RETURN_TO_LOBBY")) {
     verdict = "return-to-lobby";
-  } else if (t == msgType("START_GAME") || t == msgType("SERIES_NEXT") ||
-             t == msgType("SET_SOUND")) {
+  } else if (t == msgOf("START_GAME") || t == msgOf("SERIES_NEXT") ||
+             t == msgOf("SET_SOUND")) {
     // Host-only, re-checked here so a stale or forged message cannot jump the
     // lobby; a start additionally needs every other racer ready (the same gate
     // that lights the host's button).
@@ -245,9 +247,9 @@ const char* ttp_net_controller_action(int roomHandle, int sessionHandle,
     const bool isHost = from.type != Value::NUL &&
         canonical_stringify(from) == canonical_stringify(ttp_room_host_value(roomHandle));
     if (isHost) {
-      if (t == msgType("SET_SOUND")) {
+      if (t == msgOf("SET_SOUND")) {
         verdict = "set-sound";
-      } else if (t == msgType("SERIES_NEXT")) {
+      } else if (t == msgOf("SERIES_NEXT")) {
         verdict = "series-next";
       } else {
         // The same readiness rule the lobby's Start button shows, asked of the
@@ -261,12 +263,6 @@ const char* ttp_net_controller_action(int roomHandle, int sessionHandle,
   }
   return verdict;
 }
-
-// ---- room-state transitions ----------------------------------------------------
-
-// ---- liveness -------------------------------------------------------------------
-
-// ---- claims + reconciliation ------------------------------------------------------
 
 // ===========================================================================
 // THE CHOREOGRAPHY WALKS (ttp_net.h's second section).
@@ -292,6 +288,13 @@ struct NetState {
   bool inRoom = false;
   bool hbPending = false;
   double hbSentAt = 0;
+  // The display's own link, as the viewer sees it (session.h LinkState). The
+  // four fields are exactly the `set-link` payload; a shell mirrors them only
+  // to draw the overlay.
+  ns::LinkState link = ns::LinkState::CONNECTED;
+  double linkAttempt = 0;
+  double linkMax = 0;
+  bool linkButton = false;
 };
 std::map<int, NetState> g_netStates;
 NetState& netStateOf(int roomHandle) { return g_netStates[roomHandle]; }
@@ -299,15 +302,7 @@ NetState& netStateOf(int roomHandle) { return g_netStates[roomHandle]; }
 // One scratch buffer per walk, the file's own rule (see the block above).
 std::string g_bufOpen, g_bufCreateTimeout, g_bufProtocol, g_bufClose, g_bufPeerMsg,
     g_bufSelectDraw, g_bufSetTrack, g_bufLiveness, g_bufSeen, g_bufHostApply,
-    g_bufStateApply, g_bufPick;
-
-// The wire spelling of a MSG key, off the shared manifest — never a literal
-// here, so the walk cannot drift from what protocol.js told the phone.
-const char* msgOf(const char* key) {
-  for (const auto& kv : protocol::MSG)
-    if (kv.first == key) return kv.second.c_str();
-  return "";
-}
+    g_bufStateApply, g_bufPick, g_bufReconnect;
 
 const Value kUndef;  // JS `undefined`, for absent-key comparisons
 const Value& orUndef(const Value* v) { return v ? *v : kUndef; }
@@ -361,26 +356,46 @@ void pushPeerOp(Value& effects, const char* op, const PeerId& id) {
 const char* answer(std::string& buf, Value effects) {
   Value out = Value::Obj();
   out.set("effects", std::move(effects));
-  ordered_stringify_into(out, buf);
+  canonical_stringify_into(out, buf);
   return buf.c_str();
+}
+
+// Store the link view and tell the shell. The ONE writer of the four fields,
+// so the effect and the store can never disagree.
+void setLink(NetState& st, ns::LinkState state, double attempt, double max, bool button,
+             Value& effects) {
+  st.link = state;
+  st.linkAttempt = attempt;
+  st.linkMax = max;
+  st.linkButton = button;
+  Value e = effectOp("set-link");
+  e.set("state", Value::Str(ns::key(state)));
+  e.set("attempt", Value::Num(attempt));
+  e.set("max", Value::Num(max));
+  e.set("button", Value::Bool(button));
+  effects.push(std::move(e));
 }
 
 // ---- the old shell's private methods, one each -----------------------------
 
-// _seen: record proof of life. Also lifts a dropped seat back to connected: a
-// phone can go silent and resume WITHOUT its socket ever closing (locked
-// screen, network blip), so presence must flip back here, not only on
-// peer_joined. This is the single writer that lifts disconnection.
-void seenWalk(RoomFlow* flow, const PeerId& id, double nowMs, Value& effects) {
-  flow->onSeen(id, nowMs);  // no-op for unseated peers
+// _seen: lift a dropped seat back to connected. Traffic from a seat the display
+// has flagged disconnected means it is back — reached from peer_joined, from any
+// peer message (a rejoining phone's HELLO) and from fastlane input. This is the
+// single writer that lifts disconnection.
+//
+// It no longer STAMPS anything: RoomFlow's lastSeen map is read by isExpired
+// alone, and nothing expires now that presence is the relay's answer. The walk
+// keeps its name and its `nowMs` (ABI: ttp_net_on_seen_json), because the shells
+// pass a clock and the lift is still what the call means.
+void seenWalk(RoomFlow* flow, const PeerId& id, double, Value& effects) {
   if (flow->isDisconnected(id)) {
     flow->markReconnected(id);  // emits rosterchange -> the shell announces
     pushPeerOp(effects, "clear-reconnect", id);
   }
 }
 
-// _dropSeat: mid-game drop (socket gone, liveness silence, or a mid-race
-// LEAVE): keep the seat AND the car — the camera stays on it and a quick
+// _dropSeat: mid-game drop (the socket gone, or a mid-race LEAVE — presence is
+// the relay's answer, so nothing else drops a seat): keep the seat AND the car — the camera stays on it and a quick
 // reconnect resumes driving — and offer the per-seat reconnect QR with its
 // grace clock running. The card's URL is the shell's (D3: the claim URL needs
 // the platform's base origin), so the effect carries the seat and nothing else.
@@ -428,17 +443,20 @@ void addPeerWalk(RoomFlow* flow, const PeerId& id, double nowMs, Value& effects)
     fields.emplace_back("ready", Value::Bool(plan.seat.ready));
     flow->addPlayer(id, fields);  // emits rosterchange -> the shell announces
   }
+  // The clock is threaded, not spent — seenWalk lifts and stamps nothing. It
+  // stays because dropping it here makes ttp_net_on_protocol_json's own nowMs
+  // unused (these two calls are its only readers), which trades one ignored
+  // parameter for three unnamed ABI ones. Not worth the churn; see seenWalk.
   if (plan.stamp) seenWalk(flow, id, nowMs, effects);
 }
 
 // _claimReconnect: the cross-device rejoin, claiming a dropped seat via the
-// HELLO's rejoinToken. The WHOLE message is consulted, not just the token: an
-// ABSENT rejoinToken and an explicit null answer differently, and that
-// difference is frozen — see claim_plan/norm_index. Answers the CLAIMED old
-// seat (None when nothing was claimed): the hello walk needs it, because the
-// still-racing car is keyed to that seat until the shell performs rekey-player.
+// HELLO's rejoinToken — an integer or nothing, see claim_plan/norm_index.
+// Answers the CLAIMED old seat (None when nothing was claimed): the hello walk
+// needs it, because the still-racing car is keyed to that seat until the shell
+// performs rekey-player.
 PeerId claimWalk(RoomFlow* flow, const Value* fromV, const PeerId& from, const Value& msg,
-                 double nowMs, Value& effects) {
+                 Value& effects) {
   const Value* token = mfind(msg, "rejoinToken");
   // `hasOld`/`oldDisconnected` are asked speculatively, exactly as the shell
   // did: the plan needs them alongside the token it is about to normalize.
@@ -453,10 +471,10 @@ PeerId claimWalk(RoomFlow* flow, const Value* fromV, const PeerId& from, const V
   if (!plan.claim) return PeerId::None();
   pushPeerOp(effects, "close-fastlane", oldId);
   pushPeerOp(effects, "close-fastlane", from);
-  flow->rekey(oldId, from);  // moves the seat record (+ stamp), marks reconnected
-  // The carried stamp is from before the drop (> timeout old), so without this
-  // the reclaimed seat would expire again on the very next tick.
-  if (plan.restamp) flow->onSeen(from, nowMs);
+  flow->rekey(oldId, from);  // moves the seat record, marks reconnected
+  // plan.restamp is not spent: it existed so a reclaimed seat, carrying a stamp
+  // from before the drop, would not expire again on the very next tick. Nothing
+  // expires now. The plan keeps the field, which the frozen session corpus pins.
   Value e = effectOp("rekey-player");  // move their still-racing car over
   e.set("oldId", oldId.toValue());
   e.set("newId", from.toValue());
@@ -773,6 +791,12 @@ const char* ttp_net_on_protocol_json(int roomHandle, const char* type, const cha
     effects.push(std::move(s));
     st.hbPending = false;
     pushOp(effects, "start-liveness");
+    // The overlay comes down HERE, on the relay's answer, never on the raw
+    // socket open: a dial that opens and is then refused would flash the
+    // lobby between two overlays. Only on a change, so the common case's
+    // effect list is exactly what it always was.
+    if (st.link != ns::LinkState::CONNECTED)
+      setLink(st, ns::LinkState::CONNECTED, 0, 0, false, effects);
     Value r = effectOp("room-ready");
     r.set("room", Value::Str(st.roomCode));
     r.set("instance", st.instance.empty() ? Value::Null() : Value::Str(st.instance));
@@ -858,12 +882,21 @@ const char* ttp_net_on_protocol_json(int roomHandle, const char* type, const cha
   return answer(g_bufProtocol, std::move(effects));
 }
 
-const char* ttp_net_on_close_json(int roomHandle, int roomClosed) {
+const char* ttp_net_on_close_json(int roomHandle, int roomClosed, int replaced, double attempt,
+                                  double maxAttempts) {
   RoomFlow* flow = ttp_room_flow(roomHandle);
   NetState& st = netStateOf(roomHandle);
   st.inRoom = false;
   Value effects = Value::Arr();
   pushOp(effects, "clear-create-timer");
+  // What this close means for the viewer — the rule is session.h's. The
+  // attempt and the cap are the kit's own counters, handed through untouched
+  // so the overlay's "Attempt N of M" is the budget that is actually running.
+  {
+    const ns::LinkPlan plan = ns::link_after_close(replaced != 0, roomClosed != 0, attempt,
+                                                   maxAttempts);
+    if (plan.change) setLink(st, plan.state, attempt, maxAttempts, plan.button, effects);
+  }
   // The room itself is gone — our own closeRoom() echoing back, or the relay
   // tore it down. Terminal for the room but not for the display: forget it and
   // open a fresh one (new code/QR), same fallback as a "Room not found" join.
@@ -905,7 +938,8 @@ const char* ttp_net_on_peer_message_json(int roomHandle, int sessionHandle,
     return answer(g_bufPeerMsg, std::move(effects));
   }
 
-  // ANY traffic from a peer — app message or RTC signal — is proof of life.
+  // ANY traffic from a peer — app message or RTC signal — says a seat the
+  // display had dropped is back, so the lift runs before the type is read.
   const PeerId from = peerIdOf(&fromV);
   seenWalk(flow, from, nowMs, effects);
   if (isSignal) return answer(g_bufPeerMsg, std::move(effects));
@@ -916,7 +950,7 @@ const char* ttp_net_on_peer_message_json(int roomHandle, int sessionHandle,
       // A cross-device rejoin claims its dropped seat first, so the snapshot
       // published below reflects the restored identity (livery/car/host) — not
       // the throwaway placeholder slot the relay just handed this connection.
-      const PeerId claimedOld = claimWalk(flow, &fromV, from, msg, nowMs, effects);
+      const PeerId claimedOld = claimWalk(flow, &fromV, from, msg, effects);
       // A HELLO from a peer we never seated (the relay knows them, we don't —
       // e.g. this tab reloaded and missed their peer_joined): seat them now.
       // Whether the seat EXISTED is also what tells a rename from a first
@@ -943,6 +977,29 @@ const char* ttp_net_on_peer_message_json(int roomHandle, int sessionHandle,
               if (pid && strictEquals(*pid, from.toValue())) row.set("name", Value::Str(name));
             }
             ttp_room_store_field(roomHandle, std::move(f));
+          }
+          // The board ALREADY OUT carries the old name too, and the field only
+          // reaches a phone on the board's next compose — mid-race the next car
+          // to cross, on the podium never. So PATCH the retained board's rows
+          // (the `announce` below republishes it).
+          //
+          // Patched, NOT recomposed, for two reasons. A recompose would pick up
+          // whatever the roster did since the board went out, so the re-push
+          // would differ in more than the name; and this walk holds no
+          // intermission budget, so it would silently re-price the board's cup
+          // chip — dropping the web's __intermissionMs E2E override in the
+          // process. Late-joiner rows are patched by the same loop: their name
+          // came off the roster, and it is the roster that just moved.
+          Value board = ttp_room_board_value(roomHandle);
+          const Value* order = board.type == Value::OBJ ? board.find("order") : nullptr;
+          if (order && order->type == Value::ARR) {
+            Value rows = *order;
+            for (Value& row : rows.arr) {
+              const Value* pid = row.find("playerId");
+              if (pid && strictEquals(*pid, from.toValue())) row.set("name", Value::Str(name));
+            }
+            board.set("order", std::move(rows));
+            ttp_room_store_board(roomHandle, std::move(board));
           }
           Value e = effectOp("player-renamed");
           e.set("peerIndex", from.toValue());
@@ -1097,7 +1154,7 @@ void ttp_net_clear_pick(int roomHandle) {
 const char* ttp_net_pick_json(int roomHandle) {
   Value out = Value::Obj();
   setPickFields(roomHandle, out);
-  ordered_stringify_into(out, g_bufPick);
+  canonical_stringify_into(out, g_bufPick);
   return g_bufPick.c_str();
 }
 
@@ -1116,6 +1173,9 @@ const char* ttp_net_liveness_json(int roomHandle, int sessionHandle, double nowM
   st.hbSentAt = tick.hbSentAt;
   if (tick.act == ns::HeartbeatAct::RECONNECT) {
     // The relay can no longer reach us: force the reconnect it cannot ask for.
+    // An unnumbered retry (attempt 0): the overlay's heading and nothing else
+    // until the redial's own outcome numbers it.
+    setLink(st, ns::LinkState::RECONNECTING, 0, 0, false, effects);
     pushOp(effects, "reconnect");
   } else if (tick.act == ns::HeartbeatAct::SEND) {
     Value data = Value::Obj();
@@ -1126,17 +1186,38 @@ const char* ttp_net_liveness_json(int roomHandle, int sessionHandle, double nowM
     effects.push(std::move(e));
   }
   if (!tick.sweep) return answer(g_bufLiveness, std::move(effects));
-  // Per-controller silence check. RoomFlow owns the detection (mid-game only —
-  // expiredPeers is empty in the lobby); the drop is applied here so
-  // markDisconnected keeps its single writer.
-  for (const PeerId& id : flow->expiredPeers(nowMs)) dropSeatWalk(flow, id, effects);
-  // …then the abandoned-race deadline, on the same tick and the same clock:
+  // NO per-controller silence check: presence is the relay's answer, so a seat
+  // is dropped by peer_left and by nothing else (see protocol.js LIVENESS for
+  // why the display's own 3 s window was given up, and what it cost). RoomFlow
+  // still HAS the detector — it is kit code, pinned by the roomflow corpus — but
+  // nothing here configures a timeout for it, so expiredPeers can only be empty.
+  // The abandoned-race deadline, on the same tick and the same clock:
   // RoomFlow arms it while every participant is gone and someone is waiting,
   // and returns true the one time it expires. The active order is re-synced
   // off the live race first, through the same seam as ever.
   ttp_room_sync_active_order(roomHandle, sessionHandle);
   if (flow->graceTick(nowMs)) pushOp(effects, "race-abandoned");
   return answer(g_bufLiveness, std::move(effects));
+}
+
+const char* ttp_net_reconnect_json(int roomHandle) {
+  NetState& st = netStateOf(roomHandle);
+  Value effects = Value::Arr();
+  // Only the gave-up state offers the button; anything else is a stray press
+  // (or a shell re-firing a stale one) and must not drop a healthy socket.
+  if (st.link != ns::LinkState::DISCONNECTED || !st.linkButton)
+    return answer(g_bufReconnect, std::move(effects));
+  // Re-arm the FULL budget before the dial: a bare reconnect would leave the
+  // counter past the cap, and the next drop would fall straight back to
+  // DISCONNECTED after one attempt instead of five.
+  pushOp(effects, "reset-reconnect-count");
+  setLink(st, ns::LinkState::RECONNECTING, 0, 0, false, effects);
+  pushOp(effects, "reconnect");
+  return answer(g_bufReconnect, std::move(effects));
+}
+
+bool ttp_net_link_down(int roomHandle) {
+  return netStateOf(roomHandle).link != ns::LinkState::CONNECTED;
 }
 
 const char* ttp_net_on_seen_json(int roomHandle, const char* peerIdJson, double nowMs) {
@@ -1162,24 +1243,17 @@ const char* ttp_net_host_change_apply_json(int roomHandle, const char* hostPeerI
   return answer(g_bufHostApply, std::move(effects));
 }
 
-const char* ttp_net_state_change_apply_json(int roomHandle, const char* to, double nowMs) {
+// `nowMs` is unnamed because nothing here spends a clock any more: the race-start
+// re-stamp it fed was the silence sweep's, and presence is the relay's answer now
+// (see seenWalk). plan.restampConnected goes with it — the FIELD stays, pinned by
+// the frozen session corpus, but no caller reads it. The ABI parameter stays too:
+// three shells pass it, and a phase flip is the obvious place for the next rule
+// that needs a clock.
+const char* ttp_net_state_change_apply_json(int roomHandle, const char* to, double) {
   RoomFlow* flow = ttp_room_flow(roomHandle);
   Value effects = Value::Arr();
   if (!flow) return answer(g_bufStateApply, std::move(effects));
   const ns::StateChangePlan plan = ns::state_change_plan(stateOf(to));
-  // Race start: re-stamp every CONNECTED seat's liveness, so silence
-  // accumulated in the lobby (where expiredPeers is gated off) isn't charged
-  // against the first COUNTDOWN tick. Deliberately not a blanket
-  // clear-disconnected: flipping a grace-pending seat back to connected here
-  // would orphan its reconnect QR (only the seen/claim walks may flip
-  // presence). Disconnected seats keep their stale stamp; expiredPeers already
-  // skips them.
-  if (plan.restampConnected) {
-    const Value roster = flow->listValue();
-    for (const Value& p : roster.arr)
-      if (json::truthy(p.find("connected")))
-        flow->onSeen(peerIdOf(p.find("peerIndex")), nowMs);
-  }
   // Returning to the lobby, free every seat still flagged disconnected: the
   // race that reserved them is over, and a lobby ghost with a dead reconnect
   // QR would just block one of the four slots. (A cup's RESULTS→COUNTDOWN
@@ -1194,7 +1268,12 @@ const char* ttp_net_state_change_apply_json(int roomHandle, const char* to, doub
     }
     for (const PeerId& id : ids) expireSeatWalk(flow, id, effects);
   }
-  if (plan.clearStandings) pushOp(effects, "clear-standings");
+  // A fresh race and the lobby both start with no results board. EXECUTED here
+  // rather than spelled: the board lives behind the room (ttp_room.h), so
+  // dropping it is a store, not a platform op — and the `publish` below is
+  // already the push that tells the phones. The plan FIELD stays: it is
+  // session::StateChangePlan's rule and the frozen session corpus pins it.
+  if (plan.clearStandings) ttp_room_store_board(roomHandle, Value::Null());
   if (plan.publish) pushOp(effects, "publish");
   return answer(g_bufStateApply, std::move(effects));
 }

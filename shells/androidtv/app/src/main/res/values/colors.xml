@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The ONE colour this shell spells outside design-tokens.json, and it has to
+     be here: a windowBackground drawable is resolved by the resource system
+     before any code could read the token file. Kept to the single value the
+     splash needs — every other colour in the app comes from Tokens.kt. -->
+<resources>
+    <color name="paper">#FFF6EB</color>
+</resources>

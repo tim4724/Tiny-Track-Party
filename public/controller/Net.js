@@ -11,14 +11,17 @@ import { InputGate } from './InputGate.js';
 const { PartyConnection, MSG, RELAY_URL, FASTLANE_TYPES, LIVENESS } = window;
 const enc = encodeURIComponent;
 
-// Relay-liveness ping cadence and the overdue-PONG threshold after which we
-// surface a "no signal" reading (only when the fastlane isn't carrying its own
-// live RTT). Both come from the shared presence contract (protocol.js LIVENESS)
-// rather than being restated here: this cadence is the thing the display's
-// 3 s drop window is budgeted against, and the two files used to name their own
-// numbers with only a comment between them.
+// Ping cadence and the overdue-PONG threshold after which we surface a "no
+// signal" reading (only when the fastlane isn't carrying its own live RTT).
+// Both come from the shared presence contract (protocol.js LIVENESS) rather
+// than being restated here.
+//
+// The ping is NOT how the big screen knows we are here — presence is the
+// relay's answer, from peer_joined to peer_left. It keeps the relay's own idle
+// timeout off our socket, and it is the WS-path latency sample. The threshold
+// below only paints this phone's chip.
 const PING_INTERVAL_MS = LIVENESS.PING_INTERVAL_MS;
-const PONG_TIMEOUT_MS = LIVENESS.TIMEOUT_MS;
+const PONG_TIMEOUT_MS = LIVENESS.PONG_TIMEOUT_MS;
 
 function deriveRoomCode() {
   const seg = (location.pathname || '/').split('/').filter(Boolean)[0];
@@ -34,6 +37,10 @@ function deriveInstance() {
 // this token tells the display which dropped seat to hand this fresh connection —
 // see DisplayNet._claimReconnect. A same-device reconnect keeps its relay slot by
 // clientId and never needs it. Null on a normal first-time join.
+//
+// INTEGER OR NOTHING: the display type-checks this token and coerces nothing, so
+// sending the seat as the raw query STRING would silently claim no seat at all.
+// Number() here is not a convenience — it is the contract (session.h).
 function deriveClaim() {
   const raw = new URLSearchParams(location.search).get('claim');
   if (raw == null || raw === '') return null;
@@ -66,16 +73,15 @@ export class ControllerNet extends GameNet {
     this.playerName = '';
     this._pingTimer = null;
     this._lastPong = 0;
-    // Gates the sensor-rate CONTROL stream down to what the display doesn't already
-    // hold (see InputGate). opts.gate lets tests/measurement pass a configured
-    // one; the default is the shipping policy.
+    // Gates the sensor-rate CONTROL stream down to what the display doesn't
+    // already hold (see InputGate).
     //
     // TEMPORARY (with the AC ping below): while the WS ping runs on AirConsole,
     // the 1 ping/s rides on top of the CONTROL stream in the controller's own
     // send budget, so the gate floor gives that message its headroom:
     // 42 ms ⇒ ≤23.8 CONTROL/s, +1 ping/s < the platform's 25 msg/s. Revert to
     // the plain default when the ping gate below goes back in.
-    this.gate = opts.gate || new InputGate(window.airconsole ? { sendMinIntervalMs: 42 } : {});
+    this.gate = new InputGate(window.airconsole ? { sendMinIntervalMs: 42 } : {});
     this._srtt = 0;
     // §7 lifecycle state. _suspended: the link was dropped by suspend() and is
     // ours to rebuild on return. _terminal: the relay finished this session for
@@ -122,7 +128,7 @@ export class ControllerNet extends GameNet {
         // The display came back (reconnect — or a RELOAD that wiped its
         // roster): re-introduce ourselves so a fresh display restores this
         // seat's name, and re-open the fastlane right away instead of waiting
-        // for the retry tick. The WELCOME it answers with clears any
+        // for the retry tick. The snapshot it republishes clears any
         // "waiting for the big screen" overlay.
         this.party.sendTo(0, { type: MSG.HELLO, name: this.playerName, rejoinToken: this.rejoinToken });
         if (this.fastlane) this.fastlane.open(0);
@@ -136,7 +142,7 @@ export class ControllerNet extends GameNet {
     };
     // Retained host snapshot (the display's set_state): the lobby roster, pushed
     // live on each change and replayed by the relay right after our `joined` —
-    // so a (re)join catches up on roster/track before WELCOME round-trips. The
+    // so a (re)join catches up on roster/track before our HELLO round-trips. The
     // payload carries the same type tag a relayed message would (LOBBY_UPDATE),
     // so it funnels into the one handler.
     this.party.onState = (data) => { if (data && data.type) this.onMessage(data); };
@@ -294,11 +300,12 @@ export class ControllerNet extends GameNet {
     if (this.fastlane) this.fastlane.open(0); // null with no WebRTC: relay only
   }
 
-  // ---- ping / pong (WS relay-liveness + WS-path latency) ----
+  // ---- ping / pong (relay keepalive + WS-path latency) ----
   // The fastlane reports its own (lower) RTT via onRtt; this WS ping is the
-  // fallback latency source and the liveness check. When the fastlane is open
-  // its samples win — we don't let the 1 Hz WS reading clobber the live P2P
-  // chip (the gate in _handlePong / the timeout below).
+  // fallback latency source, and it keeps the relay's idle timeout off a socket
+  // whose inputs are all going over the fastlane. When the fastlane is open its
+  // samples win — we don't let the 1 Hz WS reading clobber the live P2P chip
+  // (the gate in _handlePong / the timeout below).
   _startPing() {
     this._stopPing();
     this._lastPong = Date.now();

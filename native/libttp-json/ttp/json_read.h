@@ -60,7 +60,7 @@ inline bool truthy(const Value* v) {
 // is that it answers for any JSON its adapter can emit, and a shell that sends
 // `{"laps": "3"}` gets the default, not a coerced 3. (JS coercion is NOT
 // reproduced on purpose — where a specific export needs it, it says so and does
-// it locally; session.h's `norm_index` is the one frozen case.)
+// it locally.)
 
 inline bool truthy(const Value& o, const char* k) { return truthy(o.find(k)); }
 

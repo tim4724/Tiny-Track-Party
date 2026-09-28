@@ -1,0 +1,240 @@
+/* /shadow-lab.html — the car contact shadow's tuning bench.
+ *
+ * Layout only. Colour, type and surface come from /shared/theme.css, which the
+ * page links first (root CLAUDE.md's Sticker Bash rule); nothing here invents a
+ * token. The one deliberate departure from the theme's die-cut chrome is the
+ * control rail: it is a dev instrument with thirteen live knobs on it, and
+ * thick outlines plus hard offset shadows on every row would drown the picture
+ * this page exists to look at. */
+
+html, body { height: 100%; }
+body { margin: 0; overflow: hidden; }
+
+#lab {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 22rem;
+  height: 100vh;
+}
+
+/* ---- the live race ---- */
+
+#stage {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--ink);
+}
+
+#stage-frame {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+#stage-frame iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+#stage-hint {
+  margin: 0;
+  padding: 0.5rem 0.9rem;
+  font: 600 0.72rem/1.5 var(--font-body);
+  color: var(--paper);
+  background: var(--ink);
+  text-align: center;
+  letter-spacing: 0.01em;
+}
+
+#stage-hint b {
+  font-family: var(--font-display);
+  color: var(--paper);
+}
+
+/* ---- the control rail ---- */
+
+#rail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--paper);
+  border-left: 3px solid var(--ink);
+}
+
+#rail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.75rem 0.9rem;
+  border-bottom: 3px solid var(--ink);
+}
+
+#controls {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.75rem 0.9rem 2rem;
+}
+
+/* A group of knobs under one heading. */
+.grp + .grp { margin-top: 1.1rem; }
+
+.grp > h2 {
+  margin: 0 0 0.5rem;
+  font: 700 0.7rem/1 var(--font-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* One knob: label + value on a line, control under it. */
+.knob + .knob { margin-top: 0.55rem; }
+
+.knob > .knob-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font: 600 0.78rem/1.3 var(--font-body);
+}
+
+.knob .val {
+  font: 700 0.72rem/1.3 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--ink-2);
+}
+
+/* A value the tuning has moved off its shipped default reads back loud, so a
+ * session's worth of dragging can be told from the shipped look at a glance —
+ * which is the question this page is usually being asked. A select carries no
+ * number beside its label (the option it shows IS the value), so it marks
+ * itself instead. */
+.knob.moved .val { color: var(--red); }
+.knob.moved select { border-color: var(--red); }
+
+.knob input[type=range] {
+  width: 100%;
+  margin: 0.15rem 0 0;
+  accent-color: var(--blue);
+}
+
+.knob select,
+.knob input[type=color] {
+  width: 100%;
+  margin-top: 0.15rem;
+}
+
+.knob input[type=color] {
+  height: 2rem;
+  padding: 0.15rem;
+  border: 3px solid var(--ink);
+  border-radius: 0.6rem;
+  background: var(--paper);
+}
+
+/* A knob whose change costs a re-allocation rather than a frame. */
+.knob.costly > .knob-top::after {
+  content: 'rebuilds';
+  font: 700 0.6rem/1 var(--font-display);
+  letter-spacing: 0.06em;
+  color: var(--purple);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.row .btn { flex: 1 1 auto; }
+
+.btn.sm {
+  padding: 0.4rem 0.7rem;
+  font-size: 0.75rem;
+}
+
+/* ---- the baked masks ---- */
+
+/* What the layer actually stamps, one card per distinct car MODEL. The deck
+ * cannot answer "is this shape right?" — a stamp lands in roughly 16 by 11
+ * layer texels, under a car, on asphalt — so the mask is shown at a size a
+ * person can judge, beside the size it is really sampled at. */
+#masks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(4.5rem, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.mask {
+  text-align: center;
+  font: 600 0.62rem/1.3 var(--font-body);
+  color: var(--ink-2);
+}
+
+.mask canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 3px solid var(--ink);
+  border-radius: 0.5rem;
+  /* The mask is COVERAGE, so it is shown as ink on paper the way the deck
+   * draws it — a white-on-black readout inverts what the eye is judging. */
+  background: var(--paper);
+  image-rendering: pixelated;
+}
+
+.mask.generic canvas { border-color: var(--red); }
+
+.mask.generic > span::after {
+  content: ' · generic';
+  color: var(--red);
+}
+
+/* The density readout. It goes RED below ~16 texels along a stamp, which is
+ * where the measured flicker sets in — the number is only useful if the page
+ * says when it is a problem. */
+#layer-readout {
+  margin: 0.5rem 0 0;
+  font: 600 0.68rem/1.5 var(--font-body);
+  color: var(--ink-2);
+}
+
+#layer-readout.tight { color: var(--red); }
+
+/* A standing note under a group — why this page opens where it does. */
+.grp-note {
+  margin: 0.45rem 0 0;
+  font: 600 0.68rem/1.45 var(--font-body);
+  color: var(--purple);
+}
+
+#layer-view {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: 0.5rem;
+  border: 3px solid var(--ink);
+  border-radius: 0.5rem;
+  background: var(--paper);
+  image-rendering: pixelated;
+}
+
+#layer-view-note {
+  margin: 0.4rem 0 0;
+  font: 600 0.68rem/1.45 var(--font-body);
+  color: var(--ink-3);
+}
+
+#layer-view-note.tight { color: var(--red); }
+
+#masks-note {
+  margin: 0.5rem 0 0;
+  font: 600 0.68rem/1.45 var(--font-body);
+  color: var(--ink-3);
+}

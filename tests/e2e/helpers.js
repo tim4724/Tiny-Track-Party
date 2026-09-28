@@ -112,6 +112,11 @@ async function joinController(browser, roomCode, name) {
   // LANDSCAPE — the controller is landscape-only; a portrait viewport gets the
   // full-screen rotate overlay, which would sit over every button these specs click.
   const context = await browser.newContext({ viewport: { width: 844, height: 390 } });
+  // Chromium (153+) gates the sensors behind a permission and, headless, answers
+  // requestPermission() with 'prompt' — no decision, so the phone would sit in
+  // 'unknown' with no listener attached. Grant it, as the player of a normal
+  // phone did; the feed below is then what a granted sensor delivers.
+  await context.grantPermissions(['accelerometer', 'gyroscope', 'magnetometer']);
   // Pre-seed the Settings popup's seen-flag so its first-run auto-show
   // doesn't cover the lobby and block ready/start clicks. These specs drive the
   // game flow (a returning player who's already dismissed it); the popup's own
@@ -166,4 +171,59 @@ async function waitForRacing(displayPage, timeout = 45000) {
     () => window.__session() && window.__session().racing, null, { timeout });
 }
 
-module.exports = { test, expect: base.expect, openDisplay, joinController, installLevelSensor, startRace, waitForRacing, visible };
+// Record every retained-state snapshot the display publishes from here on, in
+// order (window.__snaps), and return who's seated (connected peerIndexes) for
+// midRaceSeated below. Call it at the moment recording should start — the
+// FIRST recorded mid-race snapshot is what midRaceSeated asserts on, so
+// installing the hook earlier changes what that assertion means.
+async function recordSnapshots(page) {
+  await page.evaluate(() => {
+    window.__snaps = [];
+    // The retained snapshot is composed AND FRAMED in C++ now
+    // (ttp_net_lobby_frame), so the display publishes pre-encoded bytes through
+    // setStateFrame rather than handing setState an object. Unwrap the frame to
+    // get back the same snapshot this hook has always collected.
+    const p = window.__net.party, orig = p.setStateFrame.bind(p);
+    p.setStateFrame = (frame) => { window.__snaps.push(JSON.parse(frame).data); return orig(frame); };
+  });
+  return page.evaluate(() =>
+    window.__net.flow.list().filter((p) => p.connected).map((p) => p.peerIndex));
+}
+
+// The regression guard both flows share: no mid-race snapshot may show a seated
+// racer as inRace:false, and the FIRST one must be the countdown snapshot with
+// everyone already in — proof the session existed before the COUNTDOWN flip,
+// so no phone flashes the waiting screen through the countdown.
+function midRaceSeated(page, seated) {
+  return page.evaluate((seated) => {
+    const mid = window.__snaps.filter((s) => s.roomState === 'countdown' || s.roomState === 'playing');
+    const offenders = mid.flatMap((s) => (s.players || [])
+      .filter((pl) => seated.includes(pl.peerIndex) && pl.inRace === false)
+      .map((pl) => ({ roomState: s.roomState, peerIndex: pl.peerIndex })));
+    // The very first mid-race snapshot IS the countdown one — prove it exists and
+    // already marks everyone in, so the assertion can't pass vacuously.
+    const firstCountdownOk = mid.length > 0 && mid[0].roomState === 'countdown'
+      && seated.every((i) => mid[0].players.some((pl) => pl.peerIndex === i && pl.inRace === true));
+    return { offenders, firstCountdownOk };
+  }, seated);
+}
+
+// End the race: mark every human car finished with a synthetic time (the
+// sanctioned forceFinish staging hook) and let the engine's next frame do the
+// rest — humansAllDone fast-forwards the AI to the flag and endRace fires.
+const finishHumans = (displayPage) => displayPage.evaluate(() => {
+  const session = window.__session();
+  let t = 20;
+  for (const id of session.carIds()) {
+    if (String(id).startsWith('ai-')) continue;
+    session.forceFinish(id, (t += 5.3));
+  }
+});
+
+// The flag has landed. NOT the results BOARD: the race's end holds the frozen
+// finish frame for the flourish first (race_flow.h FINISH_FLOURISH_MS), so a
+// test that wants the board waits for the board.
+const inResults = (displayPage, timeout = 30000) =>
+  displayPage.waitForFunction(() => window.__net.roomState === 'results', null, { timeout });
+
+module.exports = { test, expect: base.expect, openDisplay, joinController, startRace, waitForRacing, visible, recordSnapshots, midRaceSeated, finishHumans, inResults };

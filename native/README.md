@@ -21,7 +21,9 @@ wastes an afternoon. Only the ledger is audited against the tree:
 | [plan.md](../docs/native-port/plan.md), [shared-cpp-plan.md](../docs/native-port/shared-cpp-plan.md) | **Plans.** Per-track state lives in their own headings; the tree is what was actually built. |
 
 The retired JS engine and its recorders are reachable through
-`npm run revive:js-oracle`; what gates the port TODAY is the ctest suite.
+`npm run revive:js-oracle`, which restores them into a throwaway worktree. That is
+an archaeology and corpus-re-derivation tool, not a gate: what gates the port
+TODAY is the ctest suite.
 
 ## Layout
 
@@ -40,8 +42,9 @@ libttp-runtime/ The platform-free decision layers: chase and overview cameras,
 renderer/       The Filament renderer. include/ttp_render.h is its INPUT
                 CONTRACT (TtpFrameInput), an internal C++ header rather than an
                 ABI. Built only when -DFILAMENT_SDK points at the fork's wasm
-                install (~/Projects/filament, branch tvos-v1.74.0, which carries
-                the tvOS port + newer-clang fixes).
+                install of the commit in native/filament.pin (which
+                carries the tvOS port + the newer-clang fixes). A BRANCH NAME
+                here went stale twice — the pin is the one durable answer.
 libttp-json/    Canonical JSON (sorted keys, ECMA-262 shortest-form numbers)
                 + the parser. Byte-identical to JSON.stringify by contract.
 runtime/        The public C ABIs — sim, party, display, ui, net, race, audio,

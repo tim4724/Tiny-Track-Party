@@ -13,28 +13,40 @@
 // spelled out instead of using Filament's `lit` model). flipUV is off so the
 // C++ UVs (world XZ / tile) map straight through.
 //
-// THE LIGHTING IS ttp_shade.inc's, not a copy of it. This file carried its own
-// transcription of sunVisibility, kPenumbraWorld and the ambient/sun terms —
-// ninety lines, in step with the shared include only because both were edited
-// together every time (the uvToRenderTargetUV fix had to land twice). That is
-// the exact failure ttp_shade.inc's header says it exists to prevent, and it was
-// the last copy left.
+// THE SUN'S SHADOW IS A BAKED VISIBILITY MAP, not the live ESM read-out. The
+// ground's 10-20 u mesh step is far coarser than the 0.6 u penumbra, so the
+// road's per-vertex evaluation could not transfer and this surface ran the
+// whole sunVisibility chain per fragment — a highp mat4, a bounds test, a
+// sqrt, a divide, a tap, a log and two smoothsteps over the largest surface
+// in the frame (~0.6 ms at 720p on the reference Android GPU, and it scales
+// with resolution). Every input is static per track, so vvis.mat evaluates
+// the exact same decode ONCE at build, over the light's own grid, and this
+// fragment pays one bilinear R8 tap. The smooth halves — SH ambient and the
+// sun's NoL term (ttp_shade.inc's split helpers) — ride per VERTEX, which is
+// sound for them (they vary over metres, unlike the shadow's 0.6 u edge);
+// the shadowFromWorld transform is affine, so the per-vertex uv interpolates
+// EXACTLY. Outside the light's frustum the bake's border texels are lit and
+// CLAMP_TO_EDGE extends them, which is the same answer the old early-out gave.
 //
-// The ground DOES catch the sun's baked map, and it also CASTS into it. The
-// thing the original opt-out was protecting against is a CAR's ground blob
-// detaching onto the lawn far below its deck — but that blob is a masked
-// road-shader decal (vroad), a different mechanism entirely.
-//
-// Casting looks pointless for a flat floor (it throws nothing on itself) and is
-// not: outside every caster the depth map holds its clear value, the far plane,
-// and a receiver's soft-min then compares against THAT rather than against its
-// own surface. It is the difference between a penumbra and a hard edge — see
-// buildTrackScene, where it was measured.
+// The ground still CASTS into the ESM (that part is unchanged): outside every
+// caster the depth map holds its clear value, and a receiver's soft-min then
+// compares against THAT rather than against its own surface — the difference
+// between a penumbra and a hard edge.
 material {
     name : TtpVground,
+    variables : [
+        // fog.x = the per-vertex fog factor (ttp_fog.inc); fog.yzw = the SH
+        // ambient. sun.xyz = the sun term at full visibility; sun.w and
+        // suv.x = the shadow-map uv (highp: a half-precision uv steps by
+        // ~0.0005 near 1.0 — a quarter-texel of the 512-wide bake, enough to
+        // shimmer a contrasty shadow edge as the camera moves).
+        { name : fog, precision : high },
+        { name : sun, precision : high },
+        { name : suv, precision : high }
+    ],
     requires : [
         uv0,
-        // the world normal the Lambert term needs (getWorldGeometricNormalVector)
+        // the world normal the Lambert term needs, in the VERTEX stage now
         tangents
     ],
     shadingModel : unlit,
@@ -43,29 +55,64 @@ material {
     flipUV : false,
     parameters : [
         { type : sampler2d, name : albedo },
-        // The frozen sun map, shared with vlit — same space, same compare.
-        { type : sampler2d, name : shadowMap, precision : high },
+        // The baked visibility map (vvis.mat) and what puts a world position
+        // in its [0,1] space — the same matrix the ESM bake used, so the two
+        // cannot disagree. A track with no bake binds 1x1 white, which reads
+        // as fully lit with no branch.
+        { type : sampler2d, name : visMap },
         { type : mat4, name : shadowFromWorld, precision : high },
-        { type : float, name : shadowTexel },
-        { type : float, name : shadowK },
-        // 1 / ortho depth range: turns a world-unit bias into normalised depth.
-        { type : float, name : shadowDepthScale }
+        { type : sampler2d, name : gradeLut }
     ]
 }
 
 fragment {
-    #include "ttp_shade.inc"
     #include "ttp_grade.inc"
+    #include "ttp_fog.inc"
 
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
         // Unlit adds `emissive` to `baseColor`; all the shading goes in the
         // former so nothing else in the pipeline touches it.
         material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
-        // The ground canvas is the biome's baked lawn/sand/snow texture; the
-        // shading over it is vlit's, term for term.
-        material.emissive = vec4(ttpGrade(ttpMatteShade(
-                texture(materialParams_albedo, getUV0()).rgb,
-                getWorldGeometricNormalVector())), 0.0);
+        // textureLod, matching the renderer-wide rule: the map is one level,
+        // bound with a non-mipmap filter, so LOD 0 is what an implicit sample
+        // would pick — and this call site stays legal if a branch ever grows
+        // around it.
+        float vis = textureLod(materialParams_visMap,
+                vec2(variable_sun.w, variable_suv.x), 0.0).r;
+        vec3 light = variable_fog.yzw + variable_sun.xyz * vis;
+        material.emissive = vec4(ttpFogMix(ttpGrade(
+                texture(materialParams_albedo, getUV0()).rgb * light),
+                variable_fog.x), 0.0);
+    }
+}
+
+vertex {
+    // NO_SUN_SHADOW so the include emits no sunVisibility referencing the
+    // shadow parameters this material no longer declares — the visibility is
+    // the fragment's baked tap. SHADE_VERTEX for the same reason as vroad's
+    // vertex stage (no fwidth here).
+    #define TTP_NO_SUN_SHADOW
+    #define TTP_SHADE_VERTEX
+    #include "ttp_shade.inc"
+    #include "ttp_fog.inc"
+
+    void materialVertex(inout MaterialVertexInputs material) {
+        highp vec3 uwp = (getUserWorldFromWorldMatrix()
+                * material.worldPosition).xyz;
+        highp vec3 n = material.worldNormal.xyz;
+        float NoL = saturate(dot(n, frameUniforms.lightDirection));
+        // The uv is affine in world position, so interpolating it is exact —
+        // only the shadow COMPARE needed per-fragment sampling, and that is
+        // baked now. uvToRenderTargetUV is mandatory here for the same
+        // reason as in sunVisibility: the bake is an offscreen target and
+        // Metal-family backends store it flipped.
+        highp vec3 suvw = (materialParams.shadowFromWorld
+                * vec4(uwp, 1.0)).xyz;
+        highp vec2 suv = uvToRenderTargetUV(suvw.xy);
+        material.fog = vec4(ttpFogFactor(material.worldPosition.xyz),
+                ttpMatteAmbient(n));
+        material.sun = vec4(ttpMatteSunTerm(n, NoL), suv.x);
+        material.suv = vec4(suv.y, 0.0, 0.0, 0.0);
     }
 }

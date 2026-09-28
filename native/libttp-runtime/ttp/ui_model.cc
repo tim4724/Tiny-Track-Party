@@ -62,10 +62,31 @@ int screenOrder(Screen s) {
 
 int screenStep(Screen prev, Screen next) { return screenOrder(next) - screenOrder(prev); }
 
-BackEffect backEffect(Screen s) {
+const char* key(Cover c) { return c == Cover::BOOT ? "boot" : "none"; }
+
+Cover coverFor(Screen screen, bool scenePainted) {
+  if (scenePainted) return Cover::NONE;
+  // WELCOME is exempt: it sits on the paper diorama by design (its copy is
+  // unreadable over a live track), so it is never waiting for the 3D.
+  switch (screen) {
+    case Screen::LOBBY:
+    case Screen::RACE: return Cover::BOOT;
+    case Screen::WELCOME:
+    case Screen::UNKNOWN: break;
+  }
+  return Cover::NONE;
+}
+
+BackEffect backEffect(Screen s, bool paused, bool raceEnded) {
   switch (s) {
     case Screen::LOBBY: return BackEffect::END_PARTY;
-    case Screen::RACE: return BackEffect::RETURN_TO_LOBBY;
+    // The race, in its three states. A FINISHED race is checked FIRST: the
+    // results board latches `raceEnded` while `paused` may still be set under
+    // it, and offering to thaw a race that has no cars left to move is a dead
+    // press on the one board a viewer sits longest on.
+    case Screen::RACE:
+      if (raceEnded) return BackEffect::RETURN_TO_LOBBY;
+      return paused ? BackEffect::RESUME_RACE : BackEffect::PAUSE_RACE;
     // welcome is the root: there is nothing above it, so back is swallowed —
     // and an unknown board answers the same way.
     case Screen::WELCOME:
@@ -77,6 +98,8 @@ BackEffect backEffect(Screen s) {
 const char* key(BackEffect e) {
   switch (e) {
     case BackEffect::END_PARTY: return "end-party";
+    case BackEffect::PAUSE_RACE: return "pause-race";
+    case BackEffect::RESUME_RACE: return "resume-race";
     case BackEffect::RETURN_TO_LOBBY: return "return-to-lobby";
     case BackEffect::SWALLOW: break;
   }
@@ -225,7 +248,7 @@ bool cupSlot(PickMode mode, const OptStr& cupId, const OptStr& trackId,
     out.difficulty = entry ? entry->cupDifficulty : OptNum::None();
     if (cup) {
       for (size_t i = 0; i < cup->tracks.size(); i++) {
-        out.maps.push_back(MapChip{OptStr::Of(cup->tracks[i]), OptNum::Of(static_cast<double>(i + 1))});
+        out.maps.push_back(MapChip{OptStr::Of(cup->tracks[i]), OptNum::Of(static_cast<double>(i + 1)), OptStr::None()});
       }
     }
     out.cupId = cupId;
@@ -239,7 +262,7 @@ bool cupSlot(PickMode mode, const OptStr& cupId, const OptStr& trackId,
     out.racesKey = RacesKey::ONE;
     out.raceCount = OptNum::Of(1);
     out.difficulty = entry ? entry->cupDifficulty : OptNum::None();
-    out.maps.push_back(MapChip{trackId, OptNum::None()});
+    out.maps.push_back(MapChip{trackId, OptNum::None(), OptStr::None()});
     out.cupId = entry ? entry->cup : OptStr::None();
     return true;
   }
@@ -264,7 +287,7 @@ bool cupSlot(PickMode mode, const OptStr& cupId, const OptStr& trackId,
     out.racesKey = endless ? RacesKey::ENDLESS : RacesKey::COUNT;
     out.raceCount = endless ? OptNum::None() : OptNum::Of(randomRaces.v);
     out.difficulty = OptNum::None();
-    out.maps.push_back(MapChip{trackId, OptNum::None()});
+    out.maps.push_back(MapChip{trackId, OptNum::None(), OptStr::None()});
     out.cupId = entry ? entry->cup : OptStr::None();
     return true;
   }
@@ -691,13 +714,10 @@ std::vector<Cup> shippedCups() {
 
 int cupFieldTintPct() { return TTP_CUP_FIELD_TINT_PCT; }
 
-uint32_t cupTintRgb(const OptStr& cupId, double pct) {
-  uint32_t base = TTP_CUP_COLOR_FALLBACK;
-  if (cupId.has) {
-    for (int i = 0; i < TTP_CUP_COUNT; i++) {
-      if (cupId.v == TTP_CUPS[i].id) { base = TTP_CUPS[i].color; break; }
-    }
-  }
+namespace {
+// `towardWhite` in trackPicker.js: a straight per-channel lerp on the ENCODED
+// sRGB values, which is what CSS `color-mix(in srgb, …)` does.
+uint32_t towardWhite(uint32_t base, double pct) {
   // Clamped rather than trusted: `pct` comes from a shell, and a value outside
   // 0..100 would wrap the channel arithmetic into a colour nobody authored.
   const double k = (pct < 0 ? 0 : pct > 100 ? 100 : pct) / 100.0;
@@ -711,6 +731,19 @@ uint32_t cupTintRgb(const OptStr& cupId, double pct) {
   }
   return out;
 }
+}  // namespace
+
+uint32_t cupTintRgb(const OptStr& cupId, double pct) {
+  uint32_t base = TTP_CUP_COLOR_FALLBACK;
+  if (cupId.has) {
+    for (int i = 0; i < TTP_CUP_COUNT; i++) {
+      if (cupId.v == TTP_CUPS[i].id) { base = TTP_CUPS[i].color; break; }
+    }
+  }
+  return towardWhite(base, pct);
+}
+
+uint32_t neutralTintRgb(double pct) { return towardWhite(TTP_CUP_NEUTRAL_COLOR, pct); }
 
 std::vector<CatalogEntry> shippedCatalog() {
   // CUPS order, flattened — the catalogue's own arrangement, which every picker
