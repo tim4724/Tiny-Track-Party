@@ -190,8 +190,6 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
      * the tags that frame describes. Null until the Activity attaches one.
      */
     var nameTags: NameTagView? = null
-    /** Presented frames since boot, for the tags' 4P every-other-frame beat. */
-    private var tagFrame = 0L
 
     private var frameCallback: Choreographer.FrameCallback? = null
     private var lastFrameNanos = 0L
@@ -495,14 +493,10 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
                     // RIGHT AFTER THE FRAME THEY DESCRIBE, and only a presented
                     // one: a declined frame left the last picture up, and the last
                     // tags with it. The View draws in this same vsync's traversal.
-                    // At 4+ cells only every OTHER presented frame moves them
-                    // (NameTags.kt says why); a skipped one reads nothing and
-                    // invalidates nothing, so the last tags stay up.
+                    // EVERY presented frame, at every split: a tag moving at a
+                    // different rate from its car reads as broken (NameTags.kt).
                     if (presented) nameTags?.let {
-                        tagFrame++
-                        val skip = cellCount >= NAME_TAG_HALF_RATE_CELLS && !PerfDebug.tagsEveryFrame
-                                && (tagFrame and 1L) == 1L
-                        if (!skip) it.show(if (PerfDebug.tagsHidden) 0
+                        it.show(if (PerfDebug.tagsHidden) 0
                                 else Ttp.ttp_display_name_tags(it.tags, it.tags.size / NAME_TAG_STRIDE))
                     }
                     // Consumed either way: the cosmetic clock advances before
@@ -1086,9 +1080,6 @@ private const val CELL_RECT_STRIDE = 8
 
 /** Floats per tag in `ttp_display_name_tags`' answer; the generator declares the same. */
 private const val NAME_TAG_STRIDE = 6
-
-/** The cell count from which the name tags move on every other presented frame. */
-private const val NAME_TAG_HALF_RATE_CELLS = 4
 
 /** Cells the scratch array is sized for — the field can never split further. */
 private const val MAX_CELLS = 8

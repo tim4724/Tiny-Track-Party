@@ -47,15 +47,17 @@ import kotlin.math.sqrt
  *    third sends SurfaceFlinger to GPU composition of the top two every frame.
  * So this stays the simplest of the three.
  *
- * **AT 4 CELLS THE TAGS MOVE ON EVERY OTHER PRESENTED FRAME** ([DisplayHost]),
- * so the window redraws at 30 Hz instead of 60 (user decision; 1-3 cells keep
- * every frame). Same box and pin, 3 alternated 40 s runs per arm: tags off GPU
- * p50 9.5-9.7 ms, worst 53-54 fps / 6-7 skips; every frame 11.6-12.3 ms, worst
- * 48-49 fps / 11-12 skips; every other frame 10.2-10.5 ms, worst 53 fps / 7
- * skips. The half rate buys back most of the cost and all of the worst-second
- * loss. `debug.ttp.tags 0` ([PerfDebug]) turns the tags off whole and
- * `debug.ttp.tags 60` restores every frame at 4 cells, which is how these
- * numbers are re-taken.
+ * **THE TAGS MOVE ON EVERY PRESENTED FRAME, at every split** (user decision):
+ * a tag updating at a different rate from the car under it reads as broken.
+ * That is paid for at 4 cells. Same box and pin, 3 alternated 40 s runs per arm:
+ * tags off GPU p50 9.5-9.7 ms, worst 53-54 fps / 6-7 skips; every frame
+ * 11.6-12.3 ms, worst 48-49 fps / 11-12 skips. Every OTHER frame (10.2-10.5 ms,
+ * worst 53 fps / 7 skips) was built and rejected for that look. About half the
+ * cost is the window being GL while the race is Vulkan (`debug.hwui.renderer
+ * skiavk` halves it, and no app can choose it); drawing the tags inside the
+ * Filament frame at native resolution was probed and costs +13.7 ms for the
+ * 1080p present alone (branch android-native-present-probe). `debug.ttp.tags 0`
+ * ([PerfDebug]) turns the tags off whole, which is how these numbers are re-taken.
  */
 class NameTagView(context: Context) : View(context) {
 
