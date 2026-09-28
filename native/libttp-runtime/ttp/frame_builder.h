@@ -88,6 +88,11 @@ struct DisplayState {
     // car starts at.
     std::map<std::string, float> steerBar;
 
+    // The name tags' covered/clear fade, one per (view, car) — ttp/name_tags.h.
+    // Smoothing state like `steerBar`; nameTags resets it when the field or the
+    // split changes shape.
+    std::vector<float> tagCover;
+
     // Cell overlay state (TtpCellHudInput). `cardMask` bit i = a centred card
     // owns cell i (finished, or dropped and showing the reconnect QR), which is
     // exactly when its steer bar is hidden. Latched by the shell rather than

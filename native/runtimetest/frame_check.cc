@@ -1520,7 +1520,8 @@ void testNameTags() {
     return 1 - (1 - ttp::rt::NAME_TAG_FAR_SCALE) * k;
   };
 
-  const std::vector<ttp::rt::NameTag> tags = ttp::rt::nameTags(*f, pictures);
+  std::vector<float> cover;
+  const std::vector<ttp::rt::NameTag> tags = ttp::rt::nameTags(*f, pictures, cover);
   checkU((uint32_t) tags.size(), 5, "nameTags: cell 1 sees everything behind it, slot 4 is nobody");
   if (tags.size() != 5) return;
   // Cell 0, far to near: car 2 dead ahead in its fade band, the CPU, then car 1.
@@ -1550,10 +1551,63 @@ void testNameTags() {
   f->viewCount = 1;
   f->carCount = nCars;
   std::memmove((uint8_t*) (cars + nCars), views, sizeof(TtpViewInput));  // view 0 stays first
-  checkU((uint32_t) ttp::rt::nameTags(*f, pictures).size(), 3, "nameTags: a solo race tags its rivals");
+  cover.clear();
+  checkU((uint32_t) ttp::rt::nameTags(*f, pictures, cover).size(), 3, "nameTags: a solo race tags its rivals");
 
   f->flags = TTP_FRAME_OVERVIEW;
-  check(ttp::rt::nameTags(*f, pictures).empty(), "nameTags: an overview tags nobody");
+  check(ttp::rt::nameTags(*f, pictures, cover).empty(), "nameTags: an overview tags nobody");
+}
+
+// Cover: one cell whose camera looks down -Z past its own car at a rival 8
+// units out, with a monster truck placed three ways: squarely between (the tag
+// fades and goes), ghosted in front of the cell's own car (see-through, the tag
+// stays), and off to one side so half the rival shows (the tag stays).
+void testNameTagCover() {
+  const uint32_t nCars = 3;
+  std::vector<uint8_t> buf(sizeof(TtpFrameInput) + nCars * sizeof(TtpCarInput) + sizeof(TtpViewInput));
+  TtpFrameInput* f = (TtpFrameInput*) buf.data();
+  f->version = TTP_FRAME_INPUT_VERSION;
+  f->carCount = nCars;
+  f->viewCount = 1;
+  TtpCarInput* cars = (TtpCarInput*) (f + 1);
+  for (uint32_t i = 0; i < nCars; i++) { cars[i].up = { 0, 1, 0 }; cars[i].forward = { 0, 0, -1 }; }
+  cars[0].pos = { 0, 0, -1.15f };           // the cell's own car
+  cars[1].pos = { 0, 0, -8 };               // the rival
+  cars[2].monster = 1;                      // the truck, placed per arm
+  TtpViewInput* v = (TtpViewInput*) (cars + nCars);
+  using ttp::rt::V3;
+  ttp::rt::lookAtWorld(v->world, V3{ 0, 0.64f, 0 }, V3{ 0, 0.3f, -1 }, V3{ 0, 1, 0 });
+  v->fov = 90;
+  v->aspect = 1;
+  v->nearZ = 0.1f;
+  v->farZ = 600;
+  v->car = 0;
+  const float pictures[] = { 0, 0, 1, 1 };
+  auto rival = [&](const std::vector<ttp::rt::NameTag>& tags) -> const ttp::rt::NameTag* {
+    for (const auto& t : tags) if (t.target == 1) return &t;
+    return nullptr;
+  };
+
+  f->dt = 1;  // long enough to finish any fade in one frame
+  std::vector<float> cover;
+  cars[2].pos = { 0, 0, -5 };
+  check(!rival(ttp::rt::nameTags(*f, pictures, cover)), "a truck squarely in front hides the rival's tag");
+  cover.clear();
+  cars[2].pos = { 0, 0, -0.6f };
+  check(ttp_monster_ghosted(cars[2].pos, TtpVec3{ 0, 0.64f, 0 }, cars[0].pos),
+        "arm check: the truck in front of the own car is one the renderer ghosts");
+  check(rival(ttp::rt::nameTags(*f, pictures, cover)) != nullptr, "a ghosted truck is see-through");
+  cover.clear();
+  cars[2].pos = { 0.5f, 0, -5 };
+  check(rival(ttp::rt::nameTags(*f, pictures, cover)) != nullptr, "a rival half behind a truck keeps its tag");
+
+  // The fade: a quarter of NAME_TAG_COVER_FADE behind the truck is a quarter gone.
+  cover.clear();
+  cars[2].pos = { 0, 0, -5 };
+  f->dt = ttp::rt::NAME_TAG_COVER_FADE * 0.25f;
+  const std::vector<ttp::rt::NameTag> tags = ttp::rt::nameTags(*f, pictures, cover);
+  const ttp::rt::NameTag* t = rival(tags);
+  check(t && std::fabs(t->alpha - 0.75f) < 1e-4f, "the covered tag fades rather than popping");
 }
 
 int main() {
@@ -1582,6 +1636,7 @@ int main() {
   testProps(bt);
   testShowcaseExhibits(bt.game);
   testNameTags();
+  testNameTagCover();
 
   std::printf("frame builder check: %d assertions, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;

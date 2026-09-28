@@ -689,7 +689,7 @@ void ttp_display_cell_cards(uint32_t mask) {
 
 int ttp_display_name_tags(float* out, int maxTags) {
     if (!g_disp || !g_disp->built || !out || maxTags <= 0) return 0;
-    const DisplayCore& d = *g_disp;
+    DisplayCore& d = *g_disp;
     const uint32_t n = (uint32_t) d.cells.size();
     if (n == 0 || d.frame.size() < sizeof(TtpFrameInput)) return 0;
     const TtpFrameInput& f = *(const TtpFrameInput*) d.frame.data();
@@ -706,7 +706,7 @@ int ttp_display_name_tags(float* out, int maxTags) {
         pictures[4 * i + 2] = (float) (r.w / sw);
         pictures[4 * i + 3] = (float) (r.h / sh);
     }
-    const std::vector<ttp::rt::NameTag> tags = ttp::rt::nameTags(f, pictures.data());
+    const std::vector<ttp::rt::NameTag> tags = ttp::rt::nameTags(f, pictures.data(), d.tagCover);
     const int want = (int) tags.size() < maxTags ? (int) tags.size() : maxTags;
     for (int i = 0; i < want; i++) {
         const ttp::rt::NameTag& t = tags[(size_t) i];
