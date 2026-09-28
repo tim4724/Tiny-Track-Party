@@ -111,6 +111,18 @@ typedef struct TtpViewInput {
      * the race cells, the lobby's perimeter orbit and the overview each run
      * their own ramp, and the gallery runs none. fogFar <= fogNear = no fog. */
     float fogNear, fogFar;
+    /* WHICH car this view is FOLLOWING (index into cars[]), or -1 for a view
+     * that follows nobody — an overview, or a cell whose car is not in this
+     * scene's roster yet.
+     *
+     * The renderer cannot work this out from `world`, and "the car nearest the
+     * eye" is NOT the same question: the chase rig sits CHASE_DIST behind the
+     * player, so a car drafting them is nearer to their eye than their own car
+     * is. Anything that budgets a scarce per-player resource off this view has
+     * to reserve it for the SUBJECT, or it hands the player's share to the bot
+     * on their tail. That is exactly what the contact shadow's masked budget
+     * does (renderCars), and it is the defect this field exists to close. */
+    int32_t car;
 } TtpViewInput;
 
 /* A dropped banana hazard (contract snapshot.bananas): track-space position —

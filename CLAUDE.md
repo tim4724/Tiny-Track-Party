@@ -27,8 +27,23 @@ node --test tests/wire-*.test.js  # Wire-compat only (C++ host vs the JS phone)
 npm run test:e2e                  # Playwright E2E (real pages + hermetic relay stub)
 npx playwright test tests/e2e/flow.spec.js   # A single E2E spec
 npm run check:artifact            # Is the checked-in wasm current?
+npm run check:blob-cache          # Do blobs kept between RUNS survive the round
+                                  # trip? No suite can see that (tests/CLAUDE.md)
+npm run perf:race -- --platform web|androidtv|tvos [--players 1|2|4] [--track id]
+                                  # THE BENCH: one live race, autopiloted players at the
+                                  # back of a full grid, one readout shape on all three
+npm run probe:cost                # what a SIM frame costs in CPU us. The bench above
+                                  # cannot see it: the sim is ~10us inside ~8000.
 npm start / npm run dev           # Serve (with --watch)
 native/scripts/build-runtime-web.sh   # Rebuild the engine wasm → public/display/engine/native/
+npm run build:tvos [device|simulator] # The Apple TV app: engine, bundle and project included
+npm run build:androidtv -- [release|debug] [install]   # The Android TV app, likewise
+npm run bake:shelf                    # The Apple TV shelf art: nine carousel frames +
+                                      # the four catalogue strips, all captured GAMEPLAY
+npm run shots:web                     # Freeze the reference column of /gallery-shots.html
+npm run shots:tvos / shots:tvos-sim   # Photograph the Apple TV (device or sim), one shot per scenario
+npm run shots:androidtv[-emu]         # …and the Android TV box, or the AVD. The `store` cards
+                                      # ARE the store listings: that page zips each TV's set
 npm run gen:airconsole            # Regenerate the committed AirConsole entries from index.html
 npm run build:airconsole          # AirConsole upload zip (screen.html/controller.html at its root)
 npm run cover                     # Square store cover tile → artwork/ (uploaded by hand)
@@ -148,7 +163,9 @@ Fonts are self-hosted variable woff2 (SIL OFL) so the CSP keeps `font-src 'self'
 | `public/display/CLAUDE.md` | the browser shell: adapters, boot and back-stack, the audio device half, measuring frame cost |
 | `public/controller/CLAUDE.md` | the phone: why none of it becomes C++, what lives in which module, previews through the live renderer |
 | `public/shared/CLAUDE.md` | the protocol manifest, design tokens as data, the schematic codec |
+| `scripts/CLAUDE.md` | the bakes: the capture seam and its two invisible traps, naming, what gates each output |
 | `public/assets/audio/CLAUDE.md` | cues are generated, music is acquired; the MP3 and re-encode traps |
+| `shells/androidtv/CLAUDE.md` | the Android TV app: one thread, the generated JNI bridge, byte[] strings, the authored-pixel density override |
 | `docs/native-port/shells.md` | the audited ledger of what a new TV platform still owes |
 
 ## Dev loop
@@ -157,6 +174,11 @@ This tree is worked in **many git worktrees at once**, and `node_modules` +
 `native/build` are per-worktree and gitignored, so the cold cost is paid over and
 over. `npm run setup` is the one command that fixes that; `native/CLAUDE.md`
 covers the caching that keeps rebuilds cheap.
+
+A throwaway that drives the app goes in `scratch/` (gitignored, eslint-ignored).
+It has to be inside the repo — ESM resolves from the file's own directory, so a
+probe in the system temp dir cannot import `@playwright/test` — and the ones
+written at the tree root keep outliving their session and failing `npm run lint`.
 
 **Measure CPU seconds, not wall-clock.** Concurrent worktrees swing wall-clock by
 well over 100%, so a reading taken while another build runs is noise — quote

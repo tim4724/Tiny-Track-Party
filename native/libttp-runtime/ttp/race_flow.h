@@ -42,12 +42,14 @@
 // keeping the second copy public/display/aiPersonas.js used to be.
 //
 // CONFORMANCE. tests/fixtures/raceflow-corpus.jsonl was recorded off the live
-// raceFlow.js before this file existed, which makes it JS-RECORDED
-// cross-implementation evidence: class 1 in tests/fixtures/traces/README.md,
-// the only class that can settle a parity question. runtimetest/raceflow_check.cc
-// replays every step of it — `out` AND the shell state its driver threads —
-// through this header on all four legs. A disagreement is a bug HERE, never in
-// the corpus.
+// raceFlow.js before this file existed, and its JS-parity claim now lives in git
+// history: baking the three launch flags in (below) re-recorded every launch and
+// podium line, which DEMOTES the fixture to class 2 — regression evidence, not
+// cross-implementation evidence (tests/fixtures/traces/README.md).
+// runtimetest/raceflow_check.cc still replays every step of it — `out` AND the
+// shell state its driver threads — through this header on all four legs, and an
+// UNEXPLAINED disagreement is still a bug HERE: the fixture moves only on a
+// deliberate, green-first, diff-read re-record (root rule 4).
 //
 // WHAT IS DELIBERATELY NOT HERE. The performing (sockets, timers, the History
 // API, the AudioContext, scene objects), and — for the reason the plan gives
@@ -84,11 +86,11 @@ enum class Op {
   STOP_LOBBY_DEMO, SET_FIELD, CLEAR_ITEM_CACHE, SHOW_SCREEN,
   HIDE_RESULTS, SET_RACE_FLAGS, SET_PAUSE_OVERLAY, SET_PAUSE_BUTTON,
   REVEAL_CHROME, HOLD_CHROME, RESET_SCENE_CARS, CREATE_SESSION, TRANSITION,
-  BIND_SESSION, PAINT_INITIAL_HUD, START_COUNTDOWN, SHOW_COUNTDOWN,
+  BIND_SESSION, PAINT_HUD, START_COUNTDOWN, SHOW_COUNTDOWN,
   BROADCAST_COUNTDOWN, REFRESH_AUTO_PAUSE, START_MUSIC, STOP_MUSIC,
-  SHOW_MUSIC_CREDIT, STOP_VOICES, ITEM_PICKUP, ROCKET_IMPACT, ROCKET_EXPIRE,
-  BROADCAST_STANDINGS, APPLY_RACE_POINTS, SHOW_RESULTS, ARM_RESULTS_FAILSAFE,
-  CLEAR_RESULTS_FAILSAFE, ARM_INTERMISSION, CLEAR_INTERMISSION, SERIES_ADVANCE,
+  STOP_VOICES, ITEM_PICKUP, ROCKET_IMPACT, ROCKET_EXPIRE,
+  BROADCAST_STANDINGS, APPLY_RACE_POINTS, ARM_RESULTS, SHOW_RESULTS,
+  ARM_INTERMISSION, CLEAR_INTERMISSION, SERIES_ADVANCE,
   CLEAR_SERIES, SET_TRACK_FROM_SERIES, PLACE_TRACK, SET_TRACK, DISPOSE_SESSION,
   CLEAR_FIELD, FADE_TO_LOBBY, REMOVE_SCENE_CAR, STOP_CAR_AUDIO, SYNC_STATE,
   SERIES_REKEY, REKEY_SCENE_CAR, REKEY_FIELD, SET_AUTO_PAUSED, SYNC_FROZEN,
@@ -133,11 +135,26 @@ struct FieldEntry {
 };
 
 // A bot as the wasm takes it.
+//
+// `player` is the AUTOPILOT MARKER, and it is the one field that does not
+// describe how the car drives. A spec carrying it names a seat that is still a
+// PLAYER — it counts as a participant, it grids with the humans, it keeps its
+// split-screen cell and it is not in `aiIds` — and that also carries a
+// controller, so the sim drives it instead of a phone. Default false, so no
+// existing launch changes and no recorded effect list gains a key
+// (ttp_race.cc's writer emits it only when set).
+//
+// It exists because a bench, a screenshot and an attract race all need a field
+// that DRIVES without a room full of phones, and the alternative every shell
+// reached for — spec every seat as a bot — files the players under `bots`, and
+// then the session has no participants left and tears the race down a second
+// after it starts.
 struct BotSpec {
   Id peerIndex;
   double caution = 1.0;
   double laneBias = 0.0;
   double seed = 0;   // already >>>0'd; double so it round-trips as a JS Number
+  bool player = false;
 };
 
 // A car as the renderer takes it.
@@ -159,7 +176,7 @@ struct Effect {
 
   double num = 0;         // create-session's seed | n | ms | seconds
   double deadline = 0;    // arm-intermission — when the auto-advance fires
-  bool on = false;        // set-pause-overlay/show-music-credit/set-auto-paused
+  bool on = false;        // set-pause-overlay/set-auto-paused
   bool shown = false;     // set-pause-button
   bool over = false;      // broadcast-standings
   bool deferred = false;  // refresh-auto-pause — see the header
@@ -235,6 +252,17 @@ struct BuiltField {
 };
 BuiltField buildField(const std::vector<Human>& humans, double seed, const FieldWorld& w);
 
+// The BENCH ROSTER: `n` player seats for a field nobody joined — a perf run, a
+// screenshot, an attract race. Names, liveries and cars are decided HERE, once,
+// because three shells photographing the same screen side by side must differ
+// in the UI under inspection and in nothing else (the tvOS harness picked its
+// own names and every comparison since carried that as noise).
+//
+// peerIndex is the seat number, so a bench roster and a real lobby's first `n`
+// players are the same ids — which is what lets the bench exercise the scalar-id
+// path a shell actually ships.
+std::vector<Human> benchPlayers(int n, const FieldWorld& w);
+
 // The attract field. Same CPU fill, different ids, and one extra rule: persona
 // by FINAL GRID INDEX so they spread across the whole field, with each CPU
 // taking that persona's name so its HUD name matches how it drives. Humans
@@ -255,11 +283,10 @@ std::string demoSig(const std::vector<DemoEntry>& field, const std::string& trac
 
 // ---- the series behind a start ----------------------------------------------
 
-struct Cup {
-  std::string id;
-  std::string name;
-  std::vector<std::string> tracks;
-};
+// The lobby card's cup row, shared rather than mirrored — this layer reads
+// only id/name/tracks, and ui::Cup's extra `color` is a picker concern it
+// never touches.
+using Cup = ui::Cup;
 
 // What Start commits to, as a DESCRIPTOR the shell hands to CupSeries — never a
 // series object, because constructing one is the shell's job and this layer
@@ -335,19 +362,35 @@ struct LaunchInput {
   OptStr forceItem;
   FieldWorld world;
   // Grid order. The field array IS the grid — index 0 is pole (the session
-  // seats cars in field order) — and these two knobs reorder it AFTER the fill:
-  //   * gridOrder, when non-empty, is the previous race's finish order and wins
-  //     outright (a chained series race). Ids it does not name — a mid-series
-  //     joiner, a fresh fill bot — start at the back.
-  //   * humansAtBack sends the CPU field out front (a first race, and the
-  //     back-of-grid rule for ids gridOrder missed).
-  // Both default OFF because the raceflow corpus predates them: recorded
-  // launches replay the recorded grid, and the live walks pass the game's rule.
-  bool humansAtBack = false;
+  // seats cars in field order) — and it is reordered AFTER the fill by the
+  // GAME'S ONE RULE, which has no off switch: HUMANS START AT THE BACK, behind
+  // the CPU field. `gridOrder`, when non-empty, is the previous race's finish
+  // order and wins outright over it (a chained series race); ids it does not
+  // name — a mid-series joiner, a fresh fill bot — fall to the back-of-grid
+  // rule. An empty gridOrder is a first race, where the rule is the whole
+  // ordering.
   std::vector<Id> gridOrder;
+  // Give every PLAYER seat a controller too (BotSpec::player) — the bench, the
+  // attract race and the screenshot harnesses, where nobody is holding a phone.
+  // The field is otherwise identical to a real launch's: same fill, same grid
+  // rule, same cells, same ids. Only the source of the steering changes.
+  //
+  // THE ONE FLAG LEFT, and it cannot be baked in the way the grid and countdown
+  // rules were: it is not what a shipping race does — a real party steers from
+  // phones — and ttp_race_autopilot_players() sets a runtime latch the live
+  // launch path reads, so OFF is a state the shipping build reaches.
+  bool autopilotPlayers = false;
 };
 struct LaunchResult {
   Effects effects;
+  // The launch's tail: `start-countdown` alone, held until countdownReady()
+  // says the scene has stopped assembling. THE COUNTDOWN DOES NOT START ON A
+  // SCENE THAT IS STILL ASSEMBLING ITSELF — see countdownReady for what the
+  // wait is actually for. A second list rather than a marker op in the first,
+  // because a walk is performed whole: a shell that had to suspend halfway
+  // through one would be sequencing the launch itself, which is the thing this
+  // layer exists to stop.
+  Effects countdownEffects;
   std::vector<FieldEntry> field;
   std::vector<Id> aiIds;
   std::vector<BotSpec> bots;
@@ -356,6 +399,62 @@ struct LaunchResult {
 // The actual race launch, shared by the lobby start and the series chain.
 // THE ORDER OF THE EFFECTS IS THE CONTRACT — read this file's header first.
 LaunchResult launchRace(const LaunchInput& in);
+
+// ---- the countdown gate ------------------------------------------------------
+//
+// A SCENE'S FIRST SECONDS ARE NOT ITS COST, and the countdown used to be spent
+// paying them. `reset-scene-cars` starts a full build and `start-countdown` is
+// eleven ops later in the same walk, so "3, 2, 1" ran while the thread was still
+// meshing — and a build RETURNING is not the end of it either. render_scale.h's
+// kScaleSceneGraceSec records the measurement: on an A10X a solo race presented
+// at 7-25 fps for the first ~2.6 s after the build returned, because staging
+// keeps costing in shader compiles, first uploads and the shadow bake, all of
+// which are paid by DRAWING the scene rather than by building it.
+//
+// So the wait is for FRAMES, not for the build, and the same seconds now buy
+// something: they are also what lets the render-scale rule reach a verdict on
+// the race's own cost (four cells, not the lobby's one) before anybody is
+// driving. What is on screen meanwhile is the grid, already dressed and framed
+// — the launch places the cars and paints the HUD before this gate.
+//
+// STEADINESS, NOT SPEED, is the test, and it has to be: a 4-cell race on the
+// reference Android box costs well over one budget per frame and always will, so
+// a rule that waited for frames INSIDE budget would wait forever there and mean
+// nothing. What separates assembly from racing is DISPERSION — a 300 ms compile
+// stall sits next to 20 ms frames, and once the scene is warm the spread
+// collapses. p95 over p50 is that, off the window ttp_perf.h is already keeping
+// (every shell resets it on a build, so the window IS this scene's).
+//
+// IT MUST BE THE PRESENT SERIES, never the loop's. perf_stats.h's Readout
+// carries both and says why they diverge: a CADisplayLink and a Choreographer
+// fire every vsync whatever the last frame did, so on the two TV shells `frame`
+// is a flat vsync period all the way through the worst of the assembly and would
+// report a stalling box as perfectly settled. The seam that feeds this passes
+// `present`, which is the same series the render-scale rule steers off.
+//
+// Cheap hardware therefore pays nothing: a Mac clears the gate on the first fold
+// and the launch looks exactly as it did.
+//
+// A SHELL THAT IS NOT MEASURING IS NOT A SLOW ONE, and `measuring` is the fact
+// that separates them. An empty window looks identical either way, and the two
+// answers are opposites: a scene whose first frames have not landed yet must
+// wait, while a surface that will never feed the monitor has no evidence coming
+// and must not sit out the backstop on every start. The web turns instrumenting
+// off under automation and under a pinned ?dpr= (the E2E suite, the trailer, an
+// A/B) precisely so the GPU timer cannot perturb what those runs measure.
+inline constexpr int kSceneWarmMinFrames = 12;      // under this a fold is noise
+inline constexpr double kSceneWarmSpread = 1.6;     // p95/p50 at or below this is settled
+// THE BACKSTOP, and it is not a tuning knob: a scene that never settles, or a
+// build that never returns (a hung asset fetch), must still start the race. Long
+// enough that a slow box gets its warm-up, short enough that a party never reads
+// it as a hang.
+inline constexpr double kSceneWarmCapMs = 4000.0;
+
+// May the deferred countdown start? `frames`, `p50Ms` and `p95Ms` are the frame
+// window's, `sinceLaunchMs` the shell's clock since the launch walk. Pure: the
+// facts arrive, nothing is reached for.
+bool countdownReady(bool sceneBuilt, bool measuring, int frames, double p50Ms,
+                    double p95Ms, double sinceLaunchMs);
 
 // One countdown beat. n > 0 is "3/2/1", n === 0 is "GO!", n < 0 is banner-gone.
 // The n<0 beat clears the LOCAL banner only and is never broadcast: the phones'
@@ -384,17 +483,37 @@ struct RaceEvent {
 };
 Effects raceEvent(const RaceEvent& e, bool fastForwarding, bool humansAllDone);
 
+// THE FINISH FLOURISH. The sim raises the last car's finish and raceOver in ONE
+// update, so a board shown the moment every human is home lands on the same
+// frame the flag does: the finisher never sees the place card their own cell
+// just earned, and a race that was being driven a moment ago is replaced
+// mid-breath. So the flag paints the cards and the race KEEPS RUNNING for this
+// long — the field still moving, finished cars on the sim's own victory-lap
+// autopilot — and only then does it end and the board arrive.
+//
+// A DURATION, not a budget: nothing waits on it and no phone is told about it,
+// which is why it is emitted from here rather than passed in the way the
+// intermission is. Long enough to read your own place, short enough that a
+// party never feels stalled.
+inline constexpr double FINISH_FLOURISH_MS = 3000;
+
+// THE FLAG: every human is home. The cards go up and the phones are handed the
+// standings — the people holding them are out of control the moment they cross,
+// so there is nothing left to spoil — and the race is told to keep running.
+// Nothing here freezes anything and nothing here ends anything: `arm-results`
+// is a timer for endRace, which is where both of those happen.
+Effects flagRace();
+
 struct EndRaceInput {
   bool hasSeries = false;
   bool seriesFinished = false;
   double intermissionMs = 0;
   double nowMs = 0;
-  double resultsFailsafeMs = 0;
-  // Emit persist-progression on a finished series' podium. Default-off keeps
-  // the frozen corpus lines byte-identical (same trick as LaunchInput's
-  // humansAtBack); the live executor always sets it.
-  bool bankProgression = false;
 };
+// The flourish is over. NOW the field freezes, the cup banks its points, the
+// board goes up — and, mid-cup, the intermission clock starts, measured from
+// here so a chained race gets its full budget rather than the flourish eating
+// into it.
 Effects endRace(const EndRaceInput& in);
 
 // ---- the cup chain -----------------------------------------------------------
@@ -467,15 +586,14 @@ struct PauseResult {
 PauseResult pauseRace(const PauseInput& in);
 PauseResult resumeRace(const PauseInput& in);
 
-// The two game-timing budgets endRace takes as inputs. They live HERE — the
-// layer that arms the timers' effects — and shells read them through the ABI
-// (main.js used to own both numbers, which made them the only game timings a
-// second shell had to re-author). The E2E overrides (__intermissionMs and
-// friends) stay shell-side overrides of these defaults; the raceflow corpus
-// header records the values it was driven with and raceflow_check pins it to
-// these, so the oracle and the layer cannot drift.
+// The game-timing budget endRace takes as an input. It lives HERE — the
+// layer that arms the timer's effect — and shells read it through the ABI (main.js
+// used to own the number, which made it a game timing a second shell had to
+// re-author). The E2E override (__intermissionMs) stays a shell-side override
+// of this default; the raceflow corpus header records the value it was driven
+// with and raceflow_check pins it to this, so the oracle and the layer cannot
+// drift.
 inline constexpr double INTERMISSION_MS = 10000;       // auto-advance budget; the host can advance early
-inline constexpr double RESULTS_FAILSAFE_MS = 60000;   // players-all-left recovery net
 
 // ---- the roster-driven repairs ----------------------------------------------
 

@@ -54,8 +54,8 @@ Theme showcase_theme(const char* biomeName, const char* trackId);
 
 // What that world holds, for the gallery's legend:
 //
-//   {"scenery":[…GLB names…],"landmarks":[…names…],"clutter":[…names…],
-//    "fliers":[…names…]}
+//   {"scenery":[…GLB names…],"props":[…GLB names…],"landmarks":[…names…],
+//    "clutter":[…names…],"fliers":[…names…]}
 //
 // Canonical JSON, keys sorted, as every ttp_*_json boundary but ttp_ui.h's is.
 // The names are for HUMANS to read beside the thing they name — they are not an

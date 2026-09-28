@@ -25,14 +25,11 @@ if (typeof document !== 'undefined') {
 // there). On the same LAN, host candidates work even without STUN.
 // VERIFIED 2026-07-29: an eturnal server answers Binding Requests here on both
 // A and AAAA (it is STUN ONLY — no TURN relay is configured, so a symmetric NAT
-// on both ends still has no path and falls back to the relay). GameNet.js also
-// lists a public STUN fallback after this one, so a stun.* outage costs
-// cross-network play nothing.
+// on both ends still has no path and falls back to the relay).
+// The ONLY STUN server, deliberately: no third-party fallback, so no outside
+// party sees a player's address. A stun.couchpad.games outage costs
+// cross-network play its fastlane, and input rides the relay instead.
 var STUN_URL = 'stun:stun.couchpad.games:3478';
-// The public fallback GameNet lists AFTER ours, so a stun.couchpad.games
-// outage costs cross-network play nothing. Part of the manifest so a TV shell
-// offers the same candidate set, in the same order.
-var STUN_FALLBACK_URL = 'stun:stun.l.google.com:19302';
 
 // Message types carried inside the Party-Server `data` field. Every message is
 // a plain object with a `.type` drawn from here.
@@ -51,13 +48,17 @@ var MSG = {
                                 // The display derives ttp_process_input's presence MASK from which fields arrived (bit1 s:number,
                                 // bit2 b:number-or-boolean, bit4 u:number); the wire carries no mask. Derive from THIS line, not
                                 // from another shell's code. (A C++ seam for this path was measured and refuted — stays JS.)
+                                // Absent fields are left UNTOUCHED on the car, which is what makes a partial message safe —
+                                // a `u` defaulted to 0 would read as a fresh use-counter and fire the car's held item.
+                                // ttp_process_input answers the mask it consumed (-1 = no such car), so a shell bringing this
+                                // path up can assert once rather than steer nothing in silence; tests/control-mask.test.js pins both.
   START_GAME: 'start_game',     // host only — starts the race; the display ignores it until every other player is ready (SET_READY)
   RETURN_TO_LOBBY: 'return_to_lobby', // "New game" — abort the race back to the lobby (any player)
   PAUSE_GAME: 'pause_game',     // request a pause (any player, mid-countdown/race)
   RESUME_GAME: 'resume_game',   // request resume from the pause overlay
   SET_CAR: 'set_car',           // {carIndex} — chosen car model in lobby (livery is auto-assigned)
   SET_READY: 'set_ready',       // {ready} — non-host readiness toggle; gates the host's "Start race" button (START_GAME)
-  SELECT_MODE: 'select_mode',   // {mode:'track'|'cup'|'random'|'tour', trackId?, cupId?, randomRaces?} — host's lobby pick: exact track (single race), a cup (4-race Grand Prix), random (a run of drawn tracks: randomRaces=0 endless, else that many races then a podium, default 4), or tour (the World Tour: one drawn track per cup, raced in cup order). EVERY accepted random/tour message deals a fresh draw, identical to the current pick or not — re-tapping a sub-option re-rolls.
+  SELECT_MODE: 'select_mode',   // {mode:'track'|'cup'|'random'|'tour', trackId?, cupId?, randomRaces?} — host's lobby pick: exact track (single race), a cup (4-race Grand Prix), random (a run of drawn tracks: randomRaces=0 endless, else that many races then a podium, default 4), or tour (the World Tour: one drawn track per cup, raced in cup order). EVERY accepted random/tour message deals a fresh draw, identical to the current pick or not — re-tapping the same tile re-rolls. 'track' stays a legal message (the display's own debug panel sends one) but the phone's picker no longer offers it: it is one tile per cup and one per random run.
   SERIES_NEXT: 'series_next',   // host only, during a series intermission — start the next race now (the display also auto-advances)
   SET_SOUND: 'set_sound',       // {on} — host only: mute/unmute the display's audio (the TV's own mute button flips the same state); echoed to everyone as the snapshot's soundOn
   LEAVE: 'leave',               // intentional exit (back-out) — frees the seat at once in lobby/results; mid-race it's a soft drop (reconnect QR + grace), so an accidental back-swipe can't forfeit a car
@@ -66,9 +67,14 @@ var MSG = {
   // Display -> all controllers: the retained room snapshot (relay set_state)
   LOBBY_UPDATE: 'lobby_update', // THE room snapshot. { roomState, hostPeerIndex, paused, soundOn, mode, cupId, trackId, randomRaces,
                                 //   players:[{peerIndex,name,colorIndex,carIndex,connected,ready,inRace}],
-                                //   standings:{over,order:[…],series?}|null (playing/results),
+                                //   standings:{over,total,hostPeerIndex,order:[…],series?,settled?}|null (playing/results;
+                                //   composed and RETAINED in C++ behind the room handle, so every shell puts the same board out).
+                                //   `settled` appears ONLY as true, and only on a cup's FINAL board, once the TV's podium reveal
+                                //   has landed — the phone's cue to stop reporting the race and report the cup. It is the ONLY
+                                //   difference between the two pushes of that board; ahead of it the phones would crown the champion
+                                //   while the TV was still counting points towards it.
                                 //   cars:[{id,name,stats}], colors:['#…'], tracks:[{id,name,cup,cupName,cupDifficulty,svg}]|null (lobby only),
-                                //   progress:{cups:[{id,stars,locked,unlockDone?,unlockNeed?}]} (lobby only; absent, not null, elsewhere —
+                                //   progress:{cups:[{id,stars,locked,unlockDone?,unlockNeed?}],stars:{earned,total}} (lobby only; absent, not null, elsewhere —
                                 //   the couch's DERIVED star record, composed display-side off the wasm catalogue; phones draw it, never re-derive it) }.
                                 //   trackId is always the RESOLVED track (exact pick / cup's current race / random draw). Pushed live
                                 //   on change, replayed to each (re)joiner right after `joined`. Car images load by id from the web host.
@@ -143,14 +149,24 @@ var RANDOM_RACES = {
   MAX: 8
 };
 
-// ---- The presence contract (phone pings -> display drops) ----
+// ---- The presence contract (the relay decides who is connected) ----
 // Six numbers that, like STEER above, only mean anything TOGETHER and are read
-// by two files in two roles: the phone's ping cadence (controller/Net.js) and
-// the display's drop/grace/canary windows (display/Net.js, fed straight into
-// the native RoomFlow's liveness config). "A seat silent past 3 s is dropped"
-// is only true because the phone pings at 1 Hz — until this block existed that
-// was a two-file chain held together by prose comments, and a tvOS shell would
-// have picked its own 3 s with nothing to say so.
+// by two files in two roles: the phone's ping cadence and chip threshold
+// (controller/Net.js), and the display's grace/canary windows (display/Net.js,
+// fed straight into the native RoomFlow's liveness config).
+//
+// PRESENCE IS THE RELAY'S ANSWER, and only the relay's: a seat is connected
+// from peer_joined until peer_left, and the display runs no silence detector of
+// its own. It used to run one, a 3 s drop window budgeted against the ping
+// cadence below, which is why these numbers still read as a set. What that
+// second opinion cost was that the display and Party-Sockets could disagree,
+// and the relay is the half that owns the room: its cap counts LIVE SOCKETS, so
+// a seat the display had dropped on silence still filled a slot, and the
+// reconnect QR offered for that seat was answered "Room is full".
+//
+// It is not free: a locked phone whose socket outlives it reads as PRESENT.
+// native/libttp-party/CLAUDE.md carries that cost in full, measured against the
+// real relay and pinned by tests/wire-compat.test.js.
 //
 // These are the WINDOWS, not the timers: setInterval/setTimeout stay with each
 // platform's shell, and so does the E2E `window.__abandonGraceMs` override.
@@ -158,20 +174,24 @@ var RANDOM_RACES = {
 // scripts/gen-protocol-corpus.mjs carries it into the protocol corpus, which
 // the `protocol` ctest replays against native/libttp-party/ttp/protocol.h.
 var LIVENESS = {
-  // PHONE. How often a controller pings the display (MSG.PING). Everything
-  // below is budgeted against this cadence.
+  // PHONE. How often a controller pings the display (MSG.PING). NOT a presence
+  // signal: it keeps the relay's own idle timeout from closing an
+  // application-quiet socket, and it is the WS-path latency sample.
   PING_INTERVAL_MS: 1000,
-  // DISPLAY. Silence longer than this drops a seat mid-game, through the same
-  // path as a real peer_left. Three missed pings, so a single dropped packet
-  // or a scheduling hiccup can never kick a live phone.
-  TIMEOUT_MS: 3000,
-  // DISPLAY. The cadence the display re-checks presence on (its own tick).
+  // PHONE. No PONG back inside this window and the latency chip reads "no
+  // signal". A phone-side display threshold only — nothing is dropped by it,
+  // here or on the big screen. Three missed pings, so one lost packet cannot
+  // blink the chip.
+  PONG_TIMEOUT_MS: 3000,
+  // DISPLAY. The cadence of the display's own tick: the self-heartbeat below,
+  // and the abandoned-race deadline. It sweeps no seats.
   TICK_MS: 1000,
   // DISPLAY. The self-heartbeat's deadline: no echo of MSG.HEARTBEAT back from
   // our own slot inside this window means OUR socket is half-dead, so force a
-  // reconnect rather than wait for TCP. Wider than TIMEOUT_MS because with the
-  // fastlane carrying inputs the display's socket sees only ~1 Hz of traffic,
-  // so this lone canary needs the margin.
+  // reconnect rather than wait for TCP. Wide because with the fastlane carrying
+  // inputs the display's socket sees only ~1 Hz of traffic, so this lone canary
+  // needs the margin. It is the one liveness detector left, and it watches
+  // exactly one socket: our own.
   HEARTBEAT_DEAD_MS: 6000,
   // DISPLAY. Every racer gone while late joiners wait: hold the room this long
   // for the dropped party to scan back in, then return to the lobby.
@@ -255,13 +275,6 @@ var CAR_MODELS = [
 var CAR_NAMES = [
   'Dash', 'Bolt', 'Carve', 'Rumble'
 ];
-// Extra Y-rotation (radians) per model, for any model whose mesh faces the wrong
-// way after the renderer's base half-turn (most Kenney vehicles face -Z, so the
-// renderer turns them to +Z). Every model currently faces correctly, so this is
-// all zeros — kept as a per-model hook. Applied in-race (the renderer) and when
-// baking the car thumbnails, so the picker preview matches the racing car.
-var CAR_MODEL_YAW = [0, 0, 0, 0];
-
 // Per-model handling stats, parallel to CAR_MODELS. The native engine reads a
 // resolved stats object per car; these are the source of truth the display feeds
 // in. accel/vmax/turn are MULTIPLIERS on the engine's benchmark; `mass` is
@@ -313,9 +326,9 @@ function carStats(carIndex) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     MSG, FASTLANE_TYPES, ROOM_STATE,
-    RELAY_URL, STUN_URL, STUN_FALLBACK_URL,
+    RELAY_URL, STUN_URL,
     MAX_PLAYERS, FIELD_SIZE, TOTAL_LAPS, COUNTDOWN_SECONDS, SCHEMATIC_EPS, STEER, LIVENESS, RANDOM_RACES,
-    CAR_COLORS, CAR_MODELS, CAR_NAMES, CAR_MODEL_YAW,
+    CAR_COLORS, CAR_MODELS, CAR_NAMES,
     CAR_STATS, carStats
   };
 }

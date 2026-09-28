@@ -1,16 +1,22 @@
 material {
     name : TtpVblend,
+    // The per-vertex fog factor (ttp_fog.inc); .yzw unused.
+    variables : [ fog ],
     requires : [
         color
     ],
     shadingModel : unlit,
     culling : none,
     blending : transparent,
-    depthWrite : false
+    depthWrite : false,
+    parameters : [
+        { type : sampler2d, name : gradeLut }
+    ]
 }
 
 fragment {
     #include "ttp_grade.inc"
+    #include "ttp_fog.inc"
 
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
@@ -23,6 +29,16 @@ fragment {
         material.baseColor = getColor();
         // Graded BEFORE the premultiply, so what gets scaled by alpha is the
         // displayed colour — the scene buffer holds sRGB now (ttp_grade.inc).
-        material.baseColor.rgb = ttpGrade(material.baseColor.rgb) * material.baseColor.a;
+        material.baseColor.rgb = ttpFogMix(ttpGrade(material.baseColor.rgb), variable_fog.x) * material.baseColor.a;
+    }
+}
+
+vertex {
+    #include "ttp_fog.inc"
+
+    // The fog factor is the only thing this stage exists for: per vertex, so the
+    // fragment pays a mix instead of a sqrt and an exp. See ttp_fog.inc.
+    void materialVertex(inout MaterialVertexInputs material) {
+        material.fog = vec4(ttpFogFactor(material.worldPosition.xyz), 0.0, 0.0, 0.0);
     }
 }

@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- The relay, and the origin that serves the phone controller plus the
+         streamed race music. A TV app has no origin of its own, so the web
+         deployment is a runtime dependency (shells.md's base-URL item), not
+         an optimisation. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- NOTHING IS DECLARED FOR THE LAN, and that is a targetSdk fact rather
+         than a permanent one. Two features here touch the local network — the
+         CouchPad room record over NsdManager (RoomAdvertiser.kt) and the
+         fastlane's ICE host candidates (Fastlane.kt) — and Local Network
+         Protections gate both behind the ACCESS_LOCAL_NETWORK runtime permission
+         only for apps targeting API 37. This one targets 36 on purpose
+         (build.gradle.kts says why). When targetSdk moves: declare it here, ask
+         at runtime on API 37+, and re-publish the room record on the grant —
+         commit a97798e5 is a verified version of all three. Without the grant
+         both features fail SILENTLY (the QR still works and CONTROL still rides
+         the relay), which is the shape nobody notices. -->
+
+    <!-- A TV, and only a TV. leanback REQUIRED is what keeps this off phones in
+         the Play listing; touchscreen NOT required is what lets it onto a TV at
+         all, since the default for that feature is `true`. -->
+    <uses-feature
+        android:name="android.software.leanback"
+        android:required="true" />
+    <uses-feature
+        android:name="android.hardware.touchscreen"
+        android:required="false" />
+    <!-- Filament's GLES3 path. Declared so the store filters boxes that cannot
+         run the renderer, rather than letting them install and show black. -->
+    <uses-feature
+        android:glEsVersion="0x00030000"
+        android:required="true" />
+
+    <application
+        android:label="@string/app_name"
+        android:banner="@drawable/banner"
+        android:icon="@mipmap/ic_launcher"
+        android:supportsRtl="false"
+        android:theme="@style/Theme.TinyTrackParty">
+
+        <!-- simpleperf/profiler attach on RELEASE builds, from the shell only.
+             The perf knobs are deliberately live in release (PerfDebug's
+             measure-the-build-that-ships rule); this is the same decision for
+             the sampling profiler, and it exposes nothing to other apps. -->
+        <profileable android:shell="true" />
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:screenOrientation="landscape"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.TinyTrackParty.Splash"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode|density">
+            <!-- LEANBACK_LAUNCHER, not LAUNCHER: the TV home screen only shows
+                 the former, and an app with only the latter installs and then
+                 cannot be found. -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

@@ -15,9 +15,11 @@ cross-device claim, and post-reload reconciliation against the relay's peer list
 **It holds no room handle and mutates nothing** — every function is pure over
 plain data, which is what lets the corpus replay with no room machine at all.
 
-Returns come out in the model's key order, because the snapshot IS the wire. One
-piece of configured state (the chooser payload) is set once and stays opaque to
-the model, bar the rule that tracks ride the LOBBY snapshot only.
+Returns are plain `Value` trees and their key order means nothing: the snapshot's
+only caller frames it, and the frame encoder canonicalizes, so the composed order
+has never reached a phone. One piece of configured state (the chooser payload) is
+set once and stays opaque to the model, bar the rule that tracks ride the LOBBY
+snapshot only.
 
 **Deliberately did not cross:** the transport and its timers, the QR bitmap (the
 URL composition is shared, the bitmap is three platform one-liners), the reconnect
@@ -33,30 +35,65 @@ which this layer keeps opaque.
 lives in the ABI shim, not here: this library stays pure over plain data, which
 is what keeps the frozen corpus replayable with no room machine at all.
 
-**`norm_index` carries a frozen, security-adjacent quirk.** It is JS
-`Number(value)`, so a HELLO with an explicit null rejoin token claims seat 0 while
-one with no token claims nothing. It is harmless only because seat 0 is the
-display's own slot and never appears on the roster. **Do not tidy it** — the corpus
-pins both answers, and the ABI takes the whole HELLO rather than the token so
-absent and null stay distinguishable.
+**A rejoinToken is an integer or it is nothing.** `norm_index` accepts a JSON
+number that is finite, integral and non-negative, and refuses every other shape,
+so absent and null are the same answer and a client that sends the seat as a
+string silently fails to claim. Untrusted phone input is type-checked here, never
+coerced. This layer used to reproduce JS `Number(value)` instead, under which a
+null read as 0 and every ordinary HELLO was a claim on seat 0; the corpus pins
+the current answers.
 
 ## Liveness and disconnects
 
-The relay fires `peer_left` only on a real socket close, so the display also runs
-its own liveness: phones ping, and a seat silent past the timeout is dropped
-mid-game by the same path, with any traffic restoring it. Both windows live in the
-protocol manifest, because "silent past N seconds" is only true against a matching
-ping rate.
+**Presence is the relay's answer, and only the relay's.** A seat is connected from
+`peer_joined` until `peer_left`; the display runs no silence detector over other
+people's sockets. RoomFlow still HAS one — it is kit code, driven by the roomflow
+corpus — but nothing configures a `timeoutMs` for it, so `expiredPeers` can only
+ever be empty. `seenWalk` survives as the disconnect LIFT alone: traffic from a
+seat the display had dropped means it is back.
 
-The self-heartbeat uses an **in-flight flag, never an echo age**, so a throttled
+That is a decision with a known cost, not an oversight. The display used to run a
+3 s silence window budgeted against the phone's 1 Hz ping, and it was given up
+because two authorities disagreeing about the room is worse than one authority
+being slow: Party-Sockets' cap counts LIVE SOCKETS, so a seat dropped here still
+filled a relay slot and the reconnect QR offered for it was answered "Room is
+full". What that costs is measured and pinned by `tests/wire-compat.test.js` — uWS
+answers its own keepalive pings inside the browser's network stack, so a locked or
+backgrounded phone reads as PRESENT for as long as its socket survives. The phone
+closing its own link on background (`controller/Net.js` `suspend()`) is what turns
+a pocketed phone into a free seat; one killed without that `pagehide` holds its
+seat until the relay's idle timeout closes the socket.
+
+The self-heartbeat is the one detector left, and it watches exactly one socket:
+ours. It uses an **in-flight flag, never an echo age**, so a throttled
 background tab cannot misread its own starvation as a dead link. The shell owns
 only the interval and the calls the tick asks for.
 
-**The abandoned-race policy** rides that same tick: every participant gone while
-someone waits arms a grace timer that fires once. Its participant set is derived
-from the LIVE RACE through the session seam — every seat holding a car, plus every
-dropped seat — so a shell passes a session handle and **no car id is ever
-serialized out and handed back.**
+**What the viewer sees of our own link is a rule here too** (`link_after_close`,
+the `link` corpus op): the connection kit's retry budget stays platform code, but
+its counters come into the close walk and out as the `set-link` effect, so every
+shell draws the same overlay off the same answer — the kit's "Attempt N of M"
+while it retries, then DISCONNECTED with a RECONNECT once the budget is spent,
+and no button after a 4000 (rejoining under the same id would evict the other
+display right back). The button is `ttp_net_reconnect_json`, which re-arms the
+budget before it dials; before it existed the budget was one-shot, and a Wi-Fi
+blip that outlasted ~13 s parked the display forever with nothing on screen. A
+link that is down also reads as "every participant is gone" to the auto-pause
+rule (through `ttp_net_link_down`), so a live race freezes instead of running
+blind and thaws on the relay's created/joined — never on the raw socket open.
+
+**The abandoned-room policy** rides that same tick and has TWO arms on ONE grace
+deadline, both firing once. Mid-race: every participant gone while someone waits.
+On the RESULTS board: **no connected peer at all** — the same "the room is empty"
+the cup chain's advance already uses. The results arm replaced a wall-clock
+failsafe the three shells armed off the end of a race, which fired on a timer and
+so yanked a party that was still talking off its own podium; it fires on the
+condition that timer was always a proxy for. **A podium with anybody still in the
+room waits for a human**, however long it sits there.
+
+The mid-race arm's participant set is derived from the LIVE RACE through the
+session seam — every seat holding a car, plus every dropped seat — so a shell
+passes a session handle and **no car id is ever serialized out and handed back.**
 
 What falls outside that set is exactly a connected, car-less seat, and one
 definition stands behind the policy, the standings' joining rows and the display's

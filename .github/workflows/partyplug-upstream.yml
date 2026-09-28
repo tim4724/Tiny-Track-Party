@@ -33,7 +33,7 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Both the upstream repo and the commit we are synced to are READ OUT of
       # the ledger rather than repeated here — a stamp this job disagreed with

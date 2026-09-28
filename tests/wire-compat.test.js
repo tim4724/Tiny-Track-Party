@@ -164,7 +164,7 @@ async function bringUpRealDisplay(relayOpts = {}, opts = {}) {
     carChooser: [{ id: 'vehicle-racer-low', name: 'Dash' }, { id: 'vehicle-speedster', name: 'Bolt' }],
     colorPalette: ['#e6492d', '#f2b134', '#2bb673', '#2d9cdb'],
     trackChooser: [{ id: 'tidepool', name: 'Tidepool', cup: 'beach' }],
-    progressChooser: { cups: [{ id: 'beach', stars: 2, locked: false }] },
+    progressChooser: { cups: [{ id: 'beach', stars: 2, locked: false }], stars: { earned: 2, total: 15 } },
     defaultTrackId: 'tidepool',
     onRoomReady: (r) => seen.roomReady.push(r),
     onRosterChange: (r, host) => seen.roster.push({ r, host }),
@@ -364,9 +364,9 @@ test('wire: a real phone joins a C++-hosted room and HELLO/PING cross both parse
   assert.ok(hello, 'HELLO arrived');
   assert.equal(hello.from, 1);
   assert.equal(hello.data.name, 'Ada');
-  // rejoinToken is LITERALLY null on a normal join, and DisplayNet._normIndex(null)
-  // is 0 (Number(null) === 0) — every normal HELLO is a claim on seat 0 that
-  // survives only because the display's own slot is never on the roster.
+  // rejoinToken is LITERALLY null on a normal join — the key is present, and the
+  // controller only ever fills it with an integer. A token that is not a number
+  // claims nothing (session.h), so this null and an absent key are one answer.
   assert.equal(hello.data.rejoinToken, null);
   assert.ok('rejoinToken' in hello.data, 'the key is PRESENT, not absent');
 
@@ -424,7 +424,7 @@ test('wire: the LOBBY_UPDATE the display AUTHORS survives the round trip, field 
   // The progression chooser crosses OPAQUELY (like tracks): the phone draws
   // stars/locks straight off it, so its shape is part of the wire contract.
   assert.deepEqual(snap.progress,
-    { cups: [{ id: 'beach', stars: 2, locked: false }] },
+    { cups: [{ id: 'beach', stars: 2, locked: false }], stars: { earned: 2, total: 15 } },
     'the couch progression rides the lobby snapshot verbatim');
 
   // 2. THE ROSTER, whose every field crosses from C++ (RoomFlow) through JS
@@ -1085,9 +1085,13 @@ test('asym: prod does NOT drop an application-idle socket — only one that stop
   //
   // WHAT THIS MEANS AT A REAL PARTY: the relay reports a locked, backgrounded or
   // Wi-Fi-parked phone as PRESENT, for as long as its socket survives. peer_left
-  // is not a silence detector, which is exactly why display/Net.js runs its own
-  // 1 Hz liveness (LIVENESS_TIMEOUT_MS = 3 s) instead of trusting the relay, and
-  // why a TV shell that skips that layer will show ghosts on the grid.
+  // is not a silence detector — and peer_left is now the display's ONLY presence
+  // signal, so this is the exact shape of what that costs. It is the accepted
+  // price of a single authority: the display's own 3 s window disagreed with the
+  // relay's cap (which counts live sockets), and a seat dropped here still filled
+  // a slot, so its reconnect QR was answered "Room is full". What keeps a pocketed
+  // phone from holding a seat is the phone itself: controller/Net.js suspend()
+  // closes the link on background. A shell that skips THAT will show ghosts.
   //
   // The E2E stub never times out at all, so neither half of this was ever
   // exercised; the previous version of this test asserted the OPPOSITE of what

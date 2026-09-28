@@ -78,11 +78,58 @@ if (!hasBin('ccache')) {
 if (!has('public/display/engine/native/ttp_runtime.wasm')) {
   notes.push('the engine wasm is missing from the checkout — nothing that loads the display will run.');
 }
-// The e2e browser is a per-machine install, not a per-worktree one, so a missing
-// one is worth saying once here rather than as a Playwright error per worktree.
-const pwCache = path.join(process.env.HOME || '', 'Library/Caches/ms-playwright');
-if (!fs.existsSync(pwCache) && !fs.existsSync(path.join(process.env.HOME || '', '.cache/ms-playwright'))) {
-  notes.push('no Playwright browser — run `npx playwright install chromium` before `npm run test:e2e`.');
+// The e2e browsers are a per-machine install, not a per-worktree one, so a
+// missing one is worth saying once here rather than as a Playwright error per
+// worktree. Both are named: the suite is Chromium except for one WebKit spec
+// (tests/CLAUDE.md says why), and "the cache directory exists" is not the
+// question — every machine that ever installed Chromium passes that and then
+// fails on the WebKit spec alone.
+const pwCache = [
+  path.join(process.env.HOME || '', 'Library/Caches/ms-playwright'),
+  path.join(process.env.HOME || '', '.cache/ms-playwright')
+].find((d) => fs.existsSync(d));
+const installed = pwCache ? fs.readdirSync(pwCache) : [];
+const wanted = ['chromium', 'webkit'].filter((b) => !installed.some((d) => d.startsWith(`${b}-`)));
+if (wanted.length) {
+  notes.push(`no Playwright ${wanted.join('/')} browser — run \`npx playwright install ${wanted.join(' ')}\``
+    + ' before `npm run test:e2e`.');
+}
+// Per-machine like the browsers above, and silent when missing in a way that only
+// shows up at the television: release APKs fall back to the debug key, and a box
+// already carrying a distribution-signed build refuses them as a signature
+// mismatch — curable only by an uninstall, which takes that box's progression.
+if (!has('shells/androidtv/keystore.properties')
+    && !fs.existsSync(path.join(process.env.HOME || '', '.android/tinytrack.keystore.properties'))) {
+  notes.push('no Android release signing secrets — `npm run build:androidtv` will sign with the'
+    + ' debug key. See shells/androidtv/keystore.properties.example.');
+}
+
+// THE TV ENGINE SDKS ARE HAND-BUILT, and nothing else announces their absence.
+// The wasm leg fetches everything it needs (the fork clone, emsdk), so "the
+// Filament fork is pinned and automatic" is true there and false here: the
+// Android and tvOS legs link a Filament SDK that only `./build.sh` in the
+// pinned checkout produces, at ~25 min per slice, and a pin bump moves the
+// checkout and leaves every one of them behind in the old one. Reported per
+// SLICE rather than per platform for the reason build-runtime-android.sh
+// guards them that way: both Android ABIs install under one root, so a root
+// that exists can still be missing arm64 entirely, and that stays invisible
+// until someone installs on a 64-bit device.
+const filamentSrc = process.env.FILAMENT_SRC || (() => {
+  const pin = fs.readFileSync(path.join(ROOT, 'native/filament.pin'), 'utf8');
+  const sha = /^FILAMENT_COMMIT=(\w+)/m.exec(pin)?.[1] ?? '';
+  return path.join(process.env.HOME || '', 'Projects', `filament-${sha.slice(0, 12)}`);
+})();
+const slices = [
+  ['Android armeabi-v7a', 'out/android-release/filament/lib/armeabi-v7a/libfilament.a'],
+  ['Android arm64-v8a', 'out/android-release/filament/lib/arm64-v8a/libfilament.a'],
+  ['tvOS device', 'out/tvos-release/filament-appletvos/include/filament/Engine.h'],
+  ['tvOS simulator', 'out/tvos-release/filament-appletvsimulator/include/filament/Engine.h']
+].filter(([, p]) => !fs.existsSync(path.join(filamentSrc, p))).map(([name]) => name);
+if (slices.length) {
+  notes.push(`no Filament SDK for ${slices.join(', ')} in ${filamentSrc} —`
+    + ' `npm run build:androidtv` / `build:tvos` stop there and print the build to run'
+    + ' (~25 min each). An SDK built from another checkout can be carried over when'
+    + ' the pin delta cannot reach that platform; those scripts say how.');
 }
 
 // Asked rather than remembered. A hand-typed count is wrong the first time a
@@ -99,14 +146,21 @@ const ctestCount = (() => {
   }
 })();
 
+// Orders of magnitude, not measurements — the point is which of these you can
+// put in a tight loop and which one you go and do something else during. A
+// figure precise enough to be checked is a figure that rots: the e2e line here
+// read "~90 s" against a suite that measures over two minutes.
 console.log('\nReady:');
-console.log('  npm test                        unit + wire-compat  (~5 s)');
-console.log(`  npm run test:native             native conformance, ${ctestCount}  (~2 s, build included)`);
-console.log('  npm run test:e2e                Playwright  (~90 s)');
+console.log('  npm test                        unit + wire-compat  (seconds)');
+console.log(`  npm run test:native             native conformance, ${ctestCount}  (seconds, build included)`);
+console.log('  npm run test:e2e                Playwright  (a few minutes)');
 console.log('  npm run dev                     the server, watching');
-console.log('\nEngine changes (native/) additionally need the Filament fork + emsdk (both fetched automatically, pinned by native/filament.pin):');
-console.log('  native/scripts/build-runtime-web.sh   then commit the artifacts');
-console.log('  npm run check:artifact                is the checked-in wasm current?  (~0.2 s)');
+console.log('  npm run build:tvos [device|simulator]   the Apple TV app, engine + bundle included');
+console.log('  npm run build:androidtv -- [release|debug] [install]   the Android TV app, likewise');
+console.log('\nEngine changes (native/) additionally need the Filament fork, pinned by native/filament.pin:');
+console.log('  native/scripts/build-runtime-web.sh   then commit the artifacts  (fork + emsdk fetched automatically)');
+console.log('  npm run check:artifact                is the checked-in wasm current?  (instant)');
+console.log('  the two TV apps above                 additionally need a HAND-BUILT Filament SDK per slice');
 
 if (notes.length) {
   console.log('\nNotes:');

@@ -1,0 +1,218 @@
+package games.couchpad.tinytrack
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
+
+/**
+ * The screen switcher: put whichever board the model names over the 3D surface.
+ *
+ * Two jobs and no third: stand the boards up, and route. **It owns no game
+ * logic.** Every action is a call into the coordinator, and every decision behind
+ * those calls is already `ttp_ui.h`'s or `ttp_race.h`'s — including what BACK
+ * means, which is `ttp_ui_back_effect`'s answer and lives in [MainActivity]'s back
+ * callback rather than as a switch here.
+ *
+ * THE 3D IS ALWAYS AT THE BOTTOM AND NEVER TORN DOWN. The shell does not hide the
+ * surface; each BOARD decides whether its own opaque paper is in front. A shell
+ * that stopped the frame loop to "hide" the scene would also stop the attract race
+ * the lobby is showing.
+ *
+ * THERE IS NO WELCOME BOARD, and that is a platform difference rather than an
+ * omission. The web's welcome exists to collect a user GESTURE — the one that
+ * unlocks an AudioContext and enters fullscreen — and a TV has neither
+ * restriction, so a title card with a single button would be a press between the
+ * viewer and the room code for nothing. The tvOS shell reaches the same conclusion
+ * and boots straight to the lobby.
+ *
+ * The crossfade is a conditional INSERTION, not an opacity ramp over views that
+ * stay in the tree. On a TV that distinction is the whole ball game: a composable
+ * at zero alpha is still focusable, so an invisible button would keep eating
+ * remote presses from behind the board that replaced it.
+ */
+@Composable
+fun RootScreen(game: GameCoordinator) {
+    val state = game.state
+
+    Box(Modifier.fillMaxSize()) {
+        // A COVERED BOARD KEEPS ITS FOCUS TARGETS, and on a TV that is a press
+        // that goes nowhere: the lobby's focus park is an INVISIBLE strip along
+        // the foot of the board (LobbyScreen), so Down from the info board's one
+        // button landed on it and the button quietly went dark — focus on
+        // nothing, over a board that has nothing else to offer.
+        //
+        // CANCEL THE ENTRY, don't hide the subtree. `canFocus = false` is what
+        // `focusGroup` itself already sets: it deactivates the GROUP and leaves
+        // its children reachable, which is the opposite of what is wanted here.
+        // Refusing entry leaves the search with nowhere to go, so focus stays
+        // where the viewer can see it.
+        Box(
+            Modifier
+                .fillMaxSize()
+                .focusProperties {
+                    onEnter = { if (state.infoPath.isNotEmpty()) cancelFocusChange() }
+                }
+                .focusGroup()
+        ) {
+            when (state.screen) {
+                // Unreachable on this platform, and kept only because the screen
+                // enum mirrors the model's rather than this shell's. Rendering the
+                // lobby here too keeps the switch total without inventing a board.
+                GameState.Screen.WELCOME, GameState.Screen.LOBBY -> LobbyScreen(state)
+                GameState.Screen.RACE -> if (!PerfDebug.hudHidden) RaceHud(state)
+            }
+        }
+
+        // THE RACE OUTRANKS THE BOARD. The ⓘ is reachable only from the lobby, but
+        // a race does not start from the TV — a phone presses START — so a viewer
+        // reading a licence when the host starts is holding a legal board over a
+        // race nobody can see. The stack is dropped rather than kept for later:
+        // whatever they were reading, the room has moved on. (tvOS gets this for
+        // free — its NavigationStack lives INSIDE the lobby, which the switch
+        // replaces.)
+        LaunchedEffect(state.screen) {
+            if (state.screen == GameState.Screen.RACE) state.infoPath = emptyList()
+        }
+
+        // THE INFO BRANCH, over the board that pushed it. The lobby's ⓘ is the
+        // only way in and BACK is the only way out ([MainActivity]), so this is a
+        // stack rather than a screen: the deepest page is what shows, and popping
+        // it uncovers the one beneath. Only the LAST entry is composed — the pages
+        // under it are opaque paper boards anyway, and a composed-but-covered
+        // board keeps its focusable rows live behind the one on top.
+        when (val page = state.infoPath.lastOrNull()) {
+            null -> Unit
+            GameState.InfoRoute.Info -> InfoScreen(state)
+            GameState.InfoRoute.Licenses -> LicensesScreen(state)
+            is GameState.InfoRoute.License -> LicenseTextScreen(page.index)
+        }
+
+        // The overlays, in paint order. Each is a conditional insertion.
+        // The banner's LAST text is held, because the exit fade is triggered BY the
+        // countdown going null: composing `state.countdown` here would render nothing
+        // for the whole 200 ms exit and "GO!" would vanish instantly instead of
+        // fading. AnimatedVisibility keeps its content alive through the exit; it
+        // cannot keep the value the content reads.
+        var lastCount by remember { mutableStateOf("") }
+        state.countdown?.let { lastCount = it }
+        AnimatedVisibility(
+            visible = state.screen == GameState.Screen.RACE && state.countdown != null,
+            enter = fadeIn(tween(120)), exit = fadeOut(tween(200)),
+        ) { CountdownBanner(lastCount) }
+
+        // THE BOARD FADES UP, because it no longer arrives at the flag: the race's
+        // end holds the frozen finish frame for the flourish (race_flow.h
+        // FINISH_FLOURISH_MS) while everyone reads the place cards, and cutting to
+        // the board throws away the beat that hold exists to buy. ENTER ONLY —
+        // ResultsScreen returns early on a null board, so an exit fade would need
+        // the countdown's held-value dance to have anything to draw, and the board
+        // leaves under a launch's own scene change anyway.
+        //
+        // SCOPED TO THE RACE SCREEN, as tvOS nests it in `raceChrome` and the web
+        // keeps `#results` inside the race section. `state.results` is nulled by
+        // `hide-results`, which only a LAUNCH emits — a return to the lobby does
+        // not — so gated on the board alone this stood opaque over the lobby
+        // after the podium's New game, with its own button now a no-op and BACK
+        // meaning leave the app. Seen on the emulator; a launch still clears it.
+        AnimatedVisibility(
+            visible = state.screen == GameState.Screen.RACE && state.results != null,
+            enter = fadeIn(tween(320)), exit = ExitTransition.None,
+        ) { ResultsScreen(state, game) }
+
+        if (state.screen == GameState.Screen.RACE && state.paused && state.results == null) {
+            PauseOverlay(game)
+        }
+
+        // THE BOOT COVER, over every board: the lobby and the race are chrome
+        // over a live 3D view, and until that view has put a frame on the glass
+        // they are chrome over nothing. Which board owes one is `ttp_ui_cover`'s
+        // answer; welcome is exempt because it stands on the paper diorama.
+        //
+        // A RENDERED BOARD, exactly as the web and tvOS do it, because ANDROID TV
+        // SHOWS NO SYSTEM SPLASH TO HOLD. This shell tried that: API 31+ creates
+        // a starting window for every cold start on a phone, and
+        // `installSplashScreen().setKeepOnScreenCondition` would keep it until
+        // the game was ready. On a TV build no starting window is ever created —
+        // not for this app and not for Settings either, and `dumpsys window`
+        // lists none — so the hold had nothing to hold, and all it did was block
+        // this composition from drawing: the launcher stayed up until the app's
+        // first frame, and then a black SurfaceView hole stood in for the splash
+        // until the lobby painted. The theme's splash attributes stay (they cost
+        // nothing and are right if a box ever does show one); the cover is here.
+        //
+        // NOTHING HERE MOVES, and that is a rule rather than a preference. This
+        // is a full-screen overlay up at exactly the moment the renderer is
+        // busiest — standing a scene up — and an animated overlay of that shape
+        // is what cost the Apple TV 60 -> 7 fps through the GO beat. A spinner
+        // would compete for the very frames it is waiting on.
+        if (state.cover == "boot") {
+            // NO allowsHitTesting(false) TWIN HERE, and its absence is not an
+            // oversight: tvOS blocks input on the cover VIEW, this shell blocks it
+            // on the WINDOW (MainActivity's FLAG_NOT_FOCUSABLE, cleared when the
+            // cover lifts), because here the reason is an ANR rather than a stray
+            // tap and the whole window is what has to stop answering.
+            Box(Modifier.fillMaxSize().background(Tokens.paper)) {
+                // THE LAUNCH IMAGE ITSELF, not a live re-render of the wordmark:
+                // the same bake tvOS's CoverView draws and its launch image is
+                // cut from, so the three shells open on ONE picture. Opaque
+                // paper underneath it, so a missing file degrades to the right
+                // colour rather than to the black it is here to replace.
+                Image(
+                    painter = painterResource(R.drawable.launch_tv),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                )
+            }
+        }
+
+        // The display's OWN link, over the cover too: a boot with no relay must say
+        // so instead of sitting on the launch picture.
+        state.link?.let { LinkOverlay(it, game) }
+
+        // The perf readout is NOT here: it is a plain View beside this whole
+        // ComposeView ([PerfOverlayView] has the argument and the measured
+        // numbers — its Compose form cost ~9× the frame-thread time per
+        // republish). It still shares this corner with the error box below.
+
+        // The one channel this app has for saying something went wrong. A TV has no
+        // console and no devtools, and every failure path in this shell is silent by
+        // construction — a missing material degrades quietly, a rejected scene build
+        // leaves the previous frame up.
+        state.lastError?.let { why ->
+            Box(
+                Modifier
+                    .align(Alignment.BottomEnd)
+                    // The authored 24 outside the overscan margin: an error nobody
+                    // can read because the set cropped it is the same as no error.
+                    .padding(end = Tokens.safeMarginX + 24.dp,
+                             bottom = Tokens.safeMarginY + 24.dp)
+                    .background(Tokens.danger, RoundedCornerShape(Sticker.radiusSmall))
+                    .padding(horizontal = 14.dp, vertical = 8.dp)
+            ) {
+                StickerText(why, size = 16.dp, color = Tokens.paper, maxLines = 2)
+            }
+        }
+    }
+}

@@ -151,11 +151,6 @@ std::string ordered_stringify(const Value& v) {
   return o;
 }
 
-void ordered_stringify_into(const Value& v, std::string& out) {
-  out.clear();
-  stringify_into(v, out, false);
-}
-
 uint32_t fnv1a(const std::string& utf8) {
   uint32_t h = 0x811c9dc5u;
   for (unsigned char b : utf8) { h ^= b; h *= 0x01000193u; }

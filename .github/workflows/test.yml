@@ -14,8 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           # Plain reproducibility pin. Nothing here depends on the Node major:
           # every sim and track number is produced inside the wasm, which
@@ -34,8 +34,8 @@ jobs:
     # 5-minute budget had zero headroom and flaked on exactly that.
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           # Plain reproducibility pin. Nothing here depends on the Node major:
           # every sim and track number is produced inside the wasm, which
@@ -69,9 +69,14 @@ jobs:
     # Per-test sharding (fullyParallel in playwright.config.js) is what makes any
     # of these splits even; by FILE, cup-series alone would pin one shard.
     #
-    # 10 covers the slowest shard plus the retry the config arms, with room for a
-    # cold-cache run, and still trips on a genuine hang.
-    timeout-minutes: 10
+    # 10 covered the slowest shard plus the retry the config arms, with room for
+    # a cold-cache run, and still tripped on a genuine hang. What it did NOT
+    # cover was setup going wrong: `--with-deps` shells out to apt, and a slow
+    # mirror stalled it past the whole budget three times in one afternoon — the
+    # job was cancelled mid-download having run ZERO tests, and the only
+    # published signal was a red X on a green suite. So the budget is now split:
+    # the install step has its own cap below (it fails FAST and says what it was
+    # doing), and this covers that plus the 10 the tests actually want.
     strategy:
       fail-fast: false   # one shard's failure shouldn't hide the others' results
       matrix:
@@ -79,21 +84,23 @@ jobs:
     # NO `container:`. This job used to run in mcr.microsoft.com/playwright,
     # which is 922 MB and was re-pulled by every shard on every run — 25-40 s
     # before a single test started, and then a different Node was installed on
-    # top of the one it ships anyway. Caching just the chromium binaries does
+    # top of the one it ships anyway. Caching just the browser binaries does
     # the same job in ~4 s. Measured, four variants, warm cache:
     #   container + setup-node (what this was)   50 s
     #   container, image's own node              40 s
     #   cached browsers + `install --with-deps`  35 s
-    #   cached browsers, no --with-deps          30 s   <- this
+    #   cached browsers, no --with-deps          30 s
     #
-    # No --with-deps because the ubuntu-latest image already carries chromium's
-    # shared libraries: the variant above ran the full 3D scene boot through
-    # SwiftShader on a stock runner. If GitHub ever drops one of those libs this
-    # goes red on every shard at once with a chromium launch error, and the fix
-    # is to put --with-deps back on the install step (+11 s).
+    # --with-deps is NOT for chromium, whose shared libraries the ubuntu-latest
+    # image already carries (that variant ran the full 3D scene boot through
+    # SwiftShader on a stock runner). It is for WEBKIT, which one spec opens
+    # (tests/CLAUDE.md says why) and whose libraries the stock image does not
+    # carry — without it that shard dies on launch, and which shard draws it
+    # moves with the sharding.
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           # Plain reproducibility pin. Nothing here depends on the Node major:
           # every sim and track number is produced inside the wasm, which
@@ -103,7 +110,7 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - name: Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           # Keyed on the lockfile, so bumping @playwright/test invalidates it
@@ -112,14 +119,21 @@ jobs:
           # set and only downloads the delta.
           key: pw-browsers-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
           restore-keys: pw-browsers-${{ runner.os }}-
-      - run: npx playwright install chromium
+      - name: Install Playwright browsers
+        # Its OWN cap, so an apt stall cannot spend the tests' time. Four
+        # minutes is generous against a warm cache (~4 s) and a cold browser
+        # download; past that the mirror is not coming back, and a re-run is
+        # cheaper than the wait. Failing here names the step, which a job-level
+        # cancellation did not.
+        timeout-minutes: 4
+        run: npx playwright install --with-deps chromium webkit
       - name: Run E2E tests
         run: npx playwright test --shard=${{ matrix.shard }}/6
       - name: Upload traces on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          # Unique per shard — upload-artifact@v4 rejects a duplicate name.
+          # Unique per shard — upload-artifact rejects a duplicate name.
           name: playwright-traces-${{ matrix.shard }}
           path: test-results/
           retention-days: 7

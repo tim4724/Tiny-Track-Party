@@ -28,4 +28,8 @@ namespace ttp {
 // snapshot+results elapsed, rockets[].owner, race_over + pad events.
 inline constexpr int CONTRACT_VERSION = 2;
 
+// The math-library stamp on every recorded trace header and in ttp_version()'s
+// answer; scripts/oracle-lib.mjs is the JS mirror, pinned by the trace fixtures.
+inline constexpr char MATHLIB[] = "fdlibm-openlibm-0.8.7";
+
 }  // namespace ttp

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- THE LAUNCHER ICON, from API 26 up.
+
+     WHY THE APP HAS ONE is a shell rule and lives in shells/androidtv/CLAUDE.md:
+     a flat PNG in `android:icon` is a LEGACY icon and every masking surface draws
+     it on a system plate rather than cutting into it.
+
+     THE LAYERS ARE A BAKE, not artwork committed here — scripts/bake-wordmark.mjs
+     renders them through the real theme.css and stage-assets.sh copies them in, on
+     the same terms as the banner and the splash icon. Their composition is that
+     file's business, including why it is not the square icon cut in two, and there
+     is no <monochrome> here for the reason it gives.
+
+     The pre-26 fallback is mipmap-nodpi/ic_launcher.png, which minSdk keeps live. -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@mipmap/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+</adaptive-icon>

@@ -16,10 +16,10 @@
 //   requestAnimationFrame  queues the callback and never fires it
 //   window.__pump(stepMs)  runs everything queued, advancing a clock of our own
 //
-// Callers all reach it the same way, through `?gate=1`: scripts/trailer/render.js,
-// scripts/trailer/scout.js and public/trailer/editor.js. The editor is why it has to live
-// here rather than in the capture scripts — it drives an <iframe> and cannot inject
-// anything ahead of the page's own scripts.
+// Callers all reach it the same way, through `?gate=1`: scripts/trailer/render.js and
+// public/trailer/editor.js. The editor is why it has to live here rather than in the
+// capture scripts — it drives an <iframe> and cannot inject anything ahead of the
+// page's own scripts.
 //
 // Nothing in normal play imports the behaviour: without the param this module does
 // nothing at all.

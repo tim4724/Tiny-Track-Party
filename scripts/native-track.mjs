@@ -137,12 +137,6 @@ export function buildTrack(defOrId, { laps = 3, seed = 1, memoize = true } = {})
   return built;
 }
 
-// The oracle's buildRaceTrack(trackId, {laps, seed}) signature, kept for callers
-// that used it by that name.
-export function buildRaceTrack(trackId, { laps = 3, seed = 1 } = {}) {
-  return buildTrack(trackId, { laps, seed });
-}
-
 // Support-structure measurements for a built track (see ttp_runtime.h):
 //   { posts: [{ kind, x, z, radius, intrusion, s }],
 //     autoPoles: [{ s, lat, radius, x, z }] }
@@ -176,9 +170,6 @@ export function trackFrames(defOrId, sList) {
   if (!json) throw new Error('trackFrames: refused (bad track or arclength list)');
   return JSON.parse(json);
 }
-
-// One frame, for the occasional point lookup.
-export function trackFrameAt(defOrId, s) { return trackFrames(defOrId, [s])[0]; }
 
 // The track's top-down schematic — {viewBox, d, start, proj} — projected into the
 // 256-unit square by libttp-track's own ttp::schematic. Laps and seed touch

@@ -1,0 +1,409 @@
+# XcodeGen spec for the Apple TV shell. Checked in as TEXT rather than a
+# hand-maintained .xcodeproj, so the project stays reviewable in a diff:
+#
+#   shells/tvos/scripts/build.sh            (prepares, regenerates, then builds)
+#   shells/tvos/scripts/prepare.sh          (everything but the xcodebuild)
+#
+# `xcodegen generate` ALONE NO LONGER WORKS, on purpose: the Filament path below
+# comes from Generated/filament.xcconfig, which prepare.sh derives from
+# native/filament.pin. A spec that could be generated without it would be a spec
+# that can name the wrong Filament tree (it did — see the configFiles note).
+#
+# WHAT THIS TARGET IS: SwiftUI + a CAMetalLayer over one static library. It
+# contains no game logic — the sim, the party layer, the cameras, the race
+# orchestration, every screen's decisions and the audio decisions are C++ in
+# libttp_runtime_tvos.a, reached through the C ABI (see the bridging header).
+name: TinyTrackParty
+options:
+  bundleIdPrefix: games.couchpad
+  createIntermediateGroups: true
+  deploymentTarget:
+    tvOS: "17.0"
+
+# FILAMENT_TVOS_OUT — WHICH FILAMENT TREE THIS APP LINKS — is deliberately NOT
+# set here. It lives in Generated/filament.xcconfig, written by prepare.sh from
+# the commit in native/filament.pin, because a literal path in this file is a
+# second source for the pin and drifted into a real defect: it read
+# $(HOME)/Projects/filament/out/tvos-release, the SHARED MUTABLE checkout that
+# native/scripts/filament-checkout.sh exists to stop anyone using. The engine
+# archive compiled against the pinned version-addressed tree while the app
+# linked Filament from whatever the shared one had been rebased to — the exact
+# mixed-toolchain hazard `npm run check:artifact` gates on the web leg, on a leg
+# that has no such gate and where the symptom is a material-load failure on the
+# television with no build error anywhere.
+#
+# An xcconfig rather than an xcodebuild argument so an Xcode.app build gets it
+# too; a project-level `settings` entry would OVERRIDE the xcconfig and put the
+# second source straight back.
+configFiles:
+  Debug: Generated/filament.xcconfig
+  Release: Generated/filament.xcconfig
+
+# Filament is linked with -l flags against the PER-SDK install trees, never as
+# xcframework file references: XcodeGen writes a file reference into the
+# .pbxproj as a path RELATIVE to the project, so a reference outside the repo
+# only resolves from a checkout at the exact directory depth it was generated
+# in (a different worktree broke it). Build settings expand $(PLATFORM_NAME) at
+# build time, so everything below survives any checkout location and needs no
+# lipo — device and simulator each get their own tree.
+settings:
+  base:
+    CLANG_CXX_LANGUAGE_STANDARD: c++20
+    SWIFT_VERSION: "5.0"
+    ENABLE_BITCODE: NO
+    # ARM64 ONLY, on both SDKs. Apple TV hardware is arm64, both Filament tvOS
+    # slices are arm64, libttp_runtime_tvos.a is arm64, and LiveKitWebRTC ships
+    # an arm64-only simulator slice. Left unset, a GENERIC simulator destination
+    # takes ARCHS_STANDARD and adds x86_64 — which nothing in the link line has,
+    # so `build.sh simulator` failed with "symbol(s) not found for architecture
+    # x86_64" for every C ABI symbol in the app. It went unnoticed because the
+    # screenshot runner resolves a CONCRETE simulator id, and a concrete
+    # destination pins the arch to that device's.
+    ARCHS: arm64
+    # THE VERSION, IN ONE PLACE FOR BOTH TARGETS. Both Info.plists below read
+    # these through $(...) rather than carrying a literal, because App Store
+    # Connect enforces two rules that a literal cannot keep: a CFBundleVersion
+    # may not repeat under one CFBundleShortVersionString, and an embedded
+    # app-extension's CFBundleVersion must EQUAL the app's. Setting them here
+    # means one xcodebuild override moves the app and the Top Shelf appex
+    # together — .github/workflows/release.yml passes the run number as
+    # CURRENT_PROJECT_VERSION and the release tag as MARKETING_VERSION, the same
+    # shape as Android's -PttpVersionCode / -PttpVersionName.
+    #
+    # WHICH BUILD ACTUALLY SEES THESE differs between the two, and the asymmetry
+    # is deliberate: release.yml overrides CURRENT_PROJECT_VERSION on EVERY run,
+    # tag and dispatch alike, because App Store Connect refuses a build number it
+    # has already seen — while MARKETING_VERSION is overridden only by a tag, so
+    # a dispatch ships the value below. A build outside that workflow keeps both:
+    # a local xcodebuild, or tvos.yml's simulator leg, which sets neither.
+    # Nothing here needs editing to cut a release.
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+  # MANUAL SIGNING, AND ONLY FOR RELEASE. Two separate reasons, and both matter:
+  #
+  #   WHY MANUAL. Automatic signing asks Apple to mint the profile, which Xcode
+  #   calls "cloud signing" and which an App Store Connect API key may only do
+  #   with the ADMIN role. Handing a CI runner a team-wide Admin credential to
+  #   save creating two profiles by hand is a bad trade — with the profiles
+  #   supplied, the key does nothing but upload, and App Manager covers that.
+  #   HexStacker's tvOS shell signs the same way for a second reason worth
+  #   knowing: automatic signing cannot archive a tvOS app without a registered
+  #   device, because it insists on a device-BOUND development profile, while an
+  #   App Store profile is bound to nothing.
+  #
+  #   WHY RELEASE ONLY. The Archive action builds Release and the Launch action
+  #   builds Debug, which is what `xcodebuild build` takes — so scoping this to
+  #   Release leaves shells/tvos/scripts/build.sh exactly as it was, signing a
+  #   local device build with whatever Apple Development identity the keychain
+  #   holds (lib.sh derives the team from that cert). A developer never needs the
+  #   distribution profile installed to build and run on their own Apple TV.
+  #
+  # The profile NAMES are the contract with the portal: they must exist under
+  # exactly these names, and .github/workflows/release.yml installs them by UUID
+  # from secrets before it archives. PROVISIONING_PROFILE_SPECIFIER is per target
+  # (an appex needs its own profile), so it sits on each target rather than here.
+  configs:
+    # SAID OUT LOUD, because an unset style is read as Manual: once Release
+    # named its style below, XcodeGen stopped emitting the automatic one Debug
+    # had always had, and every local device build failed with "requires a
+    # provisioning profile" while the certificate, the team and the device
+    # registration were all valid.
+    Debug:
+      CODE_SIGN_STYLE: Automatic
+    Release:
+      CODE_SIGN_STYLE: Manual
+      CODE_SIGN_IDENTITY: Apple Distribution
+
+# The item icons ship as the SHARED SVGs (public/assets/items/, staged by
+# stage-assets.sh), and UIKit cannot rasterize an SVG file at runtime —
+# SwiftDraw is that rasterizer (zlib licence, pure Swift + CoreGraphics).
+# Pinned exact: a renderer bump is a visual change and should be a diff here,
+# not a lockfile surprise.
+#
+# LiveKitWebRTC is the fastlane's transport (Net/Fastlane.swift): tvOS ships
+# no system WebRTC and stasel/WebRTC ships no tvOS slices, so LiveKit's
+# distribution is the one that works — the same build HexStacker's TV shell
+# device-proved, at the same pin. Its simulator slice is arm64-only, which
+# this project already requires (the native libs are arm64-only too).
+packages:
+  SwiftDraw:
+    url: https://github.com/swhitty/SwiftDraw
+    exactVersion: "0.29.0"
+  LiveKitWebRTC:
+    url: https://github.com/livekit/webrtc-xcframework
+    exactVersion: "150.7871.01"
+
+targets:
+  TinyTrackParty:
+    type: application
+    platform: tvOS
+    sources:
+      - path: TinyTrackParty
+        excludes:
+          - "**/*.md"
+          # The SOURCE of the two tvOS-only notice texts. They reach the bundle
+          # through Generated/assets/licenses like every other notice
+          # (gen-legal.mjs stages them), so bundling them from here as well
+          # would put the same text in the .ipa twice.
+          - "Resources/Licenses/**"
+      # The info board's legal data, baked from public/shared/credits.js by
+      # gen-legal.mjs (stage-assets.sh runs it).
+      - path: Generated/Legal.swift
+      # The staged bundle (stage-assets.sh): models, cues, Metal materials,
+      # design tokens. A FOLDER REFERENCE, not a group — the renderer looks a
+      # texture up by the exact URI authored in its GLB ("Textures/colormap.png"),
+      # so the directory structure has to survive into the bundle. Xcode's
+      # default resource copy flattens it.
+      - path: Generated/assets
+        type: folder
+        buildPhase: resources
+      # The LAUNCH IMAGE, and it has to be an asset catalog: tvOS reads one out
+      # of a compiled Assets.car before any app code runs, which is exactly why
+      # the in-app boot cover cannot reach that window. Staged by
+      # stage-assets.sh from the same bake Android's splash uses.
+      - path: Generated/Assets.xcassets
+    info:
+      path: TinyTrackParty/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: Tiny Track Party
+        # Expanded from the build settings at the top of this file — see the
+        # note there for why neither may be a literal.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # NO ENCRYPTION BEYOND HTTPS/WSS, which is the exempt case. Declared here
+        # rather than answered in the console because an upload that does not
+        # carry it PARKS in App Store Connect waiting for the answer, and cannot
+        # reach a TestFlight tester until someone opens the web UI.
+        ITSAppUsesNonExemptEncryption: false
+        # Where the phones load the controller from (Protocol.swift's seam).
+        # Without this the app falls back to the per-push preview deploy.
+        TTPBaseURL: https://tinytrack.couchpad.games
+        # The fonts are the web's variable woff2 baked to static TTFs
+        # (scripts/gen-fonts.py). CoreText cannot read woff2, and a named face
+        # beats building a variation descriptor at every call site.
+        UIAppFonts:
+          - Fredoka-Light.ttf
+          - Fredoka-SemiBold.ttf
+          - Fredoka-Bold.ttf
+          - Nunito-ExtraLight.ttf
+          - Nunito-Light.ttf
+          - Nunito-SemiBold.ttf
+          - Nunito-Bold.ttf
+          - Nunito-ExtraBold.ttf
+        # The relay is wss:// and the origin is https://, so no ATS exception is
+        # needed for the shipping path. A local dev server over http:// is the
+        # exception, and it is scoped to nothing but localhost.
+        # The Top Shelf carousel's items open the app through a URL, and a URL
+        # into an app that declares no scheme opens nothing. The app routes none
+        # of it — a bare tinytrack:// is "just launch", which is what every
+        # carousel item means today (TopShelf/TopShelfProvider.swift).
+        CFBundleURLTypes:
+          - CFBundleURLName: games.couchpad.tinytrack
+            CFBundleURLSchemes: [tinytrack]
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        # Two uses trip tvOS's local-network prompt. The fastlane's ICE
+        # host-candidate checks reach a phone on the same Wi-Fi (Fastlane.swift),
+        # and RoomAdvertiser publishes the open room over Bonjour so a launcher
+        # can offer one-tap join (CONTRACT.md §8). Declining costs neither path:
+        # input falls back to the relay, and the on-screen QR and room code stay
+        # the universal way in.
+        NSLocalNetworkUsageDescription: >-
+          Connects directly to the phones on your network for lower-latency
+          steering, and lets phones nearby find this room without scanning the
+          code. Without it, both still work over the internet relay.
+        # The LiveKit binary REFERENCES capture APIs it never calls; without
+        # these two strings an App Store upload fails ITMS-90683. No media is
+        # ever captured — the peer connections carry a data channel only.
+        NSCameraUsageDescription: >-
+          This app does not use the camera. A networking library references
+          the API.
+        NSMicrophoneUsageDescription: >-
+          This app does not use the microphone. A networking library
+          references the API.
+    settings:
+      configs:
+        Release:
+          PROVISIONING_PROFILE_SPECIFIER: Tiny Track Party tvOS App Store
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: games.couchpad.tinytrack
+        # Names the set inside Generated/Assets.xcassets. Without it actool
+        # compiles the catalogue and nothing points at the image.
+        ASSETCATALOG_COMPILER_LAUNCHIMAGE_NAME: LaunchImage
+        # Likewise for the brand assets — the app icon stack and the two top
+        # shelf banners. Unset, actool compiles them and the home screen still
+        # draws the platform placeholder, which is what this shell shipped.
+        ASSETCATALOG_COMPILER_APPICON_NAME: Brand Assets
+        SWIFT_OBJC_BRIDGING_HEADER: $(SRCROOT)/TinyTrackParty/Bridge/TinyTrackParty-Bridging-Header.h
+        # The C ABI headers, the internal headers they include, and Filament's.
+        HEADER_SEARCH_PATHS:
+          - $(SRCROOT)/../../native/runtime
+          - $(SRCROOT)/../../native/libttp-runtime
+          - $(SRCROOT)/../../native/renderer/include
+          - $(FILAMENT_TVOS_OUT)/filament-$(PLATFORM_NAME)/include
+        # $(PLATFORM_NAME) resolves per build — appletvos or appletvsimulator —
+        # and native/scripts/build-runtime-tvos.sh writes each slice straight
+        # where this looks. Apple TV device and simulator are BOTH arm64, so
+        # there is no fat library to build and no lipo to run; two directories is
+        # the only shape available.
+        LIBRARY_SEARCH_PATHS:
+          - $(SRCROOT)/../../native/build/tvos-$(PLATFORM_NAME)
+          - $(FILAMENT_TVOS_OUT)/filament-$(PLATFORM_NAME)/lib/arm64-$(PLATFORM_NAME)
+        # Our own archives, then Filament's. No -force_load anywhere: TTP_ABI
+        # expands to nothing off emscripten, so there is no keepalive to
+        # preserve and nothing auto-registering that the linker could drop.
+        # Filament's list is only what TtpRenderer.cpp actually pulls in — the
+        # fork installs 31 archives, this names 20.
+        OTHER_LDFLAGS:
+          - -lttp_runtime_tvos
+          - -lttp_renderer
+          - -llibttp_sim
+          - -llibttp_party
+          - -llibttp_track
+          - -llibttp_json
+          - -lttp_mathlib
+          - -lttp_double_conversion
+          - -lc++
+          - -lfilament
+          - -lbackend
+          - -lfilaflat
+          - -lfilabridge
+          - -lutils
+          - -lsmol-v
+          - -lgeometry
+          - -libl
+          - -lktxreader
+          - -labseil
+          - -lzstd
+          - -lgltfio_core
+          - -luberarchive
+          - -luberzlib
+          - -limage
+          - -lstb
+          - -lbasis_transcoder
+          - -lcamutils
+          - -ldracodec
+          - -lmeshoptimizer
+          - -lmikktspace
+    dependencies:
+      # EMBEDS the Top Shelf extension. XcodeGen puts an app-extension dependency
+      # in the app's Embed App Extensions phase for us, which is the whole of what
+      # makes the shelf carousel reach the home screen.
+      - target: TopShelf
+      - package: SwiftDraw
+      - package: LiveKitWebRTC
+      - sdk: Metal.framework
+      - sdk: MetalKit.framework
+      - sdk: QuartzCore.framework
+      - sdk: UIKit.framework
+      - sdk: Foundation.framework
+      - sdk: CoreGraphics.framework
+      - sdk: CoreVideo.framework
+      - sdk: CoreImage.framework      # CIQRCodeGenerator — the join code
+      - sdk: AVFoundation.framework   # the audio device + the music stream
+
+  # THE TOP SHELF CAROUSEL. The asset catalogue's `Top Shelf Image` is one flat
+  # picture; this extension is the only way tvOS shows a SET, and the set is one
+  # frame per cup plus the situations a cup frame cannot say (the four-way split
+  # above all). See TopShelf/TopShelfProvider.swift for the shape, and
+  # scripts/bake-shelf.mjs for where the frames come from.
+  #
+  # The catalogue's static image is NOT replaced by this and must stay current: it
+  # is what the shelf draws if the extension is absent, and it is the 8:3 strip
+  # rather than a full screen.
+  TopShelf:
+    type: app-extension
+    platform: tvOS
+    sources:
+      - path: TopShelf
+        excludes: ["Info.plist"]
+      # The frames and their running order, staged by stage-assets.sh out of
+      # public/assets/brand/tv/shelf. A FOLDER REFERENCE for the same reason the
+      # app's assets are one: the provider looks each frame up by name inside a
+      # `shelf` subdirectory, and Xcode's default resource copy would flatten it.
+      - path: Generated/shelf
+        type: folder
+        buildPhase: resources
+    # THE PLIST IS GENERATED FROM HERE, not hand-written beside the Swift.
+    # XcodeGen REWRITES the file at `info.path` from `properties` on every run, so
+    # a checked-in Info.plist carrying the NSExtension dict is silently replaced by
+    # one without it — the app then builds and signs clean and installd rejects it
+    # on the device with AppexBundleMissingNSExtensionDict, which is a long way
+    # from the cause.
+    info:
+      path: TopShelf/Info.plist
+      properties:
+        CFBundleDisplayName: Tiny Track Party Shelf
+        # THE SAME TWO SETTINGS THE APP READS, and that is the point: an appex
+        # whose CFBundleVersion differs from its host app's is rejected at
+        # upload, so this must not be able to drift.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # DECLARED HERE BECAUSE THE APP'S COPY IS NOT INHERITED. Xcode injects
+        # UIRequiredDeviceCapabilities=[arm64] into an APPLICATION's plist on its
+        # own, but this plist is generated wholesale from these properties — the
+        # same rewrite the NSExtension note below is about — so the appex gets
+        # whatever is written here and nothing else. Without it App Store Connect
+        # refuses the upload: "Invalid Bundle. Your binary,
+        # games.couchpad.tinytrack.topshelf, has a 64-bit architecture slice, so
+        # you must include the arm64 value" (ITMS-90502). The archive, the export
+        # and every local install succeed; only the store says no.
+        UIRequiredDeviceCapabilities:
+          - arm64
+        NSExtension:
+          # The Top Shelf extension point. TVTopShelfContentProvider is only
+          # consulted for a bundle carrying exactly this identifier; anything else
+          # and the shelf silently falls back to the catalogue's static strip.
+          NSExtensionPointIdentifier: com.apple.tv-top-shelf
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ContentProvider
+    settings:
+      configs:
+        Release:
+          # ITS OWN PROFILE. An app-extension is a separate bundle id and cannot
+          # ride the host app's profile.
+          PROVISIONING_PROFILE_SPECIFIER: Tiny Track Party Top Shelf App Store
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: games.couchpad.tinytrack.topshelf
+    dependencies:
+      - sdk: TVServices.framework
+
+  # The screenshot harness. It launches the app with a scenario argument and
+  # shoots the composited screen — which is the only way to photograph a real
+  # Apple TV at all (devicectl has no screenshot verb), and which captures the
+  # Metal layer AND the SwiftUI chrome over it, verified on the device.
+  #
+  # It drives NOTHING through the remote: the scenario stands the screen up from
+  # the app's own harness, exactly as `?scenario=` does for the web gallery.
+  # Automating the real lobby with XCUIRemote presses would be slow and flaky.
+  TinyTrackPartyShots:
+    type: bundle.ui-testing
+    platform: tvOS
+    sources:
+      - TinyTrackPartyUITests
+      # The scenario list, baked from public/shared/galleryScenarios.js by
+      # stage-assets.sh. Compiled into the runner rather than handed to it as an
+      # environment variable, which does not survive the trip to a device (see
+      # scripts/gen-scenarios.mjs).
+      - Generated/ShotScenarios.swift
+    dependencies:
+      - target: TinyTrackParty
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: games.couchpad.tinytrack.shots
+        TEST_TARGET_NAME: TinyTrackParty
+        # A DEVICE run has to code sign, and code signing needs an Info.plist. A
+        # test bundle has nothing to put in one, so let Xcode synthesize it
+        # rather than checking in an empty file.
+        GENERATE_INFOPLIST_FILE: "YES"
+
+schemes:
+  TinyTrackParty:
+    build:
+      targets:
+        TinyTrackParty: all
+        TinyTrackPartyShots: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets: [TinyTrackPartyShots]

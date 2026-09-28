@@ -24,7 +24,7 @@
 // size themselves off the cell, which is already a C++ answer.
 import { ordinal } from '../shared/format.js';
 import { cssHex, loadBiomes } from '../shared/biomes.js';
-import { CAM, Display, assetCache } from './render/Display.js';
+import { CAM, Display, RECT_STRIDE, assetCache } from './render/Display.js';
 import { PerfHud } from './render/PerfHud.js';
 import { ITEM_IDS } from './engine/contract.js';
 import { loadItemIcons, CAR_BODY_COLORS } from '../shared/itemIcons.js';
@@ -45,11 +45,24 @@ const ITEM_ICONS = {};
 // id having an icon; a missing entry would flash an empty chip).
 const ITEM_KEYS = [...ITEM_IDS];
 
-// A centred card (FINISHED banner or reconnect QR) owns this car's cell. ONE
-// spelling: it feeds both the renderer's per-cell mask (steer bar hides, one
-// layer down) and the DOM chrome around it — two consumers that must agree or
-// the bar shows under a card.
-const cardOwnsCell = (c) => !!(c.finished || c.reconnecting);
+// The renderer's per-cell mask, one layer down: which cells drop the STEER BAR.
+// Under either centred card. The FINISHED cell because the race is over for
+// them; the reconnect cell because the bar reports a phone that is gone — it
+// would freeze on the last tilt it heard and read as live input — and because
+// the card sits on top of it in a split cell. The DOM chrome in _loop hides
+// LESS: only the FINISHED card owns its cell (place and lap go), while the
+// reconnect QR leaves the HUD reporting a car that is still in the race.
+const cellDropsSteerBar = (c) => !!(c.finished || c.reconnecting);
+
+// A unitless `:root` token as a number, or null when the stylesheet that
+// declares it did not load. NULL RATHER THAN A DEFAULT: the one fallback for a
+// missing safe inset is the C++ side's, and a second one spelled here would be
+// a second place to change it. The caller skips the push instead.
+function cssFraction(name) {
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(name);
+  const v = Number.parseFloat(raw);
+  return Number.isFinite(v) ? v : null;
+}
 
 // The band the drawing buffer lives in, in lines, whatever the screen is.
 //
@@ -63,12 +76,11 @@ const cardOwnsCell = (c) => !!(c.finished || c.reconnecting);
 //
 // So the number is DECIDED, per device, from what its frames actually cost —
 // _adaptScale below, over the rule in native/libttp-runtime/ttp/render_scale.h.
-// These two are only the band it may move in. The ceiling is 4K because past it
-// nobody is sitting close enough. The floor is 720 lines and is deliberately
-// BELOW the commonest panel: a floor equal to the screen collapses the band to a
-// point on an ordinary 1080p TV, which is the exact device this exists for — it
-// could not have dropped a single pixel, and the whole mechanism would have been
-// a sharpness feature for good screens wearing a weak-device justification.
+// This is only the CEILING it may move under, and it is 4K because past that
+// nobody is sitting close enough. THE FLOOR IS NOT HERE: render_scale.h's rungs
+// are line counts and its bottom rung is the softest picture this game will
+// show, so that decision lives in one place for every shell instead of being a
+// fraction that meant 360 lines on one surface and 720 on another.
 //
 // Lines, not pixel counts: height is the axis every display shares, so an
 // ultrawide keeps its full width rather than being letterboxed into a budget.
@@ -80,12 +92,27 @@ const cardOwnsCell = (c) => !!(c.finished || c.reconnecting);
 // BYPASSES the whole mechanism — that is how the trailer renders a true 4K
 // master, and how a fixed resolution is pinned for an A/B.
 const MAX_BUFFER_H = 2160;
-const MIN_BUFFER_H = 720;
 
-// How often the scale is re-decided. The C++ holds are seconds long, so this
-// only has to be fast enough to catch the load changing (a race starting behind
-// a lobby, a fourth player joining) within about a second of it happening.
-const SCALE_POLL_MS = 1000;
+// The most `?supersample=` may ask for. A ceiling on the debug ceiling: this is
+// the one path allowed past MAX_BUFFER_H, and a fat-fingered 30 in a URL is a
+// buffer allocation that takes the tab down rather than a slow frame.
+const MAX_SUPERSAMPLE = 8;
+
+// …and it ARMS this long after boot, rather than applying from the first frame.
+//
+// THE LOAD MUST ARRIVE AFTER THE PANEL PERIOD IS KNOWN, or the demo lands
+// exactly on the one case the fallback cannot see. `presentBaseline` learns the
+// device's own FASTEST present and only ever lowers it, so a page that is
+// heavy from frame one has a p05 equal to its p95, reads as a perfectly steady
+// cadence however slow it is, and never adapts — render_scale.h says so at the
+// fallback, and names cheap screens (a welcome board, a lobby) as where an
+// honest period gets learned. Measured here before this existed: 4200x2700 at
+// 1.5 fps, floor learned as 642 ms, ratio 1.09, no step, forever.
+//
+// So the scene runs at the ordinary ceiling first — which is the real boot
+// sequence, where a welcome board precedes a race — and the load lands on a
+// rule that knows what this panel can do.
+const SUPERSAMPLE_ARM_MS = 3000;
 
 // NOTHING IS REMEMBERED ACROSS SESSIONS, on purpose. Persisting the learned
 // scale looks like free value — a weak TV would skip the seconds it spends
@@ -130,6 +157,8 @@ export class Stage {
     this._last = 0;
     this._timeScale = 1;
     this._fixedDt = 0;       // >0: ignore the rAF clock entirely (see setFixedStep)
+    this._undrawn = false;   // step everything but the draw (see setUndrawn)
+    this._clockMs = 0;       // the frame clock: dt summed, handed to onFrame
     this._track = null;
     this._biome = 'grass';   // resolved from the track's cup, or forced by biomeOverride
     this.display = null;     // set by boot()
@@ -173,37 +202,94 @@ export class Stage {
     // resize.
     const automation = this._automation =
         typeof navigator !== 'undefined' && !!navigator.webdriver;
-    const dprCap = parseFloat(new URLSearchParams(location.search).get('dpr'));
+    const params = new URLSearchParams(location.search);
+    const dprCap = parseFloat(params.get('dpr'));
     this._dprRequest = Number.isFinite(dprCap) && dprCap > 0 ? dprCap : null;
     this._autoCap = automation ? 0.25 : 2;
+    // DEBUG: ?supersample=N raises the band's CEILING to N x the layout size,
+    // above the panel's own resolution and past MAX_BUFFER_H.
+    //
+    // It exists because the mechanism is otherwise unwatchable on a good
+    // machine: the rule only steps down when frames genuinely cost too much, and
+    // four cells at a laptop's own resolution do not. Every other way of
+    // provoking it lies to something — a fabricated GPU cost, a fake panel
+    // period — and a rule whose whole contract is "hand over measurements, not
+    // opinions" is not worth demonstrating on invented ones. This makes the
+    // frames ACTUALLY expensive (at 3 it is nine times the fill), so everything
+    // downstream is real: real cost, real percentiles, real cost model, real
+    // resize. Where it settles is the honest answer to "what rung does this
+    // machine hold four cells at".
+    //
+    // The three terms it overrides are each deliberate — the panel's own
+    // resolution (this never supersamples), the 2x cap, and MAX_BUFFER_H — so
+    // this is the one place allowed past them, and only ever from a URL nobody
+    // reaches by accident.
+    //
+    // NOT UNDER AUTOMATION, whatever the URL says: the E2E cap exists to keep
+    // the suite fast, and a stray parameter must not be able to hand it a
+    // 20-megapixel buffer per cell.
+    const ss = parseFloat(params.get('supersample'));
+    this._superSample = !automation && Number.isFinite(ss) && ss > 0
+        ? Math.min(ss, MAX_SUPERSAMPLE) : 0;
+    // DEBUG (?dresskeep=F, ?dresssheets=0): the two halves of the dressing
+    // ablation. ttp_display.h says what they are for and what they measured.
+    const dk = parseFloat(params.get('dresskeep'));
+    this._dressKeep = Number.isFinite(dk) && dk >= 0 && dk < 1 ? dk : null;
+    this._dressSheetsOff = params.get('dresssheets') === '0';
+    // DEBUG (?features=0x800DFFC): the whole ttp_display_debug_features mask,
+    // for the bits that have no knob of their own (the deck's far-ribbon ones).
+    // Seven hex digits: 0x800DFFC and 0x80DFFC are different masks.
+    const fm = parseInt(params.get('features'), 16);
+    this._features = Number.isFinite(fm) ? fm : null;
+    this._superArmed = false;
+    this._superReached = false;
     this._dpr = 1;           // real value comes from the _sizeCanvas below
-    // The adaptive scale's state: the scale in force, when it last moved, and
-    // when it was last re-decided. Infinity rather than a number, so the band's
-    // ceiling is the only place that knows what "as sharp as this screen allows"
-    // means (_sizeCanvas clamps it before the first frame).
+    // THE OPERATING POINT THIS SIDE PERFORMS — the buffer scale it sized and the
+    // cadence it paced. Not a second opinion about what to do: everything the
+    // decision is MADE from (the window, the percentiles, the fastest present,
+    // the cost model, the clocks) lives in ttp/render_scale_controller.h and
+    // folds off the same monitor `perf` feeds. This is the record of the answer.
+    //
+    // Infinity rather than a number, so the band's ceiling is the only place
+    // that knows what "as sharp as this screen allows" means (_sizeCanvas clamps
+    // it before the first frame, and the rule adopts the same ceiling on its
+    // first poll).
     this._autoScale = Infinity;
-    this._scaleAt = 0;
-    // Left at 0 deliberately, so the first decision is not held back: `t` is a
-    // rAF timestamp measured from page load, which means the first poll already
-    // satisfies both holds and a device that cannot hold its opening frames is
-    // rescued at once rather than 2.5 s in. Only a step DOWN can come of it —
-    // the scale starts clamped at the ceiling, so there is nothing to rise into.
-    this._scaleMovedAt = 0;
-    this._presentFloor = 0;  // the running fastest present (ttp_display_present_floor)
+    // `_divisor` is "render every Nth rAF callback" and is the other half of the
+    // point — 2 on a 120 Hz display holding the desired 1080@60, 1 once the
+    // device proves it can drive 120.
+    //
+    // The SIM still ticks on every callback: only the picture is paced, so
+    // steering keeps the display's full cadence and what doubles is picture
+    // latency, not input latency. (The Android shell paces the same way, for the
+    // same reason — see its vsyncInterval.)
+    this._divisor = 1;
+    this._vsyncCount = 0;
+    this._pendingDt = 0;
     this._canvas = document.createElement('canvas');
     this._canvas.id = 'scene-canvas';
     this._canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
     // FIRST child: the HUD overlays are later siblings and paint over it.
     container.insertBefore(this._canvas, container.firstChild);
+    // Frame-cost readout, OFF until asked for — `?perf=1` here, "P" at any
+    // point, or window.__perf.show(). Hiding stops the DRAWING; whether it keeps
+    // MEASURING is the next line's business. BEFORE the first _sizeCanvas, which
+    // is the one place that tells it the scale the buffer was sized at — a
+    // resize is not guaranteed to follow boot, so a HUD built after it would
+    // report that scale as 1 for the whole session.
+    this.perf = new PerfHud(this.container, this._canvas);
+    if (params.get('perf') === '1') this.perf.show();
+    // The scale is decided from the perf HUD's own measurements, so it has to
+    // keep measuring with the panel hidden — which is the ordinary state.
+    if (this._dprRequest == null && !automation) this.perf.instrument(true);
+    // The operating point the readout judges against, declared at boot and again
+    // whenever either half moves (_adaptScale). Nothing is known about the panel
+    // yet, which ttp_perf.h reads as "assume 60".
+    this._pacedMs = 0;
+    this._pacedDivisor = this._divisor;
+    this.perf.pacing(this._pacedMs, this._pacedDivisor);
     this._sizeCanvas();
     this._initOverlay();
-    // Frame-cost readout, on by default while the game is in development ("P"
-    // hides it). Hiding stops the DRAWING; whether it keeps MEASURING is the
-    // next line's business.
-    this.perf = new PerfHud(this.container, this._canvas);
-    // The scale is decided from the perf HUD's own measurements, so it has to
-    // keep measuring with the panel hidden — which is the shipped state.
-    if (this._dprRequest == null && !automation) this.perf.instrument(true);
     this._assets = assetCache();
     this._free = null;       // free-cam state, once enableUserCamera() runs
     this._cellSig = null;    // last pushed cell list / camera mode (see _loop)
@@ -225,6 +311,25 @@ export class Stage {
   // second renderer to fall back to.
   async boot() {
     this.display = await Display.create(this._canvas);
+    if (this._dressKeep !== null) this.display.dressKeep(this._dressKeep);
+    if (this._dressSheetsOff) this.display.dressSheets(false);
+    if (this._features !== null) this.display.debugFeatures(this._features);
+    // RECONCILE THE SIZE THE RENDERER WAS BORN AT. ttp_display_create is handed
+    // the buffer's dimensions and Display.create THEN fetches the .filamat
+    // blobs, so `display` is null for a network round trip — and _onResize drops
+    // its half of a resize for exactly as long. A window change landing in there
+    // moves the canvas and leaves the viewport short, which draws the picture at
+    // the BOTTOM of a taller buffer (GL's origin) under a bar of the black clear.
+    // It does not heal: the only other caller of _onResize is _adaptScale, and a
+    // machine sitting at the band's ceiling never steps. NEW GAME is the change
+    // most likely to land here — its click carries the fullscreen unlock, and
+    // the transition is slow enough to reach mid-boot. A no-op when they agree.
+    this.display.resize(this._canvas.width, this._canvas.height);
+    // The TV overscan margin the HUD gets placed inside, read from the ONE place
+    // it is authored (theme.css's :root) rather than spelled again here. Sticky
+    // in C++, so it belongs beside the boot resize and not in _onResize.
+    const safeX = cssFraction('--safe-frac-x'), safeY = cssFraction('--safe-frac-y');
+    if (safeX != null && safeY != null) this.display.safeInsets(safeX, safeY);
     // The other half of the automation budget (see the DPR cap in the ctor):
     // drop the per-track shadow bake. Must be set before any setTrack, since
     // the map is baked into the scene at build time.
@@ -236,16 +341,34 @@ export class Stage {
   // A function of the box, so it is asked for rather than stored: the same tab
   // moved to a 4K screen, or a preview card that grows, moves both ends.
   //
-  // The floor is the softest picture this will show — but only where there is
-  // room for it to be a floor at all. Under the automation cap, or in a window
-  // shorter than MIN_BUFFER_H, the min() collapses the band onto the ceiling and
-  // nothing can adapt, which is exactly right: the E2E suite's 0.25 and a
-  // preview card's half scale are not budgets to be renegotiated.
+  // THERE IS NO FLOOR HERE ANY MORE. render_scale.h's rungs are LINE COUNTS and
+  // its bottom rung is the floor, so the softest picture this game will show is
+  // one number in one place instead of a fraction that meant something different
+  // on every window size. `min: 0` is "narrow me no further".
+  //
+  // The ceiling still collapses the band where it should: under the automation
+  // cap or a preview card's half scale, min === max and nothing adapts, which is
+  // exactly right — those are not budgets to be renegotiated.
   _scaleBand() {
     const ch = Math.max(1, this.container.clientHeight);
+    if (this._superArmed) {
+      // Held AT the debug ceiling until the point has been there once
+      // (`_superReached`, latched in _adaptScale); released after, so the rescue
+      // this exists to show is not fought by its own floor.
+      return {
+        min: this._superReached ? 0 : this._superSample,
+        max: this._superSample,
+        baseLines: ch
+      };
+    }
     const max = Math.min(window.devicePixelRatio || 1, this._autoCap, MAX_BUFFER_H / ch);
-    return { min: Math.min(max, MIN_BUFFER_H / ch), max };
+    return { min: 0, max, baseLines: ch };
   }
+
+  // NO PANEL PERIOD TO DECLARE. There is no reliable web API for refresh rate,
+  // so this shell passes 0 and the rule learns one off the tick series — see
+  // RenderScaleController::panelMs, and `scalePanelMs()` for reading it back.
+  // The two TV shells have a real answer and pass it.
 
   // Size the drawing buffer to the container, and pick the scale it is sized by.
   // The scale is resolved HERE rather than at construction because the band is a
@@ -263,12 +386,22 @@ export class Stage {
     const h = Math.max(1, Math.round(ch * this._dpr));
     this._canvas.width = w;
     this._canvas.height = h;
+    // The readout reports the scale its PIXELS were rendered at, which is this
+    // one and not devicePixelRatio — they differ under ?dpr= and under every
+    // adaptive step. Written here because this is the only place it is decided.
+    this.perf.dpr = this._dpr;
     return { w, h };
   }
 
   _onResize() {
     const { w, h } = this._sizeCanvas();
     if (this.display) this.display.resize(w, h);
+    // DROP THE WINDOW, every time — this is the one place the buffer changes
+    // size, and the readout is LABELLED with the size it was measured at. Held,
+    // a line reads "960x540" over percentiles half of which were drawn at
+    // 1280x720; worse, _adaptScale then fits its cost model from a point that
+    // belongs to neither scale and banks it as prevCostMs.
+    this.perf.reset();
     // The resize reallocated (and cleared) the drawing buffer. A running loop
     // repaints on the next rAF, but a preview idled by pauseAfterFrame would stay
     // blank forever (frozen cards have no play button) — repaint one frame, re-idle.
@@ -410,6 +543,15 @@ export class Stage {
             await this.display.setTrack(this._track.id, this._biome, roster, this._assets);
             this._sceneSig = sceneSig;
             this._rosterSig = rosterSig;
+            // A FULL BUILD ONLY. The reroster path above is an in-place re-dress
+            // of the same scene — same meshes, same cost — so it inherits its own
+            // scale legitimately and must not re-arm the recovery hold.
+            this.display.scaleScene(
+                typeof performance !== 'undefined' ? performance.now() : 0);
+            // …and the window describes the scene that just went away, exactly as
+            // it does after a resize. Left in place, the first decision about the
+            // NEW scene is made from the old one's frames.
+            this.perf.reset();
           } catch (e) {
             this._sceneSig = this._rosterSig = null; // let the next change retry
             console.error('[stage] scene build failed', e);
@@ -424,6 +566,16 @@ export class Stage {
       })();
     }
     return this._rebuilding;
+  }
+
+  // Has the scene the shell last asked for actually been meshed? The COUNTDOWN
+  // GATE's half of the question (ttp_race.h): one bit, and the frame evidence
+  // that goes with it is the rule's to read. `_rebuilding` covers a build still
+  // in flight AND one the queue has not started yet, which is why this is not
+  // `display.built` on its own — that flag describes the scene on screen, which
+  // during a swap is the one being replaced.
+  sceneBuilt() {
+    return !this._rebuilding && !!(this.display && this.display.built);
   }
 
   // Mesh a track AHEAD of the race that will run on it, and promise the next
@@ -742,13 +894,28 @@ export class Stage {
   // The rects are truncated to whole DEVICE pixels C++-side, so a cell edge can
   // land on a half CSS pixel at dpr 2. That is deliberate: the label follows the
   // edge the player actually sees, which is where the renderer put its viewport.
+  // The cell grid in CSS pixels, for placing the DOM chrome over it.
+  //
+  // The ABI answers FRACTIONS of the surface, so what they are multiplied by is
+  // the container — never the buffer, and therefore never anything the adaptive
+  // render scale can move. `_dpr` used to be the divisor here and its only job
+  // was to undo a scaling the ABI had no reason to apply.
   _cellRects(n) {
     const packed = this.display.cellRects(n);
-    const k = 1 / this._dpr;
+    const cw = Math.max(1, this.container.clientWidth);
+    const ch = Math.max(1, this.container.clientHeight);
     const out = [];
-    for (let i = 0; i + 3 < packed.length; i += 4) {
-      out.push({ x: packed[i] * k, y: packed[i + 1] * k,
-                 w: packed[i + 2] * k, h: packed[i + 3] * k });
+    // TWO RECTS PER CELL, and which one a caller wants is a real choice: `safe`
+    // for anything anchored to an EDGE, since a television may be cropping that
+    // edge, and the outer rect for anything centred on the PICTURE. Both come
+    // out of one read so they cannot describe different cells.
+    for (let i = 0; i + RECT_STRIDE - 1 < packed.length; i += RECT_STRIDE) {
+      out.push({
+        x: packed[i] * cw, y: packed[i + 1] * ch,
+        w: packed[i + 2] * cw, h: packed[i + 3] * ch,
+        safe: { x: packed[i + 4] * cw, y: packed[i + 5] * ch,
+                w: packed[i + 6] * cw, h: packed[i + 7] * ch },
+      });
     }
     return out;
   }
@@ -767,7 +934,7 @@ export class Stage {
     let mask = 0;
     ids.forEach((id, i) => {
       const c = this.cars.get(id);
-      if (c && cardOwnsCell(c)) mask |= 1 << i;
+      if (c && cellDropsSteerBar(c)) mask |= 1 << i;
     });
     if (mask !== this._cardMask) { this._cardMask = mask; this.display.cellCards(mask); }
     if (this._dividers !== this._divPushed) {
@@ -980,11 +1147,14 @@ export class Stage {
   // 60fps; the held frame renders fully, so resuming picks up seamlessly.
   pauseAfterFrame() { if (this._running) this._idleAfterFrame = true; }
 
-  // ADAPTIVE resolution: re-decide the render scale about once a second from
-  // what the last window of frames cost. Everything JUDGED about those numbers
-  // is C++'s (native/libttp-runtime/ttp/render_scale.h, which carries the whole
-  // argument); this half measures, hands the measurements over unjudged, and
-  // performs the resize.
+  // ADAPTIVE resolution: ask, and perform the answer.
+  //
+  // NOTHING IS DECIDED HERE and nothing is even measured here any more. The
+  // window is the readout's (PerfHud feeds ttp_perf_sample every callback), the
+  // percentiles, the fastest present, the cost model and the clocks are all
+  // ttp/render_scale_controller.h's, and the rule is ttp/render_scale.h's. What
+  // is left on this side is the two things only a browser knows — the band, and
+  // that a hidden tab is not a device — plus the resize.
   //
   // WHAT "low hardware" MEANS here: not a device probe. There is no honest one
   // in a browser — a UA string lies and WEBGL_debug_renderer_info is being taken
@@ -998,35 +1168,80 @@ export class Stage {
   // problem to be special-cased: a lobby that has climbed then meets a race that
   // has not, notices inside a second and gives the pixels back, because the
   // holds are asymmetric.
+  // DEBUG (?supersample=): arm the raised ceiling, and get there THROUGH THE
+  // BAND rather than by writing the scale.
+  //
+  // THE SHELL MAY NOT MOVE THE OPERATING POINT. It tried, in the first draft of
+  // this, and the bug is the exact one the whole layer exists to prevent: the
+  // shell set `_autoScale` to the new ceiling, the rule went on deciding from
+  // the point IT still held, and the "rescue" that followed was arithmetic on a
+  // scale nobody was drawing at. It happened to land on the floor, which is
+  // what made it look like it had worked.
+  //
+  // So the band does it. `min` means "narrow me no further" — a shell saying
+  // the floor is 3x is using a documented input for its documented meaning, and
+  // the rule moves the point itself and stays the only thing that ever has. The
+  // floor is released the moment the point reaches it (`_superReached` latches,
+  // so a rescue afterwards is not forced back up), and from there the rule steps
+  // down the ladder normally.
+  //
+  // WHY NOT JUST RAISE THE CEILING AND LET IT CLIMB: a climb needs the cost
+  // model, which needs a GPU timer, so on WebKit it would never arrive at all.
+  _armSuperSample(t) {
+    if (!this._superSample || this._superArmed || t < SUPERSAMPLE_ARM_MS) return;
+    this._superArmed = true;
+    console.info(`[stage] supersample armed: ceiling -> ${this._superSample}x`
+        + ` (${Math.round(this._superSample * this.container.clientHeight)} lines)`);
+  }
+
   _adaptScale(t) {
     if (this._dprRequest != null || this._automation) return;   // a named scale is not ours to move
-    if (t - this._scaleAt < SCALE_POLL_MS) return;
-    // A throttled tab presents at whatever rate the browser feels like, and none
-    // of it describes the device. Nothing is measured or decided while hidden.
-    if (typeof document !== 'undefined' && document.hidden) { this._scaleAt = t; return; }
-    this._scaleAt = t;
-    const s = this.perf.sample();
-    // The fastest present is the one number carried between windows, so the fold
-    // happens here — but WHICH samples may become one is the rule's, not ours.
-    this._presentFloor = this.display.presentFloor(this._presentFloor, s.frame.p05 || 0);
+    // A THROTTLED TAB IS NOT THIS DEVICE. A hidden tab presents at whatever rate
+    // the browser feels like, so the window fills with frames that describe
+    // nothing — drop it rather than decide on it, which is the readout's own
+    // rule (stale history is worse than none) applied to the same monitor.
+    if (typeof document !== 'undefined' && document.hidden) { this.perf.reset(); return; }
+    this._armSuperSample(t);
+    // …and release its floor once the point has actually reached it. Latched
+    // here rather than inside _scaleBand, which _sizeCanvas also calls and which
+    // has no business having a side effect.
+    if (this._superArmed && this._autoScale >= this._superSample - 1e-9) {
+      this._superReached = true;
+    }
     const band = this._scaleBand();
-    const next = this.display.scaleStep(this._autoScale, {
-      // A missing GPU timer, and a percentile no frame has landed in yet, are
-      // both "nothing measured" — 0, which the rule reads as no signal.
-      gpuShareP95: s.gpuTimer === 'ext' ? s.gpuUsedP95 || 0 : 0,
-      gpuFrames: s.gpu.n,
-      presentP95Ms: s.frame.p95 || 0,
-      presentFloorMs: this._presentFloor,
-      presentFrames: s.frame.n,
-    }, (t - this._scaleMovedAt) / 1000, band.min, band.max);
-    if (next === this._autoScale) return;
-    this._autoScale = next;
-    this._scaleMovedAt = t;
+    // 0 for the panel period: no web API answers it, so the rule learns one.
+    const was = this._autoScale;
+    const step = this.display.scalePoll(t, band.min, band.max, band.baseLines, 0);
+    if (step) [this._autoScale, this._divisor] = step;
+    // THE READOUT IS JUDGED AGAINST THE POINT THE RULE IS STEERING, so it hears
+    // both halves whenever either moves — and the panel period is one of them
+    // here, because this shell has none to declare and the rule LEARNS it (it
+    // only ever falls, as the box turns out to be capable of a faster present
+    // than anything seen yet). Declared on change rather than every frame: a
+    // budget still quoting the first estimate paints an honest box red, and a
+    // per-frame setter is a boundary crossing for a value that moves a handful
+    // of times a session.
+    const panelMs = this.display.scalePanelMs();
+    if (panelMs !== this._pacedMs || this._divisor !== this._pacedDivisor) {
+      this._pacedMs = panelMs;
+      this._pacedDivisor = this._divisor;
+      this.perf.pacing(panelMs, this._divisor);
+    }
+    if (!step) return;
+    // WHAT THE RULE ANSWERED, on the console, because a move is an EVENT and the
+    // readout only ever shows the current size. Both TV shells print this and
+    // the browser did not, so the one platform you can actually sit in front of
+    // was the one where a step left no trace — you had to catch the corner
+    // changing. Only on a MOVE (the poll is silent), so a settled session says
+    // nothing at all.
+    console.info(`[stage] scale ${was.toFixed(3)} -> ${this._autoScale.toFixed(3)}`
+        + ` (${Math.round(this._autoScale * band.baseLines)} lines)`
+        + ` | ${Math.round(1000 / (panelMs || 1000 / 60))}Hz / divisor ${this._divisor}`);
+    // …and _onResize drops the window a second time, once the buffer has
+    // actually changed size. The rule dropped it at the decision; this catches
+    // the reallocation's own stall, which would otherwise be the first thing the
+    // next decision sees.
     this._onResize();
-    // The window that just decided this describes the OLD resolution. Keeping it
-    // would judge the new one on the old one's frames for the next two seconds,
-    // which is how a controller talks itself into a second step it does not need.
-    this.perf.reset();
   }
 
   // DEBUG resolution scale: re-point the drawing buffer at n x the layout size,
@@ -1073,15 +1288,126 @@ export class Stage {
     const dt = (this._fixedDt || Math.min(Math.max(rawMs, 0) / 1000, 0.05)) * this._timeScale;
     this._last = t;
     if (rawMs > 0 && rawMs < 1000) this.perf.tick(t, rawMs); // skip absurd post-stall deltas
-    if (this.onFrame) this.onFrame(dt);
+    // The frame clock rides along: dt summed, so under a capture gate it is the sim's
+    // time and not the wall's, which a frame drawn in 300 ms would otherwise be.
+    this._clockMs += dt * 1000;
+    if (this.onFrame) this.onFrame(dt, this._clockMs);
     if (!this.display) { this._scheduleNext(); return; }
+    if (this._undrawn) {
+      // Everything a frame does before the GPU — the sim above, the bookkeeping, the
+      // renderer's own state — and no draw. See setUndrawn.
+      this._syncCells();
+      this.display.advance(dt);
+      this._scheduleNext();
+      return;
+    }
     this._adaptScale(t);
+    // Derived bytes the last frame landed. HERE and not at the end of a build:
+    // a WebGL readback cannot complete inside the call that issues it, so the
+    // build only stages and this is where the bake and the silhouettes actually
+    // arrive (ttp_display.h). One integer on an idle frame, and it is deliberately
+    // not awaited — nothing on screen waits for a cache write.
+    // Unawaited, and its failures are swallowed: nothing on screen waits for a
+    // cache write, and a rejected IndexedDB put must not reach the page as an
+    // unhandled rejection from the frame loop.
+    this.display.writeReadyBlobs().catch(() => {});
 
+    const ids = this._syncCells();
+
+    // THE PACING GATE. Everything above is the sim and the scene's bookkeeping
+    // and runs every callback; everything below draws. dt is ACCUMULATED across
+    // the skipped callbacks rather than dropped, because the renderer's own
+    // clock (box bob, cloud drift, skid decay, camera damping) is cosmetic and
+    // would otherwise run at a fraction speed whenever the divisor is above 1.
+    this._vsyncCount++;
+    this._pendingDt += dt;
+    if (this._divisor > 1 && this._vsyncCount % this._divisor !== 0) {
+      this._scheduleNext();
+      return;
+    }
+    const frameDt = this._pendingDt;
+    this._pendingDt = 0;
+
+    if (ids.length === 0) {
+      if (this._free) this._stepFreeCam(dt);
+      this._renderFrame(frameDt, 0);
+      this._hideCellHud();
+      this._scheduleNext();
+      return;
+    }
+
+    this._renderFrame(frameDt, ids.length);
+
+    // Place this frame's HUD over the cells the renderer just drew — ASKING it
+    // where they are (_cellRects) instead of scoring the same grid again here.
+    // The placement only moves on a seat edit, a resize or a card flip, so the
+    // ~40 style writes below latch on a signature of exactly those inputs and
+    // the steady-state frame writes no DOM (this file's own rule).
+    const cells = this._cellRects(ids.length);
+    const hudSig = this._cellSig + '|'
+        + cells.map((r) => [r.x, r.y, r.w, r.h,
+                            r.safe.x, r.safe.y, r.safe.w, r.safe.h].join(',')).join(';') + '|'
+        + ids.map((id) => {
+          const c = this.cars.get(id);
+          return (c.finished ? 'f' : '') + (c.reconnecting ? 'r' : '');
+        }).join(',');
+    if (hudSig === this._hudSig) { this._scheduleNext(); return; }
+    this._hudSig = hudSig;
+    ids.forEach((id, i) => {
+      const c = this.cars.get(id);
+      const r = cells[i];
+      if (!r) return; // more cells than rects: only if the two lists disagree
+      // The corner label is EDGE-ANCHORED, so it measures from the SAFE rect:
+      // the corner it hangs in may be under a television's bezel, and a name
+      // nobody can read is the same as no name. The centred cards below keep
+      // the picture rect.
+      if (c.label) {
+        c.label.style.display = 'block';
+        c.label.style.left = r.safe.x + 'px';
+        c.label.style.top = r.safe.y + 'px';
+      }
+      // place/lap is hidden only under the FINISHED card — the race is over for
+      // them. The reconnect card leaves them up (the steer bar is
+      // _syncOverlay's, one layer down, and hides under both — cellDropsSteerBar
+      // above).
+      if (c.placeEl) {
+        c.placeEl.style.display = c.finished ? 'none' : 'block';
+        c.placeEl.style.left = (r.safe.x + r.safe.w - 12) + 'px';
+        c.placeEl.style.top = (r.safe.y + 11) + 'px';
+      }
+      if (c.finishEl) {
+        c.finishEl.style.display = c.finished ? 'flex' : 'none';
+        if (c.finished) {
+          c.finishEl.style.left = (r.x + r.w / 2) + 'px';
+          c.finishEl.style.top = (r.y + r.h / 2) + 'px';
+        }
+      }
+      // Reconnect QR: centred exactly like FINISHED, while their car keeps its
+      // place on track. FINISHED wins the cell if both.
+      // The card also learns its cell's size: the QR is sized off the cell (half
+      // its height, see .cell-reconnect in display.css), so one player's card
+      // fills the screen while a split cell's stays inside its own quarter.
+      if (c.reconnectEl) {
+        const showRc = c.reconnecting && !c.finished;
+        c.reconnectEl.style.display = showRc ? 'flex' : 'none';
+        if (showRc) {
+          c.reconnectEl.style.left = (r.x + r.w / 2) + 'px';
+          c.reconnectEl.style.top = (r.y + r.h / 2) + 'px';
+          c.reconnectEl.style.setProperty('--cell-w', r.w + 'px');
+          c.reconnectEl.style.setProperty('--cell-h', r.h + 'px');
+        }
+      }
+    });
+    this._scheduleNext();
+  }
+
+  // Which cars own cells, which overlay flags, and which camera rig is running
+  // change on a seat edit — not per frame. Push them only when they actually
+  // move, so the steady-state frame really is one call with a dt. Returns the
+  // cell owners, in order.
+  _syncCells() {
     const ids = this.soloCam ? [] : this._order.filter((id) => this.cars.has(id));
     if (ids.length) this._hudHidden = false; // cells are back; the HUD gets placed below
-    // Which cars own cells, and which camera rig is running, change on a seat
-    // edit — not per frame. Push them only when they actually move, so the
-    // steady-state frame really is one call with a dt.
     const cellSig = ids.join(',');
     if (cellSig !== this._cellSig) { this._cellSig = cellSig; this.display.cells(ids); }
     // …and the same for the cell overlay's two flags, BEFORE the frame draws
@@ -1093,72 +1419,17 @@ export class Stage {
         : this.bboxOrbit ? CAM.BBOX
         : this.orbit ? CAM.ORBIT : CAM.STILL;
     if (mode !== null && mode !== this._camMode) { this._camMode = mode; this.display.camera(mode); }
-
-    if (ids.length === 0) {
-      if (this._free) this._stepFreeCam(dt);
-      this._renderFrame(dt, 0);
-      this._hideCellHud();
-      this._scheduleNext();
-      return;
-    }
-
-    this._renderFrame(dt, ids.length);
-
-    // Place this frame's HUD over the cells the renderer just drew — ASKING it
-    // where they are (_cellRects) instead of scoring the same grid again here.
-    // The placement only moves on a seat edit, a resize or a card flip, so the
-    // ~40 style writes below latch on a signature of exactly those inputs and
-    // the steady-state frame writes no DOM (this file's own rule).
-    const cells = this._cellRects(ids.length);
-    const hudSig = cellSig + '|'
-        + cells.map((r) => r.x + ',' + r.y + ',' + r.w + ',' + r.h).join(';') + '|'
-        + ids.map((id) => {
-          const c = this.cars.get(id);
-          return (c.finished ? 'f' : '') + (c.reconnecting ? 'r' : '');
-        }).join(',');
-    if (hudSig === this._hudSig) { this._scheduleNext(); return; }
-    this._hudSig = hudSig;
-    ids.forEach((id, i) => {
-      const c = this.cars.get(id);
-      const r = cells[i];
-      if (!r) return; // more cells than rects: only if the two lists disagree
-      // The corner label is hidden while the reconnect card owns the cell — that
-      // card already shows the name, so the label would just duplicate it. (The
-      // FINISHED card has no name, so it keeps the label.)
-      if (c.label) {
-        c.label.style.display = c.reconnecting ? 'none' : 'block';
-        c.label.style.left = r.x + 'px';
-        c.label.style.top = r.y + 'px';
-      }
-      // place/lap is hidden while a centred card owns the cell; the steer bar
-      // goes with it, one layer down — cardOwnsCell is the one predicate both
-      // consumers read (pushed as _syncOverlay's bitmask above).
-      const cardInCell = cardOwnsCell(c);
-      if (c.placeEl) {
-        c.placeEl.style.display = cardInCell ? 'none' : 'block';
-        c.placeEl.style.left = (r.x + r.w - 12) + 'px';
-        c.placeEl.style.top = (r.y + 11) + 'px';
-      }
-      if (c.finishEl) {
-        c.finishEl.style.display = c.finished ? 'flex' : 'none';
-        if (c.finished) {
-          c.finishEl.style.left = (r.x + r.w / 2) + 'px';
-          c.finishEl.style.top = (r.y + r.h / 2) + 'px';
-        }
-      }
-      // Reconnect QR: centred exactly like FINISHED, while their car keeps its
-      // place on track. FINISHED wins the cell if both.
-      if (c.reconnectEl) {
-        const showRc = c.reconnecting && !c.finished;
-        c.reconnectEl.style.display = showRc ? 'flex' : 'none';
-        if (showRc) {
-          c.reconnectEl.style.left = (r.x + r.w / 2) + 'px';
-          c.reconnectEl.style.top = (r.y + r.h / 2) + 'px';
-        }
-      }
-    });
-    this._scheduleNext();
+    return ids;
   }
+
+  // UNDRAWN: every frame runs the sim and the scene's bookkeeping exactly as it
+  // does, then the renderer's own state (Display.advance) and no draw — everything
+  // a frame does before the GPU, at a fraction of its cost. For a driver winding a
+  // race faster than it can draw it (the trailer editor): the next drawn frame then
+  // shows the state drawing every frame would have reached, rubber and chase rigs
+  // included. The loop is the same loop, so the gate's clock and the animations it
+  // drives keep step too. Pacing and the perf meter are a drawn frame's business.
+  setUndrawn(on) { this._undrawn = !!on; }
 
   // The frame itself, and the only place the perf HUD instruments. The GPU timer
   // brackets THIS call and nothing else: the HUD's own DOM writes and the cell
@@ -1170,7 +1441,10 @@ export class Stage {
     this.perf.gpuBegin();
     this.display.frame(dt);
     this.perf.gpuEnd();
-    if (this.perf.visible) this.perf.cpu(this.display.profileTotal());
+    // ONLY WITH A READER. The CPU term feeds the panel and the benched log and
+    // nothing else — the scale rule does not use one — so an unwatched frame
+    // does not pay for the profile read (PerfHud's `watching`).
+    if (this.perf.watching) this.perf.cpu(this.display.profileTotal());
   }
 
   // Tail of every iteration: idle if asked, else queue the next frame.

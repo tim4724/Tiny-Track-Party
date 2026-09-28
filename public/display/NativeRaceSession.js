@@ -1,17 +1,16 @@
-// NativeRaceSession — RaceSession's exact surface, backed by the NATIVE C++
+// NativeRaceSession — the race session's ONLY implementation: the NATIVE C++
 // sim compiled to WASM (native/runtime/ttp_runtime.h via engine/native/
-// ttp_runtime.mjs). Behind ?sim=native only: main.js dynamic-imports this module
-// and awaits init() before any race, then constructs it exactly where it
-// would construct RaceSession. The default path never loads the module.
+// ttp_runtime.mjs). boot.js awaits init() unconditionally on every boot and
+// main.js constructs it for every race; there is no JS engine to fall back to.
 //
-// Semantic parity is the C++ conformance suite's job (the sim is bit-exact
-// against the JS engine on every committed golden trace); THIS file's job is
-// wiring parity: same construction order (humans then bots, add order = grid
-// order), same callback cadence (countdown ticks, GO, raceEnd — all drained
-// from the ABI's one outbound event queue on each update), same passthrough
-// shapes (plain data out, fresh objects the caller owns).
+// Semantic parity is the C++ conformance suite's job (the frozen trace corpus
+// — tests/CLAUDE.md); THIS file's job is wiring parity: same construction
+// order (humans then bots, add order = grid order), same callback cadence
+// (countdown ticks, GO, raceEnd — all drained from the ABI's one outbound
+// event queue on each update), same passthrough shapes (plain data out, fresh
+// objects the caller owns).
 //
-// Differences from the JS RaceSession, by design:
+// By design:
 // - Bots live INSIDE the wasm (added via opts.bots personas); ttp_update steps
 //   the AI internally in the live loop's order.
 // - Construction is deferred: the engine session is built at startCountdown
@@ -39,16 +38,17 @@ export async function init() {
     snapshot: c('ttp_snapshot_json', 'string', ['number']),
     events: c('ttp_events_json', 'string', ['number']),
     hasCar: c('ttp_has_car', 'number', ['number', 'string']),
-    carFinished: c('ttp_car_finished', 'number', ['number', 'string']),
     carIds: c('ttp_car_ids_json', 'string', ['number']),
-    removeCar: c('ttp_force_remove_car', 'number', ['number', 'string']),
-    rekeyCar: c('ttp_rekey_car', 'number', ['number', 'string', 'string']),
     forceFinish: c('ttp_force_finish', null, ['number', 'string', 'number']),
+    holdEnd: c('ttp_hold_end', null, ['number', 'number']),
     fastForward: c('ttp_fast_forward', null, ['number']),
     pause: c('ttp_pause', null, ['number']),
     resume: c('ttp_resume', null, ['number']),
     racing: c('ttp_racing', 'number', ['number']),
     paused: c('ttp_paused', 'number', ['number']),
+    shotHold: c('ttp_shot_hold', 'number', ['number', 'string']),
+    shotHeld: c('ttp_shot_held', 'number', ['number']),
+    itemShowcase: c('ttp_item_showcase', 'number', ['number', 'string']),
     dispose: c('ttp_dispose', null, ['number']),
     setSteerExpo: c('ttp_set_steer_expo', null, ['number']),
     getSteerExpo: c('ttp_get_steer_expo', 'number', [])
@@ -57,12 +57,9 @@ export async function init() {
   console.info(`[native:sim] ${JSON.stringify(v)}`);
 }
 
-// Steer-expo mirror: main.js keeps calling the JS engine's module-level
-// setter (harmless); under the flag it also calls this one so the native sim
-// tracks the same setting.
+// The engine-global steer curve lives in the wasm; the debug panel writes it
+// live through the setter and reads its default back through the getter.
 export function setNativeSteerExpo(x) { if (fn) fn.setSteerExpo(x); }
-// The engine-global steer curve now lives in the wasm, so the debug panel reads
-// its default from there instead of from a JS module constant.
 export function getNativeSteerExpo() { return fn ? fn.getSteerExpo() : 0; }
 
 const idJson = (id) => JSON.stringify(id);
@@ -125,6 +122,15 @@ export class NativeRaceSession {
     this._drain();
   }
 
+  // The screenshot hold (ttp_shot_hold): the race stops at the card's moment.
+  // False when the engine refused the hold.
+  shotHold(hold) { return !!(this.h && fn.shotHold(this.h, JSON.stringify(hold))); }
+  get shotHeld() { return !!(this.h && fn.shotHeld(this.h)); }
+
+  // The item previews' showcase (ttp_item_showcase): the engine gives and fires
+  // the item itself. 'rocket' | 'monster'; null turns it off.
+  itemShowcase(kind) { if (this.h) fn.itemShowcase(this.h, kind || null); }
+
   update(dtMs) {
     if (this._ended || !this.h) return;
     fn.update(this.h, dtMs);
@@ -146,15 +152,13 @@ export class NativeRaceSession {
     this._drain();
   }
 
-  forceRemoveCar(id) {
-    if (!this.h) return false;
-    const removed = !!fn.removeCar(this.h, idJson(id));
-    if (removed) this._drain(); // last-car removal can end the race
-    return removed;
-  }
-
-  rekeyCar(oldId, newId) { return this.h ? !!fn.rekeyCar(this.h, idJson(oldId), idJson(newId)) : false; }
   forceFinish(id, time) { if (this.h) fn.forceFinish(this.h, idJson(id), time); }
+
+  // THE FINISH FLOURISH: keep stepping past the point the race would otherwise
+  // end, so the shell can show a few live seconds with the place cards up. Set
+  // it when every human is home, clear it when the flourish is over — and then
+  // fastForwardToEnd() as usual. See ttp_hold_end.
+  holdEnd(on) { if (this.h) fn.holdEnd(this.h, on ? 1 : 0); }
 
   pause() { if (this.h) fn.pause(this.h); }
   resume() {
@@ -166,7 +170,6 @@ export class NativeRaceSession {
   getSnapshot() { return JSON.parse(fn.snapshot(this.h)); }
   carIds() { return JSON.parse(fn.carIds(this.h)); }
   hasCar(id) { return !!fn.hasCar(this.h, idJson(id)); }
-  carFinished(id) { return this.h ? fn.carFinished(this.h, idJson(id)) === 1 : false; }
 
   dispose() {
     this._ended = true;

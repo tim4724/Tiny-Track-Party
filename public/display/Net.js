@@ -28,13 +28,14 @@ import { buildQRMatrix } from '../shared/qr.js';
 const { PartyConnection, RELAY_URL, CAR_COLORS, LIVENESS } = window;
 
 // Presence windows. The manifest numbers this shell still SPENDS itself: the
-// detection windows feed RoomFlow at construction, and the tick rate arms the
-// one interval the start-liveness effect asks for. The create watchdog's delay
-// is no longer read here — it rides the arm-create-watchdog effect, from the
+// abandoned-race grace feeds RoomFlow at construction, and the tick rate arms
+// the one interval the start-liveness effect asks for. There is no drop window
+// to read — a seat is connected from peer_joined until peer_left, and this
+// shell detects nothing about anyone else's socket. The create watchdog's delay
+// is not read here either; it rides the arm-create-watchdog effect, from the
 // same manifest entry via protocol.h. __abandonGraceMs is the E2E hook that
 // shortens the wait, and it is the one platform-flavoured part — an override
 // of a manifest number, not a second declaration of it.
-const LIVENESS_TIMEOUT_MS = LIVENESS.TIMEOUT_MS;
 const ABANDONED_RACE_GRACE_MS = window.__abandonGraceMs || LIVENESS.ABANDONED_RACE_GRACE_MS;
 const LIVENESS_TICK_MS = LIVENESS.TICK_MS;
 
@@ -135,7 +136,13 @@ const NET_PERFORMERS = {
   'game-message': (n, e, ctx) => n.onControllerMessage(ctx.from, ctx.data),
   'race-abandoned': (n) => n.onRaceAbandoned(),
   'track-change': (n, e) => n.onTrackChange(e.trackId),
-  'clear-standings': (n) => { n._standings = null; }
+  // The display's OWN link, for the connection overlay. The payload is the
+  // whole view ({state, attempt, max, button}); the game layer draws it and
+  // re-asks the auto-pause rule, which reads the link through its own seam.
+  'set-link': (n, e) => n.onLinkChange(e)
+  // NO clear-standings. The results board is room-retained (ttp_room.h), so the
+  // statechange walk drops it with a store and its own `publish` carries the
+  // change — this shell holds no board to null out.
 };
 
 // The boot proof: every op this build's walks can emit has a performer. Run at
@@ -186,6 +193,10 @@ export class DisplayNet extends GameNet {
     // ABANDONED_RACE_GRACE_MS): the race has no racer left and someone is waiting
     // for the next one. The game layer returns to the lobby.
     this.onRaceAbandoned = opts.onRaceAbandoned || (() => {});
+    // Fired by the set-link effect: the display's own relay link as the viewer
+    // should see it — {state: connected|reconnecting|disconnected, attempt,
+    // max, button}. "connected" takes the overlay down.
+    this.onLinkChange = opts.onLinkChange || (() => {});
 
     // Dropped seats currently offering a reconnect QR. peerIndex -> {peerIndex,
     // name, colorIndex, url}. Held for the whole race (no give-up timer); freed
@@ -220,11 +231,12 @@ export class DisplayNet extends GameNet {
     session.configure({ cars: this.carChooser, colors: this.colorPalette,
                         tracks: this.trackChooser, progress: this.progressChooser });
     assertNetOps();
-    // Latest standings board, mirrored into the snapshot so a phone that reconnects
-    // on the results screen (or after its car finished) recovers it by replay.
-    // null outside a race; set via setStandings on each finish + at race end,
-    // cleared by the statechange walk's clear-standings effect.
-    this._standings = null;
+    // NO STANDINGS MIRROR. The results board lives behind the room handle like
+    // the pick, the series and the field: the race walk composes and retains it,
+    // the lobby frame reads it on every publish, and the rename patch and the
+    // settle stamp move the stored one. What this shell does about a board is
+    // republish (see the broadcast-standings performer in main.js).
+
     // The shuffle bag lives BEHIND THE ROOM; what this shell supplies is one
     // page-entropy seed at init_pick. hasBag false is the bagless test
     // surface, which refuses random picks outright (the walk's gate).
@@ -248,18 +260,14 @@ export class DisplayNet extends GameNet {
     // what the display uses; keep the kit class as the documented default.
     this._PartyConnectionImpl = opts.PartyConnectionImpl || PartyConnection;
     if (opts.FastlaneImpl) this.FastlaneImpl = opts.FastlaneImpl;
-    // Two RoomFlow provider seams a transport may claim (AirConsole does —
-    // see display-airconsole.js): the transport-designated master controller,
-    // and switching our own lastSeen expiry off where the platform's
-    // connect/disconnect events are already authoritative. Absent (the relay),
-    // both fall back to the machine's defaults: sticky-lowest-slot host
-    // election, liveness on.
+    // The grace window and nothing else. Leaving RoomFlow's expiry unset leaves
+    // it at Infinity, which is how "the transport decides who is connected" is
+    // spelled to the kit. masterProvider is the one seam a transport may claim
+    // (AirConsole does — see display-airconsole.js): the platform-designated
+    // host. Absent (the relay), host election stays sticky-lowest-slot.
     this.flow = new this._RoomFlowImpl({
       masterProvider: opts.masterProvider || null,
-      liveness: {
-        timeoutMs: LIVENESS_TIMEOUT_MS, graceMs: ABANDONED_RACE_GRACE_MS,
-        enabledProvider: opts.livenessEnabledProvider || null
-      }
+      liveness: { graceMs: ABANDONED_RACE_GRACE_MS }
     });
     session.initPick(this.flow.handle,
       opts.defaultTrackId != null ? opts.defaultTrackId : null, this._hasBag,
@@ -270,17 +278,17 @@ export class DisplayNet extends GameNet {
     this.baseUrlOverride = null;
     this._createTimer = null; // created/joined-answer watchdog (armed/cleared by effects)
 
-    // Fastlane input counts as proof of life: a phone whose relay socket died
-    // can still be driving over the open P2P channel — its car must not grow a
+    // Fastlane input lifts a dropped seat: a phone whose relay socket blipped
+    // can still be driving over the open P2P channel — its car must not keep a
     // reconnect QR mid-corner.
     this._initFastlane(0, { onInput: (peerIdx, ev) => { this._seen(peerIdx); this.onControllerMessage(peerIdx, ev); } });
 
     // Re-broadcast roster to controllers + notify our own UI whenever it shifts.
     this.flow.on('rosterchange', () => this._announce());
     // The bodies of these two are C++ walks now: what a host promotion or a
-    // phase flip implies (the ready-clear, the countdown restamp, the lobby
-    // sweep of dropped seats, when to republish) is decided and MUTATED inside
-    // the wasm; the effects that come back are performed like any other walk's.
+    // phase flip implies (the ready-clear, the lobby sweep of dropped seats,
+    // when to republish) is decided and MUTATED inside the wasm; the effects
+    // that come back are performed like any other walk's.
     this.flow.on('hostchange', ({ hostPeerIndex }) => {
       this._walk(this.flow.runWalk(() =>
         session.hostChangeApply(this.flow.handle, hostPeerIndex)));
@@ -371,8 +379,11 @@ export class DisplayNet extends GameNet {
       this._walk(this.flow.runWalk(() => session.onOpen(this.flow.handle)));
     };
     this.party.onClose = (attempt, max, meta) => {
+      // The kit's own counters go in verbatim: the walk answers what the
+      // viewer sees (set-link) off them, and never re-derives the budget.
       this._walk(this.flow.runWalk(() =>
-        session.onClose(this.flow.handle, !!(meta && meta.roomClosed))));
+        session.onClose(this.flow.handle, !!(meta && meta.roomClosed),
+          !!(meta && meta.replaced), attempt, max)));
     };
     this.party.onProtocol = (type, msg) => {
       if (type === 'error') console.warn('[relay]', msg.message);
@@ -385,8 +396,8 @@ export class DisplayNet extends GameNet {
 
   _onMessage(from, data) {
     if (!data) return;
-    // The fastlane consumes RTC signals; the walk still stamps liveness for
-    // them (ANY traffic from a peer is proof of life) and then stops.
+    // The fastlane consumes RTC signals; the walk still runs the seat lift for
+    // them (ANY traffic from a peer says it is back) and then stops.
     const sig = this._isSignal(from, data);
     const ctx = { from, data };
     this._walk(this.flow.runWalk(() =>
@@ -445,15 +456,15 @@ export class DisplayNet extends GameNet {
   }
 
   // ---- liveness (1 Hz) ----
-  // Record proof of life for a peer outside the message path — fastlane input.
-  // The walk also lifts a dropped seat back to connected (a phone can go silent
-  // and resume WITHOUT its socket ever closing) and is the single writer that
-  // lifts disconnection; the message walks run the same C++ internally.
+  // Lift a dropped seat back to connected from outside the message path —
+  // fastlane input. It is the single writer that lifts disconnection, and the
+  // message walks run the same C++ internally. It stamps nothing: presence is
+  // the relay's answer, so a seat is dropped by peer_left and by nothing else.
   _seen(peerIndex) {
     const raw = session.onSeen(this.flow.handle, peerIndex, Date.now());
     // Hot path: this rides every fastlane input event, and the common answer is
-    // the shared empty list — the stamp moved no record and queued no event, so
-    // skip the parse and the drain entirely.
+    // the shared empty list — the seat was already connected, so nothing moved
+    // and nothing was queued; skip the parse and the drain entirely.
     if (raw === EMPTY_EFFECTS) return;
     this.flow.walkMutated();
     this._walk(raw);
@@ -462,9 +473,9 @@ export class DisplayNet extends GameNet {
   _livenessTick() {
     if (!this.party) return;
     // The whole tick is one walk: the self-heartbeat state machine (in-flight
-    // pair lives in the wasm), then on a sweep the expiry drops, the
-    // active-order re-sync and the abandoned-race deadline, in that order on
-    // one clock reading.
+    // pair lives in the wasm), then the active-order re-sync and the
+    // abandoned-race deadline, in that order on one clock reading. It sweeps no
+    // seats — the relay's peer_left is the only thing that drops one.
     this._walk(this.flow.runWalk(() =>
       session.liveness(this.flow.handle, this.sessionHandle(), Date.now())));
   }
@@ -480,7 +491,7 @@ export class DisplayNet extends GameNet {
   // NOTHING ABOUT A SEAT CROSSES. The roster, the effective host, the room phase
   // and every seat's "does this seat hold a car in the live race" are read off
   // the two HANDLES in C++ (ttp_net_lobby_frame over ttp_room.h's seam); what is
-  // passed here is the six fields only the game knows. The answer is the finished
+  // passed here is the two latches only the game knows. The answer is the finished
   // frame text, so the socket write is the next statement and there is no object
   // in between. (~169.6 us -> 44.4 us a publish in the browser at the 4-player
   // cap when the round trip through this file was removed; most of what was
@@ -491,27 +502,13 @@ export class DisplayNet extends GameNet {
   // on the boundary this call exists to keep it off.
   _publishLobby() {
     if (!this.party) return;
-    // The pick is not here: the frame reads the stored one off the handle.
+    // Neither the pick nor the standings board is here: the frame reads both
+    // off the room handle, where the walks wrote them.
     this.party.setStateFrame(session.lobbyFrame(this.flow.handle, this.sessionHandle(), {
       paused: !!this.isPaused(),
-      soundOn: !!this.isSoundOn(),
-      standings: this._standings      // results board (playing/results), else null
+      soundOn: !!this.isSoundOn()
     }));
   }
-
-  // Mirror the latest standings board into the snapshot (display drives this on
-  // each finish + at race end; cleared on lobby return). Republishes so the change
-  // reaches live controllers and every later (re)joiner.
-  setStandings(board) {
-    this._standings = board || null;
-    this._publishLobby();
-  }
-
-  // Is a board currently in the retained snapshot? A live rename refreshes the
-  // one that is out (it carries player NAMES) but must never publish the first:
-  // phones raise their results overlay on a non-null standings, so a board pushed
-  // before anyone has crossed the line pops an empty one over every wheel.
-  hasStandings() { return this._standings != null; }
 
   // Public nudge for the game layer to republish the snapshot when a field it owns
   // changes without a roster/state event (manual pause, mid-race car forfeit/rekey).
@@ -545,6 +542,14 @@ export class DisplayNet extends GameNet {
   // room (the room-closed walk). For a page exit use shutdown() instead,
   // which suppresses that self-heal.
   closeRoom() { if (this.party) this.party.closeRoom(); }
+
+  // The connection overlay's RECONNECT. The walk decides — only the gave-up
+  // state answers anything — and its effects re-arm the kit's budget before
+  // the dial, so a second outage gets the full budget again.
+  reconnect() {
+    if (!this.party) return;
+    this._walk(this.flow.runWalk(() => session.reconnect(this.flow.handle)));
+  }
 
   // Page-exit teardown (pagehide): the party is over for everyone, so tear the
   // room down (phones bail terminally instead of waiting out the relay's ~2 min
@@ -634,32 +639,32 @@ export function renderQR(canvas, qr, px = 480, bg = '#ffffff') {
   canvas.classList.add('is-in'); // see renderJoinUrl — inert everywhere but the ticket
 }
 
-// Build a dropped-player reconnect card — name + "scan to rejoin" + the rejoin QR
-// — to be centred in that player's split-screen cell by the renderer (see
+// Build a dropped-player reconnect card — "Disconnected" + the rejoin QR — to
+// be centred in that player's split-screen cell by the renderer (see
 // Stage.setCarReconnect / _loop). Reuses the .cell-finish chrome (frosted
 // card, livery top-border, centred placement) so it matches the FINISHED card.
-// `seat` is {name, colorIndex, url}. Shared by the live display (main.js) and the
-// gallery harness so the markup stays in one place.
+// No name on it: the cell's corner label stays up around the card and already
+// says whose cell this is. `seat` is {colorIndex, url} (the live caller hands
+// the whole seat record, which carries more). Shared by the live display
+// (main.js) and the gallery harness so the markup stays in one place.
 export function buildReconnectCard(seat) {
   const card = document.createElement('div');
   card.className = 'cell-finish cell-reconnect'; // .cell-finish = positioning + card chrome
   card.style.setProperty('--c', (CAR_COLORS && CAR_COLORS[seat.colorIndex]) || '#888');
 
-  const head = document.createElement('div');
-  head.className = 'rc-card__head';
-  const nm = document.createElement('span'); nm.className = 'rc-card__name'; nm.textContent = seat.name;
-  head.append(nm);
-
-  const sub = document.createElement('div');
-  sub.className = 'rc-card__sub'; sub.textContent = 'Disconnected';
+  const title = document.createElement('div');
+  title.className = 'rc-card__title'; title.textContent = 'Disconnected';
 
   const qr = document.createElement('canvas');
   qr.className = 'rc-card__qr';
 
-  card.append(head, sub, qr);
+  card.append(title, qr);
 
   // Transparent QR background → black modules sit straight on the frosted card.
-  renderQR(qr, buildQRMatrix(seat.url), 220, null);
+  // Rendered big: CSS scales it to half the cell's height, which on a 4K
+  // display with one player is over 1000px, and a pixelated upscale of a
+  // small canvas gives uneven modules.
+  renderQR(qr, buildQRMatrix(seat.url), 1080, null);
 
   return card;
 }

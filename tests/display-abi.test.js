@@ -45,10 +45,19 @@ test('the shipped module exports the display ABI the shell binds to', async () =
   for (const name of ['create', 'asset', 'resize', 'build', 'reroster',
                       'release', 'bind',
                       'cells', 'cell_rects', 'cell_cards', 'dividers',
+                      'safe_insets',
                       'camera', 'look', 'fog', 'shadows',
                       'hold', 'frame', 'burst', 'hud', 'slot_ids_json',
                       'profile', 'profile_names',
-                      'biome', 'showcase']) {
+                      'biome', 'showcase',
+                      // What still has to be fetched, and the derived bytes kept
+                      // between runs. Both are WALKS this side performs every
+                      // build (asset_plan, asset_textures) or every frame
+                      // (blob_ready), so a missing export is not a degraded
+                      // cache — it is a TypeError in the render loop.
+                      'asset_plan', 'asset_textures',
+                      'blob_stores', 'blob_plan', 'blob_offer', 'blob_ready',
+                      'blob_keep', 'blob_export', 'blob_wrote']) {
     assert.equal(typeof M[`_ttp_display_${name}`], 'function',
       `_ttp_display_${name} is not exported — the browser would fail at the cwrap call`);
   }
@@ -119,14 +128,15 @@ test('ttp_display_cell_rects is a safe no-op with no display', async () => {
   // ttp_display_create can succeed without a canvas), which is the same state
   // the browser is in for the frames before boot() resolves.
   const cellRects = M.cwrap('ttp_display_cell_rects', 'number', ['number', 'number']);
-  const ptr = M._malloc(8 * 4 * 4);
+  // 8 cells x 8 floats (the picture rect and the safe one) x 4 bytes.
+  const ptr = M._malloc(8 * 8 * 4);
   try {
     const f32 = M.HEAPF32;
-    for (let i = 0; i < 8 * 4; i++) f32[(ptr >> 2) + i] = -1;
+    for (let i = 0; i < 8 * 8; i++) f32[(ptr >> 2) + i] = -1;
     assert.equal(cellRects(ptr, 8), 0, 'no display means no cells');
     assert.equal(cellRects(0, 8), 0, 'a null buffer is not written through');
     assert.equal(cellRects(ptr, 0), 0, 'room for nothing writes nothing');
-    for (let i = 0; i < 8 * 4; i++) {
+    for (let i = 0; i < 8 * 8; i++) {
       assert.equal(M.HEAPF32[(ptr >> 2) + i], -1, `slot ${i} was left alone`);
     }
   } finally {
@@ -245,9 +255,10 @@ test('the asset showroom stages every scenery GLB in the kit', async () => {
 // ---- the CPU roster is one table ---------------------------------------------
 test('aiPersonas.js has not drifted from the wasm persona table', async () => {
   const M = await load();
-  // The runtime path no longer holds a copy: main.js reads the table out of
-  // ttp_race_personas_json (libttp-sim's own ttp::AI_PERSONALITIES) and
-  // configures it straight back. public/display/aiPersonas.js survives only for
+  // The runtime path no longer holds a copy, and no longer even carries one
+  // across: every shell omits `personas` from ttp_race_configure, which the ABI
+  // reads as libttp-sim's own ttp::AI_PERSONALITIES.
+  // public/display/aiPersonas.js survives only for
   // the test surfaces that need it synchronously — the gallery harness grids a
   // persona per slot before any wasm call — so it is a second spelling of a
   // shipped table, and this is the check that stops it drifting. It used to be

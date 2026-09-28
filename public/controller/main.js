@@ -16,7 +16,7 @@ import { Haptics } from './Haptics.js';
 import { buildCarPicker } from '../shared/carPicker.js';
 import { buildModePicker } from '../shared/trackPicker.js';
 import { unpackSchematic } from '../shared/schematicCodec.js';
-import { applyLatencyChip, renderReadyFoot } from './ui.js';
+import { applyLatencyChip, renderReadyFoot, NEXT_RACE_NOTE } from './ui.js';
 import { createWakeLock } from '../shared/wakeLock.js';
 // Sanitize a display name to the wire limit (trim + ≤16 chars). The cap is
 // shared with the display's own re-clamp of an incoming HELLO, so it lives in
@@ -28,10 +28,11 @@ import { cleanName } from '../shared/names.js';
 import { inShell, shellName, endSession, terminalReason, setAccentColor, installRenameHook, armSystemBack, installBackHook } from './launcher.js';
 import { storedName, saveName, storedMode, saveMode, storedCarIndex, saveCarIndex, storedInputMode, saveInputMode } from './prefs.js';
 import { showConn, hideConn, linkCopy, initLinkStatus } from './linkStatus.js';
-import { initModals, onEnterLobby, closeAnyModal, anyModalOpen, closeTopModal, refreshHelpName, refreshSettingsState } from './modals.js';
+import { initModals, onEnterLobby, closeAnyModal, anyModalOpen, closeTopModal, refreshHelpName, refreshSettingsState, openStarsPopup } from './modals.js';
 import { renderResultsBoard } from './resultsBoard.js';
 import { initDriveSurface, startDriving, stopDriving, setInputMode, setHeldItem, resetHeldItem } from './driveSurface.js';
 import { initOrientation } from './orientation.js';
+import { initPressPaint } from './press.js';
 
 const { MSG, ROOM_STATE } = window;
 const el = (id) => document.getElementById(id);
@@ -51,6 +52,8 @@ let currentScreen = null;
 function show(name) {
   const prev = currentScreen;
   currentScreen = name;
+  // A held Start belongs to the lobby: landing anywhere else IS the answer to it.
+  if (name !== 'lobby') clearStartPending();
   for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name);
   // Push history only when stepping UP a level (name → lobby). Same-level and
   // back transitions don't push, so there's exactly one entry to pop: pressing
@@ -100,14 +103,20 @@ let trackCatalogRaw = '';  // the packed snapshot.tracks it was decoded from (sk
 let carCatalog = [];       // [{id,name,stats}] — snapshot.cars
 let colorPalette = (window.CAR_COLORS || []).slice(); // snapshot.colors (bundled palette = pre-snapshot fallback)
 const liveryOf = (i) => colorPalette[i] || '#888';
-let selectedMode = null;   // current pick {mode:'track'|'cup'|'random'|'tour', trackId?, cupId?} (host-controlled, echoed to all)
-let displayMode = null;    // pick the display last reported (WELCOME/LOBBY_UPDATE); null = it has none
+let selectedMode = null;   // current pick {mode:'cup'|'random'|'tour', cupId?, randomRaces?} (host-controlled, echoed to all)
+let displayMode = null;    // pick the display last reported (LOBBY_UPDATE snapshot); null = it has none
 let progressData = null;   // snapshot.progress — the couch's stars/locks (lobby only; cached like tracks)
 let lobbyTab = 'car';      // the host's lobby page: 'car' | 'race' (non-hosts only ever see 'car')
-let raceCursor = null;     // which race-list row the detail panel describes; null follows the pick
 let amReady = false;       // my lobby ready flag (optimistic; LOBBY_UPDATE confirms)
+// The host's Start press, held until the display answers it. Unlike every other
+// optimistic flag here it needs a way OUT on its own: the display validates
+// START_GAME and a refusal (no track, no scene) publishes nothing at all, so
+// there is no snapshot coming to clear this one. See armStartGiveUp.
+let startPending = false;
+let startGiveUpTimer = null;
 let inResults = false;     // showing the results overlay (my car finished / race over)
-// Joined while a race was already running (WELCOME said inRace:false): we have
+// Joined while a race was already running (the snapshot says our inRace is
+// false): we have
 // no car out there, so we wait on the lobby screen — car picker live, no ready
 // button — and ignore the current race's broadcasts. The display seats us
 // automatically when the next race builds its field; GAME_END (back to the
@@ -183,12 +192,27 @@ const tilt = new TiltInput({
 // the stored pref only means anything where tilt exists, and the same browser
 // on a page that does get the sensors must not inherit a fallback as a
 // preference. Every caller goes through here, so the rule holds in one place —
-// the startup seed below, the Settings seg, and the join fallback alike.
+// the startup seed below, the Settings seg, the join fallback and the heal that
+// undoes it alike.
 let inputMode = tilt.motionState === 'unsupported' ? 'buttons' : storedInputMode();
 function applyInputMode(mode) {
   inputMode = mode;
   if (tilt.motionState !== 'unsupported') saveInputMode(mode);
   setInputMode(mode);
+}
+
+// The fallback to buttons is a GUESS on a 600 ms fuse (TiltInput's settle
+// window), and a sensor that merely answered late leaves the phone steering by
+// buttons with a stored TILT preference and the Settings card as the only way
+// back. TiltInput takes its own verdict back on the first real sample; this is
+// the other half — take the CONSEQUENCE back too. Run on every snapshot, so it
+// heals in the lobby, before the race that would otherwise be driven wrong.
+//
+// It can never override a deliberate pick: applyInputMode declines to save
+// while the state is 'unsupported', so a stored 'tilt' is the player's own
+// preference, untouched by the fallback that ignored it.
+function healProvisionalFallback() {
+  if (inputMode !== 'tilt' && tilt.haveTilt && storedInputMode() === 'tilt') applyInputMode('tilt');
 }
 
 initModals({
@@ -210,6 +234,7 @@ setInputMode(inputMode);
 // orientation (see the bootstrap's constructor options), and fullscreen
 // requests from inside the AC iframe are its host's business, not ours.
 initOrientation({ inShell: inShell || !!acBoot });
+initPressPaint();
 
 function setStatus(t) { el('name-status').textContent = t; }
 // Lock the join form while a connection is in flight so a double-tap can't fire
@@ -220,8 +245,8 @@ function setJoining(on) {
   el('name-input').disabled = on;
 }
 
-// The display's pick as {mode, cupId, trackId} (WELCOME / LOBBY_UPDATE carry it
-// flat). A display that predates modes sends a bare trackId — read it as an
+// The display's pick as {mode, cupId, trackId} (the LOBBY_UPDATE snapshot
+// carries it flat). A display that predates modes sends a bare trackId — read it as an
 // exact pick so a mid-deploy pairing still works.
 function modeFrom(data) {
   if (data.mode) {
@@ -294,6 +319,7 @@ function syncRoom(data) {
   // the open settings card in step: a host handover or the TV's own mute
   // button can move it while the card is up.
   displaySoundOn = data.soundOn !== false;
+  healProvisionalFallback();   // before the card is refreshed, so a restored mode shows on THIS snapshot
   refreshSettingsState();
   displayMode = modeFrom(data);
   if (displayMode) selectedMode = displayMode;
@@ -386,8 +412,8 @@ function applyLivery() {
 function renderLobby() {
   maybeAutoSelectMode();    // host: leave the display's plain diorama for the 3D preview right away
   el('me-name').textContent = myName || 'Racer'; // who you are, up top (livery dot is var(--car))
-  renderLobbyTabs();
-  buildCarPicker({ heroEl: el('car-hero'), stripEl: el('carpick'), selected: myCarIndex, onPick: chooseCar, canPick: !amReady, cars: carCatalog });
+  renderLobbyPage();
+  buildCarPicker({ gridEl: el('carpick'), selected: myCarIndex, onPick: chooseCar, canPick: !amReady, cars: carCatalog });
   renderModePicker();
   const hostP = roster.find((p) => p.peerIndex === hostPeerIndex);
   if (waitingForNextRace) {
@@ -397,13 +423,15 @@ function renderLobby() {
     // still hides the start controls — acceptable: the abandoned-race timer on
     // the display returns everyone to the lobby, where we get them normally.
     el('ready-btn').classList.add('hidden');
-    el('ready-note').textContent = 'You’re in the next race!'; // copy duplicated in TestHarness.js 'lobby-joining'
+    el('ready-note').textContent = NEXT_RACE_NOTE;
     return;
   }
   renderReadyFoot(el('ready-btn'), el('ready-note'), {
     amHost, amReady,
+    backEl: el('lobby-back'),     // the corner's other half: shown on the race page only
     tab: lobbyTab,                // the stepper: CAR says "Select race", RACE "Start race"
     canStart: !!selectedMode,     // host can't start without a pick (auto-picked, so ~always true)
+    starting: startPending,       // the press owns the button until the display answers
     host: hostP && { name: hostP.name, color: liveryOf(hostP.colorIndex) },
     others: roster   // every non-host racer but me (for the host that's everyone else)
       .filter((p) => p.peerIndex !== net.peerIndex && p.peerIndex !== hostPeerIndex && p.connected !== false)
@@ -411,43 +439,50 @@ function renderLobby() {
   });
 }
 
-// The CAR | RACE tab strip — host only (a non-host lobby IS the car page, so
-// the strip would be a one-tab strip saying nothing). The bottom bar steps
-// forward; these step anywhere, including back.
-function setLobbyTab(tab) {
+// Which lobby page we're on. There is no tab strip: the action corner's two
+// buttons ARE the stepper (forward is renderReadyFoot's, back is the chip
+// below). Both steps come through here, so the buzz and the transition live
+// here too rather than at the call sites — the forward step used to buzz and
+// the back chip didn't, which is exactly the drift a shared path prevents.
+function setLobbyPage(tab) {
   if (tab === lobbyTab) return;
   lobbyTab = tab;
   renderLobby();
+  // Without a page change to explain it, the corner's label simply mutates
+  // under the thumb that pressed it. The content fades; the button itself
+  // deliberately does NOT move, animate or fade — it is the fixed point the
+  // finger is already on. (Its node is swapped for a fresh one on a face
+  // change; see renderReadyFoot.)
+  const lobby = el('lobby');
+  lobby.classList.remove('lobby--step');
+  void lobby.offsetWidth;             // restart it when stepping twice quickly
+  lobby.classList.add('lobby--step');
+  buzz(15);
 }
-function renderLobbyTabs() {
-  const tabs = el('lobby-tabs');
-  const showTabs = amHost && trackCatalog.length > 0 && !waitingForNextRace;
-  tabs.classList.toggle('hidden', !showTabs);
-  if (!showTabs) { lobbyTab = 'car'; }
-  el('lobby').classList.toggle('lobby--race', showTabs && lobbyTab === 'race');
-  el('tab-car').setAttribute('aria-selected', String(lobbyTab === 'car'));
-  el('tab-race').setAttribute('aria-selected', String(lobbyTab === 'race'));
+// A race page exists only for a host with a catalogue to pick from. Anyone
+// else's lobby IS the car page, so we pin them there rather than leaving a
+// stale 'race' behind a vanished picker (host handover mid-lobby does exactly
+// that).
+function renderLobbyPage() {
+  const canPickRace = amHost && trackCatalog.length > 0 && !waitingForNextRace;
+  if (!canPickRace) lobbyTab = 'car';
+  el('lobby').classList.toggle('lobby--race', lobbyTab === 'race');
 }
-el('tab-car').addEventListener('click', () => setLobbyTab('car'));
-el('tab-race').addEventListener('click', () => setLobbyTab('race'));
+el('lobby-back').addEventListener('click', () => setLobbyPage('car'));
 
-// Mode picker — host only: one tile per cup then 🎲 Random (a cup pick runs its
-// 4-race Grand Prix and its open panel offers exact single-track picks; Random's
-// panel offers the run's length instead). Sent as SELECT_MODE. Everyone else gets no picker at all — the big screen
-// shows the host's pick. Also hidden until the catalog arrives (older display /
-// pre-WELCOME). Layout in shared/trackPicker.js.
+// Mode picker — host only: one tile per cup (which runs its 4-race Grand Prix)
+// then the three random runs. Sent as SELECT_MODE. Everyone else gets no picker
+// at all — the big screen shows the host's pick. Also hidden until the catalog
+// arrives (no snapshot yet). Layout in shared/trackPicker.js.
 function renderModePicker() {
   const wrap = el('trackpick');
   if (!amHost || !trackCatalog.length || lobbyTab !== 'race') { wrap.classList.add('hidden'); return; }
   wrap.classList.remove('hidden');
   buildModePicker({
-    stripEl: el('track-strip'),
+    gridEl: el('track-strip'), keyEl: el('race-key'),
     catalog: trackCatalog, progress: progressData,
-    selection: selectedMode, highlight: raceCursor,
-    canPick: true, onPickMode: chooseMode,
-    // A tapped row moves the detail cursor; a LOCKED row moves only it — the
-    // panel becomes the unlock pitch without touching the pick.
-    onHighlight: (rowId) => { raceCursor = rowId; renderModePicker(); }
+    selection: selectedMode, canPick: true, onPickMode: chooseMode,
+    onStarsInfo: () => { buzz(15); openStarsPopup(progressData, trackCatalog); }
   });
 }
 
@@ -460,19 +495,19 @@ function lockedCupIds() {
 }
 
 // A stored pick is only worth re-asserting if this catalog still backs it
-// (tracks/cups can churn between visits; 'random' always resolves) AND the
-// couch hasn't got it locked (a progress reset can re-lock a cup this phone
-// once raced).
+// (cups can churn between visits; 'random' always resolves) AND the couch hasn't
+// got it locked (a progress reset can re-lock a cup this phone once raced).
+//
+// 'track' — an exact single-race pick — is deliberately NOT here. The picker
+// stopped offering it, so a phone still holding one in localStorage from an
+// earlier version must fall through to the first cup rather than re-assert a
+// pick no tile can show as picked.
 function modeInCatalog(m) {
   if (!m) return false;
   const locked = lockedCupIds();
   if (m.mode === 'random') return true;
   if (m.mode === 'tour') return trackCatalog.some((t) => t.cup); // needs cups to tour
   if (m.mode === 'cup') return !locked.has(m.cupId) && trackCatalog.some((t) => t.cup === m.cupId);
-  if (m.mode === 'track') {
-    const t = trackCatalog.find((x) => x.id === m.trackId);
-    return !!t && !locked.has(t.cup);
-  }
   return false;
 }
 
@@ -491,9 +526,8 @@ function maybeAutoSelectMode() {
     // display silently refuses, stranding the Start gate.
     const locked = lockedCupIds();
     const firstCup = trackCatalog.find((t) => t.cup && !locked.has(t.cup));
-    selectedMode = modeInCatalog(stored) ? stored
-      : firstCup ? { mode: 'cup', cupId: firstCup.cup }
-        : { mode: 'track', trackId: trackCatalog[0].id }; // cup-less catalog (older display)
+    if (!modeInCatalog(stored) && !firstCup) return;   // nothing pickable to assert
+    selectedMode = modeInCatalog(stored) ? stored : { mode: 'cup', cupId: firstCup.cup };
     net.send(MSG.SELECT_MODE, selectedMode); // optimistic; LOBBY_UPDATE is the source of truth
     return;
   }
@@ -510,17 +544,14 @@ function maybeAutoSelectMode() {
 function chooseMode(pick) {
   const cur = selectedMode || {};
   const same = cur.mode === pick.mode
-    && (pick.mode === 'cup' ? cur.cupId === pick.cupId
-      : pick.mode === 'track' ? cur.trackId === pick.trackId
-        // The random family is never filtered: a tap that changes the run
-        // changes the pick, and EVERY tap — same pick included — deals fresh
-        // track(s). Both need the display.
-        : false);
+    // The random family is never filtered: a tap that changes the run changes
+    // the pick, and EVERY tap — same pick included — deals fresh track(s). Both
+    // need the display.
+    && (pick.mode === 'cup' ? cur.cupId === pick.cupId : false);
   if (same) return;
   selectedMode = { ...pick };  // optimistic; LOBBY_UPDATE is the source of truth
-  raceCursor = null;           // the detail panel follows the pick again
   saveMode(pick);              // remember it so the next lobby auto-picks this mode
-  renderModePicker();          // move the mark (and swap the detail panel) now
+  renderModePicker();          // move the mark now
   net.send(MSG.SELECT_MODE, pick);
   buzz(15);
 }
@@ -640,10 +671,14 @@ async function joinRace(name, { persist } = {}) {
   // calls requestPermission before its first await), so awaiting the result is
   // safe and doesn't break the gesture rule. On iOS this waits out the system
   // prompt; on Android/desktop it resolves on the next microtask.
-  // enableMotion resolves the state completely (permission AND delivery), so a
-  // phone whose sensor turns out to be absent or withheld is put on buttons
-  // here rather than steering with a dead wheel. applyInputMode declines to
-  // save it, since the state it just resolved is 'unsupported'.
+  // enableMotion resolves permission AND delivery, so a phone whose sensor turns
+  // out to be absent or withheld is put on buttons here rather than steering
+  // with a dead wheel. applyInputMode declines to save it, since the state it
+  // just resolved is 'unsupported' — which is what lets healProvisionalFallback
+  // undo this if the sensor was only slow. The one thing it CANNOT resolve is a
+  // request the platform refused to even put, which is this very call site in
+  // the shell (no gesture behind a launcher join): that leaves 'unknown', keeps
+  // the phone on tilt, and re-asks on the player's next tap.
   if (inputMode === 'tilt' && (await tilt.enableMotion()) === 'unsupported') {
     applyInputMode('buttons');
   }
@@ -654,15 +689,51 @@ el('name-form').addEventListener('submit', (e) => {
   joinRace(el('name-input').value, { persist: true });
 });
 
+// Let go of a held Start that nothing answered, and say so rather than silently
+// re-enabling: the display logs its refusal to a console this phone cannot see,
+// so "nothing happened" is the whole of what the host would otherwise get.
+//
+// The wait is generous ON PURPOSE. What it has to outlast is the display's launch
+// build — a track mesh plus a shadow bake, which on the Android TV shell runs on
+// the main thread BEFORE the launch publishes anything — and giving up early
+// would flip the button back to "Start race" while the race it started is still
+// assembling. Only a genuine refusal ever reaches the end of it.
+const START_GIVE_UP_MS = 8000;
+
+function armStartGiveUp() {
+  clearTimeout(startGiveUpTimer);
+  startGiveUpTimer = setTimeout(() => {
+    if (!startPending) return;
+    clearStartPending();
+    // renderLobby FIRST: it owns the note and would overwrite this line.
+    renderLobby();
+    el('ready-note').textContent = 'The TV didn’t start the race. Try again.';
+  }, START_GIVE_UP_MS);
+}
+
+function clearStartPending() {
+  clearTimeout(startGiveUpTimer);
+  startGiveUpTimer = null;
+  startPending = false;
+}
+
 // Lobby footer button — for the host it's "Start race" (enabled only once
 // everyone else is ready — see renderReadyFoot); for everyone else it's the
 // ready toggle. The display validates both messages.
-el('ready-btn').addEventListener('click', () => {
+// DELEGATED from the corner rather than bound to the button: renderReadyFoot
+// swaps the primary button's NODE whenever its face changes, and a listener
+// bound to the old node would go with it. (#lobby-back needs none of this — it
+// is static markup, only ever shown and hidden.)
+el('ready-btn').closest('.lobby-go').addEventListener('click', (e) => {
+  if (!e.target.closest('#ready-btn')) return;
   if (amHost) {
     // The stepper: on the CAR page the button ADVANCES to the race page; on
     // the RACE page it starts. Two taps from a fresh lobby, matching the two
     // decisions a host actually makes.
-    if (lobbyTab !== 'race') { setLobbyTab('race'); buzz(15); return; }
+    if (lobbyTab !== 'race') { setLobbyPage('race'); return; }   // setLobbyPage buzzes
+    startPending = true;  // optimistic; the snapshot that moves us off the lobby confirms it
+    renderLobby();
+    armStartGiveUp();
     net.send(MSG.START_GAME);
   } else {
     amReady = !amReady;   // optimistic; LOBBY_UPDATE is the source of truth
@@ -727,7 +798,8 @@ installBackHook(() => {
 if (inShell && shellName) {
   // Never flash the name screen (it's the default-visible section): hide it up
   // front and go straight to joining. The launcher's own joining spinner floats
-  // over the blank sky until WELCOME lands and show('lobby') takes over.
+  // over the blank sky until the replayed room snapshot lands and show('lobby')
+  // takes over.
   screens.name.classList.add('hidden');
   joinRace(shellName, { persist: false });
 } else if (acBoot) {
@@ -866,16 +938,6 @@ if (_scenario) {
     scenario: _scenario,
     color: _int(_params.get('color'), 0)
   }));
-}
-
-// Measurement overlay for the CONTROL send gate: ?netstats=1 (optionally with
-// ?steerThresh=…). Same escape-hatch shape as ?scenario= above — opt-in via URL,
-// so it can't reach a player who joined by scanning the QR. See NetStats.js.
-if (_params.get('netstats')) {
-  const _thresh = parseFloat(_params.get('steerThresh'));
-  if (isFinite(_thresh) && _thresh >= 0) net.gate.steerThreshold = _thresh;
-  net.gate.enableShadows(); // the suppression-curve counters exist for this overlay
-  import('./NetStats.js').then(({ initNetStats }) => initNetStats(net.gate));
 }
 
 // No debug-settings wrench on the controller — it's the player-facing phone, so the

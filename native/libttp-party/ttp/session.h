@@ -66,8 +66,6 @@ RoomState room_state_of(const std::string& name);
 // A field absent from a roster record stays absent from the row (JS reads
 // `undefined` and JSON.stringify drops the key); `ready` and `inRace` are always
 // present, coerced.
-//
-// KEY ORDER IS THE WIRE'S. See the note on lobby_snapshot.
 Value roster_rows(const Value& roster, const Value& inRace);
 
 // The room's single outbound message (LOBBY_UPDATE over the relay's set_state).
@@ -82,9 +80,11 @@ Value roster_rows(const Value& roster, const Value& inRace);
 // `tracks` are LOBBY-ONLY: they are the bulk of the blob, the picker is only
 // shown there, and the whole snapshot must fit the relay's 16 KiB cap.
 //
-// THE KEY ORDER OF THIS ANSWER IS THE WIRE'S, not canonical. The phones have
-// parsed these bytes since the JS wrote them; emitting them sorted would be a
-// silent re-spelling of a shipped message. Emit with ordered_stringify.
+// KEY ORDER IS NOT A CONTRACT, and this header used to say it was the wire's.
+// The only shipping caller (runtime/ttp_net.cc's ttp_net_lobby_frame) frames
+// this answer before it goes anywhere, and the frame encoder canonicalizes, so
+// the composed order has never reached a phone. Emit it with whatever the
+// caller emits everything else with.
 Value lobby_snapshot(const Value& input, const Value& chooser);
 
 // ---- the display-name cap ---------------------------------------------------
@@ -149,22 +149,22 @@ bool controller_url_template(const std::string& base, const std::string& platfor
                              std::string* out);
 
 // ---- the rejoinToken normalizer ---------------------------------------------
-// FROZEN QUIRK, DO NOT TIDY. This is JS `Number(value)`, so norm_index of a JSON
-// null yields 0 and therefore EVERY ordinary HELLO — which carries no
-// rejoinToken — is a claim on seat 0. It is harmless only because seat 0 is the
-// DISPLAY'S OWN slot and never appears on the roster, so claim_plan's `hasOld`
-// always misses. Reproducing Number() loosely, or "fixing" null to be rejected,
-// changes who is able to claim what.
+// THE RULE, and every other mention of rejoinToken points here: THE TOKEN IS AN
+// INTEGER OR IT IS NOTHING. A JSON number that is finite, integral and >= 0
+// claims; every other shape — string, bool, array, object, null — is nothing, so
+// ABSENT AND NULL ARE THE SAME ANSWER and a client that sends the seat as a
+// STRING silently fails to claim. `v` is the raw JSON value, or nullptr for an
+// absent key; returns false for "no index".
 //
-// `v` is the raw JSON value, or nullptr for JS `undefined` (an absent key —
-// which is NOT the same as null: Number(undefined) is NaN). Returns false when
-// the JS answer is null.
+// This layer type-checks untrusted phone input rather than coercing it (as
+// set_car_decision does), and the shipped controller's deriveClaim
+// (public/controller/Net.js) already sends an integer or null, so nothing a real
+// phone can send changed answer when the coercion went. What went with it: this
+// used to be JS `Number(value)`, under which a JSON null read as 0 and therefore
+// EVERY ordinary HELLO was a claim on seat 0 — harmless only because seat 0 is
+// the DISPLAY'S OWN slot and claim_plan's `hasOld` always missed it. That
+// booby-trap is now gone rather than documented.
 bool norm_index(const Value* v, double* out);
-
-// JS ToNumber over the JSON value set, which norm_index is built on. Exposed
-// because it is the part worth testing directly: null->0, true->1, ""->0,
-// " 42 "->42, "0x10"->16, [7]->7, [1,2]->NaN, {}->NaN.
-double js_to_number(const Value* v);
 
 // ---- seats ------------------------------------------------------------------
 
@@ -197,11 +197,11 @@ std::string seat_name(const SeatDefaults& d);
 // A full room REFUSES the seat and does NOT stamp it — the relay let them onto
 // the socket, but there is no chair. An EXISTING seat is a same-device
 // reconnect: the relay keys slots by clientId, so a returning phone lands back
-// on its old index and only needs its liveness clock restarted.
+// on its old index and only needs its presence lifted.
 struct AddPeerPlan {
   bool hasSeat = false;   // false = seat nobody (full room, or already seated)
   SeatDefaults seat;
-  bool stamp = false;     // record proof of life for this peer
+  bool stamp = false;     // run the seen walk for this peer (lift it if dropped)
 };
 AddPeerPlan add_peer_plan(bool has, double size, double maxPlayers, double colorIndex);
 
@@ -263,13 +263,12 @@ bool set_ready_decision(bool isHost, RoomState state, bool ready, bool current);
 
 // What a phase flip means, beyond the flip itself.
 //
-// restampConnected: race start re-stamps every CONNECTED seat's liveness, so
-//   silence accumulated in the lobby (where expiries are gated off) is not
-//   charged against the first countdown tick — a phone whose ping was throttled
-//   past the timeout before the host hit Start would otherwise be dropped one
-//   tick in. The window must run from race start. Deliberately NOT a blanket
-//   clear-disconnected: flipping a grace-pending seat back to connected here
-//   would orphan its reconnect QR.
+// restampConnected: NOT SPENT any more, and the field survives because the
+//   frozen session corpus pins it. It re-stamped every connected seat at race
+//   start so lobby silence was not charged against the first countdown tick —
+//   a rule that only meant anything while the display ran a silence sweep of
+//   its own. Presence is the relay's answer now (native/libttp-party/CLAUDE.md),
+//   so nothing measures silence and nothing needs the clock restarted.
 // freeDisconnected: back in the lobby, the race that reserved dropped seats is
 //   over, so reclaim any that never came back.
 // clearStandings: a fresh race and the lobby both start with no results board.
@@ -322,6 +321,29 @@ struct HeartbeatTick {
 };
 HeartbeatTick heartbeat_tick(bool inRoom, bool hbPending, double hbSentAt, double now);
 
+// ---- the display's own link ---------------------------------------------------
+
+// What the DISPLAY shows about its OWN relay socket. The retry budget itself is
+// the connection kit's (relay_framing.h close_outcome); this is what one close
+// outcome means for the viewer:
+//
+//   CONNECTED     nothing to show — the initial state, and created/joined
+//   RECONNECTING  the kit is retrying: "Attempt N of M" (attempt 0 is an
+//                 unnumbered immediate retry, heading only)
+//   DISCONNECTED  the budget is spent, and the RECONNECT button re-arms it —
+//                 or the slot was taken over (4000), where there is no button
+//                 because rejoining would evict the other display right back
+//
+// A ROOM close (4001) changes nothing: the display dials a fresh room at once,
+// and only that dial's own failure raises the overlay.
+enum class LinkState { CONNECTED, RECONNECTING, DISCONNECTED };
+struct LinkPlan {
+  bool change = false;
+  LinkState state = LinkState::CONNECTED;
+  bool button = false;
+};
+LinkPlan link_after_close(bool replaced, bool roomClosed, double attempt, double maxAttempts);
+
 // ---- claims + reconciliation ---------------------------------------------------
 
 // A different DEVICE claims a dropped seat by carrying its old peerIndex as the
@@ -330,12 +352,14 @@ HeartbeatTick heartbeat_tick(bool inRoom, bool hbPending, double hbSentAt, doubl
 // their livery, car, name and host slot. A same-device reconnect keeps its index
 // and never reaches here.
 //
-// `restamp` is not decoration: the seat's carried last-seen stamp is from BEFORE
-// the drop and is therefore already older than the timeout, so a reclaimed seat
-// would expire again on the very next tick without it. It is exactly the sort of
-// detail a reimplementation loses, which is why it is an explicit command.
+// `restamp` is NOT SPENT any more, and survives because the frozen session
+// corpus pins it. It was the reclaimed seat's stay of execution: the carried
+// last-seen stamp is from before the drop and so already older than the
+// timeout, so without it the seat expired again on the very next tick. Nothing
+// expires now — presence is the relay's answer (native/libttp-party/CLAUDE.md).
 //
-// `rejoinToken` is nullptr for an absent key (JS undefined) — see norm_index.
+// `rejoinToken` is nullptr for an absent key, which claims nothing — as does any
+// token that is not a non-negative integer. See norm_index.
 struct ClaimPlan {
   bool claim = false;
   double oldId = 0;
@@ -369,6 +393,7 @@ const char* key(LeaveAction a);
 const char* key(InboundRoute r);
 const char* key(MessageAction a);
 const char* key(HeartbeatAct a);
+const char* key(LinkState s);
 
 }  // namespace session
 }  // namespace ttp

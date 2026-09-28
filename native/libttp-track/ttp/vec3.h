@@ -9,10 +9,7 @@
 
 #include <cmath>
 
-extern "C" {
-double ttp_fd_sin(double);
-double ttp_fd_cos(double);
-}
+#include "ttp_fd.h"
 
 namespace ttp {
 

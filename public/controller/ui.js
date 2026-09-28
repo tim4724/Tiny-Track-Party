@@ -33,13 +33,6 @@ export function renderWaitNote(waitEl, { name, color } = {}, suffix) {
   waitEl.append(nameEl, suffix);
 }
 
-// Lobby footer — shared by the live phone (main.js) and the gallery preview
-// (TestHarness) so the button logic can't drift. Non-hosts toggle their own
-// readiness; the host gets a single "Start race" button, disabled until every
-// other connected player is ready (the display re-validates START_GAME, so
-// this gate is purely UX). `others` is every other NON-host connected player
-// as {name, color, ready}; `host` is {name, color} for the non-host waiting
-// note; `canStart` additionally gates the host until a track is picked.
 // "Motion sensor is blocked" popup copy — one source of truth for the live phone
 // (main.js refreshMotionPopup) and the gallery preview (TestHarness's
 // 'motion-blocked' case), keyed off tilt.motionState so the two can't drift. Returns
@@ -57,8 +50,10 @@ export function renderWaitNote(waitEl, { name, color } = {}, suffix) {
 // granted on the Join tap) needs no recovery, so the popup stays shut. 'unsupported'
 // has no case: a device with no sensor is forced onto button steering at startup
 // (main.js) and the settings card's Tilt row reads "Not available" — nothing to
-// recover, so it never reaches this popup. 'unknown' (the gallery / pre-prompt
-// edge) is the one state where a fresh request CAN still prompt.
+// recover, so it never reaches this popup. 'unknown' is the one state where a
+// fresh request CAN still prompt — and it is not only the gallery's pre-prompt
+// edge: a request the platform refused to even put for want of a gesture (a
+// launcher join, see TiltInput._askOnNextGesture) lands a real phone here too.
 export function motionHelpCopy(state) {
   switch (state) {
     case 'granted':
@@ -70,7 +65,7 @@ export function motionHelpCopy(state) {
         status: 'Steering uses your phone’s tilt, which is switched off.',
         fix: 'Still off after reloading? Turn on <em>Settings → Apps → Safari → Motion &amp; Orientation Access</em>, then rejoin.'
       };
-    default: // 'unknown' — before the Join tap resolved permission (e.g. the gallery)
+    default: // 'unknown' — nothing has asked yet (the gallery), or the ask was refused a hearing
       return {
         show: true, allow: true, action: 'request', allowText: 'Allow motion',
         title: 'Turn on motion access',
@@ -80,21 +75,60 @@ export function motionHelpCopy(state) {
   }
 }
 
-export function renderReadyFoot(btnEl, noteEl, { amHost, amReady, tab, canStart, host, others }) {
+// The late joiner's footer note (their ready button is hidden) — one string for
+// the live lobby (main.js renderLobby) and the gallery preview (TestHarness
+// 'lobby-joining').
+export const NEXT_RACE_NOTE = 'You’re in the next race!';
+
+// Lobby footer — shared by the live phone (main.js) and the gallery preview
+// (TestHarness) so the button logic can't drift. Non-hosts toggle their own
+// readiness; the host gets a single "Start race" button, disabled until every
+// other connected player is ready (the display re-validates START_GAME, so
+// this gate is purely UX). `others` is every other NON-host connected player
+// as {name, color, ready}; `host` is {name, color} for the non-host waiting
+// note; `canStart` additionally gates the host until a track is picked.
+export function renderReadyFoot(btnEl, noteEl, { amHost, amReady, tab, canStart, host, others, backEl, starting }) {
+  // A new NODE for a new face, so the relabelled button can never inherit an
+  // in-flight press from the face before it — its release, its :active, or a
+  // phone's sticky :hover. Timing fixes all failed here: on a touch tap the
+  // release lands AFTER this handler, so nothing it does can catch one. Same
+  // id and classes, so the next el('ready-btn') finds it; main.js delegates
+  // from .lobby-go so the listener survives the swap.
+  const face = amHost ? tab : 'ready';
+  if (btnEl.dataset.face && btnEl.dataset.face !== face) {
+    const fresh = btnEl.cloneNode(false);
+    btnEl.replaceWith(fresh);
+    btnEl = fresh;
+  }
+  btnEl.dataset.face = face;
+
   btnEl.classList.remove('hidden');
+  // The back chip is the other half of the stepper, and only the host has a
+  // page to go back FROM — so it lives and dies with the forward button rather
+  // than in its own renderer, which is what let the old tab strip drift out of
+  // step with the bar below it.
+  if (backEl) backEl.classList.toggle('hidden', !(amHost && tab === 'race'));
   // The note is a floating chip OUT OF FLOW above the button (controller.css),
   // hidden by :empty — so it's cleared, never display:none'd, and toggling
   // ready never moves the button.
   const allReady = others.every((p) => p.ready);
   if (amHost) {
-    // The host's bar is a STEPPER between the two lobby pages: on CAR it
+    // The host's button is a STEPPER between the two lobby pages: on CAR it
     // advances ("Select race", always enabled — picking needs no permission),
-    // on RACE it launches. Blue for the step, brand green stays "go".
+    // on RACE it launches. Blue for the step, brand green stays "go". There is
+    // no tab strip above it: this button and the chip beside it ARE the
+    // navigation, so the label has to name the destination, not the action.
     const onCar = tab === 'car';
-    btnEl.textContent = onCar ? 'Select race' : 'Start race';
+    // START IS THE ONE TAP WITH NOTHING BEHIND IT. Every other lobby control
+    // moves this phone's own UI on the press and lets the next LOBBY_UPDATE
+    // confirm it; START moves nothing here, and what it waits for is the display
+    // building a whole scene before it publishes the snapshot that changes our
+    // screen. Left bare, the button reads as dead for the whole of that. So the
+    // press owns the button until the snapshot arrives (or main.js gives up).
+    btnEl.textContent = onCar ? 'Select race' : (starting ? 'Starting…' : 'Start race');
     btnEl.classList.toggle('btn--step', onCar);
-    btnEl.disabled = onCar ? false : (!canStart || !allReady);
-    btnEl.classList.remove('is-pressed');
+    btnEl.disabled = onCar ? false : (starting || !canStart || !allReady);
+    btnEl.classList.toggle('is-pressed', !onCar && !!starting);
     noteEl.textContent = (!onCar && !allReady) ? 'Waiting for all players to get ready…' : '';
   } else {
     btnEl.disabled = false;

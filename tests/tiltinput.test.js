@@ -219,45 +219,41 @@ test("headless (no window at all) stays 'unknown' — Node suites are not sensor
   assert.equal(new TiltInput({}).motionState, 'unknown');
 });
 
-// A fake browser: a window with the sensor API present, a settable permissions
-// policy, and a hand-driven `deviceorientation` listener list. This is the shape
-// that matters — every case below has DeviceOrientationEvent DEFINED, because
-// the whole point is that its presence proves nothing about delivery.
-async function withFakeBrowser({ policyAllows = true, hasFeaturePolicy = true }, fn) {
-  const had = ['window', 'document'].map((k) => [k, Object.prototype.hasOwnProperty.call(globalThis, k), globalThis[k]]);
+// A fake browser: a window with the sensor API present and a hand-driven
+// `deviceorientation` listener list. This is the shape that matters — every case
+// below has DeviceOrientationEvent DEFINED, because the whole point is that its
+// presence proves nothing about delivery.
+async function withFakeBrowser(fn) {
+  const had = ['window'].map((k) => [k, Object.prototype.hasOwnProperty.call(globalThis, k), globalThis[k]]);
   const listeners = new Set();
+  const clicks = new Set();   // the gesture TiltInput waits for when it was refused one
   globalThis.window = {
     DeviceOrientationEvent: function () {},   // present, as on every real browser
-    addEventListener: (type, fn2) => { if (type === 'deviceorientation') listeners.add(fn2); },
-    removeEventListener: (type, fn2) => { if (type === 'deviceorientation') listeners.delete(fn2); },
+    addEventListener: (type, fn2) => {
+      if (type === 'deviceorientation') listeners.add(fn2); else if (type === 'click') clicks.add(fn2);
+    },
+    removeEventListener: (type, fn2) => {
+      if (type === 'deviceorientation') listeners.delete(fn2); else if (type === 'click') clicks.delete(fn2);
+    },
   };
-  globalThis.document = hasFeaturePolicy
-    ? { featurePolicy: { allowsFeature: (f) => (f === 'accelerometer' ? policyAllows : true) } }
-    : {};
   const emit = (e) => { for (const l of [...listeners]) l(e); };
+  const tap = () => { for (const l of [...clicks]) l(); };
   // AWAIT before the teardown: the settle timer fires 600 ms after fn returns
   // its promise, and would find the fake window already gone.
-  try { return await fn({ emit }); } finally {
+  try { return await fn({ emit, tap, clicks }); } finally {
     for (const [k, existed, prev] of had) { if (existed) globalThis[k] = prev; else delete globalThis[k]; }
   }
 }
 
-test("a permissions policy that withholds the accelerometer constructs as 'unsupported'", async () => {
-  await withFakeBrowser({ policyAllows: false }, () => {
-    // DeviceOrientationEvent is defined here and would never fire — the exact
-    // shape of a cross-origin iframe whose embedder spent no `allow` on it.
-    assert.equal(new TiltInput({}).motionState, 'unsupported');
-  });
-});
-
-test('a policy that allows the accelerometer leaves the state unresolved for the gesture', async () => {
-  await withFakeBrowser({ policyAllows: true }, () => {
-    assert.equal(new TiltInput({}).motionState, 'unknown');
+test('a window WITH the sensor API leaves the state unresolved for the gesture', async () => {
+  await withFakeBrowser(() => {
+    assert.equal(new TiltInput({}).motionState, 'unknown',
+      'the constructor proves nothing about delivery — only listening does');
   });
 });
 
 test("a granted listener that delivers nothing settles to 'unsupported'", async () => {
-  await withFakeBrowser({ hasFeaturePolicy: false }, async () => {
+  await withFakeBrowser(async () => {
     const t = new TiltInput({});
     assert.equal(await t.enableMotion(), 'unsupported',
       'no sample inside the settle window means no usable sensor, whatever permission said');
@@ -265,7 +261,7 @@ test("a granted listener that delivers nothing settles to 'unsupported'", async 
 });
 
 test("a sample after the window takes the 'unsupported' verdict back", async () => {
-  await withFakeBrowser({ hasFeaturePolicy: false }, async ({ emit }) => {
+  await withFakeBrowser(async ({ emit }) => {
     const t = new TiltInput({});
     assert.equal(await t.enableMotion(), 'unsupported');
     // A slow sensor, not an absent one. Without this the phone would sit on
@@ -277,7 +273,7 @@ test("a sample after the window takes the 'unsupported' verdict back", async () 
 });
 
 test("an all-null sample does NOT count as delivery — it still settles 'unsupported'", async () => {
-  await withFakeBrowser({ hasFeaturePolicy: false }, async ({ emit }) => {
+  await withFakeBrowser(async ({ emit }) => {
     const t = new TiltInput({});
     const state = t.enableMotion();
     // Chromium emits exactly one of these on sensorless hardware; counting
@@ -289,7 +285,7 @@ test("an all-null sample does NOT count as delivery — it still settles 'unsupp
 });
 
 test('a real sample resolves granted immediately, without paying the settle window', async () => {
-  await withFakeBrowser({ hasFeaturePolicy: false }, async ({ emit }) => {
+  await withFakeBrowser(async ({ emit }) => {
     const t = new TiltInput({});
     const started = Date.now();
     const state = t.enableMotion();
@@ -372,13 +368,77 @@ test('after calibration, a translation shake barely moves the steer', () => {
   });
 });
 
-test('stop() resets brake + ACTION state so the next race cannot inherit a stale press', () => {
+test('stop() resets brake + ACTION + keyboard state so the next race cannot inherit a stale press', () => {
   const t = new TiltInput({});
   t.setActionEnabled(true);
   t.pressAction(); t.pressBrake(true);
+  // A held ArrowLeft + Space whose keyup the page missed (window blurred over
+  // race end). Set directly: headless Node never binds the key listeners.
+  t._keyL = true; t._key = -1; t._brakeKey = 1;
   assert.ok(t._useCount > 0 && t._brakeBtn > 0, 'state is set mid-race');
   t.stop();
   assert.equal(t._useCount, 0, 'use-counter reset on stop');
   assert.equal(t._brakeBtn, 0, 'brake reset on stop');
   assert.equal(t._actKeyDown, false, 'held-key flag cleared on stop');
+  assert.equal(t._key, 0, 'keyboard steer cleared on stop — a missed keyup must not steer the next race');
+  assert.equal(t._keyL, false, 'held-key steer flag cleared on stop');
+  assert.equal(t._brakeKey, 0, 'keyboard brake cleared on stop');
+});
+
+// ---- a refused REQUEST is not a refused PERMISSION ----
+
+test("a requestPermission the platform would not even put leaves 'unknown', and re-asks on the next tap", async () => {
+  await withFakeBrowser(async ({ emit, tap, clicks }) => {
+    // iOS rejects the call outright when no user gesture is behind it — which is
+    // what a launcher join produces, since the shell joins at boot with no tap.
+    // Recording 'denied' there would be a one-way door: its only recovery is a
+    // reload, straight back into the same gestureless boot.
+    let gesture = false;
+    globalThis.window.DeviceOrientationEvent.requestPermission = () =>
+      (gesture ? Promise.resolve('granted') : Promise.reject(new Error('NotAllowedError')));
+
+    const t = new TiltInput({});
+    assert.equal(await t.enableMotion(), 'unknown', 'refused a hearing, not refused permission');
+    assert.equal(clicks.size, 1, 'the missing gesture is what it now waits for');
+
+    gesture = true;
+    tap();
+    await Promise.resolve(); await Promise.resolve();   // let the re-request resolve and attach
+    emit({ beta: 10, gamma: 15 });
+    assert.equal(t.motionState, 'granted', 'the tap supplied what the boot could not');
+    assert.ok(t.haveTilt);
+    assert.equal(clicks.size, 0, 'one shot — a refusal WITH a gesture behind it is a real one');
+  });
+});
+
+test("Chromium's 'prompt' resolution is no answer either: 'unknown', re-asked on the next tap", async () => {
+  await withFakeBrowser(async ({ emit, tap, clicks }) => {
+    // Chromium 153 gained requestPermission() and, where it does not put the
+    // question (no gesture, or a headless browser), resolves 'prompt' instead
+    // of rejecting. Mapping every non-'granted' answer to 'denied' turned that
+    // into the "Motion sensor is blocked" popup on every E2E phone.
+    let gesture = false;
+    globalThis.window.DeviceOrientationEvent.requestPermission = () =>
+      Promise.resolve(gesture ? 'granted' : 'prompt');
+
+    const t = new TiltInput({});
+    assert.equal(await t.enableMotion(), 'unknown', "'prompt' is not a decision");
+    assert.equal(clicks.size, 1, 'waits for the gesture that lets the platform ask');
+
+    gesture = true;
+    tap();
+    await Promise.resolve(); await Promise.resolve();
+    emit({ beta: 10, gamma: 15 });
+    assert.equal(t.motionState, 'granted');
+    assert.ok(t.haveTilt);
+  });
+});
+
+test("an actual 'denied' answer is still a denial", async () => {
+  await withFakeBrowser(async ({ clicks }) => {
+    globalThis.window.DeviceOrientationEvent.requestPermission = () => Promise.resolve('denied');
+    const t = new TiltInput({});
+    assert.equal(await t.enableMotion(), 'denied');
+    assert.equal(clicks.size, 0, 'the player answered; nothing to re-ask');
+  });
 });

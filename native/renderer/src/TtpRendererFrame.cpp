@@ -1,7 +1,9 @@
-// Split from the original single-file TtpRenderer.cpp along its subsystem
-// seams; TtpRendererImpl.h carries what the topic files share. Pure code
-// motion — behaviour, member set and ABI are unchanged.
+// The per-frame path: the cell grid, cameras, cars, effects and the per-view
+// passes. TtpRendererImpl.h carries what the topic files share.
 #include "TtpRendererImpl.h"
+
+#include <utils/Log.h>
+
 #include "TtpRendererKit.h"
 
 
@@ -145,12 +147,33 @@ static View::FogOptions fogFor(float near, float far, const float3& color) {
     View::FogOptions fog{};
     fog.color = color;
     fog.heightFalloff = 0.0f;
-    fog.cutOffDistance = 400.0f; // keeps the SKY_R dome unfogged (fog:false in the JS)
-    if (!(far > near)) { fog.enabled = false; return fog; }
-    const float span = far - near;
-    fog.distance = near + 0.075f * span;
-    fog.density = 1.85f / span;
-    fog.enabled = true;
+    fog.cutOffDistance = 400.0f; // keeps SKY_BAND's sky content unfogged (fog:false in the JS)
+    // ALWAYS DISABLED, AND THE OPTIONS STILL MATTER. `enabled` selects Filament's
+    // fog VARIANT, which is the expensive thing — a cubemap sampler and a sun
+    // inscattering pow behind uniform branches this scene never takes, for one
+    // exponential's worth of work (18 ms of a 79 ms frame on the reference
+    // Android box; see ttp_grade.inc's ttpFog, which reproduces it for a
+    // fraction). Everything below is still filled in because
+    // ColorPassDescriptorSet::prepareFog runs whether or not the variant does, so
+    // these ARE the uniforms our own fog reads.
+    //
+    // THE NO-FOG CASE MUST ZERO THE DENSITY BY HAND. Filament's FogOptions
+    // defaults `density` to 0.1, not 0, and `distance` to 0 — so a branch that
+    // simply declined to write them left ttpFogFactor evaluating
+    // `1 - exp(-0.1 * d)` from the camera outwards, i.e. near-opaque haze by
+    // ~30 world units, on exactly the surfaces that asked for NO fog (track
+    // previews and the free-cam inspector, via ttp_display_fog(0), and the
+    // TTP_FEAT_FOG ablation arm). Confirmed on the Android box 2026-08-23 by an
+    // A/B/A of the mask on one install: the "fog off" frame was the FOGGIER of
+    // the two. An earlier comment here asserted the default was 0; it is not.
+    fog.distance = 0.0f;
+    fog.density = 0.0f;
+    if (far > near) {
+        const float span = far - near;
+        fog.distance = near + 0.075f * span;
+        fog.density = 1.85f / span;
+    }
+    fog.enabled = false;
     return fog;
 }
 
@@ -194,7 +217,19 @@ void TtpRenderer::ensureSceneTarget() {
             .texture(RenderTarget::AttachmentPoint::DEPTH, mSceneDepth)
             .build(*mEngine);
 
-    if (!mPresentInstance) {
+    ensurePresentQuad();
+    TextureSampler sampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR);
+    sampler.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+    sampler.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+    mPresentInstance->setParameter("scene", mSceneColor, sampler);
+    mPresentInstance->setParameter("texel",
+            math::float2{ 1.0f / (float) mWidth, 1.0f / (float) mHeight });
+    mPresentView->setViewport({ 0, 0, mWidth, mHeight });
+}
+
+void TtpRenderer::ensurePresentQuad() {
+    if (mPresentInstance || !mPresentMaterial) return;
+    {
         mPresentInstance = mPresentMaterial->createInstance();
         // No exposure parameter any more — the grade is the scene materials'
         // (kGradeExposure / ttp_grade.inc), and this pass only antialiases.
@@ -239,13 +274,8 @@ void TtpRenderer::ensureSceneTarget() {
         mPresentView->setShadowingEnabled(false);
         mPresentView->setFrustumCullingEnabled(false);
     }
-    TextureSampler sampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR);
-    sampler.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
-    sampler.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
-    mPresentInstance->setParameter("scene", mSceneColor, sampler);
-    mPresentInstance->setParameter("texel",
-            math::float2{ 1.0f / (float) mWidth, 1.0f / (float) mHeight });
-    mPresentView->setViewport({ 0, 0, mWidth, mHeight });
+    // No "scene" binding here: the AA path's ensureSceneTarget sets it when a
+    // real target exists. The bakes only borrow the geometry and views.
 }
 
 // Between frames only (resize / teardown): the views and the present instance
@@ -254,6 +284,21 @@ void TtpRenderer::ensureSceneTarget() {
 void TtpRenderer::destroySceneTarget() {
     if (!mSceneRT) return;
     for (View* v : mCellViews) v->setRenderTarget(nullptr);
+    // The present instance holds mSceneColor as its "scene" sampler, and a
+    // MaterialInstance parameter OUTLIVES a destroy: the next descriptor-set
+    // commit validates the handle and a freed one is a driver-thread PANIC
+    // (use-after-free of FTexture — it cost a day of "relay flakiness" to
+    // find, because it fired exactly on pinned boots, where the resize lands
+    // while the first scene build's target is fresh). Point it at something
+    // alive BEFORE the free; ensureSceneTarget re-binds the real one whenever
+    // the target comes back.
+    if (mPresentInstance) {
+        if (Texture* w = whiteTexture()) {
+            TextureSampler smp(TextureSampler::MinFilter::NEAREST,
+                    TextureSampler::MagFilter::NEAREST);
+            mPresentInstance->setParameter("scene", w, smp);
+        }
+    }
     mEngine->flushAndWait();
     mEngine->destroy(mSceneRT); mSceneRT = nullptr;
     mEngine->destroy(mSceneColor); mSceneColor = nullptr;
@@ -335,9 +380,24 @@ void TtpRenderer::ensureOverlay() {
     mOverlayView = mEngine->createView();
     mOverlayView->setScene(mOverlayScene);
     mOverlayView->setCamera(mOverlayCamera);
-    // TRANSLUCENT is what makes this an OVERLAY: the view blends onto whatever
-    // the present pass already put on the canvas instead of replacing it.
-    mOverlayView->setBlendMode(View::BlendMode::TRANSLUCENT);
+    // OPAQUE, and the quads' own `blending : transparent` is what makes this an
+    // overlay. NOT `BlendMode::TRANSLUCENT`, which is a different question than
+    // it looks: it does not mean "these quads blend", it means "composite this
+    // whole VIEW over the destination" — so Filament renders the view into a
+    // full-surface intermediate buffer and blends the lot on. Measured on the
+    // Apple TV (A10X) at 3840x2160: **4.2-4.5 ms of a 16.68 ms budget**, to
+    // deliver a few thousand pixels of divider and steer bar. It was the single
+    // largest item in a 4-player frame — larger than the entire game world —
+    // and dropping it is what puts a 4-way split back inside 60 Hz at native
+    // 4K. Removing the quads instead measured the SAME as this, i.e. the
+    // drawing was never the cost.
+    //
+    // Nothing is wiped by going opaque: this is the LAST view of the frame, and
+    // Filament clears colour only for the first view rendered into a given
+    // target (details/Renderer.cpp drops COLOR from both the clear and the
+    // discard flags after it). So the quads blend against what the present pass
+    // left there, which is exactly what the old blend mode was asked for.
+    mOverlayView->setBlendMode(View::BlendMode::OPAQUE);
     mOverlayView->setPostProcessingEnabled(false); // we are past the grade
     mOverlayView->setShadowingEnabled(false);
     mOverlayView->setFrustumCullingEnabled(false);
@@ -356,12 +416,19 @@ MaterialInstance* TtpRenderer::overlayQuad(float x, float y, float w, float h) {
                 .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
                         mOverlayVB, mOverlayIB, 0, 6)
                 .culling(false)
+                // Last in a cell's blend pass, over everything the cell drew.
+                .priority(7)
+                // On every feature layer but the shadow casters', so a folded
+                // overlay stays on screen whatever group an ablation hides.
+                .layerMask(0xff, 0xfd)
                 .castShadows(false).receiveShadows(false)
                 .build(*mEngine, q.entity);
         mOverlayQuads.push_back(q);
     }
     OverlayQuad& q = mOverlayQuads[mOverlayUsed++];
-    if (!q.inScene) { mOverlayScene->addEntity(q.entity); q.inScene = true; }
+    Scene* const want = mOverlayFolded ? mScene : mOverlayScene;
+    if (q.scene && q.scene != want) { q.scene->remove(q.entity); q.scene = nullptr; }
+    if (!q.scene) { want->addEntity(q.entity); q.scene = want; }
     // ttp_grid_cell measures from the TOP left, like the DOM and like every
     // consumer of the answer; the ortho camera below is ordinary GL, measuring
     // from the bottom. This is the one flip — the same one the cell viewports
@@ -378,6 +445,7 @@ MaterialInstance* TtpRenderer::overlayQuad(float x, float y, float w, float h) {
 void TtpRenderer::drawOverlay(const TtpFrameInput& input) {
     const uint32_t before = mOverlayUsed;
     mOverlayUsed = 0;
+    mOverlayFolded = !mAntialias && !mDeckLodTint;
     if (mOverlayMaterial && input.hudCount && mWidth && mHeight) {
         // Every size here is a fraction of something this function can measure:
         // the cell and the canvas for the bar, the canvas alone for the rules.
@@ -389,7 +457,7 @@ void TtpRenderer::drawOverlay(const TtpFrameInput& input) {
         const float3 surface = hudRgb(TTP_HUD_SURFACE);
         const uint32_t n = input.hudCount;
 
-        // .cell-divider — a 4 px ink rule down every seam that has cells on both
+        // .cell-divider — a 7 px black rule down every seam that has cells on both
         // sides, SPANNING THE WHOLE CANVAS, deduplicated exactly as the DOM's
         // loop was: one rule per distinct cell edge, not one per cell.
         //
@@ -429,12 +497,21 @@ void TtpRenderer::drawOverlay(const TtpFrameInput& input) {
                 for (uint32_t k = 0; k < ny; k++) seen = seen || ys[k] == r.y;
                 if (r.y > y0 && !seen && ny < 8) ys[ny++] = r.y;
             }
-            // rgba(42, 39, 53, 0.88) — the ink, let through by the tiniest bit.
-            const float4 rule{ ink.xyz, 0.88f };
+            // Pure opaque black, NOT the theme ink: the rule is the join between
+            // two players' pictures rather than chrome on one of them, and the
+            // warm ink at 0.88 read as a tinted stripe over whatever the two
+            // scenes put behind it.
+            const float4 rule{ 0.0f, 0.0f, 0.0f, 1.0f };
             // Weight off the CANVAS, like the span: the rule belongs to the
             // whole surface, not to one cell. The floor is rasterization — a
             // sub-pixel rule fades out rather than thinning.
-            const float ruleW = std::max(1.0f, (float) mHeight * (4.0f / 1080.0f));
+            //
+            // 7 authored px, up from 4. The cells' chrome moved off the divider
+            // when the HUD took a uniform margin, and a hairline with clear air
+            // either side of it stopped reading as the join between two pictures
+            // and started reading as a scratch on one. It is the only thing
+            // separating two players' views, so it is allowed to be a line.
+            const float ruleW = std::max(1.0f, (float) mHeight * (7.0f / 1080.0f));
             for (uint32_t k = 0; k < nx; k++) {
                 if (MaterialInstance* mi = overlayQuad(xs[k] - ruleW * 0.5f, 0,
                             ruleW, (float) mHeight)) {
@@ -461,6 +538,31 @@ void TtpRenderer::drawOverlay(const TtpFrameInput& input) {
         // 20 clear of the bottom) against a 1080-line panel, times BAR_SCALE.
         // BAR_SCALE is the only knob: scale the shape, never re-proportion the
         // numbers.
+        //
+        // NOT INSET BY THE SAFE ZONE, and that is a decision rather than an
+        // omission. Everything the SHELL places is inset — its rects come out of
+        // ttp_display_cell_rects already intersected with what a television
+        // leaves — and this bar deliberately keeps the authored clearance:
+        //
+        //   1. It is the ONE HUD element the player also has in their hand. The
+        //      phone draws the same bar off the same tilt eased by the same
+        //      STEER_BAR_TAU, so a cropped bar on the TV is the only readout in
+        //      this HUD with an uncropped copy two feet away. Nothing else here
+        //      — the name chip, the place badge, the lap pill, the item slot —
+        //      exists anywhere but the TV.
+        //   2. Insetting it costs the picture. `clear` is already 20 * unit, so
+        //      the move is only the difference (about 20 px at 1080p solo), but
+        //      the cell it moves INTO is the one the car is in: the rig's fixed
+        //      vertical fov puts the car's rear contact patch around 13% of a
+        //      cell's height above its bottom edge whatever the layout, and in a
+        //      STACKED cell 5% of the screen is 10% of the cell. Solo has the
+        //      room; the split does not, and one bar that moves in some layouts
+        //      and not others is worse than either.
+        //
+        // What is accepted: on a set that crops, the bar loses its bottom border
+        // and part of the fill, and reads as a broken shape rather than a smaller
+        // one. Weighed against (1) and taken. Do not "fix" the inconsistency with
+        // the chips without re-arguing both points.
         static constexpr float BAR_SCALE = 1.7f;
         const TtpCellHudInput* hud = ttp_frame_hud(&input);
         for (uint32_t i = 0; i < n; i++) {
@@ -513,14 +615,16 @@ void TtpRenderer::drawOverlay(const TtpFrameInput& input) {
     // Retire what this frame did not claim. Scene membership, not a parked
     // transform: the pool outlives every split it ever drew.
     for (uint32_t i = mOverlayUsed; i < before && i < mOverlayQuads.size(); i++) {
-        if (!mOverlayQuads[i].inScene) continue;
-        mOverlayScene->remove(mOverlayQuads[i].entity);
-        mOverlayQuads[i].inScene = false;
+        OverlayQuad& q = mOverlayQuads[i];
+        if (!q.scene) continue;
+        q.scene->remove(q.entity);
+        q.scene = nullptr;
     }
-    if (mOverlayUsed && mOverlayView) {
+    if (mOverlayUsed && mOverlayView && !mOverlayFolded) {
         mOverlayView->setViewport({ 0, 0, mWidth, mHeight });
         mOverlayCamera->setProjection(Camera::Projection::ORTHO,
                 0, (double) mWidth, 0, (double) mHeight, 0, 2);
+        mOverlayView->setMaterialGlobal(3, float4{ 0.0f, 0.0f, (float) mWidth, (float) mHeight });
     }
 }
 
@@ -535,7 +639,7 @@ static double ttpNowMs() {
 const char* const* TtpRenderer::profileNames() {
     static const char* names[] = { "cars", "world", "skids", "ambient",
             "beginFrame", "cellSetup", "cellRender", "present", "endFrame",
-            "total", nullptr };
+            "total", "decalUp", "build", nullptr };
     return names;
 }
 
@@ -545,6 +649,117 @@ const char* const* TtpRenderer::profileNames() {
 void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars,
         uint32_t nCars, std::vector<float3>& carPosW, std::vector<DeckDecal>& auraDecals) {
     auto& tcm = mEngine->getTransformManager();
+    // The car-shadow layer is TRANSIENT: last frame's stamps are erased
+    // before this frame lays its own — unconditionally, ablation arm
+    // included, so a car that vanished (or a channel switched off mid-run)
+    // leaves nothing behind. The stamps themselves are laid per car below.
+    if (mCarShadowTex[0]) eraseCarShadow();
+    // The shadow LOD's camera eyes. Null = no per-car ranking, and the lodT
+    // fallback below splits that two ways: overviews (the gallery pins those)
+    // and the no-views case stay on the TEXTURE path, so every car keeps a
+    // shadow under the [4] masked cap; a vroad without the carShadow sampler
+    // or the forced debug mask layer go all-MASKED instead.
+    // BLOB MODE NEEDS NO PICK AT ALL — nobody is eligible, so the ranking below
+    // is skipped outright rather than run and thrown away. The other two modes
+    // both need it: hybrid to crossfade by distance, and silhouette because the
+    // masked list still only holds four, and WHICH four has to be the per-view
+    // round robin or a player loses their own car's shadow (see below).
+    const TtpViewInput* lodViews = ((input.flags & TTP_FRAME_OVERVIEW) == 0u
+            && input.viewCount > 0 && mForceMaskLayer < 0 && mCarShadowTex[0]
+            && mShadowTune.mode != kShadowModeBlob)
+            ? ttp_frame_views(&input) : nullptr;
+    // RANK the near band, PER VIEW. A pack can put more cars inside
+    // kShadowLodNear than the masked list holds, and a car whose entry the
+    // fold dropped had NO shadow at all — near cars skip the texture raster,
+    // so the cap's overflow deleted the shadow outright (user-caught: "close
+    // cars without a shadow next to far cars with one"). So the pick is a RANK
+    // gate: everyone it does not reach rides the texture blob regardless of
+    // distance, the fold can never overflow, and every car always carries a
+    // shadow.
+    //
+    // Each camera ranks its OWN nearest and they take turns, rather than one
+    // global pool ranked by distance to whichever camera happens to be
+    // closest. A global pool is starvable the moment the screen splits — see
+    // kMaxMaskedDeckDecals for the bug it produced — and taking turns cannot
+    // be: whatever the other cameras are looking at, this one still gets its
+    // pick.
+    //
+    // Note the two distances do different jobs. The PICK is against the view
+    // doing the picking; the CROSSFADE below rides lodCamD, the distance to
+    // the nearest camera of any, because that is the camera the fade has to
+    // look right from. Contract positions are plenty at a 10u threshold; the
+    // seating below moves a car millimetres.
+    float lodCamD[16];
+    bool lodEligible[16];
+    // SILHOUETTE mode has no distance band — it is the A/B arm for "what did
+    // the masked loop look like", so every car the pick reaches is fully masked
+    // rather than faded in over kShadowLodNear. Declared out here because the
+    // per-car loop below reads it.
+    const bool allMasked = mShadowTune.mode == kShadowModeSilhouette;
+    if (lodViews) {
+        for (uint32_t i = 0; i < nCars && i < 16; i++) {
+            const TtpCarInput& ci = cars[i];
+            const float3 cp{ ci.pos.x, ci.pos.y, ci.pos.z };
+            float d2 = 1e30f;
+            for (uint32_t vi = 0; vi < input.viewCount; vi++) {
+                const float3 dc = cp - float3{ lodViews[vi].world[12],
+                        lodViews[vi].world[13], lodViews[vi].world[14] };
+                d2 = std::min(d2, dot(dc, dc));
+            }
+            lodCamD[i] = std::sqrt(d2);
+            lodEligible[i] = false;
+        }
+        // The decal sub-arms reach the masked list HERE, not in the shader:
+        // budget 0 (NO_DECAL_MASKED) makes every car ineligible, so lodT
+        // rides to 1 and the blob carries full alpha — the real fallback
+        // picture. CAPS_HALF halves the budget the same way; the rank gate
+        // degrades whoever misses to the blob.
+        int budget = (mDecalDebug & kDebugNoDecalMasked) ? 0
+                : (mDecalDebug & kDebugDecalCapsHalf)
+                        ? kMaxMaskedDeckDecals / 2 : kMaxMaskedDeckDecals;
+        // FIRST, EVERY VIEW'S OWN CAR — the one it FOLLOWS (TtpViewInput.car),
+        // not the one nearest its eye. Those are different questions and the
+        // difference is the whole bug: the chase rig sits CHASE_DIST behind
+        // the player, so a car DRAFTING them is nearer to their eye than their
+        // own car is, and a nearest-first pick therefore hands the player's
+        // own slot to the bot on their tail. That is the blob-under-your-own-
+        // car this budget exists to prevent, and picking by proximity only
+        // moved it from "some player" to "the drafted player" — user-caught
+        // both times. No distance gate here on purpose: the subject is ~2u
+        // away by construction, and a gate could only ever strand them.
+        for (uint32_t vi = 0; vi < input.viewCount && budget > 0; vi++) {
+            const int own = lodViews[vi].car;
+            if (own < 0 || own >= (int) nCars || own >= 16 || lodEligible[own]) continue;
+            lodEligible[own] = true;
+            budget--;
+        }
+        // THEN whatever is left, round-robin over the views by proximity, so
+        // adjacent rivals get dressed too and solo still spends its whole
+        // budget. Round-robin and not view-by-view: draining one view's
+        // allowance before starting the next spends everything on cameras 0
+        // and 1 in a four-way split and leaves 2 and 3 with nothing.
+        //
+        // A view with nothing left in range CONTINUES rather than breaks: it
+        // is out of candidates, the other cameras are not.
+        for (int round = 0; round < kMaxMaskedDeckDecals && budget > 0; round++) {
+            for (uint32_t vi = 0; vi < input.viewCount && budget > 0; vi++) {
+                const float3 eye{ lodViews[vi].world[12], lodViews[vi].world[13],
+                        lodViews[vi].world[14] };
+                int best = -1;
+                float bestD2 = 0;
+                for (uint32_t i = 0; i < nCars && i < 16; i++) {
+                    if (lodEligible[i]) continue;
+                    const float3 dc = float3{ cars[i].pos.x, cars[i].pos.y,
+                            cars[i].pos.z } - eye;
+                    const float d2 = dot(dc, dc);
+                    if (best < 0 || d2 < bestD2) { best = (int) i; bestD2 = d2; }
+                }
+                if (best < 0 || bestD2 >= kShadowLodFar * kShadowLodFar) continue;
+                lodEligible[best] = true;
+                budget--;
+            }
+        }
+    }
     for (uint32_t i = 0; i < nCars; i++) {
         const TtpCarInput& c = cars[i];
         float3 fwd = { c.forward.x, c.forward.y, c.forward.z };
@@ -760,10 +975,11 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
             if (c.monster > 0.5f && input.viewCount > 0) {
                 const TtpViewInput* vws = ttp_frame_views(&input);
                 const float3 mon = carPos;
-                for (uint32_t vi = 0; vi < input.viewCount && vi < input.carCount; vi++) {
-                    if (vi == i) continue;
+                for (uint32_t vi = 0; vi < input.viewCount; vi++) {
+                    const int own = vws[vi].car;
+                    if (own < 0 || own == (int) i || own >= (int) nCars) continue;
                     const float3 camP = { vws[vi].world[12], vws[vi].world[13], vws[vi].world[14] };
-                    const float3 f = float3{ cars[vi].pos.x, cars[vi].pos.y, cars[vi].pos.z } - camP;
+                    const float3 f = float3{ cars[own].pos.x, cars[own].pos.y, cars[own].pos.z } - camP;
                     const float3 mv = mon - camP;
                     if (dot(mv, f) <= 0) continue;               // behind the camera
                     if (dot(mv, mv) >= dot(f, f)) continue;      // beyond the car
@@ -831,34 +1047,46 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                 mv.body = pose;
             }
             // Wheel cosmetics (SceneRenderer's readability numbers): roll from
-            // the car's REAL travel this frame (ds/r × WHEEL_SPIN_SCALE 0.4 —
-            // the marshalled spd is NORMALIZED and can't drive it), fronts yaw
+            // the car's REAL travel this frame (ds/r × WHEEL_SPIN_SCALE — the
+            // marshalled spd is NORMALIZED and can't drive it), fronts yaw
             // ±0.5 rad with steerYaw. Teleport-sized jumps don't spin the wheels.
+            //
+            // WHEEL_SPIN_SCALE is the WHOLE readability slowdown and the only
+            // place one belongs: the radius it divides by is the measured one
+            // (wheelRadiusFor), so this constant reads straight — the wheels
+            // turn at two fifths of the rate the ground speed really implies.
+            // Spinning them true strobes against the frame rate, which reads
+            // as wheels that stall or run backwards. 0.5 was auditioned and
+            // rejected on look; the slower wheel is the one that reads.
             if (mCarWheels.size() > i) {
                 constexpr float WHEEL_TURN_MAX = 0.5f;
                 constexpr float WHEEL_SPIN_SCALE = 0.4f;
-                constexpr float WHEEL_RADIUS = 0.13f;
                 constexpr float ROLL_SEG_MAX = 1.5f;
                 CarWheels& w = mCarWheels[i];
-                const float3 posW = carPos;
+                // The WHOLE distance travelled, signed by whether it was
+                // forward — a sideways slide still turns the wheels, so this
+                // is a length rather than a projection onto fwd.
                 float ds = 0;
                 if (w.hasLastPos) {
-                    const float3 d = posW - w.lastPos;
-                    const float len = length(d);
-                    ds = len * (dot(d, fwd) >= 0 ? 1.0f : -1.0f);
+                    const float3 d = carPos - w.lastPos;
+                    ds = std::copysign(length(d), dot(d, fwd));
                 }
-                w.lastPos = posW;
+                w.lastPos = carPos;
                 w.hasLastPos = true;
                 w.lastDs = ds; // the boost streaks cycle at this real travel speed
                 // While the monster is up its own fat tyres are the ones on the
                 // ground, so the roll accumulates at THEIR radius (the JS swaps
                 // c.wheelRadius to the rig's for the same reason).
-                const float radius = (isMonster && mMonsterWheelRadius > 0)
-                        ? mMonsterWheelRadius : WHEEL_RADIUS;
+                const float radius = wheelRadiusFor(w, isMonster);
                 if (std::fabs(ds) < ROLL_SEG_MAX) {
-                    w.roll += (ds / radius) * WHEEL_SPIN_SCALE;
-                    w.roll = std::fmod(std::fmod(w.roll + (float) M_PI, 2.0f * (float) M_PI)
-                            + 2.0f * (float) M_PI, 2.0f * (float) M_PI) - (float) M_PI;
+                    // Wrapped to (−π, π] so the accumulator cannot drift into
+                    // the range where a float has no precision left for a
+                    // small step. remainder() IS that wrap — it subtracts the
+                    // NEAREST multiple, where fmod subtracts toward zero and
+                    // needs a second pass to lift the negative half.
+                    w.roll = std::remainder(
+                            w.roll + (ds / radius) * WHEEL_SPIN_SCALE,
+                            2.0f * (float) M_PI);
                 }
                 // Steer yaw is about the wheel's local +Y, and the pose's
                 // half-turn is ITSELF about Y — so unlike the roll axis, this
@@ -961,18 +1189,20 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
         // Ground shadow: a MASKED road-shader decal riding the road-aligned
         // pose basis (it follows whatever the car drives — bank, hill, loop
         // deck), spun by the spin-out whirl so the silhouette tracks the car
-        // (the JS shadow's rotated right/forward axes). A monster swaps to its
-        // own footprint.
+        // (the JS shadow's rotated right/forward axes). A monster keeps the
+        // CAR's shadow, one step larger.
         {
             const mat4f bm = (c.spin != 0)
                     ? m * mat4f::rotation(c.spin, float3{ 0, 1, 0 })
                     : m;
             float sx = 1, sz = 1;
-            const bool monsterBlob = c.monster > 0.5f && mMonsterFootW > 0
-                    && mCarWheels.size() > i;
+            const bool monsterBlob = c.monster > 0.5f && mCarWheels.size() > i;
             if (monsterBlob) {
-                sx = mMonsterFootW / mCarWheels[i].footW;
-                sz = mMonsterFootL / mCarWheels[i].footL;
+                // The CAR's own shadow, wider at the wheels and barely
+                // longer — simple, by the user's call, with the two factors
+                // set from the truck's measured footprint (TtpRenderer.h).
+                sx = kMonsterShadowScaleW;
+                sz = kMonsterShadowScaleL;
             }
             // Load shift: the harder the body pitches, the closer the chassis
             // presses to the road (JS aoMat.opacity = 0.55 + AO_LOAD_GAIN·k).
@@ -995,7 +1225,12 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
             // that seed alive now that the car itself does not project.
             if (mDecalProjHint.size() <= i) mDecalProjHint.resize(i + 1, -1);
             mDecalProjHint[i] = mTrack->ringHint(carS);
-            if (mRoadInst && mDecalMaskArray
+            // mDecalMaskArray and mCarShadowTex are independent capabilities
+            // — the current blob carries both, the hybrid's near and far
+            // halves. Under either the CPU entry below is still pushed — it
+            // is the ttp_display_debug_decals readback and the warp bench's
+            // data, and the conform diagnostics ride its shape field.
+            if (mRoadInst && (mDecalMaskArray || mCarShadowTex[0])
                     && (int) mDeckDecals.size() < kMaxDeckDecals) {
                 // SHADED INTO THE ROAD, like the aura below: the shadow's
                 // fragment IS a road fragment, so nothing floats and nothing
@@ -1009,8 +1244,8 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                 // The blob quad's halves in the CAR's frame: forward in rect.z,
                 // right in rect.w (the shader divides its rotated components by
                 // exactly these).
-                const float halfF = fl * sz * 1.45f * 0.5f;
-                const float halfR = fw * sx * 1.45f * 0.5f;
+                const float halfF = fl * sz * mShadowTune.overscan * 0.5f;
+                const float halfR = fw * sx * mShadowTune.overscan * 0.5f;
                 // Heading against the track frame at carS. `bm` already carries
                 // the spin-out whirl, so the silhouette keeps whirling.
                 const TrackBin::Sample f0 = mTrack->frameAt(carS);
@@ -1018,13 +1253,19 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                 float cs = dot(f0.tangent(), fwdW), sn = dot(f0.lat, fwdW);
                 const float nl = std::sqrt(cs * cs + sn * sn);
                 if (nl > 1e-5f) { cs /= nl; sn /= nl; } else { cs = 1; sn = 0; }
+                // The layer is the MODEL's, not the slot's — claimMaskLayer
+                // resolved it at build time. Generic whenever the bake it
+                // needs did not land, which is now a state the bake itself
+                // reports rather than one that goes unnoticed.
+                const int slotLayer = mMaskLayerOfSlot.size() > i
+                        ? mMaskLayerOfSlot[i] : kMaskLayerGeneric;
                 const int layer = mForceMaskLayer >= 0 ? mForceMaskLayer
                         : (monsterBlob
                         ? (((mMaskLayerBakedBits >> kMaskLayerMonster) & 1u)
                                 ? kMaskLayerMonster : kMaskLayerGeneric)
-                        : ((i < (uint32_t) kMaskLayerMonster
-                                && ((mMaskLayerBakedBits >> i) & 1u))
-                                ? (int) i : kMaskLayerGeneric));
+                        : ((slotLayer >= 0 && slotLayer < kMaskLayerMonster
+                                && ((mMaskLayerBakedBits >> slotLayer) & 1u))
+                                ? slotLayer : kMaskLayerGeneric));
                 // THE PLANE THE MASK PROJECTS ONTO IS THE ONE THE CAR SITS ON:
                 // the best fit through its own four wheel contacts, not the
                 // track frame's tangent plane at the centreline. On a flat or
@@ -1061,14 +1302,33 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                 //
                 // So measure it: run the stamp's four corners through the same
                 // surface the seat uses and take the widest each way. The halves
-                // ride in the w slots of the two axis vectors, read by the
-                // shader AND by foldToChunk — keep those two in step.
+                // ride in the w slots of the two axis vectors, read by
+                // foldToChunk and repacked into the shader's maskRect.zw by
+                // uploadDeckDecals — the one site that keeps cull and fold in
+                // step.
+                // SIX probes now, not four: the corners plus the two
+                // long-edge midpoints. The cull maxes read all six (the
+                // midpoints can only widen the window, which is the safe
+                // direction), and the texture path keeps the projected
+                // points themselves — they are the warped-quad raster's
+                // vertices, so the stamp's bending error lives inside one
+                // half-stamp instead of first-order across the whole one.
                 float halfSw = 0, halfLw = 0;
-                for (int k = 0; k < 4; k++) {
-                    const float3 corner = aPos + wF * ((k & 1) ? halfF : -halfF)
-                            + wR * ((k & 2) ? halfR : -halfR);
+                float2 stampSL[6];
+                for (int k = 0; k < 6; k++) {
+                    const float fk = (float) (k % 3) - 1.0f;    // -1, 0, +1 along fwd
+                    const float rk = k < 3 ? -1.0f : 1.0f;      // left / right edge
+                    const float3 corner = aPos + wF * (fk * halfF) + wR * (rk * halfR);
                     float ks = c.trackS, kl = c.trackLat;
-                    mTrack->deckFoot(corner, ks, kl);
+                    if (mShadowTune.stampProject) {
+                        // WHERE THE SHADER WILL LOOK, not where the surface
+                        // truly is — see CarShadowTuning::stampProject.
+                        int hint = mDecalProjHint.size() > i ? mDecalProjHint[i] : -1;
+                        mTrack->project(corner, aUp, ks, kl, &hint);
+                    } else {
+                        mTrack->deckFoot(corner, ks, kl);
+                    }
+                    stampSL[k] = { ks, kl };
                     halfSw = std::max(halfSw, std::fabs(ks - c.trackS));
                     halfLw = std::max(halfLw, std::fabs(kl - c.trackLat));
                 }
@@ -1077,10 +1337,59 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                 // that lands inside the feather prints as a hard line.
                 halfSw += 0.05f;
                 halfLw += 0.05f;
+                // Load shift folded into the stamp's peak alpha, one
+                // expression for the CPU entry and the raster.
+                const float blobA = mShadowTune.ao
+                        * (1.0f + mShadowTune.loadGain * load);
+                // THE HYBRID SHADOW LOD. Near a camera the silhouette's
+                // car-shape reads and the texture layer's ~8 texels/u cannot
+                // carry it (the blob under YOUR OWN CAR looked visibly worse
+                // — user-caught, 2026-08-18); far away the blob is
+                // indistinguishable and the masked loop's per-fragment cost
+                // is the frame's biggest item. So: lodT = 0 inside
+                // kShadowLodNear of the closest active camera (true masked
+                // silhouette), 1 past kShadowLodFar (texture raster), a
+                // complementary-alpha crossfade between — stateless, so it
+                // cannot pop. The masked list only ever holds the near cars,
+                // which is what lets it declare [4] instead of FIELD_SIZE.
+                float lodT = 1.0f;
+                if (lodViews) {
+                    // Rank-gated: a car no camera's own allowance reached
+                    // rides the blob however close it is — a full blob beats
+                    // the deleted shadow the fold overflow used to produce.
+                    // The gate can no longer strand a PLAYER's car, because
+                    // round one of the pick is every view's own (see above).
+                    lodT = (i < 16 && lodEligible[i])
+                            ? (allMasked ? 0.0f : std::min(1.0f, std::max(0.0f,
+                                    (lodCamD[i] - kShadowLodNear)
+                                            / (kShadowLodFar - kShadowLodNear))))
+                            : 1.0f;
+                } else if (!mCarShadowTex[0] || mForceMaskLayer >= 0) {
+                    // All MASKED: no texture to ride (an old vroad blob), or
+                    // the ttp_display_debug_force_mask_layer probe — which
+                    // only means anything on the masked path. Overviews and
+                    // the no-views fallback keep lodT = 1: texture for every
+                    // car, so the [4] masked cap can never delete a shadow.
+                    lodT = 0.0f;
+                }
+                // The texture half. Gated by the decal ablation arm exactly
+                // as the masked loop is — raster AND (via mCarShadowUpload)
+                // the upload drop out, so the arm still prices the whole
+                // channel; applyRoadDebug zeroes the tap to match.
+                if (lodT > 0.0f && mCarShadowTex[0]
+                        && (mRoadMask & kFeatRoadDecals)
+                        && !(mDecalDebug & kDebugNoDecalBlob)) {
+                    // THE CAR'S OWN OUTLINE, not one shape for the field.
+                    // The four roster models share a bounding box, so this is
+                    // the only place they can be told apart.
+                    rasterCarShadowStamp(stampSL, carS, blobA * lodT,
+                            carShadowShapeFor(i));
+                }
                 mDeckDecals.push_back({
                         float4{ carS, carLat, halfF, halfR },
-                        float4{ kCarBlobInk.x, kCarBlobInk.y, kCarBlobInk.z,
-                                kCarBlobAO * (1.0f + (0.08f / 0.55f) * load) },
+                        float4{ mShadowInkLinear.x, mShadowInkLinear.y,
+                                mShadowInkLinear.z,
+                                lodT < 1.0f ? blobA * (1.0f - lodT) : blobA },
                         // `shape` is the profile decals' (inner/ellipse/knee/
                         // chevrons) and the masked path reads none of it, so it
                         // carries the GROUND CONFORM's numbers out to
@@ -1092,7 +1401,12 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                                 mCarWheels.size() > i ? mCarWheels[i].jitter : 0.0f,
                                 mCarWheels.size() > i ? mCarWheels[i].rawJitter : 0.0f,
                                 mCarWheels.size() > i ? mCarWheels[i].upJitter : 0.0f },
-                        float4{ sn, cs, (float) layer, 1.0f },
+                        // texrot.w: 1 = fold-visible masked (near), 2 =
+                        // texture-carried (readback only) — foldToChunk keys
+                        // on it. In the crossfade band the entry is masked
+                        // with the faded alpha above; the raster carries the
+                        // complement.
+                        float4{ sn, cs, (float) layer, lodT < 1.0f ? 1.0f : 2.0f },
                         float4{ wp.x, wp.y, wp.z, 0 },
                         float4{ wF.x, wF.y, wF.z, halfSw },
                         float4{ wR.x, wR.y, wR.z, halfLw } });
@@ -1176,7 +1490,11 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
             const float fw = mCarWheels.size() > i ? mCarWheels[i].footW : 0.95f;
             const float fl = mCarWheels.size() > i ? mCarWheels[i].footL : 2.0f;
             const float outerR = (fw + fl) * 0.5f * sc * 0.5f;
-            float alpha = std::min(0.85f, 0.7f + k * 0.3f) * pulse;
+            // 0.55/0.70, down from 0.70/0.85: the aura composites OVER the
+            // blob now, and at the blob's die-cut depth a near-opaque aura
+            // read as the shadow vanishing under boost. This is the point
+            // where the glow reads AND the shadow ghosts through it.
+            float alpha = std::min(0.70f, 0.55f + k * 0.3f) * pulse;
             // The JS alpha holds a 0.7 floor right down to the gate above, and
             // as a decal that reads worse than the mesh it mirrors: the mix
             // REPLACES what is under it, so when the sim's linear fade crossed
@@ -1445,13 +1763,22 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
         // Gold emissive throb (TrackProps _stepBoxes): synchronized across
         // boxes — 0xffd23f at 0.16 + 0.18·(0.5 + 0.5·sin(4.5t)).
         if (!mBoxGlowMats.empty()) {
-            const float pulse = 0.16f + 0.18f * (0.5f + 0.5f * std::sin(mTime * 4.5f));
-            const float3 gold = srgbToLinear(0xffd23f) * pulse;
-            // mBoxGlowMats holds every emissive-bearing instance across both
-            // pools (the fade twins carry it too, or a box would drop its glow
-            // on the frame it is grabbed — the one frame anyone is looking at
-            // it), resolved once at load rather than string-probed here.
-            for (MaterialInstance* gm : mBoxGlowMats) gm->setParameter("emissiveFactor", gold);
+            // The pulse is quantized to 20 Hz steps: on a 0.7 Hz throb the
+            // steps are invisible, and skipping the redundant writes is the
+            // point — every setParameter dirties that instance's UBO for a
+            // driver re-upload, per glow instance, per frame, for a value
+            // that barely moved. A frozen clock (pause, bench) writes nothing.
+            const float qt = std::floor(mTime * 20.0f) * (1.0f / 20.0f);
+            const float pulse = 0.16f + 0.18f * (0.5f + 0.5f * std::sin(qt * 4.5f));
+            if (pulse != mBoxGlowPulse) {
+                mBoxGlowPulse = pulse;
+                const float3 gold = srgbToLinear(0xffd23f) * pulse;
+                // mBoxGlowMats holds every emissive-bearing instance across both
+                // pools (the fade twins carry it too, or a box would drop its glow
+                // on the frame it is grabbed — the one frame anyone is looking at
+                // it), resolved once at load rather than string-probed here.
+                for (MaterialInstance* gm : mBoxGlowMats) gm->setParameter("emissiveFactor", gold);
+            }
         }
         const uint32_t* boxStates = ttp_frame_box_states(&input);
         const uint32_t nBoxes = std::min<uint32_t>(input.boxCount,
@@ -1545,7 +1872,6 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
                     bf.basis(bananas[j].lat));
         }
         const TtpRocketInput* rockets = ttp_frame_rockets(&input);
-        std::vector<float3> nowRockets;
         for (uint32_t j = 0; j < (uint32_t) mRockets.size(); j++) {
             if (mRockets[j].entity.isNull()) continue;
             auto inst = tcm.getInstance(mRockets[j].entity);
@@ -1563,7 +1889,6 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
             placeBlob(f, rockets[j].lat, 0.95f);
             const float3 tanv = f.tangent();
             const float3 p = f.pos + f.lat * rockets[j].lat + f.up * 0.32f;
-            nowRockets.push_back(p);
             const mat4f rocketXf = mat4f{ float4{ f.lat, 0 }, float4{ tanv, 0 },
                     float4{ cross(f.lat, tanv), 0 }, float4{ p, 1 } }
                     * mat4f::rotation(mTime * 9.0f, float3{ 0, 1, 0 });
@@ -1577,10 +1902,9 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
                 tcm.setTransform(tcm.getInstance(mRocketFlames[j].entity), rocketXf);
             }
         }
-        // A sim reset (fixture scrubbing) teleports every car — clear the
-        // rocket trackers so the count drop can't fire a stale-position burst,
-        // and wipe the skid layer (the JS cleared marks + patina on restart;
-        // here the wipe is one unconditional clear).
+        // A sim reset (fixture scrubbing) teleports every car — kill any live
+        // bursts and wipe the skid layer (the JS cleared marks + patina on
+        // restart; here the wipe is one unconditional clear).
         if (input.carCount > 0) {
             // A RESET teleports the whole field; a lone car jumping is a
             // RESPAWN (off the deck, back to the line). The detector once
@@ -1595,8 +1919,6 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
             const bool jumped0 = length(c0 - mLastCar0) > 5.0f;
             const bool jumpedN = input.carCount == 1 || length(cN - mLastCarN) > 5.0f;
             if (jumped0 && jumpedN) {
-                mPrevRockets.clear();
-                mPrevRocketCount = 0;
                 for (Burst& b : mBursts) b.t = -1;
                 if (mSkidTex) {
                     for (WheelTrail& t : mWheelTrails) t = {};
@@ -1636,8 +1958,6 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
             slot->ball = slot->pos;
             slot->t = 0;
         }
-        mPrevRockets = std::move(nowRockets);
-        mPrevRocketCount = input.rocketCount;
         for (int bi = 0; bi < 2; bi++) {
             Burst& b = mBursts[bi];
             if (mBurstMeshes[bi].entity.isNull()) continue;
@@ -1705,11 +2025,28 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
         mDeckDecals.insert(mDeckDecals.begin(), auraDecals.begin(),
                 auraDecals.begin() + std::min(room, auraDecals.size()));
     }
+    // Bracketed into its own profile slot (a sub-span of kProfWorld) because a
+    // moving pack defeats the per-chunk memcmp skip: 4 vec4 arrays x 4 masked
+    // entries x ~13 chunks of uniform writes is a per-frame CPU cost the
+    // world bucket alone cannot attribute.
+    const double tDecal = ttpNowMs();
     uploadDeckDecals();
+    // The car-shadow layer's one setImage + ping-pong rebind rides the same
+    // profile slot: it is this frame's other decal upload, and a decalUp
+    // spike should cover both suspects.
+    uploadCarShadow();
+    mProfile[kProfDecalUp] = ttpNowMs() - tDecal;
 }
 
 void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* cars,
         uint32_t nCars) {
+
+    // The rubber ablation arm gates the WHOLE layer — CPU raster, the
+    // setImage uploads and the throttled mip refresh below — not just the
+    // shader tap applyRoadDebug zeroes. Without this, a `-rubber` sweep
+    // measured only the tap and the upload half of the layer was
+    // unattributable (its cost is a p95 item the median cannot see).
+    if (!(mRoadMask & kFeatRoadRubber)) return;
 
     // Skid trails — the SkidMarks.js channels (slip past SKID_THRESH, curb
     // scrub, spin-out scribbles, brake bite, launch scratch) driving STAMPS
@@ -1917,9 +2254,39 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
             if (!marksAll) { trails[0].seeded = false; trails[1].seeded = false; }
             const float halfW = (mwp && mMonsterSkidWidth > 0
                     ? mMonsterSkidWidth : cw.skidWidth) / 2;
+            // The ribbon is anchored at the tyre's LEADING ground contact, not
+            // at the contact patch centre: the head runs one rolling radius
+            // ahead of the wheel node, which is exactly where the wheel's own
+            // ground silhouette ends. A trail head can only ever LAG (ink is
+            // additive and permanent, so nothing may be drawn ahead of the
+            // wheel and rewritten), and the lead buys a radius of lag that
+            // falls under the tyre and cannot be seen — the SEG_MIN commit
+            // distance fits inside it whole. It does not hide arbitrary
+            // latency: at VMAX one 60 Hz frame of travel is already wider than
+            // the radius, so an upload throttle still shows.
+            // The whole ribbon shifts by this, head and tail together, so the
+            // mark traces the same curve — only its phase along that curve
+            // moves, by at most a third of a car length.
+            // Model space faces −Z (FLIP maps it to the car's forward), and
+            // taking it off poseSpun rather than off `fwd` keeps a spun-out
+            // car's scribbles leading its own wheels.
+            //
+            // BOUNDED HERE rather than where either radius is measured, and
+            // that is the point: both come off a wheel node's AABB in shell-
+            // provided GLB bytes, and the same radius ALSO divides the roll
+            // animation, where a clamp would silently retime the spin. Only
+            // this use is a position, so only this use needs the ceiling — a
+            // mismeasured wheel may spin wrong, but it may not float ink off
+            // the tyre. The kit measures 0.125 and the monster rig 0.188, so
+            // the cap is slack on everything shipped; it exists to make the
+            // bound above a fact rather than a property of the assets.
+            constexpr float LEAD_MAX = 0.3f;
+            const float3 leadDir = normalize((poseSpun * float4{ 0, 0, -1, 0 }).xyz);
+            const float lead = std::min(LEAD_MAX, wheelRadiusFor(cw, mwp != nullptr));
             for (int wi = marksAll ? 0 : 2; wi < 4; wi++) {
                 WheelTrail& st = trails[wi];
-                const float3 gp = (poseSpun * float4{ wlocal[wi], 1 }).xyz;
+                const float3 gp = (poseSpun * float4{ wlocal[wi], 1 }).xyz
+                        + leadDir * lead;
                 if (st.projHint < 0 && mDecalProjHint.size() > i) {
                     st.projHint = mDecalProjHint[i]; // seed from the car
                 }
@@ -1977,28 +2344,76 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
                 st.last = cur;
             }
         }
-        // The upload — the ONLY recurring cost of the whole layer: a few
-        // tiny sub-rect copies on frames that committed a segment, nothing
-        // at all otherwise.
-        if (!mSkidDirty.empty()) {
-            uploadSkidRects();
-            mSkidMipsDirty = true;
-        }
-        // Refresh the rubber layer's mip chain, throttled. The tap filters
-        // trilinear (bindSkidLayer): without mips, the deck ahead minifies a
-        // 16k-wide layer through single-texel lookups and every mark
-        // SCINTILLATES in motion, which the eye reads as the track itself
-        // flickering. Regenerating on every stamp frame would be a per-frame
-        // pass over megatexels — the exact recurring cost this layer's design
-        // refuses — so it runs at most ~7 Hz; a fresh mark is under the car at
-        // mip 0 for those 150 ms, where no one can see the difference.
-        if (mSkidMipsDirty && mSkidTex && mTime - mSkidMipsAt > 0.15f) {
-            mSkidTex->generateMipmaps(*mEngine);
-            mSkidMipsDirty = false;
-            mSkidMipsAt = mTime;
+        // Dirty rects are uploaded by the drawn frame (flushSkidLayer). A frame stepped
+        // undrawn (advance) leaves them here, and a wind is thousands of those before a
+        // drawn one — so the list is bounded: past kSkidDirtyMax it collapses to its
+        // union, one upload of at most the layer. uploadSkidRects wraps and clamps it
+        // like any other.
+        if (mSkidDirty.size() > kSkidDirtyMax) {
+            for (size_t i = 1; i < mSkidDirty.size(); i++) {
+                mSkidDirty[0].x0 = std::min(mSkidDirty[0].x0, mSkidDirty[i].x0);
+                mSkidDirty[0].y0 = std::min(mSkidDirty[0].y0, mSkidDirty[i].y0);
+                mSkidDirty[0].x1 = std::max(mSkidDirty[0].x1, mSkidDirty[i].x1);
+                mSkidDirty[0].y1 = std::max(mSkidDirty[0].y1, mSkidDirty[i].y1);
+            }
+            mSkidDirty.resize(1);
         }
     }
+}
 
+// The rubber layer's GPU side, for a DRAWN frame: this frame's stamps up into the
+// texture, then the mip chain. Before beginFrame, so ink stamped this frame is drawn
+// this frame.
+void TtpRenderer::flushSkidLayer() {
+    if (!mSkidTex) return;
+        // The upload: every frame that commits a stamp, at every cell count.
+    // It runs BEFORE beginFrame, so ink stamped this frame is drawn this
+    // frame and the ribbon's visible head is the tyre's own position.
+    //
+    // THERE WAS A ~30 Hz THROTTLE HERE AND IT BOUGHT NOTHING, which is
+    // why there is no rate limit to find. It cost the half a player can
+    // SEE — a trail's head lags the tyre by upload latency times road
+    // speed, up to half a car length of bare road at VMAX — on the theory
+    // that the driver pays per upload EVENT on this in-flight texture.
+    // Measured against no throttle it is a null, and ablating the layer
+    // WHOLE is not: the layer's cost is the tap and the CPU raster.
+    // `shells/androidtv/CLAUDE.md` has the sweep and its controls.
+    // Do not reintroduce one without re-running that sweep — the reading
+    // the throttle originally came from predates kMaskedBlobCells zeroing
+    // the masked shadow budget at four cells, which was ~7 ms of the
+    // frame it was taken in.
+        if (!mSkidDirty.empty()) {
+        uploadSkidRects();
+        mSkidMipsDirty = true;
+    }
+    // Frames went by undrawn (advance) since the last draw: the throttle's premise
+    // below — a fresh mark sits under the car for its 150 ms — does not hold for
+    // marks laid a lap ago, so refresh every level now and the first drawn frame
+    // after a wind is complete.
+    if (mSkidCatchUp) {
+        mSkidCatchUp = false;
+        mSkidMipsDirty = false; mSkidMipsAt = mTime;
+        do { refreshSkidMips(); } while (mSkidMipLevel != 0 || !mSkidMipDirty.empty());
+        return;
+    }
+        // Refresh the rubber layer's mip chain, throttled. The tap filters
+    // trilinear (bindSkidLayer): without mips, the deck ahead minifies a
+    // 8k-wide layer through single-texel lookups and every mark
+    // SCINTILLATES in motion, which the eye reads as the track itself
+    // flickering. The refresh is INCREMENTAL — CPU box-filter under the
+    // dirty rects, per-level sub-rect uploads (refreshSkidMips) — because
+    // the full-chain generateMipmaps this used to be measured ~10 dropped
+    // frames/s on the reference Android box, invisible in the GPU median.
+    // The ~7 Hz throttle stays: a fresh mark is under the car at mip 0
+    // for those 150 ms, where no one can see the difference. A pass then
+    // runs ONE LEVEL PER FRAME (refreshSkidMips says why), so the four-cell
+    // slowdown this used to carry against the pass's burst is gone with
+    // the burst.
+    if (mSkidTex && (mSkidMipLevel > 0
+            || (mSkidMipsDirty && mTime - mSkidMipsAt > 0.15f))) {
+        if (mSkidMipLevel == 0) { mSkidMipsDirty = false; mSkidMipsAt = mTime; }
+        refreshSkidMips();
+    }
 }
 
 void TtpRenderer::renderAmbient(const TtpFrameInput& input) {
@@ -2013,13 +2428,34 @@ void TtpRenderer::renderAmbient(const TtpFrameInput& input) {
     // the three side ever loses the quirk, this collapses to a constant.
     if (mPollenMat) {
         const uint32_t vc = input.viewCount;
-        const uint32_t rows = vc ? (vc + (uint32_t) std::ceil(std::sqrt((double) vc)) - 1)
-                        / (uint32_t) std::ceil(std::sqrt((double) vc))
-                : 1u;
+        const uint32_t rows = gridDims(vc ? vc : 1).rows;
         const float fov = vc ? ttp_frame_views(&input)[0].fov : 50.0f;
         mPollenMat->setParameter("halfSize",
                 mAmbSize * (float) rows * std::tan(fov * (float) M_PI / 360.0f));
         mPollenMat->setParameter("time", mTime); // drives the shader-side drift
+        // The COUNT is per camera too: every cell draws its own box, so a
+        // split multiplies the cloud's vertex work by its cells — and on the
+        // Android box that work was the whole of the snow cup's cost over
+        // the beach (docs/perf/androidtv-frame-map.md). A cell draws the
+        // first count/cells particles in a box shrunk by sqrt(cells): the
+        // same flakes per unit of world as the solo view has, nearest the
+        // camera, and the far ones — a few pixels in a quarter-size cell —
+        // are what goes. `lite` then drops the floor tap and the fog from
+        // the vertex stage in those cells: the shrunk box ends inside the
+        // fog's onset, and a flake failing to settle is under what the eye
+        // resolves there (vpoint.mat).
+        if (vc && vc != mAmbCells) {
+            mAmbCells = vc;
+            auto& rcm = mEngine->getRenderableManager();
+            const auto ri = rcm.getInstance(mPollen.entity);
+            const uint32_t particles = (uint32_t) mPollen.idx.size() / 3;
+            if (ri && particles) {
+                rcm.setGeometryAt(ri, 0, RenderableManager::PrimitiveType::TRIANGLES,
+                        mPollen.vb, mPollen.ib, 0, std::max(1u, particles / vc) * 3);
+            }
+            mPollenMat->setParameter("boxXZ", kAmbBox / std::sqrt((float) vc));
+            mPollenMat->setParameter("lite", vc >= 3 ? 1.0f : 0.0f);
+        }
     }
 
     // Frame pacing. beginFrame() drops a frame when the GPU is behind — it waits
@@ -2040,16 +2476,40 @@ void TtpRenderer::renderAmbient(const TtpFrameInput& input) {
 }
 
 void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
-    auto& tcm = mEngine->getTransformManager();
     const TtpViewInput* views = ttp_frame_views(&input);
+    // Feature ablation, off until a caller asks for it: the tag pass has moved
+    // every renderable off bit 0 onto its group's, so from here the view's
+    // visible layers are what decides. Bits 0 and 1 are left alone — 1 is the
+    // shadow bake's caster set, and its view filters on that alone.
+    if (mFeatureTagged) mView->setVisibleLayers(kFeatAll, mFeatureMask);
+    // The deck's far ribbon (RoadChunk) is every race cell's trade past that
+    // cell's own gate; only the overviews draw the fine ribbon everywhere.
+    const bool deckLod = input.viewCount > 0 && !mDeckLodOff
+            && (input.flags & TTP_FRAME_OVERVIEW) == 0;
+    if (!deckLod) chooseDeckLod(nullptr, float3{ 0 }, 0.0f, false);
     if (input.viewCount == 0) {
+        if (mOverlayFolded) {
+            mView->setMaterialGlobal(3, float4{ 0.0f, 0.0f, (float) mWidth, (float) mHeight });
+        }
         mRenderer->render(mView);
     } else {
         // Split-screen: same cell grid as the display (bestGrid ≈ square-ish,
         // row 0 on top — flipped here because GL viewports are bottom-left).
         mProfile[kProfCellSetup] = 0; mProfile[kProfCellRender] = 0;
-        ensureSceneTarget();
+        // WITH the antialias pass the cells write into an offscreen buffer and
+        // vpresent filters the lot in one go; WITHOUT it they go straight onto
+        // the swap chain and there is no second pass at all. Skipping it saves
+        // BOTH halves — the buffer's store and the full-screen read — which is
+        // why the switch is here rather than a flag inside vpresent. See
+        // ttp_display_antialias for the measurement that made it a switch.
+        const bool post = mAntialias;
+        if (post) ensureSceneTarget();
         ensureCells(input.viewCount);
+        // After ensureCells, or a freshly created cell view keeps Filament's
+        // default visible layers (bit 0 alone) and draws an empty picture.
+        if (mFeatureTagged) {
+            for (View* cv : mCellViews) if (cv) cv->setVisibleLayers(kFeatAll, mFeatureMask);
+        }
         for (uint32_t i = 0; i < input.viewCount; i++) {
             // A CELL gets its tile of the fitted grid; an OVERVIEW gets the
             // surface entire. The frame says which (TTP_FRAME_OVERVIEW) rather
@@ -2064,8 +2524,13 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
             // (depth still clears per view), so the cells accumulate instead of
             // wiping each other — the same thing three does with one target and
             // per-cell viewport + scissor.
-            v->setRenderTarget(mSceneRT);
+            v->setRenderTarget(post ? mSceneRT : nullptr);
             v->setViewport({ rect.x, rect.y, rect.w, rect.h });
+            // The folded overlay's cell, in canvas pixels — voverlay.mat.
+            if (mOverlayFolded) {
+                v->setMaterialGlobal(3, float4{ (float) rect.x, (float) rect.y,
+                        (float) rect.w, (float) rect.h });
+            }
             mat4f world;
             std::memcpy(&world, views[i].world, sizeof(world));
             cam->setModelMatrix(world);
@@ -2074,158 +2539,254 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
             // Fog rides the VIEW: the race cells, the lobby's perimeter orbit
             // and the overview each run their own ramp, and the gallery runs
             // none (fogFar <= fogNear).
-            v->setFogOptions(fogFor(views[i].fogNear, views[i].fogFar, fogColorGraded(cam)));
+            v->setFogOptions(mFogOn
+                    ? fogFor(views[i].fogNear, views[i].fogFar, fogColorGraded(cam))
+                    : fogFor(1.0f, 0.0f, fogColorGraded(cam)));   // far <= near disables
+            applyDebugGlobals(v);
             // Per-cell monster fade: a truck looming in front of THIS cell's
             // car swaps to its 50%-alpha ghost (chassis + grafted body), while
             // every other cell — including the monster driver's own — keeps it
             // solid. Same between-render() trick as the cloud billboards.
-            for (size_t mi = 0; mi < mMonsterViews.size(); mi++) {
-                const MonsterView& mv = mMonsterViews[mi];
-                if (!mv.on) continue;
-                const bool ghost = (mv.mask >> i) & 1u;
-                static const mat4f GPARK = mat4f::translation(float3{ 0, -1000, 0 });
-                const bool haveRigGhost = mMonsterGhostInstances.size() > mi
-                        && mMonsterGhostInstances[mi];
-                const bool haveBodyGhost = mCarGhostAssets.size() > mi && mCarGhostAssets[mi];
-                const bool useGhost = ghost && haveRigGhost && haveBodyGhost;
-                if (mMonsterInstances.size() > mi && mMonsterInstances[mi]) {
-                    tcm.setTransform(tcm.getInstance(mMonsterInstances[mi]->getRoot()),
-                            useGhost ? GPARK : mv.rig);
-                }
-                if (haveRigGhost) {
-                    tcm.setTransform(tcm.getInstance(mMonsterGhostInstances[mi]->getRoot()),
-                            useGhost ? mv.rig : GPARK);
-                }
-                if (mCarAssets.size() > mi && mCarAssets[mi]) {
-                    tcm.setTransform(tcm.getInstance(mCarAssets[mi]->getRoot()),
-                            useGhost ? GPARK : mv.body);
-                }
-                if (haveBodyGhost) {
-                    tcm.setTransform(tcm.getInstance(mCarGhostAssets[mi]->getRoot()),
-                            useGhost ? mv.body : GPARK);
-                }
-            }
-            // Fliers ride the same per-cell billboard trick as the clouds.
-            // Birds circle their roosts with a wing-beat that squashes the
-            // glyph's height (SceneRenderer's flap); kites bob around their
-            // anchors and sway on the string.
-            if (mTrack && !mBirds.empty()) {
-                const TrackBin& t = *mTrack;
-                for (size_t bi = 0; bi < mBirds.size(); bi++) {
-                    if (mBirds[bi].entity.isNull()) continue;
-                    const float a0 = ((float) bi / 4) * 2.0f * (float) M_PI + (bi % 3) * 0.8f;
-                    const float dy = (bi % 3) * 2.5f;
-                    const float ph0 = bi * 2.1f, sp = 0.82f + (bi % 4) * 0.12f;
-                    const float ph = ph0 + mTime * t.birdSpeed * sp;
-                    const float3 p{
-                        std::cos(a0) * t.birdRc * mHillSf + std::cos(ph) * t.birdRb,
-                        t.birdY + dy * t.birdDys + std::sin(ph * 2.3f) * 0.9f,
-                        std::sin(a0) * t.birdRc * mHillSf + std::sin(ph) * t.birdRb };
-                    const float beat = 0.5f + 0.5f * std::sin(
-                            (mTime * sp * t.birdFlapHz + ph0) * 2.0f * (float) M_PI);
-                    const float yaw = std::atan2(world[3].x - p.x, world[3].z - p.z);
-                    tcm.setTransform(tcm.getInstance(mBirds[bi].entity),
-                            mat4f::translation(p) * mat4f::rotation(yaw, float3{ 0, 1, 0 })
-                            * mat4f::scaling(float3{ t.birdSize,
-                                    t.birdSize * 0.5f * (1 - t.birdFlap * 0.48f * beat), 1 }));
-                }
-            }
-            if (mTrack && !mKites.empty()) {
-                const TrackBin& t = *mTrack;
-                for (size_t ki = 0; ki < mKites.size(); ki++) {
-                    if (mKites[ki].entity.isNull()) continue;
-                    const float a0 = 0.9f + ki * 2.6f, r = 105.0f + ki * 18.0f;
-                    const float ph = ki * 1.7f;
-                    const float3 p{
-                        std::cos(a0) * r * mHillSf + std::sin(mTime * 0.55f + ph) * 2.2f,
-                        t.kiteY + std::sin(mTime * 0.85f + ph * 2) * 1.6f
-                                + std::sin(mTime * 2.1f + ph) * 0.35f,
-                        std::sin(a0) * r * mHillSf + std::cos(mTime * 0.5f + ph) * 2.2f };
-                    const float yaw = std::atan2(world[3].x - p.x, world[3].z - p.z);
-                    const float roll = std::sin(mTime * 0.9f + ph) * 0.14f;
-                    tcm.setTransform(tcm.getInstance(mKites[ki].entity),
-                            mat4f::translation(p) * mat4f::rotation(yaw, float3{ 0, 1, 0 })
-                            * mat4f::rotation(roll, float3{ 0, 0, 1 })
-                            * mat4f::scaling(float3{ t.kiteSize }));
-                }
-            }
-            // Dust banks drift faster than the clouds above them (wind shear
-            // sells "dust", not "low cloud"), wrapping outside the hill ring.
-            for (size_t hi = 0; hi < mHaze.size(); hi++) {
-                if (mHaze[hi].entity.isNull()) continue;
-                const float wrap = 300.0f * mHillSf;
-                float3 p = mHazePos[hi];
-                p.x = std::fmod(std::fmod(p.x + 2.2f * mTime + wrap, 2 * wrap)
-                        + 2 * wrap, 2 * wrap) - wrap;
-                p.x *= 1.0f; p.z *= mHillSf;
-                const float yaw = std::atan2(world[3].x - p.x, world[3].z - p.z);
-                tcm.setTransform(tcm.getInstance(mHaze[hi].entity),
-                        mat4f::translation(p) * mat4f::rotation(yaw, float3{ 0, 1, 0 }));
-            }
-            // Per-view cloud billboards: single-threaded rendering executes
-            // each render() immediately, so re-aiming the sprites between
-            // cells gives every camera its own facing (the JS sprite way).
-            for (size_t ci = 0; ci < mClouds.size(); ci++) {
-                if (mClouds[ci].entity.isNull()) continue;
-                // Push the AUTHORED position out to the SKY_BAND unfogged
-                // band along its current direction (drift moves it in
-                // authored space, like the JS). Size keeps the k^0.55
-                // softening CALIBRATED AT THE 405 BAND, rescaled to the
-                // farther SKY_BAND so the angular look is unchanged.
-                float3 p0 = mCloudPos[ci];
-                p0.x = std::fmod(std::fmod(p0.x + 0.7f * mTime + 300.0f, 600.0f)
-                        + 600.0f, 600.0f) - 300.0f; // JS drift, closed-form
-                const float len = std::max(1.0f, length(p0));
-                const float k = SKY_BAND / len;
-                const float3 p = p0 * k;
-                const float sk = std::pow(405.0f / len, 0.55f) * (SKY_BAND / 405.0f);
-                const float yaw = std::atan2(world[3].x - p.x, world[3].z - p.z);
-                mEngine->getTransformManager().setTransform(
-                        mEngine->getTransformManager().getInstance(mClouds[ci].entity),
-                        mat4f::translation(p) * mat4f::rotation(yaw, float3{ 0, 1, 0 })
-                        * mat4f::scaling(float3{ sk }));
-            }
-            // Boost streaks: AXIAL billboards (streakBillboard) — spin each
-            // about its length axis (local Z) so the face (+Y) turns toward
-            // THIS cell's camera; a fixed quad is edge-on from dead astern.
-            for (size_t si = 0; si < mStreakMeshes.size(); si++) {
-                Mesh& sm = mStreakMeshes[si];
-                if (sm.entity.isNull()) continue;
-                auto& tcmV = mEngine->getTransformManager();
-                auto sInst = tcmV.getInstance(sm.entity);
-                const Streak& st = mStreaks[si];
-                const size_t car = si / 4;
-                // A dead streak was already removed from the scene by the
-                // update pass — nothing to park, nothing to write.
-                if (!sm.inScene || mCarBasis.size() <= car
-                        || mCarBasisInv.size() <= car) {
-                    continue;
-                }
-                const mat4f& P = mCarBasis[car];
-                // The inverse is the car's, not the cell's — cached per car per
-                // frame above rather than recomputed for each of the four cells.
-                const float3 camL = (mCarBasisInv[car]
-                        * float4{ world[3].x, world[3].y, world[3].z, 1 }).xyz;
-                const float3 vv = camL - float3{ st.x, st.y, st.z };
-                const float beta = std::atan2(-vv.x, vv.y);
-                tcmV.setTransform(sInst,
-                        P * mat4f::translation(float3{ st.x, st.y, st.z })
-                          * mat4f::rotation(beta, float3{ 0, 0, 1 })
-                          * mat4f::scaling(float3{ 0.07f, 1.0f, st.len }));
+            applyMonsterGhosts(i);
+            // Fliers, haze, clouds and boost streaks all turn toward THIS
+            // cell's camera between render() calls (single-threaded rendering
+            // executes each render() immediately, the JS sprite way).
+            orientCellBillboards(world[3].xyz);
+            if (deckLod) {
+                // Where a chord of kDeckLodTol subtends kDeckLodChordPx in THIS
+                // cell: d = tol * (cell height / (2 tan(fov/2))) / px. A
+                // 216-line cell at 55 degrees puts it near 17 u, a 4K cell
+                // past 80 u — the trade scales itself to the pixels it has.
+                const float pxPerRad = (float) rect.h
+                        / (2.0f * std::tan(views[i].fov * 0.5f * (float) M_PI / 180.0f));
+                chooseDeckLod(v, world[3].xyz, kDeckLodTol * pxPerRad / kDeckLodChordPx, true);
+            } else {
+                v->setMaterialGlobal(1, float4{ 0.0f });   // no far ribbon, no tint
             }
             mProfile[kProfCellSetup] += ttpNowMs() - tMark; tMark = ttpNowMs();
             mRenderer->render(v);
             mProfile[kProfCellRender] += ttpNowMs() - tMark; tMark = ttpNowMs();
         }
-        // One pass for the whole canvas: grade, sRGB, FXAA, done.
-        if (mSceneRT) mRenderer->render(mPresentView);
+        // One pass for the whole canvas: FXAA over the already-graded colours.
+        if (post && mSceneRT) mRenderer->render(mPresentView);
     }
     // The cell overlay goes on LAST, over the graded canvas — see voverlay.mat
     // for why it is past the grade and not inside it.
-    if (mOverlayUsed && mOverlayView) mRenderer->render(mOverlayView);
+    if (mOverlayUsed && mOverlayView && !mOverlayFolded) mRenderer->render(mOverlayView);
 }
 
-bool TtpRenderer::render(const TtpFrameInput& input) {
+// ---------------------------------------------------------------------------
+// The scene mutations the cell loop runs BETWEEN render() calls — rendering is
+// single-threaded, so each cell's render() executes against the state set just
+// before it. Each is given ONE cell's own answer, and has to be: a state shared
+// across cells is the bug both of them were written to fix.
+// ---------------------------------------------------------------------------
+
+// The deck's LOD pick for one cell (RoadChunk): a chunk whose box is farther
+// than `near` from this cell's camera draws the far ribbon. A swap is a
+// geometry re-point on the same entity, so nothing about culling, materials or
+// the decal fold moves — and it is stated only when it CHANGES, because a
+// chunk near one cell and far from the next flips every frame while the rest
+// hold. `enabled` false puts every chunk back on the fine ribbon.
+//
+// MEASURED on the Google TV Streamer at 4P pinned 768x432: the seconds every
+// cell spends looking down the straight — the one stretch of the lap that
+// decided whether 432@60 held — lose about a third of their GPU time to
+// this. docs/perf/androidtv-frame-map.md, 2026-09-02, has every arm.
+void TtpRenderer::chooseDeckLod(View* v, const float3& cam, float near, bool enabled) {
+    if (!mRoadFarIb || !mRoad.vb || !mRoad.ib) return;
+    auto& rcm = mEngine->getRenderableManager();
+    // The debug tint's far-chunk bitmask, EIGHT bits per channel over view
+    // globals 1..3 (vroad.mat says why: a view global, and fp16-exact).
+    constexpr int kTintChannels = 11;
+    float tint[kTintChannels] = {};
+    for (size_t i = 0; i < mRoadChunks.size(); i++) {
+        RoadChunk& c = mRoadChunks[i];
+        int lod = 0;
+        if (enabled && c.farCnt) {
+            const float3 q = clamp(cam, c.boxMin, c.boxMax);   // nearest point of the box
+            const float3 d = q - cam;
+            lod = (mDeckLodAll || dot(d, d) > near * near) ? 1 : 0;
+        }
+        if (lod && i < kTintChannels * 8) tint[i / 8] += (float) (1u << (i % 8));
+        if (lod == c.lod) continue;
+        c.lod = lod;
+        const auto ri = rcm.getInstance(c.entity);
+        if (!ri) continue;
+        if (lod) {
+            rcm.setGeometryAt(ri, 0, RenderableManager::PrimitiveType::TRIANGLES,
+                    mRoad.vb, mRoadFarIb, c.farOff, c.farCnt);
+        } else {
+            rcm.setGeometryAt(ri, 0, RenderableManager::PrimitiveType::TRIANGLES,
+                    mRoad.vb, mRoad.ib, c.fullOff, c.fullCnt);
+        }
+    }
+    if (v) {
+        if (mDeckLodTint) {
+            v->setMaterialGlobal(1, float4{ tint[0], tint[1], tint[2], 1.0f });
+            v->setMaterialGlobal(2, float4{ tint[3], tint[4], tint[5], tint[6] });
+            v->setMaterialGlobal(3, float4{ tint[7], tint[8], tint[9], tint[10] });
+        } else {
+            v->setMaterialGlobal(1, float4{ 0.0f });
+        }
+    }
+}
+
+// The monster ghost swap for one cell: a truck looming in front of THAT cell's
+// car swaps to its 50%-alpha ghost (chassis + grafted body) while every other
+// cell — the monster driver's own included — keeps it solid. Anything that
+// ghosts on a UNION of cells reintroduces the bug the per-cell mask exists for
+// (see the blockMask build): the neighbour sees a see-through truck it has no
+// reason to.
+void TtpRenderer::applyMonsterGhosts(uint32_t cell) {
+    auto& tcm = mEngine->getTransformManager();
+    bool anyOn = false;
+    for (size_t mi = 0; mi < mMonsterViews.size(); mi++) {
+        const MonsterView& mv = mMonsterViews[mi];
+        if (!mv.on) continue;
+        anyOn = true;
+        const bool ghost = (mv.mask & (1u << cell)) != 0;
+        static const mat4f GPARK = mat4f::translation(float3{ 0, -1000, 0 });
+        const bool haveRigGhost = mMonsterGhostInstances.size() > mi
+                && mMonsterGhostInstances[mi];
+        const bool haveBodyGhost = mCarGhostAssets.size() > mi && mCarGhostAssets[mi];
+        const bool useGhost = ghost && haveRigGhost && haveBodyGhost;
+        if (mMonsterInstances.size() > mi && mMonsterInstances[mi]) {
+            tcm.setTransform(tcm.getInstance(mMonsterInstances[mi]->getRoot()),
+                    useGhost ? GPARK : mv.rig);
+        }
+        if (haveRigGhost) {
+            tcm.setTransform(tcm.getInstance(mMonsterGhostInstances[mi]->getRoot()),
+                    useGhost ? mv.rig : GPARK);
+        }
+        if (mCarAssets.size() > mi && mCarAssets[mi]) {
+            tcm.setTransform(tcm.getInstance(mCarAssets[mi]->getRoot()),
+                    useGhost ? GPARK : mv.body);
+        }
+        if (haveBodyGhost) {
+            tcm.setTransform(tcm.getInstance(mCarGhostAssets[mi]->getRoot()),
+                    useGhost ? mv.body : GPARK);
+        }
+    }
+    // The ghost swap parks transforms PER CELL, so the mirrored car
+    // instances must follow it into each submission. Only while a monster is
+    // on — every other frame the once-per-frame mirror in render() holds.
+    if (anyOn) updateMergedTransforms();
+}
+
+// Everything that turns toward the active camera between render() calls:
+// bird / kite / haze / cloud billboards yaw toward camPos, boost streaks spin
+// about their length axis toward it. camPos is THIS cell's camera position.
+void TtpRenderer::orientCellBillboards(const float3& camPos) {
+    auto& tcm = mEngine->getTransformManager();
+    // Fliers ride the same per-cell billboard trick as the clouds. Birds
+    // circle their roosts with a wing-beat that squashes the glyph's height
+    // (SceneRenderer's flap); kites bob around their anchors and sway on the
+    // string.
+    if (mTrack && !mBirds.empty()) {
+        const TrackBin& t = *mTrack;
+        for (size_t bi = 0; bi < mBirds.size(); bi++) {
+            if (mBirds[bi].entity.isNull()) continue;
+            const float a0 = ((float) bi / 4) * 2.0f * (float) M_PI + (bi % 3) * 0.8f;
+            const float dy = (bi % 3) * 2.5f;
+            const float ph0 = bi * 2.1f, sp = 0.82f + (bi % 4) * 0.12f;
+            const float ph = ph0 + mTime * t.birdSpeed * sp;
+            const float3 p{
+                std::cos(a0) * t.birdRc * mHillSf + std::cos(ph) * t.birdRb,
+                t.birdY + dy * t.birdDys + std::sin(ph * 2.3f) * 0.9f,
+                std::sin(a0) * t.birdRc * mHillSf + std::sin(ph) * t.birdRb };
+            const float beat = 0.5f + 0.5f * std::sin(
+                    (mTime * sp * t.birdFlapHz + ph0) * 2.0f * (float) M_PI);
+            const float yaw = std::atan2(camPos.x - p.x, camPos.z - p.z);
+            tcm.setTransform(tcm.getInstance(mBirds[bi].entity),
+                    mat4f::translation(p) * mat4f::rotation(yaw, float3{ 0, 1, 0 })
+                    * mat4f::scaling(float3{ t.birdSize,
+                            t.birdSize * 0.5f * (1 - t.birdFlap * 0.48f * beat), 1 }));
+        }
+    }
+    if (mTrack && !mKites.empty()) {
+        const TrackBin& t = *mTrack;
+        for (size_t ki = 0; ki < mKites.size(); ki++) {
+            if (mKites[ki].entity.isNull()) continue;
+            const float a0 = 0.9f + ki * 2.6f, r = 105.0f + ki * 18.0f;
+            const float ph = ki * 1.7f;
+            const float3 p{
+                std::cos(a0) * r * mHillSf + std::sin(mTime * 0.55f + ph) * 2.2f,
+                t.kiteY + std::sin(mTime * 0.85f + ph * 2) * 1.6f
+                        + std::sin(mTime * 2.1f + ph) * 0.35f,
+                std::sin(a0) * r * mHillSf + std::cos(mTime * 0.5f + ph) * 2.2f };
+            const float yaw = std::atan2(camPos.x - p.x, camPos.z - p.z);
+            const float roll = std::sin(mTime * 0.9f + ph) * 0.14f;
+            tcm.setTransform(tcm.getInstance(mKites[ki].entity),
+                    mat4f::translation(p) * mat4f::rotation(yaw, float3{ 0, 1, 0 })
+                    * mat4f::rotation(roll, float3{ 0, 0, 1 })
+                    * mat4f::scaling(float3{ t.kiteSize }));
+        }
+    }
+    // Dust banks drift faster than the clouds above them (wind shear sells
+    // "dust", not "low cloud"), wrapping outside the hill ring.
+    for (size_t hi = 0; hi < mHaze.size(); hi++) {
+        if (mHaze[hi].entity.isNull()) continue;
+        const float wrap = 300.0f * mHillSf;
+        float3 p = mHazePos[hi];
+        p.x = std::fmod(std::fmod(p.x + 2.2f * mTime + wrap, 2 * wrap)
+                + 2 * wrap, 2 * wrap) - wrap;
+        p.z *= mHillSf; // x already spans the mHillSf-scaled range via `wrap`
+        const float yaw = std::atan2(camPos.x - p.x, camPos.z - p.z);
+        tcm.setTransform(tcm.getInstance(mHaze[hi].entity),
+                mat4f::translation(p) * mat4f::rotation(yaw, float3{ 0, 1, 0 }));
+    }
+    for (size_t ci = 0; ci < mClouds.size(); ci++) {
+        if (mClouds[ci].entity.isNull()) continue;
+        // Push the AUTHORED position out to the SKY_BAND unfogged band along
+        // its current direction (drift moves it in authored space, like the
+        // JS). Size keeps the k^0.55 softening CALIBRATED AT THE 405 BAND,
+        // rescaled to the farther SKY_BAND so the angular look is unchanged.
+        float3 p0 = mCloudPos[ci];
+        p0.x = std::fmod(std::fmod(p0.x + 0.7f * mTime + 300.0f, 600.0f)
+                + 600.0f, 600.0f) - 300.0f; // JS drift, closed-form
+        const float len = std::max(1.0f, length(p0));
+        const float k = SKY_BAND / len;
+        const float3 p = p0 * k;
+        const float sk = std::pow(405.0f / len, 0.55f) * (SKY_BAND / 405.0f);
+        const float yaw = std::atan2(camPos.x - p.x, camPos.z - p.z);
+        tcm.setTransform(tcm.getInstance(mClouds[ci].entity),
+                mat4f::translation(p) * mat4f::rotation(yaw, float3{ 0, 1, 0 })
+                * mat4f::scaling(float3{ sk }));
+    }
+    // Boost streaks: AXIAL billboards (streakBillboard) — spin each about its
+    // length axis (local Z) so the face (+Y) turns toward the camera; a fixed
+    // quad is edge-on from dead astern.
+    for (size_t si = 0; si < mStreakMeshes.size(); si++) {
+        Mesh& sm = mStreakMeshes[si];
+        if (sm.entity.isNull()) continue;
+        auto sInst = tcm.getInstance(sm.entity);
+        const Streak& st = mStreaks[si];
+        const size_t car = si / 4;
+        // A dead streak was already removed from the scene by the update pass
+        // — nothing to park, nothing to write.
+        if (!sm.inScene || mCarBasis.size() <= car
+                || mCarBasisInv.size() <= car) {
+            continue;
+        }
+        const mat4f& P = mCarBasis[car];
+        // The inverse is the car's, not the cell's — cached per car per frame
+        // rather than recomputed for each of the four cells.
+        const float3 camL = (mCarBasisInv[car]
+                * float4{ camPos.x, camPos.y, camPos.z, 1 }).xyz;
+        const float3 vv = camL - float3{ st.x, st.y, st.z };
+        const float beta = std::atan2(-vv.x, vv.y);
+        tcm.setTransform(sInst,
+                P * mat4f::translation(float3{ st.x, st.y, st.z })
+                  * mat4f::rotation(beta, float3{ 0, 0, 1 })
+                  * mat4f::scaling(float3{ 0.07f, 1.0f, st.len }));
+    }
+}
+
+bool TtpRenderer::render(const TtpFrameInput& input) { return frame(input, true); }
+bool TtpRenderer::advance(const TtpFrameInput& input) { return frame(input, false); }
+
+bool TtpRenderer::frame(const TtpFrameInput& input, bool draw) {
     if (input.version != TTP_FRAME_INPUT_VERSION) return false;
     // Every wall-clock cosmetic phases off the DRIVING scene's clock — an own
     // accumulated clock would drift by the boot-time difference between the
@@ -2260,6 +2821,39 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
     mProfile[kProfSkids] = ttpNowMs() - tMark; tMark += mProfile[kProfSkids];
     renderAmbient(input);
     mProfile[kProfAmbient] = ttpNowMs() - tMark; tMark += mProfile[kProfAmbient];
+    if (!draw) {
+        // Undrawn, and done: the merge, the blob readbacks and the GPU frame
+        // are a drawn frame's. The phases above still queued driver work (the
+        // decal uniform writes, the ambient buffers) that no endFrame will
+        // flush, so drain it here — the single-threaded backends execute on
+        // flush(), and a wind of thousands of these frames would otherwise
+        // fill the command buffer with nothing ever coming to empty it.
+        mEngine->flush();
+        mSkidCatchUp = true;   // the next drawn frame owes the rubber layer a full refresh
+        mProfile[kProfTotal] = ttpNowMs() - tFrame0;
+        return true;
+    }
+    flushSkidLayer();
+    // Merged draw groups: regroup lazily — a roster lands one slot at a time
+    // and the dressing stages model by model, so grouping at each call site
+    // would rebuild many times for one launch — then mirror this frame's node
+    // transforms into the instance buffers. After every transform writer above
+    // (the car seating, the cone kicks); the per-CELL monster swap re-mirrors
+    // in renderCells.
+    if (mCarMergeDirty) {
+        mCarMergeDirty = false;
+        if (mMergeOff) destroyMergedGroups(mMergedCars); else rebuildCarMerge();
+    }
+    if (mDressMergeDirty) {
+        mDressMergeDirty = false;
+        if (mMergeOff) destroyMergedGroups(mMergedDress); else buildDressingMerge();
+    }
+    updateMergedTransforms();
+    // A staged blob's readback lands HERE, because the driver tick that fires
+    // it rides endFrame. This is what makes the disk cache work at all on the
+    // web: a build cannot finish its own readbacks there, so without a frame to
+    // land them nothing would ever be written.
+    collectStagedBlobs();
     const bool pace = mRenderer->beginFrame(mSwapChain);
     mProfile[kProfBeginFrame] = ttpNowMs() - tMark; tMark += mProfile[kProfBeginFrame];
 #if defined(__EMSCRIPTEN__)
@@ -2271,7 +2865,52 @@ bool TtpRenderer::render(const TtpFrameInput& input) {
     renderCells(input, tMark);
     mProfile[kProfPresent] = ttpNowMs() - tMark; tMark = ttpNowMs();
     mRenderer->endFrame();
+    // Arm settled()'s fence behind the scene's FIRST submitted frame — created
+    // here, after endFrame, so everything the frame queued is ahead of it.
+    if (!mSettled && !mSettleFence) mSettleFence = mEngine->createFence();
+    // A PRESENTED frame is the only clock the graveyard may age on: buffers
+    // buried by a teardown are waiting for the frames that could still be
+    // reading them to go by, and a wall clock keeps running when the GPU does
+    // not (a released lobby, a gone surface). See MeshGrave.
+    ageGraves();
     mProfile[kProfEndFrame] = ttpNowMs() - tMark;
     mProfile[kProfTotal] = ttpNowMs() - tFrame0;
+    readGpuTimer();
     return true;
+}
+
+// See the header for what settled means. A poll rather than a blocking wait:
+// the caller is the frame thread, and blocking it for the pipeline-compile
+// storm would freeze the very cover this exists to hold up.
+bool TtpRenderer::settled() {
+    if (mSettled) return true;
+    if (!mSettleFence) return false;
+    // FLUSH + zero timeout: make sure the fence command itself has been
+    // handed to the driver (endFrame usually has, but flushing again is
+    // idempotent), then QUERY — never block, this is the frame thread.
+    if (mSettleFence->wait(Fence::Mode::FLUSH, 0)
+            != backend::FenceStatus::CONDITION_SATISFIED) return false;
+    mEngine->destroy(mSettleFence);
+    mSettleFence = nullptr;
+    mSettled = true;
+    return true;
+}
+
+// The backend's own GPU duration for a recent frame. See ttp_display_gpu_ms for
+// where this is real and where it is not — the ONE compiled-out case is
+// emscripten, and it is compiled out here too rather than being read and
+// disbelieved.
+void TtpRenderer::readGpuTimer() {
+#if defined(__EMSCRIPTEN__)
+    mGpuMs = 0.0;
+#else
+    // Index 0 is the NEWEST frame, and the newest few are still PENDING (-2):
+    // the query has not come back from the GPU yet. So walk forward to the
+    // first RESOLVED one, which is the freshest real number there is.
+    const auto history = mRenderer->getFrameInfoHistory(8);
+    for (size_t i = 0; i < history.size(); i++) {
+        const int64_t ns = history[i].gpuFrameDuration;
+        if (ns > 0) { mGpuMs = (double) ns / 1.0e6; return; }
+    }
+#endif
 }

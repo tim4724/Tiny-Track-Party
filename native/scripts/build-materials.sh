@@ -42,6 +42,7 @@ fi
 # three of them, they change rarely, and the failure this prevents (editing the
 # shared shading and rendering with the old one) is silent.
 mkdir -p "$OUTDIR"
+
 newest_inc=""
 for inc in "$MATDIR"/*.inc; do
     [ -f "$inc" ] || continue
@@ -52,11 +53,50 @@ for mat in "$MATDIR"/*.mat; do
     name="$(basename "${mat%.mat}")"
     out="$OUTDIR/$name.filamat"
     if [ ! -f "$out" ] || [ "$mat" -nt "$out" ] || [ "$MATC" -nt "$out" ] \
+            || [ "$0" -nt "$out" ] \
             || { [ -n "$newest_inc" ] && [ "$newest_inc" -nt "$out" ]; }; then
-        "$MATC" -a "$API" -p "$PLATFORM" -o "$out" "$mat"
+        # -Os IS NOT A SIZE PREFERENCE, it is what makes vroad COMPILE on a real
+        # mobile GPU.
+        #
+        # matc's default optimizer round-trips through SPIR-V and emits loops
+        # that carry a temporary through the increment expression
+        # (`for (int i=0; i<n; t0=t1,i++)`), where the temporary is only assigned
+        # inside the body. Desktop GL and Metal accept it. The PowerVR Rogue
+        # driver in a Google TV Streamer reports each one as "used without being
+        # initialised" and then fails the compile outright, so TtpVroad — the
+        # only material with dynamic loops, over its 32 deck decals — never
+        # links, and Filament's GL thread throws PostconditionPanic and aborts
+        # the process. -Os takes a different path that emits none of them, at
+        # 546 generated lines against the default's 509.
+        #
+        # GLOBAL rather than per-platform on purpose. This is not an Android
+        # quirk: a browser on that same box drives the same driver, so the web
+        # display shipped the same broken shader to it. One flag, one set of
+        # blobs, every platform fixed.
+        #
+        # NOTE the `$0 -nt` gate above: the flags live in this script and are NOT
+        # part of runtime-source-hash, so without it an edit here leaves every
+        # blob looking current and changes nothing.
+        "$MATC" -a "$API" -p "$PLATFORM" -Os -o "$out" "$mat"
         built=$((built + 1))
     else
         kept=$((kept + 1))
     fi
 done
-echo "==> materials -> $OUTDIR ($API/$PLATFORM): $built compiled, $kept up to date"
+
+# A blob whose .mat is gone is a STALE TWIN, and nothing else prunes it: the
+# tvOS outdir is gitignored and stage-assets.sh bundles the whole directory, so
+# a retired material ships forever (vskid did, for a day after the rubber layer
+# stopped using a render target). Harmless only while no shell names it — a
+# RENAMED material ships as both blobs, and the dead one loads without
+# complaint. The outdir is per backend and holds nothing but these, so the .mat
+# set is the whole truth about what belongs here.
+pruned=0
+for blob in "$OUTDIR"/*.filamat; do
+    [ -f "$blob" ] || continue
+    name="$(basename "${blob%.filamat}")"
+    [ -f "$MATDIR/$name.mat" ] && continue
+    rm "$blob"
+    pruned=$((pruned + 1))
+done
+echo "==> materials -> $OUTDIR ($API/$PLATFORM): $built compiled, $kept up to date, $pruned orphans pruned"

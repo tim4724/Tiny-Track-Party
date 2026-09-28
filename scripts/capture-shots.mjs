@@ -1,0 +1,142 @@
+// Freeze one screenshot per gallery scenario, from the WEB display, into
+// public/assets/shots/web/ — the reference column /gallery-shots.html reads the
+// tvOS ones against.
+//
+//   npm run shots:web
+//   node scripts/capture-shots.mjs --only lobby,podium --headed
+//
+// WHY A FROZEN SHOT AT ALL, when /gallery.html already renders every one of these
+// live in an iframe: because the second column cannot be live. A tvOS screen only
+// exists as a photograph of an Apple TV, so the comparison has to be
+// still-against-still or it is not a comparison. The live gallery keeps its job;
+// this is a different surface with a different question ("has the TV drifted from
+// the web?") and the same scenario table underneath, imported rather than copied
+// (public/shared/galleryScenarios.js).
+//
+// THE READINESS WAIT IS THE WHOLE GAME. `capture-artwork.js` learned this: it
+// waits on __scene/__engine and the car count and then document.fonts.ready,
+// never on a bare timeout. A cold Filament shader compile behind a plain
+// setTimeout produces a gallery of half-loaded scenes, and nobody notices for a
+// week because every card still has a picture in it.
+//
+// WEBP, NOT PNG. The whole table across three platforms at 1080p PNG is tens of
+// megabytes, which would undo the deliberate 170 -> 87 MB asset work; at 1280x720
+// WebP q80 it is a few. The store cards alone are 1080p JPEG (STORE_SHOT).
+// Byte-exactness buys nothing here, because nothing diffs these
+// programmatically: this is a human-judgement surface, and the automated half is
+// coverage and freshness (tests/shots-manifest.test.js).
+
+import path from 'node:path';
+import fs from 'node:fs';
+
+import { CAPTURED_SCENARIOS, STORE_SHOT, scenarioQuery } from '../public/shared/galleryScenarios.js';
+import { gitSha, mergeShots, shotDir, shotFile } from './lib/shots.mjs';
+import {
+  ROOT, args as parseArgs, serveApp, launchBrowser, waitForScene, encode
+} from './lib/capture.mjs';
+
+const args = parseArgs();
+
+// The capture viewport. 1920x1080 matches what the Apple TV's render server
+// actually composites (devicectl reports TVOut 1920x1080 on the 4K box), so the
+// two columns line up without a rescale in the page.
+const WIDTH = parseInt(args.width, 10) || 1920;
+const HEIGHT = parseInt(args.height, 10) || 1080;
+// Stored at half that. Big enough to judge type and colour on a laptop, small
+// enough that the whole gallery is a few MB.
+const OUT_W = parseInt(args.outWidth, 10) || 1280;
+const OUT_H = Math.round((OUT_W * HEIGHT) / WIDTH);
+const PLAYERS = parseInt(args.players, 10) || 4;
+// Animated scenarios need the race to develop past the start grid; still ones
+// need only their first painted frame.
+const SETTLE_MS = parseInt(args.settle, 10) || 2500;
+
+const only = typeof args.only === 'string' ? new Set(args.only.split(',')) : null;
+const scenarios = CAPTURED_SCENARIOS.filter((s) => !only || only.has(s.id));
+
+async function main() {
+  const dir = shotDir(ROOT, 'web');
+  fs.mkdirSync(dir, { recursive: true });
+
+  const server = await serveApp();
+  let chrome;
+  const entries = [];
+  try {
+    chrome = await launchBrowser({ headed: !!args.headed });
+    const page = await chrome.page({ viewport: { width: WIDTH, height: HEIGHT } });
+
+    const sha = gitSha(ROOT);
+    for (const scenario of scenarios) {
+      // A screen the web does not have (the TVs' info board): said, not
+      // silently skipped, so `--only info` does not look like a capture that
+      // wrote nothing. The TV runners report their own gaps the same way.
+      if (scenario.tvOnly) {
+        console.log(`  ${scenario.id.padEnd(14)} (no web screen)`);
+        continue;
+      }
+      // dpr=1 IS LOAD-BEARING. Without it Stage.js sees `navigator.webdriver` and
+      // renders the scene at a QUARTER of the layout size; capture.mjs's browser
+      // also presents the page as an ordinary tab, which is what brings the sun's
+      // shadow bake back. This gallery compares a browser against photographs of
+      // real televisions, so a quarter-scale shadowless web column was not a
+      // slightly worse picture — it was the wrong picture to judge the TVs by.
+      //
+      // A `page` card is a standalone URL (the licenses page), not a display-page
+      // scenario, so it takes neither the harness flag nor the dpr pin.
+      const url = scenario.page
+        ? `http://127.0.0.1:${server.port}${scenario.page}`
+        : `http://127.0.0.1:${server.port}/?test=1&dpr=1&${scenarioQuery(scenario, { players: PLAYERS })}`
+          + (scenario.hold ? `&hold=${encodeURIComponent(JSON.stringify(scenario.hold))}` : '');
+      await page.goto(url, { waitUntil: 'networkidle' });
+      // Waits for the harness's scene signal and the self-hosted Fredoka face:
+      // without the latter a shot can catch a system fallback and every label is
+      // subtly the wrong shape. A page without a harness passes the first wait
+      // straight through and only waits on the fonts.
+      await waitForScene(page, { timeout: 20000 });
+      // A scenario's own `settleMs` wins: it names WHICH MOMENT of that screen the
+      // card is about, which for the two cup boards is after the re-sort has run.
+      // A card with a `hold` is a RACE moment, and the engine stops there itself:
+      // wait for it to say so (however long this renderer takes to get there),
+      // then long enough for the DOM chrome dressed at that moment to finish
+      // arriving — an item landing in a cell slot pops in from 1.8x over 0.5 s
+      // (`cellItemPop`), and a 300 ms beat photographed it half-grown.
+      if (scenario.hold) {
+        await page.waitForFunction(() => window.__engine?.shotHeld, null, { timeout: 180000, polling: 100 });
+        await page.waitForTimeout(800);
+      } else {
+        await page.waitForTimeout(scenario.settleMs ?? (scenario.animated ? SETTLE_MS : 400));
+      }
+
+      const png = await page.screenshot();
+      // A store card is STORE_SHOT (the size and format the stores take), the
+      // rest the gallery's WebP.
+      const [w, h, type, quality] = scenario.store
+        ? [STORE_SHOT.w, STORE_SHOT.h, 'image/jpeg', 0.9]
+        : [OUT_W, OUT_H, 'image/webp', 0.8];
+      const bytes = await encode(page, png, { width: w, height: h, type, quality });
+      const file = shotFile(scenario);
+      fs.writeFileSync(path.join(dir, file), bytes);
+      entries.push({
+        scenario: scenario.id,
+        platform: 'web',
+        file: `web/${file}`,
+        w,
+        h,
+        bytes: bytes.length,
+        capturedAt: new Date().toISOString(),
+        gitSha: sha
+      });
+      console.log(`  ${scenario.id.padEnd(14)} ${String(bytes.length).padStart(7)} B`);
+    }
+  } finally {
+    if (chrome) await chrome.close();
+    server.close();
+  }
+
+  // Merge rather than replace: --only must not wipe the platforms and scenarios
+  // this run did not touch.
+  mergeShots(ROOT, 'web', entries);
+  console.log(`==> ${entries.length} web shots -> public/assets/shots/web/`);
+}
+
+main().catch((e) => { console.error(e); process.exit(1); });

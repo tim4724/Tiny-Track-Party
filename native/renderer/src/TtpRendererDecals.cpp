@@ -1,18 +1,31 @@
-// Split from the original single-file TtpRenderer.cpp along its subsystem
-// seams; TtpRendererImpl.h carries what the topic files share. Pure code
-// motion — behaviour, member set and ABI are unchanged.
+// The road-shader channels — skid and carShadow rasters, deck decals and
+// paint — plus their 3D markers. TtpRendererImpl.h carries what the topic
+// files share.
 #include "TtpRendererImpl.h"
+
+#include <utils/Log.h>
+
+#include <algorithm>
 
 
 // The silhouette store for the road-shader shadow decals: one array layer per
-// car slot, one for the monster, one generic. Engine-lifetime (layers are
-// rebaked per scene — mMaskLayerBakedBits says which hold the current scene's
-// bake); created on first use and bound to every vroad instance, because a
-// declared sampler must be bound even while no masked decal references it.
+// car MODEL (claimMaskLayer keys them by the GLB's bytes, so the eight-car
+// grid's four models cost four layers), one for the monster, one generic.
+// Engine-lifetime (layers are rebaked per scene — mMaskLayerBakedBits says
+// which hold the current scene's bake); created on first use and bound to
+// every vroad instance, because a declared sampler must be bound even while no
+// masked decal references it.
 Texture* TtpRenderer::ensureDecalMaskArray() {
     if (mDecalMaskArray || !mEngine) return mDecalMaskArray;
     mDecalMaskArray = Texture::Builder()
             .width(kMaskCellW).height(kMaskCellH).depth(kMaskLayers).levels(1)
+            // RGBA8, deliberately NOT R8: the R8 version (a quarter of the
+            // tap bytes) was tried and the TRANSLUCENT silhouette bake into
+            // an R8 array layer renders ZERO coverage on the PowerVR driver
+            // — bake logs success, sample reads nothing, and the generic
+            // UPLOADED layer keeps working, so every car shadow silently
+            // became the fallback oval. vvis's R8 is not a counter-example:
+            // that bake is an OPAQUE view. Coverage rides ALPHA.
             .format(Texture::InternalFormat::RGBA8)
             .sampler(Texture::Sampler::SAMPLER_2D_ARRAY)
             // UPLOADABLE for the generic layer's setImage, COLOR_ATTACHMENT for
@@ -49,6 +62,12 @@ void TtpRenderer::clearSkidLayer() {
     if (!mSkidTex || mSkidPix.empty()) return;
     std::fill(mSkidPix.begin(), mSkidPix.end(), (uint8_t) 0);
     mSkidDirty.clear();
+    // The CPU mip truth zeroes with it — generateMipmaps below zeroes the
+    // GPU chain, and the two must agree before the next incremental refresh.
+    for (auto& level : mSkidMips) std::fill(level.begin(), level.end(), (uint8_t) 0);
+    mSkidMipDirty.clear();
+    mSkidMipRects.clear();
+    mSkidMipLevel = 0;
     const size_t bytes = mSkidPix.size();
     auto* zeros = new uint8_t[bytes]();
     mSkidTex->setImage(*mEngine, 0,
@@ -120,13 +139,54 @@ void TtpRenderer::rasterSkidTri(const float2* p, const float* ink) {
     }
 }
 
+// UPLOAD EVENTS ARE THE COST, NOT UPLOAD BYTES. On the Android box's Vulkan
+// driver every setImage is its own kick, and a 4P frame was issuing a dozen
+// or two of them across the two deck layers (counted on the device log: 400
+// to 870 rubber copies and 300 to 490 shadow copies per 60 frames, a few
+// hundred texels each) for ~1.7 ms of a 17 ms 540-line frame. Sending every
+// rubber rect of a frame as ONE copy — a hundred times the bytes — took a
+// millisecond of that back. The barrier's stage masks (a fork arm that
+// skipped the fragment-read wait), an in-flight reader (uploads into a twin
+// that nothing samples) and the texture's shape (one level, no mip usage,
+// half the rows) all measured null first. So a frame's rects are merged
+// here by arclength until a merge would exceed a byte budget: cars in a
+// pack share a copy, a lone car gets its own. The budget is the ONLY
+// test — two rects need not touch to share a copy, unlike the eight-texel
+// neighbourhood the shadow layer used to require — because bytes were free
+// at the sizes the one-copy arm reached (up to 650 KB in a frame); it is
+// set where a merged copy stays a block of the layer rather than a strip of
+// the whole lap.
+static constexpr size_t kUploadEventTexels = 512 * 512;
+
+void TtpRenderer::mergeUploadRects(std::vector<SkidRect>& rects) {
+    if (rects.size() < 2) return;
+    std::sort(rects.begin(), rects.end(),
+            [](const SkidRect& a, const SkidRect& b) { return a.x0 < b.x0; });
+    std::vector<SkidRect> out;
+    out.reserve(rects.size());
+    out.push_back(rects[0]);
+    for (size_t i = 1; i < rects.size(); i++) {
+        SkidRect& m = out.back();
+        const SkidRect& r = rects[i];
+        const SkidRect u{ std::min(m.x0, r.x0), std::min(m.y0, r.y0),
+                          std::max(m.x1, r.x1), std::max(m.y1, r.y1) };
+        if ((size_t) (u.x1 - u.x0) * (size_t) (u.y1 - u.y0) <= kUploadEventTexels) {
+            m = u;
+        } else {
+            out.push_back(r);
+        }
+    }
+    rects.swap(out);
+}
+
 // Push this frame's dirty rects into the texture. Each rect is a tight copy
 // with its own free callback — the CPU buffer is mutated again next frame,
 // and native drivers read uploads asynchronously, so handing them a pointer
-// into mSkidPix would race. Rects are a few hundred texels; the copies are
-// noise. Unwrapped x splits at the lap seam here, once per rect.
+// into mSkidPix would race. Unwrapped x splits at the lap seam here, once
+// per rect. Merged first: see kUploadEventTexels.
 void TtpRenderer::uploadSkidRects() {
     const int W = (int) mSkidTexW, H = (int) mSkidTexH;
+    mergeUploadRects(mSkidDirty);
     for (const SkidRect& r : mSkidDirty) {
         const int y0 = std::max(0, r.y0), y1 = std::min(H, r.y1);
         if (y0 >= y1) continue;
@@ -151,6 +211,9 @@ void TtpRenderer::uploadSkidRects() {
             const int sx0 = spans[s][0], sx1 = spans[s][1];
             const int sw = sx1 - sx0, sh = y1 - y0;
             if (sw <= 0 || sh <= 0) continue;
+            // The same PHYSICAL rect feeds the throttled mip refresh — one
+            // wrap-split, owned here, so the two paths cannot disagree on it.
+            mSkidMipDirty.push_back({ sx0, y0, sx1, y1 });
             auto* buf = new uint8_t[(size_t) sw * sh];
             for (int y = 0; y < sh; y++) {
                 std::memcpy(buf + (size_t) y * sw,
@@ -166,6 +229,906 @@ void TtpRenderer::uploadSkidRects() {
         }
     }
     mSkidDirty.clear();
+}
+
+// The rubber layer's mip refresh: box-filter the accumulated dirty rects down
+// the CPU chain and upload only those sub-rects, level by level. This REPLACED
+// the throttled generateMipmaps, and the difference is not the filtering — the
+// 2x2 average below is what the blit computed — it is what the driver was
+// asked to do: a full-chain generateMipmaps on the 8192-wide layer is a dozen
+// render passes re-filtering megatexels to update a few hundred, issued
+// mid-frame, and on the reference Android box it measured as ~10 dropped
+// frames per second on its own (live A/B, rubber gated whole vs on — the GPU
+// MEDIAN did not move, which is why no frozen bench ever saw it). Rects are
+// merged per level (a car's four wheels collapse to one rect within a couple
+// of levels), so the deep chain is a handful of texel-sized uploads.
+//
+// Reads at a rect's edge reach one texel OUTSIDE it on odd boundaries; those
+// neighbours did not change this round, and the CPU chain is kept globally
+// consistent by construction, so what they hold is exactly what the filter
+// wants. The seam is deliberately NOT wrapped — generateMipmaps never wrapped
+// either, and the marks the stamper lays keep clear of the clamp rows.
+//
+// ONE LEVEL PER CALL. A pass used to land every level's copies in one frame,
+// and on the Android box each copy is its own kick (kUploadEventTexels): the
+// pass was the p95 of otherwise-quiet seconds — GPU p50 13.4 with p95 17.4
+// and three skips in the second — twice a second at four cells. Spread over
+// the chain's dozen frames it is a couple of copies a frame, like any other.
+// The chain stays consistent: a level is always the filter of the level
+// above as of an earlier frame, and the next pass recomputes every level
+// under whatever changed since.
+void TtpRenderer::refreshSkidMips() {
+    if (!mSkidTex || mSkidMips.empty()) {
+        mSkidMipDirty.clear(); mSkidMipRects.clear(); mSkidMipLevel = 0;
+        return;
+    }
+    if (mSkidMipLevel == 0) {                    // start a pass
+        if (mSkidMipDirty.empty()) return;
+        mSkidMipRects.swap(mSkidMipDirty);
+        mSkidMipDirty.clear();
+        mSkidMipLevel = 1;
+    }
+    const int W0 = (int) mSkidTexW, H0 = (int) mSkidTexH;
+    std::vector<SkidRect> rects = std::move(mSkidMipRects);
+    mSkidMipRects.clear();
+    {
+        const size_t li = (size_t) mSkidMipLevel - 1;
+        if (li >= mSkidMips.size() || rects.empty()) { mSkidMipLevel = 0; return; }
+        const int l = mSkidMipLevel;
+        const int sw = std::max(1, W0 >> (l - 1)), sh = std::max(1, H0 >> (l - 1));
+        const int dw = std::max(1, W0 >> l), dh = std::max(1, H0 >> l);
+        const uint8_t* src = li == 0 ? mSkidPix.data() : mSkidMips[li - 1].data();
+        uint8_t* dst = mSkidMips[li].data();
+        // Halve every rect, then merge overlaps — O(n²) over a handful.
+        std::vector<SkidRect> next;
+        for (const SkidRect& r : rects) {
+            SkidRect d{ std::max(0, r.x0 >> 1), std::max(0, r.y0 >> 1),
+                        std::min(dw, (r.x1 + 1) >> 1), std::min(dh, (r.y1 + 1) >> 1) };
+            if (d.x0 >= d.x1 || d.y0 >= d.y1) continue;
+            bool merged = false;
+            for (SkidRect& m : next) {
+                if (d.x0 <= m.x1 && m.x0 <= d.x1 && d.y0 <= m.y1 && m.y0 <= d.y1) {
+                    m.x0 = std::min(m.x0, d.x0); m.y0 = std::min(m.y0, d.y0);
+                    m.x1 = std::max(m.x1, d.x1); m.y1 = std::max(m.y1, d.y1);
+                    merged = true;
+                    break;
+                }
+            }
+            if (!merged) next.push_back(d);
+        }
+        mergeUploadRects(next);
+        for (const SkidRect& d : next) {
+            for (int y = d.y0; y < d.y1; y++) {
+                const uint8_t* row0 = src + (size_t) std::min(2 * y, sh - 1) * sw;
+                const uint8_t* row1 = src + (size_t) std::min(2 * y + 1, sh - 1) * sw;
+                uint8_t* drow = dst + (size_t) y * dw;
+                for (int x = d.x0; x < d.x1; x++) {
+                    const int sx0 = std::min(2 * x, sw - 1);
+                    const int sx1 = std::min(2 * x + 1, sw - 1);
+                    drow[x] = (uint8_t) (((int) row0[sx0] + row0[sx1]
+                            + row1[sx0] + row1[sx1] + 2) >> 2);
+                }
+            }
+            const int uw = d.x1 - d.x0, uh = d.y1 - d.y0;
+            auto* buf = new uint8_t[(size_t) uw * uh];
+            for (int y = 0; y < uh; y++) {
+                std::memcpy(buf + (size_t) y * uw,
+                        dst + (size_t) (d.y0 + y) * dw + d.x0, (size_t) uw);
+            }
+            mSkidTex->setImage(*mEngine, (size_t) l,
+                    (uint32_t) d.x0, (uint32_t) d.y0, (uint32_t) uw, (uint32_t) uh,
+                    Texture::PixelBufferDescriptor(buf, (size_t) uw * uh,
+                            Texture::Format::R, Texture::Type::UBYTE,
+                            [](void* b, size_t, void*) { delete[] (uint8_t*) b; },
+                            nullptr));
+        }
+        mSkidMipRects = std::move(next);
+        mSkidMipLevel = (mSkidMipRects.empty() || (size_t) mSkidMipLevel >= mSkidMips.size())
+                ? 0 : mSkidMipLevel + 1;
+    }
+}
+
+// Which vroad arrived? Two INDEPENDENT capability probes: the current blob
+// carries BOTH — the hybrid shadow LOD's masked arrays (near cars) and the
+// carShadow tap (everyone else) — and each path keys on its own probe, so a
+// blob with only one half still draws that half. hasParameter is a name
+// lookup — called at build, at debug switches, and once per uploadDeckDecals,
+// so it is not worth a cached bool that could go stale across provideAsset.
+bool TtpRenderer::roadHasMaskLoop() const {
+    return mRoadMaterial && mRoadMaterial->hasParameter("maskRect");
+}
+bool TtpRenderer::roadHasCarShadow() const {
+    return mRoadMaterial && mRoadMaterial->hasParameter("carShadow");
+}
+
+// The carShadow sampler must be bound on every vroad instance from creation
+// (Filament draws with every sampler resolved); the 1x1 zero the skid layer
+// keeps is the right null here too. maskInk.w = 0 is what actually disables
+// the tap.
+void TtpRenderer::bindCarShadow(MaterialInstance* mi, Texture* t) {
+    if (!mi) return;
+    if (!t) t = mSkidNullTex;   // bindSkidLayer has made it by the time any
+    if (!t) return;             // road instance exists (see roadInstance)
+    // LINEAR both ways, single level — the masked loop's silhouette was a
+    // no-mip LOD-0 sample too, so minification behaves exactly as it did.
+    TextureSampler smp(TextureSampler::MinFilter::LINEAR,
+            TextureSampler::MagFilter::LINEAR);
+    // REPEAT along s carries the lap wrap; CLAMP across lat parks the kerbs'
+    // and underside's out-of-band v on edge rows the raster never writes —
+    // the rubber layer's exact contract, on the rubber layer's exact span.
+    smp.setWrapModeS(TextureSampler::WrapMode::REPEAT);
+    smp.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+    mi->setParameter("carShadow", t, smp);
+}
+
+// ── The blob's SHAPE, per car model ─────────────────────────────────────────
+//
+// The spec the current tuning asks for. One place, so a bake and a re-bake
+// cannot disagree about the frame they drew in.
+static ttp::rt::FootprintSpec footprintSpecOf(const CarShadowTuning& t, int W, int H) {
+    ttp::rt::FootprintSpec spec;
+    spec.w = W;
+    spec.h = H;
+    spec.overscan = t.overscan;
+    spec.grow = t.grow;
+    spec.blur = t.blur;
+    return spec;
+}
+
+// Rasterize a captured outline at the current tuning. Pure: geometry in, mask
+// out, no asset and no scene — which is what lets a tuning drag re-derive every
+// model's shape without going near a car that has since driven off.
+bool TtpRenderer::rasterCarOutline(uint64_t key) {
+    const auto it = mCarOutlines.find(key);
+    if (it == mCarOutlines.end()) return false;
+    const CarOutline& o = it->second;
+    std::vector<float> mask = ttp::rt::car_footprint_mask(o.xz.data(), o.xz.size() / 2,
+            o.idx.data(), o.idx.size(), o.halfX, o.halfZ,
+            footprintSpecOf(mShadowTune, kCarShadowMaskW, kCarShadowMaskH));
+    // An outline that came out blank is a FAILED bake, not a car with no
+    // shadow. Leave the model absent from the store and it falls back to the
+    // superellipse — the same discipline bakeSilhouette's coverage probe
+    // enforces on the GPU side, and for the same reason: a blank mask draws as
+    // nothing at all and no screenshot gate separates the two.
+    if (mask.empty()) {
+        utils::slog.w << "carFootprint: empty outline for model "
+                << (unsigned long long) key << " — the superellipse stands in"
+                << utils::io::endl;
+        mCarShadowMasks.erase(key);
+        return false;
+    }
+    // FIT THE CHEAP SHAPES TO THE SAME CAPTURE, so the analytic paths are
+    // per-car too. One pass each, here, and nothing at all in the raster —
+    // which is the whole reason both are parameterised. The polygon fits the
+    // raw projected vertices rather than the mask: the hull wants the
+    // geometry, not pixels of it.
+    //
+    // THE FIT MEASURES A SHARP RASTER, never the blurred display mask: blur
+    // is the LOOK, and at the shipped width it closes the very gap the fit
+    // exists to see — an open-wheeler's detached rear wheels bridged above
+    // the 0.5 threshold, and Rumble's tail read full-width.
+    ttp::rt::FootprintSpec fitSpec =
+            footprintSpecOf(mShadowTune, kCarShadowMaskW, kCarShadowMaskH);
+    fitSpec.blur = 0.0f;
+    const std::vector<float> fitMask = ttp::rt::car_footprint_mask(
+            o.xz.data(), o.xz.size() / 2, o.idx.data(), o.idx.size(),
+            o.halfX, o.halfZ, fitSpec);
+    it->second.fit = ttp::rt::fit_rounded_rect(
+            fitMask.empty() ? mask : fitMask, fitSpec);
+    it->second.poly = ttp::rt::fit_convex_poly_lobes(o.xz.data(), o.xz.size() / 2,
+            o.idx.data(), o.idx.size(),
+            o.halfX, o.halfZ, mShadowTune.polyEdges, mask,
+            footprintSpecOf(mShadowTune, kCarShadowMaskW, kCarShadowMaskH));
+    mCarShadowMasks[key] = std::move(mask);
+    return true;
+}
+
+// One model's outline, CAPTURED and then rasterized.
+//
+// The GEOMETRY comes from `ttp/glb_mesh.h` — the same decode the merged draw
+// groups already memoise off the same bytes, so this adds no parse — and the
+// NODE TRANSFORMS come from the gltfio asset, matched by node name exactly as
+// buildMergedCarGroups matches them. That split is deliberate: glb_mesh reads
+// geometry and has no business knowing a scene hierarchy, and the renderer is
+// the only thing here that holds one.
+//
+// **THE ASSET MUST BE AT ITS PARSE POSE.** This is the load path's to call and
+// nobody else's: `getWorldTransform` answers where the car IS, and a car that
+// has started racing is hundreds of units from the mask's frame, so a capture
+// taken then rasterizes to nothing at all. That failure is silent on the glass
+// — every car simply falls back to the superellipse — which is why the outline
+// is captured once, here, and re-rasterized from the copy for ever after.
+bool TtpRenderer::bakeCarFootprint(uint64_t key, const std::vector<uint8_t>& glb,
+        gltfio::FilamentAsset* asset, const float3& bbMin, const float3& bbMax) {
+    if (!key || !asset || !mEngine) return false;
+    const std::vector<ttp::rt::GlbMeshNode>* nodes = glbMeshes(key, glb);
+    if (!nodes || nodes->empty()) return false;
+    CarOutline o;
+    o.halfX = (bbMax.x - bbMin.x) * 0.5f;
+    o.halfZ = (bbMax.z - bbMin.z) * 0.5f;
+    if (!(o.halfX > 0.0f) || !(o.halfZ > 0.0f)) return false;
+
+    auto& tcm = mEngine->getTransformManager();
+    for (const ttp::rt::GlbMeshNode& n : *nodes) {
+        if (n.name.empty()) continue;
+        const utils::Entity e = asset->getFirstEntityByName(n.name.c_str());
+        if (e.isNull()) continue;
+        const auto ti = tcm.getInstance(e);
+        // A node the asset does not own under that name contributes nothing —
+        // its geometry would land at the origin and print a blot in the middle
+        // of the shadow, which is worse than the outline it was meant to add.
+        if (!ti) continue;
+        const mat4f wm = tcm.getWorldTransform(ti);
+        for (const ttp::rt::GlbMeshPrim& p : n.prims) {
+            const uint32_t base = (uint32_t) (o.xz.size() / 2);
+            const size_t verts = p.pos.size() / 3;
+            for (size_t v = 0; v < verts; v++) {
+                const float3 wp = (wm * float4{ p.pos[v * 3], p.pos[v * 3 + 1],
+                        p.pos[v * 3 + 2], 1.0f }).xyz;
+                o.xz.push_back(wp.x);
+                o.xz.push_back(wp.z);
+            }
+            for (const uint32_t i : p.idx) o.idx.push_back(base + i);
+        }
+    }
+    // A CAPTURE OFF A POSED ASSET IS THE ONE MISTAKE THIS CANNOT SURVIVE, and
+    // it is invisible downstream, so it is refused here instead: every roster
+    // model is origin-centred at rest, so an outline whose extent does not
+    // straddle the origin was measured somewhere out on the track.
+    float lo = 1e30f, hi = -1e30f;
+    for (size_t v = 0; v + 1 < o.xz.size(); v += 2) {
+        lo = std::min(lo, o.xz[v]);
+        hi = std::max(hi, o.xz[v]);
+    }
+    if (o.xz.empty() || lo > o.halfX || hi < -o.halfX) {
+        utils::slog.w << "bakeCarFootprint: model " << (unsigned long long) key
+                << " was not at its rest pose — outline refused" << utils::io::endl;
+        return false;
+    }
+    mCarOutlines[key] = std::move(o);
+    return rasterCarOutline(key);
+}
+
+// Which outline slot `i` stamps: this slot's model, or the shared superellipse
+// whenever the tuning asks for it or the bake did not land. A car wearing the
+// MONSTER keeps its own shape — the stamp just scales (kMonsterShadowScale).
+TtpRenderer::StampShape TtpRenderer::carShadowShapeFor(size_t slot) const {
+    StampShape out;
+    const uint64_t key =
+            mCarShadowMaskOfSlot.size() > slot ? mCarShadowMaskOfSlot[slot] : 0;
+    const auto outline = key ? mCarOutlines.find(key) : mCarOutlines.end();
+    // THE ANALYTIC SHAPE reads no mask; what it needs is this model's FIT, and
+    // the generic default when the model has none — the fallback is a shape,
+    // not a blank. `corner` scales the fitted radius (1 = as fitted), so the
+    // slider always does something AND the cars stay different from each other.
+    if (mShadowTune.shape == kShadowShapeRounded
+            || mShadowTune.shape == kShadowShapePoly) {
+        if (outline != mCarOutlines.end()) out.fit = outline->second.fit;
+        out.fit.corner = std::min(1.0f, out.fit.corner * mShadowTune.corner);
+        // The polygon when it is asked for AND this model has one; a failed
+        // fit leaves the fitted rect standing in — a shape, never a blank.
+        if (mShadowTune.shape == kShadowShapePoly
+                && outline != mCarOutlines.end()
+                && outline->second.poly[0].count >= 3) {
+            out.poly = &outline->second.poly[0];
+            if (outline->second.poly[1].count >= 3) {
+                out.poly2 = &outline->second.poly[1];
+            }
+        }
+        return out;
+    }
+    if (mShadowTune.shape == kShadowShapeCar && key) {
+        const auto it = mCarShadowMasks.find(key);
+        if (it != mCarShadowMasks.end() && !it->second.empty()) {
+            out.mask = &it->second;
+            return out;
+        }
+    }
+    out.mask = &mCarShadowMask;
+    return out;
+}
+
+// Re-derive every mask at the current tuning, FROM THE CAPTURED OUTLINES and
+// never from the assets — the cars have long since driven away from the pose an
+// outline has to be measured in (mCarOutlines says what that costs). Only the
+// tuning ABI calls it: four models at 256x512 supersampled is a few
+// milliseconds, nothing against a scene build and unthinkable inside a frame.
+void TtpRenderer::rebakeCarShadowMasks() {
+    mCarShadowMask = superellipseMaskPixels(kCarShadowMaskW, kCarShadowMaskH);
+    mCarShadowMasks.clear();
+    for (const auto& [key, outline] : mCarOutlines) {
+        (void) outline;
+        rasterCarOutline(key);
+    }
+}
+
+TtpRenderer::ShadowLayerInfo TtpRenderer::shadowLayerInfo() const {
+    ShadowLayerInfo o;
+    o.w = (int) mCarShadowW;
+    o.h = (int) mCarShadowH;
+    if (mTrack && mTrack->length > 0.0f) o.texelsPerU = mCarShadowW / mTrack->length;
+    if (mSkidLatHalf > 0.0f) o.texelsPerLat = mCarShadowH / (2.0f * mSkidLatHalf);
+    // A car's stamp, in texels — its footprint times the overscan the quad
+    // carries. Off the FIRST slot that has a measured footprint, because the
+    // roster's models are within a few percent of each other and this is a
+    // readout, not a per-car fact.
+    for (const CarWheels& w : mCarWheels) {
+        if (!(w.footW > 0.0f) || !(w.footL > 0.0f)) continue;
+        o.stampTexelsS = w.footL * mShadowTune.overscan * o.texelsPerU;
+        o.stampTexelsLat = w.footW * mShadowTune.overscan * o.texelsPerLat;
+        break;
+    }
+    return o;
+}
+
+bool TtpRenderer::shadowLayerWindow(int x, int y, int w, int h,
+        std::vector<uint8_t>& out) const {
+    const int LW = (int) mCarShadowW, LH = (int) mCarShadowH;
+    if (LW <= 0 || LH <= 0 || mCarShadowPix.empty()) return false;
+    if (w <= 0 || h <= 0) return false;
+    out.assign((size_t) w * h, 0);
+    for (int j = 0; j < h; j++) {
+        const int sy = y + j;
+        if (sy < 0 || sy >= LH) continue;
+        const uint8_t* src = mCarShadowPix.data() + (size_t) sy * LW;
+        uint8_t* dst = out.data() + (size_t) j * w;
+        for (int i = 0; i < w; i++) {
+            // x wraps: the layer is periodic along the lap, and a stamp near
+            // the seam is exactly the case worth being able to look at.
+            dst[i] = src[(((x + i) % LW) + LW) % LW];
+        }
+    }
+    return true;
+}
+
+TtpRenderer::ShadowMaskView TtpRenderer::shadowMaskView(size_t slot) {
+    ShadowMaskView v;
+    v.w = kCarShadowMaskW;
+    v.h = kCarShadowMaskH;
+    const uint64_t key = mCarShadowMaskOfSlot.size() > slot
+            ? mCarShadowMaskOfSlot[slot] : 0;
+    // THE ANALYTIC SHAPE HAS NO MASK, so one is drawn here for the readback
+    // alone. Without it the tuning page would show an oval while the deck drew
+    // a rounded rect, which is exactly the kind of quiet lie this readback
+    // exists to prevent. Never on a frame path — the ABI is once per drag.
+    if (mShadowTune.shape == kShadowShapeRounded
+            || mShadowTune.shape == kShadowShapePoly) {
+        // THROUGH THE SAME SELECTOR AND EVALUATOR THE RASTER USES, or the page
+        // would show one shape for every car while the deck drew a different
+        // one per model — which is the exact class of quiet lie this readback
+        // exists to catch, and it did catch it once.
+        const StampShape sh = carShadowShapeFor(slot);
+        mAnalyticPreview.resize((size_t) kCarShadowMaskW * kCarShadowMaskH);
+        for (int y = 0; y < kCarShadowMaskH; y++) {
+            for (int x = 0; x < kCarShadowMaskW; x++) {
+                mAnalyticPreview[(size_t) y * kCarShadowMaskW + x] =
+                        analyticCoverage(sh,
+                                (x + 0.5f) / kCarShadowMaskW,
+                                (y + 0.5f) / kCarShadowMaskH, 0.02f);
+            }
+        }
+        v.px = mAnalyticPreview.data();
+        v.model = key;
+        v.generic = false;
+        return v;
+    }
+    if (mShadowTune.shape == kShadowShapeCar && key) {
+        const auto it = mCarShadowMasks.find(key);
+        if (it != mCarShadowMasks.end() && !it->second.empty()) {
+            v.px = it->second.data();
+            v.model = key;
+            v.generic = false;
+            return v;
+        }
+    }
+    // The slot's model is still reported when the superellipse stands in, so a
+    // reader can tell "no such slot" from "this model's outline did not bake".
+    v.model = key;
+    if (!mCarShadowMask.empty()) v.px = mCarShadowMask.data();
+    return v;
+}
+
+// Apply a tuning. The masks re-bake whenever their SHAPE inputs moved, and the
+// layer pair re-allocates whenever its DENSITY did; everything else is read
+// fresh by the next frame and costs nothing to change.
+void TtpRenderer::setShadowTuning(const CarShadowTuning& t) {
+    const bool reshape = t.overscan != mShadowTune.overscan
+            || t.grow != mShadowTune.grow
+            || t.blur != mShadowTune.blur
+            || t.polyEdges != mShadowTune.polyEdges;
+    const bool resize = t.texelsPerU != mShadowTune.texelsPerU
+            || t.rows != mShadowTune.rows;
+    mShadowTune = t;
+    if (reshape || mCarShadowMask.empty()) rebakeCarShadowMasks();
+    if (resize && mTrack) buildCarShadowLayer(mTrack->length);
+    // AND PUSH THE UNIFORMS, or the ink, the cap and the tail cut are read off
+    // whatever the last LAYER BUILD left on the material. Without this every
+    // one of those four knobs was silently inert unless a density knob happened
+    // to move with it — which cost a measurement: an arm that changed the tail
+    // cut alone measured byte-identical to the arm before it, and the arm that
+    // moved the cut into the raster was left double-cutting.
+    applyShadowInk();
+}
+
+
+// The CAR-SHADOW layer — the texture path that replaced vroad's masked uniform
+// loop, only when the served blob carries the tap. It rides the rubber layer's
+// lat span (mSkidLatHalf) so the shader's one uv serves both taps, which is why
+// the track build calls this from inside the rubber layer's own guard.
+//
+// A PAIR, both zeroed now (a fresh texture holds garbage — the lobby-speckle
+// lesson): the per-frame upload alternates between them so it never lands on
+// the texture the driver is reading (uploadCarShadow has the whole argument).
+//
+// W targets `texelsPerU` texels/u of arclength — coarse against the rubber's 80
+// on purpose, because the stamp is a pre-blurred blob and the WHOLE level
+// re-uploads every frame, so W bounds that event's size (512 KB at the 4096
+// cap). Raising either density is therefore a per-frame upload cost and not
+// only a memory one, which is why both are knobs a person has to drag on the
+// tuning page rather than constants somebody picked.
+//
+// Re-entrant: the tuning ABI calls it again when a density moves, so it drops
+// whatever pair it already had first.
+void TtpRenderer::buildCarShadowLayer(float trackLength) {
+    if (!mEngine || !roadHasCarShadow()) return;
+    for (auto*& t : mCarShadowTex) {
+        if (t) { mEngine->destroy(t); t = nullptr; }
+    }
+    mCarShadowW = mCarShadowH = 0;
+    if (!(trackLength > 1.0f)) return;
+    // THE DENSITY IS THE FLICKER, so the ceiling is the driver's and not a
+    // number picked here. At the shipped 8 texels/u a car's whole stamp is
+    // about 7 by 10 texels, the raster re-lands it at a new sub-texel offset
+    // every frame, and the edge boils — measured as 3.5x the temporal energy
+    // the masked silhouette put in the same band. The lat rows and the width
+    // both buy that back; what they cost is the whole-level upload, which is
+    // why both are knobs on /shadow-lab.html rather than a constant.
+    mCarShadowH = (uint32_t) std::max(16, std::min(1024, mShadowTune.rows));
+    mCarShadowW = (uint32_t) std::min((float) mMaxTextureDim, std::max(1024.0f,
+            std::round(trackLength * std::max(1.0f, mShadowTune.texelsPerU))));
+    if (mCarShadowMask.empty()) rebakeCarShadowMasks();
+    bool ok = true;
+    for (int t = 0; t < 2 && ok; t++) {
+        mCarShadowTex[t] = Texture::Builder()
+                .width(mCarShadowW).height(mCarShadowH).levels(1)
+                .format(Texture::InternalFormat::R8)
+                // UPLOAD-ONLY, like the rubber: no COLOR_ATTACHMENT, ever
+                // (the A10X RT law — see mSkidPix).
+                .usage(Texture::Usage::SAMPLEABLE | Texture::Usage::UPLOADABLE)
+                .build(*mEngine);
+        if (!mCarShadowTex[t]) { ok = false; break; }
+        const size_t bytes = (size_t) mCarShadowW * mCarShadowH;
+        auto* zeros = new uint8_t[bytes]();
+        mCarShadowTex[t]->setImage(*mEngine, 0,
+                Texture::PixelBufferDescriptor(zeros, bytes,
+                        Texture::Format::R, Texture::Type::UBYTE,
+                        [](void* b, size_t, void*) { delete[] (uint8_t*) b; },
+                        nullptr));
+    }
+    if (ok) {
+        mCarShadowPix.assign((size_t) mCarShadowW * mCarShadowH, 0);
+        mCarShadowDirty.clear();
+        // Both textures and the CPU buffer are zero here, so the pair starts
+        // agreed and the dirty-rect upload has nothing to catch up on. The
+        // history MUST go with them: a rect measured against the old layer's
+        // width would upload the wrong strip of the new one.
+        for (auto& l : mCarShadowWas) l.clear();
+        mCarShadowWasAt = 0;
+        // 1, not 0: the instances below bind tex[0], so the FIRST upload must
+        // land on tex[1] — starting at 0 respecified the very texture the
+        // driver was reading, once per scene, which is the exact in-flight
+        // conflict the pair exists to avoid.
+        mCarShadowPing = 1;
+        mCarShadowUpload = false;
+        applyShadowInk();
+        if (mRoadInst) bindCarShadow(mRoadInst, mCarShadowTex[0]);
+        for (RoadChunk& rc : mRoadChunks) {
+            if (rc.mi) bindCarShadow(rc.mi, mCarShadowTex[0]);
+        }
+    } else {
+        // No layer, no tap: maskInk.w stays 0, so the deck simply draws no car
+        // shadows — the same benign state a shell with no vroad at all is in.
+        for (auto*& t : mCarShadowTex) {
+            if (t) { mEngine->destroy(t); t = nullptr; }
+        }
+        mCarShadowW = mCarShadowH = 0;
+        applyShadowInk();
+    }
+}
+
+// The shadow's colour, its coverage cap and the shader's tail-cut remap, onto
+// every live road instance. One funnel, because these are three parameters on
+// two materials that must never be set from different places with different
+// ideas of the current tuning.
+void TtpRenderer::applyShadowInk() {
+    mShadowInkLinear = srgbToLinear(mShadowTune.ink);
+    if (!roadHasCarShadow()) return;
+    const math::float4 v = shadowInkParam(mCarShadowTex[0] != nullptr);
+    const math::float4 remap = shadowRemapParam();
+    const auto set = [&](MaterialInstance* mi) {
+        if (!mi) return;
+        mi->setParameter("maskInk", v);
+        if (mi->getMaterial()->hasParameter("carShadowRemap")) {
+            mi->setParameter("carShadowRemap", remap);
+        }
+    };
+    set(mRoadInst);
+    for (RoadChunk& rc : mRoadChunks) set(rc.mi);
+}
+
+
+// Zero the rects the last raster touched. The layer is TRANSIENT — the cars
+// re-stamp every frame — so this runs at the top of renderCars whether or not
+// any car will stamp again (a car that vanished must leave nothing behind).
+// x is unwrapped (a stamp near the seam runs past W); the memset wraps.
+void TtpRenderer::eraseCarShadow() {
+    if (mCarShadowPix.empty()) { mCarShadowDirty.clear(); return; }
+    const int W = (int) mCarShadowW, H = (int) mCarShadowH;
+    for (const SkidRect& r : mCarShadowDirty) {
+        const int y0 = std::max(0, r.y0), y1 = std::min(H, r.y1);
+        const int span = std::min(W, r.x1 - r.x0);
+        if (y0 >= y1 || span <= 0) continue;
+        const int wx0 = ((r.x0 % W) + W) % W;
+        const int first = std::min(span, W - wx0);
+        for (int y = y0; y < y1; y++) {
+            uint8_t* row = mCarShadowPix.data() + (size_t) y * W;
+            std::memset(row + wx0, 0, (size_t) first);
+            if (first < span) std::memset(row, 0, (size_t) (span - first));
+        }
+        mCarShadowUpload = true;
+    }
+    // Hand this list to the upload's history before dropping it: what the erase
+    // just zeroed is a region that changed, and the ping-pong's other texture
+    // has not seen it yet (mCarShadowWas).
+    mCarShadowWas[mCarShadowWasAt & 1] = std::move(mCarShadowDirty);
+    mCarShadowWasAt++;
+    mCarShadowDirty.clear();
+}
+
+// One triangle of a car-shadow stamp: texel space, the same top-left rule and
+// per-row x wrap as rasterSkidTri, but instead of a flat interpolated ink it
+// carries the silhouette's (u, v) per vertex — linear per triangle, exactly
+// what the GPU would interpolate — and samples the CPU superellipse bilinearly
+// at each covered texel. Saturating ADD like the rubber; the cap on the summed
+// result is the shader's (CarShadowTuning::cap via maskInk.w), not the raster's.
+// y clamps to [1, H-2]: the outer rows are the CLAMP rows the shader's
+// out-of-band v relies on staying empty.
+// The one analytic evaluator — the raster and the readback preview both come
+// here, so the tuning page can never show a shape the deck is not drawing.
+float TtpRenderer::analyticCoverage(const StampShape& s, float u, float v,
+        float soft) const {
+    if (s.poly) {
+        const float r = kPolyCornerBase * mShadowTune.corner;
+        float cov = ttp::rt::convex_poly_coverage(u, v, mShadowTune.overscan,
+                *s.poly, r, soft);
+        // The waist's second lobe: the UNION is what puts the pinch back.
+        if (s.poly2) {
+            cov = std::max(cov, ttp::rt::convex_poly_coverage(u, v,
+                    mShadowTune.overscan, *s.poly2, r, soft));
+        }
+        return cov;
+    }
+    return ttp::rt::rounded_rect_coverage(u, v, mShadowTune.overscan,
+            s.fit.corner, soft, s.fit.fillXTail, s.fit.fillXNose, s.fit.fillZ);
+}
+
+void TtpRenderer::rasterCarShadowTri(const float2* p, const float2* uv, float alpha,
+        const StampShape& shape) {
+    if (mStampW <= 0 || mStampH <= 0) return;
+    if (!shape.mask && mShadowTune.shape != kShadowShapeRounded
+            && mShadowTune.shape != kShadowShapePoly) return;
+    if (shape.mask && shape.mask->empty()) return;
+    const float area = (p[1].x - p[0].x) * (p[2].y - p[0].y)
+                     - (p[2].x - p[0].x) * (p[1].y - p[0].y);
+    if (area == 0.0f) return;
+    const float2 a = p[0];
+    const float2 b = area > 0 ? p[1] : p[2];
+    const float2 c = area > 0 ? p[2] : p[1];
+    const float2 ua = uv[0];
+    const float2 ub = area > 0 ? uv[1] : uv[2];
+    const float2 uc = area > 0 ? uv[2] : uv[1];
+    const float inv = 1.0f / std::fabs(area);
+    // Clipped to the SCRATCH; the layer's own row clamp and the x wrap are the
+    // composite's job now (rasterCarShadowStamp).
+    const int y0 = std::max(mStampY0, (int) std::ceil(
+            std::min(a.y, std::min(b.y, c.y)) - 0.5f));
+    const int y1 = std::min(mStampY0 + mStampH - 1, (int) std::floor(
+            std::max(a.y, std::max(b.y, c.y)) - 0.5f + 1.0f));
+    const int x0 = std::max(mStampX0, (int) std::ceil(
+            std::min(a.x, std::min(b.x, c.x)) - 0.5f));
+    const int x1 = std::min(mStampX0 + mStampW - 1, (int) std::floor(
+            std::max(a.x, std::max(b.x, c.x)) - 0.5f + 1.0f));
+    const auto edge = [](const float2& e0, const float2& e1, float px, float py) {
+        return (e1.x - e0.x) * (py - e0.y) - (e1.y - e0.y) * (px - e0.x);
+    };
+    const auto topLeft = [](const float2& e0, const float2& e1) {
+        return (e0.y == e1.y && e1.x < e0.x) || e1.y > e0.y;
+    };
+    // Clamped bilinear over the CPU silhouette — the sampler's CLAMP_TO_EDGE,
+    // in floats (the mask's own border is already ~0 from the bake blur).
+    const auto mask = [&](float u, float v) {
+        const float fx = u * (float) kCarShadowMaskW - 0.5f;
+        const float fy = v * (float) kCarShadowMaskH - 0.5f;
+        const int mx0 = (int) std::floor(fx), my0 = (int) std::floor(fy);
+        const float tx = fx - (float) mx0, ty = fy - (float) my0;
+        const auto at = [&](int x, int y) {
+            x = std::min(kCarShadowMaskW - 1, std::max(0, x));
+            y = std::min(kCarShadowMaskH - 1, std::max(0, y));
+            return (*shape.mask)[(size_t) y * kCarShadowMaskW + x];
+        };
+        const float t0 = at(mx0, my0) + (at(mx0 + 1, my0) - at(mx0, my0)) * tx;
+        const float t1 = at(mx0, my0 + 1) + (at(mx0 + 1, my0 + 1) - at(mx0, my0 + 1)) * tx;
+        return t0 + (t1 - t0) * ty;
+    };
+    const bool tlAB = topLeft(a, b), tlBC = topLeft(b, c), tlCA = topLeft(c, a);
+    // The mask's uv GRADIENT per layer texel, constant over the triangle — a
+    // 2x2 box filter's step. One point sample per texel under per-frame
+    // sub-texel slide is what breathes at a hard edge; four samples half a
+    // texel apart are the filter the minification never had.
+    const float ex1 = b.x - a.x, ey1 = b.y - a.y;
+    const float ex2 = c.x - a.x, ey2 = c.y - a.y;
+    const float du1 = ub.x - ua.x, dv1 = ub.y - ua.y;
+    const float du2 = uc.x - ua.x, dv2 = uc.y - ua.y;
+    const float det = ex1 * ey2 - ex2 * ey1;
+    const float id = det != 0.0f ? 1.0f / det : 0.0f;
+    const float dudx = (du1 * ey2 - du2 * ey1) * id, dvdx = (dv1 * ey2 - dv2 * ey1) * id;
+    const float dudy = (du2 * ex1 - du1 * ex2) * id, dvdy = (dv2 * ex1 - dv1 * ex2) * id;
+    // THE ANALYTIC SHAPE NEEDS NO FILTER, which is most of why it is cheaper:
+    // the edge ramp is sized from the texel footprint the gradients above
+    // already give, so ONE evaluation is already antialiased where a mask needs
+    // four taps to be. Half a texel of ramp, in the stamp's own units.
+    // THE STORED RAMP WANTS TO BE WIDE, not tight to the texel. The shader
+    // takes the tail cut on the INTERPOLATED value, so a smooth field gives a
+    // sub-texel edge position that slides continuously (the signed-distance
+    // trick); a ramp sized to half a texel quantises the edge to the grid
+    // instead and measured 30% MORE flicker than the masks. So the floor is the
+    // texel footprint — below it the raster would alias — and the target is the
+    // same softness `blur` gives a mask, converted into the footprint's own
+    // units (the mask is `w` wide and its footprint 1/overscan of that).
+    const bool analytic = shape.mask == nullptr;
+    const float texelRamp = 0.5f * mShadowTune.overscan
+            * (std::fabs(dudx) + std::fabs(dudy)
+             + std::fabs(dvdx) + std::fabs(dvdy));
+    const float soft = analytic
+            ? std::max(1e-3f, std::max(texelRamp,
+                    mShadowTune.blur * 2.0f * mShadowTune.overscan))
+            : 0.0f;
+    for (int y = y0; y <= y1; y++) {
+        float* row = mStampCov.data() + (size_t) (y - mStampY0) * mStampW;
+        const float py = (float) y + 0.5f;
+        for (int x = x0; x <= x1; x++) {
+            const float px = (float) x + 0.5f;
+            const float eAB = edge(a, b, px, py);
+            const float eBC = edge(b, c, px, py);
+            const float eCA = edge(c, a, px, py);
+            if ((eAB > 0 || (eAB == 0 && tlAB))
+                    && (eBC > 0 || (eBC == 0 && tlBC))
+                    && (eCA > 0 || (eCA == 0 && tlCA))) {
+                // Barycentric uv: eBC weighs vertex a, eCA weighs b, eAB c.
+                const float w0 = eBC * inv, w1 = eCA * inv, w2 = eAB * inv;
+                const float mu = ua.x * w0 + ub.x * w1 + uc.x * w2;
+                const float mv = ua.y * w0 + ub.y * w1 + uc.y * w2;
+                const float cov = analytic
+                        ? analyticCoverage(shape, mu, mv, soft)
+                        : 0.25f
+                            * (mask(mu - 0.25f * (dudx + dudy), mv - 0.25f * (dvdx + dvdy))
+                             + mask(mu + 0.25f * (dudx - dudy), mv + 0.25f * (dvdx - dvdy))
+                             + mask(mu - 0.25f * (dudx - dudy), mv - 0.25f * (dvdx - dvdy))
+                             + mask(mu + 0.25f * (dudx + dudy), mv + 0.25f * (dvdx + dvdy)));
+                // MAX, never add: two triangles of one stamp may both claim a
+                // texel on their shared edge (mStampCov says why), and adding
+                // there is the diagonal banding.
+                float& dst = row[x - mStampX0];
+                dst = std::max(dst, std::max(0.0f, cov * alpha));
+            }
+        }
+    }
+}
+
+// One car's stamp into the layer. `sl` is the SIX deckFoot-projected points
+// the cull-window measurement in renderCars already computes — the four
+// corners plus the two long-edge midpoints — as (s, lat), s ABSOLUTE (the
+// fold to unwrapped texel x happens here, against carS). Rasterized as TWO
+// warped quads (four triangles): the deck's bending of track space then
+// lives INSIDE each half-stamp, where it is second-order — the worst
+// catalogue corner bows a straight car edge by ~L²/8R ≈ 0.13 u over the full
+// stamp, and slicing once halves the sag to well under a texel. The
+// per-triangle diagonal is the same linearization the GPU applies to uv0
+// itself, so there is no finer truth to chase.
+void TtpRenderer::rasterCarShadowStamp(const float2* sl, float carS, float alpha,
+        const StampShape& shape) {
+    if (!mTrack || mCarShadowPix.empty() || mSkidLatHalf <= 0.0f) return;
+    if (!shape.mask && mShadowTune.shape != kShadowShapeRounded
+            && mShadowTune.shape != kShadowShapePoly) return;
+    const float L = mTrack->length;
+    if (L <= 0.0f) return;
+    const float texW = (float) mCarShadowW, texH = (float) mCarShadowH;
+    const float u0 = (carS - L * std::floor(carS / L)) / L;
+    float2 tp[6], tuv[6];
+    for (int k = 0; k < 6; k++) {
+        float ds = sl[k].x - carS;
+        ds -= L * std::round(ds / L);           // the short way round the lap
+        tp[k] = { (u0 + ds / L) * texW,
+                  (sl[k].y / mSkidLatHalf * 0.5f + 0.5f) * texH };
+        // The silhouette source frame: u across the car (left edge k<3, right
+        // k>=3), v along it (fk -1, 0, +1 → 0, 0.5, 1), so v = 1 is the NOSE.
+        // The superellipse is symmetric in both axes and could not be mirrored
+        // by a handedness mistake; a per-car FOOTPRINT can, and getting v
+        // backwards is the one sign that shows on a symmetric car — which is
+        // why car_footprint.h states the convention and a ctest pins it.
+        tuv[k] = { k < 3 ? 0.0f : 1.0f, (float) (k % 3) * 0.5f };
+    }
+    // The stamp's rect, one texel padded — next frame's erase, this frame's
+    // upload flag, and the scratch's own extent. Computed BEFORE rasterizing
+    // now, because the triangles resolve into that scratch.
+    float xmin = tp[0].x, xmax = tp[0].x, ymin = tp[0].y, ymax = tp[0].y;
+    for (int k = 1; k < 6; k++) {
+        xmin = std::min(xmin, tp[k].x); xmax = std::max(xmax, tp[k].x);
+        ymin = std::min(ymin, tp[k].y); ymax = std::max(ymax, tp[k].y);
+    }
+    SkidRect r{ (int) std::floor(xmin) - 1, (int) std::floor(ymin) - 1,
+                (int) std::ceil(xmax) + 1, (int) std::ceil(ymax) + 1 };
+
+    // ONE STAMP, RESOLVED BY MAX, THEN ADDED ONCE. mStampCov carries the whole
+    // argument; the short version is that four triangles sharing three edges
+    // cannot be allowed to accumulate into each other.
+    const int H = (int) mCarShadowH;
+    mStampX0 = r.x0;
+    mStampY0 = r.y0;
+    mStampW = r.x1 - r.x0;
+    mStampH = r.y1 - r.y0;
+    if (mStampW <= 0 || mStampH <= 0) return;
+    mStampCov.assign((size_t) mStampW * mStampH, 0.0f);
+    static const int quads[2][4] = { { 0, 1, 4, 3 }, { 1, 2, 5, 4 } };
+    for (const auto& q : quads) {
+        const float2 t1[3] = { tp[q[0]], tp[q[1]], tp[q[2]] };
+        const float2 u1[3] = { tuv[q[0]], tuv[q[1]], tuv[q[2]] };
+        rasterCarShadowTri(t1, u1, alpha, shape);
+        const float2 t2[3] = { tp[q[0]], tp[q[2]], tp[q[3]] };
+        const float2 u2[3] = { tuv[q[0]], tuv[q[2]], tuv[q[3]] };
+        rasterCarShadowTri(t2, u2, alpha, shape);
+    }
+    // COMPOSITE. The layer's outer rows stay empty (the shader's CLAMP relies
+    // on it), x wraps at the lap seam, and the optional raster-side tail cut is
+    // taken HERE — on the resolved coverage, once, rather than per triangle.
+    const bool cut = !mShadowTune.remapInShader
+            && mShadowTune.remapHi > mShadowTune.remapLo;  // empty band = no cut
+    const float lo = mShadowTune.remapLo * mShadowTune.ao;
+    const float hi = mShadowTune.remapHi * mShadowTune.ao;
+    for (int sy = 0; sy < mStampH; sy++) {
+        const int y = mStampY0 + sy;
+        if (y < 1 || y > H - 2) continue;
+        const float* src = mStampCov.data() + (size_t) sy * mStampW;
+        uint8_t* row = mCarShadowPix.data() + (size_t) y * (int) mCarShadowW;
+        for (int sx = 0; sx < mStampW; sx++) {
+            float a = src[sx];
+            if (a <= 0.0f) continue;
+            if (cut) {
+                const float t = std::min(1.0f, std::max(0.0f,
+                        (a - lo) / std::max(1e-4f, hi - lo)));
+                a *= t * t * (3.0f - 2.0f * t);
+            }
+            const int add = (int) std::lround(a * 255.0f);
+            if (add <= 0) continue;
+            const int wx = (((mStampX0 + sx) % (int) mCarShadowW)
+                    + (int) mCarShadowW) % (int) mCarShadowW;
+            row[wx] = (uint8_t) std::min(255, (int) row[wx] + add);
+        }
+    }
+    mCarShadowUpload = true;
+    for (SkidRect& m : mCarShadowDirty) {
+        if (r.x0 <= m.x1 + 8 && m.x0 <= r.x1 + 8
+                && r.y0 <= m.y1 + 8 && m.y0 <= r.y1 + 8) {
+            m.x0 = std::min(m.x0, r.x0); m.y0 = std::min(m.y0, r.y0);
+            m.x1 = std::max(m.x1, r.x1); m.y1 = std::max(m.y1, r.y1);
+            return;
+        }
+    }
+    mCarShadowDirty.push_back(r);
+}
+
+// The frame's upload, into the texture of the pair the driver is NOT reading,
+// then every road instance re-pointed at it. The swap IS the ping-pong — by the
+// time a texture takes its next upload, the last frame that referenced it has
+// left the queue, so the driver never has to ghost or stall a respecified
+// in-flight texture. The skid layer used to dodge the same hazard with a ~30 Hz
+// throttle instead; that was measured a null and dropped (see the skid block in
+// TtpRendererFrame), and it was never an option here anyway — shadows track
+// cars, so a throttled one lags the body it belongs to.
+//
+// **THE STAMPS' OWN RECTS, NOT THE WHOLE LEVEL, and that is the difference
+// between this channel costing 3 ms of frame thread and costing a fraction of
+// one.** The layer covers a whole lap by the whole deck; the cars occupy a few
+// thousand texels of it. Sending all of it, every frame, was ~2.9 ms of CPU on
+// the Android reference box at four players — measured by ablating the channel
+// (`TTP_DEBUG_NO_DECAL_BLOB`), and it is a memcpy plus the driver's own copy of
+// megabytes that did not change.
+//
+// The comment that used to stand here argued the other way, on the skid layer's
+// finding that the driver bills upload stalls per EVENT and not per byte. That
+// was measured when this layer was 384 KB; it does not survive the density the
+// flicker fix needed, and the events are far fewer than the 16-24 it feared
+// because the rects MERGE (a pack sits in one place).
+//
+// THREE FRAMES OF RECTS, because of the ping-pong: this texture was last
+// correct two frames ago, and what changed since is this frame's stamps, last
+// frame's (which this frame's erase zeroed) and the one before that's. Miss one
+// and each texture keeps the other's stale stamps — the shadow strobes between
+// two positions. `uploadWhole` is the A/B arm that put the number above on the
+// board and is kept for the next box.
+//
+// The copies are mandatory: the CPU buffer is mutated again next frame and
+// native drivers read uploads asynchronously.
+void TtpRenderer::uploadCarShadow() {
+    if (!mCarShadowTex[0] || !mCarShadowUpload || mCarShadowPix.empty()) return;
+    mCarShadowUpload = false;
+    Texture* t = !mCarShadowTex[1]
+            ? mCarShadowTex[0] : mCarShadowTex[mCarShadowPing & 1];
+    const int W = (int) mCarShadowW, H = (int) mCarShadowH;
+
+    if (mShadowTune.uploadWhole) {
+        const size_t bytes = mCarShadowPix.size();
+        auto* buf = new uint8_t[bytes];
+        std::memcpy(buf, mCarShadowPix.data(), bytes);
+        t->setImage(*mEngine, 0,
+                Texture::PixelBufferDescriptor(buf, bytes,
+                        Texture::Format::R, Texture::Type::UBYTE,
+                        [](void* b, size_t, void*) { delete[] (uint8_t*) b; },
+                        nullptr));
+    } else {
+        // The union of the three frames, merged under the copy budget
+        // (kUploadEventTexels): a pack shares one event.
+        std::vector<SkidRect> rects;
+        const auto add = [&](const SkidRect& r) {
+            if (r.x1 > r.x0 && r.y1 > r.y0) rects.push_back(r);
+        };
+        for (const SkidRect& r : mCarShadowDirty) add(r);
+        for (const auto& list : mCarShadowWas) {
+            for (const SkidRect& r : list) add(r);
+        }
+        mergeUploadRects(rects);
+        for (const SkidRect& r : rects) {
+            const int y0 = std::max(0, r.y0), y1 = std::min(H, r.y1);
+            if (y0 >= y1) continue;
+            // Unwrapped x splits at the lap seam, exactly as uploadSkidRects
+            // does it — same layer shape, same rule.
+            int spans[2][2];
+            int nSpans = 0;
+            if (r.x1 - r.x0 >= W) {
+                spans[0][0] = 0; spans[0][1] = W; nSpans = 1;
+            } else {
+                const int wx0 = ((r.x0 % W) + W) % W;
+                const int wx1 = wx0 + (r.x1 - r.x0);
+                if (wx1 <= W) {
+                    spans[0][0] = wx0; spans[0][1] = wx1; nSpans = 1;
+                } else {
+                    spans[0][0] = wx0; spans[0][1] = W;
+                    spans[1][0] = 0;   spans[1][1] = wx1 - W;
+                    nSpans = 2;
+                }
+            }
+            for (int s = 0; s < nSpans; s++) {
+                const int sx0 = spans[s][0], sw = spans[s][1] - sx0;
+                const int sh = y1 - y0;
+                if (sw <= 0 || sh <= 0) continue;
+                auto* buf = new uint8_t[(size_t) sw * sh];
+                for (int y = 0; y < sh; y++) {
+                    std::memcpy(buf + (size_t) y * sw,
+                            mCarShadowPix.data() + (size_t) (y0 + y) * W + sx0,
+                            (size_t) sw);
+                }
+                t->setImage(*mEngine, 0, (uint32_t) sx0, (uint32_t) y0,
+                        (uint32_t) sw, (uint32_t) sh,
+                        Texture::PixelBufferDescriptor(buf, (size_t) sw * sh,
+                                Texture::Format::R, Texture::Type::UBYTE,
+                                [](void* b, size_t, void*) { delete[] (uint8_t*) b; },
+                                nullptr));
+            }
+        }
+    }
+    for (RoadChunk& ch : mRoadChunks) bindCarShadow(ch.mi, t);
+    if (mRoadInst) bindCarShadow(mRoadInst, t);
+    mCarShadowPing ^= 1;
 }
 
 // Bound to every vroad instance, because a declared sampler must be bound even
@@ -215,6 +1178,8 @@ void TtpRenderer::bindSkidLayer(MaterialInstance* mi) {
     smp.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
     mi->setParameter("skidLayer", t, smp);
     mi->setParameter("skidLatHalf", mSkidTex ? mSkidLatHalf : 0.0f);
+    mi->setParameter("invSkidLatSpan",
+            (mSkidTex && mSkidLatHalf > 0.0f) ? 0.5f / mSkidLatHalf : 0.0f);
     // rgb = the pool's SKID_COLOR, converted by the same srgbToLinear as
     // everything else; a = the cap on summed ink — two crossing trails darken
     // (1-(1-a)^2 composited to ~0.48 when they were meshes), a donut spot
@@ -232,14 +1197,32 @@ MaterialInstance* TtpRenderer::roadInstance() {
     if (!mRoadMaterial) return litShadowInstance();  // no vroad served
     if (!mRoadInst) {
         mRoadInst = sceneInstance(mRoadMaterial);
-        mRoadInst->setParameter("shadowTexel", 0.0f);
-        mRoadInst->setParameter("decalCount", 0);
+        // Absent on the baked-light vroad (see fillRoadLight); an old blob
+        // still carries the live ESM decode.
+        if (mRoadMaterial->hasParameter("shadowTexel")) {
+            mRoadInst->setParameter("shadowTexel", 0.0f);
+        }
+        if (roadHasMaskLoop()) mRoadInst->setParameter("maskCount", 0);
+        mRoadInst->setParameter("profCount", 0);
         mRoadInst->setParameter("paintCount", 0);
         mRoadInst->setParameter("trackLength", 0.0f);
         mRoadInst->setParameter("invTrackLength", 0.0f);
         mRoadInst->setParameter("chunkMid", 0.0f);
-        if (Texture* arr = ensureDecalMaskArray()) bindDecalMask(mRoadInst, arr);
+        // The silhouette array feeds the masked loop's NEAR-car stamps; the
+        // far cars' carShadow tap stays off until a track builds the layer
+        // (maskInk.w = 0 is the tap's disable).
+        if (roadHasMaskLoop()) {
+            if (Texture* arr = ensureDecalMaskArray()) bindDecalMask(mRoadInst, arr);
+        }
         bindSkidLayer(mRoadInst);
+        if (roadHasCarShadow()) {
+            bindCarShadow(mRoadInst, mCarShadowTex[0]);
+            mRoadInst->setParameter("maskInk",
+                    shadowInkParam(mCarShadowTex[0] != nullptr));
+            if (mRoadInst->getMaterial()->hasParameter("carShadowRemap")) {
+                mRoadInst->setParameter("carShadowRemap", shadowRemapParam());
+            }
+        }
     }
     return mRoadInst;
 }
@@ -318,15 +1301,26 @@ void TtpRenderer::buildStaticDeckDecals(const TrackBin& tb) {
 // list order and returns how many landed — an overflowing chunk keeps the HEAD
 // of the list, which is why each caller orders its list by priority.
 int TtpRenderer::foldToChunk(const std::vector<DeckDecal>& src, float mid,
-        float halfSpan, float L, DeckDecal* out, int cap) {
+        float halfSpan, float L, DeckDecal* out, int cap, DecalKind kind) {
     int n = 0;
     for (const DeckDecal& d : src) {
         if (n >= cap) break;
+        // texrot.w is the masked flag on the gathered entry. It does not reach
+        // the GPU any more — the two lists ARE the distinction there — but it
+        // is still what tells the two folds apart, and what
+        // ttp_display_debug_decals reads.
+        const bool masked = d.texrot.w > 0.5f;
+        // 1 = fold-visible masked (a NEAR car under the hybrid LOD);
+        // 2 = texture-carried (far), pushed for the debug readback only —
+        // it must fold into NEITHER list.
+        const bool foldMasked = masked && d.texrot.w < 1.5f;
+        if (kind == DecalKind::Masked && !foldMasked) continue;
+        if (kind == DecalKind::Profile && masked) continue;
         float ds = d.rect.x - mid;
         if (L > 0.0f) ds -= L * std::floor(ds / L + 0.5f);
         // A MASKED stamp is rotated in track space (rect.zw are its halves in
         // the CAR's frame), so its arclength reach is measured per frame and
-        // ridden in wfwd.w — vroad.mat's masked `boundS`, and it must be THE
+        // ridden in wfwd.w — vroad.mat's maskRect.zw, and it must be THE
         // SAME NUMBER: a chunk that folds on a shorter reach than the shader
         // culls on drops a corner the fragments still want, which pops the
         // shape at chunk seams. Unmasked entries — pads, repairs, auras — keep
@@ -432,13 +1426,14 @@ void TtpRenderer::buildDeckPaint(const TrackBin& tb, const ttp::rt::WearPlan& we
             mi->setParameter("paintShape", shape, (size_t) n);
         }
         mi->setParameter("paintCount", n);
+        return n;
     };
     for (RoadChunk& ch : mRoadChunks) {
-        writeTo(ch.mi, (ch.sMin + ch.sMax) * 0.5f, (ch.sMax - ch.sMin) * 0.5f);
+        ch.paintN = writeTo(ch.mi, (ch.sMin + ch.sMax) * 0.5f, (ch.sMax - ch.sMin) * 0.5f);
     }
     // The whole-lap fallback instance, when the chunk pass produced nothing.
     if (mRoadChunks.empty() && mRoadInst) {
-        writeTo(mRoadInst, 0.0f, L > 0.0f ? L : 1.0e9f);
+        mRoadInstPaintN = writeTo(mRoadInst, 0.0f, L > 0.0f ? L : 1.0e9f);
     }
 }
 
@@ -446,7 +1441,7 @@ void TtpRenderer::uploadDeckDecals() {
     // Statics FIRST: the array is composited in order, so a car's aura and its
     // contact shadow land over the pad or slick they are crossing, which is the
     // order the separate meshes used to get from their render priorities.
-    if (!mStaticDeckDecals.empty()) {
+    if (!mStaticDeckDecals.empty() && !(mDecalDebug & kDebugNoDecalStatics)) {
         mDeckDecals.insert(mDeckDecals.begin(),
                 mStaticDeckDecals.begin(), mStaticDeckDecals.end());
     }
@@ -464,46 +1459,140 @@ void TtpRenderer::uploadDeckDecals() {
     // (auras, item blobs) cross 1–2 chunks — so each chunk's folded list is
     // compared to what it was last handed, and an unchanged chunk (which in a
     // steady frame is every chunk) writes no uniforms at all.
+    //
+    // TWO FOLDS, TWO LISTS. A masked entry and a profile entry share no uniform
+    // array in vroad any more (see kMaxMaskedDeckDecals), so each channel gets
+    // its own fold, its own cap and its own "unchanged" comparison — a chunk can
+    // overflow one and not the other, and one concatenated compare would then
+    // rewrite both every frame.
+    //
+    // The BOXES in front of the loops (one per list — see below) are the union
+    // of the reject windows the loops actually test — r.zw for a profile
+    // stamp, the measured reach in the w slots for a masked one — so a
+    // fragment one rejects had nothing to draw. Build one from anything the
+    // folds DROPPED and it clips a stamp that is not there; build it from the
+    // wrong bound and it clips one that is.
+    // The masked fold is gated on the blob declaring the arrays, because a
+    // setParameter against a parameter the material does not declare would
+    // abort. The current vroad declares them: they carry the hybrid shadow
+    // LOD's NEAR cars, beside the far cars' carShadow layer (renderCars
+    // rasterizes, uploadCarShadow ships).
+    const bool maskLoop = roadHasMaskLoop();
     const auto uploadTo = [&](MaterialInstance* mi, float mid, float halfSpan,
-            std::vector<DeckDecal>& last) {
-        DeckDecal sel[kMaxDeckDecals];
-        const int n = foldToChunk(mDeckDecalsLast, mid, halfSpan, L, sel,
-                kMaxDeckDecals);
-        if ((size_t) n == last.size()
-                && (n == 0 || std::memcmp(sel, last.data(), n * sizeof(DeckDecal)) == 0)) {
-            return;
-        }
-        last.assign(sel, sel + n);
-        if (n > 0) {
-            float4 rect[kMaxDeckDecals], col[kMaxDeckDecals], shape[kMaxDeckDecals],
-                    trot[kMaxDeckDecals], wpos[kMaxDeckDecals], wfwd[kMaxDeckDecals],
-                    wright[kMaxDeckDecals];
-            for (int i = 0; i < n; i++) {
-                rect[i] = sel[i].rect; col[i] = sel[i].color; shape[i] = sel[i].shape;
-                trot[i] = sel[i].texrot;
-                wpos[i] = sel[i].wpos; wfwd[i] = sel[i].wfwd; wright[i] = sel[i].wright;
+            std::vector<DeckDecal>& lastMask, std::vector<DeckDecal>& lastProf) {
+        DeckDecal mask[kMaxMaskedDeckDecals], prof[kMaxProfileDeckDecals];
+        // CAPS_HALF halves only the PROFILE fold here: the masked fold's cap
+        // must equal the pick budget (renderCars halves that one), or the
+        // fold overflows and a near car loses its shadow outright.
+        const int profCap = (mDecalDebug & kDebugDecalCapsHalf)
+                ? kMaxProfileDeckDecals / 2 : kMaxProfileDeckDecals;
+        const int nm = maskLoop ? foldToChunk(mDeckDecalsLast, mid, halfSpan, L,
+                mask, kMaxMaskedDeckDecals, DecalKind::Masked) : 0;
+        const int np = foldToChunk(mDeckDecalsLast, mid, halfSpan, L, prof,
+                profCap, DecalKind::Profile);
+        const bool maskSame = (size_t) nm == lastMask.size()
+                && (nm == 0 || std::memcmp(mask, lastMask.data(),
+                        nm * sizeof(DeckDecal)) == 0);
+        const bool profSame = (size_t) np == lastProf.size()
+                && (np == 0 || std::memcmp(prof, lastProf.data(),
+                        np * sizeof(DeckDecal)) == 0);
+        if (maskSame && profSame) return;
+        lastMask.assign(mask, mask + nm);
+        lastProf.assign(prof, prof + np);
+
+        // ONE BOX PER LIST. They cluster in different places — the masked
+        // entries follow the pack, the profile ones are bolted to the track —
+        // so a single union spans the gap between the two clusters and every
+        // fragment in that gap walks both loops for nothing.
+        float4 pBounds{ 1e9f, -1e9f, 1e9f, -1e9f };
+        float4 mBounds{ 1e9f, -1e9f, 1e9f, -1e9f };
+        const auto widen = [](float4& b, const float4& rect, float bS, float bL) {
+            b.x = std::min(b.x, rect.x - bS);
+            b.y = std::max(b.y, rect.x + bS);
+            b.z = std::min(b.z, rect.y - bL);
+            b.w = std::max(b.w, rect.y + bL);
+        };
+
+        if (np > 0) {
+            float4 rect[kMaxProfileDeckDecals], col[kMaxProfileDeckDecals],
+                    shape[kMaxProfileDeckDecals];
+            for (int i = 0; i < np; i++) {
+                rect[i] = prof[i].rect; col[i] = prof[i].color; shape[i] = prof[i].shape;
+                widen(pBounds, prof[i].rect, prof[i].rect.z, prof[i].rect.w);
             }
-            mi->setParameter("decalRect", rect, (size_t) n);
-            mi->setParameter("decalColor", col, (size_t) n);
-            mi->setParameter("decalShape", shape, (size_t) n);
-            mi->setParameter("decalTexRot", trot, (size_t) n);
-            mi->setParameter("decalWPos", wpos, (size_t) n);
-            mi->setParameter("decalWFwd", wfwd, (size_t) n);
-            mi->setParameter("decalWRight", wright, (size_t) n);
+            mi->setParameter("profRect", rect, (size_t) np);
+            mi->setParameter("profColor", col, (size_t) np);
+            mi->setParameter("profShape", shape, (size_t) np);
         }
-        mi->setParameter("decalCount", n);
+        if (nm > 0) {
+            float4 rect[kMaxMaskedDeckDecals], wpos[kMaxMaskedDeckDecals],
+                    wfwd[kMaxMaskedDeckDecals], wright[kMaxMaskedDeckDecals];
+            for (int i = 0; i < nm; i++) {
+                const DeckDecal& d = mask[i];
+                // THE REJECT WINDOW IS ONE vec4: centre in xy, the MEASURED
+                // track-space reaches in zw — the same wfwd.w / wright.w
+                // foldToChunk reads, packed here so the shader's cull and the
+                // fold cannot drift apart. The stamp's world halves stop
+                // crossing at all: each axis is premultiplied by its own
+                // reciprocal half instead, so the shader's projection is two
+                // dots and no divides (the invSkidLatSpan trade).
+                rect[i] = float4{ d.rect.x, d.rect.y, d.wfwd.w, d.wright.w };
+                // THE SILHOUETTE LAYER RIDES IN THE ANCHOR'S SPARE w. It was
+                // texrot.z while one mixed list carried both kinds; texrot is
+                // now readback-only (the debug accessor reads mDeckDecalsLast,
+                // not these uniforms) and does not cross to the GPU at all.
+                wpos[i] = float4{ d.wpos.x, d.wpos.y, d.wpos.z, d.texrot.z };
+                const float invF = 1.0f / std::max(d.rect.z, 1e-5f);
+                const float invR = 1.0f / std::max(d.rect.w, 1e-5f);
+                // The peak alpha rides the forward axis's freed w; the ink
+                // RGB is ONE colour for every car shadow (CarShadowTuning::
+                // ink), so it crosses once as maskInk below rather than as a
+                // per-entry array the loop would pay for by DECLARED SIZE.
+                wfwd[i] = float4{ d.wfwd.x * invF, d.wfwd.y * invF,
+                                  d.wfwd.z * invF, d.color.w };
+                wright[i] = float4{ d.wright.x * invR, d.wright.y * invR,
+                                    d.wright.z * invR, 0.0f };
+                widen(mBounds, d.rect, d.wfwd.w, d.wright.w);
+            }
+            mi->setParameter("maskRect", rect, (size_t) nm);
+            mi->setParameter("maskWPos", wpos, (size_t) nm);
+            mi->setParameter("maskWFwd", wfwd, (size_t) nm);
+            mi->setParameter("maskWRight", wright, (size_t) nm);
+            // w = the carShadow TAP's enable+cap, NOT zero: this per-frame
+            // write predates the hybrid and used to be harmless — zeroing it
+            // here silently killed the far blobs on every chunk that carried
+            // a near car (the user's own chunk, always).
+            mi->setParameter("maskInk",
+                    shadowInkParam(roadHasCarShadow() && mCarShadowTex[0]));
+        }
+        if (np > 0) mi->setParameter("profBounds", pBounds);
+        // The BOUNDS0 probe: same writes, impossible box (ttp_display.h).
+        if (nm > 0) {
+            mi->setParameter("maskBounds",
+                    (mDecalDebug & kDebugDecalMaskBounds0)
+                            ? float4{ 1e9f, -1e9f, 1e9f, -1e9f } : mBounds);
+        }
+        mi->setParameter("profCount", np);
+        // The MASK_COUNT0 probe: every write above lands on its shipped
+        // schedule, only the count the loop reads is zeroed (ttp_display.h).
+        if (maskLoop) {
+            mi->setParameter("maskCount",
+                    (mDecalDebug & kDebugDecalMaskCount0) ? 0 : nm);
+        }
     };
     if (!mRoadChunks.empty()) {
         for (RoadChunk& ch : mRoadChunks) {
             uploadTo(ch.mi, (ch.sMin + ch.sMax) * 0.5f, (ch.sMax - ch.sMin) * 0.5f,
-                    ch.last);
+                    ch.lastMask, ch.lastProf);
         }
     } else if (mRoadInst) {
         // Degenerate: the deck material exists but the chunk pass produced
         // nothing. One "chunk" spanning the whole lap keeps the decals drawing
         // (its wrap constants are set at build, like the chunks').
-        uploadTo(mRoadInst, 0.0f, L > 0.0f ? L : 1.0e9f, mRoadInstLast);
+        uploadTo(mRoadInst, 0.0f, L > 0.0f ? L : 1.0e9f,
+                mRoadInstLastMask, mRoadInstLastProf);
     }
+    applyRoadDebug();   // no-op unless a caller asked for an ablation
 }
 
 MaterialInstance* TtpRenderer::litShadowInstance() {
@@ -533,6 +1622,47 @@ void TtpRenderer::bindShadowMap(MaterialInstance* mi) {
     mi->setParameter("shadowDepthScale", mShadowDepthScale);
 }
 
+// The DECK's baked sun-visibility map (vroadvis.mat), in TRACK space. White
+// with a 0 lat span = fully lit, for a track that baked no map — the same
+// no-branch fallback the old shadowTexel-0 early-out gave, and what a road
+// material predating this parameter keeps doing.
+//
+// The sampler is CLAMP on BOTH axes, and clamping v is what carries the kerbs:
+// an off-deck fragment's OFF_DECK_LAT lands on the outermost deck column and
+// inherits its shadow. u clamps rather than repeats because the map covers the
+// lap exactly once and a wrap would fold the finish line's shadow onto the
+// start line's.
+void TtpRenderer::bindRoadVisMap(MaterialInstance* mi) {
+    if (!mi || !mi->getMaterial()->hasParameter("sunVis")) return;
+    Texture* tex = mRoadVisMap ? mRoadVisMap : whiteTexture();
+    if (!tex) return;
+    TextureSampler smp(TextureSampler::MinFilter::LINEAR,
+            TextureSampler::MagFilter::LINEAR);
+    smp.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+    smp.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+    mi->setParameter("sunVis", tex, smp);
+    mi->setParameter("invSunVisLatSpan", roadVisLatSpan());
+}
+
+// The GROUND's baked sun-visibility map (vvis.mat) — its uv is
+// shadowFromWorld's own output, so the matrix rides along with the texture.
+// White = fully lit, for a track that baked no map — the same no-branch
+// fallback the old shadowTexel-0 early-out provided. A shell still serving
+// the PRE-BAKE vground blob (the one carrying the ESM parameters) gets the
+// full bindShadowMap treatment instead, and draws exactly what it used to.
+void TtpRenderer::bindVisMap(MaterialInstance* mi) {
+    if (!mi) return;
+    if (!mi->getMaterial()->hasParameter("visMap")) { bindShadowMap(mi); return; }
+    Texture* tex = mVisMap ? mVisMap : whiteTexture();
+    if (!tex) return;
+    TextureSampler smp(TextureSampler::MinFilter::LINEAR,
+            TextureSampler::MagFilter::LINEAR);
+    smp.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+    smp.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
+    mi->setParameter("visMap", tex, smp);
+    mi->setParameter("shadowFromWorld", mShadowFromWorld);
+}
+
 // Oil slicks + warning cones. The slick is TrackProps' dark translucent disc
 // (0x161425 @ 0.7); the cones ring it exactly like _buildHazards (n on
 // radius×1.05, half-step offset, clamped inside the kerb). (Authored poles are
@@ -541,8 +1671,8 @@ void TtpRenderer::bindShadowMap(MaterialInstance* mi) {
 // The slick itself is a road-shader stamp (buildStaticDeckDecals); this builds
 // its 3D markers only.
 void TtpRenderer::buildOils(const TrackBin& tb) {
-    if ((tb.oils.empty() && tb.poles.empty())) return;
-    // Cones: hazard rings + gate poles, one instanced pool.
+    if (tb.oils.empty()) return;
+    // Cones: hazard rings, one instanced pool.
     struct ConeSpot { float s, lat; };
     std::vector<ConeSpot> spots;
     const float coneEdge = tb.roadWidth / 2 - 0.35f;

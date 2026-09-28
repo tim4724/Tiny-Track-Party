@@ -29,6 +29,11 @@ void decimal_number(std::string& out, double v) {
   js_number_into(v, out);
 }
 
+namespace {
+
+// The augmented object's top-level keys, SORTED. `cup` is deliberately absent:
+// the builder does not produce it (the host tags the built track with its cup to
+// pick a biome theme), so it is not part of what the corpus recorded either.
 const char* const kTopKeys[] = {
     "autoPoles", "bananas", "boxes", "centerline", "closed", "gap", "groundY",
     "hazards", "hills", "instances", "length", "loopStarts", "pads", "pillars",
@@ -36,7 +41,6 @@ const char* const kTopKeys[] = {
     "trackId", "version"};
 const int kTopKeyCount = (int) (sizeof(kTopKeys) / sizeof(kTopKeys[0]));
 
-namespace {
 void emitBool(std::string& o, bool v) { o += v ? "true" : "false"; }
 
 // Every element emitter takes the Writer so it can spell numbers; free functions

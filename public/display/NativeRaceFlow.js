@@ -23,9 +23,11 @@
 // configure (libttp-sim's own), so boot hands over nothing it read back.
 //
 // tests/fixtures/raceflow-corpus.jsonl was recorded off the JS oracle
-// (public/display/raceFlow.js, retired — git history has it) and is FROZEN;
-// native/runtimetest/raceflow_check.cc replays every step through the C++ on
-// every leg.
+// (public/display/raceFlow.js, retired — git history has it), which is gone, so
+// nothing can re-derive the fixture. It is no longer JS-parity evidence: a
+// deliberate re-record demoted it to class 2 (tests/fixtures/traces/README.md).
+// native/runtimetest/raceflow_check.cc still replays every step through the C++
+// on every leg, which is what keeps the walks from moving by accident.
 
 import { loadNativeRuntime } from './nativeRuntime.js';
 
@@ -37,14 +39,15 @@ export async function init() {
   const c = (name, ret, args) => M.cwrap(name, ret, args);
   fn = {
     configure: c('ttp_race_configure', 'number', ['string']),
-    personas: c('ttp_race_personas_json', 'string', []),
     effectOps: c('ttp_race_effect_ops_json', 'string', []),
     demoLive: c('ttp_race_demo_live_json', 'string', ['number', 'string', 'string']),
+    benchField: c('ttp_race_bench_field_json', 'string', ['string', 'number', 'number']),
     start: c('ttp_race_start_live_json', 'string',
              ['number', 'number', 'number', 'number', 'string', 'string']),
     events: c('ttp_race_events_live_json', 'string',
               ['number', 'number', 'string', 'number', 'number',
-               'number', 'number', 'number']),
+               'number', 'number']),
+    flag: c('ttp_race_flag_live_json', 'string', ['number']),
     advance: c('ttp_race_advance_live_json', 'string',
                ['number', 'number', 'number', 'number', 'string', 'string']),
     ret: c('ttp_race_return_live_json', 'string', ['number']),
@@ -55,7 +58,8 @@ export async function init() {
     resumeRace: c('ttp_race_resume_live_json', 'string',
                   ['number', 'number', 'number', 'number', 'number']),
     intermissionMs: c('ttp_race_intermission_ms', 'number', []),
-    resultsFailsafeMs: c('ttp_race_results_failsafe_ms', 'number', []),
+    flourishMs: c('ttp_race_flourish_ms', 'number', []),
+    countdownReady: c('ttp_race_countdown_ready', 'number', ['number', 'number', 'number']),
     forfeit: c('ttp_race_forfeit_live_json', 'string', ['number', 'string']),
     rekey: c('ttp_race_rekey_live_json', 'string', ['number', 'number', 'string', 'string']),  // (session, room)
     autoPause: c('ttp_race_auto_pause_live_json', 'string', ['number', 'number', 'number'])
@@ -68,23 +72,33 @@ const P = (s) => JSON.parse(s);
 // different players.
 const id = (x) => J(x === undefined ? null : x);
 
-// libttp-sim's persona table — the single source. Read once at boot and handed
-// back through configure().
-export function personas() { return P(fn.personas()); }
-
 // The walks' whole effect vocabulary — main.js proves its switch total at boot.
 export function effectOps() { return P(fn.effectOps()); }
 
 // The world every field rule and series lookup resolves against, set once at
 // boot. `carStats` rows are OPAQUE: copied into a field entry and never read,
 // which is what keeps CAR_STATS out of the wasm's decision layer.
-export function configure({ fieldSize, carCount, colorCount, aiPrefix, personas: ps, carStats, cups }) {
-  return fn.configure(J({ fieldSize, carCount, colorCount, aiPrefix, personas: ps, carStats, cups })) === 1;
+//
+// NO `personas`, and it is not an omission this side gets to reverse: the ABI
+// reads an ABSENT key as "libttp-sim's own table", which is the single source
+// every shell resolves to (ttp_race.h). Passing one is how the corpora inject a
+// synthetic world in ctest, and there is no reason for a shipping page to.
+export function configure({ fieldSize, carCount, colorCount, aiPrefix, carStats, cups }) {
+  return fn.configure(J({ fieldSize, carCount, colorCount, aiPrefix, carStats, cups })) === 1;
 }
 
 // The lobby attract grid + its render signature, off the live room.
 export function demoLive(roomHandle, trackId, botCap) {
   return P(fn.demoLive(roomHandle, trackId || '', id(botCap)));
+}
+
+// The BENCH field, without a room: `players` autopiloted player seats at the
+// back of the game's own grid, the CPU fill in front. Answers the two arrays
+// ttp_session_begin_field takes, so a surface with no relay — the gallery, the
+// perf bench — races the arrangement a real launch would build rather than a
+// hand-copy of it. See ttp_race.h.
+export function benchField(trackId, players, seed) {
+  return P(fn.benchField(trackId || '', players, seed));
 }
 
 export function startRace(roomHandle, sceneReady, { seed, countdownSeconds, forceItem, botCap }) {
@@ -93,12 +107,21 @@ export function startRace(roomHandle, sceneReady, { seed, countdownSeconds, forc
 }
 
 // The frame's drain: every queued race event routed and answered as one effect
-// list; `results` is non-null exactly when the drain crossed the race's end.
+// list. Nothing rides beside it — endRace's ranked rows never leave C++ now (the
+// walk banks the points and retains the board against them), so an effect is
+// all a caller gets and all it needs.
 export function drainEvents(sessionHandle, roomHandle,
-                            { biome, audioReady, fastForwarding, intermissionMs, nowMs, resultsFailsafeMs }) {
+                            { biome, audioReady, fastForwarding, intermissionMs, nowMs }) {
   return P(fn.events(sessionHandle, roomHandle, biome || '',
                      audioReady ? 1 : 0, fastForwarding ? 1 : 0,
-                     intermissionMs, nowMs, resultsFailsafeMs));
+                     intermissionMs, nowMs));
+}
+
+// THE FLAG: every human is home. Paints the place cards, hands the phones the
+// final board, and arms the end — the race keeps running for the flourish, so
+// the caller also holds the session's end open (ttp_hold_end).
+export function flagRace(roomHandle) {
+  return P(fn.flag(roomHandle));
 }
 
 export function advanceSeriesRace(roomHandle, sceneReady, { seed, countdownSeconds, forceItem, botCap }) {
@@ -122,7 +145,20 @@ export function resumeRace(sessionHandle, roomHandle, { paused, autoPaused, race
 }
 
 export function intermissionMs() { return fn.intermissionMs(); }
-export function resultsFailsafeMs() { return fn.resultsFailsafeMs(); }
+
+// The finish flourish: how long the frozen finish frame holds before the board.
+// A live race is TOLD this by the flag's own 'arm-results' effect and never asks;
+// the gallery's chained preview, which has no room to walk, asks.
+export function flourishMs() { return fn.flourishMs(); }
+
+// May the launch's held-back countdown start? The facts only a shell has go in —
+// whether its scene build has returned, whether it is feeding the frame monitor
+// at all, and how long ago it walked the launch. The FRAME evidence does not,
+// because the rule reads the same window the readout keeps (ttp_race.h). Poll it
+// once a frame until it says yes.
+export function countdownReady(sceneBuilt, measuring, sinceLaunchMs) {
+  return fn.countdownReady(sceneBuilt ? 1 : 0, measuring ? 1 : 0, sinceLaunchMs) === 1;
+}
 
 export function forfeitCar(sessionHandle, peerIndex) {
   return P(fn.forfeit(sessionHandle, id(peerIndex)));

@@ -23,14 +23,19 @@
 #include "ttp_display_core.h"
 #include "ttp_error.h"
 
+#include <chrono>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 
 #include "TtpRenderer.h"
+#include "ttp/blobstore.h"
 #include "ttp/canonical.h"
 #include "ttp/frame_builder.h"
+#include "ttp/json_read.h"
 #include "ttp/framing.h"
+#include "ttp/render_scale_controller.h"
 #include "ttp/game.h"
 #include "ttp/hud.h"
 #include "ttp/race_track.h"
@@ -96,6 +101,21 @@ void ttp_display_resize(uint32_t width, uint32_t height) {
     g_disp->renderer->resize(g_disp->width, g_disp->height);
 }
 
+void ttp_display_safe_insets(float fx, float fy) {
+    if (!g_disp) return;
+    // Clamped, not validated: a shell computing these from a system inset and a
+    // surface size can hand over a NaN for one frame during a rotation or a
+    // teardown (0/0), and a NaN inset would propagate into every rect and take
+    // the whole HUD off screen. `!(x >= 0)` catches NaN where `x < 0` does not.
+    const float lo = 0.0f, hi = 0.25f;
+    g_disp->safeFracX = !(fx >= lo) ? lo : (fx > hi ? hi : fx);
+    g_disp->safeFracY = !(fy >= lo) ? lo : (fy > hi ? hi : fy);
+}
+
+void ttp_display_drain(void) {
+    if (g_disp && g_disp->renderer) g_disp->renderer->drain();
+}
+
 // ---------------------------------------------------------------------------
 // Scene.
 // ---------------------------------------------------------------------------
@@ -105,6 +125,34 @@ int ttp_display_asset(const char* name, const uint8_t* bytes, uint32_t len) {
     // when the polarity zoo was retired (ttp_abi.h).
     if (!g_disp) return 0;
     return g_disp->renderer->provideAsset(name, bytes, len) ? 1 : 0;
+}
+
+const char* ttp_display_asset_plan(const char* wantJson) {
+    static std::string out;
+    if (!g_disp || !g_disp->renderer) { out = "[]"; return out.c_str(); }
+    std::vector<TtpRenderer::AssetWant> want;
+    const ttp::Value list = ttp::json::parse_or(wantJson, ttp::Value::Arr());
+    for (const ttp::Value& e : list.arr) {
+        TtpRenderer::AssetWant w;
+        w.name = ttp::json::str_field(e, "name");
+        if (w.name.empty()) continue;
+        w.tag = ttp::json::str_field(e, "tag");
+        w.from = ttp::json::str_field(e, "from");
+        want.push_back(std::move(w));
+    }
+    ttp::Value a = ttp::Value::Arr();
+    for (const std::string& n : g_disp->renderer->assetPlan(want)) a.push(ttp::Value::Str(n));
+    out = ttp::canonical_stringify(a);
+    return out.c_str();
+}
+
+const char* ttp_display_asset_textures(void) {
+    static std::string out;
+    if (!g_disp || !g_disp->renderer) { out = "[]"; return out.c_str(); }
+    ttp::Value a = ttp::Value::Arr();
+    for (const std::string& u : g_disp->renderer->assetTextures()) a.push(ttp::Value::Str(u));
+    out = ttp::canonical_stringify(a);
+    return out.c_str();
 }
 
 void ttp_display_biome(const char* name) {
@@ -133,6 +181,27 @@ const char* ttp_display_kit_field_layout(void) {
     // hands back its buffer rather than copying into a static of its own.
     return (g_disp && g_disp->renderer) ? g_disp->renderer->kitFieldLayout() : "[]";
 }
+
+// What a scene IS, for the sun bake — the one rule, read by the build below
+// and by the blob walk's plannedKeys(). The ROSTER is deliberately absent: the
+// casters are the static scene and cars cast nothing, which is the whole
+// reason a bake outlives a field change. The BACKEND is present because a bake
+// BLOB's byte orientation is a fact about the engine that read it back
+// (exportBake's flip note): without it a device the boot canary flips between
+// Vulkan and GL would find the other backend's blob under its own name —
+// refused on import, and blocking the store dedupe from ever writing a good
+// one over it.
+static std::string bakeKeyFor(const char* trackId, const char* biome) {
+    return (trackId ? std::string(trackId) : std::string())
+            + "|" + (biome ? biome : "")
+            + "|" + (g_disp && g_disp->showcase ? "1" : "0")
+            + "|" + std::to_string(g_disp ? g_disp->renderer->backendId() : 0);
+}
+
+// Defined with the rest of the blob walk below; called from the end of a build,
+// which is the one moment the derived bytes exist and the plan still says which
+// of them the store lacks.
+static void stagePlannedBlobs(void);
 
 int ttp_display_build(const char* trackId, const char* rosterJson) {
     ttp::clear_error();
@@ -185,6 +254,30 @@ int ttp_display_build(const char* trackId, const char* rosterJson) {
     // built track the sim races plus the deck the biome surfaces it with (a
     // moulded-plastic deck plans none), like the theme.
     const ttp::rt::WearPlan wear = ttp::rt::compute_wear_plan(geo, theme.road);
+    // WHAT THIS SCENE IS OF, for the shadow bake's reuse test (bakeShadowMap).
+    // ONE RULE, shared with the blob walk's plannedKeys so the store's name for
+    // the bake and the build deciding whether to reuse cannot disagree about
+    // what a scene is.
+    // The casters are the static scene and cars cast nothing, so two builds that
+    // agree on these three agree on the bake — and a rebuild for a new FIELD is
+    // then 520 ms cheaper on the Android reference box. The ROSTER is
+    // deliberately absent: including it would be the bug this exists to fix.
+    // showcase is in because it swaps the whole palette, and therefore the
+    // scenery that casts.
+    g_disp->renderer->setBakeKey(bakeKeyFor(trackId, biome).c_str());
+    // The render-scale rule's memory (RenderScaleController::key) is keyed on
+    // the BIOME, not the track: a cup's four circuits cost within a couple of
+    // milliseconds of each other while its biome decides the rest
+    // (docs/perf/androidtv-frame-map.md, 2026-09-09), and each track is raced
+    // once per cup, so a track-keyed memory would help nobody until a rematch.
+    // Keyed on the biome, races two to four of a cup start where race one
+    // settled. A shell that pins the scale never polls, so a bench cannot
+    // poison it.
+    {
+        const uint32_t h = ttp::fnv1a(std::string(biome ? biome : "")
+                + "|" + (g_disp->showcase ? "1" : "0"));
+        ttp::rt::renderScale().key(h ? h : 1u);
+    }
     if (!g_disp->renderer->buildScene(geo, theme, roster.cars, wear)) return 0;
     g_disp->built = true;
     g_disp->roster = roster.ids;
@@ -199,6 +292,12 @@ int ttp_display_build(const char* trackId, const char* rosterJson) {
     // Start the turntable on the still view's own bearing, so a preview's first
     // frame is the framing the track was fitted for.
     g_disp->orbitAngle = g_disp->framing.ovBearing;
+    // What this build made that is worth keeping between runs. HERE and not in
+    // the shell: whether a blob is worth staging is entirely engine knowledge
+    // (does the store hold it, did these bytes come from the store, did the
+    // build actually make one), and the shell's only remaining job is to write
+    // the bytes a later `keep` names.
+    stagePlannedBlobs();
     return 1;
 }
 
@@ -229,6 +328,256 @@ int ttp_display_reroster(const char* rosterJson) {
     g_disp->rosterCars = next.cars;
     return 1;
 }
+
+// The stores this build knows how to fill. A shell iterates this and names no
+// blob kind of its own — see ttp_display.h.
+static const char* const kBlobStores[] = { "bake", "mask" };
+static_assert(sizeof kBlobStores / sizeof kBlobStores[0] == DisplayCore::kBlobStoreCount,
+              "a new store must also widen DisplayCore::blobWalk");
+
+const char* ttp_display_blob_stores(void) {
+    static std::string out;
+    if (out.empty()) {
+        ttp::Value a = ttp::Value::Arr();
+        for (const char* s : kBlobStores) a.push(ttp::Value::Str(s));
+        out = ttp::canonical_stringify(a);
+    }
+    return out.c_str();
+}
+
+namespace {
+
+// Which store a name refers to, or -1. Two today; an unknown one is not an
+// error, it simply has nothing to plan.
+int storeIndex(const char* store) {
+    if (!store) return -1;
+    for (int i = 0; i < DisplayCore::kBlobStoreCount; i++) {
+        if (std::strcmp(store, kBlobStores[i]) == 0) return i;
+    }
+    return -1;
+}
+
+// What the NEXT build's blobs of this kind will be OF.
+//
+// The bake's key needs the biome latched (ttp_display_biome), exactly as the
+// build does, so it is derived here rather than read off the renderer — which
+// is still holding the PREVIOUS scene's. The masks' keys come from the car GLBs
+// the shell has already provided, so they do not exist until provisioning has
+// run. That is why ttp_display.h states one window that satisfies both.
+std::vector<std::string> plannedKeys(int store, const char* trackId) {
+    if (!g_disp || !g_disp->renderer) return {};
+    if (store == 0) {
+        const char* biome = (!g_disp->biome.empty())
+                ? g_disp->biome.c_str() : ttp::rt::biome_for_track(trackId);
+        const std::string key = bakeKeyFor(trackId, biome);
+        return key.empty() ? std::vector<std::string>{} : std::vector<std::string>{ key };
+    }
+    return g_disp->renderer->maskBlobKeys();
+}
+
+// Collect the pixels for every outbound blob whose reads have landed.
+//
+// The pairing from key to filename was recorded when the build staged it, so
+// this needs nothing from the plan — which is the point. When it read the plan
+// instead, two builds with no frame between them cleared the pairing while the
+// first one's read was still in flight, and those bytes could never be written
+// or freed again.
+void harvestOutboundBlobs() {
+    if (!g_disp || !g_disp->renderer) return;
+    for (DisplayCore::BlobWalk& w : g_disp->blobWalk) {
+        for (DisplayCore::BlobOutbound& o : w.outbound) {
+            if (!o.bytes.empty()) continue;
+            g_disp->renderer->takeStagedBlob(o.key, o.bytes);
+        }
+    }
+}
+
+}  // namespace
+
+const char* ttp_display_blob_plan(const char* store, const char* trackId,
+                                  const char* generation, const char* entriesJson) {
+    static std::string out;
+    const int si = storeIndex(store);
+    if (si < 0 || !g_disp || !g_disp->renderer) { out = "{}"; return out.c_str(); }
+    // A fresh PLANNED half for this store. Reset FIRST, so a plan that then
+    // fails leaves a state that writes nothing rather than one carrying the
+    // previous answer. The OUTBOUND half is deliberately untouched: those blobs
+    // belong to a build that has already happened, and on GL they routinely
+    // outlive the next plan (ttp_display_core.h).
+    DisplayCore::BlobWalk& w = g_disp->blobWalk[si];
+    w.planned.clear();
+
+    const std::vector<std::string> keys = plannedKeys(si, trackId);
+    if (keys.empty()) { out = "{}"; return out.c_str(); }
+    ttp::rt::BlobRequest in;
+    in.store = kBlobStores[si];
+    in.generation = generation ? generation : "";
+    in.keys = keys;
+    const ttp::Value entries = ttp::json::parse_or(entriesJson, ttp::Value::Arr());
+    for (const ttp::Value& e : entries.arr) {
+        ttp::rt::BlobEntry be;
+        be.name = ttp::json::str_field(e, "name");
+        // A nameless entry is not a file this store can act on either way, so it
+        // is dropped from the plan's INPUT rather than answered about.
+        if (be.name.empty()) continue;
+        if (const ttp::Value* used = e.find("usedMs")) be.usedMs = used->num;
+        in.entries.push_back(be);
+    }
+    const ttp::rt::BlobPlan plan = ttp::rt::planBlob(in);
+
+    ttp::Value read = ttp::Value::Arr();
+    for (size_t i = 0; i < keys.size() && i < plan.names.size(); i++) {
+        DisplayCore::BlobPlanned p;
+        p.key = keys[i];
+        p.name = plan.names[i];
+        for (const ttp::rt::BlobEntry& e : in.entries) {
+            if (e.name == p.name) { p.held = true; break; }
+        }
+        // ALREADY IN THE ENGINE and therefore not worth reading: asking for it
+        // would cost a multi-megabyte read to tell the engine something it
+        // knows. This is the fact a shell used to mirror; answered here, where
+        // it cannot go stale. It used to be answered for the bake alone, so a
+        // warm build re-read every silhouette it was already holding.
+        if (p.held && !g_disp->renderer->blobResident(p.key)) {
+            read.push(ttp::Value::Str(p.name));
+        }
+        w.planned.push_back(std::move(p));
+    }
+
+    ttp::Value m = ttp::Value::Obj();
+    ttp::Value drop = ttp::Value::Arr();
+    for (const std::string& d : plan.drop) drop.push(ttp::Value::Str(d));
+    m.set("drop", drop);
+    m.set("read", read);
+    out = ttp::canonical_stringify(m);
+    return out.c_str();
+}
+
+void ttp_display_blob_offer(const char* store, const uint8_t* bytes, uint32_t len) {
+    const int si = storeIndex(store);
+    if (si < 0 || !bytes || !len || !g_disp || !g_disp->renderer) return;
+    // A blob the engine refuses is a version it does not know, or bytes that do
+    // not describe what they claim. That is a MISS, never an error: the scene
+    // makes the thing again, and the build then stages the good bytes over these.
+    //
+    // WHICH blob these bytes are is theirs to say (importBlob dispatches on the
+    // magic and answers the key it adopted), so the only thing the store
+    // argument decides here is which walk records it.
+    //
+    // ONLY THAT ONE KEY IS PRIMED. Marking every key that is merely RESIDENT
+    // after the import let one offered blob vouch for its siblings — and since
+    // `primed` is what stops a blob being staged, a key that was resident but
+    // had never reached the store was then skipped by every later build too. A
+    // cache that silently stops filling is the exact failure this walk exists to
+    // remove, so it must not be reintroduced by an approximation here.
+    const std::string key = g_disp->renderer->importBlob(bytes, len);
+    if (key.empty()) return;
+    for (DisplayCore::BlobPlanned& p : g_disp->blobWalk[si].planned) {
+        if (p.key == key) { p.primed = true; break; }
+    }
+}
+
+// Stage what this build made that the store does not already have.
+//
+// CALLED BY THE BUILD, not by the shell, and that is the fix for the whole
+// class of bug this walk had. Three reasons a blob is not worth staging and
+// only the first is about storage: the store already holds it, the bytes came
+// FROM the store so writing them back is a copy of a read, and nothing was
+// planned so the name would be nobody's.
+//
+// IT ISSUES THE READS AND DOES NOT WAIT FOR THEM, on every backend. Staging
+// pumped the driver once (eight flushAndWait calls) so that Metal and Vulkan
+// could answer inside the build; that is a synchronous GPU stall on the build's
+// critical path, which is the one thing an Android lobby cannot afford, and it
+// could never work on GL anyway. So all three now land on the frame beat and
+// there is one path rather than a fast one and a slow one.
+static void stagePlannedBlobs(void) {
+    if (!g_disp || !g_disp->renderer) return;
+    for (DisplayCore::BlobWalk& w : g_disp->blobWalk) {
+        for (const DisplayCore::BlobPlanned& p : w.planned) {
+            if (p.name.empty() || p.held || p.primed) continue;
+            if (!g_disp->renderer->stageBlob(p.key)) continue;
+            // The pairing goes on the OUTBOUND list now rather than when the
+            // pixels land — see BlobOutbound. Never twice: a rebuild of the same
+            // scene stages the same key, and two entries would write it twice.
+            bool already = false;
+            for (const DisplayCore::BlobOutbound& o : w.outbound) {
+                if (o.key == p.key) { already = true; break; }
+            }
+            if (already) continue;
+            DisplayCore::BlobOutbound o;
+            o.key = p.key;
+            o.name = p.name;
+            w.outbound.push_back(std::move(o));
+        }
+    }
+    // Anything a PREVIOUS build left in flight may well have landed by now, so
+    // this build's staging is also the cheapest moment to collect it. Nothing
+    // staged above can be ready yet — no frame has run.
+    harvestOutboundBlobs();
+}
+
+int ttp_display_blob_ready(void) {
+    if (!g_disp || !g_disp->renderer) return 0;
+    harvestOutboundBlobs();
+    int bits = 0;
+    for (int si = 0; si < DisplayCore::kBlobStoreCount; si++) {
+        for (const DisplayCore::BlobOutbound& o : g_disp->blobWalk[si].outbound) {
+            if (!o.bytes.empty()) { bits |= 1 << si; break; }
+        }
+    }
+    return bits;
+}
+
+const char* ttp_display_blob_keep(const char* store) {
+    static std::string out;
+    ttp::Value m = ttp::Value::Obj();
+    ttp::Value write = ttp::Value::Arr();
+    const int si = storeIndex(store);
+    if (si >= 0 && g_disp) {
+        for (const DisplayCore::BlobOutbound& o : g_disp->blobWalk[si].outbound) {
+            // The ones still coming are not named: a shell that wrote them would
+            // store an empty file under a name nothing would then re-derive.
+            if (!o.bytes.empty()) write.push(ttp::Value::Str(o.name));
+        }
+    }
+    m.set("write", write);
+    out = ttp::canonical_stringify(m);
+    return out.c_str();
+}
+
+const uint8_t* ttp_display_blob_export(const char* store, const char* name,
+                                       uint32_t* outLen) {
+    const int si = storeIndex(store);
+    // WHAT THE BUILD ALREADY PRODUCED. Re-exporting here would pay a second
+    // readback per texture on the backends where that works, and would never
+    // answer at all on the one where it does not.
+    if (si >= 0 && name && g_disp) {
+        for (const DisplayCore::BlobOutbound& o : g_disp->blobWalk[si].outbound) {
+            if (o.name != name || o.bytes.empty()) continue;
+            if (outLen) *outLen = (uint32_t) o.bytes.size();
+            return o.bytes.data();
+        }
+    }
+    if (outLen) *outLen = 0;
+    return nullptr;
+}
+
+void ttp_display_blob_wrote(const char* store, const char* name) {
+    const int si = storeIndex(store);
+    if (si < 0 || !name || !g_disp) return;
+    // THE SHELL SAYS WHEN, because only it knows whether the bytes reached the
+    // disk — and a write that failed should be retried, not forgotten. Dropping
+    // the ready slot on `export` instead would lose a blob to a full disk with
+    // nothing to say so.
+    std::vector<DisplayCore::BlobOutbound>& out = g_disp->blobWalk[si].outbound;
+    for (size_t i = 0; i < out.size(); i++) {
+        if (out[i].name != name) continue;
+        out.erase(out.begin() + (long) i);
+        return;
+    }
+}
+
 
 void ttp_display_release(void) {
     if (!g_disp || !g_disp->built) return;
@@ -266,6 +615,11 @@ int ttp_display_cell_rects(float* out, int maxCells) {
     const uint32_t n = (uint32_t) g_disp->cells.size();
     if (!n) return 0;
     const uint32_t want = n < (uint32_t) maxCells ? n : (uint32_t) maxCells;
+    // The surface the renderer laid the grid out on, which is what the fractions
+    // below are fractions OF. Guarded because ttp_display_resize floors both at
+    // 1, and a divide by zero here would answer inf to every shell at once.
+    const double sw = g_disp->width > 0 ? (double) g_disp->width : 1.0;
+    const double sh = g_disp->height > 0 ? (double) g_disp->height : 1.0;
     for (uint32_t i = 0; i < want; i++) {
         // The RENDERER owns the rect: it letterboxes the grid as ONE piece, so a
         // cell is a tile of the capped picture and not of the raw surface. Asking
@@ -274,10 +628,56 @@ int ttp_display_cell_rects(float* out, int maxCells) {
         // renderer's own steer bar and dividers ask the same function, so the
         // shell's chrome and the renderer's cannot land on different grids.
         const TtpCellRect r = g_disp->renderer->cellRectTopLeft(n, i);
-        out[i * 4 + 0] = (float) r.x;
-        out[i * 4 + 1] = (float) r.y;
-        out[i * 4 + 2] = (float) r.w;
-        out[i * 4 + 3] = (float) r.h;
+        // THE SAFE RECT: the same cell inset on ALL FOUR EDGES, which is where
+        // this cell's CHROME may go as against where its picture is.
+        //
+        // UNIFORM, NOT AN INTERSECTION WITH THE SCREEN'S SAFE AREA, and that is
+        // a LOOK decision that overrode the tighter one. Insetting only the
+        // edges a television can actually crop is what a safe zone strictly
+        // needs, and it was built and rejected on sight: in a four-cell grid it
+        // puts two different margins in one row — the place badge left of the
+        // divider hugs it while its neighbour sits a full inset off the screen —
+        // and the pair reads as a bug rather than as a margin. A uniform inset
+        // costs a little space at the dividers that nothing else wants, and it
+        // is what a split-screen racer's HUD does: each player's chrome is inset
+        // from THEIR viewport, and overscan only ever eats the outer ones.
+        //
+        // A FRACTION OF THE SURFACE, not of the cell. The distance a set crops
+        // is a property of the screen, so the protection has to be measured
+        // against the screen — a cell-relative margin would shrink exactly where
+        // there are more cells and less room to lose.
+        //
+        // BOTH RECTS IN ONE READ, because a shell needs both and they must
+        // agree: the picture is what a centred card centres on and what proves
+        // the grid tiles the surface, the safe rect is what everything anchored
+        // to an edge measures from. Two exports would be two roads again, which
+        // is the failure the fractions below are already written against.
+        //
+        // In SURFACE PIXELS, before the normalise below. The insets cap at a
+        // quarter per side and the smallest cell is half the surface on each
+        // axis, so a rect can collapse to zero width but never invert; the
+        // max(0) below is what says so rather than a comment claiming it cannot.
+        const double insetX = g_disp->safeFracX * sw;
+        const double insetY = g_disp->safeFracY * sh;
+        const double x0 = (double) r.x + insetX;
+        const double y0 = (double) r.y + insetY;
+        const double x1 = (double) r.x + r.w - insetX;
+        const double y1 = (double) r.y + r.h - insetY;
+        // NORMALISED, because a rect in surface pixels only means anything
+        // ALONGSIDE the surface size — and the render scale moves that under the
+        // shell. Handing the two out separately made every HUD a two-value read
+        // that had to be taken in one breath, and two of the three shells had
+        // already failed it: tvOS placed the whole HUD off a stale `uiScale`, and
+        // Android divided fresh rects by a `surfaceWidth` Compose could not see
+        // change. A fraction needs no partner, so neither bug can be written.
+        out[i * 8 + 0] = (float) (r.x / sw);
+        out[i * 8 + 1] = (float) (r.y / sh);
+        out[i * 8 + 2] = (float) (r.w / sw);
+        out[i * 8 + 3] = (float) (r.h / sh);
+        out[i * 8 + 4] = (float) (x0 / sw);
+        out[i * 8 + 5] = (float) (y0 / sh);
+        out[i * 8 + 6] = (float) ((x1 > x0 ? x1 - x0 : 0.0) / sw);
+        out[i * 8 + 7] = (float) ((y1 > y0 ? y1 - y0 : 0.0) / sh);
     }
     return (int) want;
 }
@@ -356,22 +756,53 @@ void ttp_display_burst(const char* idJson, double s, double lat) {
 // ---------------------------------------------------------------------------
 // The frame.
 // ---------------------------------------------------------------------------
+namespace {
+// The frame's input, built off the bound session — the drawn frame's and the
+// undrawn advance's alike. The one seam into the sim half of the runtime
+// (ttp_session.h): the display reads the bound session's live Game instead of
+// being handed a serialized copy of it back from the shell. The cell aspect
+// matches the renderer's own viewport exactly, or the projection disagrees with
+// the rect it lands in; it comes from the renderer (cellAspect) rather than
+// being worked out here, since it is a function of the LETTERBOXED grid and a
+// shell deriving it would be a copy that could drift.
+const TtpFrameInput* frameInput(DisplayCore& d, double dtSeconds) {
+    const Game* eng = d.session ? ttp_session_engine(d.session) : nullptr;
+    return ttp::rt::buildFrame(d, eng, (float) dtSeconds,
+                               d.renderer->cellAspect((uint32_t) d.cells.size()));
+}
+}  // namespace
+
 int ttp_display_frame(double dtSeconds) {
     if (!g_disp || !g_disp->built) return 0;
     DisplayCore& d = *g_disp;
-    const float dt = (float) dtSeconds;
-    // The one seam into the sim half of the runtime (ttp_session.h): the display
-    // reads the bound session's live Game instead of being handed a serialized
-    // copy of it back from the shell.
-    const Game* eng = d.session ? ttp_session_engine(d.session) : nullptr;
-    // Match the renderer's own viewport exactly, or the projection disagrees with
-    // the rect it lands in. The number comes from the renderer (cellAspect)
-    // rather than being worked out here: it is a function of the LETTERBOXED
-    // grid, and a shell deriving it would be a copy of it that could drift.
     const uint32_t nCells = (uint32_t) d.cells.size();
-    const TtpFrameInput* head =
-            ttp::rt::buildFrame(d, eng, dt, d.renderer->cellAspect(nCells));
+    // THE GRID IS THIS SIDE'S FACT, and the render-scale rule needs it for one
+    // decision: whether the floor escape exists (ttp/render_scale.h,
+    // kScaleEscapeCells). Declared per frame rather than plumbed through
+    // ttp_display_scale_poll's arguments, because a shell asked for a cell count
+    // would be answering with a number it got from here.
+    ttp::rt::renderScale().cells((int) nCells);
+    // buildFrame is inside the shell's per-frame span (the ttp:render atrace
+    // marker) but outside the renderer's kProfTotal; posting it into the
+    // profile array is what lets a scripted sweep attribute a CPU spike to the
+    // input build without a second ABI call. Same steady_clock as ttpNowMs.
+    const auto tBuild = std::chrono::steady_clock::now();
+    const TtpFrameInput* head = frameInput(d, dtSeconds);
+    d.renderer->noteBuildMs(std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - tBuild).count());
     return d.renderer->render(*head) ? 1 : 0;
+}
+
+int ttp_display_advance(double dtSeconds) {
+    if (!g_disp || !g_disp->built) return 0;
+    // The frame's own input build — it is where the chase rigs and every cosmetic
+    // clock advance — with the render-scale rule left out: nothing is presented,
+    // so there is nothing for it to pace.
+    return g_disp->renderer->advance(*frameInput(*g_disp, dtSeconds)) ? 1 : 0;
+}
+
+int ttp_display_settled(void) {
+    return g_disp && g_disp->built && g_disp->renderer->settled() ? 1 : 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -379,6 +810,22 @@ int ttp_display_frame(double dtSeconds) {
 // ---------------------------------------------------------------------------
 const double* ttp_display_profile(void) {
     return g_disp ? g_disp->renderer->profile() : nullptr;
+}
+
+void ttp_display_antialias(int on) {
+    if (g_disp && g_disp->renderer) g_disp->renderer->setAntialias(on != 0);
+}
+
+void ttp_display_dress_keep(float frac) {
+    if (g_disp && g_disp->renderer) g_disp->renderer->setDressKeep(frac);
+}
+
+void ttp_display_dress_sheets(int on) {
+    if (g_disp && g_disp->renderer) g_disp->renderer->setDressSheets(on != 0);
+}
+
+double ttp_display_gpu_ms(void) {
+    return g_disp && g_disp->renderer ? g_disp->renderer->gpuMs() : 0.0;
 }
 
 const char* ttp_display_profile_names(void) {
@@ -402,6 +849,179 @@ void ttp_display_debug_wipe_skids(void) {
 
 void ttp_display_debug_force_mask_layer(int layer) {
     if (g_disp && g_disp->renderer) g_disp->renderer->debugForceMaskLayer(layer);
+}
+
+namespace {
+
+// The tuning as JSON. One writer for both the live values and the defaults, so
+// a page cannot be shown a key the setter does not read.
+ttp::Value shadowTuningValue(const CarShadowTuning& t) {
+    ttp::Value o = ttp::Value::Obj();
+    o.set("mode", ttp::Value::Num(t.mode));
+    o.set("shape", ttp::Value::Num(t.shape));
+    o.set("polyEdges", ttp::Value::Num(t.polyEdges));
+    o.set("corner", ttp::Value::Num(t.corner));
+    o.set("ao", ttp::Value::Num(t.ao));
+    o.set("cap", ttp::Value::Num(t.cap));
+    o.set("loadGain", ttp::Value::Num(t.loadGain));
+    o.set("ink", ttp::Value::Num((double) t.ink));
+    o.set("overscan", ttp::Value::Num(t.overscan));
+    o.set("grow", ttp::Value::Num(t.grow));
+    o.set("blur", ttp::Value::Num(t.blur));
+    o.set("remapLo", ttp::Value::Num(t.remapLo));
+    o.set("remapHi", ttp::Value::Num(t.remapHi));
+    o.set("texelsPerU", ttp::Value::Num(t.texelsPerU));
+    o.set("rows", ttp::Value::Num(t.rows));
+    o.set("stampProject", ttp::Value::Bool(t.stampProject));
+    o.set("uploadWhole", ttp::Value::Bool(t.uploadWhole));
+    o.set("remapInShader", ttp::Value::Bool(t.remapInShader));
+    o.set("smoothTap", ttp::Value::Bool(t.smoothTap));
+    return o;
+}
+
+}  // namespace
+
+// A PARTIAL object: any key the caller left out keeps the value it already has,
+// so a page may send one knob per drag without carrying the other twelve.
+void ttp_display_shadow_tuning(const char* json) {
+    if (!g_disp || !g_disp->renderer) return;
+    const ttp::Value v = ttp::json::parse_or(json, ttp::Value::Obj());
+    if (v.type != ttp::Value::OBJ) return;
+    CarShadowTuning t = g_disp->renderer->shadowTuning();
+    t.mode = (int) ttp::json::num_field(v, "mode", t.mode);
+    t.shape = (int) ttp::json::num_field(v, "shape", t.shape);
+    t.polyEdges = (int) ttp::json::num_field(v, "polyEdges", t.polyEdges);
+    t.corner = (float) ttp::json::num_field(v, "corner", t.corner);
+    if (v.find("stampProject")) t.stampProject = ttp::json::truthy(v, "stampProject");
+    if (v.find("uploadWhole")) t.uploadWhole = ttp::json::truthy(v, "uploadWhole");
+    if (v.find("remapInShader")) t.remapInShader = ttp::json::truthy(v, "remapInShader");
+    if (v.find("smoothTap")) t.smoothTap = ttp::json::truthy(v, "smoothTap");
+    t.ao = (float) ttp::json::num_field(v, "ao", t.ao);
+    t.cap = (float) ttp::json::num_field(v, "cap", t.cap);
+    t.loadGain = (float) ttp::json::num_field(v, "loadGain", t.loadGain);
+    t.ink = (uint32_t) ttp::json::num_field(v, "ink", t.ink);
+    t.overscan = (float) ttp::json::num_field(v, "overscan", t.overscan);
+    t.grow = (float) ttp::json::num_field(v, "grow", t.grow);
+    t.blur = (float) ttp::json::num_field(v, "blur", t.blur);
+    t.remapLo = (float) ttp::json::num_field(v, "remapLo", t.remapLo);
+    t.remapHi = (float) ttp::json::num_field(v, "remapHi", t.remapHi);
+    t.texelsPerU = (float) ttp::json::num_field(v, "texelsPerU", t.texelsPerU);
+    t.rows = (int) ttp::json::num_field(v, "rows", t.rows);
+    // Clamps live HERE and not in the setter's callers: a page dragging a
+    // slider is exactly the caller that can send an out-of-range number, and
+    // an overscan of 0 divides by zero inside the mask bake.
+    t.mode = t.mode < 0 ? 0 : (t.mode > 2 ? 2 : t.mode);
+    t.shape = t.shape < 0 ? 0 : (t.shape > 3 ? 3 : t.shape);
+    t.polyEdges = t.polyEdges < 3 ? 3
+            : (t.polyEdges > (int) ttp::rt::PolyFit::kMaxEdges
+                    ? (int) ttp::rt::PolyFit::kMaxEdges : t.polyEdges);
+    t.corner = t.corner < 0.0f ? 0.0f : (t.corner > 1.0f ? 1.0f : t.corner);
+    t.overscan = t.overscan < 1.0f ? 1.0f : (t.overscan > 4.0f ? 4.0f : t.overscan);
+    t.ao = t.ao < 0.0f ? 0.0f : (t.ao > 1.0f ? 1.0f : t.ao);
+    t.cap = t.cap < 0.0f ? 0.0f : (t.cap > 1.0f ? 1.0f : t.cap);
+    t.grow = t.grow < 0.0f ? 0.0f : (t.grow > 1.0f ? 1.0f : t.grow);
+    t.blur = t.blur < 0.0f ? 0.0f : (t.blur > 0.25f ? 0.25f : t.blur);
+    g_disp->renderer->setShadowTuning(t);
+}
+
+namespace {
+// Base64 of a byte block. Shared by the two shadow readbacks below; local and
+// debug-only, for the reason the mask one already gives.
+std::string b64Of(const uint8_t* p, size_t n) {
+    static const char kB64[] =
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string out;
+    out.reserve((n + 2) / 3 * 4);
+    for (size_t i = 0; i < n; i += 3) {
+        const uint32_t b0 = p[i];
+        const uint32_t b1 = i + 1 < n ? p[i + 1] : 0u;
+        const uint32_t b2 = i + 2 < n ? p[i + 2] : 0u;
+        const uint32_t w = (b0 << 16) | (b1 << 8) | b2;
+        out += kB64[(w >> 18) & 63];
+        out += kB64[(w >> 12) & 63];
+        out += (i + 1 < n) ? kB64[(w >> 6) & 63] : '=';
+        out += (i + 2 < n) ? kB64[w & 63] : '=';
+    }
+    return out;
+}
+}  // namespace
+
+const char* ttp_display_shadow_layer_json(int x, int y, int w, int h) {
+    static std::string json;
+    json = "{}";
+    if (!g_disp || !g_disp->renderer) return json.c_str();
+    // Bounded: this is a debug window, not a way to ask for the whole layer.
+    if (w <= 0 || h <= 0 || w > 512 || h > 512) return json.c_str();
+    std::vector<uint8_t> px;
+    if (!g_disp->renderer->shadowLayerWindow(x, y, w, h, px)) return json.c_str();
+    ttp::Value o = ttp::Value::Obj();
+    o.set("x", ttp::Value::Num(x));
+    o.set("y", ttp::Value::Num(y));
+    o.set("w", ttp::Value::Num(w));
+    o.set("h", ttp::Value::Num(h));
+    o.set("px", ttp::Value::Str(b64Of(px.data(), px.size())));
+    json = ttp::canonical_stringify(o);
+    return json.c_str();
+}
+
+const char* ttp_display_shadow_mask_json(int slot) {
+    static std::string json;
+    json = "{}";
+    if (!g_disp || !g_disp->renderer || slot < 0) return json.c_str();
+    const TtpRenderer::ShadowMaskView v = g_disp->renderer->shadowMaskView((size_t) slot);
+    if (!v.px || v.w <= 0 || v.h <= 0) return json.c_str();
+    // Quantise the coverage and share the encoder with the layer window above.
+    const size_t n = (size_t) v.w * v.h;
+    std::vector<uint8_t> bytes(n);
+    for (size_t i = 0; i < n; i++) {
+        bytes[i] = (uint8_t) std::lround(
+                std::min(1.0f, std::max(0.0f, v.px[i])) * 255.0f);
+    }
+    const std::string b64 = b64Of(bytes.data(), n);
+    char key[32];
+    std::snprintf(key, sizeof key, "%016llx", (unsigned long long) v.model);
+    ttp::Value o = ttp::Value::Obj();
+    o.set("w", ttp::Value::Num(v.w));
+    o.set("h", ttp::Value::Num(v.h));
+    o.set("model", ttp::Value::Str(key));
+    o.set("generic", ttp::Value::Bool(v.generic));
+    o.set("px", ttp::Value::Str(b64));
+    json = ttp::canonical_stringify(o);
+    return json.c_str();
+}
+
+const char* ttp_display_shadow_tuning_json(void) {
+    static std::string json;
+    ttp::Value o = ttp::Value::Obj();
+    o.set("current", shadowTuningValue(
+            g_disp && g_disp->renderer ? g_disp->renderer->shadowTuning()
+                                       : CarShadowTuning{}));
+    // The SHIPPED values, so a tuning page's sliders and its "reset" both come
+    // from the engine rather than from numbers re-typed in JS.
+    o.set("defaults", shadowTuningValue(CarShadowTuning{}));
+    // WHAT THE DENSITY ACTUALLY BOUGHT, and what it costs. Derived, never set:
+    // the width clamps against the driver's texture ceiling, so asking for 24
+    // texels/u on a long lap silently gets fewer — and how many texels a car's
+    // stamp lands on is the number that decides whether its edge can hold
+    // still. `uploadBytes` is the whole level, re-sent every frame.
+    if (g_disp && g_disp->renderer) {
+        const TtpRenderer::ShadowLayerInfo li = g_disp->renderer->shadowLayerInfo();
+        ttp::Value l = ttp::Value::Obj();
+        l.set("w", ttp::Value::Num(li.w));
+        l.set("h", ttp::Value::Num(li.h));
+        l.set("texelsPerU", ttp::Value::Num(li.texelsPerU));
+        l.set("texelsPerLat", ttp::Value::Num(li.texelsPerLat));
+        l.set("stampTexelsS", ttp::Value::Num(li.stampTexelsS));
+        l.set("stampTexelsLat", ttp::Value::Num(li.stampTexelsLat));
+        l.set("uploadBytes", ttp::Value::Num((double) li.w * li.h));
+        o.set("layer", l);
+    }
+    json = ttp::canonical_stringify(o);
+    return json.c_str();
+}
+
+void ttp_display_debug_features(unsigned int mask) {
+    if (g_disp && g_disp->renderer) g_disp->renderer->debugFeatureMask((uint32_t) mask);
 }
 
 const char* ttp_display_debug_decals(void) {

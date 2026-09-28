@@ -2,7 +2,8 @@
 // gallery (/gallery.html), with NO relay connection. main.js delegates here
 // when the URL carries ?scenario=…, handing over the live scene +
 // track so we can stand up the lobby, countdown, a self-driving race preview,
-// or the results overlay from fake data.
+// or the results overlay from fake data. ?scenario=bench is the one that is not
+// a picture: a live race left running under the perf readout (startBenchReadout).
 //
 // The race scenarios run the real NATIVE sim (NativeRaceSession → the C++ engine in
 // WASM) in bare mode — racing from frame 0, no countdown, no session lifecycle — with
@@ -23,59 +24,89 @@ import { renderSeats, renderLobbyPick, renderCupShelf } from './lobbySeats.js';
 // of both in template literals, and the lobby's twin had already drifted to a
 // screen that no longer existed by the time anyone noticed.
 import { renderResults, hideResults, showCountdownBanner } from './raceOverlays.js';
-import { resultsView } from './NativeUiModel.js';
-import { intermissionMs } from './NativeRaceFlow.js';
+import { resultsView, intermissionSecs, previewBoard, previewProgress, progressLoad, catalogue } from './NativeUiModel.js';
+import { benchField, intermissionMs, flourishMs } from './NativeRaceFlow.js';
 import { LobbyDemo } from './LobbyDemo.js';
 import { CUPS, TRACKS, TRACK_LIST } from '../shared/tracks.js';
 import { TRACK_SCHEMATICS } from '../shared/trackSchematics.js';
-// The monster demo's engine timbre. It used to be imported from decide.js, the
-// retired audio oracle; the race path never read it that way — a transformed
-// car's growl arrives as numbers on a voice command from the C++ decision layer
-// (ttp/audio.cc's MONSTER_ENGINE_MOD, which this mirrors). It lives here because
-// the gallery is the only caller: it drives engineDrive itself, outside any
-// session, so no command stream reaches it.
-const MONSTER_ENGINE_MOD = { rateMul: 0.6, gainMul: 1.45, lpMul: 0.82 };
-
-// Cup points per finishing rank, for the intermission/podium previews. Mirrors the
-// series layer's ladder (native/libttp-sim/ttp/grand_prix.cc POINTS_BY_RANK).
-const POINTS_BY_RANK = [9, 6, 3, 1];
 
 // One countdown beat as the banner takes it — race_flow.cc's countdownTick,
 // which is the only thing about a beat that is a decision: numerals slap in, GO
 // does not (it fades out on .is-go instead). A preview supplies the BEAT NUMBER
-// and nothing else, and this is the one place either card turns one into a
-// banner. It is not the walk itself: reaching that needs a live room handle,
-// which no scenario has.
+// and nothing else, and this is the one place the chained start below turns one
+// into a banner. It is not the walk itself: reaching that needs a live room
+// handle, which no scenario has.
 const countdownBeat = (n) => ({ n, slap: n > 0, go: n === 0 });
-const CD_BEAT_MS = 800;   // the COUNTDOWN CARD's replay cadence only — it has no session
-                          // to tick it (a frozen card paints once and idles, so no frames
-                          // run). The chained start below uses the real 1 Hz session clock.
+// The banner AFTER its entrance: the numeral in place, no slap left to play.
+// That is the Countdown card, and it is also the frame the Apple TV top shelf is
+// cut from (scripts/bake-shelf.mjs), so which numeral this holds is shipped art.
+// The chain scenario below counts for real off a live session instead.
+const COUNTDOWN_STILL = { n: 3, slap: false, go: false };
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
-const FAKE_TIMES = [28.4, 30.7, 33.1, 35.8, 38.2, 41.0, 44.3, 47.6];
-// Banked cup points per row for the intermission/podium previews: leader swap
-// drama (row 2 leads the cup despite row 1 winning this race).
-const FAKE_POINTS = [10, 15, 6, 3, 2, 1, 0, 0];
 // Held items per slot for the frozen previews (reconnect / finished) so the cell
 // item indicator shows populated — a mix of boost/banana with some empty slots,
 // rather than a field of empty squares. null = that slot is carrying nothing.
 const PREVIEW_ITEMS = ['boost', 'banana', null, 'boost', 'banana', null, 'boost', null];
+// A per-car preview fact, keyed by CAR ID. A car id is a SCALAR that may be a
+// number or a string — the CPU fill's are 'ai-0'… (race_flow's aiPrefix) — so
+// nothing on this page may index an array with one or do arithmetic on one.
+// What a preview wants per car sits on that car's launch FIELD entry, and this
+// is how it is reached. The minimap paid for the rule: `colors[c.id % n]` is
+// colors[NaN] for every bot, which writes the fill as the literal "undefined"
+// and paints the CPU dots black.
+const byCar = (field, pick) => new Map(field.map((f, i) => [f.peerIndex, pick(f, i)]));
 // Frozen previews only. The native sim has no giveItem staging hook, and a frozen sim
 // would never spend the item anyway — so we dress the snapshot cars on their way to
 // setCarHud (a fresh, caller-owned object per getSnapshot) instead of the sim.
-const dressItems = (cars) => { for (const c of cars) c.item = PREVIEW_ITEMS[c.id] || null; };
-
-// Every preview car is driven by the sim's own AI — there are no phones here. One
-// persona per grid slot (AI_PERSONALITIES is the table main.js hands the wasm for real
-// races), each on its own seed so the bots weave distinctly.
-const botSpecs = (ids) => ids.map((id, n) => {
-  const p = AI_PERSONALITIES[n % AI_PERSONALITIES.length];
-  return { peerIndex: id, caution: p.caution, laneBias: p.laneBias, seed: id + 1 };
-});
+// The SLOT is the seat's livery index, not the car's id and not its place on the
+// grid: the launch hands the field back in GRID order with the humans at the
+// back, so dressing by array position would deal the items to different cells
+// every time the field size changed.
+const dressItems = (cars, field) => {
+  const held = byCar(field, (f) => PREVIEW_ITEMS[f.colorIndex]);
+  for (const c of cars) c.item = held.get(c.id) || null;
+};
 
 // Bare mode has no session layer to fire a raceEnd, so the endless previews read the
 // engine's own `raceOver` rule (finishedOrder >= cars) straight off the snapshot.
 const raceOver = (snap) => snap.cars.length > 0 && snap.cars.every((c) => c.finished);
+
+// What a live preview keeps about its race for the trailer editor (window.__preview):
+// which deal of the race this is, the frame clock at the deal and now, and the race's
+// events stamped with the race's own time — the sim's word on when a rocket went, a
+// truck grew or a car was struck, with no snapshot to diff. Kept for the current deal
+// and the one before, since the editor reads a race's log the step after the harness
+// has dealt the next one.
+function raceLog() { return { deal: 0, dealAtMs: 0, frameMs: 0, events: [] }; }
+function logDeal(log) {
+  log.deal++;
+  log.dealAtMs = log.frameMs;
+  log.events = log.events.filter((e) => e.deal >= log.deal - 1);
+}
+
+// The per-event effects a live race PERFORMS, mirrored from the decision race_flow.cc
+// makes in raceEvent(): a live car's pickup spins its cell roulette, a rocket strike
+// bursts on the victim, a whiff bursts where the rocket died. The walk that decides
+// them takes a room, and these previews have none — so this is the one place the
+// harness performs a race_flow rule by hand, and it performs it for EVERY live preview:
+// the trailer films them as the game, and a race that spun its cars without a fireball
+// or left its item slots empty was not the game. Renderer calls only — nothing here is
+// audio; the decision layer hears the same events itself. Every event also lands in
+// the preview's log (raceLog).
+function raceEventPerformer(scene, log) {
+  return (ev) => {
+    if (ev.type === 'pickup' && !ev.finished) scene.itemPickup(ev.id, ev.item);
+    else if (ev.type === 'spin' && ev.cause === 'rocket') scene.rocketImpact(ev.id);
+    else if (ev.type === 'rocket_expire') scene.rocketExpire(ev.s, ev.lat);
+    log.events.push({ deal: log.deal, t: (log.frameMs - log.dealAtMs) / 1000,
+                      type: ev.type, id: ev.id, item: ev.item, cause: ev.cause });
+  };
+}
+
+// The editor's half of window.__preview: deal the race again from the top, and read
+// the deal count and the log (see holdFrame).
+const previewControl = (restart, log) => ({ restart, deal: () => log.deal, events: () => log.events });
 
 // A native session in BARE mode: racing from frame 0, no countdown and no lobby
 // lifecycle, which is what every preview wants. Throws with a readable message when
@@ -92,6 +123,32 @@ function bareSession(field, track, opts) {
   return s;
 }
 
+// The PERF BENCH's whole shell half (?scenario=bench): a live race that runs
+// until the tab closes, printing the shared frame-cost readout once a second.
+//
+// THE LINE IS THE CONTRACT and it is the same on all three shells — one
+// `TtpPerf <json>` per line on the platform's own log stream, carrying exactly
+// the bytes ttp_perf_readout_json answered — so ONE parser reads a browser, an
+// Apple TV and an Android box (scripts/perf-race.mjs). Nothing is folded,
+// renamed or added here: a shell that reshapes the line is a shell whose
+// numbers cannot be compared with the other two's.
+//
+// A DEV SURFACE, deliberately not a gallery card (shared/galleryScenarios.js):
+// it never settles on a frame to photograph, and it is the one scenario meant
+// to be left running.
+function startBenchReadout(scene, track) {
+  scene.perf.track = track.trackId;   // GPU cost is per track as well as per pixel
+  // MEASURE WITHOUT DRAWING: the panel is off by default and stays off here, but
+  // the window has to keep the CPU term the line below prints — which follows a
+  // READER, not visibility (PerfHud.bench). It also drops the frames spent
+  // standing the scene up, which are not the bench's.
+  scene.perf.bench();
+  setInterval(() => {
+    const line = scene.perf.readout();
+    if (line) console.log('TtpPerf ' + line);
+  }, 1000);
+}
+
 const el = (id) => document.getElementById(id);
 
 // Handling stats for a preview car (undefined when the stats table isn't on the
@@ -103,7 +160,7 @@ const statsFor = (i) => (window.carStats ? window.carStats(i) : undefined);
 // A small schematic overlay (bottom-left) with LIVE car dots, so the orbiting
 // whole-layout shot always carries a readable map of the line. The path is the exact
 // SVG the phones' track picker renders, and its baked `proj` maps world x/z onto it.
-function buildMinimap(parent, trackId, colors) {
+function buildMinimap(parent, trackId, field, colors) {
   const schem = TRACK_SCHEMATICS[trackId];
   if (!schem || !schem.d || !schem.proj) return null;
   const old = parent.querySelector('#track-minimap');
@@ -135,6 +192,8 @@ function buildMinimap(parent, trackId, colors) {
   wrap.appendChild(svg);
   parent.appendChild(wrap);
   const proj = schem.proj, dots = new Map();
+  // The livery each dot wears, off the launch field rather than off the id.
+  const paint = byCar(field, (f) => colors[f.colorIndex % colors.length]);
   return {
     update(cars) {
       for (const c of cars) {
@@ -143,7 +202,7 @@ function buildMinimap(parent, trackId, colors) {
         if (!dot) {
           dot = document.createElementNS(NS, 'circle');
           dot.setAttribute('r', '8.7');       // schematic viewBox is 0 0 256 256 (see trackSchematic VIEW)
-          dot.setAttribute('fill', colors[c.id % colors.length]);
+          dot.setAttribute('fill', paint.get(c.id) || colors[0]);
           dot.setAttribute('stroke', '#171a21');
           dot.setAttribute('stroke-width', '3');
           svg.appendChild(dot);
@@ -228,7 +287,7 @@ export function runDisplayScenario(opts, ctx) {
   // != null (not ||) so an explicit players=0 clamps to 1 rather than 4.
   // `players` is the HUMAN count — the roster seats and the split-screen cells —
   // capped at the live phone cap. Race previews then top the field up to the
-  // live FIELD_SIZE with cell-less CPU racers (raceGrid below), so a gallery
+  // live FIELD_SIZE with cell-less CPU racers (raceField below), so a gallery
   // race reads like a real one: 8 cars, at most 4 cells.
   const players = Math.max(1, Math.min(opts.players != null ? opts.players : 4, window.MAX_PLAYERS || 4));
   // ?seed= (see main.js): null leaves NativeRaceSession's own default, which is what
@@ -250,76 +309,27 @@ export function runDisplayScenario(opts, ctx) {
     el('mute-btn').classList.toggle('hidden', name === 'welcome');  // same rule as main.js show()
   };
 
-  // ---- the gallery card's ▶ ----------------------------------------------------
-  // A screen whose animation is DOM (an entrance slap-in, the results board's
-  // race→standings turn) plays once on arrival and is then over, so a preview of
-  // it is a still of whatever it settled into. `replayable` paints the screen and
-  // registers the card's ▶ to paint it again.
-  //
-  // Restarting a CSS animation means the element must go display:none and back —
-  // and BOTH halves have to be seen by a style recalc, or the browser folds the
-  // pair away and nothing re-runs. Hence the forced reflow between them; a plain
-  // hide(); paint(); is a no-op for every element the repaint does not recreate.
-  //
-  // Scene cards do NOT come through here: their animation is the sim, driven by
-  // the preview overlay's play/pause (window.__preview) instead.
-  function replayable(hide, paint) {
-    window.__TEST__.replay = () => { hide(); void document.body.offsetWidth; paint(); };
-    paint();
-  }
-
   // Paint the results overlay from a SYNTHESIZED board — the same shape
-  // standingsPayload hands live play — through the real ui model and the real
-  // renderer. The preview's whole job is choosing what board to show; every
+  // ttp_ui_standings_live_json hands live play — through the real ui model and
+  // the real renderer. The preview's whole job is choosing what board to show; every
   // decision after that (dressing, row kinds, podium split, footer) is the
   // model's, exactly as in a real race.
+  //
+  // PAINTED ON ARRIVAL, NEVER SETTLED DIRECTLY, and that is what makes the board
+  // cards honest: the model turns phase 1 (the race that just ended, with its lap
+  // times and +N gains) into phase 2 (the cup table) on its own clock, and only
+  // phase 1 carries that dressing. `settleMs` in shared/galleryScenarios.js is
+  // how a capture waits for the phase it wants.
   const showBoard = (board) => renderResults(resultsView(board, { intermissionMs: intermissionMs() }), COLORS);
-  // …and the board is the card's animation on a cup: ▶ replays the race phase
-  // turning into the standings, which otherwise happens once and never again.
-  const playBoard = (board) => replayable(hideResults, () => showBoard(board));
-
-  // A board for the first cup, as it stands after its race `raceIdx`: real cup
-  // and track names, fake points, with a leader swap so the table shows cup
-  // order beating this race's finish order. `final` is the only thing the two
-  // dressings (mid-cup intermission, closing podium) differ by — the model
-  // decides the rest. Shared by the frozen previews and the chained-start loop.
-  function cupBoard(raceIdx, final) {
-    const cup = CUPS[0];
-    const nextId = cup.tracks[raceIdx + 1] || null;
-    // Built in FINISHING order (times and gains ride the index), then sorted into
-    // cup order — the same two orders standingsPayload produces, and `racePlace`
-    // is what carries the first one through the sort. Without it the board's
-    // race phase would replay the cup table and the preview would show a leader
-    // swap that never happened.
-    const order = humansFirst(raceGrid(buildSlots(players))).map((g, i) => ({
-      playerId: g.slot, name: g.name, colorIndex: g.slot, finished: true, time: FAKE_TIMES[i],
-      racePlace: i + 1,
-      gained: POINTS_BY_RANK[i] || 0,
-      points: (FAKE_POINTS[i] || 0) + (POINTS_BY_RANK[i] || 0)
-    })).sort((a, b) => b.points - a.points);
-    return {
-      over: true, hostPeerIndex: order[0].playerId, order,
-      series: {
-        cupId: cup.id, cupName: cup.name, endless: false,
-        raceIndex: raceIdx, raceCount: cup.tracks.length,
-        nextTrackId: nextId, nextTrackName: nextId ? TRACKS[nextId].name : null,
-        final, autoAdvanceMs: intermissionMs()
-      }
-    };
-  }
 
   // The lobby's cup slot, off the same renderLobbyPick the live lobby calls: a
   // PICK goes in, the model decides the whole card. null empties the slot.
-  // The synthesized progression dresses the card's stars and the shelf below —
-  // mid-game numbers (three cups starred, the Playroom still locked), so
+  // The fabricated couch dresses the card's stars and the shelf below, so
   // gallery-lobby.spec can pin dressings only the right payload produces.
-  const PREVIEW_SHELF = CUPS.map((c, i) => ({
-    id: c.id, name: c.name,
-    stars: [3, 2, 1, 0, 0][i] || 0,
-    locked: c.id === 'rooftop',
-    ...(c.id === 'rooftop' ? { unlockDone: 3, unlockNeed: 4 } : {})
-  }));
-  const PREVIEW_PROGRESS = { cups: PREVIEW_SHELF };
+  // The couch is ttp_ui_preview_progress_json's, loaded like a saved record so
+  // the shelf and the card derive their stars and lock exactly as live play does.
+  progressLoad(previewProgress(), false);
+  const PREVIEW_PROGRESS = catalogue();
   const previewCatalog = TRACK_LIST.map((t) => ({ id: t.id, svg: TRACK_SCHEMATICS[t.id] }));
   const showPick = (pick) => renderLobbyPick(el('cup-slot'), pick || {}, previewCatalog, PREVIEW_PROGRESS);
 
@@ -355,8 +365,6 @@ export function runDisplayScenario(opts, ctx) {
     const dio = el('lobby-diorama'); if (dio) dio.classList.add('hidden');
   }
 
-  window.__TEST__ = window.__TEST__ || {};
-
   // ---- gallery power saver ----
   // The gallery mounts ~11 live WebGL scenes at once; left alone each runs a full
   // render loop forever — even the frozen previews, which redraw an unchanging frame
@@ -364,18 +372,20 @@ export function runDisplayScenario(opts, ctx) {
   // leave it idle. Animated previews additionally expose window.__preview so the
   // gallery CARD can drive play/pause from the parent document — the preview iframe is
   // pointer-events:none (page-scroll pass-through, gallery.css), so it can't take the
-  // click itself. A standalone tab (own window) ignores all this and runs freely: you
-  // opened it to watch or to fly the free-cam. Call holdFrame AFTER the scene's first
-  // state is set, so the held frame shows that state.
+  // click itself — and so the trailer editor can restart the race and read its log
+  // (previewControl). A standalone tab (own window) ignores all this and runs freely:
+  // you opened it to watch or to fly the free-cam. Call holdFrame AFTER the scene's
+  // first state is set, so the held frame shows that state.
   // Read once here (reused by setupRace's audio gate below).
   const inIframe = isFramed();
-  function holdFrame(live) {
+  function holdFrame(live, control) {
     if (!inIframe) return;                // own tab → keep running (watch / inspect)
     ctx.scene.pauseAfterFrame();          // paint the state just set, then idle
     if (live) window.__preview = {        // parent gallery card drives play/pause
       play: () => ctx.scene.start(),
       pause: () => ctx.scene.pauseAfterFrame(),
-      running: () => ctx.scene.isRunning()
+      running: () => ctx.scene.isRunning(),
+      ...control,
     };
   }
   // Diorama previews (welcome / device-choice / lobby-loading) drive no 3D — the
@@ -404,48 +414,40 @@ export function runDisplayScenario(opts, ctx) {
     return slots.length ? slots[0] : null;
   }
 
-  // The CPU fill for the given human slots, by the wasm's own seat rule
-  // (cpuSeats): lowest free livery, carIndex wraps the model list, name =
-  // the persona that drives it. `personaBase` is where the persona deal
-  // starts: 0 for a launch (buildField names bots by bot ordinal — Bolt is
-  // always the first bot), slots.length for the lobby demo (buildDemoField
-  // names by final grid index so personas spread across the whole field).
+  // THE RACE FIELD IS THE LAUNCH'S OWN (ttp_race.h's bench field): `players`
+  // seats at the back of the game's grid, the CPU fill in front, every seat
+  // autopiloted so a preview with nobody holding a phone is still an authentic
+  // race. What comes back is exactly what ttp_session_begin_field takes.
+  //
+  // It replaces a hand copy of cpuSeats/buildField/orderGrid that lived here,
+  // and the copy had already drifted: its bot seeds were `id + 1` where the
+  // engine deals toUint32(seed + n), so every gallery race was watching bots no
+  // real race has. The seed is the SESSION's, so the field and the race it
+  // drives are one draw.
+  const raceField = () => benchField(ctx.track.trackId, players, seedOpt.seed ?? 1);
+
+  // The lobby demo's shape (buildDemoField): the roster first, the CPU fill
+  // behind it, and EVERY entry driven by the persona at its final grid index —
+  // the fill carries that persona's name — exactly what flow.demoLive answers
+  // off a live room. There is no walk to call for it: demoLive needs a room
+  // handle, and no scenario here has one.
   const modelCount = () => (window.CAR_MODELS || []).length || 4;
-  function cpuFill(slots, personaBase) {
-    const fieldSize = Math.max(slots.length, Math.min(window.FIELD_SIZE || 8, COLORS.length));
-    const fill = [];
-    const used = slots.slice();
-    for (let i = 0; used.length < fieldSize; i++) {
-      if (used.includes(i)) continue;
-      used.push(i);
-      const p = AI_PERSONALITIES[(personaBase + fill.length) % AI_PERSONALITIES.length];
-      fill.push({ slot: i, human: false, name: p.name, persona: p, carIndex: i % modelCount() });
-    }
-    return fill;
-  }
-  function humanEntries(slots) {
-    return slots.map((s) => ({ slot: s, human: true, name: FAKE_NAMES[s], carIndex: s % modelCount() }));
-  }
-  // A race field in LAUNCH shape — the order the live walks hand begin_field,
-  // which seats it verbatim (race_flow's orderGrid, humansAtBack): the CPU
-  // field out front, the humans gridded at the back. botSpecs deals personas
-  // by the same positions, so name and driving stay matched.
-  function raceGrid(slots) {
-    return cpuFill(slots, 0).concat(humanEntries(slots));
-  }
-  // The lobby demo's shape (buildDemoField): the roster first, the fill behind
-  // it, and EVERY entry driven by the persona at its final grid index — the
-  // fill carries that persona's name — exactly what flow.demoLive answers off
-  // a live room. cpuFill(slots.length) lines its names up with the same index
-  // by construction.
   function demoGrid(slots) {
-    return humanEntries(slots).concat(cpuFill(slots, slots.length)).map((g, n) => ({
-      ...g, persona: AI_PERSONALITIES[n % AI_PERSONALITIES.length]
-    }));
+    const grid = slots.map((s) => ({ slot: s, human: true, name: FAKE_NAMES[s],
+                                     carIndex: s % modelCount() }));
+    const fieldSize = Math.max(slots.length, Math.min(window.FIELD_SIZE || 8, COLORS.length));
+    const used = slots.slice();
+    for (let i = 0; grid.length < fieldSize; i++) {
+      if (used.includes(i)) continue;   // lowest free livery, cpuSeats' own rule
+      used.push(i);
+      grid.push({ slot: i, human: false, name: AI_PERSONALITIES[grid.length % AI_PERSONALITIES.length].name,
+                  carIndex: i % modelCount() });
+    }
+    return grid.map((g, n) => ({ ...g, persona: AI_PERSONALITIES[n % AI_PERSONALITIES.length] }));
   }
-  // Board previews list the humans on top — the fake-points drama is authored
-  // on the roster names — with the CPU fill trailing.
-  const humansFirst = (grid) => grid.filter((g) => g.human).concat(grid.filter((g) => !g.human));
+  // Board previews list the players on top — the fake-points drama is authored
+  // on their names — with the CPU fill trailing.
+  const humansFirst = (field) => field.filter((f) => !f.ai).concat(field.filter((f) => f.ai));
 
   // Seat grid via the SAME renderer as the live lobby (lobbySeats.js), so the
   // preview can't drift from the real markup. The preview varies the car per
@@ -453,6 +455,14 @@ export function runDisplayScenario(opts, ctx) {
   function renderRoster(slots, hostPeerIndex) {
     renderSeats(el('players'), slots.map((s) => ({
       name: FAKE_NAMES[s], colorIndex: s, carIndex: s, host: s === hostPeerIndex,
+      // `connected: true`, and it is LOAD-BEARING. The seat grid TAKES a roster
+      // row and DERIVES the dimming from it, so an absent `connected` reads as
+      // falsy and every previewed seat comes back `off` — the whole dock at 50%
+      // opacity, in the gallery that exists to check the look. It was, in every
+      // populated lobby shot, until a TV column beside it made the difference
+      // obvious. (GameState.kt on Android carries the same warning; that shell
+      // hit this from the other direction.)
+      connected: true,
       // preview the readiness pill: everyone but the host has readied up
       ready: hostPeerIndex != null && s !== hostPeerIndex
     })));
@@ -489,8 +499,9 @@ export function runDisplayScenario(opts, ctx) {
   if (scenario === 'welcome') {
     // The title board at boot: just the section over the diorama (the room
     // warms invisibly behind it in live play — nothing to fake here). The
-    // wordmark/tagline/button slap in on arrival, so ▶ replays that.
-    replayable(() => el('welcome').classList.add('hidden'), () => show('welcome'));
+    // wordmark/tagline/button slap in on arrival and the card is the still they
+    // land on.
+    show('welcome');
     return;
   }
 
@@ -501,10 +512,17 @@ export function runDisplayScenario(opts, ctx) {
     show('lobby');
     renderRoster([], null);
     showPick(null);
+    // The shelf is on the board from BOOT in live play (main.js calls
+    // refreshCupShelf at module scope, off the catalogue the engine already
+    // holds) — it is the couch's record, not something a pick reveals. Left out
+    // here, the two lobby cards that show no pick were the only ones in the
+    // gallery missing a card the live lobby always has, and every TV column
+    // compared against them looked like it had grown one.
+    renderCupShelf(el('cup-shelf'), PREVIEW_PROGRESS.cups, PREVIEW_PROGRESS.stars);
     return;
   }
 
-  if (scenario === 'lobby-empty') {
+  if (scenario === 'lobby-empty' || scenario === 'reconnecting' || scenario === 'disconnected') {
     // The lobby the instant NEW GAME reveals it, before anyone joins: open
     // seats, empty cup slot, the room's join URL + QR — over the boot-time
     // attract race (all-CPU field: no one has joined).
@@ -513,7 +531,20 @@ export function runDisplayScenario(opts, ctx) {
     renderJoinUrl(el('joinurl'), (location.host || 'tinytrack.party'), null); // stamps the fade-in class
     showPick(null);   // no pick yet → empty slot
     renderQR(el('qr'), buildQRMatrix(location.origin || 'https://tinytrack.party'));
+    renderCupShelf(el('cup-shelf'), PREVIEW_PROGRESS.cups, PREVIEW_PROGRESS.stars);
     startAttractDemo([]);
+    if (scenario !== 'lobby-empty') {
+      // The display's OWN link over that board: the overlay main.js fills off
+      // the set-link effect, filled here off a fabricated view. Mid-backoff
+      // shows the kit's counter; the spent budget shows the button, focused,
+      // as it is live — nothing else on the glass takes focus then.
+      const gaveUp = scenario === 'disconnected';
+      el('link-overlay').classList.remove('hidden');
+      el('link-heading').textContent = gaveUp ? 'Disconnected' : 'Reconnecting…';
+      el('link-status').textContent = gaveUp ? '' : 'Attempt 3 of 5';
+      el('link-reconnect').classList.toggle('hidden', !gaveUp);
+      if (gaveUp) el('link-reconnect').focus();
+    }
     return;
   }
 
@@ -551,7 +582,7 @@ export function runDisplayScenario(opts, ctx) {
     // preview shows the circuit the card names.
     showPick(opts.picked ? previewPick(opts.picked) : null);
     // The star shelf under it, off the same renderer as live play.
-    renderCupShelf(el('cup-shelf'), PREVIEW_SHELF);
+    renderCupShelf(el('cup-shelf'), PREVIEW_PROGRESS.cups, PREVIEW_PROGRESS.stars);
     return;
   }
 
@@ -572,19 +603,18 @@ export function runDisplayScenario(opts, ctx) {
       // keep the calm auto-orbit turntable (you can't comfortably drag a thumbnail).
       if (!enableFreeCamIfStandalone(scene)) scene.orbit = true;
 
-      const grid = raceGrid(buildSlots(players));
-      const ids = grid.map((g) => g.slot);
-      const newSession = () => bareSession(
-        grid.map((g) => ({ peerIndex: g.slot, stats: statsFor(g.carIndex) })), track, { bots: botSpecs(ids) });
+      const { field, bots } = raceField();
+      const newSession = () => bareSession(field, track, { bots });
       let engine = newSession();
       window.__engine = engine;
 
       for (const id of [...scene.cars.keys()]) scene.removeCar(id);
       // cell:false on EVERY car — opponents in the shared world with no split-screen
       // viewport, so _order stays empty and the overview camera frames the whole track.
-      grid.forEach((g) => scene.addCar(g.slot, g.slot, g.name, { cell: false, carIndex: g.carIndex }));
+      field.forEach((f) => scene.addCar(f.peerIndex, f.colorIndex, f.name,
+                                       { cell: false, carIndex: f.carIndex }));
 
-      const minimap = buildMinimap(el('race'), track.id, COLORS);
+      const minimap = buildMinimap(el('race'), track.id, field, COLORS);
       scene.bindSession(engine.h); // the renderer draws this session's cars
 
       scene.onFrame = (dt) => {
@@ -631,7 +661,6 @@ export function runDisplayScenario(opts, ctx) {
 
     function setupShowroom() {
       const { scene, track } = ctx;
-      const MODELS = window.CAR_MODELS || [];
       const MODEL_NAMES = window.CAR_NAMES || [];
       // Three-quarters behind the grid, at car height: the opening frame is the
       // parked lineup wearing its liveries, with the gantry
@@ -652,17 +681,23 @@ export function runDisplayScenario(opts, ctx) {
       // is the kit chassis seating that slot's own body — so a lineup of this
       // shape is what makes those four rigs one of each of the four trucks
       // rather than the same one four times.
-      const ids = [];
-      for (let i = 0; i < COLORS.length; i++) ids.push(i);
-      const modelOf = (i) => (MODELS.length ? i % MODELS.length : 0);
-      const field = ids.map((i) => ({ peerIndex: i, stats: statsFor(modelOf(i)) }));
+      //
+      // The seats are the BENCH ROSTER's (ttp_race.h's bench field, one per
+      // livery here rather than a race's four): livery = seat, model = seat
+      // wrapped into the model list, every seat carrying a controller. That is
+      // the lineup above, dealt by the launch rule instead of by this page.
+      const { field, bots } = benchField(track.trackId, COLORS.length, 1);
 
       let forceItem = null;   // the roulette override the gallery's picker sets
       let engine = null;
       let driving = false;
       const newSession = () => {
         if (engine) engine.dispose();
-        engine = bareSession(field, track, { bots: botSpecs(ids), forceItem });
+        engine = bareSession(field, track, { bots, forceItem });
+        // Every box rolls the forced item, and the engine gives and fires it on a
+        // loop (the rocket's flight and burst, the monster truck's grow-in)
+        // instead of once a lap: the showcase rule, ttp_item_showcase.
+        engine.itemShowcase(forceItem);
         window.__engine = engine;
         scene.bindSession(engine.h);
         scene.hold(!driving);
@@ -672,32 +707,16 @@ export function runDisplayScenario(opts, ctx) {
       for (const id of [...scene.cars.keys()]) scene.removeCar(id);
       // cell:false — no split-screen: one camera over the whole showroom, which
       // is the one this page hands to the viewer.
-      ids.forEach((i) => scene.addCar(i, i, MODEL_NAMES[modelOf(i)] || `Car ${i + 1}`,
-                                      { cell: false, carIndex: modelOf(i) }));
-
-      // Spending the held item from out here rather than on the bot's own hold,
-      // so a forced roulette actually SHOWS the thing on a loop (the rocket's
-      // flight and burst, the monster truck's grow-in) instead of once a lap.
-      // The car furthest back fires, which is both the most dramatic and what
-      // the catch-up items are for. Lifted from the race previews above.
-      let useSeq = 0, fireCd = 1.2;
-      function spendHeldItem(snap, dt) {
-        fireCd -= dt;
-        if (fireCd > 0) return;
-        if (forceItem === 'monster' && snap.cars.some((c) => c.monster)) return;
-        const armed = snap.cars.filter((c) => c.item && !c.finished);
-        if (!armed.length) return;
-        armed.sort((a, b) => a.totalS - b.totalS);
-        engine.processInput(armed[0].id, { u: ++useSeq });
-        fireCd = forceItem === 'monster' ? 1.6 : 1.3;
-      }
+      // Labelled by MODEL rather than by driver: this page is a catalogue of
+      // the kit, and the roster's names say nothing about which car is which.
+      field.forEach((f, i) => scene.addCar(f.peerIndex, f.colorIndex,
+                                           MODEL_NAMES[f.carIndex] || `Car ${i + 1}`,
+                                           { cell: false, carIndex: f.carIndex }));
 
       scene.onFrame = (dt) => {
         if (!driving) return;   // parked: the renderer holds the grid at rest
         engine.update(dt * 1000);
-        const snap = engine.getSnapshot();
-        if (forceItem) spendHeldItem(snap, dt);
-        if (raceOver(snap)) newSession();   // endless: back to the grid, lap again
+        if (raceOver(engine.getSnapshot())) newSession();   // endless: back to the grid, lap again
       };
 
       // The gallery chrome's control surface. Same-origin, so the page reaches
@@ -813,20 +832,25 @@ export function runDisplayScenario(opts, ctx) {
   }
 
   // ---- the cup's chained start (scenario=chain) ----
-  // The one transition in the game with no lobby step to hide behind: a cup race
-  // ends, the intermission board goes up, and the next circuit has to already be
-  // on screen when the board comes down. Live play meshes it UNDER the board
-  // (main.js prepareNextTrack → Stage.prepare) so the chained start has nothing
-  // left to build; done at the start instead, the countdown ticks over the
-  // OUTGOING circuit and then hitches. This preview loops that transition around
-  // a cup's four tracks so the whole thing can be watched, which no still can
-  // show and no assertion reads as well as an eye does.
+  // THE WHOLE END-OF-RACE BEAT, on a loop: the flag, the frozen finish frame
+  // wearing its place cards, the board fading up over it a flourish later, and
+  // then the next circuit's countdown with no lobby step in between. Every one
+  // of those is a MOMENT rather than a picture — no still shows a board arriving
+  // late, and no assertion reads the join between them as well as an eye does.
+  //
+  // The chained start is the part with nothing to hide behind: the next circuit
+  // has to already be on screen when the board comes down. Live play meshes it
+  // UNDER the board (main.js prepareNextTrack → Stage.prepare) so the start has
+  // nothing left to build; done at the start instead, the countdown ticks over
+  // the OUTGOING circuit and then hitches. This loops the lot around a cup's
+  // four tracks.
   //
   // NOTHING HERE KEEPS ITS OWN COPY OF THE SEQUENCE. showBoard is the real
   // results renderer, showCountdownBanner the real banner, the scene work is
   // Stage.prepare / setTrack / rebuild IN THE ORDER THE WALKS EMIT IT
   // (place-track, hide-results, reset-scene-cars, create-session, bind-session,
-  // start-countdown), the board sits up for the layer's own intermissionMs, and
+  // start-countdown), the flag freezes and paints in endRace's order, the two
+  // waits are the layer's own flourishMs and intermissionMs, and
   // the countdown is a REAL countdown-mode session: it ticks at the sim's 1 Hz
   // and flips `racing` inside the n=0 beat, so the field leaves on GO because
   // the game says so and not because this file agreed to. A hand-rolled beat
@@ -1066,15 +1090,31 @@ export function runDisplayScenario(opts, ctx) {
       // first one. The chain then carries on through THAT track's cup, so the preview
       // still shows what it is for: one cup, raced in order.
       const cup = CUPS.find((c) => c.tracks.includes(ctx.track.trackId)) || CUPS[0];
-      const grid = raceGrid(buildSlots(players));
-      const ids = grid.map((g) => g.slot);
-      const field = grid.map((g) => ({ peerIndex: g.slot, stats: statsFor(g.carIndex) }));
+      const { field, bots } = raceField();
       const entry = (id) => built.get(id);
 
-      let leg = Math.max(0, cup.tracks.indexOf(ctx.track.trackId));  // which of the cup's tracks is racing
+      const firstLeg = Math.max(0, cup.tracks.indexOf(ctx.track.trackId));
+      let leg = firstLeg;          // which of the cup's tracks is racing
       let engine = null;
-      let onBoard = false;  // the intermission is up; the sim is done
-      let boardMs = 0, raceMs = 0, lastHud = 0;
+      // race → flourish (the frozen finish frame) → board → race. `phaseMs` is
+      // the clock of whichever of the last two is up; the race keeps its own.
+      let phase = 'race';
+      let phaseMs = 0, raceMs = 0, lastHud = -Infinity;   // -Infinity: the first frame paints
+      // The seats the sim treats as PEOPLE — the ones whose crossing is the flag,
+      // and the only ones with a split-screen cell to carry a place card.
+      const humanIds = new Set(field.filter((f) => !f.ai).map((f) => f.peerIndex));
+
+      // SOUND, and this is the one preview that carries MUSIC. Standalone only,
+      // the same rule the race previews follow: a grid of gallery iframes all
+      // playing at once is cacophony, and a card whose frames holdFrame idles
+      // would queue beats forever. It earns the song because it is the only card
+      // that plays the beat the song has to survive — the flag, the flourish,
+      // and the board landing on top of it.
+      //
+      // Decided by the production layer off the bound session, exactly as
+      // main.js does it: nothing here picks a cue or a track.
+      const audible = !inIframe && !!window.__audio && !!window.__audioDecide;
+      const sfx = (cmds) => { if (audible) window.__audio.apply(cmds); };
 
       // The launch, performed in the walks' own order. The two rebuild triggers
       // (setTrack, rebuild) come out as no-ops when the board above already
@@ -1084,57 +1124,143 @@ export function runDisplayScenario(opts, ctx) {
         scene.setTrack(t);                                    // place-track
         hideResults();                // hide-results
         for (const id of [...scene.cars.keys()]) scene.removeCar(id);
-        grid.forEach((g) => scene.addCar(g.slot, g.slot, g.name, { carIndex: g.carIndex, cell: g.human }));
+        field.forEach((f) => scene.addCar(f.peerIndex, f.colorIndex, f.name,
+                                         { carIndex: f.carIndex, cell: !f.ai }));
         scene.rebuild();                                      // reset-scene-cars
         if (engine) engine.dispose();                         // dispose-session
         // A COUNTDOWN-MODE session, not a bare one: the beats, their cadence and
         // the moment the field is allowed to move are all its own, drained to
         // the banner through the callback the live shell uses.
+        logDeal(log);
         engine = new NativeRaceSession(field, t, {            // create-session
-          bots: botSpecs(ids),
-          onCountdownTick: (n) => showCountdownBanner(countdownBeat(n))
+          bots,
+          onCountdownTick: (n) => showCountdownBanner(countdownBeat(n)),
+          onRaceEvent: raceEventPerformer(scene, log),
         });
         window.__engine = engine;
         scene.bindSession(engine.h);                          // bind-session
+        if (audible) window.__audioDecide.bind(engine.h);
         // The manifest's own count, and the same E2E override the live launch
         // reads — not a 3 retyped here.
         engine.startCountdown(window.__countdownSeconds || window.COUNTDOWN_SECONDS);
         for (const c of engine.getSnapshot().cars) scene.setCarHud(c.id, c);
-        onBoard = false; raceMs = 0;
+        phase = 'race'; raceMs = 0;
       }
 
-      // End of a leg: the board goes up and the NEXT circuit is meshed behind it.
-      function intermission() {
-        showBoard(cupBoard(leg, false));
+      // THE FLAG, in main.js's order: freeze the picture BEFORE running the sim
+      // on, or the just-finished car's chase camera whips off after a pose the
+      // screen no longer shows. Then one HUD paint — the same one endRace emits
+      // — and that paint is the whole point of this leg: it is what puts the
+      // "nth place" card in every human's cell.
+      //
+      // Live the flag IS every human home; a preview leg is cut on the clock
+      // instead, so bring them in in the order they are running and let the
+      // fast-forward resolve the CPU fill exactly as the live one does.
+      //
+      // NO BOARD HERE. That is the beat this preview exists to show.
+      function flag() {
+        // Live the flag IS every human home; a preview leg is cut on the clock
+        // instead, so bring them in in the order they are running.
+        const home = engine.getSnapshot().cars
+          .filter((c) => humanIds.has(c.id) && !c.finished)
+          .sort((a, b) => a.position - b.position);
+        home.forEach((c, i) => engine.forceFinish(c.id, raceMs / 1000 + i * 0.4));
+        // AND NOTHING STOPS. Hold the sim's own end open so the race runs on
+        // through the flourish — the cars that are home drive themselves, the
+        // ones that are not race on, the song keeps playing and the voices keep
+        // sounding. Without the hold the session would end on the very next
+        // update, because these humans were the last cars still running.
+        engine.holdEnd(true);
+        for (const c of engine.getSnapshot().cars) scene.setCarHud(c.id, c);   // paint-hud
+        phase = 'flourish'; phaseMs = 0;                      // arm-results
+      }
+
+      // The flourish's far end, in main.js's order: drop the hold, freeze the
+      // picture, THEN resolve whatever is still running — the burst draws no
+      // frames, so every remaining car teleports to the line and the freeze is
+      // what keeps that off screen. Then the board.
+      function endFlourish() {
+        engine.holdEnd(false);
+        scene.hold(true);
+        engine.fastForwardToEnd();
+        for (const c of engine.getSnapshot().cars) scene.setCarHud(c.id, c);   // paint-hud
+        sfx(window.__audioDecide.stopVoices());   // a frozen frame holds no voices open
+        board();
+      }
+
+      // The board arrives a flourish later, fading up over the held finish frame
+      // (display.css) — and the NEXT circuit is meshed behind it.
+      function board() {
+        sfx(window.__audioDecide.stopMusic());                // …with the board
+        showBoard(previewBoard('intermission', ctx.track.trackId, players, seedOpt.seed ?? 1, leg));   // show-results
         leg = (leg + 1) % cup.tracks.length;
         scene.prepare(entry(cup.tracks[leg]));
-        onBoard = true; boardMs = 0;
+        phase = 'board'; phaseMs = 0;                         // arm-intermission
       }
 
+      // The board's "starting in N…", ticked exactly as the live shell ticks it
+      // (main.js renderIntermissionCountdown): a fresh ceil off the ui model
+      // every beat rather than a counter this side decrements, so it cannot
+      // drift and it cannot disagree with the live footer.
+      //
+      // Off the FRAME clock, not main.js's setInterval, for the reason every
+      // other clock in this preview is: a gallery card's pause has to freeze the
+      // footer along with the picture, and an interval would march on behind a
+      // still. The span only exists once the board turns to its cup phase — the
+      // race phase has no footer — so a null here is "not up yet", not a fault.
+      function tickNextSecs(remainMs) {
+        const secs = el('results-next-secs');
+        if (secs) secs.textContent = String(intermissionSecs(remainMs, 0));
+      }
+
+      const log = raceLog();
       launch();
-      scene.onFrame = (dt) => {
+      // FROM THE TOP, in place: the same launch on the same first leg, for the trailer
+      // editor's backward seek. A simulation only runs forward, so a rewind is this
+      // plus a wind — and this is what makes it a wind rather than a page boot.
+      const restart = () => { leg = firstLeg; launch(); };
+      // The mix is decided on Stage's frame clock, like the footer above and for the
+      // same reason: the decision layer spaces its screeches and lap chimes by it, and
+      // under a capture gate a wall-clock read spans hundreds of ms per frame.
+      scene.onFrame = (dt, nowMs) => {
         const ms = dt * 1000;
-        if (onBoard) {
-          // The board sits for the layer's OWN budget, which is also the number
+        log.frameMs = nowMs;
+        if (phase === 'board') {
+          // The board sits for the layer's own budget, which is also the number
           // it is at that moment printing in its "starting in N…" footer.
-          boardMs += ms;
-          if (boardMs >= intermissionMs()) launch();
+          phaseMs += ms;
+          const remain = intermissionMs() - phaseMs;
+          tickNextSecs(remain);
+          if (remain <= 0) launch();
           return;
+        }
+        if (phase === 'flourish') {
+          // STILL RACING. The only difference from the beat above is that the
+          // clock is now counting the flourish out; everything else — the sim,
+          // the HUD, the mix — carries on exactly as it did a moment ago.
+          phaseMs += ms;
+          if (phaseMs >= flourishMs()) { endFlourish(); return; }
         }
         // Countdown and race are ONE path here exactly as they are in main.js:
         // the session is updated from the first countdown frame on (cars drawn
         // and steerable, physics held), and IT decides when they are racing.
         engine.update(ms);
-        const now = performance.now();
+        const now = nowMs;
+        sfx(window.__audioDecide.frame(now));   // one frame of the mix
         if (now - lastHud > HUD_TICK_MS) {
           lastHud = now;
           for (const c of engine.getSnapshot().cars) scene.setCarHud(c.id, c);
         }
-        if (!engine.racing) return;   // still counting down
+        if (!engine.racing) return;   // still counting down (never true past the flag)
+        if (phase === 'flourish') return;   // the race clock stopped at the flag
+        // THE SONG STARTS ON GO, not at the launch. That is where the live walk
+        // puts it (race_flow's raceStart, not launchRace), so the countdown beats
+        // play over silence and the music arrives with the field.
+        if (!raceMs && audible) sfx(window.__audioDecide.startMusic(scene.biome()));
         raceMs += ms;
-        if (raceMs >= CHAIN_RACE_MS || raceOver(engine.getSnapshot())) intermission();
+        if (raceMs >= CHAIN_RACE_MS || raceOver(engine.getSnapshot())) flag();
       };
-      holdFrame(true);   // gallery: the card's ▶ runs the loop; a standalone tab just runs
+      holdFrame(true, previewControl(restart, log));   // gallery: the card's ▶ runs the loop; a standalone tab just runs
     }
     return;
   }
@@ -1151,45 +1277,34 @@ export function runDisplayScenario(opts, ctx) {
     const { scene, track } = ctx;
     // (race screen already shown synchronously above, before the GLB load)
 
-    // Give each preview car the model + stats for its slot so the gallery shows
-    // the real spread of handling and the new car-car bumping, not a uniform field.
-    const grid = raceGrid(buildSlots(players));
-    const ids = grid.map((g) => g.slot);
-    const field = grid.map((g) => ({ peerIndex: g.slot, stats: statsFor(g.carIndex) }));
+    // Each car carries the model + handling stats its seat resolves to, so the
+    // gallery shows the real spread of handling and the car-car bumping, not a
+    // uniform field. All of that is the launch's (raceField).
+    const { field, bots } = raceField();
 
-    // The 'rocket' scenario routes the engine's hit event to the impact burst (live
-    // main.js does this in onRaceEvent; the gallery has no relay, so we wire it here).
-    // Sound only plays STANDALONE (own tab, not a gallery-grid iframe) — a wall of
-    // thumbnails all firing rockets would be cacophony. Audio stays locked until the
-    // viewer's first click (main.js wires the gesture-resume); window.__audio is the
-    // shared RaceAudio the host built. Same not-in-iframe gate as the free camera
-    // (inIframe is computed once at the top of runDisplayScenario).
-    const sfx = (!inIframe && window.__audio) ? window.__audio : null;
-    // The rocket FLIGHT (jet) is a sustained voice driven per-frame below (driveGalleryRocketAudio),
-    // held for the whole air time — not a one-shot. Only the impact is event-driven here.
-    const onRaceEvent = kind === 'rocket'
-      ? (ev) => {
-          if (ev.type === 'spin' && ev.cause === 'rocket') { scene.rocketImpact(ev.id); if (sfx) sfx.rocketHit(); }
-          else if (ev.type === 'rocket_expire') { scene.rocketExpire(ev.s, ev.lat); if (sfx) sfx.rocketHit(); } // whiff self-destruct
-        }
-      : kind === 'monster'
-      ? (ev) => {
-          if (!sfx) return;
-          // the morph itself is snapshot-driven in onFrame (setCarMonster); here we voice the
-          // transform: inflate on use, deflate on lapse, and the comedy slip on a body-check.
-          if (ev.type === 'item_use' && ev.item === 'monster') sfx.monsterInflate();
-          else if (ev.type === 'monster_end') sfx.monsterDeflate();
-          else if (ev.type === 'spin') sfx.spin();
-        }
-      : () => {};
-    let galleryRocketIds = new Set();
-    function driveGalleryRocketAudio(snap) {
-      if (!sfx) return;
-      const seen = new Set();
-      for (const r of (snap.rockets || [])) { seen.add(r.id); sfx.rocketFlight(r.id, 1); } // demo: full level (no human-distance to scale by)
-      for (const id of galleryRocketIds) if (!seen.has(id)) sfx.rocketFlight(id, 0);
-      galleryRocketIds = seen;
-    }
+    // Pickups, strikes and whiffs land on the picture as they do live (raceEventPerformer).
+    const log = raceLog();
+    const onRaceEvent = raceEventPerformer(scene, log);
+
+    // SOUND, THROUGH THE PRODUCTION DECISION LAYER. The preview is a real native
+    // sim on the bench field, whose player seats are autopiloted PARTICIPANTS —
+    // so the C++ layer has its four listeners and its four voiced cars and can
+    // decide the whole mix (engines, squeal, brake, boost wind, the rocket's jet,
+    // the transformed car's growl) exactly as it does in a live race. There is no
+    // gallery-only cue path any more.
+    //
+    // Only the two ITEM demos are bound, and only STANDALONE (own tab, not a
+    // gallery-grid iframe): a wall of thumbnails all firing rockets would be
+    // cacophony, and a bound session whose frames never run (holdFrame idles
+    // every card) would queue beats forever. ?scenario=bench stays silent too —
+    // audio work would perturb the reading it exists to take. Audio is locked
+    // until the viewer's first click (main.js wires the gesture-resume).
+    //
+    // …and every live kind when the sound is being RENDERED (RaceAudio.offline, the
+    // trailer's ?offlineaudio seam): there the graph plays to nobody, and a plain
+    // race wants its engines and cornering in the capture as much as the item demos.
+    const audible = !inIframe && !!window.__audio
+      && (kind === 'rocket' || kind === 'monster' || window.__audio.offline);
 
     // Self-driving preview: every car is one of the sim's own AI racers (same personas
     // main.js hands the wasm for the live CPU fill), so the gallery shows real bot
@@ -1200,69 +1315,88 @@ export function runDisplayScenario(opts, ctx) {
     // this one item (the same knob as the debug ?item=). Cars still have to collect it,
     // so the first showcase shot lands a box-run into the race rather than at 0.8s.
     const forceItem = (kind === 'rocket' || kind === 'monster') ? kind : null;
-    const newSession = () => bareSession(field, track, { bots: botSpecs(ids), onRaceEvent, forceItem, ...seedOpt });
+    // `?hold=` — a screenshot card's race moment (galleryScenarios.js `hold`),
+    // re-armed on every deal so a redealt race stops at the same moment.
+    const holdParam = new URLSearchParams(location.search).get('hold');
+    const hold = holdParam ? JSON.parse(holdParam) : null;
+    // The engine then GIVES the item and fires it on a loop, so the preview shows
+    // its showcase (rocket flight + impact burst; the monster's grow-in and the
+    // field it ploughs through) every couple of seconds instead of whenever a car
+    // happens through a box. WHO fires and when is ttp_item_showcase's rule, shared
+    // with both TV harnesses — it lived here alone once, which is why the item
+    // cards never agreed across platforms.
+    const newSession = () => {
+      const s = bareSession(field, track, { bots, onRaceEvent, forceItem, ...seedOpt });
+      s.itemShowcase(forceItem);
+      if (hold && !s.shotHold(hold)) console.error(`[harness] the engine refused hold ${holdParam}`);
+      return s;
+    };
     let engine = newSession();
     window.__engine = engine;
 
     for (const id of [...scene.cars.keys()]) scene.removeCar(id);
     // Humans get their split-screen cell, the CPU fill drives cell-less — the
     // C++ rule live launches apply (race_flow's cell = !ai).
-    grid.forEach((g) => scene.addCar(g.slot, g.slot, g.name, { carIndex: g.carIndex, cell: g.human }));
+    field.forEach((f) => scene.addCar(f.peerIndex, f.colorIndex, f.name,
+                                     { carIndex: f.carIndex, cell: !f.ai }));
     scene.bindSession(engine.h); // the renderer draws this session's cars
+    if (audible) window.__audioDecide.bind(engine.h); // …and the audio hears it
 
-    const live = kind === 'racing' || kind === 'rocket' || kind === 'monster';
+    const live = kind === 'racing' || kind === 'rocket' || kind === 'monster' || kind === 'bench';
 
-    // The forced item (above) is then SPENT from out here rather than on the bot's own
-    // 1.5–4s hold, so the preview loops its showcase (rocket flight + impact burst; the
-    // monster's grow-in and the field it ploughs through) instead of showing one event a
-    // lap. The car furthest BACK fires — the most dramatic user, and the one the catch-up
-    // items are for — on a cooldown so it doesn't become a barrage. processInput's use
-    // flag is sticky (a changed `u` arms the car there and then), which is what lets the
-    // host spend a wasm-side bot's item at all.
-    let useSeq = 0, fireCd = 0.8; // first showcase shot as soon as someone is armed
-    function spendHeldItem(snap, dt) {
-      fireCd -= dt;
-      if (fireCd > 0) return;
-      if (kind === 'monster' && snap.cars.some((c) => c.monster)) return; // one transform at a time
-      const armed = snap.cars.filter((c) => c.item && !c.finished);
-      if (!armed.length) return;
-      armed.sort((a, b) => a.totalS - b.totalS);
-      engine.processInput(armed[0].id, { u: ++useSeq });
-      fireCd = kind === 'monster' ? 1.6 : 1.3; // gap before the next one (monsters last, so give them room)
+    // The seats the decision layer treats as PEOPLE: not in the sim's aiIds, so
+    // they are its listeners and the only cars it voices. The bench field's
+    // autopiloted player seats are exactly these, and they are also the ones
+    // carrying a split-screen cell.
+    const humanIds = new Set(field.filter((f) => !f.ai).map((f) => f.peerIndex));
+
+    let lastHud = -Infinity;   // the first frame paints
+
+    // Deal the race again from the grid. The end of a preview race does this to lap
+    // forever; the trailer editor does it to seek BACKWARD, a simulation having no way
+    // back but a fresh race wound forward. Same seed, same bots, same showcase clock,
+    // so it is the same race — which is what puts the editor's in-points where
+    // render.js will put them. dispose() frees the wasm session — a JS Game was just
+    // garbage, a handle isn't.
+    function redeal() {
+      // Every voice belongs to the session about to be freed, and nothing will
+      // feed it a zero level once the loop restarts on a fresh one — so kill
+      // them here, exactly as the end-of-race walk does in a live race.
+      if (audible) window.__audio.apply(window.__audioDecide.stopVoices());
+      engine.dispose();
+      engine = newSession();
+      window.__engine = engine;
+      scene.bindSession(engine.h);
+      if (audible) window.__audioDecide.bind(engine.h);
+      logDeal(log);
     }
 
-    let lastHud = 0;
-    scene.onFrame = (dt) => {
+    // The mix is decided on Stage's frame clock, for the reason the chain preview gives.
+    scene.onFrame = (dt, nowMs) => {
       if (!live) return; // frozen preview: the renderer holds the field (see below)
+      log.frameMs = nowMs;
       // The bots, item pickups and the roulette all run inside the wasm sim, and
       // the renderer reads the result from the same engine — so a frame is one
       // update plus the shell's own business below.
       engine.update(dt * 1000);
       const snap = engine.getSnapshot();
-      if (forceItem) spendHeldItem(snap, dt); // arms the next frame's use (post-snapshot)
-      if (kind === 'rocket') driveGalleryRocketAudio(snap); // sustained jet per in-flight rocket
-      // Monster demo (standalone tab only): voice the transformed car's deep big-truck
-      // engine growl, silent otherwise — so the gallery hears the sound change too.
-      if (kind === 'monster' && sfx) for (const c of snap.cars) sfx.engineDrive(c.id, c.monster ? c.spd / 1.2 : 0, MONSTER_ENGINE_MOD);
-      const now = performance.now();
+      const now = nowMs;
+      // One frame of the mix, decided off the bound session — the same call
+      // main.js makes, and the flush point for whatever the events that fired
+      // inside the update above decided.
+      if (audible) window.__audio.apply(window.__audioDecide.frame(now));
       if (now - lastHud > HUD_TICK_MS) {
         lastHud = now;
         for (const c of snap.cars) scene.setCarHud(c.id, c);
       }
       // Endless preview: once everyone crosses the line, reset and lap again.
-      // dispose() frees the wasm session — a JS Game was just garbage, a handle isn't.
-      if (raceOver(snap)) {
-        engine.dispose();
-        engine = newSession();
-        window.__engine = engine;
-        scene.bindSession(engine.h);
-      }
+      if (raceOver(snap)) redeal();
     };
 
     if (kind === 'countdown') {
       // HUD shows lap 1 while the lights count down.
       for (const c of engine.getSnapshot().cars) scene.setCarHud(c.id, c);
-      runCountdown();
+      showCountdownBanner(COUNTDOWN_STILL);
     } else if (kind === 'paused') {
       // Spin the field forward a few seconds so it reads mid-race, freeze it
       // (speed 0 → no wheel dust), then show the pause button + overlay over it.
@@ -1278,17 +1412,17 @@ export function runDisplayScenario(opts, ctx) {
       // (the car isn't forfeited until the grace window elapses).
       for (let t = 0; t < 90; t++) engine.update(33);
       const rcCars = engine.getSnapshot().cars;
-      dressItems(rcCars); // populate the cell item slots so the preview isn't all empty
+      dressItems(rcCars, field); // populate the cell item slots so the preview isn't all empty
       for (const c of rcCars) scene.setCarHud(c.id, c);
       scene.hold(true);
       // Fake a dropped racer: the last filled slot is reconnecting. Its car keeps
       // its cell; the reconnect QR is centred in that cell (the renderer positions
       // it). The QR encodes the join URL with the seat's ?claim= token (no relay
       // needed — the matrix is built in-browser).
-      const dropped = buildSlots(players).slice(-1)[0];
-      scene.setCarReconnect(dropped, buildReconnectCard({
-        name: FAKE_NAMES[dropped], colorIndex: dropped,
-        url: (location.origin || 'https://tinytrack.party') + '/TEST?claim=' + dropped
+      const dropped = humansFirst(field)[players - 1];
+      scene.setCarReconnect(dropped.peerIndex, buildReconnectCard({
+        colorIndex: dropped.colorIndex,
+        url: (location.origin || 'https://tinytrack.party') + '/TEST?claim=' + dropped.peerIndex
       }));
     } else if (kind === 'finished') {
       // One racer has crossed the line while the rest of the field races on: spin
@@ -1298,59 +1432,27 @@ export function runDisplayScenario(opts, ctx) {
       for (let t = 0; t < 160; t++) engine.update(33);
       // The finisher must be a HUMAN — the FINISHED card lives in a split-screen
       // cell, and the CPU fill has none.
-      const humanIds = new Set(grid.filter((g) => g.human).map((g) => g.slot));
       const leadId = engine.getSnapshot().cars.filter((c) => humanIds.has(c.id))
         .reduce((a, b) => (a.position <= b.position ? a : b)).id;
-      engine.forceFinish(leadId, FAKE_TIMES[0]); // promote the finisher to P1; the rest keep racing for position
+      // Promote the finisher to P1 at the winning time the boards show; the rest keep racing.
+      engine.forceFinish(leadId, previewBoard('results', track.trackId, players, seedOpt.seed ?? 1).order[0].time);
       const fnCars = engine.getSnapshot().cars;
-      dressItems(fnCars); // the still-racing cells carry items (setCarHud clears the finisher's own slot)
+      dressItems(fnCars, field); // the still-racing cells carry items (setCarHud clears the finisher's own slot)
       for (const c of fnCars) scene.setCarHud(c.id, c);
       scene.hold(true);
-    } else if (kind === 'results') {
-      // Freeze the grid behind the blurred results overlay. Every row is a plain
-      // finish; the late joiner riding along under the field gets the model's
-      // `joining` shape (no rank, no time — they race the next one).
-      const roster = humansFirst(grid);
-      const order = roster.map((g, i) => ({
-        playerId: g.slot, name: g.name, colorIndex: g.slot, finished: true, time: FAKE_TIMES[i],
-        racePlace: i + 1
-      }));
-      // The late joiner riding along under the field. Its seat colour can repeat
-      // a CPU livery — exactly as live, where a mid-race join takes a free SEAT,
-      // not a free livery in the running race.
-      const j = players % FAKE_NAMES.length;
-      order.push({ playerId: j, name: FAKE_NAMES[j], colorIndex: j, joining: true });
-      playBoard({ over: true, hostPeerIndex: roster[0].slot, order });
-    } else if (kind === 'intermission' || kind === 'podium') {
-      // Cup dressings of the same overlay: frozen grid behind either the mid-cup
-      // intermission (points board + "next up" footer) or the final podium.
-      // WHICH dressing is the model's call off `final` — the two previews differ
-      // only in the board handed to it.
-      const final = kind === 'podium';
-      playBoard(cupBoard(final ? CUPS[0].tracks.length - 1 : 1, final));
+    } else if (kind === 'results' || kind === 'intermission' || kind === 'podium') {
+      // Freeze the grid behind the board. Both kinds of board — a single race
+      // with a late joiner, and the cup's mid-way break or its podium — are
+      // ttp_ui_preview_board_json's, over the bench race launched here.
+      showBoard(previewBoard(kind, track.trackId, players, seedOpt.seed ?? 1));
     }
+    // The bench races the same loop everything else does — that is the point of
+    // measuring it — and then runs on under the readout instead of holding a
+    // frame for a card.
+    if (kind === 'bench') { startBenchReadout(scene, track); return; }
     // gallery: animated previews (racing/rocket/monster) hold a still grid and run via
     // the card's ▶; frozen previews (countdown/paused/reconnect/finished/results) paint
     // once and stay idle. Standalone tabs ignore this and run freely.
-    holdFrame(live);
-  }
-
-  function runCountdown() {
-    let timers = [];
-    const clear = () => { timers.forEach(clearTimeout); timers = []; };
-    const seq = [3, 2, 1, 0].map(countdownBeat);
-    const rest = { n: 3, slap: false, go: false };  // the frozen frame between replays
-    function run() {
-      clear();
-      let i = 0;
-      (function tick() {
-        showCountdownBanner(seq[i]);
-        i++;
-        if (i < seq.length) timers.push(setTimeout(tick, CD_BEAT_MS));
-        else timers.push(setTimeout(() => showCountdownBanner(rest), 1200));
-      })();
-    }
-    showCountdownBanner(rest); // frozen initial frame; ▶ replays the sequence
-    window.__TEST__.replay = run;
+    holdFrame(live, live ? previewControl(redeal, log) : null);
   }
 }

@@ -46,19 +46,22 @@ export async function init() {
     catalogue: c('ttp_ui_catalogue_json', 'string', []),
     progressLoad: c('ttp_ui_progress_load', 'number', ['string', 'number']),
     progressJson: c('ttp_ui_progress_json', 'string', []),
+    previewProgress: c('ttp_ui_preview_progress_json', 'string', []),
+    previewBoard: c('ttp_ui_preview_board_json', 'string', ['string', 'string', 'number', 'number', 'number']),
     screenStep: c('ttp_ui_screen_step', 'number', ['string', 'string']),
-    backEffect: c('ttp_ui_back_effect', 'string', ['string']),
+    backEffect: c('ttp_ui_back_effect', 'string', ['string', 'number', 'number']),
+    cover: c('ttp_ui_cover', 'string', ['string', 'number']),
     rosterSeatsFromRoom: c('ttp_ui_roster_seats_room_json', 'string', ['number', 'string']),
     seatGrid: c('ttp_ui_seat_grid_json', 'string', ['string']),
     cupSlot: c('ttp_ui_cup_slot_json', 'string', ['string']),
     reconnectDiff: c('ttp_ui_reconnect_diff_json', 'string', ['string', 'string']),
-    itemPushes: c('ttp_ui_item_pushes_live_json', 'string', ['number', 'string']),
+    itemPushes: c('ttp_ui_item_pushes_live_json', 'string', ['number']),
     welcomeItem: c('ttp_ui_welcome_item_live_json', 'string', ['number', 'string']),
     raceFlowLive: c('ttp_ui_race_flow_live_json', 'string', ['number', 'number']),
     freezePlan: c('ttp_ui_freeze_plan_json', 'string', ['number', 'number', 'number']),
     resultsAction: c('ttp_ui_results_action_json', 'string', ['number']),
-    standingsLive: c('ttp_ui_standings_live_json', 'string',
-      ['number', 'number', 'number', 'string', 'number']),
+    settleStandings: c('ttp_ui_settle_standings', 'number', ['number']),
+    resultsViewLive: c('ttp_ui_results_view_live_json', 'string', ['number', 'number']),
     resultsView: c('ttp_ui_results_view_json', 'string', ['string', 'number']),
     intermissionSecs: c('ttp_ui_intermission_secs', 'number', ['number', 'number'])
   };
@@ -111,11 +114,29 @@ export function catalogue() { return JSON.parse(fn.catalogue()); }
 export function progressLoad(json, unlockAll) { fn.progressLoad(json || '', unlockAll ? 1 : 0); }
 export function progressJson() { return fn.progressJson(); }
 
+// The screens gallery's fabrications (ttp_ui.h): the couch record a preview
+// loads, and a finished board over the bench race the harness launched.
+// `raceIndex` -1 is the card's own cup race.
+export function previewProgress() { return fn.previewProgress(); }
+export function previewBoard(kind, trackId, players, seed, raceIndex = -1) {
+  return JSON.parse(fn.previewBoard(kind, trackId, players, seed, raceIndex));
+}
+
 // ---- screens ---------------------------------------------------------------
 // >0 = a forward step, <0 = a retreat, 0 = same level. WALKING the stack is the
 // shell's (the History API here, Menu on tvOS); only the table is native.
 export function screenStep(prev, next) { return fn.screenStep(prev || '', next || ''); }
-export function backEffect(screen) { return fn.backEffect(screen || ''); }
+// `paused` and `raceEnded` are the two latches no handle knows (the same two
+// pauseRace() hands in): a live race freezes on back, the overlay thaws, and
+// only a finished one retreats a level.
+export function backEffect(screen, paused, raceEnded) {
+  return fn.backEffect(screen || '', paused ? 1 : 0, raceEnded ? 1 : 0);
+}
+// Which full-bleed cover this board owes — 'none' | 'boot'. `scenePainted` is
+// the one fact only a shell has: a BUILT scene having reached the panel.
+export function cover(screen, scenePainted) {
+  return fn.cover(screen || '', scenePainted ? 1 : 0);
+}
 
 // ---- the lobby -------------------------------------------------------------
 // The seat grid off a LIVE ROOM handle. A Seat carries name, colorIndex,
@@ -161,20 +182,19 @@ export function reconnectDiff(shownIds, seats) {
 }
 
 // ---- the ITEM push ---------------------------------------------------------
-// The cars and the CPU set come off the live session in C++; what crosses is
-// the shell's own outbox map — what each phone was last told, in insertion
-// order. An `item` that is undefined stays undefined through JSON.stringify
-// (the key vanishes), which is the third state the rule turns on.
-export function itemPushes(sessionHandle, lastItem) {
-  const last = [];
-  for (const [k, v] of lastItem) last.push(v === undefined ? { id: k } : { id: k, item: v });
-  const out = JSON.parse(fn.itemPushes(sessionHandle | 0, J(last)));
+// The cars, the CPU set and the OUTBOX — what each phone was last told — all
+// live behind the session handle, so nothing crosses but the handle, and the
+// answer is already stamped by the time it arrives (ttp_ui.h). Send what comes
+// back and keep no memory of it.
+export function itemPushes(sessionHandle) {
+  const out = JSON.parse(fn.itemPushes(sessionHandle | 0));
   // `item` is absent on the wire when it is undefined — reading the key back
   // gives undefined again, so the ITEM message keeps the shape it always had.
   return out.map((p) => ({ id: p.id, item: p.item }));
 }
 
-// The one-shot relight a (re)joining phone gets, off the live race.
+// The one-shot relight a (re)joining phone gets, off the live race. It stamps
+// the outbox too, so the next push tick does not repeat it.
 export function welcomeItem(sessionHandle, peerIndex) {
   return JSON.parse(fn.welcomeItem(sessionHandle | 0, id(peerIndex)));
 }
@@ -208,30 +228,32 @@ export function resultsAction(roomHandle) {
 }
 
 // ---- the standings board ----------------------------------------------------
+// THE BOARD IS ROOM-RETAINED, so there is no composer here and no board in this
+// shell at all: the race walk composes it and stores it behind the room handle,
+// ttp_net_lobby_frame puts it on the wire from there, and the rename walk
+// patches the stored one. This page only republishes.
 // (The Grand Prix chip rides the board's `cup.info` — ttp_ui_series_info_live_json
 // stays exported for a shell that draws the chip alone; this page reads it off
 // the board and wraps nothing.)
 
-// The board the TV and every phone render.
-//
-// ITS KEY ORDER IS NOT THE WIRE'S — see the key-order note on lobbyFrame in
-// NativeSessionModel.js. This board reaches phones inside the retained room
-// snapshot, and ttp_party.cc canonicalizes every outbound frame, so the order
-// ttp_ui_standings_json writes is sorted away before it leaves. The ordered
-// emitter is pinned by abi_check at the ABI boundary and by the frozen ui
-// corpus; it is not a wire guarantee.
-// results/cup/lateJoiners/host are gathered in C++ off the three handles
-// (ttp_ui_standings_live_json). The FIELD is the one shell-owned input left:
-// the launch's frozen copy plus the shell's rename/rekey repairs (the AI
-// racers are not in any roster the room knows).
-export function standingsPayload({ sessionHandle, roomHandle, over, results, autoAdvanceMs }) {
-  return JSON.parse(fn.standingsLive(
-    sessionHandle | 0, roomHandle | 0, b(over),
-    results ? J(results) : null,
-    autoAdvanceMs));
+// THE PODIUM REVEAL HAS LANDED: stamp `settled` on the room's retained board.
+// Answers whether it stamped, which is whether the snapshot must be republished.
+// WHICH boards settle is the rule's (only a cup's final one), so this is armed
+// on every results screen and the answer decides.
+export function settleStandings(roomHandle) {
+  return !!fn.settleStandings(roomHandle | 0);
 }
 
-// The results overlay, off that same board — pass it straight back.
+// The results overlay off the room's retained board — the live path, and the one
+// the TV's own results screen uses. `null` means NO board is out, which is not
+// an empty overlay: paint nothing rather than a blank one.
+export function resultsViewLive(roomHandle, { intermissionMs }) {
+  return JSON.parse(fn.resultsViewLive(roomHandle | 0, intermissionMs));
+}
+
+// The same overlay off a board handed in — the screenshot harness's synthetic
+// one (TestHarness.js), which has no room and no race behind it. Not the live
+// path; live play calls resultsViewLive above.
 export function resultsView(board, { intermissionMs }) {
   return JSON.parse(fn.resultsView(J(board), intermissionMs));
 }

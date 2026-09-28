@@ -53,9 +53,8 @@
  * are different players. Peer indices are numbers and bots are strings like
  * "ai-0"; both flow through the same field.
  *
- * NULL IS NOT ZERO. A seat with no car pick, a launch with no ?item override
- * and a drain that crossed no race end all come out as JSON null, never 0
- * or "".
+ * NULL IS NOT ZERO. A seat with no car pick and a launch with no ?item
+ * override come out as JSON null, never 0 or "".
  */
 #ifndef TTP_RACE_H
 #define TTP_RACE_H
@@ -89,6 +88,36 @@ TTP_ABI int ttp_race_configure(const char* json);
  * (tests/display-abi.test.js) and the test surfaces'. configure defaults to
  * this table when `personas` is absent, so a shipping shell never calls it. */
 TTP_ABI const char* ttp_race_personas_json(void);
+
+/* DEV/BENCH LATCH — off the shipping path, and a shell that races real people
+ * never calls it.
+ *
+ * On, every launch from here gives its PLAYER seats a controller as well: the
+ * field, the grid, the cells and the ids are a real launch's to the byte, and
+ * the sim supplies the steering a phone would. That is what makes a perf bench,
+ * a screenshot run and an attract race an AUTHENTIC race — an unsteered seat
+ * does not sit on the grid, because throttle is automatic: it accelerates away,
+ * never turns, and piles into the first corner.
+ *
+ * The seats stay PARTICIPANTS (ttp/race_flow.h, BotSpec::player): they are not
+ * in `aiIds`, they keep their split-screen cells, and the session still counts
+ * them, so the auto-pause rule does not tear the race down. Latched rather than
+ * passed per walk because it is a property of the RUN, not of one launch, and
+ * every walk that launches would otherwise grow a parameter no shipping caller
+ * would ever pass. */
+TTP_ABI void ttp_race_autopilot_players(int on);
+
+/* The bench field, WITHOUT a room: `players` player seats plus the CPU fill,
+ * gridded by the game's own rule (players at the back), every seat autopiloted.
+ * Answers {"field":[...],"bots":[...]} — the two arguments ttp_session_begin_field
+ * takes — so a harness with no relay draws the same picture the walk would.
+ *
+ * It is launchRace() itself behind this, not a second field builder: the whole
+ * point is that a bench on a browser and a bench on a television are measuring
+ * one arrangement. Names/liveries/cars for the player seats are the bench
+ * roster's, which is why they are decided here and not re-typed per platform. */
+TTP_ABI const char* ttp_race_bench_field_json(const char* trackId, int players,
+                                              double seed);
 
 /* The ops a walk's ANSWER can carry, as a JSON array of keys in a stable
  * order. A shell walks it at boot and asserts its performer switch covers
@@ -144,27 +173,35 @@ TTP_ABI const char* ttp_race_start_live_json(int roomHandle, int sceneReady,
  * forever; that routing table is not a shell concern any more. Ordinary events
  * run the finish/visuals rule, with humans-all-done read off the live handles
  * exactly when a finish asks for it. At the race's end the executor banks the
- * cup points against the room's series and retained field — before the board
- * effects, the order the corpus pins.
+ * cup points against the room's series and retained field, and then COMPOSES
+ * AND RETAINS the standings board behind the room — before the board effects,
+ * the order the corpus pins.
  *
  *   biome             the built scene's biome (the GO beat's music pick)
  *   audioReady        the device can play (a locked AudioContext picks no song)
  *   fastForwarding    inside the AI-only fast-forward burst: visuals silenced
- *   intermissionMs    ttp_race_intermission_ms(), or the E2E override
+ *   intermissionMs    ttp_race_intermission_ms(), or the E2E override — also
+ *                     the budget the retained board's cup chip is priced in
  *   nowMs             the shell's clock (the intermission deadline is absolute)
- *   resultsFailsafeMs ttp_race_results_failsafe_ms()
  *
- *   -> {"effects":[...], "results": obj|null}
+ *   -> {"effects":[...]}
  *
- * `results` is non-null exactly when the drain crossed the race's end: the
- * ranked board endRace hands its callback, which the show-results and final
- * broadcast-standings effects read as their context. No effect can carry it,
- * so it rides the answer. */
+ * NO `results` RIDER. It used to carry the ranked board endRace hands its
+ * callback, because the show-results and broadcast-standings effects needed it
+ * and no effect could. Both read the ROOM-RETAINED board now
+ * (ttp_ui_results_view_live_json, ttp_net_lobby_frame), so the rows never leave
+ * C++ and no shell holds an untyped perform-context to route them through. */
 TTP_ABI const char* ttp_race_events_live_json(int sessionHandle, int roomHandle,
                                               const char* biome,
                                               int audioReady, int fastForwarding,
-                                              double intermissionMs, double nowMs,
-                                              double resultsFailsafeMs);
+                                              double intermissionMs, double nowMs);
+
+/* THE FLAG: every human is home. Perform this, set ttp_hold_end(session, 1), and
+ * keep updating — the race runs on for the flourish with the place cards up. The
+ * `arm-results` effect it emits carries how long; when that fires, clear the
+ * hold, fast-forward and drain, and the _raceEnd arm above lands the board.
+ *   -> {"effects":[...]} */
+TTP_ABI const char* ttp_race_flag_live_json(int roomHandle);
 
 /* ---- the cup chain / the way out ----------------------------------------- */
 
@@ -208,10 +245,42 @@ TTP_ABI const char* ttp_race_pause_live_json(int sessionHandle, int roomHandle,
 TTP_ABI const char* ttp_race_resume_live_json(int sessionHandle, int roomHandle,
                                               int paused, int autoPaused, int raceEnded);
 
-/* The two game-timing budgets (race_flow.h INTERMISSION_MS /
- * RESULTS_FAILSAFE_MS). Read them; the numbers have no shell home anymore. */
+/* The game-timing budget (race_flow.h INTERMISSION_MS). Read it; the number has
+ * no shell home anymore. */
 TTP_ABI double ttp_race_intermission_ms(void);
-TTP_ABI double ttp_race_results_failsafe_ms(void);
+
+/* How long the frozen finish frame keeps the screen before the board fades up
+ * (race_flow.h FINISH_FLOURISH_MS). A live shell never needs this — the flag's
+ * own 'arm-results' effect carries it — so the reader is the gallery's chained
+ * preview, which stages the beat without a room to walk. */
+TTP_ABI double ttp_race_flourish_ms(void);
+
+/* ---- the countdown gate --------------------------------------------------- */
+
+/* MAY THE COUNTDOWN START YET? Poll it once a frame after a launch, and perform
+ * the answer's `countdownEffects` the first time this says yes.
+ *
+ * EVERY launch answers with TWO lists and there is no other shape: `effects`,
+ * walked at once, and `countdownEffects` — start-countdown alone — held back
+ * until the scene the race is about to be driven on has stopped assembling
+ * itself. A shell that walks only the first list starts a race that never
+ * counts down. race_flow.h's countdownReady says what the wait buys and why it
+ * is measured in frames rather than in the build returning.
+ *
+ *   sceneBuilt     the shell's "my scene build has returned" latch
+ *   measuring      is this surface feeding ttp_perf_sample at all? A shell that
+ *                  is not (the web under automation or a pinned ?dpr=) has no
+ *                  frame evidence coming, and an empty window must not be read
+ *                  as a scene that has not drawn yet — see race_flow.h.
+ *   sinceLaunchMs  the shell's clock since it walked `effects` (the backstop)
+ *
+ * THE FRAME EVIDENCE IS NOT PASSED IN. It is read here off perf::monitor() —
+ * the same window ttp_perf.h keeps and the render-scale rule steers off — so a
+ * shell cannot gate a countdown on numbers its own readout disagrees with, and
+ * three shells cannot pick three different series out of it. Every shell
+ * already resets that window on a scene build, so it is this scene's frames. */
+TTP_ABI int ttp_race_countdown_ready(int sceneBuilt, int measuring,
+                                     double sinceLaunchMs);
 
 /* ---- the roster-driven repairs ------------------------------------------- */
 

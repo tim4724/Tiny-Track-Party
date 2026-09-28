@@ -114,6 +114,56 @@
      ledge is always the difference, so the two can never drift apart. */
   --btn-drop:     4px;                                /* ledge depth at rest   */
   --btn-sink:     3px;                                /* travel while pressed  */
+  /* How long the spring BACK takes. Going down is always 0s (see .btn:active),
+     so this is the only press duration there is — and every pressable surface
+     in the game reads it, the phone's tiles included (controller.css). It was
+     re-typed in seven places when it moved from 60ms to 50ms, which is six
+     places to miss. */
+  --press-up:     0.05s;
+
+  /* -- safe zone (TV overscan) ---------------------------------------------
+     A television may crop the edges of the picture it is handed, and neither
+     the browser nor Android can ask it how much: overscan is a property of the
+     panel, not of the signal.
+
+     2.5%, WHICH IS THE REAL FIGURE AND NOT GOOGLE'S. The classic "televisions
+     crop about 5%" means 5% of the PICTURE, so ~2.5% per edge; Google's TV
+     guidance doubles that to 5% a side, which is the CRT-era worst case and
+     dates from 2014. A modern panel fed a 1:1 HDMI signal crops nothing at all.
+     Shipped at 5% first and rejected on sight: it pushed the chrome so far in
+     that it read as floating rather than as cornered.
+
+     FRACTIONS OF THE SURFACE, not lengths, because overscan is a percentage and
+     an authored px is not: 48px is 2.5% of a 1920 board and 3.75% of a 1280 one.
+     Each shell converts once and reports the pair to `ttp_display_safe_insets`,
+     which is what insets the per-cell HUD rects — see public/display/CLAUDE.md.
+     Applied to EVERY edge of every cell and not only to the screen's own, which
+     is a look decision argued where it is applied (ttp_display_core.cc).
+     tvOS does NOT read these: it reports the safe area the system gives it,
+     which is a real 90/60 pt rather than an assumption.
+
+     The steer bar is deliberately NOT inset by them. It is the one HUD element
+     the player also has in their hand, and moving it up crowds the car in a
+     stacked cell — TtpRendererFrame.cpp says so where it places the bar. */
+  --safe-frac-x:  0.025;                              /* per side, of width    */
+  --safe-frac-y:  0.025;                              /* per side, of height   */
+
+  /* -- track map (the circuit mini-map's marks) -----------------------------
+     The marks a circuit's mini-map is drawn with, in the schematic's OWN
+     viewBox units (`ttp_track_schematic_json` projects into 0 0 256 256, and
+     `schematic.cc` writes that literal). Not lengths: a tile is drawn at
+     whatever size its slot is, so a px width would be a second, contradictory
+     scale.
+
+     THEY ARE HERE BECAUSE THREE PLATFORMS DRAW THIS PICTURE. The projection is
+     C++'s and the strokes are each shell's, so the widths were spelled once in
+     the CSS below, once in Swift and once in Kotlin, with nothing that could
+     see all three — the exact shape rule 1 exists to stop. As :root tokens they
+     ride `design-tokens.json`, which both TV shells already read at boot. */
+  --track-map-casing:     23;                         /* white casing under    */
+  --track-map-road:       14;                         /* the ink road over it  */
+  --track-map-start-r:    13;                         /* start/finish dot      */
+  --track-map-start-ring:  4;                         /* its white ring        */
 }
 
 /* 3. Base / reset --------------------------------------------------------- */
@@ -141,7 +191,14 @@ body {
 
 /* Button — chunky sticker push-button: flat colour, ink border, white text,
    hard ink ledge. Set --btn-bg to recolour; pressed = translateY onto the
-   ledge. Modifiers below cover the common roles. */
+   ledge. Modifiers below cover the common roles.
+
+   Three ways to look pressed, and they mean different things: `:active` is the
+   browser's, `.held` is a finger on it RIGHT NOW where :active can't be trusted
+   to say so (controller/press.js — WebKit withholds it on touch), and
+   `.is-pressed` is a control latched down by app state, with no finger on it
+   at all. `.held` is only ever set on an ENABLED control, which is why the
+   rules below do not repeat the `:disabled` guard their `:active` half carries. */
 .btn {
   --btn-bg: var(--brand);
   display: inline-block;
@@ -157,12 +214,22 @@ body {
   background: var(--btn-bg);
   box-shadow: 0 var(--btn-drop) 0 var(--btn-ledge);
   cursor: pointer;
-  transition: transform 0.06s ease, box-shadow 0.06s ease, filter 0.06s ease;
+  /* ASYMMETRIC, and that is the whole point. Going DOWN is instant (see the
+     pressed rule below): the finger is already there, so any duration at all is
+     time the button spends not yet looking pressed — 30ms of ease measured as
+     33-43ms from touch to settled, because the transition cannot start until
+     the frame after the class lands. Coming BACK UP is where the movement goes,
+     at 50ms, so the button springs rather than snapping: cutting BOTH ends to
+     zero was tried once and read as harsh, which is what that was really about.
+     Every pressed surface on the phone shares this pair; see the tiles in
+     controller.css. */
+  transition: transform var(--press-up) ease, box-shadow var(--press-up) ease, filter var(--press-up) ease;
 }
 .btn:hover { filter: brightness(1.04); }
-.btn:active, .btn.is-pressed {
+.btn:active, .btn.held, .btn.is-pressed {
   transform: translateY(var(--btn-sink));
   box-shadow: 0 calc(var(--btn-drop) - var(--btn-sink)) 0 var(--btn-ledge);
+  transition: transform 0s, box-shadow 0s, filter var(--press-up) ease;   /* down NOW */
 }
 .btn--brand  { --btn-bg: var(--brand); }
 .btn--accent { --btn-bg: var(--accent); }   /* red now — white text stands */
@@ -174,7 +241,7 @@ body {
   color: var(--ink);
   box-shadow: 0 var(--btn-drop) 0 rgba(42, 39, 53, 0.35);
 }
-.btn--ghost:active, .btn--ghost.is-pressed {
+.btn--ghost:active, .btn--ghost.held, .btn--ghost.is-pressed {
   box-shadow: 0 calc(var(--btn-drop) - var(--btn-sink)) 0 rgba(42, 39, 53, 0.35);
 }
 .btn:disabled, .btn[disabled] {       /* e.g. join button while connecting */
@@ -192,10 +259,14 @@ body {
   border-radius: var(--r-sm);
   box-shadow: var(--shadow-pop);
   cursor: pointer;
-  transition: transform 0.06s ease, box-shadow 0.06s ease, filter 0.06s ease;
+  /* same press, and the same reasoning as .btn's transition above */
+  transition: transform var(--press-up) ease, box-shadow var(--press-up) ease, filter var(--press-up) ease;
 }
 .icon-btn:hover:not(:disabled) { filter: brightness(1.03); }
-.icon-btn:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: none; }
+.icon-btn:active:not(:disabled), .icon-btn.held {
+  transform: translate(2px, 2px); box-shadow: none;
+  transition: transform 0s, box-shadow 0s, filter var(--press-up) ease;
+}
 .icon-btn:disabled { opacity: 0.5; cursor: default; }
 
 /* Pause glyph — two rounded bars, sized off the button's text colour. */
@@ -294,11 +365,15 @@ body {
    with the toy road ribbon. Shared by the phone's track picker and the
    display's lobby cup slot; the container sizes it. */
 .track-map { width: 100%; aspect-ratio: 1 / 1; display: block; border-radius: var(--r-sm); background: color-mix(in srgb, var(--brand), #fff 78%); }
-/* stroke-widths are in viewBox units; the schematic viewBox is 0 0 256 256 (see
-   trackSchematic VIEW) so these are ~2.56× their old 0-100 values. */
-.track-map__casing { fill: none; stroke: #fff; stroke-width: 23; stroke-linejoin: round; stroke-linecap: round; }
-.track-map__road { fill: none; stroke: var(--ink-2); stroke-width: 14; stroke-linejoin: round; stroke-linecap: round; }
-.track-map__start { fill: var(--danger); stroke: #fff; stroke-width: 4; }
+/* The marks are :root tokens (--track-map-*), because the two TV shells draw
+   this same picture from their own toolkits and read them out of the token
+   bake. They are in viewBox units; the schematic viewBox is 0 0 256 256 (see
+   trackSchematic VIEW) so these are ~2.56× their old 0-100 values.
+   `r` is a CSS geometry property here rather than an attribute so the dot's
+   radius comes from the same one place as the strokes. */
+.track-map__casing { fill: none; stroke: #fff; stroke-width: var(--track-map-casing); stroke-linejoin: round; stroke-linecap: round; }
+.track-map__road { fill: none; stroke: var(--ink-2); stroke-width: var(--track-map-road); stroke-linejoin: round; stroke-linecap: round; }
+.track-map__start { fill: var(--danger); stroke: #fff; stroke-width: var(--track-map-start-ring); r: var(--track-map-start-r); }
 /* A schematic-less variant: the same field carrying a glyph ("?", ∞, or the
    tour's drawn ring) instead of a ribbon — the picker's random-family tiles
    wear it so they keep a track tile's exact footprint. The wash is set inline
@@ -322,10 +397,23 @@ body {
 
 /* Star row — cup progression (built by starRow in shared/trackPicker.js): a row
    of die-cut stars, filled = earned. RED on purpose — amber/gold is vetoed in
-   chrome, and celebration is red. Size by context via font-size. */
+   chrome, and celebration is red. Size by context via font-size.
+
+   `paint-order: stroke fill` is what makes it a DIE CUT rather than a blot, and
+   it is the same line `.seat__host` already carries. An SVG stroke straddles the
+   path, so half of it paints INWARD: at the cup shelf's 0.78em the star renders
+   about 11px from a 24-unit box, the 2.4 units eat a fifth of its radius, and a
+   red star came out reading black with its five points blunted. Painting the
+   stroke UNDER the fill leaves the outline entirely outside the shape, which is
+   also how tvOS draws this row (an ink star stacked behind a smaller coloured
+   one — SF Symbols there, since that glyph cannot be shipped to the web). */
 .starrow { display: inline-flex; gap: 0.14em; line-height: 1; }
 .starrow .star { width: 1em; height: 1em; }
-.starrow .star path { fill: var(--red); stroke: var(--ink); stroke-width: 2.4; stroke-linejoin: round; }
+.starcount { display: inline-flex; align-items: center; gap: 0.3em; white-space: nowrap; line-height: 1; }
+.starrow .star path {
+  fill: var(--red); stroke: var(--ink); stroke-width: 2.4; stroke-linejoin: round;
+  paint-order: stroke fill;
+}
 .starrow .star--off path { fill: #fff; opacity: 0.35; }
 
 /* Drawn padlock (lockGlyph in shared/trackPicker.js) — platform lock emoji are
@@ -352,14 +440,19 @@ body {
    above the roof. The two must stay in step: the stills are object-fit:contain,
    so a box that disagrees with the asset letterboxes it and shrinks the car. */
 .carthumb { position: relative; width: 100%; aspect-ratio: 5 / 4; }
+/* No transition on the opacity: the turntable's frame 0 IS this still, so the
+   handoff in carThumbs.js is a CUT. Fading between them looked like a safe
+   dissolve and is not — both layers carry the car's soft ground shadow, and
+   compositing two translucent copies of it darkens the shadow for the whole
+   fade. Nothing else moves this opacity. */
 .carthumb__still {
   position: absolute; inset: 0; width: 100%; height: 100%;
-  object-fit: contain; display: block; transition: opacity 0.2s ease;
+  object-fit: contain; display: block;
 }
 .carthumb__spin {
   position: absolute; inset: 0;
   background-repeat: no-repeat;
-  background-size: 2400% 100%;   /* SPIN_FRAMES (24) * 100% — keep in sync with carThumbs.js */
+  /* background-size is written inline by carThumbs.js from SPIN_FRAMES */
   background-position: 0 0;
 }
 

@@ -200,9 +200,15 @@ int main(int argc, char** argv) {
     std::fprintf(stderr, "header parse error: %s\n", err.c_str());
     return 2;
   }
-  // The points table is part of the contract, not an implementation detail.
+  // The points table is part of the contract, not an implementation detail —
+  // LENGTH included, or a table that lost its tail passes on its head alone.
   if (const Value* pts = header.find("POINTS_BY_RANK")) {
-    for (size_t i = 0; i < pts->arr.size() && i < 4; i++) {
+    if ((int)pts->arr.size() != POINTS_RANKS) {
+      std::fprintf(stderr, "FAIL POINTS_BY_RANK length: expected %d, actual %zu\n",
+                   POINTS_RANKS, pts->arr.size());
+      return 1;
+    }
+    for (size_t i = 0; i < pts->arr.size(); i++) {
       if ((int)pts->arr[i].num != POINTS_BY_RANK[i]) {
         std::fprintf(stderr, "FAIL POINTS_BY_RANK[%zu]: expected %d, actual %d\n",
                      i, (int)pts->arr[i].num, POINTS_BY_RANK[i]);

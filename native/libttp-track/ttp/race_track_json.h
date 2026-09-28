@@ -53,12 +53,6 @@ void hex_number(std::string& out, double v);
 // that is very hard to see. Exactness wins.
 void decimal_number(std::string& out, double v);
 
-// The augmented object's top-level keys, SORTED. `cup` is deliberately absent:
-// the builder does not produce it (the host tags the built track with its cup to
-// pick a biome theme), so it is not part of what the corpus recorded either.
-extern const char* const kTopKeys[];
-extern const int kTopKeyCount;
-
 class Writer {
  public:
   explicit Writer(NumFn num) : num_(num) {}
@@ -68,7 +62,7 @@ class Writer {
   // a silent skip.
   std::string topKey(const RaceTrack& b, const std::string& key) const;
 
-  // The whole object: every kTopKeys entry, in order.
+  // The whole object: every top-level key, in sorted order.
   std::string object(const RaceTrack& b) const;
 
   // Sample windows, exposed so a centerline mismatch can be localized to the

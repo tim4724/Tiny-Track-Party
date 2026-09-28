@@ -5,6 +5,7 @@
 #include <cstring>
 
 #include "ttp/canonical.h"
+#include "ttp/glb.h"
 #include "ttp/json_parse.h"
 #include "ttp/race_track.h"
 
@@ -531,14 +532,12 @@ std::vector<MatTint> resolve_model_tints(const std::string& model,
   for (const ModelTintDef& d : kModelTints) {
     if (model == d.model) { def = &d; break; }
   }
-  if (!def || !glb || len < 20) return out;
+  if (!def) return out;
 
-  // GLB: a 12-byte header, then chunks — JSON first (length at offset 12).
-  uint32_t jsonLen = 0;
-  std::memcpy(&jsonLen, glb + 12, 4);
-  if (jsonLen == 0 || (size_t) jsonLen + 20 > len) return out;
+  std::string text;
+  if (!json_chunk(glb, len, text)) return out;
   bool ok = false;
-  const Value doc = json::parse(std::string((const char*) glb + 20, jsonLen).c_str(), &ok);
+  const Value doc = json::parse(text.c_str(), &ok);
   if (!ok) return out;
   const Value* materials = doc.find("materials");
   if (!materials || materials->type != Value::ARR) return out;

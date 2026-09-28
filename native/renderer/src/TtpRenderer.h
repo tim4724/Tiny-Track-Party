@@ -26,12 +26,195 @@
 // Filament SDK.
 #include "ttp/theme.h"
 #include "ttp/wear.h"
+// The GLB mesh reader behind the merged draw groups — header-only for the same
+// no-link-edge reason as theme.h above; ctests execute it on every leg.
+#include "ttp/glb_mesh.h"
+namespace ttp { namespace kitcolors { struct Mesh; } }
+#include "ttp/car_footprint.h"
+
+
+// The car contact shadow's live knobs, and the ONE place their defaults are
+// written down. `ttp_display_shadow_tuning` moves them at runtime for
+// /shadow-lab.html; every default here is the SHIPPED look, and the ABI hands
+// this struct's defaults out so a tuning page never re-types one.
+//
+// It exists because what a contact shadow should look like at the carShadow
+// layer's ~8 texels/u of arclength is a question that has to be judged on a
+// television, and a rebuild-per-guess loop is what stopped it being judged.
+struct CarShadowTuning {
+    // WHICH representation draws. The shipped answer is BLOB for every car at
+    // every cell count — see kShadowModeBlob.
+    int mode = 0;
+    // Where the blob's SHAPE comes from — see kShadowShape* below. The four
+    // roster cars have the SAME bounding box, so this is the only knob that can
+    // tell them apart, and it is also the knob that decides what the CPU raster
+    // costs: two of the three answers are a MASK the raster samples sixteen
+    // times a texel, and the third is an expression it evaluates once.
+    //
+    // THE FITTED ROUNDED RECT SHIPS — four corners for every car, the user's
+    // call after seeing the alternatives on the glass. The fitted k-gon
+    // (kShadowShapePoly, the hull-of-the-outline arm) carried more silhouette
+    // and read WORSE where it mattered: the roster's one distinctive
+    // footprint, Rumble, is an open-wheeler — a narrow rear body with a GAP
+    // to wheels that poke past it — and a lobeless closed-form shape can only
+    // render that as lumps. The rect covers wheels and body in one clean
+    // four-cornered stamp, is per-car through its fit (fill across, fill
+    // along, corner radius — Rumble's comes out visibly rounder), and is the
+    // cheap arm: half the channel's CPU on the Android box against the
+    // mask's sixteen reads. The k-gon stays a lab arm beside the masks.
+    int shape = 2;
+    // How many edges the k-gon ARM keeps. The stamp is ~30x20 layer texels
+    // and the soft band eats another texel of edge, so past ~8 the extra
+    // edges buy nothing a television can show.
+    int polyEdges = 7;
+    // The rounded rect's corner radius as a SCALE on the one fitted to each
+    // model: 1 is the fit, 0 a hard rectangle, higher rounder. A scale and not
+    // an absolute so the slider always does something AND the cars stay
+    // different from each other. Analytic shape only.
+    float corner = 1.0f;
+    float ao = 0.62f;          // the stamp's peak opacity
+    // Summed-coverage ceiling, the shader's maskInk.w (which is also the
+    // tap's enable). The raster accumulates with saturating ADD, where the
+    // old masked loop composited two overlapped stamps as a mix-of-mixes —
+    // at full wheel load 1-(1-0.710)² ~ 0.916 (0.710 = ao deepened by the
+    // loadGain term) — so the cap keeps a pile-up as dark as the loop drew
+    // it instead of letting addition run it toward black.
+    float cap = 0.918f;
+    float loadGain = 0.08f / 0.55f;  // deepening at full body pitch
+    uint32_t ink = 0x171513u;  // the shadow's colour, sRGB
+    float overscan = 1.45f;    // footprint's share of the stamp quad
+    float grow = 0.0f;         // dilate the outline, in footprint half-widths
+    // THE STORED FIELD'S WIDTH — deliberately wider than the penumbra the
+    // player sees, because the remap below carves the visible edge out of its
+    // middle and a wide smooth field is what keeps that edge sub-texel under
+    // the raster's per-frame re-landing. The die-cut era's sweep stands as
+    // the evidence: on identical gated frames 0.030 cut edge flicker 25%,
+    // 0.040 43%, 0.060 61% — wider is calmer, and the old reason to stop
+    // (the outline mask's wheel lobes blurring away) left with the rounded
+    // rect, which has no lobes to lose.
+    float blur = 0.07f;        // the field's ramp, as a fraction of mask width
+    // The tail-cut remap, AS FRACTIONS OF THE PEAK ALPHA — `applyShadowInk`
+    // multiplies them by `ao` on the way to the uniform, so dragging `ao` down
+    // cannot slide the shadow under its own threshold. An empty band
+    // (hi <= lo) means no remap anywhere — `shadowRemapParam` and the
+    // raster's cut both key on it, and it is the lab's "cut off" arm.
+    //
+    // **A WIDE MEDIUM BAND OVER A WIDE FIELD IS THE LOOK**, and both ends are
+    // load-bearing against a defect the band's WIDTH controls. The road mesh
+    // interpolates uv0 linearly per triangle, so the tap's read coordinate has
+    // a GRADIENT JUMP at every triangle edge; the stored field's flat core
+    // reads flat through any such kink, but wherever the field has gradient
+    // the kink prints as a Mach-band crease — under a yawed car, "diagonal
+    // bands through the shadow" (user-reported; the layer READBACK is clean,
+    // which is what pins the read side, and neither density nor stampProject
+    // moves it). So the visible skirt has to be narrow relative to the stamp:
+    // `remapLo` clips the wide faint tail where the creases have the most
+    // area, `remapHi` saturating at mid-field pulls the visible transition
+    // tight. The band stays WIDE — the die-cut's narrow band (0.39..0.61) is
+    // the other cliff, a slope steep enough to facet on the bilinear texel
+    // grid and to amplify the raster's per-frame sub-texel re-landing into
+    // edge boil. 0.2..0.8 is the middle: outline defined, tail clipped,
+    // slope ~1.7 against the die-cut's ~4.5.
+    float remapLo = 0.2f;
+    float remapHi = 0.8f;
+    // WHERE the band is applied: the shader (interpolate, then cut — the
+    // signed-distance trick, and what ships) or the raster (cut, then store
+    // the finished alpha — the lab arm that measured 44% MORE edge flicker,
+    // kept so nobody re-derives it).
+    bool remapInShader = true;
+    // Bicubic B-spline tap — four bilinear fetches, C2 across texel
+    // boundaries (vroad.mat says why, and why the one-tap quintic warp is
+    // refuted; rides carShadowRemap.w). This is the density-DEPENDENT half
+    // of the diagonal-bands report retired at 16/256 instead of paying for
+    // 32/512's raster and upload.
+    bool smoothTap = true;
+    // The LAYER's own density, and THE FLICKER LIVES HERE. Changing either
+    // RE-ALLOCATES the texture pair and moves the size of the whole-level
+    // upload every frame pays, so these are the two knobs that are not free to
+    // drag.
+    //
+    // **8 / 128 PUT A CAR'S WHOLE STAMP ON 15 BY 10 TEXELS AND IT BOILED.** The
+    // raster re-lands the stamp at a new sub-texel offset every frame, so at
+    // that grid its edge cannot hold still — measured against a shadow-off
+    // baseline over identical gated sim frames, it carried TWICE the temporal
+    // energy the masked silhouette put in the same band, which is what
+    // "flickering a lot" was. 16 / 256 doubles the grid each way (30 by 20
+    // texels), cuts that excess by 53%, and lands BELOW the silhouette it
+    // replaced. It costs 0.38 -> 1.53 MB per frame of upload, still ONE event;
+    // GPU time on the web reference did not move (2.02 -> 1.80 ms p50 at four
+    // players, three interleaved reps).
+    //
+    // Past this it saturates: the width clamps against the driver's ceiling, so
+    // 24/384 measured 56% for twice the bytes again. Do not spend there.
+    // The remaining flicker is EDGE SHARPNESS, and that is `remapLo`/`blur` —
+    // a LOOK knob, deliberately left where the die-cut retune put it.
+    float texelsPerU = 16.0f;  // along arclength
+    int rows = 256;            // across the deck's full lat span
+    // WHICH SURFACE the stamp's probes measure against, and it decides whether
+    // a cornering car's shadow RIPPLES.
+    //
+    // `deckFoot` answers the ANALYTIC deck — the true surface, and the right
+    // answer to a different question. The shader does not read the analytic
+    // deck: it reads the layer through uv0, which the road mesh interpolates
+    // LINEARLY PER TRIANGLE and whose gradient therefore JUMPS at every
+    // triangle diagonal. Writing at one and reading at the other leaves a
+    // displacement that changes per triangle, and because the jump is in the
+    // GRADIENT it prints as a crease line — which no amount of `blur` softens
+    // (it is a distortion of where the texture is read, not detail inside it)
+    // and which survives dropping the mask for the analytic shape. Both were
+    // tried; both still rippled.
+    //
+    // `project` reproduces the rasterizer's uv0 stage by stage — same ring
+    // polyline, same ring-plane blend, same per-triangle barycentric
+    // interpolation — so the write lands exactly where the read looks. Its own
+    // comment names this artifact: "the difference oscillates under a driving
+    // car at knot-crossing rate". It costs a windowed ring scan per probe
+    // against deckFoot's Gauss-Newton walk — six probes per car per frame, on a
+    // channel that is CPU-bound on the Android box.
+    //
+    // **DEFAULTED OFF, because it was never shown to buy anything.** It went in
+    // as the fix for a cornering ripple that turned out to be the raster
+    // double-writing its own shared edges (mStampCov). The decal readback puts
+    // the two probes' stamps at identical (s, lat) with the cull window ~1.5%
+    // apart, so what this changes is real but small, and nothing has measured
+    // it either on the glass or on the box. It stays a knob rather than a
+    // default: paying CPU on the one platform that cannot spare it, for an
+    // unmeasured benefit, is the trade this tree does not take.
+    bool stampProject = false;
+    // Send the WHOLE level every frame instead of the stamps' own rects. The
+    // A/B arm for the upload, kept because the shipped answer was measured and
+    // not reasoned: see uploadCarShadow.
+    bool uploadWhole = false;
+};
+
+// `mode` values, shared with the ABI and the tuning page.
+//
+// BLOB IS WHAT SHIPS, for every car at every cell count. The masked
+// silhouette's per-fragment loop is ~7 ms of a 4-player 1080 frame on the
+// Android reference box — the whole decal channel — and five separately-built
+// escapes measured dead (docs/perf/androidtv-4p-plan.md Phase 5), while the
+// blob crossfades and so cannot pop. The other two exist for the A/B on
+// /shadow-lab.html and nothing on the shipping path selects them.
+constexpr int kShadowModeBlob = 0;        // every car on the texture layer
+constexpr int kShadowModeSilhouette = 1;  // every car on the masked loop
+constexpr int kShadowModeHybrid = 2;      // the old distance LOD between them
+
+// `shape` values. The first two are MASKS — the raster samples a 64x128 image
+// four times per texel, which is sixteen scattered reads and a dozen lerps. The
+// last two are EXPRESSIONS evaluated once, and on a weak in-order core that is
+// the difference the whole channel's CPU cost turns on (see rasterCarShadowTri).
+constexpr int kShadowShapeCar = 0;        // the model's own outline
+constexpr int kShadowShapeSuperellipse = 1;  // the generic oval, one for all
+constexpr int kShadowShapeRounded = 2;    // a rounded rect, in closed form
+constexpr int kShadowShapePoly = 3;       // a fitted convex k-gon, in closed form
 
 #include <backend/DriverEnums.h>
 #include <math/mat4.h>
 #include <math/vec3.h>
 #include <utils/Entity.h>
 
+#include <array>
+#include <atomic>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -41,6 +224,7 @@
 
 namespace filament {
 class Engine;
+class Fence;
 class IndirectLight;
 class SwapChain;
 class Renderer;
@@ -54,6 +238,10 @@ class Material;
 class VertexBuffer;
 class IndexBuffer;
 class MaterialInstance;
+class InstanceBuffer;
+namespace backend {
+class Platform;
+} // namespace backend
 namespace gltfio {
 class AssetLoader;
 class FilamentAsset;
@@ -81,10 +269,6 @@ public:
     // the shell already made the WebGL2 context current).
     bool init(filament::backend::Backend backend, void* nativeWindow,
             uint32_t width, uint32_t height);
-    // The platform surface reports the device's GL_MAX_TEXTURE_SIZE here
-    // before init; unreported keeps the conservative 8192 floor. See
-    // mMaxTextureDim for what it buys the skid layer.
-    void setMaxTextureDim(uint32_t d) { if (d >= 2048) mMaxTextureDim = d; }
     void resize(uint32_t width, uint32_t height);
     // Skip the sun's shadow bake for every scene built from here on. The bake is
     // a 2048² depth pass over the whole circuit plus its ESM blur, once per
@@ -93,7 +277,9 @@ public:
     // renderer this replaced did the same, via navigator.webdriver → key
     // .castShadow = false). Takes effect at the next buildScene; not a live
     // toggle, since the map is baked into the scene.
-    void setShadowsEnabled(bool on) { mShadowsEnabled = on; }
+    // Clears the bake's reuse key with it: shadows-off drops the resident maps,
+    // so the next build must re-bake rather than match a key against nothing.
+    void setShadowsEnabled(bool on) { mShadowsEnabled = on; mBakedKey.clear(); }
 
     // ---- model variants (dev) ---------------------------------------------
     // Which take on a named prop ("rocket", "gnome", "train") this and every
@@ -128,6 +314,41 @@ public:
     const char* kitFieldLayout() const { return mKitLayout.c_str(); }
 
     bool provideAsset(const char* name, const uint8_t* bytes, uint32_t len);
+
+    // ---- what still has to be handed over ---------------------------------
+    //
+    // Provisioning is mostly RE-work. `mAssets` survives releaseScene, so across
+    // two builds the props are always the same bytes, the textures always are,
+    // the scenery is whenever the biome held, and the cars are unless somebody
+    // actually picked a different one. A re-dress is worse: the roster moves for
+    // a ready toggle, a rename or a seat expiry, none of which change a byte.
+    //
+    // WHICH ONES ARE STALE IS ENGINE KNOWLEDGE, and it lives here for the reason
+    // the blob walk gives one layer up: a shell that mirrors the asset map has
+    // to invalidate its mirror when a destroyed surface takes the map away, and
+    // only one of three shells ever had that mirror at all. `mAssetTag` lives
+    // and dies with `mAssets`, so there is nothing to invalidate.
+    //
+    // THE TAG IS WHAT THE BYTES ARE A FUNCTION OF, in the caller's vocabulary —
+    // a kit model's base name, a texture's authored URI. Not the asset name:
+    // `car3.glb` is different bytes when slot 3 picks a different model, while
+    // `Textures/colormap.png` never is.
+    struct AssetWant {
+        std::string name;
+        std::string tag;
+        // What a DERIVED asset is made out of (a ghost's model). Answering the
+        // derivative alone would ask a shell to derive from bytes it did not
+        // fetch, so a wanted derivative brings its source with it.
+        std::string from;
+    };
+    // The subset of `want` this engine does not already hold under that tag.
+    // Remembers every entry's tag, so the provideAsset that follows stamps it.
+    std::vector<std::string> assetPlan(const std::vector<AssetWant>& want);
+    // The images[].uri every held model references that is not held itself.
+    // Answered from the bytes the engine has, so a model the plan above skipped
+    // still contributes its textures — which is the whole reason the shells can
+    // stop reading a GLB they already handed over.
+    std::vector<std::string> assetTextures();
     // The bytes provided under `name`, or nullptr. The scene's caller needs the
     // scenery GLBs back: half of a biome's recolour rule is each model's own
     // AUTHORED material colours, and this class is where those bytes live.
@@ -142,6 +363,81 @@ public:
     // by the CALLER (the display shim links libttp-runtime; this class only
     // includes its headers): its patches become deck PAINT (buildDeckPaint),
     // not decals.
+    // What THIS build's static scene is, for the shadow bake's reuse test —
+    // see bakeShadowMap. The renderer is handed geometry and a theme, neither of
+    // which names anything; only the shim knows a scene is "cove under the beach
+    // biome". Latched before buildScene, like the biome one level up, and EMPTY
+    // means "never reuse" so a caller that has not thought about it cannot
+    // accidentally opt in.
+    void setBakeKey(const char* key) { mBakeKey = key ? key : ""; }
+
+    // Which backend the engine runs (filament::Backend as an int). Rides every
+    // blob key: a blob's byte orientation is a fact about the backend that read
+    // it back — see the flip note in finishBakeBlob.
+    int backendId() const;
+
+    // ---- derived bytes, kept between runs ---------------------------------
+    //
+    // WHAT A KEY IS HERE. Every blob this class can produce is named by a key in
+    // the renderer's own vocabulary; the FILE it lands in is the display shim's
+    // business (ttp/blobstore.h) and nothing below knows a filename. There are
+    // two kinds and they are asked for the same way:
+    //
+    //   the sun bake  — one blob per scene, `track|biome|showcase|backend`.
+    //   a silhouette  — one blob per car MODEL, `<glb fnv>|<backend>`, plus the
+    //                   monster's fixed key. PER MODEL AND NOT PER SET: the
+    //                   layers are baked per model already, so a set-keyed blob
+    //                   re-stored layers other blobs held and missed outright
+    //                   when a lobby's roster covered fewer models than the one
+    //                   that wrote it.
+    //
+    // STAGE, THEN FINISH, and that is not tidiness. A readback does not complete
+    // inside the call that issues it on GL (see PendingRead), so an export that
+    // insisted on answering at once could only ever answer on the backends that
+    // do not need it. `stage` snapshots everything that is NOT a readback —
+    // headers, matrices, the road light, the row-flip convention — and issues
+    // the reads; `collectStagedBlobs` finishes any whose reads have landed, on
+    // the frame beat where the GL driver tick runs. The snapshot is what makes
+    // that safe: a staged blob owns its own metadata, so the build that lands it
+    // need not be the build that made it.
+    //
+    // import answers false for any blob it does not fully trust, and leaves what
+    // is resident untouched when it does.
+    // NO bakeBlobKeys() TWIN. A scene's bake key needs the biome latched, which
+    // happens one layer up, so the shim composes it there (bakeKeyFor) and this
+    // class never spells it — one rule, one place (root CLAUDE.md rule 1).
+    std::vector<std::string> maskBlobKeys() const;
+    // Is this key's thing already in the engine, so the caller need not read it?
+    bool blobResident(const std::string& key) const;
+    // Snapshot + issue. False when there is nothing to stage under that key.
+    bool stageBlob(const std::string& key);
+    // Move a finished blob's bytes out. False while it is still coming, which
+    // is how the caller polls: it holds the key/filename pairing, so there is
+    // nothing for this class to enumerate.
+    bool takeStagedBlob(const std::string& key, std::vector<uint8_t>& out);
+    // Take a blob back, and answer WHICH key it turned out to be — the bytes
+    // say (importBlob dispatches on their magic), and the caller cannot know
+    // before asking. Empty means refused: a version it does not know, or bytes
+    // that do not describe what they claim.
+    //
+    // ANSWERING THE KEY IS LOAD-BEARING, not a convenience. It used to answer a
+    // bool, so a caller could only ask "is anything resident now?" and had to
+    // mark every resident key as having come from the store. One offered blob
+    // then vouched for its siblings, and a blob that was resident but had never
+    // been written was skipped by every later build — a cache that silently
+    // stopped filling, which is the failure this whole path exists to remove.
+    std::string importBlob(const uint8_t* bytes, uint32_t len);
+
+    // Has a frame of the CURRENT scene FINISHED on the GPU — not merely been
+    // submitted, which is all render()'s true says. The two part company on a
+    // queueing backend: Vulkan's first frames after a build sit behind the
+    // pipeline-compile storm, so the compositor has nothing to latch for over a
+    // second while render() keeps answering true. A boot cover that lifts on
+    // render()'s word uncovers that gap as a black lobby (the Android shell's
+    // hasPainted latch is the caller). Polls a fence armed by the first
+    // presented frame after a build; sticky true until the scene is released.
+    bool settled();
+
     bool buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& theme,
             const std::vector<TtpRosterCar>& roster, const ttp::rt::WearPlan& wear);
     // Re-dress the BUILT scene's car slots in place — same track, same slot
@@ -160,6 +456,10 @@ public:
     // roster. The engine, views, materials and provided asset bytes survive.
     void releaseScene();
     bool render(const TtpFrameInput& input); // false = beginFrame skipped (stale canvas)
+    // The frame's CPU half alone — the seating, the props, the skid stamps, the
+    // ambient clocks — with nothing submitted and the stamps' uploads deferred
+    // to the next render(). ttp_display_advance says what for.
+    bool advance(const TtpFrameInput& input);
 
     // The rect view i actually RENDERS into, in GL viewport terms (bottom-left
     // origin) — a tile of the split-screen grid, after that grid has been
@@ -224,14 +524,43 @@ public:
 
     // Per-section wall clock of the last frame, in milliseconds. Diagnostic
     // only — the sections are cheap (a clock read each) and the array is what
-    // ttp_profile() hands the page. Order matches kProfileNames.
+    // ttp_profile() hands the page. Order matches kProfileNames. New slots go
+    // AFTER kProfTotal: every reader maps by name, but keeping the original
+    // indices stable is free and keeps an old APK readable by a new script.
+    //
+    // kProfDecalUp is a SUB-SPAN of kProfWorld (uploadDeckDecals runs inside
+    // renderWorld), so world keeps meaning what it always did; a world spike
+    // with a matching decalUp spike is the per-chunk uniform writes.
+    // kProfBuild is the frame-input build (ttp::rt::buildFrame), which runs in
+    // ttp_display_core BEFORE render() — inside the shell's per-frame span
+    // (the ttp:render atrace marker) but outside kProfTotal. The core posts it
+    // via noteBuildMs so the one profile array covers that whole span.
     enum ProfileSlot : uint32_t {
         kProfCars = 0, kProfWorld, kProfSkids, kProfAmbient, kProfBeginFrame,
         kProfCellSetup, kProfCellRender, kProfPresent, kProfEndFrame, kProfTotal,
+        kProfDecalUp, kProfBuild,
         kProfCount
     };
     const double* profile() const { return mProfile; }
+    void noteBuildMs(double ms) { mProfile[kProfBuild] = ms; }
     static const char* const* profileNames();
+
+    // The BACKEND's own GPU timer, in milliseconds, or 0 where there is none.
+    // See ttp_display_gpu_ms for which platforms answer and which do not.
+    double gpuMs() const { return mGpuMs; }
+
+    // The full-screen antialias pass, and with it the offscreen scene buffer it
+    // exists to filter. See ttp_display_antialias.
+    void setAntialias(bool on) {
+        if (mAntialias == on) return;
+        mAntialias = on;
+        if (!on) destroySceneTarget();   // ~8 MB at 1080p, and nothing reads it now
+    }
+
+    // Block until the driver thread has executed everything recorded so far —
+    // the one safe moment for a shell to resize the window's buffer queue
+    // underneath it (ttp_display_drain has the why).
+    void drain();
 
 private:
     // One interleaved vertex everywhere for now: position + sRGB colour, drawn
@@ -264,6 +593,21 @@ private:
         // field vcloud shapes them from). Most meshes are position + colour, so
         // UVs stay out of the shared vertex.
         std::vector<filament::math::float2> uvs;
+        // Optional BAKED per-vertex matte light (half4, rgb·1) — the road
+        // under the baked-light vroad, filled by fillRoadLight. Non-empty ⇒
+        // buildMesh feeds CUSTOM0 INSTEAD of TANGENTS (nothing at draw time
+        // reads the normal; m.normals stays populated for the CPU bake).
+        // Alive for the run like every CPU copy here, and bakeShadowMap
+        // re-uploads it in place once the ESM exists.
+        std::vector<filament::math::half4> custom0;
+        uint8_t custom0Slot = 0;
+        // OPT-IN for a STATIC lit sheet: buildMesh folds the matte light into
+        // the vertex colours (bakedMatteLight) and draws it UNLIT, so nothing
+        // at draw time transforms a normal or shades a fragment. Only a mesh
+        // that never moves after build may say so — a transform would carry
+        // the baked light with it (the windmill's blades, the plane, the
+        // rockets and the kicked cones all stay lit at draw).
+        bool bakeLight = false;
         // Flat-decal template in car-local (x, z) with its rest alpha: the
         // conform rewrites `verts` into world space from this every frame.
         struct Local { float x, z; uint8_t a; };
@@ -272,19 +616,65 @@ private:
         // (blobs, streaks, rockets, bursts) leave the scene when they go idle
         // rather than parking underground — see setMeshInScene.
         bool inScene = false;
+        // SPATIAL chunk ranges, in triangles, from tileMajor(): buildMesh
+        // draws each range as its own renderable with its own box, instead of
+        // cutting `chunkTris` off the triangle ORDER. Empty = by order.
+        std::vector<uint32_t> tileStarts;
     };
+
+    // Reorder a static sheet's triangles by the ground tile their centroid
+    // falls in and record the tile ranges in `tileStarts`, so every renderable
+    // buildMesh makes of it covers ONE tile and a cell's frustum can reject
+    // the rest. A sheet the size of the world in one renderable is drawn whole
+    // by every cell however little of it is on screen; cut on triangle ORDER
+    // a row-major grid gives bands that cross every frustum exactly like the
+    // whole — which is what the 2026-09-04 "range chunk" arm measured, and
+    // why it read null (docs/perf/androidtv-frame-map.md). Tiles with fewer
+    // than `minTris` triangles are merged into the next, so a sparse sheet
+    // does not become hundreds of renderables.
+    static void tileMajor(Mesh& m, float tile, uint32_t minTris);
+    // 48 u tiles: a 4P cell's frustum to the fog is a wedge a few tiles wide,
+    // and the world is ±400 u, so a sheet is at most a few hundred ranges;
+    // a range under 64 triangles is not worth a renderable of its own.
+    static constexpr float kSheetTile = 48.0f;
+    static constexpr uint32_t kSheetMinTris = 64;
 
     struct TrackBin; // one scene's roster + theme + geometry (defined in the .cpp)
 
     filament::Engine* mEngine = nullptr;
+#if defined(__ANDROID__)
+    // The Vulkan platform with the framebuffer-eviction override (see
+    // TtpRenderer::init) — caller-owned, so it outlives the engine here.
+    std::unique_ptr<filament::backend::Platform> mVkPlatform;
+#endif
     filament::SwapChain* mSwapChain = nullptr;
     filament::Renderer* mRenderer = nullptr;
     filament::View* mView = nullptr; // single default view (no-views fallback)
     filament::Scene* mScene = nullptr;
     filament::Camera* mCamera = nullptr;
     filament::Skybox* mSkybox = nullptr;
+    // THE SKY IS A SKYBOX, NOT A DOME. It used to be a gradient sphere of
+    // radius SKY_R centred on the WORLD ORIGIN, and the far plane is measured
+    // from the CAMERA — so the moment a car left the origin the far side of the
+    // dome sat beyond CAM_FAR and was clipped, leaving a circular hole with the
+    // flat backstop showing through, sliding around as you drove. No radius
+    // fixes that: bigger puts more of it past the plane, smaller walks the
+    // camera through the shell. A skybox is drawn at infinity and cannot be
+    // clipped at all, so the failure mode does not exist.
+    //
+    // Cubemaps are ENGINE-LIFETIME and keyed by the three authored sky colours
+    // — coarser than track|biome, so one bake serves every track in a cup that
+    // shares a sky. They outlive releaseScene the way the parsed-kit cache
+    // does; the Skybox object in front of them is per-scene and owns nothing.
+    std::unordered_map<uint64_t, filament::Texture*> mSkyCubemaps;
+    filament::Texture* skyCubemap(const uint32_t sky[3], float lum);
     filament::Material* mMaterial = nullptr;    // unlit vertex-colour
     filament::Material* mLitMaterial = nullptr; // cheap-matte lit (custom Lambert)
+    // vlit minus the sun-shadow sampler (vlitns.mat), for the dressing that
+    // never reads the map — a bound sampler is per-draw descriptor cost even
+    // when shadowTexel=0 early-outs every fragment. Null on a shell whose
+    // asset set predates it; buildMesh then falls back to vlit.
+    filament::Material* mLitPlainMaterial = nullptr;
     // The road deck only: mLitMaterial's shading (shared via ttp_shade.inc)
     // plus a uv0 channel carrying track space (s, lat), so flat deck decals are
     // SHADED INTO the road rather than laid over it — no lift, no z-fight,
@@ -292,11 +682,73 @@ private:
     // case the road falls back to vlit and stamps nothing.
     filament::Material* mRoadMaterial = nullptr;
     filament::MaterialInstance* mRoadInst = nullptr;
-    static constexpr int kMaxDeckDecals = 32;  // matches vroad.mat's float4[32]
-    // The STATIC list's own cap. The shader's 32 is a PER-CHUNK bound —
-    // uploadDeckDecals folds each ~35u chunk its own nearby subset — so the
-    // track-wide list may exceed it. This is only a guard: since the pads left
-    // for the paint channel the statics are the boxes plus the slicks, well
+    // THE PER-FRAME GATHER cap, and it is CPU-side only: this list is the whole
+    // scene's decals before any chunk sees them, so it costs a memcpy and
+    // nothing on the GPU. The two numbers that DO cost are below.
+    static constexpr int kMaxDeckDecals = 32;
+    // PER CHUNK, PER CHANNEL — and these are the expensive constants in the
+    // renderer. vroad declares one dynamically-indexed uniform array per field
+    // per channel, and a PowerVR pays for a declared array whether or not the
+    // loop runs: measured on a GE9215 over a frozen single-player race at
+    // 1280x720, one mixed 32-entry list (7 arrays, 3584 bytes) cost 25.9 ms of
+    // GPU, the same seven arrays at 16 cost 18.9 and at 8 cost 17.6. Splitting
+    // by kind buys the capacity back — a masked entry needs five fields and a
+    // profile entry three, so 8+8 is 1024 bytes for sixteen entries where one
+    // mixed list of eight spent 896 for eight.
+    //
+    // Eight profile is the item-box shadows, oil slicks and boost auras within
+    // one ~35u chunk; the fold takes them in the shell's priority order, so an
+    // overflow drops the last aura rather than a marker. RAISING IT IS
+    // MEASURABLE IN THE FRAME, and the parked-view reading that declared size
+    // had become free does NOT survive a real pack: the 2026-08-18 spectate-7
+    // arm that raised profile to 16 with nothing else changed cost +1.1 ms
+    // p50 / +1.5 p95 at 720p. vroad.mat's float4[8]s must agree;
+    // tests/road-decal-caps.test.js holds the two together.
+    //
+    // THE MASKED BUDGET IS PER VIEW, and this constant is that rule.
+    //
+    // The budget is what the active cameras may dress in true silhouettes
+    // between them — a camera's own car plus adjacent rivals — and it is also
+    // the declared array size.
+    //
+    // It was a single GLOBAL pool of four, ranked by distance to the NEAREST
+    // camera, and that is a bug the moment the screen splits: four cameras
+    // competing for four slots have no headroom at all, so one bot drafting
+    // any player (a drafting car sits within a metre of that player's eye,
+    // nearer than the player's own car at CHASE_DIST) evicted the
+    // fourth-ranked car — which is some other player's own car — straight to
+    // the texture blob, with no crossfade because the rank gate jumps lodT to
+    // 1. User-caught: "with 4 players one of them has an oval blob".
+    //
+    // FOUR, spent ROUND ROBIN over the active views: every camera takes its
+    // first choice before any takes its second, so a four-way split spends the
+    // whole budget on round one — each player's own car — while solo spends
+    // all four rounds on its single view, exactly as it always did. One
+    // number, not a total plus a per-view allowance: round-robin already says
+    // "fair", and a single view must be able to take the lot.
+    //
+    // The live entry count is therefore four at EVERY player count, which is
+    // why the rule costs nothing — only WHICH four changes.
+    //
+    // FOUR AND NOT EIGHT IS MEASURED, and the measurement is worth keeping
+    // because the intuition it killed was reasonable. Ablating the whole decal
+    // channel at 4 players / 720p saves only ~0.55 ms (interleaved ABAB,
+    // inside this box's noise), which reads like an invitation to dress all
+    // eight cars. It is not: a build that raised this cap to 8 cost +4.96 ms
+    // p50 (30.98 -> 35.93, fps 28 -> 25, three interleaved reps, no overlap),
+    // while the same build at 1 player measured ZERO against [4] (17.47 vs
+    // 17.28). So the cost is NOT linear in live entries and NOT the declared
+    // size — it is the per-chunk BOUNDS BOX: four masked cars in a split sit
+    // in four different chunks with a tight box each, and eight put two in a
+    // chunk with a union spanning both, so the fragments that enter the loop
+    // multiply as well as the iterations they then run. Raising this cap
+    // needs a per-entry reject, not a bigger budget.
+    static constexpr int kMaxMaskedDeckDecals = 4;
+    static constexpr int kMaxProfileDeckDecals = 8;
+    // The STATIC list's own cap. The per-chunk bounds above are what the shader
+    // sees — uploadDeckDecals folds each ~35u chunk its own nearby subset — so
+    // the track-wide list may exceed them. This is only a guard: since the pads
+    // left for the paint channel the statics are the boxes plus the slicks, well
     // under it on any catalogue track.
     static constexpr int kMaxStaticDeckDecals = 96;
     // Deck-paint entries per road chunk — matches vroad.mat's float4[8]. A
@@ -318,9 +770,10 @@ private:
         filament::math::float4 texrot;
         // Masked decals only (zero on profile decals): the DECK point under
         // the car and the deck-plane axes at its in-plane heading (NOT the
-        // car's own axes — vroad.mat's decalWPos comment has why the two are
-        // equivalent). The MASK samples a rigid planar projection of the
-        // fragment's world position onto these — track space only BOUNDS the
+        // car's own axes — these are the heading dropped into the plane the
+        // car sits on, see renderCars). The MASK samples a rigid planar
+        // projection of the fragment's world position onto these — track
+        // space only BOUNDS the
         // stamp (the |ds|/|dl| reject, which is what keeps a loop's other
         // deck out). Painting the silhouette itself in curvilinear (s, lat)
         // bent it around every bend, and the per-triangle kinks of the
@@ -350,9 +803,12 @@ private:
             std::vector<filament::math::float3>& carPosW, std::vector<DeckDecal>& auraDecals);
     void renderWorld(const TtpFrameInput& input, const TtpCarInput* cars, uint32_t nCars,
             const std::vector<filament::math::float3>& carPosW, std::vector<DeckDecal>& auraDecals);
+    // render() and advance() are one body: `draw` is where they part.
+    bool frame(const TtpFrameInput& input, bool draw);
     void renderSkids(const TtpFrameInput& input, const TtpCarInput* cars, uint32_t nCars);
     void renderAmbient(const TtpFrameInput& input);
     void renderCells(const TtpFrameInput& input, double& tMark);
+    void readGpuTimer();
     // Decals that never move — boost pads, launch strips, oil slicks, item-box
     // contact shadows. Resolved once at track build and re-queued each frame,
     // which is cheaper than it sounds (a memcpy of a handful of float4s) and
@@ -367,25 +823,100 @@ private:
     struct RoadChunk {
         filament::MaterialInstance* mi;
         float sMin, sMax;   // arclength covered, before the decal margin
-        // What this chunk's instance was last handed (folded), so a chunk whose
-        // stretch nothing dynamic crossed skips its uniform writes entirely.
-        std::vector<DeckDecal> last;
+        // What this chunk's instance was last handed in each channel (folded),
+        // so a chunk whose stretch nothing dynamic crossed skips its uniform
+        // writes entirely. TWO lists because the two have separate caps: a
+        // chunk can overflow one and not the other, and comparing a
+        // concatenation would then rewrite both.
+        std::vector<DeckDecal> lastMask, lastProf;
+        // The paint entries this chunk was built with. Written once per track,
+        // so it is kept only so the ablation debug can put the channel back.
+        int paintN = 0;
+        // THE DECK'S FAR RIBBON. Two index ranges over the SAME vertex buffer —
+        // the shipped ribbon (mRoad.ib) and the far one (mRoadFarIb, built by
+        // buildRoadMesh) — and chooseDeckLod hands the chunk one of them per
+        // CELL, by that cell's camera distance to this box. Nothing else about
+        // the chunk changes: same entity, same material instance, same bounds
+        // (the far ribbon's corners are a subset of the fine one's).
+        utils::Entity entity;
+        uint32_t fullOff = 0, fullCnt = 0, farOff = 0, farCnt = 0;
+        filament::math::float3 boxMin{ 0 }, boxMax{ 0 };
+        int lod = 0;
     };
     std::vector<RoadChunk> mRoadChunks;
-    std::vector<DeckDecal> mRoadInstLast;  // ditto for the whole-lap fallback chunk
+    // See RoadChunk. The CPU copy stays alive for the run and is BURIED with
+    // the road (buryMeshBuffers' rule); the buffer dies in releaseScene.
+    filament::IndexBuffer* mRoadFarIb = nullptr;
+    std::vector<uint32_t> mRoadFarIdx;
+    // EVERY cell count draws the far ribbon past its gate, one player included
+    // (the user's call, 2026-09-02; it began as a split-only trade). The gate
+    // is the one below, so a big cell simply pushes it out — a 1080-line
+    // single cell past ~80 u, a 4K one past the fog.
+    //
+    // How far a far-ribbon chord may leave the rings it spans, in world units
+    // (buildRoadMesh), and how many pixels of that a cell may show: the two
+    // together put the near edge of the far ribbon where the chord error is
+    // under a pixel for THAT cell's size (renderCells). Dropping the gate
+    // altogether measured 1.2 ms more on the box's 4P heavy seconds and was
+    // shipped for an hour; the user wanted a threshold back.
+    static constexpr float kDeckLodTol = 0.08f;
+    static constexpr float kDeckLodChordPx = 2.0f;   // the user asked for aggressive
+    // Picks per chunk for one cell, and writes the cell's far-chunk bitmask
+    // into view globals 1..3 when the tint is armed (zeros otherwise).
+    void chooseDeckLod(filament::View* v, const filament::math::float3& cam,
+            float near, bool enabled);
+    // kDebugNoDeckLod: every chunk stays on the fine ribbon in every cell, so
+    // a sweep prices the far ribbon as interleaved arms.
+    bool mDeckLodOff = false;
+    // kDebugDeckLodTint: the far ribbon painted magenta, per cell, so the
+    // swap can be seen — it reuses the fine ribbon's vertices and colours and
+    // is otherwise invisible. It shipped ON while the trade was being judged;
+    // the user turned it off 2026-09-02.
+    bool mDeckLodTint = false;
+    static constexpr uint32_t kDebugNoDeckLod = 0x1000000;
+    static constexpr uint32_t kDebugDeckLodTint = 0x4000000;
+    // TTP_DEBUG_DECK_LOD_ALL — SET draws EVERY chunk with the far ribbon, gate
+    // or no gate, own car included: what the trade looks like where the eye
+    // can resolve it, which past the gate it cannot.
+    static constexpr uint32_t kDebugDeckLodAll = 0x8000000;
+    bool mDeckLodAll = false;
+    // Ditto for the whole-lap fallback chunk.
+    std::vector<DeckDecal> mRoadInstLastMask, mRoadInstLastProf;
+    int mRoadInstPaintN = 0;               // and its RoadChunk::paintN
     // The masked decals' silhouette store: one 2D-array texture, one layer per
-    // car slot (0..7), one for the monster rig, one for the generic
+    // distinct car MODEL, one for the monster rig, one for the generic
     // superellipse. Engine-lifetime — layers are REBAKED per scene, the flags
     // below say which ones currently hold this scene's bake.
-    static constexpr int kMaskLayerMonster = 8;
-    static constexpr int kMaskLayerGeneric = 9;
-    static constexpr int kMaskLayers = 10;
+    //
+    // MODEL, NOT SLOT. Eight cars race but the kit holds four models, so a
+    // per-slot store baked the same silhouette up to twice over and spent
+    // 512 KB a layer doing it. A slot claims its layer by the BYTES of its
+    // GLB (claimMaskLayer), so two players in one model at different liveries
+    // share one bake — coverage rides ALPHA, which carries no colour.
+    // protocol.js's CAR_MODELS is the source for the count and
+    // tests/mask-layer-models.test.js holds this constant to it; a fifth model
+    // added without raising it would silently fall back to the generic oval.
+    static constexpr int kMaskLayerModels = 4;
+    static constexpr int kMaskLayerMonster = kMaskLayerModels;
+    static constexpr int kMaskLayerGeneric = kMaskLayerModels + 1;
+    static constexpr int kMaskLayers = kMaskLayerModels + 2;
     // Cell size: 256 wide for the same banding reason bakeSilhouette gives, and
     // 2:1 because a kit car's footprint is ~2:1 — the stretch onto the decal
     // rect is then near-isotropic, so the baked blur stays round.
     static constexpr int kMaskCellW = 256, kMaskCellH = 512;
     filament::Texture* mDecalMaskArray = nullptr;
     uint16_t mMaskLayerBakedBits = 0;
+    // What each MODEL layer currently holds, as an FNV-1a of the GLB that was
+    // baked into it — the claim key. It deliberately outlives a re-roster: a
+    // slot re-dressed into a model another slot already baked reuses that
+    // layer and skips the bake entirely, which is what closes the old "generic
+    // oval until the re-dress rebakes" window.
+    uint64_t mMaskLayerKey[kMaskLayerModels] = {};
+    std::vector<int> mMaskLayerOfSlot;   // slot -> layer, from claimMaskLayer
+    // Resolve slot `c`'s silhouette layer, baking into it only if no layer
+    // already holds that GLB. Returns kMaskLayerGeneric when the roster holds
+    // more distinct models than there are layers.
+    int claimMaskLayer(uint32_t c, const std::vector<uint8_t>& glb);
     filament::Texture* ensureDecalMaskArray();
     // The rubber layer's tap binding (the 1x1 null texture is the
     // engine-lifetime half). The per-track texture + CPU buffer are made in
@@ -399,6 +930,8 @@ private:
     void rasterSkidTri(const filament::math::float2* p, const float* ink);
     // Push this frame's dirty rects to the texture as sub-rect uploads.
     void uploadSkidRects();
+    void flushSkidLayer();      // a drawn frame's uploads + mips (TtpRendererFrame.cpp)
+    void refreshSkidMips();
     filament::math::float3 mBoostDiskLin{};
     // The one vlit instance that SAMPLES the baked sun map. Three's receiver set
     // is the road, the structures and the berms and nothing else — the lawn,
@@ -433,7 +966,20 @@ private:
     // Size the scene buffer to the canvas (no-op when it already fits), and
     // stand up the present view on first use. Both no-op without vpresent.
     void ensureSceneTarget();
+    // The fullscreen triangle + present view, WITHOUT the scene target: the
+    // silhouette bakes' blur pass needs it too, and burying it inside
+    // ensureSceneTarget (AA-gated since the stale-handle fix) silently
+    // starved every car bake on the AA-off shell — the masked shadows all
+    // fell back to the generic superellipse and nobody's harness camera sat
+    // close enough to see the oval. Idempotent; engine-lifetime.
+    void ensurePresentQuad();
     void destroySceneTarget();
+
+    // The per-cell scene mutations the cell loop runs between render() calls:
+    // billboards turn toward camPos, and the monster ghost swap keys on "does
+    // THIS cell want the ghost". Both take one cell and must — see the bodies.
+    void orientCellBillboards(const filament::math::float3& camPos);
+    void applyMonsterGhosts(uint32_t cell);
 
     // The 2D cell overlay — the split-screen dividers and the per-player steer
     // bar (voverlay.mat carries the whole argument for why these two, and only
@@ -454,10 +1000,15 @@ private:
     struct OverlayQuad {
         utils::Entity entity;
         filament::MaterialInstance* mi = nullptr;
-        bool inScene = false;
+        filament::Scene* scene = nullptr;   // where it currently lives (null = nowhere)
     };
     std::vector<OverlayQuad> mOverlayQuads;
     uint32_t mOverlayUsed = 0;
+    // FOLDED: the quads live in the main scene and each race cell draws its
+    // own inside its pass (voverlay.mat says how), and mOverlayView does not
+    // render. Unfolded — a present pass (antialias) or the ribbon tint, which
+    // owns the view globals — they live in mOverlayScene as before.
+    bool mOverlayFolded = false;
     void ensureOverlay();
     // Next pooled quad, placed at (x, y, w, h) in DEVICE pixels with a TOP-LEFT
     // origin (the units ttp_grid_cell answers in). Returns its instance for the
@@ -490,6 +1041,20 @@ private:
     std::vector<TerrainFlat> mTerrainFlats;
     void setupTerrain(const TrackBin& tb);
     float terrainY(const TrackBin& tb, float x, float z) const;
+
+    // The corridor the terrain keeps flat around the road, and the ramp back up
+    // to full height past it. Named because the SAMPLE INDEX's search radius is
+    // derived from them: they used to be two literals inside terrainY.
+    static constexpr float kFlatR = 4.0f;
+    static constexpr float kRampR = 24.0f;
+    // Bucket size for that index. Anything from "a few samples per cell" up
+    // works; this keeps the neighbourhood search at 3x3 for a typical track.
+    static constexpr float kIndexCell = 32.0f;
+
+    void buildTerrainSampleIndex(const TrackBin& tb);
+    std::vector<std::vector<uint32_t>> mTsiCells;  // XZ bucket -> sample indices
+    int mTsiCols = 0, mTsiRows = 0;
+    float mTsiX0 = 0, mTsiZ0 = 0, mTsiReach = 0;
     // The sampled heightfield the ground MESH is built from, kept so every
     // placement stands on the mesh's own piecewise-linear surface rather than
     // the analytic field — between grid vertices they differ by enough to bury
@@ -523,7 +1088,6 @@ private:
     void recolourMonsterChassis(filament::gltfio::FilamentAsset* asset,
             const std::vector<filament::gltfio::FilamentInstance*>& instances,
             const filament::math::float4& rgba);
-    Mesh mSky;   // vertex-gradient dome at SKY_R (past the fog cutoff)
     Mesh mHills; // horizon dome ring
     // Per-feature anchors {x, z, top} in AUTHORED coords — the offshore
     // landmarks (lighthouse, sailboat) sit on the LOWEST island.
@@ -607,6 +1171,8 @@ private:
         float jitter = 0, rawJitter = 0, upJitter = 0;
         bool hasPrev = false;
         float skidWidth = 0.12f;                   // tyre-contact width (wheel AABB, clamped)
+        float wheelRadius = 0.125f;                // rolling radius (wheel AABB) — the skid
+                                                   // ribbon's lead, renderSkids says why
         float skidHold = 0;                        // scuff strength, released over SKID_RELEASE
         float skidAllHold = 0;                     // same, for the four-wheel (scrub/spin) channel
         float footW = 0.95f, footL = 2.0f;         // car footprint (asset AABB) — blob + boost disk
@@ -619,6 +1185,18 @@ private:
         filament::math::float3 monsterMount{ 0, 0.28f, 0 };
     };
     std::vector<CarWheels> mCarWheels;
+    // The rolling radius of whichever tyre is actually ON THE ROAD: the rig's
+    // fat one while a monster transform is up (the car's own are scaled to
+    // nothing there), the car's measured one otherwise. ONE source, because
+    // two callers turn on it — the wheel-roll animation and the skid ribbon's
+    // lead — and they had already drifted apart, the roll dividing by a
+    // hand-typed 0.13 while the ribbon used the 0.125 measured off the mesh.
+    // The roll's readability slowdown is WHEEL_SPIN_SCALE's job alone; it does
+    // not belong in a radius.
+    float wheelRadiusFor(const CarWheels& w, bool monster) const {
+        return (monster && mMonsterWheelRadius > 0) ? mMonsterWheelRadius
+                                                    : w.wheelRadius;
+    }
     // Per-cell monster ghosting: the swap runs between render() calls, so each
     // cell sees the truck solid or 50%-alpha according to its OWN block test.
     struct MonsterView {
@@ -649,6 +1227,7 @@ private:
     // load — the throb retints these instead of string-probing every material of
     // every instance per frame.
     std::vector<filament::MaterialInstance*> mBoxGlowMats;
+    float mBoxGlowPulse = -1; // last pulse written; -1 = force the first write
     Mesh mStructures;             // pillars / poles / loop shafts (matte concrete)
     Mesh mBerms;                  // grass lofted under a raised, non-pillared deck
     float mTime = 0; // idle-animation clock (accumulated FrameInput.dt)
@@ -681,6 +1260,88 @@ private:
     // The frozen sun shadow map and the matrix that puts a world position in
     // its [0,1] texture space (see bakeShadowMap).
     filament::Texture* mShadowMap = nullptr;
+    // The GROUND's baked sun-visibility map (vvis.mat, rendered inside
+    // bakeShadowMap over the same light camera), and the material that bakes
+    // it. Per-scene like the ESM; vground taps it instead of running the ESM
+    // decode per fragment — bindVisMap is the one binder.
+    filament::Texture* mVisMap = nullptr;
+    filament::Material* mVisMaterial = nullptr;
+    // The ROAD DECK's baked sun-visibility map (vroadvis.mat), in TRACK space
+    // rather than the light's grid — a barrel roll and the deck it shadows land
+    // in one light-space texel, and a loop has two arclengths at one (x, z).
+    // vroad taps it once per deck fragment; bindRoadVisMap is the one binder,
+    // and mRoadVisLatHalf is the deck's own ±maxHalf so an off-deck lat clamps
+    // onto the deck edge (see the material for the whole argument).
+    filament::Texture* mRoadVisMap = nullptr;
+    filament::Material* mRoadVisMaterial = nullptr;
+    float mRoadVisLatHalf = 0;
+    // The bake's reuse test — see bakeShadowMap for the whole argument.
+    // mBakeKey is what the caller says the NEXT build's statics are; mBakedKey
+    // is what the resident maps were actually made from. They match exactly when
+    // a rebuild changed only the field.
+    std::string mBakeKey;
+    std::string mBakedKey;
+    // settled()'s state: the fence armed by the first presented frame after a
+    // build, and the sticky answer once it signals. Cleared in releaseScene.
+    filament::Fence* mSettleFence = nullptr;
+    bool mSettled = false;
+
+    // ---- the graveyard --------------------------------------------------
+    //
+    // A DEAD SCENE'S CPU BUFFERS, OUTLIVING THE MESHES THAT OWNED THEM.
+    //
+    // Every upload here hands Filament a raw pointer with a null release
+    // callback (see Mesh's own note), so the driver may still read `verts` when
+    // the Mesh is destroyed. `releaseScene` used to make that safe by draining
+    // the whole pipeline first — a `flushAndWait` measured at 24-205 ms on the
+    // Android box against 6-8 ms of teardown, i.e. almost entirely a wait, paid
+    // on EVERY rebuild including the ones the bake cache already made cheap.
+    //
+    // Outliving the destroy is the same guarantee for none of the wait: the
+    // bytes stay put until the frames that could still be reading them have
+    // gone by, and the main thread walks away immediately. Nothing here becomes
+    // concurrent — the GPU was always asynchronous; we simply stop standing
+    // still for it.
+    //
+    // WHY A DELAY AT ALL, when the uploads happened at build time: some meshes
+    // re-upload per frame (the decal conform rewrites `verts` into world space
+    // every frame) and some late (bakeShadowMap re-uploads CUSTOM0), so a
+    // teardown can land with uploads still in flight. That is precisely what
+    // the fence was for.
+    struct MeshGrave {
+        std::vector<Vertex> verts;
+        std::vector<uint32_t> idx;
+        std::vector<filament::math::float3> normals;
+        std::vector<filament::math::quatf> quats;
+        std::vector<filament::math::float2> uvs;
+        std::vector<filament::math::half4> custom0;
+        // Frames still to survive. Counted DOWN on presented frames only: a
+        // scene released while nothing is drawing (the lobby's fade, a
+        // surface gone) must not have its buffers freed by a clock that keeps
+        // running while the GPU does not.
+        //
+        // Graves therefore ACCUMULATE across a build, which renders no frames —
+        // four back-to-back releases were measured holding 296 at once — and go
+        // to zero within three frames of the picture coming back. The `graves`
+        // count on the release log is there to keep that honest: a number that
+        // does not return to 0 at rest is a leak, and this held CPU copies of a
+        // whole scene.
+        uint32_t grace = 0;
+    };
+    std::vector<MeshGrave> mGraves;
+
+    // Frames a buried buffer must outlive. Three presented frames is well past
+    // any upload the frame before the teardown could still have owed, and the
+    // cost of being generous is a few hundred KB held a few frames longer.
+    static constexpr uint32_t kGraveGraceFrames = 3;
+
+    // Bury one mesh's CPU buffers instead of freeing them.
+    void buryMeshBuffers(Mesh& m);
+    // Age the graves by one presented frame, freeing what has served its time.
+    void ageGraves();
+    // Free every grave NOW, fence first. For teardowns that cannot wait for
+    // frames because none are coming.
+    void drainGravesBlocking();
     // See setShadowsEnabled. False leaves mShadowMap null, which is already the
     // "this track baked no map" path: bindShadowMap falls back to the 1×1 white
     // texture and passes shadowTexel 0, and vlit.mat reads that as fully lit.
@@ -755,18 +1416,45 @@ private:
     // segment, merged when they touch.
     struct SkidRect { int x0, y0, x1, y1; };      // half-open [x0,x1)×[y0,y1)
     std::vector<SkidRect> mSkidDirty;
+    static constexpr size_t kSkidDirtyMax = 32;   // past this the list is one union rect
+    bool mSkidCatchUp = false;                    // undrawn frames stamped; refresh all mips
+    static void mergeUploadRects(std::vector<SkidRect>& rects);   // TtpRendererDecals.cpp
+    // The mip chain's CPU truth, levels 1.. (level 0 is mSkidPix), plus the
+    // PHYSICAL-x rects awaiting the throttled per-level refresh — see
+    // refreshSkidMips for why generateMipmaps could not stay.
+    std::vector<std::vector<uint8_t>> mSkidMips;
+    std::vector<SkidRect> mSkidMipDirty;
+    // A refresh pass in flight: the rects the NEXT level is filtered under,
+    // and that level (0 = idle). One level per frame — see refreshSkidMips.
+    std::vector<SkidRect> mSkidMipRects;
+    int mSkidMipLevel = 0;
     float mSkidLatHalf = 0;                       // half the lat span the texture covers
     // Texel edges in world units per axis. The stamp feather is sized from
     // the texel footprint along the mark's own width direction, so straights
     // (resolved by the fine lat axis) stay crisp while diagonal segments —
     // which alias against the coarser s axis — get just enough ramp.
     float mSkidTexelS = 0, mSkidTexelLat = 0;
-    // The device's real GL_MAX_TEXTURE_SIZE, set by the platform surface
-    // before init (8192 = the conservative floor when no shell reports one).
-    // At 16384 the skid texture reaches 80 texels/u along s on ordinary lap
-    // lengths — the same density as lat, so the grid is isotropic and a
-    // diagonal mark resolves exactly like a straight one.
+    // The rubber layer's width ceiling: a CHOSEN cross-platform policy, not a
+    // device measurement. init() clamps it DOWN to what the driver admits (a
+    // real box's Vulkan driver caps 2D images at 4096) and nothing raises it.
+    //
+    // The web surface used to hand in its own GL_MAX_TEXTURE_SIZE, so a
+    // hardware-GL browser ran the layer at 16384. Halving that halves every
+    // place the width is spent, per-frame included: ~5.3 MiB of GPU and as much
+    // CPU, half the race-restart re-upload, and — because a stamp's texel span
+    // along s scales with texW — half the area rasterSkidTri fills, half the
+    // bytes each dirty rect uploads, half of what refreshSkidMips walks.
+    //
+    // What it costs is anisotropy, and the grid was NEVER isotropic: lat is
+    // ~80 texels/u while s at 8192 runs ~18-25 over the shipped tracks, so the
+    // s-axis texel footprint exactly doubles and ~2x anisotropic becomes ~4x.
+    // (Isotropy would want a lap under ~205 u; the shortest shipped one is
+    // 335.) The angle-aware feather in the stamp block absorbs it — it sizes
+    // its ramp from mSkidTexelS per scene, so a diagonal mark gets SOFTER
+    // rather than blockier.
     uint32_t mMaxTextureDim = 8192;
+    // The grade's sRGB curve as a 1024-entry table — ttp_grade.inc has why.
+    filament::Texture* mGradeLut = nullptr;
     bool mSkidWipe = false;    // clear the layer on the next stamp pass (race restart)
     // The layer's mip refresh (see the stamp block): stamps land in mip 0; the
     // chain regenerates at most ~7 Hz so minified marks stop scintillating
@@ -774,13 +1462,205 @@ private:
     // is on the mTime clock, which restarts at 0 with every scene build.
     bool mSkidMipsDirty = false;
     float mSkidMipsAt = 0;
+    // ── The car-shadow layer ────────────────────────────────────────────
+    // The eight contact shadows as a per-frame CPU-rasterized track-space R8
+    // texture (the rubber layer's idiom — same mapping, same lat span, so
+    // vroad's tap reuses the rubber uv), replacing vroad's masked uniform
+    // loop: under a real pack that loop was ~5 ms of the 720p frame and only
+    // structure moved it. TRANSIENT, unlike the rubber: renderCars erases
+    // last frame's stamps and lays this frame's, so unlike the rubber there
+    // is no throttle to hide behind — which is why the texture is a PAIR.
+    // Each frame uploads the WHOLE level 0 as ONE setImage into the texture
+    // the driver is NOT reading (the instances are re-pointed at it after
+    // the upload), so the respecify-while-in-flight stall the skid layer's
+    // ~30 Hz throttle exists to dodge has no texture to land on. One 256-512
+    // KB upload event per frame, against the 16-24 dirty-rect events an
+    // in-place scheme would cost — the skid layer proved the driver bills
+    // per EVENT on an in-flight texture, not per byte.
+    // No mips, deliberately: the masked loop sampled its silhouette at LOD 0
+    // with no chain either, so minification behaves exactly as it did.
+    filament::Texture* mCarShadowTex[2] = { nullptr, nullptr };
+    std::vector<uint8_t> mCarShadowPix;    // CPU raster truth, W×H, row 0 = -latHalf
+    uint32_t mCarShadowW = 0, mCarShadowH = 0;
+    uint32_t mCarShadowPing = 0;           // which of the pair takes the NEXT upload
+    std::vector<SkidRect> mCarShadowDirty; // this frame's stamp rects (unwrapped x)
+    // THE TWO FRAMES BEFORE THIS ONE'S, and they exist because of the ping-pong.
+    // A texture takes an upload every OTHER frame, so the one about to be
+    // written was last correct two frames ago — and what changed since is the
+    // regions this frame stamped, the regions last frame stamped (which this
+    // frame's erase zeroed), and the frame before that's. Uploading only the
+    // current rects leaves each texture holding the other's stale stamps, which
+    // reads on screen as the shadow strobing between two positions.
+    std::vector<SkidRect> mCarShadowWas[2];
+    uint32_t mCarShadowWasAt = 0;
+    bool mCarShadowUpload = false;         // the CPU buffer changed since the last upload
+    // The silhouette SOURCE the raster samples, PER MODEL — the car's own
+    // top-down outline (ttp/car_footprint.h), rasterized on the CPU from the
+    // same GLB bytes the merged draw groups already decode.
+    //
+    // It is a fact about the KIT, not about this race, so it is keyed by the
+    // model the way the GPU silhouette layers are and survives releaseScene:
+    // the field is eight cars over four models, and a re-dress into a model
+    // someone else drives costs nothing.
+    //
+    // **THE AABB CANNOT DO THIS JOB.** All four roster cars measure x ±0.26 to
+    // ±0.28 by z ±0.438, so a shape sized off the bounding box is the SAME
+    // shape for every one of them — which is exactly what the shared
+    // superellipse was. The outline inside the box is the only thing that
+    // differs, and it is what this holds.
+    std::unordered_map<uint64_t, std::vector<float>> mCarShadowMasks;
+    std::vector<uint64_t> mCarShadowMaskOfSlot;  // slot -> model key (0 = generic)
+    // The model's triangles, FLATTENED TO THE GROUND IN ITS REST POSE, kept so
+    // a re-bake never has to look at the asset again.
+    //
+    // THIS IS NOT AN OPTIMISATION, IT IS THE CORRECTNESS FIX. A posed car's
+    // world transform puts it out on the track, hundreds of units from the mask
+    // frame, so re-deriving an outline from the live asset answers an EMPTY
+    // mask and every car silently drops to the superellipse. It is the same
+    // law `mBodyRest` exists for one level up: a POSE IS NOT A FACT ABOUT THE
+    // MODEL, and anything that wants one has to have taken it while the asset
+    // was still at rest.
+    struct CarOutline {
+        std::vector<float> xz;      // 2 per vertex, rest-pose model space
+        std::vector<uint32_t> idx;  // triangles
+        float halfX = 0, halfZ = 0; // the AABB the stamp is sized to
+        // The rounded rect fitted to this model's mask, so the ANALYTIC shape
+        // is per-car too. Re-derived whenever the mask is.
+        ttp::rt::RoundedFit fit;
+        // The convex lobes fitted to the same capture (kShadowShapePoly): one
+        // hull, or two split at the body's waist so the union keeps the pinch
+        // (car_footprint.h says why lobeless, not convex, is the property).
+        // poly[0].count == 0 means the fit failed and the rect stands in.
+        std::array<ttp::rt::PolyFit, 2> poly{};
+    };
+    std::unordered_map<uint64_t, CarOutline> mCarOutlines;
+    // The fallback, and what kShadowShapeSuperellipse selects: one superellipse
+    // for everyone. Engine-lifetime while the tuning is untouched.
+    std::vector<float> mCarShadowMask;
+    // ONE STAMP'S COVERAGE, resolved before it touches the layer.
+    //
+    // **THE TRIANGLES MUST NOT ACCUMULATE INTO EACH OTHER.** A stamp is four
+    // triangles with three shared internal edges, and the two triangles either
+    // side of a shared edge evaluate it from DIFFERENT vertex pairs — which are
+    // exact negations only in exact arithmetic. In floating point both can
+    // claim the same texel, write it twice, and double its alpha. That is a
+    // darker band along every diagonal, written into the layer, which is why no
+    // amount of blur, no change of shape and no change of probe surface touched
+    // it: the extra ink is really there.
+    //
+    // So the triangles resolve by MAX into this, and the finished stamp is
+    // added to the layer once. Two different CARS still add — that is a real
+    // pile-up and the shader's cap bounds it — but a stamp can no longer
+    // overlap itself.
+    std::vector<float> mStampCov;
+    int mStampX0 = 0, mStampY0 = 0, mStampW = 0, mStampH = 0;
+    // The analytic shape drawn as pixels, for the tuning page's readback ONLY
+    // (shadowMaskView). Nothing on a frame path reads it.
+    std::vector<float> mAnalyticPreview;
+    static constexpr int kCarShadowMaskW = 64, kCarShadowMaskH = 128;
+    // Capture one model's outline out of its GLB bytes + the asset's node
+    // transforms, then rasterize it. **THE ASSET MUST BE AT ITS PARSE POSE** —
+    // call this only from the load path, never once a frame has posed the car
+    // (see mCarOutlines). Answers false when the model could not be read, which
+    // leaves that car on the superellipse rather than on a blank stamp.
+    bool bakeCarFootprint(uint64_t key, const std::vector<uint8_t>& glb,
+            filament::gltfio::FilamentAsset* asset,
+            const filament::math::float3& bbMin, const filament::math::float3& bbMax);
+    // Rasterize one captured outline at the current tuning. Pure — no asset, no
+    // scene — which is what makes a tuning drag safe at any point in a race.
+    bool rasterCarOutline(uint64_t key);
+    // THIS CAR's shape, whichever kind the tuning asked for — the mask the
+    // raster samples, or the rounded rect fitted to it. The stamp is the only
+    // place a per-model shape reaches the picture, so it travels with the call
+    // rather than being read off a member the raster would have to pick from.
+    //
+    // **THE FIT IS WHY THE CHEAP SHAPE IS STILL PER-CAR.** The raster evaluates
+    // one expression whatever is in here, so a rounded rect fitted to this model
+    // costs exactly what a generic one costs — including the monster truck's,
+    // which owns an outline like any other model.
+    struct StampShape {
+        const std::vector<float>* mask = nullptr;   // null for the analytic shapes
+        ttp::rt::RoundedFit fit;
+        const ttp::rt::PolyFit* poly = nullptr;     // set only by kShadowShapePoly
+        const ttp::rt::PolyFit* poly2 = nullptr;    // the waist's second lobe, if any
+    };
+    // Which shape slot `i` stamps — its model's outline or fit, or the generic.
+    StampShape carShadowShapeFor(size_t slot) const;
+    // A car wearing the MONSTER keeps its own shape; the stamp scales by
+    // these two factors instead. Deriving the size from the truck's AABB (and
+    // its own fitted outline) read too big; a single 1.2 both ways read too
+    // narrow at the wheels AND too long — because the truck's MEASURED
+    // footprint (GLB node-transformed AABBs) is only ~1.14x the cars' width
+    // and exactly their length. Width carries margin on top of that ratio
+    // because the fit's corner rounding and the soft band's half-alpha edge
+    // both sit inside the geometric box, right where the corner wheels are.
+    static constexpr float kMonsterShadowScaleW = 1.35f;
+    static constexpr float kMonsterShadowScaleL = 1.05f;
+    // The one evaluator both the raster and the readback preview go through,
+    // so the tuning page can never show a shape the deck is not drawing.
+    float analyticCoverage(const StampShape& s, float u, float v, float soft) const;
+    // The polygon's corner rounding, in the footprint's q units, scaled by the
+    // tuning's `corner` knob (the rect scales its FITTED radius instead).
+    // 0.28, up from a first cut at 0.15 the user read as "a little sharp" —
+    // the rect era's FITTED radii sat around 0.42, so the eye is calibrated
+    // to rounder corners than a hull's vertices give.
+    static constexpr float kPolyCornerBase = 0.28f;
+    // Re-derive every mask from the current tuning. Cheap (four models, a few
+    // hundred thousand supersampled pixels each) and only ever called from the
+    // tuning ABI, never from a frame.
+    void rebakeCarShadowMasks();
+    // Independent capability probes on the served vroad — the current blob
+    // carries both (the hybrid's near/far halves); see TtpRendererDecals.cpp.
+    bool roadHasMaskLoop() const;   // hasParameter("maskRect")
+    bool roadHasCarShadow() const;  // hasParameter("carShadow")
+    void bindCarShadow(filament::MaterialInstance* mi, filament::Texture* t);
+    void eraseCarShadow();          // zero last frame's rects in the CPU buffer
+    // One car's stamp: six deckFoot-projected points (the cull-window probes,
+    // now kept) rasterized as TWO warped quads with the silhouette sampled
+    // bilinearly across them — the bending of track space lives INSIDE the
+    // stamp, second-order per slice, instead of smearing it axis-aligned.
+    void rasterCarShadowStamp(const filament::math::float2* sl, float carS, float alpha,
+            const StampShape& shape);
+    void rasterCarShadowTri(const filament::math::float2* p,
+            const filament::math::float2* uv, float alpha,
+            const StampShape& shape);
+    void uploadCarShadow();         // the one setImage + the ping-pong rebind
+    // Re-allocate the layer pair at the tuning's current density. Separate from
+    // the track build because the two density knobs are live on /shadow-lab.
+    void buildCarShadowLayer(float trackLength);
+    // The shadow's ink, cap and tail-cut remap onto every road instance.
+    void applyShadowInk();
+    // The tail cut as the shader wants it: the band scaled from fractions of
+    // the peak alpha into absolute alpha, and .z saying whether the layer
+    // already holds the finished value. One place, because three sites push it.
+    filament::math::float4 shadowRemapParam() const {
+        // An empty band is NO CUT (.z = 1 routes the shader to the raw tap),
+        // never a degenerate smoothstep — its edge0 == edge1 is UB in GLSL.
+        const bool cut = mShadowTune.remapInShader
+                && mShadowTune.remapHi > mShadowTune.remapLo;
+        return { mShadowTune.remapLo * mShadowTune.ao,
+                 mShadowTune.remapHi * mShadowTune.ao,
+                 cut ? 0.0f : 1.0f,
+                 mShadowTune.smoothTap ? 1.0f : 0.0f };
+    }
     struct WheelTrail {
         filament::math::float2 last{}, dir{}, edgeL{}, edgeR{}; // all (s, lat)
         bool hasEdge = false, seeded = false;
         int projHint = -1;     // project()'s warm start
     };
     std::vector<WheelTrail> mWheelTrails; // carCount × 4 (fl fr bl br)
-    float mMonsterFootW = 0, mMonsterFootL = 0; // monster asset footprint (blob swap)
+    // The contact shadow's live knobs; TtpRendererImpl.h holds every default.
+    CarShadowTuning mShadowTune;
+    // mShadowTune.ink decoded once. The maskInk write happens per CHUNK per
+    // FRAME, and an sRGB decode is three pow() calls — not a thing to do on
+    // that path for a value that changes when a person drags a colour.
+    filament::math::float3 mShadowInkLinear{ 0.00967f, 0.00787f, 0.00615f };
+    // The maskInk parameter as the shader wants it: the tuning's ink, and the
+    // tap's enable+cap in w (0 is what actually disables the tap).
+    filament::math::float4 shadowInkParam(bool enabled) const {
+        return { mShadowInkLinear.x, mShadowInkLinear.y, mShadowInkLinear.z,
+                 enabled ? mShadowTune.cap : 0.0f };
+    }
     Mesh mGantry; // procedural start/finish gantry (FinishGate.js port)
     // The sea ring + its wet-sand glaze (theme.water), fitted to the track's
     // own shoreline.
@@ -924,10 +1804,13 @@ private:
 
     // Ambient particles (theme.ambient): immutable SEEDS in a kAmbBox-wide
     // column; vpoint.mat evaluates the motion and wraps x/z around each view's
-    // camera per frame, so after the build the CPU never touches this mesh —
-    // the only per-frame work is the `time` uniform (renderAmbient).
+    // camera per frame, so after the build the CPU touches this mesh only
+    // when the cell count changes (renderAmbient re-fits the draw range, the
+    // box and `lite`); otherwise the per-frame work is the `time` and
+    // `halfSize` uniforms.
     Mesh mPollen;
     float mAmbSize = 0.15f; // half the authored sprite size; re-fitted per frame
+    uint32_t mAmbCells = 0; // the cell count the draw range, box and lite were fitted to
     // Flake floor (FLAKE kind only): a coarse max-height grid of terrain + road
     // ribbon over the whole track, uploaded as an R16F texture the vertex
     // shader taps so a falling flake fades out ONTO the surface instead of
@@ -938,8 +1821,6 @@ private:
     static constexpr float kAmbR = 170.0f;  // the flake-floor grid's half-span
     static constexpr int kAmbFloorN = 86;   // ~4u cells across it
     static constexpr float kAmbBox = 60.0f; // the camera box's x/z extent
-    std::vector<filament::math::float3> mPrevRockets;
-    uint32_t mPrevRocketCount = 0;
     filament::math::float3 mLastCar0{}; // reset/teleport detector: first...
     filament::math::float3 mLastCarN{}; // ...and last car — both must jump
     utils::Entity mSun;
@@ -947,12 +1828,32 @@ private:
     filament::IndirectLight* mAmbient = nullptr;
 
     double mProfile[kProfCount] = {};
+    double mGpuMs = 0.0;
+    bool mAntialias = true;
     uint32_t mWidth = 0;
     uint32_t mHeight = 0;
     bool mHasTrack = false;
     filament::math::float3 mFogColor = { 0, 0, 0 }; // linear; set at scene build
 
     std::unordered_map<std::string, std::vector<uint8_t>> mAssets;
+    // What each held asset's bytes are a function of, in the caller's own
+    // vocabulary — see AssetWant. Same lifetime as mAssets by construction,
+    // which is the point of keeping it here rather than in a shell.
+    std::unordered_map<std::string, std::string> mAssetTag;
+    // …and what the last assetPlan said each name WOULD be a function of, so the
+    // provideAsset that answers it can stamp the tag without a second crossing.
+    std::unordered_map<std::string, std::string> mAssetWantTag;
+    // A model's images[].uri list, by ASSET NAME. The texture step needs it and
+    // used to get it by re-scanning a container the shell had just read — which
+    // is exactly the read the plan above exists to skip.
+    //
+    // BY NAME AND NOT BY CONTENT HASH, which the first version did: hashing is
+    // glbBytesKey, a byte-at-a-time FNV over the whole buffer, so consulting the
+    // cache re-read every model it was there to avoid re-reading. That is ~1.2 MB
+    // a build in play and tens of megabytes in the gallery's kit field. The name
+    // is exact because provideAsset is the only place an asset's bytes change,
+    // and it drops the entry.
+    std::unordered_map<std::string, std::vector<std::string>> mAssetUriCache;
     std::vector<filament::MaterialInstance*> mSceneMatInstances;
 
     void updateCamera();
@@ -967,6 +1868,107 @@ private:
             // culling (the default every dynamic mesh wants).
             uint32_t chunkTris = 0);
     void destroyMesh(Mesh& m);
+    // fillRoadLight + the vertex upload that has to follow it. Pure arithmetic
+    // over the road's own normals now — it reads no map, so it completes inside
+    // the build on every backend and nothing is ever deferred.
+    void applyRoadLight(const TrackBin& tb);
+
+    // Bake the deck's sun visibility into mRoadVisMap (vroadvis.mat), in track
+    // space. Needs a resident ESM and a built road; a no-op without either,
+    // which leaves the map null and the tap answering fully lit.
+    void bakeRoadVis(const TrackBin& tb);
+    // Bind mRoadVisMap (or the 1×1 stand-in) to one road material instance.
+    void bindRoadVisMap(filament::MaterialInstance* mi);
+    // vroad's sunVis lat scale, and its own "no map" signal — 0 means the
+    // shader takes no tap at all. ONE derivation: the feature ablation sets the
+    // same parameter, and a second spelling would drift from the binder.
+    float roadVisLatSpan() const {
+        return (mRoadVisMap && mRoadVisLatHalf > 0.0f) ? 0.5f / mRoadVisLatHalf : 0.0f;
+    }
+
+    // Finish any staged blob whose reads have all landed, and retire the
+    // textures they were reading from. Called from the frame beat because that
+    // is the one place the GL driver tick has run. A no-op on any frame with
+    // nothing staged, which is almost all of them.
+    //
+    // EVERY BACKEND LANDS HERE, not just GL. Staging deliberately does NOT pump
+    // the driver: the pump this replaced was eight flushAndWait calls on the
+    // build's critical path, and on the shell where a build IS the lobby's
+    // latency that is the last place to put a synchronous GPU wait. Metal and
+    // Vulkan would finish inside such a pump and GL cannot, so keeping it would
+    // have bought two backends a marginally earlier write in exchange for a
+    // stall and a second code path. Measured after: the first frame following a
+    // build collects them on all three.
+    void collectStagedBlobs();
+
+    // ---- staged blobs ------------------------------------------------------
+    //
+    // A texture readback that a blob is waiting on.
+    //
+    // ON ONE BACKEND THEY NEVER FINISH IN TIME. A GL readback's completion is
+    // executed from OpenGLDriver::tick(), which FRenderer::endFrame() calls and
+    // flushAndWait() does not — and in a browser a task cannot wait on the GPU at
+    // all. So on GL a blob cannot be finished inside the build that stages it;
+    // the read is parked and the frame loop turns the driver over. Metal and
+    // Vulkan finish inside the pump and never park anything.
+    //
+    // ONE READ IS OWNED BY ONE STAGED BLOB, which is what the old shared pool
+    // could not say. It keyed by (texture, layer) and retired a read whose stamp
+    // no longer matched — but the ESM texture is destroyed and reallocated on
+    // every non-reused bake, so a read for a track nobody was asking about any
+    // more matched nothing, was never retired, and sat holding a 16 MB buffer and
+    // a RenderTarget over freed storage for the life of the page.
+    struct StagedRead {
+        filament::Texture* tex = nullptr;
+        int layer = -1;                         // array slice, or -1 for a 2D texture
+        bool asFloat = false;                   // the ESM reads FLOAT, the rest UBYTE
+        uint32_t w = 0, h = 0;                  // snapshotted: `tex` may be gone by now
+        std::vector<uint8_t> px;
+        std::atomic<bool> done{ false };
+        filament::RenderTarget* rt = nullptr;   // outlives the issue; freed on finish
+    };
+
+    // Derived bytes whose metadata is already snapshotted and whose pixels are
+    // still coming. See the public stageBlob for the whole argument.
+    struct StagedBlob {
+        std::string key;
+        bool mask = false;                      // which layout `finish` writes
+        bool flip = false;                      // the writer's GL row flip, latched here
+        std::vector<uint8_t> head;              // everything before the first read's pixels
+        std::vector<uint8_t> tail;              // …and after the last (the bake's road light)
+        std::vector<std::unique_ptr<StagedRead>> reads;
+        std::vector<uint8_t> bytes;             // the finished blob; empty until it is
+        bool finished = false;
+    };
+    std::vector<std::unique_ptr<StagedBlob>> mStaged;
+
+    // Issue one read into a staged blob. `layer` is the array slice or -1.
+    bool issueRead(StagedBlob& blob, filament::Texture* tex, bool asFloat, int layer);
+    // Splice landed pixels into the snapshotted head/tail. Two layouts, one per
+    // blob kind, and both of them GL's row flip away from the texture's own order.
+    void finishBakeBlob(StagedBlob& blob);
+    void finishMaskBlob(StagedBlob& blob);
+    // Retire a staged blob's reads: free the RenderTargets, and LEAK the buffer
+    // of any read that never landed. The driver may still hold a pointer into it
+    // and there is no tick left that will fire the callback — the same trade
+    // the road-light read used to make, and for the same reason.
+    void retireStaged(StagedBlob& blob);
+    // Is a texture still the destination of an unfinished read?
+    bool readInFlight(const filament::Texture* tex) const;
+    // Textures a staged read is still writing into, kept alive past the bake that
+    // replaced them. Destroying one under an outstanding readPixels is a write
+    // into freed storage.
+    std::vector<filament::Texture*> mTexGraves;
+    // Destroy any grave nothing is reading from any more.
+    void drainTexGraves();
+    // Swap the resident sun maps, sending any the reads still need to the graves
+    // instead of destroying them. Every path that replaces them goes through here.
+    void replaceShadowMaps(filament::Texture* esm, filament::Texture* vis);
+    // The two blob layouts importBlob dispatches to on the magic it read. Each
+    // answers the key it adopted, or empty on refusal.
+    std::string importBakeBlob(const uint8_t* p, const uint8_t* end);
+    std::string importMaskBlob(const uint8_t* p, const uint8_t* end);
+
     bool buildTrackScene(const std::vector<TtpRosterCar>& roster, const ttp::RaceTrack& geo,
             const ttp::rt::Theme& theme, const ttp::rt::WearPlan& wear);
     // The roster half of TrackBin — a copy now that the liveries arrive typed.
@@ -1004,6 +2006,145 @@ private:
     filament::gltfio::FilamentAsset* loadInstancedProp(const char* assetName,
             size_t count, std::vector<filament::gltfio::FilamentInstance*>& out,
             bool shareMaterials = true);
+
+    // ---- Merged draw groups (explicit instancing) --------------------------
+    // The 4-player frame on the TV boxes is bound by SUBMISSION — ~30 µs per
+    // draw on the Android box, and the world is submitted once per cell —
+    // while Filament's automatic instancing cannot batch most of the kit (it
+    // is depth-bucketed and winding-split; see the shell docs). So the two
+    // families that are many-copies-of-one-mesh — the car field and the
+    // per-copy dressing — are re-issued as ONE renderable per distinct MESH
+    // with an explicit InstanceBuffer: geometry decoded from the same GLB
+    // bytes the shell already provided (ttp/glb_mesh.h), materials SHARED from
+    // the gltfio-loaded originals, and the original renderables taken out of
+    // the scene. The gltfio node entities STAY, transforms and all: every
+    // behaviour that rides a transform — wheel spin/steer/travel, the monster
+    // park, the ghost swap, debugHideCars — is inherited by mirroring node
+    // world transforms into the instance buffer (updateMergedTransforms),
+    // never re-implemented. A model this machinery cannot fully decode keeps
+    // drawing exactly as gltfio loaded it — merging is an optimisation with a
+    // whole-model fallback, not a second code path to keep correct.
+    struct MergedPrim {
+        filament::VertexBuffer* vb = nullptr;
+        filament::IndexBuffer* ib = nullptr;
+        // CPU copies stay alive for the group's life — BufferDescriptors carry
+        // no release callback (the Mesh rule).
+        std::vector<filament::math::float3> pos;
+        std::vector<filament::math::quatf> quats;
+        std::vector<filament::math::float2> uvs;
+        std::vector<uint32_t> idx;
+    };
+    struct MergedGroup {
+        utils::Entity ent;
+        std::vector<MergedPrim> prims;
+        filament::InstanceBuffer* ibuf = nullptr;
+        // THE BAKED FORM, for a STATIC group whose model the kit colour table
+        // knows (generated/kit_colors.h): the copies expanded into one
+        // world-space mesh with base colour x matte light folded per vertex,
+        // drawn unlit — no instance buffer, no tangents, no texture, no
+        // shading. `ent` is this mesh's entity and `prims`/`ibuf` stay empty.
+        // Expanded rather than instanced because the light depends on each
+        // copy's own rotation. bakeMergedRun builds it.
+        Mesh baked;
+        std::vector<utils::Entity> sources;      // one gltfio node per instance
+        std::vector<filament::math::mat4f> xf;   // mirror scratch
+        float radius = 0;                        // mesh-local bound, world AABB
+        bool dynamic = false;                    // mirror world transforms per frame
+        uint8_t feat = 0;                        // kFeat* bit for tagFeatures
+    };
+    std::vector<MergedGroup> mMergedCars;   // rebuilt whenever the roster moves
+    std::vector<MergedGroup> mMergedDress;  // built once per scene's dressing
+    // THE DRESSING ABLATION, in two halves because the group's cost is in two
+    // halves and no layer bit is left to split it with (kFeat* fills the byte).
+    // mDressKeep is the fraction of each merged group's COPIES that is kept;
+    // mDressSheets is whether the one-renderable SHEETS are in the scene.
+    float mDressKeep = 1.0f;
+    bool mDressSheets = true;
+    bool mCarMergeDirty = false;
+    bool mDressMergeDirty = false;
+    bool mMergeOff = false;                 // kFeatNoMerge (ablation only)
+    std::vector<uint64_t> mCarModelKey;     // per slot: FNV of its GLB bytes
+    std::vector<uint64_t> mCarGhostKey;     // …and of its ghost twin's, for the pool
+
+    // PARSED BODIES, KEPT BY MODEL — the same argument the sun bake and the
+    // silhouette layers already won, one level up. gltfio parsing a GLB and
+    // uploading its buffers is the biggest recurring phase of a build (`cars`
+    // in the phase log), and releaseScene used to destroy every one of them
+    // while the mask layers keyed off those same bytes survived. The field is
+    // usually unchanged across a build: a Grand Prix is four races on one grid,
+    // and the lobby rebuilds on every join, pick and launch.
+    //
+    // KEYED BY THE BYTES, NEVER BY THE SLOT. `glbBytesKey` is the same identity
+    // claimMaskLayer uses, and keying by slot is the exact bug that used to drop
+    // a car to the generic oval when the next race moved it (see destroyCarSlot).
+    // A vector per key, because two slots wearing one model need two ASSETS —
+    // each carries its own entities and transforms.
+    //
+    // Safe to reuse without re-dressing, and that is reroster's finding rather
+    // than an assumption: a livery change touches no GLB at all ("the GLB body
+    // keeps its own paint"), so a body is a pure function of its model bytes.
+    std::unordered_map<uint64_t, std::vector<filament::gltfio::FilamentAsset*>> mBodyPool;
+
+    // How many parked bodies to hold. Eight slots over four car models plus the
+    // ghosts, so this covers a full grid twice over; a cache with no cap is a
+    // leak (libttp-runtime/ttp/blobstore.h makes the same point about disk), and
+    // GPU memory has no eviction signal to derive one from.
+    static constexpr size_t kBodyPoolMax = 24;
+    size_t mBodyPoolCount = 0;
+
+    // Park a parsed body for reuse instead of destroying it, or destroy it when
+    // the pool is full. Takes the pointer by reference and nulls it, like
+    // dropAsset, so no caller can keep a handle to something it gave away.
+    void parkAsset(uint64_t key, filament::gltfio::FilamentAsset*& a);
+    // …and back, at its parse pose (mBodyRest): null when nothing is parked for
+    // this model.
+    filament::gltfio::FilamentAsset* takeAsset(uint64_t key);
+    // Destroy everything parked. Teardown only — a scene release PARKS.
+    void drainBodyPool();
+
+    // THE POSE A FRESH PARSE WOULD HAVE HANDED OVER: every node's own local
+    // transform, snapshotted before any frame has touched the asset and put back
+    // by takeAsset. Parking restores nothing (see parkAsset), so a parked body
+    // still wears the last frame's pose — the root, the four wheels' steer, roll
+    // and suspension, the axle, a monster's collapsed tyres — while loadCarAsset
+    // measures the seats it fills CarWheels with on the stated assumption that
+    // those nodes are at rest. Reusing without this fed each rebuild's
+    // measurement the previous one's pose, and the drift compounded across races
+    // until a corner's wheel visibly left the road.
+    //
+    // Keyed by the ASSET rather than by the model, so nothing here rests on two
+    // parses of the same bytes numbering their entities alike.
+    struct RestPose {
+        std::vector<filament::math::mat4f> nodes;  // parallel to getEntities()
+        filament::math::mat4f root;                // gltfio's own, not in there
+    };
+    std::unordered_map<const filament::gltfio::FilamentAsset*, RestPose> mBodyRest;
+    void snapshotRestPose(filament::gltfio::FilamentAsset* a);
+    void restoreRestPose(filament::gltfio::FilamentAsset* a);
+    // Parsed kit geometry, keyed by the bytes' FNV. Engine-lifetime — the kit's
+    // bytes never change, so a cup's four scenes parse each model once.
+    std::unordered_map<uint64_t, std::vector<ttp::rt::GlbMeshNode>> mGlbMeshCache;
+    // Which parse an instanced dressing asset was loaded from (scene scope).
+    std::unordered_map<const filament::gltfio::FilamentAsset*, uint64_t> mAssetMeshKey;
+    static uint64_t glbBytesKey(const std::vector<uint8_t>& glb);
+    const std::vector<ttp::rt::GlbMeshNode>* glbMeshes(uint64_t key,
+            const std::vector<uint8_t>& glb);
+    bool buildMergedGroup(std::vector<MergedGroup>& out,
+            const std::vector<utils::Entity>& sources,
+            const std::vector<ttp::rt::GlbMeshPrim>& prims, bool dynamic,
+            uint8_t feat, const ttp::kitcolors::Mesh* colors = nullptr);
+    bool bakeMergedRun(MergedGroup& g, const std::vector<ttp::rt::GlbMeshPrim>& prims,
+            const ttp::kitcolors::Mesh& colors,
+            utils::Entity src0);
+    void destroyMergedGroups(std::vector<MergedGroup>& groups);
+    void mirrorMergedGroup(MergedGroup& g,
+            filament::math::float3& mn, filament::math::float3& mx);
+    void rebuildCarMerge();
+    void buildDressingMerge();
+    void mergeInstancedSet(const filament::gltfio::FilamentAsset* asset,
+            const std::vector<filament::gltfio::FilamentInstance*>& insts,
+            bool dynamic);
+    void updateMergedTransforms();
     void buildWater(const TrackBin& tb);
     void buildFliers(const TrackBin& tb);
     void buildGantry(const TrackBin& tb);
@@ -1020,8 +2161,40 @@ private:
     // per VIEW per frame, which a 4-way split pays for four times over; the JS
     // renders one and freezes it (SceneRenderer.setTrack), and so do we.
     void bakeShadowMap(const TrackBin& tb);
+    // The matte light rig's NUMBERS — sun colour/lux and the hemisphere's
+    // 2-band SH, UNEXPOSED — one derivation for the scene's lights
+    // (buildTrackScene) and the road's baked vertex light (fillRoadLight),
+    // so the two cannot drift.
+    struct MatteRig {
+        filament::math::float3 sunColor;
+        float sunLux;
+        filament::math::float3 sh0, sh1;
+        float hemiLux;
+    };
+    MatteRig matteRig(const TrackBin& tb) const;
+    // The matte light a static sheet's vertices are folded with at build
+    // (Mesh::bakeLight): ttpMatteShade's CPU twin at visibility 1, pre-exposed
+    // exactly as the shader's frame uniforms are. buildTrackScene sets it
+    // before the first sheet is built. fillRoadLight is the same twin for the
+    // road, which keeps its light in CUSTOM0 because the road's COLOUR is
+    // computed in the shader; a sheet's colour is its vertex, so the product
+    // can be stored directly.
+    struct BakeRig {
+        filament::math::float3 sunPre{ 0 }, sh0{ 0 }, sh1{ 0 };
+        float hemiPre = 0.0f;
+        bool valid = false;
+    };
+    BakeRig mBakeRig;
+    filament::math::float3 bakedMatteLight(const filament::math::float3& n) const;
+    // Evaluate the road's matte light — ttpMatteLight's CPU twin, the fwidth
+    // AA floor dropped exactly as vvis.mat's bake drops it — into
+    // mRoad.custom0 as (ambient.rgb, NoL). It reads NO map: the deck's
+    // visibility is bakeRoadVis's track-space tap, so nothing here needs the
+    // ESM off the GPU and the fill completes inside the build on every backend.
+    void fillRoadLight(const TrackBin& tb);
     // Hand the baked map + its world→light matrix to a material instance.
     void bindShadowMap(filament::MaterialInstance* mi);
+    void bindVisMap(filament::MaterialInstance* mi);
     filament::MaterialInstance* litShadowInstance();
     // The fog colour to give Filament, pre-graded — see the definition for why
     // the grade cannot stay in the shader for this one.
@@ -1046,10 +2219,15 @@ private:
     static DeckDecal makeStamp(float s, float lat, float halfS, float halfLat,
             const filament::math::float3& col, float alpha, float inner, float knee,
             bool ellipse, int chevrons);
+    // Which entries a fold takes. The DECAL channel now runs two folds over one
+    // source list — masked and profile have separate uniform arrays and separate
+    // caps in vroad.mat — while the PAINT channel takes everything.
+    enum class DecalKind { All, Masked, Profile };
     // The lap-wrap fold both deck channels share — see the definition. Fills
     // `out` in list order up to `cap`, so an overflowing chunk keeps the head.
     static int foldToChunk(const std::vector<DeckDecal>& src, float mid,
-            float halfSpan, float L, DeckDecal* out, int cap);
+            float halfSpan, float L, DeckDecal* out, int cap,
+            DecalKind kind = DecalKind::All);
     void uploadDeckDecals();
     // Resolve the decals that never move — oil slicks and item-box contact
     // shadows — into mStaticDeckDecals, once per track.
@@ -1071,21 +2249,143 @@ public:
     // this were argued from ambiguous screenshots. These make the stamp the
     // only thing on the road. Nothing on the shipping path reads them.
     void debugHideCars(bool on) { mHideCars = on; }
+    void setDressKeep(float frac);
+    void setDressSheets(bool on);
+    void applyDressSheets();
+    void forEachDressSheet(const std::function<void(const Mesh&)>& fn) const;
     void debugWipeSkids() { mSkidWipe = true; }
     // Force every masked stamp onto ONE mask layer, or −1 to leave each car on
-    // its own. Layer 9 is the generic superellipse, a shape correct by
-    // construction, so it separates "the bake is wrong" from "everything
+    // its own. kMaskLayerGeneric is the generic superellipse, a shape correct
+    // by construction, so it separates "the bake is wrong" from "everything
     // downstream of the bake is wrong" without reading the texture back.
-    void debugForceMaskLayer(int layer) { mForceMaskLayer = layer; }
+    // Clamped: the layer count shrank when the store went per-model, and an
+    // out-of-range index would sample past the array rather than fail.
+    void debugForceMaskLayer(int layer) {
+        mForceMaskLayer = layer < 0 ? -1
+                : (layer >= kMaskLayers ? kMaskLayers - 1 : layer);
+    }
+
+    // THE CONTACT SHADOW'S LIVE KNOBS — /shadow-lab.html's whole surface.
+    // Applying a tuning re-bakes the masks and, if a density moved, the layer
+    // pair; everything else lands on the next frame for free.
+    const CarShadowTuning& shadowTuning() const { return mShadowTune; }
+    void setShadowTuning(const CarShadowTuning& t);
+
+    // The mask one car slot actually stamps, for the tuning page's readback.
+    // `generic` means the outline bake did not land and the superellipse is
+    // standing in — a state no screenshot separates from a rounded car.
+    struct ShadowMaskView {
+        const float* px = nullptr;
+        int w = 0, h = 0;
+        uint64_t model = 0;
+        bool generic = true;
+    };
+    ShadowMaskView shadowMaskView(size_t slot);
+
+    // A window of the LAYER the raster wrote — the one place this channel can
+    // be inspected without a camera and a shader in the way. `out` is filled
+    // row-major, w*h bytes; answers false when there is no layer.
+    bool shadowLayerWindow(int x, int y, int w, int h, std::vector<uint8_t>& out) const;
+
+    // What the density knobs actually BOUGHT. Derived, never set: the width
+    // clamps against the driver's texture ceiling, so asking for more texels/u
+    // on a long lap silently gets fewer — and `stampTexels*` is the number the
+    // whole flicker question turns on, because a stamp re-landed at a new
+    // sub-texel offset every frame can only hold an edge still if there are
+    // enough texels under it.
+    struct ShadowLayerInfo {
+        int w = 0, h = 0;
+        float texelsPerU = 0, texelsPerLat = 0;
+        float stampTexelsS = 0, stampTexelsLat = 0;
+    };
+    ShadowLayerInfo shadowLayerInfo() const;
+
+    // FEATURE ABLATION — the per-feature cost map's only instrument.
+    //
+    // The frame is submission-bound (per-cell draw calls, not fill), so "what
+    // does the sky cost" cannot be answered by reading a shader: it is a
+    // question about how many renderables a feature puts in front of every
+    // cell's culler. This drops one group at a time and lets the GPU timer
+    // answer. `mask` carries kFeat* bits; a cleared bit hides that group.
+    //
+    // WHY LAYERS AND NOT SCENE MEMBERSHIP: half these groups are pools whose
+    // membership the frame itself rewrites (boxes, streaks, bursts), so a
+    // removal would be undone by the next update pass. A layer bit is set once
+    // and filtered at the view, which is also where the per-cell cost is.
+    // The trade is that FScene::prepare still walks a hidden entity — the
+    // reading is the DRAW half of a feature's cost, not the whole of it.
+    static constexpr uint8_t kFeatRoad     = 0x04; // the deck ribbon (chunked)
+    static constexpr uint8_t kFeatTerrain  = 0x08; // ground, sky, hills, water, structures
+    static constexpr uint8_t kFeatDressing = 0x10; // scenery, props, landmarks, clutter, cones
+    static constexpr uint8_t kFeatSky      = 0x20; // clouds, haze, fliers, balloon
+    static constexpr uint8_t kFeatCars     = 0x40; // car GLBs, monster rigs, boost streaks
+    static constexpr uint8_t kFeatEffects  = 0x80; // item pools, rockets, bursts, ambient
+    static constexpr uint8_t kFeatAll = kFeatRoad | kFeatTerrain | kFeatDressing
+            | kFeatSky | kFeatCars | kFeatEffects;
+    // The road turns out to BE the frame's cost, so it gets a second set of
+    // bits — its fragment shader's four channels, switched by the uniforms that
+    // already gate them (vroad.mat early-outs on each count / half-width being
+    // zero). These do not hide anything: the same deck is drawn, shaded with
+    // one channel skipped, which is exactly what a candidate optimisation of
+    // that channel could ever be worth.
+    static constexpr uint32_t kFeatRoadDecals = 0x0100;
+    static constexpr uint32_t kFeatRoadRubber = 0x0200;
+    static constexpr uint32_t kFeatRoadPaint  = 0x0400;
+    static constexpr uint32_t kFeatRoadShadow = 0x0800;
+    static constexpr uint32_t kFeatRoadAll = kFeatRoadDecals | kFeatRoadRubber
+            | kFeatRoadPaint | kFeatRoadShadow;
+    // SCENE-WIDE channels, the same idea one level up: the same picture drawn
+    // with one per-fragment term skipped, on every surface at once rather than
+    // on the deck alone. Filament's fog is the first, because it is composited
+    // inside EVERY surface shader and so cannot be ablated by hiding anything.
+    static constexpr uint32_t kFeatFog = 0x1000;
+    // TTP_DEBUG_NO_MERGE — SET takes the merged draw groups apart, so a sweep
+    // prices the merging itself as interleaved arms on one launch.
+    static constexpr uint32_t kFeatNoMerge = 0x2000;
+    // The two channels that ride a Filament VIEW GLOBAL instead of a material
+    // parameter, because eleven materials include the .inc each one lives in
+    // (see ttp_grade.inc). kFeatFogVertex is NOT a finer kFeatFog: that one
+    // moves the fog's parameters and cannot reach ttpFogFactor's own maths.
+    static constexpr uint32_t kFeatGrade = 0x4000;
+    static constexpr uint32_t kFeatFogVertex = 0x8000;
+    // TTP_DEBUG_NO_DECAL_* / DECAL_CAPS_HALF — kFeatRoadDecals decomposed
+    // into its sub-arms, inverted like kFeatNoMerge (ttp_display.h's comment
+    // has each arm's meaning and which are attribution-only).
+    static constexpr uint32_t kDebugNoDecalMasked  = 0x10000;
+    static constexpr uint32_t kDebugNoDecalProfile = 0x20000;
+    static constexpr uint32_t kDebugNoDecalBlob    = 0x40000;
+    static constexpr uint32_t kDebugNoDecalStatics = 0x80000;
+    static constexpr uint32_t kDebugDecalCapsHalf  = 0x100000;
+    static constexpr uint32_t kDebugDecalMaskCount0 = 0x200000;
+    static constexpr uint32_t kDebugDecalMaskBounds0 = 0x400000;
+    static constexpr uint32_t kDebugDecalMaskFlat = 0x800000;
+    static constexpr uint32_t kDebugDecalAll = kDebugNoDecalMasked
+            | kDebugNoDecalProfile | kDebugNoDecalBlob | kDebugNoDecalStatics
+            | kDebugDecalCapsHalf | kDebugDecalMaskCount0
+            | kDebugDecalMaskBounds0 | kDebugDecalMaskFlat;
+    void debugFeatureMask(uint32_t mask);
 private:
     bool mHideCars = false;
     int mForceMaskLayer = -1;
-    // Frustum culling, off by default (buildMesh): a mesh whose vertices are
-    // rewritten in WORLD space every frame — the billboards, the burst pools —
-    // outlives its build-time bounds, so only meshes that stay put (or move by
-    // transform) may opt in.
+    // Feature-ablation state (debugFeatureMask). mFeatureTagged latches the one
+    // pass that moves every renderable off the default layer bit onto its
+    // group's — until a caller asks, nothing here touches a shipped frame.
+    uint8_t mFeatureMask = kFeatAll;
+    uint32_t mRoadMask = kFeatRoadAll;
+    uint32_t mDecalDebug = 0;
+    bool mFogOn = true;
+    // The ablation view-global, in the sense the shaders read it: ZERO is the
+    // shipped picture, so a View nobody set renders correctly (ttp_grade.inc).
+    filament::math::float4 mDebugGlobals{ 0.0f, 0.0f, 0.0f, 0.0f };
+    void applyDebugGlobals(filament::View* v) const;
+    bool mFeatureTagged = false;
+    void tagFeatures();
+    void tagEntities(const utils::Entity* e, size_t n, uint8_t bit);
+    void tagMesh(const Mesh& m, uint8_t bit);
+    void applyRoadDebug();
+    // Frustum culling, on by default (buildMesh): opt OUT for meshes the
+    // shader expands past their build-time bounds (the burst ring).
     void setMeshCulling(Mesh& m, bool enable);
-    void refreshBounds(Mesh& m);
     void setShadows(const utils::Entity* e, size_t n, bool cast, bool receive);
     // Add/remove from mScene, edge-triggered. The idiomatic way to hide
     // something in Filament: a parked transform still costs a prepare slot per

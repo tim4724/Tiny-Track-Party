@@ -1,0 +1,48 @@
+# Machine-specific SDK path. Gradle writes this itself if Android Studio opens
+# the project; the build scripts set ANDROID_HOME instead.
+local.properties
+
+# Android Studio's own project state, from that same cause. Nothing in the
+# build reads it, and it carries per-machine paths and window layout.
+.idea/
+
+# Gradle's own state.
+.gradle/
+build/
+app/build/
+
+# The daemon JVM criteria, written by `updateDaemonJvm` when the IDE opened the
+# project. Gradle's own advice is to COMMIT this file, and that advice assumes
+# the daemon JVM is a decision the project has MADE. This one was not: it
+# arrived from an IDE and pins toolchain 21, where compileOptions and the
+# workflows' setup-java are both 17. Committed, every build here and in CI
+# would fetch a JDK nobody chose. Adopt daemon JVM criteria deliberately or
+# not at all.
+gradle/gradle-daemon-jvm.properties
+
+# BUILD OUTPUT, not artifacts. native/scripts/build-runtime-android.sh writes
+# these, and unlike public/display/engine/native/ttp_runtime.wasm they are NOT
+# checked in: no test in the tree replays them, and two ABIs of a 5-7 MB .so per
+# commit would dwarf the repo. Same call the tvOS script makes for its .a.
+app/src/main/jniLibs/
+
+# Staged by shells/androidtv/scripts/stage-assets.sh from the one place each
+# thing is authored. Committing them would be a second copy of the kit, the
+# cues, the materials and design-tokens.json.
+app/src/main/assets/
+
+# Likewise, and for the same reason — but these must be RESOURCES rather than
+# assets: the launcher tile, the launcher icon and the splash icon are all read
+# from the installed package before any app code runs, so none of them can be an
+# asset. scripts/bake-wordmark.mjs is where every file in both directories comes
+# from, and stage-assets.sh empties them before it copies.
+#
+# res/mipmap-anydpi-v26/ IS committed — it is the adaptive-icon declaration, hand
+# written Android source that NAMES two of these bitmaps rather than being one.
+app/src/main/res/drawable-nodpi/
+app/src/main/res/mipmap-nodpi/
+/keystore.properties
+
+# The Kotlin compiler's own session scratch, written beside the project by
+# Kotlin 2.x. Per-build, per-machine, and empty once the daemon exits.
+.kotlin/

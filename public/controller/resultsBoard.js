@@ -15,6 +15,7 @@
 // gives away the reveal the TV is still building. What stays is the half the TV
 // cannot personalise, plus the controls only this phone has.
 import { renderWaitNote } from './ui.js';
+import { ordinal } from '../shared/format.js';
 
 const el = (id) => document.getElementById(id);
 
@@ -36,14 +37,6 @@ export function renderResultsBoard(data, { meId, hostPeerIndex, amHost, liveryOf
         : `Race ${s.raceIndex + 1} of ${s.raceCount}`;
   renderMe(data, meId, cupDone);
   renderFoot(data, { hostPeerIndex, amHost, liveryOf });
-}
-
-// 1st/2nd/3rd/4th… — the teens are all "th", which is why this is not a lookup
-// on the last digit alone. The field plus late joiners can reach the teens.
-function ordinal(n) {
-  const tens = n % 100;
-  if (tens >= 11 && tens <= 13) return `${n}th`;
-  return n + ({ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th');
 }
 
 // WHERE YOU CAME IN THE RACE — one ranking, and deliberately not the cup one.

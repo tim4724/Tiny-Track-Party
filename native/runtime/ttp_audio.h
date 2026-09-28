@@ -214,8 +214,8 @@ TTP_ABI const char* ttp_audio_cue_id(int code);
 
 /* The song a TTP_AUD_MUSIC_START command picked, by its `subject` index:
  *   {"file","title","duration","lufs","gain","artist","license","source"}
- * — the path to stream and the credit-chip fields (which is also how the CC-BY
- * attribution is satisfied). "null" for an index outside the catalogue.
+ * — the path to stream, plus the attribution fields the Licenses board is baked
+ * from. "null" for an index outside the catalogue.
  *
  * JSON, and a separate call, because this is the one thing in the audio path
  * that IS text and it happens once per race — off the frame path entirely.

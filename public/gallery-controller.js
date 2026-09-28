@@ -16,7 +16,7 @@ var CONTROLLER_CARDS = [
   { key: 'name-connecting', title: 'Connecting…' },
   { key: 'lobby-host',      title: 'Lobby (host, car page)', perColor: true },
   { key: 'lobby-race',      title: 'Lobby (host, race page)', perColor: true },
-  { key: 'lobby-race-locked', title: 'Lobby (Playroom locked)', perColor: true },
+  { key: 'lobby-race-waiting', title: 'Lobby (host, waiting to start)', perColor: true },
   { key: 'lobby-waiting',   title: 'Lobby (waiting)', perColor: true },
   { key: 'lobby-joining',   title: 'Lobby (late joiner)', perColor: true },
   { key: 'settings',         title: 'Settings (tilt)',    perColor: true },
@@ -92,8 +92,7 @@ function render() {
       frameClass: 'controller',
       logical: d.logical,
       chromePx: d.chromePx,
-      url: cardURL(c),
-      replayable: !!c.replayable
+      url: cardURL(c)
     });
     strip.appendChild(card);
     allCards.push(card);

@@ -26,8 +26,8 @@ same green-first, read-the-diff rule.
 
 **Class 1 — JS-recorded**: cross-implementation evidence from the port era. A
 deliberate re-record demotes the fixture to class 2 from that commit on; the
-JS-parity claim stays with the old bytes in git history. The traces, audio and
-theme corpora have been demoted this way.
+JS-parity claim stays with the old bytes in git history. The traces, audio, theme,
+session and raceflow corpora have been demoted this way.
 
 **Class 2 — C++-authored** (the `--record` mode of the sim, sweep and runtime
 checks): regression evidence only. It proves the sim and cameras still do what
@@ -52,12 +52,17 @@ See `tests/fixtures/traces/README.md`.
 
 Some `scripts/gen-*-corpus.mjs` are **frozen** — their JS twin is retired, so they
 can no longer run against a live implementation. Frozen headers name the `git show`
-that restores a twin, and `npm run revive:js-oracle` does the set. The audio, ui,
-session, schematic, theme and raceflow oracles were **deleted outright** with their
-twins; those corpora can never be re-derived from JS at all. The `record_*`
+that restores a twin, and `npm run revive:js-oracle` restores the whole set into a
+throwaway worktree to run one in. **That path is worth keeping for exactly three
+corpora** — math, trackbuilder and track-sampler — because their oracles have never
+been re-emitted from C++, which makes them the last cross-implementation evidence
+in the tree. The audio, ui, session, schematic, theme and raceflow oracles were
+**deleted outright** with their twins; those corpora can never be re-derived from
+JS at all. The `record_*`
 roundtrip carries the freshness obligation for all of those except raceflow, whose
-check replays structurally and deliberately has no record mode, so its obligation
-simply ended with the oracle.
+check replays structurally and deliberately has no record mode: a re-emit would
+only reproduce a JSON spelling the structural replay never reads, so there is
+nothing for it to assert.
 
 `tests/codegen-freshness.test.js` is the only thing in the tree that runs any
 generator, so **an entry missing from it is not a weaker gate, it is no gate** —
@@ -98,6 +103,17 @@ replays every trace in one process. **When adding cross-race state, own it per
 is unreachable by any fixture. No track builds with a pole, which is why pole
 collision is covered by `hazards` constructing the situation directly.
 
+**NO SUITE HERE CAN SEE THE DERIVED-BYTES CACHE**, and that is by construction
+rather than by omission: all three shells switch the blob stores off under
+automation, because a suite asserting what a BUILD produces must not be served
+what a previous run left on disk. So the warm path — plan, read, offer, import,
+and the layers a build then draws from — had no gate of any kind, and shipped an
+import that put the last offered blob's bytes into every silhouette layer.
+`npm run check:blob-cache` is the one thing that covers it, and its header says
+how; nothing in CI runs it, so **run it whenever anything on the blob walk moves**
+— the stores, the plan, an import or an export. **Anything else that survives a
+run inherits the same blind spot, and that check is where to widen.**
+
 ## The abi ctest
 
 The C ABI is not on the replay path, so the `abi` ctest covers the marshalling
@@ -106,13 +122,36 @@ ctest compiles) and the GLB loader, wire bytes included, plus every boundary
 export against its header contract. It recompiles the shims rather than
 linking a lib, so the shipped export list is untouched.
 
-`tests/party-abi.test.js` covers the same ground in Node against the SHIPPED wasm,
-**the only place that artifact is exercised**.
+`tests/party-abi.test.js` covers the same ground in Node against the SHIPPED wasm
+— **the one gate on the shipped artifact's party ABI** (the ctest recompiles the
+shims, so it never touches the artifact; the other `tests/*-abi.test.js` suites
+exercise the shipped wasm's other surfaces).
 
 **A known, deliberate hole:** the audio decisions, the world they read and the ABI
 wiring are each gated, but their ASSEMBLY inside the shipped wasm is not — the
 check that raced the artifact against a second live implementation went with the
 retired JS oracle. Do not claim coverage there that no longer exists.
+
+## Gating a feature on its OUTCOME
+
+Two checks in this tree assert what the code PRODUCES rather than what it hands
+over, and both exist because a payload assertion had already passed while the
+feature was broken.
+
+`abi_check.cc`'s `autopilotedPlayerSeats` is the worked example. The feature is
+"a race seat that is a participant and drives itself", and the thing that goes
+wrong is not the shape of the create-session arguments — it is that nothing
+moves. So the check RACES 900 frames and demands the marked cars covered a
+comparable distance to the AI they started behind, **beside an unmarked control
+arm** that must fail the same predicate. Without that second arm the assertion
+is unfalsifiable, which is the failure mode a shape assertion has by
+construction.
+
+`perf_check.cc` is the other shape: a NEW layer with no JS oracle, pinned by
+assertions rather than a corpus (as `render_scale_check` and
+`progression_check` are). What it holds beyond the thresholds is the two
+properties the bench rests on — that a platform with no GPU timer still gets a
+verdict, and that an ABSENT cost is never read as a free one.
 
 ## Wire-compat
 
@@ -146,7 +185,17 @@ anything when code moved — a mutation whose anchor is gone cannot fail.
 `tests/e2e/` drives real display + controller pages against a local relay stub via
 the server's `RELAY_URL`, so it needs no production relay. Import `test`/`expect`
 from `tests/e2e/helpers.js` (it reaps leaked phone contexts), and run
-`npx playwright install chromium` once.
+`npx playwright install chromium webkit` once.
+
+**The suite is Chromium, and the phone's audience is not.** No project is
+declared, so every spec runs on Chromium — while the controller's real users are
+on iOS Safari, and both of the ways that engine differs have shipped broken (see
+`public/controller/CLAUDE.md`). One spec therefore opts into WebKit
+(`test.use({ browserName: 'webkit' })`) and gates what a Chromium run cannot
+see; it stays DOM-only — a gallery scenario, no display and no relay — which is
+what keeps the second engine cheap, and CI installs the second browser for it.
+Put a phone defect that is ENGINE-shaped there, not a second copy of a behaviour
+the Chromium specs already cover.
 
 `airconsole.spec.js` is the exception to the relay stub: it drives the generated
 AC entries over a mocked SDK (`airconsole-mock.js`, a BroadcastChannel transport)
@@ -163,13 +212,13 @@ packing, in the `kitfield` ctest, and nothing asserts that a kit is on the disk.
 
 ## Auditing the suite itself
 
-Two checks audit the SUITE rather than the code, weekly and on demand, never on
-PRs: `npm run mutation-check` breaks the engine many ways and requires the matching
-ctest to go red for each (gates have been found blind this way), and
-`npm run revive:js-oracle` restores the retired JS sim and track builder from git —
-each file from its own retirement commit — and re-records the golden traces
-byte-identically. It pulls its whole dependency set out of history rather than
-leaning on surviving modules, so it cannot rot from under itself.
+`npm run mutation-check` audits the SUITE rather than the code — weekly and on
+demand, never on PRs. It breaks the engine many ways and requires the matching
+ctest to go red for each; gates have been found blind this way.
 
-While that passes, parity evidence is renewable. When it starts failing, decide
-consciously whether to repair the twin or accept that the traces are frozen.
+A second check used to revive the JS twin, re-record the golden traces and demand
+byte identity, on the theory that parity evidence stayed renewable while it passed.
+It went with the traces' parity claim: once those were re-emitted from C++ the
+compare could not pass again, and nothing was left for it to prove. Its restore
+half survives as a tool (see the oracle generators above); **do not rebuild the
+gate on top of it.**

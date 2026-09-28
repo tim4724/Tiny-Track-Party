@@ -47,7 +47,7 @@ function ui_() {
     const J = JSON.stringify;
     const raw = {
       configure: c('ttp_ui_configure', 'number', ['string']),
-      backEffect: c('ttp_ui_back_effect', 'string', ['string']),
+      backEffect: c('ttp_ui_back_effect', 'string', ['string', 'number', 'number']),
       screenStep: c('ttp_ui_screen_step', 'number', ['string', 'string']),
       cupSlot: c('ttp_ui_cup_slot_json', 'string', ['string']),
       seatGrid: c('ttp_ui_seat_grid_json', 'string', ['string']),
@@ -59,6 +59,7 @@ function ui_() {
       progressLoad: c('ttp_ui_progress_load', 'number', ['string', 'number']),
       progressJson: c('ttp_ui_progress_json', 'string', []),
       cupTintRgb: c('ttp_ui_cup_tint_rgb', 'number', ['string', 'number']),
+      neutralTintRgb: c('ttp_ui_neutral_tint_rgb', 'number', ['number']),
       cupFieldTintPct: c('ttp_ui_cup_field_tint_pct', 'number', []),
       // The walks a party is driven through. Same module, so the room, the race
       // and the series the board gathers off are the ones played here.
@@ -78,7 +79,7 @@ function ui_() {
       raceAdvanceLive: c('ttp_race_advance_live_json', 'string',
         ['number', 'number', 'number', 'number', 'string', 'string']),
       raceEventsLive: c('ttp_race_events_live_json', 'string',
-        ['number', 'number', 'string', 'number', 'number', 'number', 'number', 'number']),
+        ['number', 'number', 'string', 'number', 'number', 'number', 'number']),
       raceSeriesState: c('ttp_race_series_state_json', 'string', ['number']),
       raceBegin: c('ttp_session_begin', 'number', ['string', 'number', 'number', 'string']),
       raceAddHuman: c('ttp_add_human', null, ['number', 'string', 'string']),
@@ -121,12 +122,13 @@ function ui_() {
       catalogue: () => JSON.parse(raw.catalogue()),
       progressLoad: (json, unlockAll) => raw.progressLoad(json || '', unlockAll ? 1 : 0),
       progressJson: () => raw.progressJson(),
-      backEffect: (s) => raw.backEffect(s),
+      backEffect: (s, paused, ended) => raw.backEffect(s, paused ? 1 : 0, ended ? 1 : 0),
       screenStep: (a, b) => raw.screenStep(a, b),
       cupSlot: (x) => JSON.parse(raw.cupSlot(J(x))),
       seatGrid: (seats) => JSON.parse(raw.seatGrid(J(seats))),
       resultsView: (board, o) => JSON.parse(raw.resultsView(J(board), o.intermissionMs)),
       cupTintRgb: (cupId, pct) => raw.cupTintRgb(cupId == null ? '' : cupId, pct) >>> 0,
+      neutralTintRgb: (pct) => raw.neutralTintRgb(pct) >>> 0,
       cupFieldTintPct: () => raw.cupFieldTintPct(),
 
       cup: (cup) => raw.gpCreate(J(cup), 0),
@@ -200,14 +202,14 @@ function ui_() {
           seriesState: () => JSON.parse(raw.raceSeriesState(room)),
           // Run the current race out in the order given (ids finish 60s, 61s,
           // ...) and drain it. The drain is where the executor banks the cup
-          // points, so `results` and the series move together, as at a party.
+          // points, so a board read after this sees the live session and the
+          // series move together, as at a party.
           finish: (order) => {
             order.forEach((id, i) => raw.raceForceFinish(session, J(id), 60 + i));
             raw.raceUpdate(session, 16);
             const d = JSON.parse(raw.raceEventsLive(session, room, 'beach', 0, 0,
-                                                    8000, 100000, 20000));
+                                                    8000, 100000));
             perform(d.effects);
-            return d.results;
           },
           nextRace: () => launch(raw.raceAdvanceLive),
           board: ({ over = false, results = null, autoAdvanceMs = 10000 } = {}) =>
@@ -218,6 +220,20 @@ function ui_() {
     };
   })());
 }
+
+// `color-mix(in srgb, C pct%, #fff)`, as the cup-wash and neutral-tint tests
+// expect it. Re-derived here rather than read from the source under test: it is
+// a per-channel lerp on the ENCODED values. Doing it in linear light instead is
+// a one-line change that comes out visibly darker and would still pass a test
+// that only compared the C++ to itself.
+const mix = (hex, pct) => {
+  const k = pct / 100;
+  const ch = (i) => {
+    const c = parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
+    return Math.round(c * k + 255 * (1 - k));
+  };
+  return (ch(0) << 16) | (ch(1) << 8) | ch(2);
+};
 
 // THE DRIFT GATE FOR THE CODEGEN'D CATALOGUE, and the only place that can be
 // one: shared/tracks.js is the authored source and generated/track_defs.h is
@@ -246,8 +262,9 @@ test('the shipped catalogue in the wasm is the one shared/tracks.js authors', as
     id: c.id, name: c.name, tracks: c.tracks,
     color: parseInt(CUP_COLOR[c.id].slice(1), 16),
     stars: 0, locked: c.id === 'rooftop',
-    ...(c.id === 'rooftop' ? { unlockDone: 0, unlockNeed: CUPS.length - 1 } : {})
+    ...(c.id === 'rooftop' ? { unlockDone: 0, unlockNeed: 6 } : {})
   })), 'cups, their display names, track order, paper colour and fresh progression come out as authored');
+  assert.deepEqual(got.stars, { earned: 0, total: 3 * CUPS.length }, 'a fresh couch holds none of the stars');
   assert.ok(!('tour' in got), 'the tour earns no badge — stars are the cups\' reward arc');
   assert.deepEqual(got.catalog, TRACK_LIST.map((t) => ({
     id: t.id, name: t.name, cup: t.cup, cupDifficulty: t.cupDifficulty
@@ -272,7 +289,7 @@ test('the shipped catalogue in the wasm is the one shared/tracks.js authors', as
 // The progression exports through the SHIPPED wasm — the abi ctest gates the
 // same agreement on every leg, but only this file exercises the artifact the
 // browser actually loads. Values here restate the decided rules (won=3,
-// podium=2, finished=1; the Playroom opens on four finished cups) rather than
+// podium=2, finished=1; the Playroom opens on six stars from the other cups) rather than
 // deriving them, so a wasm that drifts from the decision fails loudly.
 test('a loaded record stamps stars and the unlock onto the catalogue', async () => {
   const u = await ui_();
@@ -288,8 +305,9 @@ test('a loaded record stamps stars and the unlock onto the catalogue', async () 
     assert.equal(byId.backyard.stars, 1, 'a finish is one star');
     assert.equal(byId.canyon.stars, 1);
     assert.ok(!('tour' in got), 'a stored "tour" row (the brief era it banked) derives nothing');
-    assert.equal(byId.rooftop.locked, false, 'four finished cups unlock the Playroom');
+    assert.equal(byId.rooftop.locked, false, 'seven stars (3+2+1+1) unlock the Playroom');
     assert.ok(!('unlockDone' in byId.rooftop), 'unlock progress exists only while locked');
+    assert.deepEqual(got.stars, { earned: 7, total: 15 }, 'the couch total counts every cup');
     assert.equal(u.progressJson(), JSON.stringify({
       cups: {
         backyard: { best: 6 }, beach: { best: 1 }, canyon: { best: 8 },
@@ -309,6 +327,21 @@ test('every board acts on back, and only the root swallows', async () => {
   for (const s of ['lobby', 'race']) {
     assert.notEqual(u.backEffect(s), 'swallow', `${s} must act on back`);
   }
+  // THE RACE IS THREE STATES, and no press on any of them may be a no-op: a
+  // live race freezes, the pause overlay thaws, and only a finished race (the
+  // results board, which has nothing left to freeze) retreats a level. A back
+  // that reached "return-to-lobby" while cars were still moving is the whole
+  // race thrown away on one press.
+  assert.equal(u.backEffect('race', false, false), 'pause-race');
+  assert.equal(u.backEffect('race', true, false), 'resume-race');
+  assert.equal(u.backEffect('race', false, true), 'return-to-lobby');
+  // Frozen AND finished is a real pair — the freeze survives into the results
+  // board — and the board wins, so Menu there is not an offer to thaw a race
+  // that is over.
+  assert.equal(u.backEffect('race', true, true), 'return-to-lobby');
+  // The latches belong to the race alone: neither moves the other two boards.
+  assert.equal(u.backEffect('lobby', true, true), 'end-party');
+  assert.equal(u.backEffect('welcome', true, true), 'swallow');
   // An unknown board counts as the root, which is what makes the first show() a
   // push rather than a replace.
   assert.equal(u.backEffect('nonsense'), 'swallow');
@@ -390,22 +423,27 @@ test('the cup chip names the next race out of the shipped catalogue', async () =
   assert.equal(done.final, true);
 });
 
-test('the standings board keeps its wire key order', async () => {
+test('the standings board carries exactly the keys it contracts', async () => {
   const ui = await ui_();
+  // Key SET, not key order: the ABI answers canonical (sorted) JSON like every
+  // other, so both sides sort before they are compared — the same shape
+  // tests/party-abi.test.js and tests/wire-compat.test.js use.
+  const keys = (o) => Object.keys(o).sort();
 
   // Ada races alone; Bo's phone arrives AFTER the launch, so he holds a seat
   // with no car — the only way to get a joining row now, because the late-joiner
   // list is subtracted from the live race inside C++ rather than handed in.
   const p = ui.party({ names: ['Ada'], pick: { mode: 'track', trackId: 'tidepool' } });
   const bo = p.join('Bo');
-  const board = p.board({ over: true, results: p.finish([1]) });
+  p.finish([1]);
+  const board = p.board({ over: true });
 
   // The controller reads this by key, but the shape is a contract two languages
   // will implement, so pin it rather than leave it to whoever writes the struct.
-  assert.deepEqual(Object.keys(board), ['over', 'hostPeerIndex', 'total', 'order']);
-  assert.deepEqual(Object.keys(board.order[0]),
-    ['playerId', 'name', 'colorIndex', 'ai', 'finished', 'time', 'racePlace']);
-  assert.deepEqual(Object.keys(board.order[1]), ['playerId', 'name', 'colorIndex', 'joining']);
+  assert.deepEqual(keys(board), ['hostPeerIndex', 'order', 'over', 'total']);
+  assert.deepEqual(keys(board.order[0]),
+    ['ai', 'colorIndex', 'finished', 'name', 'playerId', 'racePlace', 'time']);
+  assert.deepEqual(keys(board.order[1]), ['colorIndex', 'joining', 'name', 'playerId']);
   assert.equal(board.total, board.order.length, 'total always counts the joining rows too');
   // The joining row is dressed from the ROOM record, not from the race field.
   assert.deepEqual(board.order[1], {
@@ -417,10 +455,11 @@ test('the standings board keeps its wire key order', async () => {
   // The cup half is ONE nested object composed here, never two sibling keys.
   // A cup pick is the whole difference: same walks, same board, one more key.
   const gp = ui.party({ names: ['Ada'], pick: { mode: 'cup', cupId: ui.CUPS[0].id } });
-  const cupBoard = gp.board({ over: true, results: gp.finish([1]) });
-  assert.deepEqual(Object.keys(cupBoard), ['over', 'hostPeerIndex', 'series', 'total', 'order']);
-  assert.deepEqual(Object.keys(cupBoard.order[0]),
-    ['playerId', 'name', 'colorIndex', 'ai', 'finished', 'time', 'racePlace', 'points', 'gained']);
+  gp.finish([1]);
+  const cupBoard = gp.board({ over: true });
+  assert.deepEqual(keys(cupBoard), ['hostPeerIndex', 'order', 'over', 'series', 'total']);
+  assert.deepEqual(keys(cupBoard.order[0]),
+    ['ai', 'colorIndex', 'finished', 'gained', 'name', 'playerId', 'points', 'racePlace', 'time']);
 });
 
 test('a live cup board stays in race order; only the final board re-sorts', async () => {
@@ -446,13 +485,14 @@ test('a live cup board stays in race order; only the final board re-sorts', asyn
     'mid-race the drama is who crossed the line');
   assert.ok(live.order.every((r) => r.gained === undefined), 'gains only appear on the final board');
 
-  // Run it out for real: the drain banks Bo's 9 and Ada's 6 against the room's
-  // series before the final board is composed, which is the order the corpus
-  // pins. Ada still leads, so the final board re-sorts away from the race.
-  const final = p.board({ over: true, results: p.finish([BO, ADA]) });
+  // Run it out for real: the drain banks Bo's win and Ada's second against
+  // the room's series before the final board is composed, which is the order
+  // the corpus pins. Ada still leads, so the board re-sorts away from the race.
+  p.finish([BO, ADA]);
+  const final = p.board({ over: true });
   assert.deepEqual(final.order.map((r) => r.playerId), [ADA, BO],
     'the final board tells the cup story');
-  assert.deepEqual(final.order.map((r) => r.gained), [6, 9]);
+  assert.deepEqual(final.order.map((r) => r.gained), [12, 15]);
   // …and the RACE the re-sort just hid survives on the rows, which is the only
   // way the board's first phase can still show who actually crossed first.
   assert.deepEqual(final.order.map((r) => r.racePlace), [2, 1]);
@@ -467,11 +507,11 @@ test('a live cup board stays in race order; only the final board re-sorts', asyn
   // the running total alone. A phase 1 of plain `time` rows is what made every
   // row change size the instant the shell started animating the re-sort.
   assert.deepEqual(v.listRows.map((r) => r.kind), ['points', 'points']);
-  // Two races of 9/6 to Ada, then this one's 6/9 — so the totals climb 18→24
-  // and 12→21 while the rows hold their order. pointsBefore is the count-up's
-  // start, so no shell subtracts `gained` itself.
-  assert.deepEqual(v.listRows.map((r) => r.pointsBefore), [18, 12]);
-  assert.deepEqual(v.listRows.map((r) => r.points), [24, 21]);
+  // Two races of 15/12 to Ada, then this one's 12/15 — so the totals climb
+  // 30→42 and 24→39 while the rows hold their order. pointsBefore is the
+  // count-up's start, so no shell subtracts `gained` itself.
+  assert.deepEqual(v.listRows.map((r) => r.pointsBefore), [30, 24]);
+  assert.deepEqual(v.listRows.map((r) => r.points), [42, 39]);
 });
 
 test('the results overlay lists the whole field and medals the cup top three', async () => {
@@ -532,7 +572,7 @@ test('the seat grid never shrinks below the field that races', async () => {
   const MAX = protocol.MAX_PLAYERS;
   for (let n = 0; n <= MAX + 2; n++) {
     const seats = Array.from({ length: n }, (_, i) => ({ name: `P${i}`, colorIndex: i }));
-    const grid = ui.seatGrid(seats, MAX, protocol.CAR_MODELS.length);
+    const grid = ui.seatGrid(seats);
     assert.equal(grid.length, Math.max(MAX, n), `a roster of ${n} must fill ${Math.max(MAX, n)} tiles`);
     assert.equal(grid.filter((g) => g.open).length, Math.max(0, MAX - n));
     // Every taken tile names a car that exists in the model roster.
@@ -574,29 +614,32 @@ test('the cup wash is an sRGB lerp toward white, and Random gets the fallback', 
   const u = await ui_();
   const { CUP_COLOR, CUP_COLOR_FALLBACK, FIELD_TINT } = await load('public/shared/trackPicker.js');
 
-  // Re-derived here rather than read from the source under test: `color-mix(in
-  // srgb, C pct%, #fff)` is a per-channel lerp on the ENCODED values. Doing it
-  // in linear light instead is a one-line change that comes out visibly darker
-  // and would still pass a test that only compared the C++ to itself.
-  const mix = (hex, pct) => {
-    const k = pct / 100;
-    const ch = (i) => {
-      const c = parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
-      return Math.round(c * k + 255 * (1 - k));
-    };
-    return (ch(0) << 16) | (ch(1) << 8) | ch(2);
-  };
-
   for (const [id, hex] of Object.entries(CUP_COLOR)) {
     for (const pct of [0, FIELD_TINT, 45, 72, 100]) {
       assert.equal(u.cupTintRgb(id, pct), mix(hex, pct) >>> 0,
         `${id} at ${pct}% disagrees with an sRGB lerp`);
     }
   }
-  // Random belongs to no cup, so it washes the fallback rather than black.
+  // An UNKNOWN cup id washes the fallback rather than black. Note that is a cup
+  // COLOUR — the tile a cup-less selection wears is the neutral below, and the
+  // two being different is the whole point of there being two exports.
   assert.equal(u.cupTintRgb(null, FIELD_TINT), mix(CUP_COLOR_FALLBACK, FIELD_TINT) >>> 0);
   assert.equal(u.cupTintRgb('', FIELD_TINT), mix(CUP_COLOR_FALLBACK, FIELD_TINT) >>> 0);
   assert.equal(u.cupTintRgb('no-such-cup', FIELD_TINT), mix(CUP_COLOR_FALLBACK, FIELD_TINT) >>> 0);
+});
+
+test('the neutral tint mirrors neutralTint, and is NOT the cup fallback', async () => {
+  const u = await ui_();
+  const { NEUTRAL_COLOR, CUP_COLOR_FALLBACK, FIELD_TINT } =
+    await load('public/shared/trackPicker.js');
+  for (const pct of [0, FIELD_TINT, 45, 72, 100]) {
+    assert.equal(u.neutralTintRgb(pct), mix(NEUTRAL_COLOR, pct) >>> 0,
+      `the neutral wash at ${pct}% disagrees with an sRGB lerp`);
+  }
+  // THE POINT OF THE SECOND EXPORT. A shell that reached for cupTintRgb(null)
+  // here would paint Random in the Backyard cup's lawn green — a real colour,
+  // on a real tile, standing for a cup the selection has nothing to do with.
+  assert.notEqual(u.neutralTintRgb(FIELD_TINT), mix(CUP_COLOR_FALLBACK, FIELD_TINT) >>> 0);
 });
 
 test('a pct outside 0..100 is clamped, not wrapped', async () => {

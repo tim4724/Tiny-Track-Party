@@ -12,8 +12,12 @@
 //
 // So the portable half (the ?item= force hook, the monster transform, box respawn
 // cooldowns, and oil/banana spin-outs) is re-expressed below as REAL races on
-// catalogue tracks. One Gym-specific check is left explicitly skipped rather than
-// quietly dropped; see the comment on it.
+// catalogue tracks. The half that needs a parked car — the box trigger's 0.45
+// radius, and that a monster truck's larger body does NOT extend its reach —
+// belongs beside native/simtest/hazard_check.cc, which parks cars by assigning
+// `c.totalS`/`c.lat` outright. Do not go hunting for an ABI export for it: the
+// ABI is walks-only by decision and native/CLAUDE.md refuses the JSON-taking
+// mutator forms, so that scenario is written in C++ or not at all.
 //
 // The OTHER blocker is gone: gen-track-defs-header.mjs now carries DEV_TRACKS past
 // the shipped catalogue, so ttp_session_begin('gym') resolves and ?solo&track=gym
@@ -32,12 +36,17 @@ const skip = fs.existsSync(MJS) && fs.existsSync(WASM)
   ? false
   : 'ttp_runtime.mjs/.wasm not built — run native/scripts/build-runtime-web.sh';
 
-// [car id, caution, laneBias] — the first four AI_PERSONALITIES knob pairs from
-// native/libttp-sim/ttp/ai_driver.cc, under the traces' cpu-<name> id convention.
-const PERSONAS = [
-  ['cpu-bolt', 1.05, -0.6], ['cpu-pixel', 1.00, 0.6],
-  ['cpu-rusty', 0.97, -0.25], ['cpu-zippy', 0.94, 0.25]
-];
+// [car id, caution, laneBias] — the first four persona knob pairs, under the
+// traces' cpu-<name> id convention. Derived from public/display/aiPersonas.js,
+// the one JS copy of the C++ table (display-abi.test.js pins it to the wasm).
+let _personas = null;
+async function personas() {
+  if (_personas) return _personas;
+  const { AI_PERSONALITIES } = await import('../public/display/aiPersonas.js');
+  _personas = AI_PERSONALITIES.slice(0, 4)
+    .map((p) => [`cpu-${p.name.toLowerCase()}`, p.caution, p.laneBias]);
+  return _personas;
+}
 const DT = 1000 / 60;
 
 let _abi = null;
@@ -65,7 +74,7 @@ async function race(trackId, forceItem, frames = 3000) {
   const a = await abi();
   const h = a.begin(trackId, 42, 3, forceItem);
   assert.ok(h > 0, `ttp_session_begin('${trackId}') returned a handle`);
-  for (const [id, caution, laneBias] of PERSONAS) a.addBot(h, JSON.stringify(id), caution, laneBias, 1, null);
+  for (const [id, caution, laneBias] of await personas()) a.addBot(h, JSON.stringify(id), caution, laneBias, 1, null);
   a.start(h, -1); // no countdown: racing from frame 0
   const events = [];
   const boxState = { everTaken: false, rearmed: false };
@@ -151,12 +160,6 @@ test('oil puddles spin cars on the tracks that carry them', { skip }, async () =
   assert.ok(spinCauses(r.events).has('oil'), 'a car crossed an oil slick and spun out');
 });
 
-// ---------------------------------------------------------------------------
-// NOT COVERED ANY MORE. Both of these need something the C ABI does not offer;
-// they are skipped rather than deleted so the gap stays visible in the test
-// output. Neither is a false alarm — the behaviour is still real, just untested.
-// ---------------------------------------------------------------------------
-
 // The Gym range itself. It is a DEV track, so it exercises two things no catalogue
 // track does: authored bananas seeded at race start (every shipped track has none),
 // and a furniture layout hand-placed in a known order along the lap.
@@ -188,14 +191,3 @@ test('gym: the authored range races, and its authored bananas respawn', { skip }
     `the authored bananas are live (saw at most ${r.maxBananas}, expected >= ${authored.length})`);
   assert.ok(typesOf(r.events).has('lap'), 'the field completes laps on the dev range');
 });
-
-// Box pickup is a POINT test with the tuned 0.45 radius (9% of the 5-wide road):
-// a car centre at lat 0.40 grabs, at 0.50 does not, and a monster truck's larger
-// footprint does NOT extend its reach (the trigger ignores the body box, so every
-// car has identical reach — no footprint creep).
-// BLOCKED ON: the ABI has no car teleport and no single-trigger poll, so the probe
-// cannot park a car at a chosen (s, lat) and fire one box test in isolation.
-// Unblocked by a debug ABI entry point that sets a car's (s, lat, heading) and one
-// that evaluates the box trigger.
-test('box pickup is point-based with the tuned 0.45 radius — same reach for every car',
-  { skip: 'needs an ABI car-teleport + single-trigger poll (neither exists in ttp_runtime.h)' }, () => {});
