@@ -78,6 +78,20 @@ class TTPAirConsoleAdapter extends AirConsoleAdapter {
     if (!frameText) return;
     try { this.setState(JSON.parse(frameText).data); } catch (_) { /* a frame C++ built always parses */ }
   }
+
+  // The display's self-heartbeat (the liveness tick in ttp_net.h) addresses
+  // slot 0 — itself — and calls its own link down when the relay has not
+  // echoed it back within LIVENESS.HEARTBEAT_DEAD_MS. There is no relay here
+  // and no link of ours to watch: AirConsole owns the connection and its
+  // recovery (the kit's reconnectNow is a no-op), so a "Reconnecting…" overlay
+  // could only ever be wrong, and it auto-pauses the race behind it. The kit
+  // drops a display's send to slot 0; close the loop in the page instead,
+  // asynchronously as a relay echo arrives.
+  sendTo(to, data) {
+    if (to !== 0) { super.sendTo(to, data); return; }
+    var self = this;
+    setTimeout(function () { if (self.onMessage) self.onMessage(0, data); }, 0);
+  }
 }
 
 // No WebRTC fastlane on AirConsole (upstream decision, kept): CONTROL falls

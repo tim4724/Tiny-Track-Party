@@ -187,6 +187,18 @@ test('AC: a played-before couch keeps its cups (progression hydrates from the pl
   await expect(beachStars(page)).toHaveAttribute('aria-label', '3 of 3 stars');
 });
 
+test('AC: the screen never reports its own link down — there is no relay to echo its heartbeat', async ({ page }) => {
+  // The display's self-heartbeat waits LIVENESS.HEARTBEAT_DEAD_MS for the
+  // relay to echo its slot-0 frame, then raises "Reconnecting…" and pauses the
+  // race behind it. On AC there is no relay: the screen adapter closes that
+  // loop in the page. Every other spec here moves on before the deadline, which
+  // is how the overlay shipped stuck on a real screen.
+  const { LIVENESS } = await import('../../public/shared/protocol.js');
+  await openAcDisplay(page);
+  await page.waitForTimeout(LIVENESS.HEARTBEAT_DEAD_MS + 3000);
+  await expect(page.locator('#link-overlay')).toBeHidden();
+});
+
 test('AC: a first-time couch starts on a fresh record', async ({ page }) => {
   // The other half of the pair: with no platform record the boot load stands,
   // so the test above is proving hydration and not "beach always has stars".
