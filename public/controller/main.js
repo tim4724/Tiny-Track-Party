@@ -793,9 +793,62 @@ if (inShell && shellName) {
   // complementary filter fuses the two (gyro = response, accel = drift
   // anchor), which is what the OS would have done had we gotten
   // DeviceOrientation.
+  // ---- THROWAWAY PROBE (branch ac-motion-probe — NEVER MERGE) -------------
+  // Settles what the relay actually puts in alpha/beta/gamma. The SDK's own
+  // JSDoc says "for gyroscope" (rates); AirConsole's engineering team says the
+  // values "already represent the device orientation angles". Their relay is
+  // closed (native in the Controller App), so only a physical device answers it.
+  //
+  // The discriminator is STILLNESS: a held phone has zero rotation RATE but a
+  // nonzero ATTITUDE. So the readout detects "still" from the accelerometer
+  // alone (gravity-only magnitude, direction not moving), averages the three
+  // channels over the CURRENT hold, and prints the roll angle the accelerometer
+  // implies next to them. Hold the phone still at ~30° and read one line.
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;left:0;top:0;z-index:99999;background:rgba(0,0,0,.82);'
+    + 'color:#0f0;font:11px/1.35 ui-monospace,monospace;padding:6px 8px;white-space:pre;'
+    + 'pointer-events:none;max-width:100vw';
+  document.body.appendChild(probe);
+  const DEG = 180 / Math.PI;
+  let nSamp = 0, stillN = 0, sa = 0, sb = 0, sg = 0;
+  let maxA = 0, maxB = 0, maxG = 0, prevDir = null;
+  const acMotionProbe = (d) => {
+    const a = d.alpha || 0, b = d.beta || 0, g = d.gamma || 0;
+    nSamp++;
+    maxA = Math.max(maxA, Math.abs(a));
+    maxB = Math.max(maxB, Math.abs(b));
+    maxG = Math.max(maxG, Math.abs(g));
+    const n = Math.hypot(d.x, d.y, d.z) || 1;
+    const dir = { x: -d.x / n, y: -d.y / n, z: -d.z / n };   // gravity, pointing down
+    const moved = prevDir
+      ? Math.hypot(dir.x - prevDir.x, dir.y - prevDir.y, dir.z - prevDir.z) * DEG
+      : 99;
+    prevDir = dir;
+    // A hold, not a pose: the averages below describe THIS hold, so any motion
+    // clears them rather than smearing a lean into the flat-on-a-table window.
+    const still = Math.abs(n - 9.81) < 0.5 && moved < 0.6;
+    if (still) { stillN++; sa += Math.abs(a); sb += Math.abs(b); sg += Math.abs(g); }
+    else { stillN = 0; sa = sb = sg = 0; }
+    const mA = stillN ? sa / stillN : 0;
+    const mB = stillN ? sb / stillN : 0;
+    const mG = stillN ? sg / stillN : 0;
+    const peak = Math.max(mA, mB, mG);
+    const verdict = stillN < 20 ? 'hold it STILL at ~30 deg...'
+      : peak > 3 ? 'ANGLES (nonzero while still)'
+      : peak < 1 ? 'RATES (~zero while still)'
+      : 'AMBIGUOUS - send the numbers';
+    probe.textContent =
+      'AC device_motion probe  n=' + nSamp + (still ? '  [STILL ' + stillN + ']' : '') + '\n'
+      + 'alpha/beta/gamma  ' + a.toFixed(2) + '  ' + b.toFixed(2) + '  ' + g.toFixed(2) + '\n'
+      + 'max abs           ' + maxA.toFixed(1) + '  ' + maxB.toFixed(1) + '  ' + maxG.toFixed(1) + '\n'
+      + 'hold avg abs      ' + mA.toFixed(2) + '  ' + mB.toFixed(2) + '  ' + mG.toFixed(2) + '\n'
+      + 'accel roll ' + (Math.atan2(dir.x, -dir.z) * DEG).toFixed(1) + ' deg   |a| ' + n.toFixed(2) + '\n'
+      + '=> ' + verdict;
+  };
   acBoot.airconsole.onDeviceMotion = (data) => {
     if (!data || typeof data.x !== 'number') return;
     tilt.setGravity(data.x, data.y, data.z, data.alpha, data.beta, data.gamma);
+    acMotionProbe(data);
   };
 } else {
   show('name');
