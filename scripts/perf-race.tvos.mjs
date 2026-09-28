@@ -95,6 +95,7 @@ const flag = (name) => process.argv.includes(`--${name}`);
  *                    shipped picture
  *   --aa 0|1         force the full-screen antialias pass off or on; absent
  *                    leaves the renderer's own default
+ *   --tags 0         take the name tags out (Android: `debug.ttp.tags 0`)
  *
  * The two ablation flags are the Android backend's by the same names. They ride
  * the LAUNCH here rather than a live property, which is what that shell needs
@@ -105,6 +106,7 @@ export function makeTvosBackend() {
   const sim = flag('sim');
   const features = arg('features', null);
   const aa = arg('aa', null);
+  const tags = arg('tags', null);
   let child = null;
   let timer = null;
   /** Readout lines not yet consumed, and the consumer waiting for one. */
@@ -184,7 +186,8 @@ export function makeTvosBackend() {
         // would read nil through it and leave the drawable full size.
         ...(dpr > 0 ? ['-ttpRenderScale', String(dpr)] : []),
         ...(features ? ['-ttpFeatures', String(parseInt(features, 0))] : []),
-        ...(aa != null ? ['-ttpAntialias', String(parseInt(aa, 10))] : [])];
+        ...(aa != null ? ['-ttpAntialias', String(parseInt(aa, 10))] : []),
+        ...(tags != null ? ['-ttpTags', String(parseInt(tags, 10))] : [])];
 
       let argv;
       if (sim) {

@@ -99,8 +99,11 @@ export function assertAwake(deviceId) {
 /// verbs take, which is NOT the identifier `xcodebuild -destination` wants.
 export function resolveDevicectlId() {
   const out = sh('xcrun', ['devicectl', 'list', 'devices']);
-  const line = out.split('\n').find((l) => /Apple TV/.test(l) && /available|connected/.test(l));
-  const id = line && line.match(/([0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12})/)?.[1];
+  // Matched on the MODEL column too (`AppleTV6,2`): a box renamed in Settings
+  // carries no "Apple TV" in its name, and devicectl may list it by its
+  // 40-hex hardware UDID rather than a UUID. Both spellings work as --device.
+  const line = out.split('\n').find((l) => /Apple ?TV/.test(l) && /available|connected/.test(l));
+  const id = line && line.match(/([0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}|\b[0-9a-f]{40}\b)/)?.[1];
   if (!id) throw new Error('no paired Apple TV — pair one in Xcode');
   return id;
 }

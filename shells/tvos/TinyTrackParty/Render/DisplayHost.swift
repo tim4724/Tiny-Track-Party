@@ -240,6 +240,14 @@ final class DisplayHost {
             _ in UserDefaults.standard.integer(forKey: "ttpAntialias")
         }
 
+    /// `-ttpTags 0` takes the name tags out of the frame entirely — the per-frame
+    /// read and the layers — so a bench arm prices them. Android's
+    /// `debug.ttp.tags` twin; absent or any other value is the shipped picture.
+    private static let tagsOff =
+        UserDefaults.standard.object(forKey: "ttpTags").map {
+            _ in UserDefaults.standard.integer(forKey: "ttpTags") == 0
+        } ?? false
+
     /// The scale in force. 1.0 is the panel's own resolution, and the only way
     /// past it is the measurement pin above — the RULE's ceiling is 1. Read by
     /// `MetalSurfaceView` when it sizes the drawable.
@@ -783,6 +791,7 @@ final class DisplayHost {
     /// This frame's tags, from `ttp_display_name_tags`. At most every other car
     /// in every cell, so the buffer only grows with the field.
     private func placeNameTags() {
+        if Self.tagsOff { return }
         let maxTags = cellCount * max(0, roster.count - 1)
         guard maxTags > 0 else { tagView.clear(); return }
         if tagBuffer.count < maxTags * 6 { tagBuffer = [Float](repeating: 0, count: maxTags * 6) }
