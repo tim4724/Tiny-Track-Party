@@ -679,7 +679,11 @@ async function joinRace(name, { persist } = {}) {
   // request the platform refused to even put, which is this very call site in
   // the shell (no gesture behind a launcher join): that leaves 'unknown', keeps
   // the phone on tilt, and re-asks on the player's next tap.
-  if (inputMode === 'tilt' && (await tilt.enableMotion()) === 'unsupported') {
+  // Not on AirConsole: the frame's own sensor is the one AC never feeds, so
+  // asking for it can only fail — 'denied' on iOS, 'unsupported' wherever the
+  // settle window closes before the relay's first sample. The relay resolves
+  // the state there instead (TiltInput.relayOrientation).
+  if (inputMode === 'tilt' && !acBoot && (await tilt.enableMotion()) === 'unsupported') {
     applyInputMode('buttons');
   }
   net.connect(n);
@@ -827,23 +831,6 @@ if (inShell && shellName) {
     await joinRace(acBoot.nickname(), { persist: false });
     setStatus('Waiting for the screen…');
   });
-  // iOS browsers grant motion only from inside a user gesture, and the AC
-  // auto-join above has none — its enableMotion() resolves 'denied' and tilt
-  // falls back to the (deliberately damped) accelerometer relay. Every tap IS
-  // a gesture though, so keep re-asking on taps until granted; the moment the
-  // fused DeviceOrientation feed starts, it outranks the relay (TiltInput) and
-  // AC tilt becomes the normal mechanism. No-op where permission needs no
-  // gesture (Android grants at join) and in the AC app (no requestPermission).
-  const DOE = window.DeviceOrientationEvent;
-  if (DOE && typeof DOE.requestPermission === 'function') {
-    const askOnTap = async () => {
-      if (inputMode !== 'tilt') return;
-      if ((await tilt.enableMotion()) === 'granted') {
-        document.removeEventListener('pointerdown', askOnTap);
-      }
-    };
-    document.addEventListener('pointerdown', askOnTap);
-  }
   // The pref shim hydrates after the module read its defaults — re-apply the
   // one pref that changes live wiring (steering mode; a stored car pick is
   // read later, at WELCOME, and usually wins the race).
@@ -859,81 +846,48 @@ if (inShell && shellName) {
   };
   // TILT rides the SDK's device_motion relay (armed in the bootstrap): no AC
   // embedder delegates motion sensors to the game iframe, so DeviceOrientation
-  // never fires here and the relay is the only source. data.x/y/z is the
-  // proper acceleration (W3C accelerationIncludingGravity, flat face-up =
-  // +9.81 z), data.alpha/beta/gamma the gyro rates (deg/s) — TiltInput's
-  // complementary filter fuses the two (gyro = response, accel = drift
-  // anchor), which is what the OS would have done had we gotten
-  // DeviceOrientation.
+  // never fires here and the relay is the only source. Its alpha/beta/gamma
+  // are orientation angles (see TiltInput.relayOrientation); x/y/z, the
+  // accelerometer, is not needed.
   // ---- THROWAWAY PROBE (branch ac-motion-probe — NEVER MERGE) -------------
-  // What does the relay ACTUALLY deliver? The SDK's JSDoc says x/y/z = accel
-  // and alpha/beta/gamma = gyroscope (rates); AirConsole's engineers say
-  // alpha/beta/gamma "already represent the device orientation angles". The
-  // relay is closed (native in the Controller App), so only a device answers.
-  //
-  // Everything is captured BEFORE the handler's own guard (typeof data.x ===
-  // 'number'): a payload of a different SHAPE — orientation only, no x/y/z —
-  // would be dropped by that guard in silence, which is one way a phone ends
-  // on "Tilt: Not available". The panel redraws on a timer, so a relay that
-  // never fires reads "events 0" rather than a blank screen.
-  //
-  // With x/y/z present, the rates-vs-angles test is STILLNESS: a held phone
-  // has zero rotation rate but a nonzero attitude. Hold it still at ~30°.
+  // Round 2. The relay's angles are right (they reproduce its own accelerometer
+  // under W3C rules), yet tilt does nothing. The steer is read in the SCREEN's
+  // frame (TiltInput._screenAngle: screen.orientation.angle), so the suspect is
+  // an app webview that shows us landscape while reporting a portrait angle.
+  // The panel shows what the page believes about its orientation, the gravity
+  // vector, and the steer the SAME gravity would give at each of the four
+  // screen angles — twist the phone like a wheel and see which column moves.
   const probe = document.createElement('div');
   probe.style.cssText = 'position:fixed;left:0;top:0;z-index:99999;background:rgba(0,0,0,.85);'
     + 'color:#0f0;font:11px/1.35 ui-monospace,monospace;padding:6px 8px;white-space:pre-wrap;'
     + 'pointer-events:none;max-width:100vw;word-break:break-all';
   document.body.appendChild(probe);
-  const DEG = 180 / Math.PI;
-  const t0 = Date.now();
-  let nEvents = 0, nAccepted = 0, firstAt = 0, last = null, lastRaw = '(none)', shape = '(none)';
-  let stillN = 0, sa = 0, sb = 0, sg = 0, prevDir = null, verdictLine = '';
-  const num = (v) => (typeof v === 'number' ? v.toFixed(2) : String(v));
-  const acMotionProbe = (d) => {
-    nEvents++;
-    if (!firstAt) firstAt = Date.now();
-    last = d;
-    try { lastRaw = JSON.stringify(d).slice(0, 220); } catch (_) { lastRaw = String(d); }
-    if (d && typeof d === 'object') {
-      shape = Object.keys(d).map((k) => k + ':' + typeof d[k]).join(' ');
-    }
-    if (!d || typeof d.x !== 'number') return;
-    nAccepted++;
-    const a = Math.abs(d.alpha || 0), b = Math.abs(d.beta || 0), g = Math.abs(d.gamma || 0);
-    const n = Math.hypot(d.x, d.y, d.z) || 1;
-    const dir = { x: -d.x / n, y: -d.y / n, z: -d.z / n };
-    const moved = prevDir
-      ? Math.hypot(dir.x - prevDir.x, dir.y - prevDir.y, dir.z - prevDir.z) * DEG : 99;
-    prevDir = dir;
-    const still = Math.abs(n - 9.81) < 0.5 && moved < 0.6;
-    if (still) { stillN++; sa += a; sb += b; sg += g; } else { stillN = 0; sa = sb = sg = 0; }
-    const peak = stillN ? Math.max(sa, sb, sg) / stillN : 0;
-    verdictLine = 'hold ' + (still ? 'STILL ' + stillN : 'moving')
-      + '  avg|a b g| ' + (stillN ? [sa, sb, sg].map((s) => (s / stillN).toFixed(2)).join(' ') : '-')
-      + '\naccel roll ' + (Math.atan2(dir.x, -dir.z) * DEG).toFixed(1) + ' deg  |a| ' + n.toFixed(2)
-      + '\n=> ' + (stillN < 20 ? 'hold it STILL at ~30 deg...'
-        : peak > 3 ? 'ANGLES (nonzero while still)'
-        : peak < 1 ? 'RATES (~zero while still)' : 'AMBIGUOUS - send the numbers');
-  };
+  const RIGHT = { 0: [1, 0], 90: [0, -1], 180: [-1, 0], 270: [0, 1] };
+  let nEvents = 0, last = null;
+  const f = (v, d = 2) => (typeof v === 'number' ? v.toFixed(d) : String(v));
   setInterval(() => {
-    const secs = ((Date.now() - t0) / 1000).toFixed(0);
+    const so = screen.orientation || {};
+    const g = tilt._g;
+    const at = Object.keys(RIGHT).map((a) => {
+      const [rx, ry] = RIGHT[a];
+      const deg = Math.atan2(g.x * rx + g.y * ry, -g.z) * 180 / Math.PI;
+      return a + ':' + Math.max(-1, Math.min(1, deg / 30)).toFixed(2);
+    }).join('  ');
     probe.textContent =
-      'AC device_motion probe   t=' + secs + 's\n'
-      + 'events ' + nEvents + '  accepted ' + nAccepted
-      + (firstAt ? '  first at +' + (firstAt - t0) + 'ms' : '  (relay silent)') + '\n'
-      + 'tilt: motionState=' + tilt.motionState + ' haveTilt=' + tilt.haveTilt + ' mode=' + inputMode + '\n'
-      + 'shape: ' + shape + '\n'
-      + (last && typeof last === 'object'
-        ? 'x/y/z ' + num(last.x) + ' ' + num(last.y) + ' ' + num(last.z)
-          + '   a/b/g ' + num(last.alpha) + ' ' + num(last.beta) + ' ' + num(last.gamma) + '\n'
-        : '')
-      + 'raw: ' + lastRaw + '\n'
-      + verdictLine;
-  }, 250);
+      'AC tilt probe #2   events ' + nEvents + '\n'
+      + 'screen.orientation angle=' + so.angle + ' type=' + so.type
+      + '  window.orientation=' + window.orientation + '\n'
+      + 'viewport ' + innerWidth + 'x' + innerHeight + '  screen ' + screen.width + 'x' + screen.height
+      + '  _screenAngle()=' + tilt._screenAngle() + '\n'
+      + 'relay a/b/g ' + (last ? f(last.alpha, 1) + ' ' + f(last.beta, 1) + ' ' + f(last.gamma, 1) : '-') + '\n'
+      + 'gravity  ' + f(g.x) + ' ' + f(g.y) + ' ' + f(g.z) + '\n'
+      + 'steer if angle=  ' + at + '\n'
+      + 'LIVE: sensorSteer=' + f(tilt._sensorSteer()) + ' out=' + f(tilt.state.steer)
+      + ' mode=' + tilt.mode + ' state=' + tilt.motionState + ' timer=' + !!tilt._timer;
+  }, 150);
   acBoot.airconsole.onDeviceMotion = (data) => {
-    acMotionProbe(data);
-    if (!data || typeof data.x !== 'number') return;
-    tilt.setGravity(data.x, data.y, data.z, data.alpha, data.beta, data.gamma);
+    nEvents++; last = data;
+    if (data && typeof data.beta === 'number') tilt.relayOrientation(data.beta, data.gamma);
   };
 } else {
   show('name');

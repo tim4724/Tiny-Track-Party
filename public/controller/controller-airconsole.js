@@ -24,8 +24,10 @@ var airconsole = new AirConsole({
   // app's webview) and neither embedder delegates motion sensors to the
   // frame, so DeviceOrientation NEVER fires in here — the SDK's relay is the
   // only tilt source on this platform (local postMessage, no message-budget
-  // cost). 16 ms ≈ the 60 Hz cadence TiltInput's complementary filter
-  // integrates the gyro rates at. Wired in main.js's AC branch.
+  // cost). 16 ms ≈ the 60 Hz a phone's own orientation events arrive at, so
+  // relayed tilt feels like the browser's. Its alpha/beta/gamma are
+  // orientation angles (see TiltInput.relayOrientation). Wired in main.js's
+  // AC branch.
   //
   // This is PERMANENT, not a stopgap waiting on the platform to add
   // allow="accelerometer; gyroscope" to the game frame: that attribute would

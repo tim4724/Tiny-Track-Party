@@ -71,10 +71,16 @@ history, no self-leave on popstate.
 
 **TILT THERE IS THE SDK's `device_motion` RELAY, permanently.** The game is a
 cross-origin iframe and no AC embedder delegates the motion sensors to it, so
-`DeviceOrientation` never fires — the relay's raw accel + gyro go through
-`TiltInput.setGravity`'s complementary filter instead, and `motionState` is
-excepted from the constructor's policy verdict because the first relayed sample
-is what resolves it. Asking the platform for
+`DeviceOrientation` never fires. **The relay's `alpha/beta/gamma` are
+ORIENTATION ANGLES**, the `DeviceOrientationEvent` triple, whatever the SDK's
+JSDoc says ("for gyroscope"): measured on a device, held still at a 65° roll
+they read 65 where a rate reads 0, and AirConsole's engineers confirm it. So
+`TiltInput.relayOrientation` hands them to the same path a browser's own event
+takes. The first relayed sample is also what resolves `motionState` — the
+join skips the frame's own permission request and settle check on AC, because
+that sensor is the one AC never feeds: iOS answers `denied`, and the settle
+window closes before the relay's first sample (~1.9 s after load on the
+device), which is how a live phone once read "Tilt: Not available". Asking the platform for
 `allow="accelerometer; gyroscope"` would not end this: WebKit refuses motion in
 cross-origin frames outright and never consults `allow`, so iOS needs the relay
 whatever AirConsole ships.

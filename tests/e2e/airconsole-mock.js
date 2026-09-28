@@ -225,12 +225,20 @@
     if (nickname != null) window.__AC_NICKNAME = nickname;
     if (this.onDeviceProfileChange) this.onDeviceProfileChange(this._deviceId);
   };
-  // Simulate a native sensor sample arriving over the SDK's device_motion
-  // relay (x/y/z = accelerometer, alpha/beta/gamma = gyroscope). Delivered
-  // only when the constructor armed it, matching the real SDK's gating.
-  AirConsole.prototype.triggerDeviceMotion = function(x, y, z) {
+  // Simulate a sample arriving over the SDK's device_motion relay, in the shape
+  // a real Controller App sends it: alpha/beta/gamma are the ORIENTATION
+  // angles in degrees (the DeviceOrientationEvent triple, whatever the SDK's
+  // JSDoc says), x/y/z the accelerometer, and raw* copies of the angles.
+  // Delivered only when the constructor armed it, matching the real SDK.
+  AirConsole.prototype.triggerDeviceMotion = function(beta, gamma) {
     if (!this._opts.device_motion) return;
-    if (this.onDeviceMotion) this.onDeviceMotion({ x: x, y: y, z: z, alpha: 0, beta: 0, gamma: 0 });
+    var b = beta * Math.PI / 180, g = gamma * Math.PI / 180;
+    // At rest the accelerometer reads the negation of gravity (W3C Z-X'-Y'').
+    var x = -9.81 * Math.cos(b) * Math.sin(g), y = 9.81 * Math.sin(b), z = 9.81 * Math.cos(b) * Math.cos(g);
+    if (this.onDeviceMotion) this.onDeviceMotion({
+      x: x, y: y, z: z, alpha: 0, beta: beta, gamma: gamma,
+      rawAlpha: 0, rawBeta: beta, rawGamma: gamma
+    });
   };
 
   window.AirConsole = AirConsole;
