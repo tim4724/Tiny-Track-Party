@@ -64,17 +64,35 @@ async function joinAcController(displayPage, deviceId, nickname) {
   await page.addInitScript({ path: MOCK_PATH });
   // An UNDELEGATED frame, which is what real AirConsole is: DeviceOrientation
   // never fires and the SDK's device_motion relay is the only sensor. So the
-  // level feed that other suites install (helpers.installLevelSensor) is the
-  // relay here — without one, `enableMotion`'s settle window finds nothing
-  // delivered, resolves 'unsupported' and puts the phone on buttons, and the
-  // lean assertion below reads a steer of 0. Self-terminating for the same
-  // reason as the DeviceOrientation one: a level sample landing between the
-  // spec's lean and its read pulls the smoothed steer back toward centre.
+  // level feed other suites install (helpers.installLevelSensor) is the relay
+  // here, and it starts LATE on purpose: a real Controller App's first relayed
+  // sample landed ~1.9 s after page load, long after a 600 ms sensor settle
+  // run at the join would have written the phone off as tilt-less — which is
+  // how a live phone showed "Tilt: Not available". Self-terminating for the
+  // same reason as the DeviceOrientation one: a level sample landing between
+  // the spec's lean and its read pulls the smoothed steer back toward centre.
+  //
+  // The grant is what makes that reachable: a real phone ANSWERS the frame's
+  // own motion request ('granted' on Android), and the answer is what starts a
+  // settle clock. Headless Chromium answers 'prompt' without it, never settles,
+  // and would pass this spec with the bug in place.
+  await context.grantPermissions(['accelerometer', 'gyroscope', 'magnetometer']);
   await page.addInitScript(() => {
-    const id = setInterval(() => {
-      if (window.__tilt && window.__tilt.haveTilt) { clearInterval(id); return; }
-      if (window.airconsole) window.airconsole.triggerDeviceMotion(0, 0, 9.81);
-    }, 50);
+    // The Settings card's "Tilt: Not available" IS motionState 'unsupported',
+    // and it holds from the settle until the relay's first sample — so watch
+    // for it rather than for the input mode, which the pref shim's late
+    // hydration can put back to tilt by accident, as it does in this spec.
+    const watch = setInterval(() => {
+      if (!window.__tilt) return;
+      if (window.__tilt.motionState === 'unsupported') window.__tiltWrittenOff = true;
+      if (window.__tilt.haveTilt) clearInterval(watch);
+    }, 25);
+    setTimeout(() => {
+      const id = setInterval(() => {
+        if (window.__tilt && window.__tilt.haveTilt) { clearInterval(id); return; }
+        if (window.airconsole) window.airconsole.triggerDeviceMotion(0, 0);
+      }, 50);
+    }, 2500);
   });
   await blockSdk(page);
   await page.setViewportSize({ width: 844, height: 390 }); // landscape-only controller
@@ -130,17 +148,18 @@ test('AC: screen boots to the lobby, profile-named phones join, a race runs', as
 
   // TILT arrives over the SDK's device_motion relay — no AC embedder
   // delegates motion sensors to the game iframe, so DeviceOrientation never
-  // fires there and the relay is the only source. Feed a ~30° right lean as
-  // raw accelerometer samples (reading = -gravity, so a right lean reads
-  // x<0); the mock sends no gyro rates, so this drives the filter's
-  // accel-only fallback — 24 samples ≈ 0.4 s of a held lean at the 16 ms
-  // cadence, enough for its damped convergence.
+  // fires there and the relay is the only source. The phone must still be in
+  // tilt after the late feed above. Then a 30° right roll — gamma = ROLL_LOCK,
+  // full lock — as the relay sends it, in orientation angles; a few samples,
+  // because the steer low-pass converges per sample.
+  expect(await ana.evaluate(() => !!window.__tiltWrittenOff)).toBe(false);
+  expect(await ana.evaluate(() => window.__tilt.mode)).toBe('tilt');
   await ana.evaluate(() => {
-    for (let i = 0; i < 24; i++) window.airconsole.triggerDeviceMotion(-4.9, 0, 8.5);
+    for (let i = 0; i < 8; i++) window.airconsole.triggerDeviceMotion(0, 30);
   });
   expect(await ana.evaluate(() => window.__tilt.state.steer)).toBeGreaterThan(0.9);
   await ana.evaluate(() => {
-    for (let i = 0; i < 24; i++) window.airconsole.triggerDeviceMotion(0, 0, 9.81);
+    for (let i = 0; i < 8; i++) window.airconsole.triggerDeviceMotion(0, 0);
   });
 
   // The latency chip lights over the AC transport (TEMPORARY: the WS ping runs

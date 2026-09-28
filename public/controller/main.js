@@ -679,7 +679,11 @@ async function joinRace(name, { persist } = {}) {
   // request the platform refused to even put, which is this very call site in
   // the shell (no gesture behind a launcher join): that leaves 'unknown', keeps
   // the phone on tilt, and re-asks on the player's next tap.
-  if (inputMode === 'tilt' && (await tilt.enableMotion()) === 'unsupported') {
+  // Not on AirConsole: the frame's own sensor is the one AC never feeds, so
+  // asking for it can only fail — 'denied' on iOS, 'unsupported' wherever the
+  // settle window closes before the relay's first sample. The relay resolves
+  // the state there instead (TiltInput.relayOrientation).
+  if (inputMode === 'tilt' && !acBoot && (await tilt.enableMotion()) === 'unsupported') {
     applyInputMode('buttons');
   }
   net.connect(n);
@@ -827,23 +831,6 @@ if (inShell && shellName) {
     await joinRace(acBoot.nickname(), { persist: false });
     setStatus('Waiting for the screen…');
   });
-  // iOS browsers grant motion only from inside a user gesture, and the AC
-  // auto-join above has none — its enableMotion() resolves 'denied' and tilt
-  // falls back to the (deliberately damped) accelerometer relay. Every tap IS
-  // a gesture though, so keep re-asking on taps until granted; the moment the
-  // fused DeviceOrientation feed starts, it outranks the relay (TiltInput) and
-  // AC tilt becomes the normal mechanism. No-op where permission needs no
-  // gesture (Android grants at join) and in the AC app (no requestPermission).
-  const DOE = window.DeviceOrientationEvent;
-  if (DOE && typeof DOE.requestPermission === 'function') {
-    const askOnTap = async () => {
-      if (inputMode !== 'tilt') return;
-      if ((await tilt.enableMotion()) === 'granted') {
-        document.removeEventListener('pointerdown', askOnTap);
-      }
-    };
-    document.addEventListener('pointerdown', askOnTap);
-  }
   // The pref shim hydrates after the module read its defaults — re-apply the
   // one pref that changes live wiring (steering mode; a stored car pick is
   // read later, at WELCOME, and usually wins the race).
@@ -859,15 +846,11 @@ if (inShell && shellName) {
   };
   // TILT rides the SDK's device_motion relay (armed in the bootstrap): no AC
   // embedder delegates motion sensors to the game iframe, so DeviceOrientation
-  // never fires here and the relay is the only source. data.x/y/z is the
-  // proper acceleration (W3C accelerationIncludingGravity, flat face-up =
-  // +9.81 z), data.alpha/beta/gamma the gyro rates (deg/s) — TiltInput's
-  // complementary filter fuses the two (gyro = response, accel = drift
-  // anchor), which is what the OS would have done had we gotten
-  // DeviceOrientation.
+  // never fires here and the relay is the only source. Its alpha/beta/gamma
+  // are orientation angles (see TiltInput.relayOrientation); x/y/z, the
+  // accelerometer, is not needed.
   acBoot.airconsole.onDeviceMotion = (data) => {
-    if (!data || typeof data.x !== 'number') return;
-    tilt.setGravity(data.x, data.y, data.z, data.alpha, data.beta, data.gamma);
+    if (data && typeof data.beta === 'number') tilt.relayOrientation(data.beta, data.gamma);
   };
 } else {
   show('name');
