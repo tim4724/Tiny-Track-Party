@@ -26,6 +26,8 @@ import androidx.compose.runtime.setValue
  *                                            # prices the Compose window's own GPU share
  * adb shell setprop debug.ttp.tags 0         # no name tags: neither the per-frame read
  *                                            # nor the tag View's draw (1/unset = shown)
+ * adb shell setprop debug.ttp.tags 60        # tags on EVERY presented frame at 4P too
+ *                                            # (shipped: every other one there, NameTags.kt)
  * adb shell setprop debug.ttp.biome snow     # build every scene in this biome, whatever
  *                                            # the cup (SceneStaging reads it at build)
  * ```
@@ -81,13 +83,18 @@ object PerfDebug {
     var tagsHidden = false
         private set
 
+    /** `debug.ttp.tags 60`: no 4P halving, so a bench can price what it saves. */
+    var tagsEveryFrame = false
+        private set
+
     /** Read the knobs and apply whatever moved. */
     fun poll(display: DisplayHost) {
         val tags = getprop("debug.ttp.tags")?.toIntOrNull() ?: 1
-        if ((tags == 0) != tagsHidden) {
+        if ((tags == 0) != tagsHidden || (tags == 60) != tagsEveryFrame) {
             tagsHidden = tags == 0
+            tagsEveryFrame = tags == 60
             PerfMonitor.reset()
-            Log.i(TAG, "name tags -> ${if (tagsHidden) "off" else "on"}")
+            Log.i(TAG, "name tags -> ${if (tagsHidden) "off" else if (tagsEveryFrame) "every frame" else "on"}")
         }
 
         val hud = getprop("debug.ttp.hud")?.toIntOrNull() ?: 1

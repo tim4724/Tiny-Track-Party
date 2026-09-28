@@ -45,8 +45,17 @@ import kotlin.math.sqrt
  *  - the tags on their own translucent SurfaceView, drawn in software on a
  *    worker thread: +3.3 ms. This box's composer overlays only TWO layers, so a
  *    third sends SurfaceFlinger to GPU composition of the top two every frame.
- * So this stays the simplest of the three. `debug.ttp.tags 0` ([PerfDebug])
- * turns the tags off whole, which is how the number above is re-taken.
+ * So this stays the simplest of the three.
+ *
+ * **AT 4 CELLS THE TAGS MOVE ON EVERY OTHER PRESENTED FRAME** ([DisplayHost]),
+ * so the window redraws at 30 Hz instead of 60 (user decision; 1-3 cells keep
+ * every frame). Same box and pin, 3 alternated 40 s runs per arm: tags off GPU
+ * p50 9.5-9.7 ms, worst 53-54 fps / 6-7 skips; every frame 11.6-12.3 ms, worst
+ * 48-49 fps / 11-12 skips; every other frame 10.2-10.5 ms, worst 53 fps / 7
+ * skips. The half rate buys back most of the cost and all of the worst-second
+ * loss. `debug.ttp.tags 0` ([PerfDebug]) turns the tags off whole and
+ * `debug.ttp.tags 60` restores every frame at 4 cells, which is how these
+ * numbers are re-taken.
  */
 class NameTagView(context: Context) : View(context) {
 
