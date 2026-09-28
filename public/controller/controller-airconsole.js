@@ -61,6 +61,31 @@ var _acStorage = AirConsoleStorage.install(airconsole, {
 // also gated on window.airconsole as belt-and-braces.
 history.pushState = function () {};
 
+// Every tap bounces focus out to AirConsole's page and back onto an element in
+// this frame. Chrome can stop feeding AirConsole's page the sensors after a
+// fresh load: its listeners stay attached and it keeps relaying its last cached
+// sample 60 times a second, so tilt freezes without anything reporting an
+// error. A focus change between that page and this frame restarts it, and only
+// one that lands on an ELEMENT here, inside a user activation (window.focus()
+// alone does not). Measured with DevTools on a Pixel 7, Chrome 153: 0 sensor
+// connections before, 4 after one such tap. Every player taps before a race
+// (Ready, or Start for the host), so a race never starts on a stalled relay.
+// Invisible: the sink is a 1px transparent button that never takes a pointer,
+// and the tap's own target still gets its click.
+var _focusSink = null;
+document.addEventListener('pointerdown', function () {
+  if (!_focusSink) {
+    _focusSink = document.createElement('button');
+    _focusSink.tabIndex = -1;
+    _focusSink.setAttribute('aria-hidden', 'true');
+    _focusSink.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;'
+      + 'opacity:0;pointer-events:none;border:0;padding:0';
+    document.body.appendChild(_focusSink);
+  }
+  try { window.parent.focus(); } catch (_) {}
+  _focusSink.focus({ preventScroll: true });
+}, true);
+
 // No WebRTC fastlane on AirConsole — same stub as the display bootstrap.
 // GameNet._initFastlane reads window.PartyFastlane lazily at join, so this
 // assignment is all it takes; enqueue never answers 'p2p', so every CONTROL
