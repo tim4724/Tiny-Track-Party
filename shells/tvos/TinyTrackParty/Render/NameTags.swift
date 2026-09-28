@@ -25,10 +25,10 @@ struct NameTagLabel: Hashable {
 /// blocking the loop).
 final class NameTagView: UIView {
 
-    /// `.name-tag`'s `clamp(1rem, 1.3vw, 1.5rem)` against a 1920-wide display:
-    /// 1.3vw is 25, so the clamp lands on its 1.5rem ceiling — the same reading
-    /// `NameChip` takes of its own clamp (2.2rem there, 35 pt).
-    private static let fontSize: CGFloat = 24
+    /// `.name-tag`'s `clamp(0.9rem, 1.17vw, 1.35rem)` against a 1920-wide
+    /// display: 1.17vw is 22.5, so the clamp lands on its 1.35rem ceiling — the
+    /// same reading `NameChip` takes of its own clamp (2.2rem there, 35 pt).
+    private static let fontSize: CGFloat = 21.6
 
     /// The tag's tilt, `rotate(-2deg)`.
     private static let tilt: CGFloat = -2 * .pi / 180
@@ -121,24 +121,25 @@ final class NameTagView: UIView {
         return s
     }
 
-    /// `.name-tag` and its tail, drawn once. The box is the CSS box: `padding:
-    /// 0.25em 0.5em` around a line-height-1 line, inside the sticker outline,
-    /// with `--r-sm` corners and NO shadow. The tail is the web's two triangles:
+    /// `.name-tag` and its tail, drawn once: the SLIM sticker. The box is the CSS
+    /// box: `padding: 0.1em 0.42em` around a line-height-1 line, inside an outline
+    /// and corners two thirds of the chips' (the web's 2px and 8px against their
+    /// 3px and 12px), semibold, and NO shadow. The tail is the web's two triangles:
     /// an ink one hung from the inner edge of the bottom outline, then the livery
     /// one lifted by the outline times sqrt(2), which on 45-degree sides is one
     /// outline width, so the ink runs unbroken round the tip.
     private static func draw(_ label: NameTagLabel) -> TagImage {
         let em = fontSize
-        let border = Sticker.border
-        let radius = Sticker.radiusSmall
-        let font = Fonts.uiDisplay(em, weight: .bold)
+        let border = Sticker.border * 2 / 3
+        let radius = Sticker.radiusSmall * 2 / 3
+        let font = Fonts.uiDisplay(em, weight: .semibold)
         let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.white]
         let text = label.name as NSString
         let textW = ceil(text.size(withAttributes: attrs).width)
 
-        let boxW = textW + em + 2 * border
-        let boxH = em * 1.5 + 2 * border
-        let tailH = 0.45 * em + border
+        let boxW = textW + 0.84 * em + 2 * border
+        let boxH = em * 1.2 + 2 * border
+        let tailH = 0.3 * em + border
         let tailW = 2 * tailH
         let canvas = CGSize(width: boxW, height: boxH - border + tailH)
 
@@ -171,13 +172,13 @@ final class NameTagView: UIView {
 
             // Centred on the line box the CSS lays out: one em tall, the glyphs'
             // ascender-to-descender span centred inside it.
-            let lineTop = border + 0.25 * em
+            let lineTop = border + 0.1 * em
             let glyphH = font.ascender - font.descender
-            text.draw(at: CGPoint(x: border + 0.5 * em, y: lineTop + (em - glyphH) / 2), withAttributes: attrs)
+            text.draw(at: CGPoint(x: border + 0.42 * em, y: lineTop + (em - glyphH) / 2), withAttributes: attrs)
         }
-        // Stage._paintNameTags: the box's bottom sits 0.55em above the projected
+        // Stage._paintNameTags: the box's bottom sits 0.4em above the projected
         // point, which leaves the tail's tip just clear of the car.
-        let anchorY = (boxH + 0.55 * em) / canvas.height
+        let anchorY = (boxH + 0.4 * em) / canvas.height
         return TagImage(image: image.cgImage!, size: canvas, anchor: CGPoint(x: 0.5, y: anchorY))
     }
 }
