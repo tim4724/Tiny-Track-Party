@@ -24,6 +24,8 @@ import androidx.compose.runtime.setValue
  *                                            # unset = VulkanPolicy (Vulkan when it can)
  * adb shell setprop debug.ttp.hud 0          # compose NO race chrome (1/unset = shown):
  *                                            # prices the Compose window's own GPU share
+ * adb shell setprop debug.ttp.tags 0         # no name tags: neither the per-frame read
+ *                                            # nor the tag View's draw (1/unset = shown)
  * adb shell setprop debug.ttp.biome snow     # build every scene in this biome, whatever
  *                                            # the cup (SceneStaging reads it at build)
  * ```
@@ -71,8 +73,23 @@ object PerfDebug {
     var hudHidden by mutableStateOf(false)
         private set
 
+    /**
+     * `debug.ttp.tags 0` turns the name tags off whole: [DisplayHost] skips the
+     * per-frame `ttp_display_name_tags` read and the tag View draws nothing. The
+     * A/B for the one piece of chrome placed per frame (NameTags.kt).
+     */
+    var tagsHidden = false
+        private set
+
     /** Read the knobs and apply whatever moved. */
     fun poll(display: DisplayHost) {
+        val tags = getprop("debug.ttp.tags")?.toIntOrNull() ?: 1
+        if ((tags == 0) != tagsHidden) {
+            tagsHidden = tags == 0
+            PerfMonitor.reset()
+            Log.i(TAG, "name tags -> ${if (tagsHidden) "off" else "on"}")
+        }
+
         val hud = getprop("debug.ttp.hud")?.toIntOrNull() ?: 1
         if ((hud == 0) != hudHidden) {
             hudHidden = hud == 0

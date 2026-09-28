@@ -494,7 +494,8 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
                     // one: a declined frame left the last picture up, and the last
                     // tags with it. The View draws in this same vsync's traversal.
                     if (presented) nameTags?.let {
-                        it.show(Ttp.ttp_display_name_tags(it.tags, it.tags.size / NAME_TAG_STRIDE))
+                        it.show(if (PerfDebug.tagsHidden) 0
+                                else Ttp.ttp_display_name_tags(it.tags, it.tags.size / NAME_TAG_STRIDE))
                     }
                     // Consumed either way: the cosmetic clock advances before
                     // beginFrame can decline, so re-feeding it would double-run

@@ -32,6 +32,21 @@ import kotlin.math.sqrt
  *
  * Sits UNDER the ComposeView, so the cell chips and cards paint over a tag that
  * drifts beneath them, as on the web.
+ *
+ * **WHAT IT COSTS, AND WHY NOTHING CHEAPER WAS KEPT — measured on the Google TV
+ * Streamer, 4P, Vulkan, pinned 432.** Anything in the app window that changes
+ * every frame makes HWUI render a window frame every vsync (~10 a second
+ * without tags: the HUD poll) on the same GPU as the race, and that took about
+ * +2.3 ms of the renderer's GPU p50 and 4-5 fps off the worst second. Two other
+ * setups were built and measured, and neither is cheaper:
+ *  - one small child View per tag, moved only by its properties so nothing is
+ *    re-recorded and the damage is the tags' own rects: the same +2.3 ms. The
+ *    size of HWUI's draw is not the cost; a window frame at all is.
+ *  - the tags on their own translucent SurfaceView, drawn in software on a
+ *    worker thread: +3.3 ms. This box's composer overlays only TWO layers, so a
+ *    third sends SurfaceFlinger to GPU composition of the top two every frame.
+ * So this stays the simplest of the three. `debug.ttp.tags 0` ([PerfDebug])
+ * turns the tags off whole, which is how the number above is re-taken.
  */
 class NameTagView(context: Context) : View(context) {
 
@@ -48,7 +63,7 @@ class NameTagView(context: Context) : View(context) {
 
     /** Authored pixels (1920 wide) to this window's physical pixels. */
     private val k = resources.displayMetrics.widthPixels / AUTHORED_WIDTH
-    private val face = Typeface.createFromAsset(context.assets, "fonts/Fredoka-Bold.ttf")
+    private val face = Typeface.createFromAsset(context.assets, "fonts/Fredoka-SemiBold.ttf")
     private val matrix = Matrix()
     private val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
 
@@ -108,17 +123,19 @@ class NameTagView(context: Context) : View(context) {
      */
     private fun rasterize(name: String, color: Int): TagBitmap {
         val em = FONT_PX * k
-        val border = Sticker.border.value * k
-        val radius = Tokens.radius("r-sm").value * k
+        // The SLIM sticker: two thirds of the chips' outline and corner, so the
+        // tag reads as the same family without the chip's weight.
+        val border = Sticker.border.value * SLIM * k
+        val radius = Tokens.radius("r-sm").value * SLIM * k
         val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             typeface = face
             textSize = em
             this.color = android.graphics.Color.WHITE
         }
-        // `line-height: 1` and `padding: 0.25em 0.5em`, border-box.
-        val boxW = ceil(text.measureText(name) + em + 2 * border)
-        val boxH = ceil(em * 1.5f + 2 * border)
-        val tailH = 0.45f * em + border
+        // `line-height: 1` and `padding: 0.1em 0.42em`, border-box.
+        val boxW = ceil(text.measureText(name) + 0.84f * em + 2 * border)
+        val boxH = ceil(em * 1.2f + 2 * border)
+        val tailH = 0.3f * em + border
         val tailW = 2 * tailH
         val bmpH = ceil(boxH + tailH)
         val bitmap = Bitmap.createBitmap(boxW.toInt(), bmpH.toInt(), Bitmap.Config.ARGB_8888)
@@ -148,7 +165,7 @@ class NameTagView(context: Context) : View(context) {
         // the browser's line box puts it.
         val fm = text.fontMetrics
         val baseline = boxH / 2 - (fm.ascent + fm.descent) / 2
-        c.drawText(name, border + em * 0.5f, baseline, text)
+        c.drawText(name, border + em * 0.42f, baseline, text)
 
         return TagBitmap(name, color, bitmap, boxW / 2, boxH + GAP_EM * em)
     }
@@ -163,13 +180,16 @@ class NameTagView(context: Context) : View(context) {
 
     private companion object {
         /**
-         * `clamp(1rem, 1.3vw, 1.5rem)` on a 1920-wide display lands on its 24 px
-         * ceiling, against the name chip's 35 — the ratio this shell's own 35 px
-         * chip keeps ([RaceHud]'s NameChip).
+         * `clamp(0.9rem, 1.17vw, 1.35rem)` on a 1920-wide display lands on its
+         * 21.6 px ceiling, against the name chip's 35 — the ratio this shell's own
+         * 35 px chip keeps ([RaceHud]'s NameChip). Fredoka SemiBold, as the web's
+         * weight 600.
          */
-        const val FONT_PX = 24f
-        /** The box's bottom edge above the anchor, in em (`translateY(-0.55em)`). */
-        const val GAP_EM = 0.55f
+        const val FONT_PX = 21.6f
+        /** Outline and corner as a share of the chips' (`2px` / `8px` against `3px` / `12px`). */
+        const val SLIM = 2f / 3f
+        /** The box's bottom edge above the anchor, in em (`translateY(-0.4em)`). */
+        const val GAP_EM = 0.4f
         const val TILT = -2f
         const val TAG_STRIDE = 6
         /** Eight cars, so seven tags a cell, across the most cells a field can split into. */
