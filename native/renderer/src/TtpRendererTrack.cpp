@@ -1308,6 +1308,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     // whatever isn't live (frame 1, like the ghosts). Seeded 1 for that.
     mBoxIn.assign(mBoxInstances.size(), 1);
     mBoxFadeIn.assign(mBoxFadeInstances.size(), 1);
+    mEffectsWarm = false; // a new scene's pools have not drawn yet
     // Resolve the emissive-bearing material instances once — the gold throb
     // retints these per frame instead of string-probing every material.
     mBoxGlowMats.clear();

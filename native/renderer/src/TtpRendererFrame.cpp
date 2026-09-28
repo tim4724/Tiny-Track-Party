@@ -2778,6 +2778,42 @@ void TtpRenderer::orientCellBillboards(const float3& camPos) {
     }
 }
 
+// THE EFFECT POOLS' PIPELINES, PAID BEFORE THE RACE RATHER THAN IN IT. On a
+// Vulkan device without dynamic rendering (the Android reference box) Filament
+// cannot prewarm its pipeline cache, so a material and its raster state compile
+// on the driver thread the first time they are DRAWN — and every effect pool
+// enters the scene only when its effect happens. The first box grab and the
+// first rocket each stalled the driver thread 90-220 ms mid-race (measured in
+// the shader compiler, the frame thread's beginFrame declining 4-7 frames in a
+// row). So the first drawn race frame of a scene puts one member of each pool in
+// the scene, shrunk to nothing two units in front of cell 0's camera; the draw
+// is issued, no pixel is touched, and the next frame's ordinary reconcile takes
+// each one back out. Race views only: the pipeline is keyed on the target it is
+// drawn into, and an overview frame is not proof of the race's.
+void TtpRenderer::warmEffectPipelines(const TtpFrameInput& input) {
+    const TtpViewInput& v = ttp_frame_views(&input)[0];
+    const float3 eye{ v.world[12], v.world[13], v.world[14] };
+    const float3 ahead{ -v.world[8], -v.world[9], -v.world[10] };
+    const mat4f nothing = mat4f::translation(eye + ahead * 2.0f)
+            * mat4f::scaling(float3{ 1e-4f });
+    auto& tcm = mEngine->getTransformManager();
+    const auto place = [&](gltfio::FilamentInstance* inst, std::vector<uint8_t>& in) {
+        if (!inst || in.empty()) return;
+        setInstanceInScene(inst, in[0], true);
+        tcm.setTransform(tcm.getInstance(inst->getRoot()), nothing);
+    };
+    place(mBoxFadeInstances.empty() ? nullptr : mBoxFadeInstances[0], mBoxFadeIn);
+    place(mBananaInstances.empty() ? nullptr : mBananaInstances[0], mBananaIn);
+    Mesh* const firsts[] = { mRockets.empty() ? nullptr : &mRockets[0],
+                             mRocketFlames.empty() ? nullptr : &mRocketFlames[0],
+                             &mBurstMeshes[0], &mBurstBalls[0] };
+    for (Mesh* m : firsts) {
+        if (!m || m->entity.isNull()) continue;
+        setMeshInScene(*m, true);
+        tcm.setTransform(tcm.getInstance(m->entity), nothing);
+    }
+}
+
 bool TtpRenderer::render(const TtpFrameInput& input) { return frame(input, true); }
 bool TtpRenderer::advance(const TtpFrameInput& input) { return frame(input, false); }
 
@@ -2816,6 +2852,9 @@ bool TtpRenderer::frame(const TtpFrameInput& input, bool draw) {
     mProfile[kProfSkids] = ttpNowMs() - tMark; tMark += mProfile[kProfSkids];
     renderAmbient(input);
     mProfile[kProfAmbient] = ttpNowMs() - tMark; tMark += mProfile[kProfAmbient];
+    const bool warming = draw && !mEffectsWarm && input.viewCount > 0
+            && !(input.flags & TTP_FRAME_OVERVIEW);
+    if (warming) warmEffectPipelines(input);
     if (!draw) {
         // Undrawn, and done: the merge, the blob readbacks and the GPU frame
         // are a drawn frame's. The phases above still queued driver work (the
@@ -2858,6 +2897,7 @@ bool TtpRenderer::frame(const TtpFrameInput& input, bool draw) {
 #endif
 
     renderCells(input, tMark);
+    if (warming) mEffectsWarm = true; // drawn, so the pipelines exist now
     mProfile[kProfPresent] = ttpNowMs() - tMark; tMark = ttpNowMs();
     mRenderer->endFrame();
     // Arm settled()'s fence behind the scene's FIRST submitted frame — created
