@@ -85,11 +85,8 @@ device), which is how a live phone once read "Tilt: Not available". Asking the p
 cross-origin frames outright and never consults `allow`, so iOS needs the relay
 whatever AirConsole ships.
 
-The WS ping is TEMPORARILY on in AC too
-(real-platform latency readings); its budget headroom comes from a raised AC
-gate floor in `Net.js` — the steady state it reverts to is no ping, with
-steering alone sized to fill AC's 25 msg/s budget
-(`STEER.SEND_MIN_INTERVAL_MS`).
+No WS ping on AC: steering alone is sized to fill AC's 25 msg/s budget
+(`STEER.SEND_MIN_INTERVAL_MS`), so the latency chip stays dark there.
 
 ## The display is authoritative
 

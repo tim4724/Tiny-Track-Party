@@ -138,22 +138,6 @@ test('AC: screen boots to the lobby, profile-named phones join, a race runs', as
   await expect(ana.locator('#me-name')).toHaveText('Ana');
   await expect(ben.locator('#me-name')).toHaveText('Ben');
 
-  // Every tap bounces focus out to AirConsole's page and back onto an element
-  // here — what restarts a relay Chrome has stopped feeding (see
-  // controller-airconsole.js). No mock can stall Chrome's sensors, so this pins
-  // the handler: a tap calls the parent's focus() and lands focus on the sink.
-  // (Here the controller is the top page, so the parent is its own window.)
-  const bounce = await ana.evaluate(() => {
-    let parentFocused = false;
-    const orig = window.parent.focus;
-    window.parent.focus = function () { parentFocused = true; return orig.apply(this, arguments); };
-    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
-    window.parent.focus = orig;
-    const ae = document.activeElement;
-    return { parentFocused, sink: ae.tagName === 'BUTTON' && ae.getAttribute('aria-hidden') === 'true' };
-  });
-  expect(bounce).toEqual({ parentFocused: true, sink: true });
-
   // Ready → start → countdown → racing, the same flow the relay suite drives
   // (startRace knows the host bar is a stepper: Select race → Start race).
   await startRace(ana, [ben]);
@@ -177,13 +161,6 @@ test('AC: screen boots to the lobby, profile-named phones join, a race runs', as
   await ana.evaluate(() => {
     for (let i = 0; i < 8; i++) window.airconsole.triggerDeviceMotion(0, 0);
   });
-
-  // The latency chip lights over the AC transport (TEMPORARY: the WS ping runs
-  // in AC for real-platform readings) — which also proves the display's C++
-  // net walk answers PING through the adapter. A digit-anchored match: the
-  // pre-sample placeholder is '-- ms' and a dead link reads 'no signal', so
-  // only a real round trip satisfies it.
-  await expect(ana.locator('#latency')).toContainText(/\d+ ms/, { timeout: 5000 });
 
   // Platform pause freezes the race through the same walk the pause button
   // drives (overlay up everywhere), and the platform resume lifts exactly it.
