@@ -346,7 +346,7 @@ A caller that has changed what a frame costs should `reset()` rather than reason
 about the window.
 
 **`?scenario=bench` is the bench** (`scripts/perf-race.mjs --platform web`): a
-live race on the launch's own field with 1, 2 or 4 autopiloted player seats,
+live race on the launch's own field with 1 to 4 autopiloted player seats,
 printing `TtpPerf <json>` once a second. The line is the readout's own bytes and
 the two TV shells log the same one, so a single parser folds all three.
 

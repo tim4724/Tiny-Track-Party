@@ -29,7 +29,7 @@ npx playwright test tests/e2e/flow.spec.js   # A single E2E spec
 npm run check:artifact            # Is the checked-in wasm current?
 npm run check:blob-cache          # Do blobs kept between RUNS survive the round
                                   # trip? No suite can see that (tests/CLAUDE.md)
-npm run perf:race -- --platform web|androidtv|tvos [--players 1|2|4] [--track id]
+npm run perf:race -- --platform web|androidtv|tvos [--players 1|2|3|4] [--track id]
                                   # THE BENCH: one live race, autopiloted players at the
                                   # back of a full grid, one readout shape on all three
 npm run probe:cost                # what a SIM frame costs in CPU us. The bench above

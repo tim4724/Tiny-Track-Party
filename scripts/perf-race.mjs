@@ -2,7 +2,7 @@
 //
 //   node scripts/perf-race.mjs --platform web --players 4 --track tidepool --seconds 45
 //
-// It races 1, 2 or 4 AUTOPILOTED player cars from the back of a full grid — a
+// It races 1 to 4 AUTOPILOTED player cars from the back of a full grid — a
 // real launch's field, driven by the sim rather than by phones (ttp_race.h's
 // bench field) — and folds the frame-cost readout the shell prints while it
 // runs. The point is the comparison across shells: the browser, an Apple TV and
@@ -245,7 +245,27 @@ function report(rows) {
   console.log(`\nverdict ${order[0]}   (`
       + ['good', 'warn', 'bad'].filter((v) => tally.has(v))
           .map((v) => `${v} ${tally.get(v)}`).join(' · ') + ')');
-  if (TIMELINE) timeline(rows);
+  if (TIMELINE) { operatingPoints(rows); timeline(rows); }
+}
+
+// Where an ADAPTIVE run spent its seconds: one row per render size, in the
+// order first reached. The timeline below keeps only the last size, so without
+// this a run that climbed or retreated reports a few seconds. The half-rate
+// backstop shows as the row's mean fps.
+function operatingPoints(rows) {
+  const points = new Map();
+  for (const r of rows) {
+    const key = `${r.width}x${r.height}`;
+    if (!points.has(key)) points.set(key, []);
+    points.get(key).push(r);
+  }
+  const mean = (xs) => xs.reduce((s, v) => s + v, 0) / xs.length;
+  console.log('\noperating point     seconds   mean fps   skips/s');
+  for (const [key, rs] of points) {
+    console.log(`${key.padEnd(19)}${String(rs.length).padStart(8)}`
+        + `${mean(of(rs, (r) => r.fps)).toFixed(1).padStart(11)}`
+        + `${mean(of(rs, (r) => r.skips)).toFixed(1).padStart(10)}`);
+  }
 }
 
 // The run second by second, then its two bands. `light` is the mean GPU p50 of

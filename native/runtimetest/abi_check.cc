@@ -5506,8 +5506,8 @@ void autopilotedPlayerSeats() {
   w.set("carStats", carStats);
   check(ttp_race_configure(canonical_stringify(w).c_str()) == 1, "bench: an 8-car world");
 
-  // The three benches the harnesses offer, and the only three.
-  for (const int players : {1, 2, 4}) {
+  // Every bench the harnesses offer: one player seat up to a full party.
+  for (int players = 1; players <= protocol::MAX_PLAYERS; players++) {
     const std::string label = std::to_string(players) + "-player bench";
     const Value bench =
         parseOrNull(ttp_race_bench_field_json("tidepool", players, 1), "bench field");
