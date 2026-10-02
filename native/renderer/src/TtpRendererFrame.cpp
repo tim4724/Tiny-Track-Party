@@ -974,17 +974,12 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
             uint32_t blockMask = 0;
             if (c.monster > 0.5f && input.viewCount > 0) {
                 const TtpViewInput* vws = ttp_frame_views(&input);
-                const float3 mon = carPos;
+                const TtpVec3 mon{ carPos.x, carPos.y, carPos.z };
                 for (uint32_t vi = 0; vi < input.viewCount; vi++) {
                     const int own = vws[vi].car;
                     if (own < 0 || own == (int) i || own >= (int) nCars) continue;
-                    const float3 camP = { vws[vi].world[12], vws[vi].world[13], vws[vi].world[14] };
-                    const float3 f = float3{ cars[own].pos.x, cars[own].pos.y, cars[own].pos.z } - camP;
-                    const float3 mv = mon - camP;
-                    if (dot(mv, f) <= 0) continue;               // behind the camera
-                    if (dot(mv, mv) >= dot(f, f)) continue;      // beyond the car
-                    const float3 d = mon - (camP + f);
-                    if (dot(d, d) < 3.0f * 3.0f) blockMask |= (1u << vi);
+                    const TtpVec3 camP{ vws[vi].world[12], vws[vi].world[13], vws[vi].world[14] };
+                    if (ttp_monster_ghosted(mon, camP, cars[own].pos)) blockMask |= (1u << vi);
                 }
             }
             const bool isMonster = c.monster > 0.5f

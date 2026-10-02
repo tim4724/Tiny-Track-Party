@@ -46,6 +46,7 @@
 #include "ttp/framing.h"
 #include "ttp/game.h"
 #include "ttp/hud.h"
+#include "ttp/name_tags.h"
 #include "ttp/jsmath.h"
 #include "ttp/roster.h"
 #include "ttp/race_track.h"
@@ -1474,6 +1475,196 @@ void testOverviewOwnsTheSurface(const GameTrack& track) {
 
 }  // namespace
 
+// nameTags over a hand-built three-cell frame: each cell tags every OTHER live
+// car in front of its camera (cell cars and CPU alike), by roster slot, fades
+// them out by distance, and lists them far to near. Plain float projection, so
+// it is checked to a tolerance.
+void testNameTags() {
+  const uint32_t nCars = 5, nViews = 3;
+  std::vector<uint8_t> buf(sizeof(TtpFrameInput) + nCars * sizeof(TtpCarInput)
+                           + nViews * sizeof(TtpViewInput));
+  TtpFrameInput* f = (TtpFrameInput*) buf.data();
+  f->version = TTP_FRAME_INPUT_VERSION;
+  f->carCount = nCars;
+  f->viewCount = nViews;
+  TtpCarInput* cars = (TtpCarInput*) (f + 1);
+  const float lift = ttp::rt::NAME_TAG_LIFT;
+  // Slots 0-2 own the three cells, slot 3 is a CPU car with no cell, and slot 4
+  // is a seat with no live car: zeroed, exactly as the frame builder leaves it.
+  cars[0].pos = { 0, -lift, -2 };
+  cars[1].pos = { 1, -lift, -4 };
+  cars[2].pos = { 0, -lift, -22 };
+  cars[3].pos = { -1, -lift, -12 };
+  for (uint32_t i = 0; i < 4; i++) cars[i].up = { 0, 1, 0 };
+  TtpViewInput* views = (TtpViewInput*) (cars + nCars);
+  using ttp::rt::V3;
+  ttp::rt::lookAtWorld(views[0].world, V3{ 0, 0, 0 }, V3{ 0, 0, -1 }, V3{ 0, 1, 0 });
+  ttp::rt::lookAtWorld(views[1].world, V3{ 0, 0, -30 }, V3{ 0, 0, -31 }, V3{ 0, 1, 0 });
+  ttp::rt::lookAtWorld(views[2].world, V3{ 0, 0, -10 }, V3{ 0, 0, -9 }, V3{ 0, 1, 0 });
+  for (uint32_t i = 0; i < nViews; i++) {
+    views[i].fov = 90;
+    views[i].aspect = 1;
+    views[i].nearZ = 0.1f;
+    views[i].farZ = 600;
+    views[i].car = (int32_t) i;
+  }
+  const float pictures[] = { 0, 0, 0.5f, 0.5f,   0.5f, 0, 0.5f, 0.5f,   0, 0.5f, 0.5f, 0.5f };
+  auto near = [](float got, float want, const std::string& what) {
+    check(std::fabs(got - want) < 1e-4f, what + ": got " + std::to_string(got)
+                                         + ", want " + std::to_string(want));
+  };
+  // Past NAME_TAG_NEAR: the far leg, NEAR_SCALE down to FAR_SCALE.
+  auto scaleAt = [](float dist) {
+    const float k = (dist - ttp::rt::NAME_TAG_NEAR) / (ttp::rt::NAME_TAG_FAR - ttp::rt::NAME_TAG_NEAR);
+    return ttp::rt::NAME_TAG_NEAR_SCALE - (ttp::rt::NAME_TAG_NEAR_SCALE - ttp::rt::NAME_TAG_FAR_SCALE) * k;
+  };
+
+  const ttp::rt::NameTagDeck noDeck;
+  std::vector<float> cover;
+  const std::vector<ttp::rt::NameTag> tags = ttp::rt::nameTags(*f, pictures, noDeck, cover);
+  checkU((uint32_t) tags.size(), 5, "nameTags: cell 1 sees everything behind it, slot 4 is nobody");
+  if (tags.size() != 5) return;
+  // Cell 0, far to near: car 2 dead ahead in its fade band, the CPU, then car 1.
+  checkU(tags[0].cell, 0, "tag 0 cell");
+  checkU(tags[0].target, 2, "tag 0 names the far car first");
+  near(tags[0].x, 0.25f, "tag 0 x centred in cell 0");
+  near(tags[0].y, 0.25f, "tag 0 y on the horizon");
+  near(tags[0].alpha, (ttp::rt::NAME_TAG_FAR - 22) / (ttp::rt::NAME_TAG_FAR - ttp::rt::NAME_TAG_FADE),
+       "tag 0 fades inside the band");
+  near(tags[0].scale, scaleAt(22), "tag 0 scale");
+  checkU(tags[1].target, 3, "tag 1 names the CPU car, which owns no cell");
+  near(tags[1].x, 0.25f - 0.25f / 12, "tag 1 x: a twelfth left of centre");
+  checkU(tags[2].target, 1, "tag 2 names the near car last, on top");
+  near(tags[2].x, 0.3125f, "tag 2 x: a quarter right of centre");
+  near(tags[2].alpha, 1, "tag 2 is fully up close");
+  near(tags[2].scale, scaleAt(std::sqrt(17.0f)), "tag 2 scale");
+  // Cell 2 faces +Z from z=-10: car 0 (8 away) before car 1 (~6); the CPU is behind.
+  checkU(tags[3].cell, 2, "tag 3 cell");
+  checkU(tags[3].target, 0, "tag 3 names car 0");
+  near(tags[3].x, 0.25f, "tag 3 x in cell 2");
+  near(tags[3].y, 0.75f, "tag 3 y in cell 2");
+  checkU(tags[4].target, 1, "tag 4 names car 1");
+  near(tags[4].x, 0.25f - 0.25f / 6, "tag 4 x mirrors: the camera faces +Z");
+
+  // The near leg: full size at NAME_TAG_CLOSE and nearer, NEAR_SCALE at NAME_TAG_NEAR.
+  auto cell0Car1 = [&](const std::vector<ttp::rt::NameTag>& tags) -> float {
+    for (const auto& t : tags) if (t.cell == 0 && t.target == 1) return t.scale;
+    return -1;
+  };
+  cars[1].pos = { 0, -lift, -1.2f };
+  near(cell0Car1(ttp::rt::nameTags(*f, pictures, noDeck, cover)), 1, "a rival within NAME_TAG_CLOSE is full size");
+  cars[1].pos = { 0, -lift, -ttp::rt::NAME_TAG_NEAR };
+  near(cell0Car1(ttp::rt::nameTags(*f, pictures, noDeck, cover)), ttp::rt::NAME_TAG_NEAR_SCALE,
+       "a rival at NAME_TAG_NEAR is NEAR_SCALE");
+  cars[1].pos = { 1, -lift, -4 };
+
+  // A solo race: one cell, and the CPU field still gets its names.
+  f->viewCount = 1;
+  f->carCount = nCars;
+  std::memmove((uint8_t*) (cars + nCars), views, sizeof(TtpViewInput));  // view 0 stays first
+  cover.clear();
+  checkU((uint32_t) ttp::rt::nameTags(*f, pictures, noDeck, cover).size(), 3, "nameTags: a solo race tags its rivals");
+
+  f->flags = TTP_FRAME_OVERVIEW;
+  check(ttp::rt::nameTags(*f, pictures, noDeck, cover).empty(), "nameTags: an overview tags nobody");
+}
+
+// Cover: one cell whose camera looks down -Z past its own car at a rival 8
+// units out, with a monster truck placed three ways: squarely between (the tag
+// fades and goes), ghosted in front of the cell's own car (see-through, the tag
+// stays), and off to one side of the tag's line (the tag stays); then an
+// ordinary car squarely between, and the cell's own car as a truck, neither of
+// which ever hides a tag; then the cover fade and the road deck.
+void testNameTagCover() {
+  const uint32_t nCars = 3;
+  std::vector<uint8_t> buf(sizeof(TtpFrameInput) + nCars * sizeof(TtpCarInput) + sizeof(TtpViewInput));
+  TtpFrameInput* f = (TtpFrameInput*) buf.data();
+  f->version = TTP_FRAME_INPUT_VERSION;
+  f->carCount = nCars;
+  f->viewCount = 1;
+  TtpCarInput* cars = (TtpCarInput*) (f + 1);
+  for (uint32_t i = 0; i < nCars; i++) { cars[i].up = { 0, 1, 0 }; cars[i].forward = { 0, 0, -1 }; }
+  cars[0].pos = { 0, 0, -1.15f };           // the cell's own car
+  cars[1].pos = { 0, 0, -8 };               // the rival
+  cars[2].monster = 1;                      // the truck, placed per arm
+  TtpViewInput* v = (TtpViewInput*) (cars + nCars);
+  using ttp::rt::V3;
+  ttp::rt::lookAtWorld(v->world, V3{ 0, 0.64f, 0 }, V3{ 0, 0.3f, -1 }, V3{ 0, 1, 0 });
+  v->fov = 90;
+  v->aspect = 1;
+  v->nearZ = 0.1f;
+  v->farZ = 600;
+  v->car = 0;
+  const float pictures[] = { 0, 0, 1, 1 };
+  auto rival = [&](const std::vector<ttp::rt::NameTag>& tags) -> const ttp::rt::NameTag* {
+    for (const auto& t : tags) if (t.target == 1) return &t;
+    return nullptr;
+  };
+  const ttp::rt::NameTagDeck noDeck;
+
+  f->dt = 1;  // long enough to finish any fade in one frame
+  std::vector<float> cover;
+  cars[2].pos = { 0, 0, -5 };
+  check(!rival(ttp::rt::nameTags(*f, pictures, noDeck, cover)), "a truck squarely in front hides the rival's tag");
+  cover.clear();
+  cars[2].pos = { 0, 0, -0.6f };
+  check(ttp_monster_ghosted(cars[2].pos, TtpVec3{ 0, 0.64f, 0 }, cars[0].pos),
+        "arm check: the truck in front of the own car is one the renderer ghosts");
+  check(rival(ttp::rt::nameTags(*f, pictures, noDeck, cover)) != nullptr, "a ghosted truck is see-through");
+  cover.clear();
+  cars[2].pos = { 0.5f, 0, -5 };
+  check(rival(ttp::rt::nameTags(*f, pictures, noDeck, cover)) != nullptr, "a rival half behind a truck keeps its tag");
+  cover.clear();
+  cars[2].pos = { 0, 0, -5 };
+  cars[2].monster = 0;
+  check(rival(ttp::rt::nameTags(*f, pictures, noDeck, cover)) != nullptr,
+        "an ordinary car squarely in front never hides a tag");
+  cars[2].monster = 1;
+  // The cell's own car as the truck: the camera looks over its roof, through its
+  // box. Another truck on that very spot (not nearer than the own car, so not
+  // ghosted) is the arm check that the box does stand in the tag's line.
+  cover.clear();
+  cars[2].pos = cars[0].pos;
+  check(!rival(ttp::rt::nameTags(*f, pictures, noDeck, cover)), "arm check: a rival truck where the own car sits hides the tag");
+  cover.clear();
+  cars[2].pos = { 4, 0, -5 };
+  cars[0].monster = 1;
+  check(rival(ttp::rt::nameTags(*f, pictures, noDeck, cover)) != nullptr, "the cell's own truck never hides a tag");
+  cars[0].monster = 0;
+
+  // The fade: a quarter of NAME_TAG_COVER_FADE behind the truck is a quarter gone.
+  cover.clear();
+  cars[2].pos = { 0, 0, -5 };
+  f->dt = ttp::rt::NAME_TAG_COVER_FADE * 0.25f;
+  const std::vector<ttp::rt::NameTag> tags = ttp::rt::nameTags(*f, pictures, noDeck, cover);
+  const ttp::rt::NameTag* t = rival(tags);
+  check(t && std::fabs(t->alpha - 0.75f) < 1e-4f, "the covered tag fades rather than popping");
+
+  // The deck: a bridge 4 wide at y=3 running along X over z=-8, and the rival on
+  // the road under it. Seen from above and behind the bridge, the deck hides it;
+  // from the lower road, the ray runs under the bridge and the tag stays.
+  std::vector<ttp::OutSample> bridge(9);
+  for (int i = 0; i < 9; i++) {
+    bridge[i].pos = ttp::Vec3(-8 + 2 * i, 3, -8);
+    bridge[i].lateral = ttp::Vec3(0, 0, 1);
+    bridge[i].up = ttp::Vec3(0, 1, 0);
+    bridge[i].width = 4;
+  }
+  const ttp::rt::NameTagDeck deck = ttp::rt::nameTagDeck(bridge, false);
+  checkU((uint32_t) deck.chunks.size(), 1, "nameTagDeck: 8 pieces are one chunk");
+  cars[2].pos = { 20, 0, 20 };  // the truck out of the way
+  f->dt = 1;
+  cover.clear();
+  check(rival(ttp::rt::nameTags(*f, pictures, deck, cover)) != nullptr,
+        "a rival under a bridge keeps its tag, seen from the road below");
+  ttp::rt::lookAtWorld(v->world, V3{ 0, 8, -4 }, V3{ 0, 0, -8 }, V3{ 0, 1, 0 });
+  cover.clear();
+  check(rival(ttp::rt::nameTags(*f, pictures, noDeck, cover)) != nullptr,
+        "arm check: from above, with no deck, the rival is tagged");
+  cover.clear();
+  check(!rival(ttp::rt::nameTags(*f, pictures, deck, cover)), "the bridge deck hides a rival under it");
+}
+
 int main() {
   BuiltRaceTrack bt;
   std::string err;
@@ -1499,6 +1690,8 @@ int main() {
   testHud(bt.game);
   testProps(bt);
   testShowcaseExhibits(bt.game);
+  testNameTags();
+  testNameTagCover();
 
   std::printf("frame builder check: %d assertions, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;

@@ -38,6 +38,7 @@
 #include "ttp/render_scale_controller.h"
 #include "ttp/game.h"
 #include "ttp/hud.h"
+#include "ttp/name_tags.h"
 #include "ttp/race_track.h"
 #include "ttp/roster.h"
 #include "ttp/scalar_id.h"
@@ -286,6 +287,9 @@ int ttp_display_build(const char* trackId, const char* rosterJson) {
     // drag the old frame's camera into it.
     g_disp->chase.clear();
     g_disp->steerBar.clear();
+    g_disp->nameTags.clear();
+    g_disp->tagCover.clear();
+    g_disp->tagDeck = ttp::rt::nameTagDeck(geo.samples, geo.closed);
     g_disp->sceneT = 0;
     g_disp->bursts.clear();
     solveFraming(*g_disp);
@@ -587,6 +591,9 @@ void ttp_display_release(void) {
     g_disp->rosterCars.clear();
     g_disp->chase.clear();
     g_disp->steerBar.clear();
+    g_disp->nameTags.clear();
+    g_disp->tagCover.clear();
+    g_disp->tagDeck = {};
     g_disp->held.clear();  // a field belongs to the scene it was read from
 }
 
@@ -686,6 +693,22 @@ void ttp_display_cell_cards(uint32_t mask) {
     if (g_disp) g_disp->cardMask = mask;
 }
 
+int ttp_display_name_tags(float* out, int maxTags) {
+    if (!g_disp || !g_disp->built || !out || maxTags <= 0) return 0;
+    const std::vector<ttp::rt::NameTag>& tags = g_disp->nameTags;
+    const int want = (int) tags.size() < maxTags ? (int) tags.size() : maxTags;
+    for (int i = 0; i < want; i++) {
+        const ttp::rt::NameTag& t = tags[(size_t) i];
+        out[i * 6 + 0] = (float) t.cell;
+        out[i * 6 + 1] = (float) t.target;
+        out[i * 6 + 2] = t.x;
+        out[i * 6 + 3] = t.y;
+        out[i * 6 + 4] = t.scale;
+        out[i * 6 + 5] = t.alpha;
+    }
+    return want;
+}
+
 const char* ttp_display_slot_ids_json(void) {
     static std::string buf;
     if (!g_disp || !g_disp->built) return "[]";
@@ -770,6 +793,25 @@ const TtpFrameInput* frameInput(DisplayCore& d, double dtSeconds) {
     return ttp::rt::buildFrame(d, eng, (float) dtSeconds,
                                d.renderer->cellAspect((uint32_t) d.cells.size()));
 }
+
+// This frame's name tags, projected into each cell's picture rect in the units
+// ttp_display_cell_rects answers in, so a tag and the chip beside it sit on one
+// grid.
+void placeNameTags(DisplayCore& d, const TtpFrameInput& f) {
+    const uint32_t n = (uint32_t) d.cells.size();
+    if (n == 0 || f.viewCount != n) { d.nameTags.clear(); return; }
+    const double sw = d.width > 0 ? (double) d.width : 1.0;
+    const double sh = d.height > 0 ? (double) d.height : 1.0;
+    std::vector<float> pictures(4 * n);
+    for (uint32_t i = 0; i < n; i++) {
+        const TtpCellRect r = d.renderer->cellRectTopLeft(n, i);
+        pictures[4 * i + 0] = (float) (r.x / sw);
+        pictures[4 * i + 1] = (float) (r.y / sh);
+        pictures[4 * i + 2] = (float) (r.w / sw);
+        pictures[4 * i + 3] = (float) (r.h / sh);
+    }
+    d.nameTags = ttp::rt::nameTags(f, pictures.data(), d.tagDeck, d.tagCover);
+}
 }  // namespace
 
 int ttp_display_frame(double dtSeconds) {
@@ -790,6 +832,9 @@ int ttp_display_frame(double dtSeconds) {
     const TtpFrameInput* head = frameInput(d, dtSeconds);
     d.renderer->noteBuildMs(std::chrono::duration<double, std::milli>(
             std::chrono::steady_clock::now() - tBuild).count());
+    // Every frame, presented or not: the cover fade runs on the frame's dt, and
+    // a declined frame's dt is consumed all the same.
+    placeNameTags(d, *head);
     return d.renderer->render(*head) ? 1 : 0;
 }
 

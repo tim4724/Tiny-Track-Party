@@ -46,7 +46,11 @@ final class GameCoordinator: ObservableObject {
 
     /// Which reconnect cards actually attached, so the diff has a previous.
     var shownReconnectIds: Set<EngineIdentity> = []
-    var sceneCars: [SceneCar] = []
+    /// The cars in the scene, roster order. Every write re-dresses the name tags,
+    /// which is what keeps a rename or a re-pick on them without a frame-path read.
+    var sceneCars: [SceneCar] = [] {
+        didSet { display.nameTags.setField(sceneCars) }
+    }
     /// The claim URL each reconnecting seat's card shows. Composed in C++
     /// (`ttp_net_claim_url`); only the QR bitmap is per-platform.
     var reconnectURLs: [EngineIdentity: String] = [:]

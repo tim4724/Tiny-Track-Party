@@ -131,6 +131,17 @@ final class DisplayHost {
     /// Filament takes the layer as its native window (see `MetalSurfaceView`).
     lazy var surface = MetalSurfaceView(host: self)
 
+    // MARK: - Name tags
+
+    /// The name tags' view (`NameTags.swift`), a subview of the surface so the
+    /// SwiftUI chips stay above it, painted after every PRESENTED frame from the
+    /// tags that frame describes. Added on first use, since the surface is lazy too.
+    lazy var nameTags: NameTagView = {
+        let v = NameTagView(frame: surface.bounds)
+        surface.addSubview(v)
+        return v
+    }()
+
     // MARK: - The adaptive render scale
 
     // THE BUFFER IS NOT THE PANEL. `ttp/render_scale.h` decides how big it
@@ -218,6 +229,14 @@ final class DisplayHost {
         UserDefaults.standard.object(forKey: "ttpAntialias").map {
             _ in UserDefaults.standard.integer(forKey: "ttpAntialias")
         }
+
+    /// `-ttpTags 0` takes the name tags out: the per-frame read is skipped and
+    /// the layers stay hidden, so a bench arm prices them. Android's
+    /// `debug.ttp.tags` twin; absent or any other value is the shipped picture.
+    private static let tagsOff =
+        UserDefaults.standard.object(forKey: "ttpTags").map {
+            _ in UserDefaults.standard.integer(forKey: "ttpTags") == 0
+        } ?? false
 
     /// The scale in force. 1.0 is the panel's own resolution, and the only way
     /// past it is the measurement pin above — the RULE's ceiling is 1. Read by
@@ -542,6 +561,18 @@ final class DisplayHost {
             onFirstPaint?()
         }
 
+        // RIGHT AFTER THE FRAME THEY DESCRIBE, and only a presented one: a
+        // declined frame left the last picture up, and the last tags with it.
+        // EVERY presented frame, at every split: a tag moving at a different rate
+        // from its car reads as broken.
+        if presented {
+            let tags = nameTags
+            let n = Self.tagsOff ? 0 : tags.tags.withUnsafeMutableBufferPointer {
+                Int(ttp_display_name_tags($0.baseAddress, Int32(NameTagView.maxTags)))
+            }
+            tags.show(n)
+        }
+
         perf.record(now: link.timestamp, interval: elapsed, presented: presented,
                     cells: cellCount, pixels: surfacePixels, dpr: uiScale)
 
@@ -705,6 +736,9 @@ final class DisplayHost {
     func sceneBuilt(rosterIds: [EngineIdentity], biome: String) {
         hasScene = true
         roster = rosterIds
+        // The tags name cars by SLOT, and a build is the one thing that can
+        // change what a slot is (a re-roster refuses id changes).
+        nameTags.setSlots(rosterIds)
         biomeName = biome
         // THE SCENE CLOCK THE SCALE RULE IS HANDED, stamped where a scene
         // actually becomes true. `SceneStaging` calls `ttp_display_build` itself
@@ -743,6 +777,8 @@ final class DisplayHost {
     func release() {
         ttp_display_release()
         hasScene = false
+        // No scene means no frame will present to clear them.
+        nameTags.show(0)
     }
 
     // MARK: - What to draw

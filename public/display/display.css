@@ -633,6 +633,45 @@ html.cam-free #race { pointer-events: none; }
   white-space: nowrap; max-width: 14em; overflow: hidden; text-overflow: ellipsis;
 }
 
+/* A rival's name over their car, in your cell. Placed per frame by Stage's
+   _paintNameTags from ttp_display_name_tags: the transform anchors the tag's
+   tail's tip just above the point C++ projected, so nothing here may set
+   transform. The SLIM sticker (picked over five other styles): the chip's filled
+   livery sticker, one weight lighter, with a thin outline and tight padding, so
+   a pack of rivals does not turn into a wall of chips; and NO offset shadow:
+   over the live 3D view a paper shadow reads as a smeared second outline
+   pointing away from the scene's own light.
+   AUTHORED AT THE CLOSEST SIZE, C++'s scale 1 (ttp/name_tags.h), which is 4/3
+   of the usual tag: C++ only ever shrinks it, so the type is never an upscaled
+   raster. At the usual size this is a 2px outline and an 8px corner. */
+.name-tag {
+  --b: calc(2px * 4 / 3);
+  position: absolute; left: 0; top: 0; display: none;
+  transform-origin: 0 0; will-change: transform, opacity;
+  font-family: var(--font-display); font-weight: 600; font-size: clamp(1.2rem, 1.56vw, 1.8rem);
+  line-height: 1; color: #fff; white-space: nowrap;
+  background: var(--c, var(--brand));
+  border: var(--b) solid var(--ink); border-radius: calc(8px * 4 / 3);
+  padding: 0.1em 0.42em;
+}
+/* The tail: one die-cut piece with the tag, not a second sticker. TWO stacked
+   triangles, not a bordered square: an ink triangle hung from the inner edge of
+   the chip's bottom outline, then the same triangle in the livery lifted by the
+   outline's width times sqrt(2). With 45-degree sides that lift is exactly one
+   outline width perpendicular to each side, so the ink runs as one band of one
+   thickness from the chip round the tip and back. A rotated square with two
+   borders could not do that: its border ends met the chip's outline at their
+   own mitre and left a notch at each join. The flat tip softens the point like
+   every sticker corner. When two tags overlap, the tail says whose car is whose. */
+.name-tag::before, .name-tag::after {
+  content: ''; position: absolute; left: 50%; top: 100%;
+  width: calc(0.6em + 2 * var(--b)); height: calc(0.3em + var(--b));
+  transform: translateX(-50%);
+  clip-path: polygon(0 0, 100% 0, 54% 92%, 46% 92%);
+}
+.name-tag::before { background: var(--ink); }
+.name-tag::after { top: calc(100% - 1.41421 * var(--b)); background: var(--c, var(--brand)); }
+
 /* Place + lap — top-right of the cell: a white sticker badge for the ordinal
    over an ink "LAP 2/3" pill, the pair leaning +1.5°. Positioned by _loop; the
    transform anchors its RIGHT edge to the left coord _loop sets (cell right). */

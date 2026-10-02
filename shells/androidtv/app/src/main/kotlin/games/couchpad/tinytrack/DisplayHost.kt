@@ -185,6 +185,12 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
     var trackId: String = ""
         private set
 
+    /**
+     * The name tags' view ([NameTagView]), painted after every PRESENTED frame from
+     * the tags that frame describes. Null until the Activity attaches one.
+     */
+    var nameTags: NameTagView? = null
+
     private var frameCallback: Choreographer.FrameCallback? = null
     private var lastFrameNanos = 0L
     private var lastSlowTickNanos = 0L
@@ -484,6 +490,15 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
                     Trace.beginSection("ttp:render")
                     presented = Ttp.ttp_display_frame(pendingDt) != 0
                     Trace.endSection()
+                    // RIGHT AFTER THE FRAME THEY DESCRIBE, and only a presented
+                    // one: a declined frame left the last picture up, and the last
+                    // tags with it. The View draws in this same vsync's traversal.
+                    // EVERY presented frame, at every split: a tag moving at a
+                    // different rate from its car reads as broken.
+                    if (presented) nameTags?.let {
+                        it.show(if (PerfDebug.tagsHidden) 0
+                                else Ttp.ttp_display_name_tags(it.tags, NameTagView.MAX_TAGS))
+                    }
                     // Consumed either way: the cosmetic clock advances before
                     // beginFrame can decline, so re-feeding it would double-run
                     // the idle animations on the next call.
@@ -615,6 +630,10 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
             biome = SceneStaging.build(trackId, roster, this, store, blobs)
             this.trackId = trackId
             hasScene = true
+            // The tags name cars by SLOT, and a build is the one thing that can
+            // change what a slot is (a re-roster refuses id changes). Latched here
+            // so the frame path never parses JSON.
+            nameTags?.setSlots(this.roster)
             // A NEW SCENE VOIDS THE SCALE'S MEASUREMENTS — the same argument as
             // the clear on a scale move, one level up: the windows describe a
             // scene that no longer exists.
@@ -965,6 +984,8 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
     fun release() {
         Ttp.ttp_display_release()
         hasScene = false
+        // No scene means no frame will present to clear them.
+        nameTags?.show(0)
     }
 
     fun camera(mode: Int) = Ttp.ttp_display_camera(mode)
