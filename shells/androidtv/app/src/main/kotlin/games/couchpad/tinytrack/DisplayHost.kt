@@ -43,7 +43,11 @@ import java.nio.ByteOrder
  * `TextureView` would route every frame through the view hierarchy as a texture,
  * which costs a full-screen copy per frame on a GPU that has none to spare.
  */
-class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
+class DisplayHost(
+    private val view: SurfaceView,
+    /** The protocol manifest's MAX_PLAYERS: one cell per player at most. */
+    private val maxCells: Int,
+) : SurfaceHolder.Callback {
 
     companion object {
         private const val TAG = "DisplayHost"
@@ -497,7 +501,7 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
                     // different rate from its car reads as broken.
                     if (presented) nameTags?.let {
                         it.show(if (PerfDebug.tagsHidden) 0
-                                else Ttp.ttp_display_name_tags(it.tags, NameTagView.MAX_TAGS))
+                                else Ttp.ttp_display_name_tags(it.tags, it.maxTags))
                     }
                     // Consumed either way: the cosmetic clock advances before
                     // beginFrame can decline, so re-feeding it would double-run
@@ -678,7 +682,7 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
      * stride is the generated shim's too — `scripts/gen-jni.mjs` declares it —
      * so an array sized on the old one would read cells C++ never wrote.
      */
-    private val cellScratch = FloatArray(MAX_CELLS * CELL_RECT_STRIDE)
+    private val cellScratch = FloatArray(maxCells * CELL_RECT_STRIDE)
 
     /**
      * The authored canvas's height on THIS window: 1920 wide by the window's
@@ -690,7 +694,7 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
         else AUTHORED_HEIGHT
 
     fun cellRects(): List<CellRect> {
-        val n = Ttp.ttp_display_cell_rects(cellScratch, MAX_CELLS)
+        val n = Ttp.ttp_display_cell_rects(cellScratch, maxCells)
         if (n <= 0) return emptyList()
         return (0 until n).map { i ->
             val o = i * CELL_RECT_STRIDE
@@ -1077,9 +1081,6 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
  * declares the same number on the C side (`scripts/gen-jni.mjs`).
  */
 private const val CELL_RECT_STRIDE = 8
-
-/** Cells the scratch array is sized for — the field can never split further. */
-private const val MAX_CELLS = 8
 
 /**
  * A cell's two rectangles as fractions of the surface, exactly as

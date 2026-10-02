@@ -23,8 +23,9 @@ final class NameTagView: UIView {
 
     /// Floats per tag in `ttp_display_name_tags`' answer (`ttp_display.h`).
     static let stride = 6
-    /// The most cells a field can split into (eight), each tagging the other seven.
-    static let maxTags = 8 * 7
+    /// The most tags a frame can hold: one cell per player, each naming every
+    /// other player. From the protocol manifest's MAX_PLAYERS.
+    let maxTags: Int
 
     /// `.name-tag`'s `clamp(1.2rem, 1.56vw, 1.8rem)` against a 1920-wide
     /// display: 1.56vw is 30, so the clamp lands on its 1.8rem ceiling — the
@@ -51,7 +52,7 @@ final class NameTagView: UIView {
     }
 
     /// C++ writes into this directly (`DisplayHost`); `show` says how much of it is live.
-    var tags = [Float](repeating: 0, count: maxTags * stride)
+    var tags: [Float]
 
     /// Slot i's car id, latched per scene build by `DisplayHost`.
     private var slots: [EngineIdentity] = []
@@ -61,7 +62,9 @@ final class NameTagView: UIView {
     private var shown: [EngineIdentity?] = []
     private var visible = 0
 
-    override init(frame: CGRect) {
+    init(frame: CGRect, maxPlayers: Int) {
+        maxTags = maxPlayers * (maxPlayers - 1)
+        tags = [Float](repeating: 0, count: maxTags * Self.stride)
         super.init(frame: frame)
         isUserInteractionEnabled = false
         backgroundColor = .clear

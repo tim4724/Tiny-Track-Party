@@ -133,11 +133,17 @@ final class DisplayHost {
 
     // MARK: - Name tags
 
+    /// The protocol manifest's MAX_PLAYERS: one cell per player at most, which
+    /// is what the tag view's buffer is sized for.
+    private let maxPlayers: Int
+
+    init(maxPlayers: Int) { self.maxPlayers = maxPlayers }
+
     /// The name tags' view (`NameTags.swift`), a subview of the surface so the
     /// SwiftUI chips stay above it, painted after every PRESENTED frame from the
     /// tags that frame describes. Added on first use, since the surface is lazy too.
     lazy var nameTags: NameTagView = {
-        let v = NameTagView(frame: surface.bounds)
+        let v = NameTagView(frame: surface.bounds, maxPlayers: maxPlayers)
         surface.addSubview(v)
         return v
     }()
@@ -568,7 +574,7 @@ final class DisplayHost {
         if presented {
             let tags = nameTags
             let n = Self.tagsOff ? 0 : tags.tags.withUnsafeMutableBufferPointer {
-                Int(ttp_display_name_tags($0.baseAddress, Int32(NameTagView.maxTags)))
+                Int(ttp_display_name_tags($0.baseAddress, Int32(tags.maxTags)))
             }
             tags.show(n)
         }

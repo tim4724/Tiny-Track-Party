@@ -47,13 +47,19 @@ import kotlin.math.sqrt
  * costs more than the whole window). `debug.ttp.tags 0` ([PerfDebug]) turns
  * them off for the A/B.
  */
-class NameTagView(context: Context) : View(context) {
+class NameTagView(context: Context, maxPlayers: Int) : View(context) {
 
     private class TagBitmap(val name: String, val color: Int, val bitmap: Bitmap,
                           val anchorX: Float, val anchorY: Float)
 
+    /**
+     * The most tags a frame can hold: one cell per player, each naming every
+     * other player. `maxPlayers` is the protocol manifest's MAX_PLAYERS.
+     */
+    val maxTags = maxPlayers * (maxPlayers - 1)
+
     /** C++ writes into this directly ([DisplayHost]); [count] says how much of it is live. */
-    val tags = FloatArray(MAX_TAGS * TAG_STRIDE)
+    val tags = FloatArray(maxTags * TAG_STRIDE)
     private var count = 0
 
     /** Slot i's car id, latched per scene build by [DisplayHost]. */
@@ -179,9 +185,7 @@ class NameTagView(context: Context) : View(context) {
         close()
     }
 
-    companion object {
-        /** The most cells a field can split into (eight), each tagging the other seven. */
-        const val MAX_TAGS = 8 * 7
+    private companion object {
         /**
          * `clamp(1.2rem, 1.56vw, 1.8rem)` on a 1920-wide display lands on its
          * 28.8 px ceiling, against the name chip's 35 — the ratio this shell's own
@@ -189,16 +193,16 @@ class NameTagView(context: Context) : View(context) {
          * weight 600. Like the CSS, the CLOSEST size (C++'s scale 1), 4/3 of the
          * usual tag, so the bitmap is only ever scaled down.
          */
-        private const val FONT_PX = 28.8f
+        const val FONT_PX = 28.8f
         /**
          * Outline and corner as a share of the chips': 2/3 at the usual size
          * (`2px` / `8px` against `3px` / `12px`), so 2/3 * 4/3 at the closest.
          */
-        private const val SLIM = 8f / 9f
+        const val SLIM = 8f / 9f
         /** The box's bottom edge above the anchor, in em (`translateY(-0.4em)`). */
-        private const val GAP_EM = 0.4f
-        private const val TILT = -2f
+        const val GAP_EM = 0.4f
+        const val TILT = -2f
         /** Floats per tag in `ttp_display_name_tags`' answer (`ttp_display.h`). */
-        private const val TAG_STRIDE = 6
+        const val TAG_STRIDE = 6
     }
 }

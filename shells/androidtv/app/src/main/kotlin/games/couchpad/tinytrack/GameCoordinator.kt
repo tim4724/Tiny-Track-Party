@@ -155,7 +155,7 @@ class GameCoordinator(
     init {
         assets = AssetStore(context.assets)
         proto = GameProtocol.load(baseUrl)
-        display = DisplayHost(surfaceView)
+        display = DisplayHost(surfaceView, proto.maxPlayers)
         // Where blobs kept between runs live — one directory per store the
         // engine lists. Constructed here because it needs a Context and the
         // display does not have one. Scenarios get none: a screenshot harness
