@@ -93,6 +93,15 @@ race::FieldWorld worldWithCap(const char* botCapJson) {
   return w;
 }
 
+// The CPU fill's skill for a race on `trackId`: its cup's tendency through
+// ttp::AI_TIER_SKILL. A track in no cup (the dev tracks) races the full bot.
+double botSkillFor(const std::string& trackId) {
+  for (const rtui::CatalogEntry& e : rtui::shippedCatalog()) {
+    if (e.id == trackId) return e.cupDifficulty.has ? ttp::aiSkillForTier((int) e.cupDifficulty.v) : 1.0;
+  }
+  return 1.0;
+}
+
 // ---- the live gathers --------------------------------------------------------
 
 // The room's players as the race rules take them. The roster crosses as ui
@@ -147,6 +156,7 @@ race::LaunchResult launchOff(int roomHandle, std::vector<race::Human> players,
   li.countdownSeconds = countdownSeconds;
   li.forceItem = optStrOfC(forceItemOrNull);
   li.world = worldWithCap(botCapJson);
+  li.world.botSkill = botSkillFor(li.trackId);
   li.autopilotPlayers = g_autopilotPlayers;
   li.gridOrder = std::move(gridOrder);
   return race::launchRace(li);
@@ -192,6 +202,7 @@ Value botVal(const race::BotSpec& b) {
   v.set("peerIndex", b.peerIndex.toValue());
   v.set("caution", Value::Num(b.caution));
   v.set("laneBias", Value::Num(b.laneBias));
+  if (b.skill < 1) v.set("skill", Value::Num(b.skill));   // presence is contract, as `player`
   v.set("seed", Value::Num(b.seed));
   // ONLY when set — key PRESENCE is contract here (this file's header), and an
   // unconditional `player:false` would rewrite every recorded launch's bots

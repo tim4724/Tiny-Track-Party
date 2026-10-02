@@ -80,7 +80,9 @@ test('a part-full lobby is filled with bots (the premise)', async () => {
 test('a bot spec is keyed peerIndex, and carries NO stats', async () => {
   const d = await launch();
   const spec = d.bots[0];
-  assert.deepEqual(Object.keys(spec).sort(), ['caution', 'laneBias', 'peerIndex', 'seed']);
+  // `skill` is there because tidepool is a Beach Cup track: the CPU field of an
+  // easier cup races below full skill, and the key is absent at full skill.
+  assert.deepEqual(Object.keys(spec).sort(), ['caution', 'laneBias', 'peerIndex', 'seed', 'skill']);
   // The two mistakes this shape invites, stated as assertions so they cannot
   // quietly become true and make the shells right by accident.
   assert.equal(spec.id, undefined, 'there is no `id` — a shell reading one gets nil and skips the bot');

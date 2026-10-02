@@ -42,6 +42,7 @@
 
 #include <algorithm>
 
+#include "ttp/ai_driver.h"         // aiSkillForTier — the CPU skill a cup launches with
 #include "ttp/blobstore.h"
 #include <cmath>
 #include <cstdio>
@@ -4379,6 +4380,14 @@ void raceLiveWalks() {
       bool ids = !bots.arr.empty();
       for (const Value& b : bots.arr) ids = ids && at(b, "peerIndex").type == Value::STR;
       check(ids, "a bot's id crosses as the STRING \"ai-0\", never a number");
+      // tidepool is a Beach Cup track, the easiest tendency: its CPU field
+      // races at that tier's skill, resolved from the track by the launch.
+      bool beachSkill = !bots.arr.empty();
+      for (const Value& b : bots.arr) {
+        const Value* sk = b.find("skill");
+        beachSkill = beachSkill && sk && sk->type == Value::NUM && sk->num == ttp::aiSkillForTier(1);
+      }
+      check(beachSkill, "a Beach Cup race hands every CPU the tier-1 skill");
       check(at(*createSession, "forceItem").type == Value::NUL,
             "no ?item override crosses as null, not \"\"");
       check(json::str_field(*createSession, "trackId") == "tidepool",

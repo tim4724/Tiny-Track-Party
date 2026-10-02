@@ -48,20 +48,28 @@ double pursue(const Car& car, Centerline& centerline,
 // Brake (0..1) for upcoming bends. `turn` overrides car.turn when > 0; `line` (or
 // nullptr) rates bends by the racing line's curvature vs the centerline's.
 double cornerBrake(const Car& car, Centerline& centerline,
-                   double turn, double caution, const RacingLine* line);
+                   double turn, double caution, const RacingLine* line,
+                   double lineUse = 1.0);
 
 struct Persona { const char* name; double caution; double laneBias; };
 extern const Persona AI_PERSONALITIES[7];
 
+// Bot skill (0..1) for a cup tendency (1..4); anything else is 1, the bot as it
+// always was. Lower skill drives less of the racing line, wobbles across its
+// lane, and now and then runs wide into the barrier.
+double aiSkillForTier(int tier);
+
 class AiController {
  public:
-  AiController(double caution, double lookahead, double gain, double laneBias, uint32_t seed);
+  AiController(double caution, double lookahead, double gain, double laneBias, uint32_t seed,
+               double skill = 1.0);
   Input drive(Car& car, Centerline& centerline, Game& game);
 
  private:
   bool wantsToUse(const std::string& item, Car& car, Game& game, double corner);
+  void drawMistakeGap();
 
-  double caution_, lookahead_, gain_, laneBias_;
+  double caution_, lookahead_, gain_, laneBias_, skill_;
   Mulberry32 rng_;
   double weave_ = 0, weaveTarget_ = 0;
   double weaveT_ = 0;
@@ -71,6 +79,11 @@ class AiController {
   int holdMin_ = 0;
   bool dodgeSet_ = false;  // _dodgeLane != null
   double dodgeLane_ = 0;
+  // The kerb mistake (skill < 1 only): frames to the next one (-1 = not drawn
+  // yet), frames left in the current one, and which side it runs wide on.
+  double mistakeGap_ = -1;
+  int mistakeT_ = 0;
+  double mistakeSide_ = 1;
 };
 
 }  // namespace ttp

@@ -227,6 +227,7 @@ BuiltField buildField(const std::vector<Human>& humans, double seed, const Field
     b.peerIndex = id;
     b.caution = s.persona.caution;
     b.laneBias = s.persona.laneBias;
+    b.skill = w.botSkill;
     const double base = (seed != 0 && !std::isnan(seed)) ? seed : 1.0;
     b.seed = toUint32(base + s.n);
     out.bots.push_back(std::move(b));

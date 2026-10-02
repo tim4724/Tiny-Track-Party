@@ -42,10 +42,10 @@ TTP_ABI void ttp_add_bot(int h, const char* idJson, double caution, double laneB
 // with a spec becomes a bot, everything else a human, field order kept,
 // humans gridded before bots).
 //   fieldJson  [{"peerIndex":<scalar>,"stats":{..}|null, ...extra keys ignored}, ...]
-//   botsJson   [{"peerIndex":<scalar>,"caution":n?,"laneBias":n?,"seed":n?,
-//               "player":true?}, ...]
+//   botsJson   [{"peerIndex":<scalar>,"caution":n?,"laneBias":n?,"skill":n?,
+//               "seed":n?,"player":true?}, ...]
 // Absent or null persona knobs take the engine defaults (caution 1, laneBias 0,
-// seed 1) — a spec spells only what it means. Same 0-on-failure contract as
+// skill 1, seed 1) — a spec spells only what it means. Same 0-on-failure contract as
 // ttp_session_begin.
 //
 // `player:true` is the AUTOPILOT MARKER: the seat gets its controller AND stays

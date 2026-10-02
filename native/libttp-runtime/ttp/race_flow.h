@@ -153,6 +153,9 @@ struct BotSpec {
   Id peerIndex;
   double caution = 1.0;
   double laneBias = 0.0;
+  // ttp::AI_TIER_SKILL for the race's cup; 1 = the full bot. Emitted only when
+  // below 1, so a launch at full skill keeps its recorded bots array.
+  double skill = 1.0;
   double seed = 0;   // already >>>0'd; double so it round-trips as a JS Number
   bool player = false;
 };
@@ -226,6 +229,10 @@ struct FieldWorld {
   std::vector<Persona> personas;
   std::vector<Value> carStats;
   OptNum botCap;               // the ?bots=<n> debug cap; None = fill the grid
+  // The CPU fill's skill for THIS race — resolved per launch from the track's
+  // cup by the caller, so this layer stays catalogue-agnostic. Player seats
+  // under autopilot keep 1.
+  double botSkill = 1.0;
   std::string aiPrefix = "ai-";
 };
 

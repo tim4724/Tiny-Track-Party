@@ -122,6 +122,13 @@ The persona table is single-sourced from libttp-sim and configured straight back
 It used to be a hand-synced JS copy held together by a "keep in sync" comment —
 the exact drift root rule 1 exists to stop.
 
+**Bot skill follows the cup.** The CPU fill races at `ttp::aiSkillForTier` of the
+track's cup tendency: `ttp_race.cc` resolves it per launch into
+`FieldWorld::botSkill`, so this layer stays catalogue-agnostic. Skill is
+behaviour (line, wobble, kerb mistakes), never top speed: bots stay flat-out.
+The bot spec carries `skill` only below 1, so full-skill launches and every
+recording keep their shape.
+
 Deliberately did NOT cross: the lobby demo and the performing itself. The
 host's mode pick and the shuffle bag crossed into the net walks
 (`runtime/ttp_net.cc`), not here — see `native/libttp-party/CLAUDE.md`. The
