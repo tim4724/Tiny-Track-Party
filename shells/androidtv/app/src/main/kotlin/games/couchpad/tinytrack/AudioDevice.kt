@@ -366,8 +366,13 @@ class AudioDevice(
                 musicPrepared = true
                 if (musicWantsPause) musicWantsPause = false else it.start()
             }
+            // A player in the Error state throws from pause(), start() and
+            // isPlaying, so it is released here rather than left for the next
+            // pause or resume to call into; the next song stands a fresh one up.
             mp.setOnErrorListener { _, what, extra ->
-                Log.w(TAG, "music $file failed ($what/$extra)"); true
+                Log.w(TAG, "music $file failed ($what/$extra)")
+                if (music === mp) stopMusic()
+                true
             }
             mp.prepareAsync()
             music = mp
