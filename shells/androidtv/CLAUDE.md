@@ -856,6 +856,9 @@ Three things follow that are worth knowing before touching it:
   is a `MediaPlayer` streaming from the origin, outside the limiter. It still
   carries the master 0.6 (`Audio.js` sets the element's volume to
   `level * this._volume()`), and without that it sits 1.67x loud against its cues.
+  The player lives on its own `ttp-music` thread: standing one up is synchronous
+  binder calls and the song starts at GO, so only the engine's song pick stays on
+  the frame thread.
 - **It costs about 5-6% of one core** on this box — measured off
   `/proc/<pid>/task/*/stat` for the `ttp-mix` thread over a live race — for up to
   32 voices with a per-sample biquad on each engine. It is on its own thread at

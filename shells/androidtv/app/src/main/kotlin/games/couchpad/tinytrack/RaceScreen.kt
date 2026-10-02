@@ -33,8 +33,12 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.DrawStyle
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
@@ -418,6 +422,39 @@ private fun ReconnectCard(cell: GameState.CellHUD) {
 // -- the countdown ----------------------------------------------------------
 
 /**
+ * The banner over the race while the countdown runs, fading in and out.
+ *
+ * Its own composable so a beat recomposes this and not [RootScreen]. The fade is
+ * an [Animatable] read only inside `graphicsLayer`, so it redraws a layer per
+ * frame and recomposes nothing; `AnimatedVisibility` ran its transition through
+ * composition on every frame of both fades, and the exit lands after GO.
+ *
+ * The LAST text is held, because the exit is triggered BY the countdown going
+ * null: drawing `state.countdown` would render nothing for the whole exit and
+ * "GO!" would vanish instead of fading.
+ */
+@Composable
+fun CountdownOverlay(state: GameState) {
+    val shown = state.screen == GameState.Screen.RACE && state.countdown != null
+    var lastCount by remember { mutableStateOf("") }
+    state.countdown?.let { lastCount = it }
+    var present by remember { mutableStateOf(false) }
+    val fade = remember { Animatable(0f) }
+    LaunchedEffect(shown) {
+        if (shown) {
+            present = true
+            fade.animateTo(1f, tween(120))
+        } else {
+            fade.animateTo(0f, tween(200))
+            present = false
+        }
+    }
+    if (present) {
+        Box(Modifier.graphicsLayer { alpha = fade.value }) { CountdownBanner(lastCount) }
+    }
+}
+
+/**
  * The countdown banner: "3" / "2" / "1" / "GO!". The beat is the model's
  * (`show-countdown`), and its SOUND is the wasm's, so there is no cue call here.
  *
@@ -435,10 +472,12 @@ fun CountdownBanner(text: String) {
         // over a name chip, and without it the glyph merges into all three — over
         // the cars it very nearly disappeared.
         //
-        // Compose has no text stroke, so this is `Wordmark`'s technique: white
-        // copies stamped on a circle behind the fill. The radius is HALF the CSS
-        // width, because a text stroke is centred on the outline and only its outer
-        // half shows, while an offset copy dilates the glyph by its whole offset.
+        // One STROKED copy behind the fill, at the CSS width: the stroke is
+        // centred on the outline and the fill covers its inner half, as with
+        // `paint-order: stroke fill`. Not `Wordmark`'s ring of offset copies: a
+        // beat changes the text, and each copy is a text node to recompose, lay
+        // out and draw — sixteen of them cost the box whole frames at every beat,
+        // GO included, while the field is already moving.
         val edge = COUNTDOWN_SIZE * (12f / 280.8f) / 2f
         val drop = COUNTDOWN_SIZE * (6f / 280.8f)
         Box(contentAlignment = Alignment.Center) {
@@ -450,13 +489,10 @@ fun CountdownBanner(text: String) {
             CountdownGlyph(text, Tokens.shadowInk, Modifier.graphicsLayer {
                 translationX = (edge + drop).toPx(); translationY = (edge + drop).toPx()
             })
-            for (i in 0 until COUNTDOWN_EDGE_SAMPLES) {
-                val a = i.toDouble() / COUNTDOWN_EDGE_SAMPLES * 2 * Math.PI
-                CountdownGlyph(text, Color.White, Modifier.graphicsLayer {
-                    translationX = (Math.cos(a) * edge.toPx()).toFloat()
-                    translationY = (Math.sin(a) * edge.toPx()).toFloat()
-                })
+            val cut = with(LocalDensity.current) {
+                Stroke(width = (edge * 2).toPx(), join = StrokeJoin.Round)
             }
+            CountdownGlyph(text, Color.White, drawStyle = cut)
             // ONE COLOUR FOR EVERY BEAT, GO included: `#countdown { color: var(--ink) }`,
             // and `.is-go` adds only an opacity/scale fade. Painting GO red gave the
             // banner a role the web's never takes, and made the last beat read as a
@@ -470,13 +506,14 @@ fun CountdownBanner(text: String) {
  *  the per-numeral slap settles at `rotate(0deg)` — a permanently leaning digit is
  *  the entrance frozen. */
 @Composable
-private fun CountdownGlyph(text: String, color: Color, modifier: Modifier = Modifier) {
-    StickerText(text, size = COUNTDOWN_SIZE, color = color, modifier = modifier)
+private fun CountdownGlyph(text: String, color: Color, modifier: Modifier = Modifier,
+                           drawStyle: DrawStyle? = null) {
+    StickerText(text, size = COUNTDOWN_SIZE, color = color, modifier = modifier,
+        drawStyle = drawStyle)
 }
 
 /** `font-size: 26vh` on a 1080-high board. */
 private val COUNTDOWN_SIZE = 281.dp
-private const val COUNTDOWN_EDGE_SAMPLES = 16
 
 // -- the pause overlay ------------------------------------------------------
 
