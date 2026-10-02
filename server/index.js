@@ -24,8 +24,9 @@ const PARTYPLUG_DIR = path.join(__dirname, '..', 'partyplug');
 // is allowed to 404 — the gallery reads that as "not fetched" and says so.
 const KITS_DIR = path.join(__dirname, '..', '.cache', 'kenney-kits');
 const APP_VERSION = require('../package.json').version;
-// `scripts/` is dockerignored like the kits cache above, so a deployed image
-// carries no shot list and the route below 404s. Test for the file rather than
+// The image copies this one file of `scripts/` (see the Dockerfile), so the route
+// below serves it on a deploy too. It stays optional all the same: a missing shot
+// list 404s that route rather than failing the boot. Test for the file rather than
 // catching the require: a MODULE_NOT_FOUND raised from INSIDE the shot list is a
 // defect in it, and must still be loud.
 const TRAILER_SHOTS_PATH = path.join(__dirname, '..', 'scripts', 'trailer', 'shots.js');
