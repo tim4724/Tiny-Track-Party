@@ -291,14 +291,6 @@ html {
   padding: 0.3em 0.95em;
   box-shadow: var(--shadow-pop);
 }
-/* difficulty tendency — 4 pips, the first N filled RED (celebration colour;
-   never the old green→amber ramp) */
-.cup-meter { display: inline-flex; gap: 6px; }
-.cup-meter i {
-  width: 11px; height: 11px; border-radius: 50%;
-  border: 2px solid var(--ink); background: var(--surface);
-}
-.cup-meter i.is-on { background: var(--red); }
 
 /* Scan hint — the ticket's own last line, under the join URL. Not a sticker of
    its own: as a floating card it needed the join URL's whole width beside the

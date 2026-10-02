@@ -115,8 +115,8 @@ extension GameCoordinator {
         }
     }
 
-    /// The lobby's right rail: which name, how many races, the difficulty pips
-    /// and which circuits to draw as minis.
+    /// The lobby's right rail: which name, how many races and which circuits to
+    /// draw as minis.
     ///
     /// EVERY FIELD IS `ttp_ui_cup_slot_json`'s, keys plus data and never composed
     /// copy — the two English strings live in `Copy`. Nil before the host has

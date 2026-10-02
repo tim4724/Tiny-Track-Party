@@ -336,8 +336,9 @@ export const CUPS = [
 
 // Cup "tendency" difficulty (1–4): a LEAN for the whole cup, not a per-track label —
 // the rounded mean of its tracks' levels (Easy=1 … Expert=4), or an explicit `difficulty`
-// on the cup to pin it. The picker shows this as a 4-pip meter on the cup header; tracks
-// are NOT badged individually. Recomputes as tracks join a cup.
+// on the cup to pin it. It is DATA: no screen renders it (the lobby's 4-pip meter read as a
+// page indicator and was removed), and tracks are NOT badged individually. Recomputes as
+// tracks join a cup.
 // EXPORTED because it is codegen'd into the wasm: gen-track-defs-header.mjs
 // resolves each catalogue track's word to a level and carries the number, so the
 // C++ cup tendency needs no word table. Exporting it is what keeps that ONE

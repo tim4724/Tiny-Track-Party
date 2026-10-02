@@ -270,8 +270,7 @@ test('the shipped catalogue in the wasm is the one shared/tracks.js authors', as
     id: t.id, name: t.name, cup: t.cup, cupDifficulty: t.cupDifficulty
   })), 'every track name, its cup and its cup TENDENCY come out as authored');
 
-  // The order is load-bearing twice over: ttp_ui.h reads a cup's difficulty off
-  // its FIRST catalogue entry, and this list is what a picker draws.
+  // The order is load-bearing: this list is what a picker draws.
   assert.deepEqual(got.catalog.map((t) => t.id), CUPS.flatMap((c) => c.tracks),
     'the catalogue is CUPS order flattened');
   // Dev ranges are in the wasm's track table (id lookup) but belong to no cup,
@@ -361,7 +360,6 @@ test('the lobby race card resolves the SHIPPED cups and tracks', async () => {
     assert.equal(slot.raceCount, cup.tracks.length);
     assert.deepEqual(slot.maps.map((m) => m.trackId), cup.tracks, 'the minis must be the cup, in order');
     assert.deepEqual(slot.maps.map((m) => m.n), cup.tracks.map((_, i) => i + 1), 'the minis are numbered 1..N');
-    assert.ok(slot.difficulty >= 0 && slot.difficulty <= 4, `cup ${cup.id} has no difficulty in 0..4`);
   }
   for (const t of TRACK_LIST) {
     const slot = ui.cupSlot({ mode: 'track', trackId: t.id, cups: CUPS, catalog });
@@ -373,7 +371,6 @@ test('the lobby race card resolves the SHIPPED cups and tracks', async () => {
   const rnd = ui.cupSlot({ mode: 'random', trackId: TRACK_LIST[3].id, cups: CUPS, catalog });
   assert.equal(rnd.nameKey, 'random');
   assert.equal(rnd.name, null);
-  assert.equal(rnd.difficulty, null, 'a random draw shows no difficulty meter');
 
   // The World Tour: the card shows the WHOLE ladder, one chip per cup in cup
   // (difficulty) order — ALL undrawn ("?"), the already-drawn first race
@@ -386,7 +383,6 @@ test('the lobby race card resolves the SHIPPED cups and tracks', async () => {
   assert.equal(tour.nameKey, 'tour');
   assert.equal(tour.name, null);
   assert.equal(tour.raceCount, openCups.length, 'the locked teaser is a chip, never a race');
-  assert.equal(tour.difficulty, null, 'the tour spans the whole ladder — no single meter');
   assert.equal(tour.cupId, null, 'no single cup owns the card');
   assert.deepEqual(tour.maps.map((m) => m.trackId), CUPS.map(() => null),
     'every chip is undrawn — the drawn first included');
