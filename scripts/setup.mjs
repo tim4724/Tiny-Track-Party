@@ -68,6 +68,14 @@ step('native/build (cmake)', () => {
 });
 
 // ---- 3. report what the tree can and cannot do ------------------------------
+// An old Node fails late and cryptically: the tests import() the browser's ESM
+// .js files, and without module-syntax detection that is "Unexpected token
+// 'export'". .nvmrc is the version CI runs.
+const wantNode = parseInt(fs.readFileSync(path.join(ROOT, '.nvmrc'), 'utf8'), 10);
+if (parseInt(process.versions.node, 10) < wantNode) {
+  notes.push(`node ${process.versions.node} is older than the ${wantNode} in .nvmrc — the unit and e2e`
+    + ' suites fail with "Unexpected token \'export\'". `nvm use`, or install Node ' + wantNode + '.');
+}
 if (!hasBin('ccache')) {
   // The launcher is baked into CMakeCache.txt at configure time, so installing
   // ccache later does nothing until the build tree is re-made — say so, rather

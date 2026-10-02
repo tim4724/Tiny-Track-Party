@@ -1,6 +1,7 @@
 # The server has NO runtime dependencies — only node builtins — so there is no
 # install step and no node_modules in the image. Keep it that way: a new prod
 # dependency means reinstating a builder stage here.
+# The Node major is .nvmrc's; a Dockerfile cannot read it.
 FROM node:26-alpine
 RUN addgroup -g 1001 nodejs && adduser -u 1001 -G nodejs -s /bin/sh -D nodejs
 WORKDIR /app

@@ -87,7 +87,7 @@ jobs:
         with:
           # Only native/scripts/build-runtime-android.sh's JNI codegen needs Node,
           # and it imports node: builtins only — there is no npm ci here.
-          node-version: 26
+          node-version-file: .nvmrc
       - uses: gradle/actions/setup-gradle@v6
 
       # OUTSIDE THE WORKSPACE, unlike actions/checkout's path:, which refuses to
@@ -429,7 +429,7 @@ jobs:
         with:
           # Only the two staging generators need Node, and they import node:
           # builtins plus this repo's own ESM — there is no npm ci here.
-          node-version: 26
+          node-version-file: .nvmrc
 
       # ffmpeg IS REQUIRED HERE, unlike on the PR leg. stage-assets.sh transcodes
       # the Ogg engine loop to PCM WAV because no Apple platform decodes Vorbis,

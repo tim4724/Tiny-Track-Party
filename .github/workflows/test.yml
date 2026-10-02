@@ -17,11 +17,11 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          # Plain reproducibility pin. Nothing here depends on the Node major:
-          # every sim and track number is produced inside the wasm, which
-          # vendors its own fdlibm, so fixtures replay bit-exactly on any
-          # Node/arch.
-          node-version: 26
+          # No sim or track number depends on the Node major: they are produced
+          # inside the wasm, which vendors its own fdlibm. The tests do: they
+          # import() the browser's ESM .js files from a CommonJS package, which
+          # only Node's module-syntax detection allows, and old Nodes lack it.
+          node-version-file: .nvmrc
           cache: 'npm'
       - run: npm ci
       # Gates on errors only; no-unused-vars / style rules are warnings and
@@ -37,11 +37,11 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          # Plain reproducibility pin. Nothing here depends on the Node major:
-          # every sim and track number is produced inside the wasm, which
-          # vendors its own fdlibm, so fixtures replay bit-exactly on any
-          # Node/arch.
-          node-version: 26
+          # No sim or track number depends on the Node major: they are produced
+          # inside the wasm, which vendors its own fdlibm. The tests do: they
+          # import() the browser's ESM .js files from a CommonJS package, which
+          # only Node's module-syntax detection allows, and old Nodes lack it.
+          node-version-file: .nvmrc
           cache: 'npm'
       - run: npm ci
       - run: npm test
@@ -102,11 +102,11 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          # Plain reproducibility pin. Nothing here depends on the Node major:
-          # every sim and track number is produced inside the wasm, which
-          # vendors its own fdlibm, so fixtures replay bit-exactly on any
-          # Node/arch.
-          node-version: 26
+          # No sim or track number depends on the Node major: they are produced
+          # inside the wasm, which vendors its own fdlibm. The tests do: they
+          # import() the browser's ESM .js files from a CommonJS package, which
+          # only Node's module-syntax detection allows, and old Nodes lack it.
+          node-version-file: .nvmrc
           cache: 'npm'
       - run: npm ci
       - name: Cache Playwright browsers
