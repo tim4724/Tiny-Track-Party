@@ -1223,6 +1223,9 @@ private:
     // Scene membership for the box pools (setInstanceInScene state): a collected
     // box leaves the scene, and its fade twin is only IN it for the 0.2 s poof.
     std::vector<uint8_t> mBoxIn, mBoxFadeIn;
+    // Whether this scene has drawn one member of every effect pool yet
+    // (warmEffectPipelines). Cleared by each buildTrackScene.
+    bool mEffectsWarm = false;
     // Every box-pool MaterialInstance carrying emissiveFactor, resolved once at
     // load — the throb retints these instead of string-probing every material of
     // every instance per frame.
@@ -2393,6 +2396,7 @@ private:
     void setMeshInScene(Mesh& m, bool on);
     void setInstanceInScene(filament::gltfio::FilamentInstance* inst, uint8_t& state, bool on);
     void setAssetInScene(filament::gltfio::FilamentAsset* asset, uint8_t& state, bool on);
+    void warmEffectPipelines(const TtpFrameInput& input);
     void buildOils(const TrackBin& tb);
     void ensureCells(uint32_t count);
 };

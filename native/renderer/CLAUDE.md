@@ -690,7 +690,9 @@ The consequence for anything tempted to KEEP parsed assets across a scene, the
 way the sun bake and the silhouette layers are kept: what such a cache buys is
 the ~28 ms, never the ~405. Price it against that. The one-time half is a process
 warm-up problem and belongs with
-`backend.vulkan.enable_pipeline_cache_prewarming`, not with a resource pool.
+`backend.vulkan.enable_pipeline_cache_prewarming`, not with a resource pool. That
+prewarming is unavailable on the reference box (no dynamic rendering), which is
+why the effect pools are drawn once before the race (`warmEffectPipelines`).
 
 **Car bodies ARE kept** (`mBodyPool`) on exactly that trade; the rest of the
 gltfio assets are still dropped by `releaseScene` while the mask layers keyed off
