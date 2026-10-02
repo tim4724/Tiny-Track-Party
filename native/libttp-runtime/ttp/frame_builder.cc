@@ -328,7 +328,10 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
     // written straight from it holds still and then jumps, several frames apart.
     // One time constant, matching the 50 ms transition the phone puts on its own
     // bar (controller.css .steer #steer-fill), so both ends lag the same.
-    const float steerAlpha = dt > 0 ? (dt < STEER_BAR_TAU ? dt / STEER_BAR_TAU : 1.0f) : 0.0f;
+    // The EXACT exponential, as camera.cc eases: the linear dt / tau overshot it
+    // more the longer the frame, so a 30 Hz bar eased ~30 ms where 60 Hz eased
+    // ~41 ms, and showed the packet-rate steps it exists to hide.
+    const float steerAlpha = dt > 0 ? 1 - std::exp(-dt / STEER_BAR_TAU) : 0.0f;
     auto* outHud = const_cast<TtpCellHudInput*>(ttp_frame_hud(head));
     for (uint32_t i = 0; i < hudCount; i++) {
         TtpCellHudInput& o = outHud[i];

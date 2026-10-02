@@ -1026,7 +1026,7 @@ void testCellHud(const GameTrack& track) {
     // The bar EASES toward the tilt, so one frame from centred is a fraction of
     // the way there — same sign, strictly short of it (DT is well under the
     // 50 ms constant). What it must never be is the car cue's signed value.
-    const float a = DT / rt::STEER_BAR_TAU;
+    const float a = 1 - std::exp(-DT / rt::STEER_BAR_TAU);
     checkF(hud[0].steer, (float)c0.steer * a, "the bar eases toward RAW tilt");
     checkF(hud[1].steer, (float)c2.steer * a, "…in every cell");
     check(hud[0].steer != ttp_frame_cars(h)[1].steer,
@@ -1068,6 +1068,19 @@ void testCellHud(const GameTrack& track) {
     }
     check(shown / target > 0.5f && shown / target < 0.75f,
           "one time constant in, the bar is about two thirds of the way");
+
+    // THE FRAME RATE MUST NOT CHANGE THE EASE. Two 60 Hz frames and one 30 Hz
+    // frame cover the same time and must land the bar in the same place; the
+    // linear dt / tau this replaced put the 30 Hz bar ~20% further along, so a
+    // box pinned to half rate eased visibly less.
+    DisplayState s60 = freshState(), s30 = freshState();
+    s60.roster = s30.roster = {P0};
+    s60.cells = s30.cells = {P0};
+    rt::buildFrame(s60, &game, DT, caseAspect(s60));   // frame 1 of 2
+    const float at60 = ttp_frame_hud(rt::buildFrame(s60, &game, DT, caseAspect(s60)))[0].steer;
+    const float at30 = ttp_frame_hud(rt::buildFrame(s30, &game, 2 * DT, caseAspect(s30)))[0].steer;
+    check(std::fabs(at60 - at30) < 1e-5f * std::fabs(target),
+          "two 60 Hz frames ease the bar as far as one 30 Hz frame");
   }
 
   // A centred card (FINISHED, or the reconnect QR) owns a cell: that cell's bar
