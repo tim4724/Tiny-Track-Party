@@ -1,5 +1,6 @@
 #include "ttp/camera.h"
 
+#include <climits>
 #include <cmath>
 
 #include "ttp/game.h"
@@ -115,8 +116,16 @@ void FollowCam::update(const TtpCarInput* cars, const std::vector<bool>& live, V
         }
         return false;
     };
-    // The first pitch from which nothing hides the battle or crowds the shot.
+    // The first pitch from which nothing hides the battle or crowds the shot;
+    // among those, kerbs are scored rather than ruled out (camera.h).
+    // Car i's point `h` up its own up axis.
+    auto above = [&](size_t i, float h) {
+        const TtpVec3& u = cars[i].up;
+        return at(i) + V3{ u.x, u.y, u.z } * h;
+    };
     auto clearPitch = [&]() {
+        float best = FOLLOW_PITCH;
+        int fewest = INT_MAX;
         for (float p : FOLLOW_PITCHES) {
             const V3 eye = eyeAt(p);
             const V3 up = { 0, FOLLOW_LENS_CLEAR, 0 };
@@ -125,14 +134,20 @@ void FollowCam::update(const TtpCarInput* cars, const std::vector<bool>& live, V
                     && !hillTooHigh(eye);
             for (size_t i = 0; i < n && clear; i++) {
                 if (!inBattle(i)) continue;
-                const TtpVec3& u = cars[i].up;
-                const V3 aim = at(i) + V3{ u.x, u.y, u.z } * FOLLOW_AIM_UP;
+                const V3 aim = above(i, FOLLOW_AIM_UP);
                 clear = !deckBlocks(deck, eye, aim, 0, FOLLOW_CAR_CLEAR)
                         && !groundBlocks(eye, aim, FOLLOW_CAR_CLEAR);
             }
-            if (clear) return p;
+            if (!clear) continue;
+            int kerbed = 0;
+            for (size_t i = 0; i < n; i++) {
+                if (!inBattle(i)) continue;
+                for (float h : FOLLOW_KERB_AIMS) kerbed += kerbBlocks(deck, eye, above(i, h));
+            }
+            if (kerbed == 0) return p;
+            if (kerbed < fewest) { best = p; fewest = kerbed; }
         }
-        return FOLLOW_PITCH;
+        return best;
     };
 
     if (!init) {

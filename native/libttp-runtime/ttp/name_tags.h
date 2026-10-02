@@ -76,6 +76,7 @@ struct NameTagDeck {
         uint32_t first, count;    // piece i spans sample i to sample i+1 (mod n)
     };
     std::vector<Chunk> chunks;
+    float kerbH = 0;              // the theme's kerb height along both edges (kerbBlocks)
 };
 
 // Pieces per chunk.
@@ -88,6 +89,12 @@ NameTagDeck nameTagDeck(const std::vector<OutSample>& samples, bool closed);
 // it sits on never hides it. The tags ask it, and so does the follow camera
 // (ttp/camera.h), each with its own clearances.
 bool deckBlocks(const NameTagDeck& deck, V3 eye, V3 p, float eyeClear, float farClear);
+
+// Does a kerb — a wall kerbH tall standing up from either edge of the deck —
+// stand between `eye` and `p`? The tags never ask (a kerb hides a car's wheels,
+// never the sticker over its roof); the follow camera does, so a low side view
+// does not film the cars through the kerb.
+bool kerbBlocks(const NameTagDeck& deck, V3 eye, V3 p);
 
 struct NameTag {
     int32_t cell;    // the cell the tag is drawn in

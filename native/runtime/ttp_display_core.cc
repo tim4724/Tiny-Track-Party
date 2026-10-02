@@ -291,6 +291,7 @@ int ttp_display_build(const char* trackId, const char* rosterJson) {
     g_disp->nameTags.clear();
     g_disp->tagCover.clear();
     g_disp->tagDeck = ttp::rt::nameTagDeck(geo.samples, geo.closed);
+    g_disp->tagDeck.kerbH = theme.road.kerbH;
     g_disp->ground = g_disp->renderer->groundGrid();
     g_disp->sceneT = 0;
     g_disp->bursts.clear();

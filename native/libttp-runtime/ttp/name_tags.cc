@@ -112,6 +112,23 @@ bool deckBlocks(const NameTagDeck& deck, V3 eye, V3 p, float eyeClear, float far
     return false;
 }
 
+bool kerbBlocks(const NameTagDeck& deck, V3 eye, V3 p) {
+    if (deck.kerbH <= 0) return false;
+    const V3 d = p - eye, up = { 0, deck.kerbH, 0 };
+    const uint32_t n = (uint32_t) deck.left.size();
+    for (const NameTagDeck::Chunk& c : deck.chunks) {
+        if (!crossesBox(eye, d, 0, 1, c.lo, c.hi + up)) continue;
+        for (uint32_t i = c.first; i < c.first + c.count; i++) {
+            const uint32_t j = (i + 1) % n;
+            for (const std::vector<V3>* edge : { &deck.left, &deck.right }) {
+                const V3 a = (*edge)[i], e = (*edge)[j];
+                if (crossesTri(eye, d, 0, 1, a, e, e + up) || crossesTri(eye, d, 0, 1, a, e + up, a + up)) return true;
+            }
+        }
+    }
+    return false;
+}
+
 namespace {
 
 // Is the tag at `tag` (car `s`'s) hidden from `eye` by a monster truck or the deck?

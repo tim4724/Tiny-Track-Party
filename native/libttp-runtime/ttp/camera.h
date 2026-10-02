@@ -118,7 +118,10 @@ struct ChaseCam {
 // rises over the ground under the battle must stay below FOLLOW_HILL_ROW of
 // the frame's lower half. The ground the road runs across is not a hill, so a
 // flat field leading up to the cars never counts. With none clear it stays on
-// FOLLOW_PITCH. When the way from where the eye is to where it wants to be
+// FOLLOW_PITCH. A KERB is the softer rule, since a low side view across the
+// road edge films the cars half behind it: among the clear pitches the first
+// from which no kerb hides any FOLLOW_KERB_AIMS point of a battle car wins,
+// else the one hiding fewest of them. When the way from where the eye is to where it wants to be
 // crosses a deck — above a bridge to under it — easing would fly the lens
 // through the road, so it CUTS there instead. Pillars, props and scenery are
 // not modelled.
@@ -127,13 +130,16 @@ struct ChaseCam {
 // has no level heading, so the blend keeps the last one it had; a battle at the
 // track's very centre has no inward, and drops out of the blend.
 // ---------------------------------------------------------------------------
-constexpr float FOLLOW_GAP = 6.0f;          // track units behind the leader (~0.5 s flat out)
-constexpr float FOLLOW_MARGIN = 1.5f;       // added to the battle's radius: a car is not a point
-constexpr float FOLLOW_MIN_R = 3.0f, FOLLOW_MAX_R = 10.0f;  // fitted radius clamp
+constexpr float FOLLOW_GAP = 4.0f;          // track units behind the leader (~0.3 s flat out)
+constexpr float FOLLOW_MARGIN = 0.8f;       // added to the battle's radius: a car is not a point
+constexpr float FOLLOW_MIN_R = 1.8f, FOLLOW_MAX_R = 6.0f;   // fitted radius clamp
 constexpr float FOLLOW_PITCH = 0.3f;        // rad below level (~17 degrees)
 // The pitches tried, in order of preference; the first is FOLLOW_PITCH.
 constexpr float FOLLOW_PITCHES[] = { FOLLOW_PITCH, 0.2f, 0.1f, 0.03f, 0.45f, 0.6f, 0.8f };
 constexpr float FOLLOW_AIM_UP = 0.25f;      // where on a car the sight line ends: its body, not its wheels
+// The points tested against a kerb, in units up the car's up axis: its wheels
+// first (the tests read [0] as wheel height), then its body and its roof.
+constexpr float FOLLOW_KERB_AIMS[] = { 0.1f, 0.2f, 0.3f };
 constexpr float FOLLOW_CAR_CLEAR = 0.6f;    // the deck a car is on never hides it (as for name tags)
 constexpr float FOLLOW_LENS_CLEAR = 1.0f;   // how far off any deck, and over the ground, the eye must stay
 constexpr float FOLLOW_HILL_REACH = 0.6f;   // the near part of the line where a hill is foreground
@@ -143,9 +149,10 @@ constexpr int FOLLOW_SIGHT_STEPS = 24;      // samples along a sight line agains
 constexpr float FOLLOW_LEAD = 0.5f;         // rad from facing inward toward facing the cars' fronts
 constexpr float FOLLOW_FOV = 50.0f;
 // The springs' natural frequencies (rad/s): a spring settles in about 5/omega.
-// The pitch is the quickest — it has a bridge to get under before it passes.
+// The pitch is the quickest — it has a bridge to get under, or a kerb to see
+// over, before it passes.
 constexpr float FOLLOW_AIM_OMEGA = 3.0f, FOLLOW_YAW_OMEGA = 1.8f, FOLLOW_DIST_OMEGA = 1.5f,
-                FOLLOW_PITCH_OMEGA = 3.0f;
+                FOLLOW_PITCH_OMEGA = 5.0f;
 constexpr float FOLLOW_FLOW_RATE = 4.0f;    // 1/s, how fast the carried velocity follows the leader's
 
 struct FollowCam {

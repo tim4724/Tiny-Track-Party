@@ -831,11 +831,11 @@ void testFollowView(const GameTrack& track) {
     check(!rt::deckBlocks(deck, bridged.follow.pos - up, bridged.follow.pos + up, 0, 0),
           "follow: …and the lens is not grazing it");
 
-    // A deck half a unit under the open camera, 2 across: it hides no car (the
-    // sight line falls a quarter of a unit over that span), so only the rule
-    // that the lens keeps FOLLOW_LENS_CLEAR off any deck can move the camera.
-    const V3 eye = open.follow.pos - V3{0, 0.5f, 0};
-    const rt::NameTagDeck under = stripDeck(eye, 1, 1);
+    // A deck 0.3 under the open camera, 1 along its line: it hides no car (the
+    // sight line falls about 0.15 over that span), so only the rule that the
+    // lens keeps FOLLOW_LENS_CLEAR off any deck can move the camera.
+    const V3 eye = open.follow.pos - V3{0, 0.3f, 0};
+    const rt::NameTagDeck under = stripDeck(eye, 1, 0.5f);
     check(!rt::deckBlocks(under, open.follow.pos, V3{0, 0, 0} + aim, 0, rt::FOLLOW_CAR_CLEAR) &&
               !rt::deckBlocks(under, open.follow.pos, V3{2, 0, -3} + aim, 0, rt::FOLLOW_CAR_CLEAR),
           "premise: the deck under the open camera hides no car");
@@ -887,12 +887,12 @@ void testFollowView(const GameTrack& track) {
 
     // …and over that flat field, with the road ON the ground, a bridge still
     // brings the camera down: the field it dips toward is not a hill either.
-    // A thin strip (0.8 along the line) just under the middle of the open
-    // camera's line to the leader's body: that line dips through it, while
-    // the line from one pitch lower passes well beneath.
+    // A small strip (0.6 across, 0.8 along the line) just under the middle of
+    // the open camera's line to the leader's body: that line dips through it,
+    // while the lines from one pitch lower pass beneath and beside it.
     const V3 mid = (field.follow.pos + V3{0, rt::FOLLOW_AIM_UP, 0}) * 0.5f;
     const V3 span = mid - V3{0, 0.05f, 0};
-    const rt::NameTagDeck low = stripDeck(span, 4, 0.4f);
+    const rt::NameTagDeck low = stripDeck(span, 0.3f, 0.4f);
     DisplayState underField = field;
     underField.ground = flat;
     underField.tagDeck = low;
@@ -929,6 +929,51 @@ void testFollowView(const GameTrack& track) {
     const V3 lens = onSlope.follow.pos;
     check(lens.y >= onSlope.ground.at(lens.x, lens.z) + rt::FOLLOW_LENS_CLEAR,
           "follow: the lens keeps FOLLOW_LENS_CLEAR over the ground");
+  }
+
+  // A KERB along the road edge. A road laid across the camera's line (which
+  // runs mostly along -Z), its near edge 0.3 on the camera's side of the
+  // leader: from the camera's own pitch that kerb covers the leader's wheels,
+  // and the camera must climb until it does not. The same road with no kerb
+  // leaves the pitch alone.
+  {
+    placeCar(a, {0, 0, 0}, {0, 0, 1}, 100);
+    placeCar(b, {2, 0, -3}, {0, 0, 1}, 97);
+    rt::NameTagDeck road;  // runs along X, edges at z = 0.3 and z = -3.3
+    road.left = {{-5, 0, 0.3f}, {7, 0, 0.3f}};
+    road.right = {{-5, 0, -3.3f}, {7, 0, -3.3f}};
+    road.chunks.push_back({{-5, 0, -3.3f}, {7, 0, 0.3f}, 0, 1});
+    DisplayState flush = followState(), kerbed = followState();
+    flush.tagDeck = road;
+    road.kerbH = 0.3f;
+    kerbed.tagDeck = road;
+    for (int i = 0; i < 120; i++) {
+      rt::buildFrame(flush, &game, DT, caseAspect(flush));
+      rt::buildFrame(kerbed, &game, DT, caseAspect(kerbed));
+    }
+    const V3 wheels = {0, rt::FOLLOW_KERB_AIMS[0], 0};
+    check(rt::kerbBlocks(road, flush.follow.pos, V3{0, 0, 0} + wheels) ||
+              rt::kerbBlocks(road, flush.follow.pos, V3{2, 0, -3} + wheels),
+          "premise: from the camera's own pitch a kerb covers a car's wheels");
+    checkF(flush.follow.pitch, rt::FOLLOW_PITCH, "follow: a road with no kerb leaves the pitch alone");
+    check(kerbed.follow.pitch > rt::FOLLOW_PITCH, "follow: a kerb covering the cars sends the camera UP");
+    check(!rt::kerbBlocks(road, kerbed.follow.pos, V3{0, 0, 0} + wheels) &&
+              !rt::kerbBlocks(road, kerbed.follow.pos, V3{2, 0, -3} + wheels),
+          "follow: …until neither car's wheels are behind it");
+
+    // A leader alone (the other car placed 10 behind, out of the battle)
+    // behind a taller kerb, 0.45: its wheels are behind it from every pitch,
+    // so none is kerb-free. The one showing most of the car wins, and that is a higher
+    // one than the camera's own.
+    placeCar(b, {2, 0, -3}, {0, 0, 1}, 90);
+    road.kerbH = 0.45f;
+    DisplayState hugging = followState();
+    hugging.tagDeck = road;
+    for (int i = 0; i < 120; i++) rt::buildFrame(hugging, &game, DT, caseAspect(hugging));
+    check(rt::kerbBlocks(road, hugging.follow.pos, V3{0, 0, 0} + wheels),
+          "premise: the leader hugs a kerb no pitch sees its wheels over");
+    check(hugging.follow.pitch > rt::FOLLOW_PITCH,
+          "follow: with no kerb-free pitch, it takes the one showing most of the cars");
   }
 }
 
