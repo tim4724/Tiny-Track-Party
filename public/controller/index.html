@@ -317,7 +317,7 @@
 
   <!-- Motion-blocked popup — a SEPARATE alert (not part of the instructions): shown
        when the tilt sensor is blocked (iOS denied), with the live recovery path. A
-       device with no sensor at all never sees it — startup forces button steering
+       device with no sensor at all never sees it — it is put on button steering (main.js onMotionState)
        and the settings card's Tilt row reads "Not available" instead. Sits above
        #settings-overlay (z 18) but below #conn. Title, copy + the primary button's
        action come from tilt.motionState (see refreshMotionPopup / motionHelpCopy).

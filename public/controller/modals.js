@@ -64,7 +64,7 @@ const settingsOpen = () => !el('settings-overlay').classList.contains('hidden');
 
 // Sync the card to the CURRENT input mode: the seg's checked side and the
 // .is-buttons class that flips the demo phone + captions between modes.
-// On a device with no motion sensor (main.js forced buttons at startup) the
+// On a device with no motion sensor (main.js forced buttons) the
 // Tilt row is disabled outright and its sticker says why — a pickable-looking
 // Tilt would only lead into a recovery popup with no recovery.
 function refreshSettingsCard() {
@@ -88,6 +88,15 @@ function refreshSettingsCard() {
 // (openSettings re-syncs anyway).
 export function refreshSettingsState() {
   if (settingsOpen()) refreshSettingsCard();
+}
+
+// motionState moved (main.js onMotionState) — the background delivery verdict,
+// or a late sample taking it back. Keep the open card true to it, and close the
+// motion popup once there is nothing left for it to fix: a sensor that turned out
+// absent has been put on buttons, and its "Allow motion" would only re-ask.
+export function refreshMotionState() {
+  refreshSettingsState();
+  if (motionOpen() && _tilt.motionState === 'unsupported') closeMotionPopup();
 }
 
 function openSettings() {
@@ -270,11 +279,9 @@ export function initModals({ screens, tilt, buzz, playerName, getInputMode, setI
     _setInputMode('tilt');
     refreshSettingsCard();
     if (_tilt.motionState !== 'granted') {
+      // A sensor that turns out absent is put back on buttons by main.js's
+      // onMotionState, a moment after this resolves.
       await _tilt.enableMotion();
-      // Trying is the only way to prove a sensor absent on a browser that can't
-      // be asked, so the Tilt row can be live at click time and dead by now.
-      // Put the phone back on buttons and let the card say why.
-      if (_tilt.motionState === 'unsupported') _setInputMode('buttons');
       refreshSettingsCard();
       if (motionBlocked()) openMotionPopup();
     }
@@ -309,15 +316,9 @@ export function initModals({ screens, tilt, buzz, playerName, getInputMode, setI
     if (motionHelpCopy(_tilt.motionState).action === 'reload') { location.reload(); return; }
     const btn = el('motion-allow');
     btn.disabled = true; btn.textContent = 'Asking…';
+    // Allowed but silent is caught after this resolves: refreshMotionState
+    // closes the popup when the phone falls back to buttons.
     await _tilt.enableMotion();
-    // Allowed, but the sensor delivers nothing. There is no recovery to offer
-    // (the dead-end "tilt isn't available" face was removed on purpose), so
-    // close and fall back rather than loop the player through Allow again.
-    if (_tilt.motionState === 'unsupported') {
-      _setInputMode('buttons');
-      closeMotionPopup();
-      return;
-    }
     if (_tilt.motionState === 'granted') {
       el('motion-title').textContent = 'Motion access on';
       el('motion-status').textContent = 'Tilt to steer is ready.';

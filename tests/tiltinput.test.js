@@ -9,9 +9,9 @@ const assert = require('node:assert/strict');
 
 // TiltInput is a browser ES module but is written to construct headlessly (window/
 // document guards). Load it dynamically like the other suites.
-let TiltInput;
+let TiltInput, SENSOR_SETTLE_MS;
 test.before(async () => {
-  ({ TiltInput } = await import('../public/controller/TiltInput.js'));
+  ({ TiltInput, SENSOR_SETTLE_MS } = await import('../public/controller/TiltInput.js'));
 });
 
 // _screenAngle reads the `screen` global; set/clear it around each case so the
@@ -222,15 +222,19 @@ test("headless (no window at all) stays 'unknown' — Node suites are not sensor
 // A fake browser: a window with the sensor API present and a hand-driven
 // `deviceorientation` listener list. This is the shape that matters — every case
 // below has DeviceOrientationEvent DEFINED, because the whole point is that its
-// presence proves nothing about delivery.
+// presence proves nothing about delivery. setTimeout is mocked, so the
+// background no-sample timer runs only when a case ticks it.
 async function withFakeBrowser(fn) {
-  const had = ['window'].map((k) => [k, Object.prototype.hasOwnProperty.call(globalThis, k), globalThis[k]]);
+  const had = ['window', 'document'].map((k) => [k, Object.prototype.hasOwnProperty.call(globalThis, k), globalThis[k]]);
   const listeners = new Set();
   const clicks = new Set();   // the gesture TiltInput waits for when it was refused one
+  const page = { focused: true, onFocus: new Set() };
+  globalThis.document = { hasFocus: () => page.focused };
   globalThis.window = {
     DeviceOrientationEvent: function () {},   // present, as on every real browser
     addEventListener: (type, fn2) => {
       if (type === 'deviceorientation') listeners.add(fn2); else if (type === 'click') clicks.add(fn2);
+      else if (type === 'focus') page.onFocus.add(fn2);
     },
     removeEventListener: (type, fn2) => {
       if (type === 'deviceorientation') listeners.delete(fn2); else if (type === 'click') clicks.delete(fn2);
@@ -238,11 +242,24 @@ async function withFakeBrowser(fn) {
   };
   const emit = (e) => { for (const l of [...listeners]) l(e); };
   const tap = () => { for (const l of [...clicks]) l(); };
-  // AWAIT before the teardown: the settle timer fires 600 ms after fn returns
-  // its promise, and would find the fake window already gone.
-  try { return await fn({ emit, tap, clicks }); } finally {
+  const blur = () => { page.focused = false; };
+  const focus = () => {
+    page.focused = true;
+    const once = [...page.onFocus]; page.onFocus.clear();
+    for (const l of once) l();
+  };
+  test.mock.timers.enable({ apis: ['setTimeout'] });
+  try { return await fn({ emit, tap, clicks, blur, focus }); } finally {
+    test.mock.timers.reset();
     for (const [k, existed, prev] of had) { if (existed) globalThis[k] = prev; else delete globalThis[k]; }
   }
+}
+
+// A TiltInput recording every motionState it reports, in order.
+function watched() {
+  const seen = [];
+  const t = new TiltInput({ onMotionState: (s) => seen.push(s) });
+  return { t, seen };
 }
 
 test('a window WITH the sensor API leaves the state unresolved for the gesture', async () => {
@@ -252,47 +269,78 @@ test('a window WITH the sensor API leaves the state unresolved for the gesture',
   });
 });
 
-test("a granted listener that delivers nothing settles to 'unsupported'", async () => {
+test('a grant answers at once: the phone joins on tilt without waiting for a sample', async () => {
   await withFakeBrowser(async () => {
-    const t = new TiltInput({});
-    assert.equal(await t.enableMotion(), 'unsupported',
-      'no sample inside the settle window means no usable sensor, whatever permission said');
+    const { t, seen } = watched();
+    assert.equal(await t.enableMotion(), 'granted', 'delivery is not awaited');
+    assert.deepEqual(seen, ['granted']);
   });
 });
 
-test("a sample after the window takes the 'unsupported' verdict back", async () => {
+test("a granted listener that delivers nothing falls back to 'unsupported' after the window", async () => {
+  await withFakeBrowser(async () => {
+    const { t, seen } = watched();
+    await t.enableMotion();
+    test.mock.timers.tick(SENSOR_SETTLE_MS - 1);
+    assert.equal(t.motionState, 'granted', 'optimistic until the window is out');
+    test.mock.timers.tick(1);
+    assert.equal(t.motionState, 'unsupported',
+      'no sample inside the window means no usable sensor, whatever permission said');
+    assert.deepEqual(seen, ['granted', 'unsupported'], 'reported, so an open card can redraw');
+  });
+});
+
+test('an unfocused page is not judged: the window starts when focus arrives', async () => {
+  await withFakeBrowser(async ({ blur, focus }) => {
+    const { t } = watched();
+    // A launcher WebView nobody has focused yet: Chromium sends it no samples,
+    // so its silence says nothing about the sensor.
+    blur();
+    await t.enableMotion();
+    test.mock.timers.tick(SENSOR_SETTLE_MS * 10);
+    assert.equal(t.motionState, 'granted');
+    focus();
+    test.mock.timers.tick(SENSOR_SETTLE_MS);
+    assert.equal(t.motionState, 'unsupported', 'silence while focused still counts');
+  });
+});
+
+test("a sample after the window takes the 'unsupported' verdict back, and says so", async () => {
   await withFakeBrowser(async ({ emit }) => {
-    const t = new TiltInput({});
-    assert.equal(await t.enableMotion(), 'unsupported');
+    const { t, seen } = watched();
+    await t.enableMotion();
+    test.mock.timers.tick(SENSOR_SETTLE_MS);
     // A slow sensor, not an absent one. Without this the phone would sit on
     // buttons with the Tilt row disabled — the only way back — until a reload.
     emit({ beta: 10, gamma: 15 });
     assert.equal(t.motionState, 'granted');
     assert.ok(t.haveTilt);
+    assert.deepEqual(seen, ['granted', 'unsupported', 'granted']);
   });
 });
 
-test("an all-null sample does NOT count as delivery — it still settles 'unsupported'", async () => {
+test("an all-null sample does NOT count as delivery — it still falls back to 'unsupported'", async () => {
   await withFakeBrowser(async ({ emit }) => {
-    const t = new TiltInput({});
-    const state = t.enableMotion();
+    const { t } = watched();
+    await t.enableMotion();
     // Chromium emits exactly one of these on sensorless hardware; counting
     // events instead of usable samples would read it as a working sensor.
     emit({ beta: null, gamma: null });
-    assert.equal(await state, 'unsupported');
+    test.mock.timers.tick(SENSOR_SETTLE_MS);
+    assert.equal(t.motionState, 'unsupported');
     assert.equal(t.haveTilt, false);
   });
 });
 
-test('a real sample resolves granted immediately, without paying the settle window', async () => {
+test('a real sample inside the window keeps the grant: no fallback, nothing more reported', async () => {
   await withFakeBrowser(async ({ emit }) => {
-    const t = new TiltInput({});
-    const started = Date.now();
-    const state = t.enableMotion();
+    const { t, seen } = watched();
+    await t.enableMotion();
     emit({ beta: 10, gamma: 15 });
-    assert.equal(await state, 'granted');
+    test.mock.timers.tick(SENSOR_SETTLE_MS);
+    assert.equal(t.motionState, 'granted');
     assert.ok(t.haveTilt, 'the sample was applied, not just counted');
-    assert.ok(Date.now() - started < 300, 'a working sensor must not wait out the window');
+    assert.deepEqual(seen, ['granted']);
   });
 });
 
