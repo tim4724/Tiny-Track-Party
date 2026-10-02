@@ -190,12 +190,14 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
     }
 
     auto* outViews = const_cast<TtpViewInput*>(ttp_frame_views(head));
+    // The follow cam works at race distances, so it takes the race fog band.
+    const bool follow = !raceCams && d.camMode == CAM_FOLLOW;
     const float fogNear = !d.fog ? 0
-            : raceCams ? d.framing.raceFogNear
+            : raceCams || follow ? d.framing.raceFogNear
             : d.camMode == CAM_BBOX ? d.framing.bbFogNear
             : d.framing.ovFogNear;
     const float fogFar = !d.fog ? 0
-            : raceCams ? d.framing.raceFogFar
+            : raceCams || follow ? d.framing.raceFogFar
             : d.camMode == CAM_BBOX ? d.framing.bbFogFar
             : d.framing.ovFogFar;
     if (raceCams) {
@@ -248,6 +250,12 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
         if (d.camMode == CAM_FREE) {
             eye = d.freeEye;
             target = d.freeTarget;
+        } else if (follow) {
+            std::vector<bool> live(cars.size());
+            for (size_t i = 0; i < cars.size(); i++) live[i] = fromHeld || cars[i];
+            d.follow.update(outCars, live, f.center, d.tagDeck, d.ground, dt);
+            eye = d.follow.pos;
+            target = d.follow.target;
         } else if (d.camMode == CAM_BBOX) {
             d.orbitAngle += BBOX_ORBIT_SPEED * dt;
             eye = { f.center.x + std::cos(d.orbitAngle) * f.bbAx,
@@ -264,10 +272,10 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
         TtpViewInput& v = outViews[0];
         v.car = -1;   // an overview follows nobody
         lookAtWorld(v.world, eye, target, V3{ 0, 1, 0 });
-        v.fov = OVERVIEW_FOV;
+        v.fov = follow ? FOLLOW_FOV : OVERVIEW_FOV;
         v.aspect = aspect;
-        v.nearZ = d.camMode == CAM_FREE ? FREE_NEAR : OV_NEAR;
-        v.farZ = OV_FAR;
+        v.nearZ = follow ? CAM_NEAR : d.camMode == CAM_FREE ? FREE_NEAR : OV_NEAR;
+        v.farZ = follow ? CAM_FAR : OV_FAR;
         v.fogNear = fogNear;
         v.fogFar = fogFar;
     }

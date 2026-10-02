@@ -33,8 +33,6 @@ struct DisplayCore : DisplayState {
     // out once per ttp_display_frame, so reading them is free of side effects.
     std::vector<NameTag> nameTags;
     std::vector<float> tagCover;
-    // The built track's road, as the tags' occluder. Per scene.
-    NameTagDeck tagDeck;
 
     // A blob walk's state between its crossings (ttp_display.h), in two halves
     // with two different lifetimes — which is the whole lesson of the version

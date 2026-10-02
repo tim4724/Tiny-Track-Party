@@ -27,7 +27,7 @@ import { BlobStores } from './BlobStore.js';
 
 // Camera modes for a surface with no split-screen cells — the C side's
 // TTP_CAM_* (ttp_display.h).
-export const CAM = { STILL: 0, ORBIT: 1, BBOX: 2, FREE: 3 };
+export const CAM = { STILL: 0, ORBIT: 1, BBOX: 2, FREE: 3, FOLLOW: 4 };
 
 // Feature-ablation bits for debugFeatures() — the C side's TTP_FEAT_*
 // (ttp_display.h). DEBUG ONLY: the per-feature GPU cost map's instrument.

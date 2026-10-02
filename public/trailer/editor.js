@@ -27,6 +27,10 @@ import { CUPS, TRACK_LIST } from '/shared/tracks.js';
 // land where the catch-up rules put them, and the timeline marks where (see survey).
 const SCENARIOS = ['racing', 'chain'];
 const SPLITS = [1, 2, 4];
+// 'chase' is the split-screen cells; 'follow' is one overview on the lead battle
+// (?cam=follow). A shot with no `camera` is a chase shot.
+const CAMERAS = ['chase', 'follow'];
+const camOf = (shot) => shot.camera || 'chase';
 const STORE = 'ttp-trailer-edit';
 // Sim time is COUNTED IN STEPS and divided, never accumulated. Adding 1/60 repeatedly
 // drifts: 300 of them come to 4.999999999999998, so a wind to 5.0 takes one step too
@@ -94,7 +98,7 @@ let outAt = Infinity;    // sim time this shot stops at, while following
 // wall-clock dt nobody can reproduce and leaves the editor a few frames off the render
 // forever after. See public/display/frameGate.js.
 const urlFor = (shot) => `/?test=1&gate=1&scenario=${shot.scenario}&players=${shot.players}` +
-  `&track=${shot.track}&dpr=${VIEW_DPR}`;
+  `&track=${shot.track}&dpr=${VIEW_DPR}${camOf(shot) === 'follow' ? '&cam=follow' : ''}`;
 
 // Everything on the display that is page chrome rather than the GAME. The monitor has
 // to show what the render will show, and the corner buttons in particular land square
@@ -119,7 +123,7 @@ function mount(shot) {
     // What this race was actually dealt with. The shot object it came from is mutable —
     // changing its track edits it in place — so a frame has to remember its own terms
     // rather than be asked to re-read them.
-    mounted: { track: shot.track, players: shot.players, scenario: shot.scenario },
+    mounted: { track: shot.track, players: shot.players, scenario: shot.scenario, camera: camOf(shot) },
     get time() { return this.steps / FPS; },
   };
 
@@ -366,7 +370,7 @@ async function show(index, { preloadNext = true, wind = follow, swapFirst = fals
   if (!wind && cached && cached.ready && cached.steps > 0) restart(cached);
   if (liveFrame && liveFrame.ready && sameShot(liveFrame.mounted, shot)) {
     // Already showing this exact race, and not resetting: keep it, move the playhead.
-    // Frames are cached by track|players|scenario, so this can be a DIFFERENT shot
+    // Frames are cached by track|players|scenario|camera, so this can be a DIFFERENT shot
     // than the one the frame was mounted for — repoint it, or the clock, the kept
     // span on the bar and "Wind to in" keep reading the old shot's in/out.
     liveFrame.shot = shot;
@@ -474,7 +478,8 @@ async function toNextShot() {
   try { await show(next); } finally { advancing = false; }
 }
 
-const sameShot = (a, b) => a && b && a.track === b.track && a.players === b.players && a.scenario === b.scenario;
+const sameShot = (a, b) => a && b && a.track === b.track && a.players === b.players && a.scenario === b.scenario
+  && camOf(a) === camOf(b);
 
 // KEEP THE RACES WE HAVE ALREADY RUN. A shot costs seconds of simulation to reach its
 // in-point, and throwing that away the moment the monitor moves on means paying it again
@@ -487,13 +492,13 @@ const sameShot = (a, b) => a && b && a.track === b.track && a.players === b.play
 // dead context is far worse than a re-wind. Four covers moving between neighbouring shots
 // while editing.
 //
-// Editing a shot's track, split or scenario changes its key, so the stale frame simply
+// Editing a shot's track, split, scenario or camera changes its key, so the stale frame simply
 // stops being asked for and ages out. Editing only the in-point keeps the frame and
 // re-winds it, which is the cheap case.
 const MAX_FRAMES = 4;
 const frames = new Map();      // key -> frame, in least-recently-used order
 
-const keyOf = (shot) => `${shot.track}|${shot.players}|${shot.scenario}`;
+const keyOf = (shot) => `${shot.track}|${shot.players}|${shot.scenario}|${camOf(shot)}`;
 
 function acquire(shot) {
   const key = keyOf(shot);
@@ -716,8 +721,9 @@ function paintShots() {
     const change = (key, value) => {
       shot[key] = key === 'players' ? parseInt(value, 10) : value;
       save(); paintShots(); paintTotal();
-      // A changed track/split/scenario is a different race, so the monitor is stale.
-      if (i === liveIndex && (key === 'track' || key === 'players' || key === 'scenario')) {
+      // A changed track/split/scenario/camera is a different load, so the monitor is stale.
+      if (i === liveIndex && (key === 'track' || key === 'players' || key === 'scenario'
+          || key === 'camera')) {
         show(i, { swapFirst: true });
       }
     };
@@ -728,6 +734,7 @@ function paintShots() {
       trackSelect(shot, change),
       pick(SPLITS, 'players', shot, change, (v) => `${v}P`),
       pick(SCENARIOS, 'scenario', shot, change),
+      pick(CAMERAS, 'camera', shot, change),
       num('warmup', shot, change, '0.1'),
       num('seconds', shot, change, '0.5'),
     );
@@ -770,7 +777,8 @@ function shotsJs() {
   const body = shots.map((s, i) => {
     const id = `${String(i + 1).padStart(2, '0')}-${s.track}-${s.players}p`;
     return `  { id: '${id}', scenario: '${s.scenario}', players: ${s.players}, ` +
-      `track: '${s.track}', warmup: ${+s.warmup}, seconds: ${+s.seconds} },`;
+      `track: '${s.track}', ${camOf(s) === 'follow' ? "camera: 'follow', " : ''}` +
+      `warmup: ${+s.warmup}, seconds: ${+s.seconds} },`;
   }).join('\n');
   // Only the ARRAY is worth pasting: shots.js carries a long field-by-field header that
   // this export cannot reproduce, and replacing the whole file with this would throw it
@@ -848,8 +856,8 @@ async function loadCommitted() {
   const res = await fetch('/api/trailer-shots');
   const { shots: loaded, error } = await res.json();
   if (!res.ok) throw new Error(error);
-  shots = loaded.map(({ track, players, scenario, warmup, seconds }) =>
-    ({ track, players, scenario, warmup, seconds }));
+  shots = loaded.map(({ track, players, scenario, camera, warmup, seconds }) =>
+    ({ track, players, scenario, camera, warmup, seconds }));
   liveIndex = -1;
   save(); paintShots(); paintTotal();
 }

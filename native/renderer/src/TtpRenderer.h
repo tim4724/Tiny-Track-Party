@@ -31,6 +31,7 @@
 #include "ttp/glb_mesh.h"
 namespace ttp { namespace kitcolors { struct Mesh; } }
 #include "ttp/car_footprint.h"
+#include "ttp/ground_grid.h"
 
 
 // The car contact shadow's live knobs, and the ONE place their defaults are
@@ -442,6 +443,9 @@ public:
     // hasPainted latch is the caller). Polls a fence armed by the first
     // presented frame after a build; sticky true until the scene is released.
     bool settled();
+
+    // The built scene's ground surface, as the mesh draws it (ttp/ground_grid.h).
+    const ttp::rt::GroundGrid& groundGrid() const { return mGroundGrid; }
 
     bool buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& theme,
             const std::vector<TtpRosterCar>& roster, const ttp::rt::WearPlan& wear);
@@ -1065,10 +1069,9 @@ private:
     // placement stands on the mesh's own piecewise-linear surface rather than
     // the analytic field — between grid vertices they differ by enough to bury
     // a shadow disc or a starfish. Filled by buildTerrainGrid, read by
-    // groundSurfaceY (which answers groundY wherever the grid is absent).
-    std::vector<float> mTerrainHs;
-    int mTerrainCols = 0, mTerrainRows = 0;
-    float mTerrainSx = 0, mTerrainSz = 0;
+    // groundSurfaceY (which answers groundY wherever the grid is absent), and
+    // handed out by groundGrid() so the follow camera keeps clear of it.
+    ttp::rt::GroundGrid mGroundGrid;
     void buildTerrainGrid(const TrackBin& tb);
     float groundSurfaceY(const TrackBin& tb, float x, float z) const;
     float footprintY(const TrackBin& tb, float x, float z, float r) const;

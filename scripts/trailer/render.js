@@ -168,6 +168,7 @@ async function renderShot(page, shot, port) {
   });
   if (shot.seed != null) q.set('seed', String(shot.seed));
   if (shot.dividers === false) q.set('dividers', '0');
+  if (shot.camera === 'follow') q.set('cam', 'follow');
 
   await page.goto(`http://127.0.0.1:${port}/?${q}`, { waitUntil: 'networkidle' });
 

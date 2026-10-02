@@ -83,6 +83,12 @@ constexpr uint32_t NAME_TAG_DECK_CHUNK = 16;
 
 NameTagDeck nameTagDeck(const std::vector<OutSample>& samples, bool closed);
 
+// Does the road deck stand between `eye` and `p`? The first `eyeClear` and the
+// last `farClear` units of the line are exempt — the end at a car, so the deck
+// it sits on never hides it. The tags ask it, and so does the follow camera
+// (ttp/camera.h), each with its own clearances.
+bool deckBlocks(const NameTagDeck& deck, V3 eye, V3 p, float eyeClear, float farClear);
+
 struct NameTag {
     int32_t cell;    // the cell the tag is drawn in
     int32_t target;  // the roster slot of the car it names

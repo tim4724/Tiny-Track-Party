@@ -169,6 +169,9 @@ export class Stage {
     // grid of cars racing, so a track's SHADOWS can be looked at without four
     // close-up chase cells in the way.
     this.soloCam = false;
+    // The trailer's overview (?cam=follow): no cells either, and the one camera
+    // follows the lead battle from outside the circuit (CAM.FOLLOW — the rig is C++'s).
+    this.followCam = false;
     this._dividers = true;   // ?dividers=0; pushed to the renderer by _loop
     // Opt-in resolution cap (?dpr=0.5). A gallery preview iframe lays out at full
     // logical size, so at full DPR every card allocates a screen-sized drawing
@@ -1455,7 +1458,7 @@ export class Stage {
   // move, so the steady-state frame really is one call with a dt. Returns the
   // cell owners, in order.
   _syncCells() {
-    const ids = this.soloCam ? [] : this._order.filter((id) => this.cars.has(id));
+    const ids = this.soloCam || this.followCam ? [] : this._order.filter((id) => this.cars.has(id));
     if (ids.length) this._hudHidden = false; // cells are back; the HUD gets placed below
     const cellSig = ids.join(',');
     if (cellSig !== this._cellSig) { this._cellSig = cellSig; this.display.cells(ids); }
@@ -1465,6 +1468,7 @@ export class Stage {
     if (ids.length) this._syncOverlay(ids);
     const mode = ids.length ? null
         : this._free ? CAM.FREE
+        : this.followCam ? CAM.FOLLOW
         : this.bboxOrbit ? CAM.BBOX
         : this.orbit ? CAM.ORBIT : CAM.STILL;
     if (mode !== null && mode !== this._camMode) { this._camMode = mode; this.display.camera(mode); }

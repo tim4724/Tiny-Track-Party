@@ -93,12 +93,13 @@ bool crossesTri(V3 a, V3 d, float t0, float t1, V3 p, V3 q, V3 r) {
     return t > t0 && t < t1;
 }
 
-// Does the road deck stand between `eye` and `p`?
-bool deckBlocks(const NameTagDeck& deck, V3 eye, V3 p) {
+}  // namespace
+
+bool deckBlocks(const NameTagDeck& deck, V3 eye, V3 p, float eyeClear, float farClear) {
     const V3 d = p - eye;
     const float len = std::sqrt(dot(d, d));
-    if (len <= DECK_EYE_CLEAR + DECK_CAR_CLEAR) return false;
-    const float t0 = DECK_EYE_CLEAR / len, t1 = 1 - DECK_CAR_CLEAR / len;
+    if (len <= eyeClear + farClear) return false;
+    const float t0 = eyeClear / len, t1 = 1 - farClear / len;
     const uint32_t n = (uint32_t) deck.left.size();
     for (const NameTagDeck::Chunk& c : deck.chunks) {
         if (!crossesBox(eye, d, t0, t1, c.lo, c.hi)) continue;
@@ -110,6 +111,8 @@ bool deckBlocks(const NameTagDeck& deck, V3 eye, V3 p) {
     }
     return false;
 }
+
+namespace {
 
 // Is the tag at `tag` (car `s`'s) hidden from `eye` by a monster truck or the deck?
 // The cell's own car never hides one: the camera looks over its roof, so driving
@@ -123,7 +126,7 @@ bool covered(const TtpFrameInput& f, const NameTagDeck& deck, V3 eye, V3 tag, ui
         if (own < f.carCount && ttp_monster_ghosted(cars[k].pos, eyeV, cars[own].pos)) continue;
         if (blocks(boxOf(cars[k]), eye, tag)) return true;
     }
-    return deckBlocks(deck, eye, tag);
+    return deckBlocks(deck, eye, tag, DECK_EYE_CLEAR, DECK_CAR_CLEAR);
 }
 
 // Scale by eye distance: 1 at NAME_TAG_CLOSE and nearer, then two linear legs.

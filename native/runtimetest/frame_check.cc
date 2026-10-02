@@ -91,6 +91,7 @@ static_assert(TTP_CAM_STILL == ttp::rt::CAM_STILL, "camera mode drift");
 static_assert(TTP_CAM_ORBIT == ttp::rt::CAM_ORBIT, "camera mode drift");
 static_assert(TTP_CAM_BBOX == ttp::rt::CAM_BBOX, "camera mode drift");
 static_assert(TTP_CAM_FREE == ttp::rt::CAM_FREE, "camera mode drift");
+static_assert(TTP_CAM_FOLLOW == ttp::rt::CAM_FOLLOW, "camera mode drift");
 
 namespace {
 
@@ -651,6 +652,283 @@ void testOverviewViews(const GameTrack& track) {
     d.height = 0;
     const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d));
     checkF(ttp_frame_views(h)[0].aspect, 800.0f, "a zero-height surface falls back to height 1");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 5b. The FOLLOW overview: a low camera on the lead battle. What it is FOR is
+//     pinned here — who is in the battle, that it looks INWARD across it at
+//     the circuit, that the aim moves WITH the race and not a spring behind
+//     it, that a change of leader does not jump the aim, and that a leader
+//     pointing up a loop does not spin the camera.
+// ---------------------------------------------------------------------------
+void placeCar(Car& c, V3 pos, V3 fwd, double totalS) {
+  c.pose.pos = {pos.x, pos.y, pos.z};
+  c.pose.forward = {fwd.x, fwd.y, fwd.z};
+  c.pose.up = {0, 1, 0};
+  c.totalS = totalS;
+}
+
+void checkNear(V3 got, V3 want, const std::string& what) {
+  const V3 e = got - want;
+  check(std::sqrt(rt::dot(e, e)) < 1e-4f, what);
+}
+
+// A fresh follow-cam state over the three-player roster.
+DisplayState followState() {
+  DisplayState d = freshState();
+  d.roster = {P0, P1, P2};
+  d.camMode = TTP_CAM_FOLLOW;
+  return d;
+}
+
+// A flat strip of road: one piece, `halfX` either side of `c` across and
+// `halfZ` along Z.
+rt::NameTagDeck stripDeck(V3 c, float halfX, float halfZ) {
+  rt::NameTagDeck deck;
+  deck.left = {c + V3{-halfX, 0, -halfZ}, c + V3{-halfX, 0, halfZ}};
+  deck.right = {c + V3{halfX, 0, -halfZ}, c + V3{halfX, 0, halfZ}};
+  deck.chunks.push_back({c + V3{-halfX, 0, -halfZ}, c + V3{halfX, 0, halfZ}, 0, 1});
+  return deck;
+}
+
+void testFollowView(const GameTrack& track) {
+  Game game(threePlayers(), track, nullptr);
+  Car& a = *game.cars()[0];
+  Car& b = *game.cars()[1];
+  Car& c = *game.cars()[2];
+  DisplayState d = followState();
+
+  // A leader, a car 3 units of track behind it (in the battle), and one 20
+  // behind (out of it, and far away so it would drag the aim if counted).
+  placeCar(a, {0, 0, 0}, {0, 0, 1}, 100);
+  placeCar(b, {2, 0, -3}, {0, 0, 1}, 97);
+  placeCar(c, {50, 0, -80}, {0, 0, 1}, 80);
+
+  const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d));
+  const TtpViewInput& v = ttp_frame_views(h)[0];
+  checkNear(d.follow.target, {1, 0, -1.5f}, "follow: aims at the battle's centre, the straggler out");
+  checkF(v.world[12], d.follow.pos.x, "follow: the view sits at the rig's eye (x)");
+  checkF(v.world[14], d.follow.pos.z, "follow: the view sits at the rig's eye (z)");
+  {
+    // The eye stands OUTSIDE the battle and faces the track's centre across
+    // it, swung FOLLOW_LEAD toward the leader's front (it heads +Z, so its
+    // front is seen from +Z, facing -Z).
+    V3 in = d.framing.center - d.follow.target;
+    in.y = 0;
+    const V3 face = rt::norm(in) * std::cos(rt::FOLLOW_LEAD) + V3{0, 0, -1} * std::sin(rt::FOLLOW_LEAD);
+    check(std::fabs(d.follow.yaw - std::atan2(face.x, face.z)) < 1e-5f,
+          "follow: faces inward, swung FOLLOW_LEAD toward the cars' fronts");
+    V3 eyeOut = d.follow.pos - d.framing.center, tgtOut = d.follow.target - d.framing.center;
+    eyeOut.y = tgtOut.y = 0;
+    check(rt::dot(eyeOut, eyeOut) > rt::dot(tgtOut, tgtOut) && d.follow.pos.y > d.follow.target.y,
+          "follow: the eye is further out from the circuit's centre than the battle, and above");
+  }
+  // The world's Z column points BACK at the eye, so its y is the pitch's sine.
+  check(std::fabs(v.world[9] - std::sin(rt::FOLLOW_PITCH)) < 1e-5f, "follow: looks down at FOLLOW_PITCH");
+  checkF(v.fov, rt::FOLLOW_FOV, "follow.fov");
+  checkF(v.nearZ, rt::CAM_NEAR, "follow.nearZ");
+  checkF(v.farZ, rt::CAM_FAR, "follow.farZ");
+  checkF(v.fogNear, d.framing.raceFogNear, "follow: the race fog band (near)");
+  checkF(v.fogFar, d.framing.raceFogFar, "follow: the race fog band (far)");
+
+  // The battle drives on at a steady 24 u/s (0.4 a frame) for four seconds —
+  // long enough for the carried velocity's start-up to wash out: the aim rides
+  // with it and settles ON its centre. A spring on the aim alone would be left
+  // v/omega behind.
+  auto drive = [&](int i) {
+    placeCar(a, {0, 0, 0.4f * i}, {0, 0, 1}, 100 + 0.4 * i);
+    placeCar(b, {2, 0, -3 + 0.4f * i}, {0, 0, 1}, 97 + 0.4 * i);
+  };
+  for (int i = 1; i <= 240; i++) {
+    drive(i);
+    rt::buildFrame(d, &game, DT, caseAspect(d));
+  }
+  {
+    const V3 off = d.follow.target - V3{1, 0, -1.5f + 0.4f * 240};
+    check(std::sqrt(rt::dot(off, off)) < 0.02f, "follow: at a steady speed the aim sits on the battle, no lag");
+  }
+
+  // b takes the lead on track progress mid-stride: the aim moves exactly as it
+  // does on the same frame with the old leader still ahead.
+  {
+    DisplayState same = d;
+    drive(241);
+    rt::buildFrame(same, &game, DT, caseAspect(same));
+    b.totalS = a.totalS + 1;
+    rt::buildFrame(d, &game, DT, caseAspect(d));
+    checkNear(d.follow.target, same.follow.target, "follow: a change of leader does not jolt the aim");
+  }
+
+  // A third car joins the battle and its centre shifts: the aim must GATHER
+  // speed toward it — under 1% of the way in the first frame, where a plain
+  // ease covers ~5% and a snap all of it — and still be there within 3 s.
+  {
+    placeCar(a, {0, 0, 0}, {0, 0, 1}, 100);
+    placeCar(b, {2, 0, -3}, {0, 0, 1}, 97);
+    placeCar(c, {50, 0, -80}, {0, 0, 1}, 80);
+    DisplayState joined = followState();
+    rt::buildFrame(joined, &game, DT, caseAspect(joined));
+    const V3 from = joined.follow.target;
+    placeCar(c, {4, 0, -4.5f}, {0, 0, 1}, 98);  // into the battle
+    const V3 to = V3{6, 0, -7.5f} * (1.0f / 3);
+    const V3 jump = to - from;
+    const float span = std::sqrt(rt::dot(jump, jump));
+    rt::buildFrame(joined, &game, DT, caseAspect(joined));
+    const V3 moved = joined.follow.target - from;
+    check(std::sqrt(rt::dot(moved, moved)) < 0.01f * span, "follow: the aim gathers speed, it does not jump");
+    for (int i = 0; i < 180; i++) rt::buildFrame(joined, &game, DT, caseAspect(joined));
+    const V3 left = joined.follow.target - to;
+    check(std::sqrt(rt::dot(left, left)) < 0.05f * span, "follow: …and arrives within 3 s");
+    placeCar(c, {50, 0, -80}, {0, 0, 1}, 80);
+  }
+
+  // The leader points straight up a loop: the camera turns exactly as it would
+  // have with the leader still level, against a copy of the rig that saw it so.
+  DisplayState level = d;
+  const V3 bAt = {(float) b.pose.pos.x, (float) b.pose.pos.y, (float) b.pose.pos.z};
+  placeCar(b, bAt, {0, 1, 0}, b.totalS);
+  rt::buildFrame(d, &game, DT, caseAspect(d));
+  placeCar(b, bAt, {0, 0, 1}, b.totalS);
+  rt::buildFrame(level, &game, DT, caseAspect(level));
+  checkF(d.follow.yaw, level.follow.yaw, "follow: a leader pointing up a loop keeps its last level heading");
+
+  // A BRIDGE across the sight line. Film the battle once with no deck to find
+  // where the camera wants to be, lay a strip of road across the middle of its
+  // line to the cars, and film the same battle again: the camera must drop
+  // under it and see every car, where the control never leaves FOLLOW_PITCH.
+  {
+    placeCar(a, {0, 0, 0}, {0, 0, 1}, 100);
+    placeCar(b, {2, 0, -3}, {0, 0, 1}, 97);
+    // The race runs on a raised deck, 3 over the ground (Gulch's shape), so
+    // there is room under a bridge for a lens that keeps FOLLOW_LENS_CLEAR off
+    // the ground.
+    DisplayState open = followState();
+    open.ground.flatY = -3;
+    rt::buildFrame(open, &game, DT, caseAspect(open));
+    const V3 mid = (open.follow.pos + open.follow.target) * 0.5f;
+    // Two samples of road laid flat across that midpoint: 8 wide, but only 2
+    // along the camera's line (which runs mostly along Z), so it is a bridge in
+    // between and not a roof over the camera itself.
+    const rt::NameTagDeck deck = stripDeck(mid, 4, 1);
+    const V3 aim = {0, rt::FOLLOW_AIM_UP, 0};
+    check(rt::deckBlocks(deck, open.follow.pos, V3{0, 0, 0} + aim, 0, rt::FOLLOW_CAR_CLEAR),
+          "premise: the bridge hides the leader from where the open camera stands");
+
+    DisplayState bridged = followState();
+    bridged.ground.flatY = -3;
+    bridged.tagDeck = deck;
+    for (int i = 0; i < 120; i++) {
+      rt::buildFrame(open, &game, DT, caseAspect(open));
+      rt::buildFrame(bridged, &game, DT, caseAspect(bridged));
+    }
+    checkF(open.follow.pitch, rt::FOLLOW_PITCH, "follow: with nothing in the way the pitch stays put");
+    check(bridged.follow.pitch < rt::FOLLOW_PITCH, "follow: a bridge ahead brings the camera DOWN");
+    check(!rt::deckBlocks(deck, bridged.follow.pos, V3{0, 0, 0} + aim, 0, rt::FOLLOW_CAR_CLEAR) &&
+              !rt::deckBlocks(deck, bridged.follow.pos, V3{2, 0, -3} + aim, 0, rt::FOLLOW_CAR_CLEAR),
+          "follow: …to where the bridge hides neither car in the battle");
+    const V3 up = {0, rt::FOLLOW_LENS_CLEAR, 0};
+    check(!rt::deckBlocks(deck, bridged.follow.pos - up, bridged.follow.pos + up, 0, 0),
+          "follow: …and the lens is not grazing it");
+
+    // A deck half a unit under the open camera, 2 across: it hides no car (the
+    // sight line falls a quarter of a unit over that span), so only the rule
+    // that the lens keeps FOLLOW_LENS_CLEAR off any deck can move the camera.
+    const V3 eye = open.follow.pos - V3{0, 0.5f, 0};
+    const rt::NameTagDeck under = stripDeck(eye, 1, 1);
+    check(!rt::deckBlocks(under, open.follow.pos, V3{0, 0, 0} + aim, 0, rt::FOLLOW_CAR_CLEAR) &&
+              !rt::deckBlocks(under, open.follow.pos, V3{2, 0, -3} + aim, 0, rt::FOLLOW_CAR_CLEAR),
+          "premise: the deck under the open camera hides no car");
+    // The deck arrives under a camera already settled above it, and every
+    // pitch it may take instead is BELOW it: easing down would fly the lens
+    // through the road, so it must cut, landing on its new pitch in one frame.
+    DisplayState grazed = open;
+    grazed.tagDeck = under;
+    rt::buildFrame(grazed, &game, DT, caseAspect(grazed));
+    check(grazed.follow.pos.y < eye.y,
+          "follow: a camera whose way down crosses a deck cuts under it, never through");
+    for (int i = 0; i < 120; i++) rt::buildFrame(grazed, &game, DT, caseAspect(grazed));
+    check(grazed.follow.pitch != rt::FOLLOW_PITCH &&
+              !rt::deckBlocks(under, grazed.follow.pos - up, grazed.follow.pos + up, 0, 0),
+          "follow: a lens grazing a deck moves off it");
+  }
+
+  // A HILL in the foreground. On a flat field the camera keeps its pitch —
+  // the ground the road runs across is not a hill, even as a real grid. Raise
+  // a mound there instead, 40% of the way from the lens to the battle and
+  // nearly up to the sight line (it hides no car): the camera must climb
+  // until the mound sits low in the shot.
+  {
+    placeCar(a, {0, 0, 0}, {0, 0, 1}, 100);
+    placeCar(b, {2, 0, -3}, {0, 0, 1}, 97);
+    DisplayState field = followState();
+    rt::buildFrame(field, &game, DT, caseAspect(field));
+    const V3 at = field.follow.pos * 0.6f + field.follow.target * 0.4f;
+    rt::GroundGrid flat;
+    flat.cols = flat.rows = 2;
+    flat.sx = flat.sz = 2.5f;
+    flat.x0 = at.x - 2.5f;
+    flat.z0 = at.z - 2.5f;
+    flat.h.assign(9, 0.0f);
+    rt::GroundGrid mound = flat;
+    mound.h[4] = at.y - 0.3f;  // the centre vertex, just under the sight line
+    check(mound.at(at.x, at.z) - mound.flatY > rt::FOLLOW_HILL_RISE,
+          "premise: the mound rises more than FOLLOW_HILL_RISE over the battle's ground");
+
+    DisplayState onField = field, onMound = field;
+    onField.ground = flat;
+    onMound.ground = mound;
+    for (int i = 0; i < 120; i++) {
+      rt::buildFrame(onField, &game, DT, caseAspect(onField));
+      rt::buildFrame(onMound, &game, DT, caseAspect(onMound));
+    }
+    checkF(onField.follow.pitch, rt::FOLLOW_PITCH, "follow: a flat field is not a hill");
+    check(onMound.follow.pitch > rt::FOLLOW_PITCH, "follow: a hill in the foreground sends the camera UP");
+
+    // …and over that flat field, with the road ON the ground, a bridge still
+    // brings the camera down: the field it dips toward is not a hill either.
+    // A thin strip (0.8 along the line) just under the middle of the open
+    // camera's line to the leader's body: that line dips through it, while
+    // the line from one pitch lower passes well beneath.
+    const V3 mid = (field.follow.pos + V3{0, rt::FOLLOW_AIM_UP, 0}) * 0.5f;
+    const V3 span = mid - V3{0, 0.05f, 0};
+    const rt::NameTagDeck low = stripDeck(span, 4, 0.4f);
+    DisplayState underField = field;
+    underField.ground = flat;
+    underField.tagDeck = low;
+    check(rt::deckBlocks(low, field.follow.pos, V3{0, rt::FOLLOW_AIM_UP, 0}, 0, rt::FOLLOW_CAR_CLEAR),
+          "premise: the low bridge hides the leader from where the open camera stands");
+    for (int i = 0; i < 120; i++) rt::buildFrame(underField, &game, DT, caseAspect(underField));
+    check(underField.follow.pitch < rt::FOLLOW_PITCH,
+          "follow: on a road across a flat field, a bridge still brings the camera DOWN");
+
+    // A RIDGE 80% of the way to the battle — past the stretch the hill rule
+    // looks at — rising over the line to the leader: only the sight-line test
+    // can see it, and the camera must lift until the leader shows over it.
+    // A 2x2-cell patch of ground centred on `c`, peaking at `y` there.
+    auto patchAt = [&](V3 c, float y, float cell) {
+      rt::GroundGrid g = flat;
+      g.sx = g.sz = cell;
+      g.x0 = c.x - cell;
+      g.z0 = c.z - cell;
+      g.h[4] = y;
+      return g;
+    };
+    const V3 ridgeAt = field.follow.pos * 0.2f + V3{0, rt::FOLLOW_AIM_UP, 0} * 0.8f;
+    DisplayState behindRidge = field;
+    behindRidge.ground = patchAt(ridgeAt, ridgeAt.y + 0.2f, 1.0f);  // narrow: all of it past the hill reach
+    for (int i = 0; i < 120; i++) rt::buildFrame(behindRidge, &game, DT, caseAspect(behindRidge));
+    check(behindRidge.follow.pitch > rt::FOLLOW_PITCH, "follow: a ridge hiding the leader sends the camera UP");
+
+    // Ground rising to just under the LENS (hides nothing): the lens must end
+    // up FOLLOW_LENS_CLEAR over it.
+    const V3 eyeAt = field.follow.pos;
+    DisplayState onSlope = field;
+    onSlope.ground = patchAt(eyeAt, eyeAt.y - 0.5f, 2.5f);
+    for (int i = 0; i < 120; i++) rt::buildFrame(onSlope, &game, DT, caseAspect(onSlope));
+    const V3 lens = onSlope.follow.pos;
+    check(lens.y >= onSlope.ground.at(lens.x, lens.z) + rt::FOLLOW_LENS_CLEAR,
+          "follow: the lens keeps FOLLOW_LENS_CLEAR over the ground");
   }
 }
 
@@ -1698,6 +1976,7 @@ int main() {
   testHold(bt.game);
   testHeldChaseCam(bt.game);
   testOverviewViews(bt.game);
+  testFollowView(bt.game);
   testRaceViews(bt.game);
   testSplitLensIsLayoutInvariant(bt.game);
   testOverviewOwnsTheSurface(bt.game);

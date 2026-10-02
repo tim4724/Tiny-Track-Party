@@ -49,6 +49,10 @@
 //
 // Optional: `dividers: false` drops the ink lines between split cells (default on —
 // they are part of the split-screen look, not chrome).
+// Optional: `camera: 'follow'` swaps the split-screen cells for ONE overview that
+// follows the lead battle from above (TTP_CAM_FOLLOW; the rig is FollowCam in
+// native/libttp-runtime/ttp/camera.h). `players` still sets the field's humans; it
+// just stops deciding the picture.
 
 module.exports = [
   // Built in /trailer.html and pasted in. The editor's clock is the renderer's clock, so

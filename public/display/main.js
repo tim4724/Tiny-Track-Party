@@ -226,6 +226,9 @@ if (_trackParams.get('scenario') === 'assets') scene.showcase(true);
 // ?dividers=0 — drop the chunky ink lines between split-screen cells (default
 // ON; a debug-panel toggle so the look can be A/B'd at a party).
 scene.showDividers = _trackParams.get('dividers') !== '0';
+// ?cam=follow — the trailer's overview: one camera on the lead battle instead of
+// the split-screen cells (scripts/trailer/shots.js `camera`).
+scene.followCam = _trackParams.get('cam') === 'follow';
 scene.orbit = true;
 scene.bboxOrbit = true; // lobby sweeps an ellipse around the track's bounding box (close, elongated like the track)
 let sceneReady = false;

@@ -53,8 +53,8 @@ void TtpRenderer::setupTerrain(const TrackBin& tb) {
         case 3: mTerrainAmp = 5.2f; break;  // snow
         default: mTerrainAmp = 0; break;    // sand, wood
     }
-    mTerrainHs.clear();
-    mTerrainCols = mTerrainRows = 0;
+    mGroundGrid = {};
+    mGroundGrid.flatY = tb.groundY;
     // Own stream, derived from the scatter seed: reusing scSeed1's VALUE (not
     // its stream) keeps every existing tree/clutter/landmark roll untouched.
     mTerrainSeed = tb.scSeed1 ^ 0x7465726eu;
@@ -179,17 +179,19 @@ float TtpRenderer::terrainY(const TrackBin& tb, float x, float z) const {
 void TtpRenderer::buildTerrainGrid(const TrackBin& tb) {
     if (mTerrainAmp <= 0) return;
     constexpr float STEP = 9.0f;
-    mTerrainCols = std::min(48, std::max(12,
+    mGroundGrid.cols = std::min(48, std::max(12,
             (int) std::ceil((mTerrainX1 - mTerrainX0) / STEP)));
-    mTerrainRows = std::min(48, std::max(12,
+    mGroundGrid.rows = std::min(48, std::max(12,
             (int) std::ceil((mTerrainZ1 - mTerrainZ0) / STEP)));
-    mTerrainSx = (mTerrainX1 - mTerrainX0) / mTerrainCols;
-    mTerrainSz = (mTerrainZ1 - mTerrainZ0) / mTerrainRows;
-    mTerrainHs.resize((size_t) (mTerrainCols + 1) * (mTerrainRows + 1));
-    for (int r = 0; r <= mTerrainRows; r++) {
-        for (int c = 0; c <= mTerrainCols; c++) {
-            mTerrainHs[(size_t) r * (mTerrainCols + 1) + c] = terrainY(tb,
-                    mTerrainX0 + c * mTerrainSx, mTerrainZ0 + r * mTerrainSz);
+    mGroundGrid.x0 = mTerrainX0;
+    mGroundGrid.z0 = mTerrainZ0;
+    mGroundGrid.sx = (mTerrainX1 - mTerrainX0) / mGroundGrid.cols;
+    mGroundGrid.sz = (mTerrainZ1 - mTerrainZ0) / mGroundGrid.rows;
+    mGroundGrid.h.resize((size_t) (mGroundGrid.cols + 1) * (mGroundGrid.rows + 1));
+    for (int r = 0; r <= mGroundGrid.rows; r++) {
+        for (int c = 0; c <= mGroundGrid.cols; c++) {
+            mGroundGrid.h[(size_t) r * (mGroundGrid.cols + 1) + c] = terrainY(tb,
+                    mTerrainX0 + c * mGroundGrid.sx, mTerrainZ0 + r * mGroundGrid.sz);
         }
     }
 }
@@ -207,21 +209,8 @@ float TtpRenderer::footprintY(const TrackBin& tb, float x, float z, float r) con
 }
 
 float TtpRenderer::groundSurfaceY(const TrackBin& tb, float x, float z) const {
-    if (mTerrainHs.empty()) return tb.groundY;
-    const float u = (x - mTerrainX0) / mTerrainSx, v = (z - mTerrainZ0) / mTerrainSz;
-    if (u <= 0 || v <= 0 || u >= mTerrainCols || v >= mTerrainRows) return tb.groundY;
-    const int c = std::min(mTerrainCols - 1, (int) u);
-    const int r = std::min(mTerrainRows - 1, (int) v);
-    const float fu = u - c, fv = v - r;
-    const auto h = [&](int cc, int rr) {
-        return mTerrainHs[(size_t) rr * (mTerrainCols + 1) + cc];
-    };
-    // TRIANGLE-exact, not bilinear: the mesh splits each cell along the b–d
-    // anti-diagonal (see the index loop), and a blob draped onto the other
-    // interpolant would still dip under the drawn surface.
-    const float a = h(c, r), b = h(c + 1, r), d = h(c, r + 1), e = h(c + 1, r + 1);
-    if (fu + fv <= 1.0f) return a + (b - a) * fu + (d - a) * fv;
-    return e + (d - e) * (1.0f - fu) + (b - e) * (1.0f - fv);
+    if (mGroundGrid.h.empty()) return tb.groundY;
+    return mGroundGrid.at(x, z);
 }
 
 // The painted road — a direct port of render/track.js buildRoad's sweep: a
@@ -1536,12 +1525,12 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
             // (buildTerrainGrid), the same surface every placement stood on;
             // the border rows sit exactly at groundY (terrainY fades to 0
             // there), so the ring joins without a seam.
-            const int cols = mTerrainCols, rows = mTerrainRows;
-            const float sx = mTerrainSx, sz = mTerrainSz;
+            const int cols = mGroundGrid.cols, rows = mGroundGrid.rows;
+            const float sx = mGroundGrid.sx, sz = mGroundGrid.sz;
             const auto hAt = [&](int c, int r) {
                 c = std::min(cols, std::max(0, c));
                 r = std::min(rows, std::max(0, r));
-                return mTerrainHs[(size_t) r * (cols + 1) + c];
+                return mGroundGrid.h[(size_t) r * (cols + 1) + c];
             };
             for (int r = 0; r <= rows; r++) {
                 for (int c = 0; c <= cols; c++) {
