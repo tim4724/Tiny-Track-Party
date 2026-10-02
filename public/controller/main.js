@@ -679,11 +679,7 @@ async function joinRace(name, { persist } = {}) {
   // request the platform refused to even put, which is this very call site in
   // the shell (no gesture behind a launcher join): that leaves 'unknown', keeps
   // the phone on tilt, and re-asks on the player's next tap.
-  // Not on AirConsole: the frame's own sensor is the one AC never feeds, so
-  // asking for it can only fail — 'denied' on iOS, 'unsupported' wherever the
-  // settle window closes before the relay's first sample. The relay resolves
-  // the state there instead (TiltInput.relayOrientation).
-  if (inputMode === 'tilt' && !acBoot && (await tilt.enableMotion()) === 'unsupported') {
+  if (inputMode === 'tilt' && (await tilt.enableMotion()) === 'unsupported') {
     applyInputMode('buttons');
   }
   net.connect(n);

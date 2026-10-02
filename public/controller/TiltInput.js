@@ -145,6 +145,11 @@ export class TiltInput {
   // exception that it CANNOT be final: a request the platform refused to even
   // put (no gesture behind it) leaves 'unknown' and re-asks on the next tap.
   async enableMotion() {
+    // Not on AirConsole: the frame's own sensor is the one AC never feeds, so
+    // asking for it can only fail ('denied' on iOS, 'unsupported' wherever the
+    // settle window closes before the relay's first sample). The relay resolves
+    // the state there instead (relayOrientation).
+    if (window.airconsole) return this.motionState;
     const DOE = window.DeviceOrientationEvent;
     if (!DOE) return this.motionState; // 'unsupported' since the constructor — nothing to request
     try {

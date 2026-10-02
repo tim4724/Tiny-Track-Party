@@ -77,7 +77,7 @@ JSDoc says ("for gyroscope"): measured on a device, held still at a 65° roll
 they read 65 where a rate reads 0, and AirConsole's engineers confirm it. So
 `TiltInput.relayOrientation` hands them to the same path a browser's own event
 takes. The first relayed sample is also what resolves `motionState` — the
-join skips the frame's own permission request and settle check on AC, because
+frame's own permission request and settle check (`enableMotion`) are a no-op on AC, because
 that sensor is the one AC never feeds: iOS answers `denied`, and the settle
 window closes before the relay's first sample (~1.9 s after load on the
 device), which is how a live phone once read "Tilt: Not available". Asking the platform for
