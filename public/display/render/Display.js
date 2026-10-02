@@ -165,6 +165,7 @@ export class Display {
       nameTags: mod.cwrap('ttp_display_name_tags', 'number', ['number', 'number']),
       slotIds: mod.cwrap('ttp_display_slot_ids_json', 'string', []),
       dividers: mod.cwrap('ttp_display_dividers', null, ['number']),
+      steerBars: mod.cwrap('ttp_display_steer_bars', null, ['number']),
       camera: mod.cwrap('ttp_display_camera', null, ['number']),
       look: mod.cwrap('ttp_display_look', null, ['number', 'number', 'number', 'number', 'number', 'number']),
       fog: mod.cwrap('ttp_display_fog', null, ['number']),
@@ -708,6 +709,7 @@ export class Display {
 
   // The ink rules on the split-screen seams (?dividers=0 turns them off).
   dividers(on) { this._fn.dividers(on ? 1 : 0); }
+  steerBars(on) { this._fn.steerBars(on ? 1 : 0); }
 
   camera(mode) { this._fn.camera(mode); }
   look(eye, target) { this._fn.look(eye.x, eye.y, eye.z, target.x, target.y, target.z); }

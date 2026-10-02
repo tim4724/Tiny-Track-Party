@@ -345,7 +345,7 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
         TtpCellHudInput& o = outHud[i];
         o.car = -1;
         o.steer = 0;
-        o.flags = (d.cardMask >> i) & 1u ? 0u : TTP_HUD_STEER_BAR;
+        o.flags = d.steerBars && !((d.cardMask >> i) & 1u) ? TTP_HUD_STEER_BAR : 0u;
         for (size_t j = 0; j < d.roster.size(); j++) {
             if (d.roster[j] != d.cells[i]) continue;
             o.car = (int32_t) j;

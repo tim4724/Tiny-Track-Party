@@ -485,6 +485,11 @@ jbyteArray n_ttp_display_slot_ids_json(JNIEnv* env, jclass) {
     return toBytes(env, ttp_display_slot_ids_json());
 }
 
+void n_ttp_display_steer_bars(JNIEnv* env, jclass, jint a0) {
+    (void) env;
+    ttp_display_steer_bars((int) a0);
+}
+
 void n_ttp_dispose(JNIEnv* env, jclass, jint a0) {
     (void) env;
     ttp_dispose((int) a0);
@@ -1414,6 +1419,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_display_shadows", "(I)V", (void*) n_ttp_display_shadows },
     { "ttp_display_showcase", "(I)V", (void*) n_ttp_display_showcase },
     { "ttp_display_slot_ids_json", "()[B", (void*) n_ttp_display_slot_ids_json },
+    { "ttp_display_steer_bars", "(I)V", (void*) n_ttp_display_steer_bars },
     { "ttp_dispose", "(I)V", (void*) n_ttp_dispose },
     { "ttp_events_json", "(I)[B", (void*) n_ttp_events_json },
     { "ttp_fast_forward", "(I)V", (void*) n_ttp_fast_forward },

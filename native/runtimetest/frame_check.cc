@@ -1373,6 +1373,19 @@ void testCellHud(const GameTrack& track) {
     d.cardMask = 0;
   }
 
+  // Steer bars off (a trailer's clean chase shot): every cell's bar goes, and
+  // each cell still names its car. Back on, they return.
+  {
+    d.steerBars = false;
+    const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d));
+    const TtpCellHudInput* hud = ttp_frame_hud(h);
+    checkU(hud[0].flags | hud[1].flags, 0, "steer bars off takes every cell's bar");
+    check(hud[1].car == 0, "…but the cells still name their cars");
+    d.steerBars = true;
+    h = rt::buildFrame(d, &game, DT, caseAspect(d));
+    checkU(ttp_frame_hud(h)[0].flags, TTP_HUD_STEER_BAR, "steer bars back on draws them again");
+  }
+
   // Held (the pause overlay, the end-of-race fast-forward): the field is at
   // rest, so the bars are centred with it. A bar still showing full lock behind
   // the pause glass says the player is steering, which they are not.

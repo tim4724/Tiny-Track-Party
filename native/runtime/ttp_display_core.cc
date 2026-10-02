@@ -698,6 +698,10 @@ void ttp_display_cell_cards(uint32_t mask) {
     if (g_disp) g_disp->cardMask = mask;
 }
 
+void ttp_display_steer_bars(int enabled) {
+    if (g_disp) g_disp->steerBars = enabled != 0;
+}
+
 int ttp_display_name_tags(float* out, int maxTags) {
     if (!g_disp || !g_disp->built || !out || maxTags <= 0) return 0;
     const std::vector<ttp::rt::NameTag>& tags = g_disp->nameTags;

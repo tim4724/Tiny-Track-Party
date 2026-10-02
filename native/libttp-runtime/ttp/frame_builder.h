@@ -105,6 +105,7 @@ struct DisplayState {
     // the alternative — the shell describing its cards to C++ every frame — is
     // the serialized-HUD shape this whole layer exists to avoid.
     uint32_t cardMask = 0;
+    bool steerBars = true;              // ttp_display_steer_bars: off for a clean trailer shot
     bool dividers = true;               // ?dividers=0 debug toggle
 
     bool hold = false;                  // draw the last-read field, at rest

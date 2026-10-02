@@ -168,7 +168,9 @@ async function renderShot(page, shot, port) {
   });
   if (shot.seed != null) q.set('seed', String(shot.seed));
   if (shot.dividers === false) q.set('dividers', '0');
-  if (shot.camera === 'follow') q.set('cam', 'follow');
+  // The same table as the editor's CAMERA_QUERY (public/trailer/editor.js).
+  const camera = { 'chase-nohud': ['hud', '0'], follow: ['cam', 'follow'] }[shot.camera];
+  if (camera) q.set(...camera);
 
   await page.goto(`http://127.0.0.1:${port}/?${q}`, { waitUntil: 'networkidle' });
 

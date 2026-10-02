@@ -173,6 +173,10 @@ export class Stage {
     // follows the lead battle from outside the circuit (CAM.FOLLOW — the rig is C++'s).
     this.followCam = false;
     this._dividers = true;   // ?dividers=0; pushed to the renderer by _loop
+    // ?hud=0, the trailer's clean chase shot (scripts/trailer/shots.js lists what
+    // goes): the cells draw no HUD, the renderer's steer bars included — pushed
+    // like the dividers.
+    this.showHud = true;
     // Opt-in resolution cap (?dpr=0.5). A gallery preview iframe lays out at full
     // logical size, so at full DPR every card allocates a screen-sized drawing
     // buffer to show a ~500px thumbnail — and the gallery shows a grid of them.
@@ -300,6 +304,7 @@ export class Stage {
     this._camMode = null;
     this._cardMask = null;   // last pushed "a card owns this cell" bitmask
     this._divPushed = null;  // last pushed divider toggle
+    this._hudPushed = null;  // last pushed steer-bar toggle
     window.addEventListener('resize', () => this._onResize());
   }
 
@@ -950,6 +955,10 @@ export class Stage {
       this._divPushed = this._dividers;
       this.display.dividers(this._dividers);
     }
+    if (this.showHud !== this._hudPushed) {
+      this._hudPushed = this.showHud;
+      this.display.steerBars(this.showHud);
+    }
   }
 
   // The no-cell branch runs for the whole lobby, so this latches: hiding the
@@ -1388,6 +1397,11 @@ export class Stage {
     }
 
     this._renderFrame(frameDt, ids.length);
+    if (!this.showHud) {
+      this._hideCellHud();
+      this._scheduleNext();
+      return;
+    }
     this._paintNameTags(ids);
 
     // Place this frame's HUD over the cells the renderer just drew — ASKING it
@@ -1459,7 +1473,7 @@ export class Stage {
   // cell owners, in order.
   _syncCells() {
     const ids = this.soloCam || this.followCam ? [] : this._order.filter((id) => this.cars.has(id));
-    if (ids.length) this._hudHidden = false; // cells are back; the HUD gets placed below
+    if (ids.length && this.showHud) this._hudHidden = false; // cells with a HUD: it gets placed below
     const cellSig = ids.join(',');
     if (cellSig !== this._cellSig) { this._cellSig = cellSig; this.display.cells(ids); }
     // …and the same for the cell overlay's two flags, BEFORE the frame draws

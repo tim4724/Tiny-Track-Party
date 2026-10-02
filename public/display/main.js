@@ -229,6 +229,8 @@ scene.showDividers = _trackParams.get('dividers') !== '0';
 // ?cam=follow — the trailer's overview: one camera on the lead battle instead of
 // the split-screen cells (scripts/trailer/shots.js `camera`).
 scene.followCam = _trackParams.get('cam') === 'follow';
+// ?hud=0 — the trailer's clean chase shot: the cells without any HUD.
+scene.showHud = _trackParams.get('hud') !== '0';
 scene.orbit = true;
 scene.bboxOrbit = true; // lobby sweeps an ellipse around the track's bounding box (close, elongated like the track)
 let sceneReady = false;

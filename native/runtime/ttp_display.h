@@ -568,6 +568,12 @@ TTP_ABI int ttp_display_cell_rects(float* out, int maxCells);
  * it: one bit, not a description. */
 TTP_ABI void ttp_display_cell_cards(uint32_t mask);
 
+/* The cells' steer bars on/off (on by default) — the one piece of a cell's HUD
+ * the renderer draws, so a shell hiding its own HUD has to say so here too.
+ * Only a trailer's clean chase shot turns them off (?hud=0); the dividers are
+ * not HUD and keep their own switch (ttp_display_dividers). */
+TTP_ABI void ttp_display_steer_bars(int enabled);
+
 /* Name tags over every other PLAYER's car in each cell (never a CPU's), for the
  * frame ttp_display_frame last drew: the one HUD element placed PER FRAME,
  * because it rides a moving car. The text is the shell's, drawn at native

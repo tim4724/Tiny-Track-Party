@@ -27,9 +27,12 @@ import { CUPS, TRACK_LIST } from '/shared/tracks.js';
 // land where the catch-up rules put them, and the timeline marks where (see survey).
 const SCENARIOS = ['racing', 'chain'];
 const SPLITS = [1, 2, 4];
-// 'chase' is the split-screen cells; 'follow' is one overview on the lead battle
-// (?cam=follow). A shot with no `camera` is a chase shot.
-const CAMERAS = ['chase', 'follow'];
+// 'chase' is the split-screen cells, 'chase-nohud' the same without their HUD
+// (?hud=0), 'follow' one camera on the lead battle (?cam=follow). A shot with no
+// `camera` is a chase shot.
+const CAMERAS = ['chase', 'chase-nohud', 'follow'];
+// The same table as render.js's.
+const CAMERA_QUERY = { chase: '', 'chase-nohud': '&hud=0', follow: '&cam=follow' };
 const camOf = (shot) => shot.camera || 'chase';
 const STORE = 'ttp-trailer-edit';
 // Sim time is COUNTED IN STEPS and divided, never accumulated. Adding 1/60 repeatedly
@@ -98,7 +101,7 @@ let outAt = Infinity;    // sim time this shot stops at, while following
 // wall-clock dt nobody can reproduce and leaves the editor a few frames off the render
 // forever after. See public/display/frameGate.js.
 const urlFor = (shot) => `/?test=1&gate=1&scenario=${shot.scenario}&players=${shot.players}` +
-  `&track=${shot.track}&dpr=${VIEW_DPR}${camOf(shot) === 'follow' ? '&cam=follow' : ''}`;
+  `&track=${shot.track}&dpr=${VIEW_DPR}${CAMERA_QUERY[camOf(shot)]}`;
 
 // Everything on the display that is page chrome rather than the GAME. The monitor has
 // to show what the render will show, and the corner buttons in particular land square
@@ -776,8 +779,9 @@ function paintTotal() {
 function shotsJs() {
   const body = shots.map((s, i) => {
     const id = `${String(i + 1).padStart(2, '0')}-${s.track}-${s.players}p`;
+    const camera = camOf(s) === 'chase' ? '' : `camera: '${camOf(s)}', `;
     return `  { id: '${id}', scenario: '${s.scenario}', players: ${s.players}, ` +
-      `track: '${s.track}', ${camOf(s) === 'follow' ? "camera: 'follow', " : ''}` +
+      `track: '${s.track}', ${camera}` +
       `warmup: ${+s.warmup}, seconds: ${+s.seconds} },`;
   }).join('\n');
   // Only the ARRAY is worth pasting: shots.js carries a long field-by-field header that
