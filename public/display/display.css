@@ -633,14 +633,14 @@ html.cam-free #race { pointer-events: none; }
   white-space: nowrap; max-width: 14em; overflow: hidden; text-overflow: ellipsis;
 }
 
-/* A rival's name over their car, in your cell. Placed per frame by Stage's
-   _paintNameTags from ttp_display_name_tags: the transform anchors the tag's
-   tail's tip just above the point C++ projected, so nothing here may set
-   transform. The SLIM sticker (picked over five other styles): the chip's filled
-   livery sticker, one weight lighter, with a thin outline and tight padding, so
-   a pack of rivals does not turn into a wall of chips; and NO offset shadow:
-   over the live 3D view a paper shadow reads as a smeared second outline
-   pointing away from the scene's own light.
+/* Another player's name over their car, in your cell (CPU cars get none).
+   Placed per frame by Stage's _paintNameTags from ttp_display_name_tags: the
+   transform anchors the tag's tail's tip just above the point C++ projected,
+   so nothing here may set transform. The SLIM sticker (picked over five other
+   styles): the chip's filled livery sticker, one weight lighter, with a thin
+   outline and tight padding, so a pack of tags does not turn into a wall of
+   chips; and NO offset shadow: over the live 3D view a paper shadow reads as a
+   smeared second outline pointing away from the scene's own light.
    AUTHORED AT THE CLOSEST SIZE, C++'s scale 1 (ttp/name_tags.h), which is 4/3
    of the usual tag: C++ only ever shrinks it, so the type is never an upscaled
    raster. At the usual size this is a 2px outline and an 8px corner. */

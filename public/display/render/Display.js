@@ -621,7 +621,7 @@ export class Display {
     return this._slotIdCache || (this._slotIdCache = JSON.parse(this._fn.slotIds()));
   }
 
-  // Name tags over every other car, per cell, for the frame just drawn,
+  // Name tags over every other player's car, per cell, for the frame just drawn,
   // TAG_STRIDE floats each (ttp_display.h); the second float is a roster slot.
   // Read after frame() and painted in the same rAF, so the DOM and the canvas
   // reach the screen together. A view over scratch reused by the next call, for

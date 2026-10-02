@@ -14,7 +14,7 @@ import kotlin.math.ceil
 import kotlin.math.sqrt
 
 /**
- * The name tags over every other car in each cell, CPU included: the Android half
+ * The name tags over every other player's car in each cell: the Android half
  * of the web's `Stage._paintNameTags` and its `.name-tag` CSS, and the twin of
  * tvOS's `NameTags.swift`, method for method.
  *
@@ -74,11 +74,13 @@ class NameTagView(context: Context) : View(context) {
     /**
      * Who the field is: re-rasterizes only the stickers whose name or livery
      * moved, and drops the ones whose car left. Called whenever the scene's cars
-     * change (a build, a rename), never per frame.
+     * change (a build, a rename), never per frame. Only a car with a cell can be
+     * named, so a CPU car gets no sticker.
      */
     fun setField(cars: List<SceneCar>) {
         val next = HashMap<EngineId, TagBitmap>(cars.size * 2)
         for (car in cars) {
+            if (!car.cell) continue
             val color = Tokens.car(car.colorIndex).toArgb()
             val have = stickers[car.id]
             next[car.id] = if (have != null && have.name == car.name && have.color == color) have
@@ -178,7 +180,7 @@ class NameTagView(context: Context) : View(context) {
     }
 
     companion object {
-        /** Eight cars, so seven tags a cell, across the most cells a field can split into. */
+        /** The most cells a field can split into (eight), each tagging the other seven. */
         const val MAX_TAGS = 8 * 7
         /**
          * `clamp(1.2rem, 1.56vw, 1.8rem)` on a 1920-wide display lands on its

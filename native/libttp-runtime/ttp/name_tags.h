@@ -1,6 +1,9 @@
-// name_tags — where each split-screen cell shows the other cars' names.
+// name_tags — where each split-screen cell shows the other players' names.
 //
-// A tag floats over every other car in your cell, CPU included. The TEXT is
+// A tag floats over every other PLAYER's car in your cell: a car that owns a
+// cell of its own. CPU cars never get one (user decision: a CPU's name says
+// nothing to the couch, and its sticker buries the friend worth naming), so a
+// solo race has no tags at all and does none of this work. The TEXT is
 // drawn by the shell's UI toolkit at the panel's native resolution, because the
 // renderer's buffer is scaled down under load (ttp/render_scale.h) and type
 // rendered into it goes soft exactly on the box that needs it most. So this
@@ -92,7 +95,8 @@ struct NameTag {
 // that cell's picture rect as fractions of the surface, top-left origin
 // (ttp_display_cell_rects' first rect). Tags come back grouped by cell in cell
 // order and, within a cell, FAR TO NEAR, so a shell stacking them in order puts
-// the nearer name on top. Empty for an overview frame; a solo race tags the CPU.
+// the nearer name on top. Empty for an overview frame and for fewer than two
+// cells.
 //
 // `cover` is the fade state across frames, one entry per (view, car) — the
 // caller keeps it and hands it back; a size that does not fit this frame is

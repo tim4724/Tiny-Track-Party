@@ -964,17 +964,20 @@ export class Stage {
     }
   }
 
-  // Every other car's name over it, CPU included, placed by C++ off the frame just
-  // drawn (ttp_display_name_tags). THE ONE PER-FRAME DOM WRITE in this loop, and
-  // on purpose: a tag rides a moving car, and drawing its text here keeps it at
-  // the panel's resolution while the 3D buffer is scaled down. Only transform and
-  // opacity move per frame — compositor properties, no layout — and the text and
-  // colour are written only when a pooled element changes whose name it shows.
+  // Every other player's name over their car (never a CPU's), placed by C++ off
+  // the frame just drawn (ttp_display_name_tags). THE ONE PER-FRAME DOM WRITE in
+  // this loop, and on purpose: a tag rides a moving car, and drawing its text
+  // here keeps it at the panel's resolution while the 3D buffer is scaled down.
+  // Only transform and opacity move per frame — compositor properties, no
+  // layout — and the text and colour are written only when a pooled element
+  // changes whose name it shows.
   _paintNameTags(ids) {
     let n = 0;
-    if (ids.length) {
+    // At most cells x (cells - 1): a solo race asks for nothing at all.
+    const maxTags = ids.length * (ids.length - 1);
+    if (maxTags > 0) {
       const slots = this.display.slotIds();
-      const packed = this.display.nameTags(ids.length * Math.max(0, slots.length - 1));
+      const packed = this.display.nameTags(maxTags);
       const cw = this.container.clientWidth, ch = this.container.clientHeight;
       for (let i = 0; i + TAG_STRIDE - 1 < packed.length; i += TAG_STRIDE) {
         const id = slots[packed[i + 1]];

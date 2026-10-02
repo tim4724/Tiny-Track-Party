@@ -1,7 +1,7 @@
 import QuartzCore
 import UIKit
 
-/// The name tags over every other car in each cell, CPU included: the tvOS half
+/// The name tags over every other player's car in each cell: the tvOS half
 /// of the web's `Stage._paintNameTags` and its `.name-tag` CSS, and the twin of
 /// Android's `NameTags.kt`, method for method.
 ///
@@ -23,7 +23,7 @@ final class NameTagView: UIView {
 
     /// Floats per tag in `ttp_display_name_tags`' answer (`ttp_display.h`).
     static let stride = 6
-    /// Eight cars, so seven tags a cell, across the most cells a field can split into.
+    /// The most cells a field can split into (eight), each tagging the other seven.
     static let maxTags = 8 * 7
 
     /// `.name-tag`'s `clamp(1.2rem, 1.56vw, 1.8rem)` against a 1920-wide
@@ -73,10 +73,11 @@ final class NameTagView: UIView {
 
     /// Who the field is: re-rasterizes only the stickers whose name or livery
     /// moved, and drops the ones whose car left. Called whenever the scene's cars
-    /// change (a build, a rename), never per frame.
+    /// change (a build, a rename), never per frame. Only a car with a cell can be
+    /// named, so a CPU car gets no sticker.
     func setField(_ cars: [SceneCar]) {
         var next: [EngineIdentity: TagImage] = [:]
-        for car in cars {
+        for car in cars where car.cell {
             if let have = stickers[car.id], have.name == car.name, have.colorIndex == car.colorIndex {
                 next[car.id] = have
             } else {

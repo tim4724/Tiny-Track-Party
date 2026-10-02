@@ -1475,8 +1475,8 @@ void testOverviewOwnsTheSurface(const GameTrack& track) {
 
 }  // namespace
 
-// nameTags over a hand-built three-cell frame: each cell tags every OTHER live
-// car in front of its camera (cell cars and CPU alike), by roster slot, fades
+// nameTags over a hand-built three-cell frame: each cell tags every OTHER
+// player's car in front of its camera (never the CPU's), by roster slot, fades
 // them out by distance, and lists them far to near. Plain float projection, so
 // it is checked to a tolerance.
 void testNameTags() {
@@ -1522,9 +1522,10 @@ void testNameTags() {
   const ttp::rt::NameTagDeck noDeck;
   std::vector<float> cover;
   const std::vector<ttp::rt::NameTag> tags = ttp::rt::nameTags(*f, pictures, noDeck, cover);
-  checkU((uint32_t) tags.size(), 5, "nameTags: cell 1 sees everything behind it, slot 4 is nobody");
-  if (tags.size() != 5) return;
-  // Cell 0, far to near: car 2 dead ahead in its fade band, the CPU, then car 1.
+  checkU((uint32_t) tags.size(), 4, "nameTags: the CPU car in cell 0's view gets no tag, cell 1 sees nobody");
+  if (tags.size() != 4) return;
+  // Cell 0, far to near: car 2 dead ahead in its fade band, then car 1. The CPU
+  // car between them owns no cell, so it is nobody's tag.
   checkU(tags[0].cell, 0, "tag 0 cell");
   checkU(tags[0].target, 2, "tag 0 names the far car first");
   near(tags[0].x, 0.25f, "tag 0 x centred in cell 0");
@@ -1532,19 +1533,17 @@ void testNameTags() {
   near(tags[0].alpha, (ttp::rt::NAME_TAG_FAR - 22) / (ttp::rt::NAME_TAG_FAR - ttp::rt::NAME_TAG_FADE),
        "tag 0 fades inside the band");
   near(tags[0].scale, scaleAt(22), "tag 0 scale");
-  checkU(tags[1].target, 3, "tag 1 names the CPU car, which owns no cell");
-  near(tags[1].x, 0.25f - 0.25f / 12, "tag 1 x: a twelfth left of centre");
-  checkU(tags[2].target, 1, "tag 2 names the near car last, on top");
-  near(tags[2].x, 0.3125f, "tag 2 x: a quarter right of centre");
-  near(tags[2].alpha, 1, "tag 2 is fully up close");
-  near(tags[2].scale, scaleAt(std::sqrt(17.0f)), "tag 2 scale");
-  // Cell 2 faces +Z from z=-10: car 0 (8 away) before car 1 (~6); the CPU is behind.
-  checkU(tags[3].cell, 2, "tag 3 cell");
-  checkU(tags[3].target, 0, "tag 3 names car 0");
-  near(tags[3].x, 0.25f, "tag 3 x in cell 2");
-  near(tags[3].y, 0.75f, "tag 3 y in cell 2");
-  checkU(tags[4].target, 1, "tag 4 names car 1");
-  near(tags[4].x, 0.25f - 0.25f / 6, "tag 4 x mirrors: the camera faces +Z");
+  checkU(tags[1].target, 1, "tag 1 names the near car last, on top");
+  near(tags[1].x, 0.3125f, "tag 1 x: a quarter right of centre");
+  near(tags[1].alpha, 1, "tag 1 is fully up close");
+  near(tags[1].scale, scaleAt(std::sqrt(17.0f)), "tag 1 scale");
+  // Cell 2 faces +Z from z=-10: car 0 (8 away) before car 1 (~6).
+  checkU(tags[2].cell, 2, "tag 2 cell");
+  checkU(tags[2].target, 0, "tag 2 names car 0");
+  near(tags[2].x, 0.25f, "tag 2 x in cell 2");
+  near(tags[2].y, 0.75f, "tag 2 y in cell 2");
+  checkU(tags[3].target, 1, "tag 3 names car 1");
+  near(tags[3].x, 0.25f - 0.25f / 6, "tag 3 x mirrors: the camera faces +Z");
 
   // The near leg: full size at NAME_TAG_CLOSE and nearer, NEAR_SCALE at NAME_TAG_NEAR.
   auto cell0Car1 = [&](const std::vector<ttp::rt::NameTag>& tags) -> float {
@@ -1558,30 +1557,30 @@ void testNameTags() {
        "a rival at NAME_TAG_NEAR is NEAR_SCALE");
   cars[1].pos = { 1, -lift, -4 };
 
-  // A solo race: one cell, and the CPU field still gets its names.
-  f->viewCount = 1;
-  f->carCount = nCars;
-  std::memmove((uint8_t*) (cars + nCars), views, sizeof(TtpViewInput));  // view 0 stays first
-  cover.clear();
-  checkU((uint32_t) ttp::rt::nameTags(*f, pictures, noDeck, cover).size(), 3, "nameTags: a solo race tags its rivals");
-
   f->flags = TTP_FRAME_OVERVIEW;
   check(ttp::rt::nameTags(*f, pictures, noDeck, cover).empty(), "nameTags: an overview tags nobody");
+  f->flags = 0;
+
+  // A solo race: one cell, the CPU field in plain view of it, and no tags.
+  f->viewCount = 1;
+  cover.clear();
+  check(ttp::rt::nameTags(*f, pictures, noDeck, cover).empty(), "nameTags: a solo race tags nobody");
 }
 
-// Cover: one cell whose camera looks down -Z past its own car at a rival 8
-// units out, with a monster truck placed three ways: squarely between (the tag
-// fades and goes), ghosted in front of the cell's own car (see-through, the tag
-// stays), and off to one side of the tag's line (the tag stays); then an
-// ordinary car squarely between, and the cell's own car as a truck, neither of
-// which ever hides a tag; then the cover fade and the road deck.
+// Cover: a cell whose camera looks down -Z past its own car at a rival player 8
+// units out (the rival's own cell only makes it a player; nothing inspects it),
+// with a monster truck placed three ways: squarely between (the tag fades and
+// goes), ghosted in front of the cell's own car (see-through, the tag stays),
+// and off to one side of the tag's line (the tag stays); then an ordinary car
+// squarely between, and the cell's own car as a truck, neither of which ever
+// hides a tag; then the cover fade and the road deck.
 void testNameTagCover() {
   const uint32_t nCars = 3;
-  std::vector<uint8_t> buf(sizeof(TtpFrameInput) + nCars * sizeof(TtpCarInput) + sizeof(TtpViewInput));
+  std::vector<uint8_t> buf(sizeof(TtpFrameInput) + nCars * sizeof(TtpCarInput) + 2 * sizeof(TtpViewInput));
   TtpFrameInput* f = (TtpFrameInput*) buf.data();
   f->version = TTP_FRAME_INPUT_VERSION;
   f->carCount = nCars;
-  f->viewCount = 1;
+  f->viewCount = 2;
   TtpCarInput* cars = (TtpCarInput*) (f + 1);
   for (uint32_t i = 0; i < nCars; i++) { cars[i].up = { 0, 1, 0 }; cars[i].forward = { 0, 0, -1 }; }
   cars[0].pos = { 0, 0, -1.15f };           // the cell's own car
@@ -1595,9 +1594,12 @@ void testNameTagCover() {
   v->nearZ = 0.1f;
   v->farZ = 600;
   v->car = 0;
-  const float pictures[] = { 0, 0, 1, 1 };
+  v[1] = v[0];
+  v[1].car = 1;
+  const float pictures[] = { 0, 0, 1, 1,   0, 0, 1, 1 };
+  // Cell 0's tag for the rival.
   auto rival = [&](const std::vector<ttp::rt::NameTag>& tags) -> const ttp::rt::NameTag* {
-    for (const auto& t : tags) if (t.target == 1) return &t;
+    for (const auto& t : tags) if (t.cell == 0 && t.target == 1) return &t;
     return nullptr;
   };
   const ttp::rt::NameTagDeck noDeck;

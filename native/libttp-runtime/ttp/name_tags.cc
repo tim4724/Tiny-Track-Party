@@ -167,7 +167,8 @@ NameTagDeck nameTagDeck(const std::vector<OutSample>& samples, bool closed) {
 std::vector<NameTag> nameTags(const TtpFrameInput& f, const float* pictures,
                               const NameTagDeck& deck, std::vector<float>& cover) {
     std::vector<NameTag> out;
-    if ((f.flags & TTP_FRAME_OVERVIEW) || f.viewCount == 0 || !pictures) return out;
+    // Only players are tagged, so a single cell has nobody to tag.
+    if ((f.flags & TTP_FRAME_OVERVIEW) || f.viewCount < 2 || !pictures) return out;
     const TtpCarInput* cars = ttp_frame_cars(&f);
     const TtpViewInput* views = ttp_frame_views(&f);
     // 1 = clear, 0 = covered. A new field or split starts every tag clear.
@@ -185,8 +186,11 @@ std::vector<NameTag> nameTags(const TtpFrameInput& f, const float* pictures,
         const float tx = ty * v.aspect;
         const float* r = pictures + 4 * i;
         cell.clear();
-        for (uint32_t s = 0; s < f.carCount; s++) {
-            if ((int32_t) s == v.car) continue;
+        // The other cells' cars: the players. CPU cars own no cell.
+        for (uint32_t j = 0; j < f.viewCount; j++) {
+            const int32_t other = views[j].car;
+            if (other < 0 || (uint32_t) other >= f.carCount || other == v.car) continue;
+            const uint32_t s = (uint32_t) other;
             const TtpCarInput& c = cars[s];
             if (!alive(c)) continue;
             const V3 carUp = norm(v3(c.up));
