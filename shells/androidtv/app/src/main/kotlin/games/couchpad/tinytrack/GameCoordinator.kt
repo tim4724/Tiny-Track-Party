@@ -877,9 +877,9 @@ class GameCoordinator(
     }
 
     /**
-     * Pull a player's car out of the live race (a clean LEAVE, or a dropped seat
-     * the liveness sweep gave up on). sessionHandle 0 is legal (the no-car
-     * effects).
+     * Pull a player's car out of the live race (a seat freed for good: the room
+     * closing, or a peer the relay no longer knows). sessionHandle 0 is legal
+     * (the no-car effects).
      */
     fun forfeit(id: EngineId) =
         run(TtpJson.obj(Ttp.ttp_race_forfeit_live_json(sessionHandle, TtpJson.arg(id.json))))
@@ -1061,17 +1061,11 @@ class GameCoordinator(
         paintHUD(display.hud())
         pushItems()
 
-        // THE FORFEITS BELONG INSIDE THE allDone ARM, as on the web. `forfeit[]`
-        // names every disconnected human EVERY poll — outside the arm it forfeits a
-        // dropped-but-reconnectable racer six times a second, and with one phone
-        // down the auto-pause freeze turns into a return to the lobby.
+        // A dropped racer is NOT forfeited here: their car and cell stay, with the
+        // reconnect card, until the lobby frees the seat. The flourish's end
+        // bounds the race, and the sim's DNF ladder resolves the car.
         val flow = TtpJson.obj(Ttp.ttp_ui_race_flow_live_json(sessionHandle, net.roomHandle))
         if (flow.optBoolean("allDone") && !raceEnded && !flourishing) {
-            val f = flow.optJSONArray("forfeit") ?: JSONArray()
-            for (i in 0 until f.length()) EngineId.from(f.opt(i))?.let { forfeit(it) }
-            // A forfeit can end the race under us; this guard is the web's
-            // `if (!session.racing) return`.
-            if (sessionHandle == 0 || Ttp.ttp_racing(sessionHandle) == 0) return
             // THE FLAG — and the race does NOT stop here. Hold the sim's own end
             // open so the field keeps moving for the flourish (the cars that are
             // home drive themselves; Game's victory-lap autopilot), then let the

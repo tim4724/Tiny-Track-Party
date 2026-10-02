@@ -688,7 +688,10 @@ AdvanceResult advanceSeriesRace(const AdvanceInput& in) {
       !in.sceneReady) {
     return r;   // NONE, no effects
   }
-  // Everyone left mid-intermission.
+  // An empty roster goes back to the lobby. A roster whose seats are all
+  // DROPPED still advances: the seats are reserved for the cup, and the
+  // abandoned-room grace is the one rule that decides how long a room with no
+  // racer connected waits.
   if (in.players.empty()) { r.action = AdvanceAction::RETURN_TO_LOBBY; return r; }
   r.action = AdvanceAction::ADVANCE;
   r.effects.push_back(mk(Op::CLEAR_INTERMISSION));

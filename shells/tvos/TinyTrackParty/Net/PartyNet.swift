@@ -72,8 +72,8 @@ final class PartyNet {
     /// `ttp_ui_roster_seats_room_json`. Deliberately carries no payload — the
     /// roster never becomes a Swift value, exactly as it never becomes a JS one.
     var onRosterChanged: (() -> Void)?
-    /// The `race-abandoned` effect: mid-race, no racer left and someone waiting
-    /// for the next one; on the results board, nobody connected at all.
+    /// The `race-abandoned` effect: no racer connected, mid-race or on the
+    /// results board.
     var onRaceAbandoned: (() -> Void)?
     /// The socket closed. `true` means the ROOM died (4001) rather than the link.
     var onClose: ((Bool) -> Void)?
@@ -208,9 +208,7 @@ final class PartyNet {
         // §4.5's boot order: the room machine exists before the socket does, so
         // `roomHandle` is valid for every reader from the first frame drawn. The
         // grace window is the manifest's, fed straight into RoomFlow's own
-        // liveness config — this shell picks it no more than the web does. No
-        // `timeoutMs`: presence is the relay's answer, so RoomFlow's expiry is
-        // left at its Infinity default and no seat is ever dropped on silence.
+        // liveness config — this shell picks it no more than the web does.
         roomHandle = ttp_room_create(TTP.json([
             "liveness": [
                 "graceMs": proto.liveness.abandonedRaceGraceMs

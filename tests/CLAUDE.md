@@ -27,7 +27,7 @@ same green-first, read-the-diff rule.
 **Class 1 — JS-recorded**: cross-implementation evidence from the port era. A
 deliberate re-record demotes the fixture to class 2 from that commit on; the
 JS-parity claim stays with the old bytes in git history. The traces, audio, theme,
-session and raceflow corpora have been demoted this way.
+session, raceflow, ui and roomflow corpora have been demoted this way.
 
 **Class 2 — C++-authored** (the `--record` mode of the sim, sweep and runtime
 checks): regression evidence only. It proves the sim and cameras still do what
@@ -56,8 +56,8 @@ that restores a twin, and `npm run revive:js-oracle` restores the whole set into
 throwaway worktree to run one in. **That path is worth keeping for exactly three
 corpora** — math, trackbuilder and track-sampler — because their oracles have never
 been re-emitted from C++, which makes them the last cross-implementation evidence
-in the tree. The audio, ui, session, schematic, theme and raceflow oracles were
-**deleted outright** with their twins; those corpora can never be re-derived from
+in the tree. The audio, ui, session, schematic, theme, raceflow and roomflow oracles
+were **deleted outright** with their twins; those corpora can never be re-derived from
 JS at all. The `record_*`
 roundtrip carries the freshness obligation for all of those except raceflow, whose
 check replays structurally and deliberately has no record mode: a re-emit would

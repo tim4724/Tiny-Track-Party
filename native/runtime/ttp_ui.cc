@@ -684,7 +684,6 @@ static Value raceFlowValue(const std::vector<ui::Id>& carIds, const ui::IdSet& a
                            const ui::IdSet& disc, const ui::IdSet& fin) {
   Value o = Value::Obj();
   o.set("allDone", Value::Bool(ui::humansAllDone(carIds, ai, disc, fin)));
-  o.set("forfeit", idArray(ui::forfeitCandidates(carIds, ai, disc)));
   return o;
 }
 

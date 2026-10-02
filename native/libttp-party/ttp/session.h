@@ -4,7 +4,7 @@
 // about a room that is not a socket, a timer, a storage key or a canvas: the
 // retained room snapshot (the phone's only source of truth), the `players`
 // projection inside it, the four URLs a room's identity is spelled into, what a
-// new seat starts as, what a drop or a LEAVE means in each room state, which car
+// new seat starts as, what a dropped socket means in each room state, which car
 // picks and ready toggles are refused, what a phase flip implies, the
 // self-heartbeat state machine, the cross-device seat claim, and the post-reload
 // reconciliation against the relay's peer list.
@@ -205,24 +205,18 @@ struct AddPeerPlan {
 };
 AddPeerPlan add_peer_plan(bool has, double size, double maxPlayers, double colorIndex);
 
-// A socket close (peer_left). In the LOBBY a drop is forgiving — free the seat
-// outright, the lobby's own join QR covers coming back. Mid-game keep the seat
-// AND the player's car running, so the camera stays on it and a quick reconnect
-// resumes driving, and offer a reconnect QR for that exact seat.
+// A socket close (peer_left) — the ONLY way a phone leaves. The relay cannot
+// tell a back-out from a lost connection, and the game does not try to. In the
+// LOBBY the seat is freed outright; the lobby's own join QR covers coming back.
+// Anywhere else the seat is reserved until the room is back in the lobby — a
+// whole cup included — with the car kept and a reconnect QR for that exact seat.
 enum class PresenceAction { FREE, DROP };
 PresenceAction presence_action(RoomState state);
 
-// An intentional LEAVE (back-out). Mid-race this is a DROP, not a free: one
-// accidental back-swipe must not forfeit a car, so the seat holds its reconnect
-// QR through the usual grace window. Anywhere else the seat goes at once.
-enum class LeaveAction { EXPIRE, DROP };
-LeaveAction leave_action(RoomState state);
-
-// The dropped-seat card payload — {peerIndex, name, colorIndex, url}. Held for
-// the WHOLE race (no give-up timer) until the player returns or the room comes
-// back to the lobby. The DIFF over this set is the UI model's (reconnectDiff);
-// the SET is this layer's, which is one feature split down the middle and worth
-// knowing about.
+// The dropped-seat card payload — {peerIndex, name, colorIndex, url}. Held (no
+// give-up timer) until the player returns or the room comes back to the lobby.
+// The DIFF over this set is the UI model's (reconnectDiff); the SET is this
+// layer's, which is one feature split down the middle and worth knowing about.
 Value reconnect_card(const Value& seat, const std::string& url);
 
 // ---- controller messages -----------------------------------------------------
@@ -235,7 +229,7 @@ InboundRoute inbound_route(double from, const std::string& type);
 
 // The routing table for a peer's message. Everything this layer does not name is
 // the game layer's (GAME — START_GAME, RETURN_TO_LOBBY, controls...).
-enum class MessageAction { HELLO, LEAVE, SET_CAR, SET_READY, SELECT_MODE, PING, GAME };
+enum class MessageAction { HELLO, SET_CAR, SET_READY, SELECT_MODE, PING, GAME };
 MessageAction message_action(const std::string& type);
 
 // SET_CAR — the lobby car-model pick. Car and colour are independent and
@@ -263,19 +257,12 @@ bool set_ready_decision(bool isHost, RoomState state, bool ready, bool current);
 
 // What a phase flip means, beyond the flip itself.
 //
-// restampConnected: NOT SPENT any more, and the field survives because the
-//   frozen session corpus pins it. It re-stamped every connected seat at race
-//   start so lobby silence was not charged against the first countdown tick —
-//   a rule that only meant anything while the display ran a silence sweep of
-//   its own. Presence is the relay's answer now (native/libttp-party/CLAUDE.md),
-//   so nothing measures silence and nothing needs the clock restarted.
 // freeDisconnected: back in the lobby, the race that reserved dropped seats is
 //   over, so reclaim any that never came back.
 // clearStandings: a fresh race and the lobby both start with no results board.
 // publish: ALWAYS. The retained snapshot carries roomState, and a replay to a
 //   (re)joining phone must never hand it a stale phase.
 struct StateChangePlan {
-  bool restampConnected = false;
   bool freeDisconnected = false;
   bool clearStandings = false;
   bool publish = true;
@@ -352,18 +339,11 @@ LinkPlan link_after_close(bool replaced, bool roomClosed, double attempt, double
 // their livery, car, name and host slot. A same-device reconnect keeps its index
 // and never reaches here.
 //
-// `restamp` is NOT SPENT any more, and survives because the frozen session
-// corpus pins it. It was the reclaimed seat's stay of execution: the carried
-// last-seen stamp is from before the drop and so already older than the
-// timeout, so without it the seat expired again on the very next tick. Nothing
-// expires now — presence is the relay's answer (native/libttp-party/CLAUDE.md).
-//
 // `rejoinToken` is nullptr for an absent key, which claims nothing — as does any
 // token that is not a non-negative integer. See norm_index.
 struct ClaimPlan {
   bool claim = false;
   double oldId = 0;
-  bool restamp = false;
 };
 ClaimPlan claim_plan(double fromId, const Value* rejoinToken, bool hasOld,
                      bool oldDisconnected);
@@ -389,7 +369,6 @@ ResyncPlan resync_plan(const std::vector<double>& rosterIds,
 // ---- wire spellings ----------------------------------------------------------
 // The key each enum answers with, for an ABI or a corpus line.
 const char* key(PresenceAction a);
-const char* key(LeaveAction a);
 const char* key(InboundRoute r);
 const char* key(MessageAction a);
 const char* key(HeartbeatAct a);

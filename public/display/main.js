@@ -514,9 +514,6 @@ scene.onFrame = (dt) => {
   // Every human across the line but CPU cars still circulating? Don't make the
   // humans watch them crawl home — fast-forward the deterministic sim to the
   // flag and show the final board now (the AI get their true finish times).
-  // ONE crossing for both answers: `forfeit` is only read on the tick `allDone`
-  // flips, so asking for them separately would double the traffic to save
-  // nothing.
   //
   // NOT PER FRAME, and it never needed to be. This question is a pure function of
   // who holds a car, who is connected and who has finished — three sets that only
@@ -532,12 +529,9 @@ scene.onFrame = (dt) => {
   // scope, and a local of the same name shadowed it for the whole branch below.
   const finish = (slowTick && session.racing && !flourishing) ? raceFlow() : null;
   if (finish && finish.allDone) {
-    // A dropped racer's ghost can never cross the line — forfeit any such car now
-    // that every connected human is home, so the burst (and the race) ends
-    // promptly instead of running to the guard cap on a car that can't finish.
-    // fresh array — safe while forfeitCar removes cars
-    for (const id of finish.forfeit) forfeitCar(id);
-    if (!session.racing) return; // forfeiting the last unfinished car already ended the race
+    // A dropped racer is NOT forfeited here: their car and cell stay, with the
+    // reconnect card, until the lobby frees the seat. The flourish's end bounds
+    // the race, and the sim's DNF ladder resolves the car.
     // THE FLAG — and the race does NOT stop here. The cards go up, the phones
     // get the board, and the sim is told to hold its own end open so the field
     // keeps moving for the flourish: the cars that are home drive themselves
@@ -650,9 +644,8 @@ const net = new DisplayNet({
   // The display's mute switch, for the snapshot's soundOn — so the host
   // phone's Sound setting shows the live state, TV-button flips included.
   isSoundOn: () => !audio.muted,
-  // RoomFlow's abandoned-ROOM deadline expired: mid-race, no racer left and
-  // someone waiting for the next one; on the results board, nobody connected at
-  // all. Same exit as any other quit path.
+  // RoomFlow's abandoned-ROOM deadline expired: no racer connected, mid-race
+  // or on the results board. Same exit as any other quit path.
   onRaceAbandoned: returnToLobby,
   // A (re)joining phone recovers all room/results state from the snapshot replay,
   // but its held item is per-owner and rides ITEM (sent only on change) — so
@@ -687,10 +680,10 @@ const net = new DisplayNet({
   }
 });
 
-// Pull a player's car out of the live race. Fires on playerleave — a clean
-// back-out (LEAVE) or a dropped seat whose reconnect grace window elapsed. A
-// brief mid-race disconnect does NOT come through here: the car is kept running
-// (camera stays on it) so a quick reconnect resumes driving.
+// Pull a player's car out of the live race. Fires on playerleave — a seat freed
+// for good, which outside the lobby means the room closing or the relay no
+// longer knowing the peer after our own reconnect. A dropped socket does NOT
+// come through here: the seat and its car stay reserved until the lobby.
 function forfeitCar(peerIndex) {
   // The removal happens inside the walk, against the live session; a removal
   // that ends the race queues its end events, which the next frame's drain
@@ -825,7 +818,9 @@ refreshCupShelf();
 // Driven by DisplayNet.onReconnectChange; we diff against what's shown so a roster
 // reshuffle only adds/removes the cards that changed.
 const _rcShown = new Set(); // car ids currently showing a reconnect card
+let _rcSeats = [];          // the seats awaiting a rejoin, as last handed over
 function renderReconnect(seats) {
+  _rcSeats = seats;
   const { remove, add } = ui.reconnectDiff([..._rcShown], seats);
   for (const id of remove) { scene.setCarReconnect(id, null); _rcShown.delete(id); }
   // Putting a card up can fail (a seat whose car has no cell), so the shown set
@@ -872,6 +867,11 @@ const RACE_PERFORMERS = {
     for (const c of [...scene.cars.keys()]) scene.removeCar(c);
     for (const c of e.cars) scene.addCar(c.id, c.colorIndex, c.name, { cell: c.cell, carIndex: c.carIndex });
     scene.rebuild();
+    // A card rides its scene car, and the cars above are new. A seat reserved
+    // through a cup's chained start is still awaiting its rejoin, so put the
+    // cards back on.
+    _rcShown.clear();
+    renderReconnect(_rcSeats);
   },
   'create-session': (e) => createSession(e),
   'transition': (e) => net.flow.transitionTo(ROOM_STATE[e.to.toUpperCase()]),

@@ -4,7 +4,7 @@
 // OWN room (sessionStorage) and regathers the party instead of orphaning it.
 // (A clean display reload/exit tears the party down instead — pagehide sends
 // close_room; see close-room.spec.js.)
-const { test, expect, openDisplay, joinController, startRace, waitForRacing, visible } = require('./helpers');
+const { test, expect, openDisplay, joinController, startRace, waitForRacing, visible, inResults } = require('./helpers');
 
 test('a reloaded phone rejoins straight into its still-running race', async ({ page, browser }) => {
   const roomCode = await openDisplay(page);
@@ -58,6 +58,29 @@ test('a mid-race drop holds the seat, the car and its cell — the lobby return 
     await page.waitForFunction(() => window.__net.roomState === 'lobby', null, { timeout: 15000 });
     expect(await page.evaluate(() => window.__net.flow.has(2))).toBe(false);
     await expect(page.locator('.cell-reconnect')).toHaveCount(0);
+  });
+
+test('a dropped racer keeps the car and the cell through the flag to the results board',
+  async ({ page, browser }) => {
+    // The finish used to FORFEIT every dropped racer once the connected ones were
+    // home: the car left the race, so a two-way split collapsed to one full
+    // screen at the flag. The reservation ends at the lobby, not the finish line.
+    const roomCode = await openDisplay(page);
+    const alice = await joinController(browser, roomCode, 'Alice'); // peerIndex 1
+    const bob = await joinController(browser, roomCode, 'Bob');     // peerIndex 2
+    await startRace(alice, [bob]);
+    await waitForRacing(page);
+
+    await bob.context().close();
+    await page.waitForFunction(() => window.__net.flow.isDisconnected(2), null, { timeout: 10000 });
+
+    // Only the connected racer crosses the line; Bob's car never can.
+    await page.evaluate(() => window.__session().forceFinish(1, 42.5));
+    await inResults(page);
+
+    expect(await page.evaluate(() => window.__session().carIds())).toContain(2);
+    await expect(page.locator('.cell-reconnect')).toHaveCount(1);
+    expect(await page.evaluate(() => window.__net.flow.has(2))).toBe(true);
   });
 
 test('a lobby peer_left frees the seat outright', async ({ page, browser }) => {

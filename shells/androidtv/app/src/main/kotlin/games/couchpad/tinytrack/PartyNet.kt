@@ -113,8 +113,8 @@ class PartyNet(
     var onRosterChanged: (() -> Unit)? = null
 
     /**
-     * The `race-abandoned` effect: mid-race, no racer left and someone waiting for
-     * the next race; on the results board, nobody connected at all.
+     * The `race-abandoned` effect: no racer connected, mid-race or on the results
+     * board.
      */
     var onRaceAbandoned: (() -> Unit)? = null
 
@@ -285,9 +285,7 @@ class PartyNet(
         // The room machine exists before the socket does, so `roomHandle` is valid
         // for every reader from the first frame drawn. The grace window is the
         // manifest's, fed straight into RoomFlow's own liveness config — this
-        // shell picks it no more than the web does. No `timeoutMs`: presence is
-        // the relay's answer, so RoomFlow's expiry is left at its Infinity
-        // default and no seat is ever dropped on silence.
+        // shell picks it no more than the web does.
         roomHandle = Ttp.ttp_room_create(
             TtpJson.arg(
                 JSONObject().put(

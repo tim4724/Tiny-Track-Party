@@ -28,7 +28,7 @@ that state by hand had already drifted to three different percentile formulas.
 
 `ttp/ui_model.{h,cc}` behind `runtime/ttp_ui.h` owns the decisions behind the 2D
 screens — the seat grid, readiness, the race HUD values, the standings and results
-boards, the pause and forfeit predicates, and the screen enum with its per-screen
+boards, the pause and finish predicates, and the screen enum with its per-screen
 back EFFECT. `ttp/hud.{h,cc}` is separate and packed, so HUD values never come out
 of a snapshot.
 

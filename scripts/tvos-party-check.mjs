@@ -401,10 +401,9 @@ async function main() {
   }
 
   console.log('\n== a phone leaves ==');
-  bob.leave();
+  bob.close();   // the relay's peer_left is the only way a phone leaves
   await alice.waitFor(() => (alice.snapshot.players || []).length === 1, 'the roster to shrink');
-  check('LEAVE frees the seat in the lobby', (alice.snapshot.players || []).length === 1);
-  bob.close();
+  check('a closed socket frees the seat in the lobby', (alice.snapshot.players || []).length === 1);
 
   // ---- THE PARTY ENDS WITH THE APP ----------------------------------------
   //

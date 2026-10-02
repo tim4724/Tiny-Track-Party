@@ -103,12 +103,8 @@ int ttp_room_create(const char* configJson) {
           if (kv.second.type == Value::NUM) cfg.master = PeerId::Num(kv.second.num);
           else if (kv.second.type == Value::STR) cfg.master = PeerId::Str(kv.second.str);
         } else if (kv.first == "liveness" && kv.second.type == Value::OBJ) {
-          cfg.hasLiveness = true;
           for (const auto& lk : kv.second.obj) {
-            if (lk.first == "timeoutMs" && lk.second.type == Value::NUM) cfg.timeoutMs = lk.second.num;
-            else if (lk.first == "graceMs" && lk.second.type == Value::NUM) cfg.graceMs = lk.second.num;
-            else if (lk.first == "useEnabledProvider" && lk.second.type == Value::BOOL)
-              cfg.hasEnabledProvider = lk.second.b;
+            if (lk.first == "graceMs" && lk.second.type == Value::NUM) cfg.graceMs = lk.second.num;
           }
         }
       }

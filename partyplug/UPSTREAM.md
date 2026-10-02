@@ -73,15 +73,16 @@ unexplained diff hunk. Update the hash in the same commit as the edit.
 | `PartyConnection.d.ts` | `81ea8d52afffa564` | none |
 | `PartyFastlane.js` | `ded18593c20e25d5` | exports `PartyFastlane.TICK_MS` so `scripts/gen-fastlane-corpus.mjs` stamps the real cadence instead of re-typing 50. Worth upstreaming |
 | `PartyFastlane.d.ts` | `07caed7eda7145ad` | declares what the JS already does: `enqueue`'s `'p2p' \| 'dropped'` return, the `onAcked`/`maxRing` options, and `static TICK_MS`. Worth upstreaming |
-| `RoomFlow.d.ts` | `1d749261479089d5` | kept as the interface the C++ port implements, though `RoomFlow.js` is not here |
+| `RoomFlow.d.ts` | `1d749261479089d5` | kept as the interface the C++ port implements, though `RoomFlow.js` is not here — minus the silence detector (`liveness.timeoutMs`, `enabledProvider`, `onSeen`, `isExpired`, `expiredPeers`) and `clearDisconnected`, which the port deleted: presence is the relay's `peer_left` alone |
 | `tests/party-connection.test.js` | `7f8467c4673d2ed8` | comments only, same reason as `PartyConnection.js` |
 | `tests/party-fastlane.test.js` | `bb048dd7e480c164` | none — but ours is a **superset** upstream lacks (loss+retransmit loopback suite, the `'p2p'` return assert). Never clobber it wholesale |
 
 **Files deliberately absent** (do not copy them in on a sync):
 
 - `RoomFlow.js` — the room state machine is C++ here (`native/libttp-party`,
-  adapter `public/display/NativeRoomFlow.js`), with the frozen behavioural
-  corpus `tests/fixtures/roomflow-corpus.jsonl` as its oracle.
+  adapter `public/display/NativeRoomFlow.js`), with the behavioural corpus
+  `tests/fixtures/roomflow-corpus.jsonl` (recorded off the JS, since re-emitted
+  from C++) as its oracle.
 - `AirConsoleAdapter.*`, `AirConsoleStorage.*`, `tests/airconsole-*.test.js` —
   that platform was dropped. `package.json` and `README.md` are adapted to match.
 

@@ -379,15 +379,6 @@ bool humansAllDone(const std::vector<Id>& carIds, const IdSet& aiIds,
   return humans > 0;
 }
 
-std::vector<Id> forfeitCandidates(const std::vector<Id>& carIds, const IdSet& aiIds,
-                                  const IdSet& disconnectedIds) {
-  std::vector<Id> out;
-  for (const Id& id : carIds) {
-    if (!aiIds.has(id) && disconnectedIds.has(id)) out.push_back(id);
-  }
-  return out;
-}
-
 // ---- pause arbitration ------------------------------------------------------
 
 bool canPause(bool hasSession, bool paused, RoomState roomState) {

@@ -6,8 +6,8 @@
  *
  * WHAT IS BEHIND IT. libttp-party/ttp/session.{h,cc} — the retained room
  * snapshot and its `players` projection, the four URLs a room's identity is
- * spelled into, the seat defaults and the room-full cap, what a drop and a LEAVE
- * mean in each phase, the SET_CAR / SET_READY guards, the phase-flip effects,
+ * spelled into, the seat defaults and the room-full cap, what a dropped socket
+ * means in each phase, the SET_CAR / SET_READY guards, the phase-flip effects,
  * the self-heartbeat state machine, the cross-device seat claim and the
  * post-reload reconciliation. Pure functions of plain data, replayed step for
  * step against tests/fixtures/session-corpus.jsonl (recorded off

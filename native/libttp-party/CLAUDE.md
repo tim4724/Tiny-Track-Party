@@ -7,8 +7,8 @@ sockets and `RTCPeerConnection` stay in `partyplug/`.
 
 `ttp/session.{h,cc}` behind `runtime/ttp_net.h` is the ROOM half of what the
 display's net module used to do inline: the retained room snapshot and its players
-projection, the URLs a room's identity is spelled into, the seat cap, what a close
-and an intentional LEAVE mean in each phase, the SET_CAR/SET_READY guards, the
+projection, the URLs a room's identity is spelled into, the seat cap, what a
+socket close means in each phase, the SET_CAR/SET_READY guards, the
 phase-flip effects and host-promotion ready-clear, the self-heartbeat machine, the
 cross-device claim, and post-reload reconciliation against the relay's peer list.
 
@@ -47,10 +47,23 @@ the current answers.
 
 **Presence is the relay's answer, and only the relay's.** A seat is connected from
 `peer_joined` until `peer_left`; the display runs no silence detector over other
-people's sockets. RoomFlow still HAS one — it is kit code, driven by the roomflow
-corpus — but nothing configures a `timeoutMs` for it, so `expiredPeers` can only
-ever be empty. `seenWalk` survives as the disconnect LIFT alone: traffic from a
-seat the display had dropped means it is back.
+people's sockets, and RoomFlow carries none (the kit's detector was deleted).
+`seenWalk` survives as the disconnect LIFT alone: traffic from a seat the
+display had dropped means it is back.
+
+**`peer_left` is also the only way a phone LEAVES.** The relay cannot tell a
+back-out from a lost connection, and the game no longer tries to: there is no
+LEAVE message (a user decision). In the lobby the seat is freed; anywhere else
+it stays reserved, car and reconnect QR included, until the room is back in the
+lobby — a whole cup included.
+
+**A newcomer to a full room takes over a reserved seat** (`takeoverWalk`, a
+user decision). Reserved seats count against the four-seat cap, but
+Party-Sockets' cap counts LIVE sockets, so a dropped racer frees a socket the
+relay will hand to anyone. That newcomer's HELLO takes the oldest reserved seat
+— car, cell and cup points, through the same seat move as a `?claim=` — instead
+of sitting seatless with no answer. A claim always wins. The original owner
+coming back later finds the room full, which the relay tells them itself.
 
 That is a decision with a known cost, not an oversight. The display used to run a
 3 s silence window budgeted against the phone's 1 Hz ping, and it was given up
@@ -82,27 +95,32 @@ link that is down also reads as "every participant is gone" to the auto-pause
 rule (through `ttp_net_link_down`), so a live race freezes instead of running
 blind and thaws on the relay's created/joined — never on the raw socket open.
 
-**The abandoned-room policy** rides that same tick and has TWO arms on ONE grace
-deadline, both firing once. Mid-race: every participant gone while someone waits.
-On the RESULTS board: **no connected peer at all** — the same "the room is empty"
-the cup chain's advance already uses. The results arm replaced a wall-clock
-failsafe the three shells armed off the end of a race, which fired on a timer and
-so yanked a party that was still talking off its own podium; it fires on the
-condition that timer was always a proxy for. **A podium with anybody still in the
-room waits for a human**, however long it sits there.
+**The abandoned-room policy** rides that same tick: ONE grace deadline, firing
+once, on ONE question — **is any racer still connected?** Mid-race, every
+participant gone; on the RESULTS board, no participant connected. Either way the
+room returns to the lobby after the grace (a user decision). A dropped
+racer keeps their seat, car and rejoin QR for that grace, and the lobby frees it.
 
-The mid-race arm's participant set is derived from the LIVE RACE through the
-session seam — every seat holding a car, plus every dropped seat — so a shell
-passes a session handle and **no car id is ever serialized out and handed back.**
+**A late joiner counts for neither arm**, and does not shorten the wait. They
+cannot drive the race or press New game, so a room that waited on "someone is
+waiting" froze forever when nobody came, and a podium watched only by a newcomer
+was stuck for good with no host. The results arm replaced a wall-clock failsafe
+the shells armed off the end of a race, which yanked a party still talking off
+its own podium: **a podium any racer is still watching waits for a human**,
+however long it sits there.
+
+The participant set is derived from the LIVE RACE through the session seam —
+every seat holding a car, plus every dropped seat — so a shell passes a session
+handle and **no car id is ever serialized out and handed back.**
 
 What falls outside that set is exactly a connected, car-less seat, and one
 definition stands behind the policy, the standings' joining rows and the display's
 silent auto-pause.
 
 **Syncing it is load-bearing:** the kit's own countdown snapshot would count a
-DROPPED late joiner as someone waiting and yank a blipped party's race back to the
-lobby. That unfiltered kit semantics is pinned by the frozen corpus — adding a
-connected filter turns `roomflow` red. **Fix the SET, never the C++.**
+DROPPED late joiner as waiting and list a ghost as a joining row. That unfiltered
+kit semantics is pinned by the frozen corpus — adding a connected filter turns
+`roomflow` red. **Fix the SET, never the C++.**
 
 ## Room teardown
 

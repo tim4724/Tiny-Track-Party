@@ -11,15 +11,12 @@
 // WHAT THIS FILE IS ALLOWED TO DO, and it is a short list: name the shell's own
 // objects (a roster entry, a seat, a snapshot car), turn them into the plain
 // JSON the ABI takes, and turn the answer back into the shapes the renderers
-// already expect. No rule may live here. Two places where that shows:
+// already expect. No rule may live here. One place where that shows:
 //
 //   * reconnectDiff comes back as INDICES, and this file resolves them against
 //     the array it passed in — so the shell keeps its OWN objects (and
 //     whatever it hangs off them) instead of racing a copy that has been
 //     through a serializer.
-//   * raceFlow answers allDone and the forfeit list TOGETHER, because the
-//     boundary is what costs, not the rule. main.js reads one and then the
-//     other off a single crossing per frame.
 //
 // STRINGS ARE KEYS. Nothing user-facing crosses: titles, subtitles, row kinds,
 // race counts and the back gesture's meaning all arrive as stable keys plus
@@ -200,10 +197,8 @@ export function welcomeItem(sessionHandle, peerIndex) {
 }
 
 // ---- race flow -------------------------------------------------------------
-// Both finish-moment answers off ONE crossing: allDone is read every frame and
-// forfeit only on the frame it flips, so splitting them would double the
-// boundary traffic to save nothing. The role sets are GATHERED in C++ off the
-// two handles (ttp_ui_race_flow_live_json) — the shell no longer assembles
+// The finish moment: {allDone}. The role sets are GATHERED in C++ off the two
+// handles (ttp_ui_race_flow_live_json) — the shell no longer assembles
 // carIds/aiIds/disconnectedIds/finishedIds at all.
 export function raceFlow(sessionHandle, roomHandle) {
   return JSON.parse(fn.raceFlowLive(sessionHandle | 0, roomHandle | 0));

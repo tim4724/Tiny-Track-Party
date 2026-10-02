@@ -374,7 +374,8 @@ TTP_ABI const char* ttp_ui_welcome_item_live_json(int sessionHandle, const char*
  * off the room. The shell used to assemble them by crossing the C boundary
  * twice per car per slow tick; the tvOS twin then misspelled the keys and the
  * absent sets read as legal. sessionHandle 0 answers the no-race constants
- * ({"allDone":false,"forfeit":[]}). */
+ * ({"allDone":false}). A dropped racer is never forfeited at the flag: their
+ * car and cell stay until the lobby frees the seat. */
 TTP_ABI const char* ttp_ui_race_flow_live_json(int sessionHandle, int roomHandle);
 
 /* ---- pause arbitration --------------------------------------------------- */

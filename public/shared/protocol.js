@@ -61,7 +61,6 @@ var MSG = {
   SELECT_MODE: 'select_mode',   // {mode:'track'|'cup'|'random'|'tour', trackId?, cupId?, randomRaces?} — host's lobby pick: exact track (single race), a cup (4-race Grand Prix), random (a run of drawn tracks: randomRaces=0 endless, else that many races then a podium, default 4), or tour (the World Tour: one drawn track per cup, raced in cup order). EVERY accepted random/tour message deals a fresh draw, identical to the current pick or not — re-tapping the same tile re-rolls. 'track' stays a legal message (the display's own debug panel sends one) but the phone's picker no longer offers it: it is one tile per cup and one per random run.
   SERIES_NEXT: 'series_next',   // host only, during a series intermission — start the next race now (the display also auto-advances)
   SET_SOUND: 'set_sound',       // {on} — host only: mute/unmute the display's audio (the TV's own mute button flips the same state); echoed to everyone as the snapshot's soundOn
-  LEAVE: 'leave',               // intentional exit (back-out) — frees the seat at once in lobby/results; mid-race it's a soft drop (reconnect QR + grace), so an accidental back-swipe can't forfeit a car
   PING: 'ping',
 
   // Display -> all controllers: the retained room snapshot (relay set_state)
@@ -193,8 +192,9 @@ var LIVENESS = {
   // needs the margin. It is the one liveness detector left, and it watches
   // exactly one socket: our own.
   HEARTBEAT_DEAD_MS: 6000,
-  // DISPLAY. Every racer gone while late joiners wait: hold the room this long
-  // for the dropped party to scan back in, then return to the lobby.
+  // DISPLAY. No racer connected, mid-race or on the results board: hold the
+  // room this long for the dropped party to scan back in, then return to the
+  // lobby. A waiting late joiner neither starts nor shortens it.
   ABANDONED_RACE_GRACE_MS: 15000,
   // DISPLAY. How long an open socket may sit without a created/joined answer
   // before the attempt is written off (the relay accepted the socket and never

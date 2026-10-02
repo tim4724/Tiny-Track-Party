@@ -444,7 +444,7 @@ target_include_directories(libttp_party PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libtt
 target_link_libraries(libttp_party PUBLIC libttp_json ttp_strict_fp ttp_warnings)
 
 # ---- Conformance: the RoomFlow behavioural corpus ---------------------------
-# Replays tests/fixtures/roomflow-corpus.jsonl (scripts/gen-roomflow-corpus.mjs)
+# Replays tests/fixtures/roomflow-corpus.jsonl (recorded off the retired JS kit)
 # against the port: per scripted op, reproduces ret + emitted events (order +
 # detail) + a public-surface digest, compared as canonical JSON. 36 scripts (plus
 # 13 lowestFreeSlot cases), every step exact.
@@ -454,6 +454,13 @@ ttp_emscripten_cli(roomflow_check)
 add_test(NAME roomflow
   COMMAND roomflow_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/roomflow-corpus.jsonl
 )
+add_test(NAME record_roomflow
+  COMMAND ${CMAKE_COMMAND}
+    -DCLI=$<TARGET_FILE:roomflow_check>
+    "-DEMULATOR=${CMAKE_CROSSCOMPILING_EMULATOR}"
+    -DFIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/roomflow-corpus.jsonl
+    -DOUT=${CMAKE_CURRENT_BINARY_DIR}/rerecord/roomflow-corpus.jsonl
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/record_roundtrip.cmake)
 
 # ---- Conformance: the protocol vocabulary + relay framing --------------------
 # protocol_check replays protocol-corpus.jsonl (constants manifest + carStats

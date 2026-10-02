@@ -381,12 +381,9 @@ void setLink(NetState& st, ns::LinkState state, double attempt, double max, bool
 // _seen: lift a dropped seat back to connected. Traffic from a seat the display
 // has flagged disconnected means it is back — reached from peer_joined, from any
 // peer message (a rejoining phone's HELLO) and from fastlane input. This is the
-// single writer that lifts disconnection.
-//
-// It no longer STAMPS anything: RoomFlow's lastSeen map is read by isExpired
-// alone, and nothing expires now that presence is the relay's answer. The walk
-// keeps its name and its `nowMs` (ABI: ttp_net_on_seen_json), because the shells
-// pass a clock and the lift is still what the call means.
+// single writer that lifts disconnection. It stamps nothing: presence is the
+// relay's answer, so nothing expires on silence. The walk keeps its `nowMs`
+// (ABI: ttp_net_on_seen_json) because the shells pass a clock.
 void seenWalk(RoomFlow* flow, const PeerId& id, double, Value& effects) {
   if (flow->isDisconnected(id)) {
     flow->markReconnected(id);  // emits rosterchange -> the shell announces
@@ -394,11 +391,12 @@ void seenWalk(RoomFlow* flow, const PeerId& id, double, Value& effects) {
   }
 }
 
-// _dropSeat: mid-game drop (the socket gone, or a mid-race LEAVE — presence is
-// the relay's answer, so nothing else drops a seat): keep the seat AND the car — the camera stays on it and a quick
-// reconnect resumes driving — and offer the per-seat reconnect QR with its
-// grace clock running. The card's URL is the shell's (D3: the claim URL needs
-// the platform's base origin), so the effect carries the seat and nothing else.
+// _dropSeat: a socket gone outside the lobby (presence is the relay's answer,
+// so nothing else drops a seat): keep the seat AND the car — the camera stays
+// on it and a quick reconnect resumes driving — and offer the per-seat
+// reconnect QR, the seat reserved until the lobby. The card's URL is the
+// shell's (D3: the claim URL needs the platform's base origin), so the effect
+// carries the seat and nothing else.
 void dropSeatWalk(RoomFlow* flow, const PeerId& id, Value& effects) {
   pushPeerOp(effects, "close-fastlane", id);
   flow->markDisconnected(id);
@@ -414,7 +412,8 @@ void dropSeatWalk(RoomFlow* flow, const PeerId& id, Value& effects) {
 }
 
 // _expireSeat: free a seat for good — clear its reconnect card and drop the
-// player. An intentional LEAVE, and the grace window elapsing.
+// player. The relay closing the room (4001), the post-reload resync, and the
+// lobby freeing every seat still reserved.
 void expireSeatWalk(RoomFlow* flow, const PeerId& id, Value& effects) {
   pushPeerOp(effects, "clear-reconnect", id);
   if (!flow->has(id)) return;
@@ -450,6 +449,21 @@ void addPeerWalk(RoomFlow* flow, const PeerId& id, double nowMs, Value& effects)
   if (plan.stamp) seenWalk(flow, id, nowMs, effects);
 }
 
+// Move a reserved seat onto a fresh connection: the seat record (livery, car
+// pick, name, host slot), and through rekey-player the still-racing car and the
+// cup points. The claim and the takeover both land here.
+void rekeySeatWalk(RoomFlow* flow, const PeerId& oldId, const PeerId& from, Value& effects) {
+  pushPeerOp(effects, "close-fastlane", oldId);
+  pushPeerOp(effects, "close-fastlane", from);
+  flow->rekey(oldId, from);  // moves the seat record, marks reconnected
+  Value e = effectOp("rekey-player");  // move their still-racing car over
+  e.set("oldId", oldId.toValue());
+  e.set("newId", from.toValue());
+  effects.push(std::move(e));
+  pushPeerOp(effects, "clear-reconnect", oldId);
+  pushPeerOp(effects, "clear-reconnect", from);
+}
+
 // _claimReconnect: the cross-device rejoin, claiming a dropped seat via the
 // HELLO's rejoinToken — an integer or nothing, see claim_plan/norm_index.
 // Answers the CLAIMED old seat (None when nothing was claimed): the hello walk
@@ -469,19 +483,29 @@ PeerId claimWalk(RoomFlow* flow, const Value* fromV, const PeerId& from, const V
       ns::claim_plan(fromNum, token, hasGuess && flow->has(oldId),
                      hasGuess && flow->isDisconnected(oldId));
   if (!plan.claim) return PeerId::None();
-  pushPeerOp(effects, "close-fastlane", oldId);
-  pushPeerOp(effects, "close-fastlane", from);
-  flow->rekey(oldId, from);  // moves the seat record, marks reconnected
-  // plan.restamp is not spent: it existed so a reclaimed seat, carrying a stamp
-  // from before the drop, would not expire again on the very next tick. Nothing
-  // expires now. The plan keeps the field, which the frozen session corpus pins.
-  Value e = effectOp("rekey-player");  // move their still-racing car over
-  e.set("oldId", oldId.toValue());
-  e.set("newId", from.toValue());
-  effects.push(std::move(e));
-  pushPeerOp(effects, "clear-reconnect", oldId);
-  pushPeerOp(effects, "clear-reconnect", from);
+  rekeySeatWalk(flow, oldId, from, effects);
   return oldId;
+}
+
+// A newcomer the seat cap refused takes over the OLDEST reserved seat — its car,
+// its cell and its cup points — rather than waiting seatless with no answer.
+// The relay admits a phone whenever a socket is free, and a reserved seat frees
+// one, so a cap-full room with a free socket always has a reserved seat to
+// give. A claim always wins: this runs only for a HELLO that claimed nothing.
+// The original owner returning later finds the room full, which the relay
+// tells them itself. Answers the taken seat, like claimWalk.
+PeerId takeoverWalk(RoomFlow* flow, const PeerId& from, Value& effects) {
+  // Only a phone the seat cap refused: the cap is add_peer_plan's to decide.
+  const ns::AddPeerPlan plan = ns::add_peer_plan(
+      flow->has(from), static_cast<double>(flow->size()), protocol::MAX_PLAYERS, 0);
+  if (flow->has(from) || plan.hasSeat) return PeerId::None();
+  for (const Value& p : flow->listValue().arr) {   // joinedAt order: oldest first
+    const PeerId id = peerIdOf(p.find("peerIndex"));
+    if (!flow->isDisconnected(id)) continue;
+    rekeySeatWalk(flow, id, from, effects);
+    return id;
+  }
+  return PeerId::None();
 }
 
 // ---- the mode pick ---------------------------------------------------------
@@ -950,7 +974,9 @@ const char* ttp_net_on_peer_message_json(int roomHandle, int sessionHandle,
       // A cross-device rejoin claims its dropped seat first, so the snapshot
       // published below reflects the restored identity (livery/car/host) — not
       // the throwaway placeholder slot the relay just handed this connection.
-      const PeerId claimedOld = claimWalk(flow, &fromV, from, msg, effects);
+      PeerId claimedOld = claimWalk(flow, &fromV, from, msg, effects);
+      // No claim, and the seat cap refused this phone: take a reserved seat.
+      if (claimedOld.isNull()) claimedOld = takeoverWalk(flow, from, effects);
       // A HELLO from a peer we never seated (the relay knows them, we don't —
       // e.g. this tab reloaded and missed their peer_joined): seat them now.
       // Whether the seat EXISTED is also what tells a rename from a first
@@ -1021,15 +1047,6 @@ const char* ttp_net_on_peer_message_json(int roomHandle, int sessionHandle,
       pushOp(effects, "announce");
       break;
     }
-    case ns::MessageAction::LEAVE:
-      // Intentional back-out. The fork is leave_action's: freed outright in
-      // the lobby (and on the results board), a soft DROP mid-race so one
-      // accidental back-swipe cannot forfeit a car.
-      if (ns::leave_action(roomState) == ns::LeaveAction::DROP)
-        dropSeatWalk(flow, from, effects);
-      else
-        expireSeatWalk(flow, from, effects);
-      break;
     case ns::MessageAction::SET_CAR: {
       // Lobby car-model pick. Whether it is allowed — a ready seat's pick is
       // locked, a racer's is locked until the lobby, a late joiner may pick
@@ -1188,13 +1205,11 @@ const char* ttp_net_liveness_json(int roomHandle, int sessionHandle, double nowM
   if (!tick.sweep) return answer(g_bufLiveness, std::move(effects));
   // NO per-controller silence check: presence is the relay's answer, so a seat
   // is dropped by peer_left and by nothing else (see protocol.js LIVENESS for
-  // why the display's own 3 s window was given up, and what it cost). RoomFlow
-  // still HAS the detector — it is kit code, pinned by the roomflow corpus — but
-  // nothing here configures a timeout for it, so expiredPeers can only be empty.
+  // why the display's own 3 s window was given up, and what it cost).
   // The abandoned-race deadline, on the same tick and the same clock:
-  // RoomFlow arms it while every participant is gone and someone is waiting,
-  // and returns true the one time it expires. The active order is re-synced
-  // off the live race first, through the same seam as ever.
+  // RoomFlow arms it while no racer is connected, and returns true the one
+  // time it expires. The active order is re-synced off the live race first,
+  // through the same seam as ever.
   ttp_room_sync_active_order(roomHandle, sessionHandle);
   if (flow->graceTick(nowMs)) pushOp(effects, "race-abandoned");
   return answer(g_bufLiveness, std::move(effects));
@@ -1243,12 +1258,9 @@ const char* ttp_net_host_change_apply_json(int roomHandle, const char* hostPeerI
   return answer(g_bufHostApply, std::move(effects));
 }
 
-// `nowMs` is unnamed because nothing here spends a clock any more: the race-start
-// re-stamp it fed was the silence sweep's, and presence is the relay's answer now
-// (see seenWalk). plan.restampConnected goes with it — the FIELD stays, pinned by
-// the frozen session corpus, but no caller reads it. The ABI parameter stays too:
-// three shells pass it, and a phase flip is the obvious place for the next rule
-// that needs a clock.
+// `nowMs` is unnamed because nothing here spends a clock: presence is the
+// relay's answer (see seenWalk). The ABI parameter stays because three shells
+// pass it.
 const char* ttp_net_state_change_apply_json(int roomHandle, const char* to, double) {
   RoomFlow* flow = ttp_room_flow(roomHandle);
   Value effects = Value::Arr();

@@ -1050,9 +1050,7 @@ void roomShellSurface() {
   // ---- silence is not an event: however long a seated phone says nothing, the
   // tick drops no one. Presence is the relay's answer, so peer_left is the only
   // thing that can take a seat away, and this is the gate on that rule holding
-  // at the ABI. (The liveness-enabled setter that used to be asserted here went
-  // with the sweep it switched off — RoomFlow still has the flag, driven by the
-  // roomflow corpus, but nothing configures an expiry for it to gate.)
+  // at the ABI.
   {
     const int q = ttp_room_create("{\"liveness\":{\"graceMs\":10}}");
     ttp_net_restore_room(q, "ROOM", "");
@@ -1103,9 +1101,8 @@ void roomShellSurface() {
 //
 // It also pins the wiring the walks depend on. The active order is "every seat
 // holding a car, plus every dropped seat", so the leftover set — what
-// hasLateJoiners/lateJoiners answer for — is exactly a CONNECTED seat with no
-// car. A dropped, car-less ghost must therefore never be the thing that keeps
-// the room waiting, and must never appear as a "joining" row.
+// lateJoiners answers for — is exactly a CONNECTED seat with no car. A dropped,
+// car-less ghost must therefore never appear as a "joining" row.
 // ---------------------------------------------------------------------------
 void abandonedRacePolicy() {
   // graceMs is the subject; the expiry timeout is pushed far out so this
@@ -1163,15 +1160,9 @@ void abandonedRacePolicy() {
       out += canonical_stringify(*e.find("peerIndex")) + ";";
     return out;
   };
-  // The predicate and the list are the same set, always.
-  const auto agree = [&](const char* where) {
-    check(flow->hasLateJoiners() == !lateIds().empty(),
-          std::string("hasLateJoiners agrees with lateJoiners (") + where + ")");
-  };
 
   join(1, 0);
   join(2, 0);
-  agree("lobby");
   // In the LOBBY the order is empty, so everyone is outside it — the corpus
   // records exactly this (a room with no active order has only late joiners).
   check(lateIds() == "1;2;", "lobby: the whole roster sits outside an empty order");
@@ -1183,22 +1174,20 @@ void abandonedRacePolicy() {
   check(!flow->allParticipantsDisconnected(), "two live racers are not all gone");
   check(!tick(1000), "no grace while the racers are here");
 
-  // Both racers drop. Their seats are held (a car and a reconnect QR each), so
-  // there is still nobody WAITING — the room must sit tight indefinitely.
+  // Both racers drop. Their seats are held (a car and a reconnect QR each) for
+  // the grace, and nobody has to be waiting for the clock to run.
   leave(1, 1000);
   leave(2, 1000);
   check(flow->allParticipantsDisconnected(), "every participant is gone");
-  check(!tick(1100), "no grace with nobody waiting");
-  check(!tick(1200), "…and no deadline was armed to expire");
+  check(!tick(1100), "the first qualifying tick only ARMS");
 
-  // A phone scans in mid-race: now someone IS waiting, and the clock starts.
+  // A phone scans in mid-race. It is no racer, so it neither starts the clock
+  // nor shortens it.
   join(3, 2000);
-  agree("late joiner present");
   check(lateIds() == "3;", "the mid-race joiner is the only late joiner");
-  check(!tick(2000), "the first qualifying tick only ARMS");
-  check(!tick(3499), "…and holds until graceMs has elapsed");
-  check(tick(3500), "fires at exactly nowMs + graceMs");
-  check(!tick(3500), "fires exactly ONCE (it re-arms, not re-fires)");
+  check(!tick(2599), "…and holds until graceMs has elapsed, late joiner or not");
+  check(tick(2600), "fires at exactly nowMs + graceMs");
+  check(!tick(2600), "fires exactly ONCE (it re-arms, not re-fires)");
   check(tick(9999), "the re-armed deadline expires in its turn");
 
   // A racer coming back disarms it: the room is being played again. `_seen` is
@@ -1220,22 +1209,22 @@ void abandonedRacePolicy() {
   ttp_room_events_json(h);
   check(!tick(300000), "the state change dropped the armed deadline");
 
-  // ---- the RESULTS arm: an EMPTY room recovers its own podium ---------------
+  // ---- the RESULTS arm: a podium no racer is watching goes back -------------
   // This replaced the 60 s results failsafe the three shells armed off endRace.
   // That timer fired on a CLOCK, so it yanked a party still talking about the
-  // race it had just run; this fires on the room being EMPTY, which is the
-  // condition the timer was always a proxy for. "Empty" is no CONNECTED peer —
-  // the same set advanceSeriesRace's empty-roster branch reads.
+  // race it had just run; this fires on no RACER being connected. Seat 3 stays
+  // connected throughout and changes nothing: a late joiner cannot press New
+  // game, so counting them once left this board stuck for good.
   ttp_room_transition_to(h, "results");
   ttp_room_events_json(h);
-  ttp_net_on_seen_json(h, "3", 400000);       // one phone still in the room
+  ttp_net_on_seen_json(h, "1", 400000);       // a racer is back on the couch
   ttp_room_events_json(h);
-  check(!tick(400000), "a podium with someone connected is not abandoned");
+  check(!tick(400000), "a podium with a racer connected is not abandoned");
   check(!tick(500000), "…and no amount of sitting on it changes that");
-  leave(3, 600000);                           // the last phone leaves
-  check(!tick(600000), "the first empty-room tick only ARMS");
+  leave(1, 600000);                           // the last racer leaves
+  check(!tick(600000), "the first racer-less tick only ARMS");
   check(!tick(601499), "…and holds until graceMs has elapsed");
-  check(tick(601500), "an EMPTY results board goes back to the lobby");
+  check(tick(601500), "a results board with only a late joiner goes back to the lobby");
   check(!tick(601500), "fires exactly ONCE, like the race arm");
 
   ttp_dispose(race);
@@ -1249,8 +1238,8 @@ void abandonedRacePolicy() {
   // room's half and nothing about the join.
   //
   // The case that matters is a late joiner who has ALSO dropped: a ghost seat, no
-  // car, no phone. Against the raw COUNTDOWN snapshot it counts as someone
-  // waiting and would yank a blipped party's whole race back to the lobby.
+  // car, no phone. Against the raw COUNTDOWN snapshot it reads as someone
+  // waiting, and would show as a "joining" row on the standings.
   const int g = ttp_room_create("{\"liveness\":{\"graceMs\":1500}}");
   if (g <= 0) { fail("abandoned-race/ghost: ttp_room_create returned no handle"); return; }
   RoomFlow* gflow = ttp_room_flow(g);
@@ -1274,12 +1263,11 @@ void abandonedRacePolicy() {
   // RAW — the countdown snapshot, before anything syncs. Read and driven off
   // the machine because every ABI path to the deadline now syncs on its way in,
   // which is precisely the fix being demonstrated.
-  check(gflow->hasLateJoiners(), "raw: a dropped ghost still reads as a late joiner");
-  check(!gflow->graceTick(1000) && gflow->graceTick(3000),
-        "raw: …and would abandon the race for nobody");
+  check(!gflow->lateJoinersValue().arr.empty(), "raw: a dropped ghost still reads as a late joiner");
 
   // The walk's own tick, which syncs first: seat 1 holds a car and seat 2 is
-  // dropped, so both are participants and nobody is waiting.
+  // dropped, so both are participants, nobody is waiting, and every racer is
+  // gone.
   const auto gtick = [&](double nowMs, int sessionHandle) {
     const Value w = parseOrNull(ttp_net_liveness_json(g, sessionHandle, nowMs), "liveness/ghost");
     bool abandoned = false;
@@ -1289,8 +1277,9 @@ void abandonedRacePolicy() {
     ttp_room_events_json(g);
     return abandoned;
   };
-  check(!gtick(4000, s) && !gtick(9999, s), "synced: the blipped party keeps its race");
-  check(!gflow->hasLateJoiners(), "synced: a dropped ghost is absent, not waiting");
+  check(!gtick(4000, s) && gtick(5500, s),
+        "synced: a race every racer has left goes back after graceMs, nobody waiting");
+  check(gflow->lateJoinersValue().arr.empty(), "synced: a dropped ghost is absent, not waiting");
   check(gflow->lateJoinersValue().arr.empty(), "synced: …so it is no 'joining' row either");
   // The bot is racing and will never disconnect, so an order that swallowed cars
   // with no seat behind them could not read "every participant is gone" here.
@@ -1301,13 +1290,13 @@ void abandonedRacePolicy() {
   ttp_net_on_seen_json(g, "2", 10000);
   ttp_room_events_json(g);
   check(!gtick(10000, s), "synced: a returning ghost re-arms rather than firing");
-  check(gflow->hasLateJoiners(), "synced: a returning ghost is waiting again");
+  check(!gflow->lateJoinersValue().arr.empty(), "synced: a returning ghost is waiting again");
   {
     const Value v = ttp_room_late_joiners_synced(g, s);
     check(v.arr.size() == 1 && canonical_stringify(*v.arr[0].find("peerIndex")) == "2",
           "synced: the car-less seat is the one waiting");
   }
-  check(gtick(11500, s), "synced: and the deadline runs for them");
+  check(gtick(11500, s), "synced: and the deadline runs, because a late joiner is no racer");
 
   // The cars really come from the SIM, not from presence. With both seats back,
   // the ONLY thing separating them is that 1 holds a car and 2 does not — and
@@ -1321,6 +1310,96 @@ void abandonedRacePolicy() {
         "no session: no cars and no dropped seats leaves an empty order");
   ttp_dispose(s);
   ttp_room_dispose(g);
+}
+
+// ---------------------------------------------------------------------------
+// Part 4c: the seat TAKEOVER. A seat is reserved until the lobby, and reserved
+// seats count against the cap, while the relay admits a phone whenever a socket
+// is free — so mid-cup a newcomer can be in the room with no seat to give. Its
+// HELLO takes over the oldest reserved seat instead of waiting with no answer.
+// ---------------------------------------------------------------------------
+void seatTakeover() {
+  const int h = ttp_room_create("{\"liveness\":{\"graceMs\":15000}}");
+  RoomFlow* flow = ttp_room_flow(h);
+  if (h <= 0 || !flow) { fail("takeover: ttp_room_create returned no handle"); return; }
+  ttp_net_on_protocol_json(h, "created", "{\"room\":\"ABCD\",\"instance\":\"m-1\"}", 0);
+  const auto join = [&](int id) {
+    char msg[48];
+    std::snprintf(msg, sizeof msg, "{\"index\":%d}", id);
+    ttp_net_on_protocol_json(h, "peer_joined", msg, 0);
+  };
+  const auto leave = [&](int id) {
+    char msg[48];
+    std::snprintf(msg, sizeof msg, "{\"index\":%d}", id);
+    ttp_net_on_protocol_json(h, "peer_left", msg, 0);
+  };
+  const auto hello = [&](int from, const char* msgJson) {
+    const std::string f = std::to_string(from);
+    return parseOrNull(ttp_net_on_peer_message_json(h, 0, f.c_str(), msgJson, 0, 100), "hello");
+  };
+  const auto rekeyed = [](const Value& w, int oldId, int newId) {
+    for (const Value& e : at(w, "effects").arr)
+      if (json::str_field(e, "op") == "rekey-player" &&
+          json::num_field(e, "oldId") == oldId && json::num_field(e, "newId") == newId)
+        return true;
+    return false;
+  };
+  const auto name = [&](int id) {
+    const ttp::Player* p = flow->get(PeerId::Num(id));
+    if (!p) return std::string();
+    for (const auto& kv : p->fields) if (kv.first == "name") return kv.second.str;
+    return std::string();
+  };
+
+  for (int id = 1; id <= 4; id++) join(id);
+  ttp_room_transition_to(h, "countdown");
+  ttp_room_transition_to(h, "playing");
+  leave(2);
+  leave(3);
+  ttp_room_events_json(h);
+  check(flow->size() == 4, "premise: four seats, two of them reserved");
+
+  // A newcomer while every seat is taken: no seat on join...
+  join(5);
+  check(!flow->has(PeerId::Num(5)), "the cap refuses the newcomer a seat of its own");
+  // ...so its HELLO takes over the OLDEST reserved seat, car and all.
+  const Value w = hello(5, "{\"type\":\"hello\",\"name\":\"Eve\"}");
+  check(rekeyed(w, 2, 5), "the HELLO moves the oldest reserved seat (2) onto the newcomer");
+  check(flow->has(PeerId::Num(5)) && !flow->has(PeerId::Num(2)),
+        "…the seat is the newcomer's now");
+  check(!flow->isDisconnected(PeerId::Num(5)), "…and connected");
+  check(name(5) == "Eve", "…under the newcomer's name");
+
+  // A claim always wins: a phone carrying seat 3's rejoin token gets seat 3.
+  join(6);
+  const Value c = hello(6, "{\"type\":\"hello\",\"name\":\"Cy\",\"rejoinToken\":3}");
+  check(rekeyed(c, 3, 6), "a claim takes the seat it names, not the oldest");
+
+  // Every seat is held by a connected phone now: nothing left to take, and the
+  // newcomer stays seatless (the relay, full itself, refuses the next one).
+  join(7);
+  const Value n = hello(7, "{\"type\":\"hello\",\"name\":\"Dee\"}");
+  check(!flow->has(PeerId::Num(7)), "no reserved seat: nothing is taken");
+  bool anyRekey = false;
+  for (const Value& e : at(n, "effects").arr)
+    anyRekey = anyRekey || json::str_field(e, "op") == "rekey-player";
+  check(!anyRekey, "…and no rekey is emitted");
+
+  // A seat free under the cap is a plain new seat, never a takeover.
+  leave(4);
+  ttp_room_events_json(h);
+  ttp_net_on_protocol_json(h, "peer_left", "{\"index\":1}", 0);
+  ttp_room_transition_to(h, "lobby");
+  ttp_net_state_change_apply_json(h, "lobby", 200);  // the lobby frees every reserved seat
+  ttp_room_events_json(h);
+  check(!flow->has(PeerId::Num(1)) && !flow->has(PeerId::Num(4)),
+        "premise: the lobby freed the reserved seats");
+  join(8);
+  const Value l = hello(8, "{\"type\":\"hello\",\"name\":\"Lu\"}");
+  check(flow->has(PeerId::Num(8)) && !rekeyed(l, 1, 8) && !rekeyed(l, 4, 8),
+        "a free seat is a fresh seat, not a takeover");
+  ttp_room_dispose(h);
+  std::printf("  the seat takeover\n");
 }
 
 bool framingCorpusThroughAbi(const std::string& path) {
@@ -2404,9 +2483,9 @@ void uiLiveTwinsMatchJsonPaths() {
   ttp_add_bot(sess, "\"ai-0\"", 1.0, 0.0, 1u, nullptr);
   ttp_add_bot(sess, "\"ai-1\"", 0.9, 0.2, 2u, nullptr);
 
-  // ---- race flow: the role sets main.js gathered, then the two rules --------
-  // Byte for byte here, because the answer is two values and no encoder is
-  // being restated: {"allDone":bool,"forfeit":[id,...]}, canonically spelled.
+  // ---- race flow: the role sets main.js gathered, then the rule -------------
+  // Byte for byte here, because the answer is one value and no encoder is
+  // being restated: {"allDone":bool}, canonically spelled.
   const auto wantRaceFlow = [&](int s, int r) {
     std::vector<ui::Id> carIds;
     ui::IdSet ai, disc, fin;
@@ -2424,22 +2503,19 @@ void uiLiveTwinsMatchJsonPaths() {
     ai.add(ui::Id::Str("ai-1"));
     Value o = Value::Obj();
     o.set("allDone", Value::Bool(ui::humansAllDone(carIds, ai, disc, fin)));
-    Value f = Value::Arr();
-    for (const ui::Id& id : ui::forfeitCandidates(carIds, ai, disc)) f.push(id.toValue());
-    o.set("forfeit", std::move(f));
     return canonical_stringify(o);
   };
   const auto sameRaceFlow = [&](const char* where) {
     const std::string want = wantRaceFlow(sess, room);
     const std::string got = ttp_ui_race_flow_live_json(sess, room);
-    check(got == want, std::string("ttp_ui_race_flow_live_json == the two rules (") + where +
+    check(got == want, std::string("ttp_ui_race_flow_live_json == the rule (") + where +
                            ")\n  want " + want + "\n  got  " + got);
   };
   sameRaceFlow("mid-race, one dropped");
   ttp_force_finish(sess, "1", 42.5);
   sameRaceFlow("after a finish");
   // No session: the shell answered its constant without crossing at all.
-  check(std::string(ttp_ui_race_flow_live_json(0, room)) == "{\"allDone\":false,\"forfeit\":[]}",
+  check(std::string(ttp_ui_race_flow_live_json(0, room)) == "{\"allDone\":false}",
         "ttp_ui_race_flow_live_json without a session is the no-race constant");
 
   // ---- the ITEM pushes, off the live race -----------------------------------
@@ -3089,7 +3165,6 @@ struct ShellTwin {
     expected.push(peerEffect("close-fastlane", oldId));
     expected.push(peerEffect("close-fastlane", from));
     flow->rekey(PeerId::Num(oldId), PeerId::Num(from));
-    // plan.restamp goes unspent on both sides — nothing expires.
     Value e = bareEffect("rekey-player");
     e.set("oldId", Value::Num(oldId));
     e.set("newId", Value::Num(from));
@@ -3611,9 +3686,7 @@ void netWalksMatchMultiCallPath() {
     Value sc = walkOf(ttp_net_state_change_apply_json(walkRoom, "countdown", 4000), "sc countdown");
     twin.reset();
     {
-      // Net.js's statechange handler: clearStandings + publish. plan.restampConnected
-      // is not spent on either side — it existed to keep lobby silence off the
-      // first countdown tick, and nothing measures silence any more.
+      // Net.js's statechange handler: clearStandings + publish.
       const ns::StateChangePlan plan = ns::state_change_plan(ns::RoomState::COUNTDOWN);
       // clearStandings is EXECUTED — the board lives behind the room, so the
       // twin drops its own room's board rather than expecting an effect. The
@@ -4422,7 +4495,7 @@ void raceLiveWalks() {
       ai.hasSeries = st.type == Value::OBJ;
       ai.seriesFinished = json::truthy(st.find("finished"));
       ai.sceneReady = sceneReady != 0;
-      ai.players = humansOf(true);
+      ai.players = humansOf(false);   // every seat: a seat is reserved for the cup
       return race::advanceSeriesRace(ai);
     };
     // The verdict AND, on an advance, the whole RESULTS -> COUNTDOWN sequence:
@@ -4509,8 +4582,12 @@ void raceLiveWalks() {
       std::string ids;
       for (const Value& f : retained.arr)
         ids += canonical_stringify(at(f, "peerIndex")) + " ";
-      check(ids == "2 \"ai-1\" 1 \"ai-0\" ",
-            "a chained race grids on the previous finish order (DNF included)\n  got  " + ids);
+      // Cy (seat 3) is DROPPED and still rides: a seat is reserved for the
+      // whole cup, so the chained race seats it too — at the back, having no
+      // finish to grid by — and the four-car grid takes one bot fewer.
+      check(ids == "2 1 \"ai-0\" 3 ",
+            "a chained race grids on the previous finish order (DNF included), "
+            "a dropped seat included\n  got  " + ids);
       // The SCENE roster is NOT the grid: it keeps the build's humans-then-bots
       // order even with a bot on pole. Stage's rebuild signature and the
       // reroster fast path are order-sensitive, so a grid-ordered roster would
@@ -5592,6 +5669,7 @@ int main(int argc, char** argv) {
   boundaryExports();
   roomShellSurface();
   abandonedRacePolicy();
+  seatTakeover();
   framingCorpusThroughAbi(argv[2]);
   fastlaneThroughAbi();
   themeThroughAbi();

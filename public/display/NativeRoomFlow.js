@@ -49,7 +49,6 @@ export class NativeRoomFlow {
     const cfg = {};
     if (opts.liveness) {
       cfg.liveness = {};
-      if (opts.liveness.timeoutMs !== undefined) cfg.liveness.timeoutMs = opts.liveness.timeoutMs;
       if (opts.liveness.graceMs !== undefined) cfg.liveness.graceMs = opts.liveness.graceMs;
     }
     this._h = fn.create(JSON.stringify(cfg));

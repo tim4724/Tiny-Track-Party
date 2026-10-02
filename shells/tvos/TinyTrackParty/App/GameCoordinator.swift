@@ -786,9 +786,9 @@ final class GameCoordinator: ObservableObject {
         run(d)
     }
 
-    /// Pull a player's car out of the live race (a clean LEAVE, or a dropped seat
-    /// the liveness sweep gave up on). The removal happens inside the walk,
-    /// against the live session; a removal that ends the race queues its end
+    /// Pull a player's car out of the live race (a seat freed for good: the room
+    /// closing, or a peer the relay no longer knows). The removal happens inside
+    /// the walk, against the live session; a removal that ends the race queues its end
     /// events, which the next frame's drain decides. sessionHandle 0 is legal
     /// (the no-car effects).
     func forfeit(_ id: EngineIdentity) {

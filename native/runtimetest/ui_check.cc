@@ -587,7 +587,6 @@ Value applyOp(Shell& st, const std::string& op, const Value& in, const Value* re
     const ui::IdSet disc = idSetOf(in.find("disconnectedIds"));
     const ui::IdSet fin = idSetOf(in.find("finishedIds"));
     out.set("allDone", Value::Bool(ui::humansAllDone(carIds, ai, disc, fin)));
-    out.set("forfeit", idArray(ui::forfeitCandidates(carIds, ai, disc)));
     return out;
   }
   if (op == "autopause") {

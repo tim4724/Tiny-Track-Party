@@ -2,7 +2,7 @@
 // Late joiner flow: a phone that scans the QR mid-race waits in the lobby
 // (car picker live, no ready button, "race in progress" note) instead of
 // landing on a dead steering wheel — and is seated in the next race.
-const { test, expect, openDisplay, joinController, startRace, waitForRacing, visible } = require('./helpers');
+const { test, expect, openDisplay, joinController, startRace, waitForRacing, visible, finishHumans, inResults } = require('./helpers');
 
 test('mid-race joiner waits in the lobby, then races the next one', async ({ page, browser }) => {
   const roomCode = await openDisplay(page);
@@ -45,11 +45,44 @@ test('an abandoned race returns to the lobby for waiting late joiners', async ({
   const bob = await joinController(browser, roomCode, 'Bob');
   await bob.waitForSelector(visible('#lobby'));
 
-  // The only racer vanishes. Normally her seat (and the frozen race) would hold
-  // its reconnect QR for the full 90 s grace — but with Bob waiting, the
-  // abandoned-race timer returns the room to the lobby after a short window.
+  // The only racer vanishes. Her seat holds its reconnect QR for the grace,
+  // then the abandoned-race timer returns the room to the lobby.
   await alice.context().close();
   await page.waitForFunction(() => window.__net.roomState === 'lobby', null, { timeout: 15000 });
   // Bob's waiting note gives way to the ready button — he's in the next race.
+  await bob.waitForSelector(visible('#ready-btn'));
+});
+
+test('a race every racer has left returns to the lobby with nobody waiting', async ({ page, browser }) => {
+  await page.addInitScript(() => { window.__abandonGraceMs = 1500; });
+  const roomCode = await openDisplay(page);
+
+  const alice = await joinController(browser, roomCode, 'Alice');
+  await startRace(alice, []);
+  await waitForRacing(page);
+
+  // No late joiner: the room used to sit frozen on her reconnect QR forever.
+  await alice.context().close();
+  await page.waitForFunction(() => window.__net.roomState === 'lobby', null, { timeout: 15000 });
+  // The lobby freed the dropped seat.
+  expect(await page.evaluate(() => window.__net.flow.list().length)).toBe(0);
+});
+
+test('a results board only a late joiner is watching returns to the lobby', async ({ page, browser }) => {
+  await page.addInitScript(() => { window.__abandonGraceMs = 1500; });
+  const roomCode = await openDisplay(page);
+
+  const alice = await joinController(browser, roomCode, 'Alice'); // host
+  await startRace(alice, []);
+  await waitForRacing(page);
+  const bob = await joinController(browser, roomCode, 'Bob');
+  await bob.waitForSelector(visible('#lobby'));
+
+  await finishHumans(page);
+  await inResults(page);
+  // The racer leaves the podium. Bob cannot press New game (he is no host), so
+  // the board would otherwise wait on him forever.
+  await alice.context().close();
+  await page.waitForFunction(() => window.__net.roomState === 'lobby', null, { timeout: 15000 });
   await bob.waitForSelector(visible('#ready-btn'));
 });
