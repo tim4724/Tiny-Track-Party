@@ -5369,7 +5369,7 @@ void raceLiveWalks() {
         ("{\"mode\":\"tour\",\"cupId\":null,\"trackId\":\"" + race1 + "\",\"randomRaces\":2}")
             .c_str());
     const std::string wantSlot =
-        "{\"cupId\":null,\"difficulty\":null,"
+        "{\"cupId\":null,"
         "\"maps\":[{\"cup\":\"beach\",\"trackId\":null},{\"cup\":\"alpine\",\"trackId\":null}],"
         "\"name\":null,\"nameKey\":\"tour\",\"raceCount\":2,\"racesKey\":\"count\"}";
     check(slot == wantSlot, "tour: the race card spells the per-cup chips\n  want " + wantSlot +
@@ -5454,7 +5454,7 @@ void raceLiveWalks() {
     const std::string lslot = ttp_ui_cup_slot_json(
         "{\"mode\":\"tour\",\"cupId\":null,\"trackId\":\"tidepool\",\"randomRaces\":2}");
     const std::string wantL =
-        "{\"cupId\":null,\"difficulty\":null,"
+        "{\"cupId\":null,"
         "\"maps\":[{\"cup\":\"beach\",\"trackId\":null},{\"cup\":\"snow\",\"trackId\":null},"
         "{\"cup\":\"rooftop\",\"locked\":true,\"trackId\":null}],"
         "\"name\":null,\"nameKey\":\"tour\",\"raceCount\":2,\"racesKey\":\"count\"}";

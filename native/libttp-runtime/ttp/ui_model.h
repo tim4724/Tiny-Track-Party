@@ -303,7 +303,6 @@ struct CupSlot {
   OptStr name;                 // null for random / an unresolved id
   RacesKey racesKey = RacesKey::COUNT;
   OptNum raceCount;            // meaningful only for RacesKey::COUNT
-  OptNum difficulty;
   std::vector<MapChip> maps;
   OptStr cupId;
 };

@@ -88,15 +88,15 @@ function buildSeat(p) {
 // live lobby and the gallery preview for the same no-drift reason, both through
 // renderLobbyPick below. Two states:
 //   pre-pick : null / no `name`         → the slot is simply EMPTY
-//   picked   : { name, races?, raceCount?, difficulty?, maps?, cupId? }
+//   picked   : { name, races?, raceCount?, maps?, cupId? }
 //              → the race card: red cup sticker over the picked circuits as mini
 //              schematics (maps = [{ svg?, n?, q?, glyph?, cup?, locked? }] — 4
 //              numbered minis for a cup, 1 for an exact track, the tour's five
 //              per-cup chips; cupId biome-tints their fields exactly like the
 //              phone picker, a chip's own `cup` outranks it; a q chip shows
 //              `glyph` or "?"; a locked chip is the tour's teaser for a locked
-//              cup — padlock on sunken paper, counted by no races pill), races
-//              pill + difficulty pips (0–4 filled; null hides the meter)
+//              cup — padlock on sunken paper, counted by no races pill), and
+//              the races pill
 export function renderCupSlot(slotEl, state) {
   const picked = !!(state && state.name);
   slotEl.querySelector('.cup-slot__pick').classList.toggle('hidden', !picked);
@@ -156,9 +156,6 @@ export function renderCupSlot(slotEl, state) {
   const races = slotEl.querySelector('.cup-races');
   races.textContent = state.races || '';
   races.classList.toggle('hidden', !state.races);
-  const meter = slotEl.querySelector('.cup-meter');
-  meter.classList.toggle('hidden', state.difficulty == null);
-  meter.querySelectorAll('i').forEach((pip, i) => pip.classList.toggle('is-on', i < (state.difficulty || 0)));
 }
 
 // The lobby right-rail cup slot, straight from a PICK ({ mode, cupId, trackId,
@@ -166,11 +163,10 @@ export function renderCupSlot(slotEl, state) {
 // Pre-pick the slot is empty; post-pick it shows the race card (cup / exact
 // track / random / tour).
 //
-// The card's CONTENT is uiModel.cupSlot's — which name, how many races, the
-// difficulty pips, which circuits to draw as minis and how they're numbered (an
-// undrawn race is a trackId-less chip). It hands back keys plus data (never
-// composed copy), so the few English strings and the schematic lookup are all
-// that live here. `trackCatalog` supplies the baked mini-maps by id.
+// The card's CONTENT is uiModel.cupSlot's — which name, how many races, which
+// circuits to draw as minis and how they're numbered (an undrawn race is a
+// trackId-less chip). It hands back keys plus data (never composed copy), so
+// the few English strings and the schematic lookup are all that live here. `trackCatalog` supplies the baked mini-maps by id.
 const RACES_COPY = { one: () => '1 race', endless: () => 'endless', count: (n) => `${n} races` };
 const NAME_COPY = { random: 'Random', tour: 'World Tour' };
 // `progress` is the snapshot's progress shape ({cups:[{id,stars,…}]}) or null —
@@ -199,7 +195,6 @@ export function renderLobbyPick(slotEl, pick, trackCatalog, progress) {
     // only — a cup's racesKey is 'count' too, and a cup card must never pad
     // (a chip with a missing schematic just costs its picture, not a "?").
     raceCount: m.nameKey === 'random' && m.racesKey === 'count' ? m.raceCount : null,
-    difficulty: m.difficulty,
     // Random spoils nothing: a counted card is raceCount grey "?" boxes (an
     // empty list here — renderCupSlot's raceCount padding builds them all)
     // and endless is one grey box carrying ∞; even the drawn race 1 isn't the

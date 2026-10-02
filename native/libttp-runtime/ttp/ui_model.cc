@@ -233,19 +233,11 @@ bool cupSlot(PickMode mode, const OptStr& cupId, const OptStr& trackId,
         if (c.id == cupId.v) { cup = &c; break; }
       }
     }
-    // The catalogue is in CUPS order, so a cup's first entry carries its
-    // difficulty. `t.cup === cupId` compares null to null too, which is how a
-    // null pick lands on the cupless track's (absent) difficulty.
-    const CatalogEntry* entry = nullptr;
-    for (const CatalogEntry& t : catalog) {
-      if (t.cup == cupId) { entry = &t; break; }
-    }
     out = CupSlot{};
     out.nameKey = NameKey::CUP;
     out.name = cup ? OptStr::Of(cup->name) : OptStr::None();
     out.racesKey = RacesKey::COUNT;
     out.raceCount = OptNum::Of(cup ? static_cast<double>(cup->tracks.size()) : 4.0);
-    out.difficulty = entry ? entry->cupDifficulty : OptNum::None();
     if (cup) {
       for (size_t i = 0; i < cup->tracks.size(); i++) {
         out.maps.push_back(MapChip{OptStr::Of(cup->tracks[i]), OptNum::Of(static_cast<double>(i + 1)), OptStr::None()});
@@ -261,7 +253,6 @@ bool cupSlot(PickMode mode, const OptStr& cupId, const OptStr& trackId,
     out.name = entry ? OptStr::Of(entry->name) : OptStr::None();
     out.racesKey = RacesKey::ONE;
     out.raceCount = OptNum::Of(1);
-    out.difficulty = entry ? entry->cupDifficulty : OptNum::None();
     out.maps.push_back(MapChip{trackId, OptNum::None(), OptStr::None()});
     out.cupId = entry ? entry->cup : OptStr::None();
     return true;
@@ -286,7 +277,6 @@ bool cupSlot(PickMode mode, const OptStr& cupId, const OptStr& trackId,
     out.name = OptStr::None();
     out.racesKey = endless ? RacesKey::ENDLESS : RacesKey::COUNT;
     out.raceCount = endless ? OptNum::None() : OptNum::Of(randomRaces.v);
-    out.difficulty = OptNum::None();
     out.maps.push_back(MapChip{trackId, OptNum::None(), OptStr::None()});
     out.cupId = entry ? entry->cup : OptStr::None();
     return true;
@@ -297,14 +287,12 @@ bool cupSlot(PickMode mode, const OptStr& cupId, const OptStr& trackId,
     // already-drawn first included, is an undrawn "?" chip carrying only its
     // cup id, so the shell tints each placeholder with that cup's colour and
     // the card reads as the ladder itself. The card-level cupId stays null
-    // (no single cup owns it); difficulty stays null too — the tour spans
-    // the whole ladder, so a single tendency would lie.
+    // (no single cup owns it).
     out = CupSlot{};
     out.nameKey = NameKey::TOUR;
     out.name = OptStr::None();
     out.racesKey = RacesKey::COUNT;
     out.raceCount = OptNum::Of(static_cast<double>(cups.size()));
-    out.difficulty = OptNum::None();
     for (const Cup& c : cups) {
       out.maps.push_back(MapChip{OptStr::None(), OptNum::None(), OptStr::Of(c.id)});
     }
@@ -738,9 +726,8 @@ uint32_t neutralTintRgb(double pct) { return towardWhite(TTP_CUP_NEUTRAL_COLOR, 
 
 std::vector<CatalogEntry> shippedCatalog() {
   // CUPS order, flattened — the catalogue's own arrangement, which every picker
-  // draws and which ttp_ui.h's contract requires ("a cup's difficulty is read
-  // off its FIRST entry"). Walking the cups rather than TTP_TRACKS is what makes
-  // that true by construction, and it is also what leaves the dev-only tracks
+  // draws and which ttp_ui.h's contract requires. Walking the cups rather than
+  // TTP_TRACKS is what makes that true by construction, and it is also what leaves the dev-only tracks
   // out: they belong to no cup, so they cannot appear in a player-visible list.
   std::vector<CatalogEntry> out;
   for (int i = 0; i < TTP_CUP_COUNT; i++) {

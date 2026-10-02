@@ -21,7 +21,7 @@ enum Sticker {
     /// The extension default below mirrors this.
     static var border: CGFloat { 4 }
     /// Thinner rule, for the small tokens the CSS draws at 2-2.5px (livery dots,
-    /// mini-map frames, the difficulty pips).
+    /// mini-map frames).
     static var hairlineBorder: CGFloat { 2.5 }
 
     static var radiusSmall: CGFloat { Tokens.radius("r-sm") }

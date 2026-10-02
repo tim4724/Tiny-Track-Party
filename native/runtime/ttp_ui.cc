@@ -565,7 +565,6 @@ const char* ttp_ui_cup_slot_json(const char* pickJson) {
   o.set("name", valOf(slot.name));
   o.set("racesKey", Value::Str(ui::key(slot.racesKey)));
   o.set("raceCount", valOf(slot.raceCount));
-  o.set("difficulty", valOf(slot.difficulty));
   Value maps = Value::Arr();
   const auto chipVal = [](const ui::MapChip& m) {
     Value e = Value::Obj();

@@ -69,7 +69,7 @@ object Sticker {
 
     /**
      * Thinner rule, for the small tokens the CSS draws at 2-2.5px (livery dots,
-     * mini-map frames, the difficulty pips).
+     * mini-map frames).
      */
     val hairlineBorder: Dp = 2.5.dp
 

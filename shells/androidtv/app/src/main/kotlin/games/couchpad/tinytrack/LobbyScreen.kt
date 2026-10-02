@@ -433,13 +433,9 @@ private fun CupCard(slot: GameState.CupSlot, cups: List<GameState.CupRow>) {
             }
 
             // THE CARD'S FOOTER, under the tiles — `.cup-races` is the last thing in
-            // the pick's markup before the meter. Above them, the card's two chrome
-            // tokens stacked at the top and pushed the picture to the bottom.
+            // the pick's markup. Above them, the card's two chrome tokens stacked at
+            // the top and pushed the picture to the bottom.
             StickerPillOutlined(Copy.races(slot.racesKey, slot.raceCount), size = 15.dp)
-
-            // null and 0 are different: null hides the whole meter, 0 draws four
-            // unlit pips.
-            slot.difficulty?.let { DifficultyMeter(it) }
         }
     }
 }
@@ -626,21 +622,6 @@ private fun CupShelf(cups: List<GameState.CupRow>, starsEarned: Int, starsTotal:
 /** A shelf dot is the cup's colour at FULL strength — not the tiles' washed field. */
 private fun cupDot(cupId: String): Color =
     Color(Ttp.ttp_ui_cup_tint_rgb(TtpJson.arg(cupId), 100.0) or 0xFF000000.toInt())
-
-/** 0..4 pips. */
-@Composable
-private fun DifficultyMeter(level: Int) {
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        for (i in 0 until 4) {
-            Box(
-                Modifier
-                    .size(14.dp)
-                    .background(if (i < level) Tokens.red else Tokens.surface2, CircleShape)
-                    .stickerOutline(Sticker.hairlineBorder, CircleShape)
-            )
-        }
-    }
-}
 
 // -- (c) the seat dock ------------------------------------------------------
 

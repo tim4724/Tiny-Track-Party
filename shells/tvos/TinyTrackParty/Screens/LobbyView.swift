@@ -457,7 +457,7 @@ private struct JoinTicket: View {
 // MARK: - (b) Cup slot
 
 /// The race card: what the host picked, as a red cup sticker over the circuits
-/// it will run, a races pill and a difficulty meter.
+/// it will run and a races pill.
 ///
 /// Every field is `ttp_ui_cup_slot_json`'s, including the NUMBERING of the maps
 /// (`n` = 1...4) — a cup's running order is the GP menu at a glance, and the
@@ -474,12 +474,6 @@ private struct CupCard: View {
                 sticker
                 maps
                 racesPill
-                // The WHOLE meter goes when there is no difficulty — a cup with
-                // no tendency has nothing to say, and four empty pips would say
-                // "the easiest there is".
-                if let difficulty = slot.difficulty {
-                    meter(difficulty)
-                }
             }
         }
         .frame(width: LobbyViewMetrics.cupWidth)
@@ -580,25 +574,6 @@ private struct CupCard: View {
                     .hardShadow(Sticker.popShadow)
             )
             .overlay(Capsule().strokeBorder(Tokens.ink, lineWidth: Sticker.hairlineBorder))
-    }
-
-    /// Four pips, the first `difficulty` of them filled RED — the celebration
-    /// colour, never the old green-to-amber ramp (amber is vetoed in chrome).
-    /// A TENDENCY for the whole cup, not a rating for a track.
-    private func meter(_ difficulty: Int) -> some View {
-        HStack(spacing: 8) {
-            ForEach(0..<4, id: \.self) { i in
-                Circle()
-                    .fill(i < difficulty ? Tokens.red : Tokens.surface)
-                    .frame(width: 16, height: 16)
-                    .overlay(Circle().strokeBorder(Tokens.ink, lineWidth: 2.5))
-            }
-        }
-        .accessibilityElement(children: .ignore)
-        // COPY DEBT, like START's label: transcribed from `cupMeter`'s own
-        // aria-label (`shared/trackPicker.js`) rather than invented, and it
-        // belongs in `Copy.swift` with the rest.
-        .accessibilityLabel("difficulty \(difficulty) of 4")
     }
 }
 

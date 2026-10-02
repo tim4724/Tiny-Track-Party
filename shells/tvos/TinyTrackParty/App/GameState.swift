@@ -93,8 +93,6 @@ final class GameState: ObservableObject {
         let name: String?
         let racesKey: String    // "one" | "endless" | "count"  -> Copy.races
         let raceCount: Int
-        /// 0...4 pips, nil hides the meter entirely.
-        let difficulty: Int?
         let maps: [Map]
         let cupId: String?
 
@@ -422,9 +420,6 @@ extension GameState.CupSlot {
                   name: d["name"] as? String,
                   racesKey: d["racesKey"] as? String ?? "",
                   raceCount: Int(d["raceCount"] as? Double ?? 0),
-                  // nil and 0 are different: nil hides the whole meter, 0 would
-                  // draw four unlit pips.
-                  difficulty: (d["difficulty"] as? Double).map { Int($0) },
                   maps: maps,
                   cupId: d["cupId"] as? String)
     }
@@ -445,8 +440,7 @@ extension GameState.CupSlot {
             ? [Map(index: 0, trackId: nil, n: 0, cup: nil, glyph: "∞")]
             : (0..<max(raceCount, 0)).map { Map(index: $0, trackId: nil, n: 0, cup: nil, glyph: "?") }
         return GameState.CupSlot(nameKey: nameKey, name: name, racesKey: racesKey,
-                                 raceCount: raceCount, difficulty: difficulty,
-                                 maps: veil, cupId: cupId)
+                                 raceCount: raceCount, maps: veil, cupId: cupId)
     }
 }
 

@@ -101,8 +101,8 @@ extern "C" {
  * whatever list it is handed. Both or neither — a cups list with no catalog
  * would leave one lookup resolving while its neighbour missed.
  *
- * An overriding catalogue must be in CUPS order — a cup's difficulty is read
- * off its FIRST entry, which is public/shared/tracks.js's own arrangement.
+ * An overriding catalogue must be in CUPS order, which is
+ * public/shared/tracks.js's own arrangement and what every picker draws.
  *
  * Returns 1 when the text parsed, 0 otherwise (the previous catalogue then
  * stands). Never called at all, every lookup simply misses: a cup slot resolves
@@ -114,8 +114,8 @@ TTP_ABI int ttp_ui_configure(const char* json);
  *   {"cups": [...], "catalog": [...], "stars": {"earned": n, "total": n}}
  *
  * This is data, not a decision, and it is here because a shell has to DRAW the
- * thing — the lobby's mode picker is a list of cup names with a difficulty
- * meter on each, and the phones' chooser payload is a list of track names. What
+ * thing — the lobby's mode picker is a list of cup names, and the phones'
+ * chooser payload is a list of track names. What
  * it deliberately does not carry is anything the shell already knows (the field
  * sizes) or anything only the renderer needs (geometry, palette).
  *
@@ -303,7 +303,6 @@ TTP_ABI const char* ttp_ui_seat_grid_json(const char* seatsJson);
  *       "name": str|null,                   null for random/tour / an unresolved id
  *       "racesKey":"count"|"one"|"endless", how many races the pick means
  *       "raceCount": n|null,                meaningful only for "count"
- *       "difficulty": n|null,
  *       "maps":[{"trackId":str|null,"n":n?,"cup":str?}, ...],
  *       "cupId": str|null}
  * `maps` names the circuits to draw as minis BY TRACK ID; the schematic payload

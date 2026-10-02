@@ -306,7 +306,6 @@ Value slotValue(const ui::CupSlot& s) {
   o.set("name", valOf(s.name));
   o.set("racesKey", Value::Str(ui::key(s.racesKey)));
   o.set("raceCount", valOf(s.raceCount));
-  o.set("difficulty", valOf(s.difficulty));
   Value maps = Value::Arr();
   for (const ui::MapChip& m : s.maps) {
     Value e = Value::Obj();

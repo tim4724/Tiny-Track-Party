@@ -238,8 +238,6 @@ class GameState {
         val name: String?,
         val racesKey: String,       // "one" | "endless" | "count" -> Copy.races
         val raceCount: Int,
-        /** 0..4 pips; null hides the meter entirely. */
-        val difficulty: Int?,
         val maps: List<Map>,
         val cupId: String?,
     ) {
@@ -329,10 +327,6 @@ class GameState {
                     name = TtpJson.optStr(d, "name"),
                     racesKey = d.optString("racesKey"),
                     raceCount = d.optInt("raceCount"),
-                    // null and 0 are different: null hides the whole meter, 0 would
-                    // draw four unlit pips.
-                    difficulty = if (d.has("difficulty") && !d.isNull("difficulty"))
-                        d.optInt("difficulty") else null,
                     maps = maps,
                     cupId = TtpJson.optStr(d, "cupId"),
                 )
