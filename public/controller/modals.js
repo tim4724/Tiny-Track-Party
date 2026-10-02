@@ -157,7 +157,7 @@ const motionBlocked = () => _tilt.motionState === 'denied';
 
 // Populate the popup's title/status/Allow/fix from the resolved state.
 function refreshMotionPopup() {
-  const copy = motionHelpCopy(_tilt.motionState);
+  const copy = motionHelpCopy(_tilt.motionState, !!window.airconsole);
   if (!copy.show) return;          // granted — popup shouldn't be up; guard anyway
   el('motion-title').textContent = copy.title;
   el('motion-status').textContent = copy.status;
@@ -316,7 +316,9 @@ export function initModals({ screens, tilt, buzz, playerName, getInputMode, setI
   // grant in place.
   el('motion-allow').addEventListener('click', async () => {
     _buzz(15);
-    if (motionHelpCopy(_tilt.motionState).action === 'reload') { location.reload(); return; }
+    const { action } = motionHelpCopy(_tilt.motionState, !!window.airconsole);
+    if (action === 'reload') { location.reload(); return; }
+    if (action === 'buttons') { _setInputMode('buttons'); refreshSettingsCard(); closeMotionPopup(); return; }
     const btn = el('motion-allow');
     btn.disabled = true; btn.textContent = 'Asking…';
     // Allowed but silent is caught after this resolves: refreshMotionState

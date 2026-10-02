@@ -50,3 +50,7 @@ scripts/.preview-tracks.html
 # repeatedly outlived their session and then failed `npm run lint`. This is
 # where they go instead; eslint.config.js ignores it for the same reason.
 scratch/
+
+# AirConsole zip staging + packages (scripts/build-airconsole.sh). Anchored:
+# unanchored, it would also swallow any future nested build/ dir.
+/build/

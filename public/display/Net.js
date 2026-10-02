@@ -261,9 +261,12 @@ export class DisplayNet extends GameNet {
     this._PartyConnectionImpl = opts.PartyConnectionImpl || PartyConnection;
     if (opts.FastlaneImpl) this.FastlaneImpl = opts.FastlaneImpl;
     // The grace window and nothing else. Leaving RoomFlow's expiry unset leaves
-    // it at Infinity, which is how "the relay decides who is connected" is
-    // spelled to the kit.
+    // it at Infinity, which is how "the transport decides who is connected" is
+    // spelled to the kit. masterProvider is the one seam a transport may claim
+    // (AirConsole does — see display-airconsole.js): the platform-designated
+    // host. Absent (the relay), host election stays sticky-lowest-slot.
     this.flow = new this._RoomFlowImpl({
+      masterProvider: opts.masterProvider || null,
       liveness: { graceMs: ABANDONED_RACE_GRACE_MS }
     });
     session.initPick(this.flow.handle,
@@ -652,10 +655,14 @@ export function buildReconnectCard(seat) {
   const title = document.createElement('div');
   title.className = 'rc-card__title'; title.textContent = 'Disconnected';
 
+  card.append(title);
+  // No QR on AirConsole: the platform reconnects the device itself, and the
+  // seat's URL points at a relay room that does not exist there.
+  if (window.airconsole) return card;
+
   const qr = document.createElement('canvas');
   qr.className = 'rc-card__qr';
-
-  card.append(title, qr);
+  card.append(qr);
 
   // Transparent QR background → black modules sit straight on the frosted card.
   // Rendered big: CSS scales it to half the cell's height, which on a 4K

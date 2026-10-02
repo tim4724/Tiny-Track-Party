@@ -54,7 +54,20 @@ export function renderWaitNote(waitEl, { name, color } = {}, suffix) {
 // fresh request CAN still prompt — and it is not only the gallery's pre-prompt
 // edge: a request the platform refused to even put for want of a gesture (a
 // launcher join, see TiltInput._askOnNextGesture) lands a real phone here too.
-export function motionHelpCopy(state) {
+//
+// AirConsole is its own case: the frame never asks for the sensor there (the SDK
+// relay is the sensor), so neither Allow nor Reload can change anything. The
+// only state that reaches the popup is a relay delivering no tilt, and the one
+// fix this page owns is switching to buttons.
+export function motionHelpCopy(state, onAirConsole) {
+  if (onAirConsole && state !== 'granted') {
+    return {
+      show: true, allow: true, action: 'buttons', allowText: 'Use buttons',
+      title: 'Tilt isn’t reaching the game',
+      status: 'AirConsole isn’t sending your phone’s tilt right now. Switch to buttons to keep racing.',
+      fix: null
+    };
+  }
   switch (state) {
     case 'granted':
       return { show: false };

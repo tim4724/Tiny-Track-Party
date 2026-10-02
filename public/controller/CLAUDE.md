@@ -59,6 +59,34 @@ gets pinned.
 
 Both have already cost shipped bugs; each one's mechanism is commented where it
 was fixed, not restated here.
+## AirConsole (controller.html)
+
+`controller-airconsole.js` is a classic script only the generated
+`controller.html` loads: it re-points `window.PartyConnection` at the adapter
+and `window.PartyFastlane` at a stub before the modules capture them, installs
+the AC-backed pref shim, and hands `main.js` the platform surface
+(`window.__acController`: ready promise, nickname, SDK haptics). The few
+in-module gates test `window.airconsole`: no suspend/resume teardown, no
+history, no self-leave on popstate.
+
+**TILT THERE IS THE SDK's `device_motion` RELAY, permanently.** The game is a
+cross-origin iframe and no AC embedder delegates the motion sensors to it, so
+`DeviceOrientation` never fires. **The relay's `alpha/beta/gamma` are
+ORIENTATION ANGLES**, the `DeviceOrientationEvent` triple, whatever the SDK's
+JSDoc says ("for gyroscope"): measured on a device, held still at a 65° roll
+they read 65 where a rate reads 0, and AirConsole's engineers confirm it. So
+`TiltInput.relayOrientation` hands them to the same path a browser's own event
+takes. The first relayed sample is also what resolves `motionState` — the
+frame's own permission request and settle check (`enableMotion`) are a no-op on AC, because
+that sensor is the one AC never feeds: iOS answers `denied`, and the settle
+window closes before the relay's first sample (~1.9 s after load on the
+device), which is how a live phone once read "Tilt: Not available". Asking the platform for
+`allow="accelerometer; gyroscope"` would not end this: WebKit refuses motion in
+cross-origin frames outright and never consults `allow`, so iOS needs the relay
+whatever AirConsole ships.
+
+No WS ping on AC: steering alone is sized to fill AC's 25 msg/s budget
+(`STEER.SEND_MIN_INTERVAL_MS`), so the latency chip stays dark there.
 
 ## The display is authoritative
 
