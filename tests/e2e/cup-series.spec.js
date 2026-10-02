@@ -125,6 +125,51 @@ test('an untouched intermission auto-advances into the next race', async ({ page
   expect(await page.evaluate(() => window.__series().raceIndex)).toBe(1);
 });
 
+test('a dropped racer keeps a car and a cell for the whole cup', async ({ page, browser }) => {
+  await page.addInitScript(() => { window.__intermissionMs = 1200; });
+  const roomCode = await openDisplay(page);
+  const alice = await joinController(browser, roomCode, 'Alice'); // peerIndex 1
+  const bob = await joinController(browser, roomCode, 'Bob');     // peerIndex 2
+  await page.waitForFunction(() => window.__net.mode === 'cup', null, { timeout: 10000 });
+  await startRace(alice, [bob]);
+  await waitForRacing(page);
+
+  await bob.context().close();
+  await page.waitForFunction(() => window.__net.flow.isDisconnected(2), null, { timeout: 10000 });
+  await page.evaluate(() => window.__session().forceFinish(1, 42.5));
+
+  // Race 2 launches with Bob's reserved seat still in it: a car, a cell, and
+  // the reconnect QR in that cell. Only the lobby frees the seat.
+  await page.waitForFunction((id) => window.__net.trackId === id, BEACH[1], { timeout: 30000 });
+  await waitForRacing(page);
+  expect(await page.evaluate(() => window.__session().carIds())).toEqual(expect.arrayContaining([1, 2]));
+  await expect(page.locator('.cell-reconnect')).toHaveCount(1);
+});
+
+test('backing out on the intermission board still keeps the seat for the cup', async ({ page, browser }) => {
+  // There is no LEAVE message: a back-out is the relay's peer_left like any lost
+  // connection, so outside the lobby it reserves the seat rather than freeing it.
+  await page.addInitScript(() => { window.__intermissionMs = 60000; });
+  const roomCode = await openDisplay(page);
+  const alice = await joinController(browser, roomCode, 'Alice'); // peerIndex 1, host
+  const bob = await joinController(browser, roomCode, 'Bob');     // peerIndex 2
+  await page.waitForFunction(() => window.__net.mode === 'cup', null, { timeout: 10000 });
+  await startRace(alice, [bob]);
+  await waitForRacing(page);
+  await finishHumans(page);
+  await inResults(page);
+
+  await bob.evaluate(() => window.__net.disconnect());   // the back-out, as leaveToName does it
+  await page.waitForFunction(() => window.__net.flow.isDisconnected(2), null, { timeout: 10000 });
+  expect(await page.evaluate(() => window.__net.flow.has(2))).toBe(true);
+
+  await alice.evaluate(() => window.__net.send(window.MSG.SERIES_NEXT));
+  await page.waitForFunction((id) => window.__net.trackId === id, BEACH[1], { timeout: 30000 });
+  await waitForRacing(page);
+  expect(await page.evaluate(() => window.__session().carIds())).toEqual(expect.arrayContaining([1, 2]));
+  await expect(page.locator('.cell-reconnect')).toHaveCount(1);
+});
+
 test('abandoning a cup mid-race cancels the series and a restart begins at race 1', async ({ page, browser }) => {
   await page.addInitScript(() => { window.__intermissionMs = 60000; });
   const roomCode = await openDisplay(page);

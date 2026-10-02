@@ -1041,6 +1041,40 @@ test('asym: a returning owner can be told the room is full', async () => {
   assert.equal(back.seen.status.find((s) => s.s === 'error').info, 'Room is full');
 });
 
+test('asym: a newcomer the freed cap let in takes over the reserved seat', async () => {
+  // The other side of the test above. Prod's cap counts LIVE sockets, while the
+  // display counts SEATS and keeps a dropped racer's seat reserved until the
+  // lobby — so mid-race a newcomer can be in the room with no seat to give.
+  // Structurally impossible on the E2E stub, whose cap counts slots.
+  //
+  // WHAT THIS BREAKS AT A REAL PARTY if it regresses: the newcomer's phone sits
+  // on "joining" forever, AND holds the freed socket, so the dropped racer's
+  // own rejoin is answered "Room is full".
+  const rekeys = [];
+  const { relay, net, room } = await bringUpRealDisplay({}, {
+    onPlayerRekey: (oldId, newId) => rekeys.push({ oldId, newId }),
+  });
+  const phones = [];
+  for (const k of ['A', 'B', 'C', 'D']) phones.push(await bringUpPhone(relay, room, { name: k, clientKey: 'to-' + k }));
+  for (const phase of ['countdown', 'playing']) net.flow.transitionTo(phase);
+  await H.flush();
+
+  const dIndex = phones[3].net.peerIndex;
+  phones[3].net.disconnect();   // D's socket closes; the seat stays reserved
+  await H.flush();
+  assert.equal(net.flow.isDisconnected(dIndex), true, 'premise: D dropped and is reserved');
+
+  const eve = await bringUpPhone(relay, room, { name: 'Eve', clientKey: 'to-E' });
+  assert.equal(eve.seen.joined.length, 1, 'the relay let the newcomer in through the freed socket');
+  assert.deepEqual(rekeys, [{ oldId: dIndex, newId: eve.net.peerIndex }],
+    "the newcomer's HELLO moved D's reserved seat onto it, car included");
+  const me = lastLobby(eve).players.find((p) => p.peerIndex === eve.net.peerIndex);
+  assert.ok(me && me.connected && me.name === 'Eve', 'Eve is seated, connected, under her own name');
+  assert.ok(!lastLobby(eve).players.some((p) => p.peerIndex === dIndex), "D's old seat is gone");
+
+  for (const p of [...phones.slice(0, 3), eve]) p.net.disconnect();
+});
+
 test('asym: replacing a live socket fires NO peer_joined, so phones never re-HELLO', async () => {
   // server.ts:526 broadcasts peer_joined only `if (!wasActive)`. The E2E stub
   // fires it unconditionally.

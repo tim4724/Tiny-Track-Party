@@ -48,7 +48,9 @@ function trapTab(overlay, e) {
   const f = [...overlay.querySelectorAll('button:not([disabled])')].filter((b) => b.offsetParent !== null);
   if (!f.length) return;
   const first = f[0], last = f[f.length - 1];
-  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  // Focus on the dialog itself (modals open that way): the first Tab enters the ring.
+  if (!f.includes(document.activeElement)) { e.preventDefault(); (e.shiftKey ? last : first).focus(); }
+  else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
   else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
 }
 
@@ -64,7 +66,7 @@ const settingsOpen = () => !el('settings-overlay').classList.contains('hidden');
 
 // Sync the card to the CURRENT input mode: the seg's checked side and the
 // .is-buttons class that flips the demo phone + captions between modes.
-// On a device with no motion sensor (main.js forced buttons at startup) the
+// On a device with no motion sensor (main.js forced buttons) the
 // Tilt row is disabled outright and its sticker says why — a pickable-looking
 // Tilt would only lead into a recovery popup with no recovery.
 function refreshSettingsCard() {
@@ -90,17 +92,27 @@ export function refreshSettingsState() {
   if (settingsOpen()) refreshSettingsCard();
 }
 
+// motionState moved (main.js onMotionState) — the background delivery verdict,
+// or a late sample taking it back. Keep the open card true to it, and close the
+// motion popup once there is nothing left for it to fix: a sensor that turned out
+// absent has been put on buttons, and its "Allow motion" would only re-ask.
+export function refreshMotionState() {
+  refreshSettingsState();
+  if (motionOpen() && _tilt.motionState === 'unsupported') closeMotionPopup();
+}
+
 function openSettings() {
   _settingsReturnFocus = document.activeElement;
   setDemoNames(_playerName());   // both demo phones read as "your phone" (livery via --car)
   refreshSettingsCard();
   el('settings-overlay').classList.remove('hidden');
   setBackgroundInert(true);
-  // keyboard-operable + announced; the trap keeps Tab inside. preventScroll
-  // because the seed is the card's LAST control: on a screen too short for the
-  // card, focusing it scrolled the card to the bottom, so Settings opened with
-  // its own title already off the top.
-  el('settings-done').focus({ preventScroll: true });
+  // Focus the DIALOG, not a button in it: announced by its title, the trap
+  // takes the first Tab inside, and nothing lights up. A seeded button drew
+  // Chromium's focus ring whenever no tap came before the open (the launcher's
+  // auto-joined first-run card). preventScroll keeps a card taller than the
+  // screen opening at its title.
+  el('settings-overlay').focus({ preventScroll: true });
   _onModalToggle();
 }
 
@@ -162,7 +174,7 @@ function openMotionPopup() {
   refreshMotionPopup();
   el('motion-overlay').classList.remove('hidden');
   setBackgroundInert(true);
-  el('motion-done').focus({ preventScroll: true });
+  el('motion-overlay').focus({ preventScroll: true });
   _onModalToggle();
 }
 
@@ -193,7 +205,7 @@ export function openStarsPopup(progress, catalog) {
     unlockEl: el('stars-unlock'), progress, catalog });
   el('stars-overlay').classList.remove('hidden');
   setBackgroundInert(true);
-  el('stars-done').focus({ preventScroll: true });
+  el('stars-overlay').focus({ preventScroll: true });
   _onModalToggle();
 }
 
@@ -270,11 +282,9 @@ export function initModals({ screens, tilt, buzz, playerName, getInputMode, setI
     _setInputMode('tilt');
     refreshSettingsCard();
     if (_tilt.motionState !== 'granted') {
+      // A sensor that turns out absent is put back on buttons by main.js's
+      // onMotionState, a moment after this resolves.
       await _tilt.enableMotion();
-      // Trying is the only way to prove a sensor absent on a browser that can't
-      // be asked, so the Tilt row can be live at click time and dead by now.
-      // Put the phone back on buttons and let the card say why.
-      if (_tilt.motionState === 'unsupported') _setInputMode('buttons');
       refreshSettingsCard();
       if (motionBlocked()) openMotionPopup();
     }
@@ -309,15 +319,9 @@ export function initModals({ screens, tilt, buzz, playerName, getInputMode, setI
     if (motionHelpCopy(_tilt.motionState).action === 'reload') { location.reload(); return; }
     const btn = el('motion-allow');
     btn.disabled = true; btn.textContent = 'Asking…';
+    // Allowed but silent is caught after this resolves: refreshMotionState
+    // closes the popup when the phone falls back to buttons.
     await _tilt.enableMotion();
-    // Allowed, but the sensor delivers nothing. There is no recovery to offer
-    // (the dead-end "tilt isn't available" face was removed on purpose), so
-    // close and fall back rather than loop the player through Allow again.
-    if (_tilt.motionState === 'unsupported') {
-      _setInputMode('buttons');
-      closeMotionPopup();
-      return;
-    }
     if (_tilt.motionState === 'granted') {
       el('motion-title').textContent = 'Motion access on';
       el('motion-status').textContent = 'Tilt to steer is ready.';

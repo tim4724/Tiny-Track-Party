@@ -31,6 +31,7 @@
 #include "ttp/glb_mesh.h"
 namespace ttp { namespace kitcolors { struct Mesh; } }
 #include "ttp/car_footprint.h"
+#include "ttp/ground_grid.h"
 
 
 // The car contact shadow's live knobs, and the ONE place their defaults are
@@ -269,6 +270,11 @@ public:
     // the shell already made the WebGL2 context current).
     bool init(filament::backend::Backend backend, void* nativeWindow,
             uint32_t width, uint32_t height);
+#if defined(__ANDROID__)
+    // Before init: the file the Vulkan backend keeps its compiled pipelines in
+    // between runs. Unset keeps them in memory, as every other backend does.
+    void setPipelineCacheFile(std::string path) { mPipelineCacheFile = std::move(path); }
+#endif
     void resize(uint32_t width, uint32_t height);
     // Skip the sun's shadow bake for every scene built from here on. The bake is
     // a 2048² depth pass over the whole circuit plus its ESM blur, once per
@@ -437,6 +443,9 @@ public:
     // hasPainted latch is the caller). Polls a fence armed by the first
     // presented frame after a build; sticky true until the scene is released.
     bool settled();
+
+    // The built scene's ground surface, as the mesh draws it (ttp/ground_grid.h).
+    const ttp::rt::GroundGrid& groundGrid() const { return mGroundGrid; }
 
     bool buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& theme,
             const std::vector<TtpRosterCar>& roster, const ttp::rt::WearPlan& wear);
@@ -646,6 +655,7 @@ private:
     // The Vulkan platform with the framebuffer-eviction override (see
     // TtpRenderer::init) — caller-owned, so it outlives the engine here.
     std::unique_ptr<filament::backend::Platform> mVkPlatform;
+    std::string mPipelineCacheFile;
 #endif
     filament::SwapChain* mSwapChain = nullptr;
     filament::Renderer* mRenderer = nullptr;
@@ -1059,10 +1069,9 @@ private:
     // placement stands on the mesh's own piecewise-linear surface rather than
     // the analytic field — between grid vertices they differ by enough to bury
     // a shadow disc or a starfish. Filled by buildTerrainGrid, read by
-    // groundSurfaceY (which answers groundY wherever the grid is absent).
-    std::vector<float> mTerrainHs;
-    int mTerrainCols = 0, mTerrainRows = 0;
-    float mTerrainSx = 0, mTerrainSz = 0;
+    // groundSurfaceY (which answers groundY wherever the grid is absent), and
+    // handed out by groundGrid() so the follow camera keeps clear of it.
+    ttp::rt::GroundGrid mGroundGrid;
     void buildTerrainGrid(const TrackBin& tb);
     float groundSurfaceY(const TrackBin& tb, float x, float z) const;
     float footprintY(const TrackBin& tb, float x, float z, float r) const;
@@ -1223,6 +1232,9 @@ private:
     // Scene membership for the box pools (setInstanceInScene state): a collected
     // box leaves the scene, and its fade twin is only IN it for the 0.2 s poof.
     std::vector<uint8_t> mBoxIn, mBoxFadeIn;
+    // Whether this scene has drawn one member of every effect pool yet
+    // (warmEffectPipelines). Cleared by each buildTrackScene.
+    bool mEffectsWarm = false;
     // Every box-pool MaterialInstance carrying emissiveFactor, resolved once at
     // load — the throb retints these instead of string-probing every material of
     // every instance per frame.
@@ -2393,6 +2405,7 @@ private:
     void setMeshInScene(Mesh& m, bool on);
     void setInstanceInScene(filament::gltfio::FilamentInstance* inst, uint8_t& state, bool on);
     void setAssetInScene(filament::gltfio::FilamentAsset* asset, uint8_t& state, bool on);
+    void warmEffectPipelines(const TtpFrameInput& input);
     void buildOils(const TrackBin& tb);
     void ensureCells(uint32_t count);
 };

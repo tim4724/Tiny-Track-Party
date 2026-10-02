@@ -155,21 +155,18 @@ export class ControllerNet extends GameNet {
     this.party.connect();
   }
 
-  // Tear down the connection for good (no reconnect). Sends LEAVE first so the
-  // display frees our seat outright instead of holding it open with a reconnect
-  // QR — a back-out is intentional, not a drop. (peer_left follows when the
-  // socket closes; the display no-ops it once the seat's already gone.) Used when
-  // the player backs out of the room to the name screen.
+  // Tear down the connection for good (no reconnect). Used when the player backs
+  // out of the room to the name screen. The display hears it as the relay's
+  // peer_left, exactly as it hears a lost connection: the lobby frees the seat,
+  // anywhere else it stays reserved (with a reconnect QR) until the lobby.
   disconnect() {
     this._suspended = false;   // an intentional back-out is never resumed
-    try { if (this.party) this.party.sendTo(0, { type: MSG.LEAVE }); } catch (_) {}
     this._dropLink();
   }
 
   // Everything the two INTENTIONAL endings have in common: stop the ping, drop
-  // the fastlane, close the socket, forget the slot. What differs is only what
-  // each says on the way out — disconnect() announces LEAVE, suspend() goes quiet
-  // — and whether it expects to come back.
+  // the fastlane, close the socket, forget the slot. What differs is only
+  // whether each expects to come back.
   _dropLink() {
     this._stopPing();
     if (this.fastlane) { this.fastlane.closeAll(); this.fastlane = null; }
@@ -184,9 +181,8 @@ export class ControllerNet extends GameNet {
   // network stack is out-of-process and survives suspension), on Android whenever
   // the OS gets round to freezing the cached process.
   //
-  // Deliberately NOT disconnect(): backgrounding is not a back-out, so no LEAVE
-  // goes out and the display holds the seat as a droppable one (reconnect QR)
-  // rather than freeing it outright. party.close() detaches the socket handlers,
+  // Deliberately NOT disconnect(): backgrounding is not a back-out, so the link
+  // is resumed on return. party.close() detaches the socket handlers,
   // so our own close can't come back through onClose and flash 'Reconnecting…'
   // over a page nobody is looking at.
   suspend() {

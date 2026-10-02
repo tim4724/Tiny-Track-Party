@@ -14,6 +14,7 @@
     "check:blob-cache": "node scripts/check-blob-cache.mjs",
     "check:music-loudness": "node scripts/check-music-loudness.mjs",
     "check:tvos-lifecycle": "node scripts/check-tvos-lifecycle.mjs",
+    "check:tvos-race-remote": "node scripts/check-tvos-race-remote.mjs",
     "check:tvos-party": "node scripts/tvos-party-check.mjs",
     "dev": "node --watch server/index.js",
     "fetch:kits": "node scripts/fetch-kits.mjs",

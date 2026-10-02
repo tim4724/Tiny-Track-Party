@@ -227,8 +227,8 @@ test('party ABI: the liveness walk abandons a race nobody is left driving', asyn
   assert.deepEqual(JSON.parse(cw('ttp_party_version', 'string', [])()),
     { contractVersion: 2, layer: 'party' }, 'the party layer in the artifact is the one the adapter expects');
 
-  // No timeoutMs — presence is the relay's answer, so the room machine holds no
-  // per-seat expiry and a seat is dropped by peer_left and by nothing else.
+  // Presence is the relay's answer: a seat is dropped by peer_left and by
+  // nothing else.
   const h = room.create(JSON.stringify({ liveness: { graceMs: 1500 } }));
   assert.ok(h > 0);
   const ops = (raw) => JSON.parse(raw).effects.map((e) => e.op);

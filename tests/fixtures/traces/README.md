@@ -93,9 +93,10 @@ fixture proves "the sim still does what it did when this was recorded" and says
 NOTHING about JS parity.
 
 **`--record` on a class-1 fixture means something different, and the difference
-is the whole rule.** `ui_check`, `audio_check`, `session_check` and
-`schematic_check` each take `--record <fixture> --out=<f>` too, gated by
-`record_ui` / `record_audio` / `record_session` / `record_schematic`. Those do
+is the whole rule.** `ui_check`, `audio_check`, `session_check`,
+`schematic_check` and `roomflow_check` each take `--record <fixture> --out=<f>`
+too, gated by `record_ui` / `record_audio` / `record_session` /
+`record_schematic` / `record_roomflow`. Those do
 NOT regenerate a corpus: they RE-EMIT the committed one, feeding each line's own
 recorded INPUT back through the port and writing the answers out again. The
 scenarios — which ops, in which order, with which arguments, sweeps included —
@@ -115,8 +116,8 @@ display's room policy), `ui-corpus.jsonl`, `audio-corpus.jsonl` and
 AHEAD of their port; `schematic-corpus.jsonl` is the odd one, its per-track
 expectations being the committed `public/shared/trackSchematics.js` bake.
 
-Two have since been DEMOTED to class 2 by a deliberate re-record, and in both
-cases the JS-parity claim lives in git history at the bytes before it.
+Four have since been DEMOTED to class 2 by a deliberate change, and in each
+case the JS-parity claim lives in git history at the bytes before it.
 `session-corpus.jsonl`: the rejoinToken normalizer stopped emulating JS
 `Number(value)` and became a plain type check (session.h), which flipped every
 non-number token to "no claim". `raceflow-corpus.jsonl`: three launch flags
@@ -124,7 +125,11 @@ non-number token to "no claim". `raceflow-corpus.jsonl`: three launch flags
 only to keep these bytes still were baked into race_flow.h, so the fixture now
 records the grid, the deferred countdown and the banked podium the game actually
 ships — the trade being that a knob no shipping caller ever set stops being
-dead code, paid for in this corpus's class.
+dead code, paid for in this corpus's class. `ui-corpus.jsonl`: the race-flow
+answer lost its `forfeit` list, because a dropped racer keeps their car to the
+lobby. `roomflow-corpus.jsonl` (the party kit's room machine, recorded off the
+retired `partyplug/RoomFlow.js`): the kit's silence detector was deleted, its
+ops and its two scripts went from the fixture, and the rest was re-emitted.
 
 **All of them are now FROZEN.** `sessionModel.js`, `uiModel.js`,
 `audio/decide.js`, `trackSchematic.js` and finally `raceFlow.js` were deleted

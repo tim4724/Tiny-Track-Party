@@ -52,7 +52,7 @@ function launch() {
     // exists to catch. The launch is the executor's (`ttp_race_start_live_json`);
     // the composed race rides its create-session effect.
     const room = c('ttp_room_create', 'number', ['string'])(JSON.stringify({
-      liveness: { timeoutMs: 60000, graceMs: 60000 } }));
+      liveness: { graceMs: 60000 } }));
     const add = c('ttp_room_add_player', 'number', ['number', 'string', 'string']);
     add(room, '1', JSON.stringify({ name: 'Alice', carIndex: 0, colorIndex: 0, ready: false }));
     add(room, '2', JSON.stringify({ name: 'Bob', carIndex: 1, colorIndex: 1, ready: false }));

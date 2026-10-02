@@ -3,7 +3,12 @@
 // documentation for every constant; they came across untouched.
 #pragma once
 
+#include <vector>
+
+#include "ttp/ground_grid.h"
+#include "ttp/name_tags.h"
 #include "ttp/vecmath.h"
+#include "ttp_render.h"
 
 namespace ttp {
 
@@ -70,6 +75,97 @@ struct ChaseCam {
     bool init = false;  // first update snaps, so it doesn't lag in from the origin
 
     void update(const ttp::Pose& pose, float spd, float dt);
+};
+
+// ---------------------------------------------------------------------------
+// The FOLLOW overview (TTP_CAM_FOLLOW): a low camera on the lead battle, for
+// trailer shots. Nothing in the game asks for it.
+//
+// IT LOOKS INWARD. The scenery is dressed along the track, so the busy
+// background is the rest of the circuit, and the empty one is whatever lies
+// outside it. The camera therefore stands OUTSIDE the battle and faces the
+// track's centre across it, swung FOLLOW_LEAD toward the cars' front so the
+// field drives at the lens rather than away. Nothing turns it on a clock: as
+// the battle goes round the circuit the inward direction turns with it, so the
+// camera sweeps because the race does.
+//
+// THE BATTLE is the leader plus every car within FOLLOW_GAP of it in track
+// progress (totalS, laps included), so a lapped car beside the leader is not in
+// it and a car a straight behind is. The camera aims at the battle's centre,
+// far enough out that the battle fits the lens.
+//
+// EVERYTHING MOVES ON SPRINGS: the aim, the yaw, the distance and the pitch are
+// each a critically damped spring, which gathers speed and sheds it rather
+// than starting at full speed the frame its goal moves — the jolt a plain ease
+// puts into every new heading. Only a cut (below) jumps.
+//
+// NO SPEED LAG. A spring on the aim point alone would trail the cars by
+// v/omega, a car length per tenth of a second, and the leader would drive out
+// of frame. So the aim is carried along at the leader's velocity, SMOOTHED
+// (FOLLOW_FLOW_RATE) so its steering wobble does not shake the shot, and the
+// spring only pulls it onto the battle's centre: at a steady speed it sits
+// exactly there. A change of leader does not jolt it, because the new
+// leader's velocity is read off ITS last position, not the old leader's.
+//
+// KEEPING THE BATTLE IN SIGHT. A bridge between the camera and the cars would
+// fill the shot with its underside, so every frame the rig tries its pitches in
+// FOLLOW_PITCHES order — its own first, then LOWER, which is what slips under a
+// bridge ahead, and only then higher — and eases toward the first one from
+// which neither the road deck nor the ground hides any car in the battle,
+// whose eye is FOLLOW_LENS_CLEAR off both (a lens that grazes a bridge or a
+// slope fills the frame with it), and from which no HILL climbs too far up the
+// shot: along the near FOLLOW_HILL_REACH of the line to the battle, ground that
+// rises over the ground under the battle must stay below FOLLOW_HILL_ROW of
+// the frame's lower half. The ground the road runs across is not a hill, so a
+// flat field leading up to the cars never counts. With none clear it stays on
+// FOLLOW_PITCH. When the way from where the eye is to where it wants to be
+// crosses a deck — above a bridge to under it — easing would fly the lens
+// through the road, so it CUTS there instead. Pillars, props and scenery are
+// not modelled.
+//
+// The facing is a YAW, eased the short way round. A leader pointing up a loop
+// has no level heading, so the blend keeps the last one it had; a battle at the
+// track's very centre has no inward, and drops out of the blend.
+// ---------------------------------------------------------------------------
+constexpr float FOLLOW_GAP = 6.0f;          // track units behind the leader (~0.5 s flat out)
+constexpr float FOLLOW_MARGIN = 1.5f;       // added to the battle's radius: a car is not a point
+constexpr float FOLLOW_MIN_R = 3.0f, FOLLOW_MAX_R = 10.0f;  // fitted radius clamp
+constexpr float FOLLOW_PITCH = 0.3f;        // rad below level (~17 degrees)
+// The pitches tried, in order of preference; the first is FOLLOW_PITCH.
+constexpr float FOLLOW_PITCHES[] = { FOLLOW_PITCH, 0.2f, 0.1f, 0.03f, 0.45f, 0.6f, 0.8f };
+constexpr float FOLLOW_AIM_UP = 0.25f;      // where on a car the sight line ends: its body, not its wheels
+constexpr float FOLLOW_CAR_CLEAR = 0.6f;    // the deck a car is on never hides it (as for name tags)
+constexpr float FOLLOW_LENS_CLEAR = 1.0f;   // how far off any deck, and over the ground, the eye must stay
+constexpr float FOLLOW_HILL_REACH = 0.6f;   // the near part of the line where a hill is foreground
+constexpr float FOLLOW_HILL_ROW = 0.33f;    // ...whose top must stay this far down the lower half-frame
+constexpr float FOLLOW_HILL_RISE = 0.5f;    // ground this far over the battle's own ground is a hill
+constexpr int FOLLOW_SIGHT_STEPS = 24;      // samples along a sight line against the ground
+constexpr float FOLLOW_LEAD = 0.5f;         // rad from facing inward toward facing the cars' fronts
+constexpr float FOLLOW_FOV = 50.0f;
+// The springs' natural frequencies (rad/s): a spring settles in about 5/omega.
+// The pitch is the quickest — it has a bridge to get under before it passes.
+constexpr float FOLLOW_AIM_OMEGA = 3.0f, FOLLOW_YAW_OMEGA = 1.8f, FOLLOW_DIST_OMEGA = 1.5f,
+                FOLLOW_PITCH_OMEGA = 3.0f;
+constexpr float FOLLOW_FLOW_RATE = 4.0f;    // 1/s, how fast the carried velocity follows the leader's
+
+struct FollowCam {
+    V3 pos, target;
+    float yaw = 0, dist = 0;  // yaw: the direction the camera FACES, atan2(x, z)
+    float pitch = FOLLOW_PITCH;
+    // The springs' velocities, and the leader's smoothed velocity the aim rides on.
+    V3 aimVel, flow;
+    float yawVel = 0, distVel = 0, pitchVel = 0;
+    V3 back = { 0, 0, -1 };   // the leader's last LEVEL heading, reversed and flattened
+    bool init = false;
+    std::vector<V3> last;    // each slot's position last frame (the leader's displacement)...
+    std::vector<bool> seen;  // ...valid only where the slot held a car last frame
+
+    // `live[i]` says slot i holds a car this frame; `cars` is the frame's own
+    // car input, so a held field is followed where it is DRAWN. `trackCentre`
+    // is Framing::center, what the camera looks in toward; `deck` and `ground`
+    // are what it keeps the battle out from behind.
+    void update(const TtpCarInput* cars, const std::vector<bool>& live, V3 trackCentre,
+                const NameTagDeck& deck, const GroundGrid& ground, float dt);
 };
 
 }  // namespace rt

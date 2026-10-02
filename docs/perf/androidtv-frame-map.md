@@ -10,7 +10,7 @@ second is the fixed 1080 pin every feature is RANKED on; the last two are the
 settled pins that fall out of the first:
 
 ```
-node scripts/perf-race.mjs  --platform androidtv --players 1|2|4 --vk 1 --pin 0 --seconds 75
+node scripts/perf-race.mjs  --platform androidtv --players 1|2|3|4 --vk 1 --pin 0 --seconds 75
 node scripts/perf-frame.mjs --players 1,2,4 --track tidepool --pin 1        --vk 1
 node scripts/perf-frame.mjs --players 1,2   --track tidepool --pin 0.5      --vk 1
 node scripts/perf-frame.mjs --players 4     --track tidepool --pin 0.333333 --vk 1
@@ -33,14 +33,27 @@ The tool's header is the argument for every other choice below.
 
 ## Where the adaptive rule actually operates
 
-Free-running (`--pin 0`), 75 s of race per count. This is the resolution a
-player is at, and every "settled" column below is pinned to it.
+Free-running (`--pin 0`, `--timeline`), Vulkan, tidepool, 120 s of race per
+count, `1.0-bcdeeb8f` (2026-10-02, name tags in). This is the resolution a
+player is at, and every "settled" column below is pinned to it. Seconds are
+the run's after its opening 1280x720 rung, which 1-3P pass through and 4P
+skips.
 
-| Players | Settles at | Presented | GPU p50 / p95 |
-|---|---|---|---|
-| 1 | 960x540 | 60 fps, 0 skips/s | 9.0 / 10.6 |
-| 2 | 960x540 | 60 fps, 0 skips/s | 9.4 / 11.5 |
-| 4 | **does not settle** — 960x540@30 ↔ 640x360@60 *(2026-08-27; superseded below: 128 of 150 s at 60 fps on 2026-09-02)* | 30 or 56 fps | 12.4 / 15.9 at 360 |
+| Players | Seconds per operating point | Mean fps | Skips/s | GPU p50 typical / p95 worst |
+|---|---|---|---|---|
+| 1 | 960x540 108 | 59.9 | 0.07 | 7.4 / 20.7 |
+| 2 | 960x540 108 | 59.9 | 0.07 | 7.1 / 15.6 |
+| 3 | 640x360 28 → 768x432 31 → 832x480 34 → 960x540 17 | 59.6-60.0 | 0.0-0.3 | 8.6 / 16.2 |
+| 4 | 832x480 8 → 640x360 86 → 960x540 half rate 7 → 768x432 14 | 59.6 (29.7 at half rate) | 0.3-0.4 | 10.9 / 17.6 |
+
+The 1P/2P skips are one second each, and so is 4P's worst: the results board
+going up over the frozen finish frame, not racing. 3P climbs and 4P does not
+because four cells pay the most, and on top of them the name tags: any app
+window that changes every frame costs ~2.3 ms of GPU at four cells on this
+box, half of it HWUI drawing on GL beside a Vulkan Filament (measured
+2026-09-28, `debug.ttp.tags 0|1`; nothing measurable at one cell).
+
+### 4P on 2026-08-27, and the bisect
 
 **FOUR PLAYERS NO LONGER HOLDS A RUNG.** The rule reaches 768x432@60 on the way
 down, holds a clean 60 with zero skips and a GPU p95 of 12-15 ms there for about

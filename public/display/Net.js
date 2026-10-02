@@ -190,8 +190,8 @@ export class DisplayNet extends GameNet {
     // arrives via the snapshot replay.
     this.onPlayerWelcomed = opts.onPlayerWelcomed || (() => {});
     // Fired once when RoomFlow's abandoned-race deadline expires (see
-    // ABANDONED_RACE_GRACE_MS): the race has no racer left and someone is waiting
-    // for the next one. The game layer returns to the lobby.
+    // ABANDONED_RACE_GRACE_MS): no racer connected, mid-race or on the results
+    // board. The game layer returns to the lobby.
     this.onRaceAbandoned = opts.onRaceAbandoned || (() => {});
     // Fired by the set-link effect: the display's own relay link as the viewer
     // should see it — {state: connected|reconnecting|disconnected, attempt,

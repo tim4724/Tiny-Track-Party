@@ -568,6 +568,30 @@ TTP_ABI int ttp_display_cell_rects(float* out, int maxCells);
  * it: one bit, not a description. */
 TTP_ABI void ttp_display_cell_cards(uint32_t mask);
 
+/* The cells' steer bars on/off (on by default) — the one piece of a cell's HUD
+ * the renderer draws, so a shell hiding its own HUD has to say so here too.
+ * Only a trailer's clean chase shot turns them off (?hud=0); the dividers are
+ * not HUD and keep their own switch (ttp_display_dividers). */
+TTP_ABI void ttp_display_steer_bars(int enabled);
+
+/* Name tags over every other PLAYER's car in each cell (never a CPU's), for the
+ * frame ttp_display_frame last drew: the one HUD element placed PER FRAME,
+ * because it rides a moving car. The text is the shell's, drawn at native
+ * resolution rather than into the scaled 3D buffer; where it goes is this
+ * (ttp/name_tags.h). Read it after a PRESENTED ttp_display_frame and paint in
+ * that same frame, or the tags trail their cars; a declined frame leaves the
+ * last picture, and the last tags, up. Reading changes nothing, so any number
+ * of reads agree.
+ *
+ * Writes 6 floats per tag — the cell it is drawn in, the roster SLOT of the car
+ * it names (ttp_display_slot_ids_json maps it to a car id), x and y as
+ * FRACTIONS of the surface with a top-left origin (ttp_display_cell_rects'
+ * units), a scale and an alpha — grouped by cell and far to near, so painting
+ * in order stacks the nearer name on top. Returns how many TAGS it wrote:
+ * min(tags, maxTags), 0 with fewer than two cells, no drawn frame or out null.
+ * At most cells x (cells - 1) tags exist. */
+TTP_ABI int ttp_display_name_tags(float* out, int maxTags);
+
 /* WHAT that HUD says: the bound session's per-player race values, packed, one
  * entry per roster slot in ttp_display_build order (ttp_hud.h). Place, lap,
  * total laps, the held item as a CODE, finished, finish time — the six values
@@ -614,8 +638,8 @@ TTP_ABI void ttp_display_dividers(int enabled);
 /* Camera mode for a surface with no cells (ttp_display_cells empty).
  *
  * DEFAULTS TO TTP_CAM_BBOX — the lobby preview's sweep — because that is the
- * only one of the four the shipping game ever wants; the other three belong to
- * gallery and inspector surfaces, which all push a mode explicitly. A shell
+ * only one of these the shipping game ever wants; the others belong to
+ * gallery, inspector and trailer surfaces, which all push a mode explicitly. A shell
  * that never calls this therefore gets a moving preview rather than a frozen
  * one, which is the difference between forgetting the call and shipping a
  * lobby that looks like a still photograph of a correct render. */
@@ -623,6 +647,7 @@ TTP_ABI void ttp_display_dividers(int enabled);
 #define TTP_CAM_ORBIT  1  /* turntable: circle the track at the overview radius */
 #define TTP_CAM_BBOX   2  /* lobby: sweep an ellipse hugging the track's bbox */
 #define TTP_CAM_FREE   3  /* inspector: the shell drives, via ttp_display_look */
+#define TTP_CAM_FOLLOW 4  /* trailer: a low camera outside the circuit on the lead battle */
 TTP_ABI void ttp_display_camera(int mode);
 
 /* Free-cam pose (TTP_CAM_FREE only): eye + look target in world units. */

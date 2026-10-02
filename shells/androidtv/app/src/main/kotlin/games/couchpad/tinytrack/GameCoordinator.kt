@@ -80,7 +80,15 @@ class GameCoordinator(
     /** Which reconnect cards actually attached, so the diff has a previous. */
     private val shownReconnectIds = LinkedHashSet<EngineId>()
 
+    /**
+     * The cars in the scene, roster order. Every write re-dresses the name tags,
+     * which is what keeps a rename or a re-pick on them without a frame-path read.
+     */
     var sceneCars: List<SceneCar> = emptyList()
+        set(value) {
+            field = value
+            display.nameTags?.setField(value)
+        }
 
     /** The claim URL each reconnecting seat's card shows. Composed in C++. */
     private val reconnectUrls = HashMap<EngineId, String>()
@@ -147,7 +155,7 @@ class GameCoordinator(
     init {
         assets = AssetStore(context.assets)
         proto = GameProtocol.load(baseUrl)
-        display = DisplayHost(surfaceView)
+        display = DisplayHost(surfaceView, proto.maxPlayers)
         // Where blobs kept between runs live — one directory per store the
         // engine lists. Constructed here because it needs a Context and the
         // display does not have one. Scenarios get none: a screenshot harness
@@ -869,9 +877,9 @@ class GameCoordinator(
     }
 
     /**
-     * Pull a player's car out of the live race (a clean LEAVE, or a dropped seat
-     * the liveness sweep gave up on). sessionHandle 0 is legal (the no-car
-     * effects).
+     * Pull a player's car out of the live race (a seat freed for good: the room
+     * closing, or a peer the relay no longer knows). sessionHandle 0 is legal
+     * (the no-car effects).
      */
     fun forfeit(id: EngineId) =
         run(TtpJson.obj(Ttp.ttp_race_forfeit_live_json(sessionHandle, TtpJson.arg(id.json))))
@@ -1053,17 +1061,11 @@ class GameCoordinator(
         paintHUD(display.hud())
         pushItems()
 
-        // THE FORFEITS BELONG INSIDE THE allDone ARM, as on the web. `forfeit[]`
-        // names every disconnected human EVERY poll — outside the arm it forfeits a
-        // dropped-but-reconnectable racer six times a second, and with one phone
-        // down the auto-pause freeze turns into a return to the lobby.
+        // A dropped racer is NOT forfeited here: their car and cell stay, with the
+        // reconnect card, until the lobby frees the seat. The flourish's end
+        // bounds the race, and the sim's DNF ladder resolves the car.
         val flow = TtpJson.obj(Ttp.ttp_ui_race_flow_live_json(sessionHandle, net.roomHandle))
         if (flow.optBoolean("allDone") && !raceEnded && !flourishing) {
-            val f = flow.optJSONArray("forfeit") ?: JSONArray()
-            for (i in 0 until f.length()) EngineId.from(f.opt(i))?.let { forfeit(it) }
-            // A forfeit can end the race under us; this guard is the web's
-            // `if (!session.racing) return`.
-            if (sessionHandle == 0 || Ttp.ttp_racing(sessionHandle) == 0) return
             // THE FLAG — and the race does NOT stop here. Hold the sim's own end
             // open so the field keeps moving for the flourish (the cars that are
             // home drive themselves; Game's victory-lap autopilot), then let the
@@ -1607,8 +1609,7 @@ class GameCoordinator(
      * walk's own `announce` republishes it). What is left here is the one copy no
      * handle knows about: the cell chip.
      *
-     * The car's REAR NAME PLATE is untouched and stays stale until the next scene
-     * build: it is geometry baked from the build roster. Same on the web.
+     * The name tag over the car follows through [sceneCars]' setter.
      */
     private fun renamePlayer(id: EngineId, name: String) {
         sceneCars = sceneCars.map { if (it.id == id) it.copy(name = name) else it }

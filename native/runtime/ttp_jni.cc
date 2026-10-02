@@ -276,10 +276,10 @@ void n_ttp_display_cell_cards(JNIEnv* env, jclass, jint a0) {
     ttp_display_cell_cards((uint32_t) a0);
 }
 
-jint n_ttp_display_cell_rects(JNIEnv* env, jclass, jfloatArray outArr, jint maxCells) {
+jint n_ttp_display_cell_rects(JNIEnv* env, jclass, jfloatArray outArr, jint max) {
     if (!outArr) return 0;
     const jint cap = env->GetArrayLength(outArr) / 8;
-    const jint want = maxCells < cap ? maxCells : cap;
+    const jint want = max < cap ? max : cap;
     std::vector<float> tmp((size_t) (want > 0 ? want : 0) * 8, 0.0f);
     const jint n = (jint) ttp_display_cell_rects(tmp.data(), (int) want);
     if (n > 0) env->SetFloatArrayRegion(outArr, 0, n * 8, tmp.data());
@@ -387,6 +387,16 @@ void n_ttp_display_model_variant(JNIEnv* env, jclass, jbyteArray a0, jint a1) {
     ttp_display_model_variant(s0.get(), (int) a1);
 }
 
+jint n_ttp_display_name_tags(JNIEnv* env, jclass, jfloatArray outArr, jint max) {
+    if (!outArr) return 0;
+    const jint cap = env->GetArrayLength(outArr) / 6;
+    const jint want = max < cap ? max : cap;
+    std::vector<float> tmp((size_t) (want > 0 ? want : 0) * 6, 0.0f);
+    const jint n = (jint) ttp_display_name_tags(tmp.data(), (int) want);
+    if (n > 0) env->SetFloatArrayRegion(outArr, 0, n * 6, tmp.data());
+    return n;
+}
+
 jobject n_ttp_display_profile(JNIEnv* env, jclass) {
     const auto* p = ttp_display_profile();
     if (!p) return nullptr;
@@ -473,6 +483,11 @@ void n_ttp_display_showcase(JNIEnv* env, jclass, jint a0) {
 jbyteArray n_ttp_display_slot_ids_json(JNIEnv* env, jclass) {
     (void) env;
     return toBytes(env, ttp_display_slot_ids_json());
+}
+
+void n_ttp_display_steer_bars(JNIEnv* env, jclass, jint a0) {
+    (void) env;
+    ttp_display_steer_bars((int) a0);
 }
 
 void n_ttp_dispose(JNIEnv* env, jclass, jint a0) {
@@ -1386,6 +1401,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_display_kit_field_layout", "()[B", (void*) n_ttp_display_kit_field_layout },
     { "ttp_display_look", "(DDDDDD)V", (void*) n_ttp_display_look },
     { "ttp_display_model_variant", "([BI)V", (void*) n_ttp_display_model_variant },
+    { "ttp_display_name_tags", "([FI)I", (void*) n_ttp_display_name_tags },
     { "ttp_display_profile", "()Ljava/nio/ByteBuffer;", (void*) n_ttp_display_profile },
     { "ttp_display_profile_names", "()[B", (void*) n_ttp_display_profile_names },
     { "ttp_display_release", "()V", (void*) n_ttp_display_release },
@@ -1403,6 +1419,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_display_shadows", "(I)V", (void*) n_ttp_display_shadows },
     { "ttp_display_showcase", "(I)V", (void*) n_ttp_display_showcase },
     { "ttp_display_slot_ids_json", "()[B", (void*) n_ttp_display_slot_ids_json },
+    { "ttp_display_steer_bars", "(I)V", (void*) n_ttp_display_steer_bars },
     { "ttp_dispose", "(I)V", (void*) n_ttp_dispose },
     { "ttp_events_json", "(I)[B", (void*) n_ttp_events_json },
     { "ttp_fast_forward", "(I)V", (void*) n_ttp_fast_forward },

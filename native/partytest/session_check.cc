@@ -147,10 +147,6 @@ bool applyOp(Shell& st, const std::string& op, const Value& in, Value& out, std:
     out.set("action", Value::Str(ns::key(ns::presence_action(stateOf(in, "roomState")))));
     return true;
   }
-  if (op == "leave") {
-    out.set("action", Value::Str(ns::key(ns::leave_action(stateOf(in, "roomState")))));
-    return true;
-  }
   if (op == "card") {
     const Value* seat = field(in, "seat");
     out.set("card", ns::reconnect_card(seat ? *seat : Value::Obj(), json::str_field(in, "url")));
@@ -180,7 +176,6 @@ bool applyOp(Shell& st, const std::string& op, const Value& in, Value& out, std:
   if (op == "stateChange") {
     const ns::StateChangePlan p = ns::state_change_plan(stateOf(in, "to"));
     Value plan = Value::Obj();
-    plan.set("restampConnected", Value::Bool(p.restampConnected));
     plan.set("freeDisconnected", Value::Bool(p.freeDisconnected));
     plan.set("clearStandings", Value::Bool(p.clearStandings));
     plan.set("publish", Value::Bool(p.publish));
@@ -230,7 +225,6 @@ bool applyOp(Shell& st, const std::string& op, const Value& in, Value& out, std:
     plan.set("claim", Value::Bool(p.claim));
     if (p.claim) {
       plan.set("oldId", Value::Num(p.oldId));
-      plan.set("restamp", Value::Bool(p.restamp));
     }
     out.set("plan", std::move(plan));
     return true;

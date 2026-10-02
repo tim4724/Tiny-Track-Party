@@ -318,6 +318,8 @@ struct RootView: View {
                 PauseOverlay(onContinue: { setPaused(false) },
                              onNewGame: { game.returnToLobby() })
                     .transition(.opacity)
+            } else if state.results == nil {
+                raceFocusPark
             }
         }
         // Each overlay fades on its OWN value. The results trigger is whether
@@ -325,6 +327,31 @@ struct RootView: View {
         // rather than on every row or phase change of a standing board.
         .animation(.easeOut(duration: 0.25), value: state.results == nil)
         .animation(.easeOut(duration: 0.2), value: state.paused)
+    }
+
+    /// A focus stop that draws nothing, so the countdown and a live race have
+    /// something for the remote to land on.
+    ///
+    /// **WITHOUT IT, MENU ENDS THE PARTY.** Menu and Play/Pause ride the focus
+    /// chain, and a race shows nothing focusable — the HUD is display-only on
+    /// purpose. With no focused view the press never reached `onExitCommand`,
+    /// so tvOS took it: the app went Home and `suspend()` closed the room,
+    /// where the back table says a live race PAUSES. It is the lobby's
+    /// `focusPark` for the same reason. It steps aside while the pause overlay
+    /// or a results board is up, so their own default focus takes over and
+    /// Select never lands on nothing.
+    ///
+    /// `RaceRemoteTests` (`npm run check:tvos-race-remote`) holds it.
+    private var raceFocusPark: some View {
+        VStack(spacing: 0) {
+            Spacer()
+            Color.clear
+                .frame(maxWidth: .infinity)
+                .frame(height: 40)
+                .focusable()
+                .focusEffectDisabled()
+                .accessibilityHidden(true)
+        }
     }
 
     // MARK: - The two remote buttons

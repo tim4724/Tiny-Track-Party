@@ -22,6 +22,8 @@
 
 #include "ttp/camera.h"
 #include "ttp/framing.h"
+#include "ttp/ground_grid.h"
+#include "ttp/name_tags.h"
 #include "ttp/scalar_id.h"
 #include "ttp/vecmath.h"
 #include "ttp_render.h"
@@ -47,8 +49,9 @@ enum CamMode : int {
     CAM_ORBIT = 1,  // turntable: circle the track at the overview radius
     CAM_BBOX  = 2,  // lobby: sweep an ellipse hugging the track's bbox
     CAM_FREE  = 3,  // inspector: the shell drives, via ttp_display_look
+    CAM_FOLLOW = 4, // trailer: a low camera outside the circuit on the lead battle (FollowCam)
 };
-static_assert(CAM_STILL == 0 && CAM_ORBIT == 1 && CAM_BBOX == 2 && CAM_FREE == 3,
+static_assert(CAM_STILL == 0 && CAM_ORBIT == 1 && CAM_BBOX == 2 && CAM_FREE == 3 && CAM_FOLLOW == 4,
               "CamMode carries the frozen TTP_CAM_* ABI values — do not renumber");
 
 // How fast a steer bar chases the tilt behind it, as an exponential time
@@ -80,6 +83,13 @@ struct DisplayState {
     std::vector<TtpRosterCar> rosterCars;
     std::vector<ScalarId> cells;        // cars owning a split-screen cell, in cell order
     std::map<std::string, ChaseCam> chase;
+    FollowCam follow;                   // CAM_FOLLOW's rig; reset with `chase`
+    // The built track's road as an occluder, per scene: the name tags hide
+    // behind it, and the follow cam keeps the battle out from under it.
+    NameTagDeck tagDeck;
+    // The built scene's ground surface, handed over by the renderer after each
+    // build (it alone samples the relief): the follow cam keeps above it.
+    GroundGrid ground;
 
     // Where each cell car's steer bar is actually DRAWN, eased toward the live
     // tilt (STEER_BAR_TAU). Keyed and cleared exactly like `chase`, and for the
@@ -95,6 +105,7 @@ struct DisplayState {
     // the alternative — the shell describing its cards to C++ every frame — is
     // the serialized-HUD shape this whole layer exists to avoid.
     uint32_t cardMask = 0;
+    bool steerBars = true;              // ttp_display_steer_bars: off for a clean trailer shot
     bool dividers = true;               // ?dividers=0 debug toggle
 
     bool hold = false;                  // draw the last-read field, at rest

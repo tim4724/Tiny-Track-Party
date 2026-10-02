@@ -235,11 +235,6 @@ PresenceAction presence_action(RoomState state) {
   return state == RoomState::LOBBY ? PresenceAction::FREE : PresenceAction::DROP;
 }
 
-LeaveAction leave_action(RoomState state) {
-  return (state == RoomState::COUNTDOWN || state == RoomState::PLAYING)
-             ? LeaveAction::DROP : LeaveAction::EXPIRE;
-}
-
 Value reconnect_card(const Value& seat, const std::string& url) {
   Value card = Value::Obj();
   copyKey(card, seat, "peerIndex");
@@ -258,7 +253,6 @@ InboundRoute inbound_route(double from, const std::string& type) {
 
 MessageAction message_action(const std::string& type) {
   if (type == "hello") return MessageAction::HELLO;
-  if (type == "leave") return MessageAction::LEAVE;
   if (type == "set_car") return MessageAction::SET_CAR;
   if (type == "set_ready") return MessageAction::SET_READY;
   if (type == "select_mode") return MessageAction::SELECT_MODE;
@@ -286,7 +280,6 @@ bool set_ready_decision(bool isHost, RoomState state, bool ready, bool current) 
 
 StateChangePlan state_change_plan(RoomState to) {
   StateChangePlan plan;
-  plan.restampConnected = to == RoomState::COUNTDOWN;
   plan.freeDisconnected = to == RoomState::LOBBY;
   plan.clearStandings = to == RoomState::COUNTDOWN || to == RoomState::LOBBY;
   plan.publish = true;
@@ -357,7 +350,6 @@ ClaimPlan claim_plan(double fromId, const Value* rejoinToken, bool hasOld,
   if (!hasOld || !oldDisconnected) return plan;
   plan.claim = true;
   plan.oldId = oldId;
-  plan.restamp = true;
   return plan;
 }
 
@@ -382,7 +374,6 @@ ResyncPlan resync_plan(const std::vector<double>& rosterIds,
 // ---- wire spellings ----------------------------------------------------------
 
 const char* key(PresenceAction a) { return a == PresenceAction::FREE ? "free" : "drop"; }
-const char* key(LeaveAction a) { return a == LeaveAction::DROP ? "drop" : "expire"; }
 const char* key(InboundRoute r) {
   switch (r) {
     case InboundRoute::PEER: return "peer";
@@ -394,7 +385,6 @@ const char* key(InboundRoute r) {
 const char* key(MessageAction a) {
   switch (a) {
     case MessageAction::HELLO: return "hello";
-    case MessageAction::LEAVE: return "leave";
     case MessageAction::SET_CAR: return "set_car";
     case MessageAction::SET_READY: return "set_ready";
     case MessageAction::SELECT_MODE: return "select_mode";

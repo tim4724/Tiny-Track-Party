@@ -444,7 +444,7 @@ target_include_directories(libttp_party PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/libtt
 target_link_libraries(libttp_party PUBLIC libttp_json ttp_strict_fp ttp_warnings)
 
 # ---- Conformance: the RoomFlow behavioural corpus ---------------------------
-# Replays tests/fixtures/roomflow-corpus.jsonl (scripts/gen-roomflow-corpus.mjs)
+# Replays tests/fixtures/roomflow-corpus.jsonl (recorded off the retired JS kit)
 # against the port: per scripted op, reproduces ret + emitted events (order +
 # detail) + a public-surface digest, compared as canonical JSON. 36 scripts (plus
 # 13 lowestFreeSlot cases), every step exact.
@@ -454,6 +454,13 @@ ttp_emscripten_cli(roomflow_check)
 add_test(NAME roomflow
   COMMAND roomflow_check ${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/roomflow-corpus.jsonl
 )
+add_test(NAME record_roomflow
+  COMMAND ${CMAKE_COMMAND}
+    -DCLI=$<TARGET_FILE:roomflow_check>
+    "-DEMULATOR=${CMAKE_CROSSCOMPILING_EMULATOR}"
+    -DFIXTURE=${CMAKE_CURRENT_SOURCE_DIR}/../tests/fixtures/roomflow-corpus.jsonl
+    -DOUT=${CMAKE_CURRENT_BINARY_DIR}/rerecord/roomflow-corpus.jsonl
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/record_roundtrip.cmake)
 
 # ---- Conformance: the protocol vocabulary + relay framing --------------------
 # protocol_check replays protocol-corpus.jsonl (constants manifest + carStats
@@ -593,6 +600,9 @@ add_library(libttp_runtime STATIC
   # Game through the same roster slots — but for the shell's ~6 Hz poll, not
   # for the renderer's frame.
   libttp-runtime/ttp/hud.cc
+  # Where each cell draws the other players' name tags, projected off the frame
+  # the renderer was handed. The shell draws the text, at native resolution.
+  libttp-runtime/ttp/name_tags.cc
   # The rest of uiModel.js — the seat grid, the lobby rules, the race card, the
   # ITEM-push gate, the reconnect diff, the flow predicates, the pause
   # arbitration, the standings board and the results overlay, plus the screen
@@ -1045,6 +1055,8 @@ set(TTP_APP_SOURCES
   # rather than what the renderer draws, so an SDK-less leg still has every line
   # of it in the link.
   libttp-runtime/ttp/hud.cc
+  # The name tags ttp_display_name_tags answers with, likewise read by the shell.
+  libttp-runtime/ttp/name_tags.cc
   # The rest of the UI model: every shell's boards are rendered from this.
   libttp-runtime/ttp/ui_model.cc
   # The cup star record's derivations (stars, the lock, the bank).

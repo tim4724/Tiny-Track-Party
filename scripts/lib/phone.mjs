@@ -86,10 +86,6 @@ export class Phone {
     this.sendToDisplay({ type: this.proto.MSG.START_GAME });
   }
 
-  leave() {
-    this.sendToDisplay({ type: this.proto.MSG.LEAVE });
-  }
-
   /// One steering sample: `s` steer (-1..1), `b` brake, `u` a rising counter the
   /// display's gate reads. The real controller sends these through `InputGate`,
   /// which drops samples the display already holds — that gating is the PHONE's

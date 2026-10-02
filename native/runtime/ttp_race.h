@@ -284,10 +284,10 @@ TTP_ABI int ttp_race_countdown_ready(int sceneBuilt, int measuring,
 
 /* ---- the roster-driven repairs ------------------------------------------- */
 
-/* Pull a player's car out of the live race (a clean LEAVE, or a dropped seat
- * whose reconnect grace elapsed). The removal itself happens HERE, against the
- * live session — the shell no longer asks the engine and hands the answer
- * back. sessionHandle 0 means no race: the no-car effects. -> {"effects":[...]} */
+/* Pull a player's car out of the live race (a seat freed for good: the room
+ * closing, or a peer the relay no longer knows). The removal itself happens
+ * HERE, against the live session — the shell no longer asks the engine and
+ * hands the answer back. sessionHandle 0 means no race: the no-car effects. -> {"effects":[...]} */
 TTP_ABI const char* ttp_race_forfeit_live_json(int sessionHandle, const char* peerIdJson);
 
 /* A dropped player reconnected on a different device. The session rekey, the

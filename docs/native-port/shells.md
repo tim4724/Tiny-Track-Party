@@ -556,6 +556,25 @@ identically (both are commented where they bite, in `TtpRendererBakes.cpp`):
     browser show the URL as a QR for the phone already in the room. Read those
     two URLs out of the display's own footer rather than typing them.
 
+17. **Name tags, placed per frame and drawn natively.** `ttp_display_name_tags`
+    answers where each cell shows every other PLAYER's name (CPU cars get
+    none, so a solo race answers nothing), naming each car by roster SLOT;
+    read it after every PRESENTED `ttp_display_frame` and move the tags in that
+    same callback; when there were none and there are still none, do not
+    redraw at all, so a solo race costs nothing. Draw the text in the
+    platform's own toolkit, not the renderer, so it stays at the panel's
+    resolution under a scaled buffer — but below that toolkit's layout layer:
+    rasterize each car's sticker ONCE (on a name or livery change) and per
+    frame only move, scale and fade it. Nothing waits on the other layer (no
+    `presentsWithTransaction`, no surface sync); that was decided for
+    simplicity. Both TV shells have the same `NameTagView`:
+    `setField(sceneCars)` from the coordinator's scene-car setter,
+    `setSlots(roster)` at a build, `show(n)` per presented frame over the `tags`
+    array C++ just filled, `show(0)` at release. References:
+    `Stage._paintNameTags` (web), `Render/NameTags.swift` (pooled CALayers under
+    the SwiftUI chips), `NameTags.kt` (one plain View under the ComposeView, for
+    the Compose-on-the-frame-thread reason in its header).
+
 ## Still owed by the TV shells
 
 This list is an audit walked against the shells' code, not a wishlist: each row

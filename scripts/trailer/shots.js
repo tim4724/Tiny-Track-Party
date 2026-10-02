@@ -49,6 +49,12 @@
 //
 // Optional: `dividers: false` drops the ink lines between split cells (default on —
 // they are part of the split-screen look, not chrome).
+// Optional: `camera` picks the picture. Absent is the game's own split-screen
+// chase cells, HUD and all. `'chase-nohud'` is the same cells with no HUD over
+// them (?hud=0): no name, item, place or lap chips, cards, name tags or steer
+// bars. `'follow'` swaps the cells for ONE camera that follows the lead battle
+// (TTP_CAM_FOLLOW; the rig is FollowCam in native/libttp-runtime/ttp/camera.h);
+// `players` still sets the field's humans, it just stops deciding the picture.
 
 module.exports = [
   // Built in /trailer.html and pasted in. The editor's clock is the renderer's clock, so

@@ -46,7 +46,11 @@ final class GameCoordinator: ObservableObject {
 
     /// Which reconnect cards actually attached, so the diff has a previous.
     var shownReconnectIds: Set<EngineIdentity> = []
-    var sceneCars: [SceneCar] = []
+    /// The cars in the scene, roster order. Every write re-dresses the name tags,
+    /// which is what keeps a rename or a re-pick on them without a frame-path read.
+    var sceneCars: [SceneCar] = [] {
+        didSet { display.nameTags.setField(sceneCars) }
+    }
     /// The claim URL each reconnecting seat's card shows. Composed in C++
     /// (`ttp_net_claim_url`); only the QR bitmap is per-platform.
     var reconnectURLs: [EngineIdentity: String] = [:]
@@ -108,7 +112,7 @@ final class GameCoordinator: ObservableObject {
         assets = AssetStore(baseURL: baseURL)
         blobs = Scenarios.requested == nil ? BlobStores() : nil
         proto = GameProtocol.load(baseURL: baseURL)
-        display = DisplayHost()
+        display = DisplayHost(maxPlayers: proto.maxPlayers)
         // The blob walk's write half is a frame beat, so the host needs the
         // stores as well as the staging sequence — see DisplayHost.blobs.
         display.blobs = blobs
@@ -782,9 +786,9 @@ final class GameCoordinator: ObservableObject {
         run(d)
     }
 
-    /// Pull a player's car out of the live race (a clean LEAVE, or a dropped seat
-    /// the liveness sweep gave up on). The removal happens inside the walk,
-    /// against the live session; a removal that ends the race queues its end
+    /// Pull a player's car out of the live race (a seat freed for good: the room
+    /// closing, or a peer the relay no longer knows). The removal happens inside
+    /// the walk, against the live session; a removal that ends the race queues its end
     /// events, which the next frame's drain decides. sessionHandle 0 is legal
     /// (the no-car effects).
     func forfeit(_ id: EngineIdentity) {

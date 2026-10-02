@@ -9,6 +9,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import org.json.JSONArray
+import java.io.File
 import java.nio.ByteOrder
 
 /**
@@ -43,7 +44,11 @@ import java.nio.ByteOrder
  * `TextureView` would route every frame through the view hierarchy as a texture,
  * which costs a full-screen copy per frame on a GPU that has none to spare.
  */
-class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
+class DisplayHost(
+    private val view: SurfaceView,
+    /** The protocol manifest's MAX_PLAYERS: one cell per player at most. */
+    private val maxCells: Int,
+) : SurfaceHolder.Callback {
 
     companion object {
         private const val TAG = "DisplayHost"
@@ -185,6 +190,12 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
     var trackId: String = ""
         private set
 
+    /**
+     * The name tags' view ([NameTagView]), painted after every PRESENTED frame from
+     * the tags that frame describes. Null until the Activity attaches one.
+     */
+    var nameTags: NameTagView? = null
+
     private var frameCallback: Choreographer.FrameCallback? = null
     private var lastFrameNanos = 0L
     private var lastSlowTickNanos = 0L
@@ -222,16 +233,19 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
             // way — and the refusal keeps its canary count, so a driver that
             // refuses twice stops being asked.
             var vulkan = VulkanPolicy.useVulkan(view.context)
+            // The CODE cache: Android empties it when the app is updated, so a
+            // build with new materials never starts from the last one's pipelines.
+            val pipelines = File(view.context.codeCacheDir, "vk-pipeline-cache.bin").path.toByteArray()
             if (vulkan) {
                 VulkanPolicy.markAttempt(view.context)
                 vkCanaryArmed = true
-                if (!TtpSurface.nativeCreate(holder.surface, width, height, true)) {
+                if (!TtpSurface.nativeCreate(holder.surface, width, height, true, pipelines)) {
                     Log.e(TAG, "Vulkan engine refused ${width}x$height — retrying on GL")
                     vulkan = false
                     vkCanaryArmed = false
                 }
             }
-            if (!vulkan && !TtpSurface.nativeCreate(holder.surface, width, height, false)) {
+            if (!vulkan && !TtpSurface.nativeCreate(holder.surface, width, height, false, pipelines)) {
                 Log.e(TAG, "ttp_display_create failed for ${width}x$height")
                 return
             }
@@ -484,6 +498,15 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
                     Trace.beginSection("ttp:render")
                     presented = Ttp.ttp_display_frame(pendingDt) != 0
                     Trace.endSection()
+                    // RIGHT AFTER THE FRAME THEY DESCRIBE, and only a presented
+                    // one: a declined frame left the last picture up, and the last
+                    // tags with it. The View draws in this same vsync's traversal.
+                    // EVERY presented frame, at every split: a tag moving at a
+                    // different rate from its car reads as broken.
+                    if (presented) nameTags?.let {
+                        it.show(if (PerfDebug.tagsHidden) 0
+                                else Ttp.ttp_display_name_tags(it.tags, it.maxTags))
+                    }
                     // Consumed either way: the cosmetic clock advances before
                     // beginFrame can decline, so re-feeding it would double-run
                     // the idle animations on the next call.
@@ -615,6 +638,10 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
             biome = SceneStaging.build(trackId, roster, this, store, blobs)
             this.trackId = trackId
             hasScene = true
+            // The tags name cars by SLOT, and a build is the one thing that can
+            // change what a slot is (a re-roster refuses id changes). Latched here
+            // so the frame path never parses JSON.
+            nameTags?.setSlots(this.roster)
             // A NEW SCENE VOIDS THE SCALE'S MEASUREMENTS — the same argument as
             // the clear on a scale move, one level up: the windows describe a
             // scene that no longer exists.
@@ -659,7 +686,7 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
      * stride is the generated shim's too — `scripts/gen-jni.mjs` declares it —
      * so an array sized on the old one would read cells C++ never wrote.
      */
-    private val cellScratch = FloatArray(MAX_CELLS * CELL_RECT_STRIDE)
+    private val cellScratch = FloatArray(maxCells * CELL_RECT_STRIDE)
 
     /**
      * The authored canvas's height on THIS window: 1920 wide by the window's
@@ -671,7 +698,7 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
         else AUTHORED_HEIGHT
 
     fun cellRects(): List<CellRect> {
-        val n = Ttp.ttp_display_cell_rects(cellScratch, MAX_CELLS)
+        val n = Ttp.ttp_display_cell_rects(cellScratch, maxCells)
         if (n <= 0) return emptyList()
         return (0 until n).map { i ->
             val o = i * CELL_RECT_STRIDE
@@ -965,6 +992,8 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
     fun release() {
         Ttp.ttp_display_release()
         hasScene = false
+        // No scene means no frame will present to clear them.
+        nameTags?.show(0)
     }
 
     fun camera(mode: Int) = Ttp.ttp_display_camera(mode)
@@ -1056,9 +1085,6 @@ class DisplayHost(private val view: SurfaceView) : SurfaceHolder.Callback {
  * declares the same number on the C side (`scripts/gen-jni.mjs`).
  */
 private const val CELL_RECT_STRIDE = 8
-
-/** Cells the scratch array is sized for — the field can never split further. */
-private const val MAX_CELLS = 8
 
 /**
  * A cell's two rectangles as fractions of the surface, exactly as

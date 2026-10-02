@@ -28,10 +28,8 @@ extern "C" {
 
 // Open a RoomFlow handle. configJson mirrors the JS constructor options:
 //   { "master": <peerId|null>,            // present => a masterProvider exists
-//     "liveness": { "timeoutMs": N,       // absent => liveness disabled entirely
-//                   "graceMs": N,
-//                   "useEnabledProvider": bool } }
-// nullptr / "null" / "{}" gives the defaults (no master provider, no liveness).
+//     "liveness": { "graceMs": N } }       // the abandoned-room deadline
+// nullptr / "null" / "{}" gives the defaults (no master provider, graceMs 0).
 TTP_ABI int ttp_room_create(const char* configJson);
 TTP_ABI void ttp_room_dispose(int h);
 

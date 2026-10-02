@@ -72,8 +72,9 @@ extension GameCoordinator {
             self?.refreshLobby()
         }
 
-        // An intentional LEAVE. Mid-race that is a forfeit; in the lobby the
-        // seat is simply gone and the roster refresh covers it.
+        // A seat freed for good: outside the lobby only when the room closes or
+        // the relay no longer knows the peer, and then its car leaves the race.
+        // In the lobby the seat is simply gone and the roster refresh covers it.
         net.onPlayerLeave = { [weak self] id in
             guard let self else { return }
             if self.sessionHandle != 0 { self.forfeit(id) }
@@ -217,22 +218,14 @@ extension GameCoordinator {
         paintHUD(display.hud())
         pushItems()
 
-        // The finish. `ttp_ui_race_flow_live_json` answers {allDone, forfeit[]}
-        // and is ~11 us, which is why it is here and not on the frame.
+        // The finish. `ttp_ui_race_flow_live_json` answers {allDone} and is
+        // ~11 us, which is why it is here and not on the frame.
         //
-        // THE FORFEITS BELONG INSIDE THE allDone ARM, as on the web (`main.js`
-        // guards the loop under `if (flow && flow.allDone)`). `forfeit[]` names
-        // every disconnected human EVERY poll — outside the arm it forfeits a
-        // dropped-but-reconnectable racer six times a second, and with one phone
-        // down the auto-pause freeze turns into a return to the lobby.
+        // A dropped racer is NOT forfeited here: their car and cell stay, with
+        // the reconnect card, until the lobby frees the seat. The flourish's
+        // end bounds the race, and the sim's DNF ladder resolves the car.
         let flow = raceFlow()
         if flow["allDone"] as? Bool == true, !raceEnded, !flourishing {
-            for id in (flow["forfeit"] as? [Any] ?? []).compactMap(EngineIdentity.from) {
-                forfeit(id)
-            }
-            // A forfeit can end the race under us; the `ttp_racing` guard is
-            // the web's `if (!session.racing) return`.
-            guard sessionHandle != 0, ttp_racing(sessionHandle) != 0 else { return }
             // THE FLAG — and the race does NOT stop here. Hold the sim's own end
             // open so the field keeps moving for the flourish (the cars that are
             // home drive themselves; Game's victory-lap autopilot), then let the

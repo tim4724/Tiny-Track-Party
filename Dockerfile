@@ -18,6 +18,9 @@ COPY public/ ./public/
 # /partyplug/ route remap in server/index.js. It must be copied into the image
 # or that route 404s.
 COPY partyplug/ ./partyplug/
+# The trailer's shot list, the one file of scripts/ the server reads (served at
+# /api/trailer-shots). Everything else under scripts/ stays out of the image.
+COPY scripts/trailer/shots.js ./scripts/trailer/shots.js
 USER nodejs
 EXPOSE 4000
 ENV NODE_ENV=production PORT=4000

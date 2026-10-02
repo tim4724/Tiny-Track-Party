@@ -28,7 +28,7 @@ import { cleanName } from '../shared/names.js';
 import { inShell, shellName, endSession, terminalReason, setAccentColor, installRenameHook, armSystemBack, installBackHook } from './launcher.js';
 import { storedName, saveName, storedMode, saveMode, storedCarIndex, saveCarIndex, storedInputMode, saveInputMode } from './prefs.js';
 import { showConn, hideConn, linkCopy, initLinkStatus } from './linkStatus.js';
-import { initModals, onEnterLobby, closeAnyModal, anyModalOpen, closeTopModal, refreshHelpName, refreshSettingsState, openStarsPopup } from './modals.js';
+import { initModals, onEnterLobby, closeAnyModal, anyModalOpen, closeTopModal, refreshHelpName, refreshSettingsState, refreshMotionState, openStarsPopup } from './modals.js';
 import { renderResultsBoard } from './resultsBoard.js';
 import { initDriveSurface, startDriving, stopDriving, setInputMode, setHeldItem, resetHeldItem } from './driveSurface.js';
 import { initOrientation } from './orientation.js';
@@ -179,7 +179,8 @@ const tilt = new TiltInput({
   surface: el('game'),
   // sendControl (not send) — the sensor-rate stream is gated down to what the display
   // doesn't already hold. See InputGate.js.
-  onControl: (c) => net.sendControl(c)
+  onControl: (c) => net.sendControl(c),
+  onMotionState
 });
 
 // Steering input mode — 'tilt' (default) or 'buttons', remembered per device.
@@ -192,8 +193,8 @@ const tilt = new TiltInput({
 // the stored pref only means anything where tilt exists, and the same browser
 // on a page that does get the sensors must not inherit a fallback as a
 // preference. Every caller goes through here, so the rule holds in one place —
-// the startup seed below, the Settings seg, the join fallback and the heal that
-// undoes it alike.
+// the startup seed below, the Settings seg, the background fallback and the
+// heal that undoes it alike.
 let inputMode = tilt.motionState === 'unsupported' ? 'buttons' : storedInputMode();
 function applyInputMode(mode) {
   inputMode = mode;
@@ -201,18 +202,19 @@ function applyInputMode(mode) {
   setInputMode(mode);
 }
 
-// The fallback to buttons is a GUESS on a 600 ms fuse (TiltInput's settle
-// window), and a sensor that merely answered late leaves the phone steering by
-// buttons with a stored TILT preference and the Settings card as the only way
-// back. TiltInput takes its own verdict back on the first real sample; this is
-// the other half — take the CONSEQUENCE back too. Run on every snapshot, so it
-// heals in the lobby, before the race that would otherwise be driven wrong.
+// The phone joins on tilt optimistically and TiltInput settles delivery in the
+// background, so the verdict lands whenever it lands — often with the first-run
+// Settings card already up. Act on it here, and redraw what shows it.
 //
-// It can never override a deliberate pick: applyInputMode declines to save
-// while the state is 'unsupported', so a stored 'tilt' is the player's own
-// preference, untouched by the fallback that ignored it.
-function healProvisionalFallback() {
-  if (inputMode !== 'tilt' && tilt.haveTilt && storedInputMode() === 'tilt') applyInputMode('tilt');
+// No sample in time → buttons, unsaved, so the stored pref still says what the
+// player chose. A late sample takes the verdict back → back onto the stored
+// pref. That can never override a deliberate Buttons pick: applyInputMode
+// declines to save while the state is 'unsupported', so a stored 'tilt' is the
+// player's own preference, untouched by the fallback that ignored it.
+function onMotionState() {
+  if (tilt.motionState === 'unsupported' && inputMode === 'tilt') applyInputMode('buttons');
+  else if (inputMode !== 'tilt' && tilt.haveTilt && storedInputMode() === 'tilt') applyInputMode('tilt');
+  refreshMotionState();
 }
 
 initModals({
@@ -319,7 +321,6 @@ function syncRoom(data) {
   // the open settings card in step: a host handover or the TV's own mute
   // button can move it while the card is up.
   displaySoundOn = data.soundOn !== false;
-  healProvisionalFallback();   // before the card is refreshed, so a restored mode shows on THIS snapshot
   refreshSettingsState();
   displayMode = modeFrom(data);
   if (displayMode) selectedMode = displayMode;
@@ -665,23 +666,15 @@ async function joinRace(name, { persist } = {}) {
   setJoining(true);
   // Request motion permission within this user gesture (iOS requirement) — but
   // only when TILT is the steering mode; a buttons phone never needs the sensor
-  // (switching to Tilt later re-requests inside that tap, see modals.js). AWAIT it
-  // so motionState is resolved before the lobby's auto-shown settings reads it —
-  // the request itself is fired synchronously inside this gesture (enableMotion
-  // calls requestPermission before its first await), so awaiting the result is
-  // safe and doesn't break the gesture rule. On iOS this waits out the system
-  // prompt; on Android/desktop it resolves on the next microtask.
-  // enableMotion resolves permission AND delivery, so a phone whose sensor turns
-  // out to be absent or withheld is put on buttons here rather than steering
-  // with a dead wheel. applyInputMode declines to save it, since the state it
-  // just resolved is 'unsupported' — which is what lets healProvisionalFallback
-  // undo this if the sensor was only slow. The one thing it CANNOT resolve is a
-  // request the platform refused to even put, which is this very call site in
-  // the shell (no gesture behind a launcher join): that leaves 'unknown', keeps
-  // the phone on tilt, and re-asks on the player's next tap.
-  if (inputMode === 'tilt' && (await tilt.enableMotion()) === 'unsupported') {
-    applyInputMode('buttons');
-  }
+  // (switching to Tilt later re-requests inside that tap, see modals.js). AWAIT
+  // the answer so a denial is known before the lobby picks its first popup
+  // (onEnterLobby) — the request itself is fired synchronously inside this
+  // gesture, so awaiting it doesn't break the gesture rule. On iOS this waits out
+  // the system prompt; elsewhere it resolves on the next microtask. Delivery is
+  // NOT awaited: the phone joins on tilt and onMotionState falls back if no
+  // sample ever comes. A request the platform refused to even put (a launcher
+  // join, no gesture behind it) leaves 'unknown' and re-asks on the next tap.
+  if (inputMode === 'tilt') await tilt.enableMotion();
   net.connect(n);
 }
 el('name-form').addEventListener('submit', (e) => {

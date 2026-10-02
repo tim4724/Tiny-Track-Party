@@ -4,7 +4,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
@@ -14,10 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusProperties
@@ -109,17 +104,7 @@ fun RootScreen(game: GameCoordinator) {
         }
 
         // The overlays, in paint order. Each is a conditional insertion.
-        // The banner's LAST text is held, because the exit fade is triggered BY the
-        // countdown going null: composing `state.countdown` here would render nothing
-        // for the whole 200 ms exit and "GO!" would vanish instantly instead of
-        // fading. AnimatedVisibility keeps its content alive through the exit; it
-        // cannot keep the value the content reads.
-        var lastCount by remember { mutableStateOf("") }
-        state.countdown?.let { lastCount = it }
-        AnimatedVisibility(
-            visible = state.screen == GameState.Screen.RACE && state.countdown != null,
-            enter = fadeIn(tween(120)), exit = fadeOut(tween(200)),
-        ) { CountdownBanner(lastCount) }
+        CountdownOverlay(state)
 
         // THE BOARD FADES UP, because it no longer arrives at the flag: the race's
         // end holds the frozen finish frame for the flourish (race_flow.h

@@ -9,8 +9,9 @@
 // modeled as a vector), JSON-scalar peer identity (number vs string distinct),
 // joinedAt tiebreaks in host election, the sticky host slot vs the effective
 // `host` fallback chain, and the EXACT event emission order within one op.
-// Detectors (onSeen/isExpired/expiredPeers/graceTick) are pure predicates that
-// never mutate roster/presence and never emit — the single-writer invariant.
+// Presence is the relay's answer alone (peer_joined .. peer_left), so there is
+// no silence detector here. graceTick is a pure predicate that never mutates
+// roster/presence and never emits — the single-writer invariant.
 #pragma once
 
 #include <cmath>
@@ -49,17 +50,13 @@ class RoomFlow {
  public:
   enum class State { LOBBY, COUNTDOWN, PLAYING, RESULTS };
 
-  // Construction config. masterProvider/enabledProvider are modeled as settable
-  // values (driven by setMasterValue/setLivenessEnabled), matching the corpus
-  // generator's closures. timeoutMs defaults to Infinity (liveness absent = expiry
-  // never fires); graceMs defaults to 0.
+  // Construction config. masterProvider is modeled as a settable value (driven
+  // by setMasterValue). graceMs is the abandoned-room deadline (graceTick); it
+  // defaults to 0.
   struct Config {
     bool hasMasterProvider = false;
     PeerId master = PeerId::None();  // initial master value
-    bool hasLiveness = false;
-    double timeoutMs = INFINITY;
     double graceMs = 0;
-    bool hasEnabledProvider = false;
   };
 
   // type + detail, in emission order. Detail keys mirror RoomFlow.js.
@@ -74,7 +71,6 @@ class RoomFlow {
   bool rekey(const PeerId& oldId, const PeerId& newId);
   void markDisconnected(const PeerId& peerIndex);
   void markReconnected(const PeerId& peerIndex);
-  void clearDisconnected(bool hasNow, double nowMs);
 
   // ---- lifecycle ------------------------------------------------------------
   bool transitionTo(const std::string& to);
@@ -85,8 +81,8 @@ class RoomFlow {
   // define the participant set: the ids the caller counts as actively playing (in
   // Tiny Track: holding a car in the live race), PLUS every dropped seat. An
   // absent seat is being HELD for its player, not waiting for the next round —
-  // which is exactly what makes the leftover set (hasLateJoiners /
-  // lateJoinersValue) mean "connected, and with nothing to play".
+  // which is exactly what makes the leftover set (lateJoinersValue) mean
+  // "connected, and with nothing to play".
   //
   // Ids that are not on the roster are ignored, so a caller may hand over its
   // whole participant list — bots included — without filtering it first.
@@ -96,26 +92,21 @@ class RoomFlow {
   // three shells can share one copy.
   void syncActiveOrder(const std::vector<PeerId>& activeIds);
 
-  // ---- liveness (pure predicates) ------------------------------------------
-  void onSeen(const PeerId& peerIndex, double nowMs);
-  bool isExpired(const PeerId& peerIndex, double nowMs) const;
-  std::vector<PeerId> expiredPeers(double nowMs) const;
+  // ---- presence (pure predicates) -------------------------------------------
   bool allParticipantsDisconnected() const;
-  bool hasLateJoiners() const;
-  // WHO the late joiners are — the same roster-minus-active-order set
-  // hasLateJoiners() tests, as records in list() order. A shell that renders
-  // "waiting for the next race" rows must read them from here, so the rows and
-  // the graceTick policy can never disagree about who is waiting.
+  // WHO the late joiners are — every roster member outside the active order, as
+  // records in list() order. A shell that renders "waiting for the next race"
+  // rows must read them from here.
   Value lateJoinersValue() const;
   // The abandoned-room deadline, true the ONE time it expires. Two arms, one
-  // deadline: mid-race, every participant gone while someone waits; on the
-  // RESULTS board, nobody connected at all. See the .cc for why the results arm
-  // is a condition rather than the clock it replaced.
+  // deadline, one question: is any racer still connected? Mid-race, every
+  // participant gone; on the RESULTS board, no participant connected. Late
+  // joiners count for neither. See the .cc for why the results arm is a
+  // condition rather than the clock it replaced.
   bool graceTick(double nowMs);
 
   // ---- provider setters -----------------------------------------------------
   void setMasterValue(const PeerId& v) { masterValue_ = v; }
-  void setLivenessEnabled(bool v) { livenessEnabled_ = v; }
 
   // ---- read accessors -------------------------------------------------------
   State state() const { return state_; }
@@ -150,10 +141,6 @@ class RoomFlow {
   void discAdd(const PeerId& id);
   void discDelete(const PeerId& id);
 
-  bool lastSeenGet(const PeerId& id, double& out) const;
-  void lastSeenSet(const PeerId& id, double v);
-  void lastSeenDelete(const PeerId& id);
-
   bool inActiveOrder(const PeerId& id) const;  // the late-joiner test, once
   bool restricted() const;
   bool isEligible(const PeerId& id, const std::vector<PeerId>* eligible) const;
@@ -177,12 +164,10 @@ class RoomFlow {
   double joinSeq_ = 0;               // monotonic joinedAt source
   std::vector<PeerId> disconnected_; // membership set (order irrelevant)
   std::vector<PeerId> order_;        // active participants (snapshot / setActiveOrder)
-  std::vector<std::pair<PeerId, double>> lastSeen_;  // peerIndex -> last nowMs
   bool hasGraceDeadline_ = false;
   double graceDeadline_ = 0;
 
   PeerId masterValue_ = PeerId::None();  // live master (setMasterValue)
-  bool livenessEnabled_ = true;          // live enabled flag (setLivenessEnabled)
 };
 
 }  // namespace ttp

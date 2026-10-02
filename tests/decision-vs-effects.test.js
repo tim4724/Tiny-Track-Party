@@ -50,7 +50,7 @@ function abi() {
 }
 
 function freshRoom(a) {
-  return a.roomCreate(JSON.stringify({ liveness: { timeoutMs: 60000, graceMs: 60000 } }));
+  return a.roomCreate(JSON.stringify({ liveness: { graceMs: 60000 } }));
 }
 
 test('a rejected start answers a REASON, not an empty plan', async () => {

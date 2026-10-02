@@ -111,7 +111,7 @@ export function runControllerScenario(opts) {
     renderStarsCard({ countEl: el('stars-count'), rulesEl: el('stars-rules'),
       unlockEl: el('stars-unlock'), progress: PREVIEW_PROGRESS, catalog: PREVIEW_TRACKS });
     el('stars-overlay').classList.remove('hidden');
-    el('stars-done').focus({ preventScroll: true });
+    el('stars-overlay').focus({ preventScroll: true });
   }
   el('stars-done').onclick = () => el('stars-overlay').classList.add('hidden');
   // The auto-picked default a host lobby opens with (mirrors maybeAutoSelectMode).
@@ -290,7 +290,7 @@ export function runControllerScenario(opts) {
       el('tv-seg').classList.remove('hidden');
       el('sound-toggle').setAttribute('aria-checked', 'true');
       el('settings-overlay').classList.remove('hidden');
-      el('settings-done').focus({ preventScroll: true });   // seed focus inside the dialog (mirrors openSettings)
+      el('settings-overlay').focus({ preventScroll: true });   // seed focus inside the dialog (mirrors openSettings)
       break;
     }
 
@@ -315,7 +315,7 @@ export function runControllerScenario(opts) {
       fix.classList.toggle('hidden', !copy.fix);
       if (copy.fix) fix.innerHTML = copy.fix;
       el('motion-overlay').classList.remove('hidden');
-      el('motion-done').focus({ preventScroll: true });
+      el('motion-overlay').focus({ preventScroll: true });
       break;
     }
 

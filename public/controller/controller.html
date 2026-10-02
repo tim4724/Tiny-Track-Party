@@ -208,7 +208,7 @@
        auto-shows ONCE per device on first lobby entry (localStorage
        'tinytrack_seen_help'); the gear buttons reopen it. The motion-permission
        recovery is a SEPARATE popup (#motion-overlay). Wiring in modals.js. -->
-  <div id="settings-overlay" class="hidden" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+  <div id="settings-overlay" class="hidden" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="settings-title">
     <!-- .is-buttons (set by refreshSettingsCard) flips the demo + captions to
          button steering; the default card teaches tilt. -->
     <div id="settings-card" class="settings-card">
@@ -317,13 +317,13 @@
 
   <!-- Motion-blocked popup — a SEPARATE alert (not part of the instructions): shown
        when the tilt sensor is blocked (iOS denied), with the live recovery path. A
-       device with no sensor at all never sees it — startup forces button steering
+       device with no sensor at all never sees it — it is put on button steering (main.js onMotionState)
        and the settings card's Tilt row reads "Not available" instead. Sits above
        #settings-overlay (z 18) but below #conn. Title, copy + the primary button's
        action come from tilt.motionState (see refreshMotionPopup / motionHelpCopy).
        Once iOS has denied, that button RELOADS (the only way to re-raise the
        prompt) rather than uselessly re-requesting. -->
-  <div id="motion-overlay" class="hidden" role="alertdialog" aria-modal="true" aria-labelledby="motion-title" aria-describedby="motion-status">
+  <div id="motion-overlay" class="hidden" tabindex="-1" role="alertdialog" aria-modal="true" aria-labelledby="motion-title" aria-describedby="motion-status">
     <div class="settings-card motion-card">
       <h2 id="motion-title">Motion sensor is blocked</h2>
       <p id="motion-status" class="help-copy"></p>
@@ -338,7 +338,7 @@
        opens it. Same shape and layer as #motion-overlay (never both at once:
        each opens only from a tap on the lobby). Filled by renderStarsCard
        (shared/trackPicker.js); wiring in modals.js. -->
-  <div id="stars-overlay" class="hidden" role="dialog" aria-modal="true" aria-labelledby="stars-title">
+  <div id="stars-overlay" class="hidden" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="stars-title">
     <div class="settings-card motion-card">
       <h2 id="stars-title">Stars</h2>
       <p id="stars-count" class="help-copy"></p>

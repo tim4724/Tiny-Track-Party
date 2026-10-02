@@ -269,6 +269,15 @@ device-pixel rects divided back out by the same number.
 anything tempted onto the per-frame path must actually CHANGE per frame. See
 `native/renderer/CLAUDE.md` for what the frame itself costs.
 
+The one element that does is the **name tags** over every other player's car
+(`_paintNameTags`), because a tag rides a moving car. They are DOM rather than
+renderer geometry so the text stays at the panel's resolution while the 3D
+buffer is scaled down; C++ decides where each goes (`ttp/name_tags.h`) off the
+frame it was just handed. Two rules keep them honest: read and paint in the
+same rAF as `display.frame`, so the browser composites tag and car together,
+and write only `transform` and `opacity` per frame — text and colour only when
+a pooled tag changes whose name it shows.
+
 **Fetching assets is the shell's whole half of a scene build.** C++ names what it
 needs (scenery, props, cars, the kit field's models) and this side answers with
 bytes; nothing about which file that was crosses back. The asset gallery's KIT
@@ -363,7 +372,7 @@ A caller that has changed what a frame costs should `reset()` rather than reason
 about the window.
 
 **`?scenario=bench` is the bench** (`scripts/perf-race.mjs --platform web`): a
-live race on the launch's own field with 1, 2 or 4 autopiloted player seats,
+live race on the launch's own field with 1 to 4 autopiloted player seats,
 printing `TtpPerf <json>` once a second. The line is the readout's own bytes and
 the two TV shells log the same one, so a single parser folds all three.
 

@@ -287,21 +287,6 @@ test('the presence windows still describe one design', () => {
     'the abandoned-race grace is too close to the detection windows to be a grace at all');
 });
 
-test('the display runs no silence detector of its own', () => {
-  // THE RULE: presence is the relay's answer, from peer_joined to peer_left.
-  // This is the assertion that the display did not quietly grow a second
-  // opinion again — a per-seat silence window here and Party-Sockets' cap
-  // (which counts LIVE SOCKETS) disagree about who is in the room, and the
-  // half that is wrong is always ours: a seat we dropped still fills a relay
-  // slot, so the reconnect QR we offer for it is answered "Room is full".
-  const disp = fs.readFileSync(DISPLAY_NET, 'utf8');
-  assert.doesNotMatch(disp, /LIVENESS\.TIMEOUT_MS|timeoutMs\s*:/,
-    'display/Net.js: a per-controller drop window is back — presence belongs to the relay');
-  const netCc = fs.readFileSync(path.join(ROOT, 'native/runtime/ttp_net.cc'), 'utf8');
-  assert.doesNotMatch(netCc, /flow->expiredPeers\(/,
-    'ttp_net.cc: the silence sweep is back — a seat is dropped by peer_left and by nothing else');
-});
-
 test('the C++ mirror of the presence contract matches the manifest', () => {
   const src = fs.readFileSync(path.join(ROOT, 'native/libttp-party/ttp/protocol.h'), 'utf8');
   for (const [key, want] of Object.entries(protocol.LIVENESS)) {

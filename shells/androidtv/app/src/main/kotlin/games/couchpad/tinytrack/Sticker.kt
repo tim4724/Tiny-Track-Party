@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.drawOutline
+import androidx.compose.ui.graphics.drawscope.DrawStyle
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.PlatformTextStyle
@@ -566,12 +567,16 @@ fun StickerText(
      * their box exactly as they do in the CSS.
      */
     lineHeight: Float? = null,
+    /** `-webkit-text-stroke`: a [androidx.compose.ui.graphics.drawscope.Stroke]
+     *  paints the glyph's outline instead of filling it. Null fills. */
+    drawStyle: DrawStyle? = null,
 ) {
     androidx.compose.foundation.text.BasicText(
         text = text,
         modifier = modifier,
         style = TextStyle(
             color = color,
+            drawStyle = drawStyle,
             fontSize = size.value.sp,
             fontFamily = if (body) Fonts.body else Fonts.display,
             fontWeight = weight,

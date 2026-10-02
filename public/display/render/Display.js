@@ -27,7 +27,7 @@ import { BlobStores } from './BlobStore.js';
 
 // Camera modes for a surface with no split-screen cells — the C side's
 // TTP_CAM_* (ttp_display.h).
-export const CAM = { STILL: 0, ORBIT: 1, BBOX: 2, FREE: 3 };
+export const CAM = { STILL: 0, ORBIT: 1, BBOX: 2, FREE: 3, FOLLOW: 4 };
 
 // Feature-ablation bits for debugFeatures() — the C side's TTP_FEAT_*
 // (ttp_display.h). DEBUG ONLY: the per-feature GPU cost map's instrument.
@@ -80,6 +80,8 @@ const EMPTY_RECTS = new Float32Array(0);
 // each. Declared once here because the allocation and the read-back must agree,
 // and they are twenty lines apart.
 export const RECT_STRIDE = 8;
+// ttp_display_name_tags: cell, roster slot, x, y, scale, alpha.
+export const TAG_STRIDE = 6;
 // hud()'s, for the same reason.
 const EMPTY_HUD = [];
 
@@ -119,6 +121,8 @@ export class Display {
     this.built = false;
     this._rectPtr = 0;       // cellRects' heap scratch, grown on demand
     this._rectBytes = 0;
+    this._tagPtr = 0;        // nameTags' heap scratch, likewise
+    this._tagBytes = 0;
     this._pollPtr = 0;       // step()'s two-double out array; allocated on first use
     this._showcase = false;  // the asset gallery's showroom; see showcase()
     this._kitModels = [];    // …and its kit field; see kitField()
@@ -158,8 +162,10 @@ export class Display {
       cells: mod.cwrap('ttp_display_cells', null, ['string']),
       cellRects: mod.cwrap('ttp_display_cell_rects', 'number', ['number', 'number']),
       cellCards: mod.cwrap('ttp_display_cell_cards', null, ['number']),
+      nameTags: mod.cwrap('ttp_display_name_tags', 'number', ['number', 'number']),
       slotIds: mod.cwrap('ttp_display_slot_ids_json', 'string', []),
       dividers: mod.cwrap('ttp_display_dividers', null, ['number']),
+      steerBars: mod.cwrap('ttp_display_steer_bars', null, ['number']),
       camera: mod.cwrap('ttp_display_camera', null, ['number']),
       look: mod.cwrap('ttp_display_look', null, ['number', 'number', 'number', 'number', 'number', 'number']),
       fog: mod.cwrap('ttp_display_fog', null, ['number']),
@@ -608,6 +614,30 @@ export class Display {
                                    (this._rectPtr >> 2) + got * RECT_STRIDE);
   }
 
+  // Slot i's car id, off the built scene's own roster.
+  // LATCHED per build: the list only changes when a scene is built (reroster
+  // refuses id changes), so the per-frame tags and the ~6 Hz HUD poll must not
+  // re-parse JSON that cannot have moved.
+  slotIds() {
+    return this._slotIdCache || (this._slotIdCache = JSON.parse(this._fn.slotIds()));
+  }
+
+  // Name tags over every other player's car, per cell, for the frame just drawn,
+  // TAG_STRIDE floats each (ttp_display.h); the second float is a roster slot.
+  // Read after frame() and painted in the same rAF, so the DOM and the canvas
+  // reach the screen together. A view over scratch reused by the next call, for
+  // cellRects' reason.
+  nameTags(maxTags) {
+    const bytes = maxTags * TAG_STRIDE * 4;
+    if (!this._tagPtr || this._tagBytes < bytes) {
+      if (this._tagPtr) this.m._free(this._tagPtr);
+      this._tagPtr = this.m._malloc(bytes);
+      this._tagBytes = bytes;
+    }
+    const got = this._fn.nameTags(this._tagPtr, maxTags);
+    return this.m.HEAPF32.subarray(this._tagPtr >> 2, (this._tagPtr >> 2) + got * TAG_STRIDE);
+  }
+
   // WHAT the HUD says: place, lap, total laps, the held item, finished and the
   // finish time, per car — read out of the packed block ttp_display_hud points
   // at (ttp_hud.h) rather than out of a serialized race state. Those six values
@@ -645,13 +675,9 @@ export class Display {
     }
     const count = u32[head + 1];
     const stride = u32[head + 2];
-    // Slot i's car id, off the built scene's own roster (the one owner —
-    // this side used to keep a copy and a drifted index was silently skipped).
-    // LATCHED per build: the list only changes when a scene is built (reroster
-    // refuses id changes), so the ~6 Hz HUD poll must not re-parse JSON that
-    // cannot have moved — that parse was the one JSON crossing left inside the
-    // packed-readback path.
-    const slotIds = this._slotIdCache || (this._slotIdCache = JSON.parse(this._fn.slotIds()));
+    // Slot i's car id (slotIds) — the one owner; this side used to keep a copy
+    // and a drifted index was silently skipped.
+    const slotIds = this.slotIds();
     const rows = [];
     for (let i = 0; i < count; i++) {
       const id = slotIds[i];
@@ -683,6 +709,7 @@ export class Display {
 
   // The ink rules on the split-screen seams (?dividers=0 turns them off).
   dividers(on) { this._fn.dividers(on ? 1 : 0); }
+  steerBars(on) { this._fn.steerBars(on ? 1 : 0); }
 
   camera(mode) { this._fn.camera(mode); }
   look(eye, target) { this._fn.look(eye.x, eye.y, eye.z, target.x, target.y, target.z); }

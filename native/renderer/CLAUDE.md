@@ -689,8 +689,13 @@ overstates what a rebuild costs. `props+rig` behaves the same way, 67 ms then 20
 The consequence for anything tempted to KEEP parsed assets across a scene, the
 way the sun bake and the silhouette layers are kept: what such a cache buys is
 the ~28 ms, never the ~405. Price it against that. The one-time half is a process
-warm-up problem and belongs with
-`backend.vulkan.enable_pipeline_cache_prewarming`, not with a resource pool.
+warm-up problem, not a resource pool's. Filament's
+`backend.vulkan.enable_pipeline_cache_prewarming` is unavailable on the reference
+box (no `VK_EXT_vertex_input_dynamic_state`), so the effect pools are drawn once
+before the race (`warmEffectPipelines`) and the compiled pipelines outlive the
+process instead: the fork's Vulkan backend keeps its VkPipelineCache in the
+platform blob cache, which `TtpRenderer::init` points at a file the Android shell
+names (`setPipelineCacheFile`).
 
 **Car bodies ARE kept** (`mBodyPool`) on exactly that trade; the rest of the
 gltfio assets are still dropped by `releaseScene` while the mask layers keyed off

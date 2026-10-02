@@ -96,19 +96,6 @@ void RoomFlow::discDelete(const PeerId& id) {
     if (disconnected_[i] == id) { disconnected_.erase(disconnected_.begin() + i); return; }
 }
 
-bool RoomFlow::lastSeenGet(const PeerId& id, double& out) const {
-  for (const auto& kv : lastSeen_) if (kv.first == id) { out = kv.second; return true; }
-  return false;
-}
-void RoomFlow::lastSeenSet(const PeerId& id, double v) {
-  for (auto& kv : lastSeen_) if (kv.first == id) { kv.second = v; return; }
-  lastSeen_.emplace_back(id, v);
-}
-void RoomFlow::lastSeenDelete(const PeerId& id) {
-  for (size_t i = 0; i < lastSeen_.size(); i++)
-    if (lastSeen_[i].first == id) { lastSeen_.erase(lastSeen_.begin() + i); return; }
-}
-
 // ---- emit helpers -----------------------------------------------------------
 void RoomFlow::emitHostchange() {
   Value d = Value::Obj();
@@ -172,7 +159,6 @@ void RoomFlow::removePlayer(const PeerId& peerIndex) {
   bool wasHost = peerIndex == hostPeerIndex_;
   erasePlayer(peerIndex);
   discDelete(peerIndex);
-  lastSeenDelete(peerIndex);
   for (size_t i = 0; i < order_.size(); i++)
     if (order_[i] == peerIndex) { order_.erase(order_.begin() + i); break; }
   if (wasHost && (state_ == State::LOBBY || state_ == State::RESULTS)) {
@@ -198,16 +184,6 @@ bool RoomFlow::rekey(const PeerId& oldId, const PeerId& newId) {
   players_.push_back(std::move(moved));  // re-appended -> moves to end of Map order
   discDelete(oldId);
   discDelete(newId);
-  // Keep the NEWER of the two last-seen stamps (the placeholder's is the live
-  // signal; the old seat's may be a full grace window stale).
-  double oldStamp = 0, newStamp = 0;
-  bool hasOld = lastSeenGet(oldId, oldStamp), hasNew = lastSeenGet(newId, newStamp);
-  lastSeenDelete(oldId);
-  lastSeenDelete(newId);
-  if (hasOld || hasNew) {
-    double kept = !hasOld ? newStamp : (!hasNew ? oldStamp : std::max(oldStamp, newStamp));
-    lastSeenSet(newId, kept);
-  }
   for (auto& id : order_) if (id == oldId) id = newId;
   if (hostPeerIndex_ == oldId) hostPeerIndex_ = newId;
   if (host() != prevHost) emitHostchange();
@@ -235,19 +211,6 @@ void RoomFlow::markReconnected(const PeerId& peerIndex) {
   emitRosterchange();
 }
 
-void RoomFlow::clearDisconnected(bool hasNow, double nowMs) {
-  // Re-stamp liveness on this "everyone present" transition BEFORE the early
-  // return, so a controller that just went quiet isn't instantly re-expired.
-  if (hasNow) {
-    for (const auto& p : players_) lastSeenSet(p.peerIndex, nowMs);
-  }
-  if (disconnected_.empty()) return;
-  PeerId prevHost = host();
-  disconnected_.clear();
-  for (auto& p : players_) p.connected = true;
-  if (host() != prevHost) emitHostchange();
-  emitRosterchange();
-}
 
 // ============================================================================
 // Host election
@@ -382,29 +345,8 @@ bool RoomFlow::transitionTo(const std::string& to) {
 }
 
 // ============================================================================
-// Liveness (pure, nowMs-injected predicates)
+// Presence (pure, nowMs-injected predicates)
 // ============================================================================
-void RoomFlow::onSeen(const PeerId& peerIndex, double nowMs) {
-  if (find(peerIndex)) lastSeenSet(peerIndex, nowMs);
-}
-
-bool RoomFlow::isExpired(const PeerId& peerIndex, double nowMs) const {
-  if (cfg_.hasEnabledProvider && !livenessEnabled_) return false;
-  double stamp = 0;
-  if (!lastSeenGet(peerIndex, stamp)) return false;
-  return nowMs - stamp > cfg_.timeoutMs;  // strict '>' — exactly-at-timeout is alive
-}
-
-std::vector<PeerId> RoomFlow::expiredPeers(double nowMs) const {
-  std::vector<PeerId> out;
-  if (state_ == State::LOBBY) return out;
-  for (const auto& p : players_) {  // Map key order -> return array order
-    if (discHas(p.peerIndex)) continue;
-    if (isExpired(p.peerIndex, nowMs)) out.push_back(p.peerIndex);
-  }
-  return out;
-}
-
 bool RoomFlow::allParticipantsDisconnected() const {
   if (order_.empty()) return false;
   for (const auto& id : order_) if (!discHas(id)) return false;
@@ -418,12 +360,7 @@ bool RoomFlow::inActiveOrder(const PeerId& id) const {
 
 // A late joiner is any roster member outside the active order — presence is NOT
 // part of it (a host that wants "connected and waiting" says so by putting the
-// absent seats in the order; see setActiveOrder). hasLateJoiners/lateJoinersValue
-// are the predicate and the list of the SAME set, so they cannot drift.
-bool RoomFlow::hasLateJoiners() const {
-  for (const auto& p : players_) if (!inActiveOrder(p.peerIndex)) return true;
-  return false;
-}
+// absent seats in the order; see setActiveOrder).
 
 Value RoomFlow::lateJoinersValue() const {
   std::vector<const Player*> arr;
@@ -436,16 +373,23 @@ Value RoomFlow::lateJoinersValue() const {
 }
 
 bool RoomFlow::graceTick(double nowMs) {
-  // Mid-race: every participant is gone and someone is waiting for the next one.
-  const bool raceAbandoned =
-      state_ == State::PLAYING && allParticipantsDisconnected() && hasLateJoiners();
-  // On the results board: nobody is connected at all. The recovery this replaces
-  // was a 60 s timer the shells armed off endRace, and it fired on a CLOCK — so
-  // it yanked a party that was still talking off its own podium. This fires on
-  // the room being EMPTY, which is the condition that timer was always a proxy
-  // for. "Empty" is connectedCount() == 0, the same set advanceSeriesRace's
-  // empty-roster branch reads (its players come from the connected-only roster).
-  const bool podiumAbandoned = state_ == State::RESULTS && connectedCount() == 0;
+  // Both arms ask one question: is any RACER still connected? A late joiner does
+  // not count. They cannot drive the race or start the next one, so a room whose
+  // racers are all gone is waiting on nobody it can use, whether or not a
+  // newcomer is there. A dropped racer keeps their seat and rejoin QR until the
+  // lobby frees it; the grace is how long the room waits for one to come back.
+  //
+  // Mid-race: every participant is gone. A frozen race used to wait forever
+  // unless a late joiner turned up.
+  const bool raceAbandoned = state_ == State::PLAYING && allParticipantsDisconnected();
+  // On the results board: no participant is connected, the empty order
+  // included. The recovery this replaces was a 60 s timer the shells armed off
+  // endRace, and it fired on a CLOCK, so it yanked a party that was still
+  // talking off its own podium. Counting a late joiner here once left a podium
+  // that only a newcomer was watching stuck for good: no host to press New game.
+  bool racerConnected = false;
+  for (const auto& id : order_) if (!discHas(id)) { racerConnected = true; break; }
+  const bool podiumAbandoned = state_ == State::RESULTS && !racerConnected;
   if (raceAbandoned || podiumAbandoned) {
     if (!hasGraceDeadline_) { hasGraceDeadline_ = true; graceDeadline_ = nowMs + cfg_.graceMs; return false; }
     if (nowMs >= graceDeadline_) { hasGraceDeadline_ = false; return true; }
@@ -479,7 +423,6 @@ void RoomFlow::reset() {
   bool hadHost = !hostPeerIndex_.isNull();
   players_.clear();
   disconnected_.clear();
-  lastSeen_.clear();
   hasGraceDeadline_ = false;
   order_.clear();
   hostPeerIndex_ = PeerId::None();

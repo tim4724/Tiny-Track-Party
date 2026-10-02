@@ -190,12 +190,14 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
     }
 
     auto* outViews = const_cast<TtpViewInput*>(ttp_frame_views(head));
+    // The follow cam works at race distances, so it takes the race fog band.
+    const bool follow = !raceCams && d.camMode == CAM_FOLLOW;
     const float fogNear = !d.fog ? 0
-            : raceCams ? d.framing.raceFogNear
+            : raceCams || follow ? d.framing.raceFogNear
             : d.camMode == CAM_BBOX ? d.framing.bbFogNear
             : d.framing.ovFogNear;
     const float fogFar = !d.fog ? 0
-            : raceCams ? d.framing.raceFogFar
+            : raceCams || follow ? d.framing.raceFogFar
             : d.camMode == CAM_BBOX ? d.framing.bbFogFar
             : d.framing.ovFogFar;
     if (raceCams) {
@@ -248,6 +250,12 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
         if (d.camMode == CAM_FREE) {
             eye = d.freeEye;
             target = d.freeTarget;
+        } else if (follow) {
+            std::vector<bool> live(cars.size());
+            for (size_t i = 0; i < cars.size(); i++) live[i] = fromHeld || cars[i];
+            d.follow.update(outCars, live, f.center, d.tagDeck, d.ground, dt);
+            eye = d.follow.pos;
+            target = d.follow.target;
         } else if (d.camMode == CAM_BBOX) {
             d.orbitAngle += BBOX_ORBIT_SPEED * dt;
             eye = { f.center.x + std::cos(d.orbitAngle) * f.bbAx,
@@ -264,10 +272,10 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
         TtpViewInput& v = outViews[0];
         v.car = -1;   // an overview follows nobody
         lookAtWorld(v.world, eye, target, V3{ 0, 1, 0 });
-        v.fov = OVERVIEW_FOV;
+        v.fov = follow ? FOLLOW_FOV : OVERVIEW_FOV;
         v.aspect = aspect;
-        v.nearZ = d.camMode == CAM_FREE ? FREE_NEAR : OV_NEAR;
-        v.farZ = OV_FAR;
+        v.nearZ = follow ? CAM_NEAR : d.camMode == CAM_FREE ? FREE_NEAR : OV_NEAR;
+        v.farZ = follow ? CAM_FAR : OV_FAR;
         v.fogNear = fogNear;
         v.fogFar = fogFar;
     }
@@ -328,13 +336,16 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
     // written straight from it holds still and then jumps, several frames apart.
     // One time constant, matching the 50 ms transition the phone puts on its own
     // bar (controller.css .steer #steer-fill), so both ends lag the same.
-    const float steerAlpha = dt > 0 ? (dt < STEER_BAR_TAU ? dt / STEER_BAR_TAU : 1.0f) : 0.0f;
+    // The EXACT exponential, as camera.cc eases: the linear dt / tau overshot it
+    // more the longer the frame, so a 30 Hz bar eased ~30 ms where 60 Hz eased
+    // ~41 ms, and showed the packet-rate steps it exists to hide.
+    const float steerAlpha = dt > 0 ? 1 - std::exp(-dt / STEER_BAR_TAU) : 0.0f;
     auto* outHud = const_cast<TtpCellHudInput*>(ttp_frame_hud(head));
     for (uint32_t i = 0; i < hudCount; i++) {
         TtpCellHudInput& o = outHud[i];
         o.car = -1;
         o.steer = 0;
-        o.flags = (d.cardMask >> i) & 1u ? 0u : TTP_HUD_STEER_BAR;
+        o.flags = d.steerBars && !((d.cardMask >> i) & 1u) ? TTP_HUD_STEER_BAR : 0u;
         for (size_t j = 0; j < d.roster.size(); j++) {
             if (d.roster[j] != d.cells[i]) continue;
             o.car = (int32_t) j;

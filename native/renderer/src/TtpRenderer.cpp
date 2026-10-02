@@ -1,6 +1,8 @@
 // Engine and scene lifecycle: materials, mesh build/teardown, releaseScene and
 // the ablation plumbing. TtpRendererImpl.h carries what the topic files share.
 #include <algorithm>
+#include <cstdio>
+#include <string>
 #include <utility>
 #include <chrono>
 
@@ -50,6 +52,44 @@ public:
         return c;
     }
 };
+
+// THE COMPILED PIPELINES OUTLIVE THE PROCESS. The reference box cannot prewarm
+// pipelines (no VK_EXT_vertex_input_dynamic_state), so every launch compiled
+// each one again on the driver thread before the first race could start. The
+// fork's Vulkan backend seeds its VkPipelineCache from the platform's blob
+// cache and writes it back once pipeline creation goes quiet. One entry, so one
+// file and the key is not looked at: the data carries its own device and driver
+// header, which the driver checks before using any of it. Written beside and
+// renamed over, so a process killed mid-write never leaves a torn cache behind
+// (a power cut can, unsynced: the read gives back 0 bytes or a header the driver
+// refuses). One writer: Filament saves from its driver thread, once per burst.
+void persistPipelineCache(filament::backend::Platform& platform, std::string const& file) {
+    platform.setBlobFunc(
+            [file](const void*, size_t, const void* value, size_t size) {
+                std::string const tmp = file + ".tmp";
+                FILE* f = std::fopen(tmp.c_str(), "wb");
+                if (!f) return;
+                bool const wrote = std::fwrite(value, 1, size, f) == size;
+                if (std::fclose(f) == 0 && wrote) {
+                    std::rename(tmp.c_str(), file.c_str());
+                } else {
+                    std::remove(tmp.c_str());
+                }
+            },
+            [file](const void*, size_t, void* value, size_t size) -> size_t {
+                FILE* f = std::fopen(file.c_str(), "rb");
+                if (!f) return 0;
+                std::fseek(f, 0, SEEK_END);
+                long const length = std::ftell(f);
+                std::fseek(f, 0, SEEK_SET);
+                size_t stored = length > 0 ? (size_t) length : 0;
+                if (stored && stored <= size && std::fread(value, 1, stored, f) != stored) {
+                    stored = 0;
+                }
+                std::fclose(f);
+                return stored;
+            });
+}
 }  // namespace
 #endif
 
@@ -96,6 +136,7 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
     // after Engine::destroy in shutdown; only the Vulkan backend takes it.
     if (backend == backend::Backend::VULKAN) {
         mVkPlatform = std::make_unique<TtpVulkanPlatform>();
+        if (!mPipelineCacheFile.empty()) persistPipelineCache(*mVkPlatform, mPipelineCacheFile);
         builder.platform(mVkPlatform.get());
     }
 #endif

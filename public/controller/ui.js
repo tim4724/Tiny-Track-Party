@@ -48,7 +48,7 @@ export function renderWaitNote(waitEl, { name, color } = {}, suffix) {
 // it's a one-tap rejoin). If the global Safari toggle is off, even reload won't
 // prompt, hence the Settings fix line. 'granted' (incl. Android/desktop, which resolve
 // granted on the Join tap) needs no recovery, so the popup stays shut. 'unsupported'
-// has no case: a device with no sensor is forced onto button steering at startup
+// has no case: a device with no sensor is forced onto button steering
 // (main.js) and the settings card's Tilt row reads "Not available" — nothing to
 // recover, so it never reaches this popup. 'unknown' is the one state where a
 // fresh request CAN still prompt — and it is not only the gallery's pre-prompt

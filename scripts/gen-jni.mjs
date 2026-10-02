@@ -89,6 +89,8 @@ const OVERRIDES = {
   // Kotlin side sizes its array by it, and a shim that kept an old one would
   // read cells past the end of what C++ wrote.
   ttp_display_cell_rects: { kind: 'floatOut', stride: 8 },
+  // Same shape, one tag at a time (ttp_display.h).
+  ttp_display_name_tags: { kind: 'floatOut', stride: 6 },
   // Self-describing packed blocks: version + count + STRIDE, designed so a
   // reader can decode without having compiled the struct (ttp_hud.h). A direct
   // ByteBuffer is therefore the intended read and costs no copy. Scratch
@@ -304,10 +306,10 @@ function emitC(fns) {
     } else if (kind === 'floatOut') {
       const stride = OVERRIDES[fn.name].stride;
       if (!stride) throw new Error(`${fn.name}: floatOut needs a stride`);
-      args.push('jfloatArray outArr', 'jint maxCells');
+      args.push('jfloatArray outArr', 'jint max');
       pre.push(`    if (!outArr) return 0;`);
       pre.push(`    const jint cap = env->GetArrayLength(outArr) / ${stride};`);
-      pre.push(`    const jint want = maxCells < cap ? maxCells : cap;`);
+      pre.push(`    const jint want = max < cap ? max : cap;`);
       pre.push(`    std::vector<float> tmp((size_t) (want > 0 ? want : 0) * ${stride}, 0.0f);`);
       pre.push(`    const jint n = (jint) ${fn.name}(tmp.data(), (int) want);`);
       post.push(`    if (n > 0) env->SetFloatArrayRegion(outArr, 0, n * ${stride}, tmp.data());`);
@@ -472,7 +474,7 @@ function emitKt(fns) {
       ps = [...lead.map((p) => `${p.name}: ${isStr(p.type) ? 'ByteArray?' : SCALAR[p.type].kt}`),
             `${fn.params[fn.params.length - 1].name}: DoubleArray`];
       ret = 'Int';
-    } else if (kind === 'floatOut') { ps = ['out: FloatArray', 'maxCells: Int']; ret = 'Int'; }
+    } else if (kind === 'floatOut') { ps = ['out: FloatArray', 'max: Int']; ret = 'Int'; }
     else if (kind === 'namedBytes') { ps = ['name: ByteArray?', 'bytes: ByteArray?']; ret = 'Int'; }
     else if (kind === 'bytesIn' || kind === 'bytesInBytesOut') { ps = ['bytes: ByteArray?']; ret = 'ByteArray?'; }
     else if (kind === 'bytesOut') { ps = []; ret = 'ByteArray?'; }

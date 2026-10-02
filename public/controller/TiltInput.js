@@ -25,9 +25,9 @@
 //
 // iOS 13+ needs requestPermission() from a user gesture (call enableMotion() in a
 // tap handler). HTTPS is required for sensors. Permission is not delivery,
-// though: enableMotion() also waits for a first real sample before it answers,
-// because a granted-but-silent sensor is the common failure and it used to
-// present as a dead steering wheel (see _settle).
+// though: a granted-but-silent sensor is the common failure, so after a grant
+// the page keeps watching for a first real sample and gives up on it in the
+// background (see _watchForSample) rather than holding the join for it.
 //
 // Braking: a held BRAKE button. Held → brake = BRAKE_LEVEL; the engine reads it
 // as a target speed of (1 - BRAKE_LEVEL) × top speed, so a full hold (1) bleeds
@@ -70,10 +70,11 @@ export const SMOOTH = 0.5;
 const BRAKE_LEVEL = 1.0;   // held brake decelerates the car to a full stop
 
 // How long a listening page has to receive its first USABLE sample before the
-// sensor is declared absent. Both platforms deliver at ~60 Hz from the moment
-// the listener attaches, so a real sensor answers within a frame or two and
-// pays none of this window; it only has to outlast a slow first sample.
-const SENSOR_SETTLE_MS = 600;
+// sensor is declared absent. Nothing waits on it — the phone is optimistically
+// on tilt meanwhile — so it is set generously: every too-early verdict flashes
+// the Settings card to "Not available" and back, while a sensorless phone only
+// pays for it with a dead wheel in the lobby.
+export const SENSOR_SETTLE_MS = 3000;
 
 const DEG = Math.PI / 180;
 const RAD = 180 / Math.PI;
@@ -92,27 +93,30 @@ const SCREEN_RIGHT = {
 };
 
 export class TiltInput {
-  constructor({ onControl, surface }) {
+  constructor({ onControl, onMotionState, surface }) {
     this.onControl = onControl || (() => {});
+    // Called on every motionState change after construction. The background
+    // verdict (and a late sample taking it back) lands after the join, so
+    // whatever renders the state has to hear about it rather than read it once.
+    this.onMotionState = onMotionState || (() => {});
     this.surface = surface || (typeof document !== 'undefined' ? document.body : null);
     this.haveTilt = false;
     // unknown | granted | denied | unsupported. 'unsupported' means THIS PAGE
     // cannot get tilt, however that came about, because nothing downstream can
-    // act on the difference: startup falls back to buttons (main.js) and the
+    // act on the difference: main.js falls back to buttons (onMotionState) and the
     // settings card disables Tilt (modals.js) either way.
     //
     // Only the absent constructor resolves here, without a gesture: no
     // DeviceOrientationEvent means no sensor, ever. Every other route to
     // 'unsupported' — a withheld sensor, a missing gyroscope — can only be found
-    // by listening, and _settle finds them all by the one test that matters,
-    // whether samples ARRIVE. (A permissions-policy probe used to answer the
-    // withheld case ~600 ms sooner on Blink alone; it was a second mechanism for
-    // the same question, able to disagree with the delivery it was predicting.)
+    // by listening, and _watchForSample finds them all by the one test that matters,
+    // whether samples ARRIVE. (A permissions-policy probe was once a second
+    // mechanism for the same question, able to disagree with delivery.)
     //
     // EXCEPT on AirConsole, where the constructor says nothing about the sensor:
-    // the SDK's device_motion relay is the sensor there (relayOrientation), so an app
-    // webview without the constructor still steers by tilt. Stay 'unknown' and
-    // let the first relayed sample resolve it.
+    // the SDK's device_motion relay is the sensor there (relayOrientation), so an
+    // app webview without the constructor still steers by tilt. Stay 'unknown'
+    // and let the first relayed sample resolve it.
     this.motionState = (typeof window !== 'undefined' && !window.airconsole
       && !window.DeviceOrientationEvent)
       ? 'unsupported' : 'unknown';
@@ -133,22 +137,21 @@ export class TiltInput {
     this._actionEnabled = false; // gate: ACTION does nothing unless the slot holds an item (set via setActionEnabled)
     this._timer = null;
     this._gestureAsk = false;  // a re-request is already armed (see _askOnNextGesture)
+    this._sampleWatch = null;  // the no-sample timer (see _watchForSample)
 
     this._onOrient = this._onOrient.bind(this);
     this._bindKeys();
     this._initSurface();
   }
 
-  // Call from a user gesture (e.g. the Join tap). Resolves once the sensor has
-  // been proved to deliver or not, so the returned state is final and callers
-  // can switch steering mode off it without a second round — with the one
-  // exception that it CANNOT be final: a request the platform refused to even
-  // put (no gesture behind it) leaves 'unknown' and re-asks on the next tap.
+  // Call from a user gesture (e.g. the Join tap). Resolves with the PERMISSION
+  // answer; delivery is settled afterwards in the background and reported through
+  // onMotionState. A request the platform refused to even put (no gesture behind
+  // it) leaves 'unknown' and re-asks on the next tap.
   async enableMotion() {
     // Not on AirConsole: the frame's own sensor is the one AC never feeds, so
-    // asking for it can only fail ('denied' on iOS, 'unsupported' wherever the
-    // settle window closes before the relay's first sample). The relay resolves
-    // the state there instead (relayOrientation).
+    // asking for it can only fail ('denied' on iOS, 'unsupported' once the
+    // watch times out). The relay resolves the state there (relayOrientation).
     if (window.airconsole) return this.motionState;
     const DOE = window.DeviceOrientationEvent;
     if (!DOE) return this.motionState; // 'unsupported' since the constructor — nothing to request
@@ -158,10 +161,10 @@ export class TiltInput {
         // 'prompt' resolution (Chromium's, when it could not or did not put the
         // question to the player) is the same non-event as the rejection below.
         const res = await DOE.requestPermission();
-        if (res === 'granted' || res === 'denied') this.motionState = res;
+        if (res === 'granted' || res === 'denied') this._setMotionState(res);
         else this._askOnNextGesture();
       } else {
-        this.motionState = 'granted'; // older Chromium: just attach
+        this._setMotionState('granted'); // older Chromium, Android WebView: just attach
       }
     } catch (_) {
       // A REJECTION is not a denial. iOS rejects requestPermission() when the
@@ -176,9 +179,15 @@ export class TiltInput {
     }
     if (this.motionState === 'granted') {
       window.addEventListener('deviceorientation', this._onOrient);
-      await this._settle();
+      this._watchForSample();
     }
     return this.motionState;
+  }
+
+  _setMotionState(state) {
+    if (state === this.motionState) return;
+    this.motionState = state;
+    this.onMotionState(state);
   }
 
   // Re-request on the next tap anywhere, for the pages that join without one.
@@ -201,30 +210,22 @@ export class TiltInput {
   // a cross-origin iframe with no `allow` for them), or hardware that simply
   // has no gyroscope — and downstream that is indistinguishable from having no
   // sensor, so resolve it to 'unsupported' rather than leave a dead steering
-  // wheel in tilt mode. Waits for the first USABLE sample, so a working phone
-  // pays a frame rather than the window — and a sample that lands after the
-  // window still takes the verdict back (see _onOrient), so a slow sensor
-  // costs a fallback, never a stranding.
-  _settle() {
-    if (this.haveTilt) return Promise.resolve();
-    return new Promise((resolve) => {
-      let timer = null;
-      const finish = () => {
-        clearTimeout(timer);
-        window.removeEventListener('deviceorientation', onSample);
-        resolve();
-      };
-      // _onOrient attached first, so for this very event it has already decided
-      // whether the sample was usable. That matters: Chromium emits one
-      // all-null deviceorientation event on sensorless hardware, and an event
-      // count would read it as a working sensor.
-      const onSample = () => { if (this.haveTilt) finish(); };
-      timer = setTimeout(() => {
-        if (!this.haveTilt) this.motionState = 'unsupported';
-        finish();
-      }, SENSOR_SETTLE_MS);
-      window.addEventListener('deviceorientation', onSample);
-    });
+  // wheel in tilt mode. Only the ABSENCE of a sample is timed: a sample that
+  // lands after the window still takes the verdict back (see _onOrient), so a
+  // slow sensor costs a brief fallback, never a stranding. Silence from an
+  // UNFOCUSED page proves nothing — Chromium sends it no samples — so the clock
+  // starts on focus: a launcher WebView nobody has focused yet would otherwise
+  // be judged sensorless until the player's first touch.
+  _watchForSample() {
+    if (this.haveTilt || this._sampleWatch) return;
+    if (!document.hasFocus()) {
+      window.addEventListener('focus', () => this._watchForSample(), { once: true });
+      return;
+    }
+    this._sampleWatch = setTimeout(() => {
+      this._sampleWatch = null;
+      if (!this.haveTilt) this._setMotionState('unsupported');
+    }, SENSOR_SETTLE_MS);
   }
 
   // AirConsole's device_motion relay. The game is a cross-origin iframe that no
@@ -235,25 +236,25 @@ export class TiltInput {
   // where a rate would read 0) and confirmed by AirConsole's engineers, though
   // the SDK's JSDoc calls them "gyroscope" — so they take exactly the path a
   // browser's own event does. A relayed sample is also this page's proof of
-  // delivery: the frame's own permission and settle check are moot on AC
-  // (main.js skips them there), so the first sample is what resolves it.
+  // delivery: enableMotion is a no-op on AC, so the first sample resolves it.
   relayOrientation(beta, gamma) {
-    this.motionState = 'granted';
+    this._setMotionState('granted');
     this._onOrient({ beta, gamma });
   }
 
   _onOrient(e) {
+    // Chromium emits one all-null event on sensorless hardware; counting events
+    // instead of usable samples would read it as a working sensor.
     if (e.beta == null && e.gamma == null) return;
     this.haveTilt = true;
-    // A usable sample after _settle gave up means the sensor was slow, not
-    // absent, so take the verdict back. Worth the line because 'unsupported' is
-    // otherwise TERMINAL for the page load: the Settings Tilt row it disables is
-    // the only way back to tilt, so a single over-eager timeout would strand a
-    // working phone on buttons until a reload. The card re-reads motionState on
-    // every open, so this is all the recovery needs. (Only reachable while the
-    // listener is attached, i.e. permission was granted — the constructor's two
-    // routes to 'unsupported' never attach one.)
-    if (this.motionState === 'unsupported') this.motionState = 'granted';
+    // A usable sample after _watchForSample gave up means the sensor was slow,
+    // not absent, so take the verdict back. Worth the line because
+    // 'unsupported' is otherwise TERMINAL for the page load: the Settings Tilt
+    // row it disables is the only way back to tilt, so a single over-eager
+    // timeout would strand a working phone on buttons until a reload. (Only
+    // reachable while the listener is attached, i.e. permission was granted —
+    // the constructor's route to 'unsupported' never attaches one.)
+    if (this.motionState === 'unsupported') this._setMotionState('granted');
 
     // Gravity (unit, pointing down) in the device frame from the W3C Z-X'-Y''
     // Euler angles. alpha (compass yaw) doesn't tilt gravity, so it drops out —

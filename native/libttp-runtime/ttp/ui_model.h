@@ -397,12 +397,6 @@ ItemVal welcomeItem(const PushCar* car);
 bool humansAllDone(const std::vector<Id>& carIds, const IdSet& aiIds,
                    const IdSet& disconnectedIds, const IdSet& finishedIds);
 
-// Ghosts to forfeit at the finish moment: a dropped human's car can never cross
-// the line, so once every connected human is home it must be removed or the
-// fast-forward burst runs to its guard cap on a car that cannot finish.
-std::vector<Id> forfeitCandidates(const std::vector<Id>& carIds, const IdSet& aiIds,
-                                  const IdSet& disconnectedIds);
-
 // ---- pause arbitration ------------------------------------------------------
 // Two independent freezes compose into one: the manual overlay pause (any
 // player's controller, or the on-screen button) and the SILENT auto-pause (no

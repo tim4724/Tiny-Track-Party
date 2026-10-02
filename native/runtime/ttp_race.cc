@@ -806,7 +806,10 @@ const char* ttp_race_advance_live_json(int roomHandle, int sceneReady, double se
   ai.hasSeries = s != nullptr;
   ai.seriesFinished = s && s->finished();
   ai.sceneReady = sceneReady != 0;
-  ai.players = humansOfEntries(ttp_live_roster_players(roomHandle, true));
+  // EVERY seat, dropped ones included: a seat is reserved for the whole cup, so
+  // a racer who dropped keeps a car and a cell (with the reconnect QR) in the
+  // next race. Only the lobby frees a seat.
+  ai.players = humansOfEntries(ttp_live_roster_players(roomHandle, false));
   race::AdvanceResult r = race::advanceSeriesRace(ai);
   Value v = Value::Obj();
   v.set("action", Value::Str(race::key(r.action)));

@@ -4,6 +4,8 @@ import android.content.res.AssetFileDescriptor
 import android.content.res.AssetManager
 import android.media.AudioAttributes
 import android.media.MediaPlayer
+import android.os.Handler
+import android.os.HandlerThread
 import android.util.Log
 import java.nio.ByteOrder
 
@@ -84,25 +86,35 @@ class AudioDevice(
         set(on) {
             field = on
             mixer.muted = on
-            applyMusicVolume()
+            musicHandler.post { musicMuted = on; applyMusicVolume() }
         }
 
     private val bank = CueBank(assets)
     private val mixer = AudioMixer(bank)
 
 
+    /**
+     * THE MUSIC BED LIVES ON ITS OWN THREAD, and every field from here to
+     * [musicUrl] is touched only there. Standing a [MediaPlayer] up is a run of
+     * synchronous binder calls (the player itself, its audio attributes, the
+     * file descriptor), and the song starts at GO — inside the frame callback, on
+     * the one frame where the field starts to move. The player's own callbacks
+     * arrive on the looper that created it, so they land here as well.
+     */
+    private val musicThread = HandlerThread("ttp-music").apply { start() }
+    private val musicHandler = Handler(musicThread.looper)
     private var music: MediaPlayer? = null
     /**
      * Whether [music] has reached Prepared. `pause()` and `start()` are documented
-     * INVALID before it and throw IllegalStateException — which, from inside the
-     * drain, would propagate out through frame() and take the render callback with
-     * it. A pause in the first seconds of a race (or the auto-pause that freezes
+     * INVALID before it and throw IllegalStateException, which on the music thread
+     * is an uncaught crash. A pause in the first seconds of a race (or the auto-pause that freezes
      * the field at GO) is exactly when the stream is still preparing.
      */
     private var musicPrepared = false
     /** A pause that arrived before Prepared, applied when it lands. */
     private var musicWantsPause = false
     private var musicGain = 1f
+    private var musicMuted = false
     /** The song's own level, before the mute and the master gain. */
     private var musicBed = 1f
     /** What [music] is streaming, so a repeat rewinds instead of re-fetching. */
@@ -116,7 +128,7 @@ class AudioDevice(
      * twin's `applyMusicVolume`.
      */
     private fun applyMusicVolume() {
-        musicGain = if (muted) 0f else musicBed * AudioMixer.MASTER
+        musicGain = if (musicMuted) 0f else musicBed * AudioMixer.MASTER
         try {
             music?.setVolume(musicGain, musicGain)
         } catch (_: IllegalStateException) {
@@ -260,10 +272,11 @@ class AudioDevice(
                     // and no ABI call may happen while the drained block is still
                     // being read. Only the index and the bed are kept.
                     MUSIC_START -> { pendingSong = subject; pendingBed = level }
-                    MUSIC_STOP -> { pendingSong = null; stopMusic() }
-                    MUSIC_PAUSE ->
+                    MUSIC_STOP -> { pendingSong = null; musicHandler.post { stopMusic() } }
+                    MUSIC_PAUSE -> musicHandler.post {
                         if (musicPrepared) music?.pause() else musicWantsPause = true
-                    MUSIC_RESUME -> {
+                    }
+                    MUSIC_RESUME -> musicHandler.post {
                         musicWantsPause = false
                         if (musicPrepared && music?.isPlaying == false) music?.start()
                     }
@@ -278,11 +291,15 @@ class AudioDevice(
     private var pendingSong: Int? = null
     private var pendingBed = 1.0
 
+    /** On the frame thread, because it asks the engine which song; the player is [playSong]'s. */
     private fun startMusic(index: Int, bed: Double) {
         val song = TtpJson.obj(Ttp.ttp_audio_song_json(index))
         val file = song.optString("file")
         if (file.isEmpty()) return
+        musicHandler.post { playSong(file, bed) }
+    }
 
+    private fun playSong(file: String, bed: Double) {
         // `* MASTER`: `Audio.js:249` sets the element's volume to
         // `level * this._volume()`, the same 0.6 the mix bus carries.
         musicBed = bed.toFloat().coerceIn(0f, 1f)
@@ -349,8 +366,13 @@ class AudioDevice(
                 musicPrepared = true
                 if (musicWantsPause) musicWantsPause = false else it.start()
             }
+            // A player in the Error state throws from pause(), start() and
+            // isPlaying, so it is released here rather than left for the next
+            // pause or resume to call into; the next song stands a fresh one up.
             mp.setOnErrorListener { _, what, extra ->
-                Log.w(TAG, "music $file failed ($what/$extra)"); true
+                Log.w(TAG, "music $file failed ($what/$extra)")
+                if (music === mp) stopMusic()
+                true
             }
             mp.prepareAsync()
             music = mp
@@ -389,7 +411,8 @@ class AudioDevice(
     }
 
     fun release() {
-        stopMusic()
+        musicHandler.post { stopMusic() }
+        musicThread.quitSafely()
         // The mixer owns its own thread and stream; joining it is [AudioMixer.release].
         mixer.release()
     }
