@@ -24,9 +24,12 @@ jobs:
           KUBECONFIG_B64: ${{ secrets.KUBECONFIG_B64 }}
 
       - name: Delete preview namespace
+        env:
+          # Through the environment, never `${{ }}` in the script: a ref may
+          # legally contain `$(...)`, and this job holds the kubeconfig.
+          BRANCH_RAW: ${{ github.event.ref }}
         run: |
           set -euo pipefail
-          BRANCH_RAW="${{ github.event.ref }}"
           # Must stay identical to the slug pipeline in preview.yml — a shorter
           # pipeline here computes a different namespace for long branch names,
           # deletes nothing (--ignore-not-found stays green) and leaks the ns.
