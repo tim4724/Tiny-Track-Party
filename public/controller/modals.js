@@ -48,7 +48,9 @@ function trapTab(overlay, e) {
   const f = [...overlay.querySelectorAll('button:not([disabled])')].filter((b) => b.offsetParent !== null);
   if (!f.length) return;
   const first = f[0], last = f[f.length - 1];
-  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  // Focus on the dialog itself (modals open that way): the first Tab enters the ring.
+  if (!f.includes(document.activeElement)) { e.preventDefault(); (e.shiftKey ? last : first).focus(); }
+  else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
   else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
 }
 
@@ -105,11 +107,12 @@ function openSettings() {
   refreshSettingsCard();
   el('settings-overlay').classList.remove('hidden');
   setBackgroundInert(true);
-  // keyboard-operable + announced; the trap keeps Tab inside. preventScroll
-  // because the seed is the card's LAST control: on a screen too short for the
-  // card, focusing it scrolled the card to the bottom, so Settings opened with
-  // its own title already off the top.
-  el('settings-done').focus({ preventScroll: true });
+  // Focus the DIALOG, not a button in it: announced by its title, the trap
+  // takes the first Tab inside, and nothing lights up. A seeded button drew
+  // Chromium's focus ring whenever no tap came before the open (the launcher's
+  // auto-joined first-run card). preventScroll keeps a card taller than the
+  // screen opening at its title.
+  el('settings-overlay').focus({ preventScroll: true });
   _onModalToggle();
 }
 
@@ -171,7 +174,7 @@ function openMotionPopup() {
   refreshMotionPopup();
   el('motion-overlay').classList.remove('hidden');
   setBackgroundInert(true);
-  el('motion-done').focus({ preventScroll: true });
+  el('motion-overlay').focus({ preventScroll: true });
   _onModalToggle();
 }
 
@@ -202,7 +205,7 @@ export function openStarsPopup(progress, catalog) {
     unlockEl: el('stars-unlock'), progress, catalog });
   el('stars-overlay').classList.remove('hidden');
   setBackgroundInert(true);
-  el('stars-done').focus({ preventScroll: true });
+  el('stars-overlay').focus({ preventScroll: true });
   _onModalToggle();
 }
 
