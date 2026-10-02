@@ -25,15 +25,13 @@
 // What IS in `npm test` is `tests/chooser-contract.test.js`, which pins the one
 // thing here that can be checked from source alone.
 
-import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, openSync, readFileSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { Phone, loadProtocol } from './lib/phone.mjs';
 import { resolveDevicectlId, assertAwake } from './lib/tvos-device.mjs';
-
-const BUNDLE_ID = 'games.couchpad.tinytrack';
+import { BUNDLE_ID, sleep, launchApp, waitForRoom, backgroundApp, foregroundApp } from './lib/tvos-app.mjs';
 const args = process.argv.slice(2);
 const SIM = args.includes('--sim');
 const KEEP = args.includes('--keep');
@@ -46,66 +44,6 @@ const check = (name, ok, detail = '') => {
 };
 
 const sh = (cmd, argv) => execFileSync(cmd, argv, { encoding: 'utf8' });
-
-// ---- the app under test -----------------------------------------------------
-
-/// Launch, and stream stdout to a file. The ROOM CODE is read back out of that
-/// stream: a TV has no address bar, and reading the code off the screen with a
-/// camera is not a thing a script can do.
-function launchApp(logPath) {
-  rmSync(logPath, { force: true });
-  const out = openSync(logPath, 'w');
-  const argv = SIM
-    ? ['simctl', 'launch', '--console-pty', 'booted', BUNDLE_ID]
-    : ['devicectl', 'device', 'process', 'launch', '--device', resolveDevicectlId(),
-       '--console', '--terminate-existing', BUNDLE_ID];
-  const child = spawn('xcrun', argv, { stdio: ['ignore', out, out] });
-  child.unref();
-  return child;
-}
-
-/// The LAST room code the app logged, optionally waiting for one that is not
-/// `notThis`. The app prints every room it warms, so a resume appends a second
-/// line to the same stream — matching the last rather than the first is what
-/// lets one log serve the whole run.
-async function waitForRoom(logPath, timeout = 60000, notThis = null) {
-  const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) {
-    if (existsSync(logPath)) {
-      const all = [...readFileSync(logPath, 'utf8').matchAll(/\[ttp\] room ([A-Za-z0-9]+) — (\S+)/g)];
-      const last = all[all.length - 1];
-      if (last && (!notThis || last[1] !== notThis)) return { room: last[1], url: last[2] };
-    }
-    await sleep(500);
-  }
-  throw new Error(notThis ? 'the app never warmed a room other than ' + notThis
-                          : 'the app never logged a room code');
-}
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-/// Send the app to the background, the way a viewer pressing Home does.
-///
-/// BY LAUNCHING ANOTHER APP, because neither `devicectl` nor `simctl` can press
-/// Home on a TV. Backgrounding is the case that matters and a force-kill is NOT
-/// a substitute for it: SIGKILL runs no code at all, so it exercises the CRASH
-/// path (where the room is supposed to survive and the next launch regathers it)
-/// and would report the graceful teardown as broken no matter how well it works.
-function backgroundApp() {
-  if (SIM) { sh('xcrun', ['simctl', 'launch', 'booted', 'com.apple.TVSettings']); return; }
-  sh('xcrun', ['devicectl', 'device', 'process', 'launch',
-               '--device', resolveDevicectlId(), '--terminate-existing', 'com.apple.TVSettings']);
-}
-
-/// Bring the game back to the front WITHOUT `--terminate-existing`, so this is a
-/// genuine resume of the suspended process rather than a cold launch. The
-/// distinction is the whole point: a cold launch would exercise
-/// `restoreRoom()`, and what needs proving is that coming back from a
-/// backgrounded party warms a fresh room.
-function foregroundApp() {
-  if (SIM) { sh('xcrun', ['simctl', 'launch', 'booted', BUNDLE_ID]); return; }
-  sh('xcrun', ['devicectl', 'device', 'process', 'launch', '--device', resolveDevicectlId(), BUNDLE_ID]);
-}
 
 // ---- the party --------------------------------------------------------------
 
@@ -131,7 +69,7 @@ async function main() {
   // right product behaviour and the wrong starting state for a check: it opens
   // on somebody else's party, with a host that is not us. Backgrounding first
   // ends the party properly and drops the blob, so the launch below is cold.
-  backgroundApp();
+  backgroundApp({ sim: SIM });
   await sleep(2500);
   // SIM ONLY: plant a crash-recovery blob naming a room the relay never had, so
   // this boot takes the join-refused -> fresh-create fallback. That path once
@@ -148,7 +86,7 @@ async function main() {
     writeFileSync(join(dir, 'Library/Caches/tinytrack_display_room.json'),
       JSON.stringify({ room: 'zzZZzz', instance: null, clientId: 'display-party-check-dead-room' }));
   }
-  launchApp(logPath);
+  launchApp(logPath, { sim: SIM });
   const { room, url } = await waitForRoom(logPath);
   console.log(`   room ${room} — ${url}\n`);
   if (SIM) {
@@ -414,7 +352,7 @@ async function main() {
   // dials the corpse back and can serve a stale board to somebody who just
   // scanned a fresh code.
   console.log('\n== the viewer leaves the app ==');
-  backgroundApp();
+  backgroundApp({ sim: SIM });
   let closedInTime = true;
   try {
     await alice.waitFor(() => alice.closed != null, 'the room to close behind us', 20000);
@@ -444,7 +382,7 @@ async function main() {
   // "that race has ended", which is precisely the report this check was written
   // for.
   console.log('\n== the viewer comes back ==');
-  foregroundApp();
+  foregroundApp({ sim: SIM });
   let fresh = null;
   try {
     fresh = await waitForRoom(logPath, 45000, room);
@@ -473,7 +411,7 @@ async function main() {
     carol.close();
   }
 
-  if (!KEEP) backgroundApp();
+  if (!KEEP) backgroundApp({ sim: SIM });
 
   const failed = results.filter((r) => !r.ok);
   console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
