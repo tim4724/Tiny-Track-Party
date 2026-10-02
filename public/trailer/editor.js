@@ -52,7 +52,7 @@ const CUP_OF = new Map(TRACK_LIST.map((t) => [t.id, t.cupName]));
 
 const $ = (sel) => document.querySelector(sel);
 const el = {
-  shots: $('#shots'), add: $('#add'), total: $('#total'), status: $('#status'),
+  shots: $('#shots'), add: $('#add'), paste: $('#paste'), total: $('#total'), status: $('#status'),
   wrap: $('#frame-wrap'), clock: $('#clock'), marks: $('#marks'),
   play: $('#play'), toIn: $('#to-in'), setIn: $('#set-in'),
   playCut: $('#play-cut'), export: $('#export'), import: $('#import'),
@@ -792,11 +792,44 @@ function shotsJs() {
     + `module.exports = [\n${body}\n];\n`;
 }
 
+// The way in for a shot made elsewhere: shots.js lines or their JSON, one shot per
+// `{…}`. Read field by field, not evaluated — the page's CSP has no unsafe-eval. A
+// shot naming a track this build does not have is skipped.
+function parseShots(text) {
+  return [...text.matchAll(/\{[^{}]*\}/g)].flatMap(([obj]) => {
+    const f = {};
+    for (const [, key, str, n] of obj.matchAll(/["']?(\w+)["']?\s*:\s*(?:["']([^"']*)["']|(-?[\d.]+))/g)) {
+      f[key] = str ?? +n;
+    }
+    if (!NAME_OF.has(f.track)) return [];
+    const shot = {
+      track: f.track,
+      players: SPLITS.includes(f.players) ? f.players : 1,
+      scenario: SCENARIOS.includes(f.scenario) ? f.scenario : 'racing',
+      warmup: +f.warmup || 0,
+      seconds: +f.seconds || DEFAULT_SHOT.seconds,
+    };
+    if (CAMERAS.includes(f.camera)) shot.camera = f.camera;
+    return [shot];
+  });
+}
+
 // ---- wiring ------------------------------------------------------------------
 
 el.add.onclick = () => {
   shots.push({ ...DEFAULT_SHOT });
   save(); paintShots(); paintTotal();
+};
+
+el.paste.onclick = async () => {
+  let text;
+  // Clipboard reads need a secure context; over plain http on a LAN address, ask.
+  try { text = await navigator.clipboard.readText(); } catch (_) { text = prompt('Paste shots'); }
+  const added = parseShots(text || '');
+  shots.push(...added);
+  save(); paintShots(); paintTotal();
+  el.paste.textContent = added.length ? `Added ${added.length}` : 'No shots found';
+  setTimeout(() => { el.paste.textContent = 'Paste shots'; }, 1400);
 };
 
 el.play.onclick = () => {
