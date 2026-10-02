@@ -7,8 +7,9 @@
 // its room never leaves the lobby, so the pause walk would refuse it. So this
 // launches the app, joins two phones over the real relay, starts a real race,
 // and only then hands the running app to `xcodebuild test`. The phones then
-// say whether the party survived: a Menu that reached tvOS backgrounds the app,
-// and `suspend()` closes the room under them.
+// say whether the pause reached the room and the party survived the resume: a
+// Menu that reached tvOS backgrounds the app, and `suspend()` closes the room
+// under them.
 //
 // Assumes the app is BUILT and INSTALLED — `npm run build:tvos device` builds
 // it, then `xcrun devicectl device install app …` — exactly like
@@ -16,7 +17,7 @@
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 
@@ -57,7 +58,15 @@ async function main() {
   await alice.waitFor(() => alice.snapshot.roomState === 'playing', 'GO', 60000);
   console.log('==> racing; pressing the remote');
 
-  const r = spawnSync('xcrun', ['xcodebuild', 'test',
+  // NOT spawnSync. A blocked event loop is a dead phone: it cannot answer the
+  // relay's keepalive pings (the relay drops it after `idleTimeoutMs`,
+  // tests/wire-compat/relay-contract.json) or read
+  // a frame, so anything asserted from it afterwards is the state from BEFORE
+  // the presses. Sampled while the test runs, the phones also prove the pause
+  // reached the room, not just the overlay.
+  let sawPaused = false;
+  const sampler = setInterval(() => { if (alice.snapshot.paused) sawPaused = true; }, 100);
+  const test = spawn('xcrun', ['xcodebuild', 'test',
     '-project', path.join(TVOS, 'TinyTrackParty.xcodeproj'),
     '-scheme', 'TinyTrackParty',
     '-destination', destination,
@@ -67,20 +76,28 @@ async function main() {
     '-only-testing:TinyTrackPartyShots/RaceRemoteTests',
     '-allowProvisioningUpdates',
     ...signingArgs()
-  ], { encoding: 'utf8', cwd: TVOS });
-  const log = `${r.stdout || ''}${r.stderr || ''}`;
+  ], { cwd: TVOS });
+  let log = '';
+  test.stdout.on('data', (d) => { log += d; });
+  test.stderr.on('data', (d) => { log += d; });
+  const status = await new Promise((res) => {
+    test.on('error', (e) => { console.error(`xcodebuild did not start: ${e.message}`); res(-1); });
+    test.on('close', res);
+  });
+  await sleep(2000);   // let the last resume reach the phones
+  clearInterval(sampler);
   for (const line of log.split('\n')) {
     if (/Test Case .*(passed|failed)|error:/.test(line)) console.log(line.trim());
   }
 
-  // The phones' half: the party is still there, racing, and not left paused.
+  // The phones' half: the presses paused the room, and it is racing again.
   const s = alice.snapshot;
   const survived = alice.closed == null && s.roomState === 'playing' && s.paused === false;
-  console.log(`==> room ${survived ? 'still racing' : 'NOT racing'}: closed=${JSON.stringify(alice.closed)}, ` +
+  console.log(`==> phones: saw paused=${sawPaused}; now closed=${JSON.stringify(alice.closed)}, ` +
               `roomState=${s.roomState}, paused=${s.paused}`);
   alice.close();
   bob.close();
-  if (r.status !== 0 || !survived) {
+  if (status !== 0 || !sawPaused || !survived) {
     console.error('==> FAILED');
     process.exit(1);
   }
