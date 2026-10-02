@@ -54,7 +54,9 @@ async function openAcDisplay(page) {
 // phone on a different planet. (Also why parallel tests can't cross-talk:
 // each test's context is its own partition.) Shared localStorage is harmless
 // here — the AC storage shim replaces it per page, and clientIds are unused.
-async function joinAcController(displayPage, deviceId, nickname) {
+// `relay: false` models a relay that delivers no tilt (AirConsole sending
+// all-null samples), so the phone never sees one.
+async function joinAcController(displayPage, deviceId, nickname, { relay = true } = {}) {
   const context = displayPage.context();
   const page = await context.newPage();
   await page.addInitScript(({ deviceId, nickname }) => {
@@ -77,7 +79,7 @@ async function joinAcController(displayPage, deviceId, nickname) {
   // settle clock. Headless Chromium answers 'prompt' without it, never settles,
   // and would pass this spec with the bug in place.
   await context.grantPermissions(['accelerometer', 'gyroscope', 'magnetometer']);
-  await page.addInitScript(() => {
+  if (relay) await page.addInitScript(() => {
     // The Settings card's "Tilt: Not available" IS motionState 'unsupported',
     // and it holds from the settle until the relay's first sample — so watch
     // for it rather than for the input mode, which the pref shim's late
@@ -250,6 +252,40 @@ test('AC: a dropped controller frees its lobby seat', async ({ page }) => {
   await ben.close();
   await expect(page.locator('#players')).not.toContainText('Ben');
   await expect(page.locator('#players')).toContainText('Ana');
+});
+
+test('AC: a racer who drops mid-race gets a Disconnected card, no rejoin QR', async ({ page }) => {
+  // The platform reconnects the device itself, and the seat's QR would point at
+  // a relay room that does not exist on AirConsole.
+  await openAcDisplay(page);
+  const ana = await joinAcController(page, 121, 'Ana');
+  const ben = await joinAcController(page, 122, 'Ben');
+  await startRace(ana, [ben]);
+  await waitForRacing(page);
+
+  await ben.evaluate(() => window.airconsole.triggerDisconnect());
+  await ben.close();
+  const card = page.locator('.cell-reconnect');
+  await expect(card).toBeVisible();
+  await expect(card).toContainText('Disconnected');
+  await expect(card.locator('canvas')).toHaveCount(0);
+});
+
+test('AC: a phone the relay sends no tilt is offered buttons, not a permission it cannot use', async ({ page }) => {
+  // On AirConsole the frame never asks for the sensor, so "Allow motion" and
+  // "Reload" would loop the player through nothing. The chip's popup offers the
+  // one fix the page owns.
+  await openAcDisplay(page);
+  const ana = await joinAcController(page, 131, 'Ana', { relay: false });
+  const ben = await joinAcController(page, 132, 'Ben');
+  await startRace(ana, [ben]);
+  await ana.waitForSelector(visible('#game'));
+
+  await ana.locator('#motion-tip').click();
+  await expect(ana.locator('#motion-title')).toHaveText('Tilt isn’t reaching the game');
+  await ana.locator('#motion-allow').click();
+  await expect(ana.locator('#motion-overlay')).toBeHidden();
+  expect(await ana.evaluate(() => window.__tilt.mode)).toBe('buttons');
 });
 
 // ---------------------------------------------------------------------------

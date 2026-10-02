@@ -655,10 +655,14 @@ export function buildReconnectCard(seat) {
   const title = document.createElement('div');
   title.className = 'rc-card__title'; title.textContent = 'Disconnected';
 
+  card.append(title);
+  // No QR on AirConsole: the platform reconnects the device itself, and the
+  // seat's URL points at a relay room that does not exist there.
+  if (window.airconsole) return card;
+
   const qr = document.createElement('canvas');
   qr.className = 'rc-card__qr';
-
-  card.append(title, qr);
+  card.append(qr);
 
   // Transparent QR background → black modules sit straight on the frosted card.
   // Rendered big: CSS scales it to half the cell's height, which on a 4K
