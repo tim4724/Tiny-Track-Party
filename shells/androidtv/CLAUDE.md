@@ -767,7 +767,10 @@ launch runs GL until a reinstall). The decision is made at surface create and ca
 `nativeCreate` as a parameter — the shared `ttp_display_create` ABI cannot grow
 a platform-private argument — and `DisplayHost` retries the create on GL in the
 same call when the Vulkan engine refuses, so a refusing driver still shows a
-picture. A Vulkan engine reads the SPIR-V twins from `assets/materials-vk/`
+picture. The same call carries the file a Vulkan engine keeps its compiled
+pipelines in between runs, under `codeCacheDir`, which Android empties on an app
+update so a build with new materials never starts from the last one's. A Vulkan
+engine reads the SPIR-V twins from `assets/materials-vk/`
 (compiled by `build-runtime-android.sh`; a GL blob does not parse on a Vulkan
 engine, so `SceneStaging` follows `DisplayHost.usingVulkan`, never the
 property). `perf-race` arms take `--vk 1`, PIN GL when unflagged (the
@@ -853,7 +856,8 @@ Three things follow that are worth knowing before touching it:
   clamped to SoundPool's 0.5-2.0; and the stream never goes cold, which retires
   the cold-play trap above rather than moving it.
 - **The MUSIC is deliberately NOT in the mix**, exactly as on the web and tvOS: it
-  is a `MediaPlayer` streaming from the origin, outside the limiter. It still
+  is a `MediaPlayer` playing the APK's bundled copy (the origin is the fallback),
+  outside the limiter. It still
   carries the master 0.6 (`Audio.js` sets the element's volume to
   `level * this._volume()`), and without that it sits 1.67x loud against its cues.
   The player lives on its own `ttp-music` thread: standing one up is synchronous

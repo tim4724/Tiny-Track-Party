@@ -269,6 +269,11 @@ public:
     // the shell already made the WebGL2 context current).
     bool init(filament::backend::Backend backend, void* nativeWindow,
             uint32_t width, uint32_t height);
+#if defined(__ANDROID__)
+    // Before init: the file the Vulkan backend keeps its compiled pipelines in
+    // between runs. Unset keeps them in memory, as every other backend does.
+    void setPipelineCacheFile(std::string path) { mPipelineCacheFile = std::move(path); }
+#endif
     void resize(uint32_t width, uint32_t height);
     // Skip the sun's shadow bake for every scene built from here on. The bake is
     // a 2048² depth pass over the whole circuit plus its ESM blur, once per
@@ -646,6 +651,7 @@ private:
     // The Vulkan platform with the framebuffer-eviction override (see
     // TtpRenderer::init) — caller-owned, so it outlives the engine here.
     std::unique_ptr<filament::backend::Platform> mVkPlatform;
+    std::string mPipelineCacheFile;
 #endif
     filament::SwapChain* mSwapChain = nullptr;
     filament::Renderer* mRenderer = nullptr;

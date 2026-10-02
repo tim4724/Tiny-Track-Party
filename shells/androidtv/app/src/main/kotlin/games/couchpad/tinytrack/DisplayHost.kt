@@ -9,6 +9,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import org.json.JSONArray
+import java.io.File
 import java.nio.ByteOrder
 
 /**
@@ -232,16 +233,19 @@ class DisplayHost(
             // way — and the refusal keeps its canary count, so a driver that
             // refuses twice stops being asked.
             var vulkan = VulkanPolicy.useVulkan(view.context)
+            // The CODE cache: Android empties it when the app is updated, so a
+            // build with new materials never starts from the last one's pipelines.
+            val pipelines = File(view.context.codeCacheDir, "vk-pipeline-cache.bin").path.toByteArray()
             if (vulkan) {
                 VulkanPolicy.markAttempt(view.context)
                 vkCanaryArmed = true
-                if (!TtpSurface.nativeCreate(holder.surface, width, height, true)) {
+                if (!TtpSurface.nativeCreate(holder.surface, width, height, true, pipelines)) {
                     Log.e(TAG, "Vulkan engine refused ${width}x$height — retrying on GL")
                     vulkan = false
                     vkCanaryArmed = false
                 }
             }
-            if (!vulkan && !TtpSurface.nativeCreate(holder.surface, width, height, false)) {
+            if (!vulkan && !TtpSurface.nativeCreate(holder.surface, width, height, false, pipelines)) {
                 Log.e(TAG, "ttp_display_create failed for ${width}x$height")
                 return
             }

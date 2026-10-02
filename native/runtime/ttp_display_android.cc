@@ -31,6 +31,8 @@
 #include <android/native_window_jni.h>
 #include <jni.h>
 
+#include <string>
+
 #include "TtpRenderer.h"
 
 namespace {
@@ -41,6 +43,8 @@ namespace {
 // ttp_display_create's signature is the shared ABI and the backend is this
 // platform's private business.
 static bool gUseVulkan = false;
+// TtpRenderer::setPipelineCacheFile's path, carried like gUseVulkan.
+static std::string gPipelineCacheFile;
 
 // The platform sliver over the shared core: just the window.
 struct AndroidDisplay : ttp::rt::DisplayCore {
@@ -83,6 +87,7 @@ int ttp_display_create(const void* surface, uint32_t width, uint32_t height) {
     ANativeWindow_acquire(window);
 
     auto* renderer = new TtpRenderer();
+    renderer->setPipelineCacheFile(gPipelineCacheFile);
     if (!renderer->init(gUseVulkan ? filament::backend::Backend::VULKAN
                                    : filament::backend::Backend::OPENGL,
                         window, width, height)) {
@@ -123,9 +128,16 @@ void ttp_display_destroy(void) {
 JNIEXPORT jboolean JNICALL
 Java_games_couchpad_tinytrack_TtpSurface_nativeCreate(
         JNIEnv* env, jclass, jobject surface, jint width, jint height,
-        jboolean vulkan) {
+        jboolean vulkan, jbyteArray pipelineCacheFile) {
     if (!surface) return JNI_FALSE;
     gUseVulkan = vulkan == JNI_TRUE;
+    // UTF-8 bytes, never a jstring (shells/androidtv/CLAUDE.md, rule 3).
+    const jsize pathBytes = pipelineCacheFile ? env->GetArrayLength(pipelineCacheFile) : 0;
+    gPipelineCacheFile.assign((size_t) pathBytes, '\0');
+    if (pathBytes > 0) {
+        env->GetByteArrayRegion(pipelineCacheFile, 0, pathBytes,
+                reinterpret_cast<jbyte*>(gPipelineCacheFile.data()));
+    }
     // fromSurface RETURNS an acquired window; ttp_display_create acquires again
     // for its own reference, so this one is released either way below.
     ANativeWindow* window = ANativeWindow_fromSurface(env, surface);

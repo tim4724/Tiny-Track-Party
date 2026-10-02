@@ -28,8 +28,11 @@ internal object TtpSurface {
      * backend for the life of this engine — the caller decides ([VulkanPolicy]
      * through [DisplayHost]); this just carries it across, because the shared
      * `ttp_display_create` ABI cannot grow a platform-private parameter.
+     * `pipelineCacheFile` (UTF-8) is where a Vulkan engine keeps its compiled pipelines
+     * between runs, for the same reason.
      */
-    external fun nativeCreate(surface: Surface, width: Int, height: Int, vulkan: Boolean): Boolean
+    external fun nativeCreate(surface: Surface, width: Int, height: Int, vulkan: Boolean,
+                              pipelineCacheFile: ByteArray): Boolean
 
     /**
      * Tear the display down. The caller removes its Choreographer callback
