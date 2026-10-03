@@ -421,9 +421,6 @@ object Scenarios {
                 Ttp.ttp_ui_progress_load(null, 1)
                 game.show(GameState.Screen.RACE)
                 game.startDemoRace(trackPick(), forceItem(id), players, seed)
-                // The engine gives and fires the item (the showcase rule, shared with
-                // the web preview), so an item card is the same event everywhere.
-                Ttp.ttp_item_showcase(game.sessionHandle, TtpJson.arg(forceItem(id)))
                 hold?.let {
                     if (Ttp.ttp_shot_hold(game.sessionHandle, TtpJson.arg(it)) == 0) {
                         Log.e(TAG, "the engine refused hold $it")
@@ -641,20 +638,15 @@ object Scenarios {
     }
 
     /**
-     * The item scenarios force a roulette, so the thing they are named after is on
-     * screen rather than showing up once a lap.
-     *
-     * The two FROZEN previews force a boost for a different reason: they spin the
-     * field for several seconds before the shot, and a forced roulette is what
-     * fills their cells' item slots on the way past the boxes. The web dresses its
+     * The FROZEN previews force a boost: they spin the field for several seconds
+     * before the shot, and a forced roulette is what fills their cells' item slots
+     * on the way past the boxes. The web dresses its
      * frozen previews by hand for the same purpose ("so the cell item indicator
      * shows populated rather than a field of empty squares") — this reaches it
      * through the real pickup instead, which also exercises the filled slot's own
      * outline, shadow and icon.
      */
     private fun forceItem(id: String): String? = when (id) {
-        "rocket" -> "rocket"
-        "monster" -> "monster"
         "reconnect", "reconnect-solo", "finished" -> "boost"
         else -> null
     }

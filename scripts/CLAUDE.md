@@ -36,8 +36,8 @@ does dies in an unhandled rejection when one isn't there.
 
 The seam also owns `waitForScene` (wait, never sleep — a cold Filament shader
 compile behind a `setTimeout` yields half-loaded scenes and nobody notices for a
-week), `hideChrome` (the steer bar is drawn by C++, so CSS cannot hide it —
-`cellCards` is the seam that can), and `encode` (Chromium has the JPEG and WebP
+week), `hideChrome` (the page's chrome only — the steer bar is drawn by C++, so
+CSS cannot hide the race HUD; `?hud=0` is the switch that can), and `encode` (Chromium has the JPEG and WebP
 encoders; Node does not, and this repo does not need an image dependency for a
 dev-only tool).
 

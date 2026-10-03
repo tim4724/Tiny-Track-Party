@@ -332,10 +332,10 @@ static RuntimeSession* get(int h) {
   return it == g_sessions.end() ? nullptr : it->second.get();
 }
 
-// ---- the screenshot hold's inputs (ttp/shot_hold.h decides) ----
+// ---- the item showcase's inputs (ttp/shot_hold.h decides) ----
 // A viewer is every car that is not a non-player bot — the audio's listener
-// rule (audioAiIds), so "near the viewer" means near a car with a camera.
-static std::vector<ttp::rt::shot_hold::CarView> holdCars(const RuntimeSession& rs) {
+// rule (audioAiIds), so a viewer seat is a car with a camera.
+static std::vector<ttp::rt::shot_hold::CarView> showcaseCars(const RuntimeSession& rs) {
   std::vector<ttp::rt::shot_hold::CarView> out;
   out.reserve(rs.eng->cars().size());
   for (const auto& cp : rs.eng->cars()) {
@@ -344,11 +344,6 @@ static std::vector<ttp::rt::shot_hold::CarView> holdCars(const RuntimeSession& r
     out.push_back({cp->totalS, cp->monsterT > 0, !ai, cp->finished});
   }
   return out;
-}
-
-static void noteHoldEvent(RuntimeSession& rs, const Event& e) {
-  if (rs.holdArmed && rs.eng && e.type == "spin" && e.cause == "rocket")
-    ttp::rt::shot_hold::noteRocketHit(rs.hold, rs.holdState, rs.eng->elapsed());
 }
 
 // Track assembly is shared (ttp/race_track.h) so the ABI, the replay/record CLI
@@ -404,7 +399,6 @@ static void buildSession(RuntimeSession* rs) {
   auto onEvent = [self](const Event& e) {
       self->outQueue.push_back(e.toValue());
       audio_tap_event(self->handle, e);
-      noteHoldEvent(*self, e);
     };
   auto onTick = [self](int n) {
       Value c = Value::Obj();
@@ -1049,7 +1043,6 @@ void ttp_session_start(int h, int countdownSeconds) {
     auto onEvent = [self](const Event& e) {
       self->outQueue.push_back(e.toValue());
       audio_tap_event(self->handle, e);
-      noteHoldEvent(*self, e);
     };
     rs->game = std::make_unique<Game>(players, rs->track, onEvent, rs->forceItem);
     rs->eng = rs->game.get();
@@ -1079,7 +1072,7 @@ static void stepSession(RuntimeSession* rs, double dtMs) {
     rs->session->update(dtMs);
   }
   if (!racing || rs->showcase == ttp::rt::shot_hold::Showcase::None) return;
-  const auto cars = holdCars(*rs);
+  const auto cars = showcaseCars(*rs);
   const int pick = ttp::rt::shot_hold::showcasePick(rs->showcase, rs->showcaseState, dtMs / 1000, cars);
   if (pick < 0) return;
   const Id id = rs->eng->cars()[pick]->id;
@@ -1104,7 +1097,7 @@ void ttp_update(int h, double dtMs) {
   while (rs->holdAccumMs >= sh::FIXED_STEP_MS) {
     rs->holdAccumMs -= sh::FIXED_STEP_MS;
     const double ms = 1000 * sh::allow(rs->hold, rs->holdState, rs->eng->elapsed(),
-                                       sh::FIXED_STEP_MS / 1000, holdCars(*rs));
+                                       sh::FIXED_STEP_MS / 1000);
     if (ms <= 0) {
       rs->holdAccumMs = 0;
       return;
@@ -1298,12 +1291,11 @@ int ttp_shot_hold(int h, const char* holdJson) {
   rs->hold = spec;
   rs->holdState = {};
   rs->holdArmed = true;
-  // A plain hold a STARTED race already stands at is held now, not on the next
+  // A hold a STARTED race already stands at is held now, not on the next
   // step: a still preview (the countdown grid) never steps at all. Not before the
   // start — a TV launch arms before its countdown gate releases, and a hold held
   // then let the harness shoot before the launch's GO beat had been performed.
-  if (spec.on == ttp::rt::shot_hold::On::None && rs->started && rs->eng
-      && rs->eng->elapsed() >= spec.simS)
+  if (rs->started && rs->eng && rs->eng->elapsed() >= spec.simS)
     rs->holdState.held = true;
   return 1;
 }

@@ -32,7 +32,7 @@ import fs from 'node:fs';
 import { CAPTURED_SCENARIOS, STORE_SHOT, scenarioQuery } from '../public/shared/galleryScenarios.js';
 import { gitSha, mergeShots, shotDir, shotFile } from './lib/shots.mjs';
 import {
-  ROOT, args as parseArgs, serveApp, launchBrowser, waitForScene, encode
+  ROOT, args as parseArgs, serveApp, launchBrowser, waitForScene, encode, HOLD_SETTLE_MS
 } from './lib/capture.mjs';
 
 const args = parseArgs();
@@ -85,8 +85,7 @@ async function main() {
       // scenario, so it takes neither the harness flag nor the dpr pin.
       const url = scenario.page
         ? `http://127.0.0.1:${server.port}${scenario.page}`
-        : `http://127.0.0.1:${server.port}/?test=1&dpr=1&${scenarioQuery(scenario, { players: PLAYERS })}`
-          + (scenario.hold ? `&hold=${encodeURIComponent(JSON.stringify(scenario.hold))}` : '');
+        : `http://127.0.0.1:${server.port}/?test=1&dpr=1&${scenarioQuery(scenario, { players: PLAYERS })}`;
       await page.goto(url, { waitUntil: 'networkidle' });
       // Waits for the harness's scene signal and the self-hosted Fredoka face:
       // without the latter a shot can catch a system fallback and every label is
@@ -102,7 +101,7 @@ async function main() {
       // (`cellItemPop`), and a 300 ms beat photographed it half-grown.
       if (scenario.hold) {
         await page.waitForFunction(() => window.__engine?.shotHeld, null, { timeout: 180000, polling: 100 });
-        await page.waitForTimeout(800);
+        await page.waitForTimeout(HOLD_SETTLE_MS);
       } else {
         await page.waitForTimeout(scenario.settleMs ?? (scenario.animated ? SETTLE_MS : 400));
       }

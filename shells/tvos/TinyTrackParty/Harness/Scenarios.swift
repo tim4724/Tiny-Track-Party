@@ -271,10 +271,7 @@ enum Scenarios {
             _ = ttp_ui_progress_load(nil, 1)
             pinTrack(game)
             game.show(.race)
-            game.startDemoRace(forceItem: forceItem(for: id), humans: playerCount, seed: seed)
-            // The engine gives and fires the item (the showcase rule, shared with the
-            // web preview), so an item card is the same event on every platform.
-            _ = ttp_item_showcase(game.sessionHandle, forceItem(for: id))
+            game.startDemoRace(humans: playerCount, seed: seed)
             if let hold, ttp_shot_hold(game.sessionHandle, hold) == 0 {
                 state.lastError = "the engine refused hold \(hold)"
             }
@@ -284,7 +281,7 @@ enum Scenarios {
         case "results", "intermission", "podium":
             pinTrack(game)
             game.show(.race)
-            game.startDemoRace(forceItem: nil, humans: playerCount, seed: seed)
+            game.startDemoRace(humans: playerCount, seed: seed)
             // The board is the engine's fabrication over the same bench race
             // (`ttp_ui_preview_board_json`), run through the real results view. Only
             // the intermission dressing carries a deadline.
@@ -314,7 +311,7 @@ enum Scenarios {
             // a lap's own cost varies by circuit.
             pinTrack(game)
             game.show(.race)
-            game.startDemoRace(forceItem: nil, humans: playerCount)
+            game.startDemoRace(humans: playerCount)
             // AFTER the launch: `startDemoRace` resolves an empty trackId to the
             // catalogue's first, and the readout names what is being driven.
             game.display.perf.bench(track: game.trackId)
@@ -429,16 +426,6 @@ enum Scenarios {
     private static func pinTrack(_ game: GameCoordinator) {
         guard let track else { return }
         game.trackId = track
-    }
-
-    /// The item scenarios force a roulette so the thing they are named after is
-    /// actually on screen, rather than showing up once a lap.
-    private static func forceItem(for id: String) -> String? {
-        switch id {
-        case "rocket": return "rocket"
-        case "monster": return "monster"
-        default: return nil
-        }
     }
 
     /// The couch the lobby cards dress: `ttp_ui_preview_progress_json`, loaded like

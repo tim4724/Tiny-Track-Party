@@ -127,7 +127,7 @@ export class NativeRaceSession {
   shotHold(hold) { return !!(this.h && fn.shotHold(this.h, JSON.stringify(hold))); }
   get shotHeld() { return !!(this.h && fn.shotHeld(this.h)); }
 
-  // The item previews' showcase (ttp_item_showcase): the engine gives and fires
+  // The item showroom's showcase (ttp_item_showcase): the engine gives and fires
   // the item itself. 'rocket' | 'monster'; null turns it off.
   itemShowcase(kind) { if (this.h) fn.itemShowcase(this.h, kind || null); }
 

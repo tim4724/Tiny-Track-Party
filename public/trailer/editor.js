@@ -21,10 +21,8 @@
 
 import { CUPS, TRACK_LIST } from '/shared/tracks.js';
 
-// The harness's two item showcases ('rocket', 'monster') are deliberately not offered:
-// they force the roulette and hand the item to whoever is armed — a monster truck in
-// second place included — which is not a race the game would run. A real race's items
-// land where the catch-up rules put them, and the timeline marks where (see survey).
+// Real races only: a race's items land where the catch-up rules put them, and the
+// timeline marks where (see survey).
 const SCENARIOS = ['racing', 'chain'];
 const SPLITS = [1, 2, 4];
 // 'chase' is the split-screen cells, 'chase-nohud' the same without their HUD
@@ -54,7 +52,7 @@ const $ = (sel) => document.querySelector(sel);
 const el = {
   shots: $('#shots'), add: $('#add'), paste: $('#paste'), total: $('#total'), status: $('#status'),
   wrap: $('#frame-wrap'), clock: $('#clock'), marks: $('#marks'),
-  play: $('#play'), toIn: $('#to-in'), setIn: $('#set-in'),
+  play: $('#play'), toIn: $('#to-in'), setIn: $('#set-in'), still: $('#still'),
   playCut: $('#play-cut'), export: $('#export'), import: $('#import'),
   rec: $('#rec'), barIn: $('#bar-in'), barNow: $('#bar-now'), bar: $('#bar'), events: $('#bar-events'),
   followBox: $('#follow'), slowmo: $('#slowmo'),
@@ -412,7 +410,7 @@ async function show(index, { preloadNext = true, wind = follow, swapFirst = fals
 
   if (!swapFirst) swapTo(incoming, index);
 
-  for (const b of [el.play, el.toIn, el.setIn]) b.disabled = false;
+  for (const b of [el.play, el.toIn, el.setIn, el.still]) b.disabled = false;
   setStatus('');
   outAt = Infinity;              // never stop mid-wind
   runPump();
@@ -606,11 +604,15 @@ async function windTo(target) {
   // few frames past its own in-point.
   stopPump();
   try {
-    // Backward: deal the race again and re-run it.
-    if (liveFrame.steps > Math.round(target * FPS)) restart(liveFrame);
     // Steps, not seconds — the same conversion render.js makes, so both land on the
     // identical frame rather than within a step of each other.
     const goal = Math.round(target * FPS);
+    // Backward: deal the race again and re-run it. So does a still: its hold is latched
+    // in the engine, and only a fresh deal moves that race again.
+    if (liveFrame.still || liveFrame.steps > goal) {
+      liveFrame.still = false;
+      restart(liveFrame);
+    }
     if (liveFrame.steps === goal) return;   // a preloaded shot arrives already wound
     const from = liveFrame.steps;
     const t0 = Date.now();
@@ -832,7 +834,10 @@ el.paste.onclick = async () => {
   setTimeout(() => { el.paste.textContent = 'Paste shots'; }, 1400);
 };
 
-el.play.onclick = () => {
+el.play.onclick = async () => {
+  // A still's race is latched in the engine's hold; winding to where it stands
+  // re-deals it (windTo) so play has a race that moves.
+  if (liveFrame && liveFrame.still) await windTo(liveFrame.time);
   playing = !playing;
   // Pressing play at the end of a shot while following would otherwise sit on the
   // out-point doing nothing; roll into the next shot instead.
@@ -848,6 +853,48 @@ el.setIn.onclick = () => {
   // value that is already a step boundary survives the round trip exactly.
   shots[liveIndex].warmup = +(liveFrame.steps / FPS).toFixed(3);
   save(); armOut(); paintShots(); paintClock();
+};
+
+// A STILL is a screenshot card's moment (shared/galleryScenarios.js `hold`), and a held
+// card does not look like the frame it was held on: the engine stops the sim, the
+// renderer keeps drawing, and the chase camera closes its lag until it rests behind the
+// car. That rested picture is what every platform's capture photographs, so this shows
+// it the same way — the engine's own hold, armed on this frame, then frames drawn until
+// the camera settles — and copies the card's terms. Playing or seeking re-deals the race
+// (windTo), because the hold is latched.
+//
+// The camera rests within a fraction of a second; two seconds of frames is margin, and
+// so is the captures' own HOLD_SETTLE_MS (scripts/lib/capture.mjs) — both are past the
+// point where another frame changes the picture.
+const STILL_SETTLE_STEPS = 2 * FPS;
+// The camera's URL terms (CAMERA_QUERY) as card params: '&hud=0' -> ", hud: 0".
+const stillParams = (camera) => [...new URLSearchParams(CAMERA_QUERY[camera])]
+  .map(([k, v]) => `, ${k}: ${Number.isNaN(+v) ? `'${v}'` : v}`).join('');
+
+el.still.onclick = async () => {
+  const f = liveFrame;
+  if (!f || !f.ready || winding) return;
+  // Only a plain race: `chain` counts down from its own start, and the TV harnesses
+  // stand up neither it nor its clock.
+  if (f.mounted.scenario !== 'racing') { setStatus('a still is a racing shot'); return; }
+  playing = false;
+  paintPlay();
+  const simMs = Math.round((f.steps * 1000) / FPS);
+  if (!f.still) {
+    f.iframe.contentWindow.__engine.shotHold({ simMs });
+    f.still = true;
+    f.scene.setUndrawn(false);
+    for (let i = 0; i < STILL_SETTLE_STEPS; i++) {
+      f.scene.start();
+      f.scene.pauseAfterFrame();
+      f.pump(STEP * 1000);
+    }
+  }
+  const m = f.mounted;
+  const text = `key: 'racing', params: { track: '${m.track}', players: ${m.players}, seed: 1`
+    + `${stillParams(m.camera)} }, hold: { simMs: ${simMs} }`;
+  el.still.textContent = await copyText(text) ? 'Copied' : 'In console';
+  setTimeout(() => { el.still.textContent = 'Copy still'; }, 1400);
 };
 
 el.playCut.onclick = () => {
@@ -910,16 +957,20 @@ el.import.onclick = async () => {
   setTimeout(() => { el.import.textContent = 'Load shots.js'; }, 1400);
 };
 
-el.export.onclick = async () => {
-  const text = shotsJs();
+// Clipboard needs a secure context; over plain http on a LAN address it is absent, and
+// the text goes to the console instead. True when it reached the clipboard.
+async function copyText(text) {
   try {
     await navigator.clipboard.writeText(text);
-    el.export.textContent = 'Copied';
+    return true;
   } catch (_) {
-    // Clipboard needs a secure context; over plain http on a LAN address it is absent.
     console.log(text);
-    el.export.textContent = 'In console';
+    return false;
   }
+}
+
+el.export.onclick = async () => {
+  el.export.textContent = await copyText(shotsJs()) ? 'Copied' : 'In console';
   setTimeout(() => { el.export.textContent = 'Copy shots.js'; }, 1400);
 };
 

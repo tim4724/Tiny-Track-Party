@@ -130,29 +130,33 @@ export const GALLERY_SCENARIOS = [
   // different camera per platform. Every capture passes the hold through
   // unchanged and shoots once the engine reports it held.
   //
+  // A MOMENT IS PICKED, NOT GUESSED: scrub the race in /trailer.html and press
+  // Copy still, which previews the held frame exactly and copies these terms.
+  // Early moments are the start grid in grid order; the field strings out from
+  // about fifteen seconds in.
+  //
   // `seed` pins the race's item/wander seed on every platform (the TV launches
   // are otherwise random), and a held race steps in fixed increments, so a card
   // is the SAME race everywhere, not merely the same moment of one.
   { id: 'race-beach', key: 'racing', title: 'Beach Cup race', animated: true, store: 1,
-    params: { track: 'tidepool', players: 4, seed: 1 }, hold: { simMs: 5000 } },
+    params: { track: 'tidepool', players: 4, seed: 1 }, hold: { simMs: 21500 } },
   { id: 'race-snow', key: 'racing', title: 'Snow Cup race', animated: true, store: 2,
-    params: { track: 'glacier', players: 2, seed: 1 }, hold: { simMs: 5000 } },
+    params: { track: 'glacier', players: 2, seed: 1 }, hold: { simMs: 29750 } },
   { id: 'race-backyard', key: 'racing', title: 'Backyard Cup race', animated: true, store: 3,
-    params: { track: 'pretzel', players: 4, seed: 1 }, hold: { simMs: 5000 } },
+    params: { track: 'pretzel', players: 4, seed: 1 }, hold: { simMs: 63500 } },
   { id: 'race-canyon', key: 'racing', title: 'Canyon Cup race', animated: true, store: 4,
-    params: { track: 'crag', players: 1, seed: 1 }, hold: { simMs: 5000 } },
+    params: { track: 'crag', players: 1, seed: 1 }, hold: { simMs: 48000 } },
   { id: 'race-playroom', key: 'racing', title: 'Playroom Cup race', animated: true, store: 5,
-    params: { track: 'skyline', players: 4, seed: 1 }, hold: { simMs: 5000 } },
-  // The item cards hold on the EVENT: a rocket crosses the road in a few frames,
-  // so the card is the hit car spun out (sim state, which the freeze keeps — the
-  // burst ring is the renderer's and fades on its own clock), and the monster
-  // card is a player's own car grown into the truck. The cap stops a run whose
-  // item never lands instead of hanging the capture.
-  // Each names its circuit too, or every platform races its own default track.
-  { id: 'rocket', key: 'rocket', title: 'Rocket strike', animated: true, store: 6,
-    params: { track: 'powder', seed: 1 }, hold: { simMs: 1500, on: 'rocket', afterMs: 400, capMs: 30000 } },
-  { id: 'monster', key: 'monster', title: 'Monster truck', animated: true, store: 8,
-    params: { track: 'driftwood', seed: 1 }, hold: { simMs: 1500, on: 'monster', afterMs: 600, capMs: 30000 } },
+    params: { track: 'skyline', players: 4, seed: 1 }, hold: { simMs: 17750 } },
+  // The item cards are moments of real races too, found on the editor's timeline,
+  // which marks every rocket and transform: a player's rocket a few lengths from
+  // the car it is about to hit, a player's own car grown into the truck. The burst
+  // of a hit is the renderer's and fades while the hold settles, so a strike is
+  // shot in flight.
+  { id: 'rocket', key: 'racing', title: 'Rocket strike', animated: true, store: 6,
+    params: { track: 'flurry', players: 2, seed: 1 }, hold: { simMs: 58650 } },
+  { id: 'monster', key: 'racing', title: 'Monster truck', animated: true, store: 8,
+    params: { track: 'driftwood', players: 4, seed: 1 }, hold: { simMs: 43600 } },
   // The scripted-beat cards (pause, a dropped seat, a finisher) hold too, and the
   // beat runs AFTER the hold: a wall-clock delay put a slow TV's beat at the start
   // line with GO still up. The moments sit just under the web preview's own spin
@@ -238,6 +242,39 @@ export const STORE_SCENARIOS = CAPTURED_SCENARIOS
   .filter((s) => s.store)
   .sort((a, b) => a.store - b.store);
 
+// THE APPLE TV TOP SHELF CAROUSEL, in running order (scripts/bake-shelf.mjs). The
+// other picture that sells the game, so its frames are cards in the same shape —
+// a scenario, its params and a held moment picked the same way — and four of them
+// ARE store cards. `context`/`title` are what tvOS shows over the frame.
+//
+// The cup frames are the shelf's own: one per cup, full screen with no HUD, on the
+// trailer's `follow` camera, which films the race from outside the circuit — a
+// chase shot puts the same seat-0 car under the camera in every one of them. Only
+// the split keeps its HUD: the four name chips ARE the pitch.
+const card = (id) => GALLERY_SCENARIOS.find((s) => s.id === id);
+const withoutHud = (c) => ({ ...c, params: { ...c.params, hud: 0 } });
+export const SHELF_FRAMES = [
+  { id: 'cup-beach', context: 'Grand Prix', title: 'Beach Cup', key: 'racing',
+    params: { track: 'cove', players: 1, seed: 1, hud: 0, cam: 'follow' },
+    hold: { simMs: 26500 } },
+  { id: 'cup-snow', context: 'Grand Prix', title: 'Snow Cup', key: 'racing',
+    params: { track: 'flurry', players: 1, seed: 1, hud: 0, cam: 'follow' },
+    hold: { simMs: 16500 } },
+  { id: 'cup-backyard', context: 'Grand Prix', title: 'Backyard Cup', key: 'racing',
+    params: { track: 'tangle', players: 1, seed: 1, hud: 0, cam: 'follow' },
+    hold: { simMs: 44250 } },
+  { id: 'cup-canyon', context: 'Grand Prix', title: 'Canyon Cup', key: 'racing',
+    params: { track: 'sidewinder', players: 1, seed: 1, hud: 0, cam: 'follow' },
+    hold: { simMs: 37250 } },
+  { id: 'cup-playroom', context: 'Grand Prix', title: 'Playroom Cup', key: 'racing',
+    params: { track: 'gauntlet', players: 1, seed: 1, hud: 0, cam: 'follow' },
+    hold: { simMs: 26500 } },
+  { ...card('race-beach'), id: 'split', context: 'Up to four players', title: 'Four phones, one screen' },
+  { ...card('countdown'), id: 'countdown', context: 'Race start', title: 'Ready, set…' },
+  { ...withoutHud(card('monster')), id: 'monster', context: 'Items', title: 'Monster truck' },
+  { ...withoutHud(card('rocket')), id: 'rocket', context: 'Items', title: 'Rocket strike' }
+];
+
 // The display page's query string for a scenario — the CAPTURE script's URL
 // builder. The live gallery builds its iframe URLs itself (cardURL in
 // gallery-common.js, which layers preview-only dpr/host handling on top), so
@@ -256,5 +293,6 @@ export function scenarioQuery(scenario, { players = 4, host = 0, viewAs = 0 } = 
     if (v === null || v === undefined || v === '') continue;
     q.set(k, String(v));
   }
+  if (scenario.hold) q.set('hold', JSON.stringify(scenario.hold));
   return q.toString();
 }

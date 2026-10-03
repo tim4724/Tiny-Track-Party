@@ -179,7 +179,7 @@ export const ARTWORK_SWEEP = [
   { dir: 'public/assets/icon', skip: [] },
   { dir: 'public/assets/brand/tv', skip: [] },
   // The shelf directory has to be swept like the rest. The bake writes a file per
-  // frame and never deletes, so a frame renamed or dropped from its FRAMES table
+  // frame and never deletes, so a frame renamed or dropped from SHELF_FRAMES
   // leaves the old jpg behind — and reconciling only against carousel.json would
   // never see it, which made the orphan test's own title untrue.
   { dir: 'public/assets/brand/tv/shelf', skip: [] }

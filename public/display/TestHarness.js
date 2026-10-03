@@ -1285,45 +1285,28 @@ export function runDisplayScenario(opts, ctx) {
     // the transformed car's growl) exactly as it does in a live race. There is no
     // gallery-only cue path any more.
     //
-    // Only the two ITEM demos are bound, and only STANDALONE (own tab, not a
-    // gallery-grid iframe): a wall of thumbnails all firing rockets would be
-    // cacophony, and a bound session whose frames never run (holdFrame idles
-    // every card) would queue beats forever. ?scenario=bench stays silent too —
-    // audio work would perturb the reading it exists to take. Audio is locked
-    // until the viewer's first click (main.js wires the gesture-resume).
-    //
-    // …and every live kind when the sound is being RENDERED (RaceAudio.offline, the
-    // trailer's ?offlineaudio seam): there the graph plays to nobody, and a plain
-    // race wants its engines and cornering in the capture as much as the item demos.
-    const audible = !inIframe && !!window.__audio
-      && (kind === 'rocket' || kind === 'monster' || window.__audio.offline);
+    // Only when the sound is being RENDERED (RaceAudio.offline, the trailer's
+    // ?offlineaudio seam): there the graph plays to nobody. A gallery card stays
+    // silent — a wall of thumbnails all racing would be cacophony, and a bound
+    // session whose frames never run (holdFrame idles every card) would queue
+    // beats forever — and ?scenario=bench too, since audio work would perturb the
+    // reading it exists to take.
+    const audible = !inIframe && !!window.__audio && window.__audio.offline;
 
     // Self-driving preview: every car is one of the sim's own AI racers (same personas
     // main.js hands the wasm for the live CPU fill), so the gallery shows real bot
     // behaviour — fanned lanes, a spread of speeds — not a bespoke demo loop.
     //
-    // 'rocket'/'monster' demos: the native ABI carries no giveItem hook, so the demo
-    // item is guaranteed by FORCING THE ROULETTE instead — every box on the track rolls
-    // this one item (the same knob as the debug ?item=). Cars still have to collect it,
-    // so the first showcase shot lands a box-run into the race rather than at 0.8s.
-    // The bench takes the debug ?item= the live launch does, roulette only: its
-    // field still has to collect and fire the item, as in a real race.
+    // The bench takes the debug ?item= the live launch does, roulette only: every box
+    // rolls that item, and the field still has to collect and fire it, as in a real race.
     const qItem = new URLSearchParams(location.search).get('item');
-    const forceItem = (kind === 'rocket' || kind === 'monster') ? kind
-      : (kind === 'bench' && ITEM_IDS.includes(qItem)) ? qItem : null;
+    const forceItem = (kind === 'bench' && ITEM_IDS.includes(qItem)) ? qItem : null;
     // `?hold=` — a screenshot card's race moment (galleryScenarios.js `hold`),
     // re-armed on every deal so a redealt race stops at the same moment.
     const holdParam = new URLSearchParams(location.search).get('hold');
     const hold = holdParam ? JSON.parse(holdParam) : null;
-    // The engine then GIVES the item and fires it on a loop, so the preview shows
-    // its showcase (rocket flight + impact burst; the monster's grow-in and the
-    // field it ploughs through) every couple of seconds instead of whenever a car
-    // happens through a box. WHO fires and when is ttp_item_showcase's rule, shared
-    // with both TV harnesses — it lived here alone once, which is why the item
-    // cards never agreed across platforms.
     const newSession = () => {
       const s = bareSession(field, track, { bots, onRaceEvent, forceItem, ...seedOpt });
-      s.itemShowcase(forceItem);
       if (hold && !s.shotHold(hold)) console.error(`[harness] the engine refused hold ${holdParam}`);
       return s;
     };
@@ -1338,7 +1321,7 @@ export function runDisplayScenario(opts, ctx) {
     scene.bindSession(engine.h); // the renderer draws this session's cars
     if (audible) window.__audioDecide.bind(engine.h); // …and the audio hears it
 
-    const live = kind === 'racing' || kind === 'rocket' || kind === 'monster' || kind === 'bench';
+    const live = kind === 'racing' || kind === 'bench';
 
     // The seats the decision layer treats as PEOPLE: not in the sim's aiIds, so
     // they are its listeners and the only cars it voices. The bench field's
@@ -1446,7 +1429,7 @@ export function runDisplayScenario(opts, ctx) {
     // measuring it — and then runs on under the readout instead of holding a
     // frame for a card.
     if (kind === 'bench') { startBenchReadout(scene, track); return; }
-    // gallery: animated previews (racing/rocket/monster) hold a still grid and run via
+    // gallery: animated previews (racing) hold a still grid and run via
     // the card's ▶; frozen previews (countdown/paused/reconnect/finished/results) paint
     // once and stay idle. Standalone tabs ignore this and run freely.
     holdFrame(live, live ? previewControl(redeal, log) : null);

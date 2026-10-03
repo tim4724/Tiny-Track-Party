@@ -188,18 +188,20 @@ export async function waitForScene(page, { timeout = 30000 } = {}) {
   await page.evaluate(() => document.fonts && document.fonts.ready);
 }
 
-// The renderer draws the steer bar (voverlay.mat), not the DOM, so CSS cannot
-// hide it. `cellCards` is the seam that already exists for it: it tells C++ a
-// centred card owns that cell, which is how a finished player's bar goes away.
-// Stage only re-pushes the mask when its OWN computed value changes, so setting
-// it from out here sticks for the rest of the run.
-const HUD_SELECTORS = ['.cell-label', '.cell-rank', '.cell-finish'];
+// How long a capture waits once the engine reports a card's hold. The sim has
+// stopped, but the picture has not: the chase camera closes its lag behind the
+// stopped car, and DOM chrome dressed at that moment is still arriving (an item
+// landing in a cell slot pops in over 0.5 s). The editor's Copy still previews the
+// same rested frame.
+export const HOLD_SETTLE_MS = 800;
+
+// The page's own chrome, which is not the game. The race HUD is not hidden here:
+// part of it is the renderer's (the steer bar), so `?hud=0` on the URL is the one
+// switch that takes all of it off (main.js).
 const CHROME_SELECTORS = ['#corner-btns', '#sound-hint', '#toast'];
 
-export async function hideChrome(page, { hud = true } = {}) {
-  if (hud) await page.evaluate(() => window.__scene?.display?.cellCards?.(0xF));
-  const sel = [...CHROME_SELECTORS, ...(hud ? HUD_SELECTORS : [])];
-  await page.addStyleTag({ content: `${sel.join(', ')} { display: none !important; }` });
+export async function hideChrome(page) {
+  await page.addStyleTag({ content: `${CHROME_SELECTORS.join(', ')} { display: none !important; }` });
 }
 
 // Encode in the PAGE. Node has no JPEG or WebP encoder in core and Chromium

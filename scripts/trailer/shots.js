@@ -20,11 +20,8 @@
 //                          frame 0. It starts on `track` and then chains through the
 //                          rest of THAT track's cup, so a launch can be filmed anywhere.
 //
-//             NOT the harness's item showcases (`rocket`, `monster`): they force the
-//             roulette and spend the item from whoever is armed — a monster truck in
-//             second place included — which is not a race the game would run. Items
-//             are filmed where a real race puts them; the editor's timeline marks
-//             every rocket, transform and hit so those moments can be found.
+//             Items are filmed where a real race puts them; the editor's timeline
+//             marks every rocket, transform and hit so those moments can be found.
 //             NOT `countdown`: that scenario is a frozen chrome preview (its `live`
 //             flag is false, so the scene never steps) and films as a still.
 //   players   1 | 2 | 4 — the HUMAN count, and so the split-screen grid. The field is
