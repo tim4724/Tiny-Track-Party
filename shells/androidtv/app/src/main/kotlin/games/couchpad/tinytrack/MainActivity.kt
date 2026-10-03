@@ -75,6 +75,11 @@ class MainActivity : ComponentActivity() {
         // UnsatisfiedLinkError at whatever moment of a party first reaches it.
         Ttp.load()
         Log.i(TAG, "engine ${TtpJson.strOrEmpty(Ttp.ttp_version())}")
+        // THE HARNESS LATCH OUTLIVES THE ACTIVITY. `Scenarios.standUp` sets it in
+        // the engine, a process global, and Back finishes the Activity without
+        // killing the process — so opening the app after a shots or bench run
+        // raced every phone's car on autopilot. Every launch starts it OFF.
+        Ttp.ttp_race_autopilot_players(0)
 
         // BEFORE the first composition, and that ordering is the whole reason this
         // is here rather than in boot(): a board that asks for `--ink-2` while the

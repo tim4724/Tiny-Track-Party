@@ -201,7 +201,8 @@ object Scenarios {
         // the game cannot produce.
         //
         // HERE and nowhere else. It is a property of a harness RUN, and a real
-        // party must never reach a line that sets it.
+        // party must never reach a line that sets it. `MainActivity.onCreate`
+        // clears it on every launch.
         Ttp.ttp_race_autopilot_players(1)
         val plan = try {
             apply(id, game)

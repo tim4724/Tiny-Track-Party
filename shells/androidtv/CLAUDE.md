@@ -1076,7 +1076,8 @@ here because it needs exactly what the other scenarios need — a race with no
 relay, no phone and no party — and because the seats a harness fills now DRIVE:
 `Scenarios.standUp` latches `ttp_race_autopilot_players`, so every scenario races
 a real field instead of a row of cars that accelerate away, never turn, and pile
-into the first corner.
+into the first corner. The latch is a process global, and Back does not end the
+process, so `MainActivity.onCreate` clears it on every launch.
 
 The rule it lives under is the ledger's: **a harness may fabricate its INPUTS, but
 it must not own a second copy of the road.** Every screen goes through the walk the
