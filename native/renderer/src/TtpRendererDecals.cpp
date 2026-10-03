@@ -117,10 +117,14 @@ void TtpRenderer::rasterSkidTri(const float2* p, const float* ink) {
         return (e0.y == e1.y && e1.x < e0.x) || e1.y > e0.y;
     };
     const bool tlAB = topLeft(a, b), tlBC = topLeft(b, c), tlCA = topLeft(c, a);
+    // The wrapped x of the first column, once; each row counts on from it
+    // rather than paying two software divides a texel on the armv7 box.
+    const int wx0 = ((x0 % W) + W) % W;
     for (int y = y0; y <= y1; y++) {
         uint8_t* row = mSkidPix.data() + (size_t) y * W;
         const float py = (float) y + 0.5f;
-        for (int x = x0; x <= x1; x++) {
+        for (int x = x0, wx = wx0; x <= x1;
+                x++, wx = (wx + 1 == W) ? 0 : wx + 1) {
             const float px = (float) x + 0.5f;
             const float eAB = edge(a, b, px, py);
             const float eBC = edge(b, c, px, py);
@@ -130,7 +134,6 @@ void TtpRenderer::rasterSkidTri(const float2* p, const float* ink) {
                     && (eCA > 0 || (eCA == 0 && tlCA))) {
                 // Barycentric ink: eBC weighs vertex a, eCA weighs b, eAB c.
                 const float w = (ink[0] * eBC + ib * eCA + ic * eAB) * inv;
-                const int wx = ((x % W) + W) % W;
                 const int sum = (int) row[wx]
                         + (int) std::lround(std::max(0.0f, w) * 255.0f);
                 row[wx] = (uint8_t) std::min(255, sum);
@@ -656,9 +659,8 @@ void TtpRenderer::setShadowTuning(const CarShadowTuning& t) {
 // lat span (mSkidLatHalf) so the shader's one uv serves both taps, which is why
 // the track build calls this from inside the rubber layer's own guard.
 //
-// A PAIR, both zeroed now (a fresh texture holds garbage — the lobby-speckle
-// lesson): the per-frame upload alternates between them so it never lands on
-// the texture the driver is reading (uploadCarShadow has the whole argument).
+// A PAIR on GL and Metal, ONE texture on Vulkan (uploadCarShadow says why), all
+// zeroed now (a fresh texture holds garbage — the lobby-speckle lesson).
 //
 // W targets `texelsPerU` texels/u of arclength — coarse against the rubber's 80
 // on purpose, because the stamp is a pre-blurred blob and the WHOLE level
@@ -668,7 +670,7 @@ void TtpRenderer::setShadowTuning(const CarShadowTuning& t) {
 // tuning page rather than constants somebody picked.
 //
 // Re-entrant: the tuning ABI calls it again when a density moves, so it drops
-// whatever pair it already had first.
+// whatever textures it already had first.
 void TtpRenderer::buildCarShadowLayer(float trackLength) {
     if (!mEngine || !roadHasCarShadow()) return;
     for (auto*& t : mCarShadowTex) {
@@ -688,7 +690,10 @@ void TtpRenderer::buildCarShadowLayer(float trackLength) {
             std::round(trackLength * std::max(1.0f, mShadowTune.texelsPerU))));
     if (mCarShadowMask.empty()) rebakeCarShadowMasks();
     bool ok = true;
-    for (int t = 0; t < 2 && ok; t++) {
+    // The RESOLVED backend, fixed for the engine's life: the Android GL
+    // fallback on the same box keeps the pair, and so do tvOS and the web.
+    const int nTex = mEngine->getBackend() == Engine::Backend::VULKAN ? 1 : 2;
+    for (int t = 0; t < nTex && ok; t++) {
         mCarShadowTex[t] = Texture::Builder()
                 .width(mCarShadowW).height(mCarShadowH).levels(1)
                 .format(Texture::InternalFormat::R8)
@@ -708,7 +713,7 @@ void TtpRenderer::buildCarShadowLayer(float trackLength) {
     if (ok) {
         mCarShadowPix.assign((size_t) mCarShadowW * mCarShadowH, 0);
         mCarShadowDirty.clear();
-        // Both textures and the CPU buffer are zero here, so the pair starts
+        // Every texture and the CPU buffer are zero here, so they start
         // agreed and the dirty-rect upload has nothing to catch up on. The
         // history MUST go with them: a rect measured against the old layer's
         // width would upload the wrong strip of the new one.
@@ -717,7 +722,7 @@ void TtpRenderer::buildCarShadowLayer(float trackLength) {
         // 1, not 0: the instances below bind tex[0], so the FIRST upload must
         // land on tex[1] — starting at 0 respecified the very texture the
         // driver was reading, once per scene, which is the exact in-flight
-        // conflict the pair exists to avoid.
+        // conflict the pair exists to avoid. Unused with one texture.
         mCarShadowPing = 1;
         mCarShadowUpload = false;
         applyShadowInk();
@@ -778,23 +783,24 @@ void TtpRenderer::eraseCarShadow() {
         mCarShadowUpload = true;
     }
     // Hand this list to the upload's history before dropping it: what the erase
-    // just zeroed is a region that changed, and the ping-pong's other texture
-    // has not seen it yet (mCarShadowWas).
+    // just zeroed is a region that changed, and the texture this frame uploads
+    // into has not seen it yet (mCarShadowWas).
     mCarShadowWas[mCarShadowWasAt & 1] = std::move(mCarShadowDirty);
     mCarShadowWasAt++;
     mCarShadowDirty.clear();
 }
 
-// One triangle of a car-shadow stamp: texel space, the same top-left rule and
-// per-row x wrap as rasterSkidTri, but instead of a flat interpolated ink it
-// carries the silhouette's (u, v) per vertex — linear per triangle, exactly
-// what the GPU would interpolate — and samples the CPU superellipse bilinearly
-// at each covered texel. Saturating ADD like the rubber; the cap on the summed
-// result is the shader's (CarShadowTuning::cap via maskInk.w), not the raster's.
-// y clamps to [1, H-2]: the outer rows are the CLAMP rows the shader's
-// out-of-band v relies on staying empty.
-// The one analytic evaluator — the raster and the readback preview both come
-// here, so the tuning page can never show a shape the deck is not drawing.
+// The one rounded-rect evaluator for a stamp's shape. analyticCoverage (and so
+// the readback preview) and the raster's rounded arm both build it here, so the
+// tuning page can never show a shape the deck is not drawing.
+ttp::rt::RoundedRectEval TtpRenderer::roundedEvaluator(const StampShape& s,
+        float soft) const {
+    return ttp::rt::RoundedRectEval(mShadowTune.overscan, s.fit.corner, soft,
+            s.fit.fillXTail, s.fit.fillXNose, s.fit.fillZ);
+}
+
+// The one analytic coverage, poly or rect — the raster's poly arm and the
+// readback preview both come here.
 float TtpRenderer::analyticCoverage(const StampShape& s, float u, float v,
         float soft) const {
     if (s.poly) {
@@ -808,10 +814,17 @@ float TtpRenderer::analyticCoverage(const StampShape& s, float u, float v,
         }
         return cov;
     }
-    return ttp::rt::rounded_rect_coverage(u, v, mShadowTune.overscan,
-            s.fit.corner, soft, s.fit.fillXTail, s.fit.fillXNose, s.fit.fillZ);
+    return roundedEvaluator(s, soft)(u, v);
 }
 
+// One triangle of a car-shadow stamp: texel space, the same top-left rule and
+// per-row x wrap as rasterSkidTri, but instead of a flat interpolated ink it
+// carries the silhouette's (u, v) per vertex — linear per triangle, exactly
+// what the GPU would interpolate — and samples the CPU superellipse bilinearly
+// at each covered texel. Saturating ADD like the rubber; the cap on the summed
+// result is the shader's (CarShadowTuning::cap via maskInk.w), not the raster's.
+// y clamps to [1, H-2]: the outer rows are the CLAMP rows the shader's
+// out-of-band v relies on staying empty.
 void TtpRenderer::rasterCarShadowTri(const float2* p, const float2* uv, float alpha,
         const StampShape& shape) {
     if (mStampW <= 0 || mStampH <= 0) return;
@@ -893,35 +906,56 @@ void TtpRenderer::rasterCarShadowTri(const float2* p, const float2* uv, float al
             ? std::max(1e-3f, std::max(texelRamp,
                     mShadowTune.blur * 2.0f * mShadowTune.overscan))
             : 0.0f;
-    for (int y = y0; y <= y1; y++) {
-        float* row = mStampCov.data() + (size_t) (y - mStampY0) * mStampW;
-        const float py = (float) y + 0.5f;
-        for (int x = x0; x <= x1; x++) {
-            const float px = (float) x + 0.5f;
-            const float eAB = edge(a, b, px, py);
-            const float eBC = edge(b, c, px, py);
-            const float eCA = edge(c, a, px, py);
-            if ((eAB > 0 || (eAB == 0 && tlAB))
-                    && (eBC > 0 || (eBC == 0 && tlBC))
-                    && (eCA > 0 || (eCA == 0 && tlCA))) {
-                // Barycentric uv: eBC weighs vertex a, eCA weighs b, eAB c.
-                const float w0 = eBC * inv, w1 = eCA * inv, w2 = eAB * inv;
-                const float mu = ua.x * w0 + ub.x * w1 + uc.x * w2;
-                const float mv = ua.y * w0 + ub.y * w1 + uc.y * w2;
-                const float cov = analytic
-                        ? analyticCoverage(shape, mu, mv, soft)
-                        : 0.25f
-                            * (mask(mu - 0.25f * (dudx + dudy), mv - 0.25f * (dvdx + dvdy))
-                             + mask(mu + 0.25f * (dudx - dudy), mv + 0.25f * (dvdx - dvdy))
-                             + mask(mu - 0.25f * (dudx - dudy), mv - 0.25f * (dvdx - dvdy))
-                             + mask(mu + 0.25f * (dudx + dudy), mv + 0.25f * (dvdx + dvdy)));
-                // MAX, never add: two triangles of one stamp may both claim a
-                // texel on their shared edge (mStampCov says why), and adding
-                // there is the diagonal banding.
-                float& dst = row[x - mStampX0];
-                dst = std::max(dst, std::max(0.0f, cov * alpha));
+    // The texel walk, instantiated once per shape kind so the shipping loop
+    // carries no per-texel test of which one it is drawing. `empty` may answer
+    // true only where `cover` would be exactly +0: max() of that into a store
+    // that is already >= +0 changes nothing, so the texel is skipped whole.
+    const auto walk = [&](auto empty, auto cover) {
+        for (int y = y0; y <= y1; y++) {
+            float* row = mStampCov.data() + (size_t) (y - mStampY0) * mStampW;
+            const float py = (float) y + 0.5f;
+            for (int x = x0; x <= x1; x++) {
+                const float px = (float) x + 0.5f;
+                const float eAB = edge(a, b, px, py);
+                const float eBC = edge(b, c, px, py);
+                const float eCA = edge(c, a, px, py);
+                if ((eAB > 0 || (eAB == 0 && tlAB))
+                        && (eBC > 0 || (eBC == 0 && tlBC))
+                        && (eCA > 0 || (eCA == 0 && tlCA))) {
+                    // Barycentric uv: eBC weighs vertex a, eCA weighs b, eAB c.
+                    const float w0 = eBC * inv, w1 = eCA * inv, w2 = eAB * inv;
+                    const float mu = ua.x * w0 + ub.x * w1 + uc.x * w2;
+                    const float mv = ua.y * w0 + ub.y * w1 + uc.y * w2;
+                    if (empty(mu, mv)) continue;
+                    const float cov = cover(mu, mv);
+                    // MAX, never add: two triangles of one stamp may both claim
+                    // a texel on their shared edge (mStampCov says why), and
+                    // adding there is the diagonal banding.
+                    float& dst = row[x - mStampX0];
+                    dst = std::max(dst, std::max(0.0f, cov * alpha));
+                }
             }
         }
+    };
+    const auto never = [](float, float) { return false; };
+    if (!analytic) {
+        walk(never, [&](float mu, float mv) {
+            return 0.25f
+                    * (mask(mu - 0.25f * (dudx + dudy), mv - 0.25f * (dvdx + dvdy))
+                     + mask(mu + 0.25f * (dudx - dudy), mv + 0.25f * (dvdx - dvdy))
+                     + mask(mu - 0.25f * (dudx - dudy), mv - 0.25f * (dvdx - dvdy))
+                     + mask(mu + 0.25f * (dudx + dudy), mv + 0.25f * (dvdx + dvdy)));
+        });
+    } else if (shape.poly) {
+        walk(never, [&](float mu, float mv) {
+            return analyticCoverage(shape, mu, mv, soft);
+        });
+    } else {
+        // THE SHIPPING ARM: the evaluator built once per triangle rather than
+        // per texel, and the overscan margin past the ramp, a large share of
+        // the texels inside the quad, proved empty without evaluating it.
+        const ttp::rt::RoundedRectEval rr = roundedEvaluator(shape, soft);
+        walk([&](float mu, float mv) { return rr.zero(mu, mv); }, rr);
     }
 }
 
@@ -995,12 +1029,19 @@ void TtpRenderer::rasterCarShadowStamp(const float2* sl, float carS, float alpha
             && mShadowTune.remapHi > mShadowTune.remapLo;  // empty band = no cut
     const float lo = mShadowTune.remapLo * mShadowTune.ao;
     const float hi = mShadowTune.remapHi * mShadowTune.ao;
+    // The wrapped x of the stamp's first column, once: the columns are
+    // consecutive, so each row counts on from it instead of paying two
+    // software divides a texel on the armv7 box. Never `% 0` — a zero-width
+    // layer has no rows to write either (H is 0 with it).
+    const int W = (int) mCarShadowW;
+    const int wx0 = W > 0 ? ((mStampX0 % W) + W) % W : 0;
     for (int sy = 0; sy < mStampH; sy++) {
         const int y = mStampY0 + sy;
         if (y < 1 || y > H - 2) continue;
         const float* src = mStampCov.data() + (size_t) sy * mStampW;
-        uint8_t* row = mCarShadowPix.data() + (size_t) y * (int) mCarShadowW;
-        for (int sx = 0; sx < mStampW; sx++) {
+        uint8_t* row = mCarShadowPix.data() + (size_t) y * W;
+        for (int sx = 0, wx = wx0; sx < mStampW;
+                sx++, wx = (wx + 1 == W) ? 0 : wx + 1) {
             float a = src[sx];
             if (a <= 0.0f) continue;
             if (cut) {
@@ -1008,10 +1049,17 @@ void TtpRenderer::rasterCarShadowStamp(const float2* sl, float carS, float alpha
                         (a - lo) / std::max(1e-4f, hi - lo)));
                 a *= t * t * (3.0f - 2.0f * t);
             }
-            const int add = (int) std::lround(a * 255.0f);
+            // lroundf, without the libm call: `a` is positive and finite here
+            // (the raster's max(0, ·) eats a NaN) and `s` a few hundred at
+            // most, so truncation plus the exact fraction rounds half away
+            // from zero exactly as lroundf does. Never (int) (s + 0.5f), which
+            // rounds 0.49999997 up. The fraction must stay one rounded product
+            // minus `add`: ttp_strict_fp's -ffp-contract=off, which reaches
+            // this file through libttp_track, is what keeps it from fusing.
+            const float s = a * 255.0f;
+            int add = (int) s;
+            if (s - (float) add >= 0.5f) add++;
             if (add <= 0) continue;
-            const int wx = (((mStampX0 + sx) % (int) mCarShadowW)
-                    + (int) mCarShadowW) % (int) mCarShadowW;
             row[wx] = (uint8_t) std::min(255, (int) row[wx] + add);
         }
     }
@@ -1027,14 +1075,29 @@ void TtpRenderer::rasterCarShadowStamp(const float2* sl, float carS, float alpha
     mCarShadowDirty.push_back(r);
 }
 
-// The frame's upload, into the texture of the pair the driver is NOT reading,
-// then every road instance re-pointed at it. The swap IS the ping-pong — by the
-// time a texture takes its next upload, the last frame that referenced it has
-// left the queue, so the driver never has to ghost or stall a respecified
-// in-flight texture. The skid layer used to dodge the same hazard with a ~30 Hz
-// throttle instead; that was measured a null and dropped (see the skid block in
-// TtpRendererFrame), and it was never an option here anyway — shadows track
-// cars, so a throttled one lags the body it belongs to.
+// The frame's upload. On GL and Metal it goes into the texture of the pair the
+// driver is NOT reading, then every road instance is re-pointed at it. The swap
+// IS the ping-pong — by the time a texture takes its next upload, the last
+// frame that referenced it has left the queue, so the driver never has to ghost
+// or stall a respecified in-flight texture. The skid layer used to dodge the
+// same hazard with a ~30 Hz throttle instead; that was measured a null and
+// dropped (see the skid block in TtpRendererFrame), and it was never an option
+// here anyway — shadows track cars, so a throttled one lags the body it
+// belongs to.
+//
+// **ON VULKAN THERE IS ONE TEXTURE, written in place and never re-pointed.**
+// The copy is recorded into the frame's own command buffer ahead of its draws,
+// behind Filament's FRAG_READ -> TRANSFER_DST barrier, and that barrier's
+// source scope is EVERY earlier fragment-shader read on the one queue, not just
+// this image's — so the pair's copy into the "idle" twin waited on exactly what
+// an in-place copy waits on, and bought nothing. The box agrees: the rubber
+// layer updates its one texture in place every frame, and copies into a twin
+// nothing samples measured null (kUploadEventTexels). What the pair DID cost
+// there was the re-point: a new handle dirties every road instance's descriptor
+// set, and Filament destroys and rebuilds each one, every sampler and the UBO
+// re-issued, every frame. So the instances keep the tex[0] that the layer
+// build, the chunk build and roadInstance() bind, and nothing per frame may
+// re-point a road instance's sampler, or the churn comes back.
 //
 // **THE STAMPS' OWN RECTS, NOT THE WHOLE LEVEL, and that is the difference
 // between this channel costing 3 ms of frame thread and costing a fraction of
@@ -1050,12 +1113,14 @@ void TtpRenderer::rasterCarShadowStamp(const float2* sl, float carS, float alpha
 // flicker fix needed, and the events are far fewer than the 16-24 it feared
 // because the rects MERGE (a pack sits in one place).
 //
-// THREE FRAMES OF RECTS, because of the ping-pong: this texture was last
+// THREE FRAMES OF RECTS, because of the pair: the texture written was last
 // correct two frames ago, and what changed since is this frame's stamps, last
 // frame's (which this frame's erase zeroed) and the one before that's. Miss one
 // and each texture keeps the other's stale stamps — the shadow strobes between
-// two positions. `uploadWhole` is the A/B arm that put the number above on the
-// board and is kept for the next box.
+// two positions. One texture needs only two of them (it was correct one upload
+// ago); it takes the same three, so every backend uploads the rects and the
+// event count that were priced. `uploadWhole` is the A/B arm that put the
+// number above on the board and is kept for the next box.
 //
 // The copies are mandatory: the CPU buffer is mutated again next frame and
 // native drivers read uploads asynchronously.
@@ -1126,9 +1191,11 @@ void TtpRenderer::uploadCarShadow() {
             }
         }
     }
-    for (RoadChunk& ch : mRoadChunks) bindCarShadow(ch.mi, t);
-    if (mRoadInst) bindCarShadow(mRoadInst, t);
-    mCarShadowPing ^= 1;
+    if (mCarShadowTex[1]) {
+        for (RoadChunk& ch : mRoadChunks) bindCarShadow(ch.mi, t);
+        if (mRoadInst) bindCarShadow(mRoadInst, t);
+        mCarShadowPing ^= 1;
+    }
 }
 
 // Bound to every vroad instance, because a declared sampler must be bound even

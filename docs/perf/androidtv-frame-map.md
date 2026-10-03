@@ -364,6 +364,41 @@ inside `libGLESv2_powervr.so` and 31% kernel, with under 5% in Filament — the
 driver itself is the cost, which is the Vulkan default's whole justification,
 now with stacks under it.
 
+## The CPU side again: descriptor churn, the View ring, the raster's divides (2026-10-03)
+
+4P tidepool, Vulkan, pinned 0.4 (768x432), CPU ms per second of wall from
+`/proc/<pid>/task/*/stat` over 30 s in the middle of a `perf-race`, two races
+per install, installs interleaved ABAB:
+
+    thread            before (4 runs)        after (4 runs)
+    FEngine::loop     443 / 451 / 454 / 457  378 / 386 / 390 / 392   -64  (~-1.1 ms/frame)
+    main              419 / 420 / 423 / 425  387 / 390 / 391 / 392   -32  (~-0.5 ms/frame)
+    RenderThread      319-323                325-330                 HWUI, untouched
+    gpu ms p50        11.25-11.87            10.33-11.18             not the aim; the
+                                                                     transfer jobs it lost
+
+What moved, by simpleperf against the unstripped `.so`: the car-shadow pair's
+per-frame re-point of every road instance (each one a descriptor-set rebuild on
+both threads; Vulkan now keeps one texture, `uploadCarShadow`), the cell Views'
+uniform writes taking the staged copy (each a PowerVR transfer job; a ring of
+three Views per cell lets them memcpy, `ensureCells`), the software integer
+divides of the per-texel and per-query index wraps (armeabi-v7a has no `sdiv`;
+3.6% of main to 0.4%), and the orphaned per-instance MaterialInstances
+Filament committed every frame (`loadInstancedProp`).
+
+**What is left is not one fault.** Main: Filament's four `FView::prepare` (the
+renderable transform job runs once per view, per-view camera origin), the
+car-shadow raster's per-texel coverage (~10%), the Kotlin frame (~0.4 ms).
+Backend: the present submit (~24%) and ~7-9 us of driver per draw. Both
+threads sit near 6.5 ms of the 16.7 ms budget at four players. Levers priced
+and NOT taken: hardware divide (`-march=armv7ve` drops armv7 cores without
+`sdiv`), PGO/ThinLTO, a Filament fork patch to `FView::partition`'s SoA swaps,
+moving the endFrame timer query before present (it feeds the render-scale
+rule), and caching the HUD stickers in layers (RenderThread's ~5 ms replay;
+not byte-identical over a moving tag). Inlining the mixer's `lerp` made
+`ttp-mix` 21% SLOWER (77 -> 93 ms/s): R8 folds the whole mixer into one method
+and ART compiles the bigger one worse. Do not re-propose it.
+
 ## The 4P frame is TWO frames, and the far deck is the one that costs (2026-09-02)
 
 Same box, same build lineage (`1.0-ae7e22ba`), Vulkan, tidepool, 4P pinned

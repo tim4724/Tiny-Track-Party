@@ -305,33 +305,51 @@ void TtpRenderer::destroySceneTarget() {
     mEngine->destroy(mSceneDepth); mSceneDepth = nullptr;
 }
 
+// Why a ring (three Views per cell on Vulkan, one elsewhere): a View's uniform
+// buffers are rewritten every time it renders, and the staging bypass
+// (TtpRenderer.cpp) can only memcpy a buffer no unfinished command buffer
+// holds. A View drawn every frame is always held by the last frame's, so every
+// write became a staged copy, a transfer job of its own on the reference box.
+// With two frames in flight, a View that drew three frames ago is free; if it
+// is not, Filament stages the write as before, slower and still correct.
+//
+// THE RING IS ONLY INVISIBLE WHILE NO VIEW CARRIES ONE FRAME INTO THE NEXT, so
+// none of TAA, SSR, dynamic resolution, View shadowing, point or spot lights or
+// the grid-based world origin, and no frame uniform that is written only when
+// its source exists: matte geometry never draws without the scene's directional
+// light, and fog keeps skyColor null and fogColorFromIbl off. Every member is
+// configured identically: a setter goes inside this loop, or on the rendered
+// View before each render(), never on one member alone.
 void TtpRenderer::ensureCells(uint32_t count) {
-    while (mCellViews.size() < count) {
-        View* v = mEngine->createView();
+    while (mCellCameras.size() < count) {
         utils::Entity camEnt = utils::EntityManager::get().create();
         Camera* cam = mEngine->createCamera(camEnt);
-        v->setCamera(cam);
-        v->setScene(mScene);
-        // Nothing in this scene casts a Filament shadow (the sun's map is baked
-        // once per track — see bakeShadowMap) and nothing refracts, but a View
-        // defaults both systems ON and re-asks every frame, per cell. Say no
-        // once instead.
-        v->setShadowingEnabled(false);
-        v->setScreenSpaceRefractionEnabled(false);
-        // Post OFF, always: the cells write their own graded sRGB into the
-        // shared scene buffer (ttp_grade.inc) and vpresent antialiases the lot
-        // in ONE pass, instead of Filament's two per cell (see vpresent.mat).
-        //
-        // THERE USED TO BE A FALLBACK HERE — no vpresent.filamat meant
-        // Filament's own chain with a linear tonemap and a 1.1 exposure — and
-        // moving the grade into the materials is what removed it, not a tidy-up.
-        // A shell serving these materials but not vpresent would now grade
-        // twice, and there is no sensible middle: the scene buffer either holds
-        // displayed colour or it does not. The whole .filamat set is produced by
-        // one build-materials.sh run and fetched by one list in Display.js, so a
-        // half-set was never a real configuration.
-        v->setPostProcessingEnabled(false);
-        mCellViews.push_back(v);
+        for (uint32_t k = 0; k < mCellRing; k++) {
+            View* v = mEngine->createView();
+            v->setCamera(cam);
+            v->setScene(mScene);
+            // Nothing in this scene casts a Filament shadow (the sun's map is
+            // baked once per track — see bakeShadowMap) and nothing refracts,
+            // but a View defaults both systems ON and re-asks every frame, per
+            // cell. Say no once instead.
+            v->setShadowingEnabled(false);
+            v->setScreenSpaceRefractionEnabled(false);
+            // Post OFF, always: the cells write their own graded sRGB into the
+            // shared scene buffer (ttp_grade.inc) and vpresent antialiases the
+            // lot in ONE pass, instead of Filament's two per cell (see
+            // vpresent.mat).
+            //
+            // THERE USED TO BE A FALLBACK HERE — no vpresent.filamat meant
+            // Filament's own chain with a linear tonemap and a 1.1 exposure —
+            // and moving the grade into the materials is what removed it, not a
+            // tidy-up. A shell serving these materials but not vpresent would
+            // now grade twice, and there is no sensible middle: the scene buffer
+            // either holds displayed colour or it does not. The whole .filamat
+            // set is produced by one build-materials.sh run and fetched by one
+            // list in Display.js, so a half-set was never a real configuration.
+            v->setPostProcessingEnabled(false);
+            mCellViews.push_back(v);
+        }
         mCellCameras.push_back(cam);
         mCellCameraEntities.push_back(camEnt);
     }
@@ -2026,9 +2044,9 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
     // world bucket alone cannot attribute.
     const double tDecal = ttpNowMs();
     uploadDeckDecals();
-    // The car-shadow layer's one setImage + ping-pong rebind rides the same
-    // profile slot: it is this frame's other decal upload, and a decalUp
-    // spike should cover both suspects.
+    // The car-shadow layer's upload (and the pair's rebind, off Vulkan) rides
+    // the same profile slot: it is this frame's other decal upload, and a
+    // decalUp spike should cover both suspects.
     uploadCarShadow();
     mProfile[kProfDecalUp] = ttpNowMs() - tDecal;
 }
@@ -2500,6 +2518,9 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
         const bool post = mAntialias;
         if (post) ensureSceneTarget();
         ensureCells(input.viewCount);
+        // This frame's ring slot, the same for every cell.
+        const uint32_t slot = mCellRingAt;
+        mCellRingAt = (mCellRingAt + 1) % mCellRing;
         // After ensureCells, or a freshly created cell view keeps Filament's
         // default visible layers (bit 0 alone) and draws an empty picture.
         if (mFeatureTagged) {
@@ -2512,7 +2533,7 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
             const CellRect rect = (input.flags & TTP_FRAME_OVERVIEW)
                     ? CellRect{ 0, 0, mWidth, mHeight }
                     : cellRect(input.viewCount, i);
-            View* v = mCellViews[i];
+            View* v = mCellViews[i * mCellRing + slot];
             Camera* cam = mCellCameras[i];
             // Every cell into the one scene buffer, each in its own sub-rect.
             // Filament drops the colour clear after the first view of a frame

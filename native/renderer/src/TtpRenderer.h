@@ -961,10 +961,15 @@ private:
     filament::MaterialInstance* mLitShadowInst = nullptr;
     utils::Entity mCameraEntity;
 
-    // Split-screen cells, grown on demand to FrameInput.viewCount.
+    // Split-screen cells, grown on demand to FrameInput.viewCount. Each cell
+    // owns ONE camera and mCellRing identical Views, cell i's at
+    // mCellViews[i * mCellRing + slot]; every cell of a frame renders the same
+    // slot, and the slot moves once per frame (ensureCells says why).
     std::vector<filament::View*> mCellViews;
     std::vector<filament::Camera*> mCellCameras;
     std::vector<utils::Entity> mCellCameraEntities;
+    uint32_t mCellRing = 1;
+    uint32_t mCellRingAt = 0;
 
     // The scene buffer every cell draws into, and the one full-screen pass that
     // grades + antialiases it onto the canvas. Filament's own post chain is two
@@ -1495,15 +1500,10 @@ private:
     // vroad's tap reuses the rubber uv), replacing vroad's masked uniform
     // loop: under a real pack that loop was ~5 ms of the 720p frame and only
     // structure moved it. TRANSIENT, unlike the rubber: renderCars erases
-    // last frame's stamps and lays this frame's, so unlike the rubber there
-    // is no throttle to hide behind — which is why the texture is a PAIR.
-    // Each frame uploads the WHOLE level 0 as ONE setImage into the texture
-    // the driver is NOT reading (the instances are re-pointed at it after
-    // the upload), so the respecify-while-in-flight stall the skid layer's
-    // ~30 Hz throttle exists to dodge has no texture to land on. One 256-512
-    // KB upload event per frame, against the 16-24 dirty-rect events an
-    // in-place scheme would cost — the skid layer proved the driver bills
-    // per EVENT on an in-flight texture, not per byte.
+    // last frame's stamps and lays this frame's, and uploadCarShadow ships
+    // the stamps' own rects, merged: into a PAIR on GL and Metal, re-pointed
+    // per frame, and into ONE texture on Vulkan ([1] stays null), bound once.
+    // uploadCarShadow has why.
     // No mips, deliberately: the masked loop sampled its silhouette at LOD 0
     // with no chain either, so minification behaves exactly as it did.
     filament::Texture* mCarShadowTex[2] = { nullptr, nullptr };
@@ -1517,7 +1517,8 @@ private:
     // regions this frame stamped, the regions last frame stamped (which this
     // frame's erase zeroed), and the frame before that's. Uploading only the
     // current rects leaves each texture holding the other's stale stamps, which
-    // reads on screen as the shadow strobing between two positions.
+    // reads on screen as the shadow strobing between two positions. Vulkan's
+    // one texture keeps the same history (uploadCarShadow).
     std::vector<SkidRect> mCarShadowWas[2];
     uint32_t mCarShadowWasAt = 0;
     bool mCarShadowUpload = false;         // the CPU buffer changed since the last upload
@@ -1624,8 +1625,11 @@ private:
     static constexpr float kMonsterShadowScaleW = 1.35f;
     static constexpr float kMonsterShadowScaleL = 1.05f;
     // The one evaluator both the raster and the readback preview go through,
-    // so the tuning page can never show a shape the deck is not drawing.
+    // so the tuning page can never show a shape the deck is not drawing:
+    // analyticCoverage for either analytic shape, and roundedEvaluator under
+    // it for the rect, which the raster's rounded arm builds once per triangle.
     float analyticCoverage(const StampShape& s, float u, float v, float soft) const;
+    ttp::rt::RoundedRectEval roundedEvaluator(const StampShape& s, float soft) const;
     // The polygon's corner rounding, in the footprint's q units, scaled by the
     // tuning's `corner` knob (the rect scales its FITTED radius instead).
     // 0.28, up from a first cut at 0.15 the user read as "a little sharp" —
@@ -1651,9 +1655,10 @@ private:
     void rasterCarShadowTri(const filament::math::float2* p,
             const filament::math::float2* uv, float alpha,
             const StampShape& shape);
-    void uploadCarShadow();         // the one setImage + the ping-pong rebind
-    // Re-allocate the layer pair at the tuning's current density. Separate from
-    // the track build because the two density knobs are live on /shadow-lab.
+    void uploadCarShadow();         // the dirty-rect upload (+ the pair's rebind)
+    // Re-allocate the layer's texture(s) at the tuning's current density.
+    // Separate from the track build because the two density knobs are live on
+    // /shadow-lab.
     void buildCarShadowLayer(float trackLength);
     // The shadow's ink, cap and tail-cut remap onto every road instance.
     void applyShadowInk();
@@ -2025,6 +2030,9 @@ private:
     void pumpTextures();
     void ensureAssetLoader();
     void registerAssetUris(filament::gltfio::FilamentAsset* asset);
+    // shareMaterials true points every copy at instance 0's materials and frees
+    // each copy's own set, so a copy's getMaterialInstances() is EMPTY: read a
+    // copy's materials through rcm.getMaterialInstanceAt.
     // shareMaterials false keeps each instance's own MaterialInstance, so they
     // can be tinted APART — costing the draw-call batching the sharing buys.
     // Only the box fade pool wants it: two players can grab two boxes a beat

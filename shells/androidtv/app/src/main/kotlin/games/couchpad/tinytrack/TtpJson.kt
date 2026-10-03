@@ -77,6 +77,14 @@ object TtpJson {
     fun arg(s: String?): ByteArray? = s?.toByteArray(Charsets.UTF_8)
 
     /**
+     * The answer of an effects walk that has nothing to do: what
+     * `ttp_race_events_live_json` returns on almost every frame. `abi_check`
+     * holds the C side's literal to the canonical `{effects:[]}`; were this copy
+     * ever to drift, a caller skipping on it would only stop skipping.
+     */
+    val NO_EFFECTS: ByteArray = "{\"effects\":[]}".toByteArray(Charsets.UTF_8)
+
+    /**
      * Parse a JSON answer. Returns an empty object rather than throwing: every
      * JSON-returning export either answers or answers emptily (`ttp_abi.h`'s
      * absent-singleton rule), so a parse failure means the C side was never

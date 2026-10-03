@@ -238,13 +238,16 @@ narrower strip clips its outer columns.
 layer — at every cell count.** That layer is a small track-space R8 texture the
 renderer CPU-rasterizes per frame (the rubber layer's idiom — same (s, lat)
 mapping, same lat span, so vroad's tap reuses the rubber uv) and re-uploads by
-**DIRTY RECT** — the stamps' own, merged — into a **ping-pong pair** so the
-upload never respecifies the texture the driver is reading (`uploadCarShadow`
-has the argument; the skid layer's stall history is why). **The pair is what
-makes the dirty rects three frames deep**: a texture is written every OTHER
-frame, so it was last correct two frames ago, and missing one frame's rects
-leaves each texture holding the other's stale stamps — the shadow strobes
-between two positions. `uploadWhole` is the A/B arm that priced it.
+**DIRTY RECT** — the stamps' own, merged — into a **ping-pong pair** on GL and
+Metal, so the upload never respecifies the texture the driver is reading, and
+into **ONE texture bound once** on Vulkan (`uploadCarShadow` has both
+arguments). **No per-frame path may re-point a road instance's sampler**: on
+Vulkan each re-point rebuilds every road instance's descriptor set. **The
+dirty rects are three frames deep for the pair** — a texture written every
+OTHER frame was last correct two frames ago, and missing one frame's rects
+leaves each texture holding the other's stale stamps, so the shadow strobes
+between two positions — and Vulkan keeps the same history. `uploadWhole` is the
+A/B arm that priced it.
 
 `CarShadowTuning::mode` is the switch and `kShadowModeBlob` is what ships, so
 the masked per-fragment loop draws NOTHING in an ordinary frame: every entry
@@ -365,8 +368,10 @@ the fit (fill across, fill along, corner radius) is one pass over that
 coverage. The raster evaluates the rect in CLOSED FORM: the cheap arm, half
 the channel's CPU on the Android box against sampling the outline mask, and
 still per car — Rumble's fit comes out visibly rounder, the monster's bigger.
-`analyticCoverage` is the ONE evaluator both the raster and the mask-card
-readback go through, so the lab cannot show a shape the deck is not drawing.
+`roundedEvaluator` builds the ONE rect evaluator both the raster and the
+mask-card readback (through `analyticCoverage`) use, so the lab cannot show a
+shape the deck is not drawing. The raster builds it once per triangle and skips
+the texels its `zero()` proves empty, the overscan margin past the ramp.
 
 > **The fitted k-GON (`kShadowShapePoly`) was built, shown, and NOT chosen —
 > it survives as a lab arm beside the masks.** A convex hull simplified to
@@ -524,7 +529,7 @@ probes on the served blob, not a shipped-vs-fallback switch**: the current
 `vroad.filamat` declares BOTH halves, and each path keys on its own probe, so
 a blob carrying only one half still draws that half. Two cases go ALL-masked
 on a current blob, both without per-car LOD ranking: no carShadow texture (the
-pair only builds where the rubber layer does), and the forced debug mask layer
+layer only builds where the rubber layer does), and the forced debug mask layer
 (`renderCars` has the split — overviews and the no-views fallback stay on the
 texture path instead, so every car keeps a shadow under the masked [4] cap).
 The CPU-side masked entries are pushed EITHER WAY —

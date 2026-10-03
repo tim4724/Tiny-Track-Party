@@ -728,57 +728,61 @@ const char* ttp_race_events_live_json(int sessionHandle, int roomHandle,
                                       int audioReady, int fastForwarding,
                                       double intermissionMs, double nowMs) {
   const Value evs = ttp_session_drain_events(sessionHandle);
+  // Empty on almost every frame, so skip the series lookups, the tree and the
+  // stringify: the literal is what put() spells for {effects:[]} (abi_check).
+  if (evs.type != Value::ARR || evs.arr.empty()) {
+    g_bufEvents.assign("{\"effects\":[]}");
+    return g_bufEvents.c_str();
+  }
   const ttp::CupSeries* series = ttp_gp_series(ttp_room_series(roomHandle));
   Value fx = Value::Arr();
   // The board ops compose against the live race, and the cup chip they carry is
   // priced in the caller's intermission budget (the E2E override rides that
   // argument, which is why nothing here re-reads ttp_race_intermission_ms).
   const RaceCtx live{sessionHandle, intermissionMs, nullptr};
-  if (evs.type == Value::ARR) {
-    for (const Value& e : evs.arr) {
-      const std::string type = json::str_field(e, "type");
-      // The three lifecycle beats have their own entry points — feeding them
-      // to the ordinary-event filter makes them vanish, which is the routing
-      // bug this drain exists to end (shells.md, the fourth launch bug).
-      if (type == "_countdown") {
-        executeAndSpell(roomHandle, race::countdownTick(json::num_field(e, "n")), {}, fx);
-      } else if (type == "_raceStart") {
-        executeAndSpell(roomHandle, race::raceStart(biome ? biome : "", audioReady != 0),
-                        {}, fx);
-      } else if (type == "_raceEnd") {
-        race::EndRaceInput ei;
-        ei.hasSeries = series != nullptr;
-        // "Finished" must mean AFTER this race's points apply: done_ flips
-        // inside applyRace, which APPLY_RACE_POINTS runs later in this very
-        // walk — read it here and the final race still says false, the
-        // persist op never emits, and no cup ever banks (the bug the podium
-        // E2E caught). An endless series extends itself instead of ending.
-        ei.seriesFinished =
-            series && (series->finished() ||
-                       (!series->endless() && series->raceIndex() + 1 >= series->raceCount()));
-        // The intermission is measured from HERE — the flourish has already run
-        // live, so a chained race gets its full budget rather than the flourish
-        // eating into it.
-        ei.intermissionMs = intermissionMs;
-        ei.nowMs = nowMs;
-        // endRace's OWN ranked board, which no effect can carry and which now
-        // never leaves C++: the points bank against it (against the retained
-        // field, BEFORE the board is composed — the order the corpus pins) and
-        // the final board composes from it.
-        const Value* results = e.find("results");
-        RaceCtx end = live;
-        end.resultRows = results && results->type == Value::OBJ ? results->find("results")
-                                                                : nullptr;
-        executeAndSpell(roomHandle, race::endRace(ei), end, fx);
-      } else {
-        // humans-all-done is read off the live handles exactly when a finish
-        // asks for it — the one event whose effects branch on the answer.
-        const bool allDone = type == "finish" && !fastForwarding &&
-                             ttp_live_humans_all_done(sessionHandle, roomHandle);
-        executeAndSpell(roomHandle,
-                        race::raceEvent(eventOf(e), fastForwarding != 0, allDone),
-                        live, fx);
-      }
+  for (const Value& e : evs.arr) {
+    const std::string type = json::str_field(e, "type");
+    // The three lifecycle beats have their own entry points — feeding them
+    // to the ordinary-event filter makes them vanish, which is the routing
+    // bug this drain exists to end (shells.md, the fourth launch bug).
+    if (type == "_countdown") {
+      executeAndSpell(roomHandle, race::countdownTick(json::num_field(e, "n")), {}, fx);
+    } else if (type == "_raceStart") {
+      executeAndSpell(roomHandle, race::raceStart(biome ? biome : "", audioReady != 0),
+                      {}, fx);
+    } else if (type == "_raceEnd") {
+      race::EndRaceInput ei;
+      ei.hasSeries = series != nullptr;
+      // "Finished" must mean AFTER this race's points apply: done_ flips
+      // inside applyRace, which APPLY_RACE_POINTS runs later in this very
+      // walk — read it here and the final race still says false, the
+      // persist op never emits, and no cup ever banks (the bug the podium
+      // E2E caught). An endless series extends itself instead of ending.
+      ei.seriesFinished =
+          series && (series->finished() ||
+                     (!series->endless() && series->raceIndex() + 1 >= series->raceCount()));
+      // The intermission is measured from HERE — the flourish has already run
+      // live, so a chained race gets its full budget rather than the flourish
+      // eating into it.
+      ei.intermissionMs = intermissionMs;
+      ei.nowMs = nowMs;
+      // endRace's OWN ranked board, which no effect can carry and which now
+      // never leaves C++: the points bank against it (against the retained
+      // field, BEFORE the board is composed — the order the corpus pins) and
+      // the final board composes from it.
+      const Value* results = e.find("results");
+      RaceCtx end = live;
+      end.resultRows = results && results->type == Value::OBJ ? results->find("results")
+                                                              : nullptr;
+      executeAndSpell(roomHandle, race::endRace(ei), end, fx);
+    } else {
+      // humans-all-done is read off the live handles exactly when a finish
+      // asks for it — the one event whose effects branch on the answer.
+      const bool allDone = type == "finish" && !fastForwarding &&
+                           ttp_live_humans_all_done(sessionHandle, roomHandle);
+      executeAndSpell(roomHandle,
+                      race::raceEvent(eventOf(e), fastForwarding != 0, allDone),
+                      live, fx);
     }
   }
   Value v = Value::Obj();

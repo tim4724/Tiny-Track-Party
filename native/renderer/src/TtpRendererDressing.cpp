@@ -1560,6 +1560,30 @@ gltfio::FilamentAsset* TtpRenderer::loadInstancedProp(const char* assetName,
                 }
             }
         }
+        // ...and free the sets that re-point orphaned: nothing draws with them,
+        // but Filament commits every live MaterialInstance every frame (the
+        // header has what that means for readers). An instance the loop above
+        // skipped, or left half re-pointed, still draws with one of its own and
+        // keeps them all. Detach BEFORE destroy: ~FFilamentInstance destroys
+        // what it still owns.
+        for (size_t i = 1; i < out.size(); i++) {
+            if (!out[i]) continue;
+            MaterialInstance* const* mis = out[i]->getMaterialInstances();
+            const std::vector<MaterialInstance*> own(mis,
+                    mis + out[i]->getMaterialInstanceCount());
+            bool inUse = false;
+            for (size_t e = 0; e < out[i]->getEntityCount() && !inUse; e++) {
+                const auto ri = rcm.getInstance(out[i]->getEntities()[e]);
+                if (!ri) continue;
+                for (size_t p = 0, n = rcm.getPrimitiveCount(ri); p < n && !inUse; p++) {
+                    inUse = std::find(own.begin(), own.end(),
+                            rcm.getMaterialInstanceAt(ri, p)) != own.end();
+                }
+            }
+            if (inUse) continue;
+            out[i]->detachMaterialInstances();
+            for (MaterialInstance* mi : own) mEngine->destroy(mi);
+        }
     }
     return asset;
 }

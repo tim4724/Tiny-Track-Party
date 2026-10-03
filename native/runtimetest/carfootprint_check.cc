@@ -22,7 +22,9 @@
 // rot with the asset kit.
 
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <vector>
 
 #include "ttp/car_footprint.h"
@@ -41,6 +43,33 @@ void expect(bool ok, const char* what) {
     if (ok) return;
     failed++;
     std::fprintf(stderr, "FAIL %s\n", what);
+}
+
+// FROZEN: rounded_rect_coverage as one call, before it became RoundedRectEval.
+// The evaluator must reproduce it to the bit, so do not edit this to follow a
+// change there; a deliberate change to the shape retires this copy instead.
+float frozenRoundedRect(float u, float v, float overscan,
+        float corner, float soft, float fillXTail, float fillXNose, float fillZ) {
+    const float qy = (v * 2.0f - 1.0f) * overscan / std::max(0.05f, fillZ);
+    const float t01 = std::min(1.0f, std::max(0.0f, 0.5f * (qy + 1.0f)));
+    const float fillX = fillXTail + (fillXNose - fillXTail) * t01;
+    const float qx = (u * 2.0f - 1.0f) * overscan / std::max(0.05f, fillX);
+    const float r = std::min(0.999f, std::max(0.0f, corner));
+    const float bx = std::fabs(qx) - (1.0f - r);
+    const float by = std::fabs(qy) - (1.0f - r);
+    const float mx = std::max(bx, 0.0f), my = std::max(by, 0.0f);
+    const float outside = std::sqrt(mx * mx + my * my);
+    const float inside = std::min(std::max(bx, by), 0.0f);
+    const float d = outside + inside - r;
+    const float e = std::max(1e-4f, soft);
+    const float t = std::min(1.0f, std::max(0.0f, (e - d) / (2.0f * e)));
+    return t * t * (3.0f - 2.0f * t);
+}
+
+uint32_t bitsOf(float f) {
+    uint32_t b;
+    std::memcpy(&b, &f, sizeof b);
+    return b;
 }
 
 // A box on the ground from (x0,z0) to (x1,z1), as two triangles appended to a
@@ -316,6 +345,50 @@ int main() {
         // A wider ramp only ever SOFTENS: the outline stays put.
         expect(std::fabs(rounded_rect_coverage(0.5f, 0.5f + 0.5f / OV, OV, 0.42f, 0.2f) - 0.5f) < 0.1f,
                 "rounded: the edge sits at coverage ~0.5 whatever the ramp");
+    }
+
+    // ── THE EVALUATOR IS THE FUNCTION, TO THE BIT ───────────────────────────
+    // The raster builds RoundedRectEval once per triangle and skips what its
+    // zero() calls empty, so both claims have to hold on every texel it can
+    // meet: the split evaluator equals the one-call form bit for bit, and
+    // zero() is never true where the coverage is anything but +0. The grid
+    // runs 0.1 past the stamp's frame (the raster's uv overshoots it at the
+    // quad's padded edge) across the preview's soft (0.02), the shipping
+    // ramp (~0.2) and the extremes, and fills down to the 0.05 floor.
+    {
+        const float softs[] = { 1e-3f, 0.02f, 0.06f, 0.203f, 0.5f };
+        const float fills[] = { 0.05f, 0.6f, 1.0f, 1.2f };
+        const float corners[] = { 0.0f, 0.42f, 1.0f };
+        const int N = 120;
+        long bad = 0, lies = 0, skipped = 0;
+        for (const float ov : { 1.0f, 1.45f })
+        for (const float soft : softs)
+        for (const float tail : fills)
+        for (const float nose : fills)
+        for (const float fz : fills)
+        for (const float corner : corners) {
+            const ttp::rt::RoundedRectEval rr(ov, corner, soft, tail, nose, fz);
+            for (int j = 0; j <= N; j++) {
+                const float v = -0.1f + 1.2f * (float) j / (float) N;
+                for (int i = 0; i <= N; i++) {
+                    const float u = -0.1f + 1.2f * (float) i / (float) N;
+                    const float want = frozenRoundedRect(u, v, ov, corner, soft,
+                            tail, nose, fz);
+                    if (bitsOf(rr(u, v)) != bitsOf(want)) bad++;
+                    if (rr.zero(u, v)) {
+                        skipped++;
+                        if (bitsOf(want) != 0) lies++;
+                    }
+                }
+            }
+        }
+        expect(bad == 0, "evaluator: bit-identical to the one-call form");
+        expect(lies == 0, "evaluator: zero() only where the coverage is exactly +0");
+        expect(skipped > 0, "evaluator: zero() fires at all (else the skip is untested)");
+        // A NaN is the evaluator's to answer, never the skip's.
+        const ttp::rt::RoundedRectEval rr(1.45f, 0.42f, 0.2f);
+        expect(!rr.zero(NAN, 5.0f) && !rr.zero(5.0f, NAN),
+                "evaluator: a NaN coordinate is never skipped");
     }
 
     // ── THE FIT INCLUDES WHEELS AND TRIMS OVERHANGS ─────────────────────────

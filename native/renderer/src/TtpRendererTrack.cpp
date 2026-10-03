@@ -1184,7 +1184,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         if (!buildMesh(mHills)) return false;
     }
 
-    // Race-fog colour for the cell views (ensureCells applies it): the same
+    // Race-fog colour for the cell views (renderCells applies it): the same
     // theme colour as the sky horizon, so distant geometry dissolves into sky.
     mFogColor = srgbToLinear(tb.fog);
     // tb.fogTune is NOT read here: the ramp arrives per view, already scaled.

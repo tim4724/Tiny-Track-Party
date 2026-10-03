@@ -206,31 +206,81 @@ inline std::vector<float> superellipse_mask(const FootprintSpec& spec) {
 // `fillX` / `fillZ` shrink the shape inside that frame, which is how one
 // expression serves every model: a body that does not reach its own bounding
 // box gets a smaller rect, at no cost.
+//
+// AN EVALUATOR, not just a function, because the layer raster calls it once per
+// texel with everything but (u, v) fixed for the whole stamp: the constructor
+// takes what is per-stamp, `operator()` what is per-texel. They are the same
+// IEEE operations in the same order either way, so the split changes no bit;
+// the `carfootprint` ctest holds a frozen copy of the one-call form to prove it.
+struct RoundedRectEval {
+    RoundedRectEval(float overscan, float corner, float soft,
+            float fillXTail = 1.0f, float fillXNose = 1.0f, float fillZ = 1.0f) {
+        ov = overscan;
+        tail = fillXTail;
+        fzDen = std::max(0.05f, fillZ);
+        dX = fillXNose - fillXTail;
+        r = std::min(0.999f, std::max(0.0f, corner));
+        omr = 1.0f - r;
+        e = std::max(1e-4f, soft);
+        twoE = 2.0f * e;
+        // zero()'s bounds. |q| past 1 + e on either axis is a whole ramp
+        // outside the outline; 1e-3 and the 1.0001 factor are margin for the
+        // few roundings between this bound and the evaluator's own |q|. The u
+        // bound takes the WIDER end, which fillX's lerp cannot exceed while
+        // both fills are positive, so anything else turns the test off.
+        const float lim = 1.0f + e + 1e-3f;
+        thrV = lim * fzDen * 1.0001f;
+        thrU = lim * std::max(0.05f, std::max(fillXTail, fillXNose)) * 1.0001f;
+        canZero = std::isfinite(overscan) && overscan > 0.0f && std::isfinite(e)
+                && std::isfinite(fillXTail) && fillXTail > 0.0f
+                && std::isfinite(fillXNose) && fillXNose > 0.0f
+                && std::isfinite(fillZ) && fillZ > 0.0f;
+    }
+
+    float operator()(float u, float v) const {
+        // Centre and scale so the footprint is |q| <= 1 on both axes. The width
+        // interpolates tail (v = 0) to nose (v = 1), so unequal ends make the
+        // four-cornered shape a symmetric trapezoid; the bent frame means `d`
+        // is no longer an exact distance on slanted sides, which the soft ramp
+        // does not care about.
+        const float qy = (v * 2.0f - 1.0f) * ov / fzDen;
+        const float t01 = std::min(1.0f, std::max(0.0f, 0.5f * (qy + 1.0f)));
+        const float fillX = tail + dX * t01;
+        const float qx = (u * 2.0f - 1.0f) * ov / std::max(0.05f, fillX);
+        const float bx = std::fabs(qx) - omr;
+        const float by = std::fabs(qy) - omr;
+        const float mx = std::max(bx, 0.0f), my = std::max(by, 0.0f);
+        // The rounded box's signed distance: outside via the corner arc, inside
+        // via whichever edge is nearest. Negative inside, 0 on the outline.
+        const float outside = std::sqrt(mx * mx + my * my);
+        const float inside = std::min(std::max(bx, by), 0.0f);
+        const float d = outside + inside - r;
+        // A smoothstep over the ramp, so the edge lands like the masks' blur.
+        const float t = std::min(1.0f, std::max(0.0f, (e - d) / twoE));
+        return t * t * (3.0f - 2.0f * t);
+    }
+
+    // True only where operator() is EXACTLY +0, so a caller that would only
+    // max() that zero into a non-negative store may skip the evaluation. It
+    // tests the same rounded |2v-1|*overscan the evaluator divides; a NaN on
+    // either axis answers false and is left to the evaluator.
+    bool zero(float u, float v) const {
+        const float pu = std::fabs(u * 2.0f - 1.0f) * ov;
+        const float pv = std::fabs(v * 2.0f - 1.0f) * ov;
+        if (!canZero || std::isnan(pu) || std::isnan(pv)) return false;
+        return pv >= thrV || pu >= thrU;
+    }
+
+private:
+    float ov, tail, fzDen, dX, r, omr, e, twoE;
+    float thrU, thrV;
+    bool canZero;
+};
+
 inline float rounded_rect_coverage(float u, float v, float overscan,
         float corner, float soft,
         float fillXTail = 1.0f, float fillXNose = 1.0f, float fillZ = 1.0f) {
-    // Centre and scale so the footprint is |q| <= 1 on both axes. The width
-    // interpolates tail (v = 0) to nose (v = 1), so unequal ends make the
-    // four-cornered shape a symmetric trapezoid; the bent frame means `d` is
-    // no longer an exact distance on slanted sides, which the soft ramp does
-    // not care about.
-    const float qy = (v * 2.0f - 1.0f) * overscan / std::max(0.05f, fillZ);
-    const float t01 = std::min(1.0f, std::max(0.0f, 0.5f * (qy + 1.0f)));
-    const float fillX = fillXTail + (fillXNose - fillXTail) * t01;
-    const float qx = (u * 2.0f - 1.0f) * overscan / std::max(0.05f, fillX);
-    const float r = std::min(0.999f, std::max(0.0f, corner));
-    const float bx = std::fabs(qx) - (1.0f - r);
-    const float by = std::fabs(qy) - (1.0f - r);
-    const float mx = std::max(bx, 0.0f), my = std::max(by, 0.0f);
-    // The rounded box's signed distance: outside via the corner arc, inside via
-    // whichever edge is nearest. Negative inside, 0 on the outline.
-    const float outside = std::sqrt(mx * mx + my * my);
-    const float inside = std::min(std::max(bx, by), 0.0f);
-    const float d = outside + inside - r;
-    const float e = std::max(1e-4f, soft);
-    // A smoothstep over the ramp, so the edge lands like the masks' blur.
-    const float t = std::min(1.0f, std::max(0.0f, (e - d) / (2.0f * e)));
-    return t * t * (3.0f - 2.0f * t);
+    return RoundedRectEval(overscan, corner, soft, fillXTail, fillXNose, fillZ)(u, v);
 }
 
 // A rounded rect FITTED TO ONE MODEL, so the cheap shape is still per-car.

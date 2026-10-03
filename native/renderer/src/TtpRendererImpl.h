@@ -371,11 +371,17 @@ struct TtpRenderer::TrackBin {
             while (lo < hi) { const size_t mid = (lo + hi) / 2; (samples[mid].s <= w) ? lo = mid + 1 : hi = mid; }
             i = (lo == 0) ? 0 : lo - 1; // JS _seg: i stays 0 below the first knot
         }
-        const auto idx = [&](long k) { return (size_t) (((k % (long) n) + (long) n) % (long) n); };
-        const Sample& pA = samples[idx((long) i - 1)];
+        // i is in [0, n-1] on both paths, so one conditional step wraps each
+        // neighbour, with no integer divide on this per-query path.
+        const size_t iA = i == 0 ? n - 1 : i - 1;
+        size_t iC = i + 1;
+        if (iC >= n) iC -= n;
+        size_t iD = iC + 1;
+        if (iD >= n) iD -= n;
+        const Sample& pA = samples[iA];
         const Sample& pB = samples[i];
-        const Sample& pC = samples[idx((long) i + 1)];
-        const Sample& pD = samples[idx((long) i + 2)];
+        const Sample& pC = samples[iC];
+        const Sample& pD = samples[iD];
         // Unwrap arclengths relative to the segment start so they stay
         // monotonic across the start/finish seam.
         const float sB = pB.s;
@@ -544,7 +550,7 @@ struct TtpRenderer::TrackBin {
         size_t bestI = 0;
         const auto trySeg = [&](size_t i) {
             const Sample& a = knots[i];
-            const float3 ab = knots[(i + 1) % n].pos - a.pos;
+            const float3 ab = knots[i + 1 == n ? 0 : i + 1].pos - a.pos;
             const float len2 = dot(ab, ab);
             float t = len2 > 1e-12f ? dot(p - a.pos, ab) / len2 : 0.0f;
             t = std::min(1.0f, std::max(0.0f, t));
@@ -557,8 +563,14 @@ struct TtpRenderer::TrackBin {
         constexpr long W = 12;
         bool solved = false;
         if (hint && *hint >= 0 && (size_t) *hint < n) {
-            for (long k = -W; k <= W; k++)
-                trySeg((size_t) ((((long) *hint + k) % (long) n + (long) n) % (long) n));
+            // (hint + k) mod n for k = -W..W, in that order: the start is the
+            // k = -W term, then each step wraps by compare (indices repeat when
+            // n is under 2W+1).
+            size_t j = (size_t) ((((long) *hint - W) % (long) n + (long) n) % (long) n);
+            for (long k = -W; k <= W; k++) {
+                trySeg(j);
+                j = j + 1 == n ? 0 : j + 1;
+            }
             // Trust the window only if the winner sits strictly INSIDE it and
             // within a deck's reach of the car (8u — clear of any jump apex):
             // a respawn moves the car half a circuit in one frame, and a
@@ -593,15 +605,15 @@ struct TtpRenderer::TrackBin {
         if (&knots == &rings) {
             for (int walk = 0; walk < 4; walk++) {
                 const Sample& wa = knots[bestI];
-                const Sample& wb = knots[(bestI + 1) % n];
-                if (dot(p - wa.pos, wa.tangent()) < 0) bestI = (bestI + n - 1) % n;
-                else if (dot(p - wb.pos, wb.tangent()) >= 0) bestI = (bestI + 1) % n;
+                const Sample& wb = knots[bestI + 1 == n ? 0 : bestI + 1];
+                if (dot(p - wa.pos, wa.tangent()) < 0) bestI = bestI == 0 ? n - 1 : bestI - 1;
+                else if (dot(p - wb.pos, wb.tangent()) >= 0) bestI = bestI + 1 == n ? 0 : bestI + 1;
                 else break;
             }
         }
         if (hint) *hint = (int) bestI;
         const Sample& a = knots[bestI];
-        const Sample& b = knots[(bestI + 1) % n];
+        const Sample& b = knots[bestI + 1 == n ? 0 : bestI + 1];
         const float d0 = dot(p - a.pos, a.tangent());
         const float d1 = dot(p - b.pos, b.tangent());
         float t = (d0 - d1) != 0 ? d0 / (d0 - d1) : bestT;

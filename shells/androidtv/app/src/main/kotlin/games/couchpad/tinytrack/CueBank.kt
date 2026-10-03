@@ -205,6 +205,13 @@ class CueBank(private val assets: AssetManager) {
                     Log.e(TAG, "cue '$id': ${samples.size} stops loaded of ${stops.size}")
                     return null
                 }
+                // One read position walks every stop and wraps at the first one's
+                // length, so each stop has to be that length (a shorter one is read
+                // past its end), and a loop of zero frames has no frame to wrap to.
+                if (samples[0].frames == 0 || samples.any { it.frames != samples[0].frames }) {
+                    Log.e(TAG, "cue '$id': its stops are not all one non-zero length")
+                    return null
+                }
                 // The stops carry only the FILTER — `bakeHeadroom: 1` divided the
                 // gain out of the PCM — so the device applies the formula.
                 val formula = playback.optString("gainFormula")
@@ -375,7 +382,8 @@ class CueBank(private val assets: AssetManager) {
                 }
                 if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) sawOutputEnd = true
             }
-            if (n == 0) return null
+            // Not one whole frame is nothing to loop.
+            if (n / channels == 0) return null
             return Sample(out.copyOf(n), n / channels, channels, rate)
         } catch (t: Throwable) {
             Log.w(TAG, "$path did not decode", t)

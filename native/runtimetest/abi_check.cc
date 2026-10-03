@@ -5110,11 +5110,18 @@ void raceLiveWalks() {
     check(beats >= 2 && gos == 1,
           "the countdown beats were routed, GO among them (" + std::to_string(beats) +
               " beats, " + std::to_string(gos) + " GO)");
-    // The queue really empties: a second drain with nothing behind it.
-    const Value empty = parseOrNull(
-        ttp_race_events_live_json(live, room, "beach", 1, 0, kInterMs, 9000),
-        "events_live empty");
+    // The queue really empties: a second drain with nothing behind it. That
+    // answer is a short-circuit literal, so it is held to the bytes the full
+    // walk would stringify for no effects; the Android shell skips its parse on
+    // exactly those bytes.
+    const std::string emptyRaw =
+        ttp_race_events_live_json(live, room, "beach", 1, 0, kInterMs, 9000);
+    const Value empty = parseOrNull(emptyRaw.c_str(), "events_live empty");
     check(at(empty, "effects").arr.empty(), "a drained queue answers no effects");
+    Value noEffects = Value::Obj();
+    noEffects.set("effects", Value::Arr());
+    check(emptyRaw == canonical_stringify(noEffects),
+          "the empty drain is byte-identical to the canonical {effects:[]}");
 
     // The end of the race, with a cup behind the room. NOTHING about the result
     // rows leaves this call any more: the points are BANKED and the standings

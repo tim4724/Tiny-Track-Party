@@ -126,6 +126,10 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
             // measured -1.5 ms of a 40 ms 4P/1080 frame on the reference box,
             // interleaved, with the boards pixel-identical either way.
             //
+            // A View rendered every frame still stages its own uniforms (the
+            // last frame holds them); the cell Views reach the memcpy because
+            // they rotate as a ring (ensureCells).
+            //
             // Filament ships this OFF and calls it experimental. It is enabled
             // here as a MEASURED decision about one device family, not a
             // statement that the feature is finished upstream.
@@ -151,6 +155,9 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
         mEngine->setAutomaticInstancingEnabled(true);
     }
     if (!mEngine) return false;
+    // The RESOLVED backend, not the one asked for: a DEFAULT request lands on
+    // Vulkan or GL by device, and only Vulkan rotates (ensureCells).
+    mCellRing = mEngine->getBackend() == Engine::Backend::VULKAN ? 3 : 1;
     // The driver's texture ceiling can sit UNDER the conservative default:
     // this box's GL driver reports 8192 while its Vulkan driver caps 2D
     // images at 4096, and a skid layer built past the cap is a
@@ -1922,10 +1929,10 @@ TtpRenderer::~TtpRenderer() {
     if (mVisMaterial) mEngine->destroy(mVisMaterial);
     if (mRoadVisMaterial) mEngine->destroy(mRoadVisMaterial);
     if (mRoadMaterial) mEngine->destroy(mRoadMaterial);
-    for (size_t i = 0; i < mCellViews.size(); i++) {
-        mEngine->destroy(mCellViews[i]);
-        mEngine->destroyCameraComponent(mCellCameraEntities[i]);
-        utils::EntityManager::get().destroy(mCellCameraEntities[i]);
+    for (View* v : mCellViews) mEngine->destroy(v);
+    for (utils::Entity e : mCellCameraEntities) {
+        mEngine->destroyCameraComponent(e);
+        utils::EntityManager::get().destroy(e);
     }
     mEngine->destroy(mView);
     mEngine->destroy(mScene);
