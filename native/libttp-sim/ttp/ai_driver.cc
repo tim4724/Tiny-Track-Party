@@ -47,6 +47,12 @@ static const double EVADE_FAR = 13.0;
 static const double EVADE_CLEAR = 0.5;
 static const double EVADE_LOOK = 3.5;
 static const double BANANA_AVOID_R = 0.5;
+// Box seeking: an empty-handed bot looks SEEK_FAR ahead for the next box row and,
+// unless its line already crosses a box that will be live on arrival, steers for
+// the nearest one within SEEK_REACH * skill of its line.
+static const double SEEK_FAR = 20.0;
+static const double SEEK_REACH = 2.0;
+static const double SEEK_ON_LINE = 0.6;  // of the box radius: the line already takes it
 
 static const double RL_STEP = 1.25;
 static const int RL_ITERS = 800;
@@ -285,6 +291,38 @@ static Dodge avoidThreat(const Car& car, LaneFor laneFor, Game& game, double max
   return {true, best.lat >= 0 ? -m : m};
 }
 
+// ---- seekBox -----------------------------------------------------------------
+// Only for an EMPTY hand: every box rerolls a held item (Game::enterBox), so a
+// detour while holding one would only throw it away.
+static bool seekBox(const Car& car, Game& game, double lane, double reach, double& out) {
+  double L = game.length();
+  int row = -1;
+  double rowDs = INF;
+  for (const BoxRt& b : game.boxes()) {
+    double ds = wrap_delta(b.s - car.totalS, L);
+    if (ds > 0 && ds <= SEEK_FAR && ds < rowDs) { rowDs = ds; row = b.row; }
+  }
+  if (row < 0) return false;
+  double eta = rowDs / js_max(car.v, 1.0);
+  // A box a car between us and the row is lined up on will be gone when we arrive.
+  auto claimed = [&](const BoxRt& b) {
+    for (const auto& o : game.cars()) {
+      if (o.get() == &car) continue;
+      double ods = wrap_delta(b.s - o->totalS, L);
+      if (ods > 0 && ods < rowDs && std::fabs(o->lat - b.lat) < b.radius) return true;
+    }
+    return false;
+  };
+  double best = INF;
+  for (const BoxRt& b : game.boxes()) {
+    if (b.row != row || b.cooldown > eta || claimed(b)) continue;
+    double d = std::fabs(b.lat - lane);
+    if (d < b.radius * SEEK_ON_LINE) return false;
+    if (d < best) { best = d; out = b.lat; }
+  }
+  return best <= reach;
+}
+
 // ---- AiController ------------------------------------------------------------
 AiController::AiController(double caution, double lookahead, double gain, double laneBias, uint32_t seed,
                            double skill)
@@ -327,6 +365,11 @@ Input AiController::drive(Car& car, Centerline& centerline, Game& game) {
     }
   }
   double look = lookahead_;
+  double seekLane;
+  if (car.item.empty() && mistakeT_ == 0 && seekBox(car, game, lane, SEEK_REACH * skill_, seekLane)) {
+    lane = seekLane;
+    look = EVADE_LOOK;
+  }
   Dodge dodge = avoidThreat(car, laneFor, game, maxLat, dodgeSet_, dodgeLane_);
   dodgeSet_ = dodge.has; dodgeLane_ = dodge.lane;
   if (dodge.has) { lane = dodge.lane; look = EVADE_LOOK; }

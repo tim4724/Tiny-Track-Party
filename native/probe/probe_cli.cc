@@ -22,7 +22,8 @@
 //
 //   probe_cli laptime            per-track lap time, one benchmark car
 //   probe_cli matrix             car x track steady-state lap matrix + summary
-//   probe_cli packed             all four cars together, every grid rotation
+//   probe_cli packed             all four cars together, every grid rotation; also how
+//                                often an empty-handed car leaves a box row holding an item
 //   probe_cli cost               CPU cost of a sim frame (see runCost)
 //   probe_cli <mode> --track=ID  restrict to one track (quick iteration)
 //   probe_cli <mode> --seed=N    item-roll RNG seed (default 1)
@@ -285,7 +286,7 @@ int runPacked(const std::string& only, uint32_t seed, bool noBrake) {
   std::vector<int> points(N, 0), wins(N, 0);
   std::vector<double> timeSum(N, 0.0);
   std::vector<int> finishes(N, 0);
-  int races = 0;
+  int races = 0, emptyRows = 0, emptyGot = 0;
 
   for (const std::string& id : trackIds(only)) {
     for (size_t rot = 0; rot < N; rot++) {
@@ -311,6 +312,11 @@ int runPacked(const std::string& only, uint32_t seed, bool noBrake) {
                                                      AI_PERSONALITIES[slot].laneBias, DEFAULT_AI_SEED, g_skill));
       }
 
+      std::vector<double> rowS;
+      for (const BoxRt& b : game.boxes())
+        if (std::find(rowS.begin(), rowS.end(), b.s) == rowS.end()) rowS.push_back(b.s);
+      const double L = game.length();
+      std::vector<int> pending(game.cars().size(), -1);
       double t = 0;
       while (!game.raceOver() && t < MAX_S) {
         for (size_t slot = 0; slot < N; slot++) {
@@ -318,7 +324,27 @@ int runPacked(const std::string& only, uint32_t seed, bool noBrake) {
           if (noBrake) driveBotNoBrake(game, slot, *ais[slot], &out);
           else game.driveBot(Id::Num((double)slot), *ais[slot], &out);
         }
+        std::vector<double> prevS;
+        std::vector<bool> wasEmpty;
+        for (const auto& c : game.cars()) { prevS.push_back(c->totalS); wasEmpty.push_back(c->item.empty()); }
         game.update(DT_MS);
+        // An EMPTY-handed approach to a box row (2 m short of it), and whether the
+        // car leaves it (2 m past) holding one. A box is taken before its centre,
+        // so the centre itself is too late to ask "was the hand empty".
+        auto crossed = [&](size_t i, double at) {
+          return std::floor((prevS[i] - at) / L) != std::floor((game.cars()[i]->totalS - at) / L);
+        };
+        for (size_t i = 0; i < game.cars().size(); i++) {
+          const Car& c = *game.cars()[i];
+          for (size_t r = 0; r < rowS.size(); r++) {
+            if (crossed(i, rowS[r] - 2) && wasEmpty[i] && !c.finished) pending[i] = (int)r;
+            if (pending[i] == (int)r && crossed(i, rowS[r] + 2)) {
+              emptyRows++;
+              if (!c.item.empty()) emptyGot++;
+              pending[i] = -1;
+            }
+          }
+        }
         t += DT_MS / 1000.0;
       }
 
@@ -345,7 +371,9 @@ int runPacked(const std::string& only, uint32_t seed, bool noBrake) {
     }
   }
 
-  std::printf("packed races: %d (all %zu cars, every grid rotation, collisions+items on)\n", races, N);
+  std::printf("packed races: %d (all %zu cars, every grid rotation, collisions+items on), "
+              "empty-handed rows hit %d/%d\n",
+              races, N, emptyGot, emptyRows);
   std::printf("%s%s%s%s%s\n", padEnd("car", 10).c_str(), padStart("points", 8).c_str(),
               padStart("wins", 6).c_str(), padStart("finished", 10).c_str(),
               padStart("avgTime", 10).c_str());
