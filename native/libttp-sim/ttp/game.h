@@ -246,7 +246,6 @@ class Game {
   void rank();
 
   double curbLimit(double width) const;
-  double colYaw(const Car& c) const;
   struct FP { double side, restSide; };
   FP footprint(const Car& c) const;
   void cacheColFrame(Car& c, const Frame& f);
@@ -265,6 +264,7 @@ class Game {
   void useItemImpl(Car& c);
   bool enterBanana(Car& c);
   void collidePole(Car& c, const PoleRt& p);
+  void monsterHit(const Car& m, Car& v);
   void collidePair(Car& a, Car& b);
   // A contact normal in WORLD units, plus how deep the pair is along it.
   struct Hit { bool hit; Vec3 n; double pen; };

@@ -343,6 +343,44 @@ int main() {
                           + std::to_string(lost) + " m/s under full brake in 0.2 s)");
   }
 
+  // ---- 5. a monster hit is ONE jolt -----------------------------------------
+  //
+  // A monster truck rear-ending a car spins it out and knocks it aside. What it
+  // must not do is a string of bumps: the victim shoved ahead, caught, shoved
+  // again. That chatter read as jerky. Nothing but contact speeds up a spinning
+  // car, and a plough adds a little each frame, so a frame in which the victim
+  // gains more than that is a hit. From dead behind and from either side.
+  // Exactly one: the hit that spins the victim out, then the knock clears it.
+  {
+    const double JOLT = 0.3;          // m/s in one frame; a plough adds ~0.1
+    BuiltRaceTrack bt = track("tidepool");
+    for (double off : {0.0, 0.25, -0.25}) {
+      Game game(field(2), bt.game, [](const Event&) {});
+      Car& lead = *game.cars()[0];
+      Car& mon = *game.cars()[1];
+      lead.finished = true; mon.finished = true;
+      lead.totalS = 30.0; lead.lat = 0;  lead.v = 6.0;  lead.heading = 0;
+      mon.totalS = 28.6;  mon.lat = off; mon.v = 11.0;  mon.heading = 0;
+      mon.monsterT = 6.0;
+      int hits = 0, ploughed = 0;
+      double prev = lead.v;
+      for (int f = 0; f < 180; f++) {
+        game.update(DT);
+        if (lead.v > prev + JOLT) hits++;
+        if (lead.spinT > 0 && lead.v > prev) ploughed++;
+        prev = lead.v;
+      }
+      check(hits == 1, "a monster rear-end lands ONE jolt, not a string of bumps (offset "
+                           + std::to_string(off) + ": " + std::to_string(hits) + " jolts)");
+      // Without the knock the victim rides the truck's nose for 17-27 frames.
+      check(ploughed < 10, "the knock clears the victim off the monster's nose (offset "
+                               + std::to_string(off) + ": ploughed " + std::to_string(ploughed)
+                               + " frames)");
+      std::printf("  monster rear-end, offset %+.2f: %d jolts, ploughed %d frames\n",
+                  off, hits, ploughed);
+    }
+  }
+
   std::printf("contact check: %d assertions, %d failures\n", checks, failures);
   return failures ? 1 : 0;
 }

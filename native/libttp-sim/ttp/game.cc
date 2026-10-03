@@ -103,6 +103,11 @@ static const double MONSTER_DUR_MAX = 8.0;
 static const double MONSTER_MASS_MUL = 8.0;
 static const double MONSTER_VMAX_MUL = 1.25;
 static const double MONSTER_FOOTPRINT_MUL = 1.3;
+// A monster bats the car it spins out ASIDE, off its own line, so a victim
+// shedding speed in its spin is not caught and shoved again. vlat decays at
+// KNOCK_DAMP, so this carries the victim MONSTER_KNOCK / KNOCK_DAMP = 1 m
+// sideways.
+static const double MONSTER_KNOCK = 6.0;
 static const double PI = 3.141592653589793;
 static const double INF = std::numeric_limits<double>::infinity();
 
@@ -352,14 +357,12 @@ long Game::stageRocket(double s, double lat, double v, Id owner) {
 double Game::curbLimit(double width) const {
   return (!std::isnan(width)) ? js_max(0.1, width / 2 - LAT_MARGIN) : maxLat_;
 }
-double Game::colYaw(const Car& c) const { return c.heading + c.spin; }
 double Game::footprintMul(const Car& c) const { return c.monsterT > 0 ? MONSTER_FOOTPRINT_MUL : 1; }
 
 Game::FP Game::footprint(const Car& c) const {
   double fp = footprintMul(c);
   double hl = c.halfLen * fp, hw = c.halfWid * fp;
-  double yaw = colYaw(c);
-  double ch = std::fabs(dmath::cos(yaw)), sh = std::fabs(dmath::sin(yaw));
+  double ch = std::fabs(dmath::cos(c.heading)), sh = std::fabs(dmath::sin(c.heading));
   return {hl * sh + hw * ch, hw};
 }
 
@@ -640,7 +643,11 @@ void Game::cacheColFrame(Car& c, const Frame& f) {
   c.colTan = f.tangent;
   c.colLat = f.lateral;
   c.colS = c.totalS;
-  c.colFwd = f.tangent.clone().applyAxisAngle(f.up, colYaw(c));
+  // The body follows the HEADING, never the spin: a spin-out is drawn, not
+  // driven (the car still travels along its heading), and a rectangle turning
+  // with it would pulse its reach by a quarter metre, shoving anything in
+  // contact four times a second.
+  c.colFwd = f.tangent.clone().applyAxisAngle(f.up, c.heading);
   c.colRight = c.colFwd.clone().cross(f.up);
   // Curvature IN THE ROAD PLANE — the only component that stretches a lateral
   // offset. d(lateral)/ds . tangent is -k by construction; a loop's vertical
@@ -708,6 +715,15 @@ void Game::applyWorldImpulse(Car& c, const Vec3& imp) {
   applyImpulse(c, imp.dot(c.colTan), imp.dot(c.colLat));
 }
 
+// Spin the victim out and knock it off the monster's line: away from the side
+// the monster is on, or toward the road's middle when they are dead in line.
+void Game::monsterHit(const Car& m, Car& v) {
+  spinOut(v, "monster");
+  double side = v.lat - m.lat;
+  if (side == 0) side = -v.lat;
+  v.vlat += side < 0 ? -MONSTER_KNOCK : MONSTER_KNOCK;
+}
+
 void Game::collidePair(Car& a, Car& b) {
   // Broadphase in world metres: one subtraction and a length, no trigonometry.
   // Each car contributes its own longer half-extent, and the sum is doubled —
@@ -720,11 +736,12 @@ void Game::collidePair(Car& a, Car& b) {
   Hit hit = satRects(a, b);
   if (!hit.hit) return;
 
-  if (a.monsterT > 0 && b.monsterT <= 0 && b.spinT <= 0) spinOut(b, "monster");
-  if (b.monsterT > 0 && a.monsterT <= 0 && a.spinT <= 0) spinOut(a, "monster");
+  bool aMon = a.monsterT > 0, bMon = b.monsterT > 0;
+  if (aMon && !bMon && b.spinT <= 0) monsterHit(a, b);
+  if (bMon && !aMon && a.spinT <= 0) monsterHit(b, a);
 
-  double massA = a.monsterT > 0 ? a.mass * MONSTER_MASS_MUL : a.mass;
-  double massB = b.monsterT > 0 ? b.mass * MONSTER_MASS_MUL : b.mass;
+  double massA = aMon ? a.mass * MONSTER_MASS_MUL : a.mass;
+  double massB = bMon ? b.mass * MONSTER_MASS_MUL : b.mass;
   double invA = 1 / massA, invB = 1 / massB, invSum = invA + invB;
   double aShare = invA / invSum;
   double bShare = invB / invSum;
@@ -745,7 +762,9 @@ void Game::collidePair(Car& a, Car& b) {
   double vrel = vb.sub(va).dot(hit.n);
   if (vrel < 0) {
     // Dead below RESTITUTION_MIN_CLOSE: queueing traffic must hold contact.
-    double e = -vrel >= RESTITUTION_MIN_CLOSE ? RESTITUTION : 0.0;
+    // A monster never bounces off a car: it ploughs, and the knock clears the
+    // victim. Two monsters bounce like any pair.
+    double e = (aMon == bMon && -vrel >= RESTITUTION_MIN_CLOSE) ? RESTITUTION : 0.0;
     double j = -(1 + e) * vrel / invSum;
     double va0 = a.v, vb0 = b.v;
     applyWorldImpulse(a, hit.n.clone().multiplyScalar(-j * invA));
