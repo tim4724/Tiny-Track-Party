@@ -22,13 +22,16 @@
 //
 //   probe_cli laptime            per-track lap time, one benchmark car
 //   probe_cli matrix             car x track steady-state lap matrix + summary
-//   probe_cli packed             all four cars together, every grid rotation
+//   probe_cli packed             all four cars together, every grid rotation; also how
+//                                often an empty-handed car leaves a box row holding an item
 //   probe_cli cost               CPU cost of a sim frame (see runCost)
 //   probe_cli <mode> --track=ID  restrict to one track (quick iteration)
 //   probe_cli <mode> --seed=N    item-roll RNG seed (default 1)
 //   probe_cli <mode> --nobrake   force b=0: humans hold flat-out, so this is the
 //                                pace/balance the couch actually sees
 //   probe_cli laptime --json     one JSON object per track (probe-difficulty.mjs)
+//   probe_cli <mode> --skill=X   bot skill 0..1 (AI_TIER_SKILL; default 1, the full bot)
+//   probe_cli laptime --item=ID  every box rolls ID: what each item is worth to a solo lap
 //
 // Determinism: fixed 60 Hz step, AI personas taken from AiDriver.js's
 // AI_PERSONALITIES, and the same seeds the JS probes used (the JS AiController
@@ -68,6 +71,9 @@ constexpr double DT_MS = 1000.0 / 60.0;
 using ttp::AI_PERSONALITIES;
 // The JS AiController's default seed when a persona carries none.
 constexpr uint32_t DEFAULT_AI_SEED = 1;
+// --skill: every bot this run drives. 1 = the full bot.
+double g_skill = 1.0;
+std::string g_item;  // --item=: every box rolls this (Game forceItem), "" = the roll table
 
 std::string mmss(double secs) {
   const int m = (int)std::floor(secs / 60.0);
@@ -127,8 +133,9 @@ std::vector<double> soloLaps(const std::string& trackId, int laps, bool hasStats
     st.mass = cs.mass; st.halfLen = cs.halfLen; st.halfWid = cs.halfWid;
   }
   std::vector<PlayerDesc> players{PlayerDesc{Id::Num(0), hasStats, st}};
-  Game game(players, bt.game, [](const Event&) {});
-  AiController ai(AI_PERSONALITIES[0].caution, LOOKAHEAD, STEER_GAIN, AI_PERSONALITIES[0].laneBias, DEFAULT_AI_SEED);
+  Game game(players, bt.game, [](const Event&) {}, g_item);
+  AiController ai(AI_PERSONALITIES[0].caution, LOOKAHEAD, STEER_GAIN, AI_PERSONALITIES[0].laneBias, DEFAULT_AI_SEED,
+                  g_skill);
 
   double t = 0, sum = 0;
   int lastLap = 0;
@@ -281,7 +288,7 @@ int runPacked(const std::string& only, uint32_t seed, bool noBrake) {
   std::vector<int> points(N, 0), wins(N, 0);
   std::vector<double> timeSum(N, 0.0);
   std::vector<int> finishes(N, 0);
-  int races = 0;
+  int races = 0, emptyRows = 0, emptyGot = 0;
 
   for (const std::string& id : trackIds(only)) {
     for (size_t rot = 0; rot < N; rot++) {
@@ -304,9 +311,14 @@ int runPacked(const std::string& only, uint32_t seed, bool noBrake) {
       std::vector<std::unique_ptr<AiController>> ais;
       for (size_t slot = 0; slot < N; slot++) {
         ais.push_back(std::make_unique<AiController>(AI_PERSONALITIES[slot].caution, LOOKAHEAD, STEER_GAIN,
-                                                     AI_PERSONALITIES[slot].laneBias, DEFAULT_AI_SEED));
+                                                     AI_PERSONALITIES[slot].laneBias, DEFAULT_AI_SEED, g_skill));
       }
 
+      std::vector<double> rowS;
+      for (const BoxRt& b : game.boxes())
+        if (std::find(rowS.begin(), rowS.end(), b.s) == rowS.end()) rowS.push_back(b.s);
+      const double L = game.length();
+      std::vector<int> pending(game.cars().size(), -1);
       double t = 0;
       while (!game.raceOver() && t < MAX_S) {
         for (size_t slot = 0; slot < N; slot++) {
@@ -314,7 +326,27 @@ int runPacked(const std::string& only, uint32_t seed, bool noBrake) {
           if (noBrake) driveBotNoBrake(game, slot, *ais[slot], &out);
           else game.driveBot(Id::Num((double)slot), *ais[slot], &out);
         }
+        std::vector<double> prevS;
+        std::vector<bool> wasEmpty;
+        for (const auto& c : game.cars()) { prevS.push_back(c->totalS); wasEmpty.push_back(c->item.empty()); }
         game.update(DT_MS);
+        // An EMPTY-handed approach to a box row (2 m short of it), and whether the
+        // car leaves it (2 m past) holding one. A box is taken before its centre,
+        // so the centre itself is too late to ask "was the hand empty".
+        auto crossed = [&](size_t i, double at) {
+          return std::floor((prevS[i] - at) / L) != std::floor((game.cars()[i]->totalS - at) / L);
+        };
+        for (size_t i = 0; i < game.cars().size(); i++) {
+          const Car& c = *game.cars()[i];
+          for (size_t r = 0; r < rowS.size(); r++) {
+            if (crossed(i, rowS[r] - 2) && wasEmpty[i] && !c.finished) pending[i] = (int)r;
+            if (pending[i] == (int)r && crossed(i, rowS[r] + 2)) {
+              emptyRows++;
+              if (!c.item.empty()) emptyGot++;
+              pending[i] = -1;
+            }
+          }
+        }
         t += DT_MS / 1000.0;
       }
 
@@ -341,7 +373,9 @@ int runPacked(const std::string& only, uint32_t seed, bool noBrake) {
     }
   }
 
-  std::printf("packed races: %d (all %zu cars, every grid rotation, collisions+items on)\n", races, N);
+  std::printf("packed races: %d (all %zu cars, every grid rotation, collisions+items on), "
+              "empty-handed rows hit %d/%d\n",
+              races, N, emptyGot, emptyRows);
   std::printf("%s%s%s%s%s\n", padEnd("car", 10).c_str(), padStart("points", 8).c_str(),
               padStart("wins", 6).c_str(), padStart("finished", 10).c_str(),
               padStart("avgTime", 10).c_str());
@@ -450,6 +484,8 @@ int main(int argc, char** argv) {
     else if (a.compare(0, 7, "--seed=") == 0) seed = (uint32_t)std::strtoul(a.substr(7).c_str(), nullptr, 10);
     else if (a == "--json") json = true;
     else if (a == "--nobrake") noBrake = true;
+    else if (a.compare(0, 8, "--skill=") == 0) g_skill = std::strtod(a.substr(8).c_str(), nullptr);
+    else if (a.compare(0, 7, "--item=") == 0) g_item = a.substr(7);
     else if (a.compare(0, 7, "--cars=") == 0) cars = (int)std::strtol(a.substr(7).c_str(), nullptr, 10);
     else if (a.compare(0, 2, "--") == 0) { std::fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }
     else if (mode.empty()) mode = a;
@@ -461,6 +497,6 @@ int main(int argc, char** argv) {
   if (mode == "cost") return runCost(only, seed, cars);
   std::fprintf(stderr,
                "usage: probe_cli <laptime|matrix|packed|cost> [--track=ID] [--seed=N] "
-               "[--cars=N] [--nobrake] [--json]\n");
+               "[--cars=N] [--skill=X] [--item=ID] [--nobrake] [--json]\n");
   return 2;
 }

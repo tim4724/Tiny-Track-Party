@@ -32,7 +32,7 @@ import { dismissDeviceChoice, startWhenDeviceChosen } from './deviceChoice.js';
 // field may freeze — is ITS answer; this file renders and decides nothing.
 //
 // THE CATALOGUE COMES OUT OF IT TOO. shared/tracks.js is not imported here: the
-// cups, their display names, every track name and the cup-difficulty tendency
+// cups, their display names, every track name and the cup difficulties
 // are codegen'd into the wasm (generated/track_defs.h), so this page asks for
 // them rather than bundling a copy — which is also what stops a second shell
 // from having to carry one. What still comes from a JS module is DEV_TRACKS,

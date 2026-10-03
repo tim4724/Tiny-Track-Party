@@ -94,8 +94,8 @@ function ui_() {
     };
     const { CUPS, TRACK_LIST } = await load('public/shared/tracks.js');
     const protocol = require('../public/shared/protocol.js');
-    // NO CATALOGUE IS PASSED, on purpose. The cups, the names and the tendency
-    // rule are codegen'd into this artifact, so the two field sizes are the
+    // NO CATALOGUE IS PASSED, on purpose. The cups, the names and the difficulties
+    // are codegen'd into this artifact, so the two field sizes are the
     // whole of what a shell owes it. What tracks.js is still used for here is
     // the OPPOSITE direction — checking that what came out matches what was
     // authored (see the first test below).
@@ -241,9 +241,7 @@ const mix = (hex, pct) => {
 // the display half was codegen'd this could not drift — the browser sent the
 // catalogue in — so the check is the price of the shell no longer carrying it.
 //
-// It compares the answer to the JS the codegen read, including cupTendency,
-// which is a RULE (a rounded mean, or the cup's own override) rather than data.
-// tracks.js still spells it in JS; a shell no longer has to.
+// It compares the answer to the JS the codegen read, each cup's difficulty included.
 test('the shipped catalogue in the wasm is the one shared/tracks.js authors', async () => {
   const u = await ui_();
   const { CUPS, TRACK_LIST } = await load('public/shared/tracks.js');
@@ -268,7 +266,7 @@ test('the shipped catalogue in the wasm is the one shared/tracks.js authors', as
   assert.ok(!('tour' in got), 'the tour earns no badge — stars are the cups\' reward arc');
   assert.deepEqual(got.catalog, TRACK_LIST.map((t) => ({
     id: t.id, name: t.name, cup: t.cup, cupDifficulty: t.cupDifficulty
-  })), 'every track name, its cup and its cup TENDENCY come out as authored');
+  })), 'every track name, its cup and its cup difficulty come out as authored');
 
   // The order is load-bearing: this list is what a picker draws.
   assert.deepEqual(got.catalog.map((t) => t.id), CUPS.flatMap((c) => c.tracks),

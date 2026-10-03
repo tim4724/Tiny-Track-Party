@@ -662,20 +662,6 @@ double intermissionSecs(double deadlineMs, double nowMs) {
 // it is catalogue-agnostic and stays that way — these functions PRODUCE the
 // lists the rest of the layer is handed, they are not consulted by it.
 
-int cupTendency(const CupDef& cup) {
-  if (cup.difficulty != 0) return cup.difficulty;
-  if (cup.nTracks <= 0) return 2;  // an empty cup cannot have a mean
-  double sum = 0;
-  for (int i = 0; i < cup.nTracks; i++) {
-    const TrackDef* t = find_track_def(cup.tracks[i]);
-    // A cup naming a track the catalogue does not hold cannot happen — the
-    // codegen resolves both from one file — but the JS read it as the same
-    // middling 2 an unlabelled track got, so this does too.
-    sum += t ? (double) t->difficulty : 2.0;
-  }
-  return (int) std::lround(sum / (double) cup.nTracks);
-}
-
 std::vector<Cup> shippedCups() {
   std::vector<Cup> out;
   out.reserve((size_t) TTP_CUP_COUNT);
@@ -724,15 +710,22 @@ uint32_t cupTintRgb(const OptStr& cupId, double pct) {
 
 uint32_t neutralTintRgb(double pct) { return towardWhite(TTP_CUP_NEUTRAL_COLOR, pct); }
 
+int shippedCupDifficulty(const std::string& trackId) {
+  for (int i = 0; i < TTP_CUP_COUNT; i++)
+    for (int t = 0; t < TTP_CUPS[i].nTracks; t++)
+      if (trackId == TTP_CUPS[i].tracks[t]) return TTP_CUPS[i].difficulty;
+  return 0;
+}
+
 std::vector<CatalogEntry> shippedCatalog() {
   // CUPS order, flattened — the catalogue's own arrangement, which every picker
   // draws and which ttp_ui.h's contract requires. Walking the cups rather than
-  // TTP_TRACKS is what makes that true by construction, and it is also what leaves the dev-only tracks
-  // out: they belong to no cup, so they cannot appear in a player-visible list.
+  // TTP_TRACKS is what makes that true by construction, and it is also what
+  // leaves the dev-only tracks out: they belong to no cup, so they cannot
+  // appear in a player-visible list.
   std::vector<CatalogEntry> out;
   for (int i = 0; i < TTP_CUP_COUNT; i++) {
     const CupDef& c = TTP_CUPS[i];
-    const int tendency = cupTendency(c);
     for (int t = 0; t < c.nTracks; t++) {
       const TrackDef* def = find_track_def(c.tracks[t]);
       if (!def) continue;
@@ -740,7 +733,7 @@ std::vector<CatalogEntry> shippedCatalog() {
       e.id = def->id;
       e.name = def->name;
       e.cup = OptStr::Of(c.id);
-      e.cupDifficulty = OptNum::Of((double) tendency);
+      e.cupDifficulty = OptNum::Of((double) c.difficulty);
       out.push_back(std::move(e));
     }
   }

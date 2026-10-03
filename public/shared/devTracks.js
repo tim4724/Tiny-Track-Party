@@ -17,7 +17,7 @@ export const DEV_TRACKS = {
   // 8+8+8+4; toy-loop drift +3 shifts the south exit one way in plan — the west
   // leg absorbs it (12 + 3 = 15, gap-verified below 0.5).
   gate0: {
-    name: 'Gate 0', difficulty: 'Dev',
+    name: 'Gate 0',
     segments: [
       { kind: 'straight', length: 28 },                                  // grid straight
       { kind: 'arc', radius: 4.185, angle: -90 },                        // NE: the plain curve
@@ -81,7 +81,7 @@ export const DEV_TRACKS = {
   // rung must keep all three of those true; check it with the gap the builder
   // reports rather than by eye.
   warp: {
-    name: 'Warp Ladder', difficulty: 'Dev',
+    name: 'Warp Ladder',
     segments: [
       // ── N leg: FLAT CONTROL. The shadow must be perfect for all of it, and
       // this is the leg you come back to when a rung looks wrong.
@@ -130,7 +130,7 @@ export const DEV_TRACKS = {
     ]
   },
   gym: {
-    name: 'Gym', difficulty: 'Easy',
+    name: 'Gym',
     waypoints: [
       // main straight (collinear points stay straight under the centripetal spline)
       { x: 0, z: 0 }, { x: 8, z: 0 }, { x: 16, z: 0 }, { x: 24, z: 0 }, { x: 32, z: 0 },
@@ -183,7 +183,7 @@ export const DEV_TRACKS = {
   // landmarks, clutter and fliers into whichever biome the gallery is showing,
   // so one lap of this oval is the whole kit rather than one cup's corner of it.
   showroom: {
-    name: 'Showroom', difficulty: 'Dev',
+    name: 'Showroom',
     waypoints: [
       // exhibition straight — 80 authored units (160 world) of landmark frontage
       { x: 0, z: 0 }, { x: 20, z: 0 }, { x: 40, z: 0 }, { x: 60, z: 0 }, { x: 80, z: 0 },

@@ -39,11 +39,11 @@ Deliberately NOT in it: DOM/CSS, fades, canvas sizing, rAF, fullscreen, QR
 painting, and the back-stack TRAVERSAL — the table crossed, the walk did not.
 
 **The catalogue is not an argument.** With no explicit lists, `ttp_ui_configure`
-installs the world this build ships, read from the codegen'd track header; the
-difficulty tendency was a rule every shell had to re-implement. Passing lists
-still OVERRIDES, which is what the corpus's synthetic world rides and why the
-layer stays catalogue-agnostic. `tests/ui-model.test.js` is the drift gate, being
-the only place that sees both the authored JS and the wasm.
+installs the world this build ships, read from the codegen'd track header, so no
+shell carries its own copy of the cups. Passing lists still OVERRIDES, which is
+what the corpus's synthetic world rides and why the layer stays
+catalogue-agnostic. `tests/ui-model.test.js` is the drift gate, being the only
+place that sees both the authored JS and the wasm.
 
 A held item crosses as a **CODE**, pinned to the browser's mirror by
 `tests/display-abi.test.js` — nothing else can see both lists at once.
@@ -121,6 +121,14 @@ supplies them.
 The persona table is single-sourced from libttp-sim and configured straight back.
 It used to be a hand-synced JS copy held together by a "keep in sync" comment —
 the exact drift root rule 1 exists to stop.
+
+**Bot skill follows the cup.** The CPU fill races at `ttp::aiSkillForTier` of
+the track's cup difficulty (authored per cup in `tracks.js`): `ttp_race.cc`
+resolves it per launch into `FieldWorld::botSkill`, so this layer stays
+catalogue-agnostic. Skill is
+behaviour (line, wobble, kerb mistakes), never top speed: bots stay flat-out.
+The bot spec carries `skill` only below 1, so full-skill launches and every
+recording keep their shape.
 
 Deliberately did NOT cross: the lobby demo and the performing itself. The
 host's mode pick and the shuffle bag crossed into the net walks

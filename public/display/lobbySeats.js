@@ -166,7 +166,8 @@ export function renderCupSlot(slotEl, state) {
 // The card's CONTENT is uiModel.cupSlot's — which name, how many races, which
 // circuits to draw as minis and how they're numbered (an undrawn race is a
 // trackId-less chip). It hands back keys plus data (never composed copy), so
-// the few English strings and the schematic lookup are all that live here. `trackCatalog` supplies the baked mini-maps by id.
+// the few English strings and the schematic lookup are all that live here.
+// `trackCatalog` supplies the baked mini-maps by id.
 const RACES_COPY = { one: () => '1 race', endless: () => 'endless', count: (n) => `${n} races` };
 const NAME_COPY = { random: 'Random', tour: 'World Tour' };
 // `progress` is the snapshot's progress shape ({cups:[{id,stars,…}]}) or null —

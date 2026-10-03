@@ -70,7 +70,7 @@ const b = (x) => (x ? 1 : 0);
 
 // The two field sizes the seat grid needs, and NOTHING ELSE. The world every id
 // in this ABI resolves against — the cups, their names, the track names and the
-// cup-tendency rule — is codegen'd into the wasm from shared/tracks.js
+// cup difficulties — is codegen'd into the wasm from shared/tracks.js
 // (generated/track_defs.h), so this side no longer assembles ~2 KB of JSON out
 // of a catalogue it would otherwise have to carry.
 //

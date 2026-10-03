@@ -27,11 +27,32 @@ static const double WEAVE_EASE = 0.045;
 static const int WEAVE_HOLD_MIN = 35, WEAVE_HOLD_SPAN = 55;
 static const double WANDER_FADE = 0.5;
 static const double WANDER_CURB = 1.3;
+// The wobble of a weaker bot: the weave moves its TARGET LANE by up to this much
+// at skill 0. A steer offset alone is cancelled by the pursuit into a lane shift.
+static const double WOBBLE_LANE = 1.2;
+// The kerb mistake: every so often a weaker bot runs wide, aiming this far past
+// the road edge on the side it is already on for MISTAKE_FRAMES, so it reaches
+// the barrier and scrapes along it. A single touch costs almost nothing (the
+// wall bills its decel per frame of contact); the scrape is the cost. The gap
+// between mistakes is drawn from [MIN, MIN+SPAN) frames and divided by
+// (1 - skill), so skill 1 never makes one.
+//
+// The wobble alone is cosmetic: in a grip-free model steering barely costs pace.
+// The mistakes are what make a weaker bot beatable (probe_cli laptime --skill).
+static const double MISTAKE_OVERSHOOT = 0.6;
+static const int MISTAKE_FRAMES = 100;
+static const double MISTAKE_GAP_MIN = 300, MISTAKE_GAP_SPAN = 300;
 static const double EVADE_NEAR = -1.5;
 static const double EVADE_FAR = 13.0;
 static const double EVADE_CLEAR = 0.5;
-static const double EVADE_LOOK = 3.5;
+static const double EVADE_LOOK = 1.5;
 static const double BANANA_AVOID_R = 0.5;
+// Box seeking: an empty-handed bot looks SEEK_FAR ahead for the next box row and,
+// unless its line already crosses a box that will be live on arrival, steers for
+// the nearest one within SEEK_REACH * skill of its line.
+static const double SEEK_FAR = 20.0;
+static const double SEEK_REACH = 2.0;
+static const double SEEK_ON_LINE = 0.6;  // of the box radius: the line already takes it
 
 static const double RL_STEP = 1.25;
 static const int RL_ITERS = 800;
@@ -59,6 +80,17 @@ static const double BRAKE_DECEL_REF = 5.8;
 const Persona AI_PERSONALITIES[7] = {
     {"Bolt", 1.05, -0.6}, {"Pixel", 1.00, 0.6}, {"Rusty", 0.97, -0.25}, {"Zippy", 0.94, 0.25},
     {"Turbo", 1.02, 0.4}, {"Gizmo", 0.99, -0.4}, {"Scoot", 0.96, 0.1}};
+
+// Skill by cup difficulty, index tier-1 (Beach, Snow, Backyard/Canyon, Playroom).
+// Tuned with probe_cli laptime --skill so each cup's bots sit a set gap behind
+// the full bot: no cup races it, because the item and dodge fixes made the full
+// bot quicker than the field the cups were balanced against.
+static const double AI_TIER_SKILL[4] = {0.0, 0.3, 0.4, 0.6};
+
+double aiSkillForTier(int tier) {
+  if (tier < 1 || tier > 4) return 1.0;
+  return AI_TIER_SKILL[tier - 1];
+}
 
 // ---- RacingLine --------------------------------------------------------------
 RacingLine::RacingLine(Centerline& centerline) {
@@ -201,13 +233,17 @@ static double curvatureAt(Centerline& centerline, double s, double step) {
   return std::fabs(dmath::atan2(cross, dot)) / step;
 }
 
-double cornerBrake(const Car& car, Centerline& centerline, double turn, double caution, const RacingLine* line) {
+double cornerBrake(const Car& car, Centerline& centerline, double turn, double caution, const RacingLine* line,
+                   double lineUse) {
   double yaw = turn != 0 ? turn : (car.turn != 0 ? car.turn : TURN_RATE_FALLBACK);
   double margin = CORNER_MARGIN * caution * clampd(yaw / TURN_RATE_FALLBACK, 0.88, 1.0);
   double v = car.v;
   double brake = 0;
   for (double d = BRAKE_LOOK_NEAR; d <= BRAKE_LOOK_FAR; d += BRAKE_LOOK_STEP) {
     double k = line ? line->curvAt(car.totalS + d) : curvatureAt(centerline, car.totalS + d, 0.6);
+    // A bot driving only part of the line corners on part of its relief.
+    if (line && lineUse < 1)
+      k = lineUse * k + (1 - lineUse) * curvatureAt(centerline, car.totalS + d, 0.6);
     if (k <= 1e-3) continue;
     double vSafe = (margin * yaw) / k;
     if (v <= vSafe) continue;
@@ -233,7 +269,11 @@ static Dodge avoidThreat(const Car& car, LaneFor laneFor, Game& game, double max
   auto consider = [&](double hs, double hlat, double radius) {
     double ds = wrap_delta(hs - car.totalS, L);
     if (ds < EVADE_NEAR || ds > EVADE_FAR) return;
-    if (std::fabs(laneFor(hs) - hlat) > radius + EVADE_CLEAR) return;
+    // The car reaches the hazard somewhere between where it is and where its
+    // line is: pursuit cuts corners, so testing the line alone drove bots
+    // straight over oil and their own bananas from the lap before.
+    double plan = laneFor(hs), clear = radius + EVADE_CLEAR;
+    if (hlat < js_min(car.lat, plan) - clear || hlat > js_max(car.lat, plan) + clear) return;
     if (ds < bestDs) { bestDs = ds; best.has = true; best.lat = hlat; best.r = radius; }
   };
   for (const auto& h : game.hazards()) consider(h.s, h.lat, h.radius);
@@ -256,12 +296,46 @@ static Dodge avoidThreat(const Car& car, LaneFor laneFor, Game& game, double max
   return {true, best.lat >= 0 ? -m : m};
 }
 
+// ---- seekBox -----------------------------------------------------------------
+// Only for an EMPTY hand: every box rerolls a held item (Game::enterBox), so a
+// detour while holding one would only throw it away.
+static bool seekBox(const Car& car, Game& game, double lane, double reach, double& out) {
+  double L = game.length();
+  int row = -1;
+  double rowDs = INF;
+  for (const BoxRt& b : game.boxes()) {
+    double ds = wrap_delta(b.s - car.totalS, L);
+    if (ds > 0 && ds <= SEEK_FAR && ds < rowDs) { rowDs = ds; row = b.row; }
+  }
+  if (row < 0) return false;
+  double eta = rowDs / js_max(car.v, 1.0);
+  // A box a car between us and the row is lined up on will be gone when we arrive.
+  auto claimed = [&](const BoxRt& b) {
+    for (const auto& o : game.cars()) {
+      if (o.get() == &car) continue;
+      double ods = wrap_delta(b.s - o->totalS, L);
+      if (ods > 0 && ods < rowDs && std::fabs(o->lat - b.lat) < b.radius) return true;
+    }
+    return false;
+  };
+  double best = INF;
+  for (const BoxRt& b : game.boxes()) {
+    if (b.row != row || b.cooldown > eta || claimed(b)) continue;
+    double d = std::fabs(b.lat - lane);
+    if (d < b.radius * SEEK_ON_LINE) return false;
+    if (d < best) { best = d; out = b.lat; }
+  }
+  return best <= reach;
+}
+
 // ---- AiController ------------------------------------------------------------
-AiController::AiController(double caution, double lookahead, double gain, double laneBias, uint32_t seed)
+AiController::AiController(double caution, double lookahead, double gain, double laneBias, uint32_t seed,
+                           double skill)
     : caution_(clampd(caution, 0.5, 1.1)),
       lookahead_(lookahead),
       gain_(gain),
       laneBias_(laneBias),
+      skill_(clampd(skill, 0, 1)),
       rng_(seed ? seed : 1u) {}
 
 Input AiController::drive(Car& car, Centerline& centerline, Game& game) {
@@ -274,14 +348,33 @@ Input AiController::drive(Car& car, Centerline& centerline, Game& game) {
   double maxLat = game.maxLat();
   RacingLine& line = game.racingLine();
   auto laneFor = [&](double sAbs) -> double {
-    double e = line.laneAt(sAbs);
+    // A weaker bot uses less of the racing line: skill 0 drives the centerline.
+    double e = line.laneAt(sAbs) * skill_;
     double room = line.roomAt(sAbs);
     double fade = room > 0.05 ? clampd(1 - std::fabs(e) / room, 0, 1) : 1;
     double lim = js_min(js_max(room, FAN_MIN_ROOM), maxLat - 0.1);
     return clampd(e + laneBias_ * fade, -lim, lim);
   };
   double lane = laneFor(car.totalS + lookahead_);
+  if (skill_ < 1) {
+    double lim = maxLat - 0.1;
+    lane = clampd(lane + weave_ * WOBBLE_LANE * (1 - skill_), -lim, lim);
+    if (mistakeGap_ < 0) drawMistakeGap();
+    if (mistakeT_ > 0) {
+      mistakeT_--;
+      lane = mistakeSide_ * (maxLat + MISTAKE_OVERSHOOT);
+    } else if (--mistakeGap_ <= 0) {
+      mistakeT_ = MISTAKE_FRAMES;
+      mistakeSide_ = car.lat >= 0 ? 1 : -1;
+      drawMistakeGap();
+    }
+  }
   double look = lookahead_;
+  double seekLane = lane;
+  if (car.item.empty() && mistakeT_ == 0 && seekBox(car, game, lane, SEEK_REACH * skill_, seekLane)) {
+    lane = seekLane;
+    look = EVADE_LOOK;
+  }
   Dodge dodge = avoidThreat(car, laneFor, game, maxLat, dodgeSet_, dodgeLane_);
   dodgeSet_ = dodge.has; dodgeLane_ = dodge.lane;
   if (dodge.has) { lane = dodge.lane; look = EVADE_LOOK; }
@@ -292,7 +385,7 @@ Input AiController::drive(Car& car, Centerline& centerline, Game& game) {
     double curbRoom = clampd((maxLat - std::fabs(car.lat)) / WANDER_CURB, 0, 1);
     s = clampd(s + weave_ * STEER_WANDER * room * curbRoom, -1, 1);
   }
-  double corner = cornerBrake(car, centerline, 0, caution_, &line);
+  double corner = cornerBrake(car, centerline, 0, caution_, &line, skill_);
 
   const std::string& item = car.item;  // "" == null
   if (!item.empty() && item == lastItem_) {
@@ -312,10 +405,17 @@ Input AiController::drive(Car& car, Centerline& centerline, Game& game) {
   return out;
 }
 
+void AiController::drawMistakeGap() {
+  mistakeGap_ = (MISTAKE_GAP_MIN + rng_.next() * MISTAKE_GAP_SPAN) / (1 - skill_);
+}
+
 bool AiController::wantsToUse(const std::string& item, Car& car, Game& game, double corner) {
   bool overdue = heldFrames_ >= AI_HOLD_MAX;
   if (item == "boost") return corner < 0.05 || (overdue && corner < 0.2);
-  if (item == "banana") { double d = nearestBehind(car, game); return (d > 0 && d <= BANANA_DROP_FAR) || overdue; }
+  // A banana is only ever dropped on a car behind, never because it is overdue:
+  // with nobody close it lands on the bot's own line and spins it a lap later.
+  // Holding it costs nothing, since the next box rerolls it anyway.
+  if (item == "banana") { double d = nearestBehind(car, game); return d > 0 && d <= BANANA_DROP_FAR; }
   if (item == "rocket") { double d; return gapToCarAhead(car, game, d) && d <= ROCKET_FIRE_RANGE; }
   return true;
 }

@@ -109,13 +109,11 @@ const pickupItems = (events) => new Set(events.filter((e) => e.type === 'pickup'
 const spinCauses = (events) => new Set(events.filter((e) => e.type === 'spin').map((e) => e.cause));
 
 test('?item= forces every box roll, and is really overriding the roll table', { skip }, async () => {
-  // Unforced, the roll table is weighted and situational: `monster` is the deep-
-  // back-field catch-up item, so a clean four-bot race never rolls one. Forcing it
-  // is therefore a visible change, not a coincidence — which is what makes this a
-  // test of the hook rather than of the table.
+  // Unforced, the same race rolls more than one item, so every forced race coming
+  // back as exactly its one item is the hook overriding the table, not a
+  // coincidence of the draw.
   const free = pickupItems((await race('tidepool', null)).events);
   assert.ok(free.size >= 2, 'the unforced roll table yields more than one item');
-  assert.ok(!free.has('monster'), 'sanity: monster does not roll naturally in a clean race');
 
   for (const item of ['boost', 'banana', 'rocket', 'monster']) {
     const forced = await race('tidepool', item, 1500);

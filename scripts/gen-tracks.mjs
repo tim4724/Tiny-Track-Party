@@ -7,7 +7,7 @@
 //
 // Workflow for adding tracks:  node scripts/scan-seeds.mjs <profile> 1 400  →  pick seeds
 //   →  add them to SEEDS below  →  node scripts/gen-tracks.mjs  →  register the id in
-//   tracks.js (waypoints + furniture from GEN_TRACKS/GEN_FURNITURE, cup, difficulty)
+//   tracks.js (waypoints + furniture from GEN_TRACKS/GEN_FURNITURE, then a cup)
 //   →  node scripts/gen-track-schematics.js  →  preview at /?scenario=track&track=<id>
 import fs from 'fs';
 import os from 'os';

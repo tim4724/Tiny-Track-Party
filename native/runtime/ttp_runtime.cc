@@ -247,7 +247,7 @@ struct BotEntry {
   Id id;
   bool hasStats = false;
   Stats stats;
-  double caution = 1, laneBias = 0;
+  double caution = 1, laneBias = 0, skill = 1;
   uint32_t aiSeed = 0;
   std::unique_ptr<AiController> ai;  // built at start
   // The autopilot marker (ttp/race_flow.h, BotSpec::player). This bucket is
@@ -380,7 +380,7 @@ static const char* EMPTY_ARR = "[]";
 // identically either way.
 static void buildBots(RuntimeSession& rs) {
   for (auto& b : rs.bots)
-    b.ai = std::make_unique<AiController>(b.caution, LOOKAHEAD, STEER_GAIN, b.laneBias, b.aiSeed);
+    b.ai = std::make_unique<AiController>(b.caution, LOOKAHEAD, STEER_GAIN, b.laneBias, b.aiSeed, b.skill);
   if (!rs.bots.empty()) rs.eng->racingLine();
 }
 
@@ -1002,6 +1002,7 @@ int ttp_session_begin_field(const char* trackId, uint32_t seed, int laps,
         b.id = json::id_of<Id>(pid);
         b.caution = optNum(it->second, "caution", 1);
         b.laneBias = optNum(it->second, "laneBias", 0);
+        b.skill = optNum(it->second, "skill", 1);
         b.aiSeed = jsToUint32(optNum(it->second, "seed", 1));
         // THE THIRD BUCKET. `player` on a spec means this seat carries a
         // controller AND is still a participant, so it is filed under `humans`

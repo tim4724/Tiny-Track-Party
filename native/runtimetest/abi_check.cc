@@ -42,6 +42,7 @@
 
 #include <algorithm>
 
+#include "ttp/ai_driver.h"         // aiSkillForTier — the CPU skill a cup launches with
 #include "ttp/blobstore.h"
 #include <cmath>
 #include <cstdio>
@@ -55,16 +56,12 @@
 #include "ttp/canonical.h"
 #include "ttp/json_parse.h"
 #include "ttp/json_read.h"
-#include "ttp/race_track.h"       // find_track_def — the levels the tendency cases pick by
+#include "ttp/race_track.h"
 #include "ttp/race_track_json.h"
 #include "ttp/trackbuilder.h"
-// THREE library headers this ABI check reaches past its own boundary for, each
+// TWO library headers this ABI check reaches past its own boundary for, each
 // for its own reason.
 //
-// ttp::rt::ui::cupTendency has no export of its own — the only ABI path to it is
-// the shipped catalogue, which exposes five answers and none of the edges — and
-// it is a RULE, so it needs a gate on every leg. See uiCupTendency below.
-#include "ttp/ui_model.h"
 // Game::giveItem STAGES a held item for the ITEM-push gate. The C ABI exports
 // no item mutator on purpose (native/CLAUDE.md), and rolling a real box would
 // mean ticking the sim until a car happens to cross one — so the check reaches
@@ -86,6 +83,7 @@
 #include "ttp/race_flow.h"
 #include "ttp/room_flow.h"
 #include "ttp/session.h"
+#include "ttp/ui_model.h"
 #include "ttp_audio.h"
 #include "ttp_live.h"     // the shared live gathers the race + ui walks compose over
 #include "ttp_room.h"     // the room seam: the pick slot, the machine, the synced reads
@@ -2015,7 +2013,7 @@ void uiShippedCatalogue() {
   check(list && list->type == Value::ARR && !list->arr.empty(),
         "…and the shipped catalogue with them");
   if (cups && list && !cups->arr.empty() && !list->arr.empty()) {
-    // Every catalogue entry names a cup and carries that cup's tendency: the
+    // Every catalogue entry names a cup and carries that cup's difficulty: the
     // getter's whole job is that a shell never resolves either itself.
     size_t inCups = 0;
     for (const Value& c : cups->arr) {
@@ -2033,7 +2031,7 @@ void uiShippedCatalogue() {
         everyEntryResolved = false;
       }
     }
-    check(everyEntryResolved, "every entry carries a name, its cup and that cup's tendency");
+    check(everyEntryResolved, "every entry carries a name, its cup and that cup's difficulty");
   }
 
   // The override still overrides — and the getter still answers SHIPPED, so a
@@ -2117,52 +2115,6 @@ void uiProgression() {
   check(std::string(ttp_ui_progress_json()) == canonical_stringify(prog::serialize(rec)),
         "…and the record itself is untouched");
   ttp_ui_progress_load(nullptr, 0);   // leave a fresh couch for later cases
-}
-
-// cupTendency, the one RULE that came with the catalogue — and the reason it is
-// pinned here rather than left to tests/ui-model.test.js.
-//
-// That test compares the wasm's answer against shared/tracks.js and is the right
-// place for the DATA. But it runs in node against the shipped artifact, so it is
-// invisible to `npm run mutation-check`, whose contract is "break the engine and
-// require the matching CTEST to go red". Swap std::lround for std::trunc in
-// ui_model.cc and every one of the 47 ctests stays green today: only Playroom's
-// mean (3.75) is far enough from an integer to move, and no ctest looks at it.
-//
-// So the cases below are synthetic CUPS over real track ids, chosen for their
-// LEVELS rather than their names, and they pin the rounding at the tie — which
-// ui_model.h flags as the fragile part precisely because no shipped cup lands
-// there, so nothing would notice the day one did.
-void uiCupTendency() {
-  const auto levelOf = [](const char* id) {
-    const ttp::TrackDef* d = ttp::find_track_def(id);
-    return d ? d->difficulty : -1;
-  };
-  // Premise first: if these stop being the levels the ladder is built from, the
-  // cases below stop testing rounding and start testing nothing.
-  check(levelOf("tidepool") == 1 && levelOf("powder") == 2 && levelOf("wash") == 3 &&
-        levelOf("gauntlet") == 4,
-        "premise: the four difficulty levels are all present in the catalogue");
-
-  const char* two[] = { "powder", "wash" };            // 2, 3 -> mean 2.5
-  const char* twoLow[] = { "tidepool", "powder" };     // 1, 2 -> mean 1.5
-  const char* four[] = { "wash", "gauntlet", "gauntlet", "gauntlet" };  // 3.75
-  const ttp::CupDef tie{ "t", "Tie", two, 2, 0, 0 };
-  const ttp::CupDef tieLow{ "tl", "Tie Low", twoLow, 2, 0, 0 };
-  const ttp::CupDef high{ "h", "High", four, 4, 0, 0 };
-  check(ui::cupTendency(tie) == 3, "a mean of exactly 2.5 rounds UP, as Math.round does");
-  check(ui::cupTendency(tieLow) == 2, "…and 1.5 does too, so it is half-up and not half-even");
-  check(ui::cupTendency(high) == 4, "3.75 rounds to 4 — the case std::trunc would silently drop");
-
-  // The override wins outright, and is not averaged with anything.
-  const ttp::CupDef pinned{ "p", "Pinned", four, 4, 1, 0 };
-  check(ui::cupTendency(pinned) == 1, "an authored tendency is used verbatim");
-
-  // A cup with no tracks has no mean; JS `sum/0` was NaN and Math.round(NaN) is
-  // NaN, which the picker read as no meter. The C++ answers the middling 2
-  // rather than propagating a NaN through an int.
-  const ttp::CupDef empty{ "e", "Empty", nullptr, 0, 0, 0 };
-  check(ui::cupTendency(empty) == 2, "an empty cup falls back rather than dividing by zero");
 }
 
 void uiCorpusThroughAbi(const char* path) {
@@ -4379,6 +4331,14 @@ void raceLiveWalks() {
       bool ids = !bots.arr.empty();
       for (const Value& b : bots.arr) ids = ids && at(b, "peerIndex").type == Value::STR;
       check(ids, "a bot's id crosses as the STRING \"ai-0\", never a number");
+      // tidepool is a Beach Cup track, the easiest cup: its CPU field
+      // races at that tier's skill, resolved from the track by the launch.
+      bool beachSkill = !bots.arr.empty();
+      for (const Value& b : bots.arr) {
+        const Value* sk = b.find("skill");
+        beachSkill = beachSkill && sk && sk->type == Value::NUM && sk->num == ttp::aiSkillForTier(1);
+      }
+      check(beachSkill, "a Beach Cup race hands every CPU the tier-1 skill");
       check(at(*createSession, "forceItem").type == Value::NUL,
             "no ?item override crosses as null, not \"\"");
       check(json::str_field(*createSession, "trackId") == "tidepool",
@@ -5693,7 +5653,6 @@ int main(int argc, char** argv) {
   audioThroughAbi();
   uiShippedCatalogue();
   uiProgression();
-  uiCupTendency();
   uiCorpusThroughAbi(argv[3]);
   handlePathsMatchJsonPaths();
   uiLiveTwinsMatchJsonPaths();
