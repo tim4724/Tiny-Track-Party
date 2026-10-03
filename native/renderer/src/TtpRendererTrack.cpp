@@ -2054,7 +2054,8 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
                             255.0f * blur.coverage(cx, cy, ellipse));
                 }
             }
-            for (auto& m : mStreakMeshes) {
+            for (size_t si = 0; si < mStreakMeshes.size(); si++) {
+                Mesh& m = mStreakMeshes[si];
                 for (int j = 0; j <= NV; j++) {
                     for (int i2 = 0; i2 <= NU; i2++) {
                         const uint8_t a = alpha[j * (NU + 1) + i2];
@@ -2073,6 +2074,24 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
                     }
                 }
                 if (!buildMesh(m, true, mBlendMaterial->getDefaultInstance())) return false;
+                // Vulkan's ring (renderCars has the why). Slot 0 is the vb
+                // buildMesh just filled; every other slot gets its own buffer
+                // in the SAME layout and the same opening bytes. Position +
+                // colour (buffer 0) is the streak's only vertex buffer, so it
+                // is all a ring slot carries.
+                if (mCellRing > 1) {
+                    Streak& st = mStreaks[si];
+                    st.ringVbs.assign(1, m.vb);
+                    st.ringVerts.assign(mCellRing, m.verts);
+                    for (uint32_t k = 1; k < mCellRing; k++) {
+                        VertexBuffer* vb = buildVertexBuffer(
+                                (uint32_t) m.verts.size(), m.layout);
+                        vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
+                                st.ringVerts[k].data(),
+                                st.ringVerts[k].size() * sizeof(Vertex), nullptr));
+                        st.ringVbs.push_back(vb);
+                    }
+                }
                 auto& tcmS = mEngine->getTransformManager();
                 tcmS.setTransform(tcmS.getInstance(m.entity),
                         mat4f::translation(float3{ 0, -1000, 0 }));

@@ -940,7 +940,7 @@ void TtpRenderer::bakeRoadVis(const TrackBin& tb) {
 void TtpRenderer::applyRoadLight(const TrackBin& tb) {
     if (mRoad.custom0.empty() || !mRoad.vb) return;
     fillRoadLight(tb);
-    mRoad.vb->setBufferAt(*mEngine, mRoad.custom0Slot,
+    mRoad.vb->setBufferAt(*mEngine, mRoad.layout.customSlot(),
             VertexBuffer::BufferDescriptor(mRoad.custom0.data(),
                     mRoad.custom0.size() * sizeof(half4), nullptr));
 }

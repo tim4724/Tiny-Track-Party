@@ -127,8 +127,10 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
             // interleaved, with the boards pixel-identical either way.
             //
             // A View rendered every frame still stages its own uniforms (the
-            // last frame holds them); the cell Views reach the memcpy because
-            // they rotate as a ring (ensureCells).
+            // last frame holds them), and a vertex buffer written every frame
+            // its vertices; the cell Views and the boost streaks' buffers
+            // reach the memcpy because they rotate as rings (ensureCells,
+            // renderCars).
             //
             // Filament ships this OFF and calls it experimental. It is enabled
             // here as a MEASURED decision about one device family, not a
@@ -156,7 +158,8 @@ bool TtpRenderer::init(backend::Backend backend, void* nativeWindow,
     }
     if (!mEngine) return false;
     // The RESOLVED backend, not the one asked for: a DEFAULT request lands on
-    // Vulkan or GL by device, and only Vulkan rotates (ensureCells).
+    // Vulkan or GL by device, and only Vulkan rotates (ensureCells, and the
+    // streak buffers in renderCars).
     mCellRing = mEngine->getBackend() == Engine::Backend::VULKAN ? 3 : 1;
     // The driver's texture ceiling can sit UNDER the conservative default:
     // this box's GL driver reports 8192 while its Vulkan driver caps 2D
@@ -311,32 +314,10 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
     }
     const bool lit = !baked && !fold && !m.normals.empty() && mLitMaterial != nullptr;
     const bool uv = !m.uvs.empty();
-    const uint8_t uvSlot = lit ? 2 : 1;
-    const uint8_t customSlot = (uint8_t) (1 + (lit ? 1 : 0) + (uv ? 1 : 0));
-    VertexBuffer::Builder vbb;
-    vbb.vertexCount((uint32_t) m.verts.size())
-            .bufferCount((uint8_t)
-                    (1 + (lit ? 1 : 0) + (uv ? 1 : 0) + (baked ? 1 : 0)))
-            .attribute(VertexAttribute::POSITION, 0,
-                    VertexBuffer::AttributeType::FLOAT3, 0, sizeof(Vertex))
-            .attribute(VertexAttribute::COLOR, 0,
-                    VertexBuffer::AttributeType::UBYTE4, 12, sizeof(Vertex))
-            .normalized(VertexAttribute::COLOR);
-    if (uv) {
-        vbb.attribute(VertexAttribute::UV0, uvSlot,
-                VertexBuffer::AttributeType::FLOAT2, 0, sizeof(math::float2));
-    }
-    if (lit) {
-        // Lit shading needs the TANGENTS frame; derive qtangents from the
-        // builder-supplied normals (arbitrary tangent — no normal maps here).
-        vbb.attribute(VertexAttribute::TANGENTS, 1,
-                VertexBuffer::AttributeType::FLOAT4, 0, sizeof(math::quatf));
-    }
-    if (baked) {
-        vbb.attribute(VertexAttribute::CUSTOM0, customSlot,
-                VertexBuffer::AttributeType::HALF4, 0, sizeof(math::half4));
-    }
-    m.vb = vbb.build(*mEngine);
+    m.layout = Mesh::Layout{ lit, uv, baked };
+    const uint8_t uvSlot = m.layout.uvSlot();
+    const uint8_t customSlot = m.layout.customSlot();
+    m.vb = buildVertexBuffer((uint32_t) m.verts.size(), m.layout);
     m.vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
             m.verts.data(), m.verts.size() * sizeof(Vertex), nullptr));
     if (uv) {
@@ -346,7 +327,6 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
     }
     if (baked) {
         m.custom0.resize(m.verts.size(), math::half4{ 1.0f, 1.0f, 1.0f, 1.0f });
-        m.custom0Slot = customSlot;
         m.vb->setBufferAt(*mEngine, customSlot, VertexBuffer::BufferDescriptor(
                 m.custom0.data(), m.custom0.size() * sizeof(math::half4),
                 nullptr));
@@ -439,6 +419,33 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
     return true;
 }
 
+VertexBuffer* TtpRenderer::buildVertexBuffer(uint32_t vertexCount, const Mesh::Layout& l) {
+    VertexBuffer::Builder vbb;
+    vbb.vertexCount(vertexCount)
+            .bufferCount((uint8_t)
+                    (1 + (l.lit ? 1 : 0) + (l.uv ? 1 : 0) + (l.baked ? 1 : 0)))
+            .attribute(VertexAttribute::POSITION, 0,
+                    VertexBuffer::AttributeType::FLOAT3, 0, sizeof(Vertex))
+            .attribute(VertexAttribute::COLOR, 0,
+                    VertexBuffer::AttributeType::UBYTE4, 12, sizeof(Vertex))
+            .normalized(VertexAttribute::COLOR);
+    if (l.uv) {
+        vbb.attribute(VertexAttribute::UV0, l.uvSlot(),
+                VertexBuffer::AttributeType::FLOAT2, 0, sizeof(math::float2));
+    }
+    if (l.lit) {
+        // Lit shading needs the TANGENTS frame; buildMesh derives qtangents
+        // from the builder-supplied normals (arbitrary tangent — no normal maps).
+        vbb.attribute(VertexAttribute::TANGENTS, 1,
+                VertexBuffer::AttributeType::FLOAT4, 0, sizeof(math::quatf));
+    }
+    if (l.baked) {
+        vbb.attribute(VertexAttribute::CUSTOM0, l.customSlot(),
+                VertexBuffer::AttributeType::HALF4, 0, sizeof(math::half4));
+    }
+    return vbb.build(*mEngine);
+}
+
 void TtpRenderer::tileMajor(Mesh& m, float tile, uint32_t minTris) {
     m.tileStarts.clear();
     const size_t triCount = m.idx.size() / 3;
@@ -503,7 +510,7 @@ void TtpRenderer::destroyMesh(Mesh& m) {
     // The CPU copies are BURIED, not dropped — the driver may still be reading
     // them. See MeshGrave for the whole argument.
     buryMeshBuffers(m);
-    m.custom0Slot = 0;
+    m.layout = {};
     m.local = {};
 }
 
@@ -1663,6 +1670,19 @@ void TtpRenderer::releaseScene() {
     for (auto& m : mCars) destroyMesh(m);
     destroyMesh(mGantry);
     for (auto& m : mStreakMeshes) destroyMesh(m);
+    // The streak ring's other slots, after every renderable that could draw
+    // them; slot 0 was the mesh's own vb. Their bytes are buried like any
+    // mesh's (MeshGrave) — the last write may not have been uploaded yet.
+    for (Streak& st : mStreaks) {
+        for (size_t k = 1; k < st.ringVbs.size(); k++) mEngine->destroy(st.ringVbs[k]);
+        st.ringVbs.clear();
+        for (auto& rv : st.ringVerts) {
+            Mesh grave;
+            grave.verts.swap(rv);
+            buryMeshBuffers(grave);
+        }
+        st.ringVerts.clear();
+    }
     for (auto& m : mClouds) destroyMesh(m);
     destroyMesh(mBoulders);
     destroyMesh(mLandmarks);

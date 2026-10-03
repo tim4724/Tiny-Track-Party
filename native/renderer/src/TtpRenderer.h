@@ -620,7 +620,6 @@ private:
         // Alive for the run like every CPU copy here, and bakeShadowMap
         // re-uploads it in place once the ESM exists.
         std::vector<filament::math::half4> custom0;
-        uint8_t custom0Slot = 0;
         // OPT-IN for a STATIC lit sheet: buildMesh folds the matte light into
         // the vertex colours (bakedMatteLight) and draws it UNLIT, so nothing
         // at draw time transforms a normal or shades a fragment. Only a mesh
@@ -640,6 +639,20 @@ private:
         // draws each range as its own renderable with its own box, instead of
         // cutting `chunkTris` off the triangle ORDER. Empty = by order.
         std::vector<uint32_t> tileStarts;
+        // The vertex layout buildMesh chose: slot 0 is the shared Vertex, then
+        // qtangents (lit), UV0 and the baked CUSTOM0, each in a slot of its own
+        // only when present. Kept so a second buffer for this mesh (the
+        // streak ring) is built to it through buildVertexBuffer — the layout
+        // keys Vulkan's vertex-input state, and any difference is a pipeline
+        // compiled on first draw.
+        struct Layout {
+            bool lit = false, uv = false, baked = false;
+            uint8_t uvSlot() const { return lit ? 2 : 1; }
+            uint8_t customSlot() const {
+                return (uint8_t) (1 + (lit ? 1 : 0) + (uv ? 1 : 0));
+            }
+        };
+        Layout layout;
     };
 
     // Reorder a static sheet's triangles by the ground tile their centroid
@@ -1403,6 +1416,12 @@ private:
         float x = 0, y = 0, z = 0, len = 1;
         float alpha = 0;
         bool dead = true;
+        // The mesh's vertex buffers as a ring of mCellRing, when that is more
+        // than one (renderCars says why); empty otherwise. ringVbs[0] is the
+        // mesh's own vb, and ringVerts[k] is the bytes slot k last uploaded.
+        std::vector<filament::VertexBuffer*> ringVbs;
+        std::vector<std::vector<Vertex>> ringVerts;
+        uint32_t ringAt = 0;
     };
     std::vector<Streak> mStreaks;              // carCount × 4
     std::vector<Mesh> mStreakMeshes;           // carCount × 4 (vblend ellipses)
@@ -1899,6 +1918,8 @@ private:
             // its own bounds and frustum culling ON. 0 = one renderable, no
             // culling (the default every dynamic mesh wants).
             uint32_t chunkTris = 0);
+    // An empty VertexBuffer in `layout` (see Mesh::Layout); buildMesh's own.
+    filament::VertexBuffer* buildVertexBuffer(uint32_t vertexCount, const Mesh::Layout& layout);
     void destroyMesh(Mesh& m);
     // fillRoadLight + the vertex upload that has to follow it. Pure arithmetic
     // over the road's own normals now — it reads no map, so it completes inside

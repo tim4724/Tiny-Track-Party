@@ -424,6 +424,25 @@ the PowerVR costs Filament's frame ~1.2 ms more. Levers priced on the box, three
   A user decision, not taken.
 - `Engine::flush` right after the uploads and after `beginFrame`: null.
 
+## A staged vertex write held the whole frame back (2026-10-03, later)
+
+The boost streaks rewrite their vertex alpha every frame. A buffer the last
+frame still holds is STAGED by Filament (a copy plus a TRANSFER->VERTEX_INPUT
+barrier at the head of the frame's single command buffer), and that barrier
+holds back all of the frame's geometry behind the previous frame on the
+PowerVR, on every frame with a boosting car. A ring of three buffers per streak
+(the cell-View ring's reasoning) turns the write into the staging bypass's
+memcpy. 4P tidepool, Vulkan, pinned 960x540, ABAB installs, three races each:
+0.4-0.7 skips/s and 68-79 clean seconds of 90, against 1.5-1.7 and 57-60.
+**Any per-frame buffer write on this box belongs in a ring** — one staged
+write anywhere in the frame serialises the frame, not just its own draw.
+
+Also settled by the same trace: the window frame's GPU cost is ~1.5-2 ms with
+under 0.3 ms of interleave on top (the earlier 1.2 ms was the window timed from
+the end of eglSwap); the window's one full-window op is its clear, which
+PowerVR turns into a draw (`fPerformColorClearsAsDraws`) and nothing else
+zeroes; render-pass load/store flags are already what a tiler wants.
+
 ## The adaptive rule parks 4P at 640x360 (2026-10-03)
 
 Four guarded adaptive races per build on tidepool settle at 640x360 for most of

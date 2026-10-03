@@ -1481,8 +1481,48 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                         const uint32_t au = (uint32_t) std::lround(sm.local[vi].a * k2);
                         sm.verts[vi].abgr = (sm.verts[vi].abgr & 0x00ffffffu) | (au << 24);
                     }
-                    sm.vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
-                            sm.verts.data(), sm.verts.size() * sizeof(Vertex), nullptr));
+                    if (st.ringVbs.empty()) {
+                        sm.vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
+                                sm.verts.data(), sm.verts.size() * sizeof(Vertex), nullptr));
+                    } else {
+                        // THE RING (Vulkan): a buffer written every frame is
+                        // still held by the last frame's command buffer, so
+                        // Filament stages the write — a copy and a barrier at
+                        // the head of the frame — where a buffer no unfinished
+                        // command buffer holds takes the staging bypass's
+                        // memcpy (TtpRenderer.cpp). Each write moves to the
+                        // next slot, uploads the WHOLE array from that slot's
+                        // own bytes, and re-points the one primitive at it.
+                        // Two things keep a reused slot free, as the cell
+                        // Views' ring (ensureCells) relies on:
+                        //   (a) every streak write is here, ahead of
+                        //       beginFrame, with no flush, readPixels or fence
+                        //       before the cell passes, so a drawn frame's
+                        //       write and its draws are normally one command
+                        //       buffer (the driver's own tick flushes inside
+                        //       beginFrame after two skipped frames);
+                        //   (b) a slot is written again only after n-1 later
+                        //       writes, at most one per frame, so its last
+                        //       draw is at least n frames old — and its bytes
+                        //       stay untouched until then, so a driver thread
+                        //       a frame behind still uploads this frame's
+                        //       alpha (the one-slot path rewrites sm.verts
+                        //       under it).
+                        // An undrawn or skipped frame only lets a slot go idle
+                        // sooner. (b) is what makes the memcpy safe: Filament's
+                        // in-use test sees only the command buffer that WROTE
+                        // a buffer, never a later one that merely drew it.
+                        st.ringAt = (st.ringAt + 1) % (uint32_t) st.ringVbs.size();
+                        std::vector<Vertex>& rv = st.ringVerts[st.ringAt];
+                        std::copy(sm.verts.begin(), sm.verts.end(), rv.begin());
+                        VertexBuffer* const vb = st.ringVbs[st.ringAt];
+                        vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
+                                rv.data(), rv.size() * sizeof(Vertex), nullptr));
+                        auto& rcm = mEngine->getRenderableManager();
+                        rcm.setGeometryAt(rcm.getInstance(sm.entity), 0,
+                                RenderableManager::PrimitiveType::TRIANGLES,
+                                vb, sm.ib, 0, sm.idx.size());
+                    }
                 }
                 // A dead streak leaves the scene (edge-triggered) rather than
                 // parking underground — see setMeshInScene for what a parked
