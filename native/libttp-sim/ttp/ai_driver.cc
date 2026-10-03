@@ -45,7 +45,7 @@ static const double MISTAKE_GAP_MIN = 600, MISTAKE_GAP_SPAN = 600;
 static const double EVADE_NEAR = -1.5;
 static const double EVADE_FAR = 13.0;
 static const double EVADE_CLEAR = 0.5;
-static const double EVADE_LOOK = 3.5;
+static const double EVADE_LOOK = 1.5;
 static const double BANANA_AVOID_R = 0.5;
 // Box seeking: an empty-handed bot looks SEEK_FAR ahead for the next box row and,
 // unless its line already crosses a box that will be live on arrival, steers for
@@ -268,7 +268,11 @@ static Dodge avoidThreat(const Car& car, LaneFor laneFor, Game& game, double max
   auto consider = [&](double hs, double hlat, double radius) {
     double ds = wrap_delta(hs - car.totalS, L);
     if (ds < EVADE_NEAR || ds > EVADE_FAR) return;
-    if (std::fabs(laneFor(hs) - hlat) > radius + EVADE_CLEAR) return;
+    // The car reaches the hazard somewhere between where it is and where its
+    // line is: pursuit cuts corners, so testing the line alone drove bots
+    // straight over oil and their own bananas from the lap before.
+    double plan = laneFor(hs), clear = radius + EVADE_CLEAR;
+    if (hlat < js_min(car.lat, plan) - clear || hlat > js_max(car.lat, plan) + clear) return;
     if (ds < bestDs) { bestDs = ds; best.has = true; best.lat = hlat; best.r = radius; }
   };
   for (const auto& h : game.hazards()) consider(h.s, h.lat, h.radius);
@@ -407,7 +411,10 @@ void AiController::drawMistakeGap() {
 bool AiController::wantsToUse(const std::string& item, Car& car, Game& game, double corner) {
   bool overdue = heldFrames_ >= AI_HOLD_MAX;
   if (item == "boost") return corner < 0.05 || (overdue && corner < 0.2);
-  if (item == "banana") { double d = nearestBehind(car, game); return (d > 0 && d <= BANANA_DROP_FAR) || overdue; }
+  // A banana is only ever dropped on a car behind, never because it is overdue:
+  // with nobody close it lands on the bot's own line and spins it a lap later.
+  // Holding it costs nothing, since the next box rerolls it anyway.
+  if (item == "banana") { double d = nearestBehind(car, game); return d > 0 && d <= BANANA_DROP_FAR; }
   if (item == "rocket") { double d; return gapToCarAhead(car, game, d) && d <= ROCKET_FIRE_RANGE; }
   return true;
 }

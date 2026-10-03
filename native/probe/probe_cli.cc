@@ -31,6 +31,7 @@
 //                                pace/balance the couch actually sees
 //   probe_cli laptime --json     one JSON object per track (probe-difficulty.mjs)
 //   probe_cli <mode> --skill=X   bot skill 0..1 (AI_TIER_SKILL; default 1, the full bot)
+//   probe_cli laptime --item=ID  every box rolls ID: what each item is worth to a solo lap
 //
 // Determinism: fixed 60 Hz step, AI personas taken from AiDriver.js's
 // AI_PERSONALITIES, and the same seeds the JS probes used (the JS AiController
@@ -72,6 +73,7 @@ using ttp::AI_PERSONALITIES;
 constexpr uint32_t DEFAULT_AI_SEED = 1;
 // --skill: every bot this run drives. 1 = the full bot.
 double g_skill = 1.0;
+std::string g_item;  // --item=: every box rolls this (Game forceItem), "" = the roll table
 
 std::string mmss(double secs) {
   const int m = (int)std::floor(secs / 60.0);
@@ -131,7 +133,7 @@ std::vector<double> soloLaps(const std::string& trackId, int laps, bool hasStats
     st.mass = cs.mass; st.halfLen = cs.halfLen; st.halfWid = cs.halfWid;
   }
   std::vector<PlayerDesc> players{PlayerDesc{Id::Num(0), hasStats, st}};
-  Game game(players, bt.game, [](const Event&) {});
+  Game game(players, bt.game, [](const Event&) {}, g_item);
   AiController ai(AI_PERSONALITIES[0].caution, LOOKAHEAD, STEER_GAIN, AI_PERSONALITIES[0].laneBias, DEFAULT_AI_SEED,
                   g_skill);
 
@@ -483,6 +485,7 @@ int main(int argc, char** argv) {
     else if (a == "--json") json = true;
     else if (a == "--nobrake") noBrake = true;
     else if (a.compare(0, 8, "--skill=") == 0) g_skill = std::strtod(a.substr(8).c_str(), nullptr);
+    else if (a.compare(0, 7, "--item=") == 0) g_item = a.substr(7);
     else if (a.compare(0, 7, "--cars=") == 0) cars = (int)std::strtol(a.substr(7).c_str(), nullptr, 10);
     else if (a.compare(0, 2, "--") == 0) { std::fprintf(stderr, "unknown option %s\n", a.c_str()); return 2; }
     else if (mode.empty()) mode = a;
