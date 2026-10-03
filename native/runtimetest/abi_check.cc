@@ -4086,6 +4086,19 @@ race::RaceEvent raceEventOf(const Value& e) {
   return ev;
 }
 
+// The CPU fill a live launch dealt, as "name/car " per bot in grid order: read
+// off the create-session field, which is what the session is built from.
+std::string botDeal(const Value& answer) {
+  std::string out;
+  for (const Value& e : at(answer, "effects").arr) {
+    if (json::str_field(e, "op") != "create-session") continue;
+    for (const Value& f : at(e, "field").arr)
+      if (json::truthy(f.find("ai")))
+        out += json::str_field(f, "name") + "/" + js_number_to_string(json::num_field(f, "carIndex")) + " ";
+  }
+  return out;
+}
+
 void raceLiveWalks() {
   // ---- the world, configured FROM the structs the rules will be run over, so
   // the two cannot drift into different worlds and quietly agree about nothing.
@@ -4270,6 +4283,9 @@ void raceLiveWalks() {
          "back to a track pick");
   ttp_room_events_json(room);
 
+  // The CPU fill each live start dealt (botDeal), compared across launches below.
+  std::string trackDeal, cupDeal;
+
   // ---- start_live: a TRACK pick, one call, one answer ------------------------
   {
     const race::StartResult want = race::startRace(startInputOf(1, {}));
@@ -4279,6 +4295,7 @@ void raceLiveWalks() {
     const Value got = parseOrNull(
         ttp_race_start_live_json(room, 1, 42, 3, nullptr, nullptr), "start track");
     check(json::str_field(got, "action") == "launch", "start_live launches a track pick");
+    trackDeal = botDeal(got);
     check(!got.has("series") && !got.has("drawsUsed"),
           "…and the answer is action + effects, nothing else");
     sameOps(got, lr.effects, "start_live effects == race::launchRace");
@@ -4426,6 +4443,21 @@ void raceLiveWalks() {
     const Value cupStart = parseOrNull(
         ttp_race_start_live_json(room, 1, 9, 3, nullptr, nullptr), "start cup");
     check(json::str_field(cupStart, "action") == "launch", "a cup pick launches at once");
+    // The CPU fill is DEALT from the start's seed: another seed, another field
+    // of cars and personas — and inside one field no persona name repeats.
+    cupDeal = botDeal(cupStart);
+    check(!cupDeal.empty() && cupDeal != trackDeal,
+          "a fresh start deals the CPU fill anew\n  seed 42: " + trackDeal + "\n  seed 9:  " + cupDeal);
+    {
+      std::vector<std::string> names;
+      for (const Value& e : at(cupStart, "effects").arr)
+        if (json::str_field(e, "op") == "create-session")
+          for (const Value& f : at(e, "field").arr)
+            if (json::truthy(f.find("ai"))) names.push_back(json::str_field(f, "name"));
+      std::sort(names.begin(), names.end());
+      check(!names.empty() && std::adjacent_find(names.begin(), names.end()) == names.end(),
+            "no two CPU seats share a persona name");
+    }
     check(canonical_stringify(ttp_room_bag_value(room)) == bagBeforeCup,
           "…drawing nothing: a cup's circuits are the configured world's");
     const Value cupSt = parseOrNull(ttp_race_series_state_json(room), "cup series state");
@@ -4508,7 +4540,17 @@ void raceLiveWalks() {
       return got;
     };
     sameAdvance(0, "the scene is not built");
-    sameAdvance(1, "mid-cup");
+    // The advance carries its own seed (11), yet the cup keeps the field its
+    // start dealt: each CPU seat keeps its name and car for the whole series.
+    // Per SEAT, so a prefix: every reserved seat returns here, which can leave
+    // room for fewer CPUs than the start filled.
+    const std::string midDeal = botDeal(sameAdvance(1, "mid-cup"));
+    const bool samePrefix = midDeal.size() <= cupDeal.size()
+        ? cupDeal.compare(0, midDeal.size(), midDeal) == 0
+        : midDeal.compare(0, cupDeal.size(), cupDeal) == 0;
+    check(!midDeal.empty() && samePrefix,
+          "a cup's next race keeps each CPU seat's dealt name and car\n  start:   " + cupDeal +
+              "\n  advance: " + midDeal);
     // Race 2 of 2 banked: a cup is over once its LAST race is applied, so the
     // chain stops rather than looping.
     ttp_gp_apply_race(ttp_room_series(room), "[{\"playerId\":1,\"rank\":1,\"finished\":true}]",

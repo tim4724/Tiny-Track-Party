@@ -130,6 +130,12 @@ behaviour (line, wobble, kerb mistakes), never top speed: bots stay flat-out.
 The bot spec carries `skill` only below 1, so full-skill launches and every
 recording keep their shape.
 
+**The CPU fill's cars and personas are dealt, once per cup.** `buildField` deals
+them from shuffled bags seeded by `FieldWorld::fieldSeed`, which `ttp_race.cc`
+takes from the race that started the series, so a bot keeps its name and car
+for the whole cup. Unset (0), the fill keeps the fixed colour/table order that
+the bench, the lobby demo and the corpora read.
+
 Deliberately did NOT cross: the lobby demo and the performing itself. The
 host's mode pick and the shuffle bag crossed into the net walks
 (`runtime/ttp_net.cc`), not here — see `native/libttp-party/CLAUDE.md`. The

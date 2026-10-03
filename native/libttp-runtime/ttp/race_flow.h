@@ -233,6 +233,11 @@ struct FieldWorld {
   // cup by the caller, so this layer stays catalogue-agnostic. Player seats
   // under autopilot keep 1.
   double botSkill = 1.0;
+  // Deals the CPU fill a random car and persona each (buildField). Set by the
+  // live launch to a seed that holds for a whole cup, so a bot keeps its name
+  // and car across the series; 0 keeps the fixed colour/table order the bench,
+  // the lobby demo and the corpora read.
+  double fieldSeed = 0;
   std::string aiPrefix = "ai-";
 };
 
@@ -247,6 +252,8 @@ struct Human {
 // CPU seats that top a human roster up to fieldSize. Each gets the lowest free
 // livery, the model that livery slot maps to (what the renderer already drew
 // when carIndex was omitted) + its stats, and a persona cycled by CPU index.
+// That is the FIXED order; buildField re-deals car and persona when
+// FieldWorld::fieldSeed is set.
 std::vector<CpuSeat> cpuSeats(const std::vector<Human>& humans, const FieldWorld& w);
 
 // The race field: the connected humans plus AI racers topping the grid up to

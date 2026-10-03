@@ -1,9 +1,11 @@
 #include "ttp/race_flow.h"
 
 #include <cmath>
+#include <utility>
 
 #include "ttp/jsmath.h"   // js_max — Math.max's ±0 ordering, not std::max's
 #include "ttp/jsonnum.h"  // js_number_to_string — Number::toString, not printf
+#include "ttp/util.h"     // Mulberry32 — the field deal
 
 namespace ttp {
 namespace rt {
@@ -208,7 +210,32 @@ BuiltField buildField(const std::vector<Human>& humans, double seed, const Field
     h.carIndex = f.carIndex;
     asHumans.push_back(std::move(h));
   }
-  for (const CpuSeat& s : cpuSeats(asHumans, w)) {
+  std::vector<CpuSeat> seats = cpuSeats(asHumans, w);
+  if (w.fieldSeed != 0) {
+    // Cars and personas each come out of a SHUFFLED BAG rather than an
+    // independent draw, so a field stays mixed: seven bots over four cars carry
+    // no model more than twice, and the seven personas never repeat a name.
+    Mulberry32 rng(static_cast<uint32_t>(toUint32(w.fieldSeed)));
+    auto shuffled = [&rng](int n) {
+      std::vector<int> bag(static_cast<size_t>(n));
+      for (int i = 0; i < n; i++) bag[static_cast<size_t>(i)] = i;
+      for (int i = n - 1; i > 0; i--) {
+        const int j = static_cast<int>(std::floor(rng.next() * (i + 1)));
+        std::swap(bag[static_cast<size_t>(i)], bag[static_cast<size_t>(j)]);
+      }
+      return bag;
+    };
+    const std::vector<int> cars = shuffled(w.carCount);
+    const std::vector<int> personas = shuffled(static_cast<int>(w.personas.size()));
+    for (CpuSeat& s : seats) {
+      if (!cars.empty()) {
+        s.carIndex = cars[static_cast<size_t>(s.n) % cars.size()];
+        s.stats = carStatsAt(w.carStats, OptNum::Of(s.carIndex));
+      }
+      if (!personas.empty()) s.persona = w.personas[static_cast<size_t>(personas[static_cast<size_t>(s.n) % personas.size()])];
+    }
+  }
+  for (const CpuSeat& s : seats) {
     const Id id = Id::Str(w.aiPrefix + std::to_string(s.n));
     FieldEntry e;
     e.peerIndex = id;

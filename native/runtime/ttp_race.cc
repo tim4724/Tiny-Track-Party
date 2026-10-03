@@ -17,6 +17,7 @@
 #include "ttp_error.h"
 #include "ttp_race.h"
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -53,6 +54,10 @@ std::vector<race::Cup> g_cups;
 // The bench latch (ttp_race_autopilot_players). Off is the shipping path and
 // the only path any recorded launch takes.
 bool g_autopilotPlayers = false;
+// Per room, the seed of the race that STARTED the current series. The CPU
+// fill's cars and personas are dealt from it (FieldWorld::fieldSeed), so a
+// cup's later races re-deal the same field rather than renaming the bots.
+std::map<int, double> g_fieldSeed;
 
 // ---- scratch buffers ---------------------------------------------------------
 // One per string-returning export rather than one shared: a shell reads the
@@ -155,6 +160,8 @@ race::LaunchResult launchOff(int roomHandle, std::vector<race::Human> players,
   li.forceItem = optStrOfC(forceItemOrNull);
   li.world = worldWithCap(botCapJson);
   li.world.botSkill = botSkillFor(li.trackId);
+  const auto dealt = g_fieldSeed.find(roomHandle);
+  li.world.fieldSeed = dealt != g_fieldSeed.end() ? dealt->second : seed;
   li.autopilotPlayers = g_autopilotPlayers;
   li.gridOrder = std::move(gridOrder);
   return race::launchRace(li);
@@ -718,6 +725,7 @@ const char* ttp_race_start_live_json(int roomHandle, int sceneReady, double seed
       return put(g_bufStart, refuse(race::key(r.reason)));
   }
   standUpSeries(roomHandle, r.series);
+  g_fieldSeed[roomHandle] = seed;  // a fresh start deals a fresh field; a cup's advances keep it
   race::LaunchResult lr = launchOff(roomHandle, si.players, seed, countdownSeconds,
                                     forceItemOrNull, botCapJson);
   Value v = Value::Obj();
