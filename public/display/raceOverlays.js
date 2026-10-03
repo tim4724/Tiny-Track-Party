@@ -29,23 +29,20 @@ export function showCountdownBanner(e) {
 // ---- the results board ------------------------------------------------------
 // Three dressings, and on a cup, TWO PHASES of one board. Phase 1 is the race
 // that just ended: finishing order, lap time, what each place scored, and the
-// cup total each row held COMING IN. Phase 2 accounts those scores into those
-// totals ONE POINT AT A TIME, re-ranking as it goes, and settles on the new
-// standings. Painting the end state alone states the delta and never shows the
-// change, which is what this board used to do.
+// cup total each row held COMING IN. Phase 2 counts those scores into those
+// totals while every row glides, once, to its place in the new standings.
+// Painting the end state alone states the delta and never shows the change,
+// which is what this board used to do.
 //
 // NOTHING APPEARS, DISAPPEARS OR RESIZES ACROSS THE TWO. Both phases lay out
 // the same filled cells at the same widths; the numbers change and the rows
-// re-order, and that is the entire animation. Three earlier cuts each broke a
+// re-order, and that is the entire animation. Two earlier cuts each broke a
 // piece of that, and the notes are kept because each is easy to reinvent:
 //   - swapping the trailing cell (lap time OUT, "+N" IN) changed every row's
 //     width and height at the exact moment the FLIP began translating it, so
 //     the board jumped 48px sideways and grew 130px mid-slide;
 //   - leaving the total blank until phase 2 gave the climb no visible starting
-//     point — it appeared and began counting in the same frame;
-//   - sliding the rows to their final order WHILE the totals were still
-//     climbing showed, for the length of the slide, a ranking the board's own
-//     figures did not yet support.
+//     point — it appeared and began counting in the same frame.
 //
 // WHICH dressing, which rows are in each phase, and what each row's trailing
 // cell says are all uiModel.resultsView's — it answers in KEYS, and the tables
@@ -69,20 +66,17 @@ const NEWGAME_COPY = { next_race: 'Next race ▸', new_game: 'New Game' };
 // column — the title and the button used to be pushed off the screen edges.
 const ONE_COL_MAX = 5;
 
-// The phase-2 beats, as fractions of the model's phase-1 hold. Proportional
+// The phase-2 timings, as fractions of the model's phase-1 hold. Proportional
 // rather than fixed because racePhaseMs is itself scaled off the intermission
 // budget, which E2E shrinks to milliseconds: fixed durations would leave the
 // animation still running after the next race had started.
-const TICK_OF_PHASE = 0.035;  // one beat of the tally
-const FADE_OF_PHASE = 0.055;  // the cut: the race table dips out before the cup's slaps in
-
-// HOW MANY BEATS THE TALLY TAKES, whatever the ladder pays. It used to take one
+//
+// The tally is ONE LENGTH whatever the ladder pays. It used to take one beat
 // per point the WINNER owed, which tied the length of the board to the top of
-// POINTS_BY_RANK: widening that from 9 to 15 stretched the tally from 819 ms to
-// 1365 ms without anyone touching this file. A row still moves WHOLE POINTS —
-// integers are what make a total followable — it just moves as many as the clock
-// has reached, so a bigger ladder means bigger steps rather than a longer wait.
-const TALLY_BEATS = 8;
+// POINTS_BY_RANK: widening that from 9 to 15 stretched it by two thirds without
+// anyone touching this file. A bigger ladder now counts faster instead.
+const TALLY_OF_PHASE = 0.28;  // the count, and the glide that rides it
+const FADE_OF_PHASE = 0.055;  // the cut: the race table dips out before the cup's slaps in
 
 let phaseTimer = null;
 let countTimer = null;
@@ -240,34 +234,34 @@ function paintNext(v, show) {
 }
 
 // ---- phase 2: the cup answers, in three beats -------------------------------
-// A CUP BOARD CARRIES THREE ORDERS, and every attempt to show it in fewer than
-// three beats has failed on one of them:
+// A CUP BOARD CARRIES THREE ORDERS:
 //   A  the race that just ended      (phase 1: finishing order, lap times)
 //   B  the cup BEFORE these points   (what the totals on screen already say)
 //   C  the cup AFTER them            (the model's listRows)
 //
-// Two cuts are on record as rejected, and they are the two halves of the same
-// mistake — animating a move the figures on screen do not account for:
-//   - SORTING LIVE FROM A ONWARD re-sorts on the totals being shown, and at t=0
-//     those are the pre-race ones: the board slides into B, which is
-//     uncorrelated with the race just watched, before a single point has moved.
-//   - GLIDING A STRAIGHT TO C shows, for the whole length of the slide, a
-//     ranking the board's own numbers do not yet support.
+// A -> B is a CUT, not a move. Sliding from the race order into B would be a
+// move uncorrelated with the race just watched, made before a single point has
+// landed. So the race table dips out, the title turns over to "Standings", and
+// the cup's own table slaps back in — the same entrance the board arrived with.
+// Nothing travels, so nothing has to be justified: the heading says why the
+// list is different.
 //
-// So A -> B is a CUT, not a move. The race table dips out, the title turns over
-// to "Standings", and the cup's own table slaps back in — the same entrance the
-// board arrived with. Nothing travels, so nothing has to be justified: the
-// heading says why the list is different. Only B -> C is animated, and there
-// every row moves BECAUSE A POINT LANDED, which is the one motivation this
-// board can actually show.
+// B -> C is ONE GLIDE. Every row travels once, straight from where it stood to
+// where it ends, for exactly as long as its total takes to count up — and each
+// total counts at its own speed, so they all land together with the rows. The
+// board used to re-sort on the totals it was showing at every beat instead, and
+// that cannot be smooth: rows climb at different rates, so a row that passes one
+// car and is then passed by another goes up and comes back down, and on the
+// two-column board a 4th/5th swap flew diagonally across the whole list. Four
+// boards in ten had a row reversing in a simulation of random cups.
 //
 // (Race 1 of a cup is the degenerate case and it is free: everyone comes in on
 // zero and the ladder is monotonic in finishing rank, so A = B = C. The cut
-// re-enters the same order and the tally moves nothing.)
+// re-enters the same order and the glide moves nothing.)
 //
-// The medals and the CHAMPS title still wait for the LAST point — the cut turns
-// the heading to "Standings", never to a champion. Crowning one while rows can
-// still overtake marks the wrong row.
+// The medals and the CHAMPS title wait for the LAST point — the cut turns the
+// heading to "Standings", never to a champion.
+//
 // BEAT 2 — the cut. The race table dips out and the CUP's table, as it stood
 // BEFORE this race, slaps back in under a new heading. paintPhase rebuilds the
 // list, and rebuilding is what replays the entrance animation: the same slap the
@@ -325,98 +319,47 @@ function standingsBefore(v) {
     .map((x) => x.row);
 }
 
-// BEAT 3 — the points land, and the rows move because of it.
+// BEAT 3 — the points land, and the rows glide to where they put them.
 function tally(v) {
   phaseTimer = null;
   const nodes = new Map();
   for (const li of el('results-list').children) nodes.set(li.dataset.pid, li);
-
-  // `seat` is the row's index in the model's FINAL order, and it is the
-  // tie-break — which is what guarantees the last point lands the board exactly
-  // on what the model said rather than near it.
-  const live = v.listRows.map((row, seat) => ({
-    row, seat, li: nodes.get(String(row.playerId)),
-    owed0: row.kind === 'points' ? Math.max(0, Math.round(row.points - row.pointsBefore)) : 0,
-    owed: 0, total: row.kind === 'points' ? row.pointsBefore : 0
+  // In the model's FINAL order, which is what the glide lands the list on.
+  const live = v.listRows.map((row) => ({
+    row, li: nodes.get(String(row.playerId)),
+    owed: row.kind === 'points' ? Math.max(0, Math.round(row.points - row.pointsBefore)) : 0
   })).filter((r) => r.li);
-  for (const r of live) r.owed = r.owed0;
 
-  const tickMs = Math.max(16, v.racePhaseMs * TICK_OF_PHASE);
-  const most = live.reduce((m, r) => Math.max(m, r.owed0), 0);
-  if (!most) return settle(v, live, tickMs);   // nothing owed: B is already C
+  const runMs = v.racePhaseMs * TALLY_OF_PHASE;
+  glide(live, runMs);
+  if (!live.some((r) => r.owed)) return settle(v, live);   // nothing owed: B is already C
 
-  // A SLIDE FITS INSIDE ITS OWN BEAT. The old board gave the flip its own
-  // fraction of the phase and got 143 ms against a 91 ms tick, so every slide
-  // was cut off at two thirds and restarted from mid-flight, stacking ease-out
-  // on ease-out. Tying the two together makes that impossible by construction.
-  const flipMs = tickMs;
-
-  // Driven by ELAPSED TIME, not by counting ticks. Each row still steps whole
-  // points, but how many have been accounted for is a function of the clock. A
-  // starved page (the E2E suite runs several of these at once) then skips ahead
-  // and still finishes inside its budget, where a fixed step per firing would
-  // stretch the tally for as long as the contention lasted.
-  const runMs = TALLY_BEATS * tickMs;
+  // Driven by ELAPSED TIME, not by counting firings: the scenario page blocks the
+  // main thread for seconds during boot, and a starved page then skips ahead and
+  // still lands inside its budget. Each total steps WHOLE points — integers are
+  // what make a total followable — at its own rate, and floor() holds every row's
+  // last point for the end, so the totals land as the glide does.
   const t0 = performance.now();
   countTimer = setInterval(() => {
-    // QUANTISED TO THE BEAT, not read off the raw clock. Rows owe different
-    // amounts, so on a continuous clock their points cross a whole number at
-    // different instants — and a row that gains one 14 ms before the row under
-    // it gains one overtakes and is overtaken back inside a single frame. Every
-    // total moves on the same beat instead, so an order the board holds for less
-    // than a beat cannot exist. It also makes the counting even: the poll is
-    // faster than the beat, so what used to be a 40-116 ms stutter is now one
-    // step per tickMs.
-    const elapsed = performance.now() - t0;
-    const beat = Math.min(TALLY_BEATS, Math.floor(elapsed / tickMs));
-    const k = beat / TALLY_BEATS;
+    const k = Math.min(1, (performance.now() - t0) / runMs);
     for (const r of live) {
-      if (!r.owed0) continue;
-      const done = Math.round(k * r.owed0);
-      if (r.owed0 - done === r.owed) continue;       // no whole point moved yet
-      r.owed = r.owed0 - done;
-      r.total = r.row.pointsBefore + done;
-      r.li.querySelector('.res-gain').textContent = `+${r.owed}`;
-      r.li.querySelector('.res-pts').textContent = `${r.total} pts`;
+      if (!r.owed) continue;
+      const done = Math.floor(k * r.owed);
+      r.li.querySelector('.res-gain').textContent = `+${r.owed - done}`;
+      r.li.querySelector('.res-pts').textContent = `${r.row.pointsBefore + done} pts`;
     }
-    reflow(live, flipMs);
-    if (elapsed >= runMs) { clearInterval(countTimer); countTimer = null; settle(v, live, flipMs); }
-  }, Math.min(tickMs / 4, 16));
+    if (k >= 1) { clearInterval(countTimer); countTimer = null; settle(v, live); }
+  }, 16);
 }
 
-// Rank on the totals CURRENTLY SHOWN, and FLIP anything that moved. This is the
-// board's only movement and every bit of it is caused by a point that has just
-// landed — which is only true because the list already sat in B when the tally
-// started. Joining rows raced nothing and stay under the field; everything else
-// is total-desc with the model's own order breaking ties, so the last tick
-// cannot land anywhere but on what the model said.
-function reflow(live, flipMs, final) {
+// Put the list in C and FLIP every row that moved from where it stood in B, over
+// the whole count. Joining rows sit under the field in both orders, so they never
+// cross it.
+function glide(live, ms) {
   const list = el('results-list');
-  // WHERE EACH ROW IS RIGHT NOW, which is the tie-break for every tick but the
-  // last. Breaking a tie by `seat` — the FINAL order — makes a level score
-  // display the finish early: two rows whose totals leapfrog each other tie on
-  // one beat, the lower one jumps ahead because it is going to end up there,
-  // and the next beat takes it back. That twitch is not a thing that happened.
-  // A row moves when it is genuinely AHEAD; a tie moves nobody.
-  const at = new Map([...list.children].map((li, i) => [li.dataset.pid, i]));
-  const here = (r) => at.get(String(r.row.playerId)) ?? r.seat;
-  const want = [...live].sort((a, b) => {
-    const aj = a.row.kind === 'joining', bj = b.row.kind === 'joining';
-    if (aj !== bj) return aj ? 1 : -1;
-    if (!aj && a.total !== b.total) return b.total - a.total;
-    // ...except at settle, where the totals are final and the board has to land
-    // exactly on the order the model composed, ties and all.
-    return final ? a.seat - b.seat : here(a) - here(b);
-  });
-  if (want.every((r, i) => list.children[i] === r.li)) return;   // nothing moved
-
-  // Measured mid-flight on purpose: a rect taken while a previous slide is still
-  // running is where the row VISUALLY is, which is exactly what the next
-  // inversion has to start from. Without that an overtake landing on top of one
-  // still settling would jump.
   const before = new Map();
   for (const li of list.children) before.set(li.dataset.pid, li.getBoundingClientRect());
-  for (const r of want) {
+  for (const r of live) {
     // Re-inserting a node RESTARTS its CSS animations, and the row's entrance
     // slap begins at opacity 0 — so every row that moved went invisible for the
     // length of its own slide. The slap belongs to the cut, which is over by now.
@@ -424,24 +367,27 @@ function reflow(live, flipMs, final) {
     list.appendChild(r.li);                 // appendChild MOVES an existing child
   }
   const moving = [];
-  for (const li of list.children) {
+  [...list.children].forEach((li, rank) => {
     const from = before.get(li.dataset.pid);
-    if (!from) continue;
+    if (!from) return;
     const to = li.getBoundingClientRect();
     const dx = from.left - to.left, dy = from.top - to.top;
-    if (!dx && !dy) continue;
+    if (!dx && !dy) return;
     li.style.transition = 'none';
     li.style.transform = `translate(${dx}px, ${dy}px)`;
     // Two rows swapping occupy the same strip of screen halfway through. The row
     // CLIMBING passes in front, so an overtake reads as one thing going past
-    // another rather than as two things dissolving through each other.
+    // another rather than as two things dissolving through each other. Of any
+    // two rows that cross, the climber is the one that ENDS higher, so stacking
+    // by final rank puts it in front of every row it passes. (Not by screen
+    // direction: across the two columns a row dropping 2nd to 5th travels UP.)
     li.style.position = 'relative';
-    li.style.zIndex = dy > 0 ? '2' : '1';
+    li.style.zIndex = String(live.length - rank);
     moving.push(li);
-  }
+  });
   void list.offsetWidth;        // commit the inverted positions before easing them out
   for (const li of moving) {
-    li.style.transition = `transform ${flipMs}ms cubic-bezier(0.2, 0.9, 0.25, 1)`;
+    li.style.transition = `transform ${ms}ms ease-in-out`;
     li.style.transform = '';
   }
 }
@@ -449,8 +395,7 @@ function reflow(live, flipMs, final) {
 // The last point has landed: the order is final, so the board can now say what
 // it is. The spent "+0" empties rather than resting on a figure that reads as
 // "scored nothing" for the rest of the intermission.
-function settle(v, live, flipMs) {
-  reflow(live, flipMs, true);
+function settle(v, live) {
   el('results').classList.toggle('is-podium', v.podium);
   el('results-title').textContent = TITLE_COPY[v.titleKey](v);
   // HELD, not hidden — same reason as the footer. A podium drops the "Race 4 of

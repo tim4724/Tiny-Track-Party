@@ -17,13 +17,10 @@ import SwiftUI
 /// animating its POSITION, and it re-flows under the re-sort — which reads as a
 /// glitch, not as a ranking.
 ///
-/// Phase 2 accounts the points out ONE AT A TIME and re-ranks on the totals it
-/// is now showing, so a row overtakes another AT the point that does it.
-/// Discreteness is what makes that legible: interpolating the same totals
-/// continuously reaches the same place, but every rank change lands mid-blur
-/// with nothing to attribute it to. `pointsBefore` is on every points row so the
-/// total can climb rather than jump, and **no shell subtracts `gained` for
-/// itself**.
+/// Phase 2 counts the points into the totals while every row GLIDES ONCE, from
+/// its place before them to its place after, for as long as the count takes.
+/// `pointsBefore` is on every points row so the total can climb rather than
+/// jump, and **no shell subtracts `gained` for itself**.
 ///
 /// **There are no podium STEPS.** The cup's top three are medalled in place in
 /// the standings list, and the rank counter runs 1..n over the whole board —
@@ -75,6 +72,9 @@ struct RaceResultsView: View {
     @State private var standings = false
     /// How much of each row's "+N" has moved into its total, 0...1.
     @State private var accounted: Double = 0
+    /// The rows stand in the cup's FINAL order. Flipped once, inside the
+    /// glide's animation, at the start of the count.
+    @State private var placed = false
     /// The CUT's fade. The race table dips out and the cup's comes back in its
     /// place — see runPhases.
     @State private var listOpacity: Double = 1
@@ -111,25 +111,30 @@ struct RaceResultsView: View {
     // MARK: - The two phases
 
     /// THE CUP ANSWERS IN THREE BEATS: the race, then the cup as it stood before
-    /// this race, then the points landing and the rows moving because of them.
+    /// this race, then the points landing while the rows glide to where they end.
     ///
     /// A cup board carries three orders — the race that just ended (A), the cup
-    /// BEFORE these points (B) and the cup after them (C) — and re-sorting on
-    /// the totals being shown means passing through B, which is uncorrelated
-    /// with the race just watched. The board snapped sideways into the pre-race
-    /// table before a single point had moved, with nothing on screen to account
-    /// for it. So A -> B is a CUT: the list dips out, the heading turns over to
+    /// BEFORE these points (B) and the cup after them (C) — and sliding from A
+    /// into B would be a move uncorrelated with the race just watched, made
+    /// before a single point had landed, with nothing on screen to account for
+    /// it. So A -> B is a CUT: the list dips out, the heading turns over to
     /// "Standings", and the cup's own table comes back in its place. Nothing
-    /// travels, so nothing has to be justified. Only B -> C is animated, and
-    /// there every row moves BECAUSE A POINT LANDED.
+    /// travels, so nothing has to be justified.
+    ///
+    /// B -> C is ONE GLIDE spanning the count: each row travels once, straight
+    /// to where it ends, while each total counts up at its own rate. Re-sorting
+    /// on the totals at every beat cannot be smooth — rows climb at different
+    /// rates, so a row that passes one car and is then passed by another goes up
+    /// and comes back down, and a 4th/5th swap crosses the two columns twice.
     ///
     /// The tally is driven from elapsed time and not from accumulated nominal
-    /// sleeps: a sleep is a floor, so summing `tickMs` stretches it under a
+    /// sleeps: a sleep is a floor, so summing them stretches it under a
     /// starved main thread — on this box, exactly when the next circuit is
     /// meshing — and it can still be counting when the intermission advances.
     private func runPhases() async {
         standings = !view.twoPhase
         accounted = view.twoPhase ? 0 : 1
+        placed = !view.twoPhase
         listOpacity = 1
         // A single-phase board never settles, exactly as on the web: `settle()`
         // there is reachable only from phase 2.
@@ -147,31 +152,17 @@ struct RaceResultsView: View {
         // Let the cup's table finish arriving before its numbers start moving.
         guard await sleep(ms: fadeMs) else { return }
 
-        // THE TALLY. A FIXED NUMBER OF BEATS, whatever the ladder pays: it used
-        // to take one per point the WINNER owed, which tied the length of the
-        // board to the top of POINTS_BY_RANK — widening that from 9 to 15
-        // stretched it by two thirds with nothing here changing. A row still
-        // moves WHOLE POINTS; it just moves as many as the clock has reached.
-        let most = view.listRows.map(\.owed).max() ?? 0
-        guard most > 0 else { accounted = 1; onSettled(); return }
-        let tickMs = max(16.0, view.racePhaseMs * Self.tickOfPhase)
-        let runMs = Double(Self.tallyBeats) * tickMs
+        // THE TALLY. ONE LENGTH, whatever the ladder pays: it used to take a
+        // beat per point the WINNER owed, which tied the length of the board to
+        // the top of POINTS_BY_RANK. A bigger ladder now counts faster instead.
+        let runMs = view.racePhaseMs * Self.tallyOfPhase
+        withAnimation(.easeInOut(duration: runMs / 1000)) { placed = true }
+        guard view.listRows.contains(where: { $0.owed > 0 }) else { accounted = 1; onSettled(); return }
         let startedAt = CACurrentMediaTime()
-        while true {
-            guard await sleep(ms: tickMs / 4) else { return }
-            let elapsed = (CACurrentMediaTime() - startedAt) * 1000
-            // QUANTISED TO THE BEAT. Rows owe different amounts, so on a
-            // continuous clock their totals cross a whole number at different
-            // instants — and a row that gains one just before the row under it
-            // does overtakes and is overtaken back inside a frame. Every total
-            // moves on the same beat instead.
-            let beat = min(Self.tallyBeats, Int(elapsed / tickMs))
-            withAnimation(.easeInOut(duration: tickMs / 1000)) {
-                accounted = Double(beat) / Double(Self.tallyBeats)
-            }
-            if elapsed >= runMs { break }
+        while accounted < 1 {
+            guard await sleep(ms: 16) else { return }
+            accounted = min(1, (CACurrentMediaTime() - startedAt) * 1000 / runMs)
         }
-        accounted = 1
         // The cup is now told. Anything waiting on it — the phones — can say so.
         onSettled()
     }
@@ -194,32 +185,26 @@ struct RaceResultsView: View {
 
     /// The rows as they stand RIGHT NOW: the race phase is the race's order and
     /// states NO cup number at all; the standings phase is the cup table with
-    /// each row's total part-way to what it banked, re-sorted on the totals
-    /// being shown.
+    /// each row's total part-way to what it banked, in the cup's order before
+    /// these points (B) until the glide places it in the final one (C).
     private var rows: [LiveRow] {
         guard standings else {
             return view.raceRows.map { LiveRow(row: $0, total: nil, seat: 0) }
         }
-        return view.listRows.enumerated()
-            .map { seat, r in
-                let done = Int((accounted * Double(r.owed)).rounded())
-                return LiveRow(row: r, total: (r.pointsBefore ?? 0) + done, seat: seat)
-            }
-            .sorted { a, b in
-                if a.row.joining != b.row.joining { return b.row.joining }
-                let ta = a.total ?? -1, tb = b.total ?? -1
-                if ta != tb { return ta > tb }
-                // A TIE MOVES NOBODY until the very end. Breaking one by `seat`
-                // — the FINAL order — makes a level score display the finish
-                // early: two rows whose totals leapfrog tie on one beat, the
-                // lower jumps ahead because it is going to end up there, and the
-                // next beat takes it back. Mid-tally a tie keeps the order the
-                // rows came in on; only the settled board sorts on the model's,
-                // which is what lands it exactly where the model said.
-                if accounted >= 1 { return a.seat < b.seat }
-                let pa = a.row.pointsBefore ?? 0, pb = b.row.pointsBefore ?? 0
-                return pa == pb ? a.seat < b.seat : pa > pb
-            }
+        let live = view.listRows.enumerated().map { seat, r in
+            // WHOLE points, each row at its own rate, and floor() holds every
+            // row's last point for the end, so the totals land as the glide does.
+            let done = Int((accounted * Double(r.owed)).rounded(.down))
+            return LiveRow(row: r, total: (r.pointsBefore ?? 0) + done, seat: seat)
+        }
+        if placed { return live }
+        // B: the totals the rows came in on, the model's own order breaking a
+        // tie. Joining rows raced nothing and stay under the field.
+        return live.sorted { a, b in
+            if a.row.joining != b.row.joining { return b.row.joining }
+            let pa = a.row.pointsBefore ?? 0, pb = b.row.pointsBefore ?? 0
+            return pa == pb ? a.seat < b.seat : pa > pb
+        }
     }
 
     // MARK: - Title
@@ -229,10 +214,14 @@ struct RaceResultsView: View {
     /// `.is-champs h2` drops to 3.4rem (54.4) and reserves the sticker's padding
     /// and a TRANSPARENT border from its first frame. The celebration is then
     /// paint only — fill, border colour, shadow and a rotation, none of which
-    /// cost layout — so nothing under it moves while the rows are mid-flip.
+    /// cost layout — so nothing under it moves while the rows are mid-glide.
     private var title: some View {
         let champs = settled && view.podium
-        let key = settled ? view.titleKey : (view.raceTitleKey.isEmpty ? view.titleKey : view.raceTitleKey)
+        // The CUT turns the heading to "Standings", never to a champion: a
+        // podium's key waits for the last point.
+        let key = settled ? view.titleKey
+            : view.twoPhase && standings ? "standings"
+            : (view.raceTitleKey.isEmpty ? view.titleKey : view.raceTitleKey)
         let size = view.podium ? Self.titleSize : Self.titleSizePlain
         return Text(Copy.title(key, cupName: view.cupName))
             .font(Fonts.display(size, weight: .bold))
@@ -285,22 +274,22 @@ struct RaceResultsView: View {
         // and a podium are all the same size, on this shell and on the web.
         let width = Self.boardWidthCup
         let columns = perColumn > 0 ? (live.count + perColumn - 1) / perColumn : 0
-        return HStack(alignment: .top, spacing: Self.columnGap) {
-            ForEach(Array(0..<columns), id: \.self) { col in
-                VStack(spacing: Self.rowGap) {
-                    ForEach(Array(live.dropFirst(col * perColumn).prefix(perColumn).enumerated()),
-                            id: \.element.row.id) { i, entry in
-                        BoardRow(rank: col * perColumn + i + 1, live: entry, settled: settled)
-                    }
-                }
-                .frame(width: width, alignment: .top)
+        // ONE LAYER, every row placed by its SLOT and keyed by player, so a row
+        // whose place is in the other column glides across to it. A stack per
+        // column can only move a row within its own.
+        return ZStack(alignment: .topLeading) {
+            ForEach(Array(live.enumerated()), id: \.element.row.id) { i, entry in
+                BoardRow(rank: i + 1, live: entry, settled: settled)
+                    .frame(width: width)
+                    .offset(x: CGFloat(i / perColumn) * (width + Self.columnGap),
+                            y: CGFloat(i % perColumn) * (Self.rowHeight + Self.rowGap))
+                    // Of two rows that cross, the climber ENDS higher, so
+                    // stacking by rank passes it in front, as on the web.
+                    .zIndex(Double(-i))
             }
         }
-        // KEYED BY PLAYER above, so a row that overtakes another moves past it
-        // rather than the two swapping contents in place. The re-sort is the
-        // whole point of phase 2 — the rows re-ordering under the points that
-        // moved them is the only place a player can see what the race DID.
-        .frame(height: Self.rowsHeight(perColumn), alignment: .top)
+        .frame(width: CGFloat(columns) * width + CGFloat(max(0, columns - 1)) * Self.columnGap,
+               height: Self.rowsHeight(perColumn), alignment: .topLeading)
         .opacity(listOpacity)
     }
 
@@ -350,16 +339,12 @@ struct RaceResultsView: View {
 
     // MARK: - Geometry
 
-    /// One point accounted for, per row, per tick — as a fraction of phase 1's
-    /// hold, floored below at one frame. Both numbers are the WEB's
-    /// (`raceOverlays.js`); `tests/shell-parity.test.js` fails if this copy or
-    /// Android's drifts from it, which is the substitute for the `pointTickMs`
-    /// the model does not answer.
-    private static let tickOfPhase = 0.035
+    /// The count, and the glide that rides it, as a fraction of phase 1's hold.
+    /// The WEB's number (`raceOverlays.js`); `tests/shell-parity.test.js` fails
+    /// if this copy or Android's drifts from it.
+    private static let tallyOfPhase = 0.28
     /// The cut's dip, as a fraction of the model's phase-1 hold.
     private static let fadeOfPhase = 0.055
-    /// How many beats the tally takes, whatever the ladder pays. See runPhases.
-    private static let tallyBeats = 8
 
     /// `#results h2` (4.6rem) and `.is-champs h2` (3.4rem) on a 1080p board.
     private static let titleSizePlain: CGFloat = 74
@@ -398,7 +383,7 @@ struct RaceResultsView: View {
 // MARK: - A row as it stands right now
 
 /// The model's record plus the total being SHOWN, and where the model's own
-/// final order put it (the re-sort's tie-break).
+/// final order put it (the tie-break within the B order).
 private struct LiveRow {
     let row: GameState.ResultsView.Row
     let total: Int?

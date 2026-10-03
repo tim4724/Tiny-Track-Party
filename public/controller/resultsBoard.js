@@ -41,9 +41,9 @@ export function renderResultsBoard(data, { meId, hostPeerIndex, amHost, liveryOf
 
 // WHERE YOU CAME IN THE RACE — one ranking, and deliberately not the cup one.
 //
-// The cup standing is the TV's to reveal: it counts the points across one at a
-// time and re-ranks live, and a phone that printed the new position the moment
-// the board arrived would spoil that for everyone holding one. The race place
+// The cup standing is the TV's to reveal: it counts the points across while the
+// rows glide to their new places, and a phone that printed the new position the
+// moment the board arrived would spoil that for everyone holding one. The race place
 // is the half the TV cannot personalise, it is true the instant you cross the
 // line, and being the only number here it can never be read as the other one.
 function renderMe(data, meId, cupDone) {

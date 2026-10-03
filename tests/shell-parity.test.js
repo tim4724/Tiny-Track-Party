@@ -192,36 +192,25 @@ test('every TV shell acts on every controller verdict the web acts on', () => {
   }
 });
 
-test('every shell paces the points tally by the same two numbers', () => {
-  // Read off the web, never typed here, so tuning the beat needs no test edit.
+test('every shell paces the points tally by the same number', () => {
+  // Read off the web, never typed here, so retuning the tally needs no test edit.
   const WEB = 'public/display/raceOverlays.js';
-  const web = shell(WEB);
-  const at = (re, what) => {
-    const m = re.exec(web);
-    assert.ok(m, `${WEB} no longer states ${what} — has the board been rewritten?`);
-    return Number(m[1]);
-  };
-  const want = {
-    share: at(/const TICK_OF_PHASE = ([\d.]+);/, "the tally's share of phase 1"),
-    floorMs: at(/Math\.max\((\d+), v\.racePhaseMs \* TICK_OF_PHASE\)/, "the beat's floor"),
-  };
+  const m = /const TALLY_OF_PHASE = ([\d.]+);/.exec(shell(WEB));
+  assert.ok(m, `${WEB} no longer states the tally's share of phase 1 — has the board been rewritten?`);
+  const want = Number(m[1]);
 
-  for (const [file, share, floor] of [
-    ['shells/tvos/TinyTrackParty/Screens/ResultsView.swift',
-      /tickOfPhase = ([\d.]+)/, /max\(([\d.]+), view\.racePhaseMs \* Self\.tickOfPhase\)/],
-    ['shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/ResultsScreen.kt',
-      /TICK_OF_PHASE = ([\d.]+)/, /max\(([\d.]+), results\.racePhaseMs \* TICK_OF_PHASE\)/],
+  for (const [file, re] of [
+    ['shells/tvos/TinyTrackParty/Screens/ResultsView.swift', /tallyOfPhase = ([\d.]+)/],
+    ['shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/ResultsScreen.kt', /TALLY_OF_PHASE = ([\d.]+)/],
   ]) {
     const src = shell(file);
     if (!src) continue;
-    for (const [name, re] of [['share', share], ['floorMs', floor]]) {
-      const m = re.exec(src);
-      assert.ok(m, `${file}: could not read its ${name} — the anchor has moved`);
-      assert.equal(Number(m[1]), want[name],
-        `${file}'s ${name} is ${m[1]} but ${WEB} says ${want[name]} — `
-        + 'the tally is one rule, and a shell that has drifted counts a cup out '
-        + 'at a speed nobody chose');
-    }
+    const got = re.exec(src);
+    assert.ok(got, `${file}: could not read its tally share — the anchor has moved`);
+    assert.equal(Number(got[1]), want,
+      `${file}'s tally share is ${got[1]} but ${WEB} says ${want} — `
+      + 'the tally is one rule, and a shell that has drifted counts a cup out '
+      + 'at a speed nobody chose');
   }
 });
 

@@ -1,7 +1,10 @@
 package games.couchpad.tinytrack
 
 import android.os.SystemClock
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.draw.alpha
 import androidx.compose.foundation.background
@@ -14,16 +17,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -31,13 +34,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.roundToInt
 
 /**
  * The results board.
@@ -55,12 +60,10 @@ import kotlin.math.roundToInt
  * POSITION, and it re-flows under the re-sort — which reads as a glitch, not as a
  * ranking.
  *
- * Phase 2 accounts the points out ONE AT A TIME and re-ranks on the totals it is
- * now showing, so a row overtakes another AT the point that does it. Discreteness
- * is what makes that legible: interpolating the same totals continuously reaches
- * the same place, but every rank change lands mid-blur with nothing to attribute
- * it to. `pointsBefore` is on every points row so the total can climb rather than
- * jump, and **no shell subtracts `gained` for itself**.
+ * Phase 2 counts the points into the totals while every row GLIDES ONCE, from its
+ * place before them to its place after, for as long as the count takes.
+ * `pointsBefore` is on every points row so the total can climb rather than jump,
+ * and **no shell subtracts `gained` for itself**.
  */
 @Composable
 fun ResultsScreen(state: GameState, game: GameCoordinator) {
@@ -68,8 +71,12 @@ fun ResultsScreen(state: GameState, game: GameCoordinator) {
 
     // A single-race board has one phase and opens already settled.
     var standings by remember(results) { mutableStateOf(!results.twoPhase) }
-    // How many points each row has moved out of its "+N" and into its total.
+    // How much of each row's "+N" has moved into its total, 0..1.
     var accounted by remember(results) { mutableStateOf(0f) }
+    // The rows stand in the cup's FINAL order. Flipped once, at the start of the
+    // count, and the rows glide there for as long as the count takes.
+    var placed by remember(results) { mutableStateOf(!results.twoPhase) }
+    val runMs = results.racePhaseMs * TALLY_OF_PHASE
     // The CUT's fade: the race table dips out and the cup's comes back in its
     // place. See the LaunchedEffect below.
     var listVisible by remember(results) { mutableStateOf(true) }
@@ -98,13 +105,11 @@ fun ResultsScreen(state: GameState, game: GameCoordinator) {
 
         // THE CUT. A cup board carries three orders — the race that just ended
         // (A), the cup BEFORE these points (B) and the cup after them (C) — and
-        // re-sorting on the totals being shown means passing through B, which is
-        // uncorrelated with the race just watched: the board snapped sideways
-        // into the pre-race table before a single point had moved, with nothing
-        // on screen to account for it. So A -> B is a CUT, not a move: the list
+        // sliding from A into B would be a move uncorrelated with the race just
+        // watched, made before a single point had landed, with nothing on screen
+        // to account for it. So A -> B is a CUT, not a move: the list
         // dips out, the heading turns over to "Standings", and the cup's own
-        // table comes back in its place. Only B -> C is animated, and there
-        // every row moves BECAUSE A POINT LANDED.
+        // table comes back in its place.
         val fadeMs = (results.racePhaseMs * FADE_OF_PHASE).toLong()
         listVisible = false
         delay(fadeMs)
@@ -113,61 +118,49 @@ fun ResultsScreen(state: GameState, game: GameCoordinator) {
         listVisible = true
         delay(fadeMs)   // let the cup's table arrive before its numbers move
 
-        // THE TALLY. A FIXED NUMBER OF BEATS, whatever the ladder pays: it used
-        // to take one per point the WINNER owed, which tied the length of the
-        // board to the top of POINTS_BY_RANK — widening that from 9 to 15
-        // stretched it by two thirds with nothing here changing. A row still
-        // moves WHOLE POINTS; it just moves as many as the clock has reached.
-        val most = results.listRows.maxOfOrNull { it.owed() } ?: 0
-        if (most == 0) { accounted = 1f; game.settleStandings(); return@LaunchedEffect }
-        val tickMs = max(16.0, results.racePhaseMs * TICK_OF_PHASE)
-        val runMs = TALLY_BEATS * tickMs
+        // B -> C is ONE GLIDE spanning the count: each row travels once, straight
+        // to where it ends, while each total counts up at its own rate.
+        // Re-sorting on the totals at every beat cannot be smooth — rows climb at
+        // different rates, so a row that passes one car and is then passed by
+        // another goes up and comes back down, and a 4th/5th swap crosses the
+        // two columns twice.
+        //
+        // ONE LENGTH, whatever the ladder pays: it used to take a beat per point
+        // the WINNER owed, which tied the length of the board to the top of
+        // POINTS_BY_RANK. A bigger ladder now counts faster instead.
+        placed = true
+        if (results.listRows.none { it.owed() > 0 }) { accounted = 1f; game.settleStandings(); return@LaunchedEffect }
         // Driven from the CLOCK, not from accumulated nominal delays. `delay` is a
-        // floor, so summing tickMs stretches the tally under a starved main thread
-        // — on this GPU, exactly when the next circuit is meshing — and it can still
-        // be counting when the intermission advances. Reading elapsed time lets a
-        // starved frame skip ahead and land inside the budget, which is why the web
-        // drives `k` off performance.now().
+        // floor, so summing them stretches the tally under a starved main thread
+        // — on this GPU, exactly when the next circuit is meshing — and it can
+        // still be counting when the intermission advances.
         val startedAt = SystemClock.uptimeMillis()
-        while (true) {
-            delay((tickMs / 4).toLong())
-            val elapsed = (SystemClock.uptimeMillis() - startedAt).toDouble()
-            // QUANTISED TO THE BEAT. Rows owe different amounts, so on a
-            // continuous clock their totals cross a whole number at different
-            // instants — and a row that gains one just before the row under it
-            // does overtakes and is overtaken back inside a frame. Every total
-            // moves on the same beat instead.
-            val beat = min(TALLY_BEATS, (elapsed / tickMs).toInt())
-            accounted = beat.toFloat() / TALLY_BEATS
-            if (elapsed >= runMs) break
+        while (accounted < 1f) {
+            delay(16)
+            accounted = min(1.0, (SystemClock.uptimeMillis() - startedAt) / runMs).toFloat()
         }
-        accounted = 1f
         // The cup is now told. Anything waiting on it — the phones — can say so.
         game.settleStandings()
     }
 
     // The rows as they stand RIGHT NOW: the race phase is the race's order and
     // states NO cup number at all; the standings phase is the cup table with each
-    // row's total part-way to what it banked, re-sorted on the totals being shown.
+    // row's total part-way to what it banked, in the cup's order before these
+    // points (B) until the glide places it in the final one (C).
     val rows: List<LiveRow> = if (!standings) {
         results.raceRows.map { LiveRow(it, null) }
     } else {
-        results.listRows
-            .mapIndexed { seat, r ->
-                val done = (accounted * r.owed()).roundToInt()
-                LiveRow(r, (r.pointsBefore ?: 0) + done, seat = seat)
-            }
-            // A TIE MOVES NOBODY until the very end. Breaking one by `seat` — the
-            // FINAL order — makes a level score display the finish early: two rows
-            // whose totals leapfrog tie on one beat, the lower jumps ahead because
-            // it is going to end up there, and the next beat takes it back.
-            // Mid-tally a tie keeps the order the rows came IN on; only the settled
-            // board sorts on the model's, which is what lands it exactly there.
-            .sortedWith(
-                compareBy<LiveRow> { it.row.joining }
-                    .thenByDescending { it.total ?: -1 }
-                    .thenByDescending { if (accounted >= 1f) 0 else (it.row.pointsBefore ?: 0) }
-                    .thenBy { it.seat })
+        val live = results.listRows.mapIndexed { seat, r ->
+            // WHOLE points, each row at its own rate, and floor() holds every
+            // row's last point for the end, so the totals land as the glide does.
+            LiveRow(r, (r.pointsBefore ?: 0) + floor(accounted * r.owed()).toInt(), seat = seat)
+        }
+        // B: the totals the rows came in on, the model's own order breaking a
+        // tie. Joining rows raced nothing and stay under the field.
+        if (placed) live else live.sortedWith(
+            compareBy<LiveRow> { it.row.joining }
+                .thenByDescending { it.row.pointsBefore ?: 0 }
+                .thenBy { it.seat })
     }
 
     // The title, the medals and the footer all wait for the last point. Crowning a
@@ -199,7 +192,7 @@ fun ResultsScreen(state: GameState, game: GameCoordinator) {
                 // sticker's padding and a TRANSPARENT border from its first frame.
                 // The celebration is then paint only — fill, border colour, shadow
                 // and a rotation, none of which cost layout — so nothing under it
-                // moves at the moment the rows are mid-flip. Recolouring the WORD
+                // moves at the moment the rows are mid-glide. Recolouring the WORD
                 // instead loses both the box and the size step.
                 val champs = settled && results.podium
                 val titleShape = RoundedCornerShape(Sticker.radiusLarge)
@@ -218,7 +211,10 @@ fun ResultsScreen(state: GameState, game: GameCoordinator) {
                 ) {
                     StickerText(
                         Copy.title(
+                            // The CUT turns the heading to "Standings", never to a
+                            // champion: a podium's key waits for the last point.
                             if (settled) results.titleKey
+                            else if (results.twoPhase && standings) "standings"
                             else results.raceTitleKey.ifEmpty { results.titleKey },
                             results.cupName,
                         ),
@@ -258,27 +254,29 @@ fun ResultsScreen(state: GameState, game: GameCoordinator) {
                 // one leaves it EMPTY rather than leaving it out — so a race result,
                 // a cup table and a podium are all the same size, here and on the web.
                 val boardWidth = BOARD_WIDTH_CUP
-                Row(
-                    Modifier.alpha(listAlpha).width(
-                        if (rows.size > ONE_COL_MAX) boardWidth * 2 + COL_GAP else boardWidth),
-                    horizontalArrangement = Arrangement.spacedBy(COL_GAP),
+                // ONE LAYER, every row placed by its SLOT and keyed by player, so a
+                // row whose place is in the other column glides across to it. A
+                // list per column can only move a row within its own.
+                val columns = if (perColumn > 0) (rows.size + perColumn - 1) / perColumn else 0
+                Box(
+                    Modifier.alpha(listAlpha)
+                        .width(boardWidth * columns + COL_GAP * max(0, columns - 1))
+                        .height(rowsHeight(perColumn)),
                 ) {
-                    for (col in 0 until (rows.size + perColumn - 1) / perColumn) {
-                        val slice = rows.drop(col * perColumn).take(perColumn)
-                        // A LazyColumn KEYED BY PLAYER, so a row that overtakes
-                        // another GLIDES past it rather than the two swapping
-                        // contents in place. The re-sort is the whole point of phase
-                        // 2 — the rows re-ordering under the points that moved them
-                        // is the only place a player can see what the race DID — and
-                        // a swap with no movement reads as a re-render.
-                        LazyColumn(
-                            Modifier.width(boardWidth).height(rowsHeight(perColumn)),
-                            verticalArrangement = Arrangement.spacedBy(ROW_GAP),
-                            userScrollEnabled = false,
-                        ) {
-                            itemsIndexed(slice, key = { _, it -> it.row.id }) { i, live ->
-                                BoardRow(col * perColumn + i + 1, live, settled, Modifier.animateItem())
-                            }
+                    // The glide is the count's; every other re-order (the cut, a
+                    // new board) is a jump made under the fade.
+                    val move = if (placed) tween<Dp>(runMs.toInt(), easing = GLIDE_EASING) else snap()
+                    rows.forEachIndexed { i, live ->
+                        key(live.row.id) {
+                            val x by animateDpAsState((boardWidth + COL_GAP) * (i / perColumn), move, label = "row-x")
+                            val y by animateDpAsState((ROW_HEIGHT + ROW_GAP) * (i % perColumn), move, label = "row-y")
+                            // Of two rows that cross, the climber ENDS higher, so
+                            // stacking by rank passes it in front, as on the web.
+                            // The lambda offset reads the glide in LAYOUT, so a
+                            // moving row is re-placed, not recomposed, per frame.
+                            BoardRow(i + 1, live, settled,
+                                Modifier.offset { IntOffset(x.roundToPx(), y.roundToPx()) }
+                                    .zIndex(-i.toFloat()).width(boardWidth))
                         }
                     }
                 }
@@ -339,12 +337,14 @@ fun ResultsScreen(state: GameState, game: GameCoordinator) {
     }
 }
 
-/** One point accounted for, per row, per tick — as a fraction of phase 1's hold. */
-private const val TICK_OF_PHASE = 0.035
+/** The count, and the glide that rides it, as a fraction of phase 1's hold. The
+ * WEB's number; `tests/shell-parity.test.js` fails if it drifts. */
+private const val TALLY_OF_PHASE = 0.28
+
+/** CSS `ease-in-out`, which is what the web's glide eases with. */
+private val GLIDE_EASING = CubicBezierEasing(0.42f, 0f, 0.58f, 1f)
 /** The cut's dip, as a fraction of the model's phase-1 hold. */
 private const val FADE_OF_PHASE = 0.055
-/** How many beats the tally takes, whatever the ladder pays. See the cut above. */
-private const val TALLY_BEATS = 8
 
 /**
  * The two title sizes, and which one a board takes is decided by whether it is a
