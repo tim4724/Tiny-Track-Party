@@ -14,6 +14,7 @@ import { init as initNativeSim, NativeRaceSession } from './NativeRaceSession.js
 // same chrome through the same setCarHud, and used to carry its own copy of the
 // number.
 import { HUD_TICK_MS } from './Stage.js';
+import { ITEM_IDS } from './engine/contract.js';
 import { AI_PERSONALITIES } from './aiPersonas.js';
 import { renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
 import { buildQRMatrix } from '../shared/qr.js';
@@ -1305,7 +1306,11 @@ export function runDisplayScenario(opts, ctx) {
     // item is guaranteed by FORCING THE ROULETTE instead — every box on the track rolls
     // this one item (the same knob as the debug ?item=). Cars still have to collect it,
     // so the first showcase shot lands a box-run into the race rather than at 0.8s.
-    const forceItem = (kind === 'rocket' || kind === 'monster') ? kind : null;
+    // The bench takes the debug ?item= the live launch does, roulette only: its
+    // field still has to collect and fire the item, as in a real race.
+    const qItem = new URLSearchParams(location.search).get('item');
+    const forceItem = (kind === 'rocket' || kind === 'monster') ? kind
+      : (kind === 'bench' && ITEM_IDS.includes(qItem)) ? qItem : null;
     // `?hold=` — a screenshot card's race moment (galleryScenarios.js `hold`),
     // re-armed on every deal so a redealt race stops at the same moment.
     const holdParam = new URLSearchParams(location.search).get('hold');
