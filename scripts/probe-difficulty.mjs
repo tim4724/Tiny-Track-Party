@@ -47,16 +47,17 @@ for (const line of execFileSync(PROBE, ['laptime', '--json'], { encoding: 'utf8'
 }
 
 // Both catalogues (devTracks.js adds the Gym, which the native engine cannot build).
-const { TRACKS } = await import(new URL('../public/shared/tracks.js', import.meta.url));
+const { TRACKS, CUPS } = await import(new URL('../public/shared/tracks.js', import.meta.url));
+const cupOf = Object.fromEntries(CUPS.flatMap((c) => c.tracks.map((id) => [id, `${c.id} ${c.difficulty}`])));
 const { DEV_TRACKS } = await import(new URL('../public/shared/devTracks.js', import.meta.url));
 
-console.log('track        diff     len  lap(s) brake  minR hairp  dens  rec  minW maxW climb');
-for (const [id, def] of Object.entries({ ...TRACKS, ...DEV_TRACKS })) {
+console.log('track        cup         len  lap(s) brake  minR hairp  dens  rec  minW maxW climb');
+for (const id of Object.keys({ ...TRACKS, ...DEV_TRACKS })) {
   const t = buildTrack(id);
   const m = measureTrack(t, id);
   const ai = probed.get(id);
   console.log(
-    `${id.padEnd(12)} ${String(def.difficulty).padEnd(8)}` +
+    `${id.padEnd(12)} ${(cupOf[id] || 'dev').padEnd(11)}` +
     `${String(Math.round(t.length)).padStart(4)}  ` +
     `${(ai ? ai.lapSec.toFixed(1) : '  -').padStart(5)}  ${ai ? ai.brakeFrac.toFixed(2) : ' -  '}  ` +
     `${String(m.minRadius).padStart(4)}    ${m.hairpins}  ${m.cornerDensity.toFixed(3)}  ${String(m.minRecovery).padStart(3)}  ` +

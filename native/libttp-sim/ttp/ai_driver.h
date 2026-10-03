@@ -54,7 +54,7 @@ double cornerBrake(const Car& car, Centerline& centerline,
 struct Persona { const char* name; double caution; double laneBias; };
 extern const Persona AI_PERSONALITIES[7];
 
-// Bot skill (0..1) for a cup tendency (1..4); anything else is 1, the bot as it
+// Bot skill (0..1) for a cup difficulty (1..4); anything else is 1, the bot as it
 // always was. Lower skill drives less of the racing line, wobbles across its
 // lane, and now and then runs wide into the barrier.
 double aiSkillForTier(int tier);

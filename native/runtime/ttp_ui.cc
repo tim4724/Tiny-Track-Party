@@ -275,7 +275,7 @@ int ttp_ui_configure(const char* json) {
   const Value* cups = c.find("cups");
   const Value* cat = c.find("catalog");
   // NEITHER LIST GIVEN = the world this build ships. The cups, their display
-  // names, the track names and the tendency rule are all codegen'd into the
+  // names, the track names and the cup difficulties are all codegen'd into the
   // wasm (generated/track_defs.h), so a shell that just wants the real game
   // hands over the two field sizes and stops — it does not owe this ABI ~2 KB
   // of JSON assembled out of a copy of the catalogue it would have to carry.

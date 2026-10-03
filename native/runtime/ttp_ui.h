@@ -89,11 +89,11 @@ extern "C" {
  *    "catalog": [{"id","name","cup": "id"|null, "cupDifficulty": n|null}, ...]}
  *
  * OMIT BOTH LISTS AND YOU GET THE SHIPPED GAME. The cups, their display names,
- * every track name and the cup-tendency rule are codegen'd into this build
+ * every track name and the cup difficulties are codegen'd into this build
  * (generated/track_defs.h), so a shell that wants the real catalogue passes the
  * two field sizes and nothing else. It used to have to send ~2 KB of JSON
  * assembled out of its own copy of the catalogue — which meant every shell
- * carried the names and re-implemented the tendency, for data the wasm already
+ * carried the names and the cup difficulties, for data the wasm already
  * held. Read it back with ttp_ui_catalogue_json if you need to draw a picker.
  *
  * Given, the two lists OVERRIDE, and that is what the conformance corpus rides:

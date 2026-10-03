@@ -234,7 +234,7 @@ TTP_ABI const char* ttp_track_json(const char* trackId, int laps, uint32_t seed)
 
 // The same, for a track that is not in the catalogue: `descriptorJson` is one
 // authored track descriptor, the shape public/shared/tracks.js entries have —
-//   { "id"?, "name"?, "difficulty"?, "width"?, "startU"?,
+//   { "id"?, "name"?, "width"?, "startU"?,
 //     "segments": [ { "kind": "straight"|"arc"|"loop", "length"?, "radius"?,
 //                     "angle"?, "rise"?, "bank"?, "roll"?, "drift"?,
 //                     "width"?: n | [a,b], "pillars"?, "over"? } ]

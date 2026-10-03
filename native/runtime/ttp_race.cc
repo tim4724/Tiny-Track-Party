@@ -93,7 +93,7 @@ race::FieldWorld worldWithCap(const char* botCapJson) {
   return w;
 }
 
-// The CPU fill's skill for a race on `trackId`: its cup's tendency through
+// The CPU fill's skill for a race on `trackId`: its cup's difficulty through
 // ttp::AI_TIER_SKILL. A track in no cup (the dev tracks) races the full bot.
 double botSkillFor(const std::string& trackId) {
   for (const rtui::CatalogEntry& e : rtui::shippedCatalog()) {

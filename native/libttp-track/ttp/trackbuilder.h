@@ -57,12 +57,12 @@ struct BananaDef { double u, lat; };
 
 struct TrackDef {
   const char* id;
-  // THE THREE FIELDS BELOW ARE NOT BUILDER INPUT. Nothing in this library reads
-  // any of them; they ride along because the catalogue is where each is
+  // THE TWO FIELDS BELOW ARE NOT BUILDER INPUT. Nothing in this library reads
+  // either; they ride along because the catalogue is where each is
   // AUTHORED, and carrying them here is what keeps one source for three shells.
   // The alternative — and what the tree did until they were added — is every
-  // shell bundling its own copy of the display names and its own spelling of
-  // the tendency rule, which is the drift the codegen exists to stop.
+  // shell bundling its own copy of the display names and cup tags, which is the
+  // drift the codegen exists to stop.
 
   // Display name (public/shared/tracks.js `name`), for pickers and boards.
   const char* name;
@@ -70,10 +70,6 @@ struct TrackDef {
   // that no cup lists. The tag the biome resolves from
   // (libttp-runtime/ttp/theme.h).
   const char* cup;
-  // Difficulty as a LEVEL, 1 (Easy) .. 4 (Expert), 2 for anything unlabelled.
-  // The catalogue authors a word; the codegen resolves it, because the only
-  // reader is the cup tendency (ttp::rt::ui::cupTendency) and it wants a number.
-  int difficulty;
   bool isSpline;
   const SegDef* segs; int nSegs;
   const WptDef* wpts; int nWpts;
@@ -101,7 +97,8 @@ struct CupDef {
   const char* id;
   const char* name;
   const char* const* tracks; int nTracks;  // ids, easiest -> hardest
-  // An AUTHORED tendency override, or 0 for "derive it from the tracks".
+  // Authored, 1..4: the cup's place on the ladder, which picks its bot skill
+  // (ttp::aiSkillForTier). No track carries one of its own.
   int difficulty;
   // The cup's PAPER colour, packed 0xRRGGBB — the picker's surface tint, and
   // NOT the biome's. The two were the same source once and it did not survive

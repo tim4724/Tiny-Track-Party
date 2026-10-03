@@ -131,7 +131,6 @@ Call-site inventory (all on the byte path unless noted):
 | `TrackBuilder.js:188` | `Math.max(8, Math.round(π r / DS))` | ≥ 0 (build-time) |
 | `AiDriver.js:83` | `Math.max(16, Math.round(L / RL_STEP))` | ≥ 0 |
 | `AiDriver.js:158` | `Math.max(2, Math.round(4 / h))` | ≥ 0 |
-| `tracks.js:339` | cup difficulty mean (UI only, off byte path) | ≥ 0 |
 
 `wrapDelta` (`util.js:19-21`) is the dangerous one: it is on the per-frame byte
 path and takes signed arguments, so the negative-tie behaviour is observable.

@@ -75,7 +75,7 @@ const Persona AI_PERSONALITIES[7] = {
     {"Bolt", 1.05, -0.6}, {"Pixel", 1.00, 0.6}, {"Rusty", 0.97, -0.25}, {"Zippy", 0.94, 0.25},
     {"Turbo", 1.02, 0.4}, {"Gizmo", 0.99, -0.4}, {"Scoot", 0.96, 0.1}};
 
-// Skill by cup tendency, index tier-1 (Beach, Snow, Backyard/Canyon, Playroom).
+// Skill by cup difficulty, index tier-1 (Beach, Snow, Backyard/Canyon, Playroom).
 // The top tier is the full bot: the hardest cup races exactly what every cup
 // raced before skill existed.
 static const double AI_TIER_SKILL[4] = {0.15, 0.4, 0.7, 1.0};
