@@ -5,7 +5,6 @@ import android.os.Bundle
 import android.util.Log
 import android.view.Gravity
 import android.view.KeyEvent
-import android.view.SurfaceView
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
@@ -128,7 +127,11 @@ class MainActivity : ComponentActivity() {
         // ABOVE the window and the UI would vanish behind the race. Why a
         // SurfaceView and never a TextureView is DisplayHost's class header.
         val root = FrameLayout(this)
-        val surfaceView = SurfaceView(this).apply {
+        // The theme's windowBackground, wrapped so it can switch to a clear once
+        // the race surface is showing (GameWindow.kt).
+        val background = WindowBackground(checkNotNull(window.decorView.background))
+        window.setBackgroundDrawable(background)
+        val surfaceView = GameSurfaceView(this, background).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         }
@@ -189,6 +192,7 @@ class MainActivity : ComponentActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         }
         game.display.nameTags = tagView
+        game.display.onSurfaceShowing = { surfaceView.setShowing(it) }
         root.addView(tagView)
         root.addView(compose)
         // The perf readout, OVER the ComposeView and outside it — a plain View,

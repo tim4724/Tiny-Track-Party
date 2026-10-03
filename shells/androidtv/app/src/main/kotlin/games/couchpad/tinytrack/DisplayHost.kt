@@ -56,6 +56,11 @@ class DisplayHost(
         /** `Stage.js`'s HUD_TICK_MS. See [onSlowTick]. */
         const val HUD_TICK_NANOS = 160_000_000L
 
+        /** Presents on a surface before it counts as showing ([onSurfaceShowing]):
+         *  a window that clears over a surface with no frame on the glass yet shows
+         *  black where the paper used to be, so it waits for a few. */
+        private const val SHOWING_PRESENTS = 3
+
         /**
          * The CEILING, in buffer lines — what a panel is worth rendering at all.
          * Only bites on a panel taller than 4K; every TV this ships to is capped
@@ -159,6 +164,16 @@ class DisplayHost(
     /** Fired once, on that frame. At boot the pick lands long before the pixels
      *  do, so without it nothing would ever re-ask what the cover should be. */
     var onFirstPaint: (() -> Unit)? = null
+
+    /**
+     * Whether the CURRENT surface is showing: true once it has presented a few
+     * frames, false again when it is destroyed. The window under it stops
+     * painting while it is (GameWindow.kt). Per surface and with an off edge, so
+     * neither [framesPresented] (never resets) nor [hasPainted] (needs a built,
+     * settled scene).
+     */
+    var onSurfaceShowing: ((Boolean) -> Unit)? = null
+    private var surfacePresents = 0
 
     /**
      * The buffer size the engine was last told about, in PHYSICAL pixels.
@@ -306,6 +321,8 @@ class DisplayHost(
         // down the swap chain, and a frame in flight while that happens is a
         // native crash rather than a dropped frame.
         stop()
+        onSurfaceShowing?.invoke(false)
+        surfacePresents = 0
         pendingW = 0; pendingH = 0; pendingSent = false
         if (hasSurface) {
             TtpSurface.nativeDestroy()
@@ -520,7 +537,10 @@ class DisplayHost(
                     // stalling the build, and a stalled build IS this shell's
                     // lobby latency (`ttp_display.h`).
                     writeReadyBlobs()
-                    if (presented) framesPresented++
+                    if (presented) {
+                        framesPresented++
+                        if (++surfacePresents == SHOWING_PRESENTS) onSurfaceShowing?.invoke(true)
+                    }
                     // A Vulkan boot that gets a frame onto the glass clears its
                     // canary — the failure the canary exists for (the EHABI
                     // unwinder hang, VulkanPolicy) happens under the cover,

@@ -399,6 +399,40 @@ not byte-identical over a moving tag). Inlining the mixer's `lerp` made
 `ttp-mix` 21% SLOWER (77 -> 93 ms/s): R8 folds the whole mixer into one method
 and ART compiles the bigger one worse. Do not re-propose it.
 
+## Every 540 drop is the GPU, and the app window is the part the timer misses (2026-10-03)
+
+4P tidepool, Vulkan, pinned 960x540, a 20 s Perfetto trace (sched, gfx, the app's
+markers) read frame by frame. **Every skipped present is a FrameSkipper decline**:
+frame k-2's fence had not signalled when frame k's `beginFrame` asked, by a median
+1.8 ms. The main thread never missed a vsync, FEngine had always submitted, no
+`dequeueBuffer` waited. FEngine's 123 ms/s of runnable-waiting (behind the FIFO
+main and RenderThread) is real but not on the path of the drops.
+
+**Filament's GPU timer under-reads the seconds that skip by 3-6 ms**, which is why
+a median that looked inside the budget sat beside the drops. Fence to fence, the
+GPU is 92% busy at this point; the app window (HUD + name tags, HWUI on GL) is
+~1.7 ms of its own per frame, and running interleaved with Filament's frame on
+the PowerVR costs Filament's frame ~1.2 ms more. Levers priced on the box, three
+90 s races per arm against a noise floor of eleven 2.5-3.2 skips/s:
+
+- **the window stops painting under a showing surface** (GameWindow.kt: no paper,
+  no full-window destination-out punch): 1.6-2.1 skips/s against 2.3-3.2,
+  56-58 clean seconds of 90 against 48-49 (ABAB on separate installs). Shipped.
+- Filament's queue at VK global priority HIGH (granted on this driver): ~-13%
+  skips, but the window's own frames then finish ~2 ms later (on-time window
+  presents 95 -> 52 in 20 s), which can pair a tag with a different 3D frame.
+  A user decision, not taken.
+- `Engine::flush` right after the uploads and after `beginFrame`: null.
+
+## The adaptive rule parks 4P at 640x360 (2026-10-03)
+
+Four guarded adaptive races per build on tidepool settle at 640x360 for most of
+the race (334-353 of ~470 s), although a pinned 768x432 holds 59.6 fps there.
+The rule's climb needs the cost model to predict the next rung under 0.85 of
+the budget, and the model is anchored on the late window that caused the
+retreat, so the climb out of 360 never fires. Changing that is a policy
+decision (render_scale.h), not a free win.
+
 ## The 4P frame is TWO frames, and the far deck is the one that costs (2026-09-02)
 
 Same box, same build lineage (`1.0-ae7e22ba`), Vulkan, tidepool, 4P pinned

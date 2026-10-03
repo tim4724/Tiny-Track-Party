@@ -44,8 +44,9 @@ import kotlin.math.sqrt
  * size), a translucent SurfaceView of its own (this box's composer overlays
  * only two layers, so a third forces GPU composition), and drawing the tags
  * inside the Filament frame at native resolution (the full-size present alone
- * costs more than the whole window). `debug.ttp.tags 0` ([PerfDebug]) turns
- * them off for the A/B.
+ * costs more than the whole window). What the window paints UNDER the tags was
+ * a lever: see GameWindow.kt. `debug.ttp.tags 0` ([PerfDebug]) turns them off
+ * for the A/B.
  */
 class NameTagView(context: Context, maxPlayers: Int) : View(context) {
 
