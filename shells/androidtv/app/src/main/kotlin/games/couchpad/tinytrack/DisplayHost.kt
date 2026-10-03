@@ -504,6 +504,9 @@ class DisplayHost(
                     // EVERY presented frame, at every split: a tag moving at a
                     // different rate from its car reads as broken.
                     if (presented) nameTags?.let {
+                        // Each sticker's size, only when one moved: C++ hides a
+                        // tag by the share of that box covered. Lands next frame.
+                        it.reportSizes { slot, w, h, lift -> Ttp.ttp_display_name_tag_size(slot, w, h, lift) }
                         it.show(if (PerfDebug.tagsHidden) 0
                                 else Ttp.ttp_display_name_tags(it.tags, it.maxTags))
                     }

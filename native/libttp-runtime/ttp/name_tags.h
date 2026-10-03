@@ -14,18 +14,26 @@
 // shell that draws the tag in the same frame it presents that picture keeps the
 // two together; one that projected on its own clock would trail its car.
 //
-// A cell never tags the car it follows, nor lets that car hide a tag. A tag
-// HIDES when something solid in the 3D scene stands between the camera and THE
-// TAG ITSELF, since a sticker drawn on top of a bridge deck that ought to be in
-// front of it reads as broken. It is the tag that is tested, not its car: a car
-// half behind something keeps its name wherever the tag floats clear, and a car
-// out of sight loses it only because its tag is out of sight too. Two things
-// are solid. A monster truck, as a box, unless the renderer is ghosting it in
-// that cell (ttp_monster_ghosted); ordinary cars never hide a tag, because they
-// overlap constantly in a pack and a tag winking in and out over every pass
-// reads worse than one drawn over a car's corner. And the road deck
-// (NameTagDeck): a bridge, a crest, the far side of a loop. The ground's
-// relief, the scenery and the walls do NOT hide a tag.
+// A cell never tags the car it follows. A tag HIDES when something solid in
+// the 3D scene stands between the camera and THE TAG ITSELF, since a sticker
+// drawn on top of something that ought to be in front of it reads as broken.
+// It is the tag that is tested, not its car: a car half behind something keeps
+// its name wherever the tag floats clear, and a car out of sight loses it only
+// because its tag is out of sight too. The tag is the sticker's box on screen,
+// as the shell measured it (NameTagSize), and what decides is the SHARE of it
+// covered: past NAME_TAG_HIDE_AT the whole tag fades out. A tag is all or
+// nothing, because a clip would have to ride the frame on every shell.
+//
+// Two things are solid. A monster truck, as a box, projected whole onto the
+// screen — only the part of it nearer than the tag — so its share is an exact
+// area; the cell's OWN truck counts too, since the chase camera rides below its
+// roof, unless the camera is inside it or the renderer is ghosting it in that
+// cell (ttp_monster_ghosted). And the road deck (NameTagDeck): a bridge, a
+// crest, the far side of a loop, sampled by rays on a grid over the sticker.
+// The two shares add. Ordinary cars never hide a tag, because they overlap
+// constantly in a pack and a tag winking in and out over every pass reads
+// worse than one drawn over a car's corner. The ground's relief, the scenery
+// and the walls do NOT hide a tag.
 #pragma once
 
 #include <cstdint>
@@ -38,14 +46,18 @@
 namespace ttp {
 namespace rt {
 
-// How far above the car's own origin, along its up axis, the tag is anchored
-// (world units): just over the roof, so a monster truck's rig lifts it by the
-// difference in height.
-constexpr float NAME_TAG_LIFT = 0.45f, NAME_TAG_MONSTER_LIFT = 0.85f;
-// The point the occlusion test aims at, this far above the anchor (world
-// units): roughly the sticker's middle at race distances, since the shells
-// stand the sticker clear above the point its tail marks.
-constexpr float NAME_TAG_BODY = 0.2f;
+// How far above the car's ROOF, along its up axis, the tag is anchored (world
+// units). The roof is measured per car off the model it is drawing (the
+// caller's `shapes`), so a low car's tag sits as close to it as a tall car's
+// does, and a monster truck's rig lifts it by the rig's own height.
+constexpr float NAME_TAG_ROOF_GAP = 0.0f;
+// A tag hides once this share of its sticker is covered, and shows again only
+// below the second: the gap keeps a truck's edge parked on the line from
+// flickering the tag.
+constexpr float NAME_TAG_HIDE_AT = 0.35f, NAME_TAG_SHOW_AT = 0.2f;
+// The deck is sampled on an N x N grid over the sticker (a bridge is too many
+// triangles to project; a truck is projected whole instead).
+constexpr int NAME_TAG_DECK_GRID = 3;
 // Eye distance at which a tag starts to fade, and past which it is gone.
 constexpr float NAME_TAG_FADE = 18.0f, NAME_TAG_FAR = 26.0f;
 // Scale 1 is the size the shells draw a sticker at, and it is the CLOSEST size:
@@ -60,10 +72,13 @@ constexpr float NAME_TAG_CLOSE = 1.5f, NAME_TAG_NEAR = 4.0f;
 constexpr float NAME_TAG_NEAR_SCALE = 0.75f, NAME_TAG_FAR_SCALE = 0.375f;
 // Seconds a tag takes to fade out when something covers it, and back in.
 constexpr float NAME_TAG_COVER_FADE = 0.12f;
-// A monster truck as an occluder box in its own frame (half width, height, half
-// length; world units): the kit chassis with the car's body grafted on top,
-// measured off the GLBs' extents.
-constexpr float NAME_TAG_MONSTER_HALF_W = 0.32f, NAME_TAG_MONSTER_H = 0.8f, NAME_TAG_MONSTER_HALF_L = 0.44f;
+// A monster truck's CHASSIS as an occluder box in its own frame (half width,
+// half length; world units), the kit's extents, from the ground up to the seat
+// its car's body is grafted on. The body above is a second box of its own
+// measured size (NameTagShape): it is narrower than the wheels, and a tag over
+// the roof meets it first, so one box the chassis's width all the way up hid
+// tags early.
+constexpr float NAME_TAG_MONSTER_HALF_W = 0.32f, NAME_TAG_MONSTER_HALF_L = 0.44f;
 
 // The road deck as an occluder: the flat pieces between neighbouring centerline
 // samples, edge to edge across the road's width, in chunks under one bounding
@@ -104,19 +119,51 @@ struct NameTag {
     float alpha;     // 0..1
 };
 
+// A sticker's box as its shell draws it at scale 1, as fractions of the surface
+// (w of its width, h and lift of its height): centred on the anchor, its bottom
+// edge `lift` above it. The shell measures it (ttp_display_name_tag_size) since
+// only the shell knows its font; the box scales about the anchor with the tag.
+struct NameTagSize {
+    float w, h, lift;
+};
+
+// What a shell that has not measured yet is assumed to draw: 28.8 px type on a
+// 1080-line panel (the authored size, display.css `.name-tag`), a typical short
+// name three em wide, the box 1.3 em tall and lifted 0.4 em.
+inline NameTagSize nameTagSizeFallback(float surfaceW, float surfaceH) {
+    const float em = 0.0267f;  // of the height
+    return { 3 * em * surfaceH / surfaceW, 1.3f * em, 0.4f * em };
+}
+
+// A car as the tags see it, as drawn this frame. `roof` is the height of its
+// roof over its origin, monster rig included: where its tag is anchored. For a
+// monster truck it is also the top of the occluder, which is the chassis box up
+// to `seat` and the car's body above it, `bodyHalfW` x `bodyHalfL` (wheels off).
+struct NameTagShape {
+    float roof;
+    float seat, bodyHalfW, bodyHalfL;
+};
+
+// The cover state of one (view, car) across frames, kept by the caller.
+struct NameTagCover {
+    float clear = 1;      // 1 = shown, 0 = gone; fades at NAME_TAG_COVER_FADE
+    bool hidden = false;  // the hysteresis latch between HIDE_AT and SHOW_AT
+};
+
 // Every tag for frame `f`. `pictures` holds 4 floats per view — x, y, w, h of
 // that cell's picture rect as fractions of the surface, top-left origin
-// (ttp_display_cell_rects' first rect). Tags come back grouped by cell in cell
-// order and, within a cell, FAR TO NEAR, so a shell stacking them in order puts
-// the nearer name on top. Empty for an overview frame and for fewer than two
-// cells.
+// (ttp_display_cell_rects' first rect). `shapes` and `sizes` hold one entry
+// per car: its shape as drawn this frame, and its sticker. Tags come back
+// grouped by cell in cell order and, within a cell, FAR TO NEAR, so a shell
+// stacking them in order puts the nearer name on top. Empty for an overview
+// frame and for fewer than two cells.
 //
-// `cover` is the fade state across frames, one entry per (view, car) — the
-// caller keeps it and hands it back; a size that does not fit this frame is
-// reset. Each tag's alpha is its distance fade times that state, which moves
-// toward covered or clear at NAME_TAG_COVER_FADE over f.dt.
-std::vector<NameTag> nameTags(const TtpFrameInput& f, const float* pictures,
-                              const NameTagDeck& deck, std::vector<float>& cover);
+// `cover` is one entry per (view, car) — the caller keeps it and hands it back;
+// a size that does not fit this frame is reset. Each tag's alpha is its
+// distance fade times that entry's `clear`.
+std::vector<NameTag> nameTags(const TtpFrameInput& f, const float* pictures, const NameTagShape* shapes,
+                              const NameTagSize* sizes, const NameTagDeck& deck,
+                              std::vector<NameTagCover>& cover);
 
 }  // namespace rt
 }  // namespace ttp

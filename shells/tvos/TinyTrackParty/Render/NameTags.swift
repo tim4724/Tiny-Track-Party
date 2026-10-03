@@ -49,6 +49,10 @@ final class NameTagView: UIView {
         /// The projected point, in the layer's unit coordinates: below the tail's
         /// tip, which is why it is past 1.
         let anchor: CGPoint
+        /// The sticker's box (the tail aside), and how far its bottom edge stands
+        /// above the projected point: what C++ measures a tag's cover against.
+        let box: CGSize
+        let lift: CGFloat
     }
 
     /// C++ writes into this directly (`DisplayHost`); `show` says how much of it is live.
@@ -61,6 +65,12 @@ final class NameTagView: UIView {
     /// Which car each pooled layer's image is, so a frame swaps images only on a change.
     private var shown: [EngineIdentity?] = []
     private var visible = 0
+    /// The slots' sticker sizes have moved since C++ was last told (`reportSizes`).
+    private var sizesDirty = true
+
+    override var bounds: CGRect {
+        didSet { if bounds.size != oldValue.size { sizesDirty = true } }
+    }
 
     init(frame: CGRect, maxPlayers: Int) {
         maxTags = maxPlayers * (maxPlayers - 1)
@@ -89,10 +99,25 @@ final class NameTagView: UIView {
         }
         stickers = next
         shown = shown.map { _ in nil }  // a re-drawn sticker must reach its layer
+        sizesDirty = true
     }
 
     /// The scene's slot order, off the built roster (`ttp_display_slot_ids_json`).
-    func setSlots(_ ids: [EngineIdentity]) { slots = ids }
+    func setSlots(_ ids: [EngineIdentity]) { slots = ids; sizesDirty = true }
+
+    /// Hands each slot's sticker box to `report` as fractions of this view — the
+    /// size C++ measures a tag's cover against (`ttp_display_name_tag_size`) —
+    /// but only when a sticker, the slot order or the view moved. `DisplayHost`
+    /// makes the call, as it makes every other.
+    func reportSizes(_ report: (_ slot: Int, _ w: Float, _ h: Float, _ lift: Float) -> Void) {
+        let w = bounds.width, h = bounds.height
+        guard sizesDirty, w > 0, h > 0 else { return }
+        sizesDirty = false
+        for (slot, id) in slots.enumerated() {
+            guard let s = stickers[id] else { continue }
+            report(slot, Float(s.box.width / w), Float(s.box.height / h), Float(s.lift / h))
+        }
+    }
 
     /// Place the `n` tags C++ just wrote into `tags`; 0 hides them all.
     func show(_ n: Int) {
@@ -194,6 +219,7 @@ final class NameTagView: UIView {
         // point, which leaves the tail's tip just clear of the car.
         let anchorY = (boxH + 0.4 * em) / canvas.height
         return TagImage(name: name, colorIndex: colorIndex, image: image.cgImage!, size: canvas,
-                        anchor: CGPoint(x: 0.5, y: anchorY))
+                        anchor: CGPoint(x: 0.5, y: anchorY), box: CGSize(width: boxW, height: boxH),
+                        lift: 0.4 * em)
     }
 }

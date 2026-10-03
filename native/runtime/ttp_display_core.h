@@ -32,7 +32,11 @@ struct DisplayCore : DisplayState {
     // covered/clear fade they carry across frames, one per (view, car). Worked
     // out once per ttp_display_frame, so reading them is free of side effects.
     std::vector<NameTag> nameTags;
-    std::vector<float> tagCover;
+    std::vector<NameTagCover> tagCover;
+    // Each slot's sticker as its shell measured it (ttp_display_name_tag_size).
+    // Kept across builds: the shell re-measures whenever a slot's name changes,
+    // and w <= 0 is a slot never measured, which falls back to the estimate.
+    std::vector<NameTagSize> tagSizes;
 
     // A blob walk's state between its crossings (ttp_display.h), in two halves
     // with two different lifetimes — which is the whole lesson of the version

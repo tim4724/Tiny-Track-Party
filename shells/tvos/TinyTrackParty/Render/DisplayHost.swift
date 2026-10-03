@@ -573,6 +573,9 @@ final class DisplayHost {
         // from its car reads as broken.
         if presented {
             let tags = nameTags
+            // Each sticker's size, only when one moved: C++ hides a tag by the
+            // share of that box covered. Lands next frame.
+            tags.reportSizes { slot, w, h, lift in ttp_display_name_tag_size(Int32(slot), w, h, lift) }
             let n = Self.tagsOff ? 0 : tags.tags.withUnsafeMutableBufferPointer {
                 Int(ttp_display_name_tags($0.baseAddress, Int32(tags.maxTags)))
             }

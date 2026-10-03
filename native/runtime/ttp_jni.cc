@@ -387,6 +387,11 @@ void n_ttp_display_model_variant(JNIEnv* env, jclass, jbyteArray a0, jint a1) {
     ttp_display_model_variant(s0.get(), (int) a1);
 }
 
+void n_ttp_display_name_tag_size(JNIEnv* env, jclass, jint a0, jfloat a1, jfloat a2, jfloat a3) {
+    (void) env;
+    ttp_display_name_tag_size((int) a0, (float) a1, (float) a2, (float) a3);
+}
+
 jint n_ttp_display_name_tags(JNIEnv* env, jclass, jfloatArray outArr, jint max) {
     if (!outArr) return 0;
     const jint cap = env->GetArrayLength(outArr) / 6;
@@ -1401,6 +1406,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_display_kit_field_layout", "()[B", (void*) n_ttp_display_kit_field_layout },
     { "ttp_display_look", "(DDDDDD)V", (void*) n_ttp_display_look },
     { "ttp_display_model_variant", "([BI)V", (void*) n_ttp_display_model_variant },
+    { "ttp_display_name_tag_size", "(IFFF)V", (void*) n_ttp_display_name_tag_size },
     { "ttp_display_name_tags", "([FI)I", (void*) n_ttp_display_name_tags },
     { "ttp_display_profile", "()Ljava/nio/ByteBuffer;", (void*) n_ttp_display_profile },
     { "ttp_display_profile_names", "()[B", (void*) n_ttp_display_profile_names },

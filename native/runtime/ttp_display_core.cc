@@ -719,6 +719,13 @@ int ttp_display_name_tags(float* out, int maxTags) {
     return want;
 }
 
+void ttp_display_name_tag_size(int slot, float w, float h, float lift) {
+    if (!g_disp || slot < 0) return;
+    std::vector<ttp::rt::NameTagSize>& s = g_disp->tagSizes;
+    if ((size_t) slot >= s.size()) s.resize((size_t) slot + 1, { 0, 0, 0 });
+    s[(size_t) slot] = { w, h, lift };
+}
+
 const char* ttp_display_slot_ids_json(void) {
     static std::string buf;
     if (!g_disp || !g_disp->built) return "[]";
@@ -820,7 +827,14 @@ void placeNameTags(DisplayCore& d, const TtpFrameInput& f) {
         pictures[4 * i + 2] = (float) (r.w / sw);
         pictures[4 * i + 3] = (float) (r.h / sh);
     }
-    d.nameTags = ttp::rt::nameTags(f, pictures.data(), d.tagDeck, d.tagCover);
+    const TtpCarInput* cars = ttp_frame_cars(&f);
+    std::vector<ttp::rt::NameTagShape> shapes(f.carCount);
+    for (uint32_t i = 0; i < f.carCount; i++) shapes[i] = d.renderer->carShape(i, cars[i].monster > 0.5f);
+    const ttp::rt::NameTagSize fallback = ttp::rt::nameTagSizeFallback((float) sw, (float) sh);
+    std::vector<ttp::rt::NameTagSize> sizes(f.carCount, fallback);
+    for (uint32_t i = 0; i < f.carCount && i < d.tagSizes.size(); i++)
+        if (d.tagSizes[i].w > 0) sizes[i] = d.tagSizes[i];
+    d.nameTags = ttp::rt::nameTags(f, pictures.data(), shapes.data(), sizes.data(), d.tagDeck, d.tagCover);
 }
 }  // namespace
 

@@ -332,6 +332,9 @@ bool TtpRenderer::loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb) 
             w.monsterMount = { SLOT_CX - (lo.x + hi.x) * 0.5f,
                                (SLOT_MIN_Y - lo.y) + MOUNT_LIFT,
                                SLOT_CZ - (lo.z + hi.z) * 0.5f };
+            w.monsterRoof = w.monsterMount.y + hi.y;
+            w.monsterSeat = SLOT_MIN_Y + MOUNT_LIFT;
+            w.monsterBodyHalf = { (hi.x - lo.x) * 0.5f, (hi.z - lo.z) * 0.5f };
         }
     }
     // Footprint (blob shadow + boost-disk sizing) from the asset AABB — the JS
@@ -340,6 +343,7 @@ bool TtpRenderer::loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb) 
     if (bb.max.x > bb.min.x) {
         w.footW = bb.max.x - bb.min.x;
         w.footL = bb.max.z - bb.min.z;
+        w.roof = bb.max.y;
         // Ground-shadow silhouette, off THIS model, while it still sits at
         // rest — into the decalMask layer this GLB owns. claimMaskLayer hands
         // back a layer already holding these bytes (nothing to do: eight cars

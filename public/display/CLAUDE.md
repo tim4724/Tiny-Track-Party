@@ -250,7 +250,9 @@ buffer is scaled down; C++ decides where each goes (`ttp/name_tags.h`) off the
 frame it was just handed. Two rules keep them honest: read and paint in the
 same rAF as `display.frame`, so the browser composites tag and car together,
 and write only `transform` and `opacity` per frame — text and colour only when
-a pooled tag changes whose name it shows.
+a pooled tag changes whose name it shows. The one READ is the sticker's size
+(`_measureNameTags`, for C++'s cover share), and it forces a layout, so it runs
+only when a slot's name or the surface changes.
 
 **Fetching assets is the shell's whole half of a scene build.** C++ names what it
 needs (scenery, props, cars, the kit field's models) and this side answers with

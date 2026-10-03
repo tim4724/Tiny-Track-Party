@@ -567,10 +567,14 @@ identically (both are commented where they bite, in `TtpRendererBakes.cpp`):
     rasterize each car's sticker ONCE (on a name or livery change) and per
     frame only move, scale and fade it. Nothing waits on the other layer (no
     `presentsWithTransaction`, no surface sync); that was decided for
-    simplicity. Both TV shells have the same `NameTagView`:
+    simplicity. C++ hides a tag by the SHARE of its sticker something covers,
+    so it needs each slot's sticker box as the shell draws it:
+    `ttp_display_name_tag_size` (fractions of the surface, at scale 1), called
+    whenever a sticker, the slot order or the surface moves — never per frame.
+    Both TV shells have the same `NameTagView`:
     `setField(sceneCars)` from the coordinator's scene-car setter,
-    `setSlots(roster)` at a build, `show(n)` per presented frame over the `tags`
-    array C++ just filled, `show(0)` at release. References:
+    `setSlots(roster)` at a build, `reportSizes` then `show(n)` per presented
+    frame over the `tags` array C++ just filled, `show(0)` at release. References:
     `Stage._paintNameTags` (web), `Render/NameTags.swift` (pooled CALayers under
     the SwiftUI chips), `NameTags.kt` (one plain View under the ComposeView, for
     the Compose-on-the-frame-thread reason in its header).

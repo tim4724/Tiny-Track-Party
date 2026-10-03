@@ -49,8 +49,12 @@ import kotlin.math.sqrt
  */
 class NameTagView(context: Context, maxPlayers: Int) : View(context) {
 
+    /** A sticker: its box is [boxW] x [boxH], its bottom edge [lift] above the anchor. */
     private class TagBitmap(val name: String, val color: Int, val bitmap: Bitmap,
-                          val anchorX: Float, val anchorY: Float)
+                          val boxW: Float, val boxH: Float, val lift: Float) {
+        val anchorX get() = boxW / 2
+        val anchorY get() = boxH + lift
+    }
 
     /**
      * The most tags a frame can hold: one cell per player, each naming every
@@ -65,6 +69,8 @@ class NameTagView(context: Context, maxPlayers: Int) : View(context) {
     /** Slot i's car id, latched per scene build by [DisplayHost]. */
     private var slots: List<EngineId> = emptyList()
     private var stickers = HashMap<EngineId, TagBitmap>()
+    /** The slots' sticker sizes have moved since C++ was last told ([reportSizes]). */
+    private var sizesDirty = true
 
     /** Authored pixels (1920 wide) to this window's physical pixels. */
     private val k = resources.displayMetrics.widthPixels / AUTHORED_WIDTH
@@ -93,11 +99,31 @@ class NameTagView(context: Context, maxPlayers: Int) : View(context) {
                 else rasterize(car.name, color)
         }
         stickers = next
+        sizesDirty = true
         invalidate()
     }
 
     /** The scene's slot order, off the built roster (`ttp_display_slot_ids_json`). */
-    fun setSlots(ids: List<EngineId>) { slots = ids }
+    fun setSlots(ids: List<EngineId>) { slots = ids; sizesDirty = true }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) { sizesDirty = true }
+
+    /**
+     * Hands each slot's sticker box to [report] as fractions of this view — the
+     * size C++ measures a tag's cover against (`ttp_display_name_tag_size`) —
+     * but only when a sticker, the slot order or the view moved. [DisplayHost]
+     * makes the call, since nothing else here touches the ABI.
+     */
+    fun reportSizes(report: (slot: Int, w: Float, h: Float, lift: Float) -> Unit) {
+        if (!sizesDirty || width == 0 || height == 0) return
+        sizesDirty = false
+        val w = width.toFloat()
+        val h = height.toFloat()
+        slots.forEachIndexed { slot, id ->
+            val s = stickers[id] ?: return@forEachIndexed
+            report(slot, s.boxW / w, s.boxH / h, s.lift / h)
+        }
+    }
 
     /** How many tags C++ just wrote into [tags]; 0 hides them all. */
     fun show(n: Int) {
@@ -174,7 +200,7 @@ class NameTagView(context: Context, maxPlayers: Int) : View(context) {
         val baseline = boxH / 2 - (fm.ascent + fm.descent) / 2
         c.drawText(name, border + em * 0.42f, baseline, text)
 
-        return TagBitmap(name, color, bitmap, boxW / 2, boxH + GAP_EM * em)
+        return TagBitmap(name, color, bitmap, boxW, boxH, GAP_EM * em)
     }
 
     private fun tail(cx: Float, top: Float, w: Float, h: Float) = Path().apply {

@@ -91,6 +91,13 @@ function cssFraction(name) {
 // An explicit ?dpr= (or setRenderScale) is a caller naming a buffer scale and
 // BYPASSES the whole mechanism — that is how the trailer renders a true 4K
 // master, and how a fixed resolution is pinned for an A/B.
+// A name tag's bottom edge stands this many of its own em above the point C++
+// projected (the tail hangs in the gap). The paint's transform and the size
+// reported to C++ (_measureNameTags) both read it, so the two cannot drift.
+const TAG_LIFT_EM = 0.4;
+// What a tag says: the car's name, or its seat for a car with none.
+const tagName = (c, id) => c.name || ('P' + id);
+
 const MAX_BUFFER_H = 2160;
 
 // The most `?supersample=` may ask for. A ceiling on the debug ceiling: this is
@@ -428,6 +435,11 @@ export class Stage {
     o.appendChild(this._tagLayer);
     this._tags = [];         // pooled .name-tag elements, reused in paint order
     this._tagsShown = 0;
+    // What each slot's sticker was last measured as (`name|w×h`), so C++ is told
+    // its size only when the name or the surface changes. The font may still be
+    // loading at the first measure, so a loaded font re-measures everything.
+    this._tagSized = [];
+    document.fonts?.ready.then(() => { this._tagSized = []; });
   }
 
   // ---- track ----------------------------------------------------------------
@@ -989,8 +1001,9 @@ export class Stage {
     const maxTags = ids.length * (ids.length - 1);
     if (maxTags > 0) {
       const slots = this.display.slotIds();
-      const packed = this.display.nameTags(maxTags);
       const cw = this.container.clientWidth, ch = this.container.clientHeight;
+      this._measureNameTags(ids, slots, cw, ch);
+      const packed = this.display.nameTags(maxTags);
       for (let i = 0; i + TAG_STRIDE - 1 < packed.length; i += TAG_STRIDE) {
         const id = slots[packed[i + 1]];
         const c = this.cars.get(id);
@@ -1002,12 +1015,12 @@ export class Stage {
           this._tagLayer.appendChild(el);
           this._tags.push(el);
         }
-        const name = c.name || ('P' + id);
+        const name = tagName(c, id);
         if (el._name !== name) { el._name = name; el.textContent = name; }
         const col = this.colors[c.colorIndex % this.colors.length] || '#fff';
         if (el._col !== col) { el._col = col; el.style.setProperty('--c', col); }
         el.style.transform = `translate3d(${packed[i + 2] * cw}px, ${packed[i + 3] * ch}px, 0) `
-            + `scale(${packed[i + 4]}) translate(-50%, -100%) translateY(-0.4em) rotate(-2deg)`;
+            + `scale(${packed[i + 4]}) translate(-50%, -100%) translateY(-${TAG_LIFT_EM}em) rotate(-2deg)`;
         el.style.opacity = packed[i + 5];
         if (n >= this._tagsShown) el.style.display = 'block';
         n++;
@@ -1015,6 +1028,33 @@ export class Stage {
     }
     for (let j = n; j < this._tagsShown; j++) this._tags[j].style.display = 'none';
     this._tagsShown = n;
+  }
+
+  // Tell C++ how big each tagged car's sticker is drawn (ttp_display_name_tag_size),
+  // since it hides a tag by the share of that box something covers and only this
+  // side knows the font. Measured off a hidden sticker of the same class, at
+  // scale 1, only when a slot's name or the surface changes: the read forces a
+  // layout, which is why it is not done per frame. It lands on the next frame.
+  _measureNameTags(ids, slots, cw, ch) {
+    for (const id of ids) {
+      const slot = slots.indexOf(id);
+      const c = this.cars.get(id);
+      if (slot < 0 || !c) continue;
+      const name = tagName(c, id);
+      const key = `${name}|${cw}x${ch}`;
+      if (this._tagSized[slot] === key) continue;
+      if (!this._tagProbe) {
+        this._tagProbe = document.createElement('div');
+        this._tagProbe.className = 'name-tag';
+        this._tagProbe.style.cssText = 'display:block;visibility:hidden;';
+        this._tagLayer.appendChild(this._tagProbe);
+      }
+      const el = this._tagProbe;
+      el.textContent = name;
+      const lift = TAG_LIFT_EM * parseFloat(getComputedStyle(el).fontSize);
+      this.display.nameTagSize(slot, el.offsetWidth / cw, el.offsetHeight / ch, lift / ch);
+      this._tagSized[slot] = key;
+    }
   }
 
   // ---- effects the renderer can't infer ---------------------------------------

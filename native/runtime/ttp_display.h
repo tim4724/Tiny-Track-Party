@@ -592,6 +592,15 @@ TTP_ABI void ttp_display_steer_bars(int enabled);
  * At most cells x (cells - 1) tags exist. */
 TTP_ABI int ttp_display_name_tags(float* out, int maxTags);
 
+/* How big the shell draws the sticker for roster SLOT, at scale 1: its box's
+ * width as a fraction of the surface's width, its height and how far its bottom
+ * edge stands above the anchor as fractions of the surface's height (the tail
+ * hangs inside that gap). C++ hides a tag by the SHARE of this box something
+ * covers, and only the shell knows its font, so it measures. Call it whenever a
+ * slot's name or the surface's size changes; until then a slot is assumed a
+ * typical short name at the authored size. */
+TTP_ABI void ttp_display_name_tag_size(int slot, float w, float h, float lift);
+
 /* WHAT that HUD says: the bound session's per-player race values, packed, one
  * entry per roster slot in ttp_display_build order (ttp_hud.h). Place, lap,
  * total laps, the held item as a CODE, finished, finish time — the six values

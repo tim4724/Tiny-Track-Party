@@ -1825,9 +1825,9 @@ void testOverviewOwnsTheSurface(const GameTrack& track) {
 }  // namespace
 
 // nameTags over a hand-built three-cell frame: each cell tags every OTHER
-// player's car in front of its camera (never the CPU's), by roster slot, fades
-// them out by distance, and lists them far to near. Plain float projection, so
-// it is checked to a tolerance.
+// player's car in front of its camera (never the CPU's), by roster slot, over
+// that car's OWN roof, fades them out by distance, and lists them far to near.
+// Plain float projection, so it is checked to a tolerance.
 void testNameTags() {
   const uint32_t nCars = 5, nViews = 3;
   std::vector<uint8_t> buf(sizeof(TtpFrameInput) + nCars * sizeof(TtpCarInput)
@@ -1837,13 +1837,19 @@ void testNameTags() {
   f->carCount = nCars;
   f->viewCount = nViews;
   TtpCarInput* cars = (TtpCarInput*) (f + 1);
-  const float lift = ttp::rt::NAME_TAG_LIFT;
+  // A different roof per car, each car sunk by its own roof plus the gap, so
+  // every tag lands on the horizon only if it is anchored over its OWN roof.
+  const std::vector<float> roofs = { 0.45f, 0.325f, 0.85f, 0.375f, 0.45f };
+  std::vector<ttp::rt::NameTagShape> shapes;
+  for (const float r : roofs) shapes.push_back({ r, 0, 0, 0 });
+  const std::vector<ttp::rt::NameTagSize> sizes(nCars, { 0.04f, 0.035f, 0.011f });
+  auto sunk = [&](uint32_t i) { return -(roofs[i] + ttp::rt::NAME_TAG_ROOF_GAP); };
   // Slots 0-2 own the three cells, slot 3 is a CPU car with no cell, and slot 4
   // is a seat with no live car: zeroed, exactly as the frame builder leaves it.
-  cars[0].pos = { 0, -lift, -2 };
-  cars[1].pos = { 1, -lift, -4 };
-  cars[2].pos = { 0, -lift, -22 };
-  cars[3].pos = { -1, -lift, -12 };
+  cars[0].pos = { 0, sunk(0), -2 };
+  cars[1].pos = { 1, sunk(1), -4 };
+  cars[2].pos = { 0, sunk(2), -22 };
+  cars[3].pos = { -1, sunk(3), -12 };
   for (uint32_t i = 0; i < 4; i++) cars[i].up = { 0, 1, 0 };
   TtpViewInput* views = (TtpViewInput*) (cars + nCars);
   using ttp::rt::V3;
@@ -1869,8 +1875,8 @@ void testNameTags() {
   };
 
   const ttp::rt::NameTagDeck noDeck;
-  std::vector<float> cover;
-  const std::vector<ttp::rt::NameTag> tags = ttp::rt::nameTags(*f, pictures, noDeck, cover);
+  std::vector<ttp::rt::NameTagCover> cover;
+  const std::vector<ttp::rt::NameTag> tags = ttp::rt::nameTags(*f, pictures, shapes.data(), sizes.data(), noDeck, cover);
   checkU((uint32_t) tags.size(), 4, "nameTags: the CPU car in cell 0's view gets no tag, cell 1 sees nobody");
   if (tags.size() != 4) return;
   // Cell 0, far to near: car 2 dead ahead in its fade band, then car 1. The CPU
@@ -1899,30 +1905,31 @@ void testNameTags() {
     for (const auto& t : tags) if (t.cell == 0 && t.target == 1) return t.scale;
     return -1;
   };
-  cars[1].pos = { 0, -lift, -1.2f };
-  near(cell0Car1(ttp::rt::nameTags(*f, pictures, noDeck, cover)), 1, "a rival within NAME_TAG_CLOSE is full size");
-  cars[1].pos = { 0, -lift, -ttp::rt::NAME_TAG_NEAR };
-  near(cell0Car1(ttp::rt::nameTags(*f, pictures, noDeck, cover)), ttp::rt::NAME_TAG_NEAR_SCALE,
+  cars[1].pos = { 0, sunk(1), -1.2f };
+  near(cell0Car1(ttp::rt::nameTags(*f, pictures, shapes.data(), sizes.data(), noDeck, cover)), 1, "a rival within NAME_TAG_CLOSE is full size");
+  cars[1].pos = { 0, sunk(1), -ttp::rt::NAME_TAG_NEAR };
+  near(cell0Car1(ttp::rt::nameTags(*f, pictures, shapes.data(), sizes.data(), noDeck, cover)), ttp::rt::NAME_TAG_NEAR_SCALE,
        "a rival at NAME_TAG_NEAR is NEAR_SCALE");
-  cars[1].pos = { 1, -lift, -4 };
+  cars[1].pos = { 1, sunk(1), -4 };
 
   f->flags = TTP_FRAME_OVERVIEW;
-  check(ttp::rt::nameTags(*f, pictures, noDeck, cover).empty(), "nameTags: an overview tags nobody");
+  check(ttp::rt::nameTags(*f, pictures, shapes.data(), sizes.data(), noDeck, cover).empty(), "nameTags: an overview tags nobody");
   f->flags = 0;
 
   // A solo race: one cell, the CPU field in plain view of it, and no tags.
   f->viewCount = 1;
   cover.clear();
-  check(ttp::rt::nameTags(*f, pictures, noDeck, cover).empty(), "nameTags: a solo race tags nobody");
+  check(ttp::rt::nameTags(*f, pictures, shapes.data(), sizes.data(), noDeck, cover).empty(), "nameTags: a solo race tags nobody");
 }
 
 // Cover: a cell whose camera looks down -Z past its own car at a rival player 8
 // units out (the rival's own cell only makes it a player; nothing inspects it),
-// with a monster truck placed three ways: squarely between (the tag fades and
-// goes), ghosted in front of the cell's own car (see-through, the tag stays),
-// and off to one side of the tag's line (the tag stays); then an ordinary car
-// squarely between, and the cell's own car as a truck, neither of which ever
-// hides a tag; then the cover fade and the road deck.
+// with a monster truck placed: squarely between (the tag fades and goes),
+// ghosted in front of the cell's own car (see-through, the tag stays), across
+// the share thresholds and their hysteresis band, and clear of the sticker (the
+// tag stays); then an ordinary car squarely between, which never hides a tag,
+// and the cell's own car as a truck, which does; then the cover fade and the
+// road deck.
 void testNameTagCover() {
   const uint32_t nCars = 3;
   std::vector<uint8_t> buf(sizeof(TtpFrameInput) + nCars * sizeof(TtpCarInput) + 2 * sizeof(TtpViewInput));
@@ -1952,42 +1959,88 @@ void testNameTagCover() {
     return nullptr;
   };
   const ttp::rt::NameTagDeck noDeck;
+  // The trucks stand 0.8 tall, a 0.26 x 0.44 body on a seat at 0.3675; the
+  // rival's roof is 0.45. Its sticker is a short name at the authored size on
+  // this square surface.
+  const ttp::rt::NameTagShape truck{ 0.8f, 0.3675f, 0.26f, 0.44f };
+  const std::vector<ttp::rt::NameTagShape> shapes = { truck, { 0.45f, 0, 0, 0 }, truck };
+  const std::vector<ttp::rt::NameTagSize> sizes(nCars, { 0.08f, 0.035f, 0.011f });
 
   f->dt = 1;  // long enough to finish any fade in one frame
-  std::vector<float> cover;
+  std::vector<ttp::rt::NameTagCover> cover;
   cars[2].pos = { 0, 0, -5 };
-  check(!rival(ttp::rt::nameTags(*f, pictures, noDeck, cover)), "a truck squarely in front hides the rival's tag");
+  check(!rival(ttp::rt::nameTags(*f, pictures, shapes.data(), sizes.data(), noDeck, cover)), "a truck squarely in front hides the rival's tag");
   cover.clear();
   cars[2].pos = { 0, 0, -0.6f };
   check(ttp_monster_ghosted(cars[2].pos, TtpVec3{ 0, 0.64f, 0 }, cars[0].pos),
         "arm check: the truck in front of the own car is one the renderer ghosts");
-  check(rival(ttp::rt::nameTags(*f, pictures, noDeck, cover)) != nullptr, "a ghosted truck is see-through");
+  check(rival(ttp::rt::nameTags(*f, pictures, shapes.data(), sizes.data(), noDeck, cover)) != nullptr, "a ghosted truck is see-through");
+  cover.clear();
+  // What decides is the SHARE covered. Sliding the truck right, off the
+  // sticker: over most of it (x 0.3), the tag goes; over a corner only (x 0.5),
+  // it stays; at x 0.4 the share sits between SHOW_AT and HIDE_AT, so the tag
+  // keeps whichever state it was in.
+  cars[2].pos = { 0.3f, 0, -5 };
+  check(!rival(ttp::rt::nameTags(*f, pictures, shapes.data(), sizes.data(), noDeck, cover)), "a truck over most of the sticker hides the tag");
   cover.clear();
   cars[2].pos = { 0.5f, 0, -5 };
-  check(rival(ttp::rt::nameTags(*f, pictures, noDeck, cover)) != nullptr, "a rival half behind a truck keeps its tag");
+  check(rival(ttp::rt::nameTags(*f, pictures, shapes.data(), sizes.data(), noDeck, cover)) != nullptr, "a truck over a corner keeps the tag");
+  cover.clear();
+  cars[2].pos = { 0.4f, 0, -5 };
+  check(rival(ttp::rt::nameTags(*f, pictures, shapes.data(), sizes.data(), noDeck, cover)) != nullptr, "in the band, a shown tag stays shown");
+  cover.clear();
+  cars[2].pos = { 0, 0, -5 };
+  ttp::rt::nameTags(*f, pictures, shapes.data(), sizes.data(), noDeck, cover);
+  cars[2].pos = { 0.4f, 0, -5 };
+  check(!rival(ttp::rt::nameTags(*f, pictures, shapes.data(), sizes.data(), noDeck, cover)), "in the band, a hidden tag stays hidden");
+  cars[2].pos = { 0.5f, 0, -5 };
+  check(rival(ttp::rt::nameTags(*f, pictures, shapes.data(), sizes.data(), noDeck, cover)) != nullptr, "below SHOW_AT, a hidden tag comes back");
+  cover.clear();
+  // A truck is its chassis up to the seat and its car's narrower body above,
+  // not one box the chassis's width all the way up: at x 0.35 the body clears
+  // enough of the sticker to keep it, where a chassis-wide body would not.
+  cars[2].pos = { 0.35f, 0, -5 };
+  check(rival(ttp::rt::nameTags(*f, pictures, shapes.data(), sizes.data(), noDeck, cover)) != nullptr, "the narrower body keeps the tag");
+  cover.clear();
+  std::vector<ttp::rt::NameTagShape> boxy = shapes;
+  boxy[2].bodyHalfW = ttp::rt::NAME_TAG_MONSTER_HALF_W;
+  check(!rival(ttp::rt::nameTags(*f, pictures, boxy.data(), sizes.data(), noDeck, cover)), "arm check: a chassis-wide body hides it");
+  cover.clear();
+  // The sticker's own width decides too: the same truck (x 0.4) that a short
+  // name's sticker shows past covers more than HIDE_AT of a long name's.
+  cars[2].pos = { 0.4f, 0, -5 };
+  check(rival(ttp::rt::nameTags(*f, pictures, shapes.data(), sizes.data(), noDeck, cover)) != nullptr, "arm check: the short name stays");
+  cover.clear();
+  std::vector<ttp::rt::NameTagSize> wide = sizes;
+  wide[1].w = 0.2f;
+  check(!rival(ttp::rt::nameTags(*f, pictures, shapes.data(), wide.data(), noDeck, cover)), "a long name's sticker hides where a short one's stays");
+  cover.clear();
+  cars[2].pos = { 1.2f, 0, -5 };
+  check(rival(ttp::rt::nameTags(*f, pictures, shapes.data(), sizes.data(), noDeck, cover)) != nullptr, "a truck clear of the whole sticker keeps it");
   cover.clear();
   cars[2].pos = { 0, 0, -5 };
   cars[2].monster = 0;
-  check(rival(ttp::rt::nameTags(*f, pictures, noDeck, cover)) != nullptr,
+  check(rival(ttp::rt::nameTags(*f, pictures, shapes.data(), sizes.data(), noDeck, cover)) != nullptr,
         "an ordinary car squarely in front never hides a tag");
   cars[2].monster = 1;
-  // The cell's own car as the truck: the camera looks over its roof, through its
-  // box. Another truck on that very spot (not nearer than the own car, so not
-  // ghosted) is the arm check that the box does stand in the tag's line.
-  cover.clear();
-  cars[2].pos = cars[0].pos;
-  check(!rival(ttp::rt::nameTags(*f, pictures, noDeck, cover)), "arm check: a rival truck where the own car sits hides the tag");
+  // The cell's own car as the truck: the chase camera rides below its roof, so
+  // it stands in the tag's line like any other truck. One the camera is INSIDE
+  // shows it no faces and hides nothing.
   cover.clear();
   cars[2].pos = { 4, 0, -5 };
   cars[0].monster = 1;
-  check(rival(ttp::rt::nameTags(*f, pictures, noDeck, cover)) != nullptr, "the cell's own truck never hides a tag");
+  check(!rival(ttp::rt::nameTags(*f, pictures, shapes.data(), sizes.data(), noDeck, cover)), "the cell's own truck hides a tag behind it");
+  cover.clear();
+  cars[0].pos = { 0, 0, -0.2f };
+  check(rival(ttp::rt::nameTags(*f, pictures, shapes.data(), sizes.data(), noDeck, cover)) != nullptr, "a truck around the camera hides nothing");
+  cars[0].pos = { 0, 0, -1.15f };
   cars[0].monster = 0;
 
   // The fade: a quarter of NAME_TAG_COVER_FADE behind the truck is a quarter gone.
   cover.clear();
   cars[2].pos = { 0, 0, -5 };
   f->dt = ttp::rt::NAME_TAG_COVER_FADE * 0.25f;
-  const std::vector<ttp::rt::NameTag> tags = ttp::rt::nameTags(*f, pictures, noDeck, cover);
+  const std::vector<ttp::rt::NameTag> tags = ttp::rt::nameTags(*f, pictures, shapes.data(), sizes.data(), noDeck, cover);
   const ttp::rt::NameTag* t = rival(tags);
   check(t && std::fabs(t->alpha - 0.75f) < 1e-4f, "the covered tag fades rather than popping");
 
@@ -2006,14 +2059,14 @@ void testNameTagCover() {
   cars[2].pos = { 20, 0, 20 };  // the truck out of the way
   f->dt = 1;
   cover.clear();
-  check(rival(ttp::rt::nameTags(*f, pictures, deck, cover)) != nullptr,
+  check(rival(ttp::rt::nameTags(*f, pictures, shapes.data(), sizes.data(), deck, cover)) != nullptr,
         "a rival under a bridge keeps its tag, seen from the road below");
   ttp::rt::lookAtWorld(v->world, V3{ 0, 8, -4 }, V3{ 0, 0, -8 }, V3{ 0, 1, 0 });
   cover.clear();
-  check(rival(ttp::rt::nameTags(*f, pictures, noDeck, cover)) != nullptr,
+  check(rival(ttp::rt::nameTags(*f, pictures, shapes.data(), sizes.data(), noDeck, cover)) != nullptr,
         "arm check: from above, with no deck, the rival is tagged");
   cover.clear();
-  check(!rival(ttp::rt::nameTags(*f, pictures, deck, cover)), "the bridge deck hides a rival under it");
+  check(!rival(ttp::rt::nameTags(*f, pictures, shapes.data(), sizes.data(), deck, cover)), "the bridge deck hides a rival under it");
 }
 
 int main() {

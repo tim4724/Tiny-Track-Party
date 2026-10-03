@@ -163,6 +163,7 @@ export class Display {
       cellRects: mod.cwrap('ttp_display_cell_rects', 'number', ['number', 'number']),
       cellCards: mod.cwrap('ttp_display_cell_cards', null, ['number']),
       nameTags: mod.cwrap('ttp_display_name_tags', 'number', ['number', 'number']),
+      nameTagSize: mod.cwrap('ttp_display_name_tag_size', null, ['number', 'number', 'number', 'number']),
       slotIds: mod.cwrap('ttp_display_slot_ids_json', 'string', []),
       dividers: mod.cwrap('ttp_display_dividers', null, ['number']),
       steerBars: mod.cwrap('ttp_display_steer_bars', null, ['number']),
@@ -637,6 +638,10 @@ export class Display {
     const got = this._fn.nameTags(this._tagPtr, maxTags);
     return this.m.HEAPF32.subarray(this._tagPtr >> 2, (this._tagPtr >> 2) + got * TAG_STRIDE);
   }
+
+  // How big slot's sticker is drawn at scale 1, as fractions of the surface (w of
+  // its width, h and lift of its height) — what C++ measures a tag's cover against.
+  nameTagSize(slot, w, h, lift) { this._fn.nameTagSize(slot, w, h, lift); }
 
   // WHAT the HUD says: place, lap, total laps, the held item, finished and the
   // finish time, per car — read out of the packed block ttp_display_hud points

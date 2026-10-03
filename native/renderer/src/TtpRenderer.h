@@ -32,6 +32,7 @@
 namespace ttp { namespace kitcolors { struct Mesh; } }
 #include "ttp/car_footprint.h"
 #include "ttp/ground_grid.h"
+#include "ttp/name_tags.h"
 
 
 // The car contact shadow's live knobs, and the ONE place their defaults are
@@ -446,6 +447,16 @@ public:
 
     // The built scene's ground surface, as the mesh draws it (ttp/ground_grid.h).
     const ttp::rt::GroundGrid& groundGrid() const { return mGroundGrid; }
+
+    // Slot i as the name tags see it (ttp/name_tags.h), measured off the model
+    // at load: its roof over its origin as drawn — in the monster rig while
+    // `monster` — and the body it grafts into that rig, the seat it sits on and
+    // its half width and length (wheels off).
+    ttp::rt::NameTagShape carShape(uint32_t i, bool monster) const {
+        static const CarWheels unmeasured{};
+        const CarWheels& w = i < mCarWheels.size() ? mCarWheels[i] : unmeasured;
+        return { monster ? w.monsterRoof : w.roof, w.monsterSeat, w.monsterBodyHalf.x, w.monsterBodyHalf.y };
+    }
 
     bool buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& theme,
             const std::vector<TtpRosterCar>& roster, const ttp::rt::WearPlan& wear);
@@ -1185,6 +1196,10 @@ private:
         float skidHold = 0;                        // scuff strength, released over SKID_RELEASE
         float skidAllHold = 0;                     // same, for the four-wheel (scrub/spin) channel
         float footW = 0.95f, footL = 2.0f;         // car footprint (asset AABB) — blob + boost disk
+        float roof = 0.45f, monsterRoof = 0.85f;   // roof over the car's origin (asset AABB), and with
+                                                   // its body grafted into the monster rig — name tags
+        float monsterSeat = 0.3675f;               // where that grafted body sits in the rig, and its
+        filament::math::float2 monsterBodyHalf{ 0.26f, 0.44f };  // half width/length, wheels off
         bool monsterOn = false;                    // morph edge detect
         float popT = 0;                            // grow/shrink pop clock (0.34 s)
         utils::Entity axle;                        // exposed axle rod (some models) — stripped by MonsterRig
