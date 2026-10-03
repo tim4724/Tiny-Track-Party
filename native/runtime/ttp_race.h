@@ -200,8 +200,10 @@ TTP_ABI const char* ttp_race_events_live_json(int sessionHandle, int roomHandle,
  * keep updating — the race runs on for the flourish with the place cards up. The
  * `arm-results` effect it emits carries how long; when that fires, clear the
  * hold, fast-forward and drain, and the _raceEnd arm above lands the board.
+ * `sessionHandle` is the live race the flag's board is composed against;
+ * without it ttp_live_store_standings refuses and no board is retained.
  *   -> {"effects":[...]} */
-TTP_ABI const char* ttp_race_flag_live_json(int roomHandle);
+TTP_ABI const char* ttp_race_flag_live_json(int sessionHandle, int roomHandle);
 
 /* ---- the cup chain / the way out ----------------------------------------- */
 

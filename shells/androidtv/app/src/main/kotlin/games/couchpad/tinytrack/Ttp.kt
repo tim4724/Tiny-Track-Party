@@ -174,7 +174,7 @@ object Ttp {
     external fun ttp_race_effect_ops_json(): ByteArray?
     external fun ttp_race_end_party_json(): ByteArray?
     external fun ttp_race_events_live_json(sessionHandle: Int, roomHandle: Int, biome: ByteArray?, audioReady: Int, fastForwarding: Int, intermissionMs: Double, nowMs: Double): ByteArray?
-    external fun ttp_race_flag_live_json(roomHandle: Int): ByteArray?
+    external fun ttp_race_flag_live_json(sessionHandle: Int, roomHandle: Int): ByteArray?
     external fun ttp_race_flourish_ms(): Double
     external fun ttp_race_forfeit_live_json(sessionHandle: Int, peerIdJson: ByteArray?): ByteArray?
     external fun ttp_race_intermission_ms(): Double

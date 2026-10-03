@@ -925,9 +925,9 @@ jbyteArray n_ttp_race_events_live_json(JNIEnv* env, jclass, jint a0, jint a1, jb
     return toBytes(env, ttp_race_events_live_json((int) a0, (int) a1, s2.get(), (int) a3, (int) a4, (double) a5, (double) a6));
 }
 
-jbyteArray n_ttp_race_flag_live_json(JNIEnv* env, jclass, jint a0) {
+jbyteArray n_ttp_race_flag_live_json(JNIEnv* env, jclass, jint a0, jint a1) {
     (void) env;
-    return toBytes(env, ttp_race_flag_live_json((int) a0));
+    return toBytes(env, ttp_race_flag_live_json((int) a0, (int) a1));
 }
 
 jdouble n_ttp_race_flourish_ms(JNIEnv* env, jclass) {
@@ -1507,7 +1507,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_race_effect_ops_json", "()[B", (void*) n_ttp_race_effect_ops_json },
     { "ttp_race_end_party_json", "()[B", (void*) n_ttp_race_end_party_json },
     { "ttp_race_events_live_json", "(II[BIIDD)[B", (void*) n_ttp_race_events_live_json },
-    { "ttp_race_flag_live_json", "(I)[B", (void*) n_ttp_race_flag_live_json },
+    { "ttp_race_flag_live_json", "(II)[B", (void*) n_ttp_race_flag_live_json },
     { "ttp_race_flourish_ms", "()D", (void*) n_ttp_race_flourish_ms },
     { "ttp_race_forfeit_live_json", "(I[B)[B", (void*) n_ttp_race_forfeit_live_json },
     { "ttp_race_intermission_ms", "()D", (void*) n_ttp_race_intermission_ms },

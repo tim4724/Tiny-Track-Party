@@ -345,8 +345,9 @@ Value wrapEffects(const race::Effects& es) {
 // through the stored state, which is how abi_check gates it.
 
 // What the drain's end-of-race and finish ops need and no effect can carry.
-// Only ttp_race_events_live_json fills it in; every other walk passes {},
-// because no other emits an op that reads any of it.
+// The drain and the flag fill it in (both emit broadcast-standings, which
+// composes against the session); every other walk passes {}, because no other
+// emits an op that reads any of it.
 struct RaceCtx {
   int sessionHandle = 0;              // the live race a board is composed against
   double autoAdvanceMs = 0;           // the intermission budget the cup chip carries
@@ -790,9 +791,11 @@ const char* ttp_race_events_live_json(int sessionHandle, int roomHandle,
   return put(g_bufEvents, v);
 }
 
-const char* ttp_race_flag_live_json(int roomHandle) {
+const char* ttp_race_flag_live_json(int sessionHandle, int roomHandle) {
   Value fx = Value::Arr();
-  executeAndSpell(roomHandle, race::flagRace(), {}, fx);
+  RaceCtx live;
+  live.sessionHandle = sessionHandle;
+  executeAndSpell(roomHandle, race::flagRace(), live, fx);
   Value v = Value::Obj();
   v.set("effects", std::move(fx));
   return put(g_bufFlag, v);

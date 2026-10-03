@@ -47,7 +47,7 @@ export async function init() {
     events: c('ttp_race_events_live_json', 'string',
               ['number', 'number', 'string', 'number', 'number',
                'number', 'number']),
-    flag: c('ttp_race_flag_live_json', 'string', ['number']),
+    flag: c('ttp_race_flag_live_json', 'string', ['number', 'number']),
     advance: c('ttp_race_advance_live_json', 'string',
                ['number', 'number', 'number', 'number', 'string', 'string']),
     ret: c('ttp_race_return_live_json', 'string', ['number']),
@@ -120,8 +120,8 @@ export function drainEvents(sessionHandle, roomHandle,
 // THE FLAG: every human is home. Paints the place cards, hands the phones the
 // final board, and arms the end — the race keeps running for the flourish, so
 // the caller also holds the session's end open (ttp_hold_end).
-export function flagRace(roomHandle) {
-  return P(fn.flag(roomHandle));
+export function flagRace(sessionHandle, roomHandle) {
+  return P(fn.flag(sessionHandle, roomHandle));
 }
 
 export function advanceSeriesRace(roomHandle, sceneReady, { seed, countdownSeconds, forceItem, botCap }) {

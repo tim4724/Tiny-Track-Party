@@ -372,8 +372,10 @@ test('the flag keeps the race running, and the board arrives a flourish later', 
   expect(b.some((v, i) => v > a[i] + 0.5), 'the field is still driving').toBe(true);
 
   // The PHONE, though, goes to the board at the flag — its owner crossed the
-  // line and is out of control, so there is nothing left for it to spoil.
+  // line and is out of control, so there is nothing left for it to spoil. Still
+  // PLAYING: the phone's board is the flag's own, not the end's.
   await expect(alice.locator(visible('#results'))).toBeVisible();
+  expect(await page.evaluate(() => window.__net.roomState)).toBe('playing');
 
   // …and nobody touches anything: the TV's board comes on its own.
   await expect(page.locator(visible('#results'))).toBeVisible({ timeout: 20000 });

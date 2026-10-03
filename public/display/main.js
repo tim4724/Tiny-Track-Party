@@ -549,7 +549,7 @@ scene.onFrame = (dt) => {
     // when it fires.
     flourishing = true;
     session.holdEnd(true);
-    perform(flow.flagRace(net.flow.handle).effects);
+    perform(flow.flagRace(session.h, net.flow.handle).effects);
     return;
   }
   // NOTHING about the race is read out per frame any more. The renderer has

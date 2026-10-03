@@ -1086,7 +1086,7 @@ class GameCoordinator(
             // last car, raceOver() is already true on this frame.
             flourishing = true
             Ttp.ttp_hold_end(sessionHandle, 1)
-            run(TtpJson.obj(Ttp.ttp_race_flag_live_json(net.roomHandle)))
+            run(TtpJson.obj(Ttp.ttp_race_flag_live_json(sessionHandle, net.roomHandle)))
         }
     }
 

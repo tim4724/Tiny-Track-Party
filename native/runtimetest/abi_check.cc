@@ -5211,7 +5211,17 @@ void raceLiveWalks() {
     // get the board, and NOTHING freezes or ends. A shell performs this, holds
     // the session's end open, and keeps updating.
     {
-      const Value flag = parseOrNull(ttp_race_flag_live_json(room), "flag");
+      // The flag fires BEFORE the end, so no board is out yet: the one the
+      // phones read through the flourish is the flag's own. Clear the end's
+      // board to stand in for that moment, and put it back for the checks below.
+      const Value endBoard = ttp_room_board_value(room);
+      ttp_room_store_board(room, Value::Null());
+      const Value flag = parseOrNull(ttp_race_flag_live_json(live, room), "flag");
+      const Value flagBoard = ttp_room_board_value(room);
+      check(flagBoard.type == Value::OBJ && json::truthy(flagBoard.find("over")),
+            "the flag RETAINS a final board, so the last human home leaves the wheel "
+            "at the flag rather than at the end (" + canonical_stringify(flagBoard) + ")");
+      ttp_room_store_board(room, endBoard);
       const std::string ops = opsOf(flag);
       check(ops.find("paint-hud") != std::string::npos &&
                 ops.find("broadcast-standings") != std::string::npos &&
