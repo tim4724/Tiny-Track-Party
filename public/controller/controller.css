@@ -106,6 +106,15 @@ input[type=text]:disabled { opacity: 0.6; }
 .btn { width: 100%; margin-top: 1rem; }           /* phone buttons fill the row */
 #name-status { color: var(--ink-2); font-weight: 700; margin-top: 1rem; min-height: 1.4em; }
 
+/* Keyboard up (main.js sets .kb-open): a landscape keyboard leaves a strip
+   barely taller than the input, so the badge goes and the field and Join
+   share one slim row at the top of the page. */
+#name.kb-open { grid-template-columns: minmax(0, 34rem); align-content: start; }
+#name.kb-open .name-wordmark { display: none; }
+#name.kb-open #name-form { display: flex; gap: 0.6rem; }
+#name.kb-open input[type=text] { padding-block: 0.55rem; }
+#name.kb-open .btn { width: auto; flex: none; margin-top: 0; }
+
 /* ---- lobby: one grammar for both pages ---- */
 /* Three rows, and the middle one is the page: a slim RIBBON on top (name, the
    page's key, settings), the CHOICES as a tile grid taking everything between,

@@ -31,7 +31,7 @@ import { showConn, hideConn, linkCopy, initLinkStatus } from './linkStatus.js';
 import { initModals, onEnterLobby, closeAnyModal, anyModalOpen, closeTopModal, refreshHelpName, refreshSettingsState, refreshMotionState, openStarsPopup } from './modals.js';
 import { renderResultsBoard } from './resultsBoard.js';
 import { initDriveSurface, startDriving, stopDriving, setInputMode, setHeldItem, resetHeldItem } from './driveSurface.js';
-import { initOrientation } from './orientation.js';
+import { initOrientation, keyboardUp } from './orientation.js';
 import { initPressPaint } from './press.js';
 
 const { MSG, ROOM_STATE } = window;
@@ -592,6 +592,21 @@ function maybeRestoreCar() {
 
 // --- name screen ---
 el('name-input').value = storedName();
+
+// Compact the form while the software keyboard is up for the field. After the
+// relayout the field has moved, so pan it back into the visible strip. No
+// blur listener: a tap on Join blurs the field at pointerdown, and relaying
+// out there would move Join from under the finger before its click lands —
+// the keyboard's own resize restores the layout after the click.
+function syncNameKeyboard() {
+  const input = el('name-input');
+  const open = document.activeElement === input && keyboardUp();
+  if (el('name').classList.contains('kb-open') === open) return;
+  el('name').classList.toggle('kb-open', open);
+  if (open) input.scrollIntoView({ block: 'nearest' });
+}
+el('name-input').addEventListener('focus', syncNameKeyboard);
+window.visualViewport?.addEventListener('resize', syncNameKeyboard);
 
 // Back out of the room (back button / phone back gesture) → name entry. Drops
 // the relay connection so the display removes us from the roster, resets the

@@ -17,10 +17,30 @@ export function initOrientation({ inShell }) {
   if (!(navigator.maxTouchPoints > 0 || 'ontouchstart' in window)) return;
 
   let busy = false;
-  const tryFullscreenLandscape = async () => {
+  const keyboardDown = () => new Promise((resolve) => {
+    const vv = window.visualViewport;
+    const finish = () => { vv.removeEventListener('resize', check); clearTimeout(cap); resolve(); };
+    const check = () => { if (!keyboardUp()) finish(); };
+    const cap = setTimeout(finish, 1000);
+    vv.addEventListener('resize', check);
+  });
+
+  const tryFullscreenLandscape = async (e) => {
+    // Never on a tap into a text field: the keyboard is about to open, and
+    // going fullscreen under it makes Chrome either drop it or lose its pan
+    // to the field.
+    if (e.target.closest('input, textarea')) return;
     if (busy || document.fullscreenElement) return;
     busy = true;
     try {
+      // A tap with the keyboard still up (e.g. Join) waits for it to go first:
+      // fullscreen entered under the keyboard keeps the pre-fullscreen height
+      // once it closes, a dead band along the bottom. The tap's activation
+      // outlives the wait.
+      if (keyboardUp()) {
+        document.activeElement.blur();
+        await keyboardDown();
+      }
       // Fullscreen first: Chrome/Android only honours an orientation lock from
       // fullscreen. Each step may throw (iOS: no requestFullscreen on elements;
       // desktop: lock unsupported) — swallow and let the CSS overlay do the work.
@@ -35,4 +55,12 @@ export function initOrientation({ inShell }) {
   // Capture-phase, so the attempt rides the same gesture as whatever button the
   // player was tapping (join, ready, a car tile …) without any handler changes.
   window.addEventListener('pointerup', tryFullscreenLandscape, { capture: true, passive: true });
+}
+
+// Is the software keyboard up? It overlays the page
+// (interactive-widget=resizes-visual), so it shows as the visual viewport
+// shrinking well below the layout one.
+export function keyboardUp() {
+  const vv = window.visualViewport;
+  return !!vv && vv.height < window.innerHeight * 0.8;
 }
