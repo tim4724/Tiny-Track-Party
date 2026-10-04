@@ -33,25 +33,25 @@ The tool's header is the argument for every other choice below.
 
 ## Where the adaptive rule actually operates
 
-Free-running (`--pin 0`, `--timeline`), Vulkan, tidepool, 120 s of race per
-count, `1.0-bcdeeb8f` (2026-10-02, name tags in). This is the resolution a
-player is at, and every "settled" column below is pinned to it. Seconds are
-the run's after its opening 1280x720 rung, which 1-3P pass through and 4P
-skips.
+Free-running (`--pin 0`, `--timeline`), Vulkan, 90 s of race per row,
+`1.0-6a9af848` (2026-10-04, name tags in). This is the resolution a player is
+at.
 
-| Players | Seconds per operating point | Mean fps | Skips/s | GPU p50 typical / p95 worst |
-|---|---|---|---|---|
-| 1 | 960x540 108 | 59.9 | 0.07 | 7.4 / 20.7 |
-| 2 | 960x540 108 | 59.9 | 0.07 | 7.1 / 15.6 |
-| 3 | 640x360 28 → 768x432 31 → 832x480 34 → 960x540 17 | 59.6-60.0 | 0.0-0.3 | 8.6 / 16.2 |
-| 4 | 832x480 8 → 640x360 86 → 960x540 half rate 7 → 768x432 14 | 59.6 (29.7 at half rate) | 0.3-0.4 | 10.9 / 17.6 |
+| Players | Track | Seconds per operating point | Skips/s | Clean s | GPU p50, heavy 30% |
+|---|---|---|---|---|---|
+| 1 | tidepool | 1280x720 90 | 0.1 | 85 | 11.3 |
+| 1 | glacier | 1280x720 90 | 0.0 | 88 | 13.4 |
+| 2 | tidepool | 1280x720 90 | 0.0 | 90 | 10.5 |
+| 2 | glacier | 1280x720 90 | 0.0 | 90 | 11.8 |
+| 4 | tidepool | 960x540 89 | 0.0 | 89 | 12.6 |
+| 4 | glacier | 1280x720 1 → 960x540 21 → 832x480 66 | 0.3 at 540 | 65 of 66 at 480 | 13.7 |
 
-The 1P/2P skips are one second each, and so is 4P's worst: the results board
-going up over the frozen finish frame, not racing. 3P climbs and 4P does not
-because four cells pay the most, and on top of them the name tags: any app
-window that changes every frame costs ~2.3 ms of GPU at four cells on this
-box, half of it HWUI drawing on GL beside a Vulkan Filament (measured
-2026-09-28, `debug.ttp.tags 0|1`; nothing measurable at one cell).
+On 2026-10-02 1P and 2P sat at 960x540 and 4P cycled 360-540 with half-rate
+spells. 1080 at 1-2P is 2.25x the pixels of 720 and is not near. The one row
+short of 540 is 4P glacier, which leaves it on the lap's heavy stretch (p95
+15.4-15.7 ms there, against the 15.0 retreat line). Any app window that
+changes every frame still costs ~2 ms of GPU at four cells (the name tags; see
+the 2026-10-03 sections).
 
 ### 4P on 2026-08-27, and the bisect
 
@@ -499,14 +499,15 @@ a rule that counts the window's GPU time.
 With the window and streak fixes in, the default rule settles 4P tidepool at
 832x480 for most of the race (three 120 s races), up from 640x360.
 
-## The adaptive rule parks 4P at 640x360 (2026-10-03)
+## A retreat is sticky: the climb back is fitted on the late window (2026-10-03)
 
-Four guarded adaptive races per build on tidepool settle at 640x360 for most of
-the race (334-353 of ~470 s), although a pinned 768x432 holds 59.6 fps there.
 The rule's climb needs the cost model to predict the next rung under 0.85 of
 the budget, and the model is anchored on the late window that caused the
-retreat, so the climb out of 360 never fires. Changing that is a policy
-decision (render_scale.h), not a free win.
+retreat. On 2026-10-03 that parked 4P tidepool at 640x360 for most of a race
+although a pinned 768x432 held 59.6 fps; it no longer retreats there (the
+table at the top), but a 4P glacier race that leaves 540 on the heavy stretch
+stays at 480 for the rest of it. Changing the climb is a policy decision
+(render_scale.h), not a free win.
 
 ## The 4P frame is TWO frames, and the far deck is the one that costs (2026-09-02)
 
