@@ -193,6 +193,7 @@ export function runControllerScenario(opts) {
     case 'name':
       show('name');
       el('name-input').value = '';
+      el('name-input').dispatchEvent(new Event('input'));  // Join greys out, as on the live page
       el('name-status').textContent = '';
       break;
 

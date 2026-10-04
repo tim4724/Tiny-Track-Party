@@ -21,9 +21,8 @@ import { createWakeLock } from '../shared/wakeLock.js';
 // Sanitize a display name to the wire limit (trim + ≤16 chars). The cap is
 // shared with the display's own re-clamp of an incoming HELLO, so it lives in
 // shared/names.js — one function, imported by both pages and driven directly by
-// tests/wire-compat.test.js. Returns '' for blank input; callers that need a
-// seatable name apply their own `|| 'Racer'` default (the shell keeps '' so a
-// missing cpName falls back to the name screen).
+// tests/wire-compat.test.js. Returns '' for blank input; the shell keeps '' so a
+// missing cpName falls back to the name screen.
 import { cleanName } from '../shared/names.js';
 import { inShell, shellName, endSession, terminalReason, setAccentColor, installRenameHook, armSystemBack, installBackHook } from './launcher.js';
 import { storedName, saveName, storedMode, saveMode, storedCarIndex, saveCarIndex, storedInputMode, saveInputMode } from './prefs.js';
@@ -233,8 +232,15 @@ function setStatus(t) { el('name-status').textContent = t; }
 // two joins; unlocked again only if the attempt errors out (success navigates
 // away to the lobby).
 function setJoining(on) {
-  el('join-btn').disabled = on;
   el('name-input').disabled = on;
+  syncJoinButton();
+}
+// Join needs a name: a blank or all-space field keeps it disabled, so nobody
+// joins under an anonymous default. A disabled default button also blocks the
+// keyboard's Go/Enter (implicit submission).
+function syncJoinButton() {
+  const input = el('name-input');
+  el('join-btn').disabled = input.disabled || !cleanName(input.value);
 }
 
 // The display's pick as {mode, cupId, trackId} (the LOBBY_UPDATE snapshot
@@ -592,21 +598,32 @@ function maybeRestoreCar() {
 
 // --- name screen ---
 el('name-input').value = storedName();
+syncJoinButton();
+el('name-input').addEventListener('input', syncJoinButton);
 
-// Compact the form while the software keyboard is up for the field. After the
-// relayout the field has moved, so pan it back into the visible strip. No
-// blur listener: a tap on Join blurs the field at pointerdown, and relaying
-// out there would move Join from under the finger before its click lands —
-// the keyboard's own resize restores the layout after the click.
+// Compact the form while the software keyboard is up for the field, and pin it
+// to the strip the keyboard leaves. That strip is the VISUAL viewport, and iOS
+// pans it over the page to reach the field (and lets the player drag it on), so
+// a form laid out in the page — or scrolled into view once — ends up above it.
+// The compact form is fixed to the layout viewport and offset by the pan,
+// re-read on every pan. No blur listener: a tap on Join blurs the field at
+// pointerdown, and relaying out there would move Join from under the finger
+// before its click lands — the keyboard's own resize restores the layout after
+// the click.
 function syncNameKeyboard() {
-  const input = el('name-input');
-  const open = document.activeElement === input && keyboardUp();
-  if (el('name').classList.contains('kb-open') === open) return;
-  el('name').classList.toggle('kb-open', open);
-  if (open) input.scrollIntoView({ block: 'nearest' });
+  const open = document.activeElement === el('name-input') && keyboardUp();
+  screens.name.classList.toggle('kb-open', open);
+  if (open) screens.name.style.setProperty('--vv-top', `${window.visualViewport.offsetTop}px`);
 }
 el('name-input').addEventListener('focus', syncNameKeyboard);
 window.visualViewport?.addEventListener('resize', syncNameKeyboard);
+window.visualViewport?.addEventListener('scroll', syncNameKeyboard);
+// The page fits its viewport, but under the keyboard iOS keeps it full height
+// and lets a drag pan the strip over it — there is nothing down there to reach,
+// so refuse the drag. Not on the field itself: that is where the caret drags.
+document.addEventListener('touchmove', (e) => {
+  if (screens.name.classList.contains('kb-open') && e.target !== el('name-input')) e.preventDefault();
+}, { passive: false });
 
 // Back out of the room (back button / phone back gesture) → name entry. Drops
 // the relay connection so the display removes us from the roster, resets the
@@ -626,10 +643,10 @@ function leaveToName() {
   roster = [];
   setPauseOverlay(false);
   closeAnyModal();     // don't strand either popup over the name screen
+  el('name-input').value = storedName();
   setJoining(false);
   setStatus('');
   hideConn();
-  el('name-input').value = storedName();
   show('name');
   el('name-input').focus();
 }
@@ -661,7 +678,7 @@ window.addEventListener('pageshow', () => net.resume());
 // standalone name form; the shell passes false — the launcher owns identity and its
 // injected name must never leak into the game's own storage (§1).
 async function joinRace(name, { persist } = {}) {
-  const n = cleanName(name) || 'Racer';
+  const n = cleanName(name);
   myName = n;
   if (persist) saveName(n);
   setStatus('');           // the disabled button signals the in-flight join

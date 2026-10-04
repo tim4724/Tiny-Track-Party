@@ -108,8 +108,11 @@ input[type=text]:disabled { opacity: 0.6; }
 
 /* Keyboard up (main.js sets .kb-open): a landscape keyboard leaves a strip
    barely taller than the input, so the badge goes and the field and Join
-   share one slim row at the top of the page. */
-#name.kb-open { grid-template-columns: minmax(0, 34rem); align-content: start; }
+   share one slim row at the top of that strip (--vv-top: syncNameKeyboard). */
+#name.kb-open {
+  position: fixed; top: var(--vv-top, 0px); left: 0; right: 0;
+  grid-template-columns: minmax(0, 34rem); align-content: start;
+}
 #name.kb-open .name-wordmark { display: none; }
 #name.kb-open #name-form { display: flex; gap: 0.6rem; }
 #name.kb-open input[type=text] { padding-block: 0.55rem; }

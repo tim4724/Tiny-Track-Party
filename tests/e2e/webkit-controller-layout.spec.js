@@ -185,10 +185,47 @@ test('webkit: the drive controls keep their own held state, whatever else is pre
   await expect(brake).toHaveClass(/\bheld\b/);   // …and BRAKE is still held
 });
 
+test('webkit: Join stays disabled until the field holds a name', async ({ page }) => {
+  await page.goto('/controller/index.html?scenario=name');
+  const join = page.locator('#join-btn');
+  await expect(join).toBeDisabled();
+  await page.fill('#name-input', '   ');          // trimmed away, still no name
+  await expect(join).toBeDisabled();
+  await page.fill('#name-input', 'A');
+  await expect(join).toBeEnabled();
+});
+
 // Typed key by key, because `fill` skips keydown: the steering keys (a, d, s, e,
 // space) are bound on the window, and iOS's soft keyboard sends them as real keys.
 test('webkit: the name field takes the letters the steering keys use', async ({ page }) => {
   await page.goto('/controller/index.html?scenario=name');
   await page.locator('#name-input').pressSequentially('Sad Ed');
   await expect(page.locator('#name-input')).toHaveValue('Sad Ed');
+});
+
+// The keyboard cannot be opened in a headless browser, so the visual viewport
+// is stood in for: a strip short enough to read as the keyboard being up, and
+// panned the way iOS pans it to reach the field. The form must follow the PAN,
+// which is the part a layout-viewport placement misses.
+test('webkit: with the keyboard up, the name form sits inside the visible strip as it pans', async ({ page }) => {
+  await page.addInitScript(() => {
+    const vv = new EventTarget();
+    Object.assign(vv, { width: innerWidth, height: innerHeight, offsetTop: 0, offsetLeft: 0, scale: 1 });
+    Object.defineProperty(window, 'visualViewport', { value: vv, configurable: true });
+  });
+  await page.goto('/controller/index.html?scenario=name');
+  await page.focus('#name-input');
+
+  for (const [offsetTop, event] of [[180, 'resize'], [90, 'scroll']]) {
+    await page.evaluate(([top, ev]) => {
+      Object.assign(window.visualViewport, { height: 150, offsetTop: top });
+      window.visualViewport.dispatchEvent(new Event(ev));
+    }, [offsetTop, event]);
+    await expect(page.locator('#name')).toHaveClass(/\bkb-open\b/);
+    for (const sel of ['#name-input', '#join-btn']) {
+      const b = await page.locator(sel).boundingBox();
+      expect(b.y).toBeGreaterThanOrEqual(offsetTop);
+      expect(b.y + b.height).toBeLessThanOrEqual(offsetTop + 150);
+    }
+  }
 });
