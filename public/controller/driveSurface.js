@@ -115,10 +115,12 @@ function releaseSteerButtons() {
 export function initDriveSurface({ tilt, buzz, haptics }) {
   _tilt = tilt; _buzz = buzz; _haptics = haptics;
 
-  // A held control must not trigger Android's long-press gesture: its context
-  // menu never shows over these buttons, but the OS haptic for it still fires —
-  // a phantom second buzz ~500ms into every hold, over our own press tick.
-  document.querySelector('.drive-controls').addEventListener('contextmenu', (e) => e.preventDefault());
+  // A long press anywhere on the race screen does nothing: Android's context
+  // menu buzzes an OS haptic ~500ms into every hold, and iOS's selection raises
+  // the Copy menu. #game's CSS covers both; these hold where an engine ignores it.
+  const game = el('game');
+  game.addEventListener('contextmenu', (e) => e.preventDefault());
+  game.addEventListener('selectstart', (e) => e.preventDefault());
 
   // BRAKE — held = brake at the fixed rate, released = release. A continuous
   // rumble runs while it's held: the player's eyes-free confirmation they're

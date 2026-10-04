@@ -713,8 +713,14 @@ input[type=text]:disabled { opacity: 0.6; }
    controls under it. .drive-controls is display:contents so each button lands in
    its own grid area per mode. The identity row is NOT one of the rows — see
    .hud-top. */
+/* Nothing on this screen is selectable, and the PREFIX is the load-bearing
+   half: WebKit honours only -webkit-user-select, so the bare property left the
+   name sticker, the hint and the paper between the buttons open to a long
+   press — a thumb drifting off a steer button raised iOS's Copy menu mid-race.
+   The callout is shut for the same press. */
 #game {
-  align-items: stretch; justify-content: flex-start; user-select: none;
+  align-items: stretch; justify-content: flex-start;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
 }
 /* Both modes share one vertical rhythm: the stretchy MID row (the steer bar
    floats with its space around it vertically), then the controls row at a fixed
@@ -833,10 +839,6 @@ input[type=text]:disabled { opacity: 0.6; }
   box-shadow: 0 var(--btn-drop) 0 var(--btn-ledge);   /* same ledge as every other button */
   touch-action: none;
   transition: transform var(--press-up), box-shadow var(--press-up), filter var(--press-up), opacity 0.15s;
-  /* no selection on a HELD control — with touch-action:none this closes off
-     Android's long-press gesture (whose OS haptic buzzed mid-hold); the
-     drive surface also preventDefaults contextmenu (driveSurface.js) */
-  user-select: none; -webkit-user-select: none;
   min-height: 0; padding: 0.4rem;
 }
 #brake-btn.brake.held, #action-btn.action.held, .steerbtn.held {

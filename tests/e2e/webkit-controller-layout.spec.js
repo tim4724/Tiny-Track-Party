@@ -185,6 +185,29 @@ test('webkit: the drive controls keep their own held state, whatever else is pre
   await expect(brake).toHaveClass(/\bheld\b/);   // …and BRAKE is still held
 });
 
+// A long press on iOS that lands on selectable text raises the Copy menu, and a
+// thumb drifting off a steer button lands on the hint or the paper beside it.
+// The race screen once carried only the bare `user-select`, which WebKit does
+// not honour, so this asks WebKit itself: the prefixed value every element on
+// the screen computes, then a real drag across the text that would select it.
+test('webkit: nothing on the race screen can be selected', async ({ page }) => {
+  await page.goto('/controller/index.html?scenario=playing');
+  await page.waitForSelector('#game:not(.hidden) #hud-name');
+
+  const selectable = await page.$$eval('#game, #game *', (els) => els
+    .filter((e) => getComputedStyle(e).webkitUserSelect !== 'none')
+    .map((e) => e.id || e.className));
+  expect(selectable).toEqual([]);
+
+  const from = await page.locator('#hud-name').boundingBox();
+  const to = await page.locator('.hud-hint').boundingBox();
+  await page.mouse.move(from.x + 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(to.x + to.width - 2, to.y + to.height / 2, { steps: 8 });
+  await page.mouse.up();
+  expect(await page.evaluate(() => String(getSelection()))).toBe('');
+});
+
 test('webkit: Join stays disabled until the field holds a name', async ({ page }) => {
   await page.goto('/controller/index.html?scenario=name');
   const join = page.locator('#join-btn');
