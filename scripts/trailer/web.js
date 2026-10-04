@@ -11,6 +11,11 @@
 // answers byte ranges, so seeking works. The size budget is held by
 // tests/trailer-web.test.js: a recut is a new copy in git history and in the image's
 // assets layer, which every deploy pulls.
+//
+// The CouchPad apps play this file from couchpad.games/games-manifest.json and cache it
+// by URL forever, so a recut must ship under a new name (trailer-v2.mp4, …): bump OUT,
+// display/index.html and tests/trailer-web.test.js, then the manifest's `video` in
+// Couch-Games and its bundled copies in Couch-Games-Controller.
 
 const { execFileSync } = require('child_process');
 const fs = require('fs');
