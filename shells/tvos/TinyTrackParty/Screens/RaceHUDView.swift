@@ -311,9 +311,12 @@ private struct ItemSlot: View {
         // 50 ms and then froze for up to 113 — the stutter that read as dropped
         // frames. The version before THAT held them still.
         //
-        // `initialValue` is the RESTING pose, because that is what the animator
-        // returns to when `repeating` goes false.
+        // The pose is IGNORED once the roll stops. `repeating: false` does not
+        // return the track to `initialValue`: it halts on whatever frame it was
+        // drawing, so a slot that had rolled rested up to 12% oversized and 4°
+        // tilted, eating the gap under the name chip.
         .keyframeAnimator(initialValue: Pose(), repeating: rolling != nil) { view, p in
+            let p = rolling == nil ? Pose() : p
             view.scaleEffect(p.scale).rotationEffect(.degrees(p.tilt)).brightness(p.bright)
         } keyframes: { _ in
             KeyframeTrack(\.scale) {
