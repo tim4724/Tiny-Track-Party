@@ -128,7 +128,7 @@ const _isTestMode = !!_trackParams.get('scenario');
 const _isDebugSolo = _trackParams.has('solo');
 const _soloCar = (((parseInt(_trackParams.get('solo'), 10) || 0) % CAR_MODELS.length) + CAR_MODELS.length) % CAR_MODELS.length;
 // ?item=<id> — DEBUG: every item-box roll returns this item (e.g. ?item=monster on the
-// gym track). Unknown ids are ignored. ?bots=<n> — DEBUG: cap the AI fill to n bots
+// gym track), in a launch and in the racing/bench scenarios. Unknown ids are ignored. ?bots=<n> — DEBUG: cap the AI fill to n bots
 // (?bots=0 = race alone) instead of topping the grid up to a full field.
 const _qForceItem = ITEM_IDS.includes(_trackParams.get('item')) ? _trackParams.get('item') : null;
 const _qBots = _trackParams.has('bots') ? Math.max(0, parseInt(_trackParams.get('bots'), 10) || 0) : null;
@@ -1391,7 +1391,8 @@ if (_scenario) {
       // same take — fine for a gallery card, useless for a capture that wants a
       // choice of takes. Naming a seed re-rolls the whole race; the trailer rig
       // scouts seeds this way and then pins the number it liked.
-      seed: _trackParams.get('seed') === null ? null : _int(_trackParams.get('seed'), 1)
+      seed: _trackParams.get('seed') === null ? null : _int(_trackParams.get('seed'), 1),
+      forceItem: _qForceItem   // ?item=: the live race scenarios roll it as a launch does
     },
     // `built` is the track catalogue as entries — the chained-start preview is
     // the one scenario that shows a SECOND circuit, so it needs to name one.
@@ -1508,7 +1509,7 @@ window.__biomes = _biomes;
 Promise.all([import('../shared/debugPanel.js'), import('./debugFields.js')])
   .then(([{ initDebugPanel }, { displayDebugFields }]) => initDebugPanel(
     displayDebugFields({
-      maxPlayers: MAX_PLAYERS, carNames: window.CAR_NAMES || [], trackList: TRACK_LIST,
+      maxPlayers: MAX_PLAYERS, carNames: window.CAR_NAMES || [], trackList: TRACK_LIST, itemIds: ITEM_IDS,
       biomeNames: _biomes.names, scene, sim: _nativeSim
     }),
     { title: 'Display' }

@@ -7,7 +7,7 @@
 // from main.js because it is a fifty-line data blob describing URL hooks that are
 // each already documented where they are read; keeping it inline buried the
 // bootstrap tail under it.
-export function displayDebugFields({ maxPlayers, carNames, trackList, biomeNames, scene, sim }) {
+export function displayDebugFields({ maxPlayers, carNames, trackList, itemIds, biomeNames, scene, sim }) {
   // Capture the engine default ONCE, before any URL ?steerExpo= value is applied
   // (the panel's range field calls live() at init). Used for both the slider's
   // default and the "· default" readout marker — reading it live inside format()
@@ -16,7 +16,7 @@ export function displayDebugFields({ maxPlayers, carNames, trackList, biomeNames
   return [
     { section: 'Test harness' },
     { key: 'scenario', label: 'Scenario', hint: 'no relay, fake players', type: 'select',
-      options: ['welcome', 'device-choice', 'lobby-loading', 'lobby-empty', 'lobby', 'track', 'assets', 'countdown', 'racing', 'results', 'intermission', 'podium']
+      options: ['welcome', 'device-choice', 'lobby-loading', 'lobby-empty', 'lobby', 'track', 'assets', 'countdown', 'racing', 'bench', 'results', 'intermission', 'podium']
         .map((s) => ({ value: s, label: s })) },
     { key: 'players', label: 'Players', hint: 'fake roster size', type: 'int', min: 1, max: maxPlayers },
     { key: 'host', label: 'Host seat', hint: 'blank = no host', type: 'int', min: 0, max: maxPlayers - 1 },
@@ -25,6 +25,11 @@ export function displayDebugFields({ maxPlayers, carNames, trackList, biomeNames
     { section: 'Solo drive' },
     { key: 'solo', label: 'Solo keyboard', hint: 'pick a car; no phones needed', type: 'select', bare: '0',
       options: carNames.map((name, i) => ({ value: String(i), label: name })) },
+    { section: 'Race' },
+    { key: 'seed', label: 'Seed', hint: 'scenarios: re-rolls the field, items and wander', type: 'int', min: 0 },
+    { key: 'item', label: 'Item roulette', hint: 'every box rolls this', type: 'select',
+      options: itemIds.map((id) => ({ value: id, label: id })) },
+    { key: 'bots', label: 'Bots', hint: 'cap the CPU fill · live launch', type: 'int', min: 0 },
     { section: 'Driving feel' },
     // Live: re-shapes the tilt→steer curve mid-race (no reload). 1 = linear scaling;
     // higher = gentler near centre, sharper toward full lock. The engine reads it

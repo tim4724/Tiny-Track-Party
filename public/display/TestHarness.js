@@ -14,7 +14,6 @@ import { init as initNativeSim, NativeRaceSession } from './NativeRaceSession.js
 // same chrome through the same setCarHud, and used to carry its own copy of the
 // number.
 import { HUD_TICK_MS } from './Stage.js';
-import { ITEM_IDS } from './engine/contract.js';
 import { AI_PERSONALITIES } from './aiPersonas.js';
 import { renderQR, renderJoinUrl, buildReconnectCard } from './Net.js';
 import { buildQRMatrix } from '../shared/qr.js';
@@ -1297,10 +1296,10 @@ export function runDisplayScenario(opts, ctx) {
     // main.js hands the wasm for the live CPU fill), so the gallery shows real bot
     // behaviour — fanned lanes, a spread of speeds — not a bespoke demo loop.
     //
-    // The bench takes the debug ?item= the live launch does, roulette only: every box
-    // rolls that item, and the field still has to collect and fire it, as in a real race.
-    const qItem = new URLSearchParams(location.search).get('item');
-    const forceItem = (kind === 'bench' && ITEM_IDS.includes(qItem)) ? qItem : null;
+    // The live race scenarios take the debug ?item= the live launch does, roulette
+    // only: every box rolls that item, and the field still has to collect and fire it,
+    // as in a real race.
+    const forceItem = (kind === 'racing' || kind === 'bench') ? opts.forceItem : null;
     // `?hold=` — a screenshot card's race moment (galleryScenarios.js `hold`),
     // re-armed on every deal so a redealt race stops at the same moment.
     const holdParam = new URLSearchParams(location.search).get('hold');
