@@ -527,7 +527,7 @@ re-derive them:
 |---|---|
 | coalescing the frame's ~16 skid dirty rects into 4 by area | within noise UNDER THAT 20 ms 720-line frame — re-priced at 540 on 2026-09-03 the count is ~1.7 ms and the merge ships (`kUploadEventTexels`, the paragraph above) |
 | `doubleSided : false` on vroad | within noise; Filament already drops the normal varying once the fragment stage stops reading it |
-| `culling : back` on vroad | 0.2 ms, and the deck's underside is deliberately visible on loops |
+| back-face culling the deck and the ground | null at 4P/540 Vulkan (2026-10-04, three races a side). The older `culling : back` row here measured nothing: `doubleSided : true` forces every instance to `CullingMode::NONE`, so it took a per-instance `setCullingMode` after creation to cull at all. Pixels match within animation (a closed, outward-wound ring; FRONT wipes the top) |
 | road ring step 0.48 -> 0.72 u | 0.3 ms for real chord sag on every track |
 | `kRoadChunkTris` 2500 -> 6000 (13 chunks -> 6) | 0.1 ms of fixed cost and **+2.7 ms of fill** — the per-chunk cull and decal window both widen |
 | skipping the ~7 Hz skid mip regeneration | ~0.6 ms, and the far field scintillates without it |

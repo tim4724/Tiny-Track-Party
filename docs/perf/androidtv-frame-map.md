@@ -443,6 +443,26 @@ the end of eglSwap); the window's one full-window op is its clear, which
 PowerVR turns into a draw (`fPerformColorClearsAsDraws`) and nothing else
 zeroes; render-pass load/store flags are already what a tiler wants.
 
+## What is left on glacier at 4P is the deck's geometry (2026-10-04, later)
+
+Group ablations at a pinned 960x540, one race an arm against a 0.6 ms
+identical-race spread (pass the mask as the bench's `--features`; perf-race
+resets a bare `debug.ttp.features` at launch): the road is ~3 ms, terrain and
+dressing ~0.8 ms each, and sky, cars, effects, fog, grade and each of the
+deck's four channels are inside the spread. The road's share barely moves with
+resolution (3.0 ms at 360, 3.1 at 540, 4.1 at 720), so it is per-primitive
+work paid once per cell, not fill.
+
+Back-face culling the deck and the ground had never been measured: their
+materials are `doubleSided`, which forces every instance to
+`CullingMode::NONE`, so the old `culling : back` arms culled nothing. Culled
+for real (per-instance `setCullingMode` after creation), the picture matches
+within animation on ten held frames including loops and barrel rolls, and the
+box reads null: typical 11.83 / 11.88 / 11.91 ms and heavy 13.76 / 13.77 /
+13.87 ms for none / deck / deck and ground, three races each. No
+pixel-neutral lever is left for glacier's heavy stretch; what keeps it at 480
+for the rest of a race is the sticky climb below.
+
 ## Glacier: the flake cloud and the car field drew into every cell (2026-10-04)
 
 Glacier's uniform premium over tidepool was vertex work no cell could see. The
