@@ -484,6 +484,10 @@ object Scenarios {
             // here, so two runs on two tracks are two different questions.
             "bench" -> {
                 PerfMonitor.bench()
+                // Unlocked first, as the race cards are: a locked cup's track is
+                // refused by the pick walk and the bench measures whatever screen
+                // was up instead.
+                Ttp.ttp_ui_progress_load(null, 1)
                 game.show(GameState.Screen.RACE)
                 game.startDemoRace(trackPick(), forceItem = null, humans = players)
             }

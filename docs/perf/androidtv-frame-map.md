@@ -443,6 +443,25 @@ the end of eglSwap); the window's one full-window op is its clear, which
 PowerVR turns into a draw (`fPerformColorClearsAsDraws`) and nothing else
 zeroes; render-pass load/store flags are already what a tiler wants.
 
+## Every track at 4P pinned 960x540 (2026-10-04)
+
+One 90 s race per track, `1.0-6a9af848`. This is what a 540 floor with no
+sub-floor rung would play like.
+
+| Track | Mean fps | Worst second | Seconds < 58 | Skips |
+|---|---|---|---|---|
+| pretzel | 59.1 | 47 | 8 | 77 |
+| tangle | 59.5 | 50 | 6 | 48 |
+| flurry | 59.5 | 51 | 7 | 44 |
+| powder | 59.7 | 49 | 4 | 26 |
+| avalanche | 59.8 | 52 | 2 | 20 |
+| gauntlet | 59.8 | 52 | 2 | 19 |
+| ribbon, cloverleaf, skyline | 59.9 | 55-57 | 2 | 8-13 |
+| the other eleven | 59.9-60.0 | 58-60 | 0 | 0-5 |
+
+The dips come in runs once a lap, not scattered: pretzel's worst is 4-5 s
+at 47-51 fps each lap, tangle's and flurry's 2-3 s at 50-54.
+
 ## What is left on glacier at 4P is the deck's geometry (2026-10-04, later)
 
 Group ablations at a pinned 960x540, one race an arm against a 0.6 ms
