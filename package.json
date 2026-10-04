@@ -47,7 +47,8 @@
     "thumbs:car": "node scripts/capture-car-thumbs.js",
     "trailer": "node scripts/trailer/render.js && node scripts/trailer/cut.js",
     "trailer:cut": "node scripts/trailer/cut.js",
-    "trailer:render": "node scripts/trailer/render.js"
+    "trailer:render": "node scripts/trailer/render.js",
+    "trailer:web": "node scripts/trailer/web.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

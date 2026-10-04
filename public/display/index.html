@@ -89,6 +89,7 @@
     <div class="wordmark welcome__wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></div>
     <p class="welcome__tag">Race your friends! Everyone steers with their phone.</p>
     <button id="newgame-btn" class="btn btn--brand welcome__btn">NEW GAME</button>
+    <button id="trailer-btn" class="btn btn--ghost welcome__btn welcome__btn--trailer">▶ TRAILER</button>
     <!-- Build badge: version + short commit, shown on preview (non-production)
          builds only. The server fills __VERSION_BADGE__ with "x.y.z (#sha)" off
          production and leaves it empty in prod; .version-badge:empty hides it.
@@ -107,6 +108,16 @@
       <a href="https://couchpad.games/en/imprint" target="_blank" rel="noopener">Imprint</a>
     </footer>
   </section>
+
+  <!-- Trailer — opened by the welcome board's TRAILER button (main.js has how it
+       opens and closes). The file is committed (npm run trailer:web) and served
+       by this server; preload="none" keeps it off the boot. -->
+  <div id="trailer" class="hidden" role="dialog" aria-modal="true" aria-label="Trailer">
+    <video id="trailer-video" src="/assets/trailer/trailer.mp4" preload="none" playsinline controls></video>
+    <button id="trailer-close" class="icon-btn trailer__close" aria-label="Close trailer">
+      <svg class="fs-glyph" viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 4.5L15.5 15.5M15.5 4.5L4.5 15.5" /></svg>
+    </button>
+  </div>
 
   <!-- Lobby — Sticker Bash chrome framing the live 3D preview: the join
        ticket on the left rail, the race pick over the cup shelf on the right

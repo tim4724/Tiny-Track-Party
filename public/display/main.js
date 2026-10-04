@@ -99,6 +99,35 @@ let newGameClick = () => {
 };
 el('newgame-btn').addEventListener('click', () => newGameClick());
 
+// TRAILER plays the committed cut over the title board (index.html #trailer). It
+// is not a screen — it opens from welcome and closes back onto it — but it holds
+// one history entry while open, so browser back closes it instead of leaving the
+// page. Like NEW GAME it answers from the first paint.
+const trailer = el('trailer'), trailerVideo = el('trailer-video');
+const trailerHistory = () => !_isTestMode && !_isDebugSolo;
+function openTrailer() {
+  if (!trailer.classList.contains('hidden')) return;   // one history entry, however it is activated
+  trailer.classList.remove('hidden');
+  trailerVideo.currentTime = 0;
+  trailerVideo.play().catch(() => {});   // the click is the gesture; a refusal leaves the controls
+  el('trailer-close').focus();
+  if (trailerHistory()) history.pushState({ trailer: true }, '');
+}
+// `popped`: browser back already took the entry. Answers whether it was open.
+function closeTrailer(popped = false) {
+  if (trailer.classList.contains('hidden')) return false;
+  trailerVideo.pause();
+  trailer.classList.add('hidden');
+  el('trailer-btn').focus();
+  if (!popped && trailerHistory()) { suppressPopstate = true; history.back(); }
+  return true;
+}
+el('trailer-btn').addEventListener('click', openTrailer);
+el('trailer-close').addEventListener('click', () => closeTrailer());
+trailerVideo.addEventListener('ended', () => closeTrailer());
+trailer.addEventListener('click', (e) => { if (e.target === trailer) closeTrailer(); });   // the glass, not the film
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeTrailer(); });
+
 // ---- tracks ----
 // No track is PICKED at first — the host's "Start race" stays gated until their
 // phone sends one — but the live lobby still previews a circuit from the first
@@ -1467,11 +1496,12 @@ if (_scenario) {
   };
   window.addEventListener('popstate', (e) => {
     if (suppressPopstate) { suppressPopstate = false; return; }
+    if (closeTrailer(true)) return;   // the trailer's own entry: back closes it, nothing more
     const act = BACK_ACTION[ui.backEffect(currentScreen, paused, raceEnded)];
     if (!act) {
       // Forward-nav (or a stale reloaded entry) landed ahead of the UI — the
       // welcome board is the root, so swallow the entry instead of acting.
-      if (e.state && e.state.screen) { suppressPopstate = true; history.back(); }
+      if (e.state && (e.state.screen || e.state.trailer)) { suppressPopstate = true; history.back(); }
       return;
     }
     popstateNavigating = true;

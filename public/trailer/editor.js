@@ -790,7 +790,8 @@ function shotsJs() {
   // this export cannot reproduce, and replacing the whole file with this would throw it
   // away. The banner says so, for whoever pastes it.
   return `// Built in /trailer.html — paste over the module.exports ARRAY in\n`
-    + `// scripts/trailer/shots.js, keeping that file's header. Then: npm run trailer\n\n`
+    + `// scripts/trailer/shots.js, keeping that file's header. Then: npm run trailer\n`
+    + `// (and npm run trailer:web to update the welcome board's copy)\n\n`
     + `module.exports = [\n${body}\n];\n`;
 }
 

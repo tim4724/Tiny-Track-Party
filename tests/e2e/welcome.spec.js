@@ -38,6 +38,40 @@ test('boot shows the welcome board with the room pre-warmed; NEW GAME reveals th
   );
 });
 
+test('TRAILER plays over the title board; back, the close button, Esc and the glass each close it, and the stack is intact', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForSelector(visible('#welcome'));
+
+  // Served by this server as video, ranged so the player can seek. (Playwright's
+  // Chromium has no H.264 decoder, so playback itself is not asserted here.)
+  const src = await page.locator('#trailer-video').getAttribute('src');
+  const res = await page.request.get(src, { headers: { Range: 'bytes=0-1023' } });
+  expect(res.status()).toBe(206);
+  expect(res.headers()['content-type']).toBe('video/mp4');
+
+  // Each way out lands back on the title board.
+  for (const close of [
+    () => page.goBack(),
+    () => page.click('#trailer-close'),
+    () => page.keyboard.press('Escape'),
+    () => page.locator('#trailer').click({ position: { x: 4, y: 4 } }),   // the glass beside the film
+  ]) {
+    await page.click('#trailer-btn');
+    await page.waitForSelector(visible('#trailer'));
+    await close();
+    await expect(page.locator('#trailer')).toBeHidden();
+    await expect(page.locator('#welcome')).toBeVisible();
+    expect(await page.evaluate(() => document.getElementById('trailer-video').paused)).toBe(true);
+  }
+
+  // The trailer's history entries are all gone: NEW GAME steps forward one
+  // level, and one back returns to the title board rather than past it.
+  await page.click('#newgame-btn');
+  await page.waitForSelector(visible('#lobby'));
+  await page.goBack();
+  await page.waitForSelector(visible('#welcome'));
+});
+
 test('back from the lobby ends the party: phones bail, a fresh room with a clean roster warms', async ({ page, browser }) => {
   const roomCode = await openDisplay(page);
   const alice = await joinController(browser, roomCode, 'Alice');

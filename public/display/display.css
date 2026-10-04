@@ -507,6 +507,36 @@ html {
 }
 /* keep the sticker tilt through the press (the kit's :active would drop it) */
 .welcome__btn:active, .welcome__btn.is-pressed { transform: rotate(1.4deg) translateY(var(--btn-sink)); }
+/* TRAILER: the quiet second sticker under NEW GAME, smaller and tilted the
+   other way so the pair reads as two stickers rather than a button stack. */
+.welcome__btn--trailer {
+  font-size: clamp(15px, 1.6vw, 22px);
+  padding: 0.6em 1.3em;
+  transform: rotate(-1.2deg);
+}
+.welcome__btn--trailer:active, .welcome__btn--trailer.is-pressed { transform: rotate(-1.2deg) translateY(var(--btn-sink)); }
+
+/* The trailer player (index.html #trailer): the film as a sticker on the
+   overlays' glass (grouped with #pause-overlay below), so the title board it
+   opened from stays in view around it; a click on the glass closes it. Over
+   the corner chrome (12), the toast (13) and the boot cover (15); under the
+   overlays that interrupt (pause 20, link 25, device chooser 30). */
+#trailer { z-index: 18; --trailer-pad: clamp(1rem, 6vh, 4rem); padding: var(--trailer-pad) 0; }
+#trailer video {
+  /* Always 16:9: as wide as 80vw (which leaves the close button's corner clear
+     of the film), 1280px, or the height between the paddings allows. */
+  width: min(80vw, 1280px, calc((100vh - 2 * var(--trailer-pad)) * 16 / 9));
+  aspect-ratio: 16 / 9;
+  display: block;
+  /* COVER, not the default contain: the border makes the picture box a hair off
+     16:9, and contain letterboxes that hair as a dark line inside the outline. */
+  object-fit: cover;
+  border: 3px solid var(--ink); border-radius: var(--r);
+  box-shadow: var(--shadow-card);      /* a 3px-bordered card (theme.css's rule) */
+}
+.trailer__close { position: absolute; top: var(--safe-y); right: var(--safe-x); }
+/* The debug wrench floats over every layer (debugPanel.css); not over the film. */
+#trailer:not(.hidden) ~ .dbg-fab { display: none; }
 
 /* Legal footer (.site-foot lives in theme.css) — pinned along the bottom of the
    title board rather than sitting in its centred column, so it never pushes the
@@ -962,7 +992,7 @@ html.cam-free #race { pointer-events: none; }
   display: flex; gap: 0.6rem;
   transition: opacity 0.4s ease;
 }
-#corner-btns .icon-btn { width: var(--corner-btn); height: var(--corner-btn); }
+#corner-btns .icon-btn, .trailer__close { width: var(--corner-btn); height: var(--corner-btn); }
 
 /* The welcome board has no fullscreen toggle: NEW GAME is the gesture that
    claims fullscreen, so a second control beside it is only a way to spend the
@@ -986,12 +1016,15 @@ html.chrome-idle, html.chrome-idle * { cursor: none; }
 html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
 
 /* Pause overlay — same bright frosted glass as the results screen, sits above
-   the (frozen) race with a floating card of choices. */
-#pause-overlay {
-  position: fixed; inset: 0; z-index: 20;
+   the (frozen) race with a floating card of choices. The glass is shared by
+   every overlay that sits over a board (this one, the link overlay and the
+   trailer); each sets only its own z-index. */
+#pause-overlay, #link-overlay, #trailer {
+  position: fixed; inset: 0;
   display: flex; align-items: center; justify-content: center;
   background: rgba(255, 246, 235, 0.72); backdrop-filter: blur(10px);
 }
+#pause-overlay { z-index: 20; }
 .pause-card {
   display: flex; flex-direction: column; align-items: center;
   gap: clamp(1.2rem, 2.5vw, 2rem); text-align: center;
@@ -1007,11 +1040,7 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
 /* ---- Connection overlay ---- the display's own link (#link-overlay). The
    pause glass at one z-step up: above the boot cover (15) and the pause
    overlay (20), under the device chooser (30). */
-#link-overlay {
-  position: fixed; inset: 0; z-index: 25;
-  display: flex; align-items: center; justify-content: center;
-  background: rgba(255, 246, 235, 0.72); backdrop-filter: blur(10px);
-}
+#link-overlay { z-index: 25; }
 .link-card {
   display: flex; flex-direction: column; align-items: center;
   gap: clamp(1rem, 2vw, 1.6rem); text-align: center;
@@ -1072,6 +1101,7 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
   }
   .welcome__tag { animation-delay: 60ms; }
   .welcome__btn { animation-delay: 120ms; }
+  .welcome__btn--trailer { animation-delay: 180ms; }
   .ticket { animation-delay: 40ms; }
   .cup-slot__pick { animation-delay: 120ms; }
   .cup-shelf { animation: sticker-slap 240ms cubic-bezier(0.2, 1.5, 0.35, 1) both; animation-delay: 140ms; }

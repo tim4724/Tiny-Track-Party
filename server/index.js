@@ -86,6 +86,8 @@ const MIME_TYPES = {
   '.wav': 'audio/wav',
   '.flac': 'audio/flac',
   '.mp3': 'audio/mpeg',
+  // The welcome board's trailer (scripts/trailer/web.js); ranged like the audio.
+  '.mp4': 'video/mp4',
   // Compiled Filament materials, shipped beside the engine wasm.
   '.filamat': 'application/octet-stream',
   // License notices, linked from /licenses.html. Without these they'd fall back
