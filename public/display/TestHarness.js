@@ -44,10 +44,6 @@ const countdownBeat = (n) => ({ n, slap: n > 0, go: n === 0 });
 const COUNTDOWN_STILL = { n: 3, slap: false, go: false };
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
-// Held items per slot for the frozen previews (reconnect / finished) so the cell
-// item indicator shows populated — a mix of boost/banana with some empty slots,
-// rather than a field of empty squares. null = that slot is carrying nothing.
-const PREVIEW_ITEMS = ['boost', 'banana', null, 'boost', 'banana', null, 'boost', null];
 // A per-car preview fact, keyed by CAR ID. A car id is a SCALAR that may be a
 // number or a string — the CPU fill's are 'ai-0'… (race_flow's aiPrefix) — so
 // nothing on this page may index an array with one or do arithmetic on one.
@@ -56,17 +52,6 @@ const PREVIEW_ITEMS = ['boost', 'banana', null, 'boost', 'banana', null, 'boost'
 // colors[NaN] for every bot, which writes the fill as the literal "undefined"
 // and paints the CPU dots black.
 const byCar = (field, pick) => new Map(field.map((f, i) => [f.peerIndex, pick(f, i)]));
-// Frozen previews only. The native sim has no giveItem staging hook, and a frozen sim
-// would never spend the item anyway — so we dress the snapshot cars on their way to
-// setCarHud (a fresh, caller-owned object per getSnapshot) instead of the sim.
-// The SLOT is the seat's livery index, not the car's id and not its place on the
-// grid: the launch hands the field back in GRID order with the humans at the
-// back, so dressing by array position would deal the items to different cells
-// every time the field size changed.
-const dressItems = (cars, field) => {
-  const held = byCar(field, (f) => PREVIEW_ITEMS[f.colorIndex]);
-  for (const c of cars) c.item = held.get(c.id) || null;
-};
 
 // Bare mode has no session layer to fire a raceEnd, so the endless previews read the
 // engine's own `raceOver` rule (finishedOrder >= cars) straight off the snapshot.
@@ -1389,9 +1374,7 @@ export function runDisplayScenario(opts, ctx) {
       // its split-screen cell — exactly as it does live while someone reconnects
       // (the car isn't forfeited until the grace window elapses).
       for (let t = 0; t < 90; t++) engine.update(33);
-      const rcCars = engine.getSnapshot().cars;
-      dressItems(rcCars, field); // populate the cell item slots so the preview isn't all empty
-      for (const c of rcCars) scene.setCarHud(c.id, c);
+      for (const c of engine.getSnapshot().cars) scene.setCarHud(c.id, c);
       scene.hold(true);
       // Fake a dropped racer: the last filled slot is reconnecting. Its car keeps
       // its cell; the reconnect QR is centred in that cell (the renderer positions
@@ -1414,9 +1397,7 @@ export function runDisplayScenario(opts, ctx) {
         .reduce((a, b) => (a.position <= b.position ? a : b)).id;
       // Promote the finisher to P1 at the winning time the boards show; the rest keep racing.
       engine.forceFinish(leadId, previewBoard('results', track.trackId, players, seedOpt.seed ?? 1).order[0].time);
-      const fnCars = engine.getSnapshot().cars;
-      dressItems(fnCars, field); // the still-racing cells carry items (setCarHud clears the finisher's own slot)
-      for (const c of fnCars) scene.setCarHud(c.id, c);
+      for (const c of engine.getSnapshot().cars) scene.setCarHud(c.id, c);
       scene.hold(true);
     } else if (kind === 'results' || kind === 'intermission' || kind === 'podium') {
       // Freeze the grid behind the board. Both kinds of board — a single race

@@ -105,9 +105,9 @@
       "file": "web/finished.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 51444,
-      "capturedAt": "2026-10-04T14:45:21.956Z",
-      "gitSha": "157b8bdc"
+      "bytes": 52316,
+      "capturedAt": "2026-10-04T15:15:41.269Z",
+      "gitSha": "da26be61"
     },
     {
       "scenario": "info",
@@ -779,9 +779,9 @@
       "file": "web/reconnect.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 67438,
-      "capturedAt": "2026-10-04T14:45:07.817Z",
-      "gitSha": "157b8bdc"
+      "bytes": 68174,
+      "capturedAt": "2026-10-04T15:15:24.801Z",
+      "gitSha": "da26be61"
     },
     {
       "scenario": "reconnect-solo",
@@ -815,9 +815,9 @@
       "file": "web/reconnect-solo.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 42434,
-      "capturedAt": "2026-10-04T14:45:14.824Z",
-      "gitSha": "157b8bdc"
+      "bytes": 41584,
+      "capturedAt": "2026-10-04T15:15:32.476Z",
+      "gitSha": "da26be61"
     },
     {
       "scenario": "reconnecting",
