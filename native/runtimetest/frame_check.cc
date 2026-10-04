@@ -839,18 +839,35 @@ void testFollowView(const GameTrack& track) {
     check(!rt::deckBlocks(under, open.follow.pos, V3{0, 0, 0} + aim, 0, rt::FOLLOW_CAR_CLEAR) &&
               !rt::deckBlocks(under, open.follow.pos, V3{2, 0, -3} + aim, 0, rt::FOLLOW_CAR_CLEAR),
           "premise: the deck under the open camera hides no car");
-    // The deck arrives under a camera already settled above it, and every
-    // pitch it may take instead is BELOW it: easing down would fly the lens
-    // through the road, so it must cut, landing on its new pitch in one frame.
+    // The deck arrives under a camera already settled above it. A lens only
+    // NEAR a deck is no reason to cut through it, so the camera must stay on
+    // its own side every frame and still end up off it.
     DisplayState grazed = open;
     grazed.tagDeck = under;
-    rt::buildFrame(grazed, &game, DT, caseAspect(grazed));
-    check(grazed.follow.pos.y < eye.y,
-          "follow: a camera whose way down crosses a deck cuts under it, never through");
-    for (int i = 0; i < 120; i++) rt::buildFrame(grazed, &game, DT, caseAspect(grazed));
+    bool stayed = true;
+    for (int i = 0; i < 120; i++) {
+      rt::buildFrame(grazed, &game, DT, caseAspect(grazed));
+      stayed = stayed && grazed.follow.pos.y > eye.y;
+    }
+    check(stayed, "follow: a lens near a deck that hides nothing never cuts through it");
     check(grazed.follow.pitch != rt::FOLLOW_PITCH &&
               !rt::deckBlocks(under, grazed.follow.pos - up, grazed.follow.pos + up, 0, 0),
           "follow: a lens grazing a deck moves off it");
+
+    // A deck spanning from under the camera to over the cars hides them from
+    // every pitch above it: easing down would fly the lens through the road,
+    // so it must cut, landing under it in one frame. 8 across, and 1 past
+    // each end of the camera's line to the battle's centre (1, 0, -1.5).
+    const V3 roofAt = (eye + V3{1, eye.y, -1.5f}) * 0.5f;
+    const V3 reach = open.follow.target - eye;
+    const rt::NameTagDeck roof = stripDeck(roofAt, 4, std::fabs(reach.z) * 0.5f + 1);
+    check(rt::deckBlocks(roof, open.follow.pos, V3{0, 0, 0} + aim, 0, rt::FOLLOW_CAR_CLEAR),
+          "premise: the roof hides the leader from where the open camera stands");
+    DisplayState roofed = open;
+    roofed.tagDeck = roof;
+    rt::buildFrame(roofed, &game, DT, caseAspect(roofed));
+    check(roofed.follow.pos.y < eye.y,
+          "follow: a camera whose way down crosses a deck cuts under it, never through");
   }
 
   // A HILL in the foreground. On a flat field the camera keeps its pitch —

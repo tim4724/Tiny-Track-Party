@@ -2,6 +2,7 @@
 
 #include <climits>
 #include <cmath>
+#include <utility>
 
 #include "ttp/game.h"
 
@@ -116,36 +117,41 @@ void FollowCam::update(const TtpCarInput* cars, const std::vector<bool>& live, V
         }
         return false;
     };
-    // The first pitch from which nothing hides the battle or crowds the shot;
-    // among those, kerbs are scored rather than ruled out (camera.h).
     // Car i's point `h` up its own up axis.
     auto above = [&](size_t i, float h) {
         const TtpVec3& u = cars[i].up;
         return at(i) + V3{ u.x, u.y, u.z } * h;
     };
+    // The pitch with the fewest faults, ranked as camera.h lists them (the fault
+    // rank first, then the kerbs); ties go to the earlier in FOLLOW_PITCHES. It
+    // says whether the way there crosses a deck, which is what makes it a cut.
+    struct Pick { float pitch; bool across; };
     auto clearPitch = [&]() {
-        float best = FOLLOW_PITCH;
-        int fewest = INT_MAX;
+        const V3 from = eyeAt(pitch);
+        Pick best = { FOLLOW_PITCH, false };
+        std::pair<int, int> bestScore = { INT_MAX, INT_MAX };
         for (float p : FOLLOW_PITCHES) {
             const V3 eye = eyeAt(p);
             const V3 up = { 0, FOLLOW_LENS_CLEAR, 0 };
-            bool clear = !deckBlocks(deck, eye - up, eye + up, 0, 0)
-                    && eye.y >= ground.at(eye.x, eye.z) + FOLLOW_LENS_CLEAR
-                    && !hillTooHigh(eye);
-            for (size_t i = 0; i < n && clear; i++) {
+            bool hidden = false;
+            for (size_t i = 0; i < n && !hidden; i++) {
                 if (!inBattle(i)) continue;
                 const V3 aim = above(i, FOLLOW_AIM_UP);
-                clear = !deckBlocks(deck, eye, aim, 0, FOLLOW_CAR_CLEAR)
-                        && !groundBlocks(eye, aim, FOLLOW_CAR_CLEAR);
+                hidden = deckBlocks(deck, eye, aim, 0, FOLLOW_CAR_CLEAR) || groundBlocks(eye, aim, FOLLOW_CAR_CLEAR);
             }
-            if (!clear) continue;
+            const bool across = deckBlocks(deck, from, eye, 0, 0);
+            const bool crowded = deckBlocks(deck, eye - up, eye + up, 0, 0)
+                    || eye.y < ground.at(eye.x, eye.z) + FOLLOW_LENS_CLEAR || hillTooHigh(eye);
+            const int rank = (hidden ? 4 : 0) + (across ? 2 : 0) + (crowded ? 1 : 0);
+            if (rank > bestScore.first) continue;  // the kerbs cannot make up for it
             int kerbed = 0;
             for (size_t i = 0; i < n; i++) {
                 if (!inBattle(i)) continue;
                 for (float h : FOLLOW_KERB_AIMS) kerbed += kerbBlocks(deck, eye, above(i, h));
             }
-            if (kerbed == 0) return p;
-            if (kerbed < fewest) { best = p; fewest = kerbed; }
+            const std::pair<int, int> score = { rank, kerbed };
+            if (score < bestScore) { best = { p, across }; bestScore = score; }
+            if (score == std::pair<int, int>{ 0, 0 }) break;
         }
         return best;
     };
@@ -154,7 +160,7 @@ void FollowCam::update(const TtpCarInput* cars, const std::vector<bool>& live, V
         target = centre;
         yaw = wantYaw;
         dist = wantDist;
-        pitch = clearPitch();
+        pitch = clearPitch().pitch;
         init = true;
     } else if (dt > 0) {
         if (lead < (int) seen.size() && seen[lead]) {
@@ -169,12 +175,12 @@ void FollowCam::update(const TtpCarInput* cars, const std::vector<bool>& live, V
         while (dy < -PI) dy += 2 * PI;
         spring(yaw, yawVel, yaw + dy, FOLLOW_YAW_OMEGA, dt);
         spring(dist, distVel, wantDist, FOLLOW_DIST_OMEGA, dt);
-        const float want = clearPitch();
-        if (deckBlocks(deck, eyeAt(pitch), eyeAt(want), 0, 0)) {
-            pitch = want;  // cut, never through
+        const Pick want = clearPitch();
+        if (want.across) {
+            pitch = want.pitch;  // cut, never through
             pitchVel = 0;
         } else {
-            spring(pitch, pitchVel, want, FOLLOW_PITCH_OMEGA, dt);
+            spring(pitch, pitchVel, want.pitch, FOLLOW_PITCH_OMEGA, dt);
         }
     }
     last.resize(n);

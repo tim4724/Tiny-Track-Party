@@ -108,23 +108,27 @@ struct ChaseCam {
 // leader's velocity is read off ITS last position, not the old leader's.
 //
 // KEEPING THE BATTLE IN SIGHT. A bridge between the camera and the cars would
-// fill the shot with its underside, so every frame the rig tries its pitches in
-// FOLLOW_PITCHES order — its own first, then LOWER, which is what slips under a
-// bridge ahead, and only then higher — and eases toward the first one from
-// which neither the road deck nor the ground hides any car in the battle,
-// whose eye is FOLLOW_LENS_CLEAR off both (a lens that grazes a bridge or a
-// slope fills the frame with it), and from which no HILL climbs too far up the
-// shot: along the near FOLLOW_HILL_REACH of the line to the battle, ground that
-// rises over the ground under the battle must stay below FOLLOW_HILL_ROW of
-// the frame's lower half. The ground the road runs across is not a hill, so a
-// flat field leading up to the cars never counts. With none clear it stays on
-// FOLLOW_PITCH. A KERB is the softer rule, since a low side view across the
-// road edge films the cars half behind it: among the clear pitches the first
-// from which no kerb hides any FOLLOW_KERB_AIMS point of a battle car wins,
-// else the one hiding fewest of them. When the way from where the eye is to where it wants to be
-// crosses a deck — above a bridge to under it — easing would fly the lens
-// through the road, so it CUTS there instead. Pillars, props and scenery are
-// not modelled.
+// fill the shot with its underside, so every frame the rig scores its pitches,
+// tried in FOLLOW_PITCHES order — its own first, then LOWER, which is what
+// slips under a bridge ahead, and only then higher — and eases toward the one
+// with the fewest faults, the worst first:
+//   1. the road deck or the ground HIDES a car in the battle;
+//   2. the way there from where the eye is CROSSES a deck — above a bridge to
+//      under it. Easing would fly the lens through the road, so the rig CUTS
+//      there instead; a cut is visible, so it is spent only to bring hidden
+//      cars back, and a lens merely near a deck eases to a pitch on its own
+//      side;
+//   3. the shot is CROWDED: the eye is within FOLLOW_LENS_CLEAR of a deck or
+//      the ground (a lens that grazes a bridge or a slope fills the frame with
+//      it), or a HILL climbs too far up the shot — along the near
+//      FOLLOW_HILL_REACH of the line to the battle, ground that rises over the
+//      ground under the battle must stay below FOLLOW_HILL_ROW of the frame's
+//      lower half. The ground the road runs across is not a hill, so a flat
+//      field leading up to the cars never counts;
+//   4. a KERB hides a FOLLOW_KERB_AIMS point of a battle car, counted per
+//      point, since a low side view across the road edge films the cars half
+//      behind it.
+// Ties go to the earlier pitch. Pillars, props and scenery are not modelled.
 //
 // The facing is a YAW, eased the short way round. A leader pointing up a loop
 // has no level heading, so the blend keeps the last one it had; a battle at the
