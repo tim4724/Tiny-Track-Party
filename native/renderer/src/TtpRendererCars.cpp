@@ -670,12 +670,15 @@ void TtpRenderer::buildCarGhost(uint32_t c) {
     pumpTextures();
 }
 
-// Regroup the whole field into merged draws: per MODEL (the bytes are the
-// identity), per distinct MESH (the per-side wheel pairs share one, so all
-// four wheels of every car of a model land in two groups), one instanced
-// renderable whose transforms mirror the gltfio nodes every frame
-// (updateMergedTransforms). Runs lazily off mCarMergeDirty — addCar fires per
-// slot, and grouping mid-roster would rebuild eight times for one launch.
+// Regroup the whole field into merged draws: per CAR, per distinct MESH (the
+// per-side wheel pairs share one, so a car's four wheels land in two
+// 2-instance groups; a body or axle node alone keeps its gltfio draw), one
+// instanced renderable whose transforms mirror the gltfio nodes every frame
+// (updateMergedTransforms). Per car rather than per model because a group's
+// box is the union of its instances: a group spanning two cars spread round
+// the lap meets nearly every cell's frustum, while a car's own group culls
+// with the car. Runs lazily off mCarMergeDirty — addCar fires per slot, and
+// grouping mid-roster would rebuild eight times for one launch.
 //
 // The GHOST twins stay out: they are four assets on a different material
 // (vglbfade), parked at -1000 except while a monster is occluding someone.
@@ -683,14 +686,10 @@ void TtpRenderer::rebuildCarMerge() {
     destroyMergedGroups(mMergedCars);
     if (!mScene || !mEngine) return;
     auto& rcm = mEngine->getRenderableManager();
-    // Slots by model.
-    std::unordered_map<uint64_t, std::vector<uint32_t>> byModel;
+    int carNodes = 0;
     for (uint32_t c = 0; c < mCarAssets.size(); c++) {
         if (!mCarAssets[c] || c >= mCarModelKey.size() || !mCarModelKey[c]) continue;
-        byModel[mCarModelKey[c]].push_back(c);
-    }
-    for (const auto& [key, slots] : byModel) {
-        const auto it = mGlbMeshCache.find(key);
+        const auto it = mGlbMeshCache.find(mCarModelKey[c]);
         if (it == mGlbMeshCache.end() || it->second.empty()) continue;
         // Node names by mesh, so shared-mesh nodes join one group.
         std::unordered_map<int, std::vector<const ttp::rt::GlbMeshNode*>> byMesh;
@@ -699,15 +698,18 @@ void TtpRenderer::rebuildCarMerge() {
         }
         for (const auto& [mesh, nodes] : byMesh) {
             std::vector<utils::Entity> sources;
-            for (const uint32_t c : slots) {
-                for (const auto* n : nodes) {
-                    const utils::Entity e =
-                            mCarAssets[c]->getFirstEntityByName(n->name.c_str());
-                    if (!e.isNull() && rcm.getInstance(e)) sources.push_back(e);
-                }
+            for (const auto* n : nodes) {
+                const utils::Entity e = mCarAssets[c]->getFirstEntityByName(n->name.c_str());
+                if (!e.isNull() && rcm.getInstance(e)) sources.push_back(e);
             }
+            carNodes += (int) sources.size();
             buildMergedGroup(mMergedCars, sources, nodes[0]->prims,
                     /*dynamic=*/true, kFeatCars);
         }
     }
+    int merged = 0;
+    for (const MergedGroup& g : mMergedCars) merged += (int) g.sources.size();
+    utils::slog.i << "ttp carmerge: per-car " << (int) mMergedCars.size() << " groups over "
+            << merged << " nodes, " << (carNodes - merged) << " nodes on their own draw"
+            << utils::io::endl;
 }

@@ -443,6 +443,21 @@ the end of eglSwap); the window's one full-window op is its clear, which
 PowerVR turns into a draw (`fPerformColorClearsAsDraws`) and nothing else
 zeroes; render-pass load/store flags are already what a tiler wants.
 
+## Glacier: the flake cloud and the car field drew into every cell (2026-10-04)
+
+Glacier's uniform premium over tidepool was vertex work no cell could see. The
+flake cloud drew all of its sprites in every cell although a chase frustum
+reaches 3-7% of the box; the per-model car groups' boxes spanned the gap between
+same-model cars, so most cells drew most of the field. Each cell now draws only
+the flake sprites that can reach its frustum (an index subset in the original
+order, conservative under every way the GPU may read the mediump motion
+uniforms), and each car is its own instanced group. 4P, pinned 960x540, three
+races per arm: glacier typical gpu 12.56-12.85 -> 11.71-12.02 ms, skips 0.5 ->
+0.0-0.1/s, clean 75-78 -> 84-87 of 90; tidepool typical 11.32-11.36 ->
+11.01-11.14. Baking the lone live-lit kit copies was ~0.1 ms and changes their
+shading; not taken. Glacier's lap-periodic heavy stretch is layout sightlines
+and remains.
+
 ## The deck's layer reads were dependent; the HUD was the drops (2026-10-04)
 
 **vroad's three deck-layer reads (rubber, car-shadow probe, sun-vis) computed

@@ -1687,6 +1687,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         // spans the full `size` (vpoint.mat).
         mAmbSize = tb.ambSize * 0.5f;
         const float bandH = std::max(2.0f, AMB_H * tb.ambBand);
+        mAmbBandH = bandH;
         uint32_t s74 = 74747;
         const auto arnd = [&]() {
             s74 = s74 * 1664525u + 1013904223u;
@@ -1768,6 +1769,8 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         mPollenMat->setParameter("time", 0.0f);         // advanced per frame
         mPollenMat->setParameter("fall", tb.ambFall);
         mPollenMat->setParameter("wind", tb.ambWind);
+        mAmbFall = tb.ambFall;
+        mAmbWind = tb.ambWind;
         mPollenMat->setParameter("bob", tb.ambBob);
         mPollenMat->setParameter("bandH", bandH);
         // Shrunk per cell count below — and what an overview frame (viewCount

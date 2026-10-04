@@ -1734,6 +1734,7 @@ void TtpRenderer::releaseScene() {
     mCarShadowMaskOfSlot.clear();
     for (auto& m : mBurstMeshes) destroyMesh(m);
     for (auto& m : mBurstBalls) destroyMesh(m);
+    releaseAmbientCull();   // its parked renderables hold mPollen.vb
     destroyMesh(mPollen);
     mAmbCells = 0; // the next build's cloud is fitted to its cells on its first frame
     for (auto& m : mRockets) destroyMesh(m);

@@ -2483,9 +2483,10 @@ void TtpRenderer::renderAmbient(const TtpFrameInput& input) {
         const uint32_t vc = input.viewCount;
         const uint32_t rows = gridDims(vc ? vc : 1).rows;
         const float fov = vc ? ttp_frame_views(&input)[0].fov : 50.0f;
-        mPollenMat->setParameter("halfSize",
-                mAmbSize * (float) rows * std::tan(fov * (float) M_PI / 360.0f));
-        mPollenMat->setParameter("time", mTime); // drives the shader-side drift
+        mAmbHalfSize = mAmbSize * (float) rows * std::tan(fov * (float) M_PI / 360.0f);
+        mAmbTime = mTime;
+        mPollenMat->setParameter("halfSize", mAmbHalfSize);
+        mPollenMat->setParameter("time", mAmbTime); // drives the shader-side drift
         // The COUNT is per camera too: every cell draws its own box, so a
         // split multiplies the cloud's vertex work by its cells — and on the
         // Android box that work was the whole of the snow cup's cost over
@@ -2528,6 +2529,291 @@ void TtpRenderer::renderAmbient(const TtpFrameInput& input) {
 
 }
 
+// ---------------------------------------------------------------------------
+// The ambient cloud's per-cell subset. vpoint.mat wraps every sprite into a
+// box around the cell's camera, but only a few percent of that box is inside
+// the cell's frustum, and the rest of the sprites are vertex-shaded and then
+// clipped whole. So each cell draws only the sprites that CAN reach its
+// frustum: the shader's motion replayed on the CPU, conservatively, and the
+// survivors' indices written in ascending order. Same vertex buffer, same
+// material instance, same renderable, same relative order among every sprite
+// that touches a pixel: the pixels are the full draw's.
+//
+// Conservative means: every quantity the GPU rounds differently is an interval
+// here. The bob (a sin this never evaluates) is its whole envelope, and every
+// wrap is taken on an interval widened by kAmbCullEps plus a bound on the fp32
+// error at that magnitude, so a sprite near a seam is tested at BOTH images.
+// The uniforms the shader reads at mediump may load as fp32 or as a half,
+// rounded to nearest or toward zero, so where time multiplies them (fall,
+// wind) the wrap interval also spans every position those loads can reach,
+// and where they only bound the sprite (halfSize, bob) they are rounded up:
+// a sprite is culled only if it misses the frustum under every reading. The
+// parameters themselves stay exactly as authored. The intervals are tested
+// against the near and side planes only (the colour pass's projection has no
+// far clip that a sprite could hide behind).
+// ---------------------------------------------------------------------------
+namespace {
+
+constexpr double kAmbCullEps = 0.05;
+// ~16 ulp of an fp32 value of magnitude m: 16 * 2^-23 * m.
+inline double ambUlp16(double m) { return m * (1.0 / 524288.0); }
+// The most a mediump (fp16) load can round a value up: half a half's ulp is
+// 2^-11 of it at most; this is 2^-10, plus the subnormal floor.
+inline double ambMediumpMax(double m) { return std::fabs(m) * (1.0 + 1.0 / 1024.0) + 1e-7; }
+
+// floor without a libm call where it fits an int32: armv7 has no rounding
+// instruction, and -fno-builtin makes even fabs a call.
+inline double ambFloor(double x) {
+    if (!(x < 2147483647.0 && x > -2147483647.0)) return std::floor(x);
+    const double i = (double) (int32_t) x;
+    return i > x ? i - 1.0 : i;
+}
+
+// The most a mediump load can move x. An fp32 load is exact; a half rounded
+// toward zero drops x's remainder on the half grid at its magnitude, and one
+// rounded to nearest never moves it further than that.
+inline double ambMediumpErr(float x) {
+    const double m = std::fabs((double) x);
+    int e = 0;
+    std::frexp(m, &e);   // m = f 2^e, f in [0.5, 1)
+    const double step = std::ldexp(1.0, std::max(e - 1, -14) - 10);   // a half's ulp there
+    return m - step * ambFloor(m / step);
+}
+
+// One cell's replay of vpoint.mat's motion, set up once per cell per frame.
+// Every interval is [lo, lo + len] with a fixed len per axis, in the wrap
+// box's local frame (x and z from the box's low corner, y from the band's
+// floor). The frustum's near and side planes are WORLD-space planes over that
+// frame, h(q) = a . q + b a view-space distance; a plane is linear, so its
+// largest h over an interval box is a . lo plus the a > 0 lengths, and both
+// those and the sprite's radius are folded into b: the sprite is wholly
+// outside plane j when a_j . lo + b_j < 0.
+struct AmbCullCell {
+    double a[5][3], b[5];
+    double xOff, zOff;   // (wind t - camX - epsXZ) and (-camZ - epsXZ), mod bx
+    double yOff;         // -U: the y interval starts U below the replayed height
+    double fallT;        // fall t
+    double bx, invBx, bandH, invBand;
+    double lenXZ, lenY;  // the x/z and y interval lengths
+};
+
+// The replay moves each sprite by fall and wind exactly as given, and widens
+// its x/z and y intervals by the most another reading of them moves it by
+// time t (speed is at most 2.5); halfSize and bob only bound the sprite, so
+// they are rounded UP by what a mediump load can add. Every operation on a
+// uniform has a highp operand (time, speed, sin, the camera axes) and the
+// vertex stage defaults to highp, so those loads are the only fp16 in the
+// position path.
+void ambCullCell(AmbCullCell& c, float t, float fall, float wind, float bob, float halfSize,
+        float bandH, float boxXZ, float seedBox, uint32_t sprites,
+        const mat4f& world, float fov, float aspect, float nearZ) {
+    c.bx = boxXZ;
+    c.invBx = 1.0 / c.bx;
+    c.bandH = bandH;
+    c.invBand = 1.0 / c.bandH;
+    c.fallT = (double) fall * t;
+    const double bob03 = 0.3 * ambMediumpMax(bob);
+    const double r = 2.0 * ambMediumpMax(halfSize) + 1e-3;   // the corners sit at radius 2
+    const double cx = world[3].x, cy = world[3].y, cz = world[3].z;
+    // The slack of each wrap: the mediump readings' drift, then the fp32
+    // error at this frame's magnitudes under any of them. The y term also
+    // carries the speed's own rounding times fall t.
+    const double dFall = ambMediumpErr(fall), dWind = ambMediumpErr(wind);
+    const double fallT = (std::fabs((double) fall) + dFall) * t;
+    const double windT = (std::fabs((double) wind) + dWind) * t;
+    const double epsXZ = kAmbCullEps + dWind * t
+            + ambUlp16(seedBox + c.bx + windT + std::fabs(cx) + std::fabs(cz));
+    // A compiler may also fuse the shader's fract(k * 0.618...) into one fma,
+    // which skips the product's rounding: h1 then moves by up to an fp32 ulp
+    // of k * 0.618 for the largest k drawn, and speed by 1.4 times that.
+    const double dH1 = ((double) sprites * 0.6180339887 + 1.0) * (1.0 / 8388608.0);
+    const double epsY = kAmbCullEps + 2.5 * dFall * t + 1.4 * dH1 * fallT
+            + ambUlp16(64.0 + c.bandH + 2.5 * fallT + bob03 + std::fabs(cy)) + 2e-6 * fallT;
+    const double sx = (double) wind * t - cx - epsXZ, sz = -cz - epsXZ;
+    c.xOff = sx - c.bx * ambFloor(sx * c.invBx);
+    c.zOff = sz - c.bx * ambFloor(sz * c.invBx);
+    const double U = bob03 + epsY;
+    c.yOff = -U;
+    c.lenXZ = 2 * epsXZ;
+    c.lenY = 2 * U;
+
+    const mat4 v = inverse(mat4(world));   // view from world
+    const double tanV = std::tan((double) fov * M_PI / 360.0);
+    const double tanH = tanV * aspect;
+    const double nH = std::sqrt(1.0 + tanH * tanH), nV = std::sqrt(1.0 + tanV * tanV);
+    // View space, looking down -z: unit normal and offset, inside >= 0.
+    const double pl[5][4] = {
+        { 0, 0, -1, -(double) nearZ },
+        { -1 / nH, 0, -tanH / nH, 0 }, { 1 / nH, 0, -tanH / nH, 0 },
+        { 0, -1 / nV, -tanV / nV, 0 }, { 0, 1 / nV, -tanV / nV, 0 } };
+    const double o[3] = { cx - 0.5 * c.bx, 0.5, cz - 0.5 * c.bx };   // the local frame's origin
+    const double len[3] = { c.lenXZ, c.lenY, c.lenXZ };
+    for (int j = 0; j < 5; j++) {
+        double b = pl[j][3] + r;
+        for (int row = 0; row < 3; row++) b += pl[j][row] * v[3][row];
+        for (int col = 0; col < 3; col++) {
+            double s = 0;
+            for (int row = 0; row < 3; row++) s += pl[j][row] * v[col][row];
+            c.a[j][col] = s;
+            b += s * o[col] + std::max(s, 0.0) * len[col];
+        }
+        c.b[j] = b;
+    }
+}
+
+// lo taken mod P, with n = 2 when [lo, lo + len] also has an image one period
+// down, and n = 0 when it spans a whole period. Not clipped to [0, P]: a GPU
+// wrap that rounds to the wrong side of a seam lands just outside it, and that
+// is kept too.
+inline double ambWrap(double lo, double len, double P, double invP, int& n) {
+    const double a = lo - P * ambFloor(lo * invP);
+    n = (len >= P) ? 0 : (a + len > P) ? 2 : 1;
+    return a;
+}
+
+// Can sprite k (seed s*) reach this cell's frustum, wherever the GPU's
+// rounding and the unevaluated bob put it?
+bool ambSpriteMayReach(const AmbCullCell& c, float sx, float sy, float sz, uint32_t k) {
+    // h1 exactly as the shader forms it: fract(float(k) * 0.618...). Within a
+    // few ulp of the wrap it could land on either side, and the speed with it,
+    // so those few always draw.
+    const float hf = (float) k * 0.6180339887f;
+    const float h1 = hf - (float) (int32_t) hf;   // hf >= 0
+    if (h1 < (1.0f / 512.0f) || h1 > 1.0f - (1.0f / 512.0f)) return true;
+    const double speed = 1.1 + 1.4 * (double) h1;
+    int nx, ny, nz;
+    const double x0 = ambWrap(sx + c.xOff, c.lenXZ, c.bx, c.invBx, nx);
+    const double z0 = ambWrap(sz + c.zOff, c.lenXZ, c.bx, c.invBx, nz);
+    const double y0 = ambWrap(sy - speed * c.fallT + c.yOff, c.lenY, c.bandH, c.invBand, ny);
+    if (!nx || !ny || !nz) return true;
+    for (int i = 0; i < nx; i++) {
+        const double x = x0 - i * c.bx;
+        for (int d = 0; d < nz; d++) {
+            const double z = z0 - d * c.bx;
+            for (int b = 0; b < ny; b++) {
+                const double y = y0 - b * c.bandH;
+                // All five, then one branch: which plane culls a sprite is a
+                // coin toss, so an early out mispredicts more than it saves.
+                double h = c.a[0][0] * x + c.a[0][1] * y + c.a[0][2] * z + c.b[0];
+                for (int j = 1; j < 5; j++) {
+                    h = std::min(h, c.a[j][0] * x + c.a[j][1] * y + c.a[j][2] * z + c.b[j]);
+                }
+                if (h >= 0) return true;
+            }
+        }
+    }
+    return false;
+}
+
+} // namespace
+
+bool TtpRenderer::cullAmbientCells(const TtpFrameInput& input, uint32_t slot) {
+    const uint32_t vc = input.viewCount;
+    const uint32_t particles = (uint32_t) mPollen.idx.size() / 3;
+    if (!vc || !particles || !mPollenMat || !mPollen.vb || !mTrack || mAmbBandH <= 0) return false;
+    auto& rcm = mEngine->getRenderableManager();
+    if (!rcm.getInstance(mPollen.entity)) return false;
+    const uint32_t per = std::max(1u, particles / vc);
+    if (mAmbCullIbs.empty()) {
+        // Every cell keeps at most its own `per` sprites, or one degenerate
+        // triangle: vc * per * 3 <= 3 * max(vc, particles).
+        mAmbCullCap = 3 * (particles + 8);
+        for (uint32_t k = 0; k < mCellRing; k++) {
+            IndexBuffer* ib = IndexBuffer::Builder()
+                    .indexCount(mAmbCullCap)
+                    .bufferType(IndexBuffer::IndexType::USHORT)
+                    .build(*mEngine);
+            const utils::Entity e = utils::EntityManager::get().create();
+            RenderableManager::Builder(1)
+                    .boundingBox({ { 0, 0, 0 }, { 1, 1, 1 } })
+                    .material(0, mPollenMat)
+                    .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
+                            mPollen.vb, ib, 0, 3)
+                    .castShadows(false)
+                    .receiveShadows(false)
+                    .build(*mEngine, e);
+            mAmbCullIbs.push_back(ib);
+            mAmbCullHolds.push_back(e);
+        }
+    }
+    if ((uint64_t) vc * per * 3 > mAmbCullCap || slot >= mAmbCullIbs.size()) return false;
+
+    const double tCull = ttpNowMs();
+    const float bx = kAmbBox / std::sqrt((float) vc);   // the boxXZ uniform
+    const TtpViewInput* views = ttp_frame_views(&input);
+
+    auto* out = new std::vector<uint16_t>();
+    out->reserve((size_t) vc * per * 3);
+    mAmbCellOff.assign(vc, 0);
+    mAmbCellCnt.assign(vc, 0);
+    for (uint32_t i = 0; i < vc; i++) {
+        mat4f wf;
+        std::memcpy(&wf, views[i].world, sizeof(wf));
+        // The uniforms exactly as renderAmbient and buildTrackScene set them.
+        AmbCullCell c;
+        ambCullCell(c, mAmbTime, mAmbFall, mAmbWind, mTrack->ambBob, mAmbHalfSize,
+                mAmbBandH, bx, kAmbBox, per, wf, views[i].fov, views[i].aspect, views[i].nearZ);
+
+        mAmbCellOff[i] = (uint32_t) out->size();
+        for (uint32_t k = 0; k < per; k++) {
+            const Vertex& s = mPollen.verts[(size_t) k * 3];
+            const bool keep = ambSpriteMayReach(c, s.px, s.py, s.pz, k);
+            if (keep) {
+                out->push_back((uint16_t) (k * 3));
+                out->push_back((uint16_t) (k * 3 + 1));
+                out->push_back((uint16_t) (k * 3 + 2));
+            }
+        }
+        mAmbCellCnt[i] = (uint32_t) out->size() - mAmbCellOff[i];
+        if (!mAmbCellCnt[i]) {
+            out->insert(out->end(), { 0, 0, 0 });   // degenerate: no fragments
+            mAmbCellCnt[i] = 3;
+        }
+    }
+    if ((++mAmbCullFrames % 120) == 1) {
+        auto& line = utils::slog.i << "ttp flakecull: " << (int) vc << " cells x "
+                << (int) per << " sprites, kept";
+        for (uint32_t i = 0; i < vc; i++) line << " " << (int) (mAmbCellCnt[i] / 3);
+        line << ", " << (int) ((ttpNowMs() - tCull) * 1000.0) << " us" << utils::io::endl;
+    }
+    // One write a frame, into this frame's ring slot (renderCars says why a
+    // ring). Heap-owned with a release callback: the driver reads it later.
+    mAmbCullIbs[slot]->setBuffer(*mEngine, IndexBuffer::BufferDescriptor(
+            out->data(), out->size() * sizeof(uint16_t),
+            [](void*, size_t, void* user) { delete (std::vector<uint16_t>*) user; }, out));
+    mAmbSubset = true;
+    return true;
+}
+
+// Back to the whole count/cells range (renderAmbient's fit): the overview, and
+// any frame the subset cannot cover.
+void TtpRenderer::restoreAmbientRange() {
+    if (!mAmbSubset) return;
+    mAmbSubset = false;
+    auto& rcm = mEngine->getRenderableManager();
+    const auto ri = rcm.getInstance(mPollen.entity);
+    const uint32_t particles = (uint32_t) mPollen.idx.size() / 3;
+    if (!ri || !particles || !mPollen.vb || !mPollen.ib) return;
+    const uint32_t cnt = mAmbCells ? std::max(1u, particles / mAmbCells) * 3 : particles * 3;
+    rcm.setGeometryAt(ri, 0, RenderableManager::PrimitiveType::TRIANGLES,
+            mPollen.vb, mPollen.ib, 0, cnt);
+}
+
+void TtpRenderer::releaseAmbientCull() {
+    if (!mEngine) return;
+    restoreAmbientRange();   // the cloud lets go of the ring buffers first
+    for (const utils::Entity e : mAmbCullHolds) {
+        mEngine->destroy(e);
+        utils::EntityManager::get().destroy(e);
+    }
+    mAmbCullHolds.clear();
+    for (IndexBuffer* ib : mAmbCullIbs) mEngine->destroy(ib);   // after their holders
+    mAmbCullIbs.clear();
+    mAmbCellOff.clear();
+    mAmbCellCnt.clear();
+    mAmbCullCap = 0;
+}
+
 void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
     const TtpViewInput* views = ttp_frame_views(&input);
     // Feature ablation, off until a caller asks for it: the tag pass has moved
@@ -2541,6 +2827,7 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
             && (input.flags & TTP_FRAME_OVERVIEW) == 0;
     if (!deckLod) chooseDeckLod(nullptr, float3{ 0 }, 0.0f, false);
     if (input.viewCount == 0) {
+        restoreAmbientRange();   // the overview draws the cloud's whole range
         if (mOverlayFolded) {
             mView->setMaterialGlobal(3, float4{ 0.0f, 0.0f, (float) mWidth, (float) mHeight });
         }
@@ -2561,6 +2848,8 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
         // This frame's ring slot, the same for every cell.
         const uint32_t slot = mCellRingAt;
         mCellRingAt = (mCellRingAt + 1) % mCellRing;
+        const bool ambCull = cullAmbientCells(input, slot);
+        if (!ambCull) restoreAmbientRange();
         // After ensureCells, or a freshly created cell view keeps Filament's
         // default visible layers (bit 0 alone) and draws an empty picture.
         if (mFeatureTagged) {
@@ -2608,6 +2897,13 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
             // cell's camera between render() calls (single-threaded rendering
             // executes each render() immediately, the JS sprite way).
             orientCellBillboards(world[3].xyz);
+            if (ambCull) {
+                auto& rcm = mEngine->getRenderableManager();
+                if (const auto ri = rcm.getInstance(mPollen.entity)) {
+                    rcm.setGeometryAt(ri, 0, RenderableManager::PrimitiveType::TRIANGLES,
+                            mPollen.vb, mAmbCullIbs[slot], mAmbCellOff[i], mAmbCellCnt[i]);
+                }
+            }
             if (deckLod) {
                 // Where a chord of kDeckLodTol subtends kDeckLodChordPx in THIS
                 // cell: d = tol * (cell height / (2 tan(fov/2))) / px. A

@@ -841,6 +841,11 @@ private:
     bool frame(const TtpFrameInput& input, bool draw);
     void renderSkids(const TtpFrameInput& input, const TtpCarInput* cars, uint32_t nCars);
     void renderAmbient(const TtpFrameInput& input);
+    // The ambient cloud's per-cell index subset (mAmbCull*): false leaves the
+    // cloud on its whole count/cells range.
+    bool cullAmbientCells(const TtpFrameInput& input, uint32_t slot);
+    void restoreAmbientRange();
+    void releaseAmbientCull();
     void renderCells(const TtpFrameInput& input, double& tMark);
     void readGpuTimer();
     // Decals that never move — boost pads, launch strips, oil slicks, item-box
@@ -1862,6 +1867,24 @@ private:
     Mesh mPollen;
     float mAmbSize = 0.15f; // half the authored sprite size; re-fitted per frame
     uint32_t mAmbCells = 0; // the cell count the draw range, box and lite were fitted to
+    // This frame's sprite halfSize and `time`, exactly as renderAmbient set
+    // the uniforms: the per-cell cull replays the shader's motion with them.
+    float mAmbHalfSize = 0;
+    float mAmbTime = 0;
+    float mAmbBandH = 0;        // the `bandH` uniform, set once at build
+    float mAmbFall = 0, mAmbWind = 0;   // the `fall` and `wind` uniforms, set at build
+    // Per-cell subset of the cloud: each cell draws only the sprites that can
+    // reach ITS frustum, as indices into the same vertex buffer in ascending
+    // order (cullAmbientCells). One index buffer per ring slot, written once a
+    // frame; each slot's (vb, ib) pair is pinned by a parked renderable that is
+    // in no scene, so the per-cell setGeometryAt never drops the factory's last
+    // reference and rebuilds the hardware primitive.
+    std::vector<filament::IndexBuffer*> mAmbCullIbs;
+    std::vector<utils::Entity> mAmbCullHolds;
+    std::vector<uint32_t> mAmbCellOff, mAmbCellCnt;
+    uint32_t mAmbCullCap = 0;   // indices each slot buffer holds
+    uint32_t mAmbCullFrames = 0;
+    bool mAmbSubset = false;    // the renderable is on a subset range right now
     // Flake floor (FLAKE kind only): a coarse max-height grid of terrain + road
     // ribbon over the whole track, uploaded as an R16F texture the vertex
     // shader taps so a falling flake fades out ONTO the surface instead of
