@@ -164,6 +164,7 @@ export class Stage {
     this._last = 0;
     this._timeScale = 1;
     this._fixedDt = 0;       // >0: ignore the rAF clock entirely (see setFixedStep)
+    this._periodMs = 0;      // the panel's vsync period, averaged off rAF deltas (see _loop)
     this._undrawn = false;   // step everything but the draw (see setUndrawn)
     this._clockMs = 0;       // the frame clock: dt summed, handed to onFrame
     this._track = null;
@@ -1385,7 +1386,19 @@ export class Stage {
     // walking the chase camera away from the car until the scene is off-screen.
     // A fixed step (offline capture) replaces the clock outright — clamp included,
     // since setFixedStep already caps at the same 50 ms.
-    const dt = (this._fixedDt || Math.min(Math.max(rawMs, 0) / 1000, 0.05)) * this._timeScale;
+    //
+    // WHOLE VSYNCS: Chrome on macOS stamps rAF ±1 ms around the vsync while frames
+    // reach the glass whole periods apart, so the raw delta moved the cars unevenly
+    // between evenly spaced pictures, a fore-aft shimmer at speed. Step by the delta
+    // rounded to whole periods of a running average instead; a plain average of the
+    // deltas would smear a dropped frame over the next ten. A delta no period fits
+    // (the first frame, a stall) steps raw and restarts the average.
+    const vsyncs = this._periodMs ? Math.round(rawMs / this._periodMs) : 0;
+    const fits = vsyncs >= 1 && vsyncs <= 4;   // a longer gap is a stall, not dropped frames
+    const stepMs = fits ? vsyncs * this._periodMs : rawMs;
+    this._periodMs = fits ? this._periodMs + (rawMs / vsyncs - this._periodMs) * 0.1
+                          : Math.max(rawMs, 0);
+    const dt = (this._fixedDt || Math.min(Math.max(stepMs, 0) / 1000, 0.05)) * this._timeScale;
     this._last = t;
     if (rawMs > 0 && rawMs < 1000) this.perf.tick(t, rawMs); // skip absurd post-stall deltas
     // The frame clock rides along: dt summed, so under a capture gate it is the sim's
