@@ -627,6 +627,11 @@ private:
         // the baked light with it (the windmill's blades, the plane, the
         // rockets and the kicked cones all stay lit at draw).
         bool bakeLight = false;
+        // OPT-IN for a static mesh that is already unlit (a baked kit run):
+        // buildMesh welds its exact duplicate vertices, as it does for every
+        // bakeLight sheet. Only a mesh whose CPU copy is never rewritten by
+        // index after build may say so.
+        bool weld = false;
         // Flat-decal template in car-local (x, z) with its rest alpha: the
         // conform rewrites `verts` into world space from this every frame.
         struct Local { float x, z; uint8_t a; };
@@ -1941,6 +1946,9 @@ private:
             // its own bounds and frustum culling ON. 0 = one renderable, no
             // culling (the default every dynamic mesh wants).
             uint32_t chunkTris = 0);
+    // Merge the vertices equal in position AND colour bits, keeping each one's
+    // first slot and the triangle order; buildMesh's own (see its call).
+    static void weldExact(Mesh& m);
     // An empty VertexBuffer in `layout` (see Mesh::Layout); buildMesh's own.
     filament::VertexBuffer* buildVertexBuffer(uint32_t vertexCount, const Mesh::Layout& layout);
     void destroyMesh(Mesh& m);

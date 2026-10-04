@@ -314,6 +314,12 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
     }
     const bool lit = !baked && !fold && !m.normals.empty() && mLitMaterial != nullptr;
     const bool uv = !m.uvs.empty();
+    // An unlit static mesh carries nothing per vertex but its position and its
+    // colour, so two vertices equal in both bits ARE one vertex. The kit's GLBs
+    // split vertices for attributes the bake has already consumed, so a baked
+    // run comes out with about half of them doubled; each cell pays for every
+    // one. The triangle order and every rasterised value are unchanged.
+    if ((fold || m.weld) && !lit && !uv && !baked) weldExact(m);
     m.layout = Mesh::Layout{ lit, uv, baked };
     const uint8_t uvSlot = m.layout.uvSlot();
     const uint8_t customSlot = m.layout.customSlot();
@@ -417,6 +423,43 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
     }
     m.inScene = addToScene;
     return true;
+}
+
+void TtpRenderer::weldExact(Mesh& m) {
+    struct Key {
+        uint32_t w[4];
+        bool operator==(const Key& o) const {
+            return w[0] == o.w[0] && w[1] == o.w[1] && w[2] == o.w[2] && w[3] == o.w[3];
+        }
+    };
+    struct Hash {
+        size_t operator()(const Key& k) const {
+            uint64_t h = 14695981039346656037ull;
+            for (const uint32_t x : k.w) { h ^= x; h *= 1099511628211ull; }
+            return (size_t) h;
+        }
+    };
+    std::unordered_map<Key, uint32_t, Hash> slot;
+    slot.reserve(m.verts.size());
+    std::vector<uint32_t> remap(m.verts.size());
+    std::vector<Vertex> verts;
+    std::vector<float3> normals;
+    verts.reserve(m.verts.size());
+    const bool hasNormals = m.normals.size() == m.verts.size();
+    for (size_t i = 0; i < m.verts.size(); i++) {
+        Key k;
+        std::memcpy(k.w, &m.verts[i], sizeof(Vertex));
+        const auto [it, fresh] = slot.emplace(k, (uint32_t) verts.size());
+        if (fresh) {
+            verts.push_back(m.verts[i]);
+            if (hasNormals) normals.push_back(m.normals[i]);
+        }
+        remap[i] = it->second;
+    }
+    if (verts.size() == m.verts.size()) return;
+    for (uint32_t& k : m.idx) k = remap[k];
+    m.verts = std::move(verts);
+    if (hasNormals) m.normals = std::move(normals);
 }
 
 VertexBuffer* TtpRenderer::buildVertexBuffer(uint32_t vertexCount, const Mesh::Layout& l) {
@@ -1032,6 +1075,7 @@ bool TtpRenderer::bakeMergedRun(MergedGroup& g,
     }
     const uint8_t layer = rcm.getLayerMask(ri0);
     Mesh& m = g.baked;
+    m.weld = true;
     for (const utils::Entity src : g.sources) {
         const auto ti = tcm.getInstance(src);
         if (!ti) return false;

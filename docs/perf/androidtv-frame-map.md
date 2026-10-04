@@ -489,6 +489,30 @@ per 80 s, worst second 43-48 -> 49-51 fps. About half of what taking the
 sheets out bought, so not the whole fix. Baking the race path's landmarks
 (only the model bench had `bakeLight`) measured inside the noise.
 
+**What the rest of the vista's decoration is worth, coarse flowers in**
+(three races a side, interleaved; `dresssheets 0` = the sheets out,
+`dresskeep 0` = every merged kit copy out):
+
+| arm | pretzel heavy | pretzel skips/80 s | flurry heavy | flurry skips/80 s |
+|---|---|---|---|---|
+| shipped | 15.8 | 75-81 | 14.9 | 38-74 |
+| sheets out | 14.5 | 12-15 | 14.8 | 32-53 |
+| kit copies out | 14.6 | 7-24 | 13.6 | 2-6 |
+| both out | 14.2 | 2-3 | 13.5 | 2-10 |
+
+Decoration IS the vista's remainder, and it is two families, not one: on
+pretzel the clutter sheets and the kit copies are worth about the same, on the
+snow tracks it is the kit copies alone. A fix aimed at flowers leaves the snow
+tracks where they are.
+
+The baked kit runs and the folded sheets carry only position and colour per
+vertex, and the GLBs split vertices for attributes the bake has consumed, so
+`buildMesh` now welds exact duplicates (bits of position and colour; triangle
+order kept): 46% fewer of those vertices on flurry, 33% on pretzel, 13% on
+tidepool, and no pixel moves. Three races a side: flurry heavy 15.0 -> 14.8,
+rest 11.6 -> 11.2, skips 43 -> 24 per 80 s; pretzel heavy 15.3 -> 14.8, rest
+12.0 -> 11.5, skips 63 -> 43. Small, every reading the same sign.
+
 ## What is left on glacier at 4P is the deck's geometry (2026-10-04, later)
 
 Group ablations at a pinned 960x540, one race an arm against a 0.6 ms
