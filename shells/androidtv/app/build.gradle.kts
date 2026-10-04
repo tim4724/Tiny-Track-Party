@@ -13,10 +13,13 @@ plugins {
  * fail a build because git is absent.
  */
 fun git(vararg args: String): String? = try {
-    val p = ProcessBuilder(listOf("git") + args)
-        .directory(rootDir).redirectErrorStream(false).start()
-    val out = p.inputStream.bufferedReader().readText().trim()
-    if (p.waitFor() == 0 && out.isNotEmpty()) out else null
+    val p = providers.exec {
+        commandLine(listOf("git") + args)
+        workingDir = rootDir
+        isIgnoreExitValue = true
+    }
+    val out = p.standardOutput.asText.get().trim()
+    if (p.result.get().exitValue == 0 && out.isNotEmpty()) out else null
 } catch (_: Exception) {
     null
 }
@@ -277,7 +280,7 @@ dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2026.09.00")
     implementation(composeBom)
 
-    implementation("androidx.core:core-ktx:1.19.0")
+    implementation("androidx.core:core-ktx:1.19.1")
     // THE SYSTEM SPLASH, held until the game is ready. Not decoration: on API 31+
     // the platform shows a splash for every cold start whether an app asks or
     // not, and this library is the only way to (a) say what it looks like on
