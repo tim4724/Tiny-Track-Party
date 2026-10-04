@@ -167,6 +167,14 @@ object Scenarios {
     /** An item card waits for its item, which can take a few box-runs. */
     private const val HOLD_TIMEOUT_MS = 180_000L
 
+    /**
+     * After a HELD moment, the item slots' roulette: eight flicks (~0.86 s) and the
+     * 0.5 s pop. A box taken just before the hold is still spinning when the race
+     * stops, and a shot inside the spin shows whichever item the flick was on.
+     * Nothing can be picked up after the hold, so one beat covers every slot.
+     */
+    private const val ROULETTE_MS = 1_500L
+
     /** Read the launch request. Called from `MainActivity.onCreate`, before anything. */
     fun read(intent: Intent?) {
         requested = intent?.getStringExtra(EXTRA_SCENARIO)?.ifEmpty { null }
@@ -234,7 +242,7 @@ object Scenarios {
                     // the race there itself, so wait until it says so.
                     val isHeld = { hold == null || Ttp.ttp_shot_held(game.sessionHandle) != 0 }
                     waitFor("the held race moment", HOLD_TIMEOUT_MS, isHeld) { held ->
-                        settle(id, game) {
+                        after(if (hold != null) ROULETTE_MS else 0L) { settle(id, game) {
                             // AND THEN WAIT FOR THE GLASS. A scene that is BUILT is not
                             // a scene that has been PRESENTED, and the last thing most
                             // of these do is `hold(true)` — after which no further frame
@@ -255,7 +263,7 @@ object Scenarios {
                                 // gallery as evidence.
                                 Log.i(TAG, "${if (ok && held && shown) "ready" else "failed"} $id")
                             }
-                        }
+                        } }
                     }
                 }
             }

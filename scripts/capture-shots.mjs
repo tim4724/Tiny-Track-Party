@@ -101,6 +101,11 @@ async function main() {
       // (`cellItemPop`), and a 300 ms beat photographed it half-grown.
       if (scenario.hold) {
         await page.waitForFunction(() => window.__engine?.shotHeld, null, { timeout: 180000, polling: 100 });
+        // A box taken just before the hold is still spinning its roulette when
+        // the race stops; a shot inside the spin shows whichever item the flick
+        // was on, so wait for every slot to land.
+        await page.waitForFunction(() => !document.querySelector('.cell-label__item.rolling'),
+          null, { timeout: 30000, polling: 100 });
         await page.waitForTimeout(HOLD_SETTLE_MS);
       } else {
         await page.waitForTimeout(scenario.settleMs ?? (scenario.animated ? SETTLE_MS : 400));
