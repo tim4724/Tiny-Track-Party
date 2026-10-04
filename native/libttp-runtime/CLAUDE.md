@@ -134,7 +134,9 @@ recording keep their shape.
 them from shuffled bags seeded by `FieldWorld::fieldSeed`, which `ttp_race.cc`
 takes from the race that started the series, so a bot keeps its name and car
 for the whole cup. Unset (0), the fill keeps the fixed colour/table order that
-the bench, the lobby demo and the corpora read.
+the lobby demo and the corpora read. The bench field deals from its seed like a
+fresh live start, because the TV harnesses launch through the live walk and a
+seeded gallery card must be one race on all three platforms.
 
 Deliberately did NOT cross: the lobby demo and the performing itself. The
 host's mode pick and the shuffle bag crossed into the net walks

@@ -5558,6 +5558,42 @@ void autopilotedPlayerSeats() {
 
     const std::string fieldJson = canonical_stringify(field);
     const std::string botsJson = canonical_stringify(bots);
+
+    // THE BENCH IS A FRESH LIVE START. The TV harnesses seat these players in a
+    // room and launch through ttp_race_start_live_json; the web preview races
+    // this field directly. A seeded gallery card is one race on all three only
+    // if both roads hand the session byte-identical arguments — the CPU deal
+    // and the cup's bot skill included.
+    {
+      const int room = ttp_room_create("{}");
+      for (const Value& f : field.arr) {
+        if (json::truthy(f.find("ai"))) continue;
+        Value seat = Value::Obj();
+        seat.set("name", Value::Str(json::str_field(f, "name")));
+        seat.set("colorIndex", Value::Num(json::num_field(f, "colorIndex")));
+        seat.set("carIndex", Value::Num(json::num_field(f, "carIndex")));
+        seat.set("ready", Value::Bool(false));
+        ttp_room_add_player(room, canonical_stringify(at(f, "peerIndex")).c_str(),
+                            canonical_stringify(seat).c_str());
+      }
+      ttp_net_init_pick(room, "tidepool", 0, 1);
+      ttp_race_autopilot_players(1);
+      const Value live =
+          parseOrNull(ttp_race_start_live_json(room, 1, 1, 0, nullptr, nullptr), "live start");
+      ttp_race_autopilot_players(0);
+      std::string liveField, liveBots;
+      for (const Value& e : at(live, "effects").arr) {
+        if (json::str_field(e, "op") != "create-session") continue;
+        liveField = canonical_stringify(at(e, "field"));
+        liveBots = canonical_stringify(at(e, "bots"));
+      }
+      check(liveField == fieldJson && liveBots == botsJson,
+            label + ": the bench field is what a live start on the same seed builds\n  bench: " +
+                fieldJson + "\n  live:  " + liveField + "\n  bench bots: " + botsJson +
+                "\n  live bots:  " + liveBots);
+      ttp_room_dispose(room);
+    }
+
     const int sess = ttp_session_begin_field("tidepool", 1u, 3, nullptr,
                                              fieldJson.c_str(), botsJson.c_str());
     if (sess <= 0) { fail(label + ": no session"); continue; }

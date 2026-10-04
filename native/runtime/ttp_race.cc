@@ -613,7 +613,13 @@ const char* ttp_race_bench_field_json(const char* trackId, int players, double s
   li.players = race::benchPlayers(players, g_world);
   li.seed = seed;
   li.trackId = trackId ? trackId : "";
+  // The world a FRESH live start composes (launchOff): its cup's bot skill and
+  // a CPU fill dealt from this seed. The TV harnesses launch through that walk
+  // and the web preview races this field, so anything less and one seeded card
+  // is two different races.
   li.world = g_world;
+  li.world.botSkill = botSkillFor(li.trackId);
+  li.world.fieldSeed = seed;
   // The grid rule is the layer's now, so a bench with no room draws what the
   // walk would for free. Autopilot is the one thing this composes for itself: a
   // bench that gridded or steered differently would measure a different picture.
