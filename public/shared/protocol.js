@@ -224,7 +224,7 @@ var STEER = {
   // |s| -> 1. This is the engine's live default; the debug panel may move it for
   // a session (ttp_set_steer_expo), nothing else may.
   EXPO: 1.25,
-  // PHONE. Degrees of left/right roll that reach full lock.
+  // PHONE. Degrees of left/right tip (the steering lean or twist) that reach full lock.
   ROLL_LOCK_DEG: 30,
   // PHONE. Normalized steer discarded around centre, then re-expanded so full
   // lock still reaches +/-1.

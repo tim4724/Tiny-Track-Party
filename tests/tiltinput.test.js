@@ -26,7 +26,7 @@ function withScreenAngle(angle, fn) {
 }
 
 // Drive one orientation sample in, read the steer out. ROLL_LOCK is 30°, so a 15°
-// effective roll lands at exactly ±0.5 — a clean fixture clear of the 0.06 deadzone.
+// effective tip lands at exactly ±0.5 — a clean fixture clear of the 0.06 deadzone.
 function steerFor({ angle, beta, gamma }) {
   return withScreenAngle(angle, () => {
     const t = new TiltInput({});
@@ -66,7 +66,7 @@ test('landscape-secondary (270°): pitch steers the opposite way to 90°', () =>
   assert.ok(Math.abs(steerFor({ angle: 270, beta: -15, gamma: 0 }) - HALF) < EPS);
 });
 
-test('upside-down portrait (180°): roll steers the opposite way to 0°', () => {
+test('upside-down portrait (180°): the tip steers the opposite way to 0°', () => {
   assert.ok(Math.abs(steerFor({ angle: 180, beta: 0, gamma: 15 }) + HALF) < EPS);
   assert.ok(Math.abs(steerFor({ angle: 180, beta: 0, gamma: -15 }) - HALF) < EPS);
 });
@@ -88,6 +88,14 @@ test('legacy window.orientation (-90) is honoured when screen.orientation is abs
     if (hadW) globalThis.window = prevW; else delete globalThis.window;
     if (hadS) globalThis.screen = prevS; else delete globalThis.screen;
   }
+});
+
+test('landscape wheel grip: an upright twist reads 1:1, also tipped past vertical', () => {
+  // Held upright in landscape-primary (gamma ~80), a 15° wheel twist is beta 15.
+  // The roll this replaced divided it by cos(gamma) and read ~57° — full lock.
+  assert.ok(Math.abs(steerFor({ angle: 90, beta: 15, gamma: 80 }) - HALF) < EPS);
+  // Past vertical the Euler angles flip (beta 165, gamma -80) for the same twist.
+  assert.ok(Math.abs(steerFor({ angle: 90, beta: 165, gamma: -80 }) - HALF) < EPS);
 });
 
 test('a full twist past the lock still clamps to ±1', () => {

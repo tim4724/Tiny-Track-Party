@@ -1,27 +1,26 @@
 // TiltInput — phone steering + braking for the Tiny Track Party controller.
 //
 // Steering is absolute (no recentering): we read DeviceOrientation, rebuild the
-// gravity vector, and steer by the phone's ROLL — gravity's angle in the x–z
-// plane:  roll = atan2(gx, -gz)  (this equals device `gamma`).
+// gravity vector, and steer by how far gravity points toward the screen's right
+// edge:  tip = asin(gRight).  That is the phone's tip about the LEVEL axis
+// pointing away from the player, so both gestures read 1:1 in their own hold:
+// held flat, the doodle-jump lean (dip one end); held upright, the steering-wheel
+// twist (turn about the screen normal). In between, either reads softer — 20° of
+// either at a 45° hold reads ~14° — and nothing ever reads more than the hand
+// moved. Both gestures, one signal, no mode switch.
 //
-// Roll is the doodle-jump signal: lean the phone left/right. Critically it's
-// PITCH-INDEPENDENT — the cosβ in gx and gz cancels, so a 25° lean reads 25°
-// whether the phone is flat or tilted back to read it. (asin(gx) does NOT cancel
-// pitch and weakened the lean the more upright you held it — that was a bug.)
+// Not the roll atan2(gRight, -gz): that divides by the hold's flatness and runs
+// away upright, so a wheel twist hit full lock in a few degrees. Read it off
+// gravity, never raw beta: the landscape wheel grip sits at gamma = ±90, where
+// tipping past vertical flips beta by 180°.
 //
-// The steering-wheel twist still works: held upright, a twist swings gravity in
-// the screen plane and the roll runs toward ±90°, so twisting drives the car too
-// (sensitively — it reaches full lock fast, since roll isn't proportional to the
-// twist the way it is to a flat lean). Both gestures, one signal, no mode switch.
-//
-// Roll is read in the SCREEN's current frame, not the phone's native one: we take
+// The tip is read in the SCREEN's current frame, not the phone's native one: we take
 // the device-frame gravity vector and rotate its x/y by screen.orientation.angle,
 // so "lean toward the right of whatever you're looking at" steers right whether the
 // UI is portrait or landscape. Hold the phone any way up and the steering tracks
 // the visible up-direction — the OS auto-rotating the UI rotates the steering
 // reference WITH it (so they stay consistent), and orientation-locking just pins
-// both. In portrait (angle 0) this collapses to the raw native roll, so nothing
-// changes for the common case.
+// both. In portrait (angle 0) this collapses to the native frame.
 //
 // iOS 13+ needs requestPermission() from a user gesture (call enableMotion() in a
 // tap handler). HTTPS is required for sensors. Permission is not delivery,
@@ -39,7 +38,7 @@
 // frame either way; the display never knows which mode a phone is in.
 //
 // Fallbacks (no tilt / desktop / permission denied): arrow keys or A/D steer,
-// Space/Down brake. Steer = roll + keys (so the loop is testable headlessly).
+// Space/Down brake. Steer = tip + keys (so the loop is testable headlessly).
 // Emits {s,b,u} to onControl on every sensor sample and on every button/key
 // edge — the InputGate downstream decides what actually reaches the wire — with
 // a SEND_HZ interval kept as the idle heartbeat and the no-sensor fallback.
@@ -54,7 +53,7 @@ const SEND_HZ = 25;
 // this file is documented importable headlessly by the Node suites — so they are
 // EXPORTED instead, and tests/config-drift.test.js fails if either copy moves
 // without the other.
-export const ROLL_LOCK = 30;      // degrees of left/right roll for full lock
+export const ROLL_LOCK = 30;      // degrees of left/right tip for full lock
 export const DEADZONE = 0.06;     // normalized steer ignored around centre
 // Single light low-pass on the steer output: just enough to take the edge off
 // sensor jitter (raw DeviceOrientation twitches ~1-2° even held still) without
@@ -115,9 +114,9 @@ export class TiltInput {
     this.motionState = (typeof window !== 'undefined' && !window.DeviceOrientationEvent)
       ? 'unsupported' : 'unknown';
 
-    // latest gravity unit vector in the device frame (overwritten each event;
-    // the flat seed only stands in until the first reading arrives)
-    this._g = { x: 0, y: 0, z: -1 };
+    // latest gravity x/y in the device frame — the screen-right component is all
+    // steering reads (overwritten each event; the seed reads as no tip)
+    this._g = { x: 0, y: 0 };
 
     this.mode = 'tilt';    // 'tilt' | 'buttons' (see setMode)
     this._steer = 0;       // smoothed steer output (-1..1)
@@ -232,17 +231,16 @@ export class TiltInput {
     // the constructor's route to 'unsupported' never attaches one.)
     if (this.motionState === 'unsupported') this._setMotionState('granted');
 
-    // Gravity (unit, pointing down) in the device frame from the W3C Z-X'-Y''
+    // Gravity's x/y (pointing down) in the device frame from the W3C Z-X'-Y''
     // Euler angles. alpha (compass yaw) doesn't tilt gravity, so it drops out —
     // which is exactly why steering needs no compass and no recentering.
     const b = (e.beta || 0) * DEG, g = (e.gamma || 0) * DEG;
-    const cb = Math.cos(b), sb = Math.sin(b), cg = Math.cos(g), sg = Math.sin(g);
+    const cb = Math.cos(b), sb = Math.sin(b), sg = Math.sin(g);
     // Store gravity straight from this sample — no smoothing here. The only
     // low-pass is the one on the steer output (SMOOTH), so there's no startup
     // ramp and no stacked latency; "level" is wherever gravity actually points.
     this._g.x = cb * sg;
     this._g.y = -sb;
-    this._g.z = -cb * cg;
 
     // Emit straight from the sensor event: a fresh sample used to sit up to
     // 40 ms waiting for the interval tick, which was the single largest
@@ -272,21 +270,14 @@ export class TiltInput {
     this._actKeyDown = false; // clear held-key state so a missed keyup can't suppress the next race's first press
   }
 
-  // Steer = roll = gravity's angle in the screen's x–z plane = atan2(gRight, -gz),
-  // where gRight is gravity's component along the screen's current "right" axis (the
-  // device x/y rotated by the screen orientation; see SCREEN_RIGHT / _screenAngle).
-  // In portrait this is the native roll (= device gamma): pitch-independent (cosβ
-  // cancels) so the doodle-jump lean is full-strength at any hold angle, and an
-  // upright twist runs gz→0 so roll heads toward ±90° and twisting steers too. In
-  // landscape the same screen-relative lean is read off the device's pitch axis
-  // instead — one signal, any orientation.
+  // Steer = tip = asin(gRight) (see the header). gRight is clamped because
+  // rounding can push it past 1, and asin of that is NaN.
   _sensorSteer() {
     if (!this.haveTilt) return 0;
-    const { x, y, z } = this._g;
+    const { x, y } = this._g;
     const { rx, ry } = SCREEN_RIGHT[this._screenAngle()] || SCREEN_RIGHT[0];
-    const gRight = x * rx + y * ry;
-    const rollDeg = Math.atan2(gRight, -z) * RAD;
-    return clamp1(rollDeg / ROLL_LOCK);
+    const tipDeg = Math.asin(clamp1(x * rx + y * ry)) * RAD;
+    return clamp1(tipDeg / ROLL_LOCK);
   }
 
   // Degrees the OS has rotated the UI from its natural (portrait) orientation,
