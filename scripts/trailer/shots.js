@@ -61,10 +61,11 @@ module.exports = [
   // 3.02s, so an in-point just past it opens on the field breaking away rather than on
   // three seconds of stationary grid. `chain` is the only scenario that counts down, and
   // it starts on the track named here.
-  { id: '01-riptide-1p', scenario: 'chain', players: 1, track: 'riptide', warmup: 3.1, seconds: 3 },
-  { id: '02-riptide-1p', scenario: 'racing', players: 1, track: 'riptide', warmup: 22.483, seconds: 3 },
-  { id: '03-pretzel-1p', scenario: 'racing', players: 1, track: 'pretzel', warmup: 81, seconds: 6 },
-  { id: '04-flurry-2p', scenario: 'racing', players: 2, track: 'flurry', warmup: 53.517, seconds: 6 },
-  { id: '05-wash-4p', scenario: 'racing', players: 4, track: 'wash', warmup: 33, seconds: 6 },
-  { id: '06-helix-4p', scenario: 'racing', players: 4, track: 'helix', warmup: 30, seconds: 6 },
+  { id: '01-riptide-1p', scenario: 'chain', players: 1, track: 'riptide', camera: 'chase-nohud', warmup: 3.1, seconds: 2.5 },
+  { id: '02-riptide-1p', scenario: 'racing', players: 1, track: 'riptide', camera: 'follow', warmup: 7.6, seconds: 4 },
+  { id: '03-avalanche-1p', scenario: 'racing', players: 1, track: 'avalanche', camera: 'chase-nohud', warmup: 43.867, seconds: 3.5 },
+  { id: '04-glacier-2p', scenario: 'racing', players: 2, track: 'glacier', warmup: 10.267, seconds: 4 },
+  { id: '05-pretzel-1p', scenario: 'racing', players: 1, track: 'pretzel', camera: 'follow', warmup: 24.5, seconds: 3.5 },
+  { id: '06-gulch-1p', scenario: 'racing', players: 1, track: 'gulch', camera: 'follow', warmup: 21.3, seconds: 4 },
+  { id: '07-helix-4p', scenario: 'racing', players: 4, track: 'helix', warmup: 30, seconds: 8 },
 ];
