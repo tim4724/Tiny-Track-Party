@@ -98,7 +98,7 @@ inline constexpr double RANDOM_RACES_MAX = 8;
 // mirrors protocol.js 1:1 and a TV shell will want the tilt numbers the moment
 // one exists.
 inline constexpr double STEER_EXPO = 1.25;
-inline constexpr double STEER_ROLL_LOCK_DEG = 30;
+inline constexpr double STEER_ROLL_LOCK_DEG = 24;
 inline constexpr double STEER_DEADZONE = 0.06;
 inline constexpr double STEER_SMOOTH = 0.5;
 inline constexpr double STEER_GATE_THRESHOLD = 0.03;

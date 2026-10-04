@@ -225,7 +225,7 @@ var STEER = {
   // a session (ttp_set_steer_expo), nothing else may.
   EXPO: 1.25,
   // PHONE. Degrees of left/right tip (the steering lean or twist) that reach full lock.
-  ROLL_LOCK_DEG: 30,
+  ROLL_LOCK_DEG: 24,
   // PHONE. Normalized steer discarded around centre, then re-expanded so full
   // lock still reaches +/-1.
   DEADZONE: 0.06,

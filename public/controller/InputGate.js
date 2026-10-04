@@ -69,8 +69,8 @@
 // Steering deltas below this are treated as "the display already knows".
 // Derived from the SENSOR NOISE FLOOR, not from what feels like a meaningful
 // turn: raw DeviceOrientation twitches 1-2 degrees held still, which over
-// TiltInput's ROLL_LOCK of 30 degrees is 0.033-0.066 of s, roughly halved by its
-// one-pole SMOOTH — so ~0.02-0.03 of wobble survives on a phone that is not
+// TiltInput's ROLL_LOCK of 24 degrees is 0.042-0.083 of s, roughly halved by its
+// one-pole SMOOTH — so ~0.02-0.04 of wobble survives on a phone that is not
 // moving. A threshold under that never engages; the gate would pass every sample
 // and do nothing. Sized at |s| -> 1 where the display's STEER_EXPO gain peaks at
 // 1.25, so the worst-case visible error stays under 0.0375 of steer authority

@@ -25,7 +25,7 @@ function withScreenAngle(angle, fn) {
   }
 }
 
-// Drive one orientation sample in, read the steer out. ROLL_LOCK is 30°, so a 15°
+// Drive one orientation sample in, read the steer out. ROLL_LOCK is 24°, so a 12°
 // effective tip lands at exactly ±0.5 — a clean fixture clear of the 0.06 deadzone.
 function steerFor({ angle, beta, gamma }) {
   return withScreenAngle(angle, () => {
@@ -35,7 +35,7 @@ function steerFor({ angle, beta, gamma }) {
   });
 }
 
-const HALF = 0.5; // 15° / ROLL_LOCK(30°)
+const HALF = 0.5; // 12° / ROLL_LOCK(24°)
 const EPS = 1e-9;
 
 test('no reading yet → neutral steer', () => {
@@ -44,8 +44,8 @@ test('no reading yet → neutral steer', () => {
 });
 
 test('portrait (0°): a right roll (gamma>0) steers right, left steers left', () => {
-  assert.ok(Math.abs(steerFor({ angle: 0, beta: 0, gamma: 15 }) - HALF) < EPS);
-  assert.ok(Math.abs(steerFor({ angle: 0, beta: 0, gamma: -15 }) + HALF) < EPS);
+  assert.ok(Math.abs(steerFor({ angle: 0, beta: 0, gamma: 12 }) - HALF) < EPS);
+  assert.ok(Math.abs(steerFor({ angle: 0, beta: 0, gamma: -12 }) + HALF) < EPS);
 });
 
 test('portrait: pure pitch (beta) does NOT steer', () => {
@@ -56,19 +56,19 @@ test('portrait: pure pitch (beta) does NOT steer', () => {
 test('landscape-primary (90°): the screen-right lean rides the pitch axis', () => {
   // Held in landscape-primary, "dip the screen's right edge" is a device pitch
   // (beta>0). It must steer right — and pure native roll (gamma) must NOT steer.
-  assert.ok(Math.abs(steerFor({ angle: 90, beta: 15, gamma: 0 }) - HALF) < EPS);
-  assert.ok(Math.abs(steerFor({ angle: 90, beta: -15, gamma: 0 }) + HALF) < EPS);
+  assert.ok(Math.abs(steerFor({ angle: 90, beta: 12, gamma: 0 }) - HALF) < EPS);
+  assert.ok(Math.abs(steerFor({ angle: 90, beta: -12, gamma: 0 }) + HALF) < EPS);
   assert.ok(Math.abs(steerFor({ angle: 90, beta: 0, gamma: 25 })) < EPS);
 });
 
 test('landscape-secondary (270°): pitch steers the opposite way to 90°', () => {
-  assert.ok(Math.abs(steerFor({ angle: 270, beta: 15, gamma: 0 }) + HALF) < EPS);
-  assert.ok(Math.abs(steerFor({ angle: 270, beta: -15, gamma: 0 }) - HALF) < EPS);
+  assert.ok(Math.abs(steerFor({ angle: 270, beta: 12, gamma: 0 }) + HALF) < EPS);
+  assert.ok(Math.abs(steerFor({ angle: 270, beta: -12, gamma: 0 }) - HALF) < EPS);
 });
 
 test('upside-down portrait (180°): the tip steers the opposite way to 0°', () => {
-  assert.ok(Math.abs(steerFor({ angle: 180, beta: 0, gamma: 15 }) + HALF) < EPS);
-  assert.ok(Math.abs(steerFor({ angle: 180, beta: 0, gamma: -15 }) - HALF) < EPS);
+  assert.ok(Math.abs(steerFor({ angle: 180, beta: 0, gamma: 12 }) + HALF) < EPS);
+  assert.ok(Math.abs(steerFor({ angle: 180, beta: 0, gamma: -12 }) - HALF) < EPS);
 });
 
 test('legacy window.orientation (-90) is honoured when screen.orientation is absent', () => {
@@ -82,7 +82,7 @@ test('legacy window.orientation (-90) is honoured when screen.orientation is abs
   globalThis.window = { orientation: -90, addEventListener() {} };
   try {
     const t = new TiltInput({});
-    t._onOrient({ beta: 15, gamma: 0 });
+    t._onOrient({ beta: 12, gamma: 0 });
     assert.ok(Math.abs(t._sensorSteer() + HALF) < EPS);
   } finally {
     if (hadW) globalThis.window = prevW; else delete globalThis.window;
@@ -91,11 +91,11 @@ test('legacy window.orientation (-90) is honoured when screen.orientation is abs
 });
 
 test('landscape wheel grip: an upright twist reads 1:1, also tipped past vertical', () => {
-  // Held upright in landscape-primary (gamma ~80), a 15° wheel twist is beta 15.
-  // The roll this replaced divided it by cos(gamma) and read ~57° — full lock.
-  assert.ok(Math.abs(steerFor({ angle: 90, beta: 15, gamma: 80 }) - HALF) < EPS);
-  // Past vertical the Euler angles flip (beta 165, gamma -80) for the same twist.
-  assert.ok(Math.abs(steerFor({ angle: 90, beta: 165, gamma: -80 }) - HALF) < EPS);
+  // Held upright in landscape-primary (gamma ~80), a 12° wheel twist is beta 12.
+  // The roll this replaced divided it by cos(gamma) and read ~51° — full lock.
+  assert.ok(Math.abs(steerFor({ angle: 90, beta: 12, gamma: 80 }) - HALF) < EPS);
+  // Past vertical the Euler angles flip (beta 168, gamma -80) for the same twist.
+  assert.ok(Math.abs(steerFor({ angle: 90, beta: 168, gamma: -80 }) - HALF) < EPS);
 });
 
 test('a full twist past the lock still clamps to ±1', () => {
@@ -111,7 +111,7 @@ test('_tick dead-zones a centred lean to zero, but full lock still re-expands to
   withScreenAngle(0, () => {
     const out = [];
     const t = new TiltInput({ onControl: (c) => out.push(c) });
-    t._onOrient({ beta: 0, gamma: 1 }); // ~0.03 normalized, inside the 0.06 dead-zone
+    t._onOrient({ beta: 0, gamma: 1 }); // ~0.04 normalized, inside the 0.06 dead-zone
     t._tick();
     assert.equal(out.at(-1).s, 0, 'a lean inside the dead-zone steers nothing');
     t._onOrient({ beta: 0, gamma: 75 }); // hard lock
@@ -130,7 +130,7 @@ test('_tick re-expands a mid lean past the dead-zone (lock maps linearly, no los
   withScreenAngle(0, () => {
     const out = [];
     const t = new TiltInput({ onControl: (c) => out.push(c) });
-    t._onOrient({ beta: 0, gamma: 15 }); // raw sensor steer 0.5 (15°/30°)
+    t._onOrient({ beta: 0, gamma: 12 }); // raw sensor steer 0.5 (12°/24°)
     for (let i = 0; i < 20; i++) t._tick();
     const expected = (0.5 - 0.06) / (1 - 0.06); // 0.5, dead-zone removed and re-expanded
     assert.ok(Math.abs(out.at(-1).s - expected) < 0.01, `re-expanded steer ~${expected.toFixed(3)} (got ${out.at(-1).s})`);

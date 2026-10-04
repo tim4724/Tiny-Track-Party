@@ -53,7 +53,7 @@ const SEND_HZ = 25;
 // this file is documented importable headlessly by the Node suites — so they are
 // EXPORTED instead, and tests/config-drift.test.js fails if either copy moves
 // without the other.
-export const ROLL_LOCK = 30;      // degrees of left/right tip for full lock
+export const ROLL_LOCK = 24;      // degrees of left/right tip for full lock
 export const DEADZONE = 0.06;     // normalized steer ignored around centre
 // Single light low-pass on the steer output: just enough to take the edge off
 // sensor jitter (raw DeviceOrientation twitches ~1-2° even held still) without
