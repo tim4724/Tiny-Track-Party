@@ -443,6 +443,23 @@ the end of eglSwap); the window's one full-window op is its clear, which
 PowerVR turns into a draw (`fPerformColorClearsAsDraws`) and nothing else
 zeroes; render-pass load/store flags are already what a tiler wants.
 
+## Filament's queue at VK global priority HIGH: not taken (2026-10-04)
+
+Re-measured after the streak ring (4+4 pinned 540 races, 3+3 adaptive, one
+trace per arm). HIGH adds no GPU capacity (fence-union busy ~96% either way):
+it moves the app window's ~1.4 ms of interference on Filament's frame out of
+Filament's timer (heavy p50 12.6-13.0 -> 11.2-11.4 ms). Pinned skips 0.6-0.9
+against 0.7-1.6/s, inside the run-to-run spread. Fed the lower timer, the
+adaptive rule holds 540 for about half the race but probes 1280x720 and fails
+in 2 of 3 races (2-3 s at ~44 fps), so a whole race drops 46-66 frames against
+20-29 at default priority. One HIGH trace also sat 5 s in a stuffed window
+queue (tags two ticks behind the 3D); no default trace has shown it. Default
+priority stays; HIGH is only worth revisiting together with a 4P climb cap and
+a rule that counts the window's GPU time.
+
+With the window and streak fixes in, the default rule settles 4P tidepool at
+832x480 for most of the race (three 120 s races), up from 640x360.
+
 ## The adaptive rule parks 4P at 640x360 (2026-10-03)
 
 Four guarded adaptive races per build on tidepool settle at 640x360 for most of
