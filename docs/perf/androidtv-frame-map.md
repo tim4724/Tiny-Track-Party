@@ -462,6 +462,28 @@ sub-floor rung would play like.
 The dips come in runs once a lap, not scattered: pretzel's worst is 4-5 s
 at 47-51 fps each lap, tangle's and flurry's 2-3 s at 50-54.
 
+**What the dip is.** Pretzel's run is its start straight, where every cell
+looks across the whole compact figure-eight at once: nearly every deck chunk,
+every clutter chunk and the landmark tile are in all four frusta, and a
+host census puts the frame at ~750k submitted indices against ~190k on an open
+stretch (clutter flowers 45% of the growth, deck 14%, kit copies 11%,
+landmarks 8%, ground 8%, pillars 5%). It is geometry, not fill: the heavy
+seconds read 16-17 ms at 540 and 15 at 360 while the rest of the lap falls
+9.5 -> 6. Hiding road, terrain or dressing alone takes ~1.5 ms off them;
+all three together take the whole rise. The pillars mark the place and are
+not the cost (sidewinder sees as many, and the whole deck, with no drops).
+Tangle's run is the same mechanism; flurry's mix is snow trees rather than
+flowers.
+
+The dressing SHEETS alone (`debug.ttp.dresssheets 0`: clutter, landmarks,
+boulders, signs), three races a side interleaved: heavy seconds 16.2-16.7 ->
+14.2-14.6 ms, skips 88-115 -> 7-19, worst second 47-49 -> 56-57 fps. That is
+the size of a fix, and every way to it changes what the backyard shows
+(fewer, coarser or distance-swapped flowers). The landmarks are built
+live-lit on the race path although `bakeLight` was meant for them
+(8615d9d3 set it on the bench branch only); baking them is worth ~0.2 ms and
+moves their smooth parts to vertex lighting.
+
 ## What is left on glacier at 4P is the deck's geometry (2026-10-04, later)
 
 Group ablations at a pinned 960x540, one race an arm against a 0.6 ms
