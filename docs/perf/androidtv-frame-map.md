@@ -443,6 +443,30 @@ the end of eglSwap); the window's one full-window op is its clear, which
 PowerVR turns into a draw (`fPerformColorClearsAsDraws`) and nothing else
 zeroes; render-pass load/store flags are already what a tiler wants.
 
+## The deck's layer reads were dependent; the HUD was the drops (2026-10-04)
+
+**vroad's three deck-layer reads (rubber, car-shadow probe, sun-vis) computed
+their uv in the fragment**, so none could be issued before the shader ran.
+Computing the two affine uvs per vertex (`layerUV`, `visUV`) makes each a bare
+varying read; pixels are unchanged up to fp32 rounding. 4P tidepool, Vulkan,
+three races per arm: pinned 1920x1080 heavy p50 34.0-34.9 -> 33.1-33.6 ms;
+pinned 960x540 skips 0.9-1.0 -> 0.1-0.3/s, clean 65-66 -> 76-80 of 90.
+
+**fp16 is real on this driver's SPIR-V path**: the same arms with vroad's
+fragment forced to highp read 35.6-36.0 (+1.3 ms). Demoting what stays highp
+is world-unit maths (arclength, layer and decal coords) and breaks shadows;
+mediump fog/sun varyings across the scene materials read 34.1-34.7 (noise).
+
+**The race HUD's stickers were most of what was left at 540.** Hiding the
+chrome (`debug.ttp.hud 0`, tags on) took 4P/540 to 0.0-0.1 skips/s and HWUI's
+RenderThread from ~328 to ~132 ms/s. Each sticker group (name chip, place+lap
+column, item slot) now renders into a RETAINED offscreen layer (RaceScreen.kt
+`retainedLayer`): 0.0 skips/s, 87-89 clean of 90, same three arms. A held
+race frame matches to within a few corner pixels of the empty slot's dashes
+(at most 8 levels). Priced and not needed beside it: the dashed slot from a
+cached bitmap (0.0-0.3 skips/s, dash edges re-antialiased) and the tilted
+outlines as fills (0.6-1.0, CPU only).
+
 ## Filament's queue at VK global priority HIGH: not taken (2026-10-04)
 
 Re-measured after the streak ring (4+4 pinned 540 races, 3+3 adaptive, one
