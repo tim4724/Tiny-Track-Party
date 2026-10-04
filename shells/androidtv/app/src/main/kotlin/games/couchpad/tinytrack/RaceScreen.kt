@@ -32,6 +32,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.GraphicsLayerScope
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.offset
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
@@ -125,34 +129,10 @@ private fun CellChrome(cell: GameState.CellHUD, state: GameState) {
         }
 
         if (!cardInCell) {
-            Column(
-                Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = margin, end = 12.dp)
-                    .tilt(1.5f),
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(7.dp),
-            ) {
-                // A cell whose car has no live HUD row this tick reports 0 — that
-                // is the readback SKIPPING a slot no live car claims, which is what
-                // stops a Grand Prix swapping tracks under the HUD from painting
-                // "0th, lap 0".
-                if (cell.place > 0) {
-                    val shape = RoundedCornerShape(Sticker.radiusSmall)
-                    Box(
-                        Modifier
-                            .hardShadow(Sticker.popShadow, shape)
-                            .background(Tokens.surface, shape)
-                            .stickerOutline(Sticker.border, shape)
-                            .padding(vertical = 10.dp, horizontal = 21.dp)
-                    ) {
-                        StickerText(Copy.ordinal(cell.place), size = 46.dp)
-                    }
-                }
-                if (cell.totalLaps > 0) {
-                    StickerPill(Copy.lap(cell.lap, cell.totalLaps), tint = Tokens.ink, tracking = 0.12f)
-                }
-            }
+            PlaceColumn(
+                cell.place, cell.lap, cell.totalLaps,
+                Modifier.align(Alignment.TopEnd).padding(top = margin, end = 12.dp),
+            )
         }
     }
 
@@ -170,6 +150,70 @@ private fun CellChrome(cell: GameState.CellHUD, state: GameState) {
 }
 
 /**
+ * The place badge over the lap pill, tilted as one. Its own composable, taking
+ * only the three numbers it shows, so a cell recomposing for its item or for
+ * anyone's pickup skips it and its retained layer is not re-rendered.
+ */
+@Composable
+private fun PlaceColumn(place: Int, lap: Int, totalLaps: Int, modifier: Modifier) {
+    Column(
+        modifier
+            .retainedLayer(TILT_PAD)
+            .tilt(1.5f),
+        horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        // A cell whose car has no live HUD row this tick reports 0 — that
+        // is the readback SKIPPING a slot no live car claims, which is what
+        // stops a Grand Prix swapping tracks under the HUD from painting
+        // "0th, lap 0".
+        if (place > 0) {
+            val shape = RoundedCornerShape(Sticker.radiusSmall)
+            Box(
+                Modifier
+                    .hardShadow(Sticker.popShadow, shape)
+                    .background(Tokens.surface, shape)
+                    .stickerOutline(Sticker.border, shape)
+                    .padding(vertical = 10.dp, horizontal = 21.dp)
+            ) {
+                StickerText(Copy.ordinal(place), size = 46.dp)
+            }
+        }
+        if (totalLaps > 0) {
+            StickerPill(Copy.lap(lap, totalLaps), tint = Tokens.ink, tracking = 0.12f)
+        }
+    }
+}
+
+/**
+ * A sticker group rendered into a RETAINED offscreen layer: HWUI keeps the
+ * texture across window frames and re-renders it only when this subtree's
+ * display list changes (a place, a lap, an item), so a steady frame composites
+ * one quad instead of replaying the group's strokes, fills and text.
+ *
+ * The layer carries NO transform. The tilt goes inside it, so the shapes and
+ * type are rasterized rotated at final pixels and the layer lands 1:1 at an
+ * integer position (Compose layout is integer px) rather than being resampled.
+ * A layer clips to its node, so it is grown by [pad] on every side to hold the
+ * hard drop and the rotated corners, and the growth is hidden from layout: the
+ * parent measures and places the group exactly where it was.
+ */
+private fun Modifier.retainedLayer(pad: Dp, block: GraphicsLayerScope.() -> Unit = {}): Modifier =
+    layout { measurable, constraints ->
+        val p = pad.roundToPx()
+        val placeable = measurable.measure(constraints.offset(2 * p, 2 * p))
+        layout(placeable.width - 2 * p, placeable.height - 2 * p) { placeable.place(-p, -p) }
+    }
+        .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen; block() }
+        .padding(pad)
+
+/**
+ * Room around a TILTED group: the widest chip (14em of 35 px, ~530 px) turned 2
+ * degrees lifts its corners ~9.3 px, plus the 3 px pop drop and an AA pixel.
+ */
+private val TILT_PAD = 16.dp
+
+/**
  * `.cell-label__name` — the player's name on a sticker FILLED with their livery,
  * white text. Filled rather than livery text on white (which this was, and which
  * the phone never did): across a four-way split the thing you hunt for is your own
@@ -182,6 +226,7 @@ private fun NameChip(name: String, colorIndex: Int) {
     val shape = RoundedCornerShape(Sticker.radiusSmall)
     Box(
         Modifier
+            .retainedLayer(TILT_PAD)
             .tilt(-2f)
             .hardShadow(Sticker.popShadow, shape)
             .background(Tokens.car(colorIndex), shape)
@@ -274,8 +319,12 @@ private fun ItemSlot(item: String?, accent: Int, carIndex: Int, tick: Int) {
 
     Box(
         Modifier
-            .size(side)
-            .graphicsLayer {
+            // Its own retained layer while AT REST, room enough for the 3 px drop.
+            // While the slot rolls or pops the layer's transform is not identity,
+            // and a cached layer under a scale is resampled soft — so the layer
+            // goes (Auto) for the ~1.3 s of the animation and the slot draws
+            // directly, as before; it is re-rendered once when it settles.
+            .retainedLayer(8.dp) {
                 // EVERY ANIMATED VALUE IS READ HERE, inside the layer block, and that
                 // is the difference between a slot machine and a dropped frame. A read
                 // in the composition subscribes the whole slot to a value that changes
@@ -292,7 +341,9 @@ private fun ItemSlot(item: String?, accent: Int, carIndex: Int, tick: Int) {
                 scaleX = s
                 scaleY = s
                 rotationZ = phase?.let { -4f + 8f * it } ?: 0f
+                if (phase != null || s != 1f) compositingStrategy = CompositingStrategy.Auto
             }
+            .size(side)
             .then(
                 if (shown != null) Modifier
                     .hardShadow(Sticker.popShadow, shape)

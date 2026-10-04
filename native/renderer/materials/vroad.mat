@@ -34,7 +34,15 @@ material {
     // per-fragment tap now, so the two halves of the light have to reach the
     // fragment separately — multiplying a tap into the FINISHED light would
     // darken the ambient floor with it and take a shadowed deck to black.
-    variables : [ fog, sun ],
+    //
+    // layerUV.xy and visUV.xy are the deck layers' track-space uvs, computed
+    // PER VERTEX so each layer read samples a bare varying (a NON-DEPENDENT
+    // read the GPU can issue before the shader runs). Both are affine in uv0,
+    // so interpolating them equals computing them per fragment up to fp32
+    // rounding. highp: u = s/L at fp16 steps 4 texels of an 8k layer.
+    variables : [ fog, sun,
+        { name : layerUV, precision : high },
+        { name : visUV, precision : high } ],
     requires : [
         color,
         // (s, lat) in world units — see above
@@ -320,6 +328,15 @@ fragment {
         return length(pa - ba * h);
     }
 
+    // The rubber tap, in a helper ON PURPOSE: matc adds filament_lodBias to every
+    // texture() written directly in material() (GLSLTools::textureLodBias), and
+    // a biased read may not be a plain varying read. The bias is always 0 here
+    // (no dynamic resolution, no TAA), so this is exact. Implicit LOD stays: the
+    // layer has mips and anisotropy.
+    float skidInk(highp vec2 uv) {
+        return texture(materialParams_skidLayer, uv).r;
+    }
+
     // ONE stamp — a profile fill plus its optional chevron grid — given the
     // fragment's offset (ds, dl) from the entry's centre in world units. Shared
     // by BOTH channels on purpose: paint and decals differ only in which side of
@@ -533,21 +550,17 @@ fragment {
         // the ink texture's lat span, clamps to an edge row the stamper never
         // writes, and reads zero ink — the deck flag for free.
         //
-        // suv serves BOTH track-space layers (rubber, and the car-shadow tap
-        // below) — the shadow layer is deliberately built on the rubber
-        // layer's exact lat span so no second mapping exists to drift. highp
-        // for the same Metal-fp16 reason as the decal uniforms: u = s/L near
-        // 1.0 at half precision steps by ~0.0005 — half a texel of an 8k-wide
-        // layer — and mediump would smear the marks.
-        highp vec2 suv = vec2(tc.x * materialParams.invTrackLength,
-                tc.y * materialParams.invSkidLatSpan + 0.5);
+        // variable_layerUV.xy serves BOTH track-space layers (rubber, and the
+        // car-shadow tap below) — the shadow layer is deliberately built on the
+        // rubber layer's exact lat span so no second mapping exists to drift.
+        // The vertex stage computes it; see `variables`.
         if (materialParams.paintCount > 0) base = deckPaint(base, sLocal, tc.y);
         float lh = materialParams.skidLatHalf;
         if (lh > 0.0) {
             // The layer is a CPU-rasterized UPLOAD (row 0 = -latHalf), not a
             // render target, so the read is raw — uploads have no
             // per-backend flip. See tests/render-target-uv.test.js.
-            float ink = texture(materialParams_skidLayer, suv).r;
+            float ink = skidInk(variable_layerUV.xy);
             vec4 sc = materialParams.skidColor;
             base = mix(base, sc.rgb, min(ink, sc.a));
         }
@@ -585,7 +598,9 @@ fragment {
             // Where bilinear reads 0 the B-spline could read at most the
             // outer texel ring's faint tail, which sits under the remap
             // band's clip — the gate is visually lossless with the band on.
-            float cs = texture(materialParams_carShadow, suv).r;
+            // textureLod 0: the layer is single-level, so this is exactly
+            // what an implicit sample picks, and it carries no lodBias.
+            float cs = textureLod(materialParams_carShadow, variable_layerUV.xy, 0.0).r;
             // textureLod, NOT texture(): the `cs` gate makes this branch
             // NON-UNIFORM, where an implicit-derivative sample is UB — the
             // whole renderer's rule (CLAUDE.md trap #5), and the exact
@@ -594,7 +609,7 @@ fragment {
             // would pick anyway.
             if (materialParams.carShadowRemap.w > 0.5 && cs > 0.004) {
                 highp vec2 ts = vec2(textureSize(materialParams_carShadow, 0));
-                highp vec2 p = suv * ts - 0.5;
+                highp vec2 p = variable_layerUV.xy * ts - 0.5;
                 highp vec2 i = floor(p);
                 highp vec2 f = p - i;
                 highp vec2 f2 = f * f;
@@ -633,8 +648,7 @@ fragment {
         // The car shadows, OVER the profiles — a shadow stays visible through
         // an aura it crosses, and a mix replaces, so the order is structural.
         // The PROBE tap above sits in uniform control flow (its guard is a
-        // uniform), so its texture() is sound like the rubber tap's; the
-        // B-spline fetches inside the cs gate are textureLod for the
+        // uniform); the B-spline fetches inside the cs gate are textureLod for the
         // non-uniform-flow reason on the block itself.
         // min() against maskInk.w caps two stacked shadows at the depth the
         // old loop's mix-of-mixes reached instead of letting saturating-add
@@ -658,13 +672,12 @@ fragment {
         //
         // A kerb, skirt or underside fragment carries OFF_DECK_LAT here, so it
         // clamps onto the outermost deck column and inherits that column's
-        // shadow: a band crosses the rail instead of stopping at it.
+        // shadow: a band crosses the rail instead of stopping at it. The
+        // SAMPLER does that clamp (CLAMP_TO_EDGE on both axes, bindRoadVisMap),
+        // which is what lets the uv stay affine and come from the vertex stage.
         float vis = 1.0;
         if (materialParams.invSunVisLatSpan > 0.0) {
-            vis = textureLod(materialParams_sunVis, uvToRenderTargetUV(vec2(
-                    tc.x * materialParams.invTrackLength,
-                    clamp(tc.y * materialParams.invSunVisLatSpan + 0.5,
-                            0.0, 1.0))), 0.0).r;
+            vis = textureLod(materialParams_sunVis, variable_visUV.xy, 0.0).r;
         }
         // The far ribbon painted magenta for debugging
         // (TTP_DEBUG_DECK_LOD_TINT).
@@ -729,5 +742,13 @@ vertex {
         vec4 c0 = getCustom0();
         material.fog = vec4(ttpFogFactor(material.worldPosition.xyz), c0.xyz);
         material.sun = vec4(ttpMatteSunTerm(vec3(0.0, 1.0, 0.0), c0.w), 0.0);
+        // The deck layers' uvs (see `variables`), exactly the expressions the
+        // fragment used to evaluate. uvToRenderTargetUV belongs to the vis map
+        // alone: it is a render target, the rubber and shadow layers are uploads.
+        highp vec2 tc = material.uv0;
+        highp float u = tc.x * materialParams.invTrackLength;
+        material.layerUV = vec4(u, tc.y * materialParams.invSkidLatSpan + 0.5, 0.0, 0.0);
+        material.visUV = vec4(uvToRenderTargetUV(vec2(u,
+                tc.y * materialParams.invSunVisLatSpan + 0.5)), 0.0, 0.0);
     }
 }

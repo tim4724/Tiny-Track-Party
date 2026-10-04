@@ -249,6 +249,14 @@ leaves each texture holding the other's stale stamps, so the shadow strobes
 between two positions — and Vulkan keeps the same history. `uploadWhole` is the
 A/B arm that priced it.
 
+**The deck's layer reads sample a bare varying.** vroad's rubber, car-shadow
+and sun-vis uvs are affine in uv0, so the VERTEX stage computes them
+(`layerUV`, `visUV`) and each read is non-dependent — one the GPU can issue
+before the fragment shader runs, which on the PowerVR box was most of a
+4P/540 skip budget (docs/perf/androidtv-frame-map.md). A new deck-layer tap
+belongs in a varying too; arithmetic on the uv in the fragment makes the read
+dependent again.
+
 `CarShadowTuning::mode` is the switch and `kShadowModeBlob` is what ships, so
 the masked per-fragment loop draws NOTHING in an ordinary frame: every entry
 goes out `texrot.w == 2`, readback-only, and `foldToChunk` never makes one
