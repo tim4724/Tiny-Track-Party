@@ -184,3 +184,11 @@ test('webkit: the drive controls keep their own held state, whatever else is pre
   await down('#pause-btn');                       // a chrome button press.js DOES track
   await expect(brake).toHaveClass(/\bheld\b/);   // …and BRAKE is still held
 });
+
+// Typed key by key, because `fill` skips keydown: the steering keys (a, d, s, e,
+// space) are bound on the window, and iOS's soft keyboard sends them as real keys.
+test('webkit: the name field takes the letters the steering keys use', async ({ page }) => {
+  await page.goto('/controller/index.html?scenario=name');
+  await page.locator('#name-input').pressSequentially('Sad Ed');
+  await expect(page.locator('#name-input')).toHaveValue('Sad Ed');
+});

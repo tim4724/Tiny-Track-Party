@@ -358,6 +358,9 @@ export class TiltInput {
   _bindKeys() {
     if (typeof window === 'undefined') return;
     const set = (e, down) => {
+      // Typing, not steering: swallowing these in the name field ate every
+      // a/d/s/e/space and the Enter that submits the form.
+      if (e.target.closest?.('input, textarea')) return;
       const k = e.key.toLowerCase();
       if (k === 'arrowleft' || k === 'a') { this._keyL = down; e.preventDefault(); }
       else if (k === 'arrowright' || k === 'd') { this._keyR = down; e.preventDefault(); }
