@@ -524,8 +524,9 @@ html {
 #trailer { z-index: 18; --trailer-pad: clamp(1rem, 6vh, 4rem); padding: var(--trailer-pad) 0; }
 #trailer video {
   /* Always 16:9: as wide as 80vw (which leaves the close button's corner clear
-     of the film), 1280px, or the height between the paddings allows. */
-  width: min(80vw, 1280px, calc((100vh - 2 * var(--trailer-pad)) * 16 / 9));
+     of the film) or the height between the paddings allows. No pixel cap: on a
+     large display the film would shrink beside a board that scales with it. */
+  width: min(80vw, calc((100vh - 2 * var(--trailer-pad)) * 16 / 9));
   aspect-ratio: 16 / 9;
   display: block;
   /* COVER, not the default contain: the border makes the picture box a hair off
