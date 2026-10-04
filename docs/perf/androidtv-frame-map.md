@@ -479,10 +479,15 @@ The dressing SHEETS alone (`debug.ttp.dresssheets 0`: clutter, landmarks,
 boulders, signs), three races a side interleaved: heavy seconds 16.2-16.7 ->
 14.2-14.6 ms, skips 88-115 -> 7-19, worst second 47-49 -> 56-57 fps. That is
 the size of a fix, and every way to it changes what the backyard shows
-(fewer, coarser or distance-swapped flowers). The landmarks are built
-live-lit on the race path although `bakeLight` was meant for them
-(8615d9d3 set it on the bench branch only); baking them is worth ~0.2 ms and
-moves their smooth parts to vertex lighting.
+(fewer, coarser or distance-swapped flowers).
+
+The user chose COARSE flowers: the same placement and colours from 4x3
+spheres and 3-sided stems, half the clutter triangles (pretzel 27.5k ->
+13.5k), indistinguishable at race scale in a 3x crop. Three races a side,
+interleaved: heavy seconds 15.7-16.9 -> 14.8-15.7 ms, skips 93-171 -> 56-96
+per 80 s, worst second 43-48 -> 49-51 fps. About half of what taking the
+sheets out bought, so not the whole fix. Baking the race path's landmarks
+(only the model bench had `bakeLight`) measured inside the noise.
 
 ## What is left on glacier at 4P is the deck's geometry (2026-10-04, later)
 

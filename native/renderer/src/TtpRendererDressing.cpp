@@ -499,7 +499,11 @@ void TtpRenderer::buildClutter(const TrackBin& tb) {
                 }
                 continue;
             }
-            // ---- flower patch (CLUTTER_BUILDERS.flower, verbatim draws) ----
+            // ---- flower patch (CLUTTER_BUILDERS.flower's placement and draws) ----
+            // The parts are LOW-POLY on purpose: the flowers are the biggest share
+            // of the geometry a cell submits where a split looks across a whole
+            // backyard circuit at once, and at race scale 4x3 spheres and 3-sided
+            // stems read the same as the smooth ones at half the triangles.
             const int n = 3 + (int) std::floor(rnd() * 3);
             struct Bloom { float x, z, r; };
             std::vector<Bloom> spots;
@@ -524,23 +528,23 @@ void TtpRenderer::buildClutter(const TrackBin& tb) {
                 const uint32_t hex = entry->tints.empty() ? 0xffffffu
                         : entry->tints[(size_t) std::floor(rnd() * entry->tints.size())];
                 const float ph = (float) rnd() * 2.0f * (float) M_PI;
-                put(primCylinder(0.038f * s, 0.05f * s, h, 5), T(fx, gy + h / 2, fz),
+                put(primCylinder(0.038f * s, 0.05f * s, h, 3), T(fx, gy + h / 2, fz),
                         0x4e8a44, 0.92f + (float) rnd() * 0.14f);
                 for (int k = 0; k < 2; k++) {
                     const float la = ph + k * 2.4f + 0.7f;
-                    put(primSphere(0.1f * s, 6, 4),
+                    put(primSphere(0.1f * s, 4, 3),
                             T(fx + std::cos(la) * 0.16f * s, gy + 0.03f, fz + std::sin(la) * 0.16f * s)
                                     * RY(-la) * SC(1.7f, 0.3f, 0.7f),
                             0x5a9a50, 0.9f + (float) rnd() * 0.12f);
                 }
                 for (int k = 0; k < 5; k++) {
                     const float pa = ph + ((float) k / 5) * 2.0f * (float) M_PI;
-                    put(primSphere(0.09f * s, 6, 4),
+                    put(primSphere(0.09f * s, 4, 3),
                             T(fx + std::cos(pa) * 0.13f * s, gy + h + 0.02f * s, fz + std::sin(pa) * 0.13f * s)
                                     * RY(-pa) * RZ(0.4f) * SC(1.5f, 0.4f, 0.85f),
                             hex, 0.95f + (float) rnd() * 0.1f);
                 }
-                put(primSphere(0.08f * s, 6, 5), T(fx, gy + h + 0.03f * s, fz) * SC(1, 0.7f, 1),
+                put(primSphere(0.08f * s, 4, 3), T(fx, gy + h + 0.03f * s, fz) * SC(1, 0.7f, 1),
                         0xf2c14e, 1.05f);
             }
         }
