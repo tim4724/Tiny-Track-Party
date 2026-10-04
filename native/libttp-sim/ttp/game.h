@@ -289,6 +289,10 @@ class Game {
   std::vector<PoleRt> poles_;
   std::vector<BananaRt> bananas_;
   long bananaSeq_ = 0;
+  // bananaSeq_ when this step began. A banana with a later id was dropped in this
+  // step and hits nobody until the next one, so it reaches at least one rendered
+  // frame even when the car behind is already inside its radius.
+  long bananaSeqAtStep_ = 0;
   std::vector<RocketRt> rockets_;
   long rocketSeq_ = 0;
   Mulberry32 rng_{1};

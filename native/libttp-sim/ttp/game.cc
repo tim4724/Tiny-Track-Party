@@ -84,7 +84,6 @@ static const double BOX_RADIUS = 0.45;
 static const double BOX_RESPAWN = 4.0;
 static const double LAUNCH_GATE = 1.5;
 static const double BANANA_RADIUS = 0.5;
-static const double BANANA_BACK = 0.7;
 static const double BANANA_OWNER_IMMUNE = 5.0;
 static const double ROCKET_HOME = 8.0;
 static const double ROCKET_HIT = 0.6;
@@ -528,10 +527,13 @@ void Game::useItemImpl(Car& c) {
     c.boostMul = js_max(c.boostMul, BOOST_ITEM_MUL);
     c.boostT = js_max(c.boostT, BOOST_ITEM_DUR_MIN + (BOOST_ITEM_DUR_MAX - BOOST_ITEM_DUR_MIN) * t);
   } else if (c.item == "banana") {
+    // Dropped ON the rear bumper, not clear of it: a tailgater a nose behind is
+    // already over anything further back, and would spin on a banana it never saw.
+    double back = c.halfLen * footprintMul(c);
     Frame f = centerline_->sampleAt(c.totalS);
     Vec3 fwd = f.tangent.clone().applyAxisAngle(f.up, c.heading);
-    Vec3 world = f.pos.clone().addScaledVector(f.lateral, c.lat).addScaledVector(fwd, -BANANA_BACK);
-    ProjectResult hit = centerline_->projectNear(world, c.totalS, BANANA_BACK + 0.5);
+    Vec3 world = f.pos.clone().addScaledVector(f.lateral, c.lat).addScaledVector(fwd, -back);
+    ProjectResult hit = centerline_->projectNear(world, c.totalS, back + 0.5);
     double lim = curbLimit(hit.frame.width);
     double lat = js_max(-lim, js_min(lim, hit.lat));
     double s = wrap_s(hit.s, length_);
@@ -556,6 +558,7 @@ bool Game::enterBanana(Car& c) {
   for (auto& b : bananas_) {
     if (b.hit) continue;
     if (elapsed_ < b.liveAt) continue;
+    if (b.id > bananaSeqAtStep_) continue;  // dropped this step: show it for a frame first
     if (b.owner == c.id && elapsed_ < b.armAt) continue;
     if (inZone(c, b.s, b.lat, BANANA_RADIUS)) {
       hit = true;
@@ -894,6 +897,7 @@ void Game::update(double dtMs) {
   double dt = js_min(dtMs / 1000, 0.05);
   if (dt <= 0) return;
   elapsed_ += dt;
+  bananaSeqAtStep_ = bananaSeq_;
   computeCatchUp(dt);
   tickProps(dt);
   stepRockets(dt);
