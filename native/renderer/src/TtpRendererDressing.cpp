@@ -1499,6 +1499,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         for (const auto& [idx, n] : smoothNormals) {
             if (idx < mLandmarks.normals.size()) mLandmarks.normals[idx] = n;
         }
+        mLandmarks.bakeLight = true;
         tileMajor(mLandmarks, kSheetTile, kSheetMinTris);   // per vertex above: order-free
         buildMesh(mLandmarks);
     }
