@@ -470,8 +470,7 @@ the same exact weld (keyed on every attribute it carries): powder's heavy
 seconds 14.1 -> 13.6 ms, pretzel inside the noise, no pixel moved.
 
 Every track after all of it, one race each: fifteen tracks drop 0-3 frames in
-90 s; powder 11, pretzel 10, skysnake 8 (main-thread spikes in beginFrame,
-not load), flurry 5, gauntlet 4. Pretzel's vista went from ~201k to ~138k
+90 s; powder 11, pretzel 10, skysnake 8, flurry 5, gauntlet 4. Pretzel's vista went from ~201k to ~138k
 submitted triangles a frame (host census), yet its heavy seconds moved much
 less than that: geometry is no longer what limits it. One race an arm there
 now: the road is ~2.2-2.5 ms and as much off the quiet seconds as off the
@@ -483,6 +482,38 @@ disc on the stem, per-tile near and far lists): pretzel's heavy seconds
 (the near ring's every other vertex) and baking the train set's rails (only
 the spin subtree left instanced): gauntlet 13.1 -> 13.0, pretzel inside the
 noise.
+
+## The compiled app, and what is left of the drops (2026-10-06, later)
+
+Every reading above was taken on an adb install, which runs the app at
+dexopt `verify`. In a Perfetto trace of those races Compose's recompose and
+`Record View#draw` stacked on `ttp:render` into 18-27 ms doFrames; compiled
+`speed-profile` the longest doFrame was 13.2 ms. A store install compiles, so
+the main-thread drops were the bench's, not a player's. The bench compiles now
+(`shells/androidtv/CLAUDE.md`), and the APK carries an app baseline profile
+beside Compose's.
+
+Every track, store-style (clean install, one launch, `speed-profile` from the
+baseline profile alone), 4P pinned 960x540, 90 s: eleven tracks drop nothing,
+fifteen drop at most one frame; powder 12, pretzel 10, skysnake 6, flurry 4,
+gauntlet 4, skyline 3. Those drops fall in the seconds whose GPU p95 reaches
+~16.5 ms, the vista seconds (powder's is the grid at the start): the timer
+plus the app window's own redraw cross the budget there.
+
+beginFrame's spikes were not those drops. Most were the frame thread asleep on
+`Surface::mMutex`: Filament's FrameInfoManager asks for ~14 frame timestamps
+and the compositor timing every beginFrame, and FEngine::loop holds that lock
+across `queueBuffer` while the GPU is behind. `TtpVulkanPlatform` now reports
+compositor timing unsupported (nothing here read it). The rest was the skid
+layer's mip filter, whose clamps kept it scalar; the interior is now
+clamp-free, same bytes, and vectorises. Three interleaved races a side on
+pretzel and powder: beginFrame's worst 4.3-5.4 ms -> 1.5-3.5 ms in every
+race, heavy seconds and drops inside the noise.
+
+Measured and NOT taken: dropping vroad's masked-stamp block, which no shipping
+frame draws (the shadow lab's silhouette and hybrid arms use it): heavy seconds
+~0.3 ms lower over six pairs, drops unchanged. Baking vground's light into a
+vertex attribute was not built: the ground is a few thousand vertices.
 
 ## Every track at 4P pinned 960x540 (2026-10-04)
 

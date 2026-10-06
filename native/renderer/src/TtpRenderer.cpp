@@ -53,6 +53,12 @@ public:
         c.timeBeforeEvictionFbo = 60;
         return c;
     }
+    // FrameInfoManager asks the Surface for compositor timing and ~14 frame
+    // timestamps inside every Renderer::beginFrame, on the frame thread, under
+    // Surface::mMutex -- which FEngine::loop holds across vkQueuePresentKHR
+    // (queueBuffer, including its wait on the previous frame's GPU fence). Nothing
+    // here reads those fields: readGpuTimer takes gpuFrameDuration, a timer query.
+    bool isCompositorTimingSupported() const noexcept override { return false; }
 };
 
 // THE COMPILED PIPELINES OUTLIVE THE PROCESS. The reference box cannot prewarm

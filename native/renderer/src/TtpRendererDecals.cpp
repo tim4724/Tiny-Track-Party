@@ -305,7 +305,16 @@ void TtpRenderer::refreshSkidMips() {
                 const uint8_t* row0 = src + (size_t) std::min(2 * y, sh - 1) * sw;
                 const uint8_t* row1 = src + (size_t) std::min(2 * y + 1, sh - 1) * sw;
                 uint8_t* drow = dst + (size_t) y * dw;
-                for (int x = d.x0; x < d.x1; x++) {
+                // 2x+1 <= sw-1 for every x < sw/2, so the clamps only bind on
+                // the tail. The interior is the same integer sum unclamped, which
+                // the clamps kept scalar and which vectorises on armeabi-v7a.
+                const int xe = std::min(d.x1, sw / 2);
+                int x = d.x0;
+                for (; x < xe; x++) {
+                    drow[x] = (uint8_t) (((int) row0[2 * x] + row0[2 * x + 1]
+                            + row1[2 * x] + row1[2 * x + 1] + 2) >> 2);
+                }
+                for (; x < d.x1; x++) {
                     const int sx0 = std::min(2 * x, sw - 1);
                     const int sx1 = std::min(2 * x + 1, sw - 1);
                     drow[x] = (uint8_t) (((int) row0[sx0] + row0[sx1]

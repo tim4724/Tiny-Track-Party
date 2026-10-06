@@ -36,10 +36,11 @@ material {
     name : TtpVground,
     variables : [
         // fog.x = the per-vertex fog factor (ttp_fog.inc); fog.yzw = the SH
-        // ambient. sun.xyz = the sun term at full visibility; sun.w and
-        // suv.x = the shadow-map uv (highp: a half-precision uv steps by
-        // ~0.0005 near 1.0 — a quarter-texel of the 512-wide bake, enough to
-        // shimmer a contrasty shadow edge as the camera moves).
+        // ambient. sun.xyz = the sun term at full visibility; suv.xy = the
+        // shadow-map uv, whole in ONE varying so its tap is a bare varying
+        // read (vroad's rule). highp: a half-precision uv steps by ~0.0005
+        // near 1.0 — a quarter-texel of the 512-wide bake, enough to shimmer
+        // a contrasty shadow edge as the camera moves.
         { name : fog, precision : high },
         { name : sun, precision : high },
         { name : suv, precision : high }
@@ -69,6 +70,13 @@ fragment {
     #include "ttp_grade.inc"
     #include "ttp_fog.inc"
 
+    // The albedo tap, in a helper ON PURPOSE: matc adds filament_lodBias to
+    // every texture() written directly in material(), and a biased read may not
+    // be a plain varying read (vroad's skidInk). The bias is always 0 here.
+    vec3 albedoAt(highp vec2 uv) {
+        return texture(materialParams_albedo, uv).rgb;
+    }
+
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
         // Unlit adds `emissive` to `baseColor`; all the shading goes in the
@@ -78,11 +86,10 @@ fragment {
         // bound with a non-mipmap filter, so LOD 0 is what an implicit sample
         // would pick — and this call site stays legal if a branch ever grows
         // around it.
-        float vis = textureLod(materialParams_visMap,
-                vec2(variable_sun.w, variable_suv.x), 0.0).r;
+        float vis = textureLod(materialParams_visMap, variable_suv.xy, 0.0).r;
         vec3 light = variable_fog.yzw + variable_sun.xyz * vis;
         material.emissive = vec4(ttpFogMix(ttpGrade(
-                texture(materialParams_albedo, getUV0()).rgb * light),
+                albedoAt(getUV0()) * light),
                 variable_fog.x), 0.0);
     }
 }
@@ -112,7 +119,7 @@ vertex {
         highp vec2 suv = uvToRenderTargetUV(suvw.xy);
         material.fog = vec4(ttpFogFactor(material.worldPosition.xyz),
                 ttpMatteAmbient(n));
-        material.sun = vec4(ttpMatteSunTerm(n, NoL), suv.x);
-        material.suv = vec4(suv.y, 0.0, 0.0, 0.0);
+        material.sun = vec4(ttpMatteSunTerm(n, NoL), 0.0);
+        material.suv = vec4(suv, 0.0, 0.0);
     }
 }
