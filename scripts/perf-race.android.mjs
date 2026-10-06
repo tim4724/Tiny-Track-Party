@@ -34,7 +34,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { GRID_MS, lineStream } from './perf-race.mjs';
 import { ADB, findTvDevice } from './lib/androidtv-device.mjs';
 import {
-  arg, sleep, pct, phases, ACTIVITY, SCENARIO, EXTRA_SCENARIO, EXTRA_TRACK,
+  arg, sleep, pct, phases, ACTIVITY, PACKAGE, SCENARIO, EXTRA_SCENARIO, EXTRA_TRACK,
   EXTRA_PLAYERS, READY_TIMEOUT_MS, FEAT, hex,
 } from './lib/androidtv-bench.mjs';
 
@@ -171,6 +171,13 @@ export function makeAndroidBackend() {
   return {
     async launch({ players, track, seconds }) {
       serial = findTvDevice(arg('serial', null));
+
+      // AN adb INSTALL RUNS UNCOMPILED (dexopt `verify`): Compose recomposes in
+      // the interpreter, on the thread this bench prices, and a store install
+      // never pays that — Play compiles from the baseline profile. `speed`
+      // compiles all of it, so no arm depends on what a previous run profiled,
+      // and without -f it is a no-op once done.
+      adb('shell', 'cmd', 'package', 'compile', '-m', 'speed', PACKAGE);
 
       // A property outlives a force-stop AND a reinstall, so an arm that does
       // not set one silently inherits the last arm's. Every one of them is

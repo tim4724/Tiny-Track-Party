@@ -451,6 +451,15 @@ throw the first run away. It is also the reason a debug/release comparison is
 easy to get backwards: run them in that order and the variant gets the credit for
 the warmup.
 
+**AN adb INSTALL IS NOT WHAT A PLAYER RUNS.** It leaves the app at dexopt
+`verify`, so Compose recomposes in the interpreter and its frames stack on the
+very thread the renderer shares — a 4P race reads main-thread overruns a store
+install never has, because Play compiles `speed-profile` from the APK's baseline
+profile (Compose's own plus `app/src/main/baseline-prof.txt`, which marks the
+whole app hot). `perf-race.android.mjs` compiles `speed` before it launches; a
+harness that does not go through it has to do the same
+(`adb shell cmd package compile -m speed games.couchpad.tinytrack`).
+
 **The lobby's attract demo is deterministic but it does NOT pick a fixed track**
 — it previews whatever the tour last resolved to, so two runs either side of a
 race are two different scenes. Pin the track: the bench takes one.
