@@ -169,6 +169,15 @@ export const ASSET_CREDITS = [
   },
   {
     section: 'Software',
+    title: 'meshoptimizer (simplifies distant scenery)',
+    author: 'Arseny Kapoulkine',
+    license: 'MIT',
+    url: 'https://github.com/zeux/meshoptimizer',
+    notice: assetUrl('/assets/licenses/meshoptimizer-LICENSE.txt'),
+    covers: ['native/vendor/meshoptimizer'],
+  },
+  {
+    section: 'Software',
     title: 'qrcode-generator (join-code QR, in-browser)',
     author: 'Kazuhiko Arase',
     license: 'MIT',

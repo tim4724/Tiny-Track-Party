@@ -632,6 +632,9 @@ private:
         // bakeLight sheet. Only a mesh whose CPU copy is never rewritten by
         // index after build may say so.
         bool weld = false;
+        // OPT-IN for a mesh buildMesh welds (see `weld`): each of its
+        // renderables gets a far form simplified to kFarTol (mLods).
+        bool simplify = false;
         // Flat-decal template in car-local (x, z) with its rest alpha: the
         // conform rewrites `verts` into world space from this every frame.
         struct Local { float x, z; uint8_t a; };
@@ -876,54 +879,55 @@ private:
         // The paint entries this chunk was built with. Written once per track,
         // so it is kept only so the ablation debug can put the channel back.
         int paintN = 0;
-        // THE DECK'S FAR RIBBON. Two index ranges over the SAME vertex buffer —
-        // the shipped ribbon (mRoad.ib) and the far one (mRoadFarIb, built by
-        // buildRoadMesh) — and chooseDeckLod hands the chunk one of them per
-        // CELL, by that cell's camera distance to this box. Nothing else about
-        // the chunk changes: same entity, same material instance, same bounds
-        // (the far ribbon's corners are a subset of the fine one's).
-        utils::Entity entity;
-        uint32_t fullOff = 0, fullCnt = 0, farOff = 0, farCnt = 0;
-        filament::math::float3 boxMin{ 0 }, boxMax{ 0 };
-        int lod = 0;
     };
     std::vector<RoadChunk> mRoadChunks;
-    // See RoadChunk. The CPU copy stays alive for the run and is BURIED with
-    // the road (buryMeshBuffers' rule); the buffer dies in releaseScene.
+    // The deck's far ribbon (buildRoadMesh): a second index buffer over the
+    // road's own vertices, listed in mLods per chunk. The CPU copy stays alive
+    // for the run and is BURIED with the road (buryMeshBuffers' rule); the
+    // buffer dies in releaseScene.
     filament::IndexBuffer* mRoadFarIb = nullptr;
     std::vector<uint32_t> mRoadFarIdx;
-    // EVERY cell count draws the far ribbon past its gate, one player included
-    // (the user's call, 2026-09-02; it began as a split-only trade). The gate
-    // is the one below, so a big cell simply pushes it out — a 1080-line
-    // single cell past ~80 u, a 4K one past the fog.
-    //
-    // How far a far-ribbon chord may leave the rings it spans, in world units
-    // (buildRoadMesh), and how many pixels of that a cell may show: the two
-    // together put the near edge of the far ribbon where the chord error is
-    // under a pixel for THAT cell's size (renderCells). Dropping the gate
-    // altogether measured 1.2 ms more on the box's 4P heavy seconds and was
-    // shipped for an hour; the user wanted a threshold back.
+    // THE FAR FORMS. A renderable listed here owns two index ranges over its
+    // own vertices: the one it ships and a cheaper one that strays at most
+    // `err` world units from it. chooseLods points it at one of them per CELL,
+    // the far one wherever the nearest point of its box is far enough that
+    // `err` covers under kLodPx pixels of THAT cell, so a big cell pushes the
+    // swap out on its own and a 4-way split's small ones pull it in. Nothing
+    // else about the renderable changes: culling, material and decal fold are
+    // its own. Listed: the deck's chunks (buildRoadMesh) and every static mesh
+    // built with `simplify` (buildMesh).
+    struct LodRange {
+        utils::Entity entity;
+        filament::VertexBuffer* vb = nullptr;
+        filament::IndexBuffer* ib = nullptr;      // the near range's buffer
+        filament::IndexBuffer* farIb = nullptr;   // the far range's
+        uint32_t off = 0, cnt = 0, farOff = 0, farCnt = 0;
+        filament::math::float3 lo{ 0 }, hi{ 0 };
+        float err = 0;
+        bool far = false;
+    };
+    std::vector<LodRange> mLods;
+    // EVERY cell count draws the far forms past their gate, one player included
+    // (the user's call for the deck, 2026-09-02; it began as a split-only
+    // trade). With the deck's tolerance a 270-line cell swaps past ~10 u, a
+    // 1080-line one past ~40 u and a 2160-line one past ~80 u. Dropping the
+    // gate altogether measured 1.2 ms more on the box's 4P heavy seconds and
+    // was shipped for an hour; the user wanted a threshold back.
+    static constexpr float kLodPx = 2.0f;   // the user asked for aggressive
+    // How far a far-ribbon chord may leave the rings it spans (buildRoadMesh).
     static constexpr float kDeckLodTol = 0.08f;
-    static constexpr float kDeckLodChordPx = 2.0f;   // the user asked for aggressive
-    // Picks per chunk for one cell, and writes the cell's far-chunk bitmask
-    // into view globals 1..3 when the tint is armed (zeros otherwise).
-    void chooseDeckLod(filament::View* v, const filament::math::float3& cam,
-            float near, bool enabled);
-    // kDebugNoDeckLod: every chunk stays on the fine ribbon in every cell, so
-    // a sweep prices the far ribbon as interleaved arms.
-    bool mDeckLodOff = false;
-    // kDebugDeckLodTint: the far ribbon painted magenta, per cell, so the
-    // swap can be seen — it reuses the fine ribbon's vertices and colours and
-    // is otherwise invisible. It shipped ON while the trade was being judged;
-    // the user turned it off 2026-09-02.
-    bool mDeckLodTint = false;
-    static constexpr uint32_t kDebugNoDeckLod = 0x1000000;
-    static constexpr uint32_t kDebugDeckLodTint = 0x4000000;
-    // TTP_DEBUG_DECK_LOD_ALL — SET draws EVERY chunk with the far ribbon, gate
-    // or no gate, own car included: what the trade looks like where the eye
-    // can resolve it, which past the gate it cannot.
-    static constexpr uint32_t kDebugDeckLodAll = 0x8000000;
-    bool mDeckLodAll = false;
+    // How far a static mesh's simplified far form may stray (buildMesh).
+    static constexpr float kFarTol = 0.2f;
+    // Picks every listed renderable's range for a camera at `cam` in a cell
+    // with `pxPerRad` pixels per radian; 0 puts them all on their near range.
+    void chooseLods(const filament::math::float3& cam, float pxPerRad);
+    // TTP_DEBUG_NO_LOD keeps every near range, so a sweep prices the far
+    // forms as interleaved arms; TTP_DEBUG_LOD_ALL draws every far range,
+    // gate or no gate, own car included: what the trade looks like where the
+    // eye can resolve it, which past the gate it cannot.
+    static constexpr uint32_t kDebugNoLod = 0x1000000;
+    static constexpr uint32_t kDebugLodAll = 0x8000000;
+    bool mLodOff = false, mLodAll = false;
     // Ditto for the whole-lap fallback chunk.
     std::vector<DeckDecal> mRoadInstLastMask, mRoadInstLastProf;
     int mRoadInstPaintN = 0;               // and its RoadChunk::paintN
@@ -1055,8 +1059,7 @@ private:
     uint32_t mOverlayUsed = 0;
     // FOLDED: the quads live in the main scene and each race cell draws its
     // own inside its pass (voverlay.mat says how), and mOverlayView does not
-    // render. Unfolded — a present pass (antialias) or the ribbon tint, which
-    // owns the view globals — they live in mOverlayScene as before.
+    // render. Unfolded (a present pass: antialias) they live in mOverlayScene.
     bool mOverlayFolded = false;
     void ensureOverlay();
     // Next pooled quad, placed at (x, y, w, h) in DEVICE pixels with a TOP-LEFT
@@ -1946,9 +1949,16 @@ private:
             // its own bounds and frustum culling ON. 0 = one renderable, no
             // culling (the default every dynamic mesh wants).
             uint32_t chunkTris = 0);
-    // Merge the vertices equal in position AND colour bits, keeping each one's
-    // first slot and the triangle order; buildMesh's own (see its call).
-    static void weldExact(Mesh& m);
+    // Merge the vertices equal in every attribute they carry (and, with
+    // keyNormals, in their CPU normal too), keeping each one's first slot and
+    // the triangle order. `remapOut` answers old index -> new, for an index
+    // list built over the old numbering.
+    static void weldExact(Mesh& m, bool keyNormals,
+            std::vector<uint32_t>* remapOut = nullptr);
+    // One range's simplified far form, appended to m.idx (buildMesh's own).
+    // `scale` is meshopt's for the whole vertex set; `lockBorder` keeps a
+    // range's open edges where a neighbouring range shares them.
+    static LodRange farForm(Mesh& m, size_t idx0, size_t idxN, float scale, bool lockBorder);
     // An empty VertexBuffer in `layout` (see Mesh::Layout); buildMesh's own.
     filament::VertexBuffer* buildVertexBuffer(uint32_t vertexCount, const Mesh::Layout& layout);
     void destroyMesh(Mesh& m);

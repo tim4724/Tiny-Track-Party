@@ -62,6 +62,7 @@ export const SHARED_NOTICES = {
   'filament-LICENSE.txt': 'public/assets/licenses/filament-LICENSE.txt',
   'openlibm-LICENSE.md': 'public/assets/licenses/openlibm-LICENSE.md',
   'double-conversion-LICENSE.txt': 'public/assets/licenses/double-conversion-LICENSE.txt',
+  'meshoptimizer-LICENSE.txt': 'public/assets/licenses/meshoptimizer-LICENSE.txt',
 };
 
 /// The privacy and imprint pages, read out of the display's legal footer so a TV

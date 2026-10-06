@@ -53,6 +53,16 @@ if [ ! -f "$SDK/include/filament/Engine.h" ] || [ ! -x "$MATC" ]; then
     (cd "$FILAMENT_SRC" && ninja -C out/cmake-wasm-release install > /dev/null)
 fi
 
+# The renderer calls the meshoptimizer every SDK slice links, through a header
+# vendored because no SDK installs it (native/vendor/meshoptimizer/VENDOR.md).
+# Its API has C linkage, so a header that drifted from the library would still
+# link: hold it to the pinned checkout's copy here, where that copy exists.
+if ! cmp -s "$FILAMENT_SRC/third_party/meshoptimizer/src/meshoptimizer.h" \
+        "$ROOT/native/vendor/meshoptimizer/meshoptimizer.h"; then
+    echo "native/vendor/meshoptimizer/meshoptimizer.h differs from the pinned Filament's; re-vendor it (VENDOR.md)" >&2
+    exit 1
+fi
+
 # --- 3. materials -----------------------------------------------------------
 # opengl/mobile, via the shared compiler script — an Android TV build wants the
 # SAME two arguments (GLES3 is GLES3), tvOS wants -a metal.

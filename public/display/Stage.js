@@ -252,7 +252,7 @@ export class Stage {
     this._dressKeep = Number.isFinite(dk) && dk >= 0 && dk < 1 ? dk : null;
     this._dressSheetsOff = params.get('dresssheets') === '0';
     // DEBUG (?features=0x800DFFC): the whole ttp_display_debug_features mask,
-    // for the bits that have no knob of their own (the deck's far-ribbon ones).
+    // for the bits that have no knob of their own (the far-form ones, say).
     // Seven hex digits: 0x800DFFC and 0x80DFFC are different masks.
     const fm = parseInt(params.get('features'), 16);
     this._features = Number.isFinite(fm) ? fm : null;

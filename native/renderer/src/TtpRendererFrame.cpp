@@ -463,7 +463,7 @@ MaterialInstance* TtpRenderer::overlayQuad(float x, float y, float w, float h) {
 void TtpRenderer::drawOverlay(const TtpFrameInput& input) {
     const uint32_t before = mOverlayUsed;
     mOverlayUsed = 0;
-    mOverlayFolded = !mAntialias && !mDeckLodTint;
+    mOverlayFolded = !mAntialias;
     if (mOverlayMaterial && input.hudCount && mWidth && mHeight) {
         // Every size here is a fraction of something this function can measure:
         // the cell and the canvas for the bar, the canvas alone for the rules.
@@ -2821,11 +2821,10 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
     // visible layers are what decides. Bits 0 and 1 are left alone — 1 is the
     // shadow bake's caster set, and its view filters on that alone.
     if (mFeatureTagged) mView->setVisibleLayers(kFeatAll, mFeatureMask);
-    // The deck's far ribbon (RoadChunk) is every race cell's trade past that
-    // cell's own gate; only the overviews draw the fine ribbon everywhere.
-    const bool deckLod = input.viewCount > 0 && !mDeckLodOff
-            && (input.flags & TTP_FRAME_OVERVIEW) == 0;
-    if (!deckLod) chooseDeckLod(nullptr, float3{ 0 }, 0.0f, false);
+    // The far forms (LodRange) are every race cell's trade past that cell's
+    // own gate; only the overviews draw every near range.
+    const bool lods = input.viewCount > 0 && (input.flags & TTP_FRAME_OVERVIEW) == 0;
+    if (!lods) chooseLods(float3{ 0 }, 0.0f);
     if (input.viewCount == 0) {
         restoreAmbientRange();   // the overview draws the cloud's whole range
         if (mOverlayFolded) {
@@ -2904,16 +2903,11 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
                             mPollen.vb, mAmbCullIbs[slot], mAmbCellOff[i], mAmbCellCnt[i]);
                 }
             }
-            if (deckLod) {
-                // Where a chord of kDeckLodTol subtends kDeckLodChordPx in THIS
-                // cell: d = tol * (cell height / (2 tan(fov/2))) / px. A
-                // 216-line cell at 55 degrees puts it near 17 u, a 4K cell
-                // past 80 u — the trade scales itself to the pixels it has.
-                const float pxPerRad = (float) rect.h
-                        / (2.0f * std::tan(views[i].fov * 0.5f * (float) M_PI / 180.0f));
-                chooseDeckLod(v, world[3].xyz, kDeckLodTol * pxPerRad / kDeckLodChordPx, true);
-            } else {
-                v->setMaterialGlobal(1, float4{ 0.0f });   // no far ribbon, no tint
+            if (lods) {
+                // THIS cell's pixels per radian, so the trade scales itself to
+                // the pixels it has (TtpRenderer.h, LodRange).
+                chooseLods(world[3].xyz, (float) rect.h
+                        / (2.0f * std::tan(views[i].fov * 0.5f * (float) M_PI / 180.0f)));
             }
             mProfile[kProfCellSetup] += ttpNowMs() - tMark; tMark = ttpNowMs();
             mRenderer->render(v);
@@ -2934,53 +2928,32 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
 // across cells is the bug both of them were written to fix.
 // ---------------------------------------------------------------------------
 
-// The deck's LOD pick for one cell (RoadChunk): a chunk whose box is farther
-// than `near` from this cell's camera draws the far ribbon. A swap is a
-// geometry re-point on the same entity, so nothing about culling, materials or
-// the decal fold moves — and it is stated only when it CHANGES, because a
-// chunk near one cell and far from the next flips every frame while the rest
-// hold. `enabled` false puts every chunk back on the fine ribbon.
+// The far-form pick for one cell (LodRange): a renderable whose box is farther
+// from this cell's camera than the distance at which its error covers kLodPx
+// pixels draws its far range. A swap is a geometry re-point on the same
+// entity, so nothing about culling, materials or the decal fold moves, and it
+// is stated only when it CHANGES, because a renderable near one cell and far
+// from the next flips every frame while the rest hold. pxPerRad 0 puts every
+// renderable back on its near range.
 //
-// MEASURED on the Google TV Streamer at 4P pinned 768x432: the seconds every
-// cell spends looking down the straight — the one stretch of the lap that
-// decided whether 432@60 held — lose about a third of their GPU time to
-// this. docs/perf/androidtv-frame-map.md, 2026-09-02, has every arm.
-void TtpRenderer::chooseDeckLod(View* v, const float3& cam, float near, bool enabled) {
-    if (!mRoadFarIb || !mRoad.vb || !mRoad.ib) return;
+// MEASURED on the Google TV Streamer at 4P pinned 768x432, for the deck: the
+// seconds every cell spends looking down the straight, the one stretch of the
+// lap that decided whether 432@60 held, lose about a third of their GPU time
+// to its far ribbon. docs/perf/androidtv-frame-map.md, 2026-09-02, has every
+// arm; the decoration's far forms are priced beside it.
+void TtpRenderer::chooseLods(const float3& cam, float pxPerRad) {
     auto& rcm = mEngine->getRenderableManager();
-    // The debug tint's far-chunk bitmask, EIGHT bits per channel over view
-    // globals 1..3 (vroad.mat says why: a view global, and fp16-exact).
-    constexpr int kTintChannels = 11;
-    float tint[kTintChannels] = {};
-    for (size_t i = 0; i < mRoadChunks.size(); i++) {
-        RoadChunk& c = mRoadChunks[i];
-        int lod = 0;
-        if (enabled && c.farCnt) {
-            const float3 q = clamp(cam, c.boxMin, c.boxMax);   // nearest point of the box
-            const float3 d = q - cam;
-            lod = (mDeckLodAll || dot(d, d) > near * near) ? 1 : 0;
-        }
-        if (lod && i < kTintChannels * 8) tint[i / 8] += (float) (1u << (i % 8));
-        if (lod == c.lod) continue;
-        c.lod = lod;
-        const auto ri = rcm.getInstance(c.entity);
+    const float k = mLodOff ? 0.0f : pxPerRad / kLodPx;
+    for (LodRange& r : mLods) {
+        const float near = r.err * k;
+        const float3 d = clamp(cam, r.lo, r.hi) - cam;   // to the nearest point of the box
+        const bool far = k > 0.0f && (mLodAll || dot(d, d) > near * near);
+        if (far == r.far) continue;
+        r.far = far;
+        const auto ri = rcm.getInstance(r.entity);
         if (!ri) continue;
-        if (lod) {
-            rcm.setGeometryAt(ri, 0, RenderableManager::PrimitiveType::TRIANGLES,
-                    mRoad.vb, mRoadFarIb, c.farOff, c.farCnt);
-        } else {
-            rcm.setGeometryAt(ri, 0, RenderableManager::PrimitiveType::TRIANGLES,
-                    mRoad.vb, mRoad.ib, c.fullOff, c.fullCnt);
-        }
-    }
-    if (v) {
-        if (mDeckLodTint) {
-            v->setMaterialGlobal(1, float4{ tint[0], tint[1], tint[2], 1.0f });
-            v->setMaterialGlobal(2, float4{ tint[3], tint[4], tint[5], tint[6] });
-            v->setMaterialGlobal(3, float4{ tint[7], tint[8], tint[9], tint[10] });
-        } else {
-            v->setMaterialGlobal(1, float4{ 0.0f });
-        }
+        rcm.setGeometryAt(ri, 0, RenderableManager::PrimitiveType::TRIANGLES, r.vb,
+                far ? r.farIb : r.ib, far ? r.farOff : r.off, far ? r.farCnt : r.cnt);
     }
 }
 

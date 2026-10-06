@@ -443,6 +443,47 @@ the end of eglSwap); the window's one full-window op is its clear, which
 PowerVR turns into a draw (`fPerformColorClearsAsDraws`) and nothing else
 zeroes; render-pass load/store flags are already what a tiler wants.
 
+## Decoration far forms and the lone kit copies (2026-10-06)
+
+Every track at 4P pinned 960x540 on `1.0-39968945` (coarse flowers and the
+weld in): fourteen tracks drop 0-5 frames in 90 s; pretzel 30, flurry 23,
+powder 21, gauntlet 11, skysnake 10, driftwood 8.
+
+Two changes against that, three races a side interleaved, heavy seconds
+(`heavywin`: mean of the ten heaviest) and skips per 80 s:
+
+| change | flurry | powder | pretzel |
+|---|---|---|---|
+| exact geometry (sphere pole triangles, parked props out of the scene, hills tiled) + lone kit copies baked like their runs | 15.2 -> 14.7 ms, 21 -> 15 | 14.7 -> 14.5, 16 -> 18 | 14.8 -> 15.0, 34 -> 32 |
+| per-cell far forms for the baked kit runs and the landmarks (`meshopt_simplify`, 0.2 u, the deck's gate) | 14.8 -> 14.5, 13 -> 8 | 14.7 -> 14.3, 20 -> 13 | 14.6 -> 14.5, 29 -> 20 |
+
+The lone copies were lit per vertex and per fragment beside identical baked
+copies of the same model; baked they shade like their neighbours (a palm's
+leaves come out a little darker). A host census put the snow vistas' lone
+copies at 10-13k lit vertices a cell, but the box bought less than that
+predicted. The far forms keep 30-50% of a kit run's triangles and differ from
+it by under a pixel at the swap (an 8-view software render against a 1 px
+shift); forced everywhere (`TTP_DEBUG_LOD_ALL`) the trees still read.
+
+The deck was a soup, every quad owning its corners, so it now goes through
+the same exact weld (keyed on every attribute it carries): powder's heavy
+seconds 14.1 -> 13.6 ms, pretzel inside the noise, no pixel moved.
+
+Every track after all of it, one race each: fifteen tracks drop 0-3 frames in
+90 s; powder 11, pretzel 10, skysnake 8 (main-thread spikes in beginFrame,
+not load), flurry 5, gauntlet 4. Pretzel's vista went from ~201k to ~138k
+submitted triangles a frame (host census), yet its heavy seconds moved much
+less than that: geometry is no longer what limits it. One race an arm there
+now: the road is ~2.2-2.5 ms and as much off the quiet seconds as off the
+heavy ones, the terrain ~1.5, the decoration and the cars inside the noise.
+
+**Measured null and NOT kept:** flower stand-ins past a 0.4 u gate (a petal
+disc on the stem, per-tile near and far lists): pretzel's heavy seconds
+14.6 -> 14.7, tangle 14.4 -> 14.1, three races a side. Six-sided far pillars
+(the near ring's every other vertex) and baking the train set's rails (only
+the spin subtree left instanced): gauntlet 13.1 -> 13.0, pretzel inside the
+noise.
+
 ## Every track at 4P pinned 960x540 (2026-10-04)
 
 One 90 s race per track, `1.0-6a9af848`. This is what a 540 floor with no
@@ -616,7 +657,7 @@ the GPU downclocks into the gap and their p50 is a PACED span: every ablation
 delta taken from them came back compressed two to three times. Rank on the
 heavy seconds and nothing else.
 
-**The fix is the deck's FAR RIBBON** (`RoadChunk`, `chooseDeckLod`): a second
+**The fix is the deck's FAR RIBBON** (now a `LodRange` chosen by `chooseLods`): a second
 index buffer over the road's own vertices in which each strip draws a run of
 same-coloured rings as one quad, chord error capped at 0.08 u, and each chunk
 swapped onto it per cell where that chord is under a pixel for the cell's size
@@ -668,15 +709,15 @@ distance gate said — which is why every nearer gate measured null. Cutting
 chunks at 26 rings (~12 u) takes the heavy seconds from 15.4-15.8 to
 14.2-14.5 ms; 13 rings reads 14.7 and adds 0.7 ms of frame thread (each chunk
 is a renderable and a decal fold). Shipped at 26; while the trade was being
-judged the ribbon was painted magenta (now `TTP_DEBUG_DECK_LOD_TINT`,
-0x400DFFC): 14.9 ms and 36 clean seconds of 40 with the tint on.
+judged the ribbon was painted magenta (a debug bit since removed):
+14.9 ms and 36 clean seconds of 40 with the tint on.
 
 **The gate's whole remaining value is 1.2 ms**, measured by drawing the whole
 deck on the ribbon (interleaved, pinned 432, two reps: heavy seconds 15.01 /
 14.84 → 13.56 / 13.91 ms, paced 10.6 → 9.6, clean seconds unchanged). That
 shipped briefly and was taken back for a threshold, which now applies at
 every cell count, one player included. The threshold then went to a
-TWO-pixel chord (`kDeckLodChordPx`, the gate halved: ~8 u in a 4P cell on the
+TWO-pixel chord (now `kLodPx`, the gate halved: ~8 u in a 4P cell on the
 box): 14.63 / 14.65 ms on the heavy seconds, 34 clean seconds of 40 — a third
 of the way from the one-pixel gate to no gate.
 

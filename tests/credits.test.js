@@ -248,6 +248,7 @@ test('the served notices are byte-identical to the sources they were copied from
   const copies = [
     ['native/vendor/fdlibm/LICENSE.md', 'public/assets/licenses/openlibm-LICENSE.md'],
     ['native/vendor/double-conversion/LICENSE', 'public/assets/licenses/double-conversion-LICENSE.txt'],
+    ['native/vendor/meshoptimizer/LICENSE', 'public/assets/licenses/meshoptimizer-LICENSE.txt'],
   ];
   for (const [src, served] of copies) {
     assert.ok(fs.readFileSync(path.join(ROOT, src)).equals(fs.readFileSync(path.join(ROOT, served))),
@@ -278,6 +279,7 @@ test('every served license text is intact', () => {
   const marks = {
     'openlibm-LICENSE.md': /Permission is hereby granted, free of charge/,
     'double-conversion-LICENSE.txt': /Redistributions of source code must retain/,
+    'meshoptimizer-LICENSE.txt': /Permission is hereby granted, free of charge/,
     'qrcode-generator-LICENSE.txt': /The above copyright notice and this permission notice/,
     'filament-LICENSE.txt': /Apache License[\s\S]*Version 2\.0, January 2004/,
     'emscripten-LICENSE.txt': /University of Illinois\/NCSA Open Source License/,

@@ -259,8 +259,7 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
     // The pools, and each model's OWN footprint. The scatter above cannot know
     // how big a model is — that is in the GLB and nowhere else — so the spacing
     // rule below cannot run until the assets are here. Pools are sized to the
-    // candidates; what the rule then drops parks out of sight, which is the same
-    // thing the item-box pool does with its spare entries.
+    // candidates; what the rule then drops leaves the scene.
     std::vector<float> reach(tb.prModelCount, 0.0f);  // half-footprint at scale 1
     for (uint32_t m = 0; m < tb.prModelCount; m++) {
         size_t count = 0;
@@ -309,7 +308,8 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
         mShadowSpots.push_back({ p.x, p.z, pr, p.h });
     }
 
-    // Pose what survived; park the rest under the floor.
+    // Pose what survived; the rest leave the scene. Parked under the floor
+    // instead, they were merged, baked and submitted to every cell like a prop.
     for (uint32_t m = 0; m < tb.prModelCount; m++) {
         if (!mPropAssets[m]) continue;
         size_t k = 0;
@@ -332,10 +332,11 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
             }
             k++;
         }
-        for (; k < mPropInstances[m].size(); k++) {
-            tcm.setTransform(tcm.getInstance(mPropInstances[m][k]->getRoot()),
-                    mat4f::translation(float3{ 0, -100, 0 }));
+        for (size_t j = k; j < mPropInstances[m].size(); j++) {
+            gltfio::FilamentInstance* inst = mPropInstances[m][j];
+            mScene->removeEntities(inst->getEntities(), inst->getEntityCount());
         }
+        mPropInstances[m].resize(k);
     }
 }
 
@@ -1504,6 +1505,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
             if (idx < mLandmarks.normals.size()) mLandmarks.normals[idx] = n;
         }
         mLandmarks.bakeLight = true;
+        mLandmarks.simplify = true;
         tileMajor(mLandmarks, kSheetTile, kSheetMinTris);   // per vertex above: order-free
         buildMesh(mLandmarks);
     }
@@ -1978,7 +1980,7 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
 // future asset honest rather than half-merged).
 void TtpRenderer::mergeInstancedSet(const gltfio::FilamentAsset* asset,
         const std::vector<gltfio::FilamentInstance*>& insts, bool dynamic) {
-    if (!asset || insts.size() < 2 || !mEngine) return;
+    if (!asset || insts.empty() || !mEngine) return;
     const auto keyIt = mAssetMeshKey.find(asset);
     if (keyIt == mAssetMeshKey.end()) return;
     const auto meshIt = mGlbMeshCache.find(keyIt->second);

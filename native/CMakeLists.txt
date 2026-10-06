@@ -1007,6 +1007,10 @@ if(DEFINED FILAMENT_SDK)
     # the same reason: neither library may LINK the other, or libttp-runtime
     # would stop building on the legs with no Filament SDK.
     ${CMAKE_CURRENT_SOURCE_DIR}/libttp-runtime)
+  # The header of the meshoptimizer every SDK slice already links but does not
+  # install (vendor/meshoptimizer/VENDOR.md).
+  target_include_directories(ttp_renderer PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/vendor/meshoptimizer)
   # libttp_track is here for the built-track TYPE the scene is meshed from
   # (ttp::RaceTrack). The renderer never resolves a track ID — which track to
   # build stays the runtime's call — so this adds a struct, not a catalogue.

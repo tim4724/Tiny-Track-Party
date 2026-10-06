@@ -10,6 +10,8 @@
 #include "../generated/kit_colors.h"
 
 #include "ttp/glb.h"
+// The simplifier the Filament SDK already links (native/vendor/meshoptimizer).
+#include <meshoptimizer.h>
 
 #include <utils/Log.h>
 
@@ -319,7 +321,8 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
     // split vertices for attributes the bake has already consumed, so a baked
     // run comes out with about half of them doubled; each cell pays for every
     // one. The triangle order and every rasterised value are unchanged.
-    if ((fold || m.weld) && !lit && !uv && !baked) weldExact(m);
+    const bool welded = (fold || m.weld) && !lit && !uv && !baked;
+    if (welded) weldExact(m, false);
     m.layout = Mesh::Layout{ lit, uv, baked };
     const uint8_t uvSlot = m.layout.uvSlot();
     const uint8_t customSlot = m.layout.customSlot();
@@ -351,6 +354,36 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
         m.vb->setBufferAt(*mEngine, 1, VertexBuffer::BufferDescriptor(
                 m.quats.data(), m.quats.size() * sizeof(math::quatf), nullptr));
     }
+    const size_t triCount = m.idx.size() / 3;
+    // One renderable, or a chain of them over ranges of the SAME buffers. The
+    // road is the reason: a whole circuit in one draw is a whole circuit's
+    // worth of vertices every frame, in every split-screen cell, however little
+    // of it is on screen. Three chunks its ribbon for the same reason.
+    const size_t perChunk = chunkTris ? std::min<size_t>(chunkTris, triCount) : triCount;
+    // The ranges: the tile ranges tileMajor() left, or `perChunk` off the order.
+    std::vector<std::pair<size_t, size_t>> ranges;
+    if (!m.tileStarts.empty()) {
+        for (size_t i = 0; i < m.tileStarts.size(); i++) {
+            const size_t t0 = m.tileStarts[i];
+            const size_t t1 = i + 1 < m.tileStarts.size() ? m.tileStarts[i + 1] : triCount;
+            if (t1 > t0) ranges.emplace_back(t0, t1 - t0);
+        }
+    } else {
+        for (size_t t0 = 0; t0 < triCount; t0 += perChunk) {
+            ranges.emplace_back(t0, std::min(perChunk, triCount - t0));
+        }
+    }
+    // Each range's FAR FORM (mLods), appended to the same index buffer: the
+    // simplifier only ever drops triangles and re-points corners at vertices
+    // the range already owns, so colours and the baked light come along exact.
+    std::vector<LodRange> far(ranges.size());
+    if (welded && m.simplify) {
+        const float scale = meshopt_simplifyScale(&m.verts[0].px, m.verts.size(), sizeof(Vertex));
+        for (size_t i = 0; i < ranges.size(); i++) {
+            const auto [t0, n] = ranges[i];
+            far[i] = farForm(m, t0 * 3, n * 3, scale, ranges.size() > 1);
+        }
+    }
     m.ib = IndexBuffer::Builder()
             .indexCount((uint32_t) m.idx.size())
             .bufferType(IndexBuffer::IndexType::UINT)
@@ -371,35 +404,18 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
             lo = min(lo, float3{ v.px, v.py, v.pz });
             hi = max(hi, float3{ v.px, v.py, v.pz });
         }
-        return filament::Box{ (lo + hi) * 0.5f, max((hi - lo) * 0.5f, float3{ 1e-3f }) };
+        return std::pair{ lo, hi };
     };
     MaterialInstance* const mi = materialInstance ? materialInstance
             : lit ? (mLitPlainMaterial ? mLitPlainMaterial : mLitMaterial)
                             ->getDefaultInstance()
                   : mMaterial->getDefaultInstance();
-    const size_t triCount = m.idx.size() / 3;
-    // One renderable, or a chain of them over ranges of the SAME buffers. The
-    // road is the reason: a whole circuit in one draw is a whole circuit's
-    // worth of vertices every frame, in every split-screen cell, however little
-    // of it is on screen. Three chunks its ribbon for the same reason.
-    const size_t perChunk = chunkTris ? std::min<size_t>(chunkTris, triCount) : triCount;
-    // The ranges: the tile ranges tileMajor() left, or `perChunk` off the order.
-    std::vector<std::pair<size_t, size_t>> ranges;
-    if (!m.tileStarts.empty()) {
-        for (size_t i = 0; i < m.tileStarts.size(); i++) {
-            const size_t t0 = m.tileStarts[i];
-            const size_t t1 = i + 1 < m.tileStarts.size() ? m.tileStarts[i + 1] : triCount;
-            if (t1 > t0) ranges.emplace_back(t0, t1 - t0);
-        }
-    } else {
-        for (size_t t0 = 0; t0 < triCount; t0 += perChunk) {
-            ranges.emplace_back(t0, std::min(perChunk, triCount - t0));
-        }
-    }
-    for (const auto& [t0, n] : ranges) {
+    for (size_t i = 0; i < ranges.size(); i++) {
+        const auto [t0, n] = ranges[i];
+        const auto [lo, hi] = boundsOf(t0 * 3, n * 3);
         utils::Entity e = utils::EntityManager::get().create();
         RenderableManager::Builder(1)
-                .boundingBox(boundsOf(t0 * 3, n * 3))
+                .boundingBox({ (lo + hi) * 0.5f, max((hi - lo) * 0.5f, float3{ 1e-3f }) })
                 // Blend-pass draw order (default 4), for the few blended
                 // sheets that must stack deterministically instead of by an
                 // arbitrary depth sort.
@@ -420,46 +436,89 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
                 .build(*mEngine, e);
         if (t0 == 0) m.entity = e; else m.chunks.push_back(e);
         if (addToScene) mScene->addEntity(e);
+        if (far[i].farCnt) {
+            LodRange& r = far[i];
+            r.entity = e;
+            r.vb = m.vb;
+            r.ib = r.farIb = m.ib;
+            r.off = (uint32_t) (t0 * 3);
+            r.cnt = (uint32_t) (n * 3);
+            r.lo = lo;
+            r.hi = hi;
+            mLods.push_back(r);
+        }
     }
     m.inScene = addToScene;
     return true;
 }
 
-void TtpRenderer::weldExact(Mesh& m) {
-    struct Key {
-        uint32_t w[4];
-        bool operator==(const Key& o) const {
-            return w[0] == o.w[0] && w[1] == o.w[1] && w[2] == o.w[2] && w[3] == o.w[3];
-        }
-    };
+// One range's far form: the range simplified to at most kFarTol world units
+// of error, appended to m.idx. Kept only where it saves a fifth or more of
+// the range, since below that the swap is not worth a renderable's state.
+// A tiled mesh locks each range's open edges: two neighbours simplified apart
+// would otherwise each move their shared seam, and a near tile beside a far
+// one (or two far ones) would open a crack along it.
+// Answers the far offset, count and reached error (farCnt 0 = no far form).
+TtpRenderer::LodRange TtpRenderer::farForm(Mesh& m, size_t idx0, size_t idxN,
+        float scale, bool lockBorder) {
+    LodRange r;
+    if (!(scale > 0.0f)) return r;
+    std::vector<uint32_t> dst(idxN);
+    float err = 0;
+    dst.resize(meshopt_simplify(dst.data(), m.idx.data() + idx0, idxN, &m.verts[0].px,
+            m.verts.size(), sizeof(Vertex), 0, kFarTol / scale,
+            lockBorder ? meshopt_SimplifyLockBorder : 0, &err));
+    if (dst.empty() || dst.size() * 5 > idxN * 4) return r;
+    r.farOff = (uint32_t) m.idx.size();
+    r.farCnt = (uint32_t) dst.size();
+    r.err = err * scale;
+    m.idx.insert(m.idx.end(), dst.begin(), dst.end());
+    return r;
+}
+
+void TtpRenderer::weldExact(Mesh& m, bool keyNormals, std::vector<uint32_t>* remapOut) {
+    // The key is every attribute the vertex carries to the GPU, bit for bit,
+    // plus its normal where a later CPU pass still reads it (the road's light
+    // re-fill); a folded sheet's normals are spent and must not split it.
+    const size_t nv = m.verts.size();
+    const bool nrm = m.normals.size() == nv, uv = m.uvs.size() == nv;
+    const bool c0 = m.custom0.size() == nv;
+    constexpr size_t kMaxWords = 4 + 3 + 2 + 2;
+    using Key = std::array<uint32_t, kMaxWords>;
     struct Hash {
         size_t operator()(const Key& k) const {
             uint64_t h = 14695981039346656037ull;
-            for (const uint32_t x : k.w) { h ^= x; h *= 1099511628211ull; }
+            for (const uint32_t x : k) { h ^= x; h *= 1099511628211ull; }
             return (size_t) h;
         }
     };
     std::unordered_map<Key, uint32_t, Hash> slot;
-    slot.reserve(m.verts.size());
-    std::vector<uint32_t> remap(m.verts.size());
-    std::vector<Vertex> verts;
-    std::vector<float3> normals;
-    verts.reserve(m.verts.size());
-    const bool hasNormals = m.normals.size() == m.verts.size();
-    for (size_t i = 0; i < m.verts.size(); i++) {
-        Key k;
-        std::memcpy(k.w, &m.verts[i], sizeof(Vertex));
-        const auto [it, fresh] = slot.emplace(k, (uint32_t) verts.size());
-        if (fresh) {
-            verts.push_back(m.verts[i]);
-            if (hasNormals) normals.push_back(m.normals[i]);
-        }
+    slot.reserve(nv);
+    std::vector<uint32_t> remap(nv);
+    std::vector<uint32_t> keep;
+    keep.reserve(nv);
+    for (size_t i = 0; i < nv; i++) {
+        Key k{};
+        std::memcpy(&k[0], &m.verts[i], sizeof(Vertex));
+        if (keyNormals && nrm) std::memcpy(&k[4], &m.normals[i], sizeof(float3));
+        if (uv) std::memcpy(&k[7], &m.uvs[i], sizeof(math::float2));
+        if (c0) std::memcpy(&k[9], &m.custom0[i], sizeof(math::half4));
+        const auto [it, fresh] = slot.emplace(k, (uint32_t) keep.size());
+        if (fresh) keep.push_back((uint32_t) i);
         remap[i] = it->second;
     }
-    if (verts.size() == m.verts.size()) return;
+    if (remapOut) *remapOut = remap;
+    if (keep.size() == nv) return;
     for (uint32_t& k : m.idx) k = remap[k];
-    m.verts = std::move(verts);
-    if (hasNormals) m.normals = std::move(normals);
+    const auto compact = [&](auto& a) {
+        if (a.size() != nv) return;
+        for (size_t i = 0; i < keep.size(); i++) a[i] = a[keep[i]];
+        a.erase(a.begin() + (std::ptrdiff_t) keep.size(), a.end());   // half4 has no default
+    };
+    compact(m.verts);
+    compact(m.normals);
+    compact(m.uvs);
+    compact(m.custom0);
 }
 
 VertexBuffer* TtpRenderer::buildVertexBuffer(uint32_t vertexCount, const Mesh::Layout& l) {
@@ -547,7 +606,11 @@ void TtpRenderer::destroyMesh(Mesh& m) {
         utils::EntityManager::get().destroy(m.entity);
         m.entity = {};
     }
-    if (m.vb) { mEngine->destroy(m.vb); m.vb = nullptr; }
+    if (m.vb) {
+        std::erase_if(mLods, [&](const LodRange& r) { return r.vb == m.vb; });
+        mEngine->destroy(m.vb);
+        m.vb = nullptr;
+    }
     if (m.ib) { mEngine->destroy(m.ib); m.ib = nullptr; }
     m.inScene = false;
     // The CPU copies are BURIED, not dropped — the driver may still be reading
@@ -867,8 +930,9 @@ void TtpRenderer::fillGeometry(TrackBin& out, const ttp::RaceTrack& geo) {
 }
 
 // Unit UV-sphere (widthSegments × heightSegments, THREE.SphereGeometry layout):
-// used by the sky dome and hill domes. Appends transformed verts
-// with a per-vertex colour callback into a Mesh.
+// the hill domes and the burst ball. Appends transformed verts with a
+// per-vertex colour callback into a Mesh. Like primSphereBand, a pole row
+// keeps one triangle per quad: the other covers nothing.
 void TtpRenderer::appendSphere(Mesh& mesh, int wseg, int hseg,
         const std::function<float3(const float3&)>& transform,
         const std::function<uint32_t(const float3&)>& colorAt, bool lit) {
@@ -893,7 +957,8 @@ void TtpRenderer::appendSphere(Mesh& mesh, int wseg, int hseg,
         for (int ix = 0; ix < wseg; ix++) {
             const uint32_t a = base + iy * stride + ix;
             const uint32_t b = a + stride;
-            idx.insert(idx.end(), { a, b, a + 1, a + 1, b, b + 1 });
+            if (iy != 0) idx.insert(idx.end(), { a, b, a + 1 });
+            if (iy != hseg - 1) idx.insert(idx.end(), { a + 1, b, b + 1 });
         }
     }
 }
@@ -1076,6 +1141,7 @@ bool TtpRenderer::bakeMergedRun(MergedGroup& g,
     const uint8_t layer = rcm.getLayerMask(ri0);
     Mesh& m = g.baked;
     m.weld = true;
+    m.simplify = true;
     for (const utils::Entity src : g.sources) {
         const auto ti = tcm.getInstance(src);
         if (!ti) return false;
@@ -1110,7 +1176,7 @@ bool TtpRenderer::buildMergedGroup(std::vector<MergedGroup>& out,
         const std::vector<utils::Entity>& sources,
         const std::vector<ttp::rt::GlbMeshPrim>& prims, bool dynamic,
         uint8_t feat, const ttp::kitcolors::Mesh* colors) {
-    if (sources.size() < 2 || prims.empty() || !mScene) return false;
+    if (sources.empty() || prims.empty() || !mScene) return false;
     auto& rcm = mEngine->getRenderableManager();
     auto& tcm = mEngine->getTransformManager();
     const auto ri0 = rcm.getInstance(sources[0]);
@@ -1183,21 +1249,25 @@ bool TtpRenderer::buildMergedGroup(std::vector<MergedGroup>& out,
         if (!run.empty()) runs.push_back(std::move(run));
     }
 
+    // A static run the kit colour table covers is BAKED (MergedGroup::baked):
+    // same draw count, no instancing, nothing lit at draw time. That holds for
+    // a run of ONE as well: a straggler has nothing to instance with, but left
+    // on its gltfio draw it is lit per vertex and per fragment beside identical
+    // baked copies a few units away.
+    const bool bake = !dynamic && colors && mBakeRig.valid;
     for (const std::vector<utils::Entity>& chunk : runs) {
         const size_t n = chunk.size();
-        if (n < 2) continue;   // a straggler of one keeps its original draw
+        if (n < 2 && !bake) continue;   // nothing to merge it with
         MergedGroup g;
         g.dynamic = dynamic;
         g.feat = feat;
         g.sources = chunk;
-        // A static run the kit colour table covers is BAKED (MergedGroup::baked):
-        // same draw count, no instancing, nothing lit at draw time.
-        if (!dynamic && colors && mBakeRig.valid
-                && bakeMergedRun(g, prims, *colors, sources[0])) {
+        if (bake && bakeMergedRun(g, prims, *colors, sources[0])) {
             for (size_t i = 0; i < n; i++) mScene->remove(g.sources[i]);
             out.push_back(std::move(g));
             continue;
         }
+        if (n < 2) continue;   // the bake refused: it keeps its original draw
         g.xf.assign(n, mat4f{});
         float r2 = 0;
         for (const auto& sp : prims) {
@@ -1598,11 +1668,9 @@ void TtpRenderer::debugFeatureMask(uint32_t mask) {
     // MASK_FLAT is the one non-inverted global: zero draws the shipped
     // picture (the tap), set replaces it with constant coverage.
     mDebugGlobals.z = (mask & kDebugDecalMaskFlat) ? 1.0f : 0.0f;
-    // The deck's far ribbon: renderCells reads these per frame (TtpRenderer.h
-    // says what each bit is for).
-    mDeckLodOff = (mask & kDebugNoDeckLod) != 0;
-    mDeckLodTint = (mask & kDebugDeckLodTint) != 0;
-    mDeckLodAll = (mask & kDebugDeckLodAll) != 0;
+    // The far forms: renderCells reads these per frame (TtpRenderer.h, LodRange).
+    mLodOff = (mask & kDebugNoLod) != 0;
+    mLodAll = (mask & kDebugLodAll) != 0;
     // The merge ablation: flipping it marks both families dirty and the lazy
     // sites take the groups apart (restoring the originals) or regroup.
     const bool mergeOff = (mask & kFeatNoMerge) != 0;
@@ -1817,6 +1885,7 @@ void TtpRenderer::releaseScene() {
     mLitShadowInst = nullptr; // was one of those — never dangle into the next build
     mRoadInst = nullptr;      // ditto: the deck's own instance is scene-scoped too
     mRoadChunks.clear();      // and so is every per-chunk instance
+    mLods.clear();            // every listed renderable died with its mesh
     mRoadInstLastMask.clear();
     mRoadInstLastProf.clear();
     mDeckDecals.clear();

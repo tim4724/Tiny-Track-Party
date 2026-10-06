@@ -34,6 +34,7 @@ const ROOTS = [
   'native/libttp-track',
   'native/vendor/fdlibm',
   'native/vendor/double-conversion',
+  'native/vendor/meshoptimizer',
   'native/scripts/build-runtime-web.sh',
   'native/scripts/filament-checkout.sh',
 ];

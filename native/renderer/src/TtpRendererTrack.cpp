@@ -378,13 +378,10 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     }
 
     // Sweep: indexed QUADS — 4 verts + 6 indices per strip per ring pair,
-    // per-vert AO from its own profile point. The old 6-vert soup's two
-    // diagonal verts were attribute-identical duplicates; they are shared by
-    // index now, INSIDE a quad only. Verts stay UNSHARED across quads (each
-    // quad still owns its corners → crisp paint bands, hard profile corners,
-    // per-quad colour and deck flag), and the triangles, winding and
-    // attributes are unchanged — byte-identical rasterization at 4
-    // vertex-shader invocations per quad instead of 6.
+    // per-vert AO from its own profile point. The sweep EMITS each quad with
+    // its own corners (crisp paint bands, hard profile corners, per-quad
+    // colour and deck flag); the exact weld below then shares only corners
+    // identical in every attribute, so none of that changes.
     static const int VSEQ_PT[4] = { 0, 1, 1, 0 };   // a@i, b@i, b@ni, a@ni
     mRoad.verts.reserve((size_t) N * 16 * 4);
     mRoad.normals.reserve((size_t) N * 16 * 4);
@@ -472,12 +469,19 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                 math::half4{ 1.0f, 1.0f, 1.0f, 1.0f });
         fillRoadLight(tb);
     }
+    // The soup shares nothing: each quad owns its four corners, so every
+    // corner along a run of one colour is drawn twice and each cell shades
+    // both. Welded on every attribute (and the normal the shadow bake's light
+    // re-fill reads), the ribbon keeps its triangle order and every value the
+    // rasterizer interpolates. Its point-set readers (the AMB_FLAKE floor
+    // raster, the shadow bake's fit) take a max or bound per point, which a
+    // merge of exact duplicates cannot change; the far ribbon below is built
+    // over the soup's numbering and mapped through `roadRemap`.
+    std::vector<uint32_t> roadRemap;
+    weldExact(mRoad, true, &roadRemap);
     // Chunked by RINGS, each chunk with its own bounds, so a chase camera pays
     // for the stretch of circuit it can actually see instead of all ~59k
-    // triangles of it — per cell, every frame. mRoad.verts still carries every
-    // quad corner as a point set — its readers (the AMB_FLAKE floor raster, the
-    // shadow bake's fit) take a max/bound per point, which merging the
-    // diagonal's exact duplicates cannot change.
+    // triangles of it — per cell, every frame.
     //
     // 26 rings (~12 u) is the knee, and the far ribbon below is why it moved
     // from 78: a chunk is swapped whole, and the chunk the camera is IN is
@@ -502,7 +506,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     // and by kDeckLodSpan. A split cell on the Android box is ~200 lines tall
     // and a 0.48 u ring past ~17 u is under two pixels, so looking down a
     // straight the fine ribbon is thousands of sub-pixel triangles a cell; the
-    // far ribbon is worth ~4 ms of that frame (chooseDeckLod has the numbers).
+    // far ribbon is worth ~4 ms of that frame (chooseLods has the numbers).
     // Ring runs are the whole of it: a coarse CROSS-SECTION on top measured
     // nothing further, so the sixteen strips stay.
     constexpr uint32_t kDeckLodSpan = 16;
@@ -590,6 +594,7 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
             }
             farRange.push_back({ off, (uint32_t) mRoadFarIdx.size() - off });
         }
+        for (uint32_t& k : mRoadFarIdx) k = roadRemap[k];
         mRoadFarIb = IndexBuffer::Builder()
                 .indexCount((uint32_t) mRoadFarIdx.size())
                 .bufferType(IndexBuffer::IndexType::UINT)
@@ -617,22 +622,25 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
             const float sMin = (float) (t0 / trisPerRing) / N * L;
             const float sMax = (float) ((t0 + n) / trisPerRing + 1) / N * L;
             RoadChunk chunk{};
-            chunk.entity = e;
-            chunk.fullOff = (uint32_t) (t0 * 3);
-            chunk.fullCnt = (uint32_t) (n * 3);
-            if (k < farRange.size()) {
-                chunk.farOff = farRange[k].first;
-                chunk.farCnt = farRange[k].second;
-            }
-            {
-                const size_t v0 = (t0 / trisPerRing) * 64, v1 = ((t0 + n) / trisPerRing) * 64;
-                float3 lo{ 1e30f }, hi{ -1e30f };
-                for (size_t v = v0; v < v1 && v < mRoad.verts.size(); v++) {
-                    const Vertex& vt = mRoad.verts[v];
-                    lo = min(lo, float3{ vt.px, vt.py, vt.pz });
-                    hi = max(hi, float3{ vt.px, vt.py, vt.pz });
+            if (k < farRange.size() && farRange[k].second) {
+                LodRange r;
+                r.entity = e;
+                r.vb = mRoad.vb;
+                r.ib = mRoad.ib;
+                r.farIb = mRoadFarIb;
+                r.off = (uint32_t) (t0 * 3);
+                r.cnt = (uint32_t) (n * 3);
+                r.farOff = farRange[k].first;
+                r.farCnt = farRange[k].second;
+                r.err = kDeckLodTol;
+                r.lo = float3{ 1e30f };
+                r.hi = float3{ -1e30f };
+                for (size_t q = t0 * 3; q < (t0 + n) * 3; q++) {
+                    const Vertex& vt = mRoad.verts[mRoad.idx[q]];
+                    r.lo = min(r.lo, float3{ vt.px, vt.py, vt.pz });
+                    r.hi = max(r.hi, float3{ vt.px, vt.py, vt.pz });
                 }
-                chunk.boxMin = lo; chunk.boxMax = hi;
+                mLods.push_back(r);
             }
             MaterialInstance* mi = sceneInstance(mRoadMaterial);
             // Absent on the baked-light vroad — its ESM decode ran at build
@@ -648,9 +656,6 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
             mi->setParameter("trackLength", L);
             mi->setParameter("invTrackLength", L > 0.0f ? 1.0f / L : 0.0f);
             mi->setParameter("chunkMid", (sMin + sMax) * 0.5f);
-            if (mRoadMaterial->hasParameter("chunkIndex")) {
-                mi->setParameter("chunkIndex", (float) k);
-            }
             // The silhouette array serves the masked loop's NEAR cars; the
             // far cars' carShadow layer is created after the rubber layer
             // below (the two share a lat span) and re-bound there.
@@ -1181,6 +1186,9 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         }
         if (shape == 1 || shape == 2) accumulateNormals(mHills);
         mHills.bakeLight = true;
+        // The ring stands all round the circuit, so one renderable is in every
+        // cell's frustum; tiles let each cell draw only the hills it faces.
+        tileMajor(mHills, kSheetTile, kSheetMinTris);
         if (!buildMesh(mHills)) return false;
     }
 

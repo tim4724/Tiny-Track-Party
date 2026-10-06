@@ -856,32 +856,33 @@ bought 0.4 ms where these 40k bought 1.1.
 
 Three consequences, and the first two have each been paid for once:
 
-- **A DISTANCE LOD BUYS NOTHING HERE, and the reason is the content.** The fog
-  saturates at `RACE_FOG_FAR` and the scenery is authored to end where the fog
-  does, so sweeping the far plane from 600 u to 100 u moves the count by two per
-  cent. There is no far field to grade. Nor is there detail to remove: the whole
-  kit is 20,033 vertices and 9,524 triangles, a palm is 190 of them, so a
-  "simpler model" is not an asset anybody can author. What the 126k dressing
-  vertices a frame are is INSTANCE COUNT.
+- **A FAR-PLANE CUT BUYS NOTHING HERE, and the reason is the content.** The
+  fog saturates at `RACE_FOG_FAR` and the scenery is authored to end where the
+  fog does, so sweeping the far plane from 600 u to 100 u moves the count by two
+  per cent. What a cell submits is INSTANCE COUNT, and it is the 4P heavy
+  seconds that pay for it (below), not the median.
 - **CUTTING GEOMETRY OFF THE DECK OR THE TERRAIN IS NOT WORTH THE COMPLEXITY —
   ON THE RUN'S MEDIAN.** Chunking both for cullability and pairing the deck
   with a coarse twin cut the frame's submitted vertices by a quarter and
   measured **−0.4 ms of GPU against +0.55 ms of frame thread** — the renderable
   count is not free either. Both were built, measured and reverted; the history
-  has them. **The exception is the deck's FAR RIBBON, and it is why the median
-  lied** (`RoadChunk`, `chooseDeckLod`, 2026-09-02): the 4P frame is not one
-  picture but two — nine seconds a lap of clean 60 and eight of every cell
-  looking down the straight at the whole deck, where the fine ribbon is
-  thousands of sub-pixel triangles a cell. A second index buffer over the
-  road's OWN vertices, one quad per run of same-coloured rings under a 0.08 u
-  chord, swapped in per cell past the distance where that chord would cover
-  `kDeckLodChordPx` pixels, takes about a third off those seconds on the
-  Android box — and moves the median by little, which is exactly what the
-  twin measured. It runs at EVERY cell count (the user's call); the gate is
-  pixel-derived, so a big cell simply pushes it out. A gate of zero (the
-  whole deck on the ribbon) was priced and declined; the frame map's
-  2026-09-02 section has every arm. Read a 4P lever on the heavy seconds
-  (`perf-race --timeline`), never the run.
+  has them. **The exception is a FAR FORM per cell, and it is why the median
+  lied** (`LodRange`, `chooseLods`): the 4P frame is not one picture but two,
+  the clean seconds and a few a lap where every cell looks across the whole
+  circuit and submits most of it, sub-pixel detail and all. A renderable
+  listed there owns a second index range over its OWN vertices that strays at
+  most `err` world units, and each cell draws it past the distance where `err`
+  covers `kLodPx` pixels OF THAT CELL, so a big cell pushes the swap out on
+  its own and one player at 1080 barely sees it. The deck's is a ribbon of one
+  quad per run of same-coloured rings under a 0.08 u chord (2026-09-02, about
+  a third off those seconds); every static unlit mesh that opts in with a
+  `simplify` (the baked kit runs, the landmarks) gets a `meshopt_simplify` of
+  each renderable at build. A coarse kit model is not an asset anybody would
+  author, but a simplifier finds the 0.2 u of it nobody sees at 26 u. The
+  flowers do NOT opt in: simplifying them strips the petals, which are the
+  point of them. It runs at EVERY cell count (the user's call); a gate of
+  zero was priced and declined; the frame map has every arm. Read a 4P lever
+  on the heavy seconds (`perf-race --timeline`), never the run.
 - **What DOES pay is making a vertex cheaper to shade.** The props are static,
   the sun is static, and they were lit from scratch every frame in every cell.
   The static SHEETS (hills, boulders, clutter, landmarks, gantry) now fold the

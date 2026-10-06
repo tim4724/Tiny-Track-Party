@@ -130,7 +130,9 @@ inline Prim primIcoDetail(float r, int detail) {
 }
 
 // UV sphere over a PHI RANGE (THREE.SphereGeometry's phiStart/phiLength args):
-// the seashell is the top half of a squashed dome.
+// the seashell is the top half of a squashed dome. A row that ends at a pole
+// keeps one triangle per quad, as THREE's does: the other has two corners on
+// the pole and covers nothing (at phi = PI only to float precision).
 inline Prim primSphereBand(float r, int ws, int hs, float phi0, float phiLen) {
     Prim p;
     for (int iy = 0; iy <= hs; iy++) {
@@ -142,33 +144,20 @@ inline Prim primSphereBand(float r, int ws, int hs, float phi0, float phiLen) {
         }
     }
     const int stride = ws + 1;
+    const bool topPole = phi0 <= 0.0f;
+    const bool bottomPole = phi0 + phiLen >= (float) M_PI;
     for (int iy = 0; iy < hs; iy++) {
         for (int ix = 0; ix < ws; ix++) {
             const uint32_t a = iy * stride + ix, b = a + stride;
-            p.i.insert(p.i.end(), { a, b, a + 1, a + 1, b, b + 1 });
+            if (iy != 0 || !topPole) p.i.insert(p.i.end(), { a, b, a + 1 });
+            if (iy != hs - 1 || !bottomPole) p.i.insert(p.i.end(), { a + 1, b, b + 1 });
         }
     }
     return p;
 }
 
 inline Prim primSphere(float r, int ws, int hs) {
-    Prim p;
-    for (int iy = 0; iy <= hs; iy++) {
-        const float phi = (float) iy / hs * (float) M_PI;
-        for (int ix = 0; ix <= ws; ix++) {
-            const float th = (float) ix / ws * 2.0f * (float) M_PI;
-            p.v.push_back({ -std::cos(th) * std::sin(phi) * r, std::cos(phi) * r,
-                            std::sin(th) * std::sin(phi) * r });
-        }
-    }
-    const int stride = ws + 1;
-    for (int iy = 0; iy < hs; iy++) {
-        for (int ix = 0; ix < ws; ix++) {
-            const uint32_t a = iy * stride + ix, b = a + stride;
-            p.i.insert(p.i.end(), { a, b, a + 1, a + 1, b, b + 1 });
-        }
-    }
-    return p;
+    return primSphereBand(r, ws, hs, 0.0f, (float) M_PI);
 }
 inline Prim primTorusArc(float R, float tube, int tubeSeg, int radSeg, float arc) {
     Prim p;

@@ -9,11 +9,12 @@ linked from `/licenses.html` as an entry's `notice` (see `shared/credits.js`).
 |---|---|---|
 | `openlibm-LICENSE.md` | the deterministic maths in the wasm | `native/vendor/fdlibm/LICENSE.md` |
 | `double-conversion-LICENSE.txt` | number formatting in the wasm | `native/vendor/double-conversion/LICENSE` |
+| `meshoptimizer-LICENSE.txt` | the far-form simplifier in the renderer | `native/vendor/meshoptimizer/LICENSE` |
 | `qrcode-generator-LICENSE.txt` | the join-code QR encoder vendored at `shared/qrcode-generator.js` | the `LICENSE` of `kazuhikoarase/qrcode-generator` |
 | `filament-LICENSE.txt` | the renderer in the wasm | the `LICENSE` of the fork commit in `native/filament.pin` |
 | `emscripten-LICENSE.txt` | the wasm glue the toolchain emits | the `LICENSE` of the emsdk version pinned in `native/scripts/build-runtime-web.sh` |
 
-The first two have a copy in this tree, and `tests/credits.test.js` holds them
+The first three have a copy in this tree, and `tests/credits.test.js` holds them
 byte-equal to it. The rest are fetched from upstream — nothing can diff those,
 so **re-fetch them when you move the pin or re-vendor**:
 
