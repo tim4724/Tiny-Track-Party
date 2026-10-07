@@ -108,7 +108,7 @@ rather than by omission: all three shells switch the blob stores off under
 automation, because a suite asserting what a BUILD produces must not be served
 what a previous run left on disk. So the warm path — plan, read, offer, import,
 and the layers a build then draws from — had no gate of any kind, and shipped an
-import that put the last offered blob's bytes into every silhouette layer.
+import that put the last offered blob's bytes into every layer of a store.
 `npm run check:blob-cache` is the one thing that covers it, and its header says
 how; nothing in CI runs it, so **run it whenever anything on the blob walk moves**
 — the stores, the plan, an import or an export. **Anything else that survives a

@@ -12,10 +12,10 @@
 // the capture harnesses already do, so the cache is on for this one run.
 //
 // The cost of that blind spot was a shipped bug: an import that put the LAST
-// offered blob's bytes into every silhouette layer, so the second visit to a
-// page drew a monster-truck chassis under every car. A green suite, a review and
-// a three-platform install all missed it, because the only thing that ever
-// exercised the warm path was a person looking at a television.
+// offered blob's bytes into every layer of a store, so the second visit to a
+// page drew a monster-truck chassis under every car. A green suite, a review and a three-platform install all missed it,
+// because the only thing that ever exercised the warm path was a person looking
+// at a television.
 //
 // WHAT IT ASSERTS: an imported blob IS what was stored, byte for byte. The cold
 // run bakes and stores; the warm run imports; then the store is emptied and the
@@ -31,13 +31,8 @@
 // bake answered — and on a page that has baked nothing yet, resident means
 // imported.
 //
-// IT DRIVES ?solo RATHER THAN A `?scenario=` PAGE, and both halves of that
-// matter. A scenario's `setTrack` rebuilds the PREVIEW scene — no cars, so no
-// silhouettes to export, and this would compare one blob and pass. And its fake
-// roster picks liveries per run, which the bake renders into the cell's RGB: two
-// COLD runs of one scenario already disagree there, while the ALPHA vroad
-// samples is identical. Solo seats a deterministic field, so whole blobs are
-// comparable and no channel needs excusing.
+// IT DRIVES ?solo: a race scene built the way a player's is, on a
+// deterministic field, so whole blobs are comparable run to run.
 //
 // It is not an `npm test` entry: it drives a real Chromium through three scene
 // builds, which is not what that suite is for.
@@ -58,7 +53,7 @@ const fail = (msg) => { console.error(`\n  FAIL  ${msg}`); process.exitCode = 1;
 const waitForStores = (page) => page.waitForFunction(
   () => window.__scene?.display?.blobs?.stores?.length > 0, null, { timeout: TIMEOUT_MS });
 
-/** Solo drops straight into a race, and the silhouettes bake as that scene builds. */
+/** Solo drops straight into a race, and the sun bakes as that scene builds. */
 const waitForRoom = (page, state) => page.waitForFunction(
   (want) => window.__net?.roomState === window.ROOM_STATE[want], state, { timeout: TIMEOUT_MS });
 
@@ -105,11 +100,11 @@ const count = (d) => Object.values(d).reduce((n, s) => n + Object.keys(s).length
 /**
  * Poll until EVERY store has answered and the total has stopped moving.
  *
- * Not "until there are N": the write half is a frame beat and the two stores do
- * not land on the same one, so a fixed number snapshots whichever arrived first
- * and silently drops the rest of the comparison. How many blobs there are is the
- * engine's business — a field of four models is four silhouettes, eight would be
- * more — so the only thing to wait for is "every store non-empty, twice running".
+ * Not "until there are N": the write half is a frame beat and separate stores
+ * need not land on the same one, so a fixed number snapshots whichever arrived
+ * first and silently drops the rest of the comparison. How many blobs there are
+ * is the engine's business, so the only thing to wait for is "every store
+ * non-empty, twice running".
  */
 async function settled(page, what) {
   const deadline = Date.now() + TIMEOUT_MS;
@@ -176,7 +171,7 @@ async function main() {
         else if (got !== sha) {
           fail(`${store}/${name} came back DIFFERENT after a round trip\n`
             + `        stored   ${sha}\n        exported ${got}\n`
-            + '        an imported blob must be the bytes that were stored — see importMaskBlob');
+            + '        an imported blob must be the bytes that were stored — see importBlob');
         }
       }
     }

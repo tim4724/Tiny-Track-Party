@@ -1,5 +1,5 @@
-// The car field: slot bodies and the body pool, ghosts, mask layers and the
-// merged draws. TtpRendererImpl.h carries what the topic files share.
+// The car field: slot bodies and the body pool, ghosts, the shadow fits and
+// the merged draws. TtpRendererImpl.h carries what the topic files share.
 #include "TtpRendererImpl.h"
 
 #include <utils/Log.h>
@@ -234,7 +234,7 @@ bool TtpRenderer::loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb) 
     setShadows(asset->getEntities(), asset->getEntityCount(), false, false);
     mCarAssets[index] = asset;
     // The merged draw groups: remember which MODEL this slot wears (the bytes
-    // are the identity — same rule as the silhouette layers), decode its
+    // are the identity — same rule as the shadow fits), decode its
     // meshes once per model, and let the next frame regroup the field.
     if (mCarModelKey.size() <= index) mCarModelKey.resize(index + 1, 0);
     mCarModelKey[index] = modelKey;
@@ -344,28 +344,17 @@ bool TtpRenderer::loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb) 
         w.footW = bb.max.x - bb.min.x;
         w.footL = bb.max.z - bb.min.z;
         w.roof = bb.max.y;
-        // Ground-shadow silhouette, off THIS model, while it still sits at
-        // rest — into the decalMask layer this GLB owns. claimMaskLayer hands
-        // back a layer already holding these bytes (nothing to do: eight cars
-        // share four models) or a freshly claimed one with its baked bit
-        // cleared, which is the signal to bake.
-        const int ml = claimMaskLayer(index, glb);
-        if (ml >= 0 && ml < kMaskLayerMonster
-                && !((mMaskLayerBakedBits >> ml) & 1u)) {
-            bakeSilhouette(asset, bb.min, bb.max, ml);
-        }
-        // …and the CPU outline the carShadow LAYER stamps, which is what every
-        // car draws now. Keyed by the model exactly as the GPU layer is, and
-        // baked here for the same reason: the asset is at its parse pose, so
-        // the outline is a fact about the model rather than about this frame.
-        // A model whose bake fails is simply absent from the store and falls
-        // back to the superellipse.
+        // The ground shadow's fitted shape, off THIS model while it still
+        // sits at rest: the outline is a fact about the model rather than
+        // about this frame, so it is keyed by the model (eight cars share four)
+        // and fitted once. A model whose bake fails is simply absent from the
+        // store, stamps the default fit, and is retried on its next load.
         const uint64_t key = mCarModelKey.size() > index ? mCarModelKey[index] : 0;
         if (mCarShadowMaskOfSlot.size() <= index) {
             mCarShadowMaskOfSlot.resize(index + 1, 0);
         }
         mCarShadowMaskOfSlot[index] = key;
-        if (key && !mCarShadowMasks.count(key)) {
+        if (key && !mCarShadowFits.count(key)) {
             bakeCarFootprint(key, glb, asset, bb.min, bb.max);
         }
     }
@@ -491,55 +480,6 @@ void TtpRenderer::pumpTextures() {
 // One car slot's body: the real GLB when the shell provided "car<c>.glb"
 // (gltfio + ubershaders, textures via stb), else a roster-coloured box
 // marker. Split out of buildTrackScene so reroster() can rebuild one slot.
-// Which silhouette layer slot `c` draws from, keyed by the BYTES of its GLB.
-//
-// A HASH, not a byte compare against the other slots' blobs, because the claim
-// has to outlive the slot the bytes first arrived on: a re-roster drops one
-// slot's asset and builds another, and a layer whose model is still being
-// driven elsewhere must not be rebaked or recycled underneath it.
-//
-// Leaves the baked bit CLEAR on a fresh claim — that is how the caller knows
-// to bake, and it is also the honest state if the bake then fails.
-int TtpRenderer::claimMaskLayer(uint32_t c, const std::vector<uint8_t>& glb) {
-    if (glb.empty()) return kMaskLayerGeneric;
-    const uint64_t key = glbBytesKey(glb);  // never 0 — 0 marks "never claimed"
-    if (mMaskLayerOfSlot.size() <= c) {
-        mMaskLayerOfSlot.resize(c + 1, kMaskLayerGeneric);
-    }
-    // Already baked, same model: share it. This is the common case — the grid
-    // is eight cars over four models — and it is also what makes a re-dress
-    // into a model someone else drives cost nothing at all.
-    for (int L = 0; L < kMaskLayerModels; L++) {
-        if (mMaskLayerKey[L] == key && ((mMaskLayerBakedBits >> L) & 1u)) {
-            mMaskLayerOfSlot[c] = L;
-            return L;
-        }
-    }
-    // Otherwise take a layer no OTHER live slot is reading. Unbaked layers
-    // qualify by construction; a stale one (its model left the roster on a
-    // re-dress) is recycled rather than leaked.
-    bool used[kMaskLayerModels] = {};
-    for (size_t k = 0; k < mMaskLayerOfSlot.size(); k++) {
-        if (k == c || k >= mCarAssets.size() || !mCarAssets[k]) continue;
-        const int L = mMaskLayerOfSlot[k];
-        if (L >= 0 && L < kMaskLayerModels) used[L] = true;
-    }
-    for (int L = 0; L < kMaskLayerModels; L++) {
-        if (used[L]) continue;
-        mMaskLayerKey[L] = key;
-        mMaskLayerBakedBits &= (uint16_t) ~(1u << L);
-        mMaskLayerOfSlot[c] = L;
-        return L;
-    }
-    // More distinct models live than there are layers. Can only happen if the
-    // roster outgrew kMaskLayerModels without the gate being raised, so say so
-    // once rather than let a generic oval pass for a silhouette.
-    utils::slog.w << "claimMaskLayer: no free layer for slot " << c
-            << " — falling back to the generic oval" << utils::io::endl;
-    mMaskLayerOfSlot[c] = kMaskLayerGeneric;
-    return kMaskLayerGeneric;
-}
-
 bool TtpRenderer::buildCarSlot(const TrackBin& tb, uint32_t c) {
     const auto glb = mAssets.find("car" + std::to_string(c) + ".glb");
     if (glb != mAssets.end() && loadCarAsset(c, glb->second)) return true;
@@ -580,16 +520,8 @@ void TtpRenderer::destroyCarSlot(uint32_t c) {
     if (mCarModelKey.size() > c) mCarModelKey[c] = 0;
     if (mCarGhostKey.size() > c) mCarGhostKey[c] = 0;
     if (mCarGhostIn.size() > c) mCarGhostIn[c] = 0;
-    // The baked bit STAYS. Layers are keyed by model now, so this slot's
-    // layer is very likely still being read by another car, and clearing it
-    // would drop that car to the generic oval for no reason. claimMaskLayer
-    // recycles a layer that really has gone unused; releaseScene clears the
-    // lot when the roster that produced them dies.
-    if (mMaskLayerOfSlot.size() > c) mMaskLayerOfSlot[c] = kMaskLayerGeneric;
-    // Same rule for the CPU outline, and for the same reason: the STORE is
-    // keyed by model and very likely still read by another slot, so only this
-    // slot's pointer into it is cleared. rebakeCarShadowMasks is what drops an
-    // outline no live slot names any more.
+    // The shadow-fit STORE is keyed by model and very likely still read by
+    // another slot, so only this slot's pointer into it is cleared.
     if (mCarShadowMaskOfSlot.size() > c) mCarShadowMaskOfSlot[c] = 0;
     if (mCars.size() > c) destroyMesh(mCars[c]);
     if (mCarWheels.size() > c) mCarWheels[c] = CarWheels{};

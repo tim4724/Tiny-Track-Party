@@ -648,7 +648,6 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
             if (mRoadMaterial->hasParameter("shadowTexel")) {
                 mi->setParameter("shadowTexel", 0.0f);
             }
-            if (roadHasMaskLoop()) mi->setParameter("maskCount", 0);
             mi->setParameter("profCount", 0);
             mi->setParameter("paintCount", 0);
             // Build-time constants: the wrap and this chunk's own midpoint never
@@ -656,12 +655,8 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
             mi->setParameter("trackLength", L);
             mi->setParameter("invTrackLength", L > 0.0f ? 1.0f / L : 0.0f);
             mi->setParameter("chunkMid", (sMin + sMax) * 0.5f);
-            // The silhouette array serves the masked loop's NEAR cars; the
-            // far cars' carShadow layer is created after the rubber layer
-            // below (the two share a lat span) and re-bound there.
-            if (roadHasMaskLoop()) {
-                if (Texture* arr = ensureDecalMaskArray()) bindDecalMask(mi, arr);
-            }
+            // The carShadow layer is created after the rubber layer below
+            // (the two share a lat span) and re-bound there.
             bindSkidLayer(mi);
             if (roadHasCarShadow()) {
                 bindCarShadow(mi, mCarShadowTex[0]);
@@ -1262,16 +1257,13 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     mCarGhostAssets.assign(carCount, nullptr);
     mCarGhostIn.assign(carCount, 1); // loadCarAsset adds them; frame 1 removes them
     mMonsterViews.assign(carCount, {});
-    // Cleared before the slots build: claimMaskLayer reads it to see which
-    // layers are still spoken for.
-    mMaskLayerOfSlot.assign(carCount, kMaskLayerGeneric);
     // SPLIT OUT because it hid the biggest phase of a build. Measured with the
     // sun bake reused: 57 ms of a 202 ms build on the Apple TV, 29-33 ms of a
     // 50-55 ms build in the browser — more than the bake costs on either. Every
     // one of those milliseconds is gltfio re-parsing and re-uploading car GLBs
     // the previous build already parsed, because releaseScene drops every asset
-    // (the silhouette bakes keyed off them survive; the assets themselves do
-    // not). What is left in `props+rig` after this mark is the same story for
+    // (the shadow fits keyed off them survive; the assets themselves do not).
+    // What is left in `props+rig` after this mark is the same story for
     // the item box, banana, cone and monster truck.
     for (uint32_t c = 0; c < carCount; c++) {
         if (!buildCarSlot(tb, c)) return false;
@@ -1368,26 +1360,6 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
                 math::float4{ srgbToLinear(0x565b63), 0.5f });
     }
     if (mMonsterAsset) {
-        const filament::Aabb mbb = mMonsterAsset->getBoundingBox();
-        if (mbb.max.x > mbb.min.x) {
-            // The rig's own outline, off instance 0 while the whole pool still
-            // sits at rest (loadInstancedProp adds them un-posed; the first
-            // frame is what takes them out of the scene). One bake serves every
-            // car — the truck under them all is the same truck.
-            // ...and one bake serves every SCENE, for the same reason it
-            // serves every car: the truck never changes. The layer is
-            // engine-lifetime and releaseScene no longer clears its bit, so
-            // this runs on the first scene of a session and never again.
-            // (The BLOB path takes no bake at all: a monster keeps the wearing
-            // car's shape at kMonsterShadowScale — the truck's own footprint
-            // fit was ballooning to the whole wheel spread.)
-            if (!mMonsterInstances.empty() && mMonsterInstances[0]
-                    && !((mMaskLayerBakedBits >> kMaskLayerMonster) & 1u)) {
-                bakeSilhouette(mMonsterInstances[0]->getEntities(),
-                        mMonsterInstances[0]->getEntityCount(), mbb.min, mbb.max,
-                        kMaskLayerMonster);
-            }
-        }
         // The rig's wheels, per instance — these are what turn while the
         // monster is up (the car's own are scaled to nothing). Rest
         // translations are kept so the roll spins each tyre IN PLACE, and the
@@ -2467,12 +2439,6 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
                 .package(vburst->second.data(), vburst->second.size())
                 .build(*mEngine);
     }
-    const auto vblur = mAssets.find("vblur.filamat");
-    if (!mBlurMaterial && vblur != mAssets.end()) {
-        mBlurMaterial = Material::Builder()
-                .package(vblur->second.data(), vblur->second.size())
-                .build(*mEngine);
-    }
     const auto vesm = mAssets.find("vesm.filamat");
     if (!mEsmMaterial && vesm != mAssets.end()) {
         mEsmMaterial = Material::Builder()
@@ -2550,7 +2516,7 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
     for (Material* m : { mMaterial, mBlendMaterial, mLitMaterial, mLitPlainMaterial,
                          mRoadMaterial, mGlbMaterial, mGlbFadeMaterial,
                          mGroundMaterial, mPointMaterial, mCloudMaterial,
-                         mBurstMaterial, mBlurMaterial, mEsmMaterial,
+                         mBurstMaterial, mEsmMaterial,
                          mPresentMaterial, mOverlayMaterial,
                          mVisMaterial }) {
         if (m) m->compile(Material::CompilerPriorityQueue::HIGH);

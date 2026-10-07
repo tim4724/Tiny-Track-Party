@@ -338,7 +338,7 @@ int ttp_display_reroster(const char* rosterJson) {
 
 // The stores this build knows how to fill. A shell iterates this and names no
 // blob kind of its own — see ttp_display.h.
-static const char* const kBlobStores[] = { "bake", "mask" };
+static const char* const kBlobStores[] = { "bake" };
 static_assert(sizeof kBlobStores / sizeof kBlobStores[0] == DisplayCore::kBlobStoreCount,
               "a new store must also widen DisplayCore::blobWalk");
 
@@ -354,8 +354,8 @@ const char* ttp_display_blob_stores(void) {
 
 namespace {
 
-// Which store a name refers to, or -1. Two today; an unknown one is not an
-// error, it simply has nothing to plan.
+// Which store a name refers to, or -1. An unknown one is not an error, it
+// simply has nothing to plan.
 int storeIndex(const char* store) {
     if (!store) return -1;
     for (int i = 0; i < DisplayCore::kBlobStoreCount; i++) {
@@ -364,22 +364,17 @@ int storeIndex(const char* store) {
     return -1;
 }
 
-// What the NEXT build's blobs of this kind will be OF.
+// What the NEXT build's bake will be OF.
 //
-// The bake's key needs the biome latched (ttp_display_biome), exactly as the
-// build does, so it is derived here rather than read off the renderer — which
-// is still holding the PREVIOUS scene's. The masks' keys come from the car GLBs
-// the shell has already provided, so they do not exist until provisioning has
-// run. That is why ttp_display.h states one window that satisfies both.
-std::vector<std::string> plannedKeys(int store, const char* trackId) {
+// Its key needs the biome latched (ttp_display_biome), exactly as the build
+// does, so it is derived here rather than read off the renderer — which is
+// still holding the PREVIOUS scene's.
+std::vector<std::string> plannedKeys(const char* trackId) {
     if (!g_disp || !g_disp->renderer) return {};
-    if (store == 0) {
-        const char* biome = (!g_disp->biome.empty())
-                ? g_disp->biome.c_str() : ttp::rt::biome_for_track(trackId);
-        const std::string key = bakeKeyFor(trackId, biome);
-        return key.empty() ? std::vector<std::string>{} : std::vector<std::string>{ key };
-    }
-    return g_disp->renderer->maskBlobKeys();
+    const char* biome = (!g_disp->biome.empty())
+            ? g_disp->biome.c_str() : ttp::rt::biome_for_track(trackId);
+    const std::string key = bakeKeyFor(trackId, biome);
+    return key.empty() ? std::vector<std::string>{} : std::vector<std::string>{ key };
 }
 
 // Collect the pixels for every outbound blob whose reads have landed.
@@ -414,7 +409,7 @@ const char* ttp_display_blob_plan(const char* store, const char* trackId,
     DisplayCore::BlobWalk& w = g_disp->blobWalk[si];
     w.planned.clear();
 
-    const std::vector<std::string> keys = plannedKeys(si, trackId);
+    const std::vector<std::string> keys = plannedKeys(trackId);
     if (keys.empty()) { out = "{}"; return out.c_str(); }
     ttp::rt::BlobRequest in;
     in.store = kBlobStores[si];
@@ -443,8 +438,7 @@ const char* ttp_display_blob_plan(const char* store, const char* trackId,
         // ALREADY IN THE ENGINE and therefore not worth reading: asking for it
         // would cost a multi-megabyte read to tell the engine something it
         // knows. This is the fact a shell used to mirror; answered here, where
-        // it cannot go stale. It used to be answered for the bake alone, so a
-        // warm build re-read every silhouette it was already holding.
+        // it cannot go stale.
         if (p.held && !g_disp->renderer->blobResident(p.key)) {
             read.push(ttp::Value::Str(p.name));
         }
@@ -467,8 +461,8 @@ void ttp_display_blob_offer(const char* store, const uint8_t* bytes, uint32_t le
     // not describe what they claim. That is a MISS, never an error: the scene
     // makes the thing again, and the build then stages the good bytes over these.
     //
-    // WHICH blob these bytes are is theirs to say (importBlob dispatches on the
-    // magic and answers the key it adopted), so the only thing the store
+    // WHICH blob these bytes are is theirs to say (importBlob reads the key
+    // from their own header and answers it), so the only thing the store
     // argument decides here is which walk records it.
     //
     // ONLY THAT ONE KEY IS PRIMED. Marking every key that is merely RESIDENT
@@ -916,179 +910,6 @@ void ttp_display_debug_wipe_skids(void) {
     if (g_disp && g_disp->renderer) g_disp->renderer->debugWipeSkids();
 }
 
-void ttp_display_debug_force_mask_layer(int layer) {
-    if (g_disp && g_disp->renderer) g_disp->renderer->debugForceMaskLayer(layer);
-}
-
-namespace {
-
-// The tuning as JSON. One writer for both the live values and the defaults, so
-// a page cannot be shown a key the setter does not read.
-ttp::Value shadowTuningValue(const CarShadowTuning& t) {
-    ttp::Value o = ttp::Value::Obj();
-    o.set("mode", ttp::Value::Num(t.mode));
-    o.set("shape", ttp::Value::Num(t.shape));
-    o.set("polyEdges", ttp::Value::Num(t.polyEdges));
-    o.set("corner", ttp::Value::Num(t.corner));
-    o.set("ao", ttp::Value::Num(t.ao));
-    o.set("cap", ttp::Value::Num(t.cap));
-    o.set("loadGain", ttp::Value::Num(t.loadGain));
-    o.set("ink", ttp::Value::Num((double) t.ink));
-    o.set("overscan", ttp::Value::Num(t.overscan));
-    o.set("grow", ttp::Value::Num(t.grow));
-    o.set("blur", ttp::Value::Num(t.blur));
-    o.set("remapLo", ttp::Value::Num(t.remapLo));
-    o.set("remapHi", ttp::Value::Num(t.remapHi));
-    o.set("texelsPerU", ttp::Value::Num(t.texelsPerU));
-    o.set("rows", ttp::Value::Num(t.rows));
-    o.set("stampProject", ttp::Value::Bool(t.stampProject));
-    o.set("uploadWhole", ttp::Value::Bool(t.uploadWhole));
-    o.set("remapInShader", ttp::Value::Bool(t.remapInShader));
-    o.set("smoothTap", ttp::Value::Bool(t.smoothTap));
-    return o;
-}
-
-}  // namespace
-
-// A PARTIAL object: any key the caller left out keeps the value it already has,
-// so a page may send one knob per drag without carrying the other twelve.
-void ttp_display_shadow_tuning(const char* json) {
-    if (!g_disp || !g_disp->renderer) return;
-    const ttp::Value v = ttp::json::parse_or(json, ttp::Value::Obj());
-    if (v.type != ttp::Value::OBJ) return;
-    CarShadowTuning t = g_disp->renderer->shadowTuning();
-    t.mode = (int) ttp::json::num_field(v, "mode", t.mode);
-    t.shape = (int) ttp::json::num_field(v, "shape", t.shape);
-    t.polyEdges = (int) ttp::json::num_field(v, "polyEdges", t.polyEdges);
-    t.corner = (float) ttp::json::num_field(v, "corner", t.corner);
-    if (v.find("stampProject")) t.stampProject = ttp::json::truthy(v, "stampProject");
-    if (v.find("uploadWhole")) t.uploadWhole = ttp::json::truthy(v, "uploadWhole");
-    if (v.find("remapInShader")) t.remapInShader = ttp::json::truthy(v, "remapInShader");
-    if (v.find("smoothTap")) t.smoothTap = ttp::json::truthy(v, "smoothTap");
-    t.ao = (float) ttp::json::num_field(v, "ao", t.ao);
-    t.cap = (float) ttp::json::num_field(v, "cap", t.cap);
-    t.loadGain = (float) ttp::json::num_field(v, "loadGain", t.loadGain);
-    t.ink = (uint32_t) ttp::json::num_field(v, "ink", t.ink);
-    t.overscan = (float) ttp::json::num_field(v, "overscan", t.overscan);
-    t.grow = (float) ttp::json::num_field(v, "grow", t.grow);
-    t.blur = (float) ttp::json::num_field(v, "blur", t.blur);
-    t.remapLo = (float) ttp::json::num_field(v, "remapLo", t.remapLo);
-    t.remapHi = (float) ttp::json::num_field(v, "remapHi", t.remapHi);
-    t.texelsPerU = (float) ttp::json::num_field(v, "texelsPerU", t.texelsPerU);
-    t.rows = (int) ttp::json::num_field(v, "rows", t.rows);
-    // Clamps live HERE and not in the setter's callers: a page dragging a
-    // slider is exactly the caller that can send an out-of-range number, and
-    // an overscan of 0 divides by zero inside the mask bake.
-    t.mode = t.mode < 0 ? 0 : (t.mode > 2 ? 2 : t.mode);
-    t.shape = t.shape < 0 ? 0 : (t.shape > 3 ? 3 : t.shape);
-    t.polyEdges = t.polyEdges < 3 ? 3
-            : (t.polyEdges > (int) ttp::rt::PolyFit::kMaxEdges
-                    ? (int) ttp::rt::PolyFit::kMaxEdges : t.polyEdges);
-    t.corner = t.corner < 0.0f ? 0.0f : (t.corner > 1.0f ? 1.0f : t.corner);
-    t.overscan = t.overscan < 1.0f ? 1.0f : (t.overscan > 4.0f ? 4.0f : t.overscan);
-    t.ao = t.ao < 0.0f ? 0.0f : (t.ao > 1.0f ? 1.0f : t.ao);
-    t.cap = t.cap < 0.0f ? 0.0f : (t.cap > 1.0f ? 1.0f : t.cap);
-    t.grow = t.grow < 0.0f ? 0.0f : (t.grow > 1.0f ? 1.0f : t.grow);
-    t.blur = t.blur < 0.0f ? 0.0f : (t.blur > 0.25f ? 0.25f : t.blur);
-    g_disp->renderer->setShadowTuning(t);
-}
-
-namespace {
-// Base64 of a byte block. Shared by the two shadow readbacks below; local and
-// debug-only, for the reason the mask one already gives.
-std::string b64Of(const uint8_t* p, size_t n) {
-    static const char kB64[] =
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    std::string out;
-    out.reserve((n + 2) / 3 * 4);
-    for (size_t i = 0; i < n; i += 3) {
-        const uint32_t b0 = p[i];
-        const uint32_t b1 = i + 1 < n ? p[i + 1] : 0u;
-        const uint32_t b2 = i + 2 < n ? p[i + 2] : 0u;
-        const uint32_t w = (b0 << 16) | (b1 << 8) | b2;
-        out += kB64[(w >> 18) & 63];
-        out += kB64[(w >> 12) & 63];
-        out += (i + 1 < n) ? kB64[(w >> 6) & 63] : '=';
-        out += (i + 2 < n) ? kB64[w & 63] : '=';
-    }
-    return out;
-}
-}  // namespace
-
-const char* ttp_display_shadow_layer_json(int x, int y, int w, int h) {
-    static std::string json;
-    json = "{}";
-    if (!g_disp || !g_disp->renderer) return json.c_str();
-    // Bounded: this is a debug window, not a way to ask for the whole layer.
-    if (w <= 0 || h <= 0 || w > 512 || h > 512) return json.c_str();
-    std::vector<uint8_t> px;
-    if (!g_disp->renderer->shadowLayerWindow(x, y, w, h, px)) return json.c_str();
-    ttp::Value o = ttp::Value::Obj();
-    o.set("x", ttp::Value::Num(x));
-    o.set("y", ttp::Value::Num(y));
-    o.set("w", ttp::Value::Num(w));
-    o.set("h", ttp::Value::Num(h));
-    o.set("px", ttp::Value::Str(b64Of(px.data(), px.size())));
-    json = ttp::canonical_stringify(o);
-    return json.c_str();
-}
-
-const char* ttp_display_shadow_mask_json(int slot) {
-    static std::string json;
-    json = "{}";
-    if (!g_disp || !g_disp->renderer || slot < 0) return json.c_str();
-    const TtpRenderer::ShadowMaskView v = g_disp->renderer->shadowMaskView((size_t) slot);
-    if (!v.px || v.w <= 0 || v.h <= 0) return json.c_str();
-    // Quantise the coverage and share the encoder with the layer window above.
-    const size_t n = (size_t) v.w * v.h;
-    std::vector<uint8_t> bytes(n);
-    for (size_t i = 0; i < n; i++) {
-        bytes[i] = (uint8_t) std::lround(
-                std::min(1.0f, std::max(0.0f, v.px[i])) * 255.0f);
-    }
-    const std::string b64 = b64Of(bytes.data(), n);
-    char key[32];
-    std::snprintf(key, sizeof key, "%016llx", (unsigned long long) v.model);
-    ttp::Value o = ttp::Value::Obj();
-    o.set("w", ttp::Value::Num(v.w));
-    o.set("h", ttp::Value::Num(v.h));
-    o.set("model", ttp::Value::Str(key));
-    o.set("generic", ttp::Value::Bool(v.generic));
-    o.set("px", ttp::Value::Str(b64));
-    json = ttp::canonical_stringify(o);
-    return json.c_str();
-}
-
-const char* ttp_display_shadow_tuning_json(void) {
-    static std::string json;
-    ttp::Value o = ttp::Value::Obj();
-    o.set("current", shadowTuningValue(
-            g_disp && g_disp->renderer ? g_disp->renderer->shadowTuning()
-                                       : CarShadowTuning{}));
-    // The SHIPPED values, so a tuning page's sliders and its "reset" both come
-    // from the engine rather than from numbers re-typed in JS.
-    o.set("defaults", shadowTuningValue(CarShadowTuning{}));
-    // WHAT THE DENSITY ACTUALLY BOUGHT, and what it costs. Derived, never set:
-    // the width clamps against the driver's texture ceiling, so asking for 24
-    // texels/u on a long lap silently gets fewer — and how many texels a car's
-    // stamp lands on is the number that decides whether its edge can hold
-    // still. `uploadBytes` is the whole level, re-sent every frame.
-    if (g_disp && g_disp->renderer) {
-        const TtpRenderer::ShadowLayerInfo li = g_disp->renderer->shadowLayerInfo();
-        ttp::Value l = ttp::Value::Obj();
-        l.set("w", ttp::Value::Num(li.w));
-        l.set("h", ttp::Value::Num(li.h));
-        l.set("texelsPerU", ttp::Value::Num(li.texelsPerU));
-        l.set("texelsPerLat", ttp::Value::Num(li.texelsPerLat));
-        l.set("stampTexelsS", ttp::Value::Num(li.stampTexelsS));
-        l.set("stampTexelsLat", ttp::Value::Num(li.stampTexelsLat));
-        l.set("uploadBytes", ttp::Value::Num((double) li.w * li.h));
-        o.set("layer", l);
-    }
-    json = ttp::canonical_stringify(o);
-    return json.c_str();
-}
-
 void ttp_display_debug_features(unsigned int mask) {
     if (g_disp && g_disp->renderer) g_disp->renderer->debugFeatureMask((uint32_t) mask);
 }
@@ -1104,35 +925,23 @@ const char* ttp_display_debug_decals(void) {
             snprintf(buf, sizeof buf,
                     "{\"s\":%.4f,\"lat\":%.4f,\"halfS\":%.4f,\"halfLat\":%.4f,"
                     "\"r\":%.4f,\"g\":%.4f,\"b\":%.4f,\"a\":%.4f,"
-                    "\"inner\":%.3f,\"ellipse\":%.1f,\"knee\":%.3f,"
-                    "\"sin\":%.4f,\"cos\":%.4f,\"layer\":%.0f,\"masked\":%.0f,"
+                    "\"inner\":%.3f,\"ellipse\":%.1f,\"knee\":%.3f,\"car\":%.0f,"
                     // The GROUND-CONFORM's numbers, not the shadow's: the worst
                     // wheel-to-deck gap and the rendered pose's jitter beside
                     // the contract pose's. The sim's own snapshot cannot show
                     // any of it, because the conform runs after it.
                     //
-                    // MEANINGFUL ON MASKED ENTRIES ONLY. They ride `shape`,
-                    // which is spare on a car stamp but on a PROFILE decal is
+                    // MEANINGFUL ON CAR ENTRIES ONLY. They ride `shape`, which
+                    // is spare on a car entry but on a PROFILE decal is
                     // genuinely inner/ellipse/knee/chevrons — so these four keys
                     // on a pad or an oil slick are that profile wearing the
-                    // wrong labels. Filter on `masked` before reading them.
+                    // wrong labels. Filter on `car` before reading them.
                     "\"wheelGap\":%.4f,\"jitter\":%.5f,"
-                    "\"rawJitter\":%.5f,\"upJitter\":%.5f,"
-                    // …and the stamp's MEASURED track-space cull window, the
-                    // half-reaches vroad.mat and foldToChunk both test against.
-                    // Worth reading because they cannot be inferred from
-                    // halfS/halfLat: those are world lengths, and winS is an
-                    // ARCLENGTH, which the deck's fanning iso-lines make a
-                    // different number everywhere off the centreline. Compare
-                    // them against hypot(halfS, halfLat) to see how far wrong a
-                    // constant window would be at this spot.
-                    "\"winS\":%.4f,\"winLat\":%.4f}",
+                    "\"rawJitter\":%.5f,\"upJitter\":%.5f}",
                     v[i].rect.x, v[i].rect.y, v[i].rect.z, v[i].rect.w,
                     v[i].color.x, v[i].color.y, v[i].color.z, v[i].color.w,
-                    v[i].shape.x, v[i].shape.y, v[i].shape.z,
-                    v[i].texrot.x, v[i].texrot.y, v[i].texrot.z, v[i].texrot.w,
-                    v[i].shape.x, v[i].shape.y, v[i].shape.z, v[i].shape.w,
-                    v[i].wfwd.w, v[i].wright.w);
+                    v[i].shape.x, v[i].shape.y, v[i].shape.z, v[i].car,
+                    v[i].shape.x, v[i].shape.y, v[i].shape.z, v[i].shape.w);
             json += buf;
         }
     }

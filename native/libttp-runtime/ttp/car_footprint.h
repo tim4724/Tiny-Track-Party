@@ -1,9 +1,10 @@
-// car_footprint — the car contact shadow's SHAPE, as pixels.
+// car_footprint — the car contact shadow's SHAPE.
 //
 // The shadow the deck actually draws is one bilinear tap of the carShadow
-// layer, and what that layer stamps is a small greyscale mask. This header
-// makes those masks: the generic superellipse that every car used to share,
-// and a per-model FOOTPRINT rasterized from the car's own triangles.
+// layer, and what that layer stamps is a ROUNDED RECT FITTED TO EACH MODEL.
+// This header makes it: a per-model FOOTPRINT rasterized from the car's own
+// triangles, the fit measured off that raster, and the closed-form evaluator
+// the layer raster calls per texel.
 //
 // HEADER-ONLY ON PURPOSE, for the reason `glb_mesh.h` beside it gives: the
 // renderer and libttp-runtime may not link each other (native/CLAUDE.md), and
@@ -17,7 +18,7 @@
 // poke past it, how long the tail runs.
 //
 // THE MASK'S FRAME, and it is the stamp's, not the model's. `rasterCarShadow-
-// Stamp` lays the quad from six deck-projected points and samples this mask
+// Stamp` lays the quad from six deck-projected points and evaluates the shape
 // with u ACROSS the car and v ALONG it, so:
 //
 //     u = 0 -> the car's LEFT edge      v = 0 -> BEHIND the car (its tail)
@@ -30,12 +31,11 @@
 // that can show. See [[kit-car-facing-convention]].
 //
 // The footprint occupies `1/overscan` of the frame, leaving the rest as room
-// for the blur tail — exactly how the stamp quad is sized (`halfF`/`halfR`
-// carry the same 1.45) and how the JS bake framed its own.
+// for the soft edge — exactly how the stamp quad is sized (`halfF`/`halfR`
+// carry the same 1.45).
 #pragma once
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -44,83 +44,13 @@
 namespace ttp {
 namespace rt {
 
-// How a mask is finished, once its coverage is known. Every field is a knob the
-// display's shadow-tuning ABI carries, because the readable size of a footprint
-// at the layer's ~8 texels/u is a LOOK question that has to be judged on a
-// television and not argued from a number here.
+// The frame a footprint is rasterized in.
 struct FootprintSpec {
     int w = 64, h = 128;       // mask resolution (across, along)
     float overscan = 1.45f;    // footprint occupies 1/overscan of the frame
-    // Dilate, as a fraction of the FOOTPRINT's half-width. A shadow is not a
-    // razor projection of the body, and the layer minifies this mask hard — a
-    // wheel that pokes out by one mask texel is gone by the time it is a layer
-    // texel. Footprint only; the superellipse has no thin features to save.
-    float grow = 0.0f;
-    // The superellipse's analytic edge ramp, in the same units as `grow`.
-    // FOOTPRINT MASKS DO NOT USE IT and must not: their edge is already
-    // antialiased by the supersampled raster, and `blur` is where their
-    // penumbra comes from. An analytic ramp on top would only be a second
-    // softness knob fighting the first.
-    float feather = 0.06f;
-    // Box blur radius as a fraction of `w`, three separable passes ~ a
-    // Gaussian. 0.022 is the JS bake's own radius and the shipped value. This
-    // is THE penumbra, and it is not decoration: the mask is minified by the
-    // layer raster and a hard edge point-sampled under per-frame sub-texel
-    // slide flickers. Zero means zero — a caller asking for no blur gets none.
-    float blur = 0.022f;
 };
 
 namespace footprint_detail {
-
-// Three separable box passes ~ the canvas filter's Gaussian, at the same
-// radius. Outside the frame reads ZERO (the tail has to be able to fall off),
-// which is why the divisor counts every tap and not just the in-bounds ones.
-inline void box_blur3(std::vector<float>& a, int W, int H, int R) {
-    if (R < 1) return;
-    std::vector<float> tmp(a.size());
-    const auto pass = [&](std::vector<float>& src, std::vector<float>& dst, bool horiz) {
-        for (int y = 0; y < H; y++)
-            for (int x = 0; x < W; x++) {
-                float s = 0;
-                int n = 0;
-                for (int k = -R; k <= R; k++) {
-                    const int px = horiz ? x + k : x, py = horiz ? y : y + k;
-                    n++;
-                    if (px < 0 || px >= W || py < 0 || py >= H) continue;  // outside = 0
-                    s += src[(size_t) py * W + px];
-                }
-                dst[(size_t) y * W + x] = s / (float) n;
-            }
-    };
-    for (int i = 0; i < 3; i++) {
-        pass(a, tmp, true);
-        pass(tmp, a, false);
-    }
-}
-
-// Grow a coverage field by `r` pixels with a separable MAX filter — valid for a
-// square structuring element, and exact at the only radii that matter here
-// (these shapes are a few dozen pixels across, so a distance transform would be
-// machinery for nothing).
-inline void dilate(std::vector<float>& a, int W, int H, float r) {
-    const int ri = (int) std::lround(r);
-    if (ri < 1) return;
-    std::vector<float> tmp(a.size());
-    const auto pass = [&](std::vector<float>& src, std::vector<float>& dst, bool horiz) {
-        for (int y = 0; y < H; y++)
-            for (int x = 0; x < W; x++) {
-                float m = 0;
-                for (int k = -ri; k <= ri; k++) {
-                    const int px = horiz ? x + k : x, py = horiz ? y : y + k;
-                    if (px < 0 || px >= W || py < 0 || py >= H) continue;
-                    m = std::max(m, src[(size_t) py * W + px]);
-                }
-                dst[(size_t) y * W + x] = m;
-            }
-    };
-    pass(a, tmp, true);
-    pass(tmp, a, false);
-}
 
 // One triangle's coverage into a supersampled buffer, by the same top-left rule
 // the layer raster uses. Coverage is a UNION — no depth, no winding — because
@@ -157,43 +87,16 @@ inline void raster_tri(std::vector<float>& a, int W, int H,
 
 }  // namespace footprint_detail
 
-// The generic shape, and the fallback whenever a model's own triangles are not
-// available: a cubic superellipse fitted to the same footprint. Rounder corners
-// than any real car, same size, same softness.
+// THE SHAPE: a rounded rectangle, in closed form.
 //
-// The PENUMBRA is not decoration. This mask is MINIFIED by the layer raster
-// (one point sample per ~6-8 mask texels), and a binary edge point-sampled
-// under per-frame sub-texel slide flickers. Half a footprint of analytic
-// feather is the filter that sample never had.
-inline std::vector<float> superellipse_mask(const FootprintSpec& spec) {
-    const int W = std::max(1, spec.w), H = std::max(1, spec.h);
-    std::vector<float> a((size_t) W * H, 0.0f);
-    const float hw = (W * 0.5f) / spec.overscan, hl = (H * 0.5f) / spec.overscan;
-    for (int y = 0; y < H; y++) {
-        for (int x = 0; x < W; x++) {
-            const float dx = std::fabs(x + 0.5f - W * 0.5f) / hw;
-            const float dz = std::fabs(y + 0.5f - H * 0.5f) / hl;
-            const float q = std::cbrt(dx * dx * dx + dz * dz * dz);  // 1 at the edge
-            const float e0 = 1.0f - spec.feather * 2.0f, e1 = e0 + 0.24f;
-            a[(size_t) y * W + x] =
-                    1.0f - std::min(1.0f, std::max(0.0f, (q - e0) / std::max(1e-4f, e1 - e0)));
-        }
-    }
-    footprint_detail::box_blur3(a, W, H, std::max(2, (int) std::lround(W * spec.blur)));
-    return a;
-}
-
-// THE CHEAP SHAPE: a rounded rectangle, in closed form.
-//
-// The two masks above are PIXELS, and the layer raster pays for that per texel —
+// A mask would be PIXELS, and the layer raster would pay for that per texel —
 // four bilinear taps of a 64x128 mask is sixteen clamped, scattered reads and a
 // dozen lerps, and on an in-order TV core the misses cost more than the maths.
-// This is the same footprint as an expression: no mask, no bake, no store, and
-// ONE evaluation instead of four because the antialiasing comes from `soft`
-// (the caller sizes it from the texel footprint it already computes) rather
-// than from supersampling.
+// This is the footprint as an expression: no mask, no bake, no store, and ONE
+// evaluation because the antialiasing comes from `soft` (the caller sizes it
+// from the texel footprint it already computes) rather than from supersampling.
 //
-// `u`, `v` are the stamp's own frame, the same one the masks are drawn in —
+// `u`, `v` are the stamp's own frame, the same one the footprint is drawn in —
 // (0,0) is the car's left/tail corner, (1,1) its right/nose corner. `overscan`
 // says how much of that frame the footprint occupies, exactly as above.
 // `corner` is the corner radius as a fraction of the half-extent: 0 is a hard
@@ -255,7 +158,7 @@ struct RoundedRectEval {
         const float outside = std::sqrt(mx * mx + my * my);
         const float inside = std::min(std::max(bx, by), 0.0f);
         const float d = outside + inside - r;
-        // A smoothstep over the ramp, so the edge lands like the masks' blur.
+        // A smoothstep over the ramp, so the edge lands soft.
         const float t = std::min(1.0f, std::max(0.0f, (e - d) / twoE));
         return t * t * (3.0f - 2.0f * t);
     }
@@ -404,289 +307,6 @@ inline RoundedFit fit_rounded_rect(const std::vector<float>& mask,
     return fit;
 }
 
-// A CONVEX POLYGON fitted to one model — the shape between the rounded rect
-// and the outline mask. The rect cannot say "tapered" or "short wheelbase at
-// the front"; the outline mask can, but its wheel notches are thin features
-// the soft edge boils on and its raster costs sixteen reads a texel. A convex
-// hull simplified to a handful of edges carries the taper and the asymmetry,
-// stays lobeless by construction, and still evaluates in closed form.
-//
-// THE FRAME IS THE FOOTPRINT'S q-FRAME: the model's AABB maps to |q| <= 1 on
-// both axes (anisotropic on purpose, like the rect's own frame), with both
-// axes NEGATED per the kit-facing convention — +q.y is the NOSE. Half-planes
-// are inside-iff `dot(n, q) <= d` with n unit-length in that frame.
-struct PolyFit {
-    static constexpr int kMaxEdges = 12;
-    int count = 0;               // 0 = no fit; the caller falls back to the rect
-    float nx[kMaxEdges] = {};
-    float ny[kMaxEdges] = {};
-    float d[kMaxEdges] = {};
-};
-
-namespace footprint_detail {
-
-// Andrew's monotone chain over (x, y) pairs, answering a CCW hull.
-inline std::vector<std::array<float, 2>> convex_hull(std::vector<std::array<float, 2>> p) {
-    std::sort(p.begin(), p.end());
-    p.erase(std::unique(p.begin(), p.end()), p.end());
-    const size_t n = p.size();
-    if (n < 3) return {};
-    const auto cross = [](const std::array<float, 2>& o, const std::array<float, 2>& a,
-            const std::array<float, 2>& b) {
-        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
-    };
-    std::vector<std::array<float, 2>> h(2 * n);
-    size_t k = 0;
-    for (size_t i = 0; i < n; i++) {
-        while (k >= 2 && cross(h[k - 2], h[k - 1], p[i]) <= 0) k--;
-        h[k++] = p[i];
-    }
-    for (size_t i = n - 1, t = k + 1; i-- > 0;) {
-        while (k >= t && cross(h[k - 2], h[k - 1], p[i]) <= 0) k--;
-        h[k++] = p[i];
-    }
-    h.resize(k - 1);
-    return h;
-}
-
-}  // namespace footprint_detail
-
-// Fit a convex `edges`-gon around a model's projected vertices.
-//
-// CONTAINMENT-PRESERVING simplification: the hull is reduced one vertex at a
-// time by extending that vertex's two neighbouring edges to their
-// intersection — the polygon only ever GROWS, so every projected vertex stays
-// inside and the shadow can never be smaller than the car. The vertex removed
-// is always the one whose removal adds the least area, which is what keeps
-// the taper and sheds the noise. SYMMETRIZED in x before hulling: the kit's
-// cars are left-right symmetric and the capture is not exactly, and a shadow
-// that leans is the one asymmetry an eye always catches.
-//
-// Answers count == 0 (fall back to the rect) rather than a degenerate shape:
-// too few points, a collapsed extent, or an interior numerically too thin.
-inline PolyFit fit_convex_poly(const float* xz, size_t vertCount,
-        float halfX, float halfZ, int edges) {
-    PolyFit out;
-    if (!xz || vertCount < 3 || !(halfX > 0.0f) || !(halfZ > 0.0f)) return out;
-    edges = std::min((int) PolyFit::kMaxEdges, std::max(3, edges));
-    // Model -> q, both axes negated (kit noses toward -z under the base FLIP).
-    std::vector<std::array<float, 2>> pts;
-    pts.reserve(vertCount * 2);
-    for (size_t i = 0; i < vertCount; i++) {
-        const float qx = -xz[i * 2] / halfX, qy = -xz[i * 2 + 1] / halfZ;
-        pts.push_back({ qx, qy });
-        pts.push_back({ -qx, qy });   // the mirror IS the symmetrization
-    }
-    std::vector<std::array<float, 2>> hull = footprint_detail::convex_hull(std::move(pts));
-    if (hull.size() < 3) return out;
-    const auto area2 = [](const std::vector<std::array<float, 2>>& v) {
-        float s = 0;
-        for (size_t i = 0; i < v.size(); i++) {
-            const auto& a = v[i];
-            const auto& b = v[(i + 1) % v.size()];
-            s += a[0] * b[1] - b[0] * a[1];
-        }
-        return s;   // CCW positive, twice the area
-    };
-    while ((int) hull.size() > edges) {
-        // Removing vertex i extends edges (i-1 -> i) and (i+1 -> i+2) to their
-        // intersection; the added area is the triangle (v[i], x, v[i+1])... in
-        // vertex terms: replace v[i] and v[i+1]? No — one REMOVAL takes out
-        // vertex i and replaces it with the intersection of its neighbouring
-        // edges' lines, so the polygon keeps one vertex per remaining edge.
-        const size_t n = hull.size();
-        float bestAdd = 0;
-        int best = -1;
-        std::array<float, 2> bestX{};
-        for (size_t i = 0; i < n; i++) {
-            const auto& p0 = hull[(i + n - 1) % n];
-            const auto& p1 = hull[i];
-            const auto& p2 = hull[(i + 1) % n];
-            const auto& p3 = hull[(i + 2) % n];
-            // Lines p0->p1 and p3->p2 (both directed toward the removed side).
-            const float d1x = p1[0] - p0[0], d1y = p1[1] - p0[1];
-            const float d2x = p2[0] - p3[0], d2y = p2[1] - p3[1];
-            const float den = d1x * d2y - d1y * d2x;
-            if (std::fabs(den) < 1e-6f) continue;   // near-parallel: skip
-            const float t = ((p3[0] - p0[0]) * d2y - (p3[1] - p0[1]) * d2x) / den;
-            if (t < 1.0f) continue;                 // intersection behind p1: concave turn
-            const std::array<float, 2> x{ p0[0] + d1x * t, p0[1] + d1y * t };
-            // Added area = triangle (p1, x, p2).
-            const float add = 0.5f * std::fabs((x[0] - p1[0]) * (p2[1] - p1[1])
-                                             - (p2[0] - p1[0]) * (x[1] - p1[1]));
-            if (best < 0 || add < bestAdd) { best = (int) i; bestAdd = add; bestX = x; }
-        }
-        if (best < 0) break;   // nothing removable without breaking convexity
-        std::vector<std::array<float, 2>> next;
-        next.reserve(n - 1);
-        for (size_t i = 0; i < n; i++) {
-            if ((int) i == best) { next.push_back(bestX); continue; }
-            if ((int) ((best + 1) % (int) n) == (int) i) continue;
-            next.push_back(hull[i]);
-        }
-        hull = std::move(next);
-    }
-    if ((int) hull.size() > PolyFit::kMaxEdges || area2(hull) < 0.05f) return out;
-    for (size_t i = 0; i < hull.size(); i++) {
-        const auto& a = hull[i];
-        const auto& b = hull[(i + 1) % hull.size()];
-        // CCW winding: the outward normal of a->b is (dy, -dx).
-        float nx = b[1] - a[1], ny = -(b[0] - a[0]);
-        const float len = std::sqrt(nx * nx + ny * ny);
-        if (len < 1e-6f) continue;
-        nx /= len; ny /= len;
-        out.nx[out.count] = nx;
-        out.ny[out.count] = ny;
-        out.d[out.count] = nx * a[0] + ny * a[1];
-        out.count++;
-    }
-    if (out.count < 3) out.count = 0;
-    return out;
-}
-
-// TWO LOBES, so the fit does not have to be convex — only LOBELESS. A single
-// hull bridges a car's waist: the wheels poke past the body at the axles, and
-// the hull's side runs wheel-to-wheel over the pinch between them. Splitting
-// the outline at its narrowest section and hulling each half separately puts
-// the pinch back — the UNION of two convex lobes is concave there — while
-// each lobe keeps every closed-form and containment property of the single
-// hull. What this still cannot say is a NOTCH, deliberately: notches are the
-// thin features the soft edge boils on, and they stay the outline mask's job.
-//
-// The split only happens when it earns its second evaluation: a body whose
-// waist is not measurably narrower than both of its ends (a monotone taper, a
-// plain box) answers one lobe and a count-0 second.
-//
-// THE WIDTH PROFILE COMES FROM THE MASK, NEVER FROM THE VERTICES. A long body
-// triangle spans the middle of the car while depositing vertices only at its
-// ends, so a vertex histogram reads the mid-body as whatever small parts
-// happen to have vertices there — a phantom waist that split every boxy car
-// into an hourglass. The rasterized mask is the silhouette truth the caller
-// already has.
-inline std::array<PolyFit, 2> fit_convex_poly_lobes(const float* xz, size_t vertCount,
-        const uint32_t* idx, size_t idxCount,
-        float halfX, float halfZ, int edges,
-        const std::vector<float>& mask, const FootprintSpec& spec) {
-    std::array<PolyFit, 2> out{};
-    if (!xz || vertCount < 3 || !(halfX > 0.0f) || !(halfZ > 0.0f)) {
-        return out;
-    }
-    const int W = std::max(1, spec.w), H = std::max(1, spec.h);
-    // Per-row silhouette half-width, as a fraction of the footprint's own
-    // half-width; -1 where the row is empty. Row y maps to model z through the
-    // same frame car_footprint_mask draws in (row 0 = tail = +z).
-    std::vector<float> w((size_t) H, -1.0f);
-    const float hw = (W * 0.5f) / spec.overscan, hh = (H * 0.5f) / spec.overscan;
-    if (mask.size() >= (size_t) W * H) {
-        for (int y = 0; y < H; y++) {
-            const float dz = std::fabs(y + 0.5f - H * 0.5f) / hh;
-            if (dz > 1.0f) continue;   // overscan margin, no part of the shape
-            for (int x = 0; x < W; x++) {
-                if (mask[(size_t) y * W + x] <= 0.5f) continue;
-                w[y] = std::max(w[y], std::fabs(x + 0.5f - W * 0.5f) / hw);
-            }
-        }
-    }
-    // The waist: the narrowest occupied row of the middle half — and on a tie,
-    // the CENTRE of the longest narrowest run. A flat-bottomed pinch ties over
-    // its whole span, and splitting at the run's end leaves one lobe holding
-    // both wide ends of the car, which bridges exactly what the split exists
-    // to stop. Then the widest row on each side; a pinch is real when BOTH
-    // sides are wider.
-    float wmin = -1.0f;
-    for (int y = H / 4; y < 3 * H / 4; y++) {
-        if (w[y] < 0.0f) continue;
-        if (wmin < 0.0f || w[y] < wmin) wmin = w[y];
-    }
-    int waist = -1;
-    if (wmin >= 0.0f) {
-        int bestLen = 0, run0 = -1;
-        for (int y = H / 4; y <= 3 * H / 4; y++) {
-            const bool narrow = y < 3 * H / 4 && w[y] >= 0.0f && w[y] <= wmin + 0.01f;
-            if (narrow && run0 < 0) run0 = y;
-            if (!narrow && run0 >= 0) {
-                if (y - run0 > bestLen) { bestLen = y - run0; waist = run0 + (y - run0) / 2; }
-                run0 = -1;
-            }
-        }
-    }
-    float wideLo = -1.0f, wideHi = -1.0f;
-    if (waist >= 0) {
-        for (int y = 0; y < waist; y++) wideLo = std::max(wideLo, w[y]);
-        for (int y = waist + 1; y < H; y++) wideHi = std::max(wideHi, w[y]);
-    }
-    const bool pinched = waist >= 0 && wideLo > 0.0f && wideHi > 0.0f
-            && w[waist] < 0.93f * std::min(wideLo, wideHi);
-    if (!pinched) {
-        out[0] = fit_convex_poly(xz, vertCount, halfX, halfZ, edges);
-        return out;
-    }
-    // Split there, each half taking an overlap band so the union has no seam.
-    // SPLITTING POINTS ALONE LEAVES A HOLE: a triangle spanning the waist has
-    // vertices only at its far ends, so neither half would cover the middle —
-    // every triangle edge that crosses the split plane therefore contributes
-    // its interpolated crossing to BOTH lobes, which is what carries the
-    // silhouette's true width at the seam into each hull.
-    const float zSplit = (H * 0.5f - (waist + 0.5f)) / hh * halfZ;   // row -> model z
-    const float band = 0.10f * halfZ;
-    std::vector<float> lo, hi;
-    for (size_t i = 0; i < vertCount; i++) {
-        const float x = xz[i * 2], z = xz[i * 2 + 1];
-        if (z <= zSplit + band) { lo.push_back(x); lo.push_back(z); }
-        if (z >= zSplit - band) { hi.push_back(x); hi.push_back(z); }
-    }
-    if (idx) {
-        // Each lobe clips at ITS OWN band edge, not at the split itself: two
-        // hulls that merely touch read coverage 0.5 each at the seam, and the
-        // union dips there. Overlapping by the full band keeps the seam solid.
-        const auto clipInto = [&](std::vector<float>& dst, float zc) {
-            for (size_t t = 0; t + 2 < idxCount; t += 3) {
-                for (int e = 0; e < 3; e++) {
-                    const uint32_t ia = idx[t + e], ib = idx[t + (e + 1) % 3];
-                    if (ia >= vertCount || ib >= vertCount) continue;
-                    const float za = xz[ia * 2 + 1], zb = xz[ib * 2 + 1];
-                    if ((za - zc) * (zb - zc) > 0.0f || za == zb) continue;
-                    const float s = (zc - za) / (zb - za);
-                    dst.push_back(xz[ia * 2] + s * (xz[ib * 2] - xz[ia * 2]));
-                    dst.push_back(zc);
-                }
-            }
-        };
-        clipInto(lo, zSplit + band);
-        clipInto(hi, zSplit - band);
-    }
-    out[0] = fit_convex_poly(lo.data(), lo.size() / 2, halfX, halfZ, edges);
-    out[1] = fit_convex_poly(hi.data(), hi.size() / 2, halfX, halfZ, edges);
-    // Half a fit is worse than no split: the missing lobe would draw as a car
-    // cut in half. Fall back to the single hull.
-    if (out[0].count < 3 || out[1].count < 3) {
-        out[0] = fit_convex_poly(xz, vertCount, halfX, halfZ, edges);
-        out[1] = PolyFit{};
-    }
-    return out;
-}
-
-// The polygon as coverage, in the same (u, v) stamp frame and with the same
-// smoothstep ramp as `rounded_rect_coverage`. `corner` rounds by pulling the
-// faces in and letting the max-of-planes field bulge back out at the
-// vertices — not the exact Euclidean corner arc, but within a texel of it at
-// these radii, and free.
-inline float convex_poly_coverage(float u, float v, float overscan,
-        const PolyFit& p, float corner, float soft) {
-    if (p.count < 3) return 0.0f;
-    const float qx = (u * 2.0f - 1.0f) * overscan;
-    const float qy = (v * 2.0f - 1.0f) * overscan;
-    const float r = std::max(0.0f, corner);
-    float d = -1e9f;
-    for (int i = 0; i < p.count; i++) {
-        d = std::max(d, p.nx[i] * qx + p.ny[i] * qy - (p.d[i] - r));
-    }
-    d -= r;
-    const float e = std::max(1e-4f, soft);
-    const float t = std::min(1.0f, std::max(0.0f, (e - d) / (2.0f * e)));
-    return t * t * (3.0f - 2.0f * t);
-}
-
 // A model's own top-down outline.
 //
 //   xz          2 floats per vertex, MODEL space (x, z), any node transform
@@ -697,9 +317,9 @@ inline float convex_poly_coverage(float u, float v, float overscan,
 //               AABB extents halved), so the mask and the quad agree on scale.
 //
 // Returns an empty vector when there is nothing to rasterize; the caller falls
-// back to `superellipse_mask`. A car whose outline came out blank must NOT be
-// drawn as a blank shadow — the bake that silently shipped an empty silhouette
-// layer is the standing lesson here.
+// back to the default fit. A car whose outline came out blank must NOT be drawn
+// as a blank shadow — a bake that silently shipped an empty silhouette is the
+// standing lesson here.
 inline std::vector<float> car_footprint_mask(const float* xz, size_t vertCount,
         const uint32_t* idx, size_t idxCount,
         float halfX, float halfZ, const FootprintSpec& spec) {
@@ -730,9 +350,6 @@ inline std::vector<float> car_footprint_mask(const float* xz, size_t vertCount,
                 toMaskX(xz[i1 * 2]), toMaskY(xz[i1 * 2 + 1]),
                 toMaskX(xz[i2 * 2]), toMaskY(xz[i2 * 2 + 1]));
     }
-    // Grow while the resolution is still there to grow into — the dilation is
-    // in FOOTPRINT half-widths, and the footprint is SW/overscan wide.
-    footprint_detail::dilate(cov, SW, SH, spec.grow * (SW * 0.5f / spec.overscan));
     std::vector<float> a((size_t) W * H, 0.0f);
     float covered = 0.0f;
     constexpr float inv = 1.0f / (float) (SS * SS);
@@ -751,7 +368,6 @@ inline std::vector<float> car_footprint_mask(const float* xz, size_t vertCount,
     // A model that projected onto nothing is a failed bake, not a car with no
     // shadow. Say so by answering empty.
     if (covered <= 0.0f) return {};
-    footprint_detail::box_blur3(a, W, H, (int) std::lround(W * spec.blur));
     return a;
 }
 

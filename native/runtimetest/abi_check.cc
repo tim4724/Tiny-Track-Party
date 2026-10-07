@@ -498,26 +498,26 @@ void boundaryExports() {
     check(plan("bake", "g", { "a|b" }).names[0] != plan("bake", "g", { "a/b" }).names[0],
           "keys that sanitise alike still name different blobs");
 
-    // A SET-SIZED PLAN names one blob per key, in order. This is what the mask
-    // store is: one blob per car model, and a build wants every model in its
-    // field at once.
+    // A SET-SIZED PLAN names one blob per key, in order: the walk takes a key
+    // LIST so a store holding several things one build wants needs no new
+    // walk. The bake store answers one key, so it carries the contract here.
     {
-      const ttp::rt::BlobPlan m = plan("mask", "g", { "k0", "k1", "k2" });
+      const ttp::rt::BlobPlan m = plan("bake", "g", { "k0", "k1", "k2" });
       check(m.names.size() == 3, "every key in the request gets a name");
       check(m.names[0] != m.names[1] && m.names[1] != m.names[2],
             "…and they are its own, not one name repeated");
-      check(m.names[0] == plan("mask", "g", { "k0" }).names[0],
+      check(m.names[0] == plan("bake", "g", { "k0" }).names[0],
             "a key's name does not depend on what it was asked beside");
     }
 
     // Under the cap nothing is dropped; over it, the oldest-used go, and NO
     // blob this plan is about is one of them — every name, not just the first.
     {
-      const uint32_t keep = ttp::rt::blobKeep("mask");
+      const uint32_t keep = ttp::rt::blobKeep("bake");
       // The entry list has to contain the plan's OWN names for the exemption to
       // mean anything, so they are asked for rather than spelled: a
       // hand-written name would differ in its hash and quietly test nothing.
-      const std::vector<std::string> mine = plan("mask", "g", { "k0", "k1" }).names;
+      const std::vector<std::string> mine = plan("bake", "g", { "k0", "k1" }).names;
       // Both of ours are the OLDEST, and every other entry is newer. Without
       // the exemption they would be first out — a cache deleting exactly what
       // was asked for, every time the store is full.
@@ -525,11 +525,11 @@ void boundaryExports() {
       for (const std::string& n : mine) entries.push_back({ n, 1 });
       std::vector<std::string> others;
       for (uint32_t i = 1; i <= keep + 1; i++) {
-        const std::string n = plan("mask", "g", { "x" + std::to_string(i) }).names[0];
+        const std::string n = plan("bake", "g", { "x" + std::to_string(i) }).names[0];
         others.push_back(n);
         entries.push_back({ n, (double) (i + 1) });
       }
-      const ttp::rt::BlobPlan f = plan("mask", "g", { "k0", "k1" }, entries);
+      const ttp::rt::BlobPlan f = plan("bake", "g", { "k0", "k1" }, entries);
       check(f.names == mine, "the plan still names the blobs asked for");
       // keep+3 entries, so three go.
       const std::vector<std::string> dropped = sorted(f.drop);

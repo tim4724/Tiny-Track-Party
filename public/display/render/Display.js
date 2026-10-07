@@ -54,7 +54,7 @@ export const FEAT = {
 // material to serve.
 const MATERIALS = ['vcolor', 'vblend', 'vlit', 'vlitns', 'vroad', 'vglb', 'vglbfade',
                    'vpoint', 'vcloud', 'vground', 'vvis', 'vroadvis', 'vpresent', 'vesm',
-                   'vblur', 'vburst', 'voverlay'];
+                   'vburst', 'voverlay'];
 
 // The GLBs every scene needs whatever the track and the biome are: the track's
 // own furniture, and the truck a monster item turns a car into. Exported because
@@ -143,11 +143,6 @@ export class Display {
       debugDecals: mod.cwrap('ttp_display_debug_decals', 'string', []),
       debugHideCars: mod.cwrap('ttp_display_debug_hide_cars', null, ['number']),
       debugWipeSkids: mod.cwrap('ttp_display_debug_wipe_skids', null, []),
-      debugForceMaskLayer: mod.cwrap('ttp_display_debug_force_mask_layer', null, ['number']),
-      shadowTuning: mod.cwrap('ttp_display_shadow_tuning', null, ['string']),
-      shadowTuningJson: mod.cwrap('ttp_display_shadow_tuning_json', 'string', []),
-      shadowMaskJson: mod.cwrap('ttp_display_shadow_mask_json', 'string', ['number']),
-      shadowLayerJson: mod.cwrap('ttp_display_shadow_layer_json', 'string', ['number','number','number','number']),
       debugFeatures: mod.cwrap('ttp_display_debug_features', null, ['number']),
       dressKeep: mod.cwrap('ttp_display_dress_keep', null, ['number']),
       dressSheets: mod.cwrap('ttp_display_dress_sheets', null, ['number']),
@@ -477,11 +472,10 @@ export class Display {
       if (bytes) this.provide(uri, bytes);
     }));
 
-    // THE BLOB WALKS, first half — AFTER provisioning and before the build, the
-    // one window that suits every store: the bake's key needs the biome (latched
-    // at the top of this method), the masks' are derived from the car GLBs handed
-    // over just above. NOTHING HERE NAMES A BLOB KIND; the engine lists its
-    // stores and this performs the answers. The second half is not here at all —
+    // THE BLOB WALKS, first half — AFTER provisioning and before the build: a
+    // key may depend on anything provisioned (the bake's needs the biome, latched
+    // at the top of this method). NOTHING HERE NAMES A BLOB KIND; the engine
+    // lists its stores and this performs the answers. The second half is not here at all —
     // it is a frame beat (writeReadyBlobs), for the reason ttp_display.h gives.
     if (this.blobs) {
       const gen = await this.blobs.generation();
@@ -763,24 +757,6 @@ export class Display {
   // dark pixel near a car is one of three things.
   debugHideCars(on) { this._fn.debugHideCars(on ? 1 : 0); }
   debugWipeSkids() { this._fn.debugWipeSkids(); }
-  debugForceMaskLayer(layer) { this._fn.debugForceMaskLayer(layer | 0); }
-  // The car contact shadow's live knobs (/shadow-lab.html). A PARTIAL object:
-  // whatever is left out keeps its current value, so a page sends one knob per
-  // drag. `shadowTuning()` answers { current, defaults } — read the sliders'
-  // ranges and the reset button off THAT rather than re-typing the engine's
-  // numbers here, which is the drift root rule 1 exists to stop.
-  setShadowTuning(patch) { this._fn.shadowTuning(JSON.stringify(patch || {})); }
-  shadowTuning() { return JSON.parse(this._fn.shadowTuningJson() || '{}'); }
-  // The mask a car slot actually stamps — { w, h, model, generic, px } with px
-  // base64. The only way to tell a shape that is WRONG from one that is right
-  // and merely too small to read on the deck; those want opposite fixes.
-  shadowMask(slot) { return JSON.parse(this._fn.shadowMaskJson(slot | 0) || '{}'); }
-  // A window of the LAYER the raster wrote — { x, y, w, h, px } with px base64.
-  // The only view of this channel with no camera and no shader in the way, and
-  // therefore the one that says whether an artifact is the WRITE or the READ.
-  shadowLayer(x, y, w, h) {
-    return JSON.parse(this._fn.shadowLayerJson(x | 0, y | 0, w | 0, h | 0) || '{}');
-  }
   // Feature ablation for the per-feature GPU cost map (TTP_FEAT_* in
   // ttp_display.h): a cleared bit hides that group of renderables, so the perf
   // HUD's timer reads what it was costing to draw. FEATURES names the bits so a

@@ -903,8 +903,7 @@ export function runDisplayScenario(opts, ctx) {
       // stamp is the only dark thing on the road. Without this a contact
       // shadow, a tyre trail and the car's own underside are three dark
       // patches in the same place and no screenshot can separate them.
-      solo: false,
-      forceLayer: -1   // -1 auto · 9 the generic superellipse · 8 the monster rig
+      solo: false
     };
     const DT = 1 / 60;   // fixed: a bench that varies its own timestep is useless
 
@@ -953,9 +952,9 @@ export function runDisplayScenario(opts, ctx) {
       if (st.lock) return;
       let eye, dir;
       if (st.cam === 'deck') {
-        // FACE-ON DOWN THE DECK NORMAL. The stamp is a prism along this axis, so
-        // seen from here its painted footprint is the baked silhouette EXACTLY —
-        // any departure is real and cannot be blamed on perspective. The car
+        // FACE-ON DOWN THE DECK NORMAL. Seen from here the painted footprint is
+        // the stamp's shape as rasterized — any departure is real and cannot be
+        // blamed on perspective. The car
         // hides most of it, which is the point of the orbit view below; use this
         // one to check the deck itself and the stamp's reach past the body.
         eye = { x: p.x + up.x * st.dist, y: p.y + up.y * st.dist, z: p.z + up.z * st.dist };
@@ -983,7 +982,7 @@ export function runDisplayScenario(opts, ctx) {
     }
 
     function paint(car) {
-      const d = scene.display.debugDecals().filter((x) => x.masked > 0.5)[0];
+      const d = scene.display.debugDecals().filter((x) => x.car > 0.5)[0];
       if (d) st.lapL = Math.max(st.lapL, d.s);
       const u = (d && st.lapL > 1) ? d.s / st.lapL : 0;
       hud.textContent = [
@@ -1002,10 +1001,9 @@ export function runDisplayScenario(opts, ctx) {
         '',
         `cam ${st.cam}${st.lock ? ' LOCKED' : ''}${st.solo ? ' · CARS HIDDEN' : ''}`
           + `   ${st.paused ? 'PAUSED' : 'running'}`
-          + (st.forceLayer >= 0 ? `   MASK ${st.forceLayer}` : '')
           + `   lat target ${st.lat.toFixed(1)}`,
         'space pause · , . step · [ ] speed · k l lat · c cam · f lock'
-          + ' · h hide cars · w wipe rubber · m mask · - = zoom'
+          + ' · h hide cars · w wipe rubber · - = zoom'
       ].join('\n');
     }
 
@@ -1036,13 +1034,6 @@ export function runDisplayScenario(opts, ctx) {
       else if (k === 'f') st.lock = !st.lock;
       else if (k === 'h') { st.solo = !st.solo; scene.display.debugHideCars(st.solo); }
       else if (k === 'w') scene.display.debugWipeSkids();
-      else if (k === 'm') {
-        // auto -> generic -> monster -> auto. The generic layer is a shape
-        // correct by construction, so it separates a bad BAKE from a bad
-        // everything-downstream-of-the-bake.
-        st.forceLayer = st.forceLayer === -1 ? 9 : st.forceLayer === 9 ? 8 : -1;
-        scene.display.debugForceMaskLayer(st.forceLayer);
-      }
       else if (k === 'c') {
         const order = ['orbit', 'deck', 'chase', 'free'];
         st.cam = order[(order.indexOf(st.cam) + 1) % order.length];

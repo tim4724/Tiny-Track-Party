@@ -118,10 +118,10 @@ typedef struct TtpViewInput {
      * The renderer cannot work this out from `world`, and "the car nearest the
      * eye" is NOT the same question: the chase rig sits CHASE_DIST behind the
      * player, so a car drafting them is nearer to their eye than their own car
-     * is. Anything that budgets a scarce per-player resource off this view has
-     * to reserve it for the SUBJECT, or it hands the player's share to the bot
-     * on their tail. That is exactly what the contact shadow's masked budget
-     * does (renderCars), and it is the defect this field exists to close. */
+     * is. So whatever is decided PER CELL about its own player reads this:
+     * the monster-truck ghosting tests a truck against the cell's own car
+     * (renderCars), and the name tags label the OTHER cells' subjects in it,
+     * by the same ghosting rule (name_tags.cc). */
     int32_t car;
 } TtpViewInput;
 

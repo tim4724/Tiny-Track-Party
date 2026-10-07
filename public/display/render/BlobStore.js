@@ -9,9 +9,9 @@
 // stale blob forever, across reloads, with nothing on screen to say so.
 //
 // It knows nothing about WHAT it is storing either — not that a sun bake exists,
-// nor a silhouette layer, nor how many kinds there are. `ttp_display.h`'s walk
-// decides what to read, keep and drop and hands over a name;
-// `ttp_display_blob_stores` says which kinds there are. A third kind needs no JS.
+// nor how many kinds there are. `ttp_display.h`'s walk decides what to read,
+// keep and drop and hands over a name; `ttp_display_blob_stores` says which
+// kinds there are. A new kind needs no JS.
 //
 // GENERATION IS THE INVALIDATION and it is this shell's one real contribution.
 // The web's is `BUILD_STAMP.json`'s `sourceHash` — a hash over every file that
@@ -158,8 +158,8 @@ class BlobStore {
  * One BlobStore per store the ENGINE says it has.
  *
  * The names are asked for rather than typed, which is the point: this shell does
- * not know that a bake or a mask exists, only that the engine keeps some kinds of
- * derived bytes and that each kind wants its own database.
+ * not know that a bake exists, only that the engine keeps some kinds of derived
+ * bytes and that each kind wants its own database.
  */
 export class BlobStores {
   constructor(names) {

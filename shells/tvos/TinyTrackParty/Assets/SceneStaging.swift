@@ -96,7 +96,7 @@ enum SceneStaging {
     /// so there is no stamp material left to stage.
     static let materialNames = ["vcolor", "vblend", "vlit", "vlitns", "vroad",
                                 "vglb", "vglbfade", "vpoint", "vcloud", "vground",
-                                "vvis", "vroadvis", "vpresent", "vesm", "vblur",
+                                "vvis", "vroadvis", "vpresent", "vesm",
                                 "vburst", "voverlay"]
 
     /// The GLBs every scene needs whatever the track and the biome are: the
@@ -266,10 +266,9 @@ enum SceneStaging {
         guard generation == mine else { return }
 
         // 6. THE BLOB WALK, first half — AFTER provisioning and before the
-        //    build, which is the one window that suits every store: the bake's
-        //    key needs the biome (latched at step 3), the masks' are derived
-        //    from the car GLBs handed over at step 4. NOTHING HERE NAMES A BLOB
-        //    KIND; the engine lists its stores and this performs the answers.
+        //    build: a key may depend on anything provisioned (the bake's needs
+        //    the biome, latched at step 3). NOTHING HERE NAMES A BLOB KIND; the
+        //    engine lists its stores and this performs the answers.
         //    The walk's SECOND half is not here at all — it is a frame beat
         //    (`DisplayHost.writeReadyBlobs`), for the reason `ttp_display.h`
         //    gives: a readback does not finish inside the build that issues it

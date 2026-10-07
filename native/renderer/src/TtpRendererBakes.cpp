@@ -1,5 +1,5 @@
-// The track-scoped bakes: sun shadow map, road light, silhouettes and the
-// staged-blob machinery. TtpRendererImpl.h carries what the topic files share.
+// The track-scoped bakes: sun shadow map, road light and the staged-blob
+// machinery. TtpRendererImpl.h carries what the topic files share.
 #include "TtpRendererImpl.h"
 
 #include <algorithm>
@@ -9,245 +9,6 @@
 #include <utility>
 
 #include <utils/Log.h>
-
-// The car's ground shadow, shaped like the CAR. SceneRenderer._bakeCarShadow
-// puts an orthographic camera over the model, renders a flat white mask on
-// transparent, and reads it back for the blur; the same picture here comes from
-// an offscreen RenderTarget rendered with renderStandaloneView — the blur is a
-// second render pass rather than a CPU convolution, and the only readback is
-// the small coverage probe that decides whether the bake landed at all.
-//
-// The framing is the JS's: footprint × SHADOW_OVERSCAN, so the silhouette lands
-// at footprint scale inside a quad with room for the penumbra tail. The camera
-// looks UP from under the model rather than down on it: the outline is the same
-// either way, and this is the handedness that makes the blob mesh's own UVs
-// (u across → car right, v along → car forward) land unmirrored.
-//
-// Alpha is the coverage channel — opaque glTF materials write 1.0 there and the
-// clear leaves 0 — which is why the bake needs no lights and doesn't care that
-// an unlit car in an empty scene renders black.
-void TtpRenderer::bakeSilhouette(gltfio::FilamentAsset* asset,
-        const float3& bbMin, const float3& bbMax, int maskLayer) {
-    if (!asset) return;
-    bakeSilhouette(asset->getEntities(), asset->getEntityCount(), bbMin, bbMax,
-            maskLayer);
-}
-
-void TtpRenderer::bakeSilhouette(const utils::Entity* entities, size_t count,
-        const float3& bbMin, const float3& bbMax, int maskLayer) {
-    if (!entities || !count || !mRenderer || bbMax.x <= bbMin.x) return;
-    // The bake feeds vroad's masked decal loop — since the hybrid shadow LOD,
-    // the NEAR cars' true silhouettes (far cars ride the CPU-rasterized
-    // carShadow layer, whose source is the CPU superellipse). The gate is a
-    // capability check: a vroad without the masked arrays has no reader, so
-    // the two render passes and the flushAndWait per car, per scene, are
-    // skipped. A slot outside the array or a missing blur material likewise
-    // means there is nothing to bake into.
-    ensurePresentQuad();
-    if (maskLayer < 0 || maskLayer >= kMaskLayers || !roadHasMaskLoop()
-            || !mBlurMaterial || !mPresentVB || !mPresentIB
-            || !ensureDecalMaskArray()) {
-        // LOGGED, because this starve is invisible: the generic-superellipse
-        // fallback draws a plausible oval and no automated gate can tell it
-        // from the baked silhouette — only a player two units from their own
-        // car can (it cost two rounds of that player's eye to find). Name the
-        // reason so the NEXT starve is one logcat read.
-        utils::slog.w << "bakeSilhouette skipped layer " << maskLayer
-                << " maskLoop=" << (int) roadHasMaskLoop()
-                << " blur=" << (mBlurMaterial != nullptr)
-                << " quad=" << (mPresentVB != nullptr)
-                << utils::io::endl;
-        return;
-    }
-    // 128 was the pixelation: a hard-edged 128-px mask softened by a 25-tap
-    // gaussian resolves its edge in about five quantised steps, and those steps
-    // are the banding in the blob's gradient. 256 plus the bake-time blur below
-    // gives the hardware something smooth to interpolate, and still only costs
-    // ~0.5 MB a car.
-    constexpr int TW = 256;
-    const float hw = (bbMax.x - bbMin.x) * 0.5f * 1.45f;
-    const float hl = (bbMax.z - bbMin.z) * 0.5f * 1.45f;
-    if (hw <= 0 || hl <= 0) return;
-    const int TH = std::max(16, (int) std::lround(TW * (hl / hw)));
-    Texture* tex = Texture::Builder()
-            .width((uint32_t) TW).height((uint32_t) TH).levels(1)
-            .format(Texture::InternalFormat::RGBA8)
-            // BLIT_SRC: the coverage probe below reads this back, which
-            // requires (and in a future Filament will assert) that COLOR0 was
-            // created blit-readable — the ESM bake's note applies here too.
-            .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE
-                    | Texture::Usage::BLIT_SRC)
-            .build(*mEngine);
-    if (!tex) return;
-    RenderTarget* rt = RenderTarget::Builder()
-            .texture(RenderTarget::AttachmentPoint::COLOR, tex)
-            .build(*mEngine);
-    Scene* scene = mEngine->createScene();
-    utils::Entity camEnt = utils::EntityManager::get().create();
-    Camera* cam = mEngine->createCamera(camEnt);
-    View* view = mEngine->createView();
-    const float cx = (bbMin.x + bbMax.x) * 0.5f, cz = (bbMin.z + bbMax.z) * 0.5f;
-    const float h = (bbMax.y - bbMin.y) + 2.0f;
-    scene->addEntities(entities, count);
-    cam->setProjection(Camera::Projection::ORTHO, -hw, hw, -hl, hl, 0.01, h);
-    cam->lookAt({ cx, bbMin.y - 1.0f, cz }, { cx, bbMax.y, cz }, { 0, 0, -1 });
-    view->setScene(scene);
-    view->setCamera(cam);
-    view->setViewport({ 0, 0, (uint32_t) TW, (uint32_t) TH });
-    view->setRenderTarget(rt);
-    view->setPostProcessingEnabled(false); // tone mapping would eat the alpha
-    view->setShadowingEnabled(false);
-    view->setBlendMode(View::BlendMode::TRANSLUCENT); // OPAQUE forces alpha to 1
-    const Renderer::ClearOptions prev = mRenderer->getClearOptions();
-    Renderer::ClearOptions co{};
-    co.clearColor = { 0, 0, 0, 0 };
-    co.clear = true;
-    mRenderer->setClearOptions(co);
-    mRenderer->renderStandaloneView(view);
-    mRenderer->setClearOptions(prev);
-    // DID ANY COVERAGE ACTUALLY LAND? This starve is silent by construction:
-    // an EMPTY layer whose baked bit is set draws nothing at all under that
-    // car, while a CLEAR bit draws a plausible generic oval — so after the
-    // fact no screenshot gate and no success log can tell the three states
-    // apart. It is not hypothetical either: the R8 experiment recorded in
-    // ensureDecalMaskArray put every car into exactly this state on the
-    // PowerVR driver while the bake logged success.
-    //
-    // One central patch is the whole test. The ortho camera frames the model's
-    // OWN aabb with 1.45 overscan, so the body covers the middle of the target
-    // for every car in the kit; anything that renders nothing there rendered
-    // nothing anywhere.
-    bool covered = false;
-    {
-        struct CoverRead { std::vector<uint8_t> px; bool done = false; };
-        constexpr int CW = 16;
-        auto* rd = new CoverRead{
-                std::vector<uint8_t>((size_t) CW * CW * 4, 0), false };
-        Texture::PixelBufferDescriptor pbd(rd->px.data(), rd->px.size(),
-                Texture::Format::RGBA, Texture::Type::UBYTE,
-                [](void*, size_t, void* user) {
-                    static_cast<CoverRead*>(user)->done = true;
-                }, rd);
-        mRenderer->readPixels(rt, (uint32_t) ((TW - CW) / 2),
-                (uint32_t) ((TH - CW) / 2), CW, CW, std::move(pbd));
-        // The ESM readback's pump, for its reasons: the GL backend completes
-        // the copy on a fence it checks a tick after the flush, and Metal's
-        // completion handler can land just as a wait returns.
-        for (int t = 0; t < 8 && !rd->done; t++) mEngine->flushAndWait();
-        if (rd->done) {
-            // Coverage rides ALPHA (the sampler's note) — opaque glTF
-            // materials write 1.0 there and the clear leaves 0.
-            for (size_t i = 3; i < rd->px.size(); i += 4) {
-                if (rd->px[i] > 8) { covered = true; break; }
-            }
-            delete rd;
-        } else {
-            // The read never landed, so the probe knows nothing. Trust the
-            // bake over the probe: a false EMPTY would cost every car its
-            // silhouette, which is worse than the starve this is hunting.
-            covered = true;
-        }
-    }
-    for (size_t i = 0; i < count; i++) scene->remove(entities[i]);
-    mEngine->destroy(view);
-    mEngine->destroy(rt);
-    // The camera and scene go back BEFORE the coverage verdict, not after: an
-    // early return between the two leaks exactly the case the probe exists to
-    // catch, which would make a driver that renders nothing also a slow leak.
-    mEngine->destroyCameraComponent(camEnt);
-    utils::EntityManager::get().destroy(camEnt);
-    mEngine->destroy(scene);
-    if (!covered) {
-        // Bit left CLEAR on purpose: the generic oval is the honest fallback,
-        // and a reload (or the next scene's rebake) is the cure.
-        utils::slog.w << "bakeSilhouette layer " << maskLayer
-                << " rendered EMPTY — bit left clear, this shape falls back to"
-                   " the generic oval" << utils::io::endl;
-        mEngine->destroy(tex);
-        return;
-    }
-
-    // Blur it ONCE, here, instead of rebuilding the penumbra with a 25-tap
-    // gaussian in every fragment of every frame (see vblur.mat) — straight
-    // into the decalMask array layer the road-shader shadow decal samples.
-    // The cell is a fixed kMaskCellW x kMaskCellH, so the bake stretches into
-    // it and the decal stretches it back onto the footprint rect — net
-    // identity.
-    RenderTarget* art = RenderTarget::Builder()
-            .texture(RenderTarget::AttachmentPoint::COLOR, mDecalMaskArray)
-            .layer(RenderTarget::AttachmentPoint::COLOR, (uint32_t) maskLayer)
-            .build(*mEngine);
-    if (art) {
-        MaterialInstance* bmi = mBlurMaterial->createInstance();
-        TextureSampler ssmp(TextureSampler::MinFilter::LINEAR,
-                TextureSampler::MagFilter::LINEAR);
-        ssmp.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
-        ssmp.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
-        bmi->setParameter("src", tex, ssmp);
-        bmi->setParameter("texel",
-                math::float2{ 1.0f / (float) TW, 1.0f / (float) TH });
-        // PENUMBRA WIDTH, and it is a look decision as much as a filtering one.
-        // At 0.9 the kernel spans about a source texel, and the mask is
-        // stretched across ~250 screen pixels on a close chase cam — so the
-        // silhouette arrived with a one-pixel edge, effectively a hard cutout.
-        // A razor edge has no slack: the stamp is a rigid plane projected onto
-        // the deck, so wherever the deck bends or twists that projection
-        // reshapes, and a hard edge renders every bit of that reshaping
-        // crisply. A contact shadow has a penumbra; giving it one both looks
-        // right and absorbs the projection's own movement instead of drawing
-        // it. vblur's kernel is scale-invariant (its sigma is in tap units, so
-        // taps stay 0.5 sigma apart at any radius) — widening costs no taps,
-        // and it is bake-time work either way, so this number is free to tune.
-        // Both ends have been walked: 0.9 read as a hard cutout, 4.0 read as
-        // too soft for a contact shadow. 2.0 is the landing — still a bit over
-        // twice the original penumbra, enough to absorb the projection's own
-        // movement, without the blob losing the car's shape.
-        bmi->setParameter("radius", 2.0f); // kernel spacing in source texels
-        utils::Entity bq = utils::EntityManager::get().create();
-        RenderableManager::Builder(1)
-                .boundingBox({ { 0, 0, 0 }, { 1, 1, 1 } })
-                .material(0, bmi)
-                .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
-                        mPresentVB, mPresentIB, 0, 3)
-                .culling(false).castShadows(false).receiveShadows(false)
-                .build(*mEngine, bq);
-        Scene* bs = mEngine->createScene();
-        bs->addEntity(bq);
-        utils::Entity bcamEnt = utils::EntityManager::get().create();
-        Camera* bcam = mEngine->createCamera(bcamEnt);
-        bcam->setProjection(Camera::Projection::ORTHO, -1, 1, -1, 1, 0, 1);
-        View* bv = mEngine->createView();
-        bv->setScene(bs);
-        bv->setCamera(bcam);
-        bv->setViewport({ 0, 0, (uint32_t) kMaskCellW, (uint32_t) kMaskCellH });
-        bv->setRenderTarget(art);
-        bv->setPostProcessingEnabled(false);
-        bv->setShadowingEnabled(false);
-        bv->setFrustumCullingEnabled(false);
-        bv->setBlendMode(View::BlendMode::TRANSLUCENT); // the mask IS alpha
-        Renderer::ClearOptions bco{};
-        bco.clear = true;
-        bco.clearColor = { 0, 0, 0, 0 };
-        const Renderer::ClearOptions bprev = mRenderer->getClearOptions();
-        mRenderer->setClearOptions(bco);
-        mRenderer->renderStandaloneView(bv);
-        mMaskLayerBakedBits |= (uint16_t) (1u << maskLayer);
-        utils::slog.d << "bakeSilhouette layer " << maskLayer << " baked (bits 0x"
-                << utils::io::hex << mMaskLayerBakedBits << utils::io::dec
-                << ")" << utils::io::endl;
-        mRenderer->setClearOptions(bprev);
-        mEngine->flushAndWait(); // `tex` dies next; let the pass read it first
-        mEngine->destroy(bv);
-        mEngine->destroy(art);
-        mEngine->destroy(bs);
-        mEngine->destroy(bq);
-        utils::EntityManager::get().destroy(bq);
-        mEngine->destroyCameraComponent(bcamEnt);
-        utils::EntityManager::get().destroy(bcamEnt);
-        mEngine->destroy(bmi);
-    }
-    mEngine->destroy(tex);
-}
 
 // Frozen sun shadow, baked ONCE at scene build (the JS renderer bakes its
 // shadow map once per track — moving casters carry blobs instead): darken road
@@ -306,11 +67,10 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     // is 520 of a 700 ms build, and the build blocks the main thread for all of
     // it, inbound relay frames included.
     //
-    // The same argument the silhouette layers already won one level up (see
-    // releaseScene: "a bake is a fact about the kit rather than about this
-    // race"), applied to the track. The KEY is the caller's — only the shim
-    // knows what a scene is OF — and an empty one means "do not reuse", which is
-    // what every caller that has not opted in gets.
+    // A bake is a fact about the TRACK rather than about this race. The KEY is
+    // the caller's — only the shim knows what a scene is OF — and an empty one
+    // means "do not reuse", which is what every caller that has not opted in
+    // gets.
     //
     // What is NOT skipped is anything keyed to the road MESH, which is new on
     // every build — see the two calls inside. The two guards below (shadows off,
@@ -478,6 +238,11 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     // means the map's resolution no longer sets the edge's softness — the blur
     // does — so ESM_SM can be well under the depth map's own size.
     // mPresentVB is the shared fullscreen triangle; without vpresent there is none.
+    // ENSURED HERE, never left to another pass: the AA path is the only other
+    // creator and both TV shells run AA off, so a quad some earlier pass
+    // happened to create was a sun shadow that vanished whenever that pass
+    // was skipped.
+    ensurePresentQuad();
     bool esmOk = false;
     if (mEsmMaterial && mPresentVB && mPresentIB) {
         // A QUARTER of the depth map's size. The blur, not the resolution, sets
@@ -979,11 +744,10 @@ void TtpRenderer::fillRoadLight(const TrackBin& tb) {
 // reference box and it is resolution-independent — the three sizes are compile
 // -time constants (SM, ESM_SM, VIS_SM) and no viewport, window or render-scale
 // value reaches it — so it is worth keeping between RUNS, not just between
-// builds. The silhouettes are the same argument on a smaller number: five bakes
-// cost ~330 ms of a launch's first build, a GPU render and a flushAndWait each.
-// Keeping something between runs means a file, and a file is the shell's job
-// (`ttp_abi.h`: the transport stays on the host side by design). So this hands
-// over bytes and takes them back, and decides nothing about where they live.
+// builds. Keeping something between runs means a file, and a file is the
+// shell's job (`ttp_abi.h`: the transport stays on the host side by design). So
+// this hands over bytes and takes them back, and decides nothing about where
+// they live.
 //
 // EVERY BLOB CARRIES ITS OWN KEY, and that is what makes a stale file harmless
 // rather than invisible: import adopts the key it finds, and the next build's
@@ -992,12 +756,6 @@ void TtpRenderer::fillRoadLight(const TrackBin& tb) {
 // `track|biome|showcase` and would silently serve shadows baked by the old
 // vesm. That invalidation is the shell's, and it is why the file lives under a
 // directory named for the installed binary rather than beside the track id.
-//
-// A SILHOUETTE IS KEYED PER MODEL, not per roster. The layers are baked per
-// model already (mMaskLayerKey), so a set-keyed blob stored each layer once per
-// SUBSET it appeared in — up to fifteen copies of the same 512 KB — and then
-// missed outright whenever a lobby's roster covered fewer models than the blob
-// that wrote it. One key per model is the same data with none of that.
 namespace {
 constexpr uint32_t kBakeMagic = 0x42505454u;  // 'TTPB', little-endian
 // v2: the writing BACKEND rides the header and import refuses a foreign blob —
@@ -1007,19 +765,6 @@ constexpr uint32_t kBakeMagic = 0x42505454u;  // 'TTPB', little-endian
 // re-deriving it needed an ESM readback; it reads no map now (fillRoadLight),
 // so the bytes cost more than the arithmetic they saved.
 constexpr uint32_t kBakeVersion = 3u;
-
-constexpr uint32_t kMaskMagic = 0x4b53544du;  // 'MTSK', little-endian
-// v3 is ONE LAYER PER BLOB, keyed by that layer's model. v2 was the whole set in
-// one container, which is what the per-model keying above retires.
-constexpr uint32_t kMaskVersion = 3u;
-constexpr uint32_t kMaskKindModel = 0u;    // goes in any free model layer
-constexpr uint32_t kMaskKindMonster = 1u;  // goes in kMaskLayerMonster, always
-
-// The monster's silhouette is keyed by nothing — the truck never changes — so it
-// takes a name no model FNV can collide with. Before v2 it had no key at all and
-// re-baked on every launch, quietly inheriting the cost the model layers had
-// already stopped paying.
-const char* const kMonsterKey = "monster";
 
 void putU32(std::vector<uint8_t>& out, uint32_t v) {
     out.insert(out.end(), (const uint8_t*) &v, (const uint8_t*) &v + 4);
@@ -1047,74 +792,31 @@ bool takeStr(const uint8_t*& p, const uint8_t* end, std::string& v) {
     return true;
 }
 
-// A mask layer's key, from the bytes baked into it.
-std::string maskKeyOf(uint64_t fnv, int backend) {
-    char buf[40];
-    std::snprintf(buf, sizeof buf, "%016llx|%d", (unsigned long long) fnv, backend);
-    return buf;
-}
 }  // namespace
 
 // ── What this build could keep, and what it already holds ───────────────────
 
-// What the NEXT build's silhouettes will be OF: one key per distinct car model
-// the shell has already provided, plus the monster's. Empty when no car bytes
-// are provided yet, which is what makes the window explicit — ask after
-// provisioning.
-std::vector<std::string> TtpRenderer::maskBlobKeys() const {
-    std::vector<uint64_t> fnvs;
-    for (uint32_t c = 0; c < 16; c++) {
-        const auto it = mAssets.find("car" + std::to_string(c) + ".glb");
-        if (it == mAssets.end() || it->second.empty()) continue;
-        const uint64_t k = glbBytesKey(it->second);
-        if (std::find(fnvs.begin(), fnvs.end(), k) == fnvs.end()) fnvs.push_back(k);
-    }
-    if (fnvs.empty()) return {};
-    // Sorted so the same field in a different slot order names the same blobs.
-    std::sort(fnvs.begin(), fnvs.end());
-    const int backend = backendId();
-    std::vector<std::string> keys;
-    keys.reserve(fnvs.size() + 1);
-    for (const uint64_t k : fnvs) keys.push_back(maskKeyOf(k, backend));
-    keys.push_back(std::string(kMonsterKey) + "|" + std::to_string(backend));
-    return keys;
-}
-
 bool TtpRenderer::blobResident(const std::string& key) const {
     if (key.empty()) return false;
-    if (key == mBakedKey && mShadowMap) return true;
-    // A mask layer is resident when a layer currently holds that model's bytes.
-    // The monster's home is fixed, so its bit alone answers.
-    const int backend = backendId();
-    if (key == std::string(kMonsterKey) + "|" + std::to_string(backend)) {
-        return (mMaskLayerBakedBits & (uint16_t) (1u << kMaskLayerMonster)) != 0;
-    }
-    for (int i = 0; i < kMaskLayerModels; i++) {
-        if (!(mMaskLayerBakedBits & (uint16_t) (1u << i))) continue;
-        if (maskKeyOf(mMaskLayerKey[i], backend) == key) return true;
-    }
-    return false;
+    return key == mBakedKey && mShadowMap;
 }
 
 // ── Staging: snapshot the metadata, issue the reads ─────────────────────────
 
-bool TtpRenderer::issueRead(StagedBlob& blob, Texture* tex, bool asFloat, int layer) {
+bool TtpRenderer::issueRead(StagedBlob& blob, Texture* tex, bool asFloat) {
     if (!tex || !mRenderer) return false;
     const Texture::Type type = asFloat ? Texture::Type::FLOAT : Texture::Type::UBYTE;
     const uint32_t bytesPerChannel = asFloat ? 4u : 1u;
     const uint32_t W = tex->getWidth(0), H = tex->getHeight(0);
-    RenderTarget::Builder rtb;
-    rtb.texture(RenderTarget::AttachmentPoint::COLOR, tex);
-    // An ARRAY slice, the same way bakeSilhouette renders into one.
-    if (layer >= 0) rtb.layer(RenderTarget::AttachmentPoint::COLOR, (uint32_t) layer);
-    RenderTarget* rt = rtb.build(*mEngine);
+    RenderTarget* rt = RenderTarget::Builder()
+            .texture(RenderTarget::AttachmentPoint::COLOR, tex)
+            .build(*mEngine);
     if (!rt) return false;
     // THE DESTINATION IS THE StagedRead's OWN BUFFER from the start, because a
     // read that does not finish here keeps being written into after this returns
     // — so the buffer may not be moved, resized or freed on the way out.
     auto rd = std::make_unique<StagedRead>();
     rd->tex = tex;
-    rd->layer = layer;
     rd->asFloat = asFloat;
     rd->w = W;
     rd->h = H;
@@ -1158,62 +860,29 @@ bool TtpRenderer::stageBlob(const std::string& key) {
     // wrong side of the circuit.
     blob->flip = mEngine->getBackend() == Engine::Backend::OPENGL;
 
-    // WHICH KIND, decided by what the engine is holding rather than by an
-    // argument: only one key can be the resident bake's, and a silhouette's is
-    // not a scene key. A caller that names neither gets a refusal.
-    if (!mBakedKey.empty() && key == mBakedKey) {
-        if (!mShadowMap) return false;
-        blob->mask = false;
-        // EVERYTHING THAT IS NOT A READBACK, NOW. A staged blob that read these
-        // at finish time would pair this build's pixels with a later build's
-        // matrices — which is the whole reason the split exists.
-        putU32(blob->head, kBakeMagic);
-        putU32(blob->head, kBakeVersion);
-        putU32(blob->head, (uint32_t) mEngine->getBackend());
-        putStr(blob->head, mBakedKey);
-        putF32(blob->head, mShadowTexel);
-        putF32(blob->head, mShadowDepthScale);
-        for (int c = 0; c < 4; c++) {
-            for (int r = 0; r < 4; r++) putF32(blob->head, mShadowFromWorld[c][r]);
-        }
-        // BOTH MAPS OR NEITHER. The visibility map used to be optional here,
-        // which was harmless while every read landed inside the call — and
-        // silently shipped a blob with no vis map the moment one did not.
-        if (!issueRead(*blob, mShadowMap, /*asFloat=*/true, -1)) return false;
-        if (mVisMap && !issueRead(*blob, mVisMap, /*asFloat=*/false, -1)) {
-            retireStaged(*blob);
-            return false;
-        }
-        mStaged.push_back(std::move(blob));
-        return true;
-    }
-
-    // A silhouette layer. Which layer currently holds this key is what says
-    // whether there is anything to stage at all.
-    const int backend = backendId();
-    int layer = -1;
-    uint32_t kind = kMaskKindModel;
-    if (key == std::string(kMonsterKey) + "|" + std::to_string(backend)) {
-        if (!(mMaskLayerBakedBits & (uint16_t) (1u << kMaskLayerMonster))) return false;
-        layer = kMaskLayerMonster;
-        kind = kMaskKindMonster;
-    } else {
-        for (int i = 0; i < kMaskLayerModels && layer < 0; i++) {
-            if (!(mMaskLayerBakedBits & (uint16_t) (1u << i))) continue;
-            if (maskKeyOf(mMaskLayerKey[i], backend) == key) layer = i;
-        }
-        if (layer < 0) return false;
-    }
-    if (!mDecalMaskArray) return false;
-    blob->mask = true;
-    putU32(blob->head, kMaskMagic);
-    putU32(blob->head, kMaskVersion);
+    // Only the resident bake's key names anything to stage; any other key gets
+    // a refusal.
+    if (mBakedKey.empty() || key != mBakedKey || !mShadowMap) return false;
+    // EVERYTHING THAT IS NOT A READBACK, NOW. A staged blob that read these
+    // at finish time would pair this build's pixels with a later build's
+    // matrices — which is the whole reason the split exists.
+    putU32(blob->head, kBakeMagic);
+    putU32(blob->head, kBakeVersion);
     putU32(blob->head, (uint32_t) mEngine->getBackend());
-    putU32(blob->head, (uint32_t) kMaskCellW);
-    putU32(blob->head, (uint32_t) kMaskCellH);
-    putU32(blob->head, kind);
-    putStr(blob->head, key);
-    if (!issueRead(*blob, mDecalMaskArray, /*asFloat=*/false, layer)) return false;
+    putStr(blob->head, mBakedKey);
+    putF32(blob->head, mShadowTexel);
+    putF32(blob->head, mShadowDepthScale);
+    for (int c = 0; c < 4; c++) {
+        for (int r = 0; r < 4; r++) putF32(blob->head, mShadowFromWorld[c][r]);
+    }
+    // BOTH MAPS OR NEITHER. The visibility map used to be optional here,
+    // which was harmless while every read landed inside the call — and
+    // silently shipped a blob with no vis map the moment one did not.
+    if (!issueRead(*blob, mShadowMap, /*asFloat=*/true)) return false;
+    if (mVisMap && !issueRead(*blob, mVisMap, /*asFloat=*/false)) {
+        retireStaged(*blob);
+        return false;
+    }
     mStaged.push_back(std::move(blob));
     return true;
 }
@@ -1260,19 +929,6 @@ void TtpRenderer::finishBakeBlob(StagedBlob& blob) {
     out.insert(out.end(), blob.tail.begin(), blob.tail.end());
 }
 
-void TtpRenderer::finishMaskBlob(StagedBlob& blob) {
-    const StagedRead& read = *blob.reads[0];
-    const size_t cell = (size_t) kMaskCellW * kMaskCellH * 4;
-    if (read.px.size() < cell) return;
-    std::vector<uint8_t>& out = blob.bytes;
-    out = blob.head;
-    for (int y = 0; y < kMaskCellH; y++) {
-        const uint8_t* row = read.px.data()
-                + (size_t) (blob.flip ? kMaskCellH - 1 - y : y) * kMaskCellW * 4;
-        out.insert(out.end(), row, row + (size_t) kMaskCellW * 4);
-    }
-}
-
 void TtpRenderer::retireStaged(StagedBlob& blob) {
     for (auto& rd : blob.reads) {
         if (rd->rt) mEngine->destroy(rd->rt);
@@ -1312,7 +968,7 @@ void TtpRenderer::collectStagedBlobs() {
             if (!rd->done) { all = false; break; }
         }
         if (!all) continue;
-        if (s->mask) finishMaskBlob(*s); else finishBakeBlob(*s);
+        finishBakeBlob(*s);
         s->finished = true;
         retireStaged(*s);
     }
@@ -1339,24 +995,16 @@ bool TtpRenderer::takeStagedBlob(const std::string& key, std::vector<uint8_t>& o
 
 // ── Import ──────────────────────────────────────────────────────────────────
 //
-// SELF-DESCRIBING, so there is one entry point and no store argument: the magic
-// says which kind of blob these bytes are, and a caller that hands over the
-// wrong file gets a refusal rather than a misparse. A blob the engine refuses is
-// a MISS, never an error — the scene makes the thing again.
+// SELF-DESCRIBING, so there is no store argument: a caller that hands over
+// the wrong file gets a refusal on the magic rather than a misparse. A blob the
+// engine refuses is a MISS, never an error — the scene makes the thing again.
 
 std::string TtpRenderer::importBlob(const uint8_t* bytes, uint32_t len) {
     if (!bytes || len < 16 || !mEngine) return std::string();
     const uint8_t* p = bytes;
     const uint8_t* end = bytes + len;
-    uint32_t magic = 0;
-    if (!takeU32(p, end, magic)) return std::string();
-    if (magic == kBakeMagic) return importBakeBlob(p, end);
-    if (magic == kMaskMagic) return importMaskBlob(p, end);
-    return std::string();
-}
-
-std::string TtpRenderer::importBakeBlob(const uint8_t* p, const uint8_t* end) {
-    uint32_t version = 0, backend = 0;
+    uint32_t magic = 0, version = 0, backend = 0;
+    if (!takeU32(p, end, magic) || magic != kBakeMagic) return std::string();
     if (!takeU32(p, end, version) || version != kBakeVersion) return std::string();
     // A blob is in its WRITER's setImage order (see the flip note in stageBlob),
     // and nothing here can re-orient bytes whose convention it cannot know — so
@@ -1403,6 +1051,9 @@ std::string TtpRenderer::importBakeBlob(const uint8_t* p, const uint8_t* end) {
                     | Texture::Usage::UPLOADABLE | Texture::Usage::BLIT_SRC)
             .build(*mEngine);
     if (!esm) return std::string();
+    // THE DESCRIPTORS OWN THEIR PIXELS: the caller's bytes only have to survive
+    // the CALL, and the upload outlives it (native/renderer/CLAUDE.md, under
+    // the blob rules, has what a borrowed buffer drew).
     {
         Texture::PixelBufferDescriptor pbd(malloc(esmBytes), esmBytes,
                 Texture::Format::R, Texture::Type::HALF,
@@ -1433,56 +1084,6 @@ std::string TtpRenderer::importBakeBlob(const uint8_t* p, const uint8_t* end) {
     mShadowDepthScale = depthScale;
     mShadowFromWorld = fromWorld;
     mBakedKey = key;
-    return key;
-}
-
-// Put one stored layer back and CLAIM it, so the build's own claimMaskLayer
-// finds that model already held and skips its bake — the very path a second race
-// on one field already takes.
-std::string TtpRenderer::importMaskBlob(const uint8_t* p, const uint8_t* end) {
-    uint32_t version = 0, backend = 0, w = 0, h = 0, kind = 0;
-    if (!takeU32(p, end, version) || version != kMaskVersion) return std::string();
-    // A blob is in its writer's byte order and nothing here can re-orient it.
-    if (!takeU32(p, end, backend)
-            || backend != (uint32_t) mEngine->getBackend()) return std::string();
-    if (!takeU32(p, end, w) || w != (uint32_t) kMaskCellW) return std::string();
-    if (!takeU32(p, end, h) || h != (uint32_t) kMaskCellH) return std::string();
-    if (!takeU32(p, end, kind)) return std::string();
-    std::string key;
-    if (!takeStr(p, end, key)) return std::string();
-    const size_t cell = (size_t) kMaskCellW * kMaskCellH * 4;
-    if ((size_t) (end - p) < cell) return std::string();
-    if (blobResident(key)) return key;
-    if (!ensureDecalMaskArray()) return std::string();
-
-    int slot = -1;
-    if (kind == kMaskKindMonster) {
-        slot = kMaskLayerMonster;   // one fixed home, because nothing else may live there
-    } else {
-        for (int i = 0; i < kMaskLayerModels && slot < 0; i++) {
-            if (!(mMaskLayerBakedBits & (uint16_t) (1u << i))) slot = i;
-        }
-        if (slot < 0) return std::string();   // every model layer is spoken for this build
-    }
-    // The key carries the FNV the claim test compares against; a key this
-    // build's own maskBlobKeys could not have produced is not one it can claim.
-    uint64_t fnv = 0;
-    if (kind != kMaskKindMonster) {
-        if (std::sscanf(key.c_str(), "%016llx", (unsigned long long*) &fnv) != 1) return std::string();
-    }
-    // THE DESCRIPTOR OWNS ITS PIXELS, exactly as importBakeBlob's two uploads do:
-    // the caller's bytes only have to survive the CALL, and the upload outlives
-    // it. A no-op destructor over those bytes plus a flushAndWait stood here
-    // instead and looked equivalent — what it actually drew is in
-    // native/renderer/CLAUDE.md, under the blob rules.
-    Texture::PixelBufferDescriptor pbd(malloc(cell), cell,
-            Texture::Format::RGBA, Texture::Type::UBYTE,
-            [](void* buf, size_t, void*) { free(buf); });
-    std::memcpy(pbd.buffer, p, cell);
-    mDecalMaskArray->setImage(*mEngine, 0, 0, 0, (uint32_t) slot,
-            (uint32_t) kMaskCellW, (uint32_t) kMaskCellH, 1, std::move(pbd));
-    if (kind != kMaskKindMonster) mMaskLayerKey[slot] = fnv;
-    mMaskLayerBakedBits |= (uint16_t) (1u << slot);
     return key;
 }
 

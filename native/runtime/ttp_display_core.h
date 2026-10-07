@@ -75,7 +75,7 @@ struct DisplayCore : DisplayState {
     };
     // One per store, indexed as ttp_display_blob_stores lists them; the
     // static_assert beside kBlobStores pins the count to that list.
-    static constexpr int kBlobStoreCount = 2;
+    static constexpr int kBlobStoreCount = 1;
     BlobWalk blobWalk[kBlobStoreCount];
 };
 

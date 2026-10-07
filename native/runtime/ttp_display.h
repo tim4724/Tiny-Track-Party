@@ -379,11 +379,10 @@ TTP_ABI int ttp_display_reroster(const char* rosterJson);
 
 /* ---- derived bytes, kept between RUNS ---------------------------------------
  *
- * Two things a build makes are expensive to compute and small to store, which
- * is the only profile that earns a file: the SUN BAKE (~1250 ms of GPU on the
- * Android reference box) and the SILHOUETTE LAYERS (~330 ms for five of them,
- * a render and a flushAndWait each). Both are already kept in memory across
- * scenes; this is the tier below, across runs. Keeping something between runs
+ * What a build makes that is expensive to compute and small to store — the
+ * only profile that earns a file — is the SUN BAKE (~1250 ms of GPU on the
+ * Android reference box). It is already kept in memory across scenes; this is
+ * the tier below, across runs. Keeping something between runs
  * means a FILE, and a file is the shell's job — ttp_abi.h puts transport on the
  * host side, and wasm has no filesystem at all.
  *
@@ -414,21 +413,19 @@ TTP_ABI int ttp_display_reroster(const char* rosterJson);
  *           for each name: export(store, name) and write those bytes under it,
  *                          then wrote(store, name)
  *
- * A NAME LIST, NOT A NAME, because a store may hold several things one build
- * wants: a silhouette is one blob per car MODEL and a field uses up to four.
- * (Keying them by the model SET instead stored each layer once per subset it
- * appeared in and then missed outright whenever a lobby covered fewer models
- * than the blob that wrote it.) The bake store answers zero or one.
+ * A NAME LIST, NOT A NAME, so a store that holds several things one build
+ * wants needs no new walk. The one store today, the bake's, answers zero or
+ * one. Key such a store per THING, never per set of things: a set key stores
+ * each thing once per subset it appears in and misses outright whenever a
+ * build needs fewer than the blob that wrote it.
  *
  * A name is absent from `read` when the engine is already holding that thing,
  * which is the commonest build of all and costs no read at all. A blob the
  * engine does not fully trust is a cache MISS, not an error: it is dropped and
  * the scene makes the thing again.
  *
- * THE PLAN WINDOW IS AFTER PROVISIONING AND BEFORE THE BUILD, for both stores.
- * The bake's key needs the biome latched; the masks' keys are derived from the
- * car GLBs the shell has already handed over, so they do not exist until they
- * have been. One call site satisfies both.
+ * THE PLAN WINDOW IS AFTER PROVISIONING AND BEFORE THE BUILD: the bake's key
+ * needs the biome latched.
  *
  * THE WRITE HALF IS A FRAME BEAT AND NOT THE BUILD'S TAIL, and that is the one
  * thing here a shell must not shortcut. A readback does not complete inside the
@@ -796,79 +793,6 @@ TTP_ABI const char* ttp_display_debug_decals(void);
 TTP_ABI void ttp_display_debug_hide_cars(int on);
 TTP_ABI void ttp_display_debug_wipe_skids(void);
 
-// Force every car's shadow onto ONE decalMask layer (-1 = each car on its own).
-// 9 is the generic superellipse — a shape correct by construction, so it
-// separates "the bake is wrong" from "everything downstream of it is wrong".
-TTP_ABI void ttp_display_debug_force_mask_layer(int layer);
-
-/* THE CAR CONTACT SHADOW'S TUNING — /shadow-lab.html's whole surface.
- *
- * JSON both ways, by the call-frequency rule: this is a once-per-drag event and
- * never a frame path. The getter answers the CURRENT values beside the SHIPPED
- * defaults under "defaults", so a tuning page builds its sliders from the
- * engine's own numbers instead of re-typing them and drifting (root rule 1).
- *
- * The setter takes a partial object — any key absent keeps its current value —
- * so a page may send one knob per drag. Unknown keys are ignored. Keys:
- *
- *   mode         0 blob (shipped: every car, every cell count), 1 silhouette
- *                (the old masked loop for everyone), 2 hybrid (the old
- *                distance LOD). 1 and 2 exist for the A/B and cost what
- *                native/renderer/CLAUDE.md prices them at.
- *   shape        0 each model's own outline, 1 the shared superellipse,
- *                2 a rounded rect in CLOSED FORM (shipped), 3 a fitted convex
- *                k-gon, likewise closed form. The four roster cars have the
- *                SAME bounding box, so the per-model FIT is the only thing
- *                that tells them apart — and 2/3 are the cheap arms, because
- *                0 and 1 are masks the CPU raster samples sixteen times a
- *                texel while an expression is evaluated once. Both are still
- *                PER-CAR, fitted to each model's own outline at bake time.
- *                `corner` SCALES the fitted radius (1 = as fitted, 0 = a hard
- *                rectangle); `polyEdges` (3..12) is the k-gon arm's edge
- *                budget.
- *   ao           the stamp's peak opacity        cap    summed-coverage ceiling
- *   loadGain     deepening at full body pitch    ink    colour, 0xRRGGBB
- *   overscan     footprint's share of the quad   grow   dilate the outline
- *   blur         the stored field's ramp         remapLo/remapHi  the edge band
- *                (an EMPTY band, hi <= lo, means no cut at all)
- *   smoothTap    bool: bicubic B-spline tap (shipped on) vs raw bilinear
- *   remapInShader  bool A/B arm: where a non-empty band is cut
- *   stampProject   bool A/B arm: project() vs deckFoot() stamp placement
- *   uploadWhole    bool A/B arm: whole-level upload vs the stamps' own rects
- *   texelsPerU   layer density along the lap     rows   layer rows across it
- *
- * The last two RE-ALLOCATE the layer pair and the shape knobs RE-BAKE the
- * masks; everything else is free and lands on the next frame. Nothing on the
- * shipping path calls either of these. */
-TTP_ABI void ttp_display_shadow_tuning(const char* json);
-TTP_ABI const char* ttp_display_shadow_tuning_json(void);
-
-/* DEBUG: the mask car slot `slot` actually stamps, as
- * { w, h, model: "<hex>", generic: bool, px: "<base64 of w*h bytes>" }.
- *
- * Exists because "does this shape look like the car?" cannot be answered from
- * the deck: the stamp lands in roughly 16 by 11 texels of the carShadow layer,
- * under a car, on asphalt. Reading the mask back is the only way to separate a
- * shape that is WRONG from a shape that is right and merely too small to read
- * — and those two want opposite fixes. `generic` says the outline bake did not
- * land and the superellipse is standing in, which is a state no screenshot can
- * distinguish from a rounded car. */
-TTP_ABI const char* ttp_display_shadow_mask_json(int slot);
-
-/* DEBUG: a WINDOW OF THE LAYER ITSELF — w*h texels of the carShadow texture at
- * (x, y), as { x, y, w, h, px: "<base64>" }. Clamped to the layer; an empty
- * object when there is no layer.
- *
- * THIS IS THE INSTRUMENT THAT SEPARATES THE WRITE FROM THE READ, and three
- * wrong diagnoses of one artifact went by without it. Everything else about
- * this channel is judged from screen pixels, which have been through a camera,
- * the road's shader, the tail cut, tone mapping and a lossy capture — so
- * "banding" seen there could be the raster, the sampling, or the grade, and
- * guessing which is how the last three attempts were spent. The layer is what
- * the raster actually wrote. If an artifact is in here it is the WRITE side; if
- * this is clean and the deck is not, it is the READ side. */
-TTP_ABI const char* ttp_display_shadow_layer_json(int x, int y, int w, int h);
-
 /* FEATURE ABLATION, for the per-feature cost map. Each bit KEEPS one group of
  * renderables; a cleared bit hides it, so the GPU timer around the frame reads
  * that group's draw cost directly. The frame is submission-bound (per-cell draw
@@ -938,42 +862,18 @@ TTP_ABI const char* ttp_display_shadow_layer_json(int x, int y, int w, int h);
 /* TTP_FEAT_ROAD_DECALS decomposed — inverted knobs like TTP_DEBUG_NO_MERGE,
  * so none of them joins TTP_FEAT_ALL: `TTP_FEAT_ALL | one of these` ablates
  * that sub-arm alone.
- *   NO_DECAL_MASKED   the near cars' silhouette stamps. Zeroes the PICK
- *                     budget rather than the shader's count, so every car
- *                     rides the far blob at full alpha — the real fallback
- *                     picture, not a field of shadowless near cars.
  *   NO_DECAL_PROFILE  the profile loop: boost auras, oil slicks, item discs.
  *   NO_DECAL_STATICS  only the statics (slicks, item discs); auras stay.
- *   NO_DECAL_BLOB     the far carShadow layer — raster, upload and the
- *                     whole-deck shader tap. Attribution only: far cars lose
- *                     their shadows outright.
- *   DECAL_CAPS_HALF   the masked pick budget and the per-chunk profile fold
- *                     cap, both halved. The rank gate degrades the overflow
- *                     to the blob, so nothing loses its shadow. */
-#define TTP_DEBUG_NO_DECAL_MASKED  0x10000
+ *   NO_DECAL_BLOB     the carShadow layer — raster, upload and the whole-deck
+ *                     shader tap. Attribution only: cars lose their shadows.
+ *   DECAL_CAPS_HALF   the per-chunk profile fold cap, halved.
+ * 0x10000 and 0x200000..0x800000 are HOLES: they were the masked car shadow's
+ * probes, deleted with it (2026-10-06). Never reuse them — the masks below and
+ * in docs/perf are typed by hand. */
 #define TTP_DEBUG_NO_DECAL_PROFILE 0x20000
 #define TTP_DEBUG_NO_DECAL_BLOB    0x40000
 #define TTP_DEBUG_NO_DECAL_STATICS 0x80000
 #define TTP_DEBUG_DECAL_CAPS_HALF  0x100000
-/* The MECHANISM probe for NO_DECAL_MASKED's saving: fold and WRITE the masked
- * uniforms exactly as shipped, but zero the shader-side count so the loop
- * never executes. Reads like NO_DECAL_MASKED -> the cost is the loop's
- * fragments; reads like the baseline -> the cost is the per-frame chunk-UBO
- * rewrites themselves. Attribution only (near cars lose their shadows). */
-#define TTP_DEBUG_DECAL_MASK_COUNT0 0x200000
-/* The probe's twin: counts and writes exactly as shipped, but maskBounds is
- * an impossible box, so the shader's box test rejects every fragment. COUNT0
- * fast + BOUNDS0 slow = the masked path runs PREDICATED across the chunks
- * that carry a stamp, whatever the branch says; both fast = the cost is the
- * stamp's own covered fragments. Attribution only. */
-#define TTP_DEBUG_DECAL_MASK_BOUNDS0 0x400000
-/* The third probe: the masked loop runs in full — projection, feather, mix —
- * but the silhouette tap answers a CONSTANT instead of sampling the decalMask
- * array (a view-global uniform branch, the grade/fog idiom). Against the
- * baseline it prices the FETCH'S EXECUTION alone; register pressure and the
- * armed-path cost stay, which is what BOUNDS0 already prices. Attribution
- * only: every near shadow draws as a feathered square. */
-#define TTP_DEBUG_DECAL_MASK_FLAT 0x800000
 /* SET keeps every far form off in every cell — the deck's far ribbon and the
  * static meshes' simplified ones (TtpRenderer::chooseLods) — so a sweep prices
  * them as interleaved arms on one launch. Inverted like TTP_DEBUG_NO_MERGE, and

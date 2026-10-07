@@ -49,20 +49,13 @@ std::string safe(const std::string& s) {
 
 }  // namespace
 
-uint32_t blobKeep(const std::string& store) {
-    // The sun bake is ~2.3 MB a blob (a 1024² R16F ESM, a 512² R8 visibility map
-    // and the road's baked vertex light), so eight is ~18 MB — enough to hold a
-    // cup's four circuits plus the lobby browsing around them, against a
-    // catalogue whose full set would be ~46 MB.
-    if (store == "bake") return 8;
-    // A silhouette is ONE LAYER, 256×512 RGBA = 512 KB, and there are only ever
-    // five things to hold: the four car models protocol.js ships plus the
-    // monster rig. Ten covers the whole set twice, which is what a device the
-    // boot canary flips between Vulkan and GL needs — a blob's byte orientation
-    // is the writing backend's, so each backend keeps its own. ~5 MB.
-    if (store == "mask") return 10;
-    // An unknown store still gets a bound. A cache with no cap is a disk leak,
-    // and answering 0 here would instead delete everything a new caller wrote.
+uint32_t blobKeep(const std::string& /*store*/) {
+    // EIGHT FOR EVERY STORE. The sun bake ("bake", the one store there is) is
+    // ~2.3 MB a blob (a 1024² R16F ESM and a 512² R8 visibility map), so eight
+    // is ~18 MB — enough to hold a cup's four circuits plus the lobby browsing
+    // around them, against a catalogue whose full set would be ~46 MB. An
+    // unknown store gets the same bound: a cache with no cap is a disk leak,
+    // and answering 0 would instead delete everything a new caller wrote.
     return 8;
 }
 
@@ -93,7 +86,7 @@ BlobPlan planBlob(const BlobRequest& in) {
     // not just one: they are all about to be read or written, so evicting any of
     // them would be a cache that deletes precisely what was asked for whenever
     // the store is full — and with a set-sized plan it would do it repeatedly,
-    // shedding one model's silhouette to make room for the next.
+    // shedding one key's blob to make room for the next.
     const uint32_t keep = blobKeep(in.store);
     if (mine.size() > keep) {
         std::sort(mine.begin(), mine.end(),

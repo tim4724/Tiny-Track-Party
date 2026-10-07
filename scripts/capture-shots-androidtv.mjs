@@ -206,14 +206,14 @@ async function main() {
 
   // THE EMULATOR'S VULKAN IS NOT WORTH PHOTOGRAPHING. With no host passthrough
   // it is guest-side software Lavapipe, which hands back vkMapMemory'd
-  // host-visible memory with PROT_NONE holes in it, so the first readPixels of
-  // a scene build (bakeSilhouette) SIGSEGVs in code upstream Filament would run
-  // identically — left alone, VulkanPolicy's boot canary still lands every
-  // fresh AVD on GL, but only after two dead launches that read as capture
-  // flakes. The AVD lane exists to exercise the arm64 SLICE (the JNI bridge,
-  // Bionic, the engine), not that driver — so pin GL up front. The BOX lane
-  // must never do this: photographing the shipping configuration is the point
-  // there.
+  // host-visible memory with PROT_NONE holes in it, so a scene build's first
+  // readPixels SIGSEGVs (seen on a bake's readback; not re-verified since that
+  // bake was removed) in code upstream Filament would run identically — left alone, VulkanPolicy's
+  // boot canary still lands every fresh AVD on GL, but only after two dead
+  // launches that read as capture flakes. The AVD lane exists to exercise the
+  // arm64 SLICE (the JNI bridge, Bionic, the engine), not that driver — so pin
+  // GL up front. The BOX lane must never do this: photographing the shipping
+  // configuration is the point there.
   if (EMU) adb(serial, ['shell', 'setprop', 'debug.ttp.vk', '-1']);
 
   // A STILL IS SHOT AT THE PANEL'S OWN SIZE. The adaptive render scale exists to

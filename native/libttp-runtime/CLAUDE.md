@@ -243,10 +243,11 @@ parked for a later revisit of how sharp turns announce themselves.
 
 ## Shapes the renderer draws with
 
-`ttp/car_footprint.h` makes the car contact shadow's mask: the generic
-superellipse, and a per-model FOOTPRINT rasterized from the car's own triangles.
-Header-only for the `kitfield.h` reason above — the renderer consumes it and may
-not link this library — and the `carfootprint` ctest executes it on every leg,
+`ttp/car_footprint.h` makes the car contact shadow's shape: a per-model
+FOOTPRINT rasterized from the car's own triangles, the ROUNDED RECT fitted to
+it, and the rect's closed-form evaluator the layer raster calls. Header-only
+for the `kitfield.h` reason above — the renderer consumes it and may not link
+this library — and the `carfootprint` ctest executes it on every leg,
 which matters more here than usual: the shape is something a person judges by
 eye on a television, so the parts that are NOT taste (the frame, the
 orientation, that two outlines in one bounding box come out different, that a

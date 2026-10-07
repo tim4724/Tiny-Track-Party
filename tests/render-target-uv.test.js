@@ -56,14 +56,14 @@ const RENDER_TARGET_SAMPLERS = new Set([
   // light-space texel, and a loop has two arclengths at one (x, z) — so there is
   // no affine varying to carry the flip and vroad wraps the sample itself.
   'sunVis',
-  // vesm/vblur read the pass before them; vpresent reads the scene target.
+  // vesm reads the pass before it; vpresent reads the scene target.
   'src', 'scene'
 ]);
 
 /** Samplers fed by an UPLOAD, which have no flip and must not be wrapped. */
 const UPLOADED_SAMPLERS = new Set([
-  // Ground canvas, car-shadow masks, baked silhouettes: `Texture::setImage`
-  // or a GLB's own texture, never a render target.
+  // Ground canvas: `Texture::setImage` or a GLB's own texture, never a
+  // render target.
   'albedo',
   // vglb's base colour: the kit's colormap atlas, decoded from the GLB's own
   // PNG by gltfio's stb provider and bound by AssetLoader. An upload — and
@@ -110,7 +110,7 @@ test('every material sampling a render target flips, somewhere', () => {
   //
   //   IN THE VERTEX STAGE — `material.uv = uvToRenderTargetUV(...)` writes an
   //   already-flipped varying and the fragment samples it raw. That is what the
-  //   fullscreen passes do (vesm, vblur, vpresent), and wrapping again in the
+  //   fullscreen passes do (vesm, vpresent), and wrapping again in the
   //   fragment would flip it back.
   //
   //   AT THE SAMPLE — for a uv the fragment computes itself, which is the

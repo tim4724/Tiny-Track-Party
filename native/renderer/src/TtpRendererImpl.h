@@ -120,17 +120,6 @@ inline float3 skyLinear(uint32_t rgb) {
     return float3{ srgbChannel(once.x), srgbChannel(once.y), srgbChannel(once.z) };
 }
 
-// Bind the silhouette array to a vroad instance, clamped bilinear. Every
-// instance of the road material needs this: a declared sampler must be bound
-// even while maskCount is 0.
-inline void bindDecalMask(MaterialInstance* mi, Texture* arr) {
-    TextureSampler ms(TextureSampler::MinFilter::LINEAR,
-            TextureSampler::MagFilter::LINEAR);
-    ms.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
-    ms.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
-    mi->setParameter("decalMask", arr, ms);
-}
-
 // THE GRADE, on the CPU. MIRRORED FROM ttp_grade.inc — read that file first; it
 // carries what moving the grade into the scene materials bought and what it
 // cost. Only two colours need this side of it, and both for the same reason:
@@ -689,27 +678,6 @@ struct TtpRenderer::TrackBin {
 
 
 
-// The generic ground-shadow mask (the decalMask array's fallback layer): a
-// superellipse footprint with the JS bake's penumbra.
-//
-// SceneRenderer renders each car model top-down into a 128-wide target and
-// blurs the result by round(128 × 0.022) ≈ 3 px — "a crisp shadow edge near the
-// loop's hard cast shadow, not a wide soft ring", as the source puts it. That
-// is ~5% of the half-width, so the shape has to come from a texture.
-//
-// THE PIXELS THEMSELVES ARE `ttp/car_footprint.h`'s, not this file's, because
-// the per-car footprint beside them has to be executed by a ctest on every leg
-// and the two shapes must agree about the frame they are drawn in. This is the
-// fallback half: a superellipse fitted to the same footprint — same size, same
-// softness, rounder corners than any real car.
-inline std::vector<float> superellipseMaskPixels(int TW, int TH) {
-    ttp::rt::FootprintSpec spec;
-    spec.w = TW;
-    spec.h = TH;
-    return ttp::rt::superellipse_mask(spec);
-}
-
-
 // A prop contact blob's ink and rest opacity (makeBlobShadowTexture), shared
 // by the item-box stamps below, the box collect fade, and the banana/rocket
 // stamps in the render loop.
@@ -717,30 +685,5 @@ constexpr float kBlobShadowAlpha = 0.4f;
 
 
 // The car ground shadow's ink, opacity and coverage cap live in
-// CarShadowTuning (TtpRenderer.h) — the tuning ABI's one home for them; the
-// prop blobs at 0.40 and the lawn discs at 0.30 sit lighter on purpose.
-
-// The hybrid shadow LOD's band, in world units of distance to the closest
-// ACTIVE camera (renderCars). ONLY kShadowModeHybrid reads it now — the shipped
-// mode is BLOB for every car, and CarShadowTuning says why — but the band is
-// kept because that mode is the A/B arm the trade gets re-argued against.
-//
-// Inside kShadowLodNear a car's contact shadow is the true MASKED baked
-// silhouette; past kShadowLodFar it is the texture raster alone; between, the
-// two crossfade with complementary alphas. 14u keeps the own car (~2u) and
-// adjacent rivals silhouetted while bounding the masked list at [4].
-//
-// Note the two distances answer different questions and both are needed. The
-// band above is against the CLOSEST camera, because that is who the fade has
-// to look right to. WHICH cars get a masked entry at all is decided against
-// the camera doing the picking, taking turns — see TtpRenderer.h's
-// kMaxMaskedDeckDecals for why a single global rank is starvable.
-constexpr float kShadowLodNear = 10.0f;
-constexpr float kShadowLodFar = 14.0f;
-// FOUR CELLS, and it now gates only the RUBBER layer's MIP REFRESH
-// (TtpRendererFrame's `splitFour`). Both of its other jobs are gone: the level-0
-// upload throttle it also gated was measured a null and dropped, and the car
-// shadow no longer has a cell threshold at all — `CarShadowTuning::mode` ships
-// as kShadowModeBlob at EVERY count, so there is nothing left to cross. The
-// pricing that settled the shadow half is in kShadowModeBlob's comment.
-constexpr uint32_t kMaskedBlobCells = 4;
+// CarShadowTuning (TtpRenderer.h); the prop blobs at 0.40 and the lawn discs
+// at 0.30 sit lighter on purpose.

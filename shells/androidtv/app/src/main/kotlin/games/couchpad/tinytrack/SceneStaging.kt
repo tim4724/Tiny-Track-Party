@@ -69,7 +69,7 @@ object SceneStaging {
      */
     val MATERIAL_NAMES = listOf(
         "vcolor", "vblend", "vlit", "vlitns", "vroad", "vglb", "vglbfade", "vpoint",
-        "vcloud", "vground", "vvis", "vroadvis", "vpresent", "vesm", "vblur", "vburst",
+        "vcloud", "vground", "vvis", "vroadvis", "vpresent", "vesm", "vburst",
         "voverlay",
     )
 
@@ -256,10 +256,9 @@ object SceneStaging {
         step(3)
 
         // 5. THE BLOB WALK, first half — AFTER provisioning and before the
-        //    build, which is the one window that suits every store: the bake's
-        //    key needs the biome (latched at step 2), the masks' are derived
-        //    from the car GLBs handed over at step 3. NOTHING HERE NAMES A BLOB
-        //    KIND; the engine lists its stores and this performs the answers.
+        //    build: a key may depend on anything provisioned (the bake's needs
+        //    the biome, latched at step 2). NOTHING HERE NAMES A BLOB KIND; the
+        //    engine lists its stores and this performs the answers.
         //    The walk's SECOND half is not here at all — it is a frame beat
         //    (`DisplayHost.writeReadyBlobs`), for the reason `ttp_display.h`
         //    gives: a readback does not finish inside the build that issues it

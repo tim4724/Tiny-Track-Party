@@ -672,112 +672,6 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
     // included, so a car that vanished (or a channel switched off mid-run)
     // leaves nothing behind. The stamps themselves are laid per car below.
     if (mCarShadowTex[0]) eraseCarShadow();
-    // The shadow LOD's camera eyes. Null = no per-car ranking, and the lodT
-    // fallback below splits that two ways: overviews (the gallery pins those)
-    // and the no-views case stay on the TEXTURE path, so every car keeps a
-    // shadow under the [4] masked cap; a vroad without the carShadow sampler
-    // or the forced debug mask layer go all-MASKED instead.
-    // BLOB MODE NEEDS NO PICK AT ALL — nobody is eligible, so the ranking below
-    // is skipped outright rather than run and thrown away. The other two modes
-    // both need it: hybrid to crossfade by distance, and silhouette because the
-    // masked list still only holds four, and WHICH four has to be the per-view
-    // round robin or a player loses their own car's shadow (see below).
-    const TtpViewInput* lodViews = ((input.flags & TTP_FRAME_OVERVIEW) == 0u
-            && input.viewCount > 0 && mForceMaskLayer < 0 && mCarShadowTex[0]
-            && mShadowTune.mode != kShadowModeBlob)
-            ? ttp_frame_views(&input) : nullptr;
-    // RANK the near band, PER VIEW. A pack can put more cars inside
-    // kShadowLodNear than the masked list holds, and a car whose entry the
-    // fold dropped had NO shadow at all — near cars skip the texture raster,
-    // so the cap's overflow deleted the shadow outright (user-caught: "close
-    // cars without a shadow next to far cars with one"). So the pick is a RANK
-    // gate: everyone it does not reach rides the texture blob regardless of
-    // distance, the fold can never overflow, and every car always carries a
-    // shadow.
-    //
-    // Each camera ranks its OWN nearest and they take turns, rather than one
-    // global pool ranked by distance to whichever camera happens to be
-    // closest. A global pool is starvable the moment the screen splits — see
-    // kMaxMaskedDeckDecals for the bug it produced — and taking turns cannot
-    // be: whatever the other cameras are looking at, this one still gets its
-    // pick.
-    //
-    // Note the two distances do different jobs. The PICK is against the view
-    // doing the picking; the CROSSFADE below rides lodCamD, the distance to
-    // the nearest camera of any, because that is the camera the fade has to
-    // look right from. Contract positions are plenty at a 10u threshold; the
-    // seating below moves a car millimetres.
-    float lodCamD[16];
-    bool lodEligible[16];
-    // SILHOUETTE mode has no distance band — it is the A/B arm for "what did
-    // the masked loop look like", so every car the pick reaches is fully masked
-    // rather than faded in over kShadowLodNear. Declared out here because the
-    // per-car loop below reads it.
-    const bool allMasked = mShadowTune.mode == kShadowModeSilhouette;
-    if (lodViews) {
-        for (uint32_t i = 0; i < nCars && i < 16; i++) {
-            const TtpCarInput& ci = cars[i];
-            const float3 cp{ ci.pos.x, ci.pos.y, ci.pos.z };
-            float d2 = 1e30f;
-            for (uint32_t vi = 0; vi < input.viewCount; vi++) {
-                const float3 dc = cp - float3{ lodViews[vi].world[12],
-                        lodViews[vi].world[13], lodViews[vi].world[14] };
-                d2 = std::min(d2, dot(dc, dc));
-            }
-            lodCamD[i] = std::sqrt(d2);
-            lodEligible[i] = false;
-        }
-        // The decal sub-arms reach the masked list HERE, not in the shader:
-        // budget 0 (NO_DECAL_MASKED) makes every car ineligible, so lodT
-        // rides to 1 and the blob carries full alpha — the real fallback
-        // picture. CAPS_HALF halves the budget the same way; the rank gate
-        // degrades whoever misses to the blob.
-        int budget = (mDecalDebug & kDebugNoDecalMasked) ? 0
-                : (mDecalDebug & kDebugDecalCapsHalf)
-                        ? kMaxMaskedDeckDecals / 2 : kMaxMaskedDeckDecals;
-        // FIRST, EVERY VIEW'S OWN CAR — the one it FOLLOWS (TtpViewInput.car),
-        // not the one nearest its eye. Those are different questions and the
-        // difference is the whole bug: the chase rig sits CHASE_DIST behind
-        // the player, so a car DRAFTING them is nearer to their eye than their
-        // own car is, and a nearest-first pick therefore hands the player's
-        // own slot to the bot on their tail. That is the blob-under-your-own-
-        // car this budget exists to prevent, and picking by proximity only
-        // moved it from "some player" to "the drafted player" — user-caught
-        // both times. No distance gate here on purpose: the subject is ~2u
-        // away by construction, and a gate could only ever strand them.
-        for (uint32_t vi = 0; vi < input.viewCount && budget > 0; vi++) {
-            const int own = lodViews[vi].car;
-            if (own < 0 || own >= (int) nCars || own >= 16 || lodEligible[own]) continue;
-            lodEligible[own] = true;
-            budget--;
-        }
-        // THEN whatever is left, round-robin over the views by proximity, so
-        // adjacent rivals get dressed too and solo still spends its whole
-        // budget. Round-robin and not view-by-view: draining one view's
-        // allowance before starting the next spends everything on cameras 0
-        // and 1 in a four-way split and leaves 2 and 3 with nothing.
-        //
-        // A view with nothing left in range CONTINUES rather than breaks: it
-        // is out of candidates, the other cameras are not.
-        for (int round = 0; round < kMaxMaskedDeckDecals && budget > 0; round++) {
-            for (uint32_t vi = 0; vi < input.viewCount && budget > 0; vi++) {
-                const float3 eye{ lodViews[vi].world[12], lodViews[vi].world[13],
-                        lodViews[vi].world[14] };
-                int best = -1;
-                float bestD2 = 0;
-                for (uint32_t i = 0; i < nCars && i < 16; i++) {
-                    if (lodEligible[i]) continue;
-                    const float3 dc = float3{ cars[i].pos.x, cars[i].pos.y,
-                            cars[i].pos.z } - eye;
-                    const float d2 = dot(dc, dc);
-                    if (best < 0 || d2 < bestD2) { best = (int) i; bestD2 = d2; }
-                }
-                if (best < 0 || bestD2 >= kShadowLodFar * kShadowLodFar) continue;
-                lodEligible[best] = true;
-                budget--;
-            }
-        }
-    }
     for (uint32_t i = 0; i < nCars; i++) {
         const TtpCarInput& c = cars[i];
         float3 fwd = { c.forward.x, c.forward.y, c.forward.z };
@@ -1199,11 +1093,10 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
         } else if (!mCars[i].entity.isNull()) {
             tcm.setTransform(tcm.getInstance(mCars[i].entity), m);
         }
-        // Ground shadow: a MASKED road-shader decal riding the road-aligned
-        // pose basis (it follows whatever the car drives — bank, hill, loop
-        // deck), spun by the spin-out whirl so the silhouette tracks the car
-        // (the JS shadow's rotated right/forward axes). A monster keeps the
-        // CAR's shadow, one step larger.
+        // Ground shadow: the car's stamp into the carShadow layer, laid on
+        // the deck it sits on (bank, hill, loop deck) and spun by the spin-out
+        // whirl so the shape tracks the car. A monster keeps the CAR's shadow,
+        // one step larger.
         {
             const mat4f bm = (c.spin != 0)
                     ? m * mat4f::rotation(c.spin, float3{ 0, 1, 0 })
@@ -1238,12 +1131,12 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
             // that seed alive now that the car itself does not project.
             if (mDecalProjHint.size() <= i) mDecalProjHint.resize(i + 1, -1);
             mDecalProjHint[i] = mTrack->ringHint(carS);
-            // mDecalMaskArray and mCarShadowTex are independent capabilities
-            // — the current blob carries both, the hybrid's near and far
-            // halves. Under either the CPU entry below is still pushed — it
-            // is the ttp_display_debug_decals readback and the warp bench's
-            // data, and the conform diagnostics ride its shape field.
-            if (mRoadInst && (mDecalMaskArray || mCarShadowTex[0])
+            // The CPU entry below is READBACK ONLY — the
+            // ttp_display_debug_decals row the warp bench reads, with the
+            // conform diagnostics riding its shape field. The layer draws, so
+            // a track whose layer failed to allocate gets no shadow, no row,
+            // and those slots go to the auras.
+            if (mRoadInst && mCarShadowTex[0]
                     && (int) mDeckDecals.size() < kMaxDeckDecals) {
                 // SHADED INTO THE ROAD, like the aura below: the shadow's
                 // fragment IS a road fragment, so nothing floats and nothing
@@ -1254,175 +1147,72 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                 // the depth test in front of the tyre's bottom slice.
                 const float fw = mCarWheels.size() > i ? mCarWheels[i].footW : 0.95f;
                 const float fl = mCarWheels.size() > i ? mCarWheels[i].footL : 2.0f;
-                // The blob quad's halves in the CAR's frame: forward in rect.z,
-                // right in rect.w (the shader divides its rotated components by
-                // exactly these).
+                // The stamp quad's halves in the CAR's frame: forward, right.
                 const float halfF = fl * sz * mShadowTune.overscan * 0.5f;
                 const float halfR = fw * sx * mShadowTune.overscan * 0.5f;
                 // Heading against the track frame at carS. `bm` already carries
-                // the spin-out whirl, so the silhouette keeps whirling.
+                // the spin-out whirl, so the shadow keeps whirling.
                 const TrackBin::Sample f0 = mTrack->frameAt(carS);
                 const float3 fwdW = bm[2].xyz;
                 float cs = dot(f0.tangent(), fwdW), sn = dot(f0.lat, fwdW);
                 const float nl = std::sqrt(cs * cs + sn * sn);
                 if (nl > 1e-5f) { cs /= nl; sn /= nl; } else { cs = 1; sn = 0; }
-                // The layer is the MODEL's, not the slot's — claimMaskLayer
-                // resolved it at build time. Generic whenever the bake it
-                // needs did not land, which is now a state the bake itself
-                // reports rather than one that goes unnoticed.
-                const int slotLayer = mMaskLayerOfSlot.size() > i
-                        ? mMaskLayerOfSlot[i] : kMaskLayerGeneric;
-                const int layer = mForceMaskLayer >= 0 ? mForceMaskLayer
-                        : (monsterBlob
-                        ? (((mMaskLayerBakedBits >> kMaskLayerMonster) & 1u)
-                                ? kMaskLayerMonster : kMaskLayerGeneric)
-                        : ((slotLayer >= 0 && slotLayer < kMaskLayerMonster
-                                && ((mMaskLayerBakedBits >> slotLayer) & 1u))
-                                ? slotLayer : kMaskLayerGeneric));
-                // THE PLANE THE MASK PROJECTS ONTO IS THE ONE THE CAR SITS ON:
-                // the best fit through its own four wheel contacts, not the
-                // track frame's tangent plane at the centreline. On a flat or
-                // purely banked deck the two are the same plane. Where the deck
-                // crests or twists they are not, and a rigid stamp projected
-                // from the wrong one foreshortens across the footprint — the
-                // shadow stretching on a crest and shearing on a twist, which
-                // is exactly "skewed on non-planar segments". Fitting it to the
-                // contacts halves the deviation for free, because the seating
-                // above has already paid for the probes.
-                //
-                // A plane it must stay: painting the silhouette in curvilinear
-                // (s, lat) instead bends it around every corner, and the
-                // per-triangle kinks of the interpolated uv0 field ripple
-                // through its sharp edge. Track space only BOUNDS the stamp.
+                // THE STAMP IS LAID FROM THE PLANE THE CAR SITS ON: the best
+                // fit through its own four wheel contacts, not the track
+                // frame's tangent plane at the centreline. On a flat or purely
+                // banked deck the two are the same plane; where the deck
+                // crests or twists they are not, and the seating above has
+                // already paid for the probes.
                 const float3 aUp = seated ? up : f0.up;
                 const float3 aPos = seated ? seatMid : (f0.pos + f0.lat * carLat);
-                // `fwdW` carries the spin-out whirl, so the silhouette whirls.
                 float3 wF = fwdW - aUp * dot(fwdW, aUp);
                 wF = length(wF) > 1e-5f ? normalize(wF)
                                         : normalize(f0.tangent() * cs + f0.lat * sn);
                 const float3 wR = normalize(cross(aUp, wF));
-                const float3 wp = aPos;
-                // MEASURED CULL WINDOW. The shader rejects fragments in TRACK
-                // SPACE before it projects, and the reach it needs there is an
-                // ARCLENGTH — which the stamp's own half-diagonal is not. The
-                // deck's iso-arclength lines FAN on a bend, so off the
-                // centreline a world step spans R/(R−lat) more arclength; the
-                // constant that used to stand here therefore closed INSIDE the
-                // stamp and cut its nose or tail along a ring plane, with the
-                // cut sliding as the car swept the corner. Through a FLAT bend
-                // the deck is a plane and the stamp's world projection is
-                // rigid, so the cull is the only thing that can reshape it.
-                //
-                // So measure it: run the stamp's four corners through the same
-                // surface the seat uses and take the widest each way. The halves
-                // ride in the w slots of the two axis vectors, read by
-                // foldToChunk and repacked into the shader's maskRect.zw by
-                // uploadDeckDecals — the one site that keeps cull and fold in
-                // step.
-                // SIX probes now, not four: the corners plus the two
-                // long-edge midpoints. The cull maxes read all six (the
-                // midpoints can only widen the window, which is the safe
-                // direction), and the texture path keeps the projected
-                // points themselves — they are the warped-quad raster's
-                // vertices, so the stamp's bending error lives inside one
-                // half-stamp instead of first-order across the whole one.
-                float halfSw = 0, halfLw = 0;
+                // SIX PROBES: the stamp's four corners plus the two long-edge
+                // midpoints, each run through `deckFoot` to its (s, lat). They
+                // are the warped-quad raster's vertices, so the deck's bending
+                // of track space lives inside one half-stamp instead of
+                // first-order across the whole one.
                 float2 stampSL[6];
                 for (int k = 0; k < 6; k++) {
                     const float fk = (float) (k % 3) - 1.0f;    // -1, 0, +1 along fwd
                     const float rk = k < 3 ? -1.0f : 1.0f;      // left / right edge
                     const float3 corner = aPos + wF * (fk * halfF) + wR * (rk * halfR);
                     float ks = c.trackS, kl = c.trackLat;
-                    if (mShadowTune.stampProject) {
-                        // WHERE THE SHADER WILL LOOK, not where the surface
-                        // truly is — see CarShadowTuning::stampProject.
-                        int hint = mDecalProjHint.size() > i ? mDecalProjHint[i] : -1;
-                        mTrack->project(corner, aUp, ks, kl, &hint);
-                    } else {
-                        mTrack->deckFoot(corner, ks, kl);
-                    }
+                    mTrack->deckFoot(corner, ks, kl);
                     stampSL[k] = { ks, kl };
-                    halfSw = std::max(halfSw, std::fabs(ks - c.trackS));
-                    halfLw = std::max(halfLw, std::fabs(kl - c.trackLat));
                 }
-                // A hair of slack, so the window is never the VISIBLE edge: the
-                // stamp's own feather is (0.72→0.98 in vroad.mat), and a cull
-                // that lands inside the feather prints as a hard line.
-                halfSw += 0.05f;
-                halfLw += 0.05f;
                 // Load shift folded into the stamp's peak alpha, one
                 // expression for the CPU entry and the raster.
                 const float blobA = mShadowTune.ao
                         * (1.0f + mShadowTune.loadGain * load);
-                // THE HYBRID SHADOW LOD. Near a camera the silhouette's
-                // car-shape reads and the texture layer's ~8 texels/u cannot
-                // carry it (the blob under YOUR OWN CAR looked visibly worse
-                // — user-caught, 2026-08-18); far away the blob is
-                // indistinguishable and the masked loop's per-fragment cost
-                // is the frame's biggest item. So: lodT = 0 inside
-                // kShadowLodNear of the closest active camera (true masked
-                // silhouette), 1 past kShadowLodFar (texture raster), a
-                // complementary-alpha crossfade between — stateless, so it
-                // cannot pop. The masked list only ever holds the near cars,
-                // which is what lets it declare [4] instead of FIELD_SIZE.
-                float lodT = 1.0f;
-                if (lodViews) {
-                    // Rank-gated: a car no camera's own allowance reached
-                    // rides the blob however close it is — a full blob beats
-                    // the deleted shadow the fold overflow used to produce.
-                    // The gate can no longer strand a PLAYER's car, because
-                    // round one of the pick is every view's own (see above).
-                    lodT = (i < 16 && lodEligible[i])
-                            ? (allMasked ? 0.0f : std::min(1.0f, std::max(0.0f,
-                                    (lodCamD[i] - kShadowLodNear)
-                                            / (kShadowLodFar - kShadowLodNear))))
-                            : 1.0f;
-                } else if (!mCarShadowTex[0] || mForceMaskLayer >= 0) {
-                    // All MASKED: no texture to ride (an old vroad blob), or
-                    // the ttp_display_debug_force_mask_layer probe — which
-                    // only means anything on the masked path. Overviews and
-                    // the no-views fallback keep lodT = 1: texture for every
-                    // car, so the [4] masked cap can never delete a shadow.
-                    lodT = 0.0f;
-                }
-                // The texture half. Gated by the decal ablation arm exactly
-                // as the masked loop is — raster AND (via mCarShadowUpload)
-                // the upload drop out, so the arm still prices the whole
-                // channel; applyRoadDebug zeroes the tap to match.
-                if (lodT > 0.0f && mCarShadowTex[0]
-                        && (mRoadMask & kFeatRoadDecals)
+                // Gated by the decal ablation arm — raster AND (via
+                // mCarShadowUpload) the upload drop out, so the arm prices
+                // the whole channel; applyRoadDebug zeroes the tap to match.
+                if ((mRoadMask & kFeatRoadDecals)
                         && !(mDecalDebug & kDebugNoDecalBlob)) {
-                    // THE CAR'S OWN OUTLINE, not one shape for the field.
-                    // The four roster models share a bounding box, so this is
-                    // the only place they can be told apart.
-                    rasterCarShadowStamp(stampSL, carS, blobA * lodT,
-                            carShadowShapeFor(i));
+                    // THE CAR'S OWN FIT, not one shape for the field. The
+                    // four roster models share a bounding box, so this is the
+                    // only place they can be told apart.
+                    rasterCarShadowStamp(stampSL, carS, blobA, carShadowFitFor(i));
                 }
                 mDeckDecals.push_back({
                         float4{ carS, carLat, halfF, halfR },
                         float4{ mShadowInkLinear.x, mShadowInkLinear.y,
-                                mShadowInkLinear.z,
-                                lodT < 1.0f ? blobA * (1.0f - lodT) : blobA },
+                                mShadowInkLinear.z, blobA },
                         // `shape` is the profile decals' (inner/ellipse/knee/
-                        // chevrons) and the masked path reads none of it, so it
+                        // chevrons) and a car entry draws none of it, so it
                         // carries the GROUND CONFORM's numbers out to
                         // ttp_display_debug_decals instead — the worst wheel gap
                         // and the pose jitter, which the conform running AFTER
                         // the sim's snapshot puts beyond every other readback.
-                        // Filter on `masked` before believing these four.
+                        // Filter on `car` before believing these four.
                         float4{ mCarWheels.size() > i ? mCarWheels[i].wheelGap : 0.0f,
                                 mCarWheels.size() > i ? mCarWheels[i].jitter : 0.0f,
                                 mCarWheels.size() > i ? mCarWheels[i].rawJitter : 0.0f,
                                 mCarWheels.size() > i ? mCarWheels[i].upJitter : 0.0f },
-                        // texrot.w: 1 = fold-visible masked (near), 2 =
-                        // texture-carried (readback only) — foldToChunk keys
-                        // on it. In the crossfade band the entry is masked
-                        // with the faded alpha above; the raster carries the
-                        // complement.
-                        float4{ sn, cs, (float) layer, lodT < 1.0f ? 1.0f : 2.0f },
-                        float4{ wp.x, wp.y, wp.z, 0 },
-                        float4{ wF.x, wF.y, wF.z, halfSw },
-                        float4{ wR.x, wR.y, wR.z, halfLw } });
+                        /*car=*/1.0f });
             }
         }
         // Boost wind streaks (SceneRenderer STREAK_*): while boosting, cycle
@@ -2065,13 +1855,12 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
         }
     }
 
-    // Auras FIRST among the dynamics (under every shadow and blob — see the
-    // auraDecals note in render() for why the mesh era's aura-over-shadow order
-    // inverts under a mix composite), then the frame's one decal upload. This
-    // sits after the world block so a banana's or rocket's stamp lands on the
-    // frame its prop appears, not one frame late. uploadDeckDecals still puts
-    // the statics ahead of all of it, so an aura keeps landing over the pad or
-    // slick it crosses.
+    // Auras FIRST among the dynamics, so a banana's or rocket's ground blob
+    // lands over an aura it sits in (render()'s auraDecals has the whole
+    // order), then the frame's one decal upload. This sits after the world
+    // block so a prop's stamp lands on the frame its prop appears, not one
+    // frame late. uploadDeckDecals still puts the statics ahead of all of it,
+    // so an aura keeps landing over the box shadow or slick it crosses.
     if (!auraDecals.empty()) {
         const size_t room = (size_t) std::max(0,
                 kMaxDeckDecals - (int) mDeckDecals.size());
@@ -2079,9 +1868,8 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
                 auraDecals.begin() + std::min(room, auraDecals.size()));
     }
     // Bracketed into its own profile slot (a sub-span of kProfWorld) because a
-    // moving pack defeats the per-chunk memcmp skip: 4 vec4 arrays x 4 masked
-    // entries x ~13 chunks of uniform writes is a per-frame CPU cost the
-    // world bucket alone cannot attribute.
+    // moving pack defeats the per-chunk memcmp skip: the chunks' uniform
+    // rewrites are a per-frame CPU cost the world bucket alone cannot attribute.
     const double tDecal = ttpNowMs();
     uploadDeckDecals();
     // The car-shadow layer's upload (and the pair's rebind, off Vulkan) rides
@@ -2432,9 +2220,8 @@ void TtpRenderer::flushSkidLayer() {
     // WHOLE is not: the layer's cost is the tap and the CPU raster.
     // `shells/androidtv/CLAUDE.md` has the sweep and its controls.
     // Do not reintroduce one without re-running that sweep — the reading
-    // the throttle originally came from predates kMaskedBlobCells zeroing
-    // the masked shadow budget at four cells, which was ~7 ms of the
-    // frame it was taken in.
+    // the throttle originally came from was taken in a frame carrying ~7 ms
+    // of a car-shadow path that no longer exists.
         if (!mSkidDirty.empty()) {
         uploadSkidRects();
         mSkidMipsDirty = true;
@@ -3164,15 +2951,14 @@ bool TtpRenderer::frame(const TtpFrameInput& input, bool draw) {
     // Conformed car positions, kept for the props that test against the car's
     // RENDERED spot (cone kicks) rather than the raw contract pose.
     std::vector<float3> carPosW(nCars);
-    // Boost auras, held back until after the loop (per-car interleaving would
-    // break the order for two overlapping cars) and composited UNDER every
-    // contact shadow. The mesh era layered the aura OVER the shadow, but that
-    // premise was ADDITIVE blending: glow added over ink left the ink visible
-    // through it. A decal mix REPLACES what is under it, so the same order
-    // ERASED the shadow for a boost's whole life and handed it back at the
-    // gate — the shadow blinking in and out with every boost. Ink over glow is
-    // the mix-composite spelling of the same look: the disc still glows around
-    // the car, and the shadow stays put through it.
+    // Boost auras, held back and put at the FRONT of the frame's dynamic
+    // stamps once renderWorld has pushed its own. The deck composites in this
+    // order (vroad.mat is the truth): the car-shadow layer first, then the
+    // profile list — statics, auras, then the props' ground blobs. So every
+    // aura lands OVER every car shadow: at the blob's near-opaque depth the
+    // reverse turned the aura's pulse into a visible wave around the blob's
+    // edge. A mix REPLACES what is under it, so the aura's alpha is held low
+    // enough for the shadow to ghost through it (renderCars).
     std::vector<DeckDecal> auraDecals;
     renderCars(input, cars, nCars, carPosW, auraDecals);
     mProfile[kProfCars] = ttpNowMs() - tMark; tMark += mProfile[kProfCars];

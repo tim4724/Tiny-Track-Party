@@ -55,10 +55,8 @@ struct BlobRequest {
     // What identifies the binary that produced (or would produce) these bytes.
     std::string generation;
     // What this build's blobs are OF, in the caller's own vocabulary — the sun
-    // bake's is "<track>|<biome>|<showcase>|<backend>", a silhouette's is
-    // "<glb fnv>|<backend>". A SET rather than one key, because a store may hold
-    // several things a single build wants: the silhouettes are one blob per car
-    // MODEL, and a build wants every model in its field.
+    // bake's is "<track>|<biome>|<showcase>|<backend>". A SET rather than one
+    // key, because a store may hold several things a single build wants.
     std::vector<std::string> keys;
     std::vector<BlobEntry> entries;
 };

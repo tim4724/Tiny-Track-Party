@@ -1,6 +1,7 @@
 // Engine and scene lifecycle: materials, mesh build/teardown, releaseScene and
 // the ablation plumbing. TtpRendererImpl.h carries what the topic files share.
 #include <algorithm>
+#include <array>
 #include <cstdio>
 #include <string>
 #include <utility>
@@ -1599,24 +1600,16 @@ void TtpRenderer::applyRoadDebug() {
     const auto set = [&](MaterialInstance* mi) {
         if (!mi) return;
         if (!(mRoadMask & kFeatRoadDecals)) {
-            // Both shadow halves ride this arm, each behind its own
-            // capability probe: the masked loop through maskCount, the
-            // carShadow tap through maskInk.w. The tap's raster + upload
-            // drop out on the same bit in renderCars.
-            if (roadHasMaskLoop()) mi->setParameter("maskCount", 0);
+            // The car shadow rides this arm through the tap's maskInk.w; its
+            // raster + upload drop out on the same bit in renderCars.
             if (roadHasCarShadow()) mi->setParameter("maskInk", shadowInkParam(false));
             mi->setParameter("profCount", 0);
         }
         if (!(mRoadMask & kFeatRoadPaint)) mi->setParameter("paintCount", 0);
         if (!(mRoadMask & kFeatRoadRubber)) mi->setParameter("skidLatHalf", 0.0f);
-        // The decal sub-arms. MASKED and STATICS act upstream (the pick
-        // budget and the gather), so only the loops with a shader-side count
-        // and the tap need an override here.
+        // The decal sub-arms. STATICS acts upstream (the gather), so only the
+        // loop with a shader-side count and the tap need an override here.
         if (mDecalDebug & kDebugNoDecalProfile) mi->setParameter("profCount", 0);
-        // kDebugDecalMaskCount0 is NOT applied here on purpose: this runs
-        // every frame over every chunk, and the probe's whole point is to
-        // keep the shipped WRITE schedule — uploadDeckDecals zeroes the count
-        // inline instead, on exactly the writes the baseline makes.
         if ((mDecalDebug & kDebugNoDecalBlob) && roadHasCarShadow()) {
             mi->setParameter("maskInk", shadowInkParam(false));
         }
@@ -1671,9 +1664,6 @@ void TtpRenderer::debugFeatureMask(uint32_t mask) {
     // nobody has touched draws the shipped picture (ttp_grade.inc's note).
     mDebugGlobals.x = (mask & kFeatGrade) ? 0.0f : 1.0f;
     mDebugGlobals.y = (mask & kFeatFogVertex) ? 0.0f : 1.0f;
-    // MASK_FLAT is the one non-inverted global: zero draws the shipped
-    // picture (the tap), set replaces it with constant coverage.
-    mDebugGlobals.z = (mask & kDebugDecalMaskFlat) ? 1.0f : 0.0f;
     // The far forms: renderCells reads these per frame (TtpRenderer.h, LodRange).
     mLodOff = (mask & kDebugNoLod) != 0;
     mLodAll = (mask & kDebugLodAll) != 0;
@@ -1700,8 +1690,7 @@ void TtpRenderer::debugFeatureMask(uint32_t mask) {
     // applyRoadDebug already overrides it alongside the chunks: leaving it out
     // here would strand ITS channels off for good on the no-chunk path.
     const auto restore = [&](MaterialInstance* mi, int paintN,
-            std::vector<DeckDecal>& lastMask, std::vector<DeckDecal>& lastProf) {
-        lastMask.clear();
+            std::vector<DeckDecal>& lastProf) {
         lastProf.clear();
         if (!mi) return;
         mi->setParameter("skidLatHalf", mSkidTex ? mSkidLatHalf : 0.0f);
@@ -1716,16 +1705,16 @@ void TtpRenderer::debugFeatureMask(uint32_t mask) {
         if (mi->getMaterial()->hasParameter("invSunVisLatSpan")) {
             mi->setParameter("invSunVisLatSpan", roadVisLatSpan());
         }
-        // The carShadow tap back on (the masked arrays restore themselves
-        // through the cleared lastMask on the next uploadDeckDecals; the tap
-        // has no per-frame writer, so its restore is here).
+        // The carShadow tap back on (the profile list restores itself through
+        // the cleared lastProf on the next uploadDeckDecals; the tap has no
+        // per-frame writer, so its restore is here).
         if (roadHasCarShadow()) {
             mi->setParameter("maskInk", shadowInkParam(mCarShadowTex[0] != nullptr));
         }
         mi->setParameter("paintCount", paintN);   // written once per track
     };
-    for (RoadChunk& ch : mRoadChunks) restore(ch.mi, ch.paintN, ch.lastMask, ch.lastProf);
-    restore(mRoadInst, mRoadInstPaintN, mRoadInstLastMask, mRoadInstLastProf);
+    for (RoadChunk& ch : mRoadChunks) restore(ch.mi, ch.paintN, ch.lastProf);
+    restore(mRoadInst, mRoadInstPaintN, mRoadInstLastProf);
     // The ground's map is overridden by the same arm (applyRoadDebug), so a
     // mask switched back on has to restore it here too or it stays lit.
     if (mGroundInst) bindVisMap(mGroundInst);
@@ -1833,8 +1822,7 @@ void TtpRenderer::releaseScene() {
     mSkidMipsAt = 0; // mTime restarts at 0 per scene; a stale stamp here would
                      // hold the refresh gate shut for the whole next race
     // The car-shadow layer is per-track like the rubber (its width is the lap
-    // length); the CPU superellipse (mCarShadowMask) is engine-lifetime — the
-    // shape never changes.
+    // length).
     for (auto*& t : mCarShadowTex) {
         if (t) { mEngine->destroy(t); t = nullptr; }
     }
@@ -1845,10 +1833,9 @@ void TtpRenderer::releaseScene() {
     mCarShadowW = mCarShadowH = 0;
     mCarShadowPing = 0;
     mCarShadowUpload = false;
-    // THE OUTLINES SURVIVE THE SCENE, exactly as the baked silhouette bits do
-    // and for the same argument: a footprint is a fact about the KIT, not about
-    // this race, so a cup's four races bake them once. Only the per-SLOT
-    // pointers into the store are per-roster.
+    // THE SHADOW FITS SURVIVE THE SCENE: a footprint is a fact about the KIT,
+    // not about this race, so a cup's four races fit them once. Only the
+    // per-SLOT pointers into the store are per-roster.
     mCarShadowMaskOfSlot.clear();
     for (auto& m : mBurstMeshes) destroyMesh(m);
     for (auto& m : mBurstBalls) destroyMesh(m);
@@ -1862,15 +1849,6 @@ void TtpRenderer::releaseScene() {
     for (size_t i = 0; i < mCarAssets.size(); i++) {
         parkAsset(i < mCarModelKey.size() ? mCarModelKey[i] : 0, mCarAssets[i]);
     }
-    // THE BAKED BITS SURVIVE THE SCENE. They used to die with the roster,
-    // because a layer belonged to a grid SLOT and the next race could put a
-    // different model in it. Layers belong to a MODEL now and are keyed by the
-    // GLB's own bytes, so a bake is a fact about the kit rather than about
-    // this race: claimMaskLayer re-checks the key and rebakes only what
-    // genuinely changed. A cup's four races therefore pay the silhouette
-    // bakes once — two render passes and a flushAndWait each — instead of
-    // once per race, and no car spends the opening of race 2 on the generic
-    // oval waiting for its rebake.
     for (size_t i = 0; i < mCarGhostAssets.size(); i++) {
         parkAsset(i < mCarGhostKey.size() ? mCarGhostKey[i] : 0, mCarGhostAssets[i]);
     }
@@ -1892,11 +1870,10 @@ void TtpRenderer::releaseScene() {
     mRoadInst = nullptr;      // ditto: the deck's own instance is scene-scoped too
     mRoadChunks.clear();      // and so is every per-chunk instance
     mLods.clear();            // every listed renderable died with its mesh
-    mRoadInstLastMask.clear();
     mRoadInstLastProf.clear();
     mDeckDecals.clear();
-    // THE SUN BAKE SURVIVES THE SCENE, on the same argument as the silhouette
-    // layers above and for a bigger prize: its casters are the STATIC scene and
+    // THE SUN BAKE SURVIVES THE SCENE, on the same argument as the shadow
+    // fits above and for a bigger prize: its casters are the STATIC scene and
     // cars cast nothing, so a rebuild that changed only the field re-renders a
     // bit-identical map. Dropping them here is what made every join and every
     // launch pay the 81-tap blur again (520 ms of a 700 ms build on the Android
@@ -2018,10 +1995,8 @@ TtpRenderer::~TtpRenderer() {
     if (mBurstMaterial) mEngine->destroy(mBurstMaterial);
     if (mGroundMaterial) mEngine->destroy(mGroundMaterial);
     if (mEsmMaterial) mEngine->destroy(mEsmMaterial);
-    if (mBlurMaterial) mEngine->destroy(mBlurMaterial);
     if (mSkidNullTex) mEngine->destroy(mSkidNullTex);
     if (mWhiteTex) mEngine->destroy(mWhiteTex);
-    if (mDecalMaskArray) mEngine->destroy(mDecalMaskArray);
     if (mShadowMap) mEngine->destroy(mShadowMap);
     if (mVisMap) mEngine->destroy(mVisMap);
     if (mRoadVisMap) mEngine->destroy(mRoadVisMap);

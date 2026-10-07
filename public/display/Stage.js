@@ -1417,8 +1417,8 @@ export class Stage {
     this._adaptScale(t);
     // Derived bytes the last frame landed. HERE and not at the end of a build:
     // a WebGL readback cannot complete inside the call that issues it, so the
-    // build only stages and this is where the bake and the silhouettes actually
-    // arrive (ttp_display.h). One integer on an idle frame, and it is deliberately
+    // build only stages and this is where the bake actually arrives
+    // (ttp_display.h). One integer on an idle frame, and it is deliberately
     // not awaited — nothing on screen waits for a cache write.
     // Unawaited, and its failures are swallowed: nothing on screen waits for a
     // cache write, and a rejected IndexedDB put must not reach the page as an

@@ -190,12 +190,15 @@ Four readings worth stating in words:
 
 ## Inside the decal channel: the carShadow TAP is the item, and it is CLOSED
 
-The channel decomposes with the inverted `TTP_DEBUG_NO_DECAL_*` bits, plus one
-probe that is not a feature bit: **`debug.ttp.shadow '{"cap":0}'` zeroes
+The channel decomposes with the inverted `TTP_DEBUG_NO_DECAL_*` bits
+(`PROFILE`, `STATICS`, `BLOB`) and `TTP_DEBUG_DECAL_CAPS_HALF`. Splitting the
+blob's SHADING from its upload takes one arm that is not a feature bit: **zero
 `maskInk.w`, which gates the whole tap block in the deck shader while the CPU
-raster and the per-frame layer upload keep running.** That is what splits the
-blob's shading from its upload, and it is the reference every row below is
-paired against. 4P/1080, Vulkan, tidepool.
+raster and the per-frame layer upload keep running.** That is the reference
+every row below is paired against. 4P/1080, Vulkan, tidepool. The rows were
+taken with runtime knobs for that arm (`cap:0`), for the bicubic
+(`smoothTap:false`) and for the masked silhouette loop (`NO_DECAL_MASKED`);
+the build keeps none of the three, so each of those arms is now a build.
 
 | | ms | knob |
 |---|---|---|
@@ -215,14 +218,13 @@ than the feature table, and this one carries a between-build drift of ~1.2 ms
 7.5 ms this channel prices at in the feature table and the 6.8 ms here. Read the
 ORDER of these rows, not their arithmetic.
 
-**The masked loop is DEAD and the cost moved wholesale to the layer that
-replaced it.** `kShadowModeBlob` ships at every cell count, `maskCount` is
-pinned to 0, and the ablation confirms the loop at 0.2 ms. Any older reading
-that attributes this channel to the masked silhouette loop
-(`androidtv-4p-plan.md`, Phase 5) describes code that no longer runs. What costs
-now is ONE unconditional `texture(carShadow, suv).r` on every deck fragment —
-about 3.8 ms once the bicubic is taken out — beside the structurally identical
-rubber tap at 3.7 ms.
+**The cost is the layer that replaced the masked loop.** With the blob
+shipping at every cell count the loop measured 0.2 ms, and it is gone from the
+shader. Any older reading that attributes this channel to the masked silhouette
+loop (`androidtv-4p-plan.md`, Phase 5) describes code that no longer exists.
+What costs is ONE unconditional carShadow tap on every deck fragment — about
+3.8 ms once the bicubic is taken out — beside the structurally identical rubber
+tap at 3.7 ms.
 
 ### Three levers measured dead
 
@@ -237,10 +239,10 @@ cancels out of every row.
 - **The bicubic: already paid for.** 0.55 ms, because the four extra fetches sit
   behind a `cs > 0.004` probe gate — the shader comment records +2.1 ms when
   they did not.
-- **A per-chunk `shadowBounds` box: NULL.** Built the way `profBounds` and
-  `maskBounds` are, from the raster's own rects rather than the decal entries
-  (a blob's footprint is projected by `stampSL` under `overscan`, which is not
-  the reach `maskRect` carries). It works mechanically — real box on the chunk
+- **A per-chunk `shadowBounds` box: NULL.** Built the way `profBounds` is,
+  from the raster's own rects rather than the decal entries (a blob's
+  footprint is projected by `stampSL` under `overscan`, which is not the reach
+  a decal entry carries). It works mechanically — real box on the chunk
   holding cars, empty box everywhere else — and bought 0.60 ms against a
   1.12 ms between-build drift. **Reverted; do not rebuild it** — it was
   rebuilt once more on 12 u chunks (2026-09-03, `blobBounds`), "measured"
@@ -256,9 +258,9 @@ reject window keeps the costly fragments and drops the cheap distant ones.
 
 That is the same shape as the masked loop's own history, where a depth-EQUAL
 stamp pass was built and refuted with "those fragments cost ~7 ms whichever pass
-shades them". **Both halves of this channel have now refused every structural
-escape tried on them. Price the fragments or delete the channel; do not look for
-a seventh pass arrangement.**
+shades them". **The masked loop and the tap that replaced it have both refused
+every structural escape tried on them. Price the fragments or delete the
+channel; do not look for a seventh pass arrangement.**
 
 ### The tap is TWO fetches, and only one of them is collectible in principle
 
@@ -287,7 +289,7 @@ frame-thread and upload work — and per the bisect above, fill is not what cost
 currently short.
 
 **The remap is free.** Moving the tail cut out of the shader and into the raster
-(`remapInShader:false`, an A/B arm that needs no rebuild) measured 39.26 against
+(`remapInShader:false`, a runtime arm at the time) measured 39.26 against
 a 39.71 shader-side mean, against a 0.97 ms repeat spread. Null — and it would
 have cost 44% more edge flicker. Do not spend on the smoothstep.
 
@@ -310,9 +312,7 @@ separate checks were run on the strength of it. **Do not conclude this channel
 is broken from a screenshot** — measure the band, or paint the coverage.
 
 The stamp is also the CAR'S OWN FOOTPRINT and no larger, so most of it is
-occluded by the car from a chase camera by construction. `grow` (0..1, dilate in
-footprint half-widths) is what makes it obvious in a debug capture; the shipped
-0 is not a bug.
+occluded by the car from a chase camera by construction. That is not a bug.
 
 ## EVERY SETTLED COLUMN IS A PACED SPAN, and this is why the sweep runs twice
 
@@ -510,10 +510,12 @@ clamp-free, same bytes, and vectorises. Three interleaved races a side on
 pretzel and powder: beginFrame's worst 4.3-5.4 ms -> 1.5-3.5 ms in every
 race, heavy seconds and drops inside the noise.
 
-Measured and NOT taken: dropping vroad's masked-stamp block, which no shipping
-frame draws (the shadow lab's silhouette and hybrid arms use it): heavy seconds
-~0.3 ms lower over six pairs, drops unchanged. Baking vground's light into a
-vertex attribute was not built: the ground is a few thousand vertices.
+Measured and then taken: dropping vroad's masked-stamp block, which no shipping
+frame drew (only the shadow lab's silhouette and hybrid arms used it): heavy
+seconds ~0.3 ms lower over six pairs, drops unchanged. It went together with
+the lab, the GPU silhouette bake (~330 ms of an Android cold build) and the
+silhouette blob store. Baking vground's light into a vertex attribute was not
+built: the ground is a few thousand vertices.
 
 ## Every track at 4P pinned 960x540 (2026-10-04)
 

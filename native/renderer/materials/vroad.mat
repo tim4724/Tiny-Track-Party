@@ -108,14 +108,15 @@ material {
         // 25.9 ms; the same seven arrays at 8 entries put it at 17.6, and at
         // 16 at 18.9. And under a REAL pack the ITERATIONS dominate too: the
         // 2026-08-18 spectate-7 ablation put the decal channel at 4-6 ms of a
-        // 22.6 ms 720p frame, almost all of it the 8-car masked loop, after
-        // every arithmetic-level cut inside that loop measured zero.
+        // 22.6 ms 720p frame, almost all of it a per-car shadow loop
+        // (native/renderer/CLAUDE.md has its history), after every
+        // arithmetic-level cut inside it measured zero.
         //
-        // So the car shadows left the uniform path entirely: they are now a
-        // per-frame CPU-rasterized TRACK-SPACE R8 layer (the rubber layer's
-        // exact idiom — TtpRenderer::rasterCarShadowStamp) and this material
-        // pays ONE bilinear tap for all eight, at the uv the rubber tap
-        // already computes. What remains a uniform list is the PROFILE kind:
+        // So the car shadows are not a uniform list: they are a per-frame
+        // CPU-rasterized TRACK-SPACE R8 layer (the rubber layer's exact idiom
+        // — TtpRenderer::rasterCarShadowStamp) and this material pays ONE
+        // bilinear tap for all eight, at the uv the rubber tap already
+        // computes. What is a uniform list is the PROFILE kind:
         // a shape the shader evaluates (rect/ellipse, a two-segment falloff,
         // an optional chevron grid), three vec4s per entry.
         //
@@ -127,15 +128,6 @@ material {
         // cost +1.1 ms p50. TtpRenderer::kMaxProfileDeckDecals must agree
         // with the [8]s below; tests/road-decal-caps.test.js holds them to it.
 
-        // How many NEAR-car masked entries are live (the hybrid shadow LOD:
-        // cars near an active camera keep the true baked silhouette; far cars
-        // ride the carShadow texture tap below). Zero disables the loop.
-        // FOUR is the whole budget, spent round-robin over the active views
-        // (TtpRenderer.h's kMaxMaskedDeckDecals): solo dresses its four
-        // nearest, a four-way split dresses each player's own car. Eight was
-        // measured at ~5 ms on the 4-player frame — read that comment before
-        // raising this.
-        { type : int, name : maskCount },
         // How many profile entries are live. Zero makes the loop free, which
         // is what the ablation switch uses.
         { type : int, name : profCount },
@@ -163,13 +155,11 @@ material {
         // rejected each entry in turn — and it is here because the decals on a
         // chunk CLUSTER while the chunk is tens of metres of deck, so without
         // it the road's biggest, nearest fragments each pay N rejects to draw
-        // nothing. (The car shadows carried a second box while they were a
-        // uniform list; as a texture tap they need none.)
+        // nothing. (The car shadows are a texture tap and need none.)
         //
         // Written by uploadDeckDecals beside the count; a list with no entries
         // leaves its box collapsed, which the count > 0 guard already covers.
         { type : float4, name : profBounds, precision : high },
-        { type : float4, name : maskBounds, precision : high },
 
         // PROFILE stamps — statics (item-box shadows, oil slicks) and boost
         // auras. In track space:
@@ -191,83 +181,38 @@ material {
 
         // — the car shadows: ONE tap of a per-frame CPU-rasterized layer —
         //
-        // The eight contact shadows used to be a MASKED uniform list here (a
-        // baked silhouette through a rigid world-plane projection, five vec4s
-        // per entry and a per-fragment reject loop). Under a real pack that
-        // loop was the single biggest item in the 720p frame (~5 ms on the
-        // spectate-7 view), and every arithmetic-level cut inside it measured
-        // zero on the reference GPU — only structure moves it. So the stamps
-        // moved to the CPU: TtpRenderer rasterizes each car's pre-blurred
-        // silhouette as a WARPED QUAD into a small track-space R8 texture
-        // every frame (deckFoot projects the stamp's corners — the same
-        // probes the old cull window already paid for), and this material
-        // pays one bilinear tap at the rubber tap's own uv. The layer is
-        // TRANSIENT (erased and re-laid per frame) and PING-PONGED so the
-        // upload never lands on the texture the driver is reading — see
+        // TtpRenderer rasterizes each car's fitted shape as a WARPED QUAD into
+        // a small track-space R8 texture every frame (deckFoot projects the
+        // stamp's corners and long-edge midpoints) and this material pays one
+        // bilinear tap at the rubber tap's own uv. The layer is TRANSIENT
+        // (erased and re-laid per frame) and PING-PONGED so the upload never
+        // lands on the texture the driver is reading — see
         // TtpRenderer::uploadCarShadow.
         //
-        // The curvilinear objection that created the masked path — painting
-        // in (s, lat) bends the silhouette around corners, and uv0's
-        // per-triangle kinks ripple through a SHARP edge — is answered by
-        // structure, not ignored: the silhouette is pre-blurred, the layer is
-        // coarse (a texel is ~0.1-0.2 u), and the warp lives INSIDE one stamp
-        // (three deckFoot-projected slices), so the residual bending error is
-        // second-order and sub-texel against the penumbra. The old shimmer
-        // was an edge phenomenon and the edge is gone.
+        // The curvilinear objection — painting in (s, lat) bends the shape
+        // around corners, and uv0's per-triangle kinks ripple through a SHARP
+        // edge — is answered by structure: the stored field is wide and
+        // smooth, and the warp lives INSIDE one stamp (two slices), so the
+        // residual bending error is second-order.
         //
         // rgb = the blob ink, in linear (CarShadowTuning::ink — one colour
         // for every car shadow). w = the ENABLE and the CAP on summed
-        // coverage: 0 while
-        // no layer exists (no track, torn down, or the ablation arm), else
-        // the darkest two stacked shadows may go (the mix-of-mixes the old
-        // loop produced for two overlapped stamps).
-        // MASKED stamps — the NEAR cars' contact shadows, whose shape is the
-        // baked silhouette. FOUR, not FIELD_SIZE: only cars within the shadow
-        // LOD's near band of some active camera enter this list (renderCars),
-        // the rest ride the carShadow texture — near is where the silhouette's
-        // car-shape reads, and where the texture layer's ~8 texels/u cannot.
-        // Half the old declared bytes; the declared-size law (re-proven
-        // 2026-08-18: profile 8->16 alone cost +1.1 ms) is why this is 4 and
-        // why the far path adds no arrays at all.
-        //   xy = centre (s, lat); zw = the MEASURED track-space reaches (the
-        //        one-vec4 reject read — see the fold comment in Decals.cpp)
-        { type : float4[4], name : maskRect, precision : high },
-        //   maskWPos.w   = the decalMask LAYER holding this car's silhouette
-        //   maskWFwd.w   = the stamp's peak alpha (deepened by wheel load,
-        //                  faded by the LOD crossfade)
-        //   maskWRight.w = unused
-        // Axes premultiplied by their reciprocal stamp halves: two dots, no
-        // divides (the invSkidLatSpan trade).
-        { type : float4[4], name : maskWPos, precision : high },
-        { type : float4[4], name : maskWFwd, precision : high },
-        { type : float4[4], name : maskWRight, precision : high },
+        // coverage: 0 while no layer exists (no track, torn down, or the
+        // ablation arm), else the darkest two stacked shadows may go.
         { type : float4, name : maskInk },
-        // One 2D-array texture, one silhouette per layer, keyed by car MODEL:
-        // kMaskLayerModels layers claimed by GLB bytes (claimMaskLayer), then
-        // kMaskLayerMonster the monster rig, kMaskLayerGeneric the generic
-        // superellipse. Baked
-        // and pre-blurred by bakeSilhouette. RGBA8, coverage in ALPHA — R8
-        // was tried (a quarter of the tap bytes) and the TRANSLUCENT bake
-        // pass into an R8 array layer renders ZERO coverage on the PowerVR
-        // driver: every silhouette sampled as nothing while the bake logged
-        // success. The generic layer (an upload, not a bake) still worked,
-        // which is what made the failure read as "shadows became ovals".
-        { type : sampler2dArray, name : decalMask },
         // The layer: u = s / trackLength (REPEAT carries the lap wrap),
         // v = lat across ±skidLatHalf (CLAMP; the outer rows stay empty, so
         // kerbs' and underside's out-of-band v reads zero) — the rubber
         // layer's exact mapping, so the tap reuses its uv. The channel is
-        // silhouette coverage × the stamp's peak alpha, folded at raster
-        // time. Single level, LINEAR — the masked loop sampled its
-        // silhouette at LOD 0 with no mips too, so minification behaves as
-        // it did.
+        // shape coverage × the stamp's peak alpha, folded at raster time.
+        // Single level, LINEAR.
         { type : sampler2d, name : carShadow },
-        // The carShadow tap's TAIL-CUT REMAP: smoothstep(x, y, coverage), zw
-        // unused. A UNIFORM and not a constant because it is the die-cut
-        // look's sharpest knob — x is where the smear's tail is cut and the
-        // band to y is the anti-flicker slack a razor edge cannot have (the
-        // raster moves sub-texel every frame). /shadow-lab.html drags it.
-        { type : float4, name : carShadowRemap },
+        // The carShadow tap's TAIL-CUT REMAP: smoothstep(x, y, coverage), in
+        // absolute alpha (TtpRenderer::shadowRemapParam). x is where the
+        // field's tail is cut and the band to y is the anti-flicker slack a
+        // razor edge cannot have (the raster moves sub-texel every frame).
+        // y > x always: a degenerate smoothstep is UB.
+        { type : float2, name : carShadowRemap },
 
         // — the paint channel: the deck's OWN surface (repairs, boost pads) —
         // Identical entry layout to the decal arrays above and painted by the
@@ -464,42 +409,6 @@ fragment {
         return base;
     }
 
-    // MASKED stamps: the NEAR cars' contact shadows, OVER the profiles and
-    // OVER the carShadow tap — a mix replaces, and in the LOD crossfade band
-    // a car carries BOTH representations with complementary alphas, so the
-    // masked one must land last. See maskRect for why this loop is only ever
-    // 0-4 entries: the budget is four, handed out per view.
-    vec3 deckMasked(vec3 base, highp float sLocal, float lat) {
-        int n = min(materialParams.maskCount, 4);
-        highp vec3 uwp = getUserWorldPosition();
-        for (int i = 0; i < n; i++) {
-            highp vec4 r = materialParams.maskRect[i];
-            highp float ds = sLocal - r.x;
-            if (abs(ds) >= r.z) continue;
-            float dl = lat - r.y;
-            if (abs(dl) >= r.w) continue;
-            highp vec4 wp = materialParams.maskWPos[i];
-            highp vec4 wf = materialParams.maskWFwd[i];
-            highp vec4 wr = materialParams.maskWRight[i];
-            highp vec3 rel = uwp - wp.xyz;
-            vec2 q = vec2(dot(rel, wf.xyz), dot(rel, wr.xyz));
-            float d = max(abs(q.x), abs(q.y));
-            if (d >= 0.98) continue;
-            vec2 uv = q.yx * 0.5 + 0.5;
-            // textureLod, NOT texture: non-uniform flow (the continues above)
-            // makes an implicit-derivative sample UB — the ANGLE-Metal
-            // flicker taught this once already. One level, so LOD 0 is exact.
-            // .a: the RGBA8 array stores coverage in alpha (see the sampler).
-            // The uniform branch is TTP_DEBUG_DECAL_MASK_FLAT — the probe
-            // that prices this fetch's execution (ttp_display.h).
-            float m = getMaterialGlobal0().z > 0.0 ? 1.0
-                    : textureLod(materialParams_decalMask, vec3(uv, wp.w), 0.0).a;
-            m *= 1.0 - smoothstep(0.72, 0.98, d);
-            base = mix(base, materialParams.maskInk.rgb, clamp(wf.w * m, 0.0, 1.0));
-        }
-        return base;
-    }
-
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
         // Unlit adds `emissive` to `baseColor`; all the shading goes in the
@@ -559,23 +468,22 @@ fragment {
             vec4 sc = materialParams.skidColor;
             base = mix(base, sc.rgb, min(ink, sc.a));
         }
-        // A box in front of the loop — see profBounds. Exact, not conservative:
-        // a box IS the union of the per-entry windows its loop tests, so a
-        // fragment it rejects had nothing to draw.
-        // AUDITION: the blob tap moved BEFORE the profiles, so a boost
-        // aura composites OVER the shadow — at the new near-opaque blob
-        // depth, shadow-over-aura turned the aura's designed ~1.8 Hz
-        // pulse into a visible wave around the blob's hard edge.
+        // The car shadows, BEFORE the profiles, so a boost aura composites
+        // OVER the shadow — at the near-opaque blob depth, shadow-over-aura
+        // turned the aura's designed ~1.8 Hz pulse into a visible wave around
+        // the blob's hard edge. The PROBE tap below sits in uniform control
+        // flow (its guard is a uniform). min() against maskInk.w caps two
+        // stacked shadows instead of letting saturating-add run darker.
         float csw = materialParams.maskInk.w;
         if (csw > 0.0) {
-            // SMOOTH the tap (carShadowRemap.w, ships on): bilinear
-            // interpolation is C0 — its GRADIENT kinks at every texel
-            // boundary, and over the stamp's smooth ramp those kinks print as
-            // Mach bands on the texel grid, the density-dependent half of the
-            // "diagonal bands through the shadow" report (the uv0 half is the
-            // remap band's job). The cure is a bicubic B-SPLINE through four
-            // bilinear fetches (Sigg-Hadwiger): C2 across texel boundaries,
-            // and its ~one-texel softening is welcome on a shadow.
+            // SMOOTH the tap: bilinear interpolation is C0 — its GRADIENT
+            // kinks at every texel boundary, and over the stamp's smooth ramp
+            // those kinks print as Mach bands on the texel grid, the
+            // density-dependent half of the "diagonal bands through the
+            // shadow" report (the uv0 half is the remap band's job). The cure
+            // is a bicubic B-SPLINE through four bilinear fetches
+            // (Sigg-Hadwiger): C2 across texel boundaries, and its ~one-texel
+            // softening is welcome on a shadow.
             //
             // THE ONE-TAP QUINTIC-WARP TRICK IS REFUTED HERE — tried first,
             // and it printed WORSE bands than raw bilinear. Warping the
@@ -602,7 +510,7 @@ fragment {
             // mistake that made this same shadow blink on ANGLE-Metal once.
             // The layer is single-level, so LOD 0 is what an implicit sample
             // would pick anyway.
-            if (materialParams.carShadowRemap.w > 0.5 && cs > 0.004) {
+            if (cs > 0.004) {
                 highp vec2 ts = vec2(textureSize(materialParams_carShadow, 0));
                 highp vec2 p = variable_layerUV.xy * ts - 0.5;
                 highp vec2 i = floor(p);
@@ -621,38 +529,21 @@ fragment {
                    + g1.x * (g0.y * textureLod(materialParams_carShadow, vec2(c1.x, c0.y), 0.0).r
                            + g1.y * textureLod(materialParams_carShadow, c1, 0.0).r);
             }
-            // The smoothstep is the shipped path: a WIDE band (0.2..0.8 of
-            // peak) over a wide stored field — CarShadowTuning's remap block
-            // holds the whole argument (tail clipped where the uv0 kinks
-            // band, slope far from the die-cut's facet cliff). .z = 1 routes
-            // the tap through raw: the lab's cut-off arm, and where an empty
-            // band lands (shadowRemapParam forces it there — a degenerate
-            // smoothstep is UB).
-            float a = materialParams.carShadowRemap.z > 0.5
-                    ? cs
-                    : cs * smoothstep(materialParams.carShadowRemap.x,
-                            materialParams.carShadowRemap.y, cs);
+            // A WIDE band (0.2..0.8 of peak) over a wide stored field —
+            // CarShadowTuning's remap block holds the whole argument (tail
+            // clipped where the uv0 kinks band, slope far from the die-cut's
+            // facet cliff).
+            float a = cs * smoothstep(materialParams.carShadowRemap.x,
+                    materialParams.carShadowRemap.y, cs);
             base = mix(base, materialParams.maskInk.rgb, min(a, csw));
         }
+        // A box in front of the loop — see profBounds. Exact, not conservative:
+        // a box IS the union of the per-entry windows its loop tests, so a
+        // fragment it rejects had nothing to draw.
         if (materialParams.profCount > 0) {
             highp vec4 pb = materialParams.profBounds;
             if (sLocal >= pb.x && sLocal <= pb.y && tc.y >= pb.z && tc.y <= pb.w) {
                 base = deckProfiles(base, sLocal, tc.y);
-            }
-        }
-        // The car shadows, OVER the profiles — a shadow stays visible through
-        // an aura it crosses, and a mix replaces, so the order is structural.
-        // The PROBE tap above sits in uniform control flow (its guard is a
-        // uniform); the B-spline fetches inside the cs gate are textureLod for the
-        // non-uniform-flow reason on the block itself.
-        // min() against maskInk.w caps two stacked shadows at the depth the
-        // old loop's mix-of-mixes reached instead of letting saturating-add
-        // run darker.
-        // The NEAR cars' true silhouettes, last of all (the hybrid LOD).
-        if (materialParams.maskCount > 0) {
-            highp vec4 mb = materialParams.maskBounds;
-            if (sLocal >= mb.x && sLocal <= mb.y && tc.y >= mb.z && tc.y <= mb.w) {
-                base = deckMasked(base, sLocal, tc.y);
             }
         }
 

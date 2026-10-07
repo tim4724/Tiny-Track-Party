@@ -45,13 +45,7 @@ const matArrays = () => {
 
 // Each array in vroad, and the constant that has to size it. A new array
 // belongs in this table — that is the point of the test.
-// (The mask* arrays came BACK at [4] with the hybrid shadow LOD: near cars
-// keep the true masked silhouette, far cars ride the carShadow texture tap.)
 const OWNERS = {
-  maskRect: 'kMaxMaskedDeckDecals',
-  maskWPos: 'kMaxMaskedDeckDecals',
-  maskWFwd: 'kMaxMaskedDeckDecals',
-  maskWRight: 'kMaxMaskedDeckDecals',
   profRect: 'kMaxProfileDeckDecals',
   profColor: 'kMaxProfileDeckDecals',
   profShape: 'kMaxProfileDeckDecals',
@@ -78,7 +72,6 @@ test('the shader clamps each loop to its own declared size', () => {
   // from indexing past the array. It has to be the DECLARED size, not a
   // number that merely happened to match when it was typed.
   const loops = [
-    [/min\(materialParams\.maskCount,\s*(\d+)\)/, 'kMaxMaskedDeckDecals'],
     [/min\(materialParams\.profCount,\s*(\d+)\)/, 'kMaxProfileDeckDecals'],
     [/min\(materialParams\.paintCount,\s*(\d+)\)/, 'kMaxChunkPaint'],
   ];
@@ -92,11 +85,11 @@ test('the shader clamps each loop to its own declared size', () => {
 
 test('the per-frame gather is at least as large as one chunk can take', () => {
   // mDeckDecals is the whole scene's list before any chunk sees it, and the
-  // fold selects from it — so a gather smaller than a chunk's caps would drop
-  // entries before the caps ever applied. It is CPU-side and costs nothing, so
-  // it is simply held above the sum.
+  // fold selects from it — so a gather smaller than a chunk's cap would drop
+  // entries before the cap ever applied. It is CPU-side and costs nothing, so
+  // it is simply held above it.
   const gather = cppConst('kMaxDeckDecals');
-  const perChunk = cppConst('kMaxMaskedDeckDecals') + cppConst('kMaxProfileDeckDecals');
+  const perChunk = cppConst('kMaxProfileDeckDecals');
   assert.ok(gather >= perChunk,
     `kMaxDeckDecals ${gather} is below one chunk's ${perChunk}`);
 });

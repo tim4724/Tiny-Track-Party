@@ -112,8 +112,8 @@ final class BlobStore {
 /// One `BlobStore` per store the ENGINE says it has.
 ///
 /// The names are asked for rather than typed, which is the point: this shell
-/// does not know that a bake or a mask exists, only that the engine keeps some
-/// kinds of derived bytes and that each kind wants its own directory.
+/// does not know that a bake exists, only that the engine keeps some kinds of
+/// derived bytes and that each kind wants its own directory.
 final class BlobStores {
 
     private let stores: [(name: String, store: BlobStore)]

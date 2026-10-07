@@ -59,8 +59,9 @@ Roster parseRoster(const char* json);
 //   - ok requires the SAME slots in the SAME order: slot identity is baked into
 //     the scene (cameras, HUD readback, held poses all go by slot), so a
 //     join/leave/reorder is never a re-dress.
-//   - `remodel` — slots whose MODEL changed (carIndex): the slot's GLB, ghost
-//     and silhouette are all rebuilt.
+//   - `remodel` — slots whose MODEL changed (carIndex): the slot's GLB and
+//     ghost are rebuilt, and its shadow re-points at the new model's fit
+//     (fitted on that model's first load, then kept by model across scenes).
 //   - `redress` — slots whose livery changed under the same model: only what
 //     wears it (a GLB-less slot's box marker) is rebuilt.
 struct RerosterPlan {

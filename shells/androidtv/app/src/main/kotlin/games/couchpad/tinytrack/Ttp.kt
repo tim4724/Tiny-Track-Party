@@ -15,7 +15,7 @@ import java.nio.ByteBuffer
 
 @Suppress("FunctionName", "unused")
 object Ttp {
-    /** Registers all 237 natives via JNI_OnLoad; a mismatch fails here. */
+    /** Registers all 232 natives via JNI_OnLoad; a mismatch fails here. */
     fun load() { System.loadLibrary("ttp_runtime_android") }
 
     external fun ttp_add_bot(h: Int, idJson: ByteArray?, caution: Double, laneBias: Double, aiSeed: Int, statsJsonOrNull: ByteArray?)
@@ -56,7 +56,6 @@ object Ttp {
     // ttp_display_create: not bound — see OVERRIDES in scripts/gen-jni.mjs.
     external fun ttp_display_debug_decals(): ByteArray?
     external fun ttp_display_debug_features(mask: Int)
-    external fun ttp_display_debug_force_mask_layer(layer: Int)
     external fun ttp_display_debug_hide_cars(on: Int)
     external fun ttp_display_debug_wipe_skids()
     external fun ttp_display_destroy()
@@ -85,10 +84,6 @@ object Ttp {
     external fun ttp_display_scale_poll(tMs: Double, minScale: Double, maxScale: Double, baseLines: Double, panelMs: Double, out2: DoubleArray): Int
     external fun ttp_display_scale_scene(tMs: Double)
     external fun ttp_display_settled(): Int
-    external fun ttp_display_shadow_layer_json(x: Int, y: Int, w: Int, h: Int): ByteArray?
-    external fun ttp_display_shadow_mask_json(slot: Int): ByteArray?
-    external fun ttp_display_shadow_tuning(json: ByteArray?)
-    external fun ttp_display_shadow_tuning_json(): ByteArray?
     external fun ttp_display_shadows(enabled: Int)
     external fun ttp_display_showcase(on: Int)
     external fun ttp_display_slot_ids_json(): ByteArray?

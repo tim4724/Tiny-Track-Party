@@ -20,9 +20,10 @@
 // The frames are therefore WIDER THAN TALL (--aspect, 5:4): these cars are ~1.4x
 // longer than they are tall, and a sphere fit is sized by the long axis, so a square
 // frame spent ~40% of its height on empty air — nearly all of it above the roof.
-// The ground shadow reproduces the in-race look (the renderer's baked car blob): the
-// car's baked top-down SILHOUETTE, tinted warm near-black with a tight penumbra,
-// laid flat under the car and parented to the turntable so it spins with the car.
+// The ground shadow is this tool's own: the car's top-down SILHOUETTE, tinted warm
+// near-black with a tight penumbra, laid flat under the car and parented to the
+// turntable so it spins with the car. (In-race the blob is a per-model fitted
+// rounded rect — native/renderer/CLAUDE.md.)
 //
 //   node scripts/capture-car-thumbs.js                    # all roster cars
 //   node scripts/capture-car-thumbs.js --name vehicle-racer-low
@@ -125,7 +126,7 @@ async function main() {
         const scene = new THREE.Scene();
         // Toy lighting matched to the game renderer. The key only LIGHTS
         // the body now — it casts no shadow (cars don't cast the sun shadow in-race either);
-        // the ground shadow below is the car's baked top-down silhouette, like the engine.
+        // the ground shadow below is the car's top-down silhouette.
         scene.add(new THREE.HemisphereLight(0xffffff, 0x9aa68f, 2.2));
         const key = new THREE.DirectionalLight(0xfff1d0, 1.4);
         key.position.set(6, 12, 4);

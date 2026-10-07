@@ -3,7 +3,7 @@
 // code to be. The renderer that consumes it is compiled by no ctest at all.
 //
 // No corpus and no oracle: what a shadow should LOOK like is a taste question
-// the tuning page exists to answer. What this pins is the handful of claims the
+// answered on the glass. What this pins is the handful of claims the
 // consumer cannot function without, and every one of them is a claim a silent
 // mistake would satisfy just as well as a correct implementation:
 //
@@ -32,7 +32,6 @@
 using ttp::rt::car_footprint_mask;
 using ttp::rt::FootprintSpec;
 using ttp::rt::rounded_rect_coverage;
-using ttp::rt::superellipse_mask;
 
 namespace {
 
@@ -95,7 +94,7 @@ float rowMean(const std::vector<float>& m, const FootprintSpec& s, int y) {
 // The mask row a point ALONG THE FOOTPRINT lands on: 0 = the car's tail, 1 =
 // its nose. Needed because the footprint is only 1/overscan of the mask — rows
 // 0..19 and 109..127 of a 128-row mask are margin, and a test that samples
-// there is measuring the blur tail rather than the shape.
+// there is measuring the margin rather than the shape.
 int rowAlong(const FootprintSpec& s, float frac) {
     const float y = (float) s.h * (0.5f - (1.0f - 2.0f * frac) * 0.5f / s.overscan);
     return std::max(0, std::min(s.h - 1, (int) std::lround(y)));
@@ -104,14 +103,10 @@ int rowAlong(const FootprintSpec& s, float frac) {
 }  // namespace
 
 int main() {
-    // A spec with the blur turned off wherever the test is measuring geometry:
-    // three box passes smear every edge by design, and an assertion about WHERE
-    // an edge is should not be reading the penumbra's tail.
+    // The shipped frame.
     FootprintSpec sharp;
     sharp.w = 64;
     sharp.h = 128;
-    sharp.blur = 0.0f;
-    sharp.grow = 0.0f;
 
     // ── THE FRAME ───────────────────────────────────────────────────────────
     // A full-footprint rectangle: exactly the AABB the stamp is sized to. It
@@ -216,34 +211,6 @@ int main() {
                 "shape: the front axle row is wider than the waist");
     }
 
-    // ── GROW WIDENS, AND ONLY WIDENS ────────────────────────────────────────
-    // The layer minifies this mask hard, so a wheel poking out by one mask
-    // texel is gone by the time it is a layer texel. Grow is the knob for it
-    // and it must be monotone — a dilation may never remove coverage.
-    {
-        const float hx = 0.275f, hz = 0.438f;
-        std::vector<float> xz;
-        std::vector<uint32_t> idx;
-        addQuad(xz, idx, -0.12f, -hz * 0.5f, 0.12f, hz * 0.5f);
-        FootprintSpec s = sharp;
-        const auto plain = car_footprint_mask(xz.data(), xz.size() / 2,
-                idx.data(), idx.size(), hx, hz, s);
-        s.grow = 0.08f;
-        const auto grown = car_footprint_mask(xz.data(), xz.size() / 2,
-                idx.data(), idx.size(), hx, hz, s);
-        expect(!plain.empty() && !grown.empty(), "grow: both rasterized");
-        if (plain.empty() || grown.empty()) return 1;
-        float tp = 0, tg = 0;
-        bool monotone = true;
-        for (size_t i = 0; i < plain.size(); i++) {
-            tp += plain[i];
-            tg += grown[i];
-            if (grown[i] + 1e-4f < plain[i]) monotone = false;
-        }
-        expect(tg > tp * 1.05f, "grow: a dilation adds coverage");
-        expect(monotone, "grow: a dilation never REMOVES coverage");
-    }
-
     // ── FAILURE IS EMPTY, NEVER BLANK ───────────────────────────────────────
     {
         FootprintSpec s = sharp;
@@ -272,34 +239,12 @@ int main() {
                 "empty: geometry off the frame");
     }
 
-    // ── THE FALLBACK STILL WORKS ────────────────────────────────────────────
-    // The superellipse is what a car whose outline could not be read draws, and
-    // what the generic decal-mask layer holds. Same frame, same centring.
-    {
-        FootprintSpec s;
-        s.w = 64;
-        s.h = 128;
-        const auto m = superellipse_mask(s);
-        expect(m.size() == (size_t) s.w * s.h, "superellipse: mask is w*h");
-        if (m.size() != (size_t) s.w * s.h) return 1;
-        expect(at(m, s, s.w / 2, s.h / 2) > 0.9f, "superellipse: centre covered");
-        expect(at(m, s, 0, 0) < 0.05f, "superellipse: corner clear");
-        // Left/right and front/back symmetric — which is half the reason it
-        // could never be mirrored by a handedness mistake.
-        bool sym = true;
-        for (int y = 0; y < s.h; y++)
-            for (int x = 0; x < s.w / 2; x++) {
-                if (std::fabs(at(m, s, x, y) - at(m, s, s.w - 1 - x, y)) > 1e-5f) sym = false;
-                if (std::fabs(at(m, s, x, y) - at(m, s, x, s.h - 1 - y)) > 1e-5f) sym = false;
-            }
-        expect(sym, "superellipse: symmetric on both axes");
-    }
-
     // ── THE CHEAP SHAPE ─────────────────────────────────────────────────────
-    // The rounded rect is the one shape with no mask behind it, so nothing else
-    // can catch it being wrong. It has to agree with the masks about the FRAME
-    // (or it draws at a different size from everything it is A/B'd against),
-    // and its corner knob has to actually span rectangle to ellipse.
+    // The rounded rect is what the layer draws, and it is closed-form: no
+    // raster stands behind it to catch it being wrong. It has to agree with the
+    // footprint masks about the FRAME (the fit is measured off a mask, so a
+    // mismatch draws every car at the wrong size), and its corner knob has to
+    // actually span rectangle to ellipse.
     {
         const float OV = 1.45f, SOFT = 0.004f;
         // The frame: the footprint fills 1/overscan, centred, on both axes.
@@ -315,8 +260,9 @@ int main() {
                 "rounded: centre solid");
         expect(rounded_rect_coverage(0.0f, 0.0f, OV, 0.42f, SOFT) < 0.01f,
                 "rounded: frame corner clear");
-        // Symmetric on both axes — it is a generic shape and must not favour an
-        // end, or it would read as a handedness bug in the per-car outline.
+        // Symmetric on both axes at equal end widths — the evaluator must not
+        // favour an end on its own, or it would read as a handedness bug in
+        // every car's fit.
         for (const float u : { 0.2f, 0.35f, 0.5f }) {
             for (const float v : { 0.2f, 0.35f, 0.5f }) {
                 const float a = rounded_rect_coverage(u, v, OV, 0.42f, SOFT);
@@ -332,8 +278,8 @@ int main() {
                 "rounded: corner 0 fills the box corner");
         expect(rounded_rect_coverage(cu, cv, OV, 1.0f, SOFT) < 0.1f,
                 "rounded: corner 1 rounds it away");
-        // …and it is MONOTONE in between, or the slider would not read as one
-        // shape becoming another.
+        // …and it is MONOTONE in between, or a fitted corner would not read as
+        // one shape becoming another.
         float last = 2.0f;
         bool mono = true;
         for (float r = 0.0f; r <= 1.0f; r += 0.1f) {
@@ -353,8 +299,8 @@ int main() {
     // meet: the split evaluator equals the one-call form bit for bit, and
     // zero() is never true where the coverage is anything but +0. The grid
     // runs 0.1 past the stamp's frame (the raster's uv overshoots it at the
-    // quad's padded edge) across the preview's soft (0.02), the shipping
-    // ramp (~0.2) and the extremes, and fills down to the 0.05 floor.
+    // quad's padded edge) across a tight ramp (0.02), the shipping ramp
+    // (~0.2) and the extremes, and fills down to the 0.05 floor.
     {
         const float softs[] = { 1e-3f, 0.02f, 0.06f, 0.203f, 0.5f };
         const float fills[] = { 0.05f, 0.6f, 1.0f, 1.2f };
@@ -446,120 +392,6 @@ int main() {
                 wfit.fillXTail, wfit.fillXNose, wfit.fillZ);
         expect(cTail > 0.5f && cNose < 0.5f,
                 "extent fit: v=0 wears the tail's width, v=1 the nose's");
-    }
-
-    // ---- the fitted convex polygon ------------------------------------------
-    {
-        using ttp::rt::convex_poly_coverage;
-        using ttp::rt::fit_convex_poly;
-        using ttp::rt::PolyFit;
-        // A tapered body: wide tail, narrow nose — the shape the rect cannot
-        // say. Model space, nose toward -z per the kit convention.
-        std::vector<float> xz = {
-            -0.25f,  0.40f,  0.25f,  0.40f,   // tail corners (+z)
-            -0.28f,  0.10f,  0.28f,  0.10f,   // widest at the hips
-            -0.12f, -0.40f,  0.12f, -0.40f,   // narrow nose (-z)
-        };
-        const float HX = 0.28f, HZ = 0.40f;
-        const PolyFit p = fit_convex_poly(xz.data(), xz.size() / 2, HX, HZ, 6);
-        expect(p.count >= 3 && p.count <= 6, "poly: fits within the asked edge count");
-        // CONTAINMENT: simplification only ever grows, so every projected
-        // vertex sits inside (q frame, both axes negated).
-        bool inside = true;
-        for (size_t i = 0; i + 1 < xz.size(); i += 2) {
-            const float qx = -xz[i] / HX, qy = -xz[i + 1] / HZ;
-            for (int e = 0; e < p.count; e++) {
-                if (p.nx[e] * qx + p.ny[e] * qy > p.d[e] + 1e-4f) inside = false;
-            }
-        }
-        expect(inside, "poly: every input vertex stays inside the fit");
-        // SYMMETRY: the fit mirrors its input in x, so every plane's mirror is
-        // a plane of the fit too.
-        bool sym = true;
-        for (int e = 0; e < p.count; e++) {
-            bool found = false;
-            for (int f = 0; f < p.count; f++) {
-                if (std::fabs(p.nx[e] + p.nx[f]) < 1e-3f
-                        && std::fabs(p.ny[e] - p.ny[f]) < 1e-3f
-                        && std::fabs(p.d[e] - p.d[f]) < 1e-3f) found = true;
-            }
-            if (!found) sym = false;
-        }
-        expect(sym, "poly: left-right symmetric by construction");
-        // THE TAPER SURVIVES: coverage at the hips' width near the NOSE
-        // (v = 1) is clear, the same offset near the TAIL (v = 0) is covered —
-        // which is also the orientation pinned end to end (nose -z -> v 1).
-        const float OV = 1.45f, SOFT = 0.02f;
-        const float uHip = 0.5f + (0.24f / HX) * 0.5f / OV;
-        const float vNose = 0.5f + 0.75f * 0.5f / OV;
-        const float vTail = 0.5f - 0.75f * 0.5f / OV;
-        expect(convex_poly_coverage(uHip, vNose, OV, p, 0.0f, SOFT) < 0.5f,
-                "poly: the nose is narrower than the hips");
-        expect(convex_poly_coverage(uHip, vTail, OV, p, 0.0f, SOFT) > 0.5f,
-                "poly: the tail keeps the hips' width");
-        expect(convex_poly_coverage(0.5f, 0.5f, OV, p, 0.0f, SOFT) > 0.99f,
-                "poly: centre solid");
-        expect(convex_poly_coverage(0.02f, 0.02f, OV, p, 0.0f, SOFT) < 0.01f,
-                "poly: frame corner clear");
-        // FAILURE IS EMPTY, so the caller falls back to the rect.
-        expect(fit_convex_poly(nullptr, 0, HX, HZ, 6).count == 0,
-                "poly: nothing to fit answers count 0");
-        expect(fit_convex_poly(xz.data(), 2, HX, HZ, 6).count == 0,
-                "poly: too few points answers count 0");
-
-        // ---- the lobed fit: concave at the waist, convex per lobe ----------
-        // The profile comes from the MASK, so the fixtures build real ones.
-        using ttp::rt::fit_convex_poly_lobes;
-        FootprintSpec fspec;
-        // A waisted body: wide at both axles, pinched between them — the
-        // outline a single hull bridges wheel-to-wheel.
-        std::vector<float> waisted;
-        std::vector<uint32_t> waistedIdx;
-        addQuad(waisted, waistedIdx, -0.28f, 0.20f, 0.28f, 0.40f);    // rear axle
-        addQuad(waisted, waistedIdx, -0.14f, -0.20f, 0.14f, 0.20f);   // the pinch
-        addQuad(waisted, waistedIdx, -0.28f, -0.40f, 0.28f, -0.20f);  // front axle
-        const std::vector<float> waistedMask = car_footprint_mask(
-                waisted.data(), waisted.size() / 2,
-                waistedIdx.data(), waistedIdx.size(), HX, HZ, fspec);
-        expect(!waistedMask.empty(), "lobes: the waisted fixture rasterizes");
-        const auto lobes = fit_convex_poly_lobes(waisted.data(), waisted.size() / 2,
-                waistedIdx.data(), waistedIdx.size(),
-                HX, HZ, 6, waistedMask, fspec);
-        expect(lobes[0].count >= 3 && lobes[1].count >= 3,
-                "lobes: a waisted body splits in two");
-        const auto unionCov = [&](float u, float v) {
-            return std::max(
-                    convex_poly_coverage(u, v, OV, lobes[0], 0.0f, SOFT),
-                    convex_poly_coverage(u, v, OV, lobes[1], 0.0f, SOFT));
-        };
-        // THE PINCH SURVIVES: beside the waist the union is clear where a
-        // single hull covers, and both axles stay covered at full width.
-        const float uWide = 0.5f + (0.24f / HX) * 0.5f / OV;
-        expect(unionCov(uWide, 0.5f) < 0.5f,
-                "lobes: the union is clear beside the waist");
-        const ttp::rt::PolyFit one = fit_convex_poly(waisted.data(),
-                waisted.size() / 2, HX, HZ, 6);
-        expect(convex_poly_coverage(uWide, 0.5f, OV, one, 0.0f, SOFT) > 0.5f,
-                "lobes: the single hull would have bridged it (the control)");
-        expect(unionCov(uWide, 0.5f + 0.85f * 0.5f / OV) > 0.5f
-                        && unionCov(uWide, 0.5f - 0.85f * 0.5f / OV) > 0.5f,
-                "lobes: both axles keep their width");
-        expect(unionCov(0.5f, 0.5f) > 0.99f,
-                "lobes: the centreline stays covered through the waist");
-        // A MONOTONE TAPER DOES NOT SPLIT: narrow at the nose only, so the
-        // nose side is never wider than the "waist" — no pinch, no second
-        // evaluation.
-        std::vector<float> taper;
-        std::vector<uint32_t> taperIdx;
-        addQuad(taper, taperIdx, -0.28f, -0.05f, 0.28f, 0.40f);   // wide rear
-        addQuad(taper, taperIdx, -0.14f, -0.40f, 0.14f, 0.05f);   // narrow nose
-        const std::vector<float> taperMask = car_footprint_mask(
-                taper.data(), taper.size() / 2,
-                taperIdx.data(), taperIdx.size(), HX, HZ, fspec);
-        expect(fit_convex_poly_lobes(taper.data(), taper.size() / 2,
-                        taperIdx.data(), taperIdx.size(),
-                        HX, HZ, 6, taperMask, fspec)[1].count == 0,
-                "lobes: a taper stays one lobe");
     }
 
     std::printf("carfootprint_check: %d checked, %d failed\n", checked, failed);
