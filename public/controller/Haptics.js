@@ -4,10 +4,11 @@
 // call REPLACES whatever pattern is already playing. Two consequences shape this
 // whole module:
 //
-//   1. "Light" has to be faked with DUTY CYCLE — a short on-pulse at a fast cycle
-//      is low average motor power (so it feels faint) with pulses too quick to
-//      tell apart (so they blend into a hum rather than reading as taps). That's
-//      what BRAKE_PATTERN is.
+//   1. "Light" has to come from SPACING — short ticks with clear gaps between
+//      them. Faking a faint hum by fast on/off (gaps the motor blurs over) only
+//      works on Android's motor; the iPhone's stops dead after every pulse and
+//      plays the same pattern as harsh bursts. Gaps of 50 ms and more feel the
+//      same on both. That's what BRAKE_PATTERN is.
 //   2. A background loop and a transient tick CANNOT coexist. A buzz fired while
 //      the brake rumble is running silences it until the loop's next renewal —
 //      up to BRAKE_RENEW_MS of dead motor in the middle of a held brake.
@@ -20,13 +21,13 @@
 // navigator/window are reached only through the injected defaults, so importing
 // this module under Node is safe.
 
-// Brake rumble: a continuous-feeling LIGHT buzz for as long as BRAKE is held —
-// the player's eyes-free confirmation they're braking (they're watching the car
-// on the main display, not the phone).
-// Tune: raise the 8 (on-time) for a stronger rumble; raise the 22 (off-time) for
-// fainter. Keep the cycle (8+22 = 30 ms) short or the pulses stop blending.
-const BRAKE_PULSE = [8, 22];                                      // 30 ms cycle, ~27% duty: a light hum
-export const BRAKE_PATTERN = Array(60).fill(BRAKE_PULSE).flat();  // ~1.8 s of rumble
+// Brake rumble: a LIGHT ABS-like ticking for as long as BRAKE is held — the
+// player's eyes-free confirmation they're braking (they're watching the car on
+// the main display, not the phone).
+// Tune: raise the 12 (tick length) for stronger ticks; raise the 60 (gap) for
+// sparser. Keep the gap at 50 ms or more (see 1. above).
+const BRAKE_PULSE = [12, 60];                                     // 72 ms cycle: ~14 soft ticks a second
+export const BRAKE_PATTERN = Array(25).fill(BRAKE_PULSE).flat();  // ~1.8 s of rumble
 export const BRAKE_RENEW_MS = 1500;                               // renew before it ends (1.8 s > 1.5 s, no gap)
 
 // Gap between a transient ending and the loop resuming underneath it. Small
