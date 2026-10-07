@@ -71,7 +71,7 @@ function syncShellBack() {
 }
 
 // haptics — vibrate the phone (ignored where unsupported; iOS Safari has no
-// navigator.vibrate at all, so every cue here is Android-only). The player's eyes
+// navigator.vibrate, the CouchPad iOS launcher supplies one). The player's eyes
 // are on the main display, not the phone, so a buzz is how the phone confirms
 // something landed. ONE motor, so every cue routes through this instance: a
 // transient fired while the brake rumble is running would otherwise silence it
