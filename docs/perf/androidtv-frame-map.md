@@ -511,6 +511,24 @@ deletion with the fix (never slow) dropped 15.4 -> 9.8 frames per race on
 pretzel and 6.6 -> 3.8 on powder, light-second drops 9 -> 2 and 7 -> 1;
 HEAD's normal-mixer races alone still dropped more (16.5 and 5.3).
 
+Every track after that and the window erase (2e57a2f7), one 90 s race each,
+4P pinned 960x540, mixer normal in all: twelve tracks drop nothing, riptide,
+powder, glacier, crag and helix 1-3, gauntlet 5, skysnake 7, pretzel 13; no
+second under 55 fps, and every drop in a heavy second.
+
+Then the split's later cells stopped LOADING the canvas. Every cell after
+the first read its whole rect back from memory before overdrawing it, because
+Filament strips the colour clear after the first View; the fork's
+fork clears a later view's own viewport instead whenever it overlaps no
+earlier view's this frame (the render area scoped to it; proposed upstream). Stable pixels
+across off/on held frames at 2, 3 and 4 players: zero differ. Measured with an
+opt-in prototype in one install, flipped per race, five interleaved races a side: pretzel at a pinned
+1280x720 425 -> 237 dropped frames per 80 s (heavy-ten GPU 20.1 -> 18.7 ms),
+tidepool 232 -> 58, pretzel at 960x540 14.8 -> 2.3. The automatic version,
+three races a side against the old pin on pretzel at 720: 431 -> 247. On GL
+the same box gains nothing (a scissored clear, with or without
+glInvalidateSubFramebuffer, measured inside the noise), so GL keeps loading.
+
 ## The compiled app, and what is left of the drops (2026-10-06, later)
 
 Every reading above was taken on an adb install, which runs the app at

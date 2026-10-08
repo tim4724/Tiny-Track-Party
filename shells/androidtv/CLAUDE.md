@@ -824,8 +824,14 @@ are near-zero NET (their GL-era cost was submission, and Vulkan ate it), and
 **the merged draw groups move this backend's median nothing** — the merge
 stays for tvOS, where it is load-bearing. Refuted here, so nobody re-derives
 them: a fork patch confining each pass's Vulkan `renderArea` to its viewport
-(built, verified ACTIVE in-log, measured ZERO at 720 — the driver already
-handles untouched tiles cheaply); the sRGB-swapchain ROP encode (the grade is
+while the passes still LOADED (built, verified ACTIVE in-log, measured ZERO at
+720 — the driver already handles untouched tiles cheaply). The tiles a cell
+DOES reach were the cost: every cell after the first loaded its whole rect back
+from memory. The pinned Filament (a change proposed upstream) clears a later
+view's viewport instead whenever it overlaps no earlier view's this frame: it
+still holds the first view's clear colour, so the pixels are identical
+(docs/perf/androidtv-frame-map.md has what it bought). Keep the cells from
+overlapping, or they go back to loading. Also refuted: the sRGB-swapchain ROP encode (the grade is
 a LUT, the prize is ~1 ms of fill, and it flips translucent blending
 gamma→linear — a look change); the engine's feature flags (nothing
 Vulkan-tunable exists). What remains above the road's own shader is
