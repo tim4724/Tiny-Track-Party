@@ -85,6 +85,25 @@ export function makeAndroidBackend() {
   const phase50 = [];
 
   const adb = (...args) => execFileSync(ADB, ['-s', serial, ...args], { encoding: 'utf8' });
+
+  /**
+   * THE AUDIO MIXER'S CPU, read over the counted window. Compiled it costs ~7% of
+   * a core; when its loop runs in the interpreter it costs ~65% and starves
+   * Filament's driver thread into dropped frames that read like the build's, so
+   * every run states it. Null when the thread cannot be found.
+   */
+  let mixer = null;
+  const mixerTicks = () => {
+    try {
+      const pid = adb('shell', 'pidof', PACKAGE).trim();
+      const tid = adb('shell', 'ps', '-T', '-p', pid).split('\n')
+        .find((l) => l.trim().endsWith('ttp-mix'))?.trim().split(/\s+/)[2];
+      if (!tid) return null;
+      // utime and stime are fields 14 and 15; the comm before ") " may hold spaces.
+      const f = adb('shell', 'cat', `/proc/${pid}/task/${tid}/stat`).split(') ')[1].split(' ');
+      return { tid, ticks: Number(f[11]) + Number(f[12]), at: Date.now() };
+    } catch { return null; }
+  };
   const setprop = (k, v) => adb('shell', 'setprop', k, String(v));
 
   /**
@@ -232,6 +251,7 @@ export function makeAndroidBackend() {
       setprop('debug.ttp.features', arg('features', TTP_FEAT_ALL));
 
       await sleep(GRID_MS);
+      mixer = mixerTicks();
       counting = true;
       timer = setTimeout(() => lines.end(), seconds * 1000);
       return lines;
@@ -252,6 +272,14 @@ export function makeAndroidBackend() {
       lines.end();
       restoreKnobs();
       report(spikes, phasemax, phase50);
+      const end = mixer && mixerTicks();
+      if (end?.tid === mixer.tid) {
+        // USER_HZ is 100: a tick is 10 ms of the thread's CPU.
+        const share = ((end.ticks - mixer.ticks) * 10) / (end.at - mixer.at);
+        console.log(`\n# audio mixer ${(100 * share).toFixed(0)}% of a core`
+          + (share > 0.2 ? ' — SLOW: its loop ran interpreted, so this run is not'
+            + ' the build\'s (shells/androidtv/CLAUDE.md, Audio)' : ''));
+      }
     },
   };
 }
