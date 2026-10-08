@@ -205,6 +205,9 @@ private fun Modifier.retainedLayer(pad: Dp, block: GraphicsLayerScope.() -> Unit
         layout(placeable.width - 2 * p, placeable.height - 2 * p) { placeable.place(-p, -p) }
     }
         .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen; block() }
+        // The layer's whole rect, which a covered window erases under it every
+        // frame (GameWindow.kt): redrawn over itself, its AA edges would darken.
+        .erasedBounds()
         .padding(pad)
 
 /**
@@ -312,6 +315,8 @@ private fun ItemSlot(item: String?, accent: Int, carIndex: Int, tick: Int) {
     // idle. The spec is the same 0.1 s linear repeat; it just only exists while it is
     // wanted, and cancelling the effect is what stops it.
     val wobble = remember { Animatable(0f) }
+    // Scaled and turned, the slot draws outside its layer's rect.
+    if (rolling != null || pop.currentState != pop.targetState) UnboundedContent()
     LaunchedEffect(rolling != null) {
         if (rolling == null) wobble.snapTo(0f)
         else wobble.animateTo(1f, infiniteRepeatable(tween(100, easing = LinearEasing)))
@@ -396,6 +401,7 @@ private object ItemVocabulary {
  */
 @Composable
 private fun FinishedCard(cell: GameState.CellHUD) {
+    UnboundedContent()
     // `.cell-finish`'s padding is ASYMMETRIC — 20.8 vertical by 35.2 horizontal —
     // so the card is noticeably wider than its stack. Uniform, it hugged.
     StickerCard(rotation = -1.5f, padding = 21.dp, horizontalPadding = 35.dp) {
@@ -432,6 +438,7 @@ private fun FinishedCard(cell: GameState.CellHUD) {
  */
 @Composable
 private fun ReconnectCard(cell: GameState.CellHUD) {
+    UnboundedContent()
     // The QR is BIG, and sized off the CELL — `.cell-reconnect`'s `--qr`: half
     // the screen's height for one player, and most of a split cell, because half
     // of a half-screen cell was too small to scan from the couch and the cell has
@@ -501,6 +508,7 @@ fun CountdownOverlay(state: GameState) {
         }
     }
     if (present) {
+        UnboundedContent()
         Box(Modifier.graphicsLayer { alpha = fade.value }) { CountdownBanner(lastCount) }
     }
 }
@@ -570,6 +578,7 @@ private val COUNTDOWN_SIZE = 281.dp
 
 @Composable
 fun PauseOverlay(game: GameCoordinator) {
+    UnboundedContent()
     Box(
         // BRIGHT FROSTED PAPER, not a dark veil. `#pause-overlay` is
         // `rgba(255,246,235,0.72)` — the same warm glass the results board uses —

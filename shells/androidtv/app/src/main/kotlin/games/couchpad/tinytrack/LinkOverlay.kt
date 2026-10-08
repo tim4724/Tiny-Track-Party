@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
  */
 @Composable
 fun LinkOverlay(link: GameState.LinkView, game: GameCoordinator) {
+    UnboundedContent()
     Box(
         Modifier.fillMaxSize().background(Tokens.paper.copy(alpha = 0.72f)),
         contentAlignment = Alignment.Center,

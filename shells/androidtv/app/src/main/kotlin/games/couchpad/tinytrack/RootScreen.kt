@@ -74,7 +74,10 @@ fun RootScreen(game: GameCoordinator) {
                 // Unreachable on this platform, and kept only because the screen
                 // enum mirrors the model's rather than this shell's. Rendering the
                 // lobby here too keeps the switch total without inventing a board.
-                GameState.Screen.WELCOME, GameState.Screen.LOBBY -> LobbyScreen(state)
+                GameState.Screen.WELCOME, GameState.Screen.LOBBY -> {
+                    UnboundedContent()
+                    LobbyScreen(state)
+                }
                 GameState.Screen.RACE -> if (!PerfDebug.hudHidden) RaceHud(state)
             }
         }
@@ -96,14 +99,18 @@ fun RootScreen(game: GameCoordinator) {
         // it uncovers the one beneath. Only the LAST entry is composed — the pages
         // under it are opaque paper boards anyway, and a composed-but-covered
         // board keeps its focusable rows live behind the one on top.
-        when (val page = state.infoPath.lastOrNull()) {
+        val page = state.infoPath.lastOrNull()
+        if (page != null) UnboundedContent()
+        when (page) {
             null -> Unit
             GameState.InfoRoute.Info -> InfoScreen(state)
             GameState.InfoRoute.Licenses -> LicensesScreen(state)
             is GameState.InfoRoute.License -> LicenseTextScreen(page.index)
         }
 
-        // The overlays, in paint order. Each is a conditional insertion.
+        // The overlays, in paint order. Each is a conditional insertion, and
+        // each is UnboundedContent: the window under a race erases only the
+        // HUD's retained groups and the name tags (GameWindow.kt).
         CountdownOverlay(state)
 
         // THE BOARD FADES UP, because it no longer arrives at the flag: the race's
@@ -123,7 +130,10 @@ fun RootScreen(game: GameCoordinator) {
         AnimatedVisibility(
             visible = state.screen == GameState.Screen.RACE && state.results != null,
             enter = fadeIn(tween(320)), exit = ExitTransition.None,
-        ) { ResultsScreen(state, game) }
+        ) {
+            UnboundedContent()
+            ResultsScreen(state, game)
+        }
 
         if (state.screen == GameState.Screen.RACE && state.paused && state.results == null) {
             PauseOverlay(game)
@@ -157,6 +167,7 @@ fun RootScreen(game: GameCoordinator) {
             // on the WINDOW (MainActivity's FLAG_NOT_FOCUSABLE, cleared when the
             // cover lifts), because here the reason is an ANR rather than a stray
             // tap and the whole window is what has to stop answering.
+            UnboundedContent()
             Box(Modifier.fillMaxSize().background(Tokens.paper)) {
                 // THE LAUNCH IMAGE ITSELF, not a live re-render of the wordmark:
                 // the same bake tvOS's CoverView draws and its launch image is
@@ -186,6 +197,7 @@ fun RootScreen(game: GameCoordinator) {
         // construction — a missing material degrades quietly, a rejected scene build
         // leaves the previous frame up.
         state.lastError?.let { why ->
+            UnboundedContent()
             Box(
                 Modifier
                     .align(Alignment.BottomEnd)

@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.view.View
@@ -78,6 +79,12 @@ class NameTagView(context: Context, maxPlayers: Int) : View(context) {
     private val face = Typeface.createFromAsset(context.assets, "fonts/Fredoka-SemiBold.ttf")
     private val matrix = Matrix()
     private val paint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+    /** This frame's tag rects for [WindowErase], `l, t, r, b` each. */
+    private val rects = IntArray(maxTags * 4)
+    /** This frame's sticker per tag, looked up once for both passes. */
+    private val found = arrayOfNulls<TagBitmap>(maxTags)
+    private val box = RectF()
+    private val rounded = Rect()
 
     init {
         isFocusable = false
@@ -107,7 +114,11 @@ class NameTagView(context: Context, maxPlayers: Int) : View(context) {
     /** The scene's slot order, off the built roster (`ttp_display_slot_ids_json`). */
     fun setSlots(ids: List<EngineId>) { slots = ids; sizesDirty = true }
 
-    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) { sizesDirty = true }
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        sizesDirty = true
+        // A resized window gets new buffers, and nothing in them is tracked.
+        WindowErase.changed()
+    }
 
     /**
      * Hands each slot's sticker box to [report] as fractions of this view — the
@@ -134,20 +145,40 @@ class NameTagView(context: Context, maxPlayers: Int) : View(context) {
     }
 
     override fun onDraw(canvas: Canvas) {
-        val w = width.toFloat()
-        val h = height.toFloat()
+        // Every tag's window rect first: the window clears under the tags before
+        // any of them draws (GameWindow.kt).
+        var n = 0
         for (i in 0 until count) {
-            val o = i * TAG_STRIDE
-            val slot = tags[o + 1].toInt()
-            val s = stickers[slots.getOrNull(slot) ?: continue] ?: continue
-            val scale = tags[o + 4]
-            matrix.setTranslate(-s.anchorX, -s.anchorY)
-            matrix.postRotate(TILT)
-            matrix.postScale(scale, scale)
-            matrix.postTranslate(tags[o + 2] * w, tags[o + 3] * h)
-            paint.alpha = (tags[o + 5] * 255f).toInt().coerceIn(0, 255)
+            val s = slots.getOrNull(tags[i * TAG_STRIDE + 1].toInt())?.let { stickers[it] }
+            found[i] = s
+            if (s == null) continue
+            place(i, s)
+            box.set(0f, 0f, s.bitmap.width.toFloat(), s.bitmap.height.toFloat())
+            matrix.mapRect(box)
+            box.roundOut(rounded)
+            rects[n * 4] = rounded.left
+            rects[n * 4 + 1] = rounded.top
+            rects[n * 4 + 2] = rounded.right
+            rects[n * 4 + 3] = rounded.bottom
+            n++
+        }
+        WindowErase.clear(canvas, rects, n)
+        for (i in 0 until count) {
+            val s = found[i] ?: continue
+            place(i, s)
+            paint.alpha = (tags[i * TAG_STRIDE + 5] * 255f).toInt().coerceIn(0, 255)
             canvas.drawBitmap(s.bitmap, matrix, paint)
         }
+    }
+
+    /** Puts tag [i]'s placement, drawing sticker [s], in [matrix]. */
+    private fun place(i: Int, s: TagBitmap) {
+        val o = i * TAG_STRIDE
+        val scale = tags[o + 4]
+        matrix.setTranslate(-s.anchorX, -s.anchorY)
+        matrix.postRotate(TILT)
+        matrix.postScale(scale, scale)
+        matrix.postTranslate(tags[o + 2] * width, tags[o + 3] * height)
     }
 
     /**

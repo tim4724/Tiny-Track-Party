@@ -306,6 +306,14 @@ thing:
 - Nothing in the HUD is focusable. The focus engine drives the pause overlay and
   the results button, and a focusable HUD element steals from them.
 - Poll `ttp_display_hud()` at ~6 Hz. Nothing in it moves faster than a place.
+- **Anything new the window draws over a race calls `UnboundedContent()`** (a
+  plain View: `WindowErase.unbounded`), or it leaves trails. Under a covering
+  surface the window does not clear whole: Skia's GL backend performs every
+  clear on this PowerVR as a full-window draw
+  (`fPerformColorClearsAsDraws`), and HWUI hands back buffers still holding
+  earlier frames, so `WindowErase` (GameWindow.kt) clears only the rects it
+  tracks — the name tags and the HUD's retained groups (`erasedBounds`). Any
+  other content, while composed, puts the whole clear back.
 
 ## The frame budget on this GPU
 

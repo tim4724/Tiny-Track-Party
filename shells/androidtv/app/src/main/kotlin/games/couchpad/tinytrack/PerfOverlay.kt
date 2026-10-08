@@ -475,8 +475,21 @@ class PerfOverlayView(context: Context) : View(context) {
         visibility = GONE
     }
 
+    // WindowErase outlives the Activity: a panel torn down showing takes its count back.
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        if (visibility == VISIBLE) {
+            visibility = GONE
+            WindowErase.unbounded(-1)
+        }
+    }
+
     /** The [PerfMonitor.onChanged] half: new lines, new tint, or show/hide. */
     fun refresh() {
+        // Window content with no tracked rect while it shows (GameWindow.kt).
+        if (PerfMonitor.visible != (visibility == VISIBLE)) {
+            WindowErase.unbounded(if (PerfMonitor.visible) 1 else -1)
+        }
         visibility = if (PerfMonitor.visible) VISIBLE else GONE
         if (visibility != VISIBLE) return
         val s = resources.displayMetrics.widthPixels / AUTHORED_WIDTH

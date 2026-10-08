@@ -418,6 +418,13 @@ the PowerVR costs Filament's frame ~1.2 ms more. Levers priced on the box, three
 - **the window stops painting under a showing surface** (GameWindow.kt: no paper,
   no full-window destination-out punch): 1.6-2.1 skips/s against 2.3-3.2,
   56-58 clean seconds of 90 against 48-49 (ABAB on separate installs). Shipped.
+  2026-10-08: the clear that replaced them is a draw too on this PowerVR
+  (`fPerformColorClearsAsDraws`). A probe that skipped it cut dropped frames at
+  a pinned 1280x720 by 26% on pretzel and 40% on tidepool, every interleaved
+  pair agreeing. It left trails (HWUI keeps the window's buffers), so what
+  ships clears only the tracked rects (GameWindow.kt): 539 -> 416 skips per
+  80 s on pretzel and 394 -> 259 on tidepool at the same pin, four interleaved
+  races a side, with held frames matching within run-to-run noise.
 - Filament's queue at VK global priority HIGH (granted on this driver): ~-13%
   skips, but the window's own frames then finish ~2 ms later (on-time window
   presents 95 -> 52 in 20 s), which can pair a tag with a different 3D frame.

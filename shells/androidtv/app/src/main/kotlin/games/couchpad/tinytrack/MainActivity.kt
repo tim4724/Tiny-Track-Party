@@ -127,8 +127,8 @@ class MainActivity : ComponentActivity() {
         // ABOVE the window and the UI would vanish behind the race. Why a
         // SurfaceView and never a TextureView is DisplayHost's class header.
         val root = FrameLayout(this)
-        // The theme's windowBackground, wrapped so it can switch to a clear once
-        // the race surface is showing (GameWindow.kt).
+        // The theme's windowBackground, wrapped so it can switch off once the
+        // race surface is showing (GameWindow.kt).
         val background = WindowBackground(checkNotNull(window.decorView.background))
         window.setBackgroundDrawable(background)
         val surfaceView = GameSurfaceView(this, background).apply {
@@ -192,6 +192,8 @@ class MainActivity : ComponentActivity() {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         }
         game.display.nameTags = tagView
+        // The tag view draws the window's clear first thing (GameWindow.kt).
+        WindowErase.onChanged = { tagView.invalidate() }
         game.display.onSurfaceShowing = { surfaceView.setShowing(it) }
         root.addView(tagView)
         root.addView(compose)
