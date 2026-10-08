@@ -483,6 +483,27 @@ disc on the stem, per-tile near and far lists): pretzel's heavy seconds
 the spin subtree left instanced): gauntlet 13.1 -> 13.0, pretzel inside the
 noise.
 
+## The audio mixer ran interpreted, and that was the light-second drops (2026-10-08)
+
+Nearly every drop in a light second (GPU p95 under ~14.5 ms) is Filament's
+driver thread (CFS nice -4) sitting runnable 9-22 ms before it submits frame
+k-2, so the skipper's fence check fails while the GPU idles. In half the
+traced races the app's own audio mixer was what held it off: ~65% of a core
+instead of ~7%, every block run in `nterp`. The installed odex had no code for
+the method R8 had folded the whole mixer into (one synthetic Runnable merged
+with eight unrelated lambdas), or had code that went unused; the frame
+callback's doFrame had none either. A compile that reuses the install's vdex
+drops a few methods' code, a different few per APK, so which build "had" the
+slow mixer was a layout lottery — it is what the shadow-lab deletion's extra
+light drops were. Keeping AudioMixer's and DisplayHost's methods as real calls
+(`proguard-rules.pro`) took one build from 4/4 slow launches to 0/10.
+
+Counterbalanced, five races a side, 4P pinned 960x540, mixer state read off
+`/proc` per race: HEAD (unfixed; its mixer slow in 4 of 10) against the
+deletion with the fix (never slow) dropped 15.4 -> 9.8 frames per race on
+pretzel and 6.6 -> 3.8 on powder, light-second drops 9 -> 2 and 7 -> 1;
+HEAD's normal-mixer races alone still dropped more (16.5 and 5.3).
+
 ## The compiled app, and what is left of the drops (2026-10-06, later)
 
 Every reading above was taken on an adb install, which runs the app at

@@ -869,6 +869,15 @@ Three things follow that are worth knowing before touching it:
   `THREAD_PRIORITY_AUDIO` and reaches the frame's thread only through a
   single-producer ring of numbers, so it cannot stall a frame and does not show in
   `doFrame`.
+- **That figure is the COMPILED loop's.** Interpreted, the same mixer costs ~65%
+  of a core and starves Filament's driver thread into dropped frames, and an
+  install can leave it interpreted: a compile that reuses the install's vdex
+  drops a few methods' code, a different few per APK, and once that was the
+  merged Runnable R8 had inlined the whole mixer into. `proguard-rules.pro`
+  keeps the mixer's and DisplayHost's methods as real calls for that reason. To
+  check a build, dump the installed odex and look for `code_offset=0x00000000`
+  on a hot method: `adb shell oatdump --oat-file=<the base.odex dumpsys package
+  dexopt names> --no-disassemble`.
 
 **The manifest is the contract and `org.json` will not tell you when you misread
 it** — see `tests/androidtv-cue-manifest.test.js`, which exists because the detune

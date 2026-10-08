@@ -1,4 +1,4 @@
-# R8 keeps for the release build. Four rules and one deliberate ABSENCE.
+# R8 keeps for the release build, and one deliberate ABSENCE.
 #
 # THE BRIDGE IS RESOLVED BY NAME. native/runtime/ttp_jni.cc binds its exports in
 # JNI_OnLoad via RegisterNatives against FindClass("games/couchpad/tinytrack/Ttp")
@@ -37,3 +37,16 @@
 
 # Hidden-API reflection in PerfDebug: android.os.SystemProperties is a platform
 # class, so R8 never touches it and its own catch covers a box that refuses.
+
+# THE TWO HOT LOOPS KEEP THEIR OWN METHODS. An install verifies the app first,
+# and every later compile (the bench's `speed`, Play's background dexopt) reuses
+# that vdex — and on this box such a compile leaves a handful of methods with no
+# code at all, a different handful per APK. R8 had inlined the whole mixer into
+# one synthetic Runnable merged with eight unrelated lambdas, and the frame
+# callback into its doFrame; when either is dropped it runs in the interpreter
+# (the mixer at ~65% of a core instead of ~7%, starving Filament's driver
+# thread) until the JIT rescues it, if it ever does. Kept as real calls, the
+# per-block and per-frame work lives in ordinary methods that keep their code.
+# `oatdump` of the installed odex is how to check (shells/androidtv/CLAUDE.md).
+-keepclassmembers,allowobfuscation,allowshrinking class games.couchpad.tinytrack.AudioMixer { <methods>; }
+-keepclassmembers,allowobfuscation,allowshrinking class games.couchpad.tinytrack.DisplayHost { <methods>; }
