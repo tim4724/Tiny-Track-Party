@@ -824,7 +824,7 @@ final class DisplayHost {
     private var lastCamMode: Int32?
 
     /// Camera mode for a surface with no cells. Takes the ABI's own
-    /// `TTP_CAM_STILL` / `_ORBIT` / `_BBOX` / `_FREE` rather than a Swift enum
+    /// `TTP_CAM_*` constants rather than a Swift enum
     /// mirroring them, because a mirror is a second table nothing pins.
     ///
     /// LATCHED, for exactly the reason `setCells` and `bind` are: pushed with no

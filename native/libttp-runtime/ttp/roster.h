@@ -68,6 +68,14 @@ struct RerosterPlan {
   bool ok = false;
   std::vector<uint32_t> remodel;
   std::vector<uint32_t> redress;
+
+  // The lowest slot this changes, or -1: the car a phone just picked, which
+  // the lobby's coverage cuts to.
+  int firstChanged() const {
+    const int a = remodel.empty() ? -1 : (int) remodel[0];
+    const int b = redress.empty() ? -1 : (int) redress[0];
+    return a < 0 ? b : b < 0 ? a : a < b ? a : b;
+  }
 };
 RerosterPlan planReroster(const Roster& prev, const Roster& next);
 

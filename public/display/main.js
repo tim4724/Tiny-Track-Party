@@ -261,7 +261,7 @@ scene.followCam = _trackParams.get('cam') === 'follow';
 // ?hud=0 — the trailer's clean chase shot: the cells without any HUD.
 scene.showHud = _trackParams.get('hud') !== '0';
 scene.orbit = true;
-scene.bboxOrbit = true; // lobby sweeps an ellipse around the track's bounding box (close, elongated like the track)
+scene.coverage = true; // the lobby covers its attract race in cuts between battles and chases
 let sceneReady = false;
 // A BUILT scene having reached the panel — the boot cover's one shell-side fact
 // (ttp_ui_cover). Distinct from sceneReady, which is the build resolving: the

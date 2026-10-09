@@ -274,6 +274,8 @@ int ttp_display_build(const char* trackId, const char* rosterJson) {
     // drag the old frame's camera into it.
     g_disp->chase.clear();
     g_disp->follow = {};
+    g_disp->coverage = {};   // a new field starts the cycle over
+    g_disp->coverChase = {};
     g_disp->steerBar.clear();
     g_disp->nameTags.clear();
     g_disp->tagCover.clear();
@@ -318,8 +320,10 @@ int ttp_display_reroster(const char* rosterJson) {
         return 0;
     }
     // Deliberately NOT touched: sceneT, orbitAngle, chase, steerBar, framing.
-    // The scene never went away, so nothing about the cameras did either.
+    // The scene never went away, so nothing about the cameras did either —
+    // except that the lobby's coverage cuts to the car just picked.
     g_disp->rosterCars = next.cars;
+    g_disp->coverage.featured = plan.firstChanged();
     return 1;
 }
 
@@ -575,6 +579,8 @@ void ttp_display_release(void) {
     g_disp->rosterCars.clear();
     g_disp->chase.clear();
     g_disp->follow = {};
+    g_disp->coverage = {};   // a new field starts the cycle over
+    g_disp->coverChase = {};
     g_disp->steerBar.clear();
     g_disp->nameTags.clear();
     g_disp->tagCover.clear();
@@ -593,6 +599,8 @@ void ttp_display_bind(int session) {
     // camera into it, and a hold taken at the old race's finish is spent.
     g_disp->chase.clear();
     g_disp->follow = {};
+    g_disp->coverage = {};   // a new field starts the cycle over
+    g_disp->coverChase = {};
     g_disp->steerBar.clear();
     g_disp->hold = false;
     g_disp->held.clear();

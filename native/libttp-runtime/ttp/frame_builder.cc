@@ -5,6 +5,7 @@
 
 #include "ttp/game.h"
 #include "ttp/json_parse.h"
+#include "ttp/race_flow.h"
 #include "ttp/showcase.h"
 #include "ttp/util.h"
 
@@ -190,15 +191,40 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
     }
 
     auto* outViews = const_cast<TtpViewInput*>(ttp_frame_views(head));
-    // The follow cam works at race distances, so it takes the race fog band.
-    const bool follow = !raceCams && d.camMode == CAM_FOLLOW;
+    // COVERAGE decides this frame's shot, and the shot is then drawn by its
+    // own rig: LEAD and PACK as the follow cam, CHASE as a
+    // CoverChase on the shot's subject. A cut starts that rig fresh, so it
+    // snaps onto its subject instead of easing in from the last shot.
+    //
+    // `camMode` is what the shell asked for; `mode` is the rig drawing this
+    // frame, which for coverage is the shot's.
+    std::vector<bool> live(cars.size());
+    for (size_t i = 0; i < cars.size(); i++) live[i] = fromHeld || cars[i];
+    const bool covered = !raceCams && d.camMode == CAM_COVERAGE;
+    int mode = d.camMode;
+    bool chase = false;
+    if (covered) {
+        std::vector<bool> player(cars.size());
+        for (size_t i = 0; i < cars.size(); i++) player[i] = !race::isDemoCpu(d.roster[i].str);
+        d.coverage.step(dt, outCars, live, player);
+        if (d.coverage.cut) {
+            d.follow = {};
+            d.coverChase = {};
+        }
+        const Shot shot = d.coverage.shot;
+        chase = shot == Shot::CHASE;
+        mode = shot == Shot::LEAD || shot == Shot::PACK ? CAM_FOLLOW : CAM_BBOX;
+    }
+    // The follow cam and the chase work at race distances, so they take the
+    // race fog band.
+    const bool follow = !raceCams && !chase && mode == CAM_FOLLOW;
     const float fogNear = !d.fog ? 0
-            : raceCams || follow ? d.framing.raceFogNear
-            : d.camMode == CAM_BBOX ? d.framing.bbFogNear
+            : raceCams || follow || chase ? d.framing.raceFogNear
+            : mode == CAM_BBOX ? d.framing.bbFogNear
             : d.framing.ovFogNear;
     const float fogFar = !d.fog ? 0
-            : raceCams || follow ? d.framing.raceFogFar
-            : d.camMode == CAM_BBOX ? d.framing.bbFogFar
+            : raceCams || follow || chase ? d.framing.raceFogFar
+            : mode == CAM_BBOX ? d.framing.bbFogFar
             : d.framing.ovFogFar;
     if (raceCams) {
         // The monster rig: the authored constants, until a debug slider moves
@@ -254,22 +280,32 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
         }
     } else {
         const Framing& f = d.framing;
-        V3 eye, target = f.center;
-        if (d.camMode == CAM_FREE) {
+        V3 eye, target = f.center, up = { 0, 1, 0 };
+        int32_t subject = -1;   // an overview follows nobody, a chase its car
+        if (mode == CAM_FREE) {
             eye = d.freeEye;
             target = d.freeTarget;
+        } else if (chase) {
+            // Off the frame's own car input, like a held race cell: the rig
+            // follows the picture.
+            subject = d.coverage.subject;
+            const TtpCarInput& c = outCars[subject];
+            d.coverChase.update(heldPose(c), dt);
+            eye = d.coverChase.pos;
+            target = d.coverChase.target;
+            up = { c.up.x, c.up.y, c.up.z };
         } else if (follow) {
-            std::vector<bool> live(cars.size());
-            for (size_t i = 0; i < cars.size(); i++) live[i] = fromHeld || cars[i];
-            d.follow.update(outCars, live, f.center, d.tagDeck, d.ground, dt);
+            std::vector<bool> filmed = live;
+            if (covered) d.coverage.battleField(outCars, filmed);
+            d.follow.update(outCars, filmed, f.center, d.tagDeck, d.ground, dt);
             eye = d.follow.pos;
             target = d.follow.target;
-        } else if (d.camMode == CAM_BBOX) {
+        } else if (mode == CAM_BBOX) {
             d.orbitAngle += BBOX_ORBIT_SPEED * dt;
             eye = { f.center.x + std::cos(d.orbitAngle) * f.bbAx,
                     f.center.y + f.bbHeight,
                     f.center.z + std::sin(d.orbitAngle) * f.bbAz };
-        } else if (d.camMode == CAM_ORBIT) {
+        } else if (mode == CAM_ORBIT) {
             d.orbitAngle += LOBBY_ORBIT_SPEED * dt;
             eye = { f.center.x + std::cos(d.orbitAngle) * f.ovRadius,
                     f.center.y + f.ovHeight,
@@ -278,12 +314,12 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
             eye = f.center + f.ovOffset;  // the fitted whole-track iso view, held still
         }
         TtpViewInput& v = outViews[0];
-        v.car = -1;   // an overview follows nobody
-        lookAtWorld(v.world, eye, target, V3{ 0, 1, 0 });
-        v.fov = follow ? FOLLOW_FOV : OVERVIEW_FOV;
+        v.car = subject;
+        lookAtWorld(v.world, eye, target, up);
+        v.fov = chase ? COVER_CHASE_FOV : follow ? FOLLOW_FOV : OVERVIEW_FOV;
         v.aspect = aspect;
-        v.nearZ = follow ? CAM_NEAR : d.camMode == CAM_FREE ? FREE_NEAR : OV_NEAR;
-        v.farZ = follow ? CAM_FAR : OV_FAR;
+        v.nearZ = follow || chase ? CAM_NEAR : mode == CAM_FREE ? FREE_NEAR : OV_NEAR;
+        v.farZ = follow || chase ? CAM_FAR : OV_FAR;
         v.fogNear = fogNear;
         v.fogFar = fogFar;
     }

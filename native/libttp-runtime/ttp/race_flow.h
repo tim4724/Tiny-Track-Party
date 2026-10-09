@@ -291,6 +291,12 @@ struct DemoEntry {
 };
 std::vector<DemoEntry> buildDemoField(const std::vector<Human>& humans, const FieldWorld& w);
 
+// What every CPU id in the attract field starts with ("demo-cpu-<n>"), and the
+// test for it: the lobby's coverage camera reads it to tell the players' cars
+// from the fill.
+inline constexpr const char* DEMO_CPU_PREFIX = "demo-cpu-";
+inline bool isDemoCpu(const std::string& id) { return id.rfind(DEMO_CPU_PREFIX, 0) == 0; }
+
 // Cheap signature of what the demo renders, so a refresh can skip a no-op
 // rebuild. Track + each car's id/livery/model; a rename alone won't re-grid.
 std::string demoSig(const std::vector<DemoEntry>& field, const std::string& trackId);

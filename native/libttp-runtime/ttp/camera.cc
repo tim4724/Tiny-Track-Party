@@ -206,5 +206,95 @@ void FollowCam::update(const TtpCarInput* cars, const std::vector<bool>& live, V
     pos = eyeAt(pitch);
 }
 
+void CoverChase::update(const ttp::Pose& pose, float dt) {
+    const V3 p = v3(pose.pos), fwd = v3(pose.forward), up = v3(pose.up);
+    const V3 want = p + fwd * -COVER_CHASE_DIST + up * COVER_CHASE_HEIGHT;
+    const V3 wantTgt = p + up * COVER_CHASE_AIM_UP;
+    const float a = 1 - std::exp(-CAM_POS_RATE * dt);
+    if (!init) { pos = want; target = wantTgt; init = true; }
+    else { pos = lerp(pos, want, a); target = lerp(target, wantTgt, a); }
+}
+
+int packFocus(const TtpCarInput* cars, const std::vector<bool>& live) {
+    const int n = (int) live.size();
+    int lead = -1;
+    for (int i = 0; i < n; i++) {
+        if (live[i] && (lead < 0 || cars[i].trackS > cars[lead].trackS)) lead = i;
+    }
+    if (lead < 0) return -1;
+    const float battleFrom = cars[lead].trackS - FOLLOW_GAP;
+    int best = -1;
+    float bestGap = FOLLOW_GAP;
+    for (int c = 0; c < n; c++) {
+        if (!live[c] || cars[c].trackS >= battleFrom) continue;
+        int ahead = -1;
+        for (int a = 0; a < n; a++) {
+            if (a == c || !live[a] || cars[a].trackS < cars[c].trackS) continue;
+            if (ahead < 0 || cars[a].trackS < cars[ahead].trackS) ahead = a;
+        }
+        if (ahead < 0 || cars[ahead].trackS >= battleFrom) continue;
+        const float gap = cars[ahead].trackS - cars[c].trackS;
+        if (gap <= bestGap) { best = c; bestGap = gap; }
+    }
+    return best;
+}
+
+void Coverage::step(float dt, const TtpCarInput* cars, const std::vector<bool>& live,
+                    const std::vector<bool>& player) {
+    // CHASE holds the odd beats.
+    static constexpr Shot CYCLE[] = { Shot::LEAD, Shot::CHASE, Shot::PACK, Shot::CHASE };
+    static constexpr uint32_t BEATS = sizeof CYCLE / sizeof *CYCLE;
+    cut = false;
+    const int n = (int) live.size();
+    const auto isLive = [&](int i) { return i >= 0 && i < n && live[i]; };
+    const auto cutTo = [&](Shot s) { shot = s; held = 0; cut = true; };
+    const int pick = featured;
+    featured = -1;
+    if (isLive(pick)) {
+        subject = pick;
+        beat |= 1;   // the chase after this battle, so the next battle is still due
+        cutTo(Shot::CHASE);
+        return;
+    }
+    bool any = false;
+    for (int i = 0; i < n; i++) any = any || live[i];
+    // No field (a preview before the demo has cars): only the wide shot has
+    // anything to look at.
+    if (!any) {
+        if (shot != Shot::WIDE) cutTo(Shot::WIDE);
+        else held += dt;
+        return;
+    }
+    held += dt;
+    const float hold = shot == Shot::CHASE ? COVER_HOLD_CHASE : COVER_HOLD_BATTLE;
+    // A shot whose car or fight has left ends at once. PACK's -1 is the whole
+    // field, which cannot leave.
+    const bool lost = (shot == Shot::CHASE && !isLive(subject))
+            || (shot == Shot::PACK && subject >= 0 && !isLive(subject));
+    if (shot != Shot::WIDE && held < hold && !lost) return;
+    // WIDE gives way to the beat the cycle is on; anything else moves it on.
+    if (shot != Shot::WIDE) beat = (beat + 1) % BEATS;
+    const Shot next = CYCLE[beat];
+    if (next == Shot::CHASE) {
+        // The next car in turn: the players' cars when there are any, the
+        // whole field when nobody has joined.
+        std::vector<int> pool;
+        for (int i = 0; i < n; i++) if (live[i] && i < (int) player.size() && player[i]) pool.push_back(i);
+        if (pool.empty()) for (int i = 0; i < n; i++) if (live[i]) pool.push_back(i);
+        subject = pool[turn++ % pool.size()];
+    } else {
+        subject = next == Shot::PACK ? packFocus(cars, live) : -1;
+    }
+    cutTo(next);
+}
+
+void Coverage::battleField(const TtpCarInput* cars, std::vector<bool>& live) const {
+    if (shot != Shot::PACK || subject < 0) return;
+    const float at = cars[subject].trackS;
+    for (size_t i = 0; i < live.size(); i++) {
+        live[i] = live[i] && std::fabs(cars[i].trackS - at) <= FOLLOW_GAP;
+    }
+}
+
 }  // namespace rt
 }  // namespace ttp

@@ -3,12 +3,12 @@
 // Three separate things have to be true for that picture, and each of them is a
 // single call that a shell can simply not make. None of the three fails loudly:
 //
-//   1. THE CAMERA RIG. `ttp_display_camera`'s default is `TTP_CAM_STILL` — the
+//   1. THE CAMERA RIG. `ttp_display_camera`'s default was `TTP_CAM_STILL` — the
 //      fitted whole-track iso view, HELD MOTIONLESS. A shell that never pushes a
 //      mode gets a perfectly correct render of the circuit that happens to be a
-//      photograph. The web asks for `TTP_CAM_BBOX` at boot (`scene.orbit` +
-//      `scene.bboxOrbit`, main.js); tvOS asked for nothing at all for the whole
-//      of the port, and "the lobby preview does not rotate" was the symptom.
+//      photograph. The web asks for `TTP_CAM_COVERAGE` at boot (`scene.coverage`,
+//      main.js); tvOS asked for nothing at all for the whole of the port, and
+//      "the lobby preview does not rotate" was the symptom.
 //
 //   2. THE SCENE ROSTER. `buildFrame` walks `ttp_display_build`'s roster and
 //      looks each slot's car up in the BOUND session — so a car the session has
@@ -49,17 +49,17 @@ const shell = (rel) => {
 
 // ---- 1. the camera rig ----------------------------------------------------
 
-test('the web asks for the bbox sweep with no cells', () => {
+test('the web asks for the coverage cuts with no cells', () => {
   const src = codeOf('public/display/main.js');
-  assert.match(src, /scene\.bboxOrbit\s*=\s*true/,
-    'the lobby sweeps an ellipse round the track bbox; without it the preview is STILL');
+  assert.match(src, /scene\.coverage\s*=\s*true/,
+    'the lobby covers its attract race in cuts; without it the preview is STILL');
   // Stage.js is what turns those flags into the ABI call.
-  assert.match(codeOf('public/display/Stage.js'), /bboxOrbit\s*\?\s*CAM\.BBOX/);
+  assert.match(codeOf('public/display/Stage.js'), /coverage\s*\?\s*CAM\.COVERAGE/);
 });
 
 test('the tvOS shell pushes a camera mode at boot', () => {
   const src = shell('shells/tvos/TinyTrackParty/App/GameCoordinator.swift');
-  assert.match(src, /display\.camera\(TTP_CAM_BBOX\)/,
+  assert.match(src, /display\.camera\(TTP_CAM_COVERAGE\)/,
     'no camera mode pushed — the ABI default is TTP_CAM_STILL, so the lobby preview '
     + 'renders correctly and never moves, which reads as a still image rather than a bug');
 });

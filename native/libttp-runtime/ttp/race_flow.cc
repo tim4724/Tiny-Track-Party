@@ -312,7 +312,7 @@ std::vector<DemoEntry> buildDemoField(const std::vector<Human>& humans, const Fi
   }
   for (const CpuSeat& s : cpuSeats(asHumans, w)) {
     DemoEntry e;
-    e.id = "demo-cpu-" + std::to_string(s.n);
+    e.id = DEMO_CPU_PREFIX + std::to_string(s.n);
     e.colorIndex = s.colorIndex;
     e.carIndex = OptNum::Of(s.carIndex);
     e.stats = s.stats;

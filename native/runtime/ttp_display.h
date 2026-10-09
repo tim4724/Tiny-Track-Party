@@ -643,7 +643,7 @@ TTP_ABI void ttp_display_dividers(int enabled);
 
 /* Camera mode for a surface with no cells (ttp_display_cells empty).
  *
- * DEFAULTS TO TTP_CAM_BBOX — the lobby preview's sweep — because that is the
+ * DEFAULTS TO TTP_CAM_COVERAGE — the lobby preview's cuts — because that is the
  * only one of these the shipping game ever wants; the others belong to
  * gallery, inspector and trailer surfaces, which all push a mode explicitly. A shell
  * that never calls this therefore gets a moving preview rather than a frozen
@@ -651,9 +651,11 @@ TTP_ABI void ttp_display_dividers(int enabled);
  * lobby that looks like a still photograph of a correct render. */
 #define TTP_CAM_STILL  0  /* the fitted whole-track iso view, held still */
 #define TTP_CAM_ORBIT  1  /* turntable: circle the track at the overview radius */
-#define TTP_CAM_BBOX   2  /* lobby: sweep an ellipse hugging the track's bbox */
+#define TTP_CAM_BBOX   2  /* sweep an ellipse hugging the track's bbox (coverage's WIDE shot) */
 #define TTP_CAM_FREE   3  /* inspector: the shell drives, via ttp_display_look */
 #define TTP_CAM_FOLLOW 4  /* trailer: a low camera outside the circuit on the lead battle */
+#define TTP_CAM_COVERAGE 5  /* lobby: hard cuts between the race's battles and chases;
+                             * a re-dressed slot (a car pick) cuts to its car */
 TTP_ABI void ttp_display_camera(int mode);
 
 /* Free-cam pose (TTP_CAM_FREE only): eye + look target in world units. */

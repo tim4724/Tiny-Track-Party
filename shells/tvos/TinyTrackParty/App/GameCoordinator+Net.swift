@@ -183,6 +183,8 @@ extension GameCoordinator {
             // Drained IMMEDIATELY after the update: the event queue is
             // per-handle and a second update would overwrite it.
             drainRaceEvents()
+        } else {
+            lobbyDemo.step(dt)
         }
         audio.frame(nowMs: nowMs())
     }

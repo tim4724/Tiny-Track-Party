@@ -1,14 +1,14 @@
 import Foundation
-import QuartzCore
 
 /// The lobby's attract race: a field of CPU cars driving the picked track behind
 /// the join ticket, so the board is never a still photograph of an empty circuit.
 ///
 /// It is a SHELL concern and stayed one deliberately. `race_flow.cc`'s header
 /// names LobbyDemo among the things that did not cross, alongside the shuffle bag
-/// and the host's mode pick: what it needs is a session, a track and a timer, all
-/// three of which are the shell's to own, and the field composition it does need
-/// is already an ABI (`ttp_race_demo_live_json`, off the live room handle).
+/// and the host's mode pick: what it needs is a session and a track, both the
+/// shell's to own, stepped on the display's frame (`step`), and the field
+/// composition it does need is already an ABI (`ttp_race_demo_live_json`, off
+/// the live room handle).
 ///
 /// It is SILENT for free. The audio layer only ever hears the BOUND session
 /// (`abi_check` asserts it), and this one is never bound — so nothing here has to
@@ -17,7 +17,6 @@ import QuartzCore
 final class LobbyDemo {
 
     private var handle: Int32 = 0
-    private var tick: Task<Void, Never>?
     /// What the running demo was built from, for the in-place swap check: the
     /// re-dress path only qualifies while the TRACK and the car-id SET both
     /// stand (a join/leave or a track switch reorders slots, which is a full
@@ -122,8 +121,6 @@ final class LobbyDemo {
     }
 
     func stop() {
-        tick?.cancel()
-        tick = nil
         signature = nil
         field = []
         track = ""
@@ -168,22 +165,15 @@ final class LobbyDemo {
         // ongoing race.
         ttp_session_start(handle, -1)
         onSession?(handle)
+    }
 
-        // Its own clock rather than the display link's. The demo runs while the
-        // welcome and lobby boards are up, which is exactly when the shell has no
-        // reason to be doing anything at 60 Hz — 30 Hz is invisible on a slow
-        // orbit and halves the work behind a static board.
-        tick = Task { @MainActor [weak self] in
-            var last = CACurrentMediaTime()
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 33_000_000)
-                guard let self, self.handle != 0, !Task.isCancelled else { return }
-                let now = CACurrentMediaTime()
-                // Clamped for the same reason the race loop clamps: a suspended
-                // app must not resume by simulating the minutes it was away.
-                ttp_update(self.handle, min(now - last, 0.05) * 1000)
-                last = now
-            }
-        }
+    /// One frame of the demo race, on the DISPLAY's frame
+    /// (`GameCoordinator.frame`) and its clamped dt. Never a clock of its own:
+    /// the lobby's coverage films the cars up close with a camera that moves
+    /// every frame, and a sim ticking on a separate 30 Hz timer moved the cars
+    /// on every other frame at uneven times, so they lurched back and forth
+    /// against the scenery.
+    func step(_ dt: Double) {
+        if handle != 0 { ttp_update(handle, dt * 1000) }
     }
 }

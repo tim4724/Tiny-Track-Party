@@ -92,6 +92,7 @@ static_assert(TTP_CAM_ORBIT == ttp::rt::CAM_ORBIT, "camera mode drift");
 static_assert(TTP_CAM_BBOX == ttp::rt::CAM_BBOX, "camera mode drift");
 static_assert(TTP_CAM_FREE == ttp::rt::CAM_FREE, "camera mode drift");
 static_assert(TTP_CAM_FOLLOW == ttp::rt::CAM_FOLLOW, "camera mode drift");
+static_assert(TTP_CAM_COVERAGE == ttp::rt::CAM_COVERAGE, "camera mode drift");
 
 namespace {
 
@@ -240,8 +241,8 @@ std::vector<PlayerDesc> threePlayers() {
 // initialiser, and it was unguarded.
 void testCameraDefault() {
   const DisplayState fresh;
-  check(fresh.camMode == TTP_CAM_BBOX,
-        "DisplayState default camMode is TTP_CAM_BBOX (the lobby's bbox sweep)");
+  check(fresh.camMode == TTP_CAM_COVERAGE,
+        "DisplayState default camMode is TTP_CAM_COVERAGE (the lobby's cuts)");
 }
 
 DisplayState freshState() {
@@ -382,6 +383,15 @@ void testPlanReroster() {
       " {\"id\":\"ai-0\",\"carIndex\":1,\"color\":\"#445566\"}]"));
   check(both.ok && both.remodel == std::vector<uint32_t>{ 0 } && both.redress.empty(),
         "a slot changing model AND livery is listed once, as a remodel");
+
+  // The car a phone just picked, which the lobby's coverage cuts to.
+  check(same.firstChanged() == -1, "firstChanged: nothing changed, no car");
+  check(model.firstChanged() == 0, "firstChanged: the remodelled slot");
+  check(dress.firstChanged() == 1, "firstChanged: the re-dressed slot");
+  rt::RerosterPlan mixed;
+  mixed.remodel = {2};
+  mixed.redress = {1};
+  check(mixed.firstChanged() == 1, "firstChanged: the LOWEST slot, whichever list holds it");
 }
 
 // ---------------------------------------------------------------------------
@@ -992,6 +1002,246 @@ void testFollowView(const GameTrack& track) {
     check(hugging.follow.pitch > rt::FOLLOW_PITCH,
           "follow: with no kerb-free pitch, it takes the one showing most of the cars");
   }
+}
+
+// ---------------------------------------------------------------------------
+// 5c. COVERAGE: the lobby's cuts. The cycle and its holds, which fight the pack
+//     shot picks and what it films, who the chase rotates over, that a car pick
+//     cuts straight to that car, and that each shot is drawn by its own rig,
+//     starting fresh on the cut.
+// ---------------------------------------------------------------------------
+void testCoverageShots() {
+  using rt::Shot;
+  // A lead battle (0, 1), and behind it a tight fight (2 a car's length
+  // ahead of 3): the pack shot's fight.
+  TtpCarInput cars[4] = {};
+  cars[0].trackS = 100;
+  cars[1].trackS = 99;
+  cars[2].trackS = 60;
+  cars[3].trackS = 58;
+  // Half-second steps add up exactly, so each hold ends on a known step.
+  const float step = 0.5f;
+  const auto run = [&](rt::Coverage& c, float seconds, const std::vector<bool>& live,
+                       const std::vector<bool>& player) {
+    int cuts = 0;
+    for (float t = 0; t < seconds; t += step) {
+      c.step(step, cars, live, player);
+      cuts += c.cut;
+    }
+    return cuts;
+  };
+  const std::vector<bool> all(4, true), nobody(4, false);
+  const std::vector<bool> players = {false, true, false, true};
+
+  // packFocus: the car closest behind another, both clear of the lead battle.
+  check(rt::packFocus(cars, all) == 3, "packFocus: the back of the tightest fight behind the lead");
+  {
+    std::vector<bool> live = all;
+    live[2] = false;
+    check(rt::packFocus(cars, live) == -1, "packFocus: a lone car is no fight");
+    TtpCarInput spread[4] = {};
+    for (int i = 0; i < 4; i++) spread[i].trackS = 100.0f - 10.0f * i;
+    check(rt::packFocus(spread, all) == -1, "packFocus: nobody within FOLLOW_GAP of anybody");
+    TtpCarInput bunched[4] = {};
+    for (int i = 0; i < 4; i++) bunched[i].trackS = 100.0f - 1.0f * i;
+    check(rt::packFocus(bunched, all) == -1, "packFocus: everyone is in the lead battle");
+  }
+
+  rt::Coverage c;
+  check(c.shot == Shot::WIDE, "coverage: nothing to film until there is a field");
+  c.step(step, cars, all, players);
+  check(c.cut && c.shot == Shot::LEAD, "coverage: a field opens on the lead battle at once");
+  check(run(c, rt::COVER_HOLD_BATTLE - step, all, players) == 0, "coverage: LEAD holds");
+  c.step(step, cars, all, players);
+  check(c.cut && c.shot == Shot::CHASE && c.subject == 1,
+        "coverage: LEAD cuts to a CHASE on the first PLAYER's car, not slot 0");
+  check(run(c, rt::COVER_HOLD_CHASE - step, all, players) == 0, "coverage: CHASE holds");
+  c.step(step, cars, all, players);
+  check(c.cut && c.shot == Shot::PACK && c.subject == 3, "coverage: CHASE cuts to the PACK fight");
+  {
+    std::vector<bool> filmed = all;
+    c.battleField(cars, filmed);
+    check(filmed == std::vector<bool>({false, false, true, true}),
+          "coverage: PACK films the fight and not the lead battle");
+  }
+  check(run(c, rt::COVER_HOLD_BATTLE - step, all, players) == 0, "coverage: PACK holds");
+  c.step(step, cars, all, players);
+  check(c.cut && c.shot == Shot::CHASE && c.subject == 3, "coverage: the next chase takes the next player");
+  c.step(rt::COVER_HOLD_CHASE, cars, all, players);
+  check(c.cut && c.shot == Shot::LEAD, "coverage: …and round to LEAD");
+  {
+    std::vector<bool> filmed = all;
+    c.battleField(cars, filmed);
+    check(filmed == all, "coverage: LEAD hands the follow cam the whole field");
+  }
+  c.step(rt::COVER_HOLD_BATTLE, cars, all, players);
+  check(c.shot == Shot::CHASE && c.subject == 1, "coverage: the chase wraps round the players");
+
+  // Nobody has joined: the chase rotates over the whole field.
+  {
+    rt::Coverage cpu;
+    run(cpu, rt::COVER_HOLD_BATTLE + step, all, nobody);
+    check(cpu.shot == Shot::CHASE && cpu.subject == 0, "coverage: no players, the fill is chased");
+  }
+
+  // A car pick cuts at once, mid-hold; the chase holds from there and the
+  // cycle carries on with a battle, not a second chase.
+  {
+    rt::Coverage pick;
+    pick.step(step, cars, all, players);
+    pick.featured = 2;
+    pick.step(step, cars, all, players);
+    check(pick.cut && pick.shot == Shot::CHASE && pick.subject == 2 && pick.featured == -1,
+          "coverage: a car pick cuts straight to that car");
+    check(run(pick, rt::COVER_HOLD_CHASE - step, all, players) == 0,
+          "coverage: …and holds a full chase from the pick");
+    pick.featured = 2;
+    pick.step(step, cars, all, players);
+    check(pick.cut && pick.held == 0, "coverage: picking again restarts the chase");
+    pick.step(rt::COVER_HOLD_CHASE, cars, all, players);
+    check(pick.shot == Shot::PACK, "coverage: after a picked chase, the cycle goes on to a battle");
+  }
+
+  // A pick of a slot with no car is ignored; a car or a fight that leaves
+  // ends its shot.
+  {
+    rt::Coverage gone;
+    gone.step(step, cars, all, players);
+    std::vector<bool> live = all;
+    live[2] = false;
+    gone.featured = 2;
+    gone.step(step, cars, live, players);
+    check(!gone.cut && gone.shot == Shot::LEAD, "coverage: a pick of an empty slot is ignored");
+    gone.featured = 1;
+    gone.step(step, cars, all, players);
+    live = all;
+    live[1] = false;
+    gone.step(step, cars, live, players);
+    check(gone.cut && gone.shot == Shot::PACK && gone.subject == 3,
+          "coverage: a chase whose car leaves cuts on");
+    live = all;
+    live[3] = false;
+    gone.step(step, cars, live, players);
+    check(gone.cut && gone.shot == Shot::CHASE, "coverage: a pack whose focus leaves cuts on");
+  }
+
+  // No field: only the wide shot has anything to look at.
+  {
+    rt::Coverage empty;
+    empty.featured = 1;
+    check(run(empty, 60, nobody, nobody) == 0 && empty.shot == Shot::WIDE,
+          "coverage: with no cars it stays on the wide shot");
+  }
+}
+
+void testCoverageView(const GameTrack& track) {
+  const Framing& f = freshState().framing;
+  const float aspect = 1920.0f / 1080.0f;
+
+  // No field: WIDE, the bbox sweep, to the bit.
+  {
+    DisplayState d = freshState();
+    d.camMode = TTP_CAM_COVERAGE;
+    const float want_angle = d.orbitAngle + rt::BBOX_ORBIT_SPEED * DT;
+    const TtpFrameInput* h = rt::buildFrame(d, nullptr, DT, caseAspect(d));
+    const V3 eye = {f.center.x + std::cos(want_angle) * f.bbAx, f.center.y + f.bbHeight,
+                    f.center.z + std::sin(want_angle) * f.bbAz};
+    float want[16];
+    rt::lookAtWorld(want, eye, f.center, V3{0, 1, 0});
+    checkView(ttp_frame_views(h)[0], want, rt::OVERVIEW_FOV, aspect, rt::OV_NEAR, rt::OV_FAR,
+              f.bbFogNear, f.bbFogFar, "coverage wide");
+    check(ttp_frame_views(h)[0].car == -1, "coverage wide follows nobody");
+    check((h->flags & TTP_FRAME_OVERVIEW) != 0, "coverage is an overview: it owns the surface");
+  }
+
+  Game game(threePlayers(), track, nullptr);
+  dressCars(game);
+  // A leader, and a fight well behind it: the pack shot's.
+  placeCar(*game.cars()[0], {0, 0, 0}, {0, 0, 1}, 100);
+  placeCar(*game.cars()[1], {30, 0, -40}, {0, 0, 1}, 60);
+  placeCar(*game.cars()[2], {31, 0, -42}, {0, 0, 1}, 58);
+  DisplayState d = freshState();
+  d.roster = {P0, P1, P2};
+  d.camMode = TTP_CAM_COVERAGE;
+  d.follow.init = true;   // a stale rig, which the cut must throw away
+
+  // The first frame with a field is the lead battle: the follow cam, fresh.
+  {
+    const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d));
+    check(d.coverage.shot == rt::Shot::LEAD, "premise: the first frame is LEAD");
+    DisplayState ref = freshState();
+    ref.roster = d.roster;
+    ref.camMode = TTP_CAM_FOLLOW;
+    rt::buildFrame(ref, &game, DT, caseAspect(ref));
+    float want[16];
+    rt::lookAtWorld(want, ref.follow.pos, ref.follow.target, V3{0, 1, 0});
+    checkView(ttp_frame_views(h)[0], want, rt::FOLLOW_FOV, aspect, rt::CAM_NEAR, rt::CAM_FAR,
+              f.raceFogNear, f.raceFogFar, "coverage lead");
+  }
+
+  // CHASE trails the subject, off the frame's own car input, and aims AT it:
+  // the car sits in the middle of the picture, clear of the lobby's boards.
+  d.coverage.held = rt::COVER_HOLD_BATTLE;
+  d.coverChase.init = true;   // stale, as above
+  {
+    const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d));
+    check(d.coverage.shot == rt::Shot::CHASE && d.coverage.subject == 0,
+          "premise: the frame cut to a CHASE on slot 0");
+    const TtpCarInput& car = ttp_frame_cars(h)[0];
+    const V3 at{car.pos.x, car.pos.y, car.pos.z};
+    const V3 fwd{car.forward.x, car.forward.y, car.forward.z};
+    const V3 up{car.up.x, car.up.y, car.up.z};
+    checkNear(d.coverChase.pos, at + fwd * -rt::COVER_CHASE_DIST + up * rt::COVER_CHASE_HEIGHT,
+              "coverage chase: a cut lands behind and above the car");
+    checkNear(d.coverChase.target, at + up * rt::COVER_CHASE_AIM_UP,
+              "coverage chase: aimed at the car's body");
+    float want[16];
+    rt::lookAtWorld(want, d.coverChase.pos, d.coverChase.target, up);
+    checkView(ttp_frame_views(h)[0], want, rt::COVER_CHASE_FOV, aspect, rt::CAM_NEAR, rt::CAM_FAR,
+              f.raceFogNear, f.raceFogFar, "coverage chase");
+    check(ttp_frame_views(h)[0].car == 0, "coverage chase names its car");
+  }
+
+  // PACK is the follow cam on the fight behind, and only on it.
+  d.coverage.held = rt::COVER_HOLD_CHASE;
+  {
+    const TtpFrameInput* h = rt::buildFrame(d, &game, DT, caseAspect(d));
+    check(d.coverage.shot == rt::Shot::PACK && d.coverage.subject == 2,
+          "premise: the frame cut to the PACK fight");
+    const V3 eye{ttp_frame_views(h)[0].world[12], ttp_frame_views(h)[0].world[13],
+                 ttp_frame_views(h)[0].world[14]};
+    checkNear(d.follow.target, V3{30.5f, 0, -41}, "coverage pack: aims at the fight, the leader out");
+    checkNear(eye, d.follow.pos, "coverage pack: the view sits at the rig's eye");
+  }
+
+  // At a steady speed the eye and the aim lag alike, so the car holds its
+  // place in the picture: the aim stays within a car length of it flat out.
+  {
+    rt::CoverChase cam;
+    ttp::Pose pose;
+    pose.forward = {0, 0, 1};
+    pose.up = {0, 1, 0};
+    for (int i = 0; i < 240; i++) {
+      pose.pos = {0, 0, 0.4 * i};
+      cam.update(pose, DT);
+    }
+    const V3 lag = V3{0, rt::COVER_CHASE_AIM_UP, 0.4f * 239} - cam.target;
+    check(std::sqrt(rt::dot(lag, lag)) < 1.0f, "coverage chase: the aim keeps up with the car");
+    check(std::fabs(cam.target.z - cam.pos.z - rt::COVER_CHASE_DIST) < 1e-3f,
+          "coverage chase: …and the eye keeps its distance behind it");
+  }
+
+  // A car pick lands on the next frame, whatever was on screen.
+  d.coverage.featured = 1;
+  rt::buildFrame(d, &game, DT, caseAspect(d));
+  check(d.coverage.shot == rt::Shot::CHASE && d.coverage.subject == 1,
+        "coverage: a pick is drawn on the very next frame");
+
+  // Cells win: a race never sees the coverage.
+  d.cells = {P1};
+  const rt::Coverage before = d.coverage;
+  rt::buildFrame(d, &game, DT, caseAspect(d));
+  check(d.coverage.held == before.held, "coverage: a frame with race cells does not step it");
 }
 
 // ---------------------------------------------------------------------------
@@ -2105,6 +2355,8 @@ int main() {
   testHeldChaseCam(bt.game);
   testOverviewViews(bt.game);
   testFollowView(bt.game);
+  testCoverageShots();
+  testCoverageView(bt.game);
   testRaceViews(bt.game);
   testSplitLensIsLayoutInvariant(bt.game);
   testOverviewOwnsTheSurface(bt.game);

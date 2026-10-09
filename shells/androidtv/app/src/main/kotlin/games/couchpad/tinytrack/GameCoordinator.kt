@@ -323,12 +323,12 @@ class GameCoordinator(
 
         // THE CAMERA RIG FOR A SURFACE WITH NO CELLS, pushed once and never again:
         // with cells the renderer runs a chase cam per cell and this is ignored,
-        // without them it is the whole picture. TTP_CAM_BBOX is the lobby's
-        // perimeter sweep. The ABI's default is TTP_CAM_STILL — a shell that never
-        // calls this gets the fitted iso view HELD MOTIONLESS, which looks exactly
-        // like a correct render of a track and is why nobody spotted the tvOS lobby
-        // preview was a photograph for the whole of the port.
-        display.camera(2 /* TTP_CAM_BBOX */)
+        // without them it is the whole picture. TTP_CAM_COVERAGE is the lobby's
+        // cuts between the race's battles and chases on single cars. Pushed
+        // even though it is the ABI's default: a preview held motionless looks
+        // exactly like a correct render of a track, which is why nobody spotted
+        // the tvOS lobby preview was a photograph for the whole of the port.
+        display.camera(5 /* TTP_CAM_COVERAGE */)
 
         // The mute is REMEMBERED, like the web's, and is applied before the first
         // sound can play. Same key, same meaning, different store.
@@ -1036,6 +1036,8 @@ class GameCoordinator(
             // Drained IMMEDIATELY after the update: the event queue is per-handle
             // and a second update would overwrite it.
             drainRaceEvents()
+        } else {
+            lobbyDemo.step(dt)
         }
         audio.frame(nowMs())
     }

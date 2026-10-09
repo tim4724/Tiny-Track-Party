@@ -241,15 +241,13 @@ final class GameCoordinator: ObservableObject {
         // again: with cells the renderer runs a chase cam per cell and this is
         // ignored, without them it is the whole picture.
         //
-        // `TTP_CAM_BBOX` is the lobby's perimeter sweep — an ellipse hugging the
-        // track's own bounding box, so a long circuit is toured lengthways
-        // rather than circled at arm's length. It is what the web asks for at
-        // boot (`scene.orbit = true; scene.bboxOrbit = true`, main.js), and the
-        // ABI's default is `TTP_CAM_STILL`: a shell that never calls this gets
-        // the fitted iso view HELD MOTIONLESS, which looks exactly like a
-        // correct render of a track and is why nobody spotted the lobby preview
-        // was a photograph for the whole of the port.
-        display.camera(TTP_CAM_BBOX)
+        // `TTP_CAM_COVERAGE` is the lobby's cuts between the race's battles
+        // and chases on single cars (Coverage, camera.h). It is what the web
+        // asks for at boot (`scene.coverage = true`, main.js). Pushed even though
+        // it is the ABI's default: a lobby preview held motionless looks exactly
+        // like a correct render of a track, which is why nobody spotted it was a
+        // photograph for the whole of the port.
+        display.camera(TTP_CAM_COVERAGE)
 
         // The frame-cost readout, OFF unless this launch asked for it with
         // `-ttpPerf 1` — the same default the web and Android now carry, and the

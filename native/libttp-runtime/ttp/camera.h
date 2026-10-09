@@ -205,5 +205,73 @@ struct FollowCam {
                 const NameTagDeck& deck, const GroundGrid& ground, float dt);
 };
 
+// ---------------------------------------------------------------------------
+// COVERAGE (TTP_CAM_COVERAGE): the lobby's attract race covered the way
+// television covers one, by HARD CUTS between shots, each held long, in the
+// cycle LEAD, CHASE, PACK, CHASE:
+//   LEAD    the follow cam on the lead battle.
+//   PACK    the follow cam on the tightest fight BEHIND the lead battle,
+//           chosen at the cut (packFocus) and held on that fight.
+//   CHASE   a trailing camera behind one car, the players' cars in turn
+//           (CoverChase, below).
+//   WIDE    the bbox sweep, only while there is no field to film.
+// Cuts and never a camera flying between shots: a flight needs a path through
+// the scenery on every track, and a lobby is watched for minutes, where a
+// camera that never stops travelling tires the eye. Not a crossfade either:
+// that draws both shots for its length, and the box's lobby is already at its
+// resolution floor.
+//
+// No whole-track shot in the cycle: from that far the race is specks on a map,
+// and the lobby's track card already shows the layout.
+//
+// A car pick on a phone (a slot re-dressed by ttp_display_reroster) cuts
+// straight to CHASE on that car, whatever is on screen: the player sees the
+// car they just chose, driving.
+// ---------------------------------------------------------------------------
+enum class Shot { WIDE, LEAD, PACK, CHASE };
+constexpr float COVER_HOLD_BATTLE = 10.0f, COVER_HOLD_CHASE = 8.0f;
+
+// The pack shot's fight: the car closest behind another, where the car in
+// front is not in the lead battle either (FOLLOW_GAP of the leader). -1 when
+// no two cars outside the lead battle are within FOLLOW_GAP of each other.
+int packFocus(const TtpCarInput* cars, const std::vector<bool>& live);
+
+struct Coverage {
+    Shot shot = Shot::WIDE;
+    float held = 0;       // seconds on this shot
+    int subject = -1;     // CHASE's car, or PACK's focus (-1: the whole field)
+    int featured = -1;    // a slot to cut to CHASE on at the next step (a car pick)
+    uint32_t beat = 0;    // where in the cycle the shot is
+    uint32_t turn = 0;    // chase shots taken, so the subject rotates
+    bool cut = false;     // the last step changed the shot: its rig starts fresh
+
+    // `live[i]`: slot i holds a car this frame, `cars` the frame's car input.
+    // `player[i]`: slot i is a player's car, which the rotating CHASE prefers
+    // over the CPU fill.
+    void step(float dt, const TtpCarInput* cars, const std::vector<bool>& live,
+              const std::vector<bool>& player);
+    // Narrow `live` to the cars a LEAD or PACK shot films: the whole field
+    // for LEAD (the follow cam finds the leader itself), the cars within
+    // FOLLOW_GAP of the focus for PACK.
+    void battleField(const TtpCarInput* cars, std::vector<bool>& live) const;
+};
+
+// The coverage CHASE is not the race chase rig. That one sits low and close
+// with the car in the lower third, which in the lobby is exactly where the seat
+// cards are, so the subject drove behind them at the size of the screen. This
+// one stands further back and higher and aims AT the car, so it sits in the
+// middle of the picture, the one region no lobby board covers. Eye and aim
+// share one spring rate, so at a steady speed both lag alike and the car holds
+// its place in frame.
+constexpr float COVER_CHASE_DIST = 2.6f, COVER_CHASE_HEIGHT = 1.1f;
+constexpr float COVER_CHASE_AIM_UP = 0.2f;   // the car's body, not its wheels
+constexpr float COVER_CHASE_FOV = 50.0f;
+
+struct CoverChase {
+    V3 pos, target;
+    bool init = false;  // first update snaps: a cut lands on the car
+    void update(const ttp::Pose& pose, float dt);
+};
+
 }  // namespace rt
 }  // namespace ttp

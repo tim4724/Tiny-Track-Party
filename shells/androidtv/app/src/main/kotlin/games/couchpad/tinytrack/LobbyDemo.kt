@@ -1,8 +1,5 @@
 package games.couchpad.tinytrack
 
-import android.os.Handler
-import android.os.Looper
-import android.os.SystemClock
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -12,9 +9,10 @@ import org.json.JSONObject
  *
  * It is a SHELL concern and stayed one deliberately. `race_flow.cc`'s header
  * names LobbyDemo among the things that did not cross, alongside the shuffle bag
- * and the host's mode pick: what it needs is a session, a track and a timer, all
- * three of which are the shell's to own, and the field composition it does need
- * is already an ABI (`ttp_race_demo_live_json`, off the live room handle).
+ * and the host's mode pick: what it needs is a session and a track, both the
+ * shell's to own, stepped on the display's frame ([step]), and the field
+ * composition it does need is already an ABI (`ttp_race_demo_live_json`, off the
+ * live room handle).
  *
  * It is SILENT for free. The audio layer only ever hears the BOUND session
  * (`abi_check` asserts it), and this one is never bound — so nothing here has to
@@ -23,9 +21,6 @@ import org.json.JSONObject
 class LobbyDemo {
 
     private var handle = 0
-    private val main = Handler(Looper.getMainLooper())
-    private var tick: Runnable? = null
-    private var lastTickMs = 0L
 
     /**
      * What the running demo was built from, for the in-place swap check: the
@@ -139,8 +134,6 @@ class LobbyDemo {
     }
 
     fun stop() {
-        tick?.let { main.removeCallbacks(it) }
-        tick = null
         signature = null
         field = emptyList()
         track = ""
@@ -190,24 +183,16 @@ class LobbyDemo {
         // preview with no ongoing race.
         Ttp.ttp_session_start(handle, -1)
         onSession?.invoke(handle)
+    }
 
-        // Its own clock rather than the display loop's. The demo runs while the
-        // lobby board is up, which is exactly when the shell has no reason to be
-        // doing anything at 60 Hz — 30 Hz is invisible on a slow orbit and halves
-        // the work behind a static board.
-        lastTickMs = SystemClock.elapsedRealtime()
-        val r = object : Runnable {
-            override fun run() {
-                if (handle == 0) return
-                val now = SystemClock.elapsedRealtime()
-                // Clamped for the same reason the race loop clamps: a suspended app
-                // must not resume by simulating the minutes it was away.
-                Ttp.ttp_update(handle, minOf((now - lastTickMs).toDouble(), 50.0))
-                lastTickMs = now
-                main.postDelayed(this, 33)
-            }
-        }
-        tick = r
-        main.postDelayed(r, 33)
+    /**
+     * One frame of the demo race, on the DISPLAY's frame (GameCoordinator.frame)
+     * and its clamped dt. Never a clock of its own: the lobby's coverage films
+     * the cars up close with a camera that moves every frame, and a sim ticking
+     * on a separate 30 Hz timer moved the cars on every other frame at uneven
+     * times, so they lurched back and forth against the scenery.
+     */
+    fun step(dt: Double) {
+        if (handle != 0) Ttp.ttp_update(handle, dt * 1000)
     }
 }

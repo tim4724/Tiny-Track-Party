@@ -47,11 +47,13 @@ namespace rt {
 enum CamMode : int {
     CAM_STILL = 0,  // the fitted whole-track iso view, held still
     CAM_ORBIT = 1,  // turntable: circle the track at the overview radius
-    CAM_BBOX  = 2,  // lobby: sweep an ellipse hugging the track's bbox
+    CAM_BBOX  = 2,  // sweep an ellipse hugging the track's bbox (coverage's WIDE shot)
     CAM_FREE  = 3,  // inspector: the shell drives, via ttp_display_look
     CAM_FOLLOW = 4, // trailer: a low camera outside the circuit on the lead battle (FollowCam)
+    CAM_COVERAGE = 5, // lobby: cuts between battles and chases (Coverage)
 };
-static_assert(CAM_STILL == 0 && CAM_ORBIT == 1 && CAM_BBOX == 2 && CAM_FREE == 3 && CAM_FOLLOW == 4,
+static_assert(CAM_STILL == 0 && CAM_ORBIT == 1 && CAM_BBOX == 2 && CAM_FREE == 3 && CAM_FOLLOW == 4
+              && CAM_COVERAGE == 5,
               "CamMode carries the frozen TTP_CAM_* ABI values — do not renumber");
 
 // How fast a steer bar chases the tilt behind it, as an exponential time
@@ -87,6 +89,8 @@ struct DisplayState {
     // ttp_display_debug_monster_{pitch,back}; negative = authored
     float monsterPitch = -1, monsterBack = -1;
     FollowCam follow;                   // CAM_FOLLOW's rig; reset with `chase`
+    Coverage coverage;                  // CAM_COVERAGE's shot; reset with `chase`
+    CoverChase coverChase;              // ...and its CHASE shot's rig
     // The built track's road as an occluder, per scene: the name tags hide
     // behind it, and the follow cam keeps the battle out from under it.
     NameTagDeck tagDeck;
@@ -130,16 +134,16 @@ struct DisplayState {
     bool showcase = false;
 
     // THE SHIPPING GAME'S RIG, not "no rig". With no cells the only surface
-    // this library draws is the LOBBY PREVIEW, and its answer is the bbox
-    // sweep; STILL, ORBIT and FREE belong to the gallery and the inspector, and
-    // every one of those surfaces pushes what it wants explicitly.
+    // this library draws is the LOBBY PREVIEW, and its answer is the coverage
+    // cuts; the other modes belong to the gallery, the inspector and the
+    // trailer, and every one of those surfaces pushes what it wants explicitly.
     //
     // It defaulted to CAM_STILL, a mode the game never asks for, and that fails
     // INVISIBLY: a shell that has not found `ttp_display_camera` renders the
     // circuit perfectly and never moves it, so a lobby preview is a photograph
     // and nothing anywhere reports a problem. A default that is one of the real
     // answers costs nothing to override and removes the whole class.
-    int camMode = CAM_BBOX;
+    int camMode = CAM_COVERAGE;
     V3 freeEye, freeTarget;
     bool fog = true;
     Framing framing;
@@ -157,6 +161,10 @@ struct DisplayState {
 
 // Freeze one car: pose kept, every motion cue dropped (see the definition).
 void atRest(TtpCarInput& c);
+
+// The pose a car is DRAWN at, read back off the frame's own car input — what
+// a camera follows when the picture and the sim may disagree (a held field).
+ttp::Pose heldPose(const TtpCarInput& c);
 
 // The ABI's JSON array of scalar ids (a roster, a cell list) as ids.
 std::vector<ScalarId> parseIds(const char* json);

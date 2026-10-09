@@ -172,7 +172,7 @@ export class Stage {
     this.display = null;     // set by boot()
     this.biomeOverride = null;
     this.orbit = false;      // lobby/gallery turntable
-    this.bboxOrbit = false;  // lobby perimeter sweep (wins over orbit)
+    this.coverage = false;   // the lobby: cuts between shots of the attract race (wins over orbit)
     // Judging aid: force the single whole-track overview camera even with a full
     // grid of cars racing, so a track's SHADOWS can be looked at without four
     // close-up chase cells in the way.
@@ -1109,7 +1109,7 @@ export class Stage {
   enableUserCamera(start) {
     if (this._free) return this._free;
     this.orbit = false;
-    this.bboxOrbit = false;
+    this.coverage = false;
     const dom = this.container;
     // Start on the same iso framing the still overview uses, looking at the
     // track centre. Yaw/pitch are then driven by the drag.
@@ -1536,7 +1536,7 @@ export class Stage {
     const mode = ids.length ? null
         : this._free ? CAM.FREE
         : this.followCam ? CAM.FOLLOW
-        : this.bboxOrbit ? CAM.BBOX
+        : this.coverage ? CAM.COVERAGE
         : this.orbit ? CAM.ORBIT : CAM.STILL;
     if (mode !== null && mode !== this._camMode) { this._camMode = mode; this.display.camera(mode); }
     return ids;
