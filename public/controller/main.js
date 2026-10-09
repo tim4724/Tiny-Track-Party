@@ -36,6 +36,11 @@ import { initPressPaint } from './press.js';
 const { MSG, ROOM_STATE } = window;
 const el = (id) => document.getElementById(id);
 
+// AirConsole (controller.html): the bootstrap swapped the transport globals
+// before this module ran and left the platform surface here — the ready
+// promise, the profile nickname, SDK-routed haptics. Null everywhere else.
+const acBoot = window.__acController || null;
+
 const screens = { name: el('name'), lobby: el('lobby'), game: el('game'), results: el('results') };
 // Screen "depth": name is the entry point (0); every in-room screen sits one
 // level above it (1). lobby↔game↔results are same-level shuffles. Used to push a
@@ -78,7 +83,9 @@ function syncShellBack() {
 // something landed. ONE motor, so every cue routes through this instance: a
 // transient fired while the brake rumble is running would otherwise silence it
 // until the next renewal. See Haptics.js.
-const haptics = new Haptics();
+// In the AC iframe navigator.vibrate is usually blocked by the permissions
+// policy, so the cues route through the SDK there (Haptics' injection seam).
+const haptics = new Haptics(acBoot ? { vibrate: acBoot.vibrate } : {});
 const buzz = (p) => haptics.tick(p);
 
 let myColorIndex = null;
@@ -229,7 +236,10 @@ initModals({
 });
 initDriveSurface({ tilt, buzz, haptics });
 setInputMode(inputMode);
-initOrientation({ inShell });
+// "The platform owns the device" covers AirConsole too: the SDK pins the
+// orientation (see the bootstrap's constructor options), and fullscreen
+// requests from inside the AC iframe are its host's business, not ours.
+initOrientation({ inShell: inShell || !!acBoot });
 initPressPaint();
 
 function setStatus(t) { el('name-status').textContent = t; }
@@ -656,7 +666,10 @@ function leaveToName() {
   el('name-input').focus();
 }
 window.addEventListener('popstate', () => {
-  if (inShell) return;   // shell owns leaving (§1) — we never pushed, and don't self-leave
+  // Shell/AirConsole own leaving — we never pushed, and don't self-leave. In
+  // the AC iframe a spurious pop (SDK location check, bfcache) must not
+  // disconnect a live seat.
+  if (inShell || acBoot) return;
   if (currentScreen && currentScreen !== 'name') leaveToName();
 });
 
@@ -791,15 +804,18 @@ el('leavecup-btn').addEventListener('click', () => {
   openLeaveCupPopup();
 });
 
-// Applies the launcher's rename locally (the labels that carry the name) AND
-// broadcasts it to the display via a re-HELLO, exactly like a join.
-installRenameHook((n) => {
+// Applies a shell rename locally (the labels that carry the name) AND
+// broadcasts it to the display via a re-HELLO, exactly like a join. Two
+// callers: the CouchPad launcher's setName below, and the AirConsole profile
+// change in the AC branch at the bottom.
+function applyShellRename(n) {
   myName = n;
   el('me-name').textContent = n;    // lobby identity
   el('hud-name').textContent = n;   // in-race HUD
   refreshHelpName(n);               // settings demo phone
   net.rename(n);                    // → display roster + LOBBY_UPDATE echo
-});
+}
+installRenameHook(applyShellRename);
 
 // Shell §9: what an armed back gesture DOES. A popup closes (motion above
 // settings); a paused race continues; anywhere else — the lobby, the results —
@@ -821,10 +837,57 @@ if (inShell && shellName) {
   // takes over.
   screens.name.classList.add('hidden');
   joinRace(shellName, { persist: false });
+} else if (acBoot) {
+  // AirConsole owns identity like the shell does: there is no name to type, so
+  // the form goes — but the name screen STAYS, as the surface we wait on.
+  //
+  // Hiding it outright (what the shell can afford, having its own chrome
+  // behind) left this page with nothing on it whatsoever until the retained
+  // snapshot arrived: a blank phone whose only mark was the latency chip
+  // reading "no signal". The gap is real and not rare — the snapshot is the
+  // FIRST thing that puts this phone on a screen (there is no per-phone
+  // greeting to land sooner; see protocol.js), so any display that is booting,
+  // slow or absent leaves the page empty for exactly that long. It is also the
+  // one state `onStatus` cannot report from: its full-screen #conn overlay is
+  // gated on being IN a room, on the reasoning that anywhere else the name
+  // screen's own status line is enough. That is still true — so keep the name
+  // screen, and the status line is enough here too. (The form is CSS-dead on
+  // AC from first paint — controller.css — so it never flashes.)
+  setStatus('Connecting…');
+  acBoot.ready.then(async () => {
+    // Awaited so this lands AFTER the join: joinRace clears the status line and
+    // the transport's synchronous `joined` (onJoined) clears it again, so a
+    // message set before either would be wiped by both. If the snapshot beats
+    // us here, syncRoom has already shown a screen and the text is never seen.
+    await joinRace(acBoot.nickname(), { persist: false });
+    setStatus('Waiting for the screen…');
+  });
+  // The pref shim hydrates after the module read its defaults — re-apply the
+  // one pref that changes live wiring (steering mode; a stored car pick is
+  // read later, at WELCOME, and usually wins the race).
+  acBoot.storage.onLoad(() => applyInputMode(storedInputMode()));
+  // Live profile rename (the AC profile editor, or a late-loading profile):
+  // same path as the CouchPad launcher's setName. Only our own device — the
+  // event fires for every device whose profile changed. The adapter never
+  // wires onDeviceProfileChange, so this assignment is durable.
+  acBoot.airconsole.onDeviceProfileChange = (deviceId) => {
+    if (deviceId !== acBoot.airconsole.getDeviceId()) return;
+    const n = cleanName(acBoot.nickname());
+    if (n) applyShellRename(n);
+  };
+  // TILT rides the SDK's device_motion relay (armed in the bootstrap): no AC
+  // embedder delegates motion sensors to the game iframe, so DeviceOrientation
+  // never fires here and the relay is the only source. Its alpha/beta/gamma
+  // are orientation angles (see TiltInput.relayOrientation); x/y/z, the
+  // accelerometer, is not needed.
+  acBoot.airconsole.onDeviceMotion = (data) => {
+    acBoot.noteMotion(data);   // TEMPORARY debug overlay (controller-airconsole.js)
+    if (data && typeof data.beta === 'number') tilt.relayOrientation(data.beta, data.gamma);
+  };
 } else {
   show('name');
 }
-window.__net = net; window.__wakeLock = wakeLock; // debug/test handles (parity with the display)
+window.__net = net; window.__wakeLock = wakeLock; window.__tilt = tilt; // debug/test handles (parity with the display)
 
 // Gallery / test mode: ?scenario=… lays out a single screen from fake data
 // without connecting to the relay (the controller never auto-connects, so

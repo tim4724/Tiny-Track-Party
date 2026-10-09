@@ -42,6 +42,16 @@ test('the welcome board footer leads to a licenses page that renders its credits
   expect(errors).toEqual([]);
 });
 
+// The lobby carries a second copy of the footer for AirConsole, which has no
+// welcome board (airconsole.spec.js proves it shows there). Everywhere else it
+// must stay hidden — the lobby is read across a room, and the welcome board is
+// already where anybody sits and reads.
+test('the web lobby keeps the legal footer off the board', async ({ page }) => {
+  await page.goto('/?scenario=lobby');
+  await page.waitForSelector(visible('#lobby'));
+  await expect(page.locator('#lobby .lobby__foot')).toBeHidden();
+});
+
 // The license chip links our own served copy wherever the license demands its
 // text ship with the build, so those are the hrefs that carry the compliance.
 test('every license notice the page links is actually served', async ({ page, request }) => {

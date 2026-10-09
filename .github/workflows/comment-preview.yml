@@ -30,6 +30,10 @@ jobs:
               `- App: ${base}`,
               `- Display gallery: ${base}/gallery.html`,
               `- Phone gallery: ${base}/gallery-controller.html`,
+              // AirConsole takes the game's base URL after its # and loads
+              // screen.html / controller.html from it itself.
+              `- AirConsole: https://www.airconsole.com/#${base}`,
+              `- AirConsole simulator: https://www.airconsole.com/simulator/#${base}`,
               marker,
             ].join('\n');
 
