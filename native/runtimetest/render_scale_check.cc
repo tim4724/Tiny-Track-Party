@@ -750,86 +750,97 @@ int main() {
             "a new scene climbs back at one evidence window a step");
     }
     {
-      // ---- A SCENE SEEN BEFORE STARTS WHERE IT SETTLED ----------------------
+      // ---- A SPLIT STARTS WHERE THE LAST SPLIT OF ITS SIZE SETTLED ----------
       //
-      // The climb is lap-sized and a race opens on its own vista, so the
-      // recovery window climbs nothing and the reference box spent most of a
-      // race reaching the rung it then held. The controller remembers, per
-      // scene key and cell count, the point a scene held longest.
+      // The climb is lap-sized and a race opens on its own vista, so a split
+      // that inherits the lobby's point pays a switch it cannot avoid. The
+      // controller remembers, per cell count, the point a split held longest;
+      // a one-cell scene (the lobby, a solo race) remembers nothing and starts
+      // at whatever was in force.
       //
       // The grid is declared AFTER the build, as ttp_display_frame does on
-      // every frame; a scene whose frames never declared one is abandoned.
-      // Every assertion below is on a jump the rule cannot make by itself —
-      // a fresh scene with no observation probes ONE rung — so a recall is
-      // told apart from the rule's own move.
+      // every frame. Every assertion below is on a jump the rule cannot make
+      // by itself — a fresh scene with no observation probes ONE rung — so a
+      // recall is told apart from the rule's own move.
       Box b;
-      b.ctl.key(0xA11CE);
-      b.ctl.scene(b.t);
-      b.ctl.cells(1);
-      b.gpuMs = 1.0;                           // scene A holds native throughout
-      for (int i = 0; i < 20; i++) { b.ticks(180); b.poll(k4K); }
-      nearly(b.lines(k4K), 2160.0, "a cheap scene holds native");
+      // A build, as the display core and the shell do it: the scene, and the
+      // window (ttp_perf_reset), which still describes the last scene's frames.
+      const auto build = [&]() {
+        b.ctl.scene(b.t);
+        b.mon.reset();
+      };
+      // A scene that costs `fixed + fill * s^2` settles: pixels must cost
+      // something, or the rule rightly reads a flat cost as "pixels are not
+      // the cost" and declines to climb on it. Two minutes of polls: past the
+      // recovery window a climb takes one kScaleUpHoldSec per rung, and the
+      // floor is four rungs under a 4K panel's native.
+      const auto settle = [&](int cells, double fixedMs, double fillMs) {
+        build();
+        b.ctl.cells(cells);
+        for (int i = 0; i < 40; i++) {
+          const double s = b.ctl.point().scale;
+          b.gpuMs = fixedMs + fillMs * s * s;
+          b.ticks(180);
+          b.poll(k4K);
+        }
+      };
+      const double kCheap = 1.0, kCheapFill = 4.0;   // native costs 5 ms
+      const double kDear = 30.0;                     // late at every point
 
-      // Scene B floors the rule.
-      b.ctl.key(0xB0B);
-      b.ctl.scene(b.t);
-      b.ctl.cells(1);
-      b.gpuMs = 30.0;
-      for (int i = 0; i < 8; i++) { b.ticks(180); b.poll(k4K); }
-      const double floorLines = b.lines(k4K);
-      check(floorLines <= 720.0, "another scene floors the rule");
+      // A four-way split the box cannot hold above the floor.
+      settle(4, kDear, 0.0);
+      const double splitLines = b.lines(k4K);
+      check(splitLines <= 720.0, "an expensive split settles low");
 
-      // Scene A again, built while the rule sits at B's floor: the first poll
-      // after its frames declare the grid lands on the remembered point, as a
-      // MOVE the shell performs — before any evidence, which is the point.
-      b.ctl.key(0xA11CE);
-      b.ctl.scene(b.t);
+      // The lobby climbs back to native in between.
+      settle(1, kCheap, kCheapFill);
+      nearly(b.lines(k4K), 2160.0, "a cheap one-cell scene climbs to native");
+
+      // The next four-way split, built at the lobby's native: no recall until
+      // its frames declare the grid, then a MOVE to the split's memory before
+      // any evidence, which is the point.
+      build();
       b.ticks(90);   // past the poll cadence, so what this poll does is the rule's
       b.poll(k4K);
-      check(b.lines(k4K) <= 1080.0, "no recall before the new scene's frames have declared their grid");
-      b.ctl.cells(1);
+      nearly(b.lines(k4K), 2160.0, "no recall before the new scene's frames have declared their grid");
+      b.ctl.cells(4);
       b.ticks(90);
       RenderScalePoint out{0, 0};
-      check(b.poll(k4K, &out), "a scene seen before starts where it settled: a move");
-      nearly(out.scale, 1.0, "…at the point it held longest");
+      check(b.poll(k4K, &out), "a split starts where the last split of its size settled: a move");
+      nearly(out.scale * k4K.baseLines, splitLines, "…at the point that split held longest");
 
-      // Scene B again, split four ways: the same scene split differently is
-      // a different memory, so nothing pulls it down to B's solo floor.
-      b.ctl.key(0xB0B);
-      b.ctl.scene(b.t);
-      b.ctl.cells(4);
+      // A two-way split is a different memory: nothing pulls it down to the
+      // four-way split's point.
+      settle(1, kCheap, kCheapFill);
+      build();
+      b.ctl.cells(2);
       b.gpuMs = 1.0;
       b.ticks(90);
+      check(!b.poll(k4K), "a two-way split does not inherit the four-way memory: no move");
+      nearly(b.lines(k4K), 2160.0, "…it stays at the point in force");
+
+      // A one-cell scene keeps no memory: a solo scene that settled low does
+      // not pull the next one-cell scene down. The climb back goes through a
+      // split, so no one-cell scene in between could have overwritten it.
+      settle(1, kDear, 0.0);
+      check(b.lines(k4K) <= 720.0, "an expensive one-cell scene settles low");
+      settle(2, kCheap, kCheapFill);
+      nearly(b.lines(k4K), 2160.0, "…and a cheap split climbs back");
+      build();
+      b.ctl.cells(1);
+      b.ticks(90);
       b.poll(k4K);
-      check(b.lines(k4K) >= 1620.0, "a split visit does not inherit the solo memory");
+      nearly(b.lines(k4K), 2160.0, "a one-cell scene starts at the point in force, never a memory");
 
       // A build the shell abandons before a frame — no cells declared, no
-      // poll — leaves NO memory: it never held anything, and what it would
-      // record is the point it inherited from the scene before it. Park the
-      // rule at B's floor first, so a corrupt memory would read as a drop
-      // to the floor on a cheap scene.
-      b.ctl.key(0xB0B);
-      b.ctl.scene(b.t);
-      b.ctl.cells(1);
-      b.gpuMs = 30.0;
-      for (int i = 0; i < 8; i++) { b.ticks(180); b.poll(k4K); }
-      check(b.lines(k4K) <= 720.0, "…B floors again");
-      b.ctl.key(0xDEAD);
-      b.ctl.scene(b.t);                        // abandoned: a second passes…
+      // poll — neither records nor erases a memory.
+      build();                                 // abandoned: a second passes…
       b.ticks(60);                             // …with no frame and no poll
-      b.ctl.key(0xA11CE);
-      b.ctl.scene(b.t);                        // …for the native-holding scene
-      b.ctl.cells(1);
-      b.gpuMs = 1.0;
+      build();
+      b.ctl.cells(4);
       b.ticks(90);
       b.poll(k4K);
-      nearly(b.lines(k4K), 2160.0, "the scene after an abandoned build recalls its own memory");
-      b.ctl.key(0xDEAD);
-      b.ctl.scene(b.t);
-      b.ctl.cells(1);
-      b.ticks(90);
-      b.poll(k4K);
-      check(b.lines(k4K) >= 1620.0, "an abandoned build left no memory to recall");
+      nearly(b.lines(k4K), splitLines, "an abandoned build leaves the split's memory intact");
     }
     {
       // ---- 540 IS THE FLOOR AT EVERY CELL COUNT -----------------------------

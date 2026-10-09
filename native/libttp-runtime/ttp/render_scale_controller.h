@@ -26,7 +26,6 @@
 // tick series beside it.
 #pragma once
 
-#include <cstdint>
 #include "ttp/perf_stats.h"
 #include "ttp/render_scale.h"
 
@@ -75,29 +74,25 @@ class RenderScaleController {
   // restamps the tenure the rule shortens its up-hold against
   // (kScaleUpRecoverHoldSec). The window itself is the shell's to drop, with
   // ttp_perf_reset, for the reason ttp_perf.h names. It also closes the
-  // ledger of the scene that just ended — the point it held longest is
-  // remembered under its key (see key()) — and arms the recall for the one
+  // ledger of the scene that just ended and arms the recall for the one
   // beginning, which fires on the first poll after that scene's frames have
   // declared their grid (cells()).
-  void scene(double tMs);
-  // WHICH scene the next build is, so a scene seen before can start where it
-  // settled last time. Any stable hash of what decides a scene's cost — the
-  // display core hashes the biome and the showcase flag (its comment says why
-  // not the track). Set BEFORE scene(); a key of 0 is "no memory for this one".
   //
-  // WHY. The climb is lap-sized by design (kScaleUpHoldSec), and a race starts
-  // on its own vista — every cell down the start straight — so the recovery
-  // window after a build sees only late seconds and climbs nothing; the
-  // reference Android box then spent 90 s of a 150 s race reaching the 540
-  // it held for the rest (docs/perf/androidtv-frame-map.md, 2026-09-09). The
-  // point a scene held LONGEST is remembered per key and cell count, and the
-  // next build of that scene starts there. A wrong memory costs one down
-  // hold (kScaleDownHoldSec); no memory costs the climb.
-  void key(uint32_t k) { nextKey_ = k; }
+  // A SPLIT STARTS WHERE THE LAST SPLIT OF ITS SIZE SETTLED. The climb is
+  // lap-sized by design (kScaleUpHoldSec), and a race starts on its own vista
+  // — every cell down the start straight — so the recovery window after a
+  // build sees only late seconds and climbs nothing, and a split that inherits
+  // the lobby's resolution pays a switch it cannot avoid. So the point a split
+  // held LONGEST is remembered per cell count and the next split of that size
+  // starts there; tracks differ far less than cell counts do
+  // (docs/perf/androidtv-frame-map.md, 2026-09-09). A ONE-CELL scene keeps no
+  // memory and starts at whatever was in force: the lobby, the gallery and a
+  // solo race all draw one cell, so a shared memory would make each recall
+  // the other's point on every switch between them.
+  void scene(double tMs);
 
-  // HOW MANY CELLS the surface is split into, which keys the scene memory
-  // (key() above): a solo memory is the wrong answer for a split of the same
-  // track. The rule itself takes no cell count. It is not a shell's fact
+  // HOW MANY CELLS the surface is split into, which keys the memory (scene()
+  // above). The rule itself takes no cell count. It is not a shell's fact
   // either: the grid belongs to the frame builder, so `ttp_display_frame`
   // declares it here.
   void cells(int n) {
@@ -147,14 +142,13 @@ class RenderScaleController {
   // always did.
   double tenureMs_ = 0;
   void credit(double untilMs);
-  // The memory itself: one entry per (key, cells), replaced round-robin.
-  // Sized for every biome at every split, several times over; in-process
-  // only — a fresh launch climbs once.
-  struct Memory { uint32_t key; int cells; RenderScalePoint point; };
-  static constexpr int kMemories = 32;
-  Memory memory_[kMemories] = {};
-  int memories_ = 0, memoryNext_ = 0;
-  uint32_t sceneKey_ = 0, nextKey_ = 0;
+  // The memory itself: the point each split size last settled at, indexed by
+  // cell count, divisor 0 for none. In-process only — a fresh launch's first
+  // split of each size starts at the lobby's point. Sized past any grid the
+  // frame builder makes (four players); a larger one would keep no memory.
+  static constexpr int kMemoryCells = 8;
+  static bool remembers(int cells) { return cells >= 2 && cells < kMemoryCells; }
+  RenderScalePoint memory_[kMemoryCells] = {};
   bool recall_ = false;
   RenderScalePoint point_{1.0, 1};
   RenderScaleSample prev_{0.0, 0.0};
