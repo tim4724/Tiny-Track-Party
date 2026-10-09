@@ -1,6 +1,7 @@
 // The car field: slot bodies and the body pool, ghosts, the shadow fits and
 // the merged draws. TtpRendererImpl.h carries what the topic files share.
 #include "TtpRendererImpl.h"
+#include "ttp/seat_stripe.h"
 
 #include <utils/Log.h>
 
@@ -135,6 +136,10 @@ public:
         // older vglb.filamat without the parameter must not panic here.
         if (mat == mMaterial && mat->hasParameter("seatMark")) {
             mi->setParameter("seatMark", math::float4{ 0.0f });
+        }
+        if (mat == mMaterial && mat->hasParameter("seatStripe")) {
+            const ttp::rt::SeatStripe fit;
+            mi->setParameter("seatStripe", math::float4{ fit.half, fit.cutZ, fit.cutY, 0.0f });
         }
         return mi;
     }
@@ -635,11 +640,22 @@ void TtpRenderer::updateSeatMarks(const TtpFrameInput& input, uint32_t nCars) {
         if ((it == mSeatMarks.end() ? 0u : it->second) == want) continue;
         mSeatMarks[a] = want;
         const float4 mark = player ? float4{ srgbToLinear(rgb), 1.0f } : float4{ 0.0f };
+        // The model's own stripe fit, measured once per model off the same
+        // parsed geometry the merged groups draw (mGlbMeshCache).
+        ttp::rt::SeatStripe fit;
+        const uint64_t key = c < mCarModelKey.size() ? mCarModelKey[c] : 0;
+        const auto mesh = mGlbMeshCache.find(key);
+        if (mesh != mGlbMeshCache.end()) fit = ttp::rt::measure_seat_stripe(mesh->second);
+        const bool hasFit = mGlbMaterial->hasParameter("seatStripe");
         gltfio::FilamentInstance* inst = a->getInstance();
         if (!inst) continue;
         MaterialInstance* const* mis = inst->getMaterialInstances();
         for (size_t i = 0; i < inst->getMaterialInstanceCount(); i++) {
-            if (mis[i]->getMaterial() == mGlbMaterial) mis[i]->setParameter("seatMark", mark);
+            if (mis[i]->getMaterial() != mGlbMaterial) continue;
+            mis[i]->setParameter("seatMark", mark);
+            if (hasFit) {
+                mis[i]->setParameter("seatStripe", float4{ fit.half, fit.cutZ, fit.cutY, 0.0f });
+            }
         }
     }
 }

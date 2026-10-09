@@ -953,6 +953,14 @@ target_link_libraries(carfootprint_check PRIVATE libttp_runtime ttp_strict_fp tt
 ttp_emscripten_cli(carfootprint_check)
 add_test(NAME carfootprint COMMAND carfootprint_check)
 
+# The player stripe's fit (ttp/seat_stripe.h): header-inline for the same
+# reason, measured on the shipped cars because the fit is geometry, not a table.
+add_executable(seatstripe_check runtimetest/seatstripe_check.cc)
+target_link_libraries(seatstripe_check PRIVATE libttp_runtime ttp_strict_fp ttp_warnings)
+ttp_emscripten_cli(seatstripe_check)
+add_test(NAME seatstripe
+  COMMAND seatstripe_check ${CMAKE_CURRENT_SOURCE_DIR}/../public/assets/toycar)
+
 # ---- Behavioural: the asset gallery's world ---------------------------------
 # NOT conformance evidence and no corpus — showcase_theme stages a scene that
 # has never existed in play, so there is no oracle to record against. What this

@@ -105,7 +105,10 @@ material {
         // — ours —
         // A player's car wears its seat colour (ttpSeatMarks): rgb linear, a 1.
         // a 0 (every instance's default) is everything else in the kit.
-        { type : float4, name : seatMark }
+        { type : float4, name : seatMark },
+        // Where the stripe may run on this model (ttp/seat_stripe.h): x the
+        // half-width, and it skips p.z > y AND p.y > z — the spoiler.
+        { type : float4, name : seatStripe }
     ]
 }
 
@@ -123,7 +126,8 @@ fragment {
         material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
         vec3 base = ttpGlbBaseColor().rgb;
         if (materialParams.seatMark.a > 0.0) {
-            base = ttpSeatMarks(base, getUV0(), variable_fog.yzw, materialParams.seatMark.rgb);
+            base = ttpSeatMarks(base, getUV0(), variable_fog.yzw, materialParams.seatMark.rgb,
+                    materialParams.seatStripe.xyz);
         }
         // emissive.w = 0 → no second exposure; both terms are pre-exposed.
         material.emissive = vec4(ttpFogMix(ttpGrade(ttpMatteShade(
