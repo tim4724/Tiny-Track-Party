@@ -808,10 +808,10 @@ Three consequences, and the first two have each been paid for once:
 a twenty-fifth of native pixels still leaves that frame at 19.8 ms against a
 16.7 ms budget: the resolution-independent floor is ~19 ms, of which ALL
 geometry is about 4. The rest scales with CELLS, not with pixels or vertices.
-Four players WAS a 30 fps mode; since the deck's far ribbon and the
-render-scale retreat fixes of 2026-09-02 the reference box runs a 4P race at
-60 fps for all but a few seconds a lap (`docs/perf/androidtv-frame-map.md`),
-and a millisecond saved there buys resolution rather than frames.
+Four players WAS a 30 fps mode; since the deck's far ribbon the reference box
+holds a 4P race at 540@60 with a handful of dropped frames in half an hour
+(`ttp/render_scale.h` has why 540 is the floor at every cell count), and a
+millisecond saved there buys resolution rather than frames.
 > **A PASS PRICED AT ONE PANEL SIZE SAYS NOTHING ABOUT ANOTHER.** That same
 > cell overlay pass, at the Apple TV's nine times the pixels, was the whole
 > reason a 4-way split missed 60 Hz — and what it cost was its VIEW's blend

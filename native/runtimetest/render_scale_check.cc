@@ -28,7 +28,6 @@ using ttp::rt::operatingPoints;
 using ttp::rt::pointBudgetMs;
 using ttp::rt::RenderScalePoint;
 using ttp::rt::renderScaleStep;
-using ttp::rt::kScaleEscapeCells;
 using ttp::rt::kScaleMaxPoints;
 using ttp::rt::fitCost;
 using ttp::rt::predictMs;
@@ -496,13 +495,6 @@ int main() {
     nearly(up.scale, anchor.scale, "…buying the rate, not pixels");
     check(renderScaleStep(anchor, gpuAt(12.0), kLongHold, kSettled, kNoFit, k4K120).divisor == 2,
           "…and a frame that does not fit the halved budget stays where it is");
-    // One rung the other way, the floor escape is the same shape: a split down
-    // there has no pixels left to give back, so the rate is the only way out.
-    const RenderScaleLimits split{0.0, 1.0, 2160.0, kHz120, kScaleEscapeCells};
-    const RenderScalePoint escaped{540.0 / 2160.0, 2 * anchorDivisor(split)};
-    check(renderScaleStep(escaped, gpuAt(2.5), kLongHold, kSettled, kNoFit, split).divisor
-              < escaped.divisor,
-          "and a split climbs back out of the floor escape the same way");
   }
   {
     // END TO END, on the sequence a race actually walks: a heavy lobby steps the
@@ -840,149 +832,33 @@ int main() {
       check(b.lines(k4K) >= 1620.0, "an abandoned build left no memory to recall");
     }
     {
-      // ---- THE FLOOR ESCAPE (kScaleEscapeCells) ------------------------
+      // ---- 540 IS THE FLOOR AT EVERY CELL COUNT -----------------------------
       //
-      // What it is for: four cells cost more to SUBMIT than a whole 60 Hz
-      // budget however few pixels each one gets, so at the bottom rung the
-      // choice is a locked 30 against a 33 fps missing a quarter of its slots.
-      // What it must NOT do is reach the SOLO case, which reads "late" at the
-      // floor while presenting a clean 60 — that is the version that was built
-      // first and reverted, so both directions are gated.
+      // A split gets no point below the bottom rung: no sub-floor rung and no
+      // half-rate entry. A box that cannot hold 60 at 540 lines drops frames
+      // THERE (render_scale.h has the trade). The rule takes no cell count, so
+      // what is gated is the outcome, through the controller with the grid
+      // declared exactly as ttp_display_frame declares it: a split late at
+      // every resolution falls to the bottom rung and stays on it.
       RenderScalePoint list[kScaleMaxPoints];
-      RenderScalePoint soloList[kScaleMaxPoints];
-
-      RenderScaleLimits solo = kHD; solo.cells = 1;
-      const int nSolo = operatingPoints(solo, soloList);
-      for (int i = 0; i < nSolo; i++) {
-        check(soloList[i].divisor == 1, "solo is offered no half-rate point at all");
+      const int n = operatingPoints(kHD, list);
+      check(n == 3, "a 60 Hz 1080p panel offers exactly its three rungs");
+      nearly(list[0].scale * kHD.baseLines, 540.0, "…the lowest being 540 lines");
+      for (int i = 0; i < n; i++) {
+        check(list[i].divisor == 1, "…every one at the panel's own rate");
       }
-
-      RenderScaleLimits split = kHD; split.cells = kScaleEscapeCells;
-      const int nSplit = operatingPoints(split, list);
-      check(nSplit == nSolo + 1 + ttp::rt::kScaleSplitLadderCount,
-            "a split gains the half-rate backstop plus the sub-floor rungs");
-      check(list[0].divisor == 2, "the backstop is the WORST one, below everything");
-      nearly(list[0].scale, soloList[0].scale,
-             "at the bottom rung's own pixels: what it trades is the rate");
-      for (int i = 1; i < nSplit; i++) {
-        check(list[i].divisor == 1, "every other point keeps the panel's rate");
-      }
-      // The sub-floor rungs sit between the backstop and the old floor,
-      // ascending: below the floor a split now gives back RESOLUTION first,
-      // and the climb out of the backstop lands on a strictly cheaper point —
-      // the terminal-parking bug the single-escape shape had.
-      for (int i = 0; i < ttp::rt::kScaleSplitLadderCount; i++) {
-        nearly(list[1 + i].scale,
-               ttp::rt::kScaleSplitLadder[i] / kHD.baseLines,
-               "…a sub-floor rung, at the panel's own rate");
-        check(list[1 + i].scale < soloList[0].scale,
-              "…strictly below the solo floor");
-      }
-
-      RenderScaleLimits two = kHD; two.cells = kScaleEscapeCells - 1;
-      check(operatingPoints(two, list) == nSolo,
-            "a 2-way split is not enough: its cells still fit a 60 Hz budget");
-
-      {
-        // A BOX THAT CANNOT HOLD 60 AT THE FLOOR falls into the escape and
-        // KEEPS RETURNING to it. Not "stays": the escape's exit probe tries
-        // the sub-floor rung once per up-hold — the bounded cost of the climb
-        // that un-parks a box the trade rescued — and this box, late at every
-        // resolution, retreats within a window each time. What the assertion
-        // holds is that between probes the box is parked at the backstop, and
-        // a probe never buys pixels or a faster rate than the rung above.
+      for (int cells = 3; cells <= 4; cells++) {
         Box b;
-        b.gpuMs = 26.0;                      // a 4-way split at the floor
-        // Through the CONTROLLER, exactly as `ttp_display_frame` declares it:
-        // the cell count is the frame builder's fact, so `poll` overwrites
-        // whatever a caller put in the limits with what was declared here.
-        b.ctl.cells(4);
-        RenderScaleLimits four = kHD;
-        for (int i = 0; i < 8; i++) { b.ticks(180); b.poll(four); }
-        check(b.ctl.point().divisor == 2, "a hopeless split reaches the half-rate point");
-        nearly(b.ctl.point().scale, soloList[0].scale, "at the floor's own pixels");
-        bool sawBackstop = false;
-        for (int i = 0; i < 8; i++) {
-          b.ticks(180); b.poll(four);
-          const RenderScalePoint p = b.ctl.point();
-          check(p.divisor == 2 || p.scale < soloList[0].scale - 1e-9,
-                "between probes the hopeless box is at the backstop, and a "
-                "probe only ever tries the sub-floor rung");
-          if (p.divisor == 2) sawBackstop = true;
-        }
-        check(sawBackstop, "and the backstop is where it keeps returning");
-      }
-      {
-        // THE EXIT IS NOT TERMINAL — the wiring's own acceptance case, off the
-        // box: parked at the backstop with a healthy-but-paced reading (the
-        // measured 14.57 against a 14.20 share gate) and only a same-scale
-        // observation (which can never become a fit), the old rule had no
-        // legal up-branch and sat at 30 Hz for the life of the race. The exit
-        // probe climbs to the sub-floor rung, where this box holds.
-        Box b;
-        b.gpuMs = 26.0;                      // the grid: late everywhere
-        b.ctl.cells(4);
-        RenderScaleLimits four = kHD;
-        for (int i = 0; i < 8; i++) { b.ticks(180); b.poll(four); }
-        check(b.ctl.point().divisor == 2, "…having parked at the backstop first");
-        // The race's scene build drops the observation — the exact state the
-        // box was measured in: no fit, no fittable prev, a paced 14.57 that
-        // fails the 14.20 share gate, and (before the exit probe) no legal
-        // up-branch at all.
-        b.ctl.scene(b.t);
-        b.gpuMs = 14.5;                      // the backstop's paced span
-        for (int i = 0; i < 24; i++) { b.ticks(180); b.poll(four); }
-        check(b.ctl.point().divisor == 1,
-              "a split that fits below the floor climbs OUT of the half rate");
-        check(b.ctl.point().scale < soloList[0].scale - 1e-9,
-              "…onto a sub-floor rung, not back to the floor's own pixels");
-      }
-      {
-        // THE BACKSTOP IS ENTERED FROM THE BOTTOM RUNG ONLY. A p95 fit taken
-        // on a vsync-quantised device reads the sub-floor rungs as late while
-        // they demonstrably hold 60 (the Android box's 432 and 360, 2026-09-02
-        // in the frame map), and the old retreat took a split from 480 or 432
-        // straight to the half-rate entry on that fit — half of every lap at
-        // 30 fps by the rule's choice. The split spends resolution before
-        // rate, so a retreat spends the rungs first.
-        operatingPoints(split, list);   // the 2-way probe above overwrote it
-        const RenderScalePoint at432 = list[2], at360 = list[1];
-        // A fit whose fixed half puts every full-rate rung over the target
-        // share and only the double budget in reach: 22 ms at 480 seen
-        // before, 20 at 432 now.
-        const RenderScaleSample prev480{list[3].scale, 22.0};
-        const RenderScalePoint fromMid =
-            renderScaleStep(at432, gpuAt(20.0), kLongHold, kSettled, prev480, split);
-        check(fromMid.divisor == 1 && fromMid.scale < at432.scale - 1e-9,
-              "late above the bottom rung, a split retreats to a full-rate rung");
-        nearly(fromMid.scale, at360.scale, "…the bottom one, not past it");
-        const RenderScalePoint fromBottom =
-            renderScaleStep(at360, gpuAt(19.0), kLongHold, kSettled, prev480, split);
-        check(fromBottom.divisor == 2,
-              "late AT the bottom rung, the backstop is still where it goes");
-        // AND THE STAY THERE IS A PROBE'S, NOT A LAP'S: parked at the
-        // backstop with a paced reading and no fit, the exit fires on
-        // kScaleEscapeProbeSec, well inside the climb hold.
-        const RenderScalePoint parked = list[0];
-        const RenderScalePoint soon = renderScaleStep(parked, gpuAt(14.5),
-            ttp::rt::kScaleEscapeProbeSec + 0.5, kSettled, kNoFit, split);
-        check(soon.divisor == 1 && soon.scale < parked.scale - 1e-9,
-              "the backstop's exit probes the bottom rung on its own short hold");
-        const RenderScalePoint notYet = renderScaleStep(parked, gpuAt(14.5),
-            ttp::rt::kScaleEscapeProbeSec - 0.5, kSettled, kNoFit, split);
-        check(notYet.divisor == 2, "…and not before it");
-      }
-      {
-        // THE SAME BOX AT ONE CELL keeps the full rate, because the entry it
-        // would fall into does not exist. The reverted design's failure, as a
-        // gate.
-        Box b;
-        b.gpuMs = 21.0;                      // solo's own p95 at the floor
-        b.ctl.cells(1);
-        RenderScaleLimits one = kHD;
-        for (int i = 0; i < 8; i++) { b.ticks(180); b.poll(one); }
-        check(b.ctl.point().divisor == 1,
-              "solo never halves its rate, however late it reads");
+        b.gpuMs = 26.0;                        // late at every resolution
+        b.ctl.cells(cells);
+        for (int i = 0; i < 8; i++) { b.ticks(180); b.poll(kHD); }
+        nearly(b.lines(kHD), 540.0, "a late split falls to the bottom rung");
+        check(b.ctl.point().divisor == 1, "…at the panel's own rate, never half of it");
+        bool moved = false;
+        for (int i = 0; i < 24; i++) { b.ticks(180); moved = b.poll(kHD) || moved; }
+        check(!moved, "…and stays there: there is no lower point to move to");
+        nearly(b.lines(kHD), 540.0, "…still at 540 lines");
+        check(b.ctl.point().divisor == 1, "…still at the panel's own rate");
       }
     }
   }

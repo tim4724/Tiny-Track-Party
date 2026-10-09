@@ -95,10 +95,11 @@ class RenderScaleController {
   // hold (kScaleDownHoldSec); no memory costs the climb.
   void key(uint32_t k) { nextKey_ = k; }
 
-  // HOW MANY CELLS the surface is split into, which is what gates the floor
-  // escape (`kScaleEscapeCells`). It is not part of `limits` as a shell passes
-  // them because it is not a shell's fact: the grid belongs to the frame
-  // builder, so `ttp_display_frame` declares it here and the poll folds it in.
+  // HOW MANY CELLS the surface is split into, which keys the scene memory
+  // (key() above): a solo memory is the wrong answer for a split of the same
+  // track. The rule itself takes no cell count. It is not a shell's fact
+  // either: the grid belongs to the frame builder, so `ttp_display_frame`
+  // declares it here.
   void cells(int n) {
     cells_ = n < 0 ? 0 : n;
     cellsKnown_ = true;   // the first frame after a build says what the grid is

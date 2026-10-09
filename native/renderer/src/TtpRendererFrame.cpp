@@ -2725,8 +2725,8 @@ void TtpRenderer::renderCells(const TtpFrameInput& input, double& tMark) {
 //
 // MEASURED on the Google TV Streamer at 4P pinned 768x432, for the deck: the
 // seconds every cell spends looking down the straight, the one stretch of the
-// lap that decided whether 432@60 held, lose about a third of their GPU time
-// to its far ribbon. docs/perf/androidtv-frame-map.md, 2026-09-02, has every
+// lap that decides whether a 4-way split holds 60, lose about a third of their
+// GPU time to its far ribbon. docs/perf/androidtv-frame-map.md, 2026-09-02, has every
 // arm; the decoration's far forms are priced beside it.
 void TtpRenderer::chooseLods(const float3& cam, float pxPerRad) {
     auto& rcm = mEngine->getRenderableManager();

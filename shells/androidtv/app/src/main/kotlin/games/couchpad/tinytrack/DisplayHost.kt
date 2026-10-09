@@ -378,8 +378,8 @@ class DisplayHost(
     /**
      * The divisor half of the rule's last answered operating point
      * ([adaptScale]), 1 until it has answered. Tracked even while pinned, so
-     * unpinning restores the rule's own cadence — a 4-cell box parked on the
-     * half-rate backstop gets its divisor 2 back, not a blanket 1.
+     * unpinning restores the rule's own cadence — a 120 Hz panel holding the
+     * anchor at divisor 2 gets its 2 back, not a blanket 1.
      */
     private var ruleDivisor = 1
 

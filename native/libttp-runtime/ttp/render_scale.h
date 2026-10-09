@@ -72,15 +72,6 @@ struct RenderScaleLimits {
   // RATE against resolution at all; a hard-coded 60 could only ever spend a
   // 120 Hz panel's headroom on pixels. 0 or absent means "assume 60".
   double panelMs;
-  // HOW MANY CELLS the surface is split into. The rule reads it for one thing
-  // only: whether the FLOOR ESCAPE below the bottom rung exists (see
-  // kScaleEscapeCells). It is not a shell's opinion — the grid is the frame
-  // builder's — so it crosses inside C++ rather than over the ABI. 0 means
-  // "not a split", which is what every caller predating the escape says — and
-  // DEFAULTED here for that reason: every shell-facing caller leaves it out, so
-  // requiring the brace to spell it would only buy `-Wmissing-field-initializers`
-  // on twenty call sites that all meant 0.
-  int cells = 0;
 };
 
 // Above this the device is LATE and retreats. The only threshold left: where to
@@ -130,13 +121,13 @@ inline constexpr double kScaleSceneGraceSec = 5.0;
 // climbing on EVIDENCE that only covered the cheap half of a lap. The
 // up-decision's ~3 s evidence window taken on a cheap section never
 // contains the vista it is about to climb into, and the reference Android box
-// pumped 768x432..960x540 for whole races, paying a buffer reallocation hitch
+// pumped between two rungs for whole races, paying a buffer reallocation hitch
 // at every move. At 28 s the scale climbs at most once per lap (catalogue lap
 // times run 45-75 s), so the window that qualifies the climb has seen most of
 // the circuit. The cost is NOT cosmetic on its own, which is what the recovery
-// pair below is for: a lap-sized hold times a twelve-rung ladder is a climb
-// measured in MINUTES, and a scale inherited from a scene that no longer exists
-// starts that climb from wherever the old scene left it.
+// pair below is for: a lap-sized hold per rung is a climb measured in MINUTES,
+// and a scale inherited from a scene that no longer exists starts that climb
+// from wherever the old scene left it.
 inline constexpr double kScaleUpHoldSec = 28.0;
 // A SCALE HAS NO TENURE IN A SCENE IT DID NOT SETTLE IN, and for the first
 // `kScaleRecoverSec` after a build the up-hold is one evidence window instead
@@ -168,16 +159,6 @@ inline constexpr double kScaleUpHoldSec = 28.0;
 // more than that. kScaleRecoverSec is derived from the ladder's own length,
 // below, where the rungs are.
 inline constexpr double kScaleUpRecoverHoldSec = 1.0;
-// THE BACKSTOP'S EXIT PROBE RUNS ON ITS OWN, SHORT HOLD. The half-rate entry is
-// where a split lands after one demonstrably late second, and a lap-sized hold
-// there charged 28 s at 30 fps for that one second — measured on the Android
-// box (docs/perf/androidtv-frame-map.md, 2026-09-02): every dip into the
-// backstop cost half a lap while the rung above it held a clean 60. A probe
-// costs one evidence window at most if wrong (kScaleDownHoldSec plus the
-// signal window), so the stay is sized to that and not to the climb hold: a
-// hopeless box parks at the backstop between probes as before, and a box the
-// backstop only caught mid-vista is back at full rate before the next one.
-inline constexpr double kScaleEscapeProbeSec = 8.0;
 // Below this the answer is "no change": a step the eye cannot see is not worth a
 // buffer reallocation, and it is what stops a scale pinned at a limit from
 // re-deciding every poll.
@@ -211,11 +192,11 @@ inline constexpr double kScaleMinMove = 0.02;
 // size at all) would otherwise cap below its own native resolution and never
 // render sharp. Native is a rung on every panel; the ladder fills in below it.
 //
-// THE BOTTOM RUNG IS THE FLOOR. There is no separate floor constant and no
-// shell may set one lower: 540 lines is the softest picture this game is
-// willing to show, and a device that cannot hold its frame rate there is asking
-// a different question than "how many pixels" (see the frame-rate half of that
-// decision in shells/androidtv/CLAUDE.md).
+// THE BOTTOM RUNG IS THE FLOOR, at every cell count. There is no separate
+// floor constant and no shell may set one lower: 540 lines is the softest
+// picture this game is willing to show, and a device that cannot hold its frame
+// rate there DROPS FRAMES there rather than going softer or slower (the
+// operating points below say why).
 inline constexpr double kScaleLadder[] = { 540.0, 720.0, 1080.0, 1620.0, 2160.0 };
 inline constexpr int kScaleLadderCount =
     (int) (sizeof(kScaleLadder) / sizeof(kScaleLadder[0]));
@@ -364,9 +345,9 @@ inline int rungAtOrBelow(double s, const double* r, int n) {
 //
 // BELOW the anchor, resolution gives way and the rate does not: a party game
 // steered by tilting a phone pays for a halved present rate in input latency,
-// on every player, which is a worse trade than a softer picture. (The 30 Hz mode
-// still exists as a deliberate floor-escape — see the Android shell — but it is
-// not a rung of this ladder.)
+// on every player, which is a worse trade than a softer picture. (`debug.ttp.hz`
+// can still pin 30 Hz on the Android shell, as a measurement knob — it is not a
+// point of this list.)
 //
 // ABOVE the anchor, the rate goes first. A 120 Hz panel with the headroom to
 // drive it should, and spending that headroom on pixels instead is what a fixed
@@ -376,66 +357,23 @@ inline int rungAtOrBelow(double s, const double* r, int n) {
 inline constexpr double kAnchorLines = 1080.0;
 inline constexpr double kAnchorHz = 60.0;
 
-// THE FLOOR ESCAPE, and the cell count that gates it.
-//
-// Below the anchor the list buys pixels and never frames, for the reason above:
-// a phone-tilt party game pays for a halved present rate in input latency, on
-// every player. That holds right down to the bottom rung — and then stops,
-// because a split screen can want a frame the bottom rung cannot deliver. Four
-// cells cost more to SUBMIT than a whole 60 Hz budget however few pixels each
-// one gets, so at the floor the box is not choosing between a locked 60 and a
-// locked 30: it is choosing between a locked 30 and a 34 fps that misses a
-// quarter of its slots. So ONE entry exists below the floor at half rate, and
-// it is the only place in this ladder where the rate gives way first.
-//
-// GATED ON CELLS, NOT ON COST, and that is the whole design. Cost-gating was
-// built first and had to be reverted: solo at the floor measures a gpu p95 of
-// ~21 ms against a 16.7 ms budget while presenting a clean 60 with ZERO skips —
-// the rare expensive frame does not land often enough to cost a slot — so the
-// down-branch has ALWAYS judged solo "late" there, and only the absence of
-// anywhere lower kept it. Anything placed below the floor inherits that
-// misjudgement and steals the solo case. A cell count cannot: one cell never
-// gets the entry, so it cannot fall into it, and when a race ends the entry
-// stops existing and the controller returns to full rate with no special case.
-//
-// THREE rather than four, because a 3-way split is the same shape as a 4-way
-// one: the grid is 2x2 with a hole, so it opens the same four cells' worth of
-// per-cell cost.
-inline constexpr int kScaleEscapeCells = 3;
-
-// THE SPLIT'S SUB-FLOOR RUNGS, at the panel's own rate, offered ONLY where the
-// escape is (cells >= kScaleEscapeCells) and ranked ABOVE the half-rate entry:
-// below the floor, resolution now gives way BEFORE the rate does, which is the
-// ladder's own principle finally applied to the one place it wasn't.
-//
-// MEASURED, and the measurement is why the escape stopped being the answer
-// (docs/perf/androidtv-4p-plan.md, Phases 4-5): on the reference box a 4-way
-// split at the floor delivers 52 fps missing 7 skips/s, while 640x360 holds a
-// LOCKED 60 with zero skips — and with the masked-shadow trade (every car on
-// the blob, taken at four cells first and then everywhere; native/renderer/
-// CLAUDE.md has the car shadow) 853x480 does too. The old single
-// half-rate escape also proved TERMINAL: 540@30's p95 can never pass the climb
-// gate back to 540@60, so a box that fell in stayed for the whole race. The
-// climb OUT of the half-rate entry now lands on a strictly cheaper point
-// (fewer pixels at full rate), which is what un-parks it.
-//
-// Solo can never fall in — same cells gate, same reasoning as the escape: at
-// one cell the entries below the floor do not exist. 432 and 360 divide both
-// TV panels wholly (2160/5, 2160/6); 480 is the measured prize rung and rides
-// a 4/9 ratio — if its scaling ever bands visibly, drop it from this list
-// before softening anything else.
-inline constexpr double kScaleSplitLadder[] = {360.0, 432.0, 480.0};
-inline constexpr int kScaleSplitLadderCount =
-    (int) (sizeof(kScaleSplitLadder) / sizeof(kScaleSplitLadder[0]));
+// NOTHING SITS BELOW THE BOTTOM RUNG, HOWEVER MANY CELLS. A split costs more
+// to submit than solo at any resolution, so a weak box with four cells can miss
+// slots at 540@60 — and that is the accepted trade, because every point below
+// it buys those slots back with something worse. A softer picture is past what
+// the game is willing to show; half rate doubles the picture latency of every
+// player steering by tilt; and any MOVE costs a hitch of its own — on the
+// reference Android box each resolution switch recreates the window swapchain,
+// ~54 ms and one to three skipped frames, so a retreat below the floor costs
+// the very stall it would cure. That box holds a 4-way split at 540@60 across
+// the catalogue with a handful of dropped frames in half an hour of racing. So
+// the rule takes no cell count, and the list is the ladder's on every grid.
 
 // The most operating points a surface can offer: every ladder rung that fits
 // under the ceiling, the ceiling itself, and the rate step above the anchor.
 // Sizes the caller's array AND the recovery window below, so the two cannot
 // disagree about how long the ladder is.
-// Rungs, plus the rate step above the anchor, plus the floor escape below the
-// bottom rung, plus the split's sub-floor rungs above the escape.
-inline constexpr int kScaleMaxPoints =
-        kScaleLadderCount + 3 + kScaleSplitLadderCount;
+inline constexpr int kScaleMaxPoints = kScaleLadderCount + 2;
 
 // How long after a scene build the up-hold stays short (kScaleUpRecoverHoldSec
 // has the why). DERIVED, because what it has to cover is the longest climb the
@@ -481,22 +419,6 @@ inline int operatingPoints(RenderScaleLimits b, RenderScalePoint* out) {
   const int fast = base > 1 ? base - 1 : 1;   // == base where there is no faster rate
   const double anchor = kAnchorLines / (b.baseLines > 0.0 ? b.baseLines : kAnchorLines);
   int m = 0;
-  // The escape sits below everything, at the bottom rung's own pixels — the
-  // backstop for a box that cannot hold 60 at ANY resolution. Above it, the
-  // split's sub-floor rungs spend resolution before rate (their comment has
-  // the measurements); dominance ordering holds (pointAtOrBelow): the
-  // half-rate entry is worse than every full-rate one above it.
-  if (b.cells >= kScaleEscapeCells && n > 0) {
-    out[m++] = RenderScalePoint{r[0], base * 2};
-    if (b.baseLines > 0.0) {
-      for (int i = 0; i < kScaleSplitLadderCount; i++) {
-        const double s = kScaleSplitLadder[i] / b.baseLines;
-        if (s < r[0] - 1e-9 && s >= b.min - 1e-9) {
-          out[m++] = RenderScalePoint{s, base};
-        }
-      }
-    }
-  }
   for (int i = 0; i < n; i++) {
     if (r[i] <= anchor + 1e-9) out[m++] = RenderScalePoint{r[i], base};
   }
@@ -693,41 +615,6 @@ inline RenderScalePoint renderScaleStep(RenderScalePoint current,
       // and this arm can climb back out of a retreat it takes late.
       to = fit.ok ? pointForBudget(at, fit, list, n, limits) : at - 1;
       if (to >= at) to = at - 1;
-      // THE BACKSTOP IS ENTERED FROM THE BOTTOM RUNG ONLY. The fit that
-      // sends a retreat past the split's full-rate rungs straight to the
-      // half-rate entry is a p95 fit taken on a vsync-quantised device, and
-      // it has read a rung that demonstrably holds a locked 60 as one that
-      // cannot (the Android box's 432 and 360, docs/perf/androidtv-frame-map.md
-      // 2026-09-02: an adaptive race spent half its laps at 540@30 by this
-      // path while 432@60 measured 60 fps and 0 skips). The split's rungs
-      // spend resolution before rate by design, so a retreat spends them
-      // first: the entry below the bottom full-rate rung is reachable only
-      // from that rung, where the measurement at that scale is the evidence.
-      if (n > 1 && list[0].divisor > list[1].divisor && to == 0 && at > 1) to = 1;
-    } else if (sinceChangeSec >= std::min(upHold, kScaleEscapeProbeSec) && at + 1 < n
-               && list[at].divisor > list[at + 1].divisor
-               && list[at + 1].scale < list[at].scale - 1e-9) {
-      // THE ESCAPE'S EXIT IS A PROBE BY RIGHT — the second one-way door, and
-      // the same disease the pure-rate arm below cures. Parked at the
-      // half-rate backstop, no other branch can ever fire: the fit needs two
-      // scales and a parked point only ever measures one, the no-data probe
-      // is blocked by a same-scale observation that can never become a fit,
-      // and the raw share gate compares THIS point's measurement against the
-      // next point's budget — a measurement that is itself a downclocked
-      // PACED span (a half-rate point leaves the GPU idle between presents,
-      // and this backend's timer reads the pace — the saturation trap, from
-      // the ledger). Measured on the reference box: the backstop read 14.57
-      // against a 14.20 gate while the sub-floor rung above it demonstrably
-      // held a locked 60. So the one climb that is out of a rate-trade into
-      // STRICTLY FEWER PIXELS at full rate is taken on tenure alone: a wrong
-      // probe is retreated within one evidence window on real present
-      // evidence, so a hopeless box pays one bad window per probe hold
-      // (kScaleEscapeProbeSec, not the lap-sized up-hold) — the bounded
-      // cost every probe in this file already accepts. Only the
-      // backstop -> first sub-floor rung transition matches the guard (the
-      // rate step above the anchor moves at EQUAL pixels and keeps its own
-      // arithmetic arm below).
-      to = at + 1;
     } else if (!fit.ok && !hasPrevObservation(prev) && sinceChangeSec >= upHold) {
       // NOTHING MEASURED AT ANOTHER SCALE YET, so PROBE. A model needs two
       // scales to exist and a scale only moves when something asks it to, so
@@ -755,7 +642,7 @@ inline RenderScalePoint renderScaleStep(RenderScalePoint current,
       // refusing to. Measured in a browser on a 120 Hz laptop: a lobby heavy
       // enough to walk the point down to 1080@60, then every race after it
       // pinned there with the GPU at 15% of a 16.7 ms budget, for the life of
-      // the page. The floor escape is the same shape one rung the other way.
+      // the page.
       //
       // It cannot pump: the climb needs kScaleTargetShare of the budget above
       // and the retreat needs kScaleDownShare of the same budget, so the two

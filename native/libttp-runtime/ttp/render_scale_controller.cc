@@ -67,10 +67,6 @@ bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
     if (limits.max > 0.0) point_.scale = limits.max;
   }
 
-  // The cell count is the frame builder's, not the shell's, so it reaches the
-  // rule from here rather than through the poll's arguments — see cells().
-  limits.cells = cells_;
-
   // A SCENE SEEN BEFORE STARTS WHERE IT SETTLED — once its frames have said
   // how many cells it has, since a solo memory is the wrong answer for a
   // split of the same track. The window describes the old buffer and goes,

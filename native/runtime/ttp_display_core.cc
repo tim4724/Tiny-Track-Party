@@ -836,11 +836,11 @@ int ttp_display_frame(double dtSeconds) {
     if (!g_disp || !g_disp->built) return 0;
     DisplayCore& d = *g_disp;
     const uint32_t nCells = (uint32_t) d.cells.size();
-    // THE GRID IS THIS SIDE'S FACT, and the render-scale rule needs it for one
-    // decision: whether the floor escape exists (ttp/render_scale.h,
-    // kScaleEscapeCells). Declared per frame rather than plumbed through
-    // ttp_display_scale_poll's arguments, because a shell asked for a cell count
-    // would be answering with a number it got from here.
+    // THE GRID IS THIS SIDE'S FACT, and the render-scale controller keys its
+    // scene memory on it (ttp/render_scale_controller.h, cells()). Declared per
+    // frame rather than plumbed through ttp_display_scale_poll's arguments,
+    // because a shell asked for a cell count would be answering with a number
+    // it got from here.
     ttp::rt::renderScale().cells((int) nCells);
     // buildFrame is inside the shell's per-frame span (the ttp:render atrace
     // marker) but outside the renderer's kProfTotal; posting it into the

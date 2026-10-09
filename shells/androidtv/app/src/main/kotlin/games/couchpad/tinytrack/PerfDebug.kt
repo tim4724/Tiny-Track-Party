@@ -163,11 +163,10 @@ object PerfDebug {
         }
 
         // 30 presents every OTHER vsync — a locked, evenly-paced 30 fps whose
-        // doubled budget the adaptive scaler spends on resolution (~1600x900+
-        // where 60 Hz affords ~900 lines). The sim still ticks at 60, so only
-        // the picture's latency doubles; whether that trade should ever be
-        // AUTOMATIC is a product call parked until a real-phone tilt drive
-        // says what the added latency feels like. 0 or unset = every vsync.
+        // doubled budget the adaptive scaler spends on resolution. The sim
+        // still ticks at 60, so only the picture's latency doubles. A
+        // measurement pin only: on a 60 Hz panel the rule itself never halves
+        // the rate (ttp/render_scale.h). 0 or unset = every vsync.
         //
         // The readout FOLLOWS this knob: the divisor is declared to it
         // (`ttp_perf_pacing`), so a pinned 30 on an idle box reads GOOD against a

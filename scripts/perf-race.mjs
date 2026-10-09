@@ -250,8 +250,7 @@ function report(rows) {
 
 // Where an ADAPTIVE run spent its seconds: one row per render size, in the
 // order first reached. The timeline below keeps only the last size, so without
-// this a run that climbed or retreated reports a few seconds. The half-rate
-// backstop shows as the row's mean fps.
+// this a run that climbed or retreated reports a few seconds.
 function operatingPoints(rows) {
   const points = new Map();
   for (const r of rows) {

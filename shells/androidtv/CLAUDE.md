@@ -579,14 +579,12 @@ racing line in the pack they started behind, in their own split-screen cells.
 place 7 — is deleted along with the reason for it. It also collapsed the cells to
 one, so it could never price a real 2- or 4-player split.)
 
-At 60 Hz on that view the adaptive scale settles at the FLOOR with its p95
-already brushing the budget — the rule being right, not stuck. 720p60 was
-never near on the picture that matters. NOTE THE FLOOR MOVED: it was 360 lines
-when the rungs were fractions of the ceiling, and is 540 now that they are line
-counts, so a re-measurement on this view is owed and 60 Hz will look worse for
-it. That is the trade the ladder was chosen for — 540 lines is the softest
-picture the game is willing to show, and a box that cannot hold 60 Hz there is
-asking a frame-rate question, which is what the 30 Hz mode above answers.
+**540@60 IS THE FLOOR AT EVERY CELL COUNT, and a box that cannot hold it drops
+frames there** (`ttp/render_scale.h` has the rule and why). The shell fact
+behind it: every resolution switch resizes this window's buffer, which recreates
+the Vulkan swapchain — ~54 ms on the Filament thread, one to three skipped
+frames — so a move costs a hitch of its own. 720p60 at four players is not near
+on the picture that matters.
 
 **THE PRESENT RATE IS THE RULE'S NOW, and `debug.ttp.hz` is a PIN over it**
 (`pinVsyncInterval`, not a setter — a setter would be overwritten a second
@@ -594,8 +592,8 @@ later and the knob would look broken). `ttp_display_scale_poll` answers a
 resolution AND a divisor as one operating point, ordered around a desired
 1080@60: below it resolution gives way and the rate does not, above it the rate
 goes first, so a 120 Hz panel with the headroom to drive it will. This box has no
-such headroom and sits below the anchor, so on it the rate is still effectively
-fixed at the panel's own — which is what the paragraph below measured.
+such headroom and sits below the anchor, so on it the rate stays at the panel's
+own.
 
 **A PIN IS DECLARED AS A PERIOD, NOT AS A DIVISOR** (`rulePanelMs`). The rule
 owns the divisor half of the point and multiplies the period it is given by the
@@ -605,62 +603,10 @@ rule picks a divisor of its own; leave the pin out and a pinned 30 Hz box is
 priced against a 16.7 ms budget and shredded down the ladder to hold a rate
 nobody asked for.
 
-**THE SPLIT GOES BELOW THE FLOOR IN RESOLUTION NOW, NOT RATE (2026-08-24).**
-`ttp/render_scale.h`'s sub-floor rungs (360/432/480 at the panel's own rate,
-split-gated like the escape) plus the masked-shadow trade (every car on the
-blob) locked an adaptive 4P race at 768x432@60 on this box that day, with the
-half-rate backstop kept underneath for boxes that cannot hold 60 anywhere.
-The escape's EXIT is a probe by right (the backstop's own reading is a
-downclocked paced span and can never pass a share gate — the second one-way
-door, cured like the rate step's). The paragraphs below describe the
-half-rate backstop, which still exists and still gates on cells.
-
-**2026-09-02: the lock was lost to two shadow commits, and won back twice
-over.** The deck's far ribbon (`native/renderer/CLAUDE.md`, the per-cell LOD)
-took the straight's heavy seconds from ~21 ms to ~14.6 at 432, and two
-retreat rules in `render_scale.h` (the backstop is entered from the bottom
-rung only; its exit probes on `kScaleEscapeProbeSec`) stopped the rule
-charging 28 s at 30 fps for one late second. Read per second, an adaptive 4P
-race on this box is now at 60 fps for 128 of 150 s (100 s at 640x360, 28 at
-768x432) and at the backstop for 8. The per-second reading is
-`perf-race --timeline`; a run median cannot see any of this, and the ledger
-(`docs/perf/androidtv-frame-map.md`) carries why.
-
-**THE FLOOR ESCAPE SHIPPED, 2026-08-21, and it is what makes a 4-way split
-watchable.** Four cells cost more to SUBMIT than a whole 60 Hz budget however few
-pixels each one gets, so at the bottom rung this box was not choosing between a
-locked 60 and a locked 30 — it was choosing between a locked 30 and a 34 fps
-missing a quarter of its slots. `ttp/render_scale.h`'s `kScaleEscapeCells` puts
-ONE point below the bottom rung, at that rung's own pixels and half the rate, and
-offers it only to a surface split three ways or more. Measured on the box,
-adaptive, tidepool, every arm at 960x540:
-
-| players | before | after |
-|---|---|---|
-| 1 | 60 fps, 0 skips/s | unchanged |
-| 2 | 59 fps, 1 skips/s | unchanged |
-| 3 | 44 fps, 14 skips/s | unchanged — see below |
-| 4 | 34 fps, 25 skips/s | **30.0 fps, 0 skips/s** |
-
-**Gated on CELLS and not on cost**, which is the whole design: solo at the floor
-reads a gpu p95 of ~21 ms against a 16.7 budget while presenting a clean 60 with
-zero skips, so the down-branch has always judged it "late" there and only the
-absence of anywhere lower kept it. The cost-gated version was built first and
-stole exactly that case.
-
-**Three players is offered the escape and does not take it**, because
-`presentsOnCadence` vetoes a retreat while the device is demonstrably
-delivering. That is the two rules composing, not a gap: the entry exists
-wherever the grid is 2x2, and the presents decide whether the box needs it.
-
-**`debug.ttp.hz 30` presents every OTHER vsync instead** — a locked,
-evenly-paced 30 with the sim still ticking at 60 (only picture latency
-doubles; see DisplayHost.setVsyncInterval). On the realistic view it holds a
-locked 30 two rungs sharper than what 60 Hz affords, and it is the playable
-configuration on this box today. Whether the sharper-but-doubled-latency
-trade should ever be AUTOMATIC is a product decision parked until a real
-phone drives it over the prod relay — until then it is an adb knob, not a
-shipped behaviour.
+**`debug.ttp.hz 30` pins every OTHER vsync** — a locked, evenly-paced 30 with
+the sim still ticking at 60 (only picture latency doubles; see
+`DisplayHost.pinVsyncInterval`). It is an adb knob for measurement, not the
+rule: on a 60 Hz panel the rule never halves the rate.
 
 **THE READOUT FOLLOWS THAT PIN**, because the shell tells it to:
 `DisplayHost.declarePacing` hands `ttp_perf_pacing` the panel's own present

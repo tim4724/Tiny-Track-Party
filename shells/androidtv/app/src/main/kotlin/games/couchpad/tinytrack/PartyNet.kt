@@ -416,9 +416,10 @@ class PartyNet(
      * stream through here and a per-frame line would bury its own exceptions in
      * repeats, exactly as the input path's once-per-session latch avoids.
      *
-     * The threshold clears one 30 Hz frame with margin, because 30 Hz is this
-     * box's own 4P mode: a frame that waited out the tick it landed in is
-     * ORDINARY and must not log, and anything past that is not.
+     * The threshold clears one skipped vsync (~33 ms) with margin, because a
+     * dropped frame at the 540 floor is ordinary at four players: a frame that
+     * waited out the tick it landed in must not log, and anything past that is
+     * not.
      *
      * IT DOES NOT COVER THE FASTLANE, and that is a gap rather than a decision.
      * [Fastlane] hops its own inbound frames to the main thread (`main.post` in
