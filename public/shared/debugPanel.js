@@ -11,8 +11,8 @@
 //     type 'flag'   → checkbox, serialized as key=1 / absent
 //     type 'int'    → number input, absent when blank, clamped to min/max
 //     type 'select' → dropdown with a "default" blank choice, absent when blank
-//     type 'range'  → slider with a numeric readout; value: default, min/max/step,
-//           optional format(n)→label, optional live(n) called on every drag (and
+//     type 'range'  → slider with −/+ step buttons and a numeric readout;
+//           value: default, min/max/step, optional format(n)→label, optional live(n) called on every drag (and
 //           once at init with the prefilled value) so the control can tune a live
 //           value with NO reload. Serialized only when it differs from `value`, so
 //           the URL stays clean at the default and a reload still restores any set value.
@@ -107,19 +107,36 @@ export function initDebugPanel(schema, { title = 'Debug' } = {}) {
       const raw = current.get(def.key);
       const val = clamp(raw != null && raw !== '' && Number.isFinite(parseFloat(raw)) ? parseFloat(raw) : def0);
 
+      row.classList.add('dbg__row--range');
       const wrap = el('div', 'dbg__range');
       const input = el('input', 'dbg__slider');
       input.type = 'range';
       input.min = def.min; input.max = def.max; input.step = step;
       input.value = String(val);
       const out = el('output', 'dbg__readout', label(val));
-      input.addEventListener('input', () => {
+      const changed = () => {
         const n = parseFloat(input.value);
         out.textContent = label(n);
         if (def.live) def.live(n);
         refreshPreview();
-      });
+      };
+      input.addEventListener('input', changed);
+      // − / + nudge by one step. After the slider in the DOM so it stays the
+      // label's first control (a click on the label text focuses it, never −);
+      // CSS `order` puts − back on the left.
+      const nudge = (dir, text) => {
+        const b = el('button', 'dbg__nudge ' + (dir < 0 ? 'dbg__nudge--dec' : 'dbg__nudge--inc'), text);
+        b.type = 'button';
+        b.setAttribute('aria-label', (dir < 0 ? 'Decrease ' : 'Increase ') + def.label);
+        b.addEventListener('click', () => {
+          input.value = String(clamp(parseFloat((parseFloat(input.value) + dir * step).toFixed(dec))));
+          changed();
+        });
+        return b;
+      };
       wrap.appendChild(input);
+      wrap.appendChild(nudge(-1, '−'));
+      wrap.appendChild(nudge(1, '+'));
       wrap.appendChild(out);
       row.appendChild(wrap);
       // Push the prefilled value into the page once, so a value carried in by the

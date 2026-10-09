@@ -69,11 +69,22 @@
 }
 .dbg__check { width: 1.15rem; height: 1.15rem; accent-color: var(--brand); }
 
-/* Range row: slider fills the space, a fixed-width readout keeps the number from
-   shifting the layout as it changes. */
-.dbg__range { display: flex; align-items: center; gap: 0.55rem; flex: 1; min-width: 0; }
-.dbg__slider { flex: 1; min-width: 0; accent-color: var(--brand); cursor: pointer; }
+/* Range row: the controls take a line of their own under the label (the panel
+   is too narrow to share one); the slider fills it, and a fixed-width readout
+   keeps the number from shifting the layout as it changes. */
+.dbg__row--range { flex-wrap: wrap; gap: 0.25rem 0.8rem; }
+.dbg__range { display: flex; align-items: center; gap: 0.55rem; flex: 1 0 100%; min-width: 0; }
+.dbg__slider { flex: 1; min-width: 0; accent-color: var(--brand); cursor: pointer; order: 1; }
+.dbg__nudge {
+  flex: none; width: 1.6rem; height: 1.6rem; padding: 0;
+  border: 2px solid var(--ink); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--ink);
+  font: inherit; font-weight: 800; line-height: 1; cursor: pointer;
+}
+.dbg__nudge--dec { order: 0; }
+.dbg__nudge--inc { order: 2; }
 .dbg__readout {
+  order: 3;
   flex: none; min-width: 5.5rem; text-align: right;
   color: var(--ink-2); font-weight: 700; font-variant-numeric: tabular-nums;
   font-size: 0.78rem;
