@@ -3,7 +3,8 @@
 //
 // Two answers, both from geometry so no table names a model:
 //   * the stripe's HALF-WIDTH is a share of the paint's own half-width, so a
-//     narrow body (Rumble's nose) wears a narrow stripe;
+//     narrow body (Rumble) wears a narrower stripe — down to a floor, because
+//     the plain share left Rumble's too thin to read;
 //   * the SPOILER is left bare. A spoiler is paint at the REAR that spans the
 //     paint's full width; the stripe skips everything behind its front edge
 //     AND above its underside, which keeps the rear deck below it striped.
@@ -23,6 +24,7 @@ namespace ttp {
 namespace rt {
 
 constexpr float SEAT_STRIPE_SHARE = 0.27f;  // of the paint's half-width
+constexpr float SEAT_STRIPE_MIN_HALF = 0.05f;
 constexpr float SEAT_STRIPE_HALF = 0.07f;   // when a model cannot be measured
 
 struct SeatStripe {
@@ -59,7 +61,7 @@ inline SeatStripe measure_seat_stripe(const std::vector<GlbMeshNode>& nodes) {
         }
     }
     if (maxX <= 0) return out;
-    out.half = SEAT_STRIPE_SHARE * maxX;
+    out.half = std::max(SEAT_STRIPE_MIN_HALF, SEAT_STRIPE_SHARE * maxX);
     // Full-width paint in the rear half is a spoiler.
     float wingZ = 1e9f, wingY = 1e9f;
     for (const GlbMeshPrim& p : body->prims) {

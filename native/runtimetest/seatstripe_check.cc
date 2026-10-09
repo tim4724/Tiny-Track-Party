@@ -78,7 +78,7 @@ int main(int argc, char** argv) {
   if (!rumble.empty()) {
     const SeatStripe s = ttp::rt::measure_seat_stripe(rumble);
     expect(s.cutZ > 1.0f, "vehicle-vintage-racer: no spoiler, no cut");
-    expect(s.half < 0.6f * coupe, "vehicle-vintage-racer: a narrower stripe than the coupe's");
+    expect(s.half < 0.8f * coupe, "vehicle-vintage-racer: a narrower stripe than the coupe's");
   }
   std::printf("seatstripe: %d checks, %d failed\n", checked, failed);
   return failed ? 1 : 0;
