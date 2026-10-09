@@ -67,7 +67,8 @@
 // nothing at all.
 material {
     name : TtpVglb,
-    // The per-vertex fog factor (ttp_fog.inc); .yzw unused.
+    // .x the per-vertex fog factor (ttp_fog.inc); .yzw the vertex's MODEL-space
+    // position, which only the seat marks read.
     variables : [ fog ],
     requires : [
         // the base colour atlas coordinate
@@ -100,7 +101,11 @@ material {
         { type : float, name : roughnessFactor },
         { type : float, name : normalScale },
         { type : float, name : aoStrength },
-        { type : sampler2d, name : gradeLut }
+        { type : sampler2d, name : gradeLut },
+        // — ours —
+        // A player's car wears its seat colour (ttpSeatMarks): rgb linear, a 1.
+        // a 0 (every instance's default) is everything else in the kit.
+        { type : float4, name : seatMark }
     ]
 }
 
@@ -116,18 +121,22 @@ fragment {
         // Unlit adds `emissive` to `baseColor`; all the shading goes in the
         // former so nothing else in the pipeline touches it.
         material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
+        vec3 base = ttpGlbBaseColor().rgb;
+        if (materialParams.seatMark.a > 0.0) {
+            base = ttpSeatMarks(base, getUV0(), variable_fog.yzw, materialParams.seatMark.rgb);
+        }
         // emissive.w = 0 → no second exposure; both terms are pre-exposed.
         material.emissive = vec4(ttpFogMix(ttpGrade(ttpMatteShade(
-                ttpGlbBaseColor().rgb, getWorldGeometricNormalVector())), variable_fog.x), 0.0);
+                base, getWorldGeometricNormalVector())), variable_fog.x), 0.0);
     }
 }
 
 vertex {
     #include "ttp_fog.inc"
 
-    // The fog factor is the only thing this stage exists for: per vertex, so the
-    // fragment pays a mix instead of a sqrt and an exp. See ttp_fog.inc.
+    // The fog factor is what this stage exists for: per vertex, so the fragment
+    // pays a mix instead of a sqrt and an exp. See ttp_fog.inc.
     void materialVertex(inout MaterialVertexInputs material) {
-        material.fog = vec4(ttpFogFactor(material.worldPosition.xyz), 0.0, 0.0, 0.0);
+        material.fog = vec4(ttpFogFactor(material.worldPosition.xyz), getPosition().xyz);
     }
 }

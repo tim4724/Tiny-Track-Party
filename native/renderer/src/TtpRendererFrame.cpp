@@ -2960,6 +2960,7 @@ bool TtpRenderer::frame(const TtpFrameInput& input, bool draw) {
     // edge. A mix REPLACES what is under it, so the aura's alpha is held low
     // enough for the shadow to ghost through it (renderCars).
     std::vector<DeckDecal> auraDecals;
+    updateSeatMarks(input, nCars);
     renderCars(input, cars, nCars, carPosW, auraDecals);
     mProfile[kProfCars] = ttpNowMs() - tMark; tMark += mProfile[kProfCars];
     renderWorld(input, cars, nCars, carPosW, auraDecals);

@@ -17,3 +17,36 @@ vec4 ttpGlbBaseColor() {
     // untextured glTF material gets a white 1x1 here and rides on its factor.
     return materialParams.baseColorFactor * texture(materialParams_baseColorMap, uv);
 }
+
+// THE SEAT MARKS: a player's seat colour as a centre stripe over the body paint
+// and on the wheels' rims. CPU cars wear none (the renderer decides which car is
+// whose; vglb.mat only reads the colour).
+//
+// The atlas is flat swatches (generated/kit_colors.h), so the swatch a texel
+// samples says what the surface IS:
+//   - body PAINT is the atlas's 0.5..0.75 band, whichever column a model is
+//     painted in; column 13 of that band is the GLASS.
+//   - the RIM is the wheel's slate (5) and white (9) swatches inside 0.062 of
+//     the wheel node's origin. The bodies use the same two swatches for lights
+//     and trim, but never that close to their own origin.
+// `p` is the MODEL-space position: the stripe is centred on the car's own axis
+// and the rim circle on the wheel's, whatever the node transforms do.
+const float TTP_STRIPE_HALF = 0.07;
+const float TTP_RIM_R = 0.062;
+vec3 ttpSeatMarks(vec3 base, highp vec2 uv, vec3 p, vec3 seat) {
+    // Derivatives first: the branches below split on the SWATCH, which is not
+    // uniform across a pixel quad, and a derivative inside one is undefined.
+    float r = length(p.yz);
+    float wx = fwidth(p.x), wr = fwidth(r);
+    float col = floor(uv.x * 16.0);
+    if (uv.y >= 0.5 && uv.y < 0.75 && col != 13.0) {
+        float m = 1.0 - smoothstep(TTP_STRIPE_HALF - wx, TTP_STRIPE_HALF + wx, abs(p.x));
+        // The band ramps light to dark down v, like every Kenney paint; the
+        // stripe keeps that ramp so it reads as paint, not as a sticker.
+        return mix(base, seat * clamp(1.12 - (uv.y - 0.5) * 1.5, 0.72, 1.12), m);
+    }
+    if (uv.y >= 0.75 && (col == 5.0 || col == 9.0)) {
+        return mix(base, seat, 1.0 - smoothstep(TTP_RIM_R - wr, TTP_RIM_R + wr, r));
+    }
+    return base;
+}

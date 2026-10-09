@@ -131,6 +131,11 @@ public:
         // the shader multiplies by it unconditionally — so it has to start as
         // something, and zero would collapse every uv to the atlas origin.
         mi->setParameter("baseColorUvMatrix", math::mat3f());
+        // No seat colour until the renderer gives one (updateSeatMarks). An
+        // older vglb.filamat without the parameter must not panic here.
+        if (mat == mMaterial && mat->hasParameter("seatMark")) {
+            mi->setParameter("seatMark", math::float4{ 0.0f });
+        }
         return mi;
     }
 
@@ -389,6 +394,7 @@ void TtpRenderer::dropAsset(gltfio::FilamentAsset*& a) {
     if (!a) return;
     mScene->removeEntities(a->getEntities(), a->getEntityCount());
     mBodyRest.erase(a);
+    mSeatMarks.erase(a);
     mAssetLoader->destroyAsset(a);
     a = nullptr;
 }
@@ -600,6 +606,42 @@ void TtpRenderer::buildCarGhost(uint32_t c) {
     }
     mCarGhostAssets[c] = ga;
     pumpTextures();
+}
+
+// A player's car wears its seat colour — a centre stripe on the paint and the
+// wheel rims (ttp_glb.inc has how the shader finds both); a CPU car wears none.
+// A PLAYER is a car some race VIEW follows: CPUs own no cell, which is the same
+// rule the name tags use. An overview (lobby orbit, gallery, preview) follows
+// nobody and marks nobody.
+//
+// The body and its wheels share one material instance per asset, and the merged
+// wheel groups draw with the original's, so one write per asset reaches all of
+// it. Written only on change (mSeatMarks): this runs every frame.
+void TtpRenderer::updateSeatMarks(const TtpFrameInput& input, uint32_t nCars) {
+    if (!mGlbMaterial || !mTrack || !mGlbMaterial->hasParameter("seatMark")) return;
+    const TtpViewInput* views = ttp_frame_views(&input);
+    const bool overview = (input.flags & TTP_FRAME_OVERVIEW) != 0;
+    for (uint32_t c = 0; c < nCars && c < mCarAssets.size(); c++) {
+        gltfio::FilamentAsset* a = mCarAssets[c];
+        if (!a || c >= mTrack->carColors.size()) continue;
+        bool player = false;
+        for (uint32_t v = 0; v < input.viewCount && !overview; v++) {
+            if (views[v].car == (int32_t) c) player = true;
+        }
+        const uint32_t abgr = mTrack->carColors[c];
+        const uint32_t rgb = ((abgr & 0xff) << 16) | (abgr & 0xff00) | ((abgr >> 16) & 0xff);
+        const uint32_t want = player ? (0x1000000u | rgb) : 0u;
+        const auto it = mSeatMarks.find(a);
+        if ((it == mSeatMarks.end() ? 0u : it->second) == want) continue;
+        mSeatMarks[a] = want;
+        const float4 mark = player ? float4{ srgbToLinear(rgb), 1.0f } : float4{ 0.0f };
+        gltfio::FilamentInstance* inst = a->getInstance();
+        if (!inst) continue;
+        MaterialInstance* const* mis = inst->getMaterialInstances();
+        for (size_t i = 0; i < inst->getMaterialInstanceCount(); i++) {
+            if (mis[i]->getMaterial() == mGlbMaterial) mis[i]->setParameter("seatMark", mark);
+        }
+    }
 }
 
 // Regroup the whole field into merged draws: per CAR, per distinct MESH (the

@@ -671,6 +671,9 @@ private:
     // compositing order).
     void renderCars(const TtpFrameInput& input, const TtpCarInput* cars, uint32_t nCars,
             std::vector<filament::math::float3>& carPosW, std::vector<DeckDecal>& auraDecals);
+    // Players' cars wear their seat colour (vglb's seatMark, ttp_glb.inc's
+    // ttpSeatMarks); CPU cars wear none. Ahead of renderCars.
+    void updateSeatMarks(const TtpFrameInput& input, uint32_t nCars);
     void renderWorld(const TtpFrameInput& input, const TtpCarInput* cars, uint32_t nCars,
             const std::vector<filament::math::float3>& carPosW, std::vector<DeckDecal>& auraDecals);
     // render() and advance() are one body: `draw` is where they part.
@@ -1916,6 +1919,11 @@ private:
     std::unordered_map<const filament::gltfio::FilamentAsset*, RestPose> mBodyRest;
     void snapshotRestPose(filament::gltfio::FilamentAsset* a);
     void restoreRestPose(filament::gltfio::FilamentAsset* a);
+    // The seatMark each body's material instances were last given, as
+    // 0x1RRGGBB (0 = none), so a frame writes only what changed. Keyed by the
+    // ASSET because the parameter lives on its instances and a parked body
+    // keeps it into its next slot; absent means what a fresh parse has (none).
+    std::unordered_map<const filament::gltfio::FilamentAsset*, uint32_t> mSeatMarks;
     // Parsed kit geometry, keyed by the bytes' FNV. Engine-lifetime — the kit's
     // bytes never change, so a cup's four scenes parse each model once.
     std::unordered_map<uint64_t, std::vector<ttp::rt::GlbMeshNode>> mGlbMeshCache;
