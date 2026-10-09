@@ -272,8 +272,8 @@ than a list. It is **dev-only** and reached by nothing on the shipping path, and
 can never move a number the shipping game draws with.
 
 **The kit field** is the other half of the same question. The showroom stages what
-the game DRAWS; the field stands what it could have drawn — all ~585 models of the
-three Kenney kits — on flat ground beyond the track, each at the size it would
+the game DRAWS; the field stands what it could have drawn — every model of the
+fetched Kenney kits — on flat ground beyond the track, each at the size it would
 ship and under the same light. It is a BROWSER, and it is 3D on purpose: a sheet
 of Kenney's preview renders says what a model is, and only the field says whether
 it belongs beside what already ships.

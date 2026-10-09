@@ -9,8 +9,8 @@
 // What crosses is what a shell genuinely draws or names for itself: the biome
 // NAME (the race-music pool key, the ?biome= override list) and two colours for
 // two 2D widgets the renderer does not draw — the HUD boost chip's stroke and
-// the music gallery's per-cup swatch. Plus the scenery model list, because
-// fetching bytes is a platform job.
+// the music gallery's per-cup swatch. Plus the model lists (scenery, props,
+// a track's set pieces), because fetching bytes is a platform job.
 //
 // If you find yourself wanting another getter to reproduce part of the look in
 // the DOM, the look belongs in the renderer instead.
@@ -32,6 +32,7 @@ export async function loadBiomes() {
   const hill = m.cwrap('ttp_theme_hill_color', 'number', ['string', 'number']);
   const models = m.cwrap('ttp_theme_scenery_models', 'string', ['string']);
   const propModels = m.cwrap('ttp_theme_prop_models', 'string', ['string']);
+  const setModels = m.cwrap('ttp_theme_set_models', 'string', ['string']);
   const showModels = m.cwrap('ttp_theme_showcase_models', 'string', []);
   const showPropModels = m.cwrap('ttp_theme_showcase_prop_models', 'string', []);
   const inventory = m.cwrap('ttp_showcase_inventory_json', 'string', []);
@@ -58,6 +59,9 @@ export async function loadBiomes() {
     // The trackside prop GLBs, same slot contract: index i is handed back as
     // prop<i>.glb. Empty for a biome that runs no props.
     propModels: (biome) => JSON.parse(propModels(biome)),
+    // The set-piece GLBs a TRACK places, same slot contract as set<i>.glb.
+    // Keyed by the track id, not the biome: a forced ?biome= keeps them.
+    setModels: (trackId) => JSON.parse(setModels(trackId)),
     // The same list for the ASSET GALLERY's showroom (ttp_display_showcase):
     // every biome's scenery at once, and deliberately not a function of the
     // biome — these bytes are fetched before the build picks a look.

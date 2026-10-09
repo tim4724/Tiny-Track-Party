@@ -231,6 +231,11 @@ enum SceneStaging {
         for (slot, name) in sceneryModels.enumerated() {
             want.append(["name": "scenery\(slot).glb", "tag": name])
         }
+        // The track's own set pieces, same slot contract (set<i>.glb).
+        let setModels = TTP.arr(ttp_theme_set_models(trackId)).compactMap { $0 as? String }
+        for (slot, name) in setModels.enumerated() {
+            want.append(["name": "set\(slot).glb", "tag": name])
+        }
         want.append(contentsOf: carWants(roster))
         for name in propModels {
             want.append(["name": "\(name).glb", "tag": name])

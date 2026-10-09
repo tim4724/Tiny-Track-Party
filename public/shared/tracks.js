@@ -213,6 +213,14 @@ const BOXES = {
   skysnake:   boxRows(0.096, 0.692)   // auto-placed: the grid straight, then the flat past the toy loop
 };
 
+// Set pieces — `set`, per track: the big landmarks that make one circuit look
+// unlike the rest of its cup (the biome's scatter is the same on all four). Each
+// names a composed model (scripts/gen-set-pieces.mjs) and places it by `u`
+// (fraction of the lap) and `lat` (world units off the centreline; + is the
+// track's RIGHT), turned `yaw` degrees from the track's heading there; `y`
+// lifts or sinks it, `scale` sizes it. Visual only: the sim never sees one, so a
+// piece the road passes through has to leave the deck and its berm clear.
+//
 // Registry of named, previewable tracks. Selected in the display via ?track=<key>.
 export const TRACKS = {
   // Beach Cup — SEEDED easy circuits (scan-seeds `easy` profile: sweeping corners,
@@ -223,7 +231,10 @@ export const TRACKS = {
   },
   cove: {
     name: 'Cove', waypoints: GEN_TRACKS.cove,
-    oils: genFurn('cove').oils, pads: genFurn('cove').pads, boxes: genFurn('cove').boxes
+    oils: genFurn('cove').oils, pads: genFurn('cove').pads, boxes: genFurn('cove').boxes,
+    set: [
+      { model: 'set-pirate-ship', u: 0.93, lat: 33, yaw: 180, y: -0.5, scale: 1.25 }  // aground in the shallows
+    ]
   },
   driftwood: {
     name: 'Driftwood', waypoints: GEN_TRACKS.driftwood,

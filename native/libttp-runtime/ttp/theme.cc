@@ -522,6 +522,19 @@ Theme resolve_theme(const char* biomeName, const char* trackId) {
   // identical wherever this runs. Track ids are ASCII, so hashing the UTF-8
   // bytes is what the JS charCodeAt loop did.
   if (t.hasWater) t.water.shoreSeed = fnv1a(track);
+
+  // The set pieces, deduped into slots in first-appearance order — the order
+  // the shell fetches them in (ttp_theme_set_models).
+  if (const TrackDef* def = trackId ? find_track_def(trackId) : nullptr) {
+    for (int i = 0; i < def->nSet; i++) {
+      const SetDef& d = def->set[i];
+      uint32_t slot = 0;
+      while (slot < t.set.models.size() && t.set.models[slot] != d.model) slot++;
+      if (slot == t.set.models.size()) t.set.models.push_back(d.model);
+      t.set.pieces.push_back({ slot, (float) d.u, (float) d.lat,
+                               (float) (d.yaw * M_PI / 180.0), (float) d.y, (float) d.scale });
+    }
+  }
   return t;
 }
 

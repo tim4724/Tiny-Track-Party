@@ -838,6 +838,11 @@ void TtpRenderer::applyTheme(TrackBin& out, const ttp::rt::Theme& th) {
     }
 
     out.lmKinds = th.landmarks;
+    out.setModelCount = (uint32_t) th.set.models.size();
+    out.setPieces.clear();
+    for (const ttp::rt::SetPiece& p : th.set.pieces) {
+        out.setPieces.push_back({ p.slot, p.u, p.lat, p.yaw, p.y, p.scale });
+    }
     out.structureCol = th.structure;
 
     out.groundKind = th.groundKind;
@@ -2069,6 +2074,7 @@ void TtpRenderer::releaseStatic() {
     for (auto& m : mRocketFlames) destroyMesh(m);
     for (auto*& a : mSceneryAssets) dropAsset(a);
     for (auto*& a : mPropAssets) dropAsset(a);
+    for (auto*& a : mSetAssets) dropAsset(a);
     for (auto*& a : mKitAssets) dropAsset(a);
     dropAsset(mBoxAsset);
     dropAsset(mBoxFadeAsset);
@@ -2103,6 +2109,9 @@ void TtpRenderer::releaseStatic() {
     mPropAssets.clear();
     mPropInstances.clear();
     mPropSpins.clear();
+    mSetAssets.clear();
+    mSetInstances.clear();
+    mSetFeet.clear();
     mKitAssets.clear();
     mBoxXf.clear();
     mGroundInst = nullptr; // a scene instance; sceneInstance() owns the teardown

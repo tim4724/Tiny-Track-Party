@@ -15,7 +15,7 @@ import java.nio.ByteBuffer
 
 @Suppress("FunctionName", "unused")
 object Ttp {
-    /** Registers all 243 natives via JNI_OnLoad; a mismatch fails here. */
+    /** Registers all 244 natives via JNI_OnLoad; a mismatch fails here. */
     fun load() { System.loadLibrary("ttp_runtime_android") }
 
     external fun ttp_add_bot(h: Int, idJson: ByteArray?, caution: Double, laneBias: Double, aiSeed: Int, statsJsonOrNull: ByteArray?)
@@ -223,6 +223,7 @@ object Ttp {
     external fun ttp_theme_hill_color(biomeName: ByteArray?, index: Int): Int
     external fun ttp_theme_prop_models(biomeName: ByteArray?): ByteArray?
     external fun ttp_theme_scenery_models(biomeName: ByteArray?): ByteArray?
+    external fun ttp_theme_set_models(trackId: ByteArray?): ByteArray?
     external fun ttp_theme_showcase_models(): ByteArray?
     external fun ttp_theme_showcase_prop_models(): ByteArray?
     external fun ttp_track_build_json(descriptorJson: ByteArray?, laps: Int, seed: Int): ByteArray?

@@ -36,7 +36,7 @@ void TtpRenderer::buildScenery(const TrackBin& tb) {
             const float dx = x - s.pos.x, dz = z - s.pos.z;
             if (dx * dx + dz * dz < half * half) return false;
         }
-        return true;
+        return !inSetFoot(x, z, 1.0f);
     };
 
     struct Placement { uint32_t model; float x, z, s, syJit, yaw, sink; };
@@ -323,7 +323,7 @@ void TtpRenderer::buildProps(const TrackBin& tb) {
             const float lim = pr + spot.z + CLEAR;
             if (dx * dx + dz * dz < lim * lim) { clash = true; break; }
         }
-        if (clash) continue;
+        if (clash || inSetFoot(p.x, p.z, pr + CLEAR)) continue;
         kept.push_back(i);
         // A model that moves registers its footprint for the clash test but
         // no height, so no baked disc is drawn under it.
@@ -379,7 +379,7 @@ void TtpRenderer::buildClutter(const TrackBin& tb) {
             const float dx = x - s.pos.x, dz = z - s.pos.z;
             if (dx * dx + dz * dz < half * half) return false;
         }
-        return true;
+        return !inSetFoot(x, z, 0.5f);
     };
     int geoms = 0;
     const auto put = [&](Prim p, const mat4f& m, uint32_t hex, float shade) {
@@ -755,7 +755,7 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
         smoothNormals.emplace_back(idx, normalize(nm * normalize(localDir)));
     };
     const auto clearSpot = [&](float x, float z, float m) {
-        if (!isClear(x, z, m)) return false;
+        if (!isClear(x, z, m) || inSetFoot(x, z, m)) return false;
         for (const auto& p : placed) {
             const float dx = x - p.x, dz = z - p.z, lim = m + p.r;
             if (dx * dx + dz * dz < lim * lim) return false;
@@ -1540,6 +1540,75 @@ void TtpRenderer::buildLandmarks(const TrackBin& tb) {
     }
 }
 
+// The track's SET PIECES (theme.set): composed landmark models
+// (scripts/gen-set-pieces.mjs) placed where the TRACK says, not where a stream
+// rolls. Each stands in the track's frame at its `u`: local +Z along the
+// direction of travel, +X the track's LEFT (-lat — the right-handed choice, see
+// TrackBin::Sample::basis), on the ground. Instanced like the props, so the
+// dressing merge bakes them the same way.
+void TtpRenderer::buildSetPieces(const TrackBin& tb) {
+    if (tb.setPieces.empty()) return;
+    mSetAssets.assign(tb.setModelCount, nullptr);
+    mSetInstances.assign(tb.setModelCount, {});
+    for (uint32_t m = 0; m < tb.setModelCount; m++) {
+        size_t count = 0;
+        for (const auto& p : tb.setPieces) if (p.slot == m) count++;
+        if (!count) continue;
+        const std::string name = "set" + std::to_string(m) + ".glb";
+        mSetAssets[m] = loadInstancedProp(name.c_str(), count, mSetInstances[m]);
+        if (!mSetAssets[m]) continue;
+        for (auto* inst : mSetInstances[m]) {
+            // The buildScenery metal fix: the shared matte read on every piece.
+            MaterialInstance* const* mis = inst->getMaterialInstances();
+            for (size_t i = 0; i < inst->getMaterialInstanceCount(); i++) {
+                mis[i]->setParameter("metallicFactor", 0.0f);
+                mis[i]->setParameter("roughnessFactor", 1.0f);
+            }
+            // UNLIKE the scatter, a set piece CASTS into the sun bake: twenty
+            // units of ship over a contact disc reads as pasted on, and the bake
+            // is paid once per track, never per frame. The merged run inherits
+            // the caster layer (bakeMergedRun).
+            setShadows(inst->getEntities(), inst->getEntityCount(), true, false);
+        }
+    }
+    auto& tcm = mEngine->getTransformManager();
+    std::vector<size_t> next(tb.setModelCount, 0);
+    for (const auto& p : tb.setPieces) {
+        if (p.slot >= mSetAssets.size() || !mSetAssets[p.slot]) continue;
+        const TrackBin::Sample f = tb.frameAt(p.u * tb.length);
+        const float3 t = f.tangent();
+        const float yaw = std::atan2(t.x, t.z) + p.yaw;
+        const float x = f.pos.x + f.lat.x * p.lat, z = f.pos.z + f.lat.z * p.lat;
+        const mat4f xf = mat4f::translation(float3{ x, tb.groundY + p.y, z })
+                * mat4f::rotation(yaw, float3{ 0, 1, 0 })
+                * mat4f::scaling(float3{ p.scale });
+        tcm.setTransform(tcm.getInstance(
+                mSetInstances[p.slot][next[p.slot]++]->getRoot()), xf);
+        // What it covers, from the composition's own bounds.
+        const filament::Aabb bb = mSetAssets[p.slot]->getBoundingBox();
+        const float cx = 0.5f * (bb.min.x + bb.max.x) * p.scale;
+        const float cz = 0.5f * (bb.min.z + bb.max.z) * p.scale;
+        const float ax = std::cos(yaw), az = -std::sin(yaw);   // local +X in the world
+        const float wx = x + ax * cx - az * cz, wz = z + az * cx + ax * cz;
+        const float hx = 0.5f * (bb.max.x - bb.min.x) * p.scale;
+        const float hz = 0.5f * (bb.max.z - bb.min.z) * p.scale;
+        mSetFeet.push_back({ wx, wz, ax, az, hx, hz });
+        // One clearing round the whole piece: the relief is flattened under
+        // it, so a ship never stands on a slope with a corner in the air.
+        mTerrainFlats.push_back({ wx, wz, std::sqrt(hx * hx + hz * hz) + 1.0f });
+    }
+}
+
+bool TtpRenderer::inSetFoot(float x, float z, float margin) const {
+    for (const SetFoot& f : mSetFeet) {
+        const float dx = x - f.x, dz = z - f.z;
+        const float u = dx * f.ax + dz * f.az;     // along the piece's +X
+        const float v = -dx * f.az + dz * f.ax;    // along its +Z
+        if (std::fabs(u) < f.hx + margin && std::fabs(v) < f.hz + margin) return true;
+    }
+    return false;
+}
+
 // Instanced prop pool (item boxes, bananas): one shared GLB, `count` instances,
 // each posed independently via its root. Unused pool entries park underground.
 gltfio::FilamentAsset* TtpRenderer::loadInstancedProp(const char* assetName,
@@ -2150,6 +2219,9 @@ void TtpRenderer::buildDressingMerge() {
     }
     for (size_t m = 0; m < mPropAssets.size() && m < mPropInstances.size(); m++) {
         mergeInstancedSet(mPropAssets[m], mPropInstances[m], false);
+    }
+    for (size_t m = 0; m < mSetAssets.size() && m < mSetInstances.size(); m++) {
+        mergeInstancedSet(mSetAssets[m], mSetInstances[m], false);
     }
     mergeInstancedSet(mConeAsset, mConeInstances, true);
 }

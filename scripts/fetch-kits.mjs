@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// fetch-kits.mjs — put the three Kenney kits on disk so the asset gallery's KIT
+// fetch-kits.mjs — put the Kenney kits on disk so the asset gallery's KIT
 // FIELD can stand every model in them, not just the ones the game draws.
 //
 // The game ships a HAND-PICKED handful of the kits' models under
@@ -65,6 +65,14 @@ const KITS = [
     // game already ships for the snow trees (they came from here), which is
     // also what a model copied out of this cache should reference.
     colormap: 'Textures/holiday-colormap.png'
+  },
+  {
+    id: 'pirate', label: 'Pirate Kit', version: '2.1',
+    url: 'https://kenney.nl/media/pages/assets/pirate-kit/e6d4bb1525-1771333093/kenney_pirate-kit.zip',
+    sha256: '667ed2caf92954ddb98f7b7cede831fe99ab75063c26b25e23d32715bee9c943',
+    models: 'Models/GLB format/*.glb', previews: 'Previews/*.png',
+    // The holiday kit's reason: a third palette under the same relative URI.
+    colormap: 'Textures/pirate-colormap.png'
   }
 ];
 
@@ -121,8 +129,8 @@ async function extract(kit) {
   // unzip -d makes ONE level of directory, so make both ends of the path first.
   await mkdir(path.join(dir, 'models'), { recursive: true });
   await mkdir(path.join(dir, 'previews'), { recursive: true });
-  // -j flattens the zip's folders, which is the whole point: the three kits keep
-  // their models under three different paths and the browser wants one shape.
+  // -j flattens the zip's folders, which is the whole point: the kits keep
+  // their models under different paths and the browser wants one shape.
   await run('unzip', ['-qoj', zip, kit.models, '-d', path.join(dir, 'models')]);
   await run('unzip', ['-qoj', zip, kit.previews, '-d', path.join(dir, 'previews')]);
 

@@ -1463,6 +1463,16 @@ private:
     // Trackside props (prop<i>.glb): scattered set dressing.
     std::vector<filament::gltfio::FilamentAsset*> mPropAssets;
     std::vector<std::vector<filament::gltfio::FilamentInstance*>> mPropInstances;
+    // The track's set pieces (set<i>.glb): composed landmarks the TRACK places
+    // (buildSetPieces), merged and baked with the props. mSetFeet is what each
+    // one covers on the ground — an oriented rectangle, because a fort is
+    // twenty units across and three deep, and a circle round it would clear a
+    // whole verge — which every later placement pass keeps out of.
+    std::vector<filament::gltfio::FilamentAsset*> mSetAssets;
+    std::vector<std::vector<filament::gltfio::FilamentInstance*>> mSetInstances;
+    struct SetFoot { float x, z, ax, az, hx, hz; };  // centre, +X axis, half extents
+    std::vector<SetFoot> mSetFeet;
+    bool inSetFoot(float x, float z, float margin) const;
     // The "spin" node of every placed prop that has one — turned about its own
     // origin each frame (buildProps). The toy train's rails are its only user.
     std::vector<utils::Entity> mPropSpins;
@@ -1982,6 +1992,7 @@ private:
     void kitFieldApron(Mesh& ground, float groundY, float tile, uint32_t col) const;
     void buildProps(const TrackBin& tb);
     void buildLandmarks(const TrackBin& tb);
+    void buildSetPieces(const TrackBin& tb);
     void buildClutter(const TrackBin& tb);
     void buildStructures(const TrackBin& tb);
     void setMeshShadows(Mesh& m, bool cast, bool receive);

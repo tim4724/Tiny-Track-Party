@@ -178,7 +178,7 @@ test('ttp_glb_image_uris: the scenery models name the textures the shell must pr
   }
   assert.deepEqual(
     [...seen].sort(),
-    ['Textures/colormap.png', 'Textures/holiday-colormap.png'],
+    ['Textures/colormap.png', 'Textures/holiday-colormap.png', 'Textures/pirate-colormap.png'],
     'the kit references a texture nothing stages'
   );
 

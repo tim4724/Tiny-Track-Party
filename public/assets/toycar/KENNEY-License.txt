@@ -28,8 +28,9 @@
 	• Mastodon:  mastodon.gamedev.place/@kenney
 		------------------------------
 
-	This folder also contains models from Kenney's Nature Kit (2.3) and
-	Holiday Kit (1.0) — same author, same CC0 license as above.
+	This folder also contains models from Kenney's Nature Kit (2.3),
+	Holiday Kit (1.0) and Pirate Kit (2.1) — same author, same CC0
+	license as above.
 
 	Which file came from which kit (and under which original name) is
 	SOURCES.json, beside this one.

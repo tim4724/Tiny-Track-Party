@@ -398,7 +398,9 @@ identically (both are commented where they bite, in `TtpRendererBakes.cpp`):
     `render/Display.js`). Cars and item props go over by their own file names;
     the biome's scenery goes over as `scenery<i>.glb` in the slot order
     `ttp_theme_scenery_models` answers, and the trackside props as
-    `prop<i>.glb` per `ttp_theme_prop_models` — the index IS the contract, and
+    `prop<i>.glb` per `ttp_theme_prop_models`, and the track's set pieces as
+    `set<i>.glb` per `ttp_theme_set_models` (keyed by the TRACK id, not the
+    biome) — the index IS the contract, and
     a missing GLB is skipped, not fatal. Textures ride the URIs inside the
     GLBs plus the kit's shared `Textures/colormap.png`. The HUD's 2D item
     icons are shared assets too: one SVG per item id under

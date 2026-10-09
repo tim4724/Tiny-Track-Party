@@ -444,6 +444,9 @@ export class Display {
     scModels.forEach((m, i) => want.push({ name: `scenery${i}.glb`, tag: m }));
     const prModels = this._showcase ? biomes.showcasePropModels() : biomes.propModels(biome);
     prModels.forEach((m, i) => want.push({ name: `prop${i}.glb`, tag: m }));
+    // The track's own set pieces — a function of the TRACK, so the showroom
+    // (which builds a stand-in track) takes the same path and gets none.
+    biomes.setModels(trackId).forEach((m, i) => want.push({ name: `set${i}.glb`, tag: m }));
     // The KIT FIELD's models (dev; empty in play). There are hundreds of them,
     // in the order the layout comes back in and the order the chrome names them.
     this._kitModels.forEach((m, i) => want.push({ name: `kit${i}.glb`, tag: m }));

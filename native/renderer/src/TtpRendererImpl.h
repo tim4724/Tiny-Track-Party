@@ -351,6 +351,10 @@ struct TtpRenderer::TrackBin {
     float prDensity = 0;
     struct PropStamp { uint32_t slot; float w, s0, s1; bool face; };
     std::vector<PropStamp> prScatter;
+    // The track's set pieces (theme.set), bound as set<i>.glb by slot.
+    uint32_t setModelCount = 0;
+    struct SetPiece { uint32_t slot; float u, lat, yaw, y, scale; };
+    std::vector<SetPiece> setPieces;
     uint32_t lmSeed = 0;                 // landmark stream (51966-FNV)
     std::vector<uint32_t> lmKinds;       // 0 gnome, 1 doghouse, 2 picnic
     float clDensity = 0;                 // clutter (only 'flower' ported)

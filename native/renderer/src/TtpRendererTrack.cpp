@@ -1356,6 +1356,9 @@ bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
     buildOils(tb);   // the cones and signs; the slick itself is a road stamp
     phases.mark("w:water+oil");
     buildStructures(tb);
+    // The track's set pieces before anything seeded: they are authored, so
+    // they win their ground, and every pass after keeps out of mSetFeet.
+    buildSetPieces(tb);
     // Landmarks FIRST: their spots carve flat clearings into the terrain field
     // (mTerrainFlats), which the scatter and the ground mesh then sample. The
     // three streams are independently seeded, so this order moves nothing.

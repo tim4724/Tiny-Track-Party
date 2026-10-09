@@ -108,6 +108,9 @@ Theme showcase_theme(const char* biomeName, const char* trackId) {
   // The PALETTE, whole and unmodified — the picked biome's sky, ground, road,
   // hills, light rig, water and ice. Nothing below touches any of it.
   Theme t = resolve_theme(biomeName, trackId);
+  // Set pieces belong to a track, and the showroom stages none (its shell
+  // fetches the showcase lists only).
+  t.set = {};
 
   // Started EMPTY, not from the picked biome's own list, and that matters: the
   // scenery<i>.glb slot order falls out of this walk, and the shell fetches

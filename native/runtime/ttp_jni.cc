@@ -1176,6 +1176,11 @@ jbyteArray n_ttp_theme_scenery_models(JNIEnv* env, jclass, jbyteArray a0) {
     return toBytes(env, ttp_theme_scenery_models(s0.get()));
 }
 
+jbyteArray n_ttp_theme_set_models(JNIEnv* env, jclass, jbyteArray a0) {
+    CStr s0(env, a0);
+    return toBytes(env, ttp_theme_set_models(s0.get()));
+}
+
 jbyteArray n_ttp_theme_showcase_models(JNIEnv* env, jclass) {
     (void) env;
     return toBytes(env, ttp_theme_showcase_models());
@@ -1582,6 +1587,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_theme_hill_color", "([BI)I", (void*) n_ttp_theme_hill_color },
     { "ttp_theme_prop_models", "([B)[B", (void*) n_ttp_theme_prop_models },
     { "ttp_theme_scenery_models", "([B)[B", (void*) n_ttp_theme_scenery_models },
+    { "ttp_theme_set_models", "([B)[B", (void*) n_ttp_theme_set_models },
     { "ttp_theme_showcase_models", "()[B", (void*) n_ttp_theme_showcase_models },
     { "ttp_theme_showcase_prop_models", "()[B", (void*) n_ttp_theme_showcase_prop_models },
     { "ttp_track_build_json", "([BII)[B", (void*) n_ttp_track_build_json },

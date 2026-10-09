@@ -223,6 +223,10 @@ object SceneStaging {
         sceneryModels.forEachIndexed { slot, model ->
             want.put(JSONObject().put("name", "scenery$slot.glb").put("tag", model))
         }
+        // The track's own set pieces, same slot contract (set<i>.glb).
+        TtpJson.strings(Ttp.ttp_theme_set_models(TtpJson.arg(trackId))).forEachIndexed { slot, model ->
+            want.put(JSONObject().put("name", "set$slot.glb").put("tag", model))
+        }
         carWants(roster, want)
         for (model in PROP_MODELS) {
             want.put(JSONObject().put("name", "$model.glb").put("tag", model))

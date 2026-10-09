@@ -591,6 +591,19 @@ batch them (depth-bucketed and winding-split). The rules that keep it honest:
   the table does not know keeps the instanced, live-lit draw.
 - The item-box fade twins stay unmerged: they hold PER-INSTANCE materials.
 
+**A track's SET PIECES ride the same path** (`buildSetPieces`, the track's
+`set` list in `public/shared/tracks.js`): composed GLBs instanced like props,
+so they merge, bake and get a far form with no renderer path of their own. Two
+things differ from the scatter, both deliberate. They CAST into the sun bake
+(the baked run inherits the caster layer) — the bake is per track, so it costs
+build time, never frame time. And everything seeded after them keeps out of
+their oriented footprints (`mSetFeet`): they are authored, so they win their
+ground. What a piece costs at draw time is its vertices in the cells that see
+it, so a heavy one belongs where few cells look at once, and is priced on the
+box's 4P heavy seconds like any other geometry. A composed model whose node
+names point at two meshes is REFUSED by the merge and draws live-lit with
+nothing to say so, which is why `scripts/lib/glb-compose.mjs` renames them.
+
 **What a draw cut buys is a fact about the device.** On a fill-bound frame (the
 Android box) it steadies the tail and leaves the median; on a submission-bound one
 (the Apple TV) it moves the median. Price it per platform.

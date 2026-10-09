@@ -171,6 +171,21 @@ struct PlaneSpec {  // trackPayload.js DEF_PLANE
 struct BalloonSpec { std::vector<uint32_t> panels; float y = 44, size = 6; };
 struct IceSpec { uint32_t sheet = 0xa9d7ee, frost = 0xf0f8fd; };
 
+// The track's SET PIECES (public/shared/tracks.js `set`): composed landmark
+// models placed by the track, not scattered by the biome. A post-corpus channel
+// like props, and a function of the TRACK alone — the same pieces stand
+// whatever biome the inspector forces. Floats for this file's reason.
+struct SetPiece {
+  uint32_t slot = 0;          // index into SetSpec::models
+  float u = 0, lat = 0;       // lap fraction; world units off the centreline, + = right
+  float yaw = 0;              // RADIANS about +y from the track's heading there
+  float y = 0, scale = 1;     // lift off the ground; uniform size
+};
+struct SetSpec {
+  std::vector<std::string> models;  // set<i>.glb slot order (the scenery rule)
+  std::vector<SetPiece> pieces;
+};
+
 // One scenery model's recolour, resolved against that model's authored glTF
 // materials — gltfio names its material instances after the glTF material, so
 // the renderer applies these by name.
@@ -205,6 +220,7 @@ struct Theme {
   BalloonSpec balloon;
   bool hasIce = false;
   IceSpec ice;
+  SetSpec set;
   // One entry per `scenery.models` index, filled by resolve_model_tints() once
   // the shell has handed over that model's bytes. Empty until then.
   std::vector<std::vector<MatTint>> modelTints;

@@ -97,6 +97,14 @@ export const ASSET_CREDITS = [
     covers: ['public/assets/toycar/KENNEY-License.txt'],
   },
   {
+    section: '3D models',
+    title: 'Pirate Kit 2.1 (the Cove set pieces)',
+    author: 'Kenney',
+    license: 'CC0 1.0',
+    url: 'https://kenney.nl/assets/pirate-kit',
+    covers: ['public/assets/toycar/KENNEY-License.txt'],
+  },
+  {
     section: 'Sound effects',
     title: 'Car Engine Loop (Car sound effects pack)',
     author: 'ggbotnet',

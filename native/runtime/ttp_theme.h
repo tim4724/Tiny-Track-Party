@@ -78,6 +78,12 @@ TTP_ABI const char* ttp_theme_scenery_models(const char* biomeName);
  * array for a biome that runs no props. */
 TTP_ABI const char* ttp_theme_prop_models(const char* biomeName);
 
+/* The SET PIECE GLBs this TRACK places (public/shared/tracks.js `set`), same
+ * JSON array and slot contract — handed back as "set<i>.glb". A function of the
+ * track and not the biome: a forced ?biome= keeps the track's pieces. Empty
+ * array for a track with none, or an id nobody ships. */
+TTP_ABI const char* ttp_theme_set_models(const char* trackId);
+
 /* ---- the asset gallery ---------------------------------------------------
  *
  * The SHOWCASE world (ttp/showcase.h): one biome's palette carrying every

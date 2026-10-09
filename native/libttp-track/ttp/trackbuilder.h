@@ -55,6 +55,18 @@ struct FurnDef {   // oil / pad / box / pole descriptor
 
 struct BananaDef { double u, lat; };
 
+// A SET PIECE: one composed landmark model (scripts/gen-set-pieces.mjs) the
+// RENDERER places on this track. Not builder input — it rides here for the
+// reason `name` and `cup` do below: the catalogue is where it is authored.
+struct SetDef {
+  const char* model;  // GLB base name under public/assets/toycar
+  double u;           // where along the lap, [0, 1) — the furniture's `u`
+  double lat;         // signed offset from the centreline, world units
+  double yaw;         // degrees about +y, from the track's own heading there
+  double y;           // lift (+) or sink (-) from the ground
+  double scale;       // uniform; 1 = as composed
+};
+
 struct TrackDef {
   const char* id;
   // THE TWO FIELDS BELOW ARE NOT BUILDER INPUT. Nothing in this library reads
@@ -81,6 +93,8 @@ struct TrackDef {
   const FurnDef* poles; int nPoles;
   const BananaDef* bananas; int nBananas;
   const FurnDef* kickers; int nKickers;   // u only: a kicker spans the road
+  // Renderer-only, like name and cup: nothing in this library reads it.
+  const SetDef* set; int nSet;
 };
 
 // A CUP: a curated, ordered set of tracks, and the catalogue's own arrangement.

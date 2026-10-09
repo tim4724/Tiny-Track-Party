@@ -234,9 +234,13 @@ test('the asset showroom stages every scenery GLB in the kit', async () => {
   // renderer always loads, or one of the staged scenery models.
   const CARS = ['vehicle-racer-low', 'vehicle-speedster', 'vehicle-racer', 'vehicle-vintage-racer'];
   const PROPS = ['item-box', 'item-banana', 'item-cone', 'vehicle-monster-truck'];
+  // A track's SET PIECES are the one channel keyed by the track, not the biome.
+  const setModels = M.cwrap('ttp_theme_set_models', 'string', ['string']);
+  const { TRACKS } = await import('../public/shared/tracks.js');
+  const placed = Object.keys(TRACKS).flatMap((id) => JSON.parse(setModels(id)));
   const kit = fs.readdirSync(path.join(ROOT, 'public/assets/toycar'))
     .filter((f) => f.endsWith('.glb')).map((f) => f.slice(0, -4));
-  const drawnBy = new Set([...CARS, ...PROPS, ...staged, ...stagedProps]);
+  const drawnBy = new Set([...CARS, ...PROPS, ...staged, ...stagedProps, ...placed]);
   assert.deepEqual(kit.filter((m) => !drawnBy.has(m)), [],
     'a GLB in public/assets/toycar is drawn by nothing — delete it, or plant it');
 
