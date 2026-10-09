@@ -129,15 +129,12 @@
   <section id="lobby" class="hidden">
     <!-- Join ticket — ONE sticker card with the wordmark as its masthead:
          TINY TRACK PARTY! over QR + the join URL (code highlighted in the
-         accent colour by renderJoinUrl in Net.js) + the scan hint as its last
-         line. It's a <button>: click (or Enter/Space) copies the full join
-         link, confirmed by the #toast. -->
+         accent colour by renderJoinUrl in Net.js), with the scan hint as its
+         own sticker hanging under it. It's a <button>: click (or Enter/Space)
+         copies the full join link, confirmed by the #toast. -->
     <div class="ticket-rail">
-      <!-- aria-describedby reaches the scan hint: a button's children are
-           presentational, so the hint became unreadable the moment it moved
-           inside the card. A DESCRIPTION is still computed from the referenced
-           subtree, and the hint is the one line that says what the card is
-           for. -->
+      <!-- aria-describedby reaches the scan hint, the one line that says what
+           the card is for. -->
       <button type="button" class="ticket" id="joinbox" aria-label="Copy join link" aria-describedby="tagline">
         <span class="wordmark ticket__wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></span>
         <canvas id="qr"></canvas>
@@ -147,14 +144,10 @@
           <div class="ticket__url ticket__wait">Loading…</div>
           <div class="ticket__url" id="joinurl"></div>
         </div>
-        <!-- Scan hint — the ticket's own last line for the whole lobby
-             (joining stays possible until the race starts). Inside the card
-             rather than hanging under it: as a free-floating sticker it
-             overlapped the first seat on a 720p board. -->
-        <div class="tagline" id="tagline">
-          <div class="tagline__main">Scan the code with your phone!</div>
-        </div>
       </button>
+      <!-- Scan hint — up for the whole lobby (joining stays possible until
+           the race starts). -->
+      <div class="tagline" id="tagline">Scan the code with your phone!</div>
     </div>
 
     <!-- Race rail — tonight's race over the long game, one column. The pick

@@ -106,13 +106,14 @@ html {
   padding: var(--safe-y) var(--safe-x) var(--safe-y-b);
 }
 
-/* Left rail — the join ticket, which carries its own scan hint. The rail
-   spans the band and CENTRES the ticket rather than stretching it: the QR is
-   what sets the card's height, and a card grown past its content is just a
-   field of white with a small QR marooned in it. */
+/* Left rail — the join ticket with the scan hint hanging under it. The rail
+   spans the band and CENTRES the pair rather than stretching the ticket: the
+   QR is what sets the card's height, and a card grown past its content is just
+   a field of white with a small QR marooned in it. */
 .ticket-rail {
   grid-area: ticket; align-self: stretch;
-  display: flex; align-items: center;
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  gap: 14px;
 }
 /* Join ticket — the wordmark masthead over QR + URL, one sticker card.
    A <button>: the whole ticket copies the join link. */
@@ -292,21 +293,26 @@ html {
   box-shadow: var(--shadow-pop);
 }
 
-/* Scan hint — the ticket's own last line, under the join URL. Not a sticker of
-   its own: as a floating card it needed the join URL's whole width beside the
-   seat dock, and on a 720p board it landed on the first seat. Hidden until
-   there's a code to scan (the QR's .is-in), then it fades in with it. */
+/* Scan hint — a quiet white sticker of its own under the ticket, as on both TV
+   shells. In flow, so it can never land on the seat dock: the dock has its own
+   column. Hidden until there's a code to scan (the QR's .is-in), then it fades
+   in; its box is held from the start, so the ticket never re-centres. It
+   wraps at the ticket's width where the TV shells overhang on one line: a
+   browser window can be far squatter than a TV, and one line would overflow
+   the rail there. */
 .tagline {
   max-width: 100%;
   text-align: center;
-  color: var(--ink-2);
+  font-family: var(--font-display); font-weight: 600;
+  font-size: clamp(14px, 1.15vw, 22px); line-height: 1.15;
+  color: var(--ink); background: var(--surface);
+  border: 3px solid var(--ink); border-radius: var(--r);
+  padding: 0.55em 1.1em;
+  box-shadow: var(--shadow-pop);
+  rotate: -2deg;
   opacity: 0; transition: opacity 0.4s ease;
 }
-.ticket:has(#qr.is-in) .tagline { opacity: 1; }
-.tagline__main {
-  font-family: var(--font-display); font-weight: 600;
-  font-size: clamp(13px, 1.05vw, 18px); line-height: 1.15;
-}
+.ticket-rail:has(#qr.is-in) .tagline { opacity: 1; }
 
 /* "Cups" — the couch's star shelf, at the bottom of the right rail under the
    "Up next" card (whose pick these stars dress). ONE sticker card of
@@ -1091,10 +1097,8 @@ html.chrome-idle #corner-btns { opacity: 0; pointer-events: none; }
    (the .slap class) since their element never re-enters the DOM. All of it
    only exists under prefers-reduced-motion: no-preference.
 
-   The scan hint has no slap of its own: it's a line INSIDE the ticket now, so
-   it arrives with the card and only its QR-gated fade is left (see .tagline).
-   Slapping a line of text inside a card that is itself slapping reads as a
-   glitch, not as a second sticker. */
+   The scan hint has no slap: it is held back until the QR lands, which is
+   long after the slap, so its arrival is the fade (see .tagline). */
 @media (prefers-reduced-motion: no-preference) {
   .welcome__wordmark, .welcome__tag, .welcome__btn,
   .ticket, .cup-slot__pick, .lobby-foot {

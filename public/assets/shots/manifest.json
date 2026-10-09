@@ -357,12 +357,12 @@
       "file": "androidtv/lobby-track.webp",
       "w": 1280,
       "h": 720,
-      "bytes": 60084,
-      "capturedAt": "2026-10-04T15:05:46.649Z",
-      "gitSha": "157b8bdc",
-      "deviceName": "Television_4K_Android_TV",
-      "deviceKind": "emulator",
-      "deviceId": "emulator-5642"
+      "bytes": 58694,
+      "capturedAt": "2026-10-09T15:18:16.088Z",
+      "gitSha": "f5a23a64",
+      "deviceName": "google Google TV Streamer",
+      "deviceKind": "device",
+      "deviceId": "192.168.1.150:5555"
     },
     {
       "scenario": "lobby-track",

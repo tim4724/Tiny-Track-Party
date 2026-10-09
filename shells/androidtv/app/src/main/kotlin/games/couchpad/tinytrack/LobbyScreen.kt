@@ -21,7 +21,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.clickable
@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.contentDescription
@@ -284,6 +285,17 @@ private fun InfoBadge(modifier: Modifier = Modifier, onClick: () -> Unit) {
 @Composable
 private fun JoinTicket(state: GameState) {
     val open = state.joinUrl.isNotEmpty()
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        TicketCard(state, open)
+        ScanHint(open)
+    }
+}
+
+@Composable
+private fun TicketCard(state: GameState, open: Boolean) {
     StickerCard(rotation = -1.2f, padding = TICKET_PAD) {
         Column(
             Modifier.fillMaxWidth(),
@@ -356,17 +368,36 @@ private fun JoinTicket(state: GameState) {
                     }
                 }
             }
-
-            // HELD BACK UNTIL THERE IS SOMETHING TO SCAN (`.ticket:has(#qr.is-in)
-            // .tagline`): a board that says "scan the code" over a blank white
-            // square is instructing the room to scan nothing. Its box stays
-            // reserved, so the card does not resize when it appears.
-            StickerText(
-                Copy.scanPrompt, size = 18.dp,
-                color = if (open) Tokens.ink2 else Color.Transparent,
-                modifier = Modifier.widthIn(max = 380.dp),
-            )
         }
+    }
+}
+
+/**
+ * The scan hint: its own quiet white sticker hanging under the ticket, as on
+ * tvOS (`LobbyView.scanHint`) and the web (`.tagline`).
+ *
+ * HELD BACK UNTIL THERE IS SOMETHING TO SCAN (`.ticket-rail:has(#qr.is-in)
+ * .tagline`): a board that says "scan the code" over a blank white square is
+ * instructing the room to scan nothing. Hidden through a `graphicsLayer` alpha,
+ * which keeps its box (so the ticket does not re-centre when it appears) and,
+ * unlike `Modifier.alpha`, does not clip the hard drop.
+ */
+@Composable
+private fun ScanHint(open: Boolean) {
+    val shape = RoundedCornerShape(Sticker.radius)
+    Box(
+        Modifier
+            // One line, overhanging the ticket rather than wrapping (tvOS's
+            // `fixedSize()`).
+            .wrapContentWidth(unbounded = true)
+            .graphicsLayer { alpha = if (open) 1f else 0f }
+            .tilt(-2f)
+            .hardShadow(Sticker.popShadow, shape)
+            .background(Tokens.surface, shape)
+            .stickerOutline(Sticker.border, shape)
+            .padding(vertical = 13.dp, horizontal = 24.dp),
+    ) {
+        StickerText(Copy.scanPrompt, size = 22.dp, weight = Fonts.semibold, color = Tokens.ink)
     }
 }
 

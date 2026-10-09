@@ -154,9 +154,9 @@ struct LobbyView: View {
         HStack(alignment: .center, spacing: Self.railGap) {
             // Each rail sizes its own card (see `LobbyViewMetrics`) rather than
             // being framed here: the scan hint is deliberately allowed to hang
-            // wider than the ticket it belongs to, exactly as the web lets it
-            // (`max-width: 120%`), and a frame at this level would wrap it
-            // instead.
+            // wider than the ticket it belongs to, as Android's does, and a
+            // frame at this level would wrap it instead. (The web wraps it at
+            // the ticket's width, because its window can be squatter than a TV.)
             JoinTicket(joinURL: state.joinURL, roomCode: state.roomCode, qr: state.joinQR)
             // THE DOCK IS BESIDE THE RAILS, NOT BELOW THEM — the web's
             // `grid-template-areas: "ticket dock race"`. It used to be the second
@@ -431,11 +431,8 @@ private struct JoinTicket: View {
     }
 
     /// A quiet white sticker hanging under the ticket for the whole lobby —
-    /// joining stays possible until the race starts.
-    ///
-    /// The web positions this absolutely so its pre/post-pick toggle cannot move
-    /// the card; there is no toggle here (it is always up), so it is simply the
-    /// next thing in the stack.
+    /// joining stays possible until the race starts. The web (`.tagline`) and
+    /// Android (`LobbyScreen.ScanHint`) hang the same sticker under their ticket.
     private var scanHint: some View {
         Text(Copy.scanPrompt)
             .font(Fonts.display(22, weight: .semibold))
