@@ -13,11 +13,11 @@ export function displayDebugFields({ maxPlayers, carNames, trackList, itemIds, b
   // default and the "· default" readout marker — reading it live inside format()
   // would wrongly equal the dragged value.
   const steerDefault = sim.getNativeSteerExpo();
-  // The camera knobs: each setter takes -1 as "authored" and answers the
-  // authored value, which is the slider's default. At that default the slider
-  // sends -1 back, so the rig runs the authored constants exactly rather than a
-  // degrees round trip.
-  const camKnob = (set, step, unit) => {
+  // The camera and curb knobs: each setter takes -1 as "authored" and answers
+  // the authored value, which is the slider's default. At that default the
+  // slider sends -1 back, so the engine runs the authored constants exactly
+  // rather than a round trip through the slider.
+  const knob = (set, step, unit) => {
     const value = set(-1);
     const isDefault = (n) => Math.abs(n - value) < step / 10;
     return { type: 'range', min: unit.min, max: unit.max, step, value,
@@ -58,15 +58,28 @@ export function displayDebugFields({ maxPlayers, carNames, trackList, itemIds, b
     // Live: tilts every chase cam by raising or lowering the eye; the distance
     // behind the car stays put. Degrees below level.
     { key: 'campitch', label: 'Camera angle', hint: 'chase pitch, degrees · live',
-      ...camKnob((n) => scene.display.debugChasePitch(n), 0.5, degrees) },
+      ...knob((n) => scene.display.debugChasePitch(n), 0.5, degrees) },
     // Live: the rig the cam eases to while YOUR car is a monster truck
     // (?item=monster makes every box roll one): its pitch, and how much further
     // back than the race rig it sits.
     { key: 'monsterpitch', label: 'Monster angle', hint: 'chase pitch as a monster truck · live',
-      ...camKnob((n) => scene.display.debugMonsterPitch(n), 0.5, degrees) },
+      ...knob((n) => scene.display.debugMonsterPitch(n), 0.5, degrees) },
     { key: 'monsterback', label: 'Monster distance', hint: 'extra pullback as a monster truck · live',
-      ...camKnob((n) => scene.display.debugMonsterBack(n), 0.05,
+      ...knob((n) => scene.display.debugMonsterBack(n), 0.05,
         { min: 0, max: 1.5, format: (n) => '+' + n.toFixed(2) }) },
+    // Live: the curb's feel (the WALL_* constants in ttp/game.cc).
+    { key: 'curbspeed', label: 'Curb speed', hint: 'scrape cap, share of top speed · live',
+      ...knob((n) => sim.debugCurbSpeed(n), 0.01,
+        { min: 0.1, max: 1, format: (n) => Math.round(n * 100) + '%' }) },
+    { key: 'curbturn', label: 'Curb turn', hint: 'how fast the wall turns the car along it · live',
+      ...knob((n) => sim.debugCurbTurn(n), 0.5,
+        { min: 0, max: 20, format: (n) => n.toFixed(1) + '/s' + (n === 0 ? ' · hangs' : '') }) },
+    { key: 'curbturnmax', label: 'Curb turn max', hint: 'fastest the wall may swing the car · live',
+      ...knob((n) => sim.debugCurbTurnMax(n), 0.05,
+        { min: 0.25, max: 10, format: (n) => Math.round(n * 180 / Math.PI) + '°/s' }) },
+    { key: 'curbimpact', label: 'Curb impact', hint: 'speed lost per radian the wall turns (0 = only the cap bills) · live',
+      ...knob((n) => sim.debugCurbImpact(n), 0.1,
+        { min: 0, max: 4, format: (n) => n.toFixed(1) }) },
     { section: 'Track' },
     { key: 'track', label: 'Preselect', type: 'select',
       options: trackList.map((t) => ({ value: t.id, label: t.name })) },

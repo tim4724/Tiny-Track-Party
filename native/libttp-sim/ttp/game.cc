@@ -18,8 +18,25 @@ static const double BRAKE_DECEL = 5.8;
 static const double TURN_RATE = 1.16;
 static const double STEER_EXPO = 1.25;
 static const double MAX_HEADING = 1.25;
-static const double WALL_SPEED_FRAC = 0.28;
+// The speed cap while scraping the curb, as a fraction of vmax.
+static const double WALL_SPEED_FRAC = 0.45;
 static const double WALL_DECEL = 20.0;
+// While pinned, the wall turns the car along itself, so a car never hangs
+// nose-first on the curb: the angle into the wall eases at WALL_TURN_RATE (1/s)
+// until the car points WALL_PEEL (rad) away from it. Contact only, into-wall
+// only: on open road the car still holds its heading (no grip). An ease swings
+// hardest on the first frame of contact, so WALL_TURN_MAX (rad/s) bounds it: a
+// big hit turns at a steady pace, a small one still eases.
+static const double WALL_TURN_RATE = 3.0;
+static const double WALL_TURN_MAX = 1.5;
+static const double WALL_PEEL = 0.05;
+// The turn is what an impact costs: speed falls by exp(-WALL_IMPACT * angle)
+// over the angle the wall turns the car through. Summed per frame that is exact
+// whatever the dt, so a glancing scrape keeps its pace and a nose-in hit does
+// not, and steering INTO the wall keeps paying while the wall turns it back.
+// The engine pulls against the loss while the turn runs, so a slower turn needs
+// a larger WALL_IMPACT for a nose-in hit to cost more than a scrape.
+static const double WALL_IMPACT = 2.0;
 static const double WALL_RASH_T = 0.5;
 static const double LAT_MARGIN = 0.3;
 static const double STEER_SCRUB = 0.35;
@@ -111,6 +128,28 @@ static const double PI = 3.141592653589793;
 static const double INF = std::numeric_limits<double>::infinity();
 
 static double g_steerExpo = STEER_EXPO;  // setSteerExpo/getSteerExpo — traces never move it
+// The curb's live copies, moved only by the debugCurb* knobs — traces never move them.
+static double g_wallSpeedFrac = WALL_SPEED_FRAC;
+static double g_wallTurnRate = WALL_TURN_RATE;
+static double g_wallTurnMax = WALL_TURN_MAX;
+static double g_wallImpact = WALL_IMPACT;
+
+double debugCurbSpeed(double frac) {
+  g_wallSpeedFrac = frac < 0 ? WALL_SPEED_FRAC : js_min(1.0, frac);
+  return WALL_SPEED_FRAC;
+}
+double debugCurbTurn(double rate) {
+  g_wallTurnRate = rate < 0 ? WALL_TURN_RATE : rate;
+  return WALL_TURN_RATE;
+}
+double debugCurbTurnMax(double rate) {
+  g_wallTurnMax = rate < 0 ? WALL_TURN_MAX : rate;
+  return WALL_TURN_MAX;
+}
+double debugCurbImpact(double k) {
+  g_wallImpact = k < 0 ? WALL_IMPACT : k;
+  return WALL_IMPACT;
+}
 
 void setSteerExpo(double v) {
   if (std::isfinite(v)) g_steerExpo = js_max(0.5, js_min(3.0, v));  // Game.js: clamp [0.5,3]
@@ -381,14 +420,30 @@ bool Game::pinCurb(Car& c) {
 // What touching the curb COSTS: the rash timer, the speed cap, and the end of
 // any shove (a car scraping a barrier must not keep coasting on a gift).
 void Game::billCurb(Car& c, double dt) {
-  double cap = c.vmax * WALL_SPEED_FRAC;
+  double cap = c.vmax * g_wallSpeedFrac;
   c.wallRashT = WALL_RASH_T;
   c.shoveT = 0;
   if (c.v > cap) c.v = js_max(cap, c.v - WALL_DECEL * dt);
 }
 
+// The integration's curb: pin the car, turn it along the wall, bill it. The
+// turn lives here and not in billCurb, which resolveCollisions also calls AFTER
+// its passes: a car turned there would swing its body into a neighbour the
+// passes have already separated it from. A car pinned only by a shove is
+// billed, not turned; the next frame's pin turns it.
 void Game::clampCurb(Car& c, double dt) {
-  if (pinCurb(c)) billCurb(c, dt);
+  if (!pinCurb(c)) return;
+  // A positive heading steers toward -lateral, so the angle INTO the wall the
+  // car is pinned on is -heading on the +lat side.
+  double side = c.lat > 0 ? 1 : -1;
+  double into = -c.heading * side;
+  if (into > -WALL_PEEL) {
+    double turned = js_min((into + WALL_PEEL) * (1 - dmath::exp(-g_wallTurnRate * dt)),
+                           g_wallTurnMax * dt);
+    c.heading += turned * side;
+    c.v *= dmath::exp(-g_wallImpact * turned);
+  }
+  billCurb(c, dt);
 }
 
 bool Game::inStrip(const Car& c, const PadRt& z) const {
@@ -950,7 +1005,7 @@ void Game::update(double dtMs) {
       c.wallRashT -= dt;
       if (!boosting) {
         double heal = 1 - js_max(0.0, c.wallRashT) / WALL_RASH_T;
-        targetV = js_min(targetV, c.vmax * (WALL_SPEED_FRAC + (1 - WALL_SPEED_FRAC) * heal));
+        targetV = js_min(targetV, c.vmax * (g_wallSpeedFrac + (1 - g_wallSpeedFrac) * heal));
       }
     }
     if (spinning) c.v *= dmath::exp(-SPIN_DRAG_RATE * dt);

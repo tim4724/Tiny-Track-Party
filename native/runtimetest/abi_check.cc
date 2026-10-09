@@ -5622,10 +5622,10 @@ void autopilotedPlayerSeats() {
                                              fieldJson.c_str(), bareJson.c_str());
     ttp_session_start(sess, -1);
     ttp_session_start(idle, -1);
-    // Long enough to be round a corner and away: an undriven car reaches the
-    // first bend at full throttle and stops there, so the two arms only
-    // separate once the track stops being straight.
-    for (int i = 0; i < 900; i++) { ttp_update(sess, 16.6667); ttp_update(idle, 16.6667); }
+    // Long enough for several corners: an undriven car keeps pace down a
+    // straight and then slides round each bend along the curb, so the two arms
+    // only separate once the track stops being straight.
+    for (int i = 0; i < 1800; i++) { ttp_update(sess, 16.6667); ttp_update(idle, 16.6667); }
 
     const auto progress = [](int h, const std::vector<std::string>& ids, bool wantPlayers) {
       double worst = 1e18;
@@ -5645,14 +5645,16 @@ void autopilotedPlayerSeats() {
     const double idlePlayers = progress(idle, playerIds, true);
 
     // THE OUTCOME. The slowest autopiloted player is racing the AI it started
-    // behind — not merely moving, which a car wedged against a barrier at full
-    // throttle also does. Half the AI's distance is a wide band on purpose:
-    // this gates "it drives", not the AI's tuning.
-    check(drivenPlayers > 0.5 * drivenAi && drivenAi > 0,
+    // behind — not merely moving, which a car sliding along the curb at full
+    // throttle also does, well under the AI's pace. Three quarters of the AI's
+    // distance sits between the two: this gates "it drives", not the AI's
+    // tuning.
+    const double RACING = 0.75;
+    check(drivenPlayers > RACING * drivenAi && drivenAi > 0,
           label + ": the autopiloted players RACE (" + std::to_string(drivenPlayers)
               + " vs the AI's " + std::to_string(drivenAi) + ")");
     // …and the control arm proves the check above can fail.
-    check(idlePlayers < 0.5 * drivenPlayers,
+    check(idlePlayers < RACING * drivenPlayers,
           label + ": …and an UNMARKED seat does not (" + std::to_string(idlePlayers)
               + ") — if this fails the outcome check is vacuous");
 

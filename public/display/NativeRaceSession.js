@@ -51,7 +51,11 @@ export async function init() {
     itemShowcase: c('ttp_item_showcase', 'number', ['number', 'string']),
     dispose: c('ttp_dispose', null, ['number']),
     setSteerExpo: c('ttp_set_steer_expo', null, ['number']),
-    getSteerExpo: c('ttp_get_steer_expo', 'number', [])
+    getSteerExpo: c('ttp_get_steer_expo', 'number', []),
+    debugCurbSpeed: c('ttp_debug_curb_speed', 'number', ['number']),
+    debugCurbTurn: c('ttp_debug_curb_turn', 'number', ['number']),
+    debugCurbTurnMax: c('ttp_debug_curb_turn_max', 'number', ['number']),
+    debugCurbImpact: c('ttp_debug_curb_impact', 'number', ['number'])
   };
   const v = JSON.parse(fn.version());
   console.info(`[native:sim] ${JSON.stringify(v)}`);
@@ -61,6 +65,12 @@ export async function init() {
 // live through the setter and reads its default back through the getter.
 export function setNativeSteerExpo(x) { if (fn) fn.setSteerExpo(x); }
 export function getNativeSteerExpo() { return fn ? fn.getSteerExpo() : 0; }
+// The curb's feel, likewise live (ttp/game.h): a negative value restores the
+// authored one, and each answers the authored value.
+export function debugCurbSpeed(n) { return fn ? fn.debugCurbSpeed(n) : 0; }
+export function debugCurbTurn(n) { return fn ? fn.debugCurbTurn(n) : 0; }
+export function debugCurbTurnMax(n) { return fn ? fn.debugCurbTurnMax(n) : 0; }
+export function debugCurbImpact(n) { return fn ? fn.debugCurbImpact(n) : 0; }
 
 const idJson = (id) => JSON.stringify(id);
 // ttp_session_start's "no countdown" sentinel (any negative — see its header):

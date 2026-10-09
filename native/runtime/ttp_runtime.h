@@ -166,6 +166,13 @@ TTP_ABI int ttp_item_showcase(int h, const char* kind);
 TTP_ABI void ttp_set_steer_expo(double v);
 TTP_ABI double ttp_get_steer_expo(void);
 
+// DEBUG: the curb's feel, live (ttp/game.h debugCurb*). Negative restores the
+// authored value; each answers the authored value.
+TTP_ABI double ttp_debug_curb_speed(double frac);
+TTP_ABI double ttp_debug_curb_turn(double rate);
+TTP_ABI double ttp_debug_curb_turn_max(double rate);
+TTP_ABI double ttp_debug_curb_impact(double k);
+
 // ---- Grand Prix / cup series (GrandPrix.js CupSeries twin) ------------------
 // The series layer ABOVE a race: points, standings order, race chaining. Handles
 // are independent of session handles.

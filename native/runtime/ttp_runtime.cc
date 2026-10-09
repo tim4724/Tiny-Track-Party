@@ -1331,6 +1331,10 @@ void ttp_dispose(int h) {
 
 void ttp_set_steer_expo(double v) { setSteerExpo(v); }
 double ttp_get_steer_expo(void) { return getSteerExpo(); }
+double ttp_debug_curb_speed(double frac) { return debugCurbSpeed(frac); }
+double ttp_debug_curb_turn(double rate) { return debugCurbTurn(rate); }
+double ttp_debug_curb_turn_max(double rate) { return debugCurbTurnMax(rate); }
+double ttp_debug_curb_impact(double k) { return debugCurbImpact(k); }
 
 
 // =============================================================================

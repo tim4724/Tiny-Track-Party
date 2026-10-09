@@ -133,6 +133,17 @@ inline constexpr double STEER_SIGN = -1;
 void setSteerExpo(double v);
 double getSteerExpo();
 
+// DEBUG, live-tunable like the steer curve: the curb's scrape speed cap
+// (fraction of vmax), how fast it turns a pinned car along itself (1/s), the
+// fastest that turn may swing (rad/s), and the speed the turn costs (per rad);
+// see the WALL_* constants in game.cc. A negative value restores the authored
+// constant; each answers the AUTHORED value, so a slider reads its default by
+// resetting.
+double debugCurbSpeed(double frac);
+double debugCurbTurn(double rate);
+double debugCurbTurnMax(double rate);
+double debugCurbImpact(double k);
+
 // That exponent APPLIED: sign(s)*|s|^expo, the factor Game::update multiplies
 // its turn rate by. Sim-side this is one line of one function, so it lived
 // inline there until libttp-runtime's frame builder needed the SAME curve to
