@@ -9,9 +9,13 @@
 namespace ttp {
 namespace rt {
 
-void ChaseCam::update(const ttp::Pose& pose, float spd, float dt) {
+void ChaseCam::update(const ttp::Pose& pose, float spd, float dt, bool monster, float height,
+                      float rise, float back) {
     const V3 p = v3(pose.pos), fwd = v3(pose.forward), up = v3(pose.up);
-    const V3 want = p + fwd * -(CHASE_DIST + CHASE_DIST_GAIN * spd) + up * CHASE_HEIGHT;
+    const float blendRate = monster ? MONSTER_CAM_UP : MONSTER_CAM_DOWN;
+    monsterBlend += ((monster ? 1.0f : 0.0f) - monsterBlend) * (1 - std::exp(-blendRate * dt));
+    const V3 want = p + fwd * -(CHASE_DIST + CHASE_DIST_GAIN * spd + monsterBlend * back)
+                  + up * (height + monsterBlend * rise);
     const V3 wantTgt = p + fwd * CHASE_LOOK + up * CHASE_TGT_UP;
     // Frame-rate-independent damping → smooth lag/swing behind through turns.
     const float rateSpd = spd < CAM_RATE_SPD_MAX ? spd : CAM_RATE_SPD_MAX;
@@ -39,6 +43,18 @@ void spring(float& x, float& v, float goal, float w, float dt) {
 }
 
 }  // namespace
+
+float chasePitchDeg(float height, float back) {
+    return std::atan((height - CHASE_TGT_UP) / (CHASE_DIST + back + CHASE_LOOK)) * 180.0f / PI;
+}
+
+float chaseHeightForPitch(float deg, float back) {
+    return CHASE_TGT_UP + std::tan(deg * PI / 180.0f) * (CHASE_DIST + back + CHASE_LOOK);
+}
+
+float authoredMonsterPitch() {
+    return chasePitchDeg(CHASE_HEIGHT + MONSTER_CAM_RISE, MONSTER_CAM_BACK);
+}
 
 void FollowCam::update(const TtpCarInput* cars, const std::vector<bool>& live, V3 trackCentre,
                        const NameTagDeck& deck, const GroundGrid& ground, float dt) {

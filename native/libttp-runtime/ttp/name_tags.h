@@ -26,8 +26,8 @@
 //
 // Two things are solid. A monster truck, as a box, projected whole onto the
 // screen — only the part of it nearer than the tag — so its share is an exact
-// area; the cell's OWN truck counts too, since the chase camera rides below its
-// roof, unless the camera is inside it or the renderer is ghosting it in that
+// area; the cell's OWN truck counts too, since the chase camera can ride below
+// its roof, unless the camera is inside it or the renderer is ghosting it in that
 // cell (ttp_monster_ghosted). And the road deck (NameTagDeck): a bridge, a
 // crest, the far side of a loop, sampled by rays on a grid over the sticker.
 // The two shares add. Ordinary cars never hide a tag, because they overlap

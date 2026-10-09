@@ -901,6 +901,24 @@ void ttp_display_debug_features(unsigned int mask) {
     if (g_disp && g_disp->renderer) g_disp->renderer->debugFeatureMask((uint32_t) mask);
 }
 
+double ttp_display_debug_chase_pitch(double deg) {
+    if (g_disp) {
+        g_disp->chaseHeight = deg < 0 ? ttp::rt::CHASE_HEIGHT
+                                      : ttp::rt::chaseHeightForPitch((float) deg);
+    }
+    return ttp::rt::chasePitchDeg(ttp::rt::CHASE_HEIGHT);
+}
+
+double ttp_display_debug_monster_pitch(double deg) {
+    if (g_disp) g_disp->monsterPitch = deg < 0 ? -1 : (float) deg;
+    return ttp::rt::authoredMonsterPitch();
+}
+
+double ttp_display_debug_monster_back(double units) {
+    if (g_disp) g_disp->monsterBack = units < 0 ? -1 : (float) units;
+    return ttp::rt::MONSTER_CAM_BACK;
+}
+
 const char* ttp_display_debug_decals(void) {
     static std::string json;
     json = "[";

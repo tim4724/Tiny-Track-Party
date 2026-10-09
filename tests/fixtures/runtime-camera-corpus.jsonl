@@ -1,4 +1,4 @@
-{"cases":15,"kind":"runtime-camera","sigDigits":4}
+{"cases":17,"kind":"runtime-camera","sigDigits":4}
 {"case":"grid","cols":[1,1,1,2,2,3,3,3,3],"h":1080,"name":"1080p","w":1920}
 {"case":"grid","cols":[1,1,1,2,2,2,2,3,3],"h":768,"name":"720p-4x3","w":1024}
 {"case":"grid","cols":[1,1,2,2,2,3,3,4,4],"h":1080,"name":"ultrawide","w":2560}
@@ -8,9 +8,11 @@
 {"bbAx":46.2,"bbAz":158.9,"bbFogFar":323.4,"bbFogNear":75.35,"bbHeight":90.17,"case":"framing","center":[31,-2.5,118],"name":"longZ","ovBearing":1.2,"ovFogFar":627.3,"ovFogNear":309.5,"ovHeight":195.6,"ovOffset":[85.58,195.6,220.1],"ovRadius":236.1,"raceFogFar":232.9,"raceFogNear":95.9}
 {"bbAx":460.6,"bbAz":363.7,"bbFogFar":370.8,"bbFogNear":34.1,"bbHeight":306.9,"case":"framing","center":[5,12,7.5],"name":"huge","ovBearing":1.2,"ovFogFar":2037,"ovFogNear":1116,"ovHeight":567.1,"ovOffset":[248.1,567.1,638],"ovRadius":684.6,"raceFogFar":105.4,"raceFogNear":43.4}
 {"bbAx":99,"bbAz":96,"bbFogFar":165,"bbFogNear":55,"bbHeight":86.65,"case":"framing","center":[12.5,1.5,-30.25],"name":"firstPass","ovBearing":1.2,"ovFogFar":232,"ovFogNear":12,"ovHeight":121.9,"ovOffset":[53.33,121.9,137.1],"ovRadius":147.1,"raceFogFar":170,"raceFogNear":70}
-{"case":"chase","fov":55,"frames":40,"name":"standing","pos":[38.85,3.64,25],"target":[41.7,3.11,25]}
-{"case":"chase","fov":57.39,"frames":40,"name":"cruise","pos":[48.01,3.64,25],"target":[50.2,3.11,25]}
-{"case":"chase","fov":58.52,"frames":40,"name":"corner","pos":[56.94,4.255,34.89],"target":[57.98,3.817,36.32]}
-{"case":"chase","fov":69.77,"frames":40,"name":"boost","pos":[57.78,7.157,64.34],"target":[57.81,6.652,64.59]}
-{"case":"chase","fov":56.53,"frames":40,"name":"halfrate","pos":[51.58,7.317,72.29],"target":[49.79,6.791,74.02]}
-{"case":"chase","fov":55.38,"frames":40,"name":"rollingOut","pos":[51.05,7.321,73.13],"target":[48.25,6.791,73.13]}
+{"case":"chase","fov":55,"frames":40,"name":"standing","pos":[38.85,3.69,25],"target":[41.7,3.11,25]}
+{"case":"chase","fov":57.39,"frames":40,"name":"cruise","pos":[48.01,3.69,25],"target":[50.2,3.11,25]}
+{"case":"chase","fov":58.52,"frames":40,"name":"corner","pos":[56.94,4.305,34.9],"target":[57.98,3.817,36.32]}
+{"case":"chase","fov":69.77,"frames":40,"name":"boost","pos":[57.78,7.207,64.34],"target":[57.81,6.652,64.59]}
+{"case":"chase","fov":56.53,"frames":40,"name":"halfrate","pos":[51.58,7.367,72.3],"target":[49.79,6.791,74.02]}
+{"case":"chase","fov":55.38,"frames":40,"name":"rollingOut","pos":[51.05,7.371,73.13],"target":[48.25,6.791,73.13]}
+{"case":"chase","fov":57.79,"frames":40,"name":"monster","pos":[40.68,7.584,73.13],"target":[38.25,6.791,73.13]}
+{"case":"chase","fov":57.8,"frames":40,"name":"monsterOff","pos":[29.35,7.43,73.13],"target":[27.19,6.791,73.13]}

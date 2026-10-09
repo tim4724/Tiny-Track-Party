@@ -30,11 +30,24 @@ namespace rt {
 // DIST AND LOOK ARE ONE BASELINE: the pitch is
 // atan((HEIGHT - TGT_UP) / (LOOK + DIST)), so only the SUM (2.85) steers the
 // aim. Move one alone and the picture noses over — a 0.35 cut to DIST by itself
-// takes the pitch 10.5 -> 12.0 degrees. HEIGHT is in that numerator but is not
-// the lever for it: it is what sees over the car, and trading it away hides the
-// road ahead. So a closer camera is DIST down and LOOK up by the same amount.
-constexpr float CHASE_DIST = 1.15f, CHASE_HEIGHT = 0.64f, CHASE_LOOK = 1.7f;
+// takes the pitch 11.5 -> 13.1 degrees. So a closer camera is DIST down and LOOK
+// up by the same amount.
+//
+// HEIGHT is the lever for a steeper or flatter view at the same distance: it is
+// what sees over the car and onto the deck. 11.5 degrees is set high enough to
+// read oil and boost paint, which a playtest at 10.5 struggled to see.
+constexpr float CHASE_DIST = 1.15f, CHASE_HEIGHT = 0.69f, CHASE_LOOK = 1.7f;
 constexpr float CHASE_TGT_UP = 0.11f;      // look point barely above the road
+// The player's OWN monster truck is taller than the eye: at the race pitch its
+// roof sits on the horizon and hides the road just ahead. So while it is active
+// the rig pulls BACK by MONSTER_CAM_BACK and UP by MONSTER_CAM_RISE, to about
+// 14 degrees. Rising alone clears the roof only at ~19, where the horizon jumps
+// a third of the way up the frame and reads as dizzying; pulling back sees over
+// it with less tilt and keeps the 1.3x truck about a car's size on screen. The
+// truck swaps in and out on one frame (the renderer has no grow-in); the rig
+// starts easing on that frame, in quickly and back out more slowly.
+constexpr float MONSTER_CAM_RISE = 0.23f, MONSTER_CAM_BACK = 0.4f;
+constexpr float MONSTER_CAM_UP = 4.0f, MONSTER_CAM_DOWN = 2.0f;  // ease rates (1/s)
 // 7 -> 32. This one constant decides both how far back the camera sits while
 // racing and how far that is from the parked shot, which never lags at all: the
 // eye's lag behind its parked place fell 0.44 -> 0.20u flat out, and that is
@@ -72,10 +85,23 @@ constexpr float CAM_NEAR = 0.1f, CAM_FAR = 600.0f;
 struct ChaseCam {
     V3 pos, target;
     float fov = BASE_FOV;
+    float monsterBlend = 0;  // eased 0..1 toward the monster rig
     bool init = false;  // first update snaps, so it doesn't lag in from the origin
 
-    void update(const ttp::Pose& pose, float spd, float dt);
+    // height / rise / back are the authored rig unless a debug slider moved them.
+    void update(const ttp::Pose& pose, float spd, float dt, bool monster = false,
+                float height = CHASE_HEIGHT, float rise = MONSTER_CAM_RISE,
+                float back = MONSTER_CAM_BACK);
 };
+
+// DEBUG (the ttp_display_debug_*_pitch sliders): the chase pitch in degrees
+// below level, and the eye height that gives a wanted one. Per the baseline note
+// above, the pitch is a function of HEIGHT over the DIST + LOOK sum; the sliders
+// move HEIGHT, so the camera tilts without moving closer or further. `back` is
+// any extra distance behind the car (the monster rig's).
+float chasePitchDeg(float height, float back = 0);
+float chaseHeightForPitch(float deg, float back = 0);
+float authoredMonsterPitch();
 
 // ---------------------------------------------------------------------------
 // The FOLLOW overview (TTP_CAM_FOLLOW): a low camera on the lead battle, for

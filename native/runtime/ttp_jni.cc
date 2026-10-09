@@ -291,6 +291,11 @@ void n_ttp_display_cells(JNIEnv* env, jclass, jbyteArray a0) {
     ttp_display_cells(s0.get());
 }
 
+jdouble n_ttp_display_debug_chase_pitch(JNIEnv* env, jclass, jdouble a0) {
+    (void) env;
+    return (jdouble) ttp_display_debug_chase_pitch((double) a0);
+}
+
 jbyteArray n_ttp_display_debug_decals(JNIEnv* env, jclass) {
     (void) env;
     return toBytes(env, ttp_display_debug_decals());
@@ -304,6 +309,16 @@ void n_ttp_display_debug_features(JNIEnv* env, jclass, jint a0) {
 void n_ttp_display_debug_hide_cars(JNIEnv* env, jclass, jint a0) {
     (void) env;
     ttp_display_debug_hide_cars((int) a0);
+}
+
+jdouble n_ttp_display_debug_monster_back(JNIEnv* env, jclass, jdouble a0) {
+    (void) env;
+    return (jdouble) ttp_display_debug_monster_back((double) a0);
+}
+
+jdouble n_ttp_display_debug_monster_pitch(JNIEnv* env, jclass, jdouble a0) {
+    (void) env;
+    return (jdouble) ttp_display_debug_monster_pitch((double) a0);
 }
 
 void n_ttp_display_debug_wipe_skids(JNIEnv* env, jclass) {
@@ -1362,9 +1377,12 @@ const JNINativeMethod kMethods[] = {
     { "ttp_display_cell_cards", "(I)V", (void*) n_ttp_display_cell_cards },
     { "ttp_display_cell_rects", "([FI)I", (void*) n_ttp_display_cell_rects },
     { "ttp_display_cells", "([B)V", (void*) n_ttp_display_cells },
+    { "ttp_display_debug_chase_pitch", "(D)D", (void*) n_ttp_display_debug_chase_pitch },
     { "ttp_display_debug_decals", "()[B", (void*) n_ttp_display_debug_decals },
     { "ttp_display_debug_features", "(I)V", (void*) n_ttp_display_debug_features },
     { "ttp_display_debug_hide_cars", "(I)V", (void*) n_ttp_display_debug_hide_cars },
+    { "ttp_display_debug_monster_back", "(D)D", (void*) n_ttp_display_debug_monster_back },
+    { "ttp_display_debug_monster_pitch", "(D)D", (void*) n_ttp_display_debug_monster_pitch },
     { "ttp_display_debug_wipe_skids", "()V", (void*) n_ttp_display_debug_wipe_skids },
     { "ttp_display_destroy", "()V", (void*) n_ttp_display_destroy },
     { "ttp_display_dividers", "(I)V", (void*) n_ttp_display_dividers },

@@ -1534,9 +1534,10 @@ window.__biomes = _biomes;
 
 // Debug settings (faint wrench, bottom-left): interactive editor for this
 // page's query params — edits reload the page so each param takes effect
-// through its normal boot path above. Lazy import: dev aid, not boot-critical.
-// The field list is debugFields.js.
-Promise.all([import('../shared/debugPanel.js'), import('./debugFields.js')])
+// through its normal boot path above. Lazy import: dev aid, not boot-critical;
+// it waits for the scene, because the camera sliders read their defaults off
+// the renderer. The field list is debugFields.js.
+Promise.all([import('../shared/debugPanel.js'), import('./debugFields.js'), sceneBooted])
   .then(([{ initDebugPanel }, { displayDebugFields }]) => initDebugPanel(
     displayDebugFields({
       maxPlayers: MAX_PLAYERS, carNames: window.CAR_NAMES || [], trackList: TRACK_LIST, itemIds: ITEM_IDS,

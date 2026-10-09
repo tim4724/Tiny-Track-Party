@@ -886,6 +886,20 @@ TTP_ABI void ttp_display_debug_wipe_skids(void);
 #define TTP_DEBUG_LOD_ALL 0x8000000
 TTP_ABI void ttp_display_debug_features(unsigned int mask);
 
+/* DEBUG: tilt every chase rig to `deg` below level by raising or lowering the
+ * eye; the distance behind the car stays authored (ttp/camera.h). A negative
+ * deg restores the authored height. Answers the AUTHORED pitch, with or
+ * without a display, so a slider reads its default by resetting. */
+TTP_ABI double ttp_display_debug_chase_pitch(double deg);
+
+/* DEBUG: the rig a chase cam eases to while its car is a monster truck — its
+ * pitch in degrees below level (held whatever the two other sliders do), and
+ * how far further back than the race rig it sits, in world units. A negative
+ * value restores the authored one. Each answers its AUTHORED value, with or
+ * without a display. */
+TTP_ABI double ttp_display_debug_monster_pitch(double deg);
+TTP_ABI double ttp_display_debug_monster_back(double units);
+
 #ifdef __cplusplus
 }
 #endif

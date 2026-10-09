@@ -351,7 +351,7 @@ float deckShare(const Cam& c, const NameTagDeck& deck, const Rect& q, float zTag
 }
 
 // The share of car `s`'s sticker `q` (at depth zTag) that the scene covers:
-// every monster truck — the cell's own included, since the chase camera rides
+// every monster truck — the cell's own included, since the chase camera can ride
 // below its roof — bar one the camera is INSIDE (its faces point away) or one
 // the renderer is ghosting in this cell; then the deck. Shares add, so two
 // occluders over the same patch count it twice; the threshold is coarse enough

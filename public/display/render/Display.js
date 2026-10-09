@@ -144,6 +144,9 @@ export class Display {
       debugHideCars: mod.cwrap('ttp_display_debug_hide_cars', null, ['number']),
       debugWipeSkids: mod.cwrap('ttp_display_debug_wipe_skids', null, []),
       debugFeatures: mod.cwrap('ttp_display_debug_features', null, ['number']),
+      debugChasePitch: mod.cwrap('ttp_display_debug_chase_pitch', 'number', ['number']),
+      debugMonsterPitch: mod.cwrap('ttp_display_debug_monster_pitch', 'number', ['number']),
+      debugMonsterBack: mod.cwrap('ttp_display_debug_monster_back', 'number', ['number']),
       dressKeep: mod.cwrap('ttp_display_dress_keep', null, ['number']),
       dressSheets: mod.cwrap('ttp_display_dress_sheets', null, ['number']),
       biome: mod.cwrap('ttp_display_biome', null, ['string']),
@@ -762,6 +765,13 @@ export class Display {
   // HUD's timer reads what it was costing to draw. FEATURES names the bits so a
   // sweep script does not re-type them; DEBUG ONLY, nothing on a play path.
   debugFeatures(mask) { this._fn.debugFeatures(mask >>> 0); }
+  // Chase-cam tilt in degrees below level (negative = authored); answers the
+  // authored pitch. The debug panel's "Camera angle" slider, nothing else.
+  debugChasePitch(deg) { return this._fn.debugChasePitch(deg); }
+  // …and the rig it eases to while the car is a monster truck: its pitch and its
+  // extra distance back ("Monster angle" / "Monster distance").
+  debugMonsterPitch(deg) { return this._fn.debugMonsterPitch(deg); }
+  debugMonsterBack(units) { return this._fn.debugMonsterBack(units); }
 
   dressKeep(f) { this._fn.dressKeep(f); }
 

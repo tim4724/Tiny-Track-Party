@@ -218,6 +218,7 @@ struct Leg {
   float spd;                  // normalised v/vmax, exactly as the frame builder passes it
   double fx, fy, fz;          // heading (normalised below)
   double ux, uy, uz;          // body up (normalised below)
+  bool monster = false;       // the player's own monster truck (the eye rises)
 };
 // `corner` at 0.88 and `halfrate` at 0.32 are unround on purpose: each keeps a
 // recorded value off a rounding boundary (WARN_FRAC above). The effect is never
@@ -232,6 +233,10 @@ const Leg LEGS[] = {
   {"boost",      40, 1.0f / 60, 1.90f,  0.0, 0.1, 1.0,    -0.05, 1.0, 0.0},
   {"halfrate",   40, 1.0f / 30, 0.32f, -0.7, 0.0, 0.7,     0.0,  1.0, 0.12},
   {"rollingOut", 40, 1.0f / 60, 0.05f, -1.0, 0.0, 0.0,     0.0,  1.0, 0.0},
+  // Last, so they add rows without reshuffling the ones above: the monster
+  // lift easing up, then back down at its slower rate.
+  {"monster",    40, 1.0f / 60, 0.70f, -1.0, 0.0, 0.0,     0.0,  1.0, 0.0, true},
+  {"monsterOff", 40, 1.0f / 60, 0.70f, -1.0, 0.0, 0.0,     0.0,  1.0, 0.0, false},
 };
 
 // World speed for a normalised spd — an arbitrary but fixed scale, so the car
@@ -259,7 +264,7 @@ std::vector<Value> chaseCases() {
       pos.y += pose.forward.y * step;
       pos.z += pose.forward.z * step;
       pose.pos = pos;
-      cam.update(pose, leg.spd, leg.dt);
+      cam.update(pose, leg.spd, leg.dt, leg.monster);
     }
     const std::string p = std::string("chase.") + leg.name;
     Value o = Value::Obj();

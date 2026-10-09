@@ -83,6 +83,9 @@ struct DisplayState {
     std::vector<TtpRosterCar> rosterCars;
     std::vector<ScalarId> cells;        // cars owning a split-screen cell, in cell order
     std::map<std::string, ChaseCam> chase;
+    float chaseHeight = CHASE_HEIGHT;   // ttp_display_debug_chase_pitch; authored otherwise
+    // ttp_display_debug_monster_{pitch,back}; negative = authored
+    float monsterPitch = -1, monsterBack = -1;
     FollowCam follow;                   // CAM_FOLLOW's rig; reset with `chase`
     // The built track's road as an occluder, per scene: the name tags hide
     // behind it, and the follow cam keeps the battle out from under it.

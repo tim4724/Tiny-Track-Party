@@ -201,6 +201,13 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
             : d.camMode == CAM_BBOX ? d.framing.bbFogFar
             : d.framing.ovFogFar;
     if (raceCams) {
+        // The monster rig: the authored constants, until a debug slider moves
+        // anything — then the rise is re-solved so its pitch holds.
+        const bool tuned = d.monsterPitch >= 0 || d.monsterBack >= 0 || d.chaseHeight != CHASE_HEIGHT;
+        const float monsterBack = d.monsterBack >= 0 ? d.monsterBack : MONSTER_CAM_BACK;
+        const float monsterPitch = d.monsterPitch >= 0 ? d.monsterPitch : authoredMonsterPitch();
+        const float monsterRise = !tuned ? MONSTER_CAM_RISE
+                : chaseHeightForPitch(monsterPitch, monsterBack) - d.chaseHeight;
         for (size_t i = 0; i < d.cells.size(); i++) {
             ChaseCam& cam = d.chase[d.cells[i].key()];
             const Car* c = nullptr;
@@ -225,7 +232,8 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
             // rest, so the rig settles into its parked shot and stays there.
             if (c) {
                 cam.update(fromHeld ? heldPose(outCars[subject]) : c->pose,
-                           fromHeld ? 0 : c->vmax != 0 ? (float) (c->v / c->vmax) : 0, dt);
+                           fromHeld ? 0 : c->vmax != 0 ? (float) (c->v / c->vmax) : 0, dt,
+                           outCars[subject].monster > 0, d.chaseHeight, monsterRise, monsterBack);
             }
             TtpViewInput& v = outViews[i];
             v.car = subject;

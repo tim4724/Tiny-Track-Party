@@ -13,6 +13,18 @@ export function displayDebugFields({ maxPlayers, carNames, trackList, itemIds, b
   // default and the "· default" readout marker — reading it live inside format()
   // would wrongly equal the dragged value.
   const steerDefault = sim.getNativeSteerExpo();
+  // The camera knobs: each setter takes -1 as "authored" and answers the
+  // authored value, which is the slider's default. At that default the slider
+  // sends -1 back, so the rig runs the authored constants exactly rather than a
+  // degrees round trip.
+  const camKnob = (set, step, unit) => {
+    const value = set(-1);
+    const isDefault = (n) => Math.abs(n - value) < step / 10;
+    return { type: 'range', min: unit.min, max: unit.max, step, value,
+      live: (n) => set(isDefault(n) ? -1 : n),
+      format: (n) => unit.format(n) + (isDefault(n) ? ' · default' : '') };
+  };
+  const degrees = { min: 4, max: 30, format: (n) => n.toFixed(1) + '°' };
   return [
     { section: 'Test harness' },
     { key: 'scenario', label: 'Scenario', hint: 'no relay, fake players', type: 'select',
@@ -43,6 +55,18 @@ export function displayDebugFields({ maxPlayers, carNames, trackList, itemIds, b
     { key: 'timescale', label: 'Time scale', hint: 'slow-mo · live', type: 'range',
       min: 0.1, max: 1, step: 0.05, value: 1, live: (n) => scene.setTimeScale(n),
       format: (n) => n.toFixed(2) + '×' + (Math.abs(n - 1) < 1e-9 ? ' · normal' : '') },
+    // Live: tilts every chase cam by raising or lowering the eye; the distance
+    // behind the car stays put. Degrees below level.
+    { key: 'campitch', label: 'Camera angle', hint: 'chase pitch, degrees · live',
+      ...camKnob((n) => scene.display.debugChasePitch(n), 0.5, degrees) },
+    // Live: the rig the cam eases to while YOUR car is a monster truck
+    // (?item=monster makes every box roll one): its pitch, and how much further
+    // back than the race rig it sits.
+    { key: 'monsterpitch', label: 'Monster angle', hint: 'chase pitch as a monster truck · live',
+      ...camKnob((n) => scene.display.debugMonsterPitch(n), 0.5, degrees) },
+    { key: 'monsterback', label: 'Monster distance', hint: 'extra pullback as a monster truck · live',
+      ...camKnob((n) => scene.display.debugMonsterBack(n), 0.05,
+        { min: 0, max: 1.5, format: (n) => '+' + n.toFixed(2) }) },
     { section: 'Track' },
     { key: 'track', label: 'Preselect', type: 'select',
       options: trackList.map((t) => ({ value: t.id, label: t.name })) },
