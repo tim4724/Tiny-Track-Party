@@ -405,9 +405,11 @@ export function runControllerScenario(opts) {
       break;
 
     case 'intermission':
+    case 'leave-cup':
       // Mid-cup standings between two series races, viewed as the host: points
       // board in cup order (the +12 row leads on total despite this race's +15)
-      // and the host's "Next race ▸".
+      // and the host's "Next race ▸" beside "Leave cup". 'leave-cup' is the
+      // same board with that button's confirm open (modals.js owns the live one).
       setLatency(20, true);
       showBoard([
         scored(2, { name: FAKE_NAMES[(color + 1) % FAKE_NAMES.length], colorIndex: (color + 1) % COLORS.length, points: 27 }),
@@ -421,6 +423,10 @@ export function runControllerScenario(opts) {
           points: [13, 9, 5, 3][i - 4]
         }))
       ], { over: true, series: { final: false, raceIndex: 1, raceCount: 4, cupName: PREVIEW_TRACKS[0].cupName } });
+      if (scenario === 'leave-cup') {
+        el('leavecup-overlay').classList.remove('hidden');
+        el('leavecup-overlay').focus({ preventScroll: true });
+      }
       break;
 
     case 'cup-podium':

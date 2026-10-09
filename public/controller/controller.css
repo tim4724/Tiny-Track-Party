@@ -58,6 +58,15 @@ html, body {
   color: var(--ink);
   touch-action: manipulation;
 }
+/* Nothing on the controller is selectable but the name field, and the PREFIX
+   is the load-bearing half: WebKit honours only -webkit-user-select. A long
+   press on iOS selects the NEAREST text, not just text under the finger, so a
+   thumb held on a button picked up whatever selectable text sat beside it (the
+   latency chip, over the corner of the right-hand drive button) and raised the
+   Copy / Search menu mid-race. Scoping this to one screen is what left that
+   chip, which lives outside it, and every lobby and results label open. */
+body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+input, textarea { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
 /* Very small devices: nearly everything here is sized in rem, so shrinking
    the ROOT font scales the whole rhythm — cards, buttons, pickers, overlays —
    proportionally, instead of a per-component media query for each screen.
@@ -712,7 +721,7 @@ input[type=text]:disabled { opacity: 0.6; }
    gear's height and widened to its text, and it sits beside the gear. Moving
    between pages stays the bottom corner's .btn. */
 .race-key__total {
-  flex: none; width: auto; height: max(2.9rem, 44px); padding: 0 0.85rem;
+  flex: none; width: auto; height: var(--corner-btn); padding: 0 0.85rem;
   font-family: var(--font-display); font-weight: 700; font-size: 1.15rem;
 }
 .race-key__total .starrow { font-size: 1.1em; }
@@ -726,15 +735,8 @@ input[type=text]:disabled { opacity: 0.6; }
    controls under it. .drive-controls is display:contents so each button lands in
    its own grid area per mode. The identity row is NOT one of the rows — see
    .hud-top. */
-/* Nothing on this screen is selectable, and the PREFIX is the load-bearing
-   half: WebKit honours only -webkit-user-select, so the bare property left the
-   name sticker, the hint and the paper between the buttons open to a long
-   press — a thumb drifting off a steer button raised iOS's Copy menu mid-race.
-   The callout is shut for the same press. */
-#game {
-  align-items: stretch; justify-content: flex-start;
-  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
-}
+/* (Selection and the callout are shut page-wide, on body.) */
+#game { align-items: stretch; justify-content: flex-start; }
 /* Both modes share one vertical rhythm: the stretchy MID row (the steer bar
    floats with its space around it vertically), then the controls row at a fixed
    share of the height. Only the columns differ: tilt = ITEM | BRAKE sharing the
@@ -938,7 +940,7 @@ input[type=text]:disabled { opacity: 0.6; }
   font-variant-numeric: tabular-nums;            /* stable width as the ms count ticks */
   color: var(--ink);
   text-shadow: 0 0 3px var(--paper), 0 0 2px var(--paper), 0 0 1px var(--paper);
-  pointer-events: none; user-select: none;
+  pointer-events: none;
 }
 .latency__bolt { display: none; font-size: 0.9em; }
 .latency__bolt::before { content: "\26A1\FE0E"; }  /* ⚡ forced to monochrome text presentation */
@@ -1026,9 +1028,10 @@ input[type=text]:disabled { opacity: 0.6; }
   font-size: 1.2rem; font-variant-numeric: tabular-nums;
 }
 
-/* Exactly one child is ever visible (renderFoot: the host's button XOR the note),
-   so this only has to centre it. */
-#result-foot { display: flex; align-items: center; justify-content: center; }
+/* One child is visible (renderFoot: the host's button XOR the note), except on
+   a cup's intermission, where the host also gets "Leave cup" — ghost, on the
+   LEFT, the lobby corner's own back-chip-then-primary order. */
+#result-foot { display: flex; align-items: center; justify-content: center; gap: 0.6rem; }
 #result-foot .btn { width: auto; min-width: 11rem; margin-top: 0; }
 .result-wait { color: var(--ink-2); font-weight: 700; text-align: center; }
 
@@ -1052,7 +1055,7 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 #settings-overlay.hidden { display: none; }
 /* modals.js focuses the dialog itself on open; the backdrop never wears a ring */
-#settings-overlay:focus, #motion-overlay:focus, #stars-overlay:focus { outline: none; }
+#settings-overlay:focus, #motion-overlay:focus, #stars-overlay:focus, #leavecup-overlay:focus { outline: none; }
 
 .settings-card {
   position: relative;
@@ -1082,9 +1085,16 @@ input[type=text]:disabled { opacity: 0.6; }
   background: var(--surface);
   border-radius: var(--r-lg); box-shadow: var(--shadow-card);
 }
-/* the motion card shares the surface but stays content-sized — it's an alert,
-   not the full settings sheet */
-.motion-card { height: auto; display: flex; flex-direction: column; gap: 0.7rem; }
+/* the popup cards (motion, stars, leave cup) share the surface but stay
+   content-sized — they're alerts, not the full settings sheet. They take the
+   surface and NOT the rhythm: the short-screen tiers below squeeze
+   .settings-card's padding and gaps because the settings sheet is tall, and a
+   few-line alert has the height to keep its air, so the doubled class puts its
+   own padding and gap out of those tiers' reach. */
+.settings-card.motion-card {
+  height: auto; display: flex; flex-direction: column;
+  gap: 0.8rem; padding: 1.3rem 1.6rem 1.4rem;
+}
 .settings-head { grid-area: head; display: flex; align-items: center; gap: 0.8rem; }
 .settings-title {
   font-family: var(--font-display); font-weight: 700;
@@ -1164,6 +1174,19 @@ input[type=text]:disabled { opacity: 0.6; }
   font-family: var(--font-display); font-weight: 700; font-size: 1.3rem; line-height: 1;
   color: var(--ink);
 }
+.tv-row__label { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+/* Whose control this is — the Tilt row's "Recommended" sticker, sat inline
+   instead of overhanging, in the info blue: it states a fact, it doesn't
+   praise. */
+.host-chip {
+  flex: none;
+  font-family: var(--font-display); font-weight: 700;
+  font-size: 0.62rem; letter-spacing: 0.07em; text-transform: uppercase; line-height: 1;
+  color: #fff; background: var(--blue);
+  border: 2px solid var(--ink); border-radius: var(--r-pill);
+  padding: 0.3em 0.6em;
+  transform: rotate(-2deg);
+}
 .switch {
   position: relative; flex: none; width: 3.6rem; height: 1.9rem; padding: 0;
   background: var(--surface-2); border: 3px solid var(--ink); border-radius: var(--r-pill);
@@ -1193,40 +1216,16 @@ input[type=text]:disabled { opacity: 0.6; }
 .settings-card.is-buttons .steer-demo--tilt { display: none; }
 /* the stage's demo scales UP from the art's native px size with `zoom`, which
    RE-LAYS-OUT the px art at the bigger size — `scale` upsampled the rasterized
-   layer instead, which is what made the ink outlines pixelated */
-.demo-stage .phone-lean { zoom: 1.3; }
-
-/* Direction chevrons flanking the phone — the steering EFFECT, on the demo's
-   own 2.6s clock: the side being steered toward lights in the livery colour
-   while the other sits faint. Tilt eases with the twist's holds; buttons SNAPS
-   with the strip. */
-.demo-chev { flex: none; display: flex; color: var(--car, var(--brand)); opacity: 0.18; }
-.demo-chev .steer-glyph { font-size: 2.1rem; }
-.steer-demo--tilt .demo-chev--l { animation: chev-tilt-l 2.6s ease-in-out infinite; }
-.steer-demo--tilt .demo-chev--r { animation: chev-tilt-r 2.6s ease-in-out infinite; }
-.steer-demo--buttons .demo-chev--l { animation: chev-snap-l 2.6s linear infinite; }
-.steer-demo--buttons .demo-chev--r { animation: chev-snap-r 2.6s linear infinite; }
-/* Timed against phone-twist's centre crossings (34% and 84%): the outgoing
-   side is fully back to faint BY the time the phone passes centre, and the
-   incoming side only starts lighting FROM centre — a chevron still half-lit
-   while the phone reads "straight ahead" contradicted the lesson. */
-@keyframes chev-tilt-l {
-  0%, 18%  { opacity: 1; }
-  34%, 84% { opacity: 0.18; }
-  100%     { opacity: 1; }
-}
-@keyframes chev-tilt-r {
-  0%, 34%   { opacity: 0.18; }
-  50%, 68%  { opacity: 1; }
-  84%, 100% { opacity: 0.18; }
-}
-@keyframes chev-snap-l {
-  0%, 49.9% { opacity: 1; }
-  50%, 100% { opacity: 0.18; }
-}
-@keyframes chev-snap-r {
-  0%, 49.9% { opacity: 0.18; }
-  50%, 100% { opacity: 1; }
+   layer instead, which is what made the ink outlines pixelated.
+   The stage is as tall as the left column makes it, and height is what binds:
+   the tilt twist swings the phone's box to ~131px tall per unit of zoom, while
+   the width has room to spare at every size. So each height tier takes the
+   largest zoom whose twist still clears the legend at the BOTTOM of its band,
+   peaking into the stage's own padding but never past it. Both demos share the
+   number so switching modes doesn't resize the phone. */
+.demo-stage .phone-lean { zoom: 1.35; }
+@media (min-height: 431px) {
+  .demo-stage .phone-lean { zoom: 1.55; }
 }
 
 /* Legend — shadowless caption rows on the stage, so the chips read as a legend
@@ -1234,7 +1233,7 @@ input[type=text]:disabled { opacity: 0.6; }
    mode: tilt teaches ITEM + BRAKE, buttons the ‹ › chord + ITEM. */
 .settings-legend {
   flex: none; display: flex; align-items: center; justify-content: center;
-  gap: 1.4rem; flex-wrap: wrap;
+  gap: 0.35rem 1.4rem; flex-wrap: wrap;   /* rows sit close: one legend, not two items */
   padding: 0.2rem 0.4rem;
 }
 .settings-card .help-ctrl--chord { display: none; }
@@ -1390,10 +1389,10 @@ input[type=text]:disabled { opacity: 0.6; }
   0%, 49.9% { transform: translateX(-50%); }
   50%, 100% { transform: translateX(50%); }
 }
-/* ONE tilt timeline, shared by the twist, the strip and the chevrons so their
+/* ONE tilt timeline, shared by the twist and the strip so their
    correspondence is readable: HOLD full-left through 0–18%, swing, HOLD
    full-right through 50–68%, swing back. Without the holds the sine motion
-   never rests and the eye can't verify the three agree. */
+   never rests and the eye can't verify the two agree. */
 @keyframes phone-twist {
   0%, 18%   { transform: rotateX(8deg) rotateZ(-15deg); }
   50%, 68%  { transform: rotateX(8deg) rotateZ(15deg); }
@@ -1420,7 +1419,7 @@ input[type=text]:disabled { opacity: 0.6; }
   display: inline-flex; align-items: center; justify-content: center; gap: 4px;
   width: 4.4rem; height: 1.7rem; box-sizing: border-box; padding: 0; flex: none;
   font-family: var(--font-display); font-weight: 700; font-size: 0.9rem; letter-spacing: 0.05em;
-  border-radius: var(--r-pill); user-select: none;
+  border-radius: var(--r-pill);
 }
 .help-chip--brake { color: #fff; background: var(--danger); }
 .help-chip--item  { color: #fff; background: var(--item); }
@@ -1432,7 +1431,7 @@ input[type=text]:disabled { opacity: 0.6; }
    A SEPARATE alert from the settings (z 18 — above #settings-overlay 17, below
    #conn 30). Same frosted glass + card surface; reuses .settings-card for the
    surface, .help-copy/.help-motion-fix for the body. */
-#motion-overlay, #stars-overlay {
+#motion-overlay, #stars-overlay, #leavecup-overlay {
   position: fixed; inset: 0; z-index: 18;
   display: flex; align-items: center; justify-content: center;
   padding:
@@ -1440,7 +1439,7 @@ input[type=text]:disabled { opacity: 0.6; }
     var(--overlay-bottom) max(4vw, var(--safe-left));   /* floored — opening ARMS back (§9), see --overlay-bottom */
   background: rgba(255, 246, 235, 0.92); backdrop-filter: blur(8px);
 }
-#motion-overlay.hidden, #stars-overlay.hidden { display: none; }
+#motion-overlay.hidden, #stars-overlay.hidden, #leavecup-overlay.hidden { display: none; }
 /* The stars popup: the motion card's shape, with the tiers as a left-aligned
    list so the star rows line up. */
 .stars-rules { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.45rem; text-align: left; }
@@ -1473,12 +1472,31 @@ input[type=text]:disabled { opacity: 0.6; }
    SQUARE rather than on a hit area reaching out past it, because an overflowing
    target is invisible to the eye and not to scrollWidth: it reads as an overflow
    to every guard that measures one (scripts/lobby-fit-check.mjs). */
-.settings-btn, .hud-btns .icon-btn {
+:root { --corner-btn: max(2.9rem, 44px); }   /* the square, read by every corner control */
+.settings-btn, .hud-btns .icon-btn, .fs-exit {
   flex: none;
-  width: max(2.9rem, 44px); height: max(2.9rem, 44px);
+  width: var(--corner-btn); height: var(--corner-btn);
   font-size: 1.5rem; line-height: 1;
 }
 .settings-btn { margin-left: auto; }
+
+/* Exit fullscreen (orientation.js) — the corner's third icon button, sized by
+   the rule above. It floats over every screen in the top-right corner, so
+   while it shows, the two rows that own that corner step left by one button
+   and the .hud-btns gap. */
+.fs-exit {
+  display: none;
+  position: fixed; z-index: 5;
+  top: var(--edge-top); right: var(--edge-right);
+}
+:root.is-fullscreen .fs-exit { display: inline-flex; }
+:root.is-fullscreen .lobby-top,
+:root.is-fullscreen .hud-top { padding-right: calc(var(--corner-btn) + 0.55rem); }
+.fs-exit-glyph {
+  width: 1em; height: 1em;
+  fill: none; stroke: currentColor; stroke-width: 2.6;
+  stroke-linecap: round; stroke-linejoin: round;
+}
 /* On the race page the star count takes the push, so the two popup buttons
    stand together at the right. */
 #lobby.lobby--race .settings-btn { margin-left: 0; }
@@ -1527,9 +1545,6 @@ input[type=text]:disabled { opacity: 0.6; }
     animation: none;
     transform: translateY(2px) scale(0.95); box-shadow: none; filter: brightness(0.8);
   }
-  /* the left chevron holds lit, agreeing with the frozen full-left pose */
-  .demo-chev { animation: none !important; }
-  .demo-chev--l { opacity: 1; }
   .rotate__phone { animation: none; transform: rotate(-90deg); }
 }
 
@@ -1538,10 +1553,10 @@ input[type=text]:disabled { opacity: 0.6; }
 /* Short screens, in tiers. The settings demos step their `zoom` down
    rather than reflowing: the whole px-art phone re-lays-out at the smaller
    size (see .demo-stage above), so every internal proportion survives — only
-   its footprint (and the reserved stage height) shrinks. */
+   its footprint shrinks. Below 380px the card's own gaps tighten (356, 320) and
+   hand the stage back the height, so 1 holds all the way down. */
 @media (max-height: 400px) {
-  .demo-stage .phone-lean { zoom: 1; }
-  .demo-chev .steer-glyph { font-size: 1.6rem; }
+  .demo-stage .phone-lean { zoom: 1.2; }
   .mode-card { padding: 0.55rem 0.8rem; }
 }
 @media (max-height: 380px) {
@@ -1550,6 +1565,7 @@ input[type=text]:disabled { opacity: 0.6; }
      still exactly one place that computes an edge. */
   :root { --edge-top: calc(max(var(--safe-top), 2px) + 4px); }
   #drive-hud { gap: 0.4rem 0.7rem; }
+  .demo-stage .phone-lean { zoom: 1; }
   /* The race's name chip and corner buttons used to shrink here, and that is
      all this tier ever bought: height for the row they sat in. That row does
      not exist any more (.hud-top floats), so the shrink paid for nothing and
@@ -1562,9 +1578,7 @@ input[type=text]:disabled { opacity: 0.6; }
 @media (max-height: 356px) {
   .settings-card { gap: 0.45rem 0.9rem; padding: 0.6rem 1rem 0.8rem; }
   .settings-title { font-size: 1.15rem; }
-  .demo-stage .phone-lean { zoom: 0.85; }
-  .demo-chev .steer-glyph { font-size: 1.3rem; }
-  .settings-legend { gap: 1rem; }
+  .settings-legend { gap: 0.3rem 1rem; }
   .settings-legend .help-ctrl__cap { font-size: 0.8rem; }
 }
 /* One more step, for a small phone whose browser bar is up. The card's height
@@ -1579,6 +1593,9 @@ input[type=text]:disabled { opacity: 0.6; }
    what its overflow-y has always been for. */
 @media (max-height: 320px) {
   .settings-card { gap: 0.3rem 0.9rem; padding: 0.45rem 0.9rem 0.55rem; }
+  /* The popups keep their own air (see .settings-card.motion-card), except the
+     motion alert: the only one measured too tall for this tier without it. */
+  #motion-overlay .settings-card.motion-card { gap: 0.65rem; padding-block: 0.9rem 1rem; }
   .settings-done { padding-block: 0.5em; }
   .demo-stage { padding: 0.45rem; }
 }

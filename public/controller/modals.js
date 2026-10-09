@@ -7,6 +7,10 @@
 // a working phone with a fix it doesn't need, or burying the fix inside a
 // settings card a returning player never re-opens.
 //
+// The other two are one-tap popups over a screen with nothing else open: the
+// stars key on the race page, and the host's leave-cup confirm on the cup
+// intermission.
+//
 // Ordering rules live here rather than at the call sites, because they only make
 // sense against each other: the motion popup wins the lobby-entry beat (the two
 // must never stack), motion sits above settings for Escape, and a pause closes
@@ -26,6 +30,7 @@ let _setInputMode = () => {};
 let _isHost = () => false;
 let _getSoundOn = () => true;
 let _setSoundOn = () => {};
+let _leaveCup = () => {};
 let _onModalToggle = () => {};
 
 // True in gallery/scenario mode — auto-popups stay shut there (the harness opens
@@ -216,6 +221,30 @@ function closeStarsPopup() {
   _onModalToggle();
 }
 
+// ---- Leave-cup confirm ----
+// Opened only by the host's "Leave cup" on the intermission board. The board
+// leaving the screen (the next race starting, the cup ending) closes it, since
+// what it asks about is gone — see closeLeaveCupPopup's caller in main.js.
+let _leaveCupReturnFocus = null;
+
+const leaveCupOpen = () => !el('leavecup-overlay').classList.contains('hidden');
+
+export function openLeaveCupPopup() {
+  _leaveCupReturnFocus = document.activeElement;
+  el('leavecup-overlay').classList.remove('hidden');
+  setBackgroundInert(true);
+  el('leavecup-overlay').focus({ preventScroll: true });
+  _onModalToggle();
+}
+
+export function closeLeaveCupPopup() {
+  if (!leaveCupOpen()) return;
+  el('leavecup-overlay').classList.add('hidden');
+  setBackgroundInert(false);
+  restoreFocus(_leaveCupReturnFocus); _leaveCupReturnFocus = null;
+  _onModalToggle();
+}
+
 // ---- the rules that only make sense against each other ----
 
 // On reaching the lobby: if tilt is the mode and the sensor is blocked, the
@@ -235,30 +264,34 @@ export function closeAnyModal() {
   if (settingsOpen()) closeSettings();
   if (motionOpen()) closeMotionPopup();
   if (starsOpen()) closeStarsPopup();
+  closeLeaveCupPopup();
 }
 
 // Whether any popup is up — the shell's system-back sync reads this (an open
 // dialog is what back should close, even mid-race).
-export function anyModalOpen() { return settingsOpen() || motionOpen() || starsOpen(); }
+export function anyModalOpen() { return settingsOpen() || motionOpen() || starsOpen() || leaveCupOpen(); }
 
 // Close the topmost popup, report whether one was there — the shell's
 // window.CouchPad.back handler (motion sits above settings, so it goes first;
-// the stars popup only opens from a lobby tap, so it never stacks with either).
+// the stars and leave-cup popups each open from one tap on a screen with no
+// other popup, so they never stack with anything).
 export function closeTopModal() {
   if (motionOpen()) { closeMotionPopup(); return true; }
   if (settingsOpen()) { closeSettings(); return true; }
   if (starsOpen()) { closeStarsPopup(); return true; }
+  if (leaveCupOpen()) { closeLeaveCupPopup(); return true; }
   return false;
 }
 
 export function initModals({ screens, tilt, buzz, playerName, getInputMode, setInputMode,
-                             isHost, getSoundOn, setSoundOn, onModalToggle }) {
+                             isHost, getSoundOn, setSoundOn, leaveCup, onModalToggle }) {
   _screens = screens; _tilt = tilt; _buzz = buzz; _playerName = playerName;
   if (getInputMode) _getInputMode = getInputMode;
   if (setInputMode) _setInputMode = setInputMode;
   if (isHost) _isHost = isHost;
   if (getSoundOn) _getSoundOn = getSoundOn;
   if (setSoundOn) _setSoundOn = setSoundOn;
+  if (leaveCup) _leaveCup = leaveCup;
   if (onModalToggle) _onModalToggle = onModalToggle;
 
   el('settings-btn').addEventListener('click', () => { _buzz(15); openSettings(); });
@@ -301,6 +334,10 @@ export function initModals({ screens, tilt, buzz, playerName, getInputMode, setI
   el('stars-done').addEventListener('click', () => { _buzz(15); closeStarsPopup(); });
   el('stars-overlay').addEventListener('keydown', (e) => trapTab(el('stars-overlay'), e));
 
+  el('leavecup-cancel').addEventListener('click', () => { _buzz(15); closeLeaveCupPopup(); });
+  el('leavecup-confirm').addEventListener('click', () => { _buzz(15); closeLeaveCupPopup(); _leaveCup(); });
+  el('leavecup-overlay').addEventListener('keydown', (e) => trapTab(el('leavecup-overlay'), e));
+
   el('motion-done').addEventListener('click', () => { _buzz(15); closeMotionPopup(); });
   el('motion-overlay').addEventListener('keydown', (e) => trapTab(el('motion-overlay'), e));
   // The in-race "tilt is off" chip reopens the recovery popup (its only fix path,
@@ -338,5 +375,6 @@ export function initModals({ screens, tilt, buzz, playerName, getInputMode, setI
     if (motionOpen()) { e.preventDefault(); e.stopPropagation(); closeMotionPopup(); }
     else if (settingsOpen()) { e.preventDefault(); e.stopPropagation(); closeSettings(); }
     else if (starsOpen()) { e.preventDefault(); e.stopPropagation(); closeStarsPopup(); }
+    else if (leaveCupOpen()) { e.preventDefault(); e.stopPropagation(); closeLeaveCupPopup(); }
   });
 }

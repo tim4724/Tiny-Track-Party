@@ -81,17 +81,18 @@ function renderMe(data, meId, cupDone) {
 }
 
 // Footer: while cars are still out, a waiting note for everyone. Once the race is
-// over, the host gets ONE button — "Next race" during a cup intermission, "New
-// game" otherwise; everyone else gets a note. There is deliberately no abandon
-// button beside it: a run in progress is left through the pause overlay's "New
-// game" in the next race, so the board can't be tapped out of a cup by mistake.
-// That exit is any phone's, not just the host's. Intermissions auto-advance, so
+// over, the host gets "Next race" during a cup intermission and "New game"
+// otherwise; everyone else gets a note. On an intermission the host also gets
+// "Leave cup", behind a confirm (modals.js) so the board can't be tapped out of
+// a cup by mistake. A playtest showed that leaving only through the next race's
+// pause menu reads as "there is no way out". Intermissions auto-advance, so
 // non-hosts see "starting soon" rather than a who-to-wait-on name.
 function renderFoot(data, { hostPeerIndex, amHost, liveryOf }) {
   const btn = el('newgame-btn');
   const wait = el('result-wait');
   const s = data.series;
   const intermission = !!(s && !s.final && data.over);
+  el('leavecup-btn').classList.toggle('hidden', !(amHost && intermission));
   if (!data.over) {
     btn.classList.add('hidden');
     wait.classList.remove('hidden');

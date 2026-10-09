@@ -59,7 +59,7 @@ test('phone results board mid-race: my time, the field still out', async ({ page
   await expect(page.locator('#result-wait')).toHaveText('Waiting for the other racers to finish…');
 });
 
-test('phone cup intermission: my RACE place only, race counter, one host button', async ({ page }) => {
+test('phone cup intermission: my RACE place only, race counter, advance or leave', async ({ page }) => {
   await page.goto(`${CONTROLLER}intermission&color=1`);
   await boardReady(page);
   // Derived from series.raceIndex/raceCount — the harness used to hardcode this.
@@ -72,10 +72,20 @@ test('phone cup intermission: my RACE place only, race counter, one host button'
   // NO cup standing, and no points: that is the TV's reveal to make.
   await expect(page.locator('#result-me')).not.toContainText('pts');
   await expect(page.locator('#result-me')).not.toContainText('+');
-  // Mid-series ⇒ advance, and that is the WHOLE footer: an intermission offers
-  // no way to abandon the cup (leaving is the pause overlay's "New game").
-  await expect(page.locator('#newgame-btn')).toHaveText('Next race ▸');
-  await expect(page.locator('#result-foot button:visible')).toHaveCount(1);
+  // Mid-series ⇒ advance, with "Leave cup" beside it (its confirm is modals.js's).
+  // Order matters: the ghost sits LEFT of the primary, as in the lobby corner.
+  await expect(page.locator('#result-foot button:visible')).toHaveText(['Leave cup', 'Next race ▸']);
+});
+
+// The leave-cup confirm over that board: the destructive choice is the RED one
+// and named for what it does, and keeping the cup is the way back out.
+test('phone cup intermission: Leave cup asks first', async ({ page }) => {
+  await page.goto(`${CONTROLLER}leave-cup&color=1`);
+  await boardReady(page);
+  await expect(page.locator('#leavecup-overlay')).toBeVisible();
+  await expect(page.locator('#leavecup-title')).toHaveText('Leave the cup?');
+  await expect(page.locator('#leavecup-overlay button:visible')).toHaveText(['Leave cup', 'Keep racing']);
+  await expect(page.locator('#leavecup-confirm')).toHaveClass(/btn--danger/);
 });
 
 // The last board of a cup has TWO states and the phone must not confuse them.
@@ -91,8 +101,8 @@ test('phone cup last race: still the RACE, while the TV is revealing', async ({ 
   await expect(page.locator('#results-title')).toHaveText('Race 4 of 4');
   await expect(page.locator('#result-place')).toHaveText('3rd');
   await expect(page.locator('#result-me')).not.toContainText('pts');
-  // The cup is done: back to the lobby.
-  await expect(page.locator('#newgame-btn')).toHaveText('New game');
+  // The cup is done: back to the lobby, and there is no cup left to leave.
+  await expect(page.locator('#result-foot button:visible')).toHaveText(['New game']);
 });
 
 test('phone cup final: reports the CUP once the TV has revealed it', async ({ page }) => {

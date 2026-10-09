@@ -121,6 +121,13 @@ export function initDriveSurface({ tilt, buzz, haptics }) {
   const game = el('game');
   game.addEventListener('contextmenu', (e) => e.preventDefault());
   game.addEventListener('selectstart', (e) => e.preventDefault());
+  // iOS runs its long-press gesture (selection, loupe, callout) off the TOUCH
+  // stream, which pointerdown's preventDefault below never reaches; touchstart's
+  // does. Only on the drive buttons, which act on pointerdown: anywhere else it
+  // would also swallow the tap's click.
+  for (const id of ['brake-btn', 'steer-left', 'steer-right', 'action-btn']) {
+    el(id).addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
+  }
 
   // BRAKE — held = brake at the fixed rate, released = release. A continuous
   // rumble runs while it's held: the player's eyes-free confirmation they're

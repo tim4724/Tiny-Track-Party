@@ -185,19 +185,34 @@ test('webkit: the drive controls keep their own held state, whatever else is pre
   await expect(brake).toHaveClass(/\bheld\b/);   // …and BRAKE is still held
 });
 
-// A long press on iOS that lands on selectable text raises the Copy menu, and a
-// thumb drifting off a steer button lands on the hint or the paper beside it.
-// The race screen once carried only the bare `user-select`, which WebKit does
-// not honour, so this asks WebKit itself: the prefixed value every element on
-// the screen computes, then a real drag across the text that would select it.
-test('webkit: nothing on the race screen can be selected', async ({ page }) => {
+// A long press on iOS selects the NEAREST text, not only text under the finger,
+// and raises the Copy / Search menu over it — so a thumb held on a drive button
+// picked up the latency chip over its corner. That chip lives outside #game,
+// and this check once looked only inside it, which is how it passed while the
+// chip stayed open. So it asks WebKit about EVERY element on the page, on every
+// kind of screen, then drags across text that would select. The bare
+// `user-select` is not enough there: WebKit honours only the prefixed one.
+for (const scenario of ['playing', 'playing-buttons', 'lobby-host', 'intermission', 'settings']) {
+  test(`webkit ${scenario}: nothing on the page can be selected`, async ({ page }) => {
+    await page.goto(`/controller/index.html?scenario=${scenario}`);
+    await page.waitForTimeout(300);
+    const selectable = await page.$$eval('body, body *', (els) => els
+      .filter((e) => !e.matches('input, textarea'))
+      .filter((e) => getComputedStyle(e).webkitUserSelect !== 'none')
+      .map((e) => e.id || e.className));
+    expect(selectable).toEqual([]);
+  });
+}
+
+// ...while the one field that takes typing keeps it.
+test('webkit: the name field stays selectable', async ({ page }) => {
+  await page.goto('/controller/index.html?scenario=name');
+  expect(await page.locator('#name-input').evaluate((e) => getComputedStyle(e).webkitUserSelect)).not.toBe('none');
+});
+
+test('webkit: a drag across the race screen selects nothing', async ({ page }) => {
   await page.goto('/controller/index.html?scenario=playing');
   await page.waitForSelector('#game:not(.hidden) #hud-name');
-
-  const selectable = await page.$$eval('#game, #game *', (els) => els
-    .filter((e) => getComputedStyle(e).webkitUserSelect !== 'none')
-    .map((e) => e.id || e.className));
-  expect(selectable).toEqual([]);
 
   const from = await page.locator('#hud-name').boundingBox();
   const to = await page.locator('.hud-hint').boundingBox();
