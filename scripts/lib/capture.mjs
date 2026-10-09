@@ -139,7 +139,8 @@ export async function servePages(pages, { root = path.join(ROOT, 'public') } = {
 // path (lobby-fit-check, which measures the DOM rather than pixels and runs
 // under webdriver in E2E anyway).
 export async function launchBrowser({ realUser = true, headed = false } = {}) {
-  const browser = await chromium.launch({ headless: !headed });
+  // Muted: a headed bake otherwise plays race audio out of the machine's speakers.
+  const browser = await chromium.launch({ headless: !headed, args: ['--mute-audio'] });
   async function context(opts = {}) {
     const ctx = await browser.newContext(opts);
     if (realUser) {
