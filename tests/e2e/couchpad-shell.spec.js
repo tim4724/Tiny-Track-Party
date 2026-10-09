@@ -172,6 +172,26 @@ test('theming metas ship and the accent retints to the player livery (§4); safe
     return parseFloat(getComputedStyle(document.getElementById('lobby')).paddingTop);
   });
   expect(padTop).toBeGreaterThanOrEqual(48);
+
+  // The launcher reports each side's ACTUAL inset. A one-sided cutout is
+  // levelled onto both sides on a regular phone, and taken as-is on a small one.
+  const sidePads = () => zoe.evaluate(() => {
+    const s = getComputedStyle(document.getElementById('lobby'));
+    return [parseFloat(s.paddingLeft), parseFloat(s.paddingRight)];
+  });
+  await zoe.evaluate(() => {
+    document.documentElement.style.setProperty('--cp-safe-left', '48px');
+    document.documentElement.style.setProperty('--cp-safe-right', '20px');
+  });
+  const [left, right] = await sidePads();
+  expect(left).toBeGreaterThanOrEqual(48);
+  expect(right).toBe(left);
+  // The injected vars survive the resize: same page, now under the small tier.
+  await zoe.setViewportSize({ width: 667, height: 375 });
+  const [smallLeft, smallRight] = await sidePads();
+  expect(smallLeft).toBeGreaterThanOrEqual(48);
+  expect(smallRight).toBeGreaterThanOrEqual(20);
+  expect(smallRight).toBeLessThan(smallLeft);
 });
 
 test('the shell asks for landscape before first paint (§10)', async ({ page, browser }) => {

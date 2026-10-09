@@ -15,14 +15,18 @@
   --safe-bottom: max(var(--cp-safe-bottom, 0px), env(safe-area-inset-bottom, 0px));
   /* LEFT and RIGHT are LEVELLED to the larger of the pair: the page is
      landscape-only and its layouts are symmetric, so a one-sided camera cutout
-     must not shove them off the physical centre. (The CouchPad launcher already
-     levels its own vars — contract §5 — this makes bare-browser env() agree.) */
-  --safe-x: max(var(--cp-safe-left,  0px), env(safe-area-inset-left,  0px),
-                var(--cp-safe-right, 0px), env(safe-area-inset-right, 0px));
+     must not shove them off the physical centre. The launcher reports each
+     side's ACTUAL inset, so the levelling is ours to do, in the shell and in a
+     bare browser alike. Small phones are the exception (below). */
+  --inset-left:  max(var(--cp-safe-left,  0px), env(safe-area-inset-left,  0px));
+  --inset-right: max(var(--cp-safe-right, 0px), env(safe-area-inset-right, 0px));
+  --safe-x: max(var(--inset-left), var(--inset-right));
+  --safe-left:  var(--safe-x);
+  --safe-right: var(--safe-x);
 
   /* Screen margin = the inset floored at a 10px design gutter, plus 4px of
-     clearance so content never sits flush ON the inset edge. All three edges
-     take the same shape, and the ORDER of the two operations is the point.
+     clearance so content never sits flush ON the inset edge. Every edge takes
+     the same shape, and the ORDER of the two operations is the point.
      Left/right used to be calc(var(--safe-x) + 14px) — the whole gutter added
      on top. With no inset that is indistinguishable from this, which is why
      every viewport sweep and screenshot here agrees with both; but on a notched
@@ -32,11 +36,20 @@
      adding a hair keeps the page off the boundary without paying for the gutter
      twice: 14px on a plain screen, inset+4 on a notched one.
      The overlays below floor against their own, larger gutters and add nothing:
-     max(6vw, var(--safe-x)) is already well clear at any inset. */
+     max(6vw, <that side's inset>) is already well clear at any inset. */
   --edge-top:    calc(max(var(--safe-top),    10px) + 4px);
   --edge-bottom: calc(max(var(--safe-bottom), 10px) + 4px);
-  --edge-x:      calc(max(var(--safe-x),      10px) + 4px);
-
+  --edge-left:   calc(max(var(--safe-left),   10px) + 4px);
+  --edge-right:  calc(max(var(--safe-right),  10px) + 4px);
+}
+/* Small phones take each side's ACTUAL inset: there the width a levelled
+   cutout costs on the side without one is worth more than the symmetry.
+   Same breakpoint as the font tier below — that is what "small" means here. */
+@media (max-height: 360px), (max-width: 700px) {
+  :root {
+    --safe-left:  var(--inset-left);
+    --safe-right: var(--inset-right);
+  }
 }
 
 html, body {
@@ -67,8 +80,8 @@ section {
   position: relative; z-index: 1;
   flex: 1; display: flex; flex-direction: column;
   padding:
-    var(--edge-top) var(--edge-x)
-    var(--edge-bottom) var(--edge-x);
+    var(--edge-top) var(--edge-right)
+    var(--edge-bottom) var(--edge-left);
 }
 /* The join screen is a two-column landscape spread: the wordmark badge on the
    left, the form on the right, EACH centred in the available height. The
@@ -212,7 +225,7 @@ input[type=text]:disabled { opacity: 0.6; }
    FLUSH RIGHT, which it could not be while it was the only thing on this row:
    the latency chip has held the bottom-right on every screen since before this
    layout, so the row reserves the chip's own strip (.latency is
-   max(--safe-x, 3.4rem) wide) and butts up against it. The page's side gutter
+   max(--safe-right, 3.4rem) wide) and butts up against it. The page's side gutter
    already pays part of that, so only the difference is added here.
    scripts/lobby-fit-check.mjs is what keeps the two from ever meeting.
 
@@ -225,7 +238,7 @@ input[type=text]:disabled { opacity: 0.6; }
 .lobby-go {
   grid-area: go;
   display: flex; align-items: center; justify-content: flex-end; gap: 0.6rem;
-  padding-right: max(0px, calc(max(var(--safe-x), 3.4rem) + 0.3rem - var(--edge-x)));
+  padding-right: max(0px, calc(max(var(--safe-right), 3.4rem) + 0.3rem - var(--edge-right)));
 }
 .lobby-go .btn {
   flex: none; width: auto; min-width: 11rem; padding-inline: 1.5rem; margin: 0;
@@ -905,7 +918,7 @@ input[type=text]:disabled { opacity: 0.6; }
    vetoed here before: no box, no border, nothing that reads as a control. It is
    invisible against the paper it sits on everywhere else, and it is the only
    thing separating the number from the ledge during a race. The element is a box as wide
-   as that strip (--safe-x) with the number CENTRED in it; the 3.4rem floor
+   as that strip (--safe-right) with the number CENTRED in it; the 3.4rem floor
    means a thin/absent inset pushes the box into safe content rather than
    squeezing the text off the edge. Bare ink text + bolt, no pill: a boxed
    pill read as another button down among the controls. The good/ok/bad state
@@ -917,7 +930,7 @@ input[type=text]:disabled { opacity: 0.6; }
 .latency {
   position: fixed;
   right: 0;
-  width: max(var(--safe-x), 3.4rem);
+  width: max(var(--safe-right), 3.4rem);
   bottom: calc(0.5rem + var(--safe-bottom));
   z-index: 14;
   display: inline-flex; align-items: center; justify-content: center; gap: 3px;
@@ -948,8 +961,8 @@ input[type=text]:disabled { opacity: 0.6; }
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 0.9rem;
   padding:
-    calc(4vh + var(--safe-top)) max(6vw, var(--safe-x))
-    calc(1vh + var(--overlay-bottom)) max(6vw, var(--safe-x));
+    calc(4vh + var(--safe-top)) max(6vw, var(--safe-right))
+    calc(1vh + var(--overlay-bottom)) max(6vw, var(--safe-left));
   background: rgba(255, 246, 235, 0.82); backdrop-filter: blur(8px);
 }
 #pause-overlay h2 {
@@ -964,8 +977,8 @@ input[type=text]:disabled { opacity: 0.6; }
   position: fixed; inset: 0; z-index: 30;
   display: flex; align-items: center; justify-content: center;
   padding:
-    calc(4vh + var(--safe-top)) max(6vw, var(--safe-x))
-    calc(4vh + var(--safe-bottom)) max(6vw, var(--safe-x));
+    calc(4vh + var(--safe-top)) max(6vw, var(--safe-right))
+    calc(4vh + var(--safe-bottom)) max(6vw, var(--safe-left));
   background: rgba(255, 246, 235, 0.92); backdrop-filter: blur(8px);
   text-align: center;
 }
@@ -1033,8 +1046,8 @@ input[type=text]:disabled { opacity: 0.6; }
      card sits visually centred; bottom floored because opening ARMS back (§9),
      see --overlay-bottom */
   padding:
-    max(var(--safe-top), 18px) max(4vw, var(--safe-x))
-    var(--overlay-bottom) max(4vw, var(--safe-x));
+    max(var(--safe-top), 18px) max(4vw, var(--safe-right))
+    var(--overlay-bottom) max(4vw, var(--safe-left));
   background: rgba(255, 246, 235, 0.9); backdrop-filter: blur(8px);
 }
 #settings-overlay.hidden { display: none; }
@@ -1272,7 +1285,8 @@ input[type=text]:disabled { opacity: 0.6; }
    below): the name up top, the steer strip centred, the mode's controls in
    their live positions. The horizontal padding is the demo's own SAFE AREA:
    it keeps the strip and buttons clear of the island on the left — and stays
-   symmetric on the right, exactly as the real page levels its side insets. */
+   symmetric on the right, as the real page levels its side insets (except on
+   small phones). */
 .phone-inner {
   position: relative;
   width: 100%; height: 100%; border-radius: 15px; overflow: hidden;
@@ -1422,8 +1436,8 @@ input[type=text]:disabled { opacity: 0.6; }
   position: fixed; inset: 0; z-index: 18;
   display: flex; align-items: center; justify-content: center;
   padding:
-    calc(2vh + var(--safe-top)) max(4vw, var(--safe-x))
-    var(--overlay-bottom) max(4vw, var(--safe-x));   /* floored — opening ARMS back (§9), see --overlay-bottom */
+    calc(2vh + var(--safe-top)) max(4vw, var(--safe-right))
+    var(--overlay-bottom) max(4vw, var(--safe-left));   /* floored — opening ARMS back (§9), see --overlay-bottom */
   background: rgba(255, 246, 235, 0.92); backdrop-filter: blur(8px);
 }
 #motion-overlay.hidden, #stars-overlay.hidden { display: none; }
