@@ -1319,3 +1319,33 @@ chase camera's base field of view at 48 against 55 degrees (ribbon 13.53,
 13.62 / 16.68, 16.39; glacier 13.20 / 17.04 against 13.1 / 17.5): fewer
 primitives in the frustum, each covering more tiles — a wash, which is
 what the tiler reading predicts.
+
+## Triangle order, the item roulette, and a long session (2026-10-09)
+
+Build `a16ce8b5` + these changes, Vulkan, 4P pinned 1280x720 (saturated), three
+interleaved whole races a side per arm on one install, 50 s counted.
+
+**Vertex-reuse order** (`reorderForVertexReuse`): the deck as generated scored
+2.0 shaded vertices per triangle against a 16-entry FIFO model, 1.14 reordered;
+the small sheets 1.0-1.4 -> 0.8-1.2; the far ribbon was already at its floor.
+
+| | heavy GPU p50 | skips per race |
+|---|---|---|
+| tidepool, built order -> reordered | 15.93 -> 15.13 (3/3 pairs) | 71 -> 32 |
+| pretzel, built order -> reordered | 17.08 -> 16.71 (2/3 pairs) | 139 -> 102 |
+
+Held-moment screenshots (tidepool, seed 1, 4P, pinned 540): pixels stable
+within each arm and different between them, 0.17% of the frame by at most 5/255.
+
+**The item roulette without its transform** (Android only, `RaceScreen.ItemSlot`):
+pretzel 158 -> 119 skips a race, every simple race under every shipped one;
+tidepool 59 -> 55, a null. The Filament timer cannot see it — the cost is the
+window's.
+
+**Combined**, a single race each (n=1, a sanity check, not an arm): tidepool 18
+skips, pretzel 100.
+
+**A 15-minute 4P soak** (seven back-to-back adaptive races) never throttled:
+board 43.7 -> 48.3 C against a 76.2 C first threshold, SoC max 56 C against 95,
+the GPU's cooling device at 0 throughout. GPU busy at 4P/540 tidepool, from the
+driver's own `gpu_work_period` events: 63%. The box emits no `gpu_frequency`.

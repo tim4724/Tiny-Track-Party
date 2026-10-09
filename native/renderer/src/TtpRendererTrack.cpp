@@ -472,11 +472,12 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
     // The soup shares nothing: each quad owns its four corners, so every
     // corner along a run of one colour is drawn twice and each cell shades
     // both. Welded on every attribute (and the normal the shadow bake's light
-    // re-fill reads), the ribbon keeps its triangle order and every value the
-    // rasterizer interpolates. Its point-set readers (the AMB_FLAKE floor
-    // raster, the shadow bake's fit) take a max or bound per point, which a
-    // merge of exact duplicates cannot change; the far ribbon below is built
-    // over the soup's numbering and mapped through `roadRemap`.
+    // re-fill reads), the ribbon keeps its triangles (buildMesh reorders them
+    // only within each chunk) and every value the rasterizer interpolates. Its
+    // point-set readers (the AMB_FLAKE floor raster, the shadow bake's fit)
+    // take a max or bound per point, which a merge of exact duplicates cannot
+    // change; the far ribbon below is built over the soup's numbering and
+    // mapped through `roadRemap`.
     std::vector<uint32_t> roadRemap;
     weldExact(mRoad, true, &roadRemap);
     // Chunked by RINGS, each chunk with its own bounds, so a chase camera pays

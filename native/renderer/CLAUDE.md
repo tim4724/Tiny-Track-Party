@@ -757,6 +757,15 @@ sheets carry no normals at all. The deck agrees from the third direction: its
 shading is baked into custom0 by `fillRoadLight`, and cutting 54k deck vertices
 bought 0.4 ms where these 40k bought 1.1.
 
+**So the ORDER of a mesh's triangles is a cost too.** A tiler shades a vertex
+once per batch of primitives that reference it, and the deck as generated
+re-shaded both new corners of every triangle. `buildMesh` therefore reorders
+every OPAQUE range and its far form for vertex reuse (`reorderForVertexReuse`,
+meshoptimizer), within the range only so each renderable keeps its own
+triangles, box and far form; the instanced kit prims are reordered too. **Nothing may depend
+on the triangle order inside an opaque range after build**; a blended mesh
+keeps its order, because it composites in it.
+
 Three consequences, and the first two have each been paid for once:
 
 - **A FAR-PLANE CUT BUYS NOTHING HERE, and the reason is the content.** The

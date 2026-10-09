@@ -11,7 +11,8 @@
 #include "../generated/kit_colors.h"
 
 #include "ttp/glb.h"
-// The simplifier the Filament SDK already links (native/vendor/meshoptimizer).
+// The meshoptimizer the Filament SDK already links (native/vendor/meshoptimizer):
+// the far forms' simplifier and the vertex-reuse order.
 #include <meshoptimizer.h>
 
 #include <utils/Log.h>
@@ -296,6 +297,22 @@ const std::vector<uint8_t>* TtpRenderer::asset(const char* name) const {
     return it == mAssets.end() ? nullptr : &it->second;
 }
 
+// Reorders one range's triangles, in place, so a shared corner is shaded once
+// rather than again for every triangle that reaches it after it left the GPU's
+// post-transform reuse window. The deck as generated re-shaded both new corners
+// of every triangle. `vertexCount` is the whole buffer's, since a range indexes
+// into all of it.
+static void reorderForVertexReuse(uint32_t* idx, size_t n, size_t vertexCount) {
+    const std::vector<uint32_t> src(idx, idx + n);   // the optimiser reads a copy
+    meshopt_optimizeVertexCache(idx, src.data(), n, vertexCount);
+}
+
+// Only an OPAQUE draw may be reordered: a blended one composites in triangle
+// order.
+static bool isOpaque(const MaterialInstance* mi) {
+    return mi->getMaterial()->getBlendingMode() == BlendingMode::OPAQUE;
+}
+
 bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
         MaterialInstance* materialInstance, uint8_t priority, uint32_t chunkTris) {
     if (m.verts.empty() || m.idx.empty() || m.idx.size() % 3) return false;
@@ -327,7 +344,8 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
     // colour, so two vertices equal in both bits ARE one vertex. The kit's GLBs
     // split vertices for attributes the bake has already consumed, so a baked
     // run comes out with about half of them doubled; each cell pays for every
-    // one. The triangle order and every rasterised value are unchanged.
+    // one. Every rasterised value is unchanged, and so is the triangle order
+    // until the reorder below.
     const bool welded = (fold || m.weld) && !lit && !uv && !baked;
     if (welded) weldExact(m, false);
     m.layout = Mesh::Layout{ lit, uv, baked };
@@ -391,6 +409,23 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
             far[i] = farForm(m, t0 * 3, n * 3, scale, ranges.size() > 1);
         }
     }
+    MaterialInstance* const mi = materialInstance ? materialInstance
+            : lit ? (mLitPlainMaterial ? mLitPlainMaterial : mLitMaterial)
+                            ->getDefaultInstance()
+                  : mMaterial->getDefaultInstance();
+    // Within each range only, so every renderable keeps its own triangles, its
+    // box and its far form. What it bought on the Android box is in
+    // docs/perf/androidtv-frame-map.md (2026-10-09).
+    if (isOpaque(mi)) {
+        for (size_t i = 0; i < ranges.size(); i++) {
+            reorderForVertexReuse(m.idx.data() + ranges[i].first * 3,
+                    ranges[i].second * 3, m.verts.size());
+            if (far[i].farCnt) {
+                reorderForVertexReuse(m.idx.data() + far[i].farOff, far[i].farCnt,
+                        m.verts.size());
+            }
+        }
+    }
     m.ib = IndexBuffer::Builder()
             .indexCount((uint32_t) m.idx.size())
             .bufferType(IndexBuffer::IndexType::UINT)
@@ -413,10 +448,6 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
         }
         return std::pair{ lo, hi };
     };
-    MaterialInstance* const mi = materialInstance ? materialInstance
-            : lit ? (mLitPlainMaterial ? mLitPlainMaterial : mLitMaterial)
-                            ->getDefaultInstance()
-                  : mMaterial->getDefaultInstance();
     for (size_t i = 0; i < ranges.size(); i++) {
         const auto [t0, n] = ranges[i];
         const auto [lo, hi] = boundsOf(t0 * 3, n * 3);
@@ -1307,6 +1338,11 @@ bool TtpRenderer::buildMergedGroup(std::vector<MergedGroup>& out,
                 }
             }
             mp.idx = sp.idx;
+            // The same material the merged draw is built with, below.
+            const size_t primIndex = (size_t) (&sp - prims.data());
+            if (isOpaque(rcm.getMaterialInstanceAt(ri0, primIndex))) {
+                reorderForVertexReuse(mp.idx.data(), mp.idx.size(), nv);
+            }
             mp.vb = VertexBuffer::Builder()
                     .vertexCount((uint32_t) nv)
                     .bufferCount(3)
