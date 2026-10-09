@@ -352,6 +352,41 @@ test('a real sample inside the window keeps the grant: no fallback, nothing more
   });
 });
 
+test("AirConsole with no DeviceOrientationEvent stays 'unknown' — the SDK's device_motion relay is the sensor there", () => {
+  const hadW = Object.prototype.hasOwnProperty.call(globalThis, 'window');
+  const prevW = globalThis.window;
+  globalThis.window = { addEventListener() {}, airconsole: {} };
+  try {
+    assert.equal(new TiltInput({}).motionState, 'unknown');
+  } finally {
+    if (hadW) globalThis.window = prevW; else delete globalThis.window;
+  }
+});
+
+// ---- relayOrientation: AirConsole's device_motion relay ----
+
+// The relay's alpha/beta/gamma are the DeviceOrientationEvent triple (measured
+// on a device: held still at a 65° roll they read 65, where a rate reads 0), so
+// the claim worth pinning is that a relayed sample IS a browser event: same
+// gravity, same steer. And that it resolves the state by itself — on AC the
+// frame's own request can only fail (iOS answers 'denied'), and the relay's
+// delivery is the proof that counts.
+test('a relayed orientation steers exactly like the browser event, whatever the frame was told', () => {
+  withScreenAngle(0, () => {
+    const relayed = new TiltInput({});
+    const native = new TiltInput({});
+    relayed.motionState = 'denied';   // the frame's own request refused, as iOS does
+    for (let i = 0; i < 40; i++) {
+      relayed.relayOrientation(0, 30);
+      native._onOrient({ beta: 0, gamma: 30 });
+    }
+    assert.equal(relayed.motionState, 'granted');
+    assert.ok(relayed.haveTilt);
+    assert.ok(relayed._sensorSteer() > 0.95, `full lock, got ${relayed._sensorSteer()}`);
+    assert.equal(relayed._sensorSteer(), native._sensorSteer());
+  });
+});
+
 test('stop() resets brake + ACTION + keyboard state so the next race cannot inherit a stale press', () => {
   const t = new TiltInput({});
   t.setActionEnabled(true);

@@ -39,6 +39,14 @@ export const GALLERY_SCENARIOS = [
     id: 'lobby-random', key: 'lobby', title: 'Lobby (random picked)',
     hostVariant: true, animated: true, params: { picked: 'random', track: 'powder' }
   },
+  // LIVE ONLY: the AirConsole dressing of the same lobby, and the only screen
+  // AirConsole has — no welcome board, so this is what carries the legal footer.
+  // AC is a web transport: no TV has this screen and no store listing shows it.
+  {
+    id: 'lobby-ac', key: 'lobby-ac', title: 'Lobby (AirConsole)',
+    hostVariant: true, animated: true, liveOnly: true,
+    params: { picked: 'track', track: 'driftwood' }
+  },
   // MOTION IS THE SIM, and `animated` is the entry that declares it: a live
   // scene that would otherwise render forever, so the live gallery's preview
   // becomes a play/pause surface over window.__preview and idles on one held

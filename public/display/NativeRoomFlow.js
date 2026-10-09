@@ -31,6 +31,7 @@ export async function init() {
     addPlayer: c('ttp_room_add_player', 'string', ['number', 'string', 'string']),
     transitionTo: c('ttp_room_transition_to', 'number', ['number', 'string']),
     state: c('ttp_room_state', 'string', ['number']),
+    setMaster: c('ttp_room_set_master', null, ['number', 'string']),
     host: c('ttp_room_host_json', 'string', ['number']),
     list: c('ttp_room_list_json', 'string', ['number']),
     events: c('ttp_room_events_json', 'string', ['number']),
@@ -47,6 +48,10 @@ export class NativeRoomFlow {
   constructor(opts = {}) {
     if (!fn) throw new Error('NativeRoomFlow: init() not awaited');
     const cfg = {};
+    // Presence of `master` marks a masterProvider: a transport that designates
+    // the host itself (AirConsole — see display-airconsole.js). The relay
+    // passes none, and host election stays sticky-lowest-slot.
+    if (opts.masterProvider) cfg.master = opts.masterProvider() ?? null;
     if (opts.liveness) {
       cfg.liveness = {};
       if (opts.liveness.graceMs !== undefined) cfg.liveness.graceMs = opts.liveness.graceMs;
@@ -58,6 +63,9 @@ export class NativeRoomFlow {
     // because a 0 here would mean the ABI changed under us.
     if (!this._h) throw new Error('ttp_room_create returned no handle');
     this._listeners = {};
+    // Read LIVE in JS (the C++ side holds a settable value), so it is mirrored
+    // across before each op that can consult it.
+    this._masterProvider = opts.masterProvider || null;
   }
 
   // The wasm handle behind this room, for the ABIs that read a LIVE ROOM in C++
@@ -87,6 +95,7 @@ export class NativeRoomFlow {
   // announce a mutation used to fire mid-walk lands before the walk's trailing
   // sends).
   runWalk(call) {
+    this._syncMaster();
     const raw = call();
     this.walkMutated();
     return raw;
@@ -108,10 +117,16 @@ export class NativeRoomFlow {
     }
   }
 
+  // Push the live master into the C++ side before an op reads it.
+  _syncMaster() {
+    if (this._masterProvider) fn.setMaster(this._h, idJson(this._masterProvider() ?? null));
+  }
+
   // ---- roster ---------------------------------------------------------------
   // The seeded record comes back as a plain snapshot the caller owns (or null
   // for a refused seat). Game fields are written at seat time via `fields`.
   addPlayer(peerIndex, fields = {}) {
+    this._syncMaster();
     const rec = fn.addPlayer(this._h, idJson(peerIndex), JSON.stringify(fields));
     this._drain();
     return rec === 'null' ? null : JSON.parse(rec);
@@ -119,6 +134,7 @@ export class NativeRoomFlow {
 
   // ---- lifecycle ------------------------------------------------------------
   transitionTo(state) {
+    this._syncMaster();
     const ok = fn.transitionTo(this._h, state) === 1;
     this._drain();
     return ok;

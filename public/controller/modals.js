@@ -342,7 +342,16 @@ export function initModals({ screens, tilt, buzz, playerName, getInputMode, setI
   el('motion-overlay').addEventListener('keydown', (e) => trapTab(el('motion-overlay'), e));
   // The in-race "tilt is off" chip reopens the recovery popup (its only fix path,
   // since players have no keyboard fallback).
-  el('motion-tip').addEventListener('click', () => { _buzz(15); openMotionPopup(); });
+  el('motion-tip').addEventListener('click', () => {
+    _buzz(15);
+    // On AirConsole the frame never asks for the sensor (the SDK relay is the
+    // sensor), so the popup's Allow and Reload could only loop. A chip up there
+    // means the relay is sending no tilt, and buttons are the one fix this page
+    // owns.
+    if (window.airconsole) { _setInputMode('buttons'); return; }
+    openMotionPopup();
+  });
+  if (window.airconsole) el('motion-tip').textContent = 'AirConsole sends no tilt. Tap for buttons.';
 
   // Primary recovery button — what it DOES depends on the resolved state (see
   // motionHelpCopy's `action`). Once iOS has denied, re-calling requestPermission()

@@ -1626,3 +1626,11 @@ input[type=text]:disabled { opacity: 0.6; }
     white-space: nowrap; text-overflow: ellipsis;
   }
 }
+
+/* ---- AirConsole (controller.html) ---- There is no name screen to exit to
+   (AC owns identity and leaving), so the conn overlay keeps its retry but
+   drops the exit. Nor is there a name to type: the form is gone from first
+   paint, before main.js (a deferred module) could hide it, so it never flashes.
+   The name screen itself stays as the surface the phone waits on (main.js). */
+body.airconsole #conn-leave,
+body.airconsole #name-form { display: none; }

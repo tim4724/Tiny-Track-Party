@@ -111,7 +111,13 @@ export class TiltInput {
     // by listening, and _watchForSample finds them all by the one test that matters,
     // whether samples ARRIVE. (A permissions-policy probe was once a second
     // mechanism for the same question, able to disagree with delivery.)
-    this.motionState = (typeof window !== 'undefined' && !window.DeviceOrientationEvent)
+    //
+    // EXCEPT on AirConsole, where the constructor says nothing about the sensor:
+    // the SDK's device_motion relay is the sensor there (relayOrientation), so an
+    // app webview without the constructor still steers by tilt. Stay 'unknown'
+    // and let the first relayed sample resolve it.
+    this.motionState = (typeof window !== 'undefined' && !window.airconsole
+      && !window.DeviceOrientationEvent)
       ? 'unsupported' : 'unknown';
 
     // latest gravity x/y in the device frame — the screen-right component is all
@@ -142,6 +148,10 @@ export class TiltInput {
   // onMotionState. A request the platform refused to even put (no gesture behind
   // it) leaves 'unknown' and re-asks on the next tap.
   async enableMotion() {
+    // Not on AirConsole: the frame's own sensor is the one AC never feeds, so
+    // asking for it can only fail ('denied' on iOS, 'unsupported' once the
+    // watch times out). The relay resolves the state there (relayOrientation).
+    if (window.airconsole) return this.motionState;
     const DOE = window.DeviceOrientationEvent;
     if (!DOE) return this.motionState; // 'unsupported' since the constructor — nothing to request
     try {
@@ -215,6 +225,20 @@ export class TiltInput {
       this._sampleWatch = null;
       if (!this.haveTilt) this._setMotionState('unsupported');
     }, SENSOR_SETTLE_MS);
+  }
+
+  // AirConsole's device_motion relay. The game is a cross-origin iframe that no
+  // AC embedder delegates the motion sensors to, so DeviceOrientation never
+  // fires in it; the SDK's own page reads the sensors and posts them in. Its
+  // alpha/beta/gamma are ORIENTATION ANGLES — the DeviceOrientationEvent
+  // triple, measured on a device (held still at a 65° roll, gamma read 65,
+  // where a rate would read 0) and confirmed by AirConsole's engineers, though
+  // the SDK's JSDoc calls them "gyroscope" — so they take exactly the path a
+  // browser's own event does. A relayed sample is also this page's proof of
+  // delivery: enableMotion is a no-op on AC, so the first sample resolves it.
+  relayOrientation(beta, gamma) {
+    this._setMotionState('granted');
+    this._onOrient({ beta, gamma });
   }
 
   _onOrient(e) {
