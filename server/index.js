@@ -179,6 +179,15 @@ const server = http.createServer((req, res) => {
 
   // --- JSON endpoints ---
   if (urlPath === '/health') { sendJson(res, 200, { status: 'ok' }); return; }
+  // The CouchPad launcher's App Clip: an iOS camera scan of a room link opens
+  // the controller without an install. App Clip domains can't be wildcards, so
+  // this host lists the clip itself; the launcher's universal links come from
+  // couchpad.games's file (applinks:*.couchpad.games reads the root domain's).
+  // Apple's CDN fetches it over HTTPS as application/json with no redirect.
+  if (urlPath === '/.well-known/apple-app-site-association') {
+    sendJson(res, 200, { appclips: { apps: ['5ZH48MPAM3.games.couchpad.controller.Clip'] } });
+    return;
+  }
   if (urlPath === '/api/baseurl') {
     sendJson(res, 200, { baseUrl: process.env.BASE_URL || `http://${getLocalIP()}:${PORT}` });
     return;
