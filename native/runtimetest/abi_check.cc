@@ -4820,6 +4820,11 @@ void raceLiveWalks() {
             json::str_field(at(at(got, "field").arr[i], "persona"), "name") ==
                 want[i].persona.name;
     check(ids, "…with the demo ids and the by-grid-index personas the rule assigns");
+    // tidepool is a Beach Cup track: the demo drives at the skill a race
+    // there hands its CPU fill (the launch case asserts the same tier).
+    const Value* skill = got.find("skill");
+    check(skill && skill->type == Value::NUM && skill->num == ttp::aiSkillForTier(1) && skill->num < 1,
+          "demo_live answers the Beach Cup's CPU skill for a Beach Cup track");
     // The signature must move with the TRACK, or a cup change would keep the
     // stale grid on screen.
     check(json::str_field(parseOrNull(ttp_race_demo_live_json(room, "helix", nullptr), "demo2"),

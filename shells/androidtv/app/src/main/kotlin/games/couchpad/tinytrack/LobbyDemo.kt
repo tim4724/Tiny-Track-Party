@@ -120,7 +120,8 @@ class LobbyDemo {
         signature = sig
         field = fresh
         track = t
-        start(rawField, t)
+        // The CPU skill a real race on this track uses, for every demo car.
+        start(rawField, t, live.optDouble("skill", 1.0))
     }
 
     /**
@@ -143,7 +144,7 @@ class LobbyDemo {
         onSession?.invoke(0)
     }
 
-    private fun start(rawField: JSONArray, track: String) {
+    private fun start(rawField: JSONArray, track: String, skill: Double) {
         // The ROSTER first, then the cars, then the bind. See [onField]: a slot the
         // roster does not name is a car nothing draws.
         onField?.invoke(rawField)
@@ -168,6 +169,7 @@ class LobbyDemo {
                 .put("peerIndex", b.opt("id") ?: JSONObject.NULL)
                 .put("caution", if (persona.has("caution")) persona.opt("caution") else 1)
                 .put("laneBias", if (persona.has("laneBias")) persona.opt("laneBias") else 0)
+                .put("skill", skill)
                 .put("seed", 0x5eed + i * 2 + 1))
         }
 

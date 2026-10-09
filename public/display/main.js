@@ -386,7 +386,7 @@ function refreshLobbyDemo() {
     return;
   }
   // The grid and its signature in one crossing, off the live room.
-  const { field, sig } = flow.demoLive(net.flow.handle, selectedTrackId, _qBots);
+  const { field, sig, skill } = flow.demoLive(net.flow.handle, selectedTrackId, _qBots);
   if (lobbyDemo.active && lobbyDemo.sig === sig) return; // no relevant change
 
   // Same track + same set of cars, only the picks changed (a player switched their
@@ -403,7 +403,7 @@ function refreshLobbyDemo() {
     lobbyDemo.sig = sig; // record the new signature so the next diff is accurate
     return;
   }
-  lobbyDemo.start(track, field, sig);
+  lobbyDemo.start(track, field, sig, skill);
 }
 
 // True when two demo fields cover the exact same set of car ids (so only liveries/

@@ -109,7 +109,8 @@ final class LobbyDemo {
         signature = sig
         field = fresh
         self.track = track
-        start(field: fresh, track: track)
+        // The CPU skill a real race on this track uses, for every demo car.
+        start(field: fresh, track: track, skill: live["skill"] as? Double ?? 1)
     }
 
     /// The two fields cover the exact same set of car ids, so only liveries,
@@ -130,7 +131,7 @@ final class LobbyDemo {
         onSession?(0)
     }
 
-    private func start(field: [Any], track: String) {
+    private func start(field: [Any], track: String, skill: Double) {
         // The ROSTER first, then the cars, then the bind. See `onField`: a slot
         // the roster does not name is a car nothing draws.
         onField?(field)
@@ -153,6 +154,7 @@ final class LobbyDemo {
             return ["peerIndex": b["id"] ?? NSNull(),
                     "caution": persona["caution"] ?? 1,
                     "laneBias": persona["laneBias"] ?? 0,
+                    "skill": skill,
                     "seed": 0x5eed + i * 2 + 1]
         }
         handle = ttp_session_begin_field(track, 0, 3, nil, TTP.json(rows), TTP.json(bots))

@@ -684,6 +684,10 @@ const char* ttp_race_demo_live_json(int roomHandle, const char* trackId,
   Value v = Value::Obj();
   v.set("field", arrOf(field, demoVal));
   v.set("sig", Value::Str(race::demoSig(field, trackId ? trackId : "")));
+  // The skill a real race on this track hands its CPU fill, so the lobby shows
+  // the driving the cup will race against. A function of the track, which
+  // `sig` already carries.
+  v.set("skill", Value::Num(botSkillFor(trackId ? trackId : "")));
   return put(g_bufDemo, v);
 }
 

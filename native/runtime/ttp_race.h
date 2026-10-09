@@ -133,9 +133,11 @@ TTP_ABI const char* ttp_race_effect_ops_json(void);
  * persona by FINAL grid index so they spread across the whole field — plus the
  * cheap signature of what that grid renders (track + each car's
  * id/livery/model), so a refresh can compare and skip a no-op rebuild. A
- * rename alone will not re-grid.
+ * rename alone will not re-grid. `skill` is the bot skill a real race on this
+ * track hands its CPU fill (its cup's tier); the shell gives it to every demo
+ * car's bot spec, so the lobby drives like the cup it previews.
  *   -> {"field":[{"id","name","colorIndex","carIndex","stats","persona"},...],
- *       "sig":"..."} */
+ *       "sig":"...","skill":n} */
 TTP_ABI const char* ttp_race_demo_live_json(int roomHandle, const char* trackId,
                                             const char* botCapJson);
 

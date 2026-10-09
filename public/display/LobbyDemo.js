@@ -39,6 +39,7 @@ export class LobbyDemo {
     this.engine = null;
     this._ids = [];         // scene car ids we own, so stop() removes exactly ours
     this.sig = null;        // caller-supplied field/track signature (skip no-op rebuilds)
+    this.skill = 1;         // the CPU skill a race on this track uses (flow.demoLive)
     this.active = false;
     this._epoch = 0;        // bumped by every start/stop, so a pending build can tell it's stale
   }
@@ -46,11 +47,12 @@ export class LobbyDemo {
   // (Re)build the demo for `track` with `field`. Tears down any previous run first,
   // so it's safe to call on every track switch / roster change. `sig` is stored so
   // the caller can compare against it next time and skip a redundant rebuild.
-  start(track, field, sig) {
+  start(track, field, sig, skill) {
     this.stop();
     this.track = track;
     this.field = field;
     this.sig = sig;
+    this.skill = skill;
     this._ids = field.map((p) => p.id);
     const epoch = ++this._epoch;
     // Deferred by a microtask (the sim promise is already resolved) so the demo can't
@@ -64,8 +66,9 @@ export class LobbyDemo {
     }).catch((e) => console.warn('[LobbyDemo] native sim unavailable — no attract race', e));
   }
 
-  // Every car drives on an AI persona (caution/laneBias) even when it's a human's
-  // livery — there are no phones steering in the lobby. The bots live inside the wasm,
+  // Every car drives on an AI persona (caution/laneBias) at the skill the track's
+  // cup races its CPU fill at, even when it's a human's livery — there are no
+  // phones steering in the lobby. The bots live inside the wasm,
   // so the personas go in at construction; distinct seeds → distinct weave.
   _buildEngine() {
     const players = this.field.map((p) => ({ peerIndex: p.id, stats: p.stats }));
@@ -75,6 +78,7 @@ export class LobbyDemo {
         peerIndex: p.id,
         caution: persona.caution != null ? persona.caution : 1,
         laneBias: persona.laneBias != null ? persona.laneBias : 0,
+        skill: this.skill,
         seed: (DEMO_SEED + i * 2 + 1) >>> 0
       };
     });
