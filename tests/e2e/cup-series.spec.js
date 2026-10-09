@@ -180,8 +180,8 @@ test('abandoning a cup mid-race cancels the series and a restart begins at race 
 
   await finishHumans(page);
   await inResults(page);
-  // The intermission board offers no way out — it advances, or it waits. The
-  // exit from a running cup is the pause overlay, one race later.
+  // The pause overlay is the exit from INSIDE a race (the intermission's own
+  // "Leave cup" is the next test), so advance to race 2 and pause out of it.
   await alice.click('#newgame-btn');
   await waitForRacing(page);
   await alice.click('#pause-btn');
@@ -201,6 +201,35 @@ test('abandoning a cup mid-race cancels the series and a restart begins at race 
   await waitForRacing(page);
   expect(await page.evaluate(() => ({ race: window.__series().raceIndex, track: window.__net.trackId })))
     .toEqual({ race: 0, track: BEACH[0] });
+});
+
+test('the host leaves a cup from the intermission, after confirming', async ({ page, browser }) => {
+  await page.addInitScript(() => { window.__intermissionMs = 60000; });
+  const roomCode = await openDisplay(page);
+  const alice = await joinController(browser, roomCode, 'Alice');
+  const bob = await joinController(browser, roomCode, 'Bob');
+  await page.waitForFunction(() => window.__net.mode === 'cup', null, { timeout: 10000 });
+  await startRace(alice, [bob]);
+  await waitForRacing(page);
+
+  await finishHumans(page);
+  await inResults(page);
+  // Only the host is offered the way out.
+  await expect(alice.locator('#leavecup-btn')).toBeVisible();
+  await expect(bob.locator('#leavecup-btn')).toBeHidden();
+
+  // Backing out of the confirm keeps the cup.
+  await alice.click('#leavecup-btn');
+  await alice.click('#leavecup-cancel');
+  await expect(alice.locator('#leavecup-overlay')).toBeHidden();
+  expect(await page.evaluate(() => window.__series() && window.__series().raceIndex)).toBe(0);
+
+  await alice.click('#leavecup-btn');
+  await alice.click('#leavecup-confirm');
+  await page.waitForFunction(() => window.__net.roomState === 'lobby', null, { timeout: 10000 });
+  expect(await page.evaluate(() => window.__series())).toBe(null);
+  await expect(alice.locator(visible('#lobby'))).toBeVisible();
+  await expect(bob.locator(visible('#lobby'))).toBeVisible();
 });
 
 test('Random runs an endless series of drawn tracks until the host ends it', async ({ page, browser }) => {

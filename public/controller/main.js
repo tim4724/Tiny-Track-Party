@@ -27,7 +27,7 @@ import { cleanName } from '../shared/names.js';
 import { inShell, shellName, endSession, terminalReason, setAccentColor, installRenameHook, armSystemBack, installBackHook } from './launcher.js';
 import { storedName, saveName, storedMode, saveMode, storedCarIndex, saveCarIndex, storedInputMode, saveInputMode } from './prefs.js';
 import { showConn, hideConn, linkCopy, initLinkStatus } from './linkStatus.js';
-import { initModals, onEnterLobby, closeAnyModal, anyModalOpen, closeTopModal, refreshHelpName, refreshSettingsState, refreshMotionState, openStarsPopup } from './modals.js';
+import { initModals, onEnterLobby, closeAnyModal, anyModalOpen, closeTopModal, refreshHelpName, refreshSettingsState, refreshMotionState, openStarsPopup, openLeaveCupPopup, closeLeaveCupPopup } from './modals.js';
 import { renderResultsBoard } from './resultsBoard.js';
 import { initDriveSurface, startDriving, stopDriving, setInputMode, setHeldItem, resetHeldItem } from './driveSurface.js';
 import { initOrientation, keyboardUp } from './orientation.js';
@@ -48,6 +48,8 @@ function show(name) {
   currentScreen = name;
   // A held Start belongs to the lobby: landing anywhere else IS the answer to it.
   if (name !== 'lobby') clearStartPending();
+  // Likewise the leave-cup question belongs to the intermission board.
+  if (name !== 'results') closeLeaveCupPopup();
   for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name);
   // Push history only when stepping UP a level (name → lobby). Same-level and
   // back transitions don't push, so there's exactly one entry to pop: pressing
@@ -220,6 +222,9 @@ initModals({
   isHost: () => amHost,
   getSoundOn: () => displaySoundOn,
   setSoundOn: (on) => { displaySoundOn = on; net.send(MSG.SET_SOUND, { on }); },
+  // The same request as the pause menu's "New game": the display ends the
+  // series on the way back to the lobby.
+  leaveCup: () => net.send(MSG.RETURN_TO_LOBBY),
   onModalToggle: syncShellBack
 });
 initDriveSurface({ tilt, buzz, haptics });
@@ -772,13 +777,18 @@ el('pause-continue').addEventListener('click', () => { buzz(15); net.send(MSG.RE
 el('pause-newgame').addEventListener('click', () => { buzz(15); net.send(MSG.RETURN_TO_LOBBY); });
 
 // Host's results button: mid-series it advances to the next race, otherwise it
-// sends everyone to the lobby. It is the board's ONLY button — abandoning a
-// running cup is the pause overlay's job (see resultsBoard's renderFoot).
+// sends everyone to the lobby. Abandoning a running cup is "Leave cup" beside
+// it, which asks first (see resultsBoard's renderFoot).
 el('newgame-btn').addEventListener('click', () => {
   if (!amHost) return;
   buzz(15);
   const s = lastStandings && lastStandings.series;
   net.send(s && !s.final ? MSG.SERIES_NEXT : MSG.RETURN_TO_LOBBY);
+});
+el('leavecup-btn').addEventListener('click', () => {
+  if (!amHost) return;
+  buzz(15);
+  openLeaveCupPopup();
 });
 
 // Applies the launcher's rename locally (the labels that carry the name) AND

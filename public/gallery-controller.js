@@ -29,6 +29,7 @@ var CONTROLLER_CARDS = [
   { key: 'finished',        title: 'Finished',        perColor: true },
   { key: 'results',         title: 'Results',         perColor: true },
   { key: 'intermission',    title: 'Cup intermission', perColor: true },
+  { key: 'leave-cup',       title: 'Leave cup (confirm)', perColor: true },
   { key: 'cup-podium',      title: 'Cup last race',   perColor: true },
   { key: 'cup-podium-settled', title: 'Cup final (TV settled)', perColor: true },
   { key: 'conn-lost',        title: 'Connection lost' },

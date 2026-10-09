@@ -43,6 +43,12 @@
        so currentColor inherits at each use site. -->
   <svg style="display:none" aria-hidden="true"><symbol id="gear" viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 16.9c-2.7 0-4.9-2.21-4.9-4.9s2.21-4.9 4.9-4.9 4.9 2.21 4.9 4.9-2.21 4.9-4.9 4.9z"/></symbol></svg>
 
+  <!-- Exit fullscreen — plain browser only, shown while the page is fullscreen
+       (orientation.js owns it, beside the auto-enter, which the next tap runs). It
+       sits in the top-right corner the gear and pause own on the lobby and in
+       the race, and those rows step left to make room while it shows. -->
+  <button id="fs-exit" class="icon-btn fs-exit" type="button" aria-label="Exit full screen"><svg class="fs-exit-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg></button>
+
   <!-- Name -->
   <section id="name">
     <div class="wordmark name-wordmark"><span>TINY TRACK</span><span class="l2">PARTY!</span></div>
@@ -180,6 +186,7 @@
       <span id="result-time" class="res-time"></span>
     </div>
     <div id="result-foot">
+      <button id="leavecup-btn" class="btn btn--ghost hidden" type="button" aria-haspopup="dialog">Leave cup</button>
       <button id="newgame-btn" class="btn btn--brand hidden">New game</button>
       <div id="result-wait" class="result-wait hidden"></div>
     </div>
@@ -245,10 +252,12 @@
            The row carries "TV" in its own label rather than under a group
            heading. A "TV" kicker over a group of one spent a whole row of a
            card that runs out of height at 320px to introduce a single switch;
-           it can come back the day there is a second TV setting. -->
+           it can come back the day there is a second TV setting. The Host
+           sticker rides the same row for the same reason: a player read "TV
+           sound" as this phone's sound until it said whose control it is. -->
       <div id="tv-seg" class="seg seg--tv hidden">
         <div class="tv-row">
-          <span id="sound-label" class="tv-row__name">TV sound</span>
+          <span class="tv-row__label"><span id="sound-label" class="tv-row__name">TV sound</span><span class="host-chip">Host</span></span>
           <button id="sound-toggle" type="button" class="switch" role="switch"
                   aria-checked="true" aria-labelledby="sound-label"></button>
         </div>
@@ -261,7 +270,6 @@
            the ‹ › chord + ITEM. -->
       <div class="demo-stage">
         <div class="steer-demo steer-demo--tilt" aria-hidden="true">
-          <span class="demo-chev demo-chev--l"><span class="steer-glyph steer-glyph--l"></span></span>
           <div class="phone-lean">
             <div class="phone-frame">
               <div class="phone-inner">
@@ -275,10 +283,8 @@
               </div>
             </div>
           </div>
-          <span class="demo-chev demo-chev--r"><span class="steer-glyph steer-glyph--r"></span></span>
         </div>
         <div class="steer-demo steer-demo--buttons" aria-hidden="true">
-          <span class="demo-chev demo-chev--l"><span class="steer-glyph steer-glyph--l"></span></span>
           <div class="phone-lean">
             <div class="phone-frame">
               <div class="phone-inner">
@@ -293,7 +299,6 @@
               </div>
             </div>
           </div>
-          <span class="demo-chev demo-chev--r"><span class="steer-glyph steer-glyph--r"></span></span>
         </div>
         <div class="settings-legend">
           <div class="help-ctrl help-ctrl--chord">
@@ -345,6 +350,19 @@
       <ul id="stars-rules" class="stars-rules"></ul>
       <p id="stars-unlock" class="help-copy"></p>
       <button id="stars-done" class="btn btn--ghost" type="button">Got it</button>
+    </div>
+  </div>
+
+  <!-- Leave-cup confirm — opened only by the host's "Leave cup" on the
+       intermission board, so it never stacks with the lobby popups. Same shape
+       and layer as #stars-overlay. Leaving throws away the cup's points for the
+       whole couch, which is why this one asks first. -->
+  <div id="leavecup-overlay" class="hidden" tabindex="-1" role="alertdialog" aria-modal="true" aria-labelledby="leavecup-title" aria-describedby="leavecup-copy">
+    <div class="settings-card motion-card">
+      <h2 id="leavecup-title">Leave the cup?</h2>
+      <p id="leavecup-copy" class="help-copy">Everyone goes back to the lobby and this cup's points are lost.</p>
+      <button id="leavecup-confirm" class="btn btn--danger" type="button">Leave cup</button>
+      <button id="leavecup-cancel" class="btn btn--ghost" type="button">Keep racing</button>
     </div>
   </div>
 
