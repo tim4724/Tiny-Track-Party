@@ -1,12 +1,7 @@
 package games.couchpad.tinytrack
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -23,7 +18,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -45,7 +39,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.offset
-import kotlin.math.abs
 import kotlinx.coroutines.delay
 
 /**
@@ -252,6 +245,15 @@ private fun NameChip(name: String, colorIndex: Int) {
  * **A fresh pickup re-spins even on the same item id.** A box swap can re-roll
  * what you already had, and a slot that only animated on CHANGE would say nothing
  * at all on that pickup — so the trigger is the pickup, not the value.
+ *
+ * **THE ROLL IS THE ICONS ALONE HERE, and that is an Android decision.** The web
+ * and tvOS also wobble the slot while it rolls and pop it from 1.8x as it lands
+ * (`cellItemRoll`, `cellItemPop`). On this box a transformed slot leaves its
+ * retained layer's rect, which puts the window's full-surface clear back
+ * ([UnboundedContent]) and redraws the slot on every vsync for the ~1.3 s of
+ * each pickup. Without the transform the layer stays retained and is re-rendered
+ * once per flick. What that bought is in docs/perf/androidtv-frame-map.md
+ * (2026-10-09).
  */
 @Composable
 private fun ItemSlot(item: String?, accent: Int, carIndex: Int, tick: Int) {
@@ -263,12 +265,11 @@ private fun ItemSlot(item: String?, accent: Int, carIndex: Int, tick: Int) {
     val shape = RoundedCornerShape(corner)
 
     var rolling by remember { mutableStateOf<String?>(null) }
-    var landed by remember { mutableIntStateOf(0) }
     val shown = rolling ?: item
 
-    // The web's `_rouletteChip`, beat for beat: flick through the item keys,
-    // decelerating, then land on the real item with a pop. Self-driven because it
-    // animates far faster than the ~6 Hz HUD poll that feeds this view.
+    // The web's `_rouletteChip` flick: through the item keys, decelerating, then
+    // the real item. Self-driven because it animates far faster than the ~6 Hz HUD
+    // poll that feeds this view.
     LaunchedEffect(item, tick) {
         val keys = ItemVocabulary.keys
         if (item == null || keys.isEmpty()) { rolling = null; return@LaunchedEffect }
@@ -280,74 +281,12 @@ private fun ItemSlot(item: String?, accent: Int, carIndex: Int, tick: Int) {
             delay((35 + n * 16).toLong())
         }
         rolling = null
-        landed += 1
-    }
-
-    // `cellItemPop`: 0.5s, scale 1.8 -> 1. STARTING AT 1.8 is the part that needs a
-    // keyframe track — animating FROM the current value would render a hold at full
-    // size the web does not have.
-    val pop = updateTransition(landed, label = "pop")
-    // NOT `by`. Every one of these values is read inside the `graphicsLayer` block
-    // below rather than here — see the comment there for why the distinction is the
-    // whole cost of this slot.
-    val popScale = pop.animateFloat(
-        transitionSpec = {
-            keyframes {
-                durationMillis = 500
-                1.8f at 0 using LinearEasing
-                1.15f at 220
-                1f at 500
-            }
-        },
-        label = "popScale",
-    ) { 1f }
-
-    // `cellItemRoll`: a 0.1 s scale/tilt flicker WHILE the slot rolls. Without it the
-    // roll is a sequence of still pictures swapping, which reads as a glitch rather
-    // than as a slot machine — the deceleration alone does not carry it.
-    //
-    // AN `Animatable` KEYED ON `rolling`, NOT A `rememberInfiniteTransition`. An
-    // InfiniteTransition runs from first composition until the composable leaves,
-    // whether or not anything reads it — so every cell held a Compose frame-clock
-    // awaiter for the whole race, and Compose broadcasts a frame to every awaiter on
-    // every vsync. Measured with `atrace`: ~1.1 ms of main-thread time on 100 % of
-    // frames, on the one thread the renderer also draws on, for an animation that is
-    // idle. The spec is the same 0.1 s linear repeat; it just only exists while it is
-    // wanted, and cancelling the effect is what stops it.
-    val wobble = remember { Animatable(0f) }
-    // Scaled and turned, the slot draws outside its layer's rect.
-    if (rolling != null || pop.currentState != pop.targetState) UnboundedContent()
-    LaunchedEffect(rolling != null) {
-        if (rolling == null) wobble.snapTo(0f)
-        else wobble.animateTo(1f, infiniteRepeatable(tween(100, easing = LinearEasing)))
     }
 
     Box(
         Modifier
-            // Its own retained layer while AT REST, room enough for the 3 px drop.
-            // While the slot rolls or pops the layer's transform is not identity,
-            // and a cached layer under a scale is resampled soft — so the layer
-            // goes (Auto) for the ~1.3 s of the animation and the slot draws
-            // directly, as before; it is re-rendered once when it settles.
-            .retainedLayer(8.dp) {
-                // EVERY ANIMATED VALUE IS READ HERE, inside the layer block, and that
-                // is the difference between a slot machine and a dropped frame. A read
-                // in the composition subscribes the whole slot to a value that changes
-                // on every vsync, so one pickup recomposed `ItemSlot` on every frame of
-                // the roll and re-ran the icon's vector draw with it. Read here, a new
-                // frame re-runs this block and nothing else.
-                //
-                // The roll transform applies ONLY while `.rolling` is set, exactly as
-                // the CSS class does. At rest the class is absent and the slot carries
-                // no transform of its own — evaluating the keyframe's 0 % stop instead
-                // left every idle slot 12 % oversized and tilted four degrees.
-                val phase = rolling?.let { 1f - abs(wobble.value * 2f - 1f) }
-                val s = popScale.value * (phase?.let { 1.12f + (0.97f - 1.12f) * it } ?: 1f)
-                scaleX = s
-                scaleY = s
-                rotationZ = phase?.let { -4f + 8f * it } ?: 0f
-                if (phase != null || s != 1f) compositingStrategy = CompositingStrategy.Auto
-            }
+            // Its own retained layer, room enough for the 3 px drop.
+            .retainedLayer(8.dp)
             .size(side)
             .then(
                 if (shown != null) Modifier

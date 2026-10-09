@@ -229,11 +229,11 @@ this box. Three that each cost real frames:
 - **`rememberInfiniteTransition` never stops.** It runs from first composition
   until the composable leaves, whether or not anything reads it, and Compose
   broadcasts a frame to every awaiter on every vsync. One idle wobble on the item
-  slot was ~1.1 ms of main thread on 100 % of frames.
+  slot (since removed) was ~1.1 ms of main thread on 100 % of frames.
 - **An animated value read in the composition body recomposes the whole
   composable.** Read it inside `graphicsLayer { }` (or any deferred lambda)
-  instead and only the layer re-runs. The item slot's roll animation recomposed
-  the slot on every vsync of every pickup.
+  instead and only the layer re-runs. The item slot's old roll animation
+  recomposed the slot on every vsync of every pickup.
 - **`clear()` + `addAll()` on a `mutableStateListOf` is a structural change**, so
   it invalidates every reader even when nothing differs. `paintHUD` did that at
   6 Hz and recomposed the entire race chrome six times a second for nothing; it
