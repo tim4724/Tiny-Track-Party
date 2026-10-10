@@ -73,8 +73,8 @@ constexpr float NAME_TAG_NEAR_SCALE = 0.75f, NAME_TAG_FAR_SCALE = 0.375f;
 // Seconds a tag takes to fade out when something covers it, and back in.
 constexpr float NAME_TAG_COVER_FADE = 0.12f;
 // A monster truck's CHASSIS as an occluder box in its own frame (half width,
-// half length; world units), the kit's extents, from the ground up to the seat
-// its car's body is grafted on. The body above is a second box of its own
+// half length; world units), the kit's extents at its authored size, from the
+// ground up to the seat its car's body is grafted on. The body above is a second box of its own
 // measured size (NameTagShape): it is narrower than the wheels, and a tag over
 // the roof meets it first, so one box the chassis's width all the way up hid
 // tags early.
@@ -139,9 +139,11 @@ inline NameTagSize nameTagSizeFallback(float surfaceW, float surfaceH) {
 // roof over its origin, monster rig included: where its tag is anchored. For a
 // monster truck it is also the top of the occluder, which is the chassis box up
 // to `seat` and the car's body above it, `bodyHalfW` x `bodyHalfL` (wheels off).
+// `rigScale` is the scale the rig is drawn at, which the chassis box rides.
 struct NameTagShape {
     float roof;
     float seat, bodyHalfW, bodyHalfL;
+    float rigScale = 1;
 };
 
 // The cover state of one (view, car) across frames, kept by the caller.

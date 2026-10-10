@@ -127,6 +127,15 @@ class RacingLine;    // ai_driver.h
 // getSnapshot's "steer", which is what libttp-runtime's frame builder mirrors).
 inline constexpr double STEER_SIGN = -1;
 
+// A monster truck's body, whichever car grew it, because the truck drawn is one
+// truck: the kit model's wheel-to-wheel box (vehicle-monster-truck.glb, 0.3125
+// by 0.4375 half) grown to 1.3x the roster's common car half-length of 0.44. In
+// the header because it is also the truck's DRAWN size: the renderer scales the
+// rig to the half-length it is handed, so the truck is exactly what it hits.
+// tests/devtrack.test.js holds the shape to the GLB.
+inline constexpr double MONSTER_HALF_LEN = 0.572;
+inline constexpr double MONSTER_HALF_WID = MONSTER_HALF_LEN * 0.3125 / 0.4375;
+
 // Live-tunable steering-response exponent. Module-global — shared by every
 // Game, not per-instance — and read fresh each physics step. setSteerExpo clamps to [0.5, 3]
 // and ignores non-finite input, matching the JS `Number.isFinite` guard.
@@ -239,10 +248,11 @@ class Game {
   const std::vector<RocketRt>& rockets() const { return rockets_; }
   // cars in insertion order (Map iteration order).
   const std::vector<std::unique_ptr<Car>>& cars() const { return cars_; }
-  // The collision footprint's current scale (monster growth). Public so the
-  // frame builder can hand the renderer the same rectangle the sim collides
-  // with, rather than a retyped multiplier.
-  double footprintMul(const Car& c) const;
+  // The half-extents the car collides with: its own, or the monster truck's
+  // while it lasts. Public so the frame builder can hand the renderer the same
+  // rectangle the sim collides with.
+  struct HalfExtents { double len, wid; };
+  HalfExtents halfExtents(const Car& c) const;
 
  private:
   Car* find(const Id& id) const;

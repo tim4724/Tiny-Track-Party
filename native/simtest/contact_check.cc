@@ -52,9 +52,9 @@ const double DT = 1000.0 / 60.0;
 double drawnOverlap(const Game& g, const Car& a, const Car& b) {
   const Vec3 fa = a.pose.forward, ra = a.pose.forward.clone().cross(a.pose.up);
   const Vec3 fb = b.pose.forward, rb = b.pose.forward.clone().cross(b.pose.up);
-  const double ma = g.footprintMul(a), mb = g.footprintMul(b);
-  const double hla = a.halfLen * ma, hwa = a.halfWid * ma;
-  const double hlb = b.halfLen * mb, hwb = b.halfWid * mb;
+  const Game::HalfExtents ea = g.halfExtents(a), eb = g.halfExtents(b);
+  const double hla = ea.len, hwa = ea.wid;
+  const double hlb = eb.len, hwb = eb.wid;
   const Vec3 d = b.pose.pos.clone().sub(a.pose.pos);
   const Vec3 axes[4] = {fa, ra, fb, rb};
   double pen = 1e9;

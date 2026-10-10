@@ -905,9 +905,15 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
             // leans only that, so the truck's own chassis and fat tyres stay
             // planted. The graft's lean therefore composes AFTER the mount —
             // it pivots about the cab slot, not about the car's road origin.
-            const mat4f rigPose = flat;
+            //
+            // Drawn at the footprint's length (mMonsterHalfLen), the grafted
+            // body with it.
+            mat4f rigPose = flat;
             if (isMonster) {
-                pose = flat * mat4f::translation(mCarWheels[i].monsterMount) * bodyRot;
+                CarWheels& w = mCarWheels[i];
+                w.rigScale = mMonsterHalfLen > 0 ? c.halfLen / mMonsterHalfLen : 1;
+                rigPose = flat * mat4f::scaling(float3{ w.rigScale });
+                pose = rigPose * mat4f::translation(w.monsterMount) * bodyRot;
             } else if (c.monster > 0.5f && (mMonsterInstances.size() <= i || !mMonsterInstances[i])) {
                 pose = pose * mat4f::scaling(float3{ 1.45f, 1.35f, 1.45f }); // no GLB fallback
             }
@@ -1107,8 +1113,8 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                 // The CAR's own shadow, wider at the wheels and barely
                 // longer — simple, by the user's call, with the two factors
                 // set from the truck's measured footprint (TtpRenderer.h).
-                sx = kMonsterShadowScaleW;
-                sz = kMonsterShadowScaleL;
+                sx = kMonsterShadowScaleW * mCarWheels[i].rigScale;
+                sz = kMonsterShadowScaleL * mCarWheels[i].rigScale;
             }
             // Load shift: the harder the body pitches, the closer the chassis
             // presses to the road (JS aoMat.opacity = 0.55 + AO_LOAD_GAIN·k).
@@ -2078,14 +2084,16 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
             // While the monster transform is up the car's own wheels are scaled
             // to nothing and the RIG's fat tyres are the ones on the road, so
             // the trails come off THEIR contact points and carry THEIR width.
-            // The rig rides the same `base` frame the car does (rigPose = flat),
-            // so its rest translations live in this very local space.
+            // The rig rides the same `base` frame the car does (rigPose = flat
+            // at the rig's scale), so its rest translations, scaled, live in
+            // this very local space.
             const bool onRig = c.monster > 0.5f && mMonsterWheels.size() > i
                     && !mMonsterWheels[i].bl.isNull();
             const MonsterWheels* mwp = onRig ? &mMonsterWheels[i] : nullptr;
+            const float rs = cw.rigScale;
             const float3 wlocal[4] = {
-                mwp ? mwp->flT : cw.flT, mwp ? mwp->frT : cw.frT,
-                mwp ? mwp->blT : cw.blT, mwp ? mwp->brT : cw.brT,
+                mwp ? mwp->flT * rs : cw.flT, mwp ? mwp->frT * rs : cw.frT,
+                mwp ? mwp->blT * rs : cw.blT, mwp ? mwp->brT * rs : cw.brT,
             };
             // The four-wheel channel releases on the same taper, so the fronts
             // fade out with the rears instead of stopping mid-mark.
@@ -2094,7 +2102,7 @@ void TtpRenderer::renderSkids(const TtpFrameInput& input, const TtpCarInput* car
             const bool marksAll = cw.skidAllHold > 0.02f;
             if (!marksAll) { trails[0].seeded = false; trails[1].seeded = false; }
             const float halfW = (mwp && mMonsterSkidWidth > 0
-                    ? mMonsterSkidWidth : cw.skidWidth) / 2;
+                    ? mMonsterSkidWidth * rs : cw.skidWidth) / 2;
             // The ribbon is anchored at the tyre's LEADING ground contact, not
             // at the contact patch centre: the head runs one rolling radius
             // ahead of the wheel node, which is exactly where the wheel's own

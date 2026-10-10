@@ -1993,6 +1993,7 @@ void TtpRenderer::releaseScene() {
     mMonsterWheels.clear();
     mMonsterWheelRadius = 0;
     mMonsterSkidWidth = 0;
+    mMonsterHalfLen = 0;
     mBoxScale = 1.0f;
     // `graves` is the standing guard on the burial: it climbs during a build,
     // which presents no frames, and must be back at 0 at rest. A number that

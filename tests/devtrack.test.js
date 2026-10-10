@@ -27,6 +27,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
+const { loadVerts } = require('../scripts/glb.js');
 
 const ROOT = path.join(__dirname, '..');
 const MJS = path.join(ROOT, 'public/display/engine/native/ttp_runtime.mjs');
@@ -123,17 +124,21 @@ test('?item= forces every box roll, and is really overriding the roll table', { 
   }
 });
 
-test('a forced monster transforms the car, grows its footprint x1.3, and times out', { skip }, async () => {
+test('a forced monster becomes the truck it is drawn as, and times out', { skip }, async () => {
   const r = await race('tidepool', 'monster');
   assert.ok(typesOf(r.events).has('pickup'), 'drove over an item box');
   assert.ok(r.monster.seen, 'the forced monster item actually transformed a car');
   assert.ok(r.monster.baseHalfLen > 0, 'sanity: saw an untransformed car to compare against');
-  // MONSTER_FOOTPRINT: the collision box grows 1.3x while transformed (the body
-  // checks other cars), and the snapshot carries the multiplied figure.
+  // The collision box grows to 1.3x a car's length while transformed (the body
+  // checks other cars), and the snapshot carries the grown figure.
   assert.ok(Math.abs(r.monster.halfLen / r.monster.baseHalfLen - 1.3) < 1e-9,
     `monster halfLen should be 1.3x (${r.monster.halfLen} vs ${r.monster.baseHalfLen})`);
-  assert.ok(Math.abs(r.monster.halfWid / r.monster.baseHalfWid - 1.3) < 1e-9,
-    `monster halfWid should be 1.3x (${r.monster.halfWid} vs ${r.monster.baseHalfWid})`);
+  // The renderer scales the rig to halfLen alone, so the box is only as wide as
+  // the drawn truck if game.h's MONSTER_HALF_WID has the model's proportions.
+  const verts = loadVerts(path.join(ROOT, 'public/assets/toycar/vehicle-monster-truck.glb'));
+  const span = (k) => Math.max(...verts.map((v) => v[k])) - Math.min(...verts.map((v) => v[k]));
+  assert.ok(Math.abs(r.monster.halfWid / r.monster.halfLen - span(0) / span(2)) < 1e-9,
+    `monster box ${r.monster.halfWid}x${r.monster.halfLen} has the truck's ${span(0)}x${span(2)} shape`);
   assert.ok(typesOf(r.events).has('monster_end'), 'the transform expires and fires monster_end');
 });
 

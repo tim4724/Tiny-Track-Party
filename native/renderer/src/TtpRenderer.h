@@ -349,7 +349,9 @@ public:
     ttp::rt::NameTagShape carShape(uint32_t i, bool monster) const {
         static const CarWheels unmeasured{};
         const CarWheels& w = i < mCarWheels.size() ? mCarWheels[i] : unmeasured;
-        return { monster ? w.monsterRoof : w.roof, w.monsterSeat, w.monsterBodyHalf.x, w.monsterBodyHalf.y };
+        if (!monster) return { w.roof, w.monsterSeat, w.monsterBodyHalf.x, w.monsterBodyHalf.y };
+        const float s = w.rigScale;
+        return { w.monsterRoof * s, w.monsterSeat * s, w.monsterBodyHalf.x * s, w.monsterBodyHalf.y * s, s };
     }
 
     bool buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& theme,
@@ -1011,6 +1013,8 @@ private:
         float monsterSeat = 0.3675f;               // where that grafted body sits in the rig, and its
         filament::math::float2 monsterBodyHalf{ 0.26f, 0.44f };  // half width/length, wheels off
         bool monsterOn = false;                    // morph edge detect
+        float rigScale = 1;                        // the monster rig's drawn scale (mMonsterHalfLen);
+                                                   // set by renderCars, read only while monster
         float popT = 0;                            // grow/shrink pop clock (0.34 s)
         utils::Entity axle;                        // exposed axle rod (some models) — stripped by MonsterRig
         filament::math::float3 axleT{};
@@ -1028,7 +1032,7 @@ private:
     // The roll's readability slowdown is WHEEL_SPIN_SCALE's job alone; it does
     // not belong in a radius.
     float wheelRadiusFor(const CarWheels& w, bool monster) const {
-        return (monster && mMonsterWheelRadius > 0) ? mMonsterWheelRadius
+        return (monster && mMonsterWheelRadius > 0) ? mMonsterWheelRadius * w.rigScale
                                                     : w.wheelRadius;
     }
     // Per-cell monster ghosting: the swap runs between render() calls, so each
@@ -1385,6 +1389,7 @@ private:
     // and exactly their length. Width carries margin on top of that ratio
     // because the fit's corner rounding and the soft band's half-alpha edge
     // both sit inside the geometric box, right where the corner wheels are.
+    // Both are at the rig's AUTHORED size, so they ride its rigScale too.
     static constexpr float kMonsterShadowScaleW = 1.35f;
     static constexpr float kMonsterShadowScaleL = 1.05f;
     bool roadHasCarShadow() const;  // hasParameter("carShadow")
@@ -1544,6 +1549,12 @@ private:
     std::vector<MonsterWheels> mMonsterWheels;
     float mMonsterWheelRadius = 0; // measured off a rear tyre (JS: bbox.y / 2)
     float mMonsterSkidWidth = 0;   // the rig's tyre-contact width (fat = fat marks)
+    // Half the rig's length as authored. The rig is DRAWN at the length of the
+    // footprint the frame hands it (TtpCarInput::halfLen, the sim's
+    // MONSTER_HALF_LEN), so the truck is exactly as big as what it hits.
+    // Everything above is measured at the authored size and scales by
+    // CarWheels::rigScale where it is used.
+    float mMonsterHalfLen = 0;
     std::vector<Mesh> mRockets;      // in-flight toy rockets (pool of 4)
     std::vector<Mesh> mRocketFlames; // per-rocket blend tail flames
     // Impact bursts: expanding rings where a rocket vanished (hit or whiff).

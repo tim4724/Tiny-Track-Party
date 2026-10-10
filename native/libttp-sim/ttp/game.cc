@@ -118,7 +118,6 @@ static const double MONSTER_DUR_MIN = 4.0;
 static const double MONSTER_DUR_MAX = 8.0;
 static const double MONSTER_MASS_MUL = 8.0;
 static const double MONSTER_VMAX_MUL = 1.25;
-static const double MONSTER_FOOTPRINT_MUL = 1.3;
 // A monster bats the car it spins out ASIDE, off its own line, so a victim
 // shedding speed in its spin is not caught and shoved again. vlat decays at
 // KNOCK_DAMP, so this carries the victim MONSTER_KNOCK / KNOCK_DAMP = 1 m
@@ -395,11 +394,14 @@ long Game::stageRocket(double s, double lat, double v, Id owner) {
 double Game::curbLimit(double width) const {
   return (!std::isnan(width)) ? js_max(0.1, width / 2 - LAT_MARGIN) : maxLat_;
 }
-double Game::footprintMul(const Car& c) const { return c.monsterT > 0 ? MONSTER_FOOTPRINT_MUL : 1; }
+Game::HalfExtents Game::halfExtents(const Car& c) const {
+  if (c.monsterT > 0) return {MONSTER_HALF_LEN, MONSTER_HALF_WID};
+  return {c.halfLen, c.halfWid};
+}
 
 Game::FP Game::footprint(const Car& c) const {
-  double fp = footprintMul(c);
-  double hl = c.halfLen * fp, hw = c.halfWid * fp;
+  HalfExtents e = halfExtents(c);
+  double hl = e.len, hw = e.wid;
   double ch = std::fabs(dmath::cos(c.heading)), sh = std::fabs(dmath::sin(c.heading));
   return {hl * sh + hw * ch, hw};
 }
@@ -584,7 +586,7 @@ void Game::useItemImpl(Car& c) {
   } else if (c.item == "banana") {
     // Dropped ON the rear bumper, not clear of it: a tailgater a nose behind is
     // already over anything further back, and would spin on a banana it never saw.
-    double back = c.halfLen * footprintMul(c);
+    double back = halfExtents(c).len;
     Frame f = centerline_->sampleAt(c.totalS);
     Vec3 fwd = f.tangent.clone().applyAxisAngle(f.up, c.heading);
     Vec3 world = f.pos.clone().addScaledVector(f.lateral, c.lat).addScaledVector(fwd, -back);
@@ -729,9 +731,9 @@ Vec3 Game::colWorld(const Car& c) const {
 // rectangles have two distinct normals each. Returns a WORLD normal pointing
 // from a to b, and the depth along it.
 Game::Hit Game::satRects(const Car& a, const Car& b) const {
-  double ma = footprintMul(a) * COLLIDE_SHRINK, mb = footprintMul(b) * COLLIDE_SHRINK;
-  double hla = a.halfLen * ma, hwa = a.halfWid * ma;
-  double hlb = b.halfLen * mb, hwb = b.halfWid * mb;
+  HalfExtents ea = halfExtents(a), eb = halfExtents(b);
+  double hla = ea.len * COLLIDE_SHRINK, hwa = ea.wid * COLLIDE_SHRINK;
+  double hlb = eb.len * COLLIDE_SHRINK, hwb = eb.wid * COLLIDE_SHRINK;
   // b's body axes as seen in a's plane. Normalized because the two cars' ground
   // planes tilt apart on a bank or a crest, which shortens the projection.
   Vec3 d = colWorld(b).sub(colWorld(a));
@@ -787,8 +789,8 @@ void Game::collidePair(Car& a, Car& b) {
   // Each car contributes its own longer half-extent, and the sum is doubled —
   // comfortably past the diagonals it stands in for, which is the only property
   // a reject needs.
-  double reach = (js_max(a.halfLen, a.halfWid) * footprintMul(a)
-                  + js_max(b.halfLen, b.halfWid) * footprintMul(b)) * 2;
+  HalfExtents ea = halfExtents(a), eb = halfExtents(b);
+  double reach = (js_max(ea.len, ea.wid) + js_max(eb.len, eb.wid)) * 2;
   Vec3 d = colWorld(b).sub(colWorld(a));
   if (d.lengthSq() >= reach * reach) return;
   Hit hit = satRects(a, b);
@@ -837,8 +839,8 @@ void Game::collidePair(Car& a, Car& b) {
 // collider: the pole's centre is expressed in the car's own body axes, clamped
 // to the rectangle, and the residual is the contact.
 void Game::collidePole(Car& c, const PoleRt& p) {
-  double mul = footprintMul(c);
-  double hl = c.halfLen * mul, hw = c.halfWid * mul;
+  HalfExtents e = halfExtents(c);
+  double hl = e.len, hw = e.wid;
   // The pole's world position. Its frame never moves, so this is the car's
   // cached frame walked to the pole's arclength — near enough over the metre or
   // so a contact spans, and it costs no sample.
@@ -1084,7 +1086,7 @@ Value Game::getSnapshot() {
   Value cars = Value::Arr();
   for (const auto& cp : cars_) {
     Car& c = *cp;
-    double fpMul = footprintMul(c);
+    HalfExtents body = halfExtents(c);
     Value car = Value::Obj();
     car.set("id", c.id.toValue());
     Value pose = Value::Obj();
@@ -1109,8 +1111,8 @@ Value Game::getSnapshot() {
     car.set("monster", Value::Bool(c.monsterT > 0));
     car.set("totalS", Value::Num(c.totalS));
     car.set("heading", Value::Num(c.heading));
-    car.set("halfLen", Value::Num(c.halfLen * fpMul));
-    car.set("halfWid", Value::Num(c.halfWid * fpMul));
+    car.set("halfLen", Value::Num(body.len));
+    car.set("halfWid", Value::Num(body.wid));
     cars.push(std::move(car));
   }
   Value boxes = Value::Arr();

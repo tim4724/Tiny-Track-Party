@@ -150,11 +150,11 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
             o.monster = c->monsterT > 0 ? 1.0f : 0.0f;
             o.spin = (float) c->spin;
             o.scrub = c->onWall ? 1.0f : 0.0f;
-            // The sim's own footprint scale, so the kick rectangle grows with
-            // the monster transform exactly as the collision footprint does.
-            const double fpMul = eng->footprintMul(*c);
-            o.halfLen = (float) (c->halfLen * fpMul);
-            o.halfWid = (float) (c->halfWid * fpMul);
+            // The sim's own body, so the kick rectangle grows with the monster
+            // transform exactly as the collision footprint does.
+            const Game::HalfExtents body = eng->halfExtents(*c);
+            o.halfLen = (float) body.len;
+            o.halfWid = (float) body.wid;
             // The car's spot on the deck, straight off the sim (ttp_render.h).
             // NOT wrapped here: the renderer's frameAt wraps, and a wrap applied
             // twice at different moduli is how a car at the start line lands a
@@ -185,8 +185,13 @@ TtpFrameInput* buildFrame(DisplayState& d, const Game* eng, float dt,
         for (size_t i = from >= 0 ? (size_t) from : cars.size(); i < cars.size(); i++) {
             // A slot with no live car behind it was memset above, so its pose is
             // the origin with a zero forward — a rig grafted onto that is a truck
-            // standing in the middle of nothing.
-            if (fromHeld || cars[i]) outCars[i].monster = 1.0f;
+            // standing in the middle of nothing. The footprint becomes the
+            // truck's, as the sim's would, because the rig is drawn at it.
+            if ((fromHeld || cars[i]) && outCars[i].monster < 0.5f) {
+                outCars[i].monster = 1.0f;
+                outCars[i].halfLen = (float) MONSTER_HALF_LEN;
+                outCars[i].halfWid = (float) MONSTER_HALF_WID;
+            }
         }
     }
 

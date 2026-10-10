@@ -81,10 +81,11 @@ typedef struct TtpCarInput {
     float monster;  /* 1 = monster-truck transform active */
     float spin;     /* spin-out whirl angle (rad) — cosmetic body yaw + skid scribbles */
     float scrub;    /* 1 = grinding the wall/curb (snapshot onWall) — full-strength skids */
-    /* Collision half-extents in the car's own frame (world units), at the sim's
-     * CURRENT footprint scale — monster growth included. The cone/sign kick
-     * tests the marker against this oriented rectangle, so the punt happens on
-     * body contact rather than at a fixed radius from the car's centre. */
+    /* Collision half-extents in the car's own frame (world units): the
+     * truck's while `monster`. The cone/sign kick tests the marker against
+     * this oriented rectangle, so the punt happens on body contact rather than
+     * at a fixed radius from the car's centre, and the monster rig is drawn at
+     * this half-length. */
     float halfLen, halfWid;
     /* WHERE THE CAR IS IN TRACK SPACE — the sim's own (totalS, lat), not a
      * re-derivation of it. The renderer has to seat the body on the deck, and

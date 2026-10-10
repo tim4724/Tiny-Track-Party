@@ -14,5 +14,5 @@
 {"case":"chase","fov":69.77,"frames":40,"name":"boost","pos":[57.78,7.207,64.34],"target":[57.81,6.652,64.59]}
 {"case":"chase","fov":56.53,"frames":40,"name":"halfrate","pos":[51.58,7.367,72.3],"target":[49.79,6.791,74.02]}
 {"case":"chase","fov":55.38,"frames":40,"name":"rollingOut","pos":[51.05,7.371,73.13],"target":[48.25,6.791,73.13]}
-{"case":"chase","fov":57.79,"frames":40,"name":"monster","pos":[40.68,7.584,73.13],"target":[38.25,6.791,73.13]}
-{"case":"chase","fov":57.8,"frames":40,"name":"monsterOff","pos":[29.35,7.43,73.13],"target":[27.19,6.791,73.13]}
+{"case":"chase","fov":57.79,"frames":40,"name":"monster","pos":[40.68,7.806,73.13],"target":[38.25,6.791,73.13]}
+{"case":"chase","fov":57.8,"frames":40,"name":"monsterOff","pos":[29.35,7.491,73.13],"target":[27.19,6.791,73.13]}

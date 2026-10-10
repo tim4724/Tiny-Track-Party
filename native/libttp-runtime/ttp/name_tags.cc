@@ -36,11 +36,11 @@ Box boxOf(const TtpCarInput& c) {
     return { v3(c.pos), norm(cross(up, fw)), up, fw };
 }
 
-bool inside(const Box& k, float h, V3 p) {
+bool inside(const Box& k, const NameTagShape& sh, V3 p) {
     const V3 d = p - k.o;
     const float x = dot(d, k.r), y = dot(d, k.u), z = dot(d, k.fw);
-    return std::fabs(x) <= NAME_TAG_MONSTER_HALF_W && y >= 0 && y <= h
-        && std::fabs(z) <= NAME_TAG_MONSTER_HALF_L;
+    return std::fabs(x) <= NAME_TAG_MONSTER_HALF_W * sh.rigScale && y >= 0 && y <= sh.roof
+        && std::fabs(z) <= NAME_TAG_MONSTER_HALF_L * sh.rigScale;
 }
 
 // Does the ray a + t*d, t in (t0, t1), cross the box [lo, hi]?
@@ -288,8 +288,8 @@ float truckShare(const Cam& c, const Box& k, const NameTagShape& sh, float zNear
     // The truck's bounding sphere first: most trucks are nowhere near a given
     // tag's line of sight, and this rejects them before eight projections.
     const float hh = sh.roof * 0.5f;
-    const float rad = std::sqrt(NAME_TAG_MONSTER_HALF_W * NAME_TAG_MONSTER_HALF_W
-                                + NAME_TAG_MONSTER_HALF_L * NAME_TAG_MONSTER_HALF_L + hh * hh);
+    const float cw = NAME_TAG_MONSTER_HALF_W * sh.rigScale, cl = NAME_TAG_MONSTER_HALF_L * sh.rigScale;
+    const float rad = std::sqrt(cw * cw + cl * cl + hh * hh);
     const V3 m = viewOf(c, k.o + k.u * hh);
     if (m.z - rad >= zTag || m.z + rad <= zNear) return 0;
     if (m.z - rad > zNear) {
@@ -302,7 +302,7 @@ float truckShare(const Cam& c, const Box& k, const NameTagShape& sh, float zNear
     Poly rect;
     for (const P2 p : { P2{ q.l, q.t }, P2{ q.r, q.t }, P2{ q.r, q.b }, P2{ q.l, q.b } }) rect.add(p);
     const Poly chassis = clipTo(
-        projectBox(c, k, NAME_TAG_MONSTER_HALF_W, NAME_TAG_MONSTER_HALF_L, 0, sh.seat, zNear, zTag, q), rect);
+        projectBox(c, k, cw, cl, 0, sh.seat, zNear, zTag, q), rect);
     const Poly body = projectBox(c, k, sh.bodyHalfW, sh.bodyHalfL, sh.seat, sh.roof, zNear, zTag, q);
     const Poly bodyIn = clipTo(body, rect);
     float covered = area(chassis) + area(bodyIn);
@@ -366,7 +366,7 @@ float coveredShare(const TtpFrameInput& f, const Cam& c, const NameTagShape* sha
         if (k == s || !alive(cars[k]) || !monster(cars[k])) continue;
         if (k != own && own < f.carCount && ttp_monster_ghosted(cars[k].pos, eyeV, cars[own].pos)) continue;
         const Box b = boxOf(cars[k]);
-        if (inside(b, shapes[k].roof, c.eye)) continue;
+        if (inside(b, shapes[k], c.eye)) continue;
         share += truckShare(c, b, shapes[k], zNear, zTag, q);
     }
     if (share < 1) share += deckShare(c, deck, q, zTag, cands);

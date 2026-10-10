@@ -40,13 +40,15 @@ constexpr float CHASE_DIST = 1.15f, CHASE_HEIGHT = 0.69f, CHASE_LOOK = 1.7f;
 constexpr float CHASE_TGT_UP = 0.11f;      // look point barely above the road
 // The player's OWN monster truck is taller than the eye: at the race pitch its
 // roof sits on the horizon and hides the road just ahead. So while it is active
-// the rig pulls BACK by MONSTER_CAM_BACK and UP by MONSTER_CAM_RISE, to about
-// 14 degrees. Rising alone clears the roof only at ~19, where the horizon jumps
-// a third of the way up the frame and reads as dizzying; pulling back sees over
-// it with less tilt and keeps the 1.3x truck about a car's size on screen. The
-// truck swaps in and out on one frame (the renderer has no grow-in); the rig
-// starts easing on that frame, in quickly and back out more slowly.
-constexpr float MONSTER_CAM_RISE = 0.23f, MONSTER_CAM_BACK = 0.4f;
+// the rig pulls BACK by MONSTER_CAM_BACK and UP by MONSTER_CAM_RISE. Pulling
+// back sees over the roof with less tilt, but it also shrinks the truck on
+// screen, and the truck is drawn bigger than the car for a reason
+// (MONSTER_HALF_LEN), so the rig mostly rises. It keeps some pullback because
+// rising alone needs a pitch where the horizon jumps a third of the way up the
+// frame and reads as dizzying. The truck swaps in and out on one frame (the
+// renderer has no grow-in); the rig starts easing on that frame, in quickly and
+// back out more slowly.
+constexpr float MONSTER_CAM_RISE = 0.47f, MONSTER_CAM_BACK = 0.4f;
 constexpr float MONSTER_CAM_UP = 4.0f, MONSTER_CAM_DOWN = 2.0f;  // ease rates (1/s)
 // 7 -> 32. This one constant decides both how far back the camera sits while
 // racing and how far that is from the parked shot, which never lags at all: the

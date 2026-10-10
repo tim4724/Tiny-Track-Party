@@ -1361,6 +1361,8 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
                 math::float4{ srgbToLinear(0x565b63), 0.5f });
     }
     if (mMonsterAsset) {
+        const filament::Aabb mb = mMonsterAsset->getBoundingBox();
+        mMonsterHalfLen = (mb.max.z - mb.min.z) * 0.5f;
         // The rig's wheels, per instance — these are what turn while the
         // monster is up (the car's own are scaled to nothing). Rest
         // translations are kept so the roll spins each tyre IN PLACE, and the
