@@ -13,11 +13,11 @@
 // the web?") and the same scenario table underneath, imported rather than copied
 // (public/shared/galleryScenarios.js).
 //
-// THE READINESS WAIT IS THE WHOLE GAME. `capture-artwork.js` learned this: it
-// waits on __scene/__engine and the car count and then document.fonts.ready,
-// never on a bare timeout. A cold Filament shader compile behind a plain
-// setTimeout produces a gallery of half-loaded scenes, and nobody notices for a
-// week because every card still has a picture in it.
+// THE READINESS WAIT IS THE WHOLE GAME: wait on __scene/__engine and the car
+// count and then document.fonts.ready, never on a bare timeout. A cold Filament
+// shader compile behind a plain setTimeout produces a gallery of half-loaded
+// scenes, and nobody notices for a week because every card still has a picture
+// in it.
 //
 // WEBP, NOT PNG. The whole table across three platforms at 1080p PNG is tens of
 // megabytes, which would undo the deliberate 170 -> 87 MB asset work; at 1280x720

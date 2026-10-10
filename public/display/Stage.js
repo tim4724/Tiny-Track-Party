@@ -88,9 +88,9 @@ function cssFraction(name) {
 // from the buffer and divided back out by _dpr (see _cellRects), so this changes
 // how many pixels the picture has and nothing about where anything sits.
 //
-// An explicit ?dpr= (or setRenderScale) is a caller naming a buffer scale and
-// BYPASSES the whole mechanism — that is how the trailer renders a true 4K
-// master, and how a fixed resolution is pinned for an A/B.
+// An explicit ?dpr= is a caller naming a buffer scale and BYPASSES the whole
+// mechanism — that is how the trailer renders a true 4K master, and how a fixed
+// resolution is pinned for an A/B.
 // A name tag's bottom edge stands this many of its own em above the point C++
 // projected (the tail hangs in the gap). The paint's transform and the size
 // reported to C++ (_measureNameTags) both read it, so the two cannot drift.
@@ -1231,9 +1231,8 @@ export class Stage {
   // from real time and clamps it at 50 ms (see _loop), which is a frame-rate/sim-rate
   // coupling: a capture that screenshots each frame runs the tab at ~3 fps, so a
   // wall-clock dt yields either a slideshow of 50 ms lurches or, once the clamp bites,
-  // a race that barely advances — the trap scripts/capture-artwork.js documents at
-  // length and works around by racing at a cheap resolution. Stepping instead means
-  // the OUTPUT is a clean 60 fps and only the render TIME is slow, which nobody sees.
+  // a race that barely advances. Stepping instead means the OUTPUT is a clean 60 fps
+  // and only the render TIME is slow, which nobody sees.
   //
   // Pairs with start() + pauseAfterFrame() to advance exactly one frame per call.
   // 0 (the default) restores the real clock. _timeScale still applies, so a shot can
@@ -1343,35 +1342,6 @@ export class Stage {
     // the reallocation's own stall, which would otherwise be the first thing the
     // next decision sees.
     this._onResize();
-  }
-
-  // DEBUG resolution scale: re-point the drawing buffer at n x the layout size,
-  // live. ?dpr= picks the value at boot and is the normal way to set it; this is
-  // for the one caller that needs to CHANGE it mid-session — scripts/capture-artwork.js,
-  // which races at a cheap scale (the artwork rig raster is software GL: full-res
-  // 4K measures 0.58 fps, and since _loop clamps dt to 50 ms per frame a slow
-  // frame rate stops the sim advancing, so a hero shot at full scale throughout
-  // is 20 s of wall clock for 0.6 s of race) and then lifts it for the shot alone.
-  //
-  // Clamped to the renderer's pixel-ratio cap of 2, but NOT to devicePixelRatio
-  // or to the adaptive band the way the automatic path is: a caller naming a
-  // scale is asking for a buffer size, and on a DPR-1 screen 2 means supersample,
-  // which is exactly what the capture wants. It also LATCHES the request, so the
-  // adaptive controller stops touching the buffer from here on.
-  //
-  // _onResize is the whole of it. The renderer's two chrome pieces used to need
-  // the new scale pushed after it (uiScale), and no longer do — they size
-  // themselves off the cell rects, which are C++'s own answer and move with the
-  // surface. So nothing here has to stay in step with a second copy of the size.
-  setRenderScale(n) {
-    const v = parseFloat(n);
-    this._dprRequest = Number.isFinite(v) && v > 0 ? Math.min(v, 2) : 1;
-    // Nothing reads the frame cost from here on, so stop paying for it — a timer
-    // query per frame with no reader, on exactly the capture paths that are
-    // slowest already. The panel keeps whatever visibility it had.
-    if (!this.perf.visible) this.perf.instrument(false);
-    this._onResize();        // resolves _dpr from the request, in _sizeCanvas
-    return this._dpr;
   }
 
   _loop(t) {

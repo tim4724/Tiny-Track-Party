@@ -232,9 +232,9 @@ this file still owns is the two things only a browser knows: the band
 to declare either — no web API answers it — so 0 goes over and the rule learns
 one off the tick series; `scalePanelMs()` reads it back for `perf.pacing`.
 
-An explicit `?dpr=` — or `setRenderScale` — is a caller naming a buffer scale and
-switches the whole mechanism off; that is how the trailer renders a 4K master and
-how a fixed resolution is pinned for an A/B. Under automation the band collapses
+An explicit `?dpr=` is a caller naming a buffer scale and switches the whole
+mechanism off; that is how the trailer renders a 4K master and how a fixed
+resolution is pinned for an A/B. Under automation the band collapses
 onto the E2E cap, so the suite never adapts. Nothing else needs to know a scale
 is in play: the cell grid and every HUD element are placed from the renderer's
 device-pixel rects divided back out by the same number.
@@ -303,8 +303,8 @@ would have shown. `onFrame(dt, nowMs)` carries the loop's own clock, dt summed,
 which under a gate is the sim's time rather than the wall's.
 
 The capture scripts must run HEADED: headless Chromium is SwiftShader, headed gets
-ANGLE-on-Metal, and that gap is the whole reason `capture-artwork.js` races at a
-cheap resolution.
+ANGLE-on-Metal, and under SwiftShader a full-resolution frame is slow enough that
+the 50 ms dt clamp stops the race advancing.
 
 ## Measuring frame cost
 
