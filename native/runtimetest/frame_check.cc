@@ -2235,8 +2235,14 @@ void testNameTagCover() {
   check(!rival(ttp::rt::nameTags(*f, pictures, shapes.data(), sizes.data(), noDeck, cover)), "a truck squarely in front hides the rival's tag");
   cover.clear();
   cars[2].pos = { 0, 0, -0.6f };
-  check(ttp_monster_ghosted(cars[2].pos, TtpVec3{ 0, 0.64f, 0 }, cars[0].pos),
+  check(ttp_monster_ghosted(cars[2].pos, TtpVec3{ 0, 0.64f, 0 }, &cars[0]),
         "arm check: the truck in front of the own car is one the renderer ghosts");
+  for (const float side : { 0.45f, -0.45f }) {
+    cars[2].pos.x = side;
+    check(!ttp_monster_ghosted(cars[2].pos, TtpVec3{ 0, 0.64f, 0 }, &cars[0]),
+          "…but not 0.45 to either side of the car, which leaves the car in view");
+  }
+  cars[2].pos.x = 0;
   check(rival(ttp::rt::nameTags(*f, pictures, shapes.data(), sizes.data(), noDeck, cover)) != nullptr, "a ghosted truck is see-through");
   cover.clear();
   // What decides is the SHARE covered. Sliding the truck right, off the

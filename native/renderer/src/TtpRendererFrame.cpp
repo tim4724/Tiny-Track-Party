@@ -891,7 +891,7 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
                     const int own = vws[vi].car;
                     if (own < 0 || own == (int) i || own >= (int) nCars) continue;
                     const TtpVec3 camP{ vws[vi].world[12], vws[vi].world[13], vws[vi].world[14] };
-                    if (ttp_monster_ghosted(mon, camP, cars[own].pos)) blockMask |= (1u << vi);
+                    if (ttp_monster_ghosted(mon, camP, &cars[own])) blockMask |= (1u << vi);
                 }
             }
             const bool isMonster = c.monster > 0.5f

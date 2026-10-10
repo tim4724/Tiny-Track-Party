@@ -364,7 +364,7 @@ float coveredShare(const TtpFrameInput& f, const Cam& c, const NameTagShape* sha
     float share = 0;
     for (uint32_t k = 0; k < f.carCount && share < 1; k++) {
         if (k == s || !alive(cars[k]) || !monster(cars[k])) continue;
-        if (k != own && own < f.carCount && ttp_monster_ghosted(cars[k].pos, eyeV, cars[own].pos)) continue;
+        if (k != own && own < f.carCount && ttp_monster_ghosted(cars[k].pos, eyeV, &cars[own])) continue;
         const Box b = boxOf(cars[k]);
         if (inside(b, shapes[k], c.eye)) continue;
         share += truckShare(c, b, shapes[k], zNear, zTag, q);

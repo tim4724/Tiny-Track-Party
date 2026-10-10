@@ -12,9 +12,10 @@
 #ifndef TTP_RENDER_H
 #define TTP_RENDER_H
 
-/* <math.h> is here for ttp_grid_cols alone — see its comment below. Nothing
- * else in this header needs more than <stdint.h>, and it must stay that way:
- * libttp-runtime, the renderer and every platform shell all include this. */
+/* <math.h> is here for the inline helpers below (ttp_monster_ghosted,
+ * ttp_grid_cols). Nothing else in this header needs more than <stdint.h>, and
+ * it must stay that way: libttp-runtime, the renderer and every platform shell
+ * all include this. */
 #include <math.h>
 #include <stdint.h>
 
@@ -285,18 +286,27 @@ typedef struct TtpTrackFraming {
 } TtpTrackFraming;
 
 /* Whether a monster truck standing at `mon` is drawn GHOSTED in a view whose
- * camera is at `cam` and which follows the car at `own`: in front of the camera,
- * nearer than that car, and within 3 units of it (SceneRenderer's
- * _monsterBlocksView). The renderer swaps the truck for its translucent twin in
- * exactly those cells; the name tags treat a ghosted truck as see-through. One
- * rule for both, here for the reason ttp_grid_cols below is. */
-static inline int ttp_monster_ghosted(TtpVec3 mon, TtpVec3 cam, TtpVec3 own) {
-    const float fx = own.x - cam.x, fy = own.y - cam.y, fz = own.z - cam.z;
+ * camera is at `cam` and which follows the car `own`: in front of the camera,
+ * nearer than that car, within 3 units of it (SceneRenderer's
+ * _monsterBlocksView), and less than 0.4 off the car's centreline, measured
+ * along its right axis. A truck further out than that leaves the car in view,
+ * so it stays solid; 0.4 was picked by eye. The renderer swaps the truck for
+ * its translucent twin in exactly those cells; the name tags treat a ghosted
+ * truck as see-through. One rule for both, here for the reason ttp_grid_cols
+ * below is. */
+static inline int ttp_monster_ghosted(TtpVec3 mon, TtpVec3 cam, const TtpCarInput* own) {
+    const TtpVec3 o = own->pos, u = own->up, w = own->forward;
+    const float fx = o.x - cam.x, fy = o.y - cam.y, fz = o.z - cam.z;
     const float mx = mon.x - cam.x, my = mon.y - cam.y, mz = mon.z - cam.z;
     if (mx * fx + my * fy + mz * fz <= 0) return 0;                    /* behind the camera */
     if (mx * mx + my * my + mz * mz >= fx * fx + fy * fy + fz * fz) return 0;  /* beyond the car */
-    const float dx = mon.x - own.x, dy = mon.y - own.y, dz = mon.z - own.z;
-    return dx * dx + dy * dy + dz * dz < 3.0f * 3.0f;
+    const float dx = mon.x - o.x, dy = mon.y - o.y, dz = mon.z - o.z;
+    if (dx * dx + dy * dy + dz * dz >= 3.0f * 3.0f) return 0;
+    /* The car's right, up x forward; normalized because the sim pitches its
+     * forward along a slope while the up stays the track's. */
+    const float rx = u.y * w.z - u.z * w.y, ry = u.z * w.x - u.x * w.z, rz = u.x * w.y - u.y * w.x;
+    const float rl = sqrtf(rx * rx + ry * ry + rz * rz);
+    return fabsf(dx * rx + dy * ry + dz * rz) < 0.4f * rl;
 }
 
 /* Split-screen column count for n views on a w x h surface — SceneRenderer's
