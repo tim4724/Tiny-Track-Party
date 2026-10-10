@@ -1675,7 +1675,7 @@ void TtpRenderer::renderWorld(const TtpFrameInput& input, const TtpCarInput* car
                 for (size_t mi = 0; mi < fadeInst->getMaterialInstanceCount(); mi++) {
                     if (mats[mi]->getMaterial()->hasParameter("baseColorFactor")) {
                         mats[mi]->setParameter("baseColorFactor",
-                                math::float4{ 1, 1, 1, alpha });
+                                math::float4{ kBoxTint, alpha });
                     }
                 }
             } else if (!avail) {

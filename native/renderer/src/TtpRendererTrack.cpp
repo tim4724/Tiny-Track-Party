@@ -1316,6 +1316,15 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     };
     for (auto* inst : mBoxInstances) collectGlow(inst);
     for (auto* inst : mBoxFadeInstances) collectGlow(inst);
+    // The box tint (kBoxTint). The fade twins take it per frame with their
+    // alpha, which overwrites the whole factor.
+    for (auto* inst : mBoxInstances) {
+        MaterialInstance* const* mats = inst->getMaterialInstances();
+        for (size_t mi = 0; mi < inst->getMaterialInstanceCount(); mi++) {
+            if (!mats[mi]->getMaterial()->hasParameter("baseColorFactor")) continue;
+            mats[mi]->setParameter("baseColorFactor", math::float4{ kBoxTint, 1.0f });
+        }
+    }
     mBananaAsset = loadInstancedProp("item-banana.glb", 8, mBananaInstances);
     mBananaIn.assign(mBananaInstances.size(), 1);
     // Contact blobs for the FLOATING props (TrackProps' _boxShadow) are all

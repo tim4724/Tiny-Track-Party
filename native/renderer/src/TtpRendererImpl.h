@@ -683,6 +683,13 @@ struct TtpRenderer::TrackBin {
 // stamps in the render loop.
 constexpr float kBlobShadowAlpha = 0.4f;
 
+// The item box's baseColorFactor, a LINEAR multiplier over the kit atlas's
+// purple. The atlas face alone is darker than the deck, so a box read on hue
+// only; this lifts it clear of the road. The white stars ride the same
+// material, so a channel too low to clip once lit tints them: this G and B
+// trade faintly peach stars under warm light for a more vibrant body.
+constexpr float3 kBoxTint{ 2.35f, 1.6f, 1.58f };
+
 
 // The car ground shadow's ink, opacity and coverage cap live in
 // CarShadowTuning (TtpRenderer.h); the prop blobs at 0.40 and the lawn discs
