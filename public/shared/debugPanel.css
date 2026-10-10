@@ -2,8 +2,9 @@
    come from the theme kit (.card .btn .pill .field). Loaded lazily by the module,
    so production pages that never open it pay nothing. */
 
-/* Faint wrench in the corner: discoverable when you look for it, invisible when
-   you don't. Opposite corner from the version badge (display) and latency chip
+/* Faint gear in the corner: absent until the pointer moves (debugPanel.js
+   sets .is-awake for a spell), faint while awake, solid under the pointer.
+   Opposite corner from the version badge (display) and latency chip
    (controller), both bottom-right. */
 .dbg-fab {
   position: fixed;
@@ -15,11 +16,13 @@
   background: color-mix(in srgb, var(--surface) 78%, transparent);
   color: var(--ink-3);
   font-size: 1.15rem; line-height: 1;
-  opacity: 0.22;
+  opacity: 0;
+  pointer-events: none;
   cursor: pointer;
-  transition: opacity 0.15s ease;
+  transition: opacity 0.4s ease;
 }
-.dbg-fab:hover, .dbg-fab:focus-visible, .dbg-fab.is-open { opacity: 1; }
+.dbg-fab.is-awake { opacity: 0.22; pointer-events: auto; }
+.dbg-fab:hover, .dbg-fab:focus-visible, .dbg-fab.is-open { opacity: 1; pointer-events: auto; }
 
 /* Our display:flex would otherwise beat the [hidden] UA default of display:none,
    leaving the panel permanently visible — restate it at higher specificity. */

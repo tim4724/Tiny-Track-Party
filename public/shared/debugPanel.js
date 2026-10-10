@@ -1,7 +1,8 @@
-// Debug settings panel — a faint wrench button (bottom-left) that opens a card
-// for editing this page's URL query params interactively. Controls are
-// prefilled from the current location; Apply rebuilds the query string and
-// reloads the page so every param takes effect through its normal boot path.
+// Debug settings panel — a faint gear button (bottom-left, shown on activity)
+// that opens a card for editing this page's URL query params interactively.
+// Controls are prefilled from the current location; Apply rebuilds the query
+// string and reloads the page so every param takes effect through its normal
+// boot path.
 // Params the schema doesn't list (e.g. ?claim=) are preserved untouched.
 //
 // Each page passes its own schema (the display knows its tracks/cars, the
@@ -33,6 +34,8 @@ function el(tag, className, text) {
   if (text != null) n.textContent = text;
   return n;
 }
+
+const FAB_IDLE_MS = 2500;
 
 export function initDebugPanel(schema, { title = 'Debug' } = {}) {
   // Stylesheet, versioned like the page's own links (the __ guard covers a raw
@@ -214,6 +217,19 @@ export function initDebugPanel(schema, { title = 'Debug' } = {}) {
   };
   fab.addEventListener('click', () => setOpen(panel.hidden));
   closeBtn.addEventListener('click', () => setOpen(false));
+
+  // Hidden until the pointer moves, like the display's corner buttons: a parked
+  // gear is litter on a TV picture, and in every capture of the page. Any
+  // pointer or key activity shows it for a spell (.is-open holds it in the CSS).
+  let idleTimer = 0;
+  const reveal = () => {
+    fab.classList.add('is-awake');
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => fab.classList.remove('is-awake'), FAB_IDLE_MS);
+  };
+  for (const ev of ['pointermove', 'pointerdown', 'keydown']) {
+    window.addEventListener(ev, reveal, { passive: true });
+  }
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !panel.hidden) setOpen(false);
   });

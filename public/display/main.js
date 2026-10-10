@@ -1532,7 +1532,7 @@ window.__perf = scene.perf;
 // parent would stand up a second wasm instance to read two lists.
 window.__biomes = _biomes;
 
-// Debug settings (faint wrench, bottom-left): interactive editor for this
+// Debug settings (faint gear, bottom-left): interactive editor for this
 // page's query params — edits reload the page so each param takes effect
 // through its normal boot path above. Lazy import: dev aid, not boot-critical;
 // it waits for the scene, because the camera sliders read their defaults off

@@ -199,7 +199,7 @@ export const HOLD_SETTLE_MS = 800;
 // The page's own chrome, which is not the game. The race HUD is not hidden here:
 // part of it is the renderer's (the steer bar), so `?hud=0` on the URL is the one
 // switch that takes all of it off (main.js).
-const CHROME_SELECTORS = ['#corner-btns', '#sound-hint', '#toast'];
+const CHROME_SELECTORS = ['#corner-btns', '.dbg-fab', '#sound-hint', '#toast'];
 
 export async function hideChrome(page) {
   await page.addStyleTag({ content: `${CHROME_SELECTORS.join(', ')} { display: none !important; }` });

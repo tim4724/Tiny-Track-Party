@@ -542,7 +542,7 @@ html {
   box-shadow: var(--shadow-card);      /* a 3px-bordered card (theme.css's rule) */
 }
 .trailer__close { position: absolute; top: var(--safe-y); right: var(--safe-x); }
-/* The debug wrench floats over every layer (debugPanel.css); not over the film. */
+/* The debug gear floats over every layer (debugPanel.css); not over the film. */
 #trailer:not(.hidden) ~ .dbg-fab { display: none; }
 
 /* Legal footer (.site-foot lives in theme.css) — pinned along the bottom of the
