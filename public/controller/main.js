@@ -332,14 +332,12 @@ function syncRoom(data) {
   if (!me) return;
   myColorIndex = me.colorIndex;
   if (me.carIndex != null) myCarIndex = me.carIndex;
-  if (me.name) myName = me.name;
+  // NOT our name: the phone already holds it (the display only re-clamps it
+  // with the same cleanName), and the first snapshot seats us under the
+  // engine's placeholder "Player N" with our HELLO still in flight — adopting it
+  // would flash the placeholder on Join and revert an optimistic rename.
   amReady = !!me.ready;
   applyLivery();
-  // The FIRST snapshot can seat us under the engine's placeholder ("Player N")
-  // with our HELLO name still in flight — and the auto-shown settings popup
-  // reads the name at open. Keep the open card's demo phone tracking the
-  // snapshot (no-op while it's closed).
-  refreshHelpName(myName || 'Racer');
   if (!amReady) maybeRestoreCar(); // ready = car locked; don't fight the display's record
 
   const rs = data.roomState;

@@ -133,8 +133,7 @@ function setDemoNames(name) {
   for (const n of document.querySelectorAll('.phone-name')) n.textContent = name;
 }
 
-// A live launcher rename (§2) — or a snapshot catching up on the engine's
-// placeholder — while the demo phones are on screen.
+// A live launcher rename (§2) while the demo phones are on screen.
 export function refreshHelpName(name) {
   if (settingsOpen()) setDemoNames(name);
 }
