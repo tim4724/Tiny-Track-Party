@@ -1,35 +1,53 @@
 // @ts-check
 // CouchPad launcher contract (CONTRACT.md): the controller, when hosted in the
 // launcher's web view (Android WebView / iOS WKWebView — identical here), is
-// handed its identity via ?cpName=… and talks back over
-// window.CouchPad.setName (§2) / window.CouchPadHost.gameEnded (§3). These specs
-// drive a shell-mode phone against the same display + hermetic relay stub the rest
-// of the suite uses, asserting the shell touchpoints end to end.
+// told it is there by window.CouchPadHost, reads the player's name off it (§1),
+// renames through the launcher's own sheet (§2), and leaves through it (§3).
+// The close button is ours. These specs drive a shell-mode phone against the
+// same display + hermetic relay stub the rest of the suite uses, asserting the
+// shell touchpoints end to end.
 const { test, expect, openDisplay, startRace, waitForRacing, visible } = require('./helpers');
 
 // A phone launched by the shell: a fresh context (own localStorage) with the
-// launcher's JS interface stubbed in BEFORE any page script runs, joined via the
-// cpName URL param — its presence is the whole shell gate, so there is no name
-// form. `__cpEnded` records the last gameEnded reason the game reported. Returns
-// the controller page.
-async function shellJoin(browser, roomCode, name, { room = roomCode } = {}) {
+// launcher's bridge stubbed in BEFORE any page script runs, the way its
+// document-start shim installs it. The stub records every call: `__cpEnded` the
+// last gameEnded reason, `__cpLeft` whether leave() ran, `__cpEdits` how many
+// times editName() opened the sheet; the sheet resolves to `__cpNextName` (null
+// = dismissed). `leave: false` models a launcher without §3's leave();
+// `nameProp: false` the old-WebView fallback, which has neither `name` nor
+// editName(). Returns the controller page.
+async function openShell(browser, room, name, { leave = true, nameProp = true } = {}) {
   // Landscape: the launcher pins the device to landscape (§10) and the page is
   // landscape-only, so the shell context matches what the WebView really shows.
   const context = await browser.newContext({ viewport: { width: 844, height: 390 } });
-  await context.addInitScript(() => {
+  await context.addInitScript(({ name, leave, nameProp }) => {
     try { localStorage.setItem('tinytrack_seen_help', '1'); } catch (_) {}
     window.__cpEnded = null;
+    window.__cpLeft = false;
+    window.__cpEdits = 0;
+    window.__cpNextName = null;
     window.__cpOrient = [];      // §10 setOrientation calls, in order
     window.__cpBackCalls = [];   // §9 enableSystemBack transitions, in order
-    // Mirrors the launcher's addJavascriptInterface host (§3, §9, §10).
-    window.CouchPadHost = {
+    let current = name;
+    const host = {
       gameEnded: (reason) => { window.__cpEnded = reason; },
       setOrientation: (mode) => { window.__cpOrient.push(mode); },
       enableSystemBack: (on) => { window.__cpBackCalls.push(on); }
     };
-  });
+    if (nameProp) {
+      Object.defineProperty(host, 'name', { get: () => current, enumerable: true });
+      host.editName = () => {
+        window.__cpEdits++;
+        const n = window.__cpNextName;
+        if (n) current = n;
+        return Promise.resolve(n);
+      };
+    }
+    if (leave) host.leave = () => { window.__cpLeft = true; };
+    window.CouchPadHost = host;
+  }, { name, leave, nameProp });
   const page = await context.newPage();
-  await page.goto(`/${room}?cpName=${encodeURIComponent(name)}`);
+  await page.goto(`/${room}`);
   return page;
 }
 
@@ -59,11 +77,11 @@ test('the display names itself `cpp=web` on the join URL and the registered temp
   await expect(page.locator('#joinurl')).not.toContainText('cpp');
 });
 
-test('a `cp*` param the launcher did not send is not mistaken for the shell', async ({ page, browser }) => {
-  // Every scanned QR now carries ?cpp=web — the display naming itself to the
-  // launcher, addressed past us. `cp*` is the launcher's reserved namespace, and
-  // the shell gate is cpName ALONE: read the prefix instead and every plain-browser
-  // player loses the name screen and gets seated as an empty name.
+test('a `cp*` param without the launcher bridge is a plain browser', async ({ page, browser }) => {
+  // Every scanned QR carries ?cpp=web — the display naming itself to the
+  // launcher, addressed past us. `cp*` is the launcher's reserved namespace and
+  // none of it is the gate: only window.CouchPadHost is. A param read as the gate
+  // would skip this phone's name screen and take its browser exit away.
   const roomCode = await openDisplay(page);
 
   const context = await browser.newContext({ viewport: { width: 844, height: 390 } });
@@ -74,71 +92,109 @@ test('a `cp*` param the launcher did not send is not mistaken for the shell', as
   await phone.goto(`/${roomCode}?cpp=web`);
 
   await phone.waitForSelector(visible('#name'));
-  expect(await phone.evaluate(() => document.documentElement.classList.contains('cp-shell'))).toBe(false);
+  // No room to leave yet, and not fullscreen.
+  await expect(phone.locator('#close-btn')).toBeHidden();
+  await phone.fill('#name-input', 'Ann');
+  await phone.click('#join-btn');
+  await phone.waitForSelector(visible('#lobby'));
+  // A browser joins with a history entry for its back gesture to pop.
+  expect(await phone.evaluate(() => history.state)).not.toBeNull();
 });
 
-test('shell join skips the name screen, seats the injected name, never persists it', async ({ page, browser }) => {
+test('the shell joins under CouchPadHost.name with no name screen (§1)', async ({ page, browser }) => {
   const roomCode = await openDisplay(page);
 
-  const zoe = await shellJoin(browser, roomCode, 'Zoe');
+  const zoe = await openShell(browser, roomCode, 'Zoe');
   // Straight to the lobby — the name form was never shown or filled.
   await zoe.waitForSelector(visible('#lobby'));
   await expect(zoe.locator('#name')).toHaveClass(/hidden/);
-  // The name still seats the display roster and feeds our labels…
   await expect(zoe.locator('#me-name')).toHaveText('Zoe');
   await expect(page.locator('#players')).toContainText('Zoe');
-  // …and stays VISIBLE in the shell too: the launcher's own name chip sits in a
-  // top bar that landscape hides, so our sticker is the only name on screen.
-  await expect(zoe.locator('#me-name')).toBeVisible();
-  await expect(zoe.locator('.cp-shell')).toHaveCount(1);
-
-  // §1: the injected identity must not leak into the game's own name storage.
+  // The launcher owns the name: it does not become this device's default.
   expect(await zoe.evaluate(() => localStorage.getItem('tinytrack_name'))).toBeNull();
-
-  // §1: the shell owns leaving — our own back handling is neutralized (nothing
-  // pushed onto history) so the launcher's back gesture / LEAVE bar is unopposed.
+  // The launcher owns back (§9) and the close button leaves through it (§3):
+  // nothing is pushed onto history for a back gesture of ours to pop.
   expect(await zoe.evaluate(() => history.state)).toBeNull();
 });
 
-test('launcher setName renames the player live on the phone and the display', async ({ page, browser }) => {
+test('a rename opens the launcher sheet, lobby and race alike (§2)', async ({ page, browser }) => {
   const roomCode = await openDisplay(page);
-
-  const zoe = await shellJoin(browser, roomCode, 'Zoe');
+  const zoe = await openShell(browser, roomCode, 'Zoe');
   await zoe.waitForSelector(visible('#lobby'));
   await expect(page.locator('#players')).toContainText('Zoe');
 
-  // §2: the launcher calls this when the player edits their name in the in-game bar.
-  await zoe.evaluate(() => window.CouchPad.setName('Zephyr'));
+  // Dismissed: the Promise resolves null and nothing changes.
+  await zoe.click('#me-name');
+  await expect.poll(() => zoe.evaluate(() => window.__cpEdits)).toBe(1);
+  await expect(zoe.locator('#me-name')).toHaveText('Zoe');
 
+  // Saved: the resolved name renames the seat on the phone and the display.
+  await zoe.evaluate(() => { window.__cpNextName = 'Zephyr'; });
+  await zoe.click('#me-name');
   await expect(zoe.locator('#me-name')).toHaveText('Zephyr');
   await expect(page.locator('#players')).toContainText('Zephyr');
   await expect(page.locator('#players')).not.toContainText('Zoe');
-  // Still not persisted — a live rename is launcher identity, same as the join name.
-  expect(await zoe.evaluate(() => localStorage.getItem('tinytrack_name'))).toBeNull();
-});
+  expect(await zoe.evaluate(() => window.__cpEdits)).toBe(2);
 
-test('a setName MID-RACE moves the display cell chip, not just the lobby seat', async ({ page, browser }) => {
-  // The lobby case above is the easy half: its seat grid is re-read off the room
-  // handle on every announce, so it cannot go stale. A RACE is where a name gets
-  // COPIED — the cell chip is written once when the car is added — and the launcher
-  // can be used to rename at any moment, not only before the flag.
-  const roomCode = await openDisplay(page);
-  const zoe = await shellJoin(browser, roomCode, 'Zoe');
-  await zoe.waitForSelector(visible('#lobby'));
-
+  // Racing: the race's sticker opens the same launcher sheet.
   await startRace(zoe, []);
   await waitForRacing(page);
-  const chip = page.locator('.cell-label__name');   // one human, so one cell
-  await expect(chip).toHaveText('Zoe');
+  await zoe.waitForSelector(visible('#drive-hud'));
+  await zoe.evaluate(() => { window.__cpNextName = 'Zed'; });
+  await zoe.click('#hud-name');
+  await expect(zoe.locator('#hud-name')).toHaveText('Zed');
+  await expect(page.locator('.cell-label__name')).toHaveText('Zed');
+  expect(await zoe.evaluate(() => window.__cpEdits)).toBe(3);
+});
 
-  await zoe.evaluate(() => window.CouchPad.setName('Zephyr'));
-  await expect(chip).toHaveText('Zephyr');
+test('a launcher without CouchPadHost.name gets our name screen and no rename', async ({ page, browser }) => {
+  // An Android WebView too old for document-start scripts: the launcher can
+  // define neither `name` nor editName(), so the page behaves as a browser.
+  const roomCode = await openDisplay(page);
+  const ann = await openShell(browser, roomCode, 'Ann', { nameProp: false });
+  await ann.waitForSelector(visible('#name'));
+  await expect(ann.locator('#close-btn')).toBeVisible();   // leave() still works there
+  await ann.fill('#name-input', 'Ann');
+  await ann.click('#join-btn');
+  await ann.waitForSelector(visible('#lobby'));
+
+  await expect(ann.locator('#me-name')).toBeDisabled();
+});
+
+test('the close button leaves through the launcher, racing included (§3)', async ({ page, browser }) => {
+  const roomCode = await openDisplay(page);
+  const zoe = await openShell(browser, roomCode, 'Zoe');
+  await zoe.waitForSelector(visible('#lobby'));
+  await expect(zoe.locator('#close-btn')).toBeVisible();
+
+  // Racing: still there, top-left, with the name sticker stepped right of it.
+  await startRace(zoe, []);
+  await waitForRacing(page);
+  await zoe.waitForSelector(visible('#drive-hud'));
+  const x = await zoe.locator('#close-btn').boundingBox();
+  const name = await zoe.locator('#hud-name').boundingBox();
+  expect(x).not.toBeNull();
+  expect((x?.x ?? 0) + (x?.width ?? 0)).toBeLessThanOrEqual(name?.x ?? 0);
+  expect(x?.x ?? 99).toBeLessThan(40);
+
+  // The tap hands over and does not navigate: the launcher closes the web view.
+  const url = zoe.url();
+  await zoe.click('#close-btn');
+  expect(await zoe.evaluate(() => window.__cpLeft)).toBe(true);
+  expect(zoe.url()).toBe(url);
+});
+
+test('a launcher without leave() gets no close button', async ({ page, browser }) => {
+  const roomCode = await openDisplay(page);
+  const zoe = await openShell(browser, roomCode, 'Zoe', { leave: false });
+  await zoe.waitForSelector(visible('#lobby'));
+  await expect(zoe.locator('#close-btn')).toBeHidden();
 });
 
 test('a rejected join reports gameEnded(room_not_found) to the launcher', async ({ page, browser }) => {
   await openDisplay(page);   // a real room exists, but we point the phone at a different code
 
-  const lost = await shellJoin(browser, 'no-such-room', 'Ann', { room: 'no-such-room' });
+  const lost = await openShell(browser, 'no-such-room', 'Ann');
   // §3: the relay rejects the join ('Room not found') → the game reports the
   // terminal reason and does NOT navigate itself (the launcher tears the WebView
   // down). It never reaches the lobby.
@@ -147,57 +203,52 @@ test('a rejected join reports gameEnded(room_not_found) to the launcher', async 
   await expect(lost.locator('#lobby')).toHaveClass(/hidden/);
 });
 
-test('theming metas ship and the accent retints to the player livery (§4); safe-zone vars are honored (§5)', async ({ page, browser }) => {
+test('the page dresses the launcher sheet (§2, §4) and keeps inside the safe area (§5)', async ({ page, browser }) => {
   const roomCode = await openDisplay(page);
 
-  const zoe = await shellJoin(browser, roomCode, 'Zoe');
+  const zoe = await openShell(browser, roomCode, 'Zoe');
   await zoe.waitForSelector(visible('#lobby'));
 
-  // §4: both hint metas are present. theme-color is the static warm paper…
-  expect(await zoe.evaluate(() => {
-    const m = document.querySelector('meta[name="theme-color"]');
-    return m && m.getAttribute('content');
-  })).toBe('#FFF6EB');
-  // …and cp-accent-color has been retinted live to this player's livery colour
-  // (first seat → red #e6492d), no longer the static default.
-  await expect.poll(() => zoe.evaluate(() => {
-    const m = document.querySelector('meta[name="cp-accent-color"]');
-    return (m && m.getAttribute('content') || '').toLowerCase();
-  })).toBe('#e6492d');
-
-  // §5: the authoritative --cp-safe-* vars feed the page's edge padding via
-  // max(var, env). Injecting a top inset must push the lobby's content down.
-  const padTop = await zoe.evaluate(() => {
-    document.documentElement.style.setProperty('--cp-safe-top', '48px');
-    return parseFloat(getComputedStyle(document.getElementById('lobby')).paddingTop);
+  // §4 + §2: the scheme drives the status-bar icons and the name sheet's text,
+  // theme-color its surface, and :root's accent-color its Save button — the
+  // player's livery (first seat → red #e6492d), read when editName() is called.
+  const look = await zoe.evaluate(() => {
+    const meta = (n) => document.querySelector(`meta[name="${n}"]`)?.getAttribute('content');
+    return { scheme: meta('color-scheme'), surface: meta('theme-color') };
   });
-  expect(padTop).toBeGreaterThanOrEqual(48);
+  expect(look.scheme).toBe('light');
+  expect(look.surface).toBe('#FFF6EB');
+  await expect.poll(() => zoe.evaluate(() => getComputedStyle(document.documentElement).accentColor))
+    .toBe('rgb(230, 73, 45)');
 
-  // The launcher reports each side's ACTUAL inset. A one-sided cutout is
-  // levelled onto both sides on a regular phone, and taken as-is on a small one.
-  const sidePads = () => zoe.evaluate(() => {
+  // §5: env(safe-area-inset-*) is the whole source. CDP sets the insets the
+  // platform would report.
+  const cdp = await zoe.context().newCDPSession(zoe);
+  const insets = (i) => cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { top: 0, bottom: 0, left: 0, right: 0, ...i } });
+  const pads = () => zoe.evaluate(() => {
     const s = getComputedStyle(document.getElementById('lobby'));
-    return [parseFloat(s.paddingLeft), parseFloat(s.paddingRight)];
+    return { top: parseFloat(s.paddingTop), left: parseFloat(s.paddingLeft), right: parseFloat(s.paddingRight) };
   });
-  await zoe.evaluate(() => {
-    document.documentElement.style.setProperty('--cp-safe-left', '48px');
-    document.documentElement.style.setProperty('--cp-safe-right', '20px');
-  });
-  const [left, right] = await sidePads();
-  expect(left).toBeGreaterThanOrEqual(48);
-  expect(right).toBe(left);
-  // The injected vars survive the resize: same page, now under the small tier.
+  await insets({ top: 48 });
+  expect((await pads()).top).toBeGreaterThanOrEqual(48);
+
+  // Each side's ACTUAL inset arrives. A one-sided cutout is levelled onto both
+  // sides on a regular phone, and taken as-is on a small one.
+  await insets({ left: 48, right: 20 });
+  const big = await pads();
+  expect(big.left).toBeGreaterThanOrEqual(48);
+  expect(big.right).toBe(big.left);
   await zoe.setViewportSize({ width: 667, height: 375 });
-  const [smallLeft, smallRight] = await sidePads();
-  expect(smallLeft).toBeGreaterThanOrEqual(48);
-  expect(smallRight).toBeGreaterThanOrEqual(20);
-  expect(smallRight).toBeLessThan(smallLeft);
+  const small = await pads();
+  expect(small.left).toBeGreaterThanOrEqual(48);
+  expect(small.right).toBeGreaterThanOrEqual(20);
+  expect(small.right).toBeLessThan(small.left);
 });
 
 test('the shell asks for landscape before first paint (§10)', async ({ page, browser }) => {
   const roomCode = await openDisplay(page);
 
-  const zoe = await shellJoin(browser, roomCode, 'Zoe');
+  const zoe = await openShell(browser, roomCode, 'Zoe');
   // The head script fires before any body script — by lobby time the request
   // must be there, exactly once, and be the literal 'landscape'.
   await zoe.waitForSelector(visible('#lobby'));
@@ -207,7 +258,7 @@ test('the shell asks for landscape before first paint (§10)', async ({ page, br
 test('system back arms in the lobby, disarms for the race, and closes an open dialog (§9)', async ({ page, browser }) => {
   const roomCode = await openDisplay(page);
 
-  const zoe = await shellJoin(browser, roomCode, 'Zoe');
+  const zoe = await openShell(browser, roomCode, 'Zoe');
   await zoe.waitForSelector(visible('#lobby'));
   // Lobby: armed (back = leave through the launcher). Transitions only, no chatter.
   await expect.poll(() => zoe.evaluate(() => window.__cpBackCalls)).toEqual([true]);
@@ -232,7 +283,7 @@ test('system back arms in the lobby, disarms for the race, and closes an open di
 test('backgrounding the app drops the seat at once; returning takes it back (§7)', async ({ page, browser }) => {
   const roomCode = await openDisplay(page);
 
-  const zoe = await shellJoin(browser, roomCode, 'Zoe');
+  const zoe = await openShell(browser, roomCode, 'Zoe');
   await zoe.waitForSelector(visible('#lobby'));
   await expect(page.locator('#players')).toContainText('Zoe');
 

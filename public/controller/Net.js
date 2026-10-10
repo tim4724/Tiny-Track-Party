@@ -201,7 +201,7 @@ export class ControllerNet extends GameNet {
   // it updates our seat and re-broadcasts the roster (LOBBY_UPDATE) to everyone —
   // the same HELLO path used on join and on display-return, so a fresh display
   // also restores the new name. No-op until we've joined (peerIndex set); the name
-  // still rides the next HELLO. Used by the CouchPad launcher's setName (§2).
+  // still rides the next HELLO. Used by the launcher's name sheet (main.js renameTo).
   rename(name) {
     this.playerName = name || this.playerName;
     if (this.party && this.peerIndex != null) {

@@ -6,18 +6,18 @@
 // what to show) because the two answers differ by where the player is: the name
 // screen has a status line under the form and needs no overlay, while in-room the
 // status line is off-screen and the overlay is the only thing they can see.
+import { inShell, canLeave } from './launcher.js';
+
 const el = (id) => document.getElementById(id);
 
-let _inShell = false;
-
 // `leave` shows the "Exit to start" escape hatch — on for every terminal state,
-// off while a reconnect is still in flight. In the shell the launcher owns
-// leaving (its LEAVE bar), so ours is never shown: it would fight it (§1).
+// off while a reconnect is still in flight. It leaves the way the close button
+// does (main.js exitRoom), so a launcher without leave() gets neither.
 export function showConn({ title, msg, retry, leave }) {
   el('conn-title').textContent = title;
   el('conn-msg').textContent = msg || '';
   el('conn-retry').classList.toggle('hidden', !retry);
-  el('conn-leave').classList.toggle('hidden', !leave || _inShell);
+  el('conn-leave').classList.toggle('hidden', !leave || (inShell && !canLeave));
   el('conn').classList.remove('hidden');
 }
 
@@ -70,8 +70,7 @@ export function linkCopy(state, info) {
   }
 }
 
-export function initLinkStatus({ inShell, onRetry, onLeave }) {
-  _inShell = inShell;
+export function initLinkStatus({ onRetry, onLeave }) {
   el('conn-retry').addEventListener('click', onRetry);
   el('conn-leave').addEventListener('click', onLeave);
 }

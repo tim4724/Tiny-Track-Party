@@ -133,11 +133,6 @@ function setDemoNames(name) {
   for (const n of document.querySelectorAll('.phone-name')) n.textContent = name;
 }
 
-// A live launcher rename (§2) while the demo phones are on screen.
-export function refreshHelpName(name) {
-  if (settingsOpen()) setDemoNames(name);
-}
-
 function maybeAutoShowSettings() {
   if (inScenario() || helpSeen() || settingsOpen()) return;
   openSettings();    // show first, THEN stamp — a throw before it shows can't burn the once

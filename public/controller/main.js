@@ -21,13 +21,14 @@ import { createWakeLock } from '../shared/wakeLock.js';
 // Sanitize a display name to the wire limit (trim + ≤16 chars). The cap is
 // shared with the display's own re-clamp of an incoming HELLO, so it lives in
 // shared/names.js — one function, imported by both pages and driven directly by
-// tests/wire-compat.test.js. Returns '' for blank input; the shell keeps '' so a
-// missing cpName falls back to the name screen.
+// tests/wire-compat.test.js. Returns '' for blank input; a shell without a
+// launcher name keeps '' and falls back to the name screen.
 import { cleanName } from '../shared/names.js';
-import { inShell, shellName, endSession, terminalReason, setAccentColor, installRenameHook, armSystemBack, installBackHook } from './launcher.js';
+import { inShell, shellName, canEditName, editName, leave, endSession, terminalReason, armSystemBack, installBackHook } from './launcher.js';
 import { storedName, saveName, storedMode, saveMode, storedCarIndex, saveCarIndex, storedInputMode, saveInputMode } from './prefs.js';
 import { showConn, hideConn, linkCopy, initLinkStatus } from './linkStatus.js';
-import { initModals, onEnterLobby, closeAnyModal, anyModalOpen, closeTopModal, refreshHelpName, refreshSettingsState, refreshMotionState, openStarsPopup, openLeaveCupPopup, closeLeaveCupPopup } from './modals.js';
+import { initModals, onEnterLobby, closeAnyModal, anyModalOpen, closeTopModal, refreshSettingsState, refreshMotionState, openStarsPopup, openLeaveCupPopup, closeLeaveCupPopup } from './modals.js';
+import { initCloseButton, syncCloseButton } from './closeButton.js';
 import { renderResultsBoard } from './resultsBoard.js';
 import { initDriveSurface, startDriving, stopDriving, setInputMode, setHeldItem, resetHeldItem } from './driveSurface.js';
 import { initOrientation, keyboardUp } from './orientation.js';
@@ -54,10 +55,12 @@ function show(name) {
   // Push history only when stepping UP a level (name → lobby). Same-level and
   // back transitions don't push, so there's exactly one entry to pop: pressing
   // back from anywhere in the room returns to the name screen in one step.
-  // In the shell the launcher owns the back gesture (it swallows it and shows its
-  // own LEAVE bar), so we push nothing — our own back handling would fight it (§1).
+  // In the shell the launcher owns the back gesture (§9) and the close button
+  // leaves through it (§3), so we push nothing — our own back handling would
+  // fight it.
   if (!inShell && (SCREEN_ORDER[name] || 0) > (SCREEN_ORDER[prev] || 0)) history.pushState({ screen: name }, '');
   syncShellBack();
+  syncCloseButton(name);
 }
 
 // Shell §9: arm the system back gesture wherever an edge swipe isn't gameplay —
@@ -157,17 +160,27 @@ const net = new ControllerNet({
   onRtt: (halfMs, viaFastlane) => applyLatencyChip(latencyEl, halfMs, viaFastlane)
 });
 
+// The way out — the close button, and the link overlay's "Exit to start". In
+// the launcher: hand over (§3); closing the web view ends the socket, and we do
+// not navigate. In a browser: leave fullscreen, and pop the room's history
+// entry — the popstate handler runs the real leave (leaveToName), exactly as
+// the back gesture would, keeping the stack clean.
+function exitRoom() {
+  buzz(15);
+  if (inShell) { leave(); return; }
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  if (currentScreen !== 'name') history.back();
+}
+
 initLinkStatus({
-  inShell,
   onRetry: () => {
     buzz(15);
     showConn({ title: 'Reconnecting…', msg: '', retry: false, leave: false });
     net.connect(myName);
   },
-  // Pop the room's history entry — the popstate handler runs the real leave
-  // (leaveToName), exactly as the back gesture would, keeping the stack clean.
-  onLeave: () => { buzz(15); history.back(); }
+  onLeave: exitRoom
 });
+initCloseButton(exitRoom);
 
 const tilt = new TiltInput({
   surface: el('game'),
@@ -391,11 +404,7 @@ function renderResults(data) {
 }
 
 function applyLivery() {
-  const c = liveryOf(myColorIndex);
-  document.documentElement.style.setProperty('--car', c);
-  // Guarded on a real colour so we don't advertise the grey placeholder before
-  // livery lands. See launcher.js for what the launcher does with it.
-  if (myColorIndex != null) setAccentColor(c);
+  document.documentElement.style.setProperty('--car', liveryOf(myColorIndex));
 }
 
 // Car picker — the controller's lobby is just "pick your car" (the shared display
@@ -632,7 +641,8 @@ document.addEventListener('touchmove', (e) => {
 // the relay connection so the display removes us from the roster, resets the
 // transient in-room UI, and re-fills the name input so the player can edit it
 // and re-join. The history entry pushed by `show` on name → lobby is what the
-// pop lands on; here we just react to it.
+// pop lands on; here we just react to it. The field is NOT focused: on a phone
+// that raises the keyboard over a screen the player may only be passing through.
 function leaveToName() {
   net.disconnect();
   stopDriving();
@@ -651,10 +661,9 @@ function leaveToName() {
   setStatus('');
   hideConn();
   show('name');
-  el('name-input').focus();
 }
 window.addEventListener('popstate', () => {
-  if (inShell) return;   // shell owns leaving (§1) — we never pushed, and don't self-leave
+  if (inShell) return;   // the launcher owns leaving (§3) — we never pushed, and don't self-leave
   if (currentScreen && currentScreen !== 'name') leaveToName();
 });
 
@@ -677,13 +686,37 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) net.
 // teardown hangs on, and resume() no-ops unless suspend() actually ran.
 window.addEventListener('pageshow', () => net.resume());
 
-// Join the room under `name`. `persist` saves it as this device's default for the
-// standalone name form; the shell passes false — the launcher owns identity and its
-// injected name must never leak into the game's own storage (§1).
-async function joinRace(name, { persist } = {}) {
-  const n = cleanName(name);
+// A rename from the launcher's sheet: the labels that carry the name, then a
+// re-HELLO so the display renames the seat (Net.rename).
+function renameTo(n) {
   myName = n;
-  if (persist) saveName(n);
+  el('me-name').textContent = n;    // lobby identity
+  el('hud-name').textContent = n;   // in-race HUD
+  net.rename(n);                    // → display roster + LOBBY_UPDATE echo
+}
+
+// The name stickers — the lobby's and the race's alike, since a name that
+// renames in one place and not the other gives no hint why. In the launcher a
+// tap opens ITS name sheet (§2), which owns the name and its rules; the resolved
+// name is already its CouchPadHost.name. A browser player named themselves on
+// the name screen a moment ago and renames by going back to it (the X), so
+// there the stickers are plain labels: an in-room field would raise the
+// keyboard over a fullscreen page, which Android Chrome mishandles.
+async function onNameTap() {
+  buzz(15);
+  const n = await editName();
+  if (n && n !== myName) renameTo(n);
+}
+for (const sticker of [el('me-name'), el('hud-name')]) {
+  if (!canEditName) { sticker.disabled = true; continue; }
+  sticker.setAttribute('aria-haspopup', 'dialog');
+  sticker.setAttribute('aria-label', 'Change name');
+  sticker.addEventListener('click', onNameTap);
+}
+
+// Join the room under `name`, already cleaned by the caller.
+async function joinRace(n) {
+  myName = n;
   setStatus('');           // the disabled button signals the in-flight join
   setJoining(true);
   // Request motion permission within this user gesture (iOS requirement) — but
@@ -699,9 +732,12 @@ async function joinRace(name, { persist } = {}) {
   if (inputMode === 'tilt') await tilt.enableMotion();
   net.connect(n);
 }
+// The name screen's Join: the name is this device's default for next time.
 el('name-form').addEventListener('submit', (e) => {
   e.preventDefault();
-  joinRace(el('name-input').value, { persist: true });
+  const n = cleanName(el('name-input').value);
+  saveName(n);
+  joinRace(n);
 });
 
 // Let go of a held Start that nothing answered, and say so rather than silently
@@ -789,36 +825,27 @@ el('leavecup-btn').addEventListener('click', () => {
   openLeaveCupPopup();
 });
 
-// Applies the launcher's rename locally (the labels that carry the name) AND
-// broadcasts it to the display via a re-HELLO, exactly like a join.
-installRenameHook((n) => {
-  myName = n;
-  el('me-name').textContent = n;    // lobby identity
-  el('hud-name').textContent = n;   // in-race HUD
-  refreshHelpName(n);               // settings demo phone
-  net.rename(n);                    // → display roster + LOBBY_UPDATE echo
-});
-
 // Shell §9: what an armed back gesture DOES. A popup closes (motion above
 // settings); a paused race continues; anywhere else — the lobby, the results —
-// returning false hands the exit to the launcher, same as its LEAVE bar.
+// returning false hands the exit to the launcher, same as the close button.
 installBackHook(() => {
   if (closeTopModal()) return true;
   if (!el('pause-overlay').classList.contains('hidden')) { net.send(MSG.RESUME_GAME); return true; }
   return false;
 });
 
-// Boot. In the shell the launcher owns identity: skip the name screen entirely
-// and join straight away with the injected name (never persisted). Otherwise land
-// on the name screen and wait for the player to pick a name. (Scenario/gallery
-// mode below never connects and always carries no cpName, so it's unaffected.)
-if (inShell && shellName) {
+// Boot. In the shell the launcher owns the name (§1): skip the name screen and
+// join straight away under it. Otherwise land on the name screen and wait for
+// the player to pick a name. (Scenario/gallery mode below never connects and
+// has no launcher, so it's unaffected.)
+if (shellName) {
   // Never flash the name screen (it's the default-visible section): hide it up
-  // front and go straight to joining. The launcher's own joining spinner floats
-  // over the blank sky until the replayed room snapshot lands and show('lobby')
-  // takes over.
+  // front and go straight to joining. The launcher's own joining cover floats
+  // over the blank paper until the replayed room snapshot lands and
+  // show('lobby') takes over — the close button is up from the start.
   screens.name.classList.add('hidden');
-  joinRace(shellName, { persist: false });
+  syncCloseButton(null);   // no screen yet; the shell's X ignores it anyway
+  joinRace(shellName);
 } else {
   show('name');
 }

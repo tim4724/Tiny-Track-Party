@@ -2,24 +2,20 @@
    Tokens + reusable bits live in /shared/theme.css. --car is the player's
    livery colour, set at runtime by controller/main.js (applyLivery). */
 
-/* Safe zone (CouchPad contract §5). The launcher hosts us edge-to-edge with
-   its chrome (status bar + LEAVE bar) floating on top, and publishes its extent
-   two ways: the authoritative --cp-safe-* vars on <html> AND a synthetic display
-   cutout via env(safe-area-inset-*). We fold both together per the contract's
-   recommended pattern — max(var, env) — so keeping interactive UI inside these
-   insets is correct in the shell AND in a plain browser (where the var is unset
-   and env() covers real notches; the var wins ties and survives WebView cutout
-   regressions). Every fixed/edge element pads against these, never bare env(). */
+/* Safe zone. env(safe-area-inset-*) is the whole source in the CouchPad
+   launcher (contract §5: status bar, cutout, home indicator, Android's nav bar
+   while it shows) and in a browser alike. Every fixed/edge element pads
+   against these, never bare env(). */
 :root {
-  --safe-top:    max(var(--cp-safe-top,    0px), env(safe-area-inset-top,    0px));
-  --safe-bottom: max(var(--cp-safe-bottom, 0px), env(safe-area-inset-bottom, 0px));
+  --safe-top:    env(safe-area-inset-top,    0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
   /* LEFT and RIGHT are LEVELLED to the larger of the pair: the page is
      landscape-only and its layouts are symmetric, so a one-sided camera cutout
-     must not shove them off the physical centre. The launcher reports each
+     must not shove them off the physical centre. The platform reports each
      side's ACTUAL inset, so the levelling is ours to do, in the shell and in a
      bare browser alike. Small phones are the exception (below). */
-  --inset-left:  max(var(--cp-safe-left,  0px), env(safe-area-inset-left,  0px));
-  --inset-right: max(var(--cp-safe-right, 0px), env(safe-area-inset-right, 0px));
+  --inset-left:  env(safe-area-inset-left,  0px);
+  --inset-right: env(safe-area-inset-right, 0px);
   --safe-x: max(var(--inset-left), var(--inset-right));
   --safe-left:  var(--safe-x);
   --safe-right: var(--safe-x);
@@ -58,6 +54,11 @@ html, body {
   color: var(--ink);
   touch-action: manipulation;
 }
+/* The CouchPad launcher's name sheet takes its Save button and field accent from
+   this (contract §2): the player's livery, so the sheet reads as theirs, like the
+   name sticker it renames. Brand green until the livery lands. Nothing on the
+   page itself is a native control it would tint. */
+:root { accent-color: var(--car, var(--brand)); }
 /* Nothing on the controller is selectable but the name field, and the PREFIX
    is the load-bearing half: WebKit honours only -webkit-user-select. A long
    press on iOS selects the NEAREST text, not just text under the finger, so a
@@ -324,11 +325,18 @@ input[type=text]:disabled { opacity: 0.6; }
    the icon buttons beside it (.settings-btn / .hud-btns, sized by one rule for
    the same reason). */
 .lobby-me { display: flex; min-width: 0; max-width: 70%; }
+/* Both stickers are BUTTONS — in the launcher a tap renames, in a browser
+   main.js disables them into plain labels. The rule below dresses them; these
+   add the pointer and the theme's icon-button press where a tap does something. */
+.lobby-me__name:enabled, .hud-name:enabled { cursor: pointer; }
+.lobby-me__name:enabled:active, .lobby-me__name.held, .hud-name:enabled:active, .hud-name.held {
+  transform: rotate(-2deg) translate(2px, 2px); box-shadow: none;
+}
 .lobby-me__name, .hud-name {
   font-family: var(--font-display); font-weight: 700; font-size: 1.4rem; line-height: 1;
   color: #fff; background: var(--car, var(--brand));
   border: 3px solid var(--ink); border-radius: var(--r-sm);
-  padding: 0.39em 0.6em;
+  padding: 0.39em 0.6em; text-align: left;
   transform: rotate(-2deg);
   box-shadow: var(--shadow-pop);
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -798,11 +806,6 @@ input[type=text]:disabled { opacity: 0.6; }
 /* .hud-name is dressed with .lobby-me__name, up in the lobby ribbon: same chip,
    same corner, one rule. */
 
-/* CouchPad shell: the name stickers STAY. The launcher's own name chip lives in
-   its top bar, which is hidden in landscape — hiding our copies too left the
-   player nameless on every screen (they were dropped as duplicates once; that
-   assumed the portrait chrome). */
-
 /* MID row — the steer indicator centred on the TOTAL screen width, with the
    BAR ALONE centred in the row's free height: the two spacer tracks are equal
    and the text hangs into the lower one, so the hint (and the motion chip under
@@ -949,7 +952,7 @@ input[type=text]:disabled { opacity: 0.6; }
 /* ---- pause ---- */
 /* Overlays that coincide with ARMING the shell's system back (§9) share a
    floored bottom inset: arming brings Android's nav bar back, growing
-   --cp-safe-bottom by the gesture pill (typically 24px) exactly as the overlay
+   the bottom inset by the gesture pill (typically 24px) exactly as the overlay
    opens. Flooring the bottom inset AT that growth keeps the centred card put —
    otherwise it visibly hops as the bar fades in. (No higher: a fatter floor
    just reads as excess bottom padding.) */
@@ -1473,28 +1476,36 @@ input[type=text]:disabled { opacity: 0.6; }
    target is invisible to the eye and not to scrollWidth: it reads as an overflow
    to every guard that measures one (scripts/lobby-fit-check.mjs). */
 :root { --corner-btn: max(2.9rem, 44px); }   /* the square, read by every corner control */
-.settings-btn, .hud-btns .icon-btn, .fs-exit {
+.settings-btn, .hud-btns .icon-btn, .close-btn {
   flex: none;
   width: var(--corner-btn); height: var(--corner-btn);
   font-size: 1.5rem; line-height: 1;
 }
 .settings-btn { margin-left: auto; }
 
-/* Exit fullscreen (orientation.js) — the corner's third icon button, sized by
-   the rule above. It floats over every screen in the top-right corner, so
-   while it shows, the two rows that own that corner step left by one button
-   and the .hud-btns gap. */
-.fs-exit {
-  display: none;
-  position: fixed; z-index: 5;
-  top: var(--edge-top); right: var(--edge-right);
+/* The close button (closeButton.js) — a corner icon button sized by the rule
+   above, in the top-LEFT corner on every screen. While it shows, the two rows
+   that own the top-left step right by one button and the .hud-btns gap — a
+   sibling selector, which is why the button comes before the sections in
+   index.html. */
+.close-btn {
+  position: fixed; z-index: 14;   /* over the screens (z 1), under every popup (15+) */
+  top: var(--edge-top); left: var(--edge-left);
 }
-:root.is-fullscreen .fs-exit { display: inline-flex; }
-:root.is-fullscreen .lobby-top,
-:root.is-fullscreen .hud-top { padding-right: calc(var(--corner-btn) + 0.55rem); }
-.fs-exit-glyph {
+/* …and it is GONE while any dialog is up: a player reaches for an X in the
+   corner to close the dialog, and this one would leave the game. Every popup,
+   the pause overlay and #conn (which carries its own "Exit to start").
+   visibility rather than .hidden, so the rows above keep their step and nothing
+   moves under the backdrop. */
+body:has(#settings-overlay:not(.hidden), #motion-overlay:not(.hidden),
+         #stars-overlay:not(.hidden), #leavecup-overlay:not(.hidden),
+         #pause-overlay:not(.hidden),
+         #conn:not(.hidden)) .close-btn { visibility: hidden; }
+.close-btn:not(.hidden) ~ section .lobby-top,
+.close-btn:not(.hidden) ~ section .hud-top { padding-left: calc(var(--corner-btn) + 0.55rem); }
+.close-glyph {
   width: 1em; height: 1em;
-  fill: none; stroke: currentColor; stroke-width: 2.6;
+  fill: none; stroke: currentColor; stroke-width: 2.8;
   stroke-linecap: round; stroke-linejoin: round;
 }
 /* On the race page the star count takes the push, so the two popup buttons

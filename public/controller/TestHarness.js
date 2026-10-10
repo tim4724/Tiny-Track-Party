@@ -13,6 +13,7 @@ import { applyLatencyChip, renderReadyFoot, motionHelpCopy, NEXT_RACE_NOTE } fro
 import { renderResultsBoard } from './resultsBoard.js';
 import { linkCopy, showConn } from './linkStatus.js';
 import { setInputMode } from './driveSurface.js';
+import { syncCloseButton } from './closeButton.js';
 
 const FAKE_NAMES = ['Mia', 'Theo', 'Ava', 'Leo', 'Zoe', 'Max', 'Ivy', 'Sam'];
 
@@ -47,7 +48,10 @@ export function runControllerScenario(opts) {
   const color = Math.max(0, Math.min(opts.color || 0, COLORS.length - 1));
 
   const screens = { name: el('name'), lobby: el('lobby'), game: el('game'), results: el('results') };
-  const show = (name) => { for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name); };
+  const show = (name) => {
+    for (const k of Object.keys(screens)) screens[k].classList.toggle('hidden', k !== name);
+    syncCloseButton(name);
+  };
 
   // Apply the player's car livery (the --car custom property tints the HUD and
   // the car-picker tiles).

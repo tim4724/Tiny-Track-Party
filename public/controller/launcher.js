@@ -1,33 +1,44 @@
 // The CouchPad launcher shell (CONTRACT.md) — everything that only means
-// something when this page is hosted inside the native launcher, in one file so
-// the rest of the controller can read as a plain web page.
+// something when this page is hosted inside the native launcher (the Android
+// app's WebView or the iOS app's WKWebView), in one file so the rest of the
+// controller can read as a plain web page. This is the one module that reads
+// window.CouchPadHost. The bridge exists only inside the launcher, so its
+// PRESENCE is the shell gate, and every touchpoint on it is feature-detected on
+// top of that — the same deployed controller keeps working untouched in a plain
+// browser.
 //
-// The launcher (the Android app hosting this page in a WebView, or the iOS app in
-// a WKWebView — they behave identically here) appends ?cpName=<name> to the join
-// URL, and is the only thing that does. Its PRESENCE is the shell gate, and ALL
-// shell behaviour hangs off it, so the same deployed controller keeps working
-// untouched in a plain browser.
-//
-// There is no version on the wire and no handshake param: every touchpoint is
-// feature-detected (a param that is there or isn't, a bridge object that exists
-// or doesn't), which is what lets the launcher add capabilities without a
-// coordinated release. `cp*` is the launcher's RESERVED namespace — this game
-// mints no query param starting with `cp`, and ignores any it doesn't know,
-// since they may be addressed to the launcher rather than to us (`cpp`, which
-// the display puts on the join URL to name itself, is exactly that).
+// `cp*` is the launcher's RESERVED query namespace — this game mints no param
+// starting with `cp`, and ignores any it doesn't know, since they may be
+// addressed to the launcher rather than to us (`cpp`, which the display puts on
+// the join URL to name itself, is exactly that).
 import { cleanName } from '../shared/names.js';
 
-const params = new URLSearchParams(location.search);
+const host = window.CouchPadHost;
 
-export const inShell = params.has('cpName');
-// The launcher's name gate guarantees non-blank <=16 chars; sanitize defensively
-// anyway, exactly as the standalone name form does.
-export const shellName = inShell ? cleanName(params.get('cpName')) : '';
+export const inShell = !!host;
 
-// Flag the shell on <html> so CSS can drop our own name labels: the launcher
-// already shows the player's name in its native top-bar chip, so the in-game
-// copies (lobby identity, in-race HUD, how-to-drive demo) are redundant there.
-document.documentElement.classList.toggle('cp-shell', inShell);
+// §1: the player's name, shared across games and always set — the launcher makes
+// one up on first run, so the shell joins without a name screen. Sanitized
+// defensively anyway, exactly as the name screen's own field is. '' means a
+// launcher that cannot define the property (an Android WebView too old for
+// document-start scripts, which gets neither `name` nor editName()), and that
+// one gets the name screen.
+export const shellName = inShell && typeof host.name === 'string' ? cleanName(host.name) : '';
+
+// §2: a rename opens the LAUNCHER's name sheet, which owns the name's rules. The
+// Promise resolves to the saved name, or null when the player dismisses it.
+export const canEditName = inShell && typeof host.editName === 'function';
+export async function editName() {
+  return cleanName(await host.editName()) || null;
+}
+
+// §3: the player's own exit. The launcher closes the web view, which ends the
+// relay socket with it, so the caller neither cleans up nor navigates. canLeave
+// gates every way out the shell shows (the close button, "Exit to start").
+export const canLeave = !!(host && typeof host.leave === 'function');
+export function leave() {
+  host.leave();
+}
 
 // Report a TERMINAL session end to the launcher (§3), feature-detected +
 // fire-once. Terminal = the session cannot continue (room gone/closed, join
@@ -38,10 +49,10 @@ document.documentElement.classList.toggle('cp-shell', inShell);
 // normal in-game handling.
 let _sessionEnded = false;
 export function endSession(reason) {
-  if (!(window.CouchPadHost && window.CouchPadHost.gameEnded)) return false;
+  if (!(host && host.gameEnded)) return false;
   if (_sessionEnded) return true;  // fire-once on our side too; extra calls are ignored anyway
   _sessionEnded = true;
-  window.CouchPadHost.gameEnded(reason);
+  host.gameEnded(reason);
   return true;
 }
 
@@ -58,35 +69,13 @@ export function terminalReason(state, info) {
   return null;
 }
 
-// Retint the launcher's accent chrome (name chip, spinner, rename sheet) to match
-// this player's livery — a live §4 hint. Mutating the meta's content is what the
-// launcher's observer watches; a plain browser ignores it. Callers guard on a real
-// colour so we never advertise the grey placeholder before livery lands.
-export function setAccentColor(color) {
-  const meta = document.querySelector('meta[name="cp-accent-color"]');
-  if (meta) meta.setAttribute('content', color);
-}
-
-// Live rename from the launcher (§2). The game implements it, the launcher calls
-// it when the player edits their name in the in-game bar (and re-asserts it on
-// every load, belt-and-suspenders with the cpName param). Only meaningful in the
-// shell — a plain browser renames via the name screen. The name is NEVER
-// persisted (§1): the injected identity must not leak into the game's own storage.
-export function installRenameHook(onRename) {
-  window.CouchPad = window.CouchPad || {};
-  window.CouchPad.setName = (name) => {
-    if (!inShell) return;
-    onRename(cleanName(name) || 'Racer');
-  };
-}
-
 // System back (§9). Armed, a back gesture reaches window.CouchPad.back (and the
 // screen edges go to the system); disarmed, edge swipes stay gameplay input and
-// LEAVE is the only exit. Deduped on transitions — the contract expects state
-// changes, not chatter — and feature-detected like every other touchpoint.
+// the close button is the only exit. Deduped on transitions — the contract
+// expects state changes, not chatter — and feature-detected like every other
+// touchpoint.
 let _backArmed = null;
 export function armSystemBack(want) {
-  const host = window.CouchPadHost;
   if (!(host && typeof host.enableSystemBack === 'function')) return;
   want = !!want;
   if (want === _backArmed) return;
@@ -95,8 +84,8 @@ export function armSystemBack(want) {
 }
 
 // The launcher calls this once per gesture, only while armed. Return true =
-// consumed (a dialog closed), anything else = leave the game through the same
-// exit as the LEAVE bar — which is exactly what a lobby/results back should do.
+// consumed (a dialog closed), anything else = the launcher leaves the game —
+// which is exactly what a lobby/results back should do.
 export function installBackHook(onBack) {
   window.CouchPad = window.CouchPad || {};
   window.CouchPad.back = () => onBack() === true;

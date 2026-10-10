@@ -8,14 +8,13 @@
        layout viewport re-fired the small-screen font tiers (controller.css),
        visibly scaling the name form down under the player's fingers. -->
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-visual" />
-  <!-- CouchPad launcher theming hints (contract §4): the host tints its floating
-       chrome to match. theme-color = the warm paper the page art fades into behind
-       the status bar; cp-accent-color = the launcher accents (name chip, spinner,
-       rename sheet) — main.js retints it live to the player's livery colour. Pure
-       cosmetics: a plain browser ignores cp-accent-color and honours theme-color as
-       the standard PWA meta, so both are harmless outside the shell. -->
+  <!-- Both dress the CouchPad launcher's name sheet (contract §2): color-scheme
+       its text and controls (and, §4, the status-bar icons), theme-color its
+       surface: the warm paper the page art fades into, which a browser also
+       uses for its address bar. The sheet's accent is controller.css's
+       accent-color on :root. -->
+  <meta name="color-scheme" content="light" />
   <meta name="theme-color" content="#FFF6EB" />
-  <meta name="cp-accent-color" content="#2bb673" />
   <meta name="app-version" content="__APP_VERSION__" />
   <meta name="relay-url" content="__RELAY_URL__" />
   <title>Tiny Track</title>
@@ -43,11 +42,12 @@
        so currentColor inherits at each use site. -->
   <svg style="display:none" aria-hidden="true"><symbol id="gear" viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 16.9c-2.7 0-4.9-2.21-4.9-4.9s2.21-4.9 4.9-4.9 4.9 2.21 4.9 4.9-2.21 4.9-4.9 4.9z"/></symbol></svg>
 
-  <!-- Exit fullscreen — plain browser only, shown while the page is fullscreen.
-       orientation.js owns it; the auto-enter stays on, so the next tap goes
-       fullscreen again. It sits in the top-right corner the gear and pause own
-       on the lobby and in the race, and those rows step left while it shows. -->
-  <button id="fs-exit" class="icon-btn fs-exit" type="button" aria-label="Exit full screen"><svg class="fs-exit-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg></button>
+  <!-- Close (X) — top-left on every screen, gone while a dialog is up. In the
+       CouchPad launcher it leaves the game (contract §3); in a browser it backs
+       out of the room to the name screen and leaves fullscreen. closeButton.js
+       owns when it shows. It must stay BEFORE the sections: the rows that own
+       the top-left step right with a sibling selector while it shows. -->
+  <button id="close-btn" class="icon-btn close-btn hidden" type="button" aria-label="Close"><svg class="close-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
 
   <!-- Name -->
   <section id="name">
@@ -67,9 +67,8 @@
        page differ only in what fills the grid, so stepping between them moves
        nothing structural. Layout in controller.css (#lobby). -->
   <section id="lobby" class="hidden">
-    <!-- Identity ribbon — your NAME as a livery sticker on the left (visible in
-         the CouchPad shell too: the launcher's own chip lives in a top bar that
-         landscape hides), the Settings gear pinned far right, and between them
+    <!-- Identity ribbon — your NAME as a livery sticker on the left (in the
+         launcher a tap renames), the Settings gear pinned far right, and between them
          whatever KEY the page below needs. Today that is the race page's star
          count, a chip that opens #stars-overlay (buildModePicker; hidden on the
          car page, whose ratings name themselves in the tile). It rides up here because the
@@ -77,7 +76,7 @@
          pixel below it. Nothing else lives here: the lobby's navigation is the
          action corner at the bottom. -->
     <div class="lobby-top">
-      <div class="lobby-me"><span id="me-name" class="lobby-me__name"></span></div>
+      <div class="lobby-me"><button id="me-name" class="lobby-me__name" type="button"></button></div>
       <div id="race-key" class="race-key"></div>
       <button id="settings-btn" class="settings-btn icon-btn" type="button" aria-label="Settings" aria-haspopup="dialog"><svg class="gear-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#gear"/></svg></button>
     </div>
@@ -131,7 +130,7 @@
       <!-- Top row: player name left, settings + pause FAR RIGHT. No place/lap on
            the phone; the live standings live on the big screen. -->
       <div class="hud-top">
-        <div id="hud-name" class="hud-name"></div>
+        <button id="hud-name" class="hud-name" type="button"></button>
         <div class="hud-btns">
           <button id="settings-btn-game" class="icon-btn" type="button" aria-label="Settings" aria-haspopup="dialog"><svg class="gear-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="#gear"/></svg></button>
           <button id="pause-btn" class="icon-btn" aria-label="Pause"><span class="pause-glyph"></span></button>

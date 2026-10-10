@@ -12,10 +12,9 @@
 // The touch gate keeps this off desktops (a dev tabbing around must not have
 // the page fling itself fullscreen) and out of the headless E2E browsers.
 //
-// While fullscreen, a corner button (#fs-exit) leaves it. The auto-enter stays
-// on regardless (user call): the button is a way out for a moment, and the
-// next tap anywhere on the page goes fullscreen again. The tap ON the button
-// cannot re-enter, since its pointerup lands while the page is still fullscreen.
+// The close button (closeButton.js) is the way out of fullscreen. The auto-enter
+// stays on regardless (user call): the next tap anywhere on the page goes
+// fullscreen again — any tap but the close button's own.
 export function initOrientation({ inShell }) {
   if (inShell) return;                        // the launcher owns the device
   if (new URLSearchParams(location.search).get('scenario')) return; // gallery iframes
@@ -23,12 +22,6 @@ export function initOrientation({ inShell }) {
 
   let busy = false;
 
-  const syncExitButton = () =>
-    document.documentElement.classList.toggle('is-fullscreen', !!document.fullscreenElement);
-  document.addEventListener('fullscreenchange', syncExitButton);
-  document.getElementById('fs-exit').addEventListener('click', () => {
-    document.exitFullscreen().catch(() => {});
-  });
   const keyboardDown = () => new Promise((resolve) => {
     const vv = window.visualViewport;
     const finish = () => { vv.removeEventListener('resize', check); clearTimeout(cap); resolve(); };
@@ -40,8 +33,8 @@ export function initOrientation({ inShell }) {
   const tryFullscreenLandscape = async (e) => {
     // Never on a tap into a text field: the keyboard is about to open, and
     // going fullscreen under it makes Chrome either drop it or lose its pan
-    // to the field.
-    if (e.target.closest('input, textarea')) return;
+    // to the field. Never on the close button: it is the way OUT.
+    if (e.target.closest('input, textarea, #close-btn')) return;
     if (busy || document.fullscreenElement) return;
     busy = true;
     try {
