@@ -559,8 +559,9 @@ class Surface:
 
 
 def dash_plus():
-    """Dash with a touch more: endplates and a gurney on its spoiler, square
-    lamps, a grille and a bonnet scoop, tail lamps."""
+    """Dash with a touch more: endplates and a gurney on its spoiler, tail
+    lamps across its back, square lamps, a grille, bonnet and roof scoops, a
+    rear screen."""
     body, nodes = kit_base('vehicle-racer-low')
     S, P = Surface(body), GREEN
     parts = [body]
@@ -571,15 +572,24 @@ def dash_plus():
     parts.append(profile('scoop', 0.055, [(0.275, h - 0.004), (0.275, h + 0.022), (0.19, h + 0.022),
                                           (0.17, S.height(0, 0.17) - 0.004)], P, 0.008))
     parts.append(box('scoopMouth', (-0.042, 0.275, h + 0.003), (0.042, 0.279, h + 0.017), INK))
+    # the roof and the fastback are what the chase cam looks down on
+    r = S.height(0, 0.0)
+    parts.append(profile('roofScoop', 0.05, [(0.03, r - 0.004), (0.03, r + 0.022), (-0.05, r + 0.018),
+                                             (-0.09, r - 0.004)], P, 0.006))
+    parts.append(box('roofMouth', (-0.038, 0.03, r + 0.002), (0.038, 0.034, r + 0.016), INK))
+    parts.append(S.patch('rearScreen', 'z+', (-0.1, 0.1, -0.14, -0.25), GLASS))
     endplates(parts, P, 0.25, [(-0.30, 0.29), (-0.43, 0.29), (-0.43, 0.37), (-0.31, 0.365)])
     gurney(parts, 0.244, -0.428, 0.344)
-    tail_lamps(S, parts, 0.105, 0.175, 0.218, 0.242)
+    # the tail under the spoiler hides from the chase cam: the lamps ride
+    # the spoiler's back instead, on a dark band
+    parts.append(S.patch('tailPanel', 'y-', (-0.21, 0.21, 0.304, 0.336), INK, 0.003))
+    tail_lamps(S, parts, 0.10, 0.19, 0.309, 0.331)
     return join(parts, 'body'), nodes
 
 
 def carve_plus():
     """Carve with a touch more: wing endplates and a gurney, twin round lamps,
-    a grille and bonnet louvres, tail lamps."""
+    a grille, louvres on the bonnet and the roof, a rear screen, tail lamps."""
     body, nodes = kit_base('vehicle-racer')
     S, P = Surface(body), BLUE
     parts = [body]
@@ -588,13 +598,15 @@ def carve_plus():
     parts.append(S.patch('grille', 'y+', (-0.075, 0.075, 0.218, 0.25), INK))
     endplates(parts, P, 0.25, [(-0.335, 0.37), (-0.445, 0.37), (-0.445, 0.455), (-0.345, 0.45)])
     gurney(parts, 0.244, -0.442, 0.425)
+    louvres(S, parts, 0.035, 0.115, (-0.03, -0.06, -0.09))
+    parts.append(S.patch('rearScreen', 'z+', (-0.1, 0.1, -0.15, -0.29), GLASS))
     tail_lamps(S, parts, 0.105, 0.175, 0.245, 0.275)
     return join(parts, 'body'), nodes
 
 
 def bolt_plus():
-    """Bolt with a touch more: endplates on both wings and a gurney, nose
-    louvres, tail lamps."""
+    """Bolt with a touch more: endplates on both wings, nose louvres, tail
+    lamps on a dark panel."""
     body, nodes = kit_base('vehicle-speedster')
     S, P = Surface(body), RED
     parts = [body]
@@ -602,9 +614,10 @@ def bolt_plus():
         parts.append(profile(f'fplate{s}', 0.006, [(0.31, 0.07), (0.43, 0.07), (0.43, 0.165), (0.33, 0.155)],
                              P, 0, cx=s * 0.226))
     endplates(parts, P, 0.226, [(-0.34, 0.30), (-0.445, 0.30), (-0.445, 0.405), (-0.34, 0.40)])
-    gurney(parts, 0.22, -0.438, 0.375)
     louvres(S, parts, 0.025, 0.075, (0.13, 0.16, 0.19))
-    tail_lamps(S, parts, 0.035, 0.085, 0.245, 0.275)
+    # red lamps on a red-orange tail need a dark panel to read
+    parts.append(S.patch('tailPanel', 'y-', (-0.105, 0.105, 0.236, 0.284), INK, 0.003))
+    tail_lamps(S, parts, 0.03, 0.09, 0.245, 0.275)
     return join(parts, 'body'), nodes
 
 
