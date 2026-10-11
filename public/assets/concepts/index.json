@@ -3,46 +3,46 @@
  "models": [
   {
    "name": "concept-buggy",
-   "tris": 2356,
-   "note": "RC off-road buggy: cab-forward shell, roll cage, open engine and knobby tyres, with the wing, round lamps and nose louvres."
+   "tris": 1732,
+   "note": "RC off-road buggy: cab-forward shell, roll cage, open engine and knobby tyres, with the wing and block lamps at both ends."
   },
   {
    "name": "concept-rally",
-   "tris": 1908,
-   "note": "Rally hatch: boxy shell with flared arches, with a roof spoiler, two driving lamps on the bumper, a bonnet scoop and a grille."
+   "tris": 1776,
+   "note": "Rally hatch: boxy shell with flared arches, with a roof spoiler, two driving lamps on the bumper, a bonnet scoop and a dark tail bar."
   },
   {
    "name": "concept-gt",
-   "tris": 1796,
-   "note": "Le Mans GT: long low wedge, tinted bubble cockpit over fender humps, with a full-width wing, fender lamps, tail lamps and bonnet louvres."
+   "tris": 1588,
+   "note": "Le Mans GT: long low wedge, tinted bubble cockpit over fender humps, with a full-width wing, fender lamps, tail lamps, a grille and a bonnet bulge."
   },
   {
    "name": "concept-pip",
-   "tris": 2376,
-   "note": "Bubble micro car: short rounded shell, glass bubble with a painted cap and chrome bumpers, with frog-eye lamps, a lip spoiler and bonnet louvres."
+   "tris": 1628,
+   "note": "Bubble micro car: short rounded shell, glass bubble with a painted cap and chrome bumpers, with frog-eye lamps, a lip spoiler, a grille and tail lamps."
   },
   {
    "name": "dash-plus",
-   "tris": 1517,
-   "note": "Dash with a touch more: a slatted rear screen, tail lamps above the bumper, square lamps, a grille, a bonnet scoop.",
+   "tris": 1354,
+   "note": "Dash with a touch more: square lamps and a grille, a bonnet scoop, a glass rear screen, tail lamps above the bumper.",
    "base": "vehicle-racer-low"
   },
   {
    "name": "bolt-plus",
-   "tris": 1602,
-   "note": "Bolt with a touch more: endplates on the front wing, louvres on the nose and the airbox, tail lamps in a dark panel.",
+   "tris": 1338,
+   "note": "Bolt with a touch more: nose lamps, a dark airbox mouth, tail lamps on a steel bar.",
    "base": "vehicle-speedster"
   },
   {
    "name": "carve-plus",
-   "tris": 2004,
-   "note": "Carve with a touch more: twin round lamps at both ends, the tail's in a dark panel, a grille, louvres on the bonnet and the roof, a rear screen.",
+   "tris": 1358,
+   "note": "Carve with a touch more: square lamps and a grille, a bonnet bulge, a glass rear screen, tail lamps under the wing.",
    "base": "vehicle-racer"
   },
   {
    "name": "rumble-plus",
-   "tris": 1733,
-   "note": "Rumble with a touch more: round lamps and a grille in the bonnet's face, louvres on the bonnet and the tail deck, tail lamps.",
+   "tris": 1316,
+   "note": "Rumble with a touch more: square lamps and a grille in the bonnet's face, a ridge down the bonnet, tail lamps.",
    "base": "vehicle-vintage-racer"
   }
  ]
