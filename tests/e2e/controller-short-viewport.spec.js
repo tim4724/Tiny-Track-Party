@@ -121,12 +121,14 @@ for (const vp of LOBBY) {
   });
 }
 
-for (const vp of SHORT) {
+// `settings-buttons` is also the sheet at its TALLEST: it shows the TV picture
+// row a display offers only when it could not hold 1080@60.
+for (const vp of SHORT) for (const scenario of ['settings', 'settings-buttons']) {
   const at = `${vp.width}x${vp.height}`;
 
-  test(`short viewport ${at}: the whole Settings sheet fits`, async ({ page }) => {
+  test(`short viewport ${at}: the whole Settings sheet fits (${scenario})`, async ({ page }) => {
     await page.setViewportSize(vp);
-    await page.goto('/controller/index.html?scenario=settings&color=0');
+    await page.goto(`/controller/index.html?scenario=${scenario}&color=0`);
     await page.waitForSelector('#settings-card');
 
     // No scroll at all at these sizes — both choices, the TV switch and the way

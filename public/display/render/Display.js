@@ -138,6 +138,7 @@ export class Display {
       scalePoll: mod.cwrap('ttp_display_scale_poll', 'number',
                            ['number', 'number', 'number', 'number', 'number', 'number']),
       scalePanelMs: mod.cwrap('ttp_display_scale_panel_ms', 'number', []),
+      scaleHalfRate: mod.cwrap('ttp_display_scale_half_rate', null, ['number']),
       build: mod.cwrap('ttp_display_build', 'number', ['string', 'string']),
       reroster: mod.cwrap('ttp_display_reroster', 'number', ['string']),
       debugDecals: mod.cwrap('ttp_display_debug_decals', 'string', []),
@@ -362,6 +363,10 @@ export class Display {
   // Everything it decides FROM — the window, the percentiles, the fastest
   // present, the cost model's observation, the clocks — is C++'s and folds off
   // the same monitor PerfHud feeds. See ttp_display_scale_poll.
+  // The host's Sharp choice: the ladder at half the panel rate. The next
+  // scalePoll answers it as an ordinary move, which Stage already performs.
+  scaleHalfRate(on) { this._fn.scaleHalfRate(on ? 1 : 0); }
+
   scalePoll(tMs, min, max, baseLines, panelMs) {
     if (!this._pollPtr) this._pollPtr = this.m._malloc(16); // 2 doubles
     if (!this._fn.scalePoll(tMs, min, max, baseLines, panelMs, this._pollPtr)) return null;

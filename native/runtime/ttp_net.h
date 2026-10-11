@@ -162,12 +162,12 @@ TTP_ABI const char* ttp_net_reconnect_card_json(const char* seatJson, const char
 /* ---- controller messages --------------------------------------------------- */
 
 /* The verdict on a GAME message (what a `game-message` effect hands the
- * coordinator): "start-race" | "series-next" | "set-sound" | "pause" |
- * "resume" | "return-to-lobby" | "control" | "none" — with the authorization
- * inside.
+ * coordinator): "start-race" | "series-next" | "set-sound" | "set-frame-rate" |
+ * "pause" | "resume" | "return-to-lobby" | "control" | "none" — with the
+ * authorization inside.
  * START_GAME must come from the host AND every other racer must be ready (the
- * same readiness gate the lobby's Start button shows); SERIES_NEXT and
- * SET_SOUND are host-only; pause/resume/new-game are any player's; CONTROL
+ * same readiness gate the lobby's Start button shows); SERIES_NEXT, SET_SOUND
+ * and SET_FRAME_RATE are host-only; pause/resume/new-game are any player's; CONTROL
  * needs a live race. A shell dispatches on the verdict and re-derives none of
  * the gates — the if-chain this replaces existed in two shells with the gates
  * spelled twice.
@@ -176,6 +176,12 @@ TTP_ABI const char* ttp_net_reconnect_card_json(const char* seatJson, const char
  * flippers: this message and whatever switch the platform's own chrome has.
  * A shell that drops the verdict leaves the host phone's Sound row showing a
  * setting it cannot change — see the `soundOn` field on the lobby frame.
+ *
+ * "set-frame-rate" carries the host's Smooth/Sharp choice ({half}): perform it
+ * with ttp_display_scale_half_rate, persist it, republish. The lobby frame's
+ * `frameRate` echoes it, and is composed here off the render-scale controller
+ * rather than supplied by the shell — it is absent wherever the display holds
+ * the anchor, which is what hides the phone's row there.
  *
  * A shell MAY keep CONTROL on its own short-circuit ahead of this call (the
  * web does): CONTROL is the relay-fallback INPUT path, sensor-rate when the
@@ -356,7 +362,9 @@ TTP_ABI const char* ttp_net_pick_json(int roomHandle);
  * internal — it also resets under created/joined, BEFORE the shell's timer
  * guard can matter, so a heartbeat left in flight by a dropped socket cannot
  * survive into the fresh connection), then the active-order re-sync and the
- * abandoned-race deadline, in that order on the one clock reading.
+ * abandoned-race deadline, in that order on the one clock reading. It also
+ * answers `publish` when the frame-rate offer (ttp_net_lobby_frame) has moved
+ * since the last frame, since nothing else in the room moves with it.
  *
  * IT DROPS NO SEAT. Presence is the relay's answer — peer_joined to peer_left
  * — so this tick watches exactly one socket, our own. The detector it used to

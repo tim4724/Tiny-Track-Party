@@ -260,6 +260,22 @@
           <button id="sound-toggle" type="button" class="switch" role="switch"
                   aria-checked="true" aria-labelledby="sound-label"></button>
         </div>
+        <!-- TV picture — only where the TV OFFERS it: the snapshot's frameRate is
+             absent on a display that holds 1080@60, and this row hides with it.
+             Sharp is half the TV's rate for a sharper picture; the small print
+             is the TV's own pair (60/30, or 50/25 on a 50 Hz set), filled by
+             refreshSettingsCard. -->
+        <div id="rate-row" class="tv-row hidden">
+          <span class="tv-row__label"><span id="rate-label" class="tv-row__name">TV picture</span></span>
+          <div class="rate-pick" role="radiogroup" aria-labelledby="rate-label">
+            <button id="rate-full" type="button" class="rate-pick__opt" role="radio" aria-checked="true">
+              <span class="rate-pick__name">Smooth</span><span id="rate-full-hz" class="rate-pick__hz">60 fps</span>
+            </button>
+            <button id="rate-half" type="button" class="rate-pick__opt" role="radio" aria-checked="false">
+              <span class="rate-pick__name">Sharp</span><span id="rate-half-hz" class="rate-pick__hz">30 fps</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- The stage — a sunken surface (surface-2, "not a control") holding the

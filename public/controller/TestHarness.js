@@ -294,6 +294,10 @@ export function runControllerScenario(opts) {
       // (mirrors refreshSettingsCard's host branch).
       el('tv-seg').classList.remove('hidden');
       el('sound-toggle').setAttribute('aria-checked', 'true');
+      // The buttons face doubles as a TV that could not hold 1080@60, so the
+      // gallery shows the TV picture row too (the snapshot's frameRate present);
+      // the tilt face shows the common case, where it is absent.
+      el('rate-row').classList.toggle('hidden', !buttons);
       el('settings-overlay').classList.remove('hidden');
       el('settings-overlay').focus({ preventScroll: true });   // seed focus inside the dialog (mirrors openSettings)
       break;

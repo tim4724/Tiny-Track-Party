@@ -72,6 +72,11 @@ struct RenderScaleLimits {
   // RATE against resolution at all; a hard-coded 60 could only ever spend a
   // 120 Hz panel's headroom on pixels. 0 or absent means "assume 60".
   double panelMs;
+  // THE ONE INPUT THAT IS NOT A FACT ABOUT THE SURFACE: the host asked for the
+  // sharper picture at half the anchor rate (the phone's "Sharp" option). The
+  // rule never chooses it — see the operating points — and a shell never sets
+  // it either; RenderScaleController holds the choice and fills it in.
+  bool halfRate = false;
 };
 
 // Above this the device is LATE and retreats. The only threshold left: where to
@@ -349,6 +354,14 @@ inline int rungAtOrBelow(double s, const double* r, int n) {
 // can still pin 30 Hz on the Android shell, as a measurement knob — it is not a
 // point of this list.)
 //
+// THE HOST MAY MAKE THE OTHER TRADE, and only the host: `halfRate` lays the
+// SAME ladder out at half the anchor rate — 30 on a 60 Hz panel, 25 on a 50 Hz
+// one — with no rate step above it, and the rule then climbs the rungs against
+// that doubled budget exactly as it does at full rate. It is never entered on
+// the rule's own judgement: a half-rate escape the rule chose for itself was
+// built and removed (the input latency, and every entry being a move that costs
+// a hitch), and a preference a person picked on purpose is a different thing.
+//
 // ABOVE the anchor, the rate goes first. A 120 Hz panel with the headroom to
 // drive it should, and spending that headroom on pixels instead is what a fixed
 // 60 Hz budget silently did: a 6 ms frame reads as 36% of 16.7 ms, the rule
@@ -411,12 +424,20 @@ inline int anchorDivisor(RenderScaleLimits b) {
   return d < 1 ? 1 : d;
 }
 
+// The divisor every rung up to the anchor runs at: the anchor's own, or twice
+// it when the host asked for half rate.
+inline int baseDivisor(RenderScaleLimits b) {
+  return anchorDivisor(b) * (b.halfRate ? 2 : 1);
+}
+
 // The list, ascending. At most one entry per rung plus one for the rate step.
 inline int operatingPoints(RenderScaleLimits b, RenderScalePoint* out) {
   double r[kScaleMaxPoints];
   const int n = rungScales(b, r);
-  const int base = anchorDivisor(b);
-  const int fast = base > 1 ? base - 1 : 1;   // == base where there is no faster rate
+  const int base = baseDivisor(b);
+  // == base where there is no faster rate — and at half rate, where the whole
+  // point is to spend the budget on pixels rather than frames.
+  const int fast = b.halfRate ? base : (base > 1 ? base - 1 : 1);
   const double anchor = kAnchorLines / (b.baseLines > 0.0 ? b.baseLines : kAnchorLines);
   int m = 0;
   for (int i = 0; i < n; i++) {
@@ -432,6 +453,24 @@ inline int operatingPoints(RenderScaleLimits b, RenderScalePoint* out) {
     if (r[i] > anchor + 1e-9) out[m++] = RenderScalePoint{r[i], fast};
   }
   return m;
+}
+
+// Is `p` below the sharpest point this surface offers at the ANCHOR RATE —
+// 1080 lines, or the ceiling where the surface is shorter than that? A device
+// that has settled there cannot hold the desired spot, and it is the only kind
+// the half-rate choice is offered to (RenderScaleController::offersHalfRate).
+inline bool belowAnchor(RenderScalePoint p, RenderScaleLimits b) {
+  b.halfRate = false;
+  RenderScalePoint list[kScaleMaxPoints];
+  const int n = operatingPoints(b, list);
+  const int base = anchorDivisor(b);
+  const double anchor = kAnchorLines / (b.baseLines > 0.0 ? b.baseLines : kAnchorLines);
+  double top = 0.0;
+  for (int i = 0; i < n; i++) {
+    // Ascending, so the last one that is not above the anchor.
+    if (list[i].divisor == base && list[i].scale <= anchor + 1e-9) top = list[i].scale;
+  }
+  return p.scale < top - 1e-9;
 }
 
 // Where `p` sits in the list: the highest entry at or below it, by the same
@@ -585,8 +624,27 @@ inline RenderScalePoint renderScaleStep(RenderScalePoint current,
   if (n <= 0) return current;
 
   const double clamped = std::min(std::max(current.scale, limits.min), limits.max);
-  int at = pointAtOrBelow(RenderScalePoint{clamped, current.divisor}, list, n);
+  // A POINT FROM THE OTHER RATE — the host just flipped `halfRate` — has no
+  // entry in this list, and the divisor-aware lookup would floor it to the
+  // bottom rung. Its RESOLUTION carries across instead: the rate change is the
+  // move, and the rungs are then climbed or given up at the new budget.
+  int divisor = list[0].divisor;
+  for (int i = 0; i < n; i++) {
+    if (list[i].divisor == current.divisor) divisor = current.divisor;
+  }
+  int at = pointAtOrBelow(RenderScalePoint{clamped, divisor}, list, n);
   const double gpuMs = cost.gpuFrames >= kMinSignalFrames ? cost.gpuP95Ms : 0.0;
+  // …EXCEPT WHERE NOTHING CAN CLIMB. With no GPU timer the fallback only ever
+  // steps down, so a carried rung is the best the new rate will ever see, and
+  // Sharp would halve the rate for the same picture. There the flip lands on
+  // the anchor (1080 lines, or the ceiling under it) — where a boot starts, and
+  // for the same reason: the fallback rescues downward if it cannot hold it.
+  if (divisor != current.divisor && !(gpuMs > 0.0)) {
+    const double anchor = kAnchorLines / (limits.baseLines > 0.0 ? limits.baseLines : kAnchorLines);
+    for (int i = at + 1; i < n; i++) {
+      if (list[i].divisor == list[0].divisor && list[i].scale <= anchor + 1e-9) at = i;
+    }
+  }
 
   // A scale inherited from a scene that no longer exists has no tenure in this
   // one, so the climb back to THIS scene's level runs at one evidence window

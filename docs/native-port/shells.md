@@ -472,6 +472,17 @@ identically (both are commented where they bite, in `TtpRendererBakes.cpp`):
     - `ttp_perf_pacing(ttp_display_scale_panel_ms(), divisor)`, so the readout's
       budget is the operating point's.
 
+    **PACE ANY DIVISOR, EVEN ON A 60 Hz PANEL.** The rule never halves a 60 Hz
+    panel's rate on its own judgement, but the HOST may: the phone's TV picture
+    row (Smooth / Sharp) sends SET_FRAME_RATE, `ttp_net_controller_action`
+    answers `set-frame-rate`, and the shell performs it with
+    `ttp_display_scale_half_rate`, persists the flag, calls the same function
+    with it at boot, and republishes. The answer then arrives from the poll as
+    an ordinary divisor of 2. Whether the row is OFFERED is not the shell's
+    question: the lobby frame composes `frameRate` off the controller, present
+    only once the display has settled below 1080@60, and only on a panel up to
+    ~90 Hz (above it the half rate is too few presents for the window to judge).
+
     If you find yourself writing an `if` around a measurement before passing it,
     or holding a clock the rule could hold, it belongs in that header instead —
     which also carries the reasoning, including why a dropped-frame count is not

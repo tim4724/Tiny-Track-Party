@@ -46,6 +46,15 @@ namespace rt {
 // controller lands where polling at the cadence lands.
 inline constexpr double kScalePollMs = 1000.0;
 
+// How long the display must stay below the anchor before the host is offered
+// half rate (offersHalfRate). Shorter than an up-hold on purpose: every scene
+// build shortens the up-hold (kScaleUpRecoverHoldSec), so a box that cannot
+// hold the anchor climbs back to it and fails again after each one, and in a
+// lobby whose previewed track keeps changing it is never below the anchor for
+// a whole up-hold. A step down already took a window of evidence, so this
+// only has to outlast a scene build's dip.
+inline constexpr double kHalfRateOfferSec = 10.0;
+
 class RenderScaleController {
  public:
   // The point in force. 1.0 is the surface's own size; nothing here ever
@@ -118,6 +127,26 @@ class RenderScaleController {
   bool poll(double tMs, RenderScaleLimits limits, perf::Monitor& mon,
             RenderScalePoint* out);
 
+  // THE HOST'S RATE CHOICE (render_scale.h, `halfRate`), restored by the shell
+  // at boot and flipped from the host phone. The next poll performs it as a
+  // move of its own — the same rung at the other rate — and the climb that
+  // follows runs on the short post-build hold, because the new budget is a new
+  // scene as far as tenure goes. The split memory is dropped with it: every
+  // point in it was settled at the other rate.
+  void setHalfRate(bool on);
+  bool halfRate() const { return halfRate_ && sharpFits(); }
+
+  // WHETHER THE HOST PHONE SHOWS THE CHOICE. Only a device that cannot hold
+  // the anchor gets it: one that has stayed below it (belowAnchor) for
+  // kHalfRateOfferSec, in the lobby as much as in a race — and from then on
+  // for the life of the process, so the option never appears and vanishes
+  // between races. Always while half rate is on, so it can be switched back.
+  bool offersHalfRate() const { return sharpFits() && (offered_ || halfRate_); }
+
+  // The present rate each choice means on this panel, for the phone's labels:
+  // 60 and 30 on a 60 Hz TV, 50 and 25 on a 50 Hz one.
+  int rateHz(bool half) const;
+
  private:
   // 1.0 until the first poll ADOPTS THE BAND'S CEILING. "As sharp as this
   // surface allows" is a fact only the band knows, and a 1.0 left standing here
@@ -157,6 +186,19 @@ class RenderScaleController {
   double movedMs_ = 0;
   double sceneMs_ = 0;
   double lastPollMs_ = 0;
+  // HALF RATE ONLY WHERE THE WINDOW CAN STILL JUDGE IT: a panel whose anchor
+  // is every vsync (up to ~90 Hz — every television). The readout's window is
+  // kWindow TICKS, so half the anchor on a 120 Hz panel is every 4th tick, 30
+  // presents a window, right at kMinSignalFrames — the present-record veto and
+  // the whole no-timer fallback go deaf, and at 240 Hz the GPU term with them.
+  // Elsewhere a stored choice is kept and simply not applied, or offered.
+  bool sharpFits() const {
+    return anchorDivisor(RenderScaleLimits{0.0, 0.0, 0.0, panelMs_}) == 1;
+  }
+  bool halfRate_ = false;
+  bool rateMoved_ = false;   // setHalfRate since the last poll
+  bool offered_ = false;
+  double belowMs_ = -1.0;    // when it last fell below the anchor, -1 while not
 };
 
 // THE PROCESS'S ONE CONTROLLER, for the reason perf::monitor() is one: there is

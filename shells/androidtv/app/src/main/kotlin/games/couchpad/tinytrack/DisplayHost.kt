@@ -1022,6 +1022,13 @@ class DisplayHost(
     fun camera(mode: Int) = Ttp.ttp_display_camera(mode)
 
     /**
+     * The host's Sharp choice: the rule lays its ladder out at half the panel
+     * rate. Nothing else here changes — the next `ttp_display_scale_poll`
+     * answers the move and [adaptScale] paces it like any divisor.
+     */
+    fun halfRate(on: Boolean) = Ttp.ttp_display_scale_half_rate(if (on) 1 else 0)
+
+    /**
      * Slot i's car id, in the block's slot order — the other half of the HUD
      * readback, and the ONE owner of that mapping (the built scene's roster).
      */

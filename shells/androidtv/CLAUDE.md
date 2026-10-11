@@ -593,7 +593,10 @@ resolution AND a divisor as one operating point, ordered around a desired
 1080@60: below it resolution gives way and the rate does not, above it the rate
 goes first, so a 120 Hz panel with the headroom to drive it will. This box has no
 such headroom and sits below the anchor, so on it the rate stays at the panel's
-own.
+own — unless the HOST picks Sharp on the phone, which lays the same ladder out at
+half the rate (`ttp_display_scale_half_rate`, `GameCoordinator.setHalfRate`).
+This box is what the choice exists for: below the anchor is exactly where the
+phone offers it.
 
 **A PIN IS DECLARED AS A PERIOD, NOT AS A DIVISOR** (`rulePanelMs`). The rule
 owns the divisor half of the point and multiplies the period it is given by the
@@ -606,7 +609,7 @@ nobody asked for.
 **`debug.ttp.hz 30` pins every OTHER vsync** — a locked, evenly-paced 30 with
 the sim still ticking at 60 (only picture latency doubles; see
 `DisplayHost.pinVsyncInterval`). It is an adb knob for measurement, not the
-rule: on a 60 Hz panel the rule never halves the rate.
+rule: on a 60 Hz panel the rule never halves the rate on its own judgement.
 
 **THE READOUT FOLLOWS THAT PIN**, because the shell tells it to:
 `DisplayHost.declarePacing` hands `ttp_perf_pacing` the panel's own present

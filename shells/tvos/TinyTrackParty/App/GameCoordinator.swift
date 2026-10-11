@@ -292,6 +292,10 @@ final class GameCoordinator: ObservableObject {
         // sound can play. Same key, same meaning, different store.
         audio.muted = UserDefaults.standard.bool(forKey: Self.mutedKey)
         try? audio.start()
+        // The host's Smooth/Sharp choice, remembered like the mute. A scenario
+        // starts at full rate, as the web's test surfaces do.
+        halfRate = Scenarios.requested == nil && UserDefaults.standard.bool(forKey: Self.halfRateKey)
+        display.halfRate(halfRate)
         wireNet()
 
         // The room warms eagerly, and on THIS platform there is no board in
@@ -371,6 +375,25 @@ final class GameCoordinator: ObservableObject {
         guard audio.muted == on else { return }
         audio.muted = !on
         UserDefaults.standard.set(!on, forKey: Self.mutedKey)
+        net.publishSnapshot()
+    }
+
+    /// `localStorage`'s key on the web (`display/main.js` HALF_RATE_KEY).
+    static let halfRateKey = "tinytrack_half_rate"
+
+    /// The host's Smooth/Sharp choice. Stored here only so a repeat of the
+    /// same choice republishes nothing; the rule holds the one that applies.
+    private var halfRate = false
+
+    /// The host phone's Smooth/Sharp row (`set-frame-rate`): half the panel
+    /// rate for a sharper picture. The engine applies it and decides whether
+    /// the row is offered at all (the snapshot's `frameRate`, composed in
+    /// C++); this shell remembers it and republishes so the row shows it.
+    func setHalfRate(_ on: Bool) {
+        guard halfRate != on else { return }   // no change, no republish
+        halfRate = on
+        UserDefaults.standard.set(on, forKey: Self.halfRateKey)
+        display.halfRate(on)
         net.publishSnapshot()
     }
 

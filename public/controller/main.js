@@ -91,6 +91,7 @@ let amHost = false;
 let roster = [];           // latest lobby roster (for the host name in the wait text)
 let hostPeerIndex = null;
 let displaySoundOn = true; // the DISPLAY's mute state (snapshot soundOn) — the host's Sound setting renders it
+let displayFrameRate = null; // the snapshot's frameRate {half, fullHz, halfHz}, null where the TV holds 60 and offers no choice
 // Chooser content, driven entirely off the relay room snapshot (set_state) — the
 // phone bundles none of it, so it can't diverge from a differently-versioned
 // display. tracks ride the snapshot in the lobby only; cars + the livery palette
@@ -235,6 +236,12 @@ initModals({
   isHost: () => amHost,
   getSoundOn: () => displaySoundOn,
   setSoundOn: (on) => { displaySoundOn = on; net.send(MSG.SET_SOUND, { on }); },
+  // The host-only Smooth/Sharp row, the same optimistic shape.
+  getFrameRate: () => displayFrameRate,
+  setHalfRate: (half) => {
+    if (displayFrameRate) displayFrameRate = { ...displayFrameRate, half };
+    net.send(MSG.SET_FRAME_RATE, { half });
+  },
   // The same request as the pause menu's "New game": the display ends the
   // series on the way back to the lobby.
   leaveCup: () => net.send(MSG.RETURN_TO_LOBBY),
@@ -335,6 +342,8 @@ function syncRoom(data) {
   // the open settings card in step: a host handover or the TV's own mute
   // button can move it while the card is up.
   displaySoundOn = data.soundOn !== false;
+  // Absent unless the TV could not hold 1080@60 — and the row hides with it.
+  displayFrameRate = data.frameRate || null;
   refreshSettingsState();
   displayMode = modeFrom(data);
   if (displayMode) selectedMode = displayMode;

@@ -111,6 +111,7 @@ extension GameCoordinator {
         // The host's Sound switch (the verdict re-checks host). The republish
         // inside setSoundOn echoes the new state back to every phone.
         case "set-sound": setSoundOn((msg["on"] as? Bool) ?? true)
+        case "set-frame-rate": setHalfRate((msg["half"] as? Bool) ?? false)
         default: break   // "none" — refused, or not a word this layer knows
         }
     }

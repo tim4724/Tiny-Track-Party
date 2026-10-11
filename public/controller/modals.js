@@ -30,6 +30,8 @@ let _setInputMode = () => {};
 let _isHost = () => false;
 let _getSoundOn = () => true;
 let _setSoundOn = () => {};
+let _getFrameRate = () => null;
+let _setHalfRate = () => {};
 let _leaveCup = () => {};
 let _onModalToggle = () => {};
 
@@ -88,6 +90,16 @@ function refreshSettingsCard() {
   // the snapshot's soundOn.
   el('tv-seg').classList.toggle('hidden', !_isHost());
   el('sound-toggle').setAttribute('aria-checked', String(_getSoundOn()));
+  // The Smooth/Sharp row exists only where the TV offers it (the snapshot's
+  // frameRate), and names the TV's own two rates.
+  const rate = _getFrameRate();
+  el('rate-row').classList.toggle('hidden', !rate);
+  if (rate) {
+    el('rate-full').setAttribute('aria-checked', String(!rate.half));
+    el('rate-half').setAttribute('aria-checked', String(!!rate.half));
+    el('rate-full-hz').textContent = `${rate.fullHz} fps`;
+    el('rate-half-hz').textContent = `${rate.halfHz} fps`;
+  }
 }
 
 // The snapshot moved something the open card renders — host handover, or the
@@ -278,13 +290,16 @@ export function closeTopModal() {
 }
 
 export function initModals({ screens, tilt, buzz, playerName, getInputMode, setInputMode,
-                             isHost, getSoundOn, setSoundOn, leaveCup, onModalToggle }) {
+                             isHost, getSoundOn, setSoundOn, getFrameRate, setHalfRate,
+                             leaveCup, onModalToggle }) {
   _screens = screens; _tilt = tilt; _buzz = buzz; _playerName = playerName;
   if (getInputMode) _getInputMode = getInputMode;
   if (setInputMode) _setInputMode = setInputMode;
   if (isHost) _isHost = isHost;
   if (getSoundOn) _getSoundOn = getSoundOn;
   if (setSoundOn) _setSoundOn = setSoundOn;
+  if (getFrameRate) _getFrameRate = getFrameRate;
+  if (setHalfRate) _setHalfRate = setHalfRate;
   if (leaveCup) _leaveCup = leaveCup;
   if (onModalToggle) _onModalToggle = onModalToggle;
 
@@ -324,6 +339,17 @@ export function initModals({ screens, tilt, buzz, playerName, getInputMode, setI
     _setSoundOn(!_getSoundOn());
     refreshSettingsCard();
   });
+
+  // Smooth / Sharp — the same optimistic shape; a tap on the picked one is a no-op.
+  const pickRate = (half) => {
+    const rate = _getFrameRate();
+    if (!rate || !!rate.half === half) return;
+    _buzz(15);
+    _setHalfRate(half);
+    refreshSettingsCard();
+  };
+  el('rate-full').addEventListener('click', () => pickRate(false));
+  el('rate-half').addEventListener('click', () => pickRate(true));
 
   el('stars-done').addEventListener('click', () => { _buzz(15); closeStarsPopup(); });
   el('stars-overlay').addEventListener('keydown', (e) => trapTab(el('stars-overlay'), e));

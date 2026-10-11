@@ -473,6 +473,30 @@ function setSoundOn(on) {
 el('mute-btn').addEventListener('click', () => setSoundOn(audio.muted));
 syncMuteBtn();   // a reload seats the button on the persisted state
 
+// ---- the host's Smooth/Sharp choice ----
+// Half the panel rate for a sharper picture, flipped only from the host phone
+// (SET_FRAME_RATE through the C++ verdict below). The engine applies it and
+// decides whether the phone is offered it at all (the snapshot's frameRate);
+// this shell only remembers it. Test surfaces start at full rate.
+const HALF_RATE_KEY = 'tinytrack_half_rate';
+let halfRate = false;
+if (!_isTestMode) {
+  try { halfRate = localStorage.getItem(HALF_RATE_KEY) === '1'; } catch (_) {}
+}
+// After the renderer boots, which can be after the room's first snapshot, so a
+// remembered Sharp republishes to put its row in front of the host.
+sceneBooted.then(() => {
+  scene.display.scaleHalfRate(halfRate);
+  if (halfRate) net.syncState();
+}).catch(() => {});
+function setHalfRate(on) {
+  if (halfRate === on) return;   // no change — don't republish the snapshot
+  halfRate = on;
+  try { localStorage.setItem(HALF_RATE_KEY, on ? '1' : '0'); } catch (_) {}
+  if (scene.display) scene.display.scaleHalfRate(on);
+  net.syncState();
+}
+
 // ---- race state ----
 let session = null;
 let paused = false;        // race frozen via the pause overlay (display or a controller)
@@ -711,6 +735,8 @@ const net = new DisplayNet({
       // Host's Sound setting (the verdict re-checks host); the republish inside
       // setSoundOn echoes the new state back to every phone.
       case 'set-sound': setSoundOn(!!data.on); break;
+      // Host's Smooth/Sharp row, likewise echoed by the republish inside.
+      case 'set-frame-rate': setHalfRate(!!data.half); break;
     }
   }
 });

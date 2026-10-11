@@ -175,7 +175,8 @@ TTP_ABI void ttp_display_scale_scene(double tMs);
  * still let the resolution adapt. The rule then prices lateness against the
  * cadence IT chose rather than the pinned one — which on a 60 Hz panel is no
  * divergence at all, because anchorDivisor is 1 there and the operating-point
- * list holds no other. Above 60 Hz, pin both or neither. */
+ * list holds no other unless the host chose half rate (below). Above 60 Hz, or
+ * at half rate, pin both or neither. */
 TTP_ABI int ttp_display_scale_poll(double tMs, double minScale, double maxScale,
                                    double baseLines, double panelMs, double* out2);
 
@@ -185,6 +186,18 @@ TTP_ABI int ttp_display_scale_poll(double tMs, double minScale, double maxScale,
  * budget are one number. 0 before anything is known, which the readout reads as
  * "assume 60". */
 TTP_ABI double ttp_display_scale_panel_ms(void);
+
+/* THE HOST'S "SHARP" CHOICE: 1 lays the ladder out at half the anchor rate
+ * (30 on a 60 Hz panel, 25 on a 50 Hz one), 0 puts it back. The next
+ * ttp_display_scale_poll answers the move — same rung, the other divisor — so
+ * a shell performs it exactly as it performs any other point, which means a
+ * shell that paces by divisor needs nothing new.
+ *
+ * Perform the `set-frame-rate` verdict (ttp_net.h) with it, PERSIST the flag,
+ * and call it once at boot with the persisted value: the choice is the
+ * shell's to remember and the rule's to apply. Whether the phone offers the
+ * choice at all is not the shell's question — the lobby frame carries it. */
+TTP_ABI void ttp_display_scale_half_rate(int on);
 
 /* ---- scene -------------------------------------------------------------- */
 

@@ -89,6 +89,25 @@ bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
   floorMs_ = presentBaseline(floorMs_, r.frame.p05);
   panelMs_ = limits.panelMs > 0 ? limits.panelMs : floorMs_;
   limits.panelMs = panelMs_;
+  limits.halfRate = halfRate();
+
+  // The host flipped the rate: tenure starts again under the new budget, so
+  // the climb into it is not held a lap per rung (kScaleUpRecoverHoldSec).
+  if (rateMoved_) {
+    rateMoved_ = false;
+    sceneMs_ = tMs;
+  }
+
+  // BELOW THE ANCHOR, at full rate, for kHalfRateOfferSec on end — counted
+  // from when it first fell below, so a step from 720 to 540 does not restart it.
+  if (limits.halfRate || !belowAnchor(point_, limits)) {
+    belowMs_ = -1.0;
+  } else if (belowMs_ < 0.0) {
+    belowMs_ = tMs;
+  }
+  if (!offered_ && belowMs_ >= 0.0 && tMs - belowMs_ >= kHalfRateOfferSec * 1000.0) {
+    offered_ = true;
+  }
 
   // ABSENT IS NOT ZERO, and the rule reads 0 as "no signal" for both terms. A
   // platform with no GPU timer has no milliseconds, not free frames.
@@ -130,6 +149,27 @@ bool RenderScaleController::poll(double tMs, RenderScaleLimits limits,
   mon.reset();
   if (out) *out = point_;
   return true;
+}
+
+void RenderScaleController::setHalfRate(bool on) {
+  if (on == halfRate_) return;
+  halfRate_ = on;
+  rateMoved_ = true;
+  for (RenderScalePoint& p : memory_) p = RenderScalePoint{};
+}
+
+int RenderScaleController::rateHz(bool half) const {
+  RenderScaleLimits b{0.0, 0.0, 0.0, panelMs_};
+  b.halfRate = half;
+  // A LEARNED period is a p05 of rAF ticks and lands a millisecond either side
+  // of the panel's, which would label a 60 Hz TV "63 fps". Snap to the panel
+  // rate it is nearest to; a declared period is already one of these.
+  static constexpr double kPanelHz[] = {50.0, 60.0, 75.0, 90.0, 100.0, 120.0, 144.0, 165.0, 240.0};
+  double hz = 1000.0 / (panelMs_ > 0.0 ? panelMs_ : 1000.0 / kAnchorHz);
+  for (double k : kPanelHz) {
+    if (hz > k * 0.95 && hz < k * 1.05) hz = k;
+  }
+  return (int) (hz / (double) baseDivisor(b) + 0.5);
 }
 
 RenderScaleController& renderScale() {

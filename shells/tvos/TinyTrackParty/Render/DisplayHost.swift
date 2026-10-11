@@ -157,29 +157,10 @@ final class DisplayHost {
     // move, the holds, the rungs — is the rule's. An `if` around a measurement
     // before passing it belongs in that header instead.
     //
-    // ONLY THE FALLBACK IS BOUND, and the reason is FILAMENT'S, not the
-    // hardware's — do not read the absent GPU column as "Metal cannot do this".
-    // The good signal is GPU share of budget, the only one that can see
-    // HEADROOM, and `ttp_display_gpu_ms` cannot supply it here because
-    // `MetalTimerQueryFence` records `clock::now()` inside a fence COMPLETION
-    // CALLBACK: host wall-clock between two callbacks, which under vsync is
-    // dominated by the GPU waiting on the display. Measured on an A10X at 4
-    // cells: 16.0 ms at one pass and 18.0 ms at four — it tracks the PRESENT
-    // CADENCE, not the work. Passed over as 0 ("no signal") rather than as a
-    // plausible substitute; `perf_stats.h` names that trap and this is it.
-    //
-    // THE HARDWARE ANSWERS BOTH WAYS, probed on the device (Apple A10X GPU,
-    // tvOS 26.6): `MTLCommandBuffer.gpuStartTime`/`gpuEndTime` returned 0.30 ms
-    // for a 4 MB blit, three runs, stable — a real GPU duration and nowhere near
-    // the present interval; and `counterSets` carries "timestamp" with
-    // `supportsCounterSampling(.atStageBoundary)` true. Filament even installs
-    // an `addCompletedHandler` on its pending command buffer already
-    // (`getPendingCommandBuffer`), which is exactly where the timestamps would
-    // be read. So the missing GPU term is a FORK PATCH, not a platform limit.
-    //
-    // Until that lands the consequence is the rule's own, documented at its
-    // fallback: late presents may only ever step DOWN, so the scale here is a
-    // one-way ratchet for the life of the process.
+    // BOTH SIGNALS ARE BOUND. The GPU term is real here: the pinned Filament
+    // fork takes GPUStartTime/GPUEndTime off the command buffers, and
+    // `PerfOverlay.record` feeds `ttp_display_gpu_ms` to the window the rule
+    // folds — see that file for why the stock fence timer could not be used.
 
     /// **THE SECOND WINDOW IS GONE, and it was this platform's oldest special
     /// case.** `ttp_perf_sample` takes a TICK interval ("one tick of the frame
@@ -275,8 +256,22 @@ final class DisplayHost {
     private var lastSlowTick: CFTimeInterval = 0
     private var inFrame = false
     private var pendingSize: CGSize?
-    /// The panel period last declared to the readout, in ms. See `declarePacing`.
+    /// The panel period and divisor last declared to the readout. See `declarePacing`.
     private var lastPanelMs: Double = 0
+    private var lastDivisor = 0
+
+    /// How many vsyncs one rendered frame spans — the divisor half of the
+    /// operating point `adaptScale` performs. 1 everywhere but the host's
+    /// Sharp choice, which asks for every other tick.
+    ///
+    /// Only the RENDER half is paced: `onFrame` (the sim) still runs every
+    /// tick, so steering keeps the panel's cadence and only the picture's
+    /// latency doubles — Android's `vsyncInterval` and the web's `_divisor`.
+    private var presentDivisor = 1
+    private var vsyncCount = 0
+    /// The skipped ticks' time, handed to the next drawn frame: the renderer's
+    /// clock is cosmetic and would otherwise run at a fraction of real speed.
+    private var pendingDt: Double = 0
 
     /// `Stage.js`'s clamp, for its reason: a dt of several seconds (the app
     /// resumed, the link stalled) runs the camera damping far past the car, and
@@ -550,13 +545,22 @@ final class DisplayHost {
         // storm — the failure `TtpRendererFrame.cpp`'s pacing note describes for
         // rAF, arrived at by a different road. Hence the verdict goes to the
         // monitor rather than the floor.
-        let presented = ttp_display_frame(dt) != 0
+        //
+        // Every `presentDivisor`th tick only (see there); a tick that is not
+        // ours to draw is not a present, and its time goes to the next one.
+        vsyncCount += 1
+        pendingDt += dt
+        var presented = false
+        if vsyncCount % presentDivisor == 0 {
+            presented = ttp_display_frame(pendingDt) != 0
+            pendingDt = 0
 
-        // Derived bytes this frame landed — normally the frame right after a
-        // build. The beat is here rather than at the build's tail because a
-        // readback cannot be waited on there without stalling the build, and on
-        // one backend cannot be waited on at all (`ttp_display.h`).
-        writeReadyBlobs()
+            // Derived bytes this frame landed — normally the frame right after a
+            // build. The beat is here rather than at the build's tail because a
+            // readback cannot be waited on there without stalling the build, and
+            // on one backend cannot be waited on at all (`ttp_display.h`).
+            writeReadyBlobs()
+        }
 
         // The first painted frame OF A BUILT SCENE, which is what the backdrop
         // waits on. Both halves matter: a present with no scene is the renderer
@@ -597,13 +601,9 @@ final class DisplayHost {
     /// reach below the bottom rung, and never mean a different picture than it
     /// does on the other two shells.
     ///
-    /// THE RATE ARM IS UNREACHABLE HERE, and this notices rather than assumes
-    /// it: both branches of the rule that may change a divisor sit inside its
-    /// `gpuMs > 0` arm, and this platform has no usable GPU timer. If that ever
-    /// stops being true the honest failure is a recorded complaint, not a shell
-    /// that quietly performs half an answer — the pair is one decision, and
-    /// honouring one half would be arbitrating the trade this shell is not
-    /// entitled to make.
+    /// BOTH HALVES ARE PERFORMED: the divisor moves on a 120 Hz panel with the
+    /// headroom for its rate step, and on the host's Sharp choice; either way
+    /// it arrives as an ordinary point.
     private func adaptScale(_ link: CADisplayLink) {
         guard Self.scalePin == 0, isAttached else { return }
         var out = [Double](repeating: 0, count: 2)
@@ -613,18 +613,18 @@ final class DisplayHost {
                                            0, 1, surface.baseLines,
                                            link.duration * 1000, &out)
         guard moved != 0 else { return }
-        // The divisor the readout is told about is `declarePacing`'s literal 1,
-        // so an answer carrying anything else would put the rule and the overlay
-        // on two different budgets.
-        if out[1] != 1 {
-            lastError = "ttp_display_scale_poll asked for divisor \(out[1]); tvOS presents every tick"
-        }
         // WHAT THE RULE ANSWERED, and in RELEASE: a `racing` scenario logs no
         // readout at all, so without this there is no way to watch the scale
         // through a REAL race — which is exactly the path whose defects the bench
         // never showed. The numbers it was judged on are on the readout line.
-        print(String(format: "[ttp] scale %.3f -> %.3f | panel %.1f ms",
-                     renderScale, out[0], link.duration * 1000))
+        print(String(format: "[ttp] point %.3f/%d -> %.3f/%d | panel %.1f ms",
+                     renderScale, presentDivisor, out[0], Int(out[1]), link.duration * 1000))
+        // The rate half takes effect from the next tick, and the readout is
+        // told at once (declarePacing) so no run of frames is priced at a
+        // cadence nobody was aiming at.
+        presentDivisor = max(1, min(4, Int(out[1])))
+        declarePacing(link)
+        guard out[0] != renderScale else { return }
         renderScale = out[0]
         // ARMED HERE, PERFORMED AT THE TOP OF THE NEXT TICK. This runs from
         // inside the frame callback, and `TtpRenderer::resize` destroys the scene
@@ -634,17 +634,13 @@ final class DisplayHost {
     }
 
     /// Tell the readout what this loop is AIMING AT: ONE VSYNC of this panel,
-    /// and a divisor of 1.
+    /// and the divisor `adaptScale` is pacing at.
     ///
     /// The period is a fact only the shell has, and undeclared the fold assumes
     /// 60 Hz — so the 50 Hz PAL match mode `start()` describes is scored against
     /// a budget the box can never meet and reads amber however idle it is. The
-    /// divisor is 1 because nothing here presents on anything but every tick.
-    /// `adaptScale` binds the RESOLUTION arm of `ttp_display_scale_poll`; the
-    /// rate arm is unreachable rather than unbound, by the rule's construction —
-    /// both branches that may move a divisor sit inside its `gpuMs > 0` arm, and
-    /// this platform has no usable GPU term. `adaptScale` complains if an answer
-    /// ever carries one anyway.
+    /// divisor is 1 unless the host chose Sharp, and a paced tick that does not
+    /// draw is a chosen cadence, not a skip.
     ///
     /// `duration` AND NOT the `cadence` above, which is the wrong number for
     /// this question: `duration` is the panel's NOMINAL period and holds still
@@ -659,10 +655,15 @@ final class DisplayHost {
     /// it MOVES, which is an output-mode switch.
     private func declarePacing(_ link: CADisplayLink) {
         let ms = link.duration * 1000
-        guard ms > 0, ms != lastPanelMs else { return }
+        guard ms > 0, ms != lastPanelMs || presentDivisor != lastDivisor else { return }
         lastPanelMs = ms
-        ttp_perf_pacing(ms, 1)
+        lastDivisor = presentDivisor
+        ttp_perf_pacing(ms, Int32(presentDivisor))
     }
+
+    /// The host's Sharp choice: the rule lays its ladder out at half the panel
+    /// rate, and the next `adaptScale` paces the answer like any other point.
+    func halfRate(_ on: Bool) { ttp_display_scale_half_rate(on ? 1 : 0) }
 
     // MARK: - Assets
 

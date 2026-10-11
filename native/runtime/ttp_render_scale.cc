@@ -42,3 +42,7 @@ extern "C" int ttp_display_scale_poll(double tMs, double minScale, double maxSca
 extern "C" double ttp_display_scale_panel_ms(void) {
   return ctl().panelMs();
 }
+
+extern "C" void ttp_display_scale_half_rate(int on) {
+  ctl().setHalfRate(on != 0);
+}

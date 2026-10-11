@@ -81,6 +81,7 @@
 #include "ttp/grand_prix.h"  // CupSeries::lastRaceOrder — the chained grid the race walks read
 #include "ttp/progression.h"  // the star record's rules — uiProgression composes them
 #include "ttp/race_flow.h"
+#include "ttp/render_scale_controller.h"  // the frame-rate choice the lobby frame offers
 #include "ttp/room_flow.h"
 #include "ttp/session.h"
 #include "ttp/ui_model.h"
@@ -2324,6 +2325,45 @@ void handlePathsMatchJsonPaths() {
     check(players && players->type == Value::ARR && !anyInRace,
           "no session: every seat's inRace is false");
   }
+  {
+    // THE FRAME-RATE CHOICE is composed off the render-scale controller, not
+    // supplied: absent while the display holds the anchor (nothing here has
+    // polled it), present with the host's choice once it is on.
+    const auto rate = [&]() {
+      const Value frame = parseOrNull(ttp_net_lobby_frame(room, 0, kFields), "frame, rate");
+      const Value* data = frame.find("data");
+      const Value* r = data ? data->find("frameRate") : nullptr;
+      return r ? canonical_stringify(*r) : std::string("absent");
+    };
+    check(rate() == "absent", "frameRate: absent on a display that holds the anchor");
+    ttp::rt::renderScale().setHalfRate(true);
+    check(rate() == "{\"fullHz\":60,\"half\":true,\"halfHz\":30}",
+          "frameRate: present, with the host's choice and the panel's two rates");
+    ttp::rt::renderScale().setHalfRate(false);
+    check(rate() == "absent", "frameRate: switched back on a display never offered it, it hides again");
+
+    // THE OFFER TURNS ON WITH NO ROOM EVENT, so the liveness tick publishes
+    // until a frame has carried it, and then stops.
+    const int q = ttp_room_create("{\"liveness\":{\"graceMs\":1500}}");
+    ttp_net_restore_room(q, "ROOM", "");
+    ttp_net_on_protocol_json(q, "created", "{\"room\":\"ROOM\",\"instance\":\"m-1\"}", 0);
+    const auto publishes = [&](double nowMs) {
+      const Value w = parseOrNull(ttp_net_liveness_json(q, 0, nowMs), "liveness, rate");
+      for (const Value& e : at(w, "effects").arr)
+        if (json::str_field(e, "op") == "publish") return true;
+      return false;
+    };
+    ttp_net_lobby_frame(q, 0, kFields);
+    check(!publishes(1000), "frameRate: no offer, no publish");
+    ttp::rt::renderScale().setHalfRate(true);
+    check(publishes(2000), "frameRate: the offer appearing publishes");
+    ttp_net_lobby_frame(q, 0, kFields);
+    check(!publishes(3000), "frameRate: …once, until it changes again");
+    ttp::rt::renderScale().setHalfRate(false);
+    check(publishes(4000), "frameRate: the offer going publishes too");
+    ttp_net_lobby_frame(q, 0, kFields);
+    ttp_room_dispose(q);
+  }
 
   // A roster that MOVES under both spellings — the gathering reads it live, so a
   // stale read would show up here and nowhere else.
@@ -2901,6 +2941,8 @@ void uiLiveTwinsMatchJsonPaths() {
   check(act("1", "series_next", sess) == "series-next", "series-next: the host");
   check(act("2", "set_sound", sess) == "none", "set-sound: not the host");
   check(act("1", "set_sound", sess) == "set-sound", "set-sound: the host");
+  check(act("2", "set_frame_rate", sess) == "none", "set-frame-rate: not the host");
+  check(act("1", "set_frame_rate", sess) == "set-frame-rate", "set-frame-rate: the host");
   check(act("1", "pause_game", sess) == "pause", "pause: any player");
   check(act("3", "resume_game", sess) == "resume", "resume: any player");
   check(act("3", "return_to_lobby", sess) == "return-to-lobby", "new game: any player");

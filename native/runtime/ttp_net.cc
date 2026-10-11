@@ -49,6 +49,7 @@
 #include "ttp_room.h"
 #include "ttp_session.h"
 #include "ttp_ui.h"     // ttp_ui_all_racers_ready — the start gate, asked not re-spelled
+#include "ttp/render_scale_controller.h"  // the frame-rate choice the lobby frame offers
 
 using namespace ttp;
 namespace ns = ttp::session;
@@ -164,6 +165,11 @@ int ttp_net_configure(const char* chooserJson) {
 
 // ---- the retained room snapshot ----------------------------------------------
 
+// Whether the last frame carried `frameRate`. The offer turns on mid-session,
+// when the display has settled below the anchor, and no room event goes with
+// it, so the liveness tick publishes when this disagrees with the controller.
+static bool g_frameRateSent = false;
+
 const char* ttp_net_lobby_frame(int roomHandle, int sessionHandle, const char* fieldsJson) {
   // The game-owned half — now only what the walks cannot know: the pause latch
   // and the mute latch. The PICK and the STANDINGS BOARD are both stored
@@ -182,6 +188,19 @@ const char* ttp_net_lobby_frame(int roomHandle, int sessionHandle, const char* f
   input.set("roster", std::move(roster));
   input.set("hostPeerIndex", ttp_room_host_value(roomHandle));
   input.set("roomState", Value::Str(ttp_room_state_name(roomHandle)));
+  // The host's Smooth/Sharp choice, read off the display's one render-scale
+  // controller — ABSENT unless this device has proved it cannot hold the
+  // anchor (offersHalfRate), which is what keeps the phone's row hidden on
+  // every display that holds 1080@60.
+  const ttp::rt::RenderScaleController& scale = ttp::rt::renderScale();
+  g_frameRateSent = scale.offersHalfRate();
+  if (g_frameRateSent) {
+    Value rate = Value::Obj();
+    rate.set("half", Value::Bool(scale.halfRate()));
+    rate.set("fullHz", Value::Num(scale.rateHz(false)));
+    rate.set("halfHz", Value::Num(scale.rateHz(true)));
+    input.set("frameRate", std::move(rate));
+  }
   g_bufFrame = canonical_stringify(framing::encode_set_state(ns::lobby_snapshot(input, g_chooser)));
   return g_bufFrame.c_str();
 }
@@ -239,7 +258,7 @@ const char* ttp_net_controller_action(int roomHandle, int sessionHandle,
   } else if (t == msgOf("RETURN_TO_LOBBY")) {
     verdict = "return-to-lobby";
   } else if (t == msgOf("START_GAME") || t == msgOf("SERIES_NEXT") ||
-             t == msgOf("SET_SOUND")) {
+             t == msgOf("SET_SOUND") || t == msgOf("SET_FRAME_RATE")) {
     // Host-only, re-checked here so a stale or forged message cannot jump the
     // lobby; a start additionally needs every other racer ready (the same gate
     // that lights the host's button).
@@ -249,6 +268,8 @@ const char* ttp_net_controller_action(int roomHandle, int sessionHandle,
     if (isHost) {
       if (t == msgOf("SET_SOUND")) {
         verdict = "set-sound";
+      } else if (t == msgOf("SET_FRAME_RATE")) {
+        verdict = "set-frame-rate";
       } else if (t == msgOf("SERIES_NEXT")) {
         verdict = "series-next";
       } else {
@@ -1201,6 +1222,9 @@ const char* ttp_net_liveness_json(int roomHandle, int sessionHandle, double nowM
     e.set("to", Value::Num(0));
     e.set("data", std::move(data));
     effects.push(std::move(e));
+  }
+  if (st.inRoom && ttp::rt::renderScale().offersHalfRate() != g_frameRateSent) {
+    pushOp(effects, "publish");
   }
   if (!tick.sweep) return answer(g_bufLiveness, std::move(effects));
   // NO per-controller silence check: presence is the relay's answer, so a seat

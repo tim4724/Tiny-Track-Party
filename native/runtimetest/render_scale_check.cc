@@ -527,7 +527,7 @@ int main() {
       double t = 0;
       int everyNth = 1;
       int tick = 0;
-      double gpuMs = -1;   // <= 0: no timer, like tvOS
+      double gpuMs = -1;   // <= 0: no timer, like WebKit
 
       void ticks(int n, double panel = kHz60) {
         // WORK THAT OVERRUNS THE PERIOD MISSES THE VSYNC. A box whose GPU takes
@@ -871,6 +871,133 @@ int main() {
         nearly(b.lines(kHD), 540.0, "…still at 540 lines");
         check(b.ctl.point().divisor == 1, "…still at the panel's own rate");
       }
+    }
+    {
+      // ---- THE HOST'S HALF RATE: the same ladder at half the anchor rate ----
+      //
+      // Never the rule's choice (the block above), only the host's: the phone's
+      // Sharp option. It lays out the same rungs at twice the anchor divisor
+      // with no rate step, so the rule spends the doubled budget on pixels.
+      RenderScaleLimits half = kHD;
+      half.halfRate = true;
+      RenderScalePoint list[kScaleMaxPoints];
+      int n = operatingPoints(half, list);
+      check(n == 3, "half rate offers the same three rungs on a 1080p panel");
+      for (int i = 0; i < n; i++) check(list[i].divisor == 2, "…every one at 30 on a 60 Hz panel");
+      RenderScaleLimits pal{0.0, 1.0, 1080.0, 20.0};
+      pal.halfRate = true;
+      n = operatingPoints(pal, list);
+      for (int i = 0; i < n; i++) check(list[i].divisor == 2, "…and at 25 on a 50 Hz one");
+      RenderScaleLimits fast = k4K120;
+      fast.halfRate = true;
+      n = operatingPoints(fast, list);
+      check(n == 5, "a 120 Hz panel at half rate takes no rate step");
+      for (int i = 0; i < n; i++) check(list[i].divisor == 4, "…every rung at 30");
+
+      // A FLIP CARRIES THE RESOLUTION where the model can climb from it. The
+      // divisor-aware lookup would floor a point from the other rate to the
+      // bottom rung; the rate is the move. (A fresh hold: nothing else moves.)
+      const RenderScalePoint at720{720.0 / 1080.0, 1};
+      RenderScalePoint p = renderScaleStep(at720, gpuAt(10.0), 0.0, kSettled, kNoFit, half);
+      nearly(p.scale * kHD.baseLines, 720.0, "with a timer, flipping to half rate keeps the rung");
+      check(p.divisor == 2, "…and halves the rate on the very next poll");
+      p = renderScaleStep(p, gpuAt(10.0), 0.0, kSettled, kNoFit, kHD);
+      nearly(p.scale * kHD.baseLines, 720.0, "flipping back keeps it too");
+      check(p.divisor == 1, "…at the panel's own rate");
+
+      // WITH NO TIMER NOTHING CAN CLIMB (the fallback only steps down), so a
+      // carried rung would be Sharp at half the rate for the same picture. The
+      // flip lands on the anchor instead, as a boot does, and the fallback
+      // rescues from there.
+      const RenderScaleCost quiet{0.0, 0, 0.0, 0.0, 0};
+      p = renderScaleStep(RenderScalePoint{540.0 / 1080.0, 1}, quiet, 0.0, kSettled, kNoFit, half);
+      nearly(p.scale * kHD.baseLines, 1080.0, "with no timer, Sharp starts at the anchor's 1080");
+      check(p.divisor == 2, "…at 30");
+      p = renderScaleStep(RenderScalePoint{540.0 / 2160.0, 1}, quiet, 0.0, kSettled, kNoFit,
+                          RenderScaleLimits{0.0, 1.0, 2160.0, kHz60, true});
+      nearly(p.scale * 2160.0, 1080.0, "…and on a 4K panel, the anchor and not native");
+    }
+    {
+      // ---- WHO IS OFFERED IT, AND WHAT IT BUYS ------------------------------
+      //
+      // A box whose frame is `14 + 8 s^2` ms on a 1080p panel holds 540@60 and
+      // nothing above it; at 30 the budget doubles and 1080 fits.
+      const auto drive = [](auto& b, int polls, RenderScaleLimits lim) {
+        for (int i = 0; i < polls; i++) {
+          const double s = b.ctl.point().scale;
+          b.gpuMs = 14.0 + 8.0 * s * s;
+          b.everyNth = b.ctl.point().divisor;
+          b.ticks(180, kHz60);
+          b.poll(lim);
+        }
+      };
+      Box b;
+      check(!b.ctl.offersHalfRate(), "nothing is offered before the box has proved anything");
+      int polls = 0;
+      while (b.lines(kHD) >= 1080.0 && polls++ < 20) drive(b, 1, kHD);
+      check(b.lines(kHD) < 1080.0, "the box steps below the anchor at full rate");
+      drive(b, 1, kHD);   // 3 s below it
+      check(!b.ctl.offersHalfRate(), "…and is not offered half rate for a dip");
+      drive(b, 4, kHD);   // 15 s below it, through the step down to 540
+      nearly(b.lines(kHD), 540.0, "the box retreats to the bottom rung");
+      check(b.ctl.offersHalfRate(), "below the anchor for kHalfRateOfferSec: the host is offered half rate");
+      check(b.ctl.rateHz(false) == 60 && b.ctl.rateHz(true) == 30, "…named as 60 and 30");
+
+      b.ctl.setHalfRate(true);
+      RenderScalePoint out{0, 0};
+      b.ticks(180, kHz60);
+      // The 540@60 window it was settled on already prices the rung above at
+      // the new budget (the fit survives a rate change), so the flip may take
+      // that rung in the same move.
+      check(b.poll(kHD, &out) && out.divisor == 2, "the host's choice is performed on the next poll");
+      check(out.scale * kHD.baseLines <= 720.0 + 1e-9, "…climbing at most one rung with it");
+      drive(b, 10, kHD);
+      nearly(b.lines(kHD), 1080.0, "at half rate the doubled budget climbs to 1080");
+      check(b.ctl.point().divisor == 2, "…and stays at 30");
+
+      b.ctl.setHalfRate(false);
+      drive(b, 4, kHD);
+      check(b.ctl.point().divisor == 1, "switching back returns to the panel's rate");
+      check(b.ctl.offersHalfRate(), "…and the choice stays offered for the life of the process");
+
+      // A device that holds the anchor is never offered it — not at native on
+      // a 4K panel, and not at 1620 lines either, which is above the anchor.
+      Box good;
+      for (int i = 0; i < 24; i++) {
+        good.gpuMs = 2.0;
+        good.ticks(180, kHz60);
+        good.poll(k4K);
+      }
+      check(!good.ctl.offersHalfRate(), "a box holding native is never offered half rate");
+      check(!belowAnchor(RenderScalePoint{1620.0 / 2160.0, 1}, k4K), "1620 lines is not below the anchor");
+      check(belowAnchor(RenderScalePoint{720.0 / 2160.0, 1}, k4K), "720 lines is");
+      check(!belowAnchor(RenderScalePoint{1.0, 1}, RenderScaleLimits{0.0, 1.0, 900.0, kHz60}),
+            "a surface too short for 1080 lines holding its own ceiling is not below it");
+
+      Box pal;
+      pal.ticks(10, 20.0);
+      pal.poll(RenderScaleLimits{0.0, 1.0, 1080.0, 20.0});
+      check(pal.ctl.rateHz(false) == 50 && pal.ctl.rateHz(true) == 25, "a 50 Hz panel names 50 and 25");
+
+      // NOT ABOVE ~90 Hz. Half the anchor on a 120 Hz panel is every 4th tick:
+      // 30 presents in the readout's 120-tick window, at kMinSignalFrames, so
+      // the present veto and the no-timer fallback would go deaf. A box there
+      // that settles below the anchor is not offered it, and a stored choice
+      // (another screen, same browser) is kept but not applied.
+      Box fast120;
+      for (int i = 0; i < 20; i++) {
+        const double s = fast120.ctl.point().scale;
+        fast120.gpuMs = 14.0 + 8.0 * s * s;   // late at 1080@60 on a 4K surface
+        fast120.everyNth = fast120.ctl.point().divisor;
+        fast120.ticks(360, kHz120);
+        fast120.poll(k4K120);
+      }
+      check(fast120.lines(k4K120) < 1080.0, "a 120 Hz box that cannot hold the anchor settles below it");
+      check(!fast120.ctl.offersHalfRate(), "…and is still not offered half rate");
+      fast120.ctl.setHalfRate(true);
+      for (int i = 0; i < 4; i++) { fast120.ticks(360, kHz120); fast120.poll(k4K120); }
+      check(fast120.ctl.point().divisor <= 2, "a stored choice is not applied at 120 Hz");
+      check(!fast120.ctl.offersHalfRate() && !fast120.ctl.halfRate(), "…nor offered, nor reported as on");
     }
   }
 

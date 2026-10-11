@@ -463,6 +463,11 @@ void n_ttp_display_safe_insets(JNIEnv* env, jclass, jfloat a0, jfloat a1) {
     ttp_display_safe_insets((float) a0, (float) a1);
 }
 
+void n_ttp_display_scale_half_rate(JNIEnv* env, jclass, jint a0) {
+    (void) env;
+    ttp_display_scale_half_rate((int) a0);
+}
+
 jdouble n_ttp_display_scale_panel_ms(JNIEnv* env, jclass) {
     (void) env;
     return (jdouble) ttp_display_scale_panel_ms();
@@ -1430,6 +1435,7 @@ const JNINativeMethod kMethods[] = {
     { "ttp_display_reroster", "([B)I", (void*) n_ttp_display_reroster },
     { "ttp_display_resize", "(II)V", (void*) n_ttp_display_resize },
     { "ttp_display_safe_insets", "(FF)V", (void*) n_ttp_display_safe_insets },
+    { "ttp_display_scale_half_rate", "(I)V", (void*) n_ttp_display_scale_half_rate },
     { "ttp_display_scale_panel_ms", "()D", (void*) n_ttp_display_scale_panel_ms },
     { "ttp_display_scale_poll", "(DDDDD[D)I", (void*) n_ttp_display_scale_poll },
     { "ttp_display_scale_scene", "(D)V", (void*) n_ttp_display_scale_scene },

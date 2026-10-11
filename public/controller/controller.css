@@ -1168,7 +1168,9 @@ input[type=text]:disabled { opacity: 0.6; }
    carries a die-cut slide switch — pill track and knob in the theme's ink
    weight, brand green when on. The row names the TV itself; see index.html for
    why it no longer sits under a group heading. */
-.seg--tv { grid-area: tv; }
+/* Its rows sit closer than the steering group's: they are two plain lines, not
+   two stickers, and the second one (TV picture) has to fit the sheet unscrolled. */
+.seg--tv { grid-area: tv; gap: 0.3rem; }
 .tv-row {
   display: flex; align-items: center; justify-content: space-between;
   gap: 0.7rem; padding: 0.15rem 0.2rem;
@@ -1205,6 +1207,25 @@ input[type=text]:disabled { opacity: 0.6; }
 }
 .switch[aria-checked='true'] { background: var(--brand); }
 .switch[aria-checked='true']::after { left: calc(100% - 1.44rem); }
+/* "TV picture" — a die-cut two-way pill beside its label, in the switch's ink
+   weight; the picked half fills brand green like a switch that is on. The fps
+   is small print BESIDE each name, not under it: one line keeps the pill the
+   switch's height, and the sheet has no second line to spare (it must fit
+   unscrolled — controller-short-viewport.spec.js). */
+.rate-pick {
+  display: flex; flex: none; overflow: hidden;
+  background: var(--surface-2); border: 3px solid var(--ink); border-radius: var(--r-pill);
+}
+.rate-pick__opt {
+  display: flex; align-items: baseline; gap: 0.3rem;
+  padding: 0.3rem 0.7rem; border: 0; background: transparent; cursor: pointer;
+  font-family: var(--font-display); font-weight: 700; color: var(--ink); line-height: 1;
+  transition: background 0.12s;
+}
+.rate-pick__opt + .rate-pick__opt { border-left: 3px solid var(--ink); }
+.rate-pick__opt[aria-checked='true'] { background: var(--brand); color: #fff; }
+.rate-pick__name { font-size: 1rem; }
+.rate-pick__hz { font-size: 0.62rem; letter-spacing: 0.05em; opacity: 0.85; white-space: nowrap; }
 
 /* The stage — surface-2 (the theme's informational surface), holding the
    picked mode's demo phone with the legend attached beneath. Only one demo
@@ -1249,6 +1270,11 @@ input[type=text]:disabled { opacity: 0.6; }
   grid-area: done; margin: 0; align-self: end; justify-self: center;
   width: auto; min-width: 11rem; padding-inline: 1.5rem;
 }
+/* The TV picture row is the sheet's tallest case, and whitespace pays for it at
+   every height — a shallower "Got it" (the trade the 320px tier below makes, for
+   the reason it gives) and the TV rows' own air. */
+.settings-card:has(#rate-row:not(.hidden)) .settings-done { padding-block: 0.5em; }
+.settings-card:has(#rate-row:not(.hidden)) .tv-row { padding-block: 0; }
 
 /* STEER demo — a stylized LANDSCAPE phone whose screen is a MINIATURE of the
    real driving HUD in the picked mode. Tilt: the phone TWISTS in the screen

@@ -48,6 +48,7 @@ class GameCoordinator(
 
         /** `localStorage`'s key on the web (`display/audio/bus.js`'s MUTED_KEY). */
         private const val MUTED_KEY = "tinytrack_sound_muted_v1"
+        private const val HALF_RATE_KEY = "tinytrack_half_rate"
 
         private const val PREFS = "tinytrack"
     }
@@ -334,6 +335,10 @@ class GameCoordinator(
         // sound can play. Same key, same meaning, different store.
         audio.muted = prefs.getBoolean(MUTED_KEY, false)
         audio.start()
+        // The host's Smooth/Sharp choice, remembered like the mute (the web's
+        // key). A scenario starts at full rate, as the web's test surfaces do.
+        halfRate = !Scenarios.active && prefs.getBoolean(HALF_RATE_KEY, false)
+        display.halfRate(halfRate)
         wireNet()
 
         // The room warms eagerly, and on THIS platform there is no board in front
@@ -459,6 +464,22 @@ class GameCoordinator(
         if (audio.muted != on) return
         audio.muted = !on
         prefs.edit().putBoolean(MUTED_KEY, !on).apply()
+        net.publishSnapshot()
+    }
+
+    /**
+     * The host phone's Smooth/Sharp row (`set-frame-rate`): half the panel rate
+     * for a sharper picture. The engine applies it and decides whether the row
+     * is offered at all (the snapshot's `frameRate`, composed in C++); this
+     * shell only remembers it, and republishes so the row shows the change.
+     */
+    private var halfRate = false
+
+    fun setHalfRate(on: Boolean) {
+        if (halfRate == on) return   // no change, no republish — as setSoundOn
+        halfRate = on
+        prefs.edit().putBoolean(HALF_RATE_KEY, on).apply()
+        display.halfRate(on)
         net.publishSnapshot()
     }
 
@@ -1361,6 +1382,7 @@ class GameCoordinator(
             // The host's Sound switch (the verdict re-checks host). The republish
             // inside setSoundOn echoes the new state back to every phone.
             "set-sound" -> setSoundOn(msg.optBoolean("on", true))
+            "set-frame-rate" -> setHalfRate(msg.optBoolean("half", false))
             else -> Unit   // "none" — refused, or not a word this layer knows
         }
     }
