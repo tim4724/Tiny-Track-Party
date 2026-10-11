@@ -23,26 +23,26 @@
   },
   {
    "name": "dash-plus",
-   "tris": 1200,
-   "note": "Dash with a touch more: tail lamps above the bumper, square lamps, a grille, a bonnet scoop, a rear screen.",
+   "tris": 1236,
+   "note": "Dash with a touch more: a slatted rear screen, tail lamps above the bumper, square lamps, a grille, a bonnet scoop.",
    "base": "vehicle-racer-low"
   },
   {
    "name": "bolt-plus",
-   "tris": 1200,
-   "note": "Bolt with a touch more: endplates on the front wing, nose louvres, tail lamps on a dark panel.",
+   "tris": 1272,
+   "note": "Bolt with a touch more: endplates on the front wing, louvres on the nose and the airbox, tail lamps on a dark panel.",
    "base": "vehicle-speedster"
   },
   {
    "name": "carve-plus",
-   "tris": 1444,
-   "note": "Carve with a touch more: twin round lamps, a grille, louvres on the bonnet and the roof, a rear screen, tail lamps.",
+   "tris": 1608,
+   "note": "Carve with a touch more: twin round lamps at both ends, the tail's on a dark panel, a grille, louvres on the bonnet and the roof, a rear screen.",
    "base": "vehicle-racer"
   },
   {
    "name": "rumble-plus",
-   "tris": 1248,
-   "note": "Rumble with a touch more: round lamps and a grille on the bonnet's face, bonnet louvres, tail lamps.",
+   "tris": 1320,
+   "note": "Rumble with a touch more: round lamps and a grille on the bonnet's face, louvres on the bonnet and the tail deck, tail lamps.",
    "base": "vehicle-vintage-racer"
   }
  ]
