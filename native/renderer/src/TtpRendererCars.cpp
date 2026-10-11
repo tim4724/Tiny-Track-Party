@@ -38,7 +38,7 @@ void TtpRenderer::recolourMonsterChassis(gltfio::FilamentAsset* asset,
                 if (white && own->getMaterial()->hasParameter("baseColorMap")) {
                     own->setParameter("baseColorMap", white, smp);
                 }
-                mSceneMatInstances.push_back(own); // released with the scene
+                mFieldMatInstances.push_back(own); // released with the field
                 rcm.setMaterialInstanceAt(ri, p, own);
             }
         }
@@ -479,13 +479,13 @@ void TtpRenderer::pumpTextures() {
 
 // One car slot's body: the real GLB when the shell provided "car<c>.glb"
 // (gltfio + ubershaders, textures via stb), else a roster-coloured box
-// marker. Split out of buildTrackScene so reroster() can rebuild one slot.
-bool TtpRenderer::buildCarSlot(const TrackBin& tb, uint32_t c) {
+// marker. Split out of buildField so reroster() can rebuild one slot.
+bool TtpRenderer::buildCarSlot(uint32_t c) {
     const auto glb = mAssets.find("car" + std::to_string(c) + ".glb");
     if (glb != mAssets.end() && loadCarAsset(c, glb->second)) return true;
     Mesh& m = mCars[c];
     destroyMesh(m); // a re-dress replaces the live marker; empty on a fresh build
-    const uint32_t col = (tb.carColors.size() > c) ? tb.carColors[c] : 0xff888888u;
+    const uint32_t col = (mTrack->carColors.size() > c) ? mTrack->carColors[c] : 0xff888888u;
     const float HL = 0.62f, HW = 0.36f, Y0 = 0.06f, Y1 = 0.62f;
     for (const float y : { Y0, Y1 }) {
         m.verts.push_back({ -HW, y, -HL, col });
@@ -536,7 +536,7 @@ bool TtpRenderer::reroster(const std::vector<TtpRosterCar>& roster,
     for (uint32_t c : remodel) {
         if (c >= roster.size()) return false;
         destroyCarSlot(c);
-        if (!buildCarSlot(*mTrack, c)) return false;
+        if (!buildCarSlot(c)) return false;
         pumpTextures(); // bind the body's decodes before the ghost queues its own
         buildCarGhost(c);
     }
@@ -544,14 +544,14 @@ bool TtpRenderer::reroster(const std::vector<TtpRosterCar>& roster,
         if (c >= roster.size()) return false;
         // Same model, new livery: only what WEARS it. The GLB body keeps its
         // own paint — a livery is the box marker's (GLB-less slots) to show.
-        if ((mCarAssets.size() <= c || !mCarAssets[c]) && !buildCarSlot(*mTrack, c)) return false;
+        if ((mCarAssets.size() <= c || !mCarAssets[c]) && !buildCarSlot(c)) return false;
     }
     pumpTextures();
     return true;
 }
 
 // One car's ghost body (the 50%-alpha occlusion twin), loaded with its own
-// decode pump — see the ordering note where buildTrackScene calls it. Also
+// decode pump — see the ordering note where buildField calls it. Also
 // reroster()'s, after the slot's solid body reloads. Best-effort: a missing
 // or unparseable ghost just means no monster occlusion fade for that car.
 void TtpRenderer::buildCarGhost(uint32_t c) {

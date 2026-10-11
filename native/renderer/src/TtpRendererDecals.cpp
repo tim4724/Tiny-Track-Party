@@ -915,20 +915,12 @@ void TtpRenderer::bindSkidLayer(MaterialInstance* mi) {
             math::float4{ srgbToLinear(0x241f1c), 0.48f });
 }
 
-// The shared receiver instance, created on first use so the road (built before
-// the bake) can already reference it; bindShadowMap fills it in afterwards.
-// The deck's own instance. It exists so the road can carry decal uniforms that
-// the structures and berms — which share litShadowInstance() — must not see, and
-// so the road can require a uv0 channel they do not have.
+// The deck's own instance, created on first use so the road (built before the
+// bake) can already reference it; bindRoadVisMap fills its map in afterwards.
 MaterialInstance* TtpRenderer::roadInstance() {
-    if (!mRoadMaterial) return litShadowInstance();  // no vroad served
+    if (!mRoadMaterial) return nullptr;  // no vroad served: bare vertex colours
     if (!mRoadInst) {
         mRoadInst = sceneInstance(mRoadMaterial);
-        // Absent on the baked-light vroad (see fillRoadLight); an old blob
-        // still carries the live ESM decode.
-        if (mRoadMaterial->hasParameter("shadowTexel")) {
-            mRoadInst->setParameter("shadowTexel", 0.0f);
-        }
         mRoadInst->setParameter("profCount", 0);
         mRoadInst->setParameter("paintCount", 0);
         mRoadInst->setParameter("trackLength", 0.0f);
@@ -1116,7 +1108,7 @@ void TtpRenderer::buildDeckPaint(const TrackBin& tb, const ttp::rt::WearPlan& we
                 0.96f, /*ellipse=*/false, /*chevrons=*/0);
     }
 
-    // tb, not mTrack: buildTrackScene only adopts the bin at the very end, so
+    // tb, not mTrack: buildStatic only adopts the bin at the very end, so
     // during the build mTrack is still the track this one replaces.
     const float L = tb.length;
     const auto writeTo = [&](MaterialInstance* mi, float mid, float halfSpan) {
@@ -1218,37 +1210,38 @@ void TtpRenderer::uploadDeckDecals() {
     applyRoadDebug();   // no-op unless a caller asked for an ablation
 }
 
-MaterialInstance* TtpRenderer::litShadowInstance() {
-    if (!mLitShadowInst && mLitMaterial) {
-        mLitShadowInst = sceneInstance(mLitMaterial);
-        mLitShadowInst->setParameter("shadowTexel", 0.0f);
+// The structures' and berms' instance of the static-receiver material: their
+// colour is the vertex's, so the albedo is white (their uvs are zero). Made on
+// first ask because the structures are built before the ground; the bake binds
+// its visibility map afterwards.
+MaterialInstance* TtpRenderer::staticInstance() {
+    if (!mStaticInst && mGroundMaterial) {
+        Texture* w = whiteTexture();
+        if (!w) return nullptr;
+        mStaticInst = sceneInstance(mGroundMaterial);
+        mStaticInst->setParameter("albedo", w, TextureSampler(
+                TextureSampler::MinFilter::NEAREST, TextureSampler::MagFilter::NEAREST));
+        bindVisMap(mStaticInst, nullptr);
     }
-    return mLitShadowInst;
+    return mStaticInst;
 }
 
-void TtpRenderer::bindShadowMap(MaterialInstance* mi) {
-    if (!mi) return;
-    // A sampler must be bound even when a track baked no map (Filament draws
-    // with every sampler resolved), so keep the 1×1 white around for it.
-    Texture* tex = mShadowMap ? mShadowMap : whiteTexture();
-    if (!tex) return;
+// The bake passes' five shadow parameters (ttp_sunvis.inc), by name.
+void TtpRenderer::bindShadowMap(MaterialInstance* mi, const SunEsm& esm) {
     TextureSampler smp(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR);
     smp.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
     smp.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
-    mi->setParameter("shadowMap", tex, smp);
+    mi->setParameter("shadowMap", esm.map, smp);
     mi->setParameter("shadowFromWorld", mShadowFromWorld);
-
-    // Sampling step + the normal offset that keeps a curving deck from
-    // shadowing itself (three refits the same guard to its texel size).
-    mi->setParameter("shadowTexel", mShadowMap ? mShadowTexel : 0.0f);
+    // Sampling step for the slope-scaled bias (three refits the same guard to
+    // its texel size).
+    mi->setParameter("shadowTexel", esm.texel);
     mi->setParameter("shadowK", kShadowEsmK);
-    mi->setParameter("shadowDepthScale", mShadowDepthScale);
+    mi->setParameter("shadowDepthScale", esm.depthScale);
 }
 
 // The DECK's baked sun-visibility map (vroadvis.mat), in TRACK space. White
-// with a 0 lat span = fully lit, for a track that baked no map — the same
-// no-branch fallback the old shadowTexel-0 early-out gave, and what a road
-// material predating this parameter keeps doing.
+// with a 0 lat span = fully lit, for a track that baked no map.
 //
 // The sampler is CLAMP on BOTH axes, and clamping v is what carries the kerbs:
 // an off-deck fragment's OFF_DECK_LAT lands on the outermost deck column and
@@ -1256,7 +1249,7 @@ void TtpRenderer::bindShadowMap(MaterialInstance* mi) {
 // lap exactly once and a wrap would fold the finish line's shadow onto the
 // start line's.
 void TtpRenderer::bindRoadVisMap(MaterialInstance* mi) {
-    if (!mi || !mi->getMaterial()->hasParameter("sunVis")) return;
+    if (!mi) return;
     Texture* tex = mRoadVisMap ? mRoadVisMap : whiteTexture();
     if (!tex) return;
     TextureSampler smp(TextureSampler::MinFilter::LINEAR,
@@ -1267,16 +1260,12 @@ void TtpRenderer::bindRoadVisMap(MaterialInstance* mi) {
     mi->setParameter("invSunVisLatSpan", roadVisLatSpan());
 }
 
-// The GROUND's baked sun-visibility map (vvis.mat) — its uv is
+// A static receiver's baked sun-visibility map (vvis.mat) — its uv is
 // shadowFromWorld's own output, so the matrix rides along with the texture.
-// White = fully lit, for a track that baked no map — the same no-branch
-// fallback the old shadowTexel-0 early-out provided. A shell still serving
-// the PRE-BAKE vground blob (the one carrying the ESM parameters) gets the
-// full bindShadowMap treatment instead, and draws exactly what it used to.
-void TtpRenderer::bindVisMap(MaterialInstance* mi) {
+// Null binds white = fully lit: a track that baked no map, or the ablation arm.
+void TtpRenderer::bindVisMap(MaterialInstance* mi, Texture* map) {
     if (!mi) return;
-    if (!mi->getMaterial()->hasParameter("visMap")) { bindShadowMap(mi); return; }
-    Texture* tex = mVisMap ? mVisMap : whiteTexture();
+    Texture* tex = map ? map : whiteTexture();
     if (!tex) return;
     TextureSampler smp(TextureSampler::MinFilter::LINEAR,
             TextureSampler::MagFilter::LINEAR);

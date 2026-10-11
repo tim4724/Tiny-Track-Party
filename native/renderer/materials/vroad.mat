@@ -1,5 +1,5 @@
-// The road deck: vlit's matte light, BAKED per vertex at track build
-// (TtpRenderer::fillRoadLight), plus TRACK-SPACE coordinates and the
+// The road deck: the matte light, BAKED per vertex at track build
+// (TtpRenderer::bakeVertexLight), plus TRACK-SPACE coordinates and the
 // flat decals that used to be laid over the road as separate geometry.
 //
 // WHY THE ROAD NEEDS ITS OWN MATERIAL. Every deck decal — the boost aura, a car's
@@ -11,10 +11,6 @@
 // removes the question rather than tuning it: the decal fragment IS a road
 // fragment, at the road's own depth. No lift, no sag, no polygon offset, and no
 // render-order to get wrong.
-//
-// vlit could not simply grow a uv0 channel: buildMesh hands vlit's default
-// instance to EVERY mesh that carries normals (hills, structures, berms, scenery,
-// props), so requiring uv0 there would mean a UV buffer on all of them.
 //
 // THE COORDINATES ARE (s, lat), written by buildRoadMesh into uv0, both in WORLD
 // units: arclength along the centreline, and lateral offset from it. Nothing is
@@ -48,7 +44,7 @@ material {
         // (s, lat) in world units — see above
         uv0,
         // The matte light's SMOOTH HALVES, baked per road vertex at track build
-        // (TtpRenderer::fillRoadLight, the CPU twin of ttpMatteAmbient): .xyz is
+        // (TtpRenderer::bakeVertexLight, the CPU twin of ttpMatteAmbient): .xyz is
         // the ambient term, .w is NoL. Every input is static per track, so
         // re-evaluating them per vertex PER FRAME bought nothing. Baking them
         // also retired `tangents` — nothing in either stage reads the normal
@@ -75,11 +71,9 @@ material {
     flipUV : false,
     parameters : [
         // — the deck's sun visibility —
-        // (Still NO ESM parameters here: the decode this material shared with
-        // vlit runs ONCE per track, in vroadvis.mat's bake, and what reaches a
-        // draw is one R8 tap. That keeps the ESM's sampler and its highp mat4
-        // off every road chunk's draw, the same per-draw descriptor cost
-        // vlitns.mat exists to avoid.)
+        // (NO ESM parameters here: the decode runs ONCE per track, in
+        // vroadvis.mat's bake, and what reaches a draw is one R8 tap. That keeps
+        // the ESM's sampler and its highp mat4 off every road chunk's draw.)
         //
         // Baked in TRACK space so a barrel roll and the deck beneath it are
         // distinct texels — see vroadvis.mat for why the light's own grid
@@ -89,7 +83,7 @@ material {
         // mapping is a MAD rather than a per-fragment divide — the same trade
         // invSkidLatSpan makes just below. 0 disables the tap (no map baked:
         // shadows off, no float targets, or a torn-down scene), which reads as
-        // fully lit and is exactly what the old shadowTexel-0 path answered.
+        // fully lit.
         //
         // NOT the rubber layer's span, deliberately. That one reaches
         // maxHalf + 0.7 so a mark can never touch the CLAMP edge rows the
@@ -109,7 +103,7 @@ material {
         // 16 at 18.9. And under a REAL pack the ITERATIONS dominate too: the
         // 2026-08-18 spectate-7 ablation put the decal channel at 4-6 ms of a
         // 22.6 ms 720p frame, almost all of it a per-car shadow loop
-        // (native/renderer/CLAUDE.md has its history), after every
+        // (docs/perf/androidtv-4p-plan.md, Phase 5), after every
         // arithmetic-level cut inside it measured zero.
         //
         // So the car shadows are not a uniform list: they are a per-frame
@@ -554,7 +548,7 @@ fragment {
         // RENDER TARGET, so v = 0 names the first row in memory — the bottom of
         // the picture on OpenGL and the top on Metal, Vulkan and WebGPU — and a
         // raw sample reads it mirrored on those backends. Same correction
-        // sunVisibility and vground already carry.
+        // sunVisibilityUV and vground already carry.
         //
         // A kerb, skirt or underside fragment carries OFF_DECK_LAT here, so it
         // clamps onto the outermost deck column and inherits that column's
@@ -574,12 +568,6 @@ fragment {
 }
 
 vertex {
-    // NO_SUN_SHADOW so the include emits no sunVisibility referencing shadow
-    // parameters this material does not declare — the visibility is the
-    // fragment's baked tap. SHADE_VERTEX for the usual no-fwidth reason.
-    // Exactly vground's pair, and for exactly its reasons.
-    #define TTP_NO_SUN_SHADOW
-    #define TTP_SHADE_VERTEX
     #include "ttp_shade.inc"
     #include "ttp_fog.inc"
 
@@ -594,17 +582,15 @@ vertex {
     // tap, a log, a sqrt and two smoothsteps, per road vertex PER FRAME, and
     // every input is static per track: the sun is fixed, the deck never moves,
     // and the cars cast blob decals rather than ESM shadows.
-    // TtpRenderer::fillRoadLight evaluates the identical ttpMatteAmbient once
+    // TtpRenderer::bakeVertexLight evaluates the identical ttpMatteAmbient once
     // per track and this stage is left with a move; the sun term is one
     // multiply off frameUniforms, which is where vground takes its own from.
-    //
-    // ttpMatteSunTerm's `n` is unused — every term in it reaches the surface
-    // through NoL alone — so the baked scalar is the whole input, and the one
-    // spelling in ttp_shade.inc still owns the constant.
+    // The baked NoL is ttpMatteSunTerm's whole input, so the one spelling in
+    // ttp_shade.inc still owns the constant.
     void materialVertex(inout MaterialVertexInputs material) {
         vec4 c0 = getCustom0();
         material.fog = vec4(ttpFogFactor(material.worldPosition.xyz), c0.xyz);
-        material.sun = vec4(ttpMatteSunTerm(vec3(0.0, 1.0, 0.0), c0.w), 0.0);
+        material.sun = vec4(ttpMatteSunTerm(c0.w), 0.0);
         // The deck layers' uvs (see `variables`), exactly the expressions the
         // fragment used to evaluate. uvToRenderTargetUV belongs to the vis map
         // alone: it is a render target, the rubber and shadow layers are uploads.

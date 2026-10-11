@@ -181,18 +181,19 @@ extension GameCoordinator {
     /// Swap the circuit the lobby previews and the next race builds.
     ///
     /// **A NO-OP WHEN THE TRACK DID NOT MOVE**, which is not an optimisation:
-    /// a rebuild is a track mesh plus a 2048x2048 shadow bake, run on the main
-    /// thread, and the whole UI is frozen for it. Two cups whose race 1 is the
-    /// same circuit, or a re-tap of the pick already showing, would each pay for
-    /// it and show nothing new. `display/Net.js`'s `setTrack` has had the same
+    /// even on the standing track a rebuild is a staging pass plus the whole
+    /// field, run on the main thread with the UI frozen for it. Two cups whose
+    /// race 1 is the same circuit, or a re-tap of the pick already showing,
+    /// would each pay for it and show nothing new. `display/Net.js`'s `setTrack` has had the same
     /// early return all along.
     ///
     /// AND IT DOES NOT BUILD IN THE LOBBY, because the attract demo is about to.
     /// `refreshLobby` -> `lobbyDemo.refresh()` re-grids onto the new track and
     /// hands its field to `setDemoSceneCars`, which rebuilds with a roster the
     /// cars are actually in. Building here first meant every pick paid for TWO
-    /// full scene builds back to back, the first of them for an empty roster —
-    /// which is what "switching cups hangs the lobby" was.
+    /// scene builds back to back, the first of them for an empty roster — which
+    /// is what "switching cups hangs the lobby" was while each was a full track
+    /// mesh and shadow bake.
     func setTrack(_ id: String) {
         guard id != trackId else { return }
         trackId = id

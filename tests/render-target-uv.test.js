@@ -43,10 +43,10 @@ const MATERIALS = path.join(__dirname, '..', 'native', 'renderer', 'materials');
  */
 const RENDER_TARGET_SAMPLERS = new Set([
   // The frozen sun map: baked to a depth RT, filtered through two more colour
-  // RTs by vesm, then sampled per lit fragment (TtpRenderer::bakeShadowMap).
+  // RTs by vesm, then decoded by the visibility bakes (TtpRenderer::bakeShadowMap).
   'shadowMap',
-  // The ground's baked sun-visibility map (vvis.mat renders it once per track
-  // inside bakeShadowMap). Its flip is in vground's VERTEX stage — the uv is
+  // The static receivers' baked sun-visibility maps (vvis.mat renders them once
+  // per track inside bakeShadowMap). Their flip is in vground's VERTEX stage — the uv is
   // shadowFromWorld's affine output, so the varying carries it pre-flipped
   // and the fragment samples raw, like the fullscreen passes.
   'visMap',
@@ -181,12 +181,13 @@ test('the sun map is sampled in exactly one place', () => {
   //
   // It used to name TWO files, because vground.mat carried its own transcription
   // of the read-out and the uvToRenderTargetUV fix had to be applied to both.
-  // That copy is gone: every receiver now includes ttp_shade.inc, so there is
-  // ONE sample site to get right. A second name appearing here is a second copy
-  // appearing — treat it as the finding, not as a list to extend.
+  // That copy is gone: the decode lives in ttp_sunvis.inc, which only the bakes
+  // include, so there is ONE sample site to get right. A second name appearing
+  // here is a second copy appearing — or a runtime ESM read, which the static
+  // light rule forbids — so treat it as the finding, not as a list to extend.
   const users = materials().filter((f) => /materialParams_shadowMap/.test(codeOf(f)));
-  assert.deepEqual(users.sort(), ['ttp_shade.inc'],
-    'the sun map is sampled outside ttp_shade.inc — that is a second copy of the '
+  assert.deepEqual(users.sort(), ['ttp_sunvis.inc'],
+    'the sun map is sampled outside ttp_sunvis.inc — that is a second copy of the '
     + 'ESM read-out, which is what the shared include exists to prevent');
 });
 

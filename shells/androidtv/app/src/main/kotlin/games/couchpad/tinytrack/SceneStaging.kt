@@ -68,7 +68,7 @@ object SceneStaging {
      * pattern to copy and this throws on every one.
      */
     val MATERIAL_NAMES = listOf(
-        "vcolor", "vblend", "vlit", "vlitns", "vroad", "vglb", "vglbfade", "vpoint",
+        "vcolor", "vblend", "vlit", "vroad", "vglb", "vglbfade", "vpoint",
         "vcloud", "vground", "vvis", "vroadvis", "vpresent", "vesm", "vburst",
         "voverlay",
     )
@@ -157,7 +157,7 @@ object SceneStaging {
         roster: List<RosterSlot>,
         display: DisplayHost,
         store: AssetStore,
-        blobs: BlobStores? = null,
+        blobs: BlobStore? = null,
     ): String {
         // THE STEPS ARE TIMED SEPARATELY. A build measures 737-1323 ms on the
         // reference box and blocks the main thread for all of it, inbound relay
@@ -172,11 +172,12 @@ object SceneStaging {
         providedBytes = 0
         providedCount = 0
 
-        // 1. Release the previous scene. `ttp_display_build` would do this
+        // 1. Release the previous FIELD. `ttp_display_build` would do this
         //    itself, but not until the very end — so without this the frame loop
         //    keeps drawing the OLD field, with the old roster baked into its
-        //    slots, for the whole rebuild. The engine, views, materials and
-        //    provided assets survive a release, so the next build stays cheap.
+        //    slots, for the whole rebuild. The static scene survives a release
+        //    (as do the engine, views, materials and provided assets), so a
+        //    build of the same track rebuilds only the field.
         Trace.beginSection("ttp:build.release")
         Ttp.ttp_display_release()
         Trace.endSection()
@@ -256,33 +257,22 @@ object SceneStaging {
         step(3)
 
         // 5. THE BLOB WALK, first half — AFTER provisioning and before the
-        //    build: a key may depend on anything provisioned (the bake's needs
-        //    the biome, latched at step 2). NOTHING HERE NAMES A BLOB KIND; the
-        //    engine lists its stores and this performs the answers.
+        //    build: the bake's key needs the biome, latched at step 2. The
+        //    engine decides what to drop and read; this performs it.
         //    The walk's SECOND half is not here at all — it is a frame beat
         //    (`DisplayHost.writeReadyBlobs`), for the reason `ttp_display.h`
         //    gives: a readback does not finish inside the build that issues it
         //    on every backend, so a build's tail is the wrong place to ask.
-        blobs?.forEach { store, name ->
+        if (blobs != null) {
             val plan = TtpJson.obj(Ttp.ttp_display_blob_plan(
-                TtpJson.arg(name), TtpJson.arg(trackId), TtpJson.arg(store.generation),
-                TtpJson.arg(store.entriesJson())))
+                TtpJson.arg(trackId), TtpJson.arg(blobs.generation),
+                TtpJson.arg(blobs.entriesJson())))
             val drop = plan.optJSONArray("drop") ?: JSONArray()
-            // Plain strings, never JSON null — unlike `read`, which is why only
-            // that one needs the optStr guard.
             for (i in 0 until drop.length()) {
-                drop.optString(i).takeIf { it.isNotEmpty() }?.let { store.delete(it) }
+                drop.optString(i).takeIf { it.isNotEmpty() }?.let { blobs.delete(it) }
             }
-            // Plain strings too, now that `read` is a LIST: an empty array is
-            // the miss, so there is no JSON null left on this walk for
-            // org.json's optString to turn into the string "null"
-            // (tests/androidtv-nullable-json.test.js still guards the ones there
-            // are).
-            val read = plan.optJSONArray("read") ?: JSONArray()
-            for (i in 0 until read.length()) {
-                val blobName = read.optString(i).takeIf { it.isNotEmpty() } ?: continue
-                store.read(blobName)?.let { Ttp.ttp_display_blob_offer(TtpJson.arg(name), it) }
-            }
+            plan.optString("read").takeIf { it.isNotEmpty() }
+                ?.let { blobs.read(it) }?.let { Ttp.ttp_display_blob_offer(it) }
         }
 
         // 6. Build. A track ID and a roster, and nothing else: the geometry is

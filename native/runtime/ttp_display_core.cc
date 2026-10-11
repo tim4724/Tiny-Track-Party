@@ -23,9 +23,9 @@
 #include "ttp_display_core.h"
 #include "ttp_error.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
-#include <cstring>
 #include <string>
 #include <vector>
 
@@ -183,12 +183,14 @@ const char* ttp_display_kit_field_layout(void) {
     return (g_disp && g_disp->renderer) ? g_disp->renderer->kitFieldLayout() : "[]";
 }
 
-// What a scene IS, for the sun bake — the one rule, read by the build below
-// and by the blob walk's plannedKeys(). The ROSTER is deliberately absent: the
-// casters are the static scene and cars cast nothing, which is the whole
-// reason a bake outlives a field change. The BACKEND is present because a bake
+// What a STATIC scene is OF — the one rule, read by the build below (a
+// resident scene of this key is kept, and only the field rebuilt) and by the
+// blob walk's plannedKey() (the sun bake is part of that scene). The ROSTER is
+// deliberately absent: nothing static depends on it and cars cast nothing,
+// which is the whole reason the static scene outlives a field change. showcase
+// is in because it swaps the whole palette. The BACKEND is present because a bake
 // BLOB's byte orientation is a fact about the engine that read it back
-// (exportBake's flip note): without it a device the boot canary flips between
+// (stageBlob's flip note): without it a device the boot canary flips between
 // Vulkan and GL would find the other backend's blob under its own name —
 // refused on import, and blocking the store dedupe from ever writing a good
 // one over it.
@@ -222,77 +224,70 @@ int ttp_display_build(const char* trackId, const char* rosterJson) {
     // Parsed BEFORE anything is torn down: a malformed roster is still a legal
     // scene (an empty one), but the parse must not straddle the release below.
     const ttp::rt::Roster roster = ttp::rt::parseRoster(rosterJson);
-    if (g_disp->built) g_disp->renderer->releaseScene();
     g_disp->built = false;
-    // laps and seed do not reach the geometry — build_race_track only stamps them
-    // onto RaceTrack.totalLaps/.seed, and the renderer reads neither. The scene is
-    // a function of the track descriptor alone.
-    const ttp::RaceTrack geo = ttp::build_race_track(*def, 1, 0u);
-    // The look, likewise a function of the track: its cup names the biome unless
-    // the inspector override forced one.
+    // The look is a function of the track: its cup names the biome unless the
+    // inspector override forced one.
     const char* biome = g_disp->biome.empty() ? ttp::rt::biome_for_track(trackId)
                                               : g_disp->biome.c_str();
-    // The gallery's showroom resolves through showcase_theme instead: the SAME
-    // palette this line would have produced, carrying every biome's vocabulary
-    // (ttp_display_showcase). Nothing on the shipping path takes that branch.
-    ttp::rt::Theme theme = g_disp->showcase ? ttp::rt::showcase_theme(biome, trackId)
-                                            : ttp::rt::resolve_theme(biome, trackId);
-    // The one part of the palette that cannot be resolved from data alone: a
-    // scenery recolour keyed by AUTHORED colour has to read the model's own glTF
-    // materials. Those bytes are already here — the shell provided them as
-    // scenery<i>.glb, i being the model's index in this same list. Resolved per
-    // MODEL, so the showroom above gets the same palm the beach does.
-    for (size_t i = 0; i < theme.scenery.models.size(); i++) {
-        const std::vector<uint8_t>* glb =
-                g_disp->renderer->asset(("scenery" + std::to_string(i) + ".glb").c_str());
-        theme.modelTints.push_back(glb
-                ? ttp::rt::resolve_model_tints(theme.scenery.models[i],
-                                               glb->data(), glb->size())
-                : std::vector<ttp::rt::MatTint>());
+    const std::string key = bakeKeyFor(trackId, biome);
+    TtpRenderer& r = *g_disp->renderer;
+    if (r.staticResident(key)) {
+        // THE STATIC SCENE IS STILL UP — a join, a leave, a launch or a restart
+        // on the track already built. Only the field is rebuilt, and with it
+        // nothing below the field changes: the framing, the occluders and the
+        // lobby orbit stand, so the preview camera does not snap on a join.
+        if (!r.rebuildField(roster.cars)) return 0;
+    } else {
+        // laps and seed do not reach the geometry — build_race_track only stamps
+        // them onto RaceTrack.totalLaps/.seed, and the renderer reads neither.
+        const ttp::RaceTrack geo = ttp::build_race_track(*def, 1, 0u);
+        // The gallery's showroom resolves through showcase_theme instead: the
+        // SAME palette this line would have produced, carrying every biome's
+        // vocabulary (ttp_display_showcase). Nothing on the shipping path takes
+        // that branch.
+        ttp::rt::Theme theme = g_disp->showcase ? ttp::rt::showcase_theme(biome, trackId)
+                                                : ttp::rt::resolve_theme(biome, trackId);
+        // The one part of the palette that cannot be resolved from data alone: a
+        // scenery recolour keyed by AUTHORED colour has to read the model's own
+        // glTF materials. Those bytes are already here — the shell provided them
+        // as scenery<i>.glb, i being the model's index in this same list.
+        // Resolved per MODEL, so the showroom above gets the same palm the beach
+        // does.
+        for (size_t i = 0; i < theme.scenery.models.size(); i++) {
+            const std::vector<uint8_t>* glb =
+                    r.asset(("scenery" + std::to_string(i) + ".glb").c_str());
+            theme.modelTints.push_back(glb
+                    ? ttp::rt::resolve_model_tints(theme.scenery.models[i],
+                                                   glb->data(), glb->size())
+                    : std::vector<ttp::rt::MatTint>());
+        }
+        // The road's wear — the asphalt patches — is planned HERE (the shim
+        // links libttp-runtime; the renderer only performs). Pure function of the
+        // same built track the sim races plus the deck the biome surfaces it
+        // with (a moulded-plastic deck plans none), like the theme.
+        const ttp::rt::WearPlan wear = ttp::rt::compute_wear_plan(geo, theme.road);
+        if (!r.buildScene(key, geo, theme, roster.cars, wear)) return 0;
+        g_disp->tagDeck = ttp::rt::nameTagDeck(geo.samples, geo.closed);
+        g_disp->tagDeck.kerbH = theme.road.kerbH;
+        g_disp->ground = r.groundGrid();
+        g_disp->sceneT = 0;
+        solveFraming(*g_disp);
+        // Start the turntable on the still view's own bearing, so a preview's
+        // first frame is the framing the track was fitted for.
+        g_disp->orbitAngle = g_disp->framing.ovBearing;
     }
-    // The road's wear — the asphalt patches — is planned HERE (the shim links
-    // libttp-runtime; the renderer only performs). Pure function of the same
-    // built track the sim races plus the deck the biome surfaces it with (a
-    // moulded-plastic deck plans none), like the theme.
-    const ttp::rt::WearPlan wear = ttp::rt::compute_wear_plan(geo, theme.road);
-    // WHAT THIS SCENE IS OF, for the shadow bake's reuse test (bakeShadowMap).
-    // ONE RULE, shared with the blob walk's plannedKeys so the store's name for
-    // the bake and the build deciding whether to reuse cannot disagree about
-    // what a scene is.
-    // The casters are the static scene and cars cast nothing, so two builds that
-    // agree on these three agree on the bake — and a rebuild for a new FIELD is
-    // then 520 ms cheaper on the Android reference box. The ROSTER is
-    // deliberately absent: including it would be the bug this exists to fix.
-    // showcase is in because it swaps the whole palette, and therefore the
-    // scenery that casts.
-    g_disp->renderer->setBakeKey(bakeKeyFor(trackId, biome).c_str());
-    if (!g_disp->renderer->buildScene(geo, theme, roster.cars, wear)) return 0;
     g_disp->built = true;
     g_disp->roster = roster.ids;
     g_disp->rosterCars = roster.cars; // ttp_display_reroster's diff base
-    // A rebuild is a new track or a new field; either way the springs must not
-    // drag the old frame's camera into it.
-    g_disp->chase.clear();
-    g_disp->follow = {};
-    g_disp->coverage = {};   // a new field starts the cycle over
-    g_disp->coverChase = {};
-    g_disp->steerBar.clear();
+    ttp::rt::newField(*g_disp);
     g_disp->nameTags.clear();
     g_disp->tagCover.clear();
-    g_disp->tagDeck = ttp::rt::nameTagDeck(geo.samples, geo.closed);
-    g_disp->tagDeck.kerbH = theme.road.kerbH;
-    g_disp->ground = g_disp->renderer->groundGrid();
-    g_disp->sceneT = 0;
     g_disp->bursts.clear();
-    solveFraming(*g_disp);
-    // Start the turntable on the still view's own bearing, so a preview's first
-    // frame is the framing the track was fitted for.
-    g_disp->orbitAngle = g_disp->framing.ovBearing;
     // What this build made that is worth keeping between runs. HERE and not in
     // the shell: whether a blob is worth staging is entirely engine knowledge
     // (does the store hold it, did these bytes come from the store, did the
     // build actually make one), and the shell's only remaining job is to write
-    // the bytes a later `keep` names.
+    // the bytes a later `ready` names.
     stagePlannedBlobs();
     return 1;
 }
@@ -327,45 +322,17 @@ int ttp_display_reroster(const char* rosterJson) {
     return 1;
 }
 
-// The stores this build knows how to fill. A shell iterates this and names no
-// blob kind of its own — see ttp_display.h.
-static const char* const kBlobStores[] = { "bake" };
-static_assert(sizeof kBlobStores / sizeof kBlobStores[0] == DisplayCore::kBlobStoreCount,
-              "a new store must also widen DisplayCore::blobWalk");
-
-const char* ttp_display_blob_stores(void) {
-    static std::string out;
-    if (out.empty()) {
-        ttp::Value a = ttp::Value::Arr();
-        for (const char* s : kBlobStores) a.push(ttp::Value::Str(s));
-        out = ttp::canonical_stringify(a);
-    }
-    return out.c_str();
-}
-
 namespace {
-
-// Which store a name refers to, or -1. An unknown one is not an error, it
-// simply has nothing to plan.
-int storeIndex(const char* store) {
-    if (!store) return -1;
-    for (int i = 0; i < DisplayCore::kBlobStoreCount; i++) {
-        if (std::strcmp(store, kBlobStores[i]) == 0) return i;
-    }
-    return -1;
-}
 
 // What the NEXT build's bake will be OF.
 //
 // Its key needs the biome latched (ttp_display_biome), exactly as the build
 // does, so it is derived here rather than read off the renderer — which is
 // still holding the PREVIOUS scene's.
-std::vector<std::string> plannedKeys(const char* trackId) {
-    if (!g_disp || !g_disp->renderer) return {};
+std::string plannedKey(const char* trackId) {
     const char* biome = (!g_disp->biome.empty())
             ? g_disp->biome.c_str() : ttp::rt::biome_for_track(trackId);
-    const std::string key = bakeKeyFor(trackId, biome);
-    return key.empty() ? std::vector<std::string>{} : std::vector<std::string>{ key };
+    return bakeKeyFor(trackId, biome);
 }
 
 // Collect the pixels for every outbound blob whose reads have landed.
@@ -377,35 +344,29 @@ std::vector<std::string> plannedKeys(const char* trackId) {
 // or freed again.
 void harvestOutboundBlobs() {
     if (!g_disp || !g_disp->renderer) return;
-    for (DisplayCore::BlobWalk& w : g_disp->blobWalk) {
-        for (DisplayCore::BlobOutbound& o : w.outbound) {
-            if (!o.bytes.empty()) continue;
-            g_disp->renderer->takeStagedBlob(o.key, o.bytes);
-        }
+    for (DisplayCore::BlobOutbound& o : g_disp->blobOutbound) {
+        if (!o.bytes.empty()) continue;
+        g_disp->renderer->takeStagedBlob(o.key, o.bytes);
     }
 }
 
 }  // namespace
 
-const char* ttp_display_blob_plan(const char* store, const char* trackId,
-                                  const char* generation, const char* entriesJson) {
+const char* ttp_display_blob_plan(const char* trackId, const char* generation,
+                                  const char* entriesJson) {
     static std::string out;
-    const int si = storeIndex(store);
-    if (si < 0 || !g_disp || !g_disp->renderer) { out = "{}"; return out.c_str(); }
-    // A fresh PLANNED half for this store. Reset FIRST, so a plan that then
-    // fails leaves a state that writes nothing rather than one carrying the
-    // previous answer. The OUTBOUND half is deliberately untouched: those blobs
-    // belong to a build that has already happened, and on GL they routinely
-    // outlive the next plan (ttp_display_core.h).
-    DisplayCore::BlobWalk& w = g_disp->blobWalk[si];
-    w.planned.clear();
+    if (!g_disp || !g_disp->renderer) { out = "{}"; return out.c_str(); }
+    // A fresh PLANNED half. Reset FIRST, so a plan that then fails leaves a
+    // state that writes nothing rather than one carrying the previous answer.
+    // The OUTBOUND half is deliberately untouched: those blobs belong to a build
+    // that has already happened, and they always outlive the next plan
+    // (ttp_display_core.h).
+    DisplayCore::BlobPlanned& p = g_disp->blobPlanned;
+    p = DisplayCore::BlobPlanned();
 
-    const std::vector<std::string> keys = plannedKeys(trackId);
-    if (keys.empty()) { out = "{}"; return out.c_str(); }
     ttp::rt::BlobRequest in;
-    in.store = kBlobStores[si];
     in.generation = generation ? generation : "";
-    in.keys = keys;
+    in.key = plannedKey(trackId);
     const ttp::Value entries = ttp::json::parse_or(entriesJson, ttp::Value::Arr());
     for (const ttp::Value& e : entries.arr) {
         ttp::rt::BlobEntry be;
@@ -418,55 +379,39 @@ const char* ttp_display_blob_plan(const char* store, const char* trackId,
     }
     const ttp::rt::BlobPlan plan = ttp::rt::planBlob(in);
 
-    ttp::Value read = ttp::Value::Arr();
-    for (size_t i = 0; i < keys.size() && i < plan.names.size(); i++) {
-        DisplayCore::BlobPlanned p;
-        p.key = keys[i];
-        p.name = plan.names[i];
-        for (const ttp::rt::BlobEntry& e : in.entries) {
-            if (e.name == p.name) { p.held = true; break; }
-        }
-        // ALREADY IN THE ENGINE and therefore not worth reading: asking for it
-        // would cost a multi-megabyte read to tell the engine something it
-        // knows. This is the fact a shell used to mirror; answered here, where
-        // it cannot go stale.
-        if (p.held && !g_disp->renderer->blobResident(p.key)) {
-            read.push(ttp::Value::Str(p.name));
-        }
-        w.planned.push_back(std::move(p));
+    p.key = in.key;
+    p.name = plan.name;
+    for (const ttp::rt::BlobEntry& e : in.entries) {
+        if (e.name == p.name) { p.held = true; break; }
     }
+    // ALREADY IN THE ENGINE and therefore not worth reading: asking for it would
+    // cost a multi-megabyte read to tell the engine something it knows. This is
+    // the fact a shell used to mirror; answered here, where it cannot go stale.
+    const bool read = p.held && !g_disp->renderer->blobResident(p.key);
 
     ttp::Value m = ttp::Value::Obj();
     ttp::Value drop = ttp::Value::Arr();
     for (const std::string& d : plan.drop) drop.push(ttp::Value::Str(d));
     m.set("drop", drop);
-    m.set("read", read);
+    m.set("read", ttp::Value::Str(read ? p.name : ""));
     out = ttp::canonical_stringify(m);
     return out.c_str();
 }
 
-void ttp_display_blob_offer(const char* store, const uint8_t* bytes, uint32_t len) {
-    const int si = storeIndex(store);
-    if (si < 0 || !bytes || !len || !g_disp || !g_disp->renderer) return;
+void ttp_display_blob_offer(const uint8_t* bytes, uint32_t len) {
+    if (!bytes || !len || !g_disp || !g_disp->renderer) return;
     // A blob the engine refuses is a version it does not know, or bytes that do
     // not describe what they claim. That is a MISS, never an error: the scene
     // makes the thing again, and the build then stages the good bytes over these.
     //
-    // WHICH blob these bytes are is theirs to say (importBlob reads the key
-    // from their own header and answers it), so the only thing the store
-    // argument decides here is which walk records it.
-    //
-    // ONLY THAT ONE KEY IS PRIMED. Marking every key that is merely RESIDENT
-    // after the import let one offered blob vouch for its siblings — and since
-    // `primed` is what stops a blob being staged, a key that was resident but
-    // had never reached the store was then skipped by every later build too. A
-    // cache that silently stops filling is the exact failure this walk exists to
-    // remove, so it must not be reintroduced by an approximation here.
+    // WHICH blob these bytes are is theirs to say: importBlob reads the key from
+    // their own header and answers it, and only a match with the PLANNED key
+    // primes it. A key that is merely resident must not count — `primed` is what
+    // stops a blob being staged, so a key that never reached the store would then
+    // be skipped by every later build too, and a cache that silently stops
+    // filling is the exact failure this walk exists to remove.
     const std::string key = g_disp->renderer->importBlob(bytes, len);
-    if (key.empty()) return;
-    for (DisplayCore::BlobPlanned& p : g_disp->blobWalk[si].planned) {
-        if (p.key == key) { p.primed = true; break; }
-    }
+    if (!key.empty() && key == g_disp->blobPlanned.key) g_disp->blobPlanned.primed = true;
 }
 
 // Stage what this build made that the store does not already have.
@@ -477,31 +422,24 @@ void ttp_display_blob_offer(const char* store, const uint8_t* bytes, uint32_t le
 // FROM the store so writing them back is a copy of a read, and nothing was
 // planned so the name would be nobody's.
 //
-// IT ISSUES THE READS AND DOES NOT WAIT FOR THEM, on every backend. Staging
-// pumped the driver once (eight flushAndWait calls) so that Metal and Vulkan
-// could answer inside the build; that is a synchronous GPU stall on the build's
-// critical path, which is the one thing an Android lobby cannot afford, and it
-// could never work on GL anyway. So all three now land on the frame beat and
-// there is one path rather than a fast one and a slow one.
+// IT ISSUES THE READS AND DOES NOT WAIT FOR THEM, on every backend
+// (ttp_display.h, "derived bytes").
 static void stagePlannedBlobs(void) {
     if (!g_disp || !g_disp->renderer) return;
-    for (DisplayCore::BlobWalk& w : g_disp->blobWalk) {
-        for (const DisplayCore::BlobPlanned& p : w.planned) {
-            if (p.name.empty() || p.held || p.primed) continue;
-            if (!g_disp->renderer->stageBlob(p.key)) continue;
-            // The pairing goes on the OUTBOUND list now rather than when the
-            // pixels land — see BlobOutbound. Never twice: a rebuild of the same
-            // scene stages the same key, and two entries would write it twice.
-            bool already = false;
-            for (const DisplayCore::BlobOutbound& o : w.outbound) {
-                if (o.key == p.key) { already = true; break; }
-            }
-            if (already) continue;
-            DisplayCore::BlobOutbound o;
-            o.key = p.key;
-            o.name = p.name;
-            w.outbound.push_back(std::move(o));
-        }
+    const DisplayCore::BlobPlanned& p = g_disp->blobPlanned;
+    std::vector<DisplayCore::BlobOutbound>& out = g_disp->blobOutbound;
+    // Never twice: a rebuild of the same scene stages the same key, and two
+    // outbound entries would write it twice.
+    const bool already = std::any_of(out.begin(), out.end(),
+            [&](const DisplayCore::BlobOutbound& o) { return o.key == p.key; });
+    if (!p.name.empty() && !p.held && !p.primed && !already
+            && g_disp->renderer->stageBlob(p.key)) {
+        // The pairing goes on the OUTBOUND list now rather than when the pixels
+        // land — see BlobOutbound.
+        DisplayCore::BlobOutbound o;
+        o.key = p.key;
+        o.name = p.name;
+        out.push_back(std::move(o));
     }
     // Anything a PREVIOUS build left in flight may well have landed by now, so
     // this build's staging is also the cheapest moment to collect it. Nothing
@@ -509,43 +447,26 @@ static void stagePlannedBlobs(void) {
     harvestOutboundBlobs();
 }
 
-int ttp_display_blob_ready(void) {
-    if (!g_disp || !g_disp->renderer) return 0;
-    harvestOutboundBlobs();
-    int bits = 0;
-    for (int si = 0; si < DisplayCore::kBlobStoreCount; si++) {
-        for (const DisplayCore::BlobOutbound& o : g_disp->blobWalk[si].outbound) {
-            if (!o.bytes.empty()) { bits |= 1 << si; break; }
-        }
-    }
-    return bits;
-}
-
-const char* ttp_display_blob_keep(const char* store) {
+const char* ttp_display_blob_ready(void) {
     static std::string out;
-    ttp::Value m = ttp::Value::Obj();
-    ttp::Value write = ttp::Value::Arr();
-    const int si = storeIndex(store);
-    if (si >= 0 && g_disp) {
-        for (const DisplayCore::BlobOutbound& o : g_disp->blobWalk[si].outbound) {
-            // The ones still coming are not named: a shell that wrote them would
-            // store an empty file under a name nothing would then re-derive.
-            if (!o.bytes.empty()) write.push(ttp::Value::Str(o.name));
-        }
+    if (!g_disp || !g_disp->renderer) return nullptr;
+    harvestOutboundBlobs();
+    // The ones still coming are not named: a shell that wrote them would store
+    // an empty file under a name nothing would then re-derive.
+    for (const DisplayCore::BlobOutbound& o : g_disp->blobOutbound) {
+        if (o.bytes.empty()) continue;
+        out = o.name;
+        return out.c_str();
     }
-    m.set("write", write);
-    out = ttp::canonical_stringify(m);
-    return out.c_str();
+    return nullptr;
 }
 
-const uint8_t* ttp_display_blob_export(const char* store, const char* name,
-                                       uint32_t* outLen) {
-    const int si = storeIndex(store);
+const uint8_t* ttp_display_blob_export(const char* name, uint32_t* outLen) {
     // WHAT THE BUILD ALREADY PRODUCED. Re-exporting here would pay a second
     // readback per texture on the backends where that works, and would never
     // answer at all on the one where it does not.
-    if (si >= 0 && name && g_disp) {
-        for (const DisplayCore::BlobOutbound& o : g_disp->blobWalk[si].outbound) {
+    if (name && g_disp) {
+        for (const DisplayCore::BlobOutbound& o : g_disp->blobOutbound) {
             if (o.name != name || o.bytes.empty()) continue;
             if (outLen) *outLen = (uint32_t) o.bytes.size();
             return o.bytes.data();
@@ -555,14 +476,13 @@ const uint8_t* ttp_display_blob_export(const char* store, const char* name,
     return nullptr;
 }
 
-void ttp_display_blob_wrote(const char* store, const char* name) {
-    const int si = storeIndex(store);
-    if (si < 0 || !name || !g_disp) return;
+void ttp_display_blob_wrote(const char* name) {
+    if (!name || !g_disp) return;
     // THE SHELL SAYS WHEN, because only it knows whether the bytes reached the
     // disk — and a write that failed should be retried, not forgotten. Dropping
-    // the ready slot on `export` instead would lose a blob to a full disk with
+    // the entry on `export` instead would lose a blob to a full disk with
     // nothing to say so.
-    std::vector<DisplayCore::BlobOutbound>& out = g_disp->blobWalk[si].outbound;
+    std::vector<DisplayCore::BlobOutbound>& out = g_disp->blobOutbound;
     for (size_t i = 0; i < out.size(); i++) {
         if (out[i].name != name) continue;
         out.erase(out.begin() + (long) i);
@@ -573,19 +493,17 @@ void ttp_display_blob_wrote(const char* store, const char* name) {
 
 void ttp_display_release(void) {
     if (!g_disp || !g_disp->built) return;
-    g_disp->renderer->releaseScene();
+    // THE FIELD ONLY: the static scene stays resident under its key, so the
+    // build that follows a release — on every shell, every race — is a field
+    // rebuild when the track did not change. tagDeck, ground and the framing
+    // belong to that scene and stay with it.
+    g_disp->renderer->releaseField();
     g_disp->built = false;
     g_disp->roster.clear();
     g_disp->rosterCars.clear();
-    g_disp->chase.clear();
-    g_disp->follow = {};
-    g_disp->coverage = {};   // a new field starts the cycle over
-    g_disp->coverChase = {};
-    g_disp->steerBar.clear();
+    ttp::rt::newField(*g_disp);
     g_disp->nameTags.clear();
     g_disp->tagCover.clear();
-    g_disp->tagDeck = {};
-    g_disp->ground = {};
     g_disp->held.clear();  // a field belongs to the scene it was read from
 }
 
@@ -595,13 +513,9 @@ void ttp_display_release(void) {
 void ttp_display_bind(int session) {
     if (!g_disp) return;
     if (g_disp->session == session) return;
-    // A new session is a new field: the springs must not drag the last race's
-    // camera into it, and a hold taken at the old race's finish is spent.
-    g_disp->chase.clear();
-    g_disp->follow = {};
-    g_disp->coverage = {};   // a new field starts the cycle over
-    g_disp->coverChase = {};
-    g_disp->steerBar.clear();
+    // A new session is a new field, and a hold taken at the old race's finish
+    // is spent.
+    ttp::rt::newField(*g_disp);
     g_disp->hold = false;
     g_disp->held.clear();
     g_disp->session = session;

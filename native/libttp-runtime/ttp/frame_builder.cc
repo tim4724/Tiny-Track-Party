@@ -12,6 +12,14 @@
 namespace ttp {
 namespace rt {
 
+void newField(DisplayState& d) {
+    d.chase.clear();
+    d.follow = {};
+    d.coverage = {};   // a new field starts the cycle over
+    d.coverChase = {};
+    d.steerBar.clear();
+}
+
 // Drop every motion cue but keep the pose — what "held" means (ttp_display_hold).
 void atRest(TtpCarInput& c) {
     c.spd = c.steer = c.steerYaw = c.brake = c.spin = c.scrub = 0;

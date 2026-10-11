@@ -474,7 +474,8 @@ historical fits behind this section were taken with a frozen-bench script since
 deleted; git history has it.) The MECHANISMS — why the fixed half is the scene
 being submitted, why the fill half is the deck's fragment shader, and the levers
 that paid (the per-vertex light move, the declared-size law, the ground's `vvis`
-bake) — are `native/renderer/CLAUDE.md`'s, each with its measured worth.
+bake) — are `native/renderer/CLAUDE.md`'s; what each measured is in
+`docs/perf/androidtv-frame-map.md` and beside the code that carries it.
 
 - The lobby OVERVIEW and a RACE are different scenes and rank differently.
   Over the lobby the ground dominates (it is most of the picture); in a chase
@@ -783,12 +784,12 @@ RESOLUTION — the ladder — and nothing else on this GPU.
 
 **`readPixels` on this driver has no `HOST_CACHED` staging memory**, so
 Filament's per-texel reshape used to walk an UNCACHED mapping — every 2-4 byte
-load its own memory transaction, which is what made the Vulkan scene build's
-readbacks (the road-light ESM above all) several times their GL cost. The
-fork carries the fix (`vulkan: bounce readPixels staging through a cached copy
-before reshape`, in the pin): one bulk memcpy into cached heap before the
-reshape, which halved the bake's `roadLight` phase on this box. The residual
-gap to GL is the bounce copy itself plus GPU waits — not worth chasing.
+load its own memory transaction, which made every Vulkan readback several
+times its GL cost. The fork carries the fix (`vulkan: bounce readPixels staging
+through a cached copy before reshape`, in the pin): one bulk memcpy into cached
+heap before the reshape. The residual gap to GL is the bounce copy itself plus
+GPU waits — not worth chasing, and no build waits on a readback any more (the
+blob's reads land on the frame beat).
 
 ## Audio
 

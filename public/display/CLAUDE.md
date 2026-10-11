@@ -206,8 +206,9 @@ step this machine may never take. NEW GAME's click carries the fullscreen unlock
 which is what makes a mid-boot window change ordinary rather than exotic;
 `tests/e2e/boot-resize.spec.js` holds that window open on purpose.
 
-**A SCENE BUILD IS ONE CALL AND ONE RESET THIS SIDE OWES.** After a full
-`setTrack` (never after a reroster — that is the same scene re-dressed),
+**A SCENE BUILD IS ONE CALL AND ONE RESET THIS SIDE OWES.** After every
+`setTrack` — a static build, or a field rebuild on the resident track — and
+never after a reroster (the same scene re-dressed),
 `_rebuild` calls `scaleScene` and clears the perf window. The call starts the
 rule's grace, inside which nothing steps down (a scene's first seconds are its
 assembly, not its cost), and drops the rule's COST MODEL observation: it fits

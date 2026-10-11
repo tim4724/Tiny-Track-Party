@@ -230,49 +230,35 @@ void n_ttp_display_biome(JNIEnv* env, jclass, jbyteArray a0) {
     ttp_display_biome(s0.get());
 }
 
-jbyteArray n_ttp_display_blob_export(JNIEnv* env, jclass, jbyteArray a0, jbyteArray a1) {
+jbyteArray n_ttp_display_blob_export(JNIEnv* env, jclass, jbyteArray a0) {
     CStr s0(env, a0);
-    CStr s1(env, a1);
     uint32_t outLen = 0;
-    const uint8_t* p = ttp_display_blob_export(s0.get(), s1.get(), &outLen);
+    const uint8_t* p = ttp_display_blob_export(s0.get(), &outLen);
     return toBytes(env, p, outLen);
 }
 
-jbyteArray n_ttp_display_blob_keep(JNIEnv* env, jclass, jbyteArray a0) {
-    CStr s0(env, a0);
-    return toBytes(env, ttp_display_blob_keep(s0.get()));
-}
-
-void n_ttp_display_blob_offer(JNIEnv* env, jclass, jbyteArray a0, jbyteArray bytes) {
-    CStr s0(env, a0);
+void n_ttp_display_blob_offer(JNIEnv* env, jclass, jbyteArray bytes) {
     const jsize n = bytes ? env->GetArrayLength(bytes) : 0;
     std::vector<uint8_t> b((size_t) n);
     if (n) env->GetByteArrayRegion(bytes, 0, n, (jbyte*) b.data());
-    ttp_display_blob_offer(s0.get(), b.data(), (uint32_t) n);
+    ttp_display_blob_offer(b.data(), (uint32_t) n);
 }
 
-jbyteArray n_ttp_display_blob_plan(JNIEnv* env, jclass, jbyteArray a0, jbyteArray a1, jbyteArray a2, jbyteArray a3) {
+jbyteArray n_ttp_display_blob_plan(JNIEnv* env, jclass, jbyteArray a0, jbyteArray a1, jbyteArray a2) {
     CStr s0(env, a0);
     CStr s1(env, a1);
     CStr s2(env, a2);
-    CStr s3(env, a3);
-    return toBytes(env, ttp_display_blob_plan(s0.get(), s1.get(), s2.get(), s3.get()));
+    return toBytes(env, ttp_display_blob_plan(s0.get(), s1.get(), s2.get()));
 }
 
-jint n_ttp_display_blob_ready(JNIEnv* env, jclass) {
+jbyteArray n_ttp_display_blob_ready(JNIEnv* env, jclass) {
     (void) env;
-    return (jint) ttp_display_blob_ready();
+    return toBytes(env, ttp_display_blob_ready());
 }
 
-jbyteArray n_ttp_display_blob_stores(JNIEnv* env, jclass) {
-    (void) env;
-    return toBytes(env, ttp_display_blob_stores());
-}
-
-void n_ttp_display_blob_wrote(JNIEnv* env, jclass, jbyteArray a0, jbyteArray a1) {
+void n_ttp_display_blob_wrote(JNIEnv* env, jclass, jbyteArray a0) {
     CStr s0(env, a0);
-    CStr s1(env, a1);
-    ttp_display_blob_wrote(s0.get(), s1.get());
+    ttp_display_blob_wrote(s0.get());
 }
 
 jint n_ttp_display_build(JNIEnv* env, jclass, jbyteArray a0, jbyteArray a1) {
@@ -1393,13 +1379,11 @@ const JNINativeMethod kMethods[] = {
     { "ttp_display_bench", "([B)V", (void*) n_ttp_display_bench },
     { "ttp_display_bind", "(I)V", (void*) n_ttp_display_bind },
     { "ttp_display_biome", "([B)V", (void*) n_ttp_display_biome },
-    { "ttp_display_blob_export", "([B[B)[B", (void*) n_ttp_display_blob_export },
-    { "ttp_display_blob_keep", "([B)[B", (void*) n_ttp_display_blob_keep },
-    { "ttp_display_blob_offer", "([B[B)V", (void*) n_ttp_display_blob_offer },
-    { "ttp_display_blob_plan", "([B[B[B[B)[B", (void*) n_ttp_display_blob_plan },
-    { "ttp_display_blob_ready", "()I", (void*) n_ttp_display_blob_ready },
-    { "ttp_display_blob_stores", "()[B", (void*) n_ttp_display_blob_stores },
-    { "ttp_display_blob_wrote", "([B[B)V", (void*) n_ttp_display_blob_wrote },
+    { "ttp_display_blob_export", "([B)[B", (void*) n_ttp_display_blob_export },
+    { "ttp_display_blob_offer", "([B)V", (void*) n_ttp_display_blob_offer },
+    { "ttp_display_blob_plan", "([B[B[B)[B", (void*) n_ttp_display_blob_plan },
+    { "ttp_display_blob_ready", "()[B", (void*) n_ttp_display_blob_ready },
+    { "ttp_display_blob_wrote", "([B)V", (void*) n_ttp_display_blob_wrote },
     { "ttp_display_build", "([B[B)I", (void*) n_ttp_display_build },
     { "ttp_display_burst", "([BDD)V", (void*) n_ttp_display_burst },
     { "ttp_display_camera", "(I)V", (void*) n_ttp_display_camera },

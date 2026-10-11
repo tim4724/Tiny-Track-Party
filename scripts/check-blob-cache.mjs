@@ -12,7 +12,7 @@
 // the capture harnesses already do, so the cache is on for this one run.
 //
 // The cost of that blind spot was a shipped bug: an import that put the LAST
-// offered blob's bytes into every layer of a store, so the second visit to a
+// offered blob's bytes into every layer, so the second visit to a
 // page drew a monster-truck chassis under every car. A green suite, a review and a three-platform install all missed it,
 // because the only thing that ever exercised the warm path was a person looking
 // at a television.
@@ -47,11 +47,11 @@ const TIMEOUT_MS = 120_000;
 const fail = (msg) => { console.error(`\n  FAIL  ${msg}`); process.exitCode = 1; };
 
 /**
- * Wait for the page to be HOLDING STORES. Not `waitForScene`: nothing in the
+ * Wait for the page to be HOLDING A STORE. Not `waitForScene`: nothing in the
  * tree sets the flag that one gates on, so it waits for fonts and no more.
  */
-const waitForStores = (page) => page.waitForFunction(
-  () => window.__scene?.display?.blobs?.stores?.length > 0, null, { timeout: TIMEOUT_MS });
+const waitForStore = (page) => page.waitForFunction(
+  () => !!window.__scene?.display?.blobs, null, { timeout: TIMEOUT_MS });
 
 /** Solo drops straight into a race, and the sun bakes as that scene builds. */
 const waitForRoom = (page, state) => page.waitForFunction(
@@ -63,48 +63,40 @@ async function raceIn(ctx, port, onConsole) {
   page.on('pageerror', (e) => console.error('  [page error]', e.message));
   if (onConsole) page.on('console', (m) => onConsole(m.text()));
   await page.goto(displayURL(port, { solo: 1 }));
-  await waitForStores(page);
+  await waitForStore(page);
   await waitForRoom(page, 'PLAYING');
   return page;
 }
 
 /**
- * Every blob the page is holding, as {store: {name: sha256}}.
+ * Every blob the page is holding, as {name: sha256}.
  *
  * Digested IN THE PAGE rather than shipped over the bridge: the bake blob is
  * megabytes and the point is equality, not the bytes. Goes through the shell's
- * OWN BlobStore API (`entriesJson`/`read`), so this names no store and no blob
- * kind — the same rule the shells follow (`ttp_display.h`).
+ * OWN BlobStore API (`entriesJson`/`read`), so this names no blob — the same
+ * rule the shells follow (`ttp_display.h`).
  */
 async function digests(page) {
   return page.evaluate(async () => {
-    const blobs = window.__scene?.display?.blobs;
-    if (!blobs) throw new Error('no blob stores on this page — is navigator.webdriver still true?');
+    const store = window.__scene?.display?.blobs;
+    if (!store) throw new Error('no blob store on this page — is navigator.webdriver still true?');
     const out = {};
-    for (const { name, store } of blobs.stores) {
-      out[name] = {};
-      for (const e of JSON.parse(await store.entriesJson())) {
-        const bytes = await store.read(e.name);
-        if (!bytes) continue;
-        const hash = await crypto.subtle.digest('SHA-256', bytes);
-        out[name][e.name] = [...new Uint8Array(hash)]
-          .map((b) => b.toString(16).padStart(2, '0')).join('');
-      }
+    for (const e of JSON.parse(await store.entriesJson())) {
+      const bytes = await store.read(e.name);
+      if (!bytes) continue;
+      const hash = await crypto.subtle.digest('SHA-256', bytes);
+      out[e.name] = [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, '0')).join('');
     }
     return out;
   });
 }
 
-const count = (d) => Object.values(d).reduce((n, s) => n + Object.keys(s).length, 0);
-
 /**
- * Poll until EVERY store has answered and the total has stopped moving.
+ * Poll until the store is non-empty and its count has stopped moving.
  *
- * Not "until there are N": the write half is a frame beat and separate stores
- * need not land on the same one, so a fixed number snapshots whichever arrived
- * first and silently drops the rest of the comparison. How many blobs there are
- * is the engine's business, so the only thing to wait for is "every store
- * non-empty, twice running".
+ * Not "until there are N": the write half is a frame beat, and how many blobs
+ * there are is the engine's business, so the only thing to wait for is
+ * "non-empty, twice running".
  */
 async function settled(page, what) {
   const deadline = Date.now() + TIMEOUT_MS;
@@ -113,13 +105,11 @@ async function settled(page, what) {
   while (Date.now() < deadline) {
     await page.waitForTimeout(500);
     seen = await digests(page);
-    const stores = Object.values(seen);
-    const full = stores.length > 0 && stores.every((s) => Object.keys(s).length > 0);
-    const n = count(seen);
-    if (full && n === last) return seen;
-    last = full ? n : -1;
+    const n = Object.keys(seen).length;
+    if (n > 0 && n === last) return seen;
+    last = n || -1;
   }
-  throw new Error(`${what}: the stores never settled (held ${count(seen)} blob(s))`);
+  throw new Error(`${what}: the store never settled (held ${Object.keys(seen).length} blob(s))`);
 }
 
 async function main() {
@@ -133,9 +123,7 @@ async function main() {
     console.log('==> cold: a solo race, baking');
     const page1 = await raceIn(ctx, server.port);
     const cold = await settled(page1, 'cold');
-    for (const [store, blobs] of Object.entries(cold)) {
-      console.log(`    ${store}: ${Object.keys(blobs).length} stored`);
-    }
+    console.log(`    ${Object.keys(cold).length} stored`);
     await page1.close();
 
     console.log('==> warm: the same race, served from the store');
@@ -150,9 +138,8 @@ async function main() {
     // lacks, so this is what makes it hand back the blobs it imported a moment
     // ago rather than the ones the run before baked.
     await page2.evaluate(async () => {
-      for (const { store } of window.__scene.display.blobs.stores) {
-        for (const e of JSON.parse(await store.entriesJson())) await store.delete(e.name);
-      }
+      const store = window.__scene.display.blobs;
+      for (const e of JSON.parse(await store.entriesJson())) await store.delete(e.name);
     });
     // Back to the lobby and out again IS a race-scene rebuild, cars and all;
     // `setTrack` alone rebuilds the preview, which has none. DebugSolo defers the
@@ -164,18 +151,18 @@ async function main() {
     const warm = await settled(page2, 'warm re-export');
 
     console.log('==> comparing');
-    for (const [store, blobs] of Object.entries(cold)) {
-      for (const [name, sha] of Object.entries(blobs)) {
-        const got = warm[store]?.[name];
-        if (!got) fail(`${store}/${name} was not written back — the engine is not holding it`);
-        else if (got !== sha) {
-          fail(`${store}/${name} came back DIFFERENT after a round trip\n`
-            + `        stored   ${sha}\n        exported ${got}\n`
-            + '        an imported blob must be the bytes that were stored — see importBlob');
-        }
+    for (const [name, sha] of Object.entries(cold)) {
+      const got = warm[name];
+      if (!got) fail(`${name} was not written back — the engine is not holding it`);
+      else if (got !== sha) {
+        fail(`${name} came back DIFFERENT after a round trip\n`
+          + `        stored   ${sha}\n        exported ${got}\n`
+          + '        an imported blob must be the bytes that were stored — see importBlob');
       }
     }
-    if (!process.exitCode) console.log(`\n  OK  ${count(cold)} blob(s) survived a full round trip\n`);
+    if (!process.exitCode) {
+      console.log(`\n  OK  ${Object.keys(cold).length} blob(s) survived a full round trip\n`);
+    }
   } finally {
     await chrome.close();
     await server.close();

@@ -87,68 +87,33 @@ Three properties of that surface matter more than the list:
 
 Not owed. Skip it until you have measured that you need it, and **measure per
 platform** — the `ttp shadow bake` line the renderer already logs tells you which
-you are. The spread is wide enough that the same feature is obviously right on
-one box and obviously wrong on another:
+you are. The sun bake runs once per STATIC build (a join or a restart on the
+same track rebuilds only the field), so a store buys an app launch or a track change,
+never a field rebuild. Its share of a build is wide enough between devices that
+the same feature is obviously right on one box and obviously wrong on another:
+large on the Android reference box, small on the Apple TV. Quote a first build
+in a fresh process on your own device, never a number inherited from another
+box or backend.
 
-| | sun bake | of a build of |
-|---|---|---|
-| Android TV reference box (Google TV Streamer, Vulkan) | ~1250 ms | ~1870 ms |
-| Web (Chromium, desktop GPU) | 85–213 ms | 101–271 ms |
-| Apple TV 4K (A10X, Metal) | 64 ms | 199 ms |
-
-**All three shells hold the store**, and the web one is the reason the
-export is allowed to answer LATER: on GL a readback cannot complete inside the
-build that asks for it, so the first ask only issues the reads and the next
-build's `keep` finds them waiting. A store therefore lands on every other build
-there — a cache missing a beat, which is a cache. Nothing about the shell loop
-changes for it, which is the test that the walk is really store- and
+**All three shells hold the store**, and the web one is the reason its write
+half is a frame beat rather than the build's tail. Nothing about the
+shell loop changes per platform, which is the test that the walk is really
 platform-agnostic.
 
-(The Android figure is a first build in a fresh process, which is what a launch
-actually pays. An older 520 ms is quoted elsewhere in the tree from a different
-box and backend — measure yours rather than inheriting either number.)
-
-**tvOS refused this once, on those numbers.** 64 ms alone did not pay for a
-storage layer. A second blob kind (car silhouettes, ~330 ms on the Android
-box) changed the sum and tvOS took the store; that kind is gone and the store
-stays, being written, small and kind-agnostic. The lesson is about arithmetic
-rather than about tvOS: judge the shell half against every kind the engine
-lists, and re-judge when the list changes.
+**tvOS refused this once, on its own numbers.** Its bake alone did not pay for a
+storage layer. A second blob kind (car silhouettes, since removed) changed
+the sum and tvOS took the store; the store stays, being written and small. The
+lesson is about arithmetic rather than about tvOS: judge the shell half against
+everything the engine keeps, and re-judge when that changes.
 
 If your platform's number does justify it, **you write four primitives and no
 policy** — list names with last-used times, read by name, write by name, delete
 by name. All three are shipped and none is more than about 120 lines:
 `BlobStore.kt`, `BlobStore.swift`, `render/BlobStore.js`. Everything else is a
-WALK in `ttp_display.h` (`ttp_display_blob_stores` / `_plan` / `_offer` /
-`_ready` / `_keep` / `_export` / `_wrote`) that hands you names to act on:
-
-```
-for each store in ttp_display_blob_stores():        # after provisioning,
-    plan(store, trackId, generation, entries)       # before the build
-                       -> {"drop":[…], "read":[…]}
-    perform the drops; read each `read` name and offer(store, its bytes)
-ttp_display_build(...)
-
-# …and on EVERY FRAME, gated by one integer:
-if ttp_display_blob_ready():
-    for each store:
-        keep(store)    -> {"write":[…]}
-        for each name: export(store, name), write it, then wrote(store, name)
-```
-
-**The write half is a FRAME BEAT, not the build's tail, and that is not
-optional.** A readback does not complete inside the call that issues it on GL —
-the completion runs from `OpenGLDriver::tick()`, which `endFrame()` calls and
-`flushAndWait()` does not — so a build cannot finish its own blobs there. It
-STAGES them (metadata snapshotted, reads issued) and the frame loop lands them —
-on every backend, because staging deliberately does not pump the driver: the pump
-that would let Metal and Vulkan answer early is a synchronous GPU stall on the
-build's critical path. In practice the frame right after a build collects them. When the write half WAS
-the build's tail, the web could only ever store a blob whose track had been built
-twice in a row, and a Grand Prix's last three circuits were never cached at all.
-
-`read` and `write` are LISTS because a store may hold several things one build
-wants. The bake store answers zero or one.
+WALK that hands you names to act on (`ttp_display_blob_plan` / `_offer` /
+`_ready` / `_export` / `_wrote`); it and its rules are in `ttp_display.h`'s
+"derived bytes" section. The rule a shell is tempted to shortcut is that the
+write half is a FRAME BEAT, never the build's tail.
 
 **Do not re-derive any of the decisions behind those names.** Whether the engine
 already holds this bake, whether the build actually baked, whether the store

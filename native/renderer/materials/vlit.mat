@@ -1,24 +1,19 @@
-// The cheap matte family: Lambert, which is what the JS actually uses.
+// The live-lit matte family, for a mesh that MOVES after build: anything not
+// opted into Mesh::bakeLight and not a baked shadow receiver (vground.mat). A
+// static surface never comes here, because a mesh that moves would carry baked
+// light along with its transform. These receive no sun shadow for the same
+// reason: nothing here can be baked, and nothing samples the ESM in a frame
+// (ttp_shade.inc).
 //
-// This was Filament's full PBR `lit` model with roughness 1 / reflectance 0 —
-// correct-looking, and three times the per-pixel cost of the MeshLambertMaterial
-// it was standing in for. Every lit surface in the scene (road, hills,
-// structures, berms, scenery) runs through here, so that was most of the screen
-// paying for a specular lobe and an IBL reflection a matte toy world never
-// shows.
-//
+// Lambert. This was Filament's full PBR `lit` model with roughness 1 /
+// reflectance 0 — correct-looking, and three times the per-pixel cost of the
+// Lambert look it was standing in for.
 // So: unlit, with the diffuse terms written out by hand. They are Filament's
 // OWN expressions, not an approximation of them —
 //   ambient  = Irradiance_SphericalHarmonics(n) * iblLuminance   (light_indirect)
 //   sun      = lightColorIntensity.rgb * .w * NoL * Fd_Lambert() (shading_model_standard)
 // — read from the same frameUniforms the lit path reads, both already
-// pre-exposed. Nothing is recalibrated; the only thing dropped is the specular,
-// which moved the parity diff toward three rather than away from it.
-//
-// The sun's shadow comes from the map TtpRenderer bakes once per track (see
-// bakeShadowMap). Unlit materials get no shadowing from the engine, and we did
-// not want the engine's anyway: it re-renders the same static depth pass in
-// every split-screen cell, every frame, where the JS renders one and freezes it.
+// pre-exposed. The only thing dropped is the specular.
 material {
     name : TtpVlit,
     // The per-vertex fog factor (ttp_fog.inc); .yzw unused.
@@ -32,24 +27,11 @@ material {
     culling : none,
     doubleSided : true,
     parameters : [
-        // The frozen sun map and what puts a world position in its [0,1] space.
-        // shadowTexel is 0 when a track baked no map, which reads as "lit".
-        { type : sampler2d, name : shadowMap, precision : high },
-        { type : mat4, name : shadowFromWorld, precision : high },
-        { type : float, name : shadowTexel },
-        // ESM exponent (kShadowEsmK), matching what vesm.mat baked in.
-        { type : float, name : shadowK },
-        // 1 / ortho depth range: turns a world-unit bias into normalised depth.
-        { type : float, name : shadowDepthScale },
         { type : sampler2d, name : gradeLut }
     ]
 }
 
 fragment {
-    // The shading itself is shared with vroad.mat — see ttp_shade.inc. It was
-    // inline here until 2026-07-30; the road needed the identical maths plus a
-    // uv0 channel, and two copies of eighty lines of measured ESM read-out would
-    // have drifted on the first fix.
     #include "ttp_shade.inc"
     #include "ttp_grade.inc"
     #include "ttp_fog.inc"

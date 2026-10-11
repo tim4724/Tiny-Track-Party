@@ -219,7 +219,7 @@ TTP_ABI int ttp_display_asset(const char* name, const uint8_t* bytes, uint32_t l
  * which it then had to invalidate itself on the beat a destroyed surface took
  * that map away. The other two shells simply re-read, re-derived and re-copied
  * everything, every build. Both are the same bug in different directions, and it
- * is the one `ttp_net.h` and the blob walk above already argue about: a shell
+ * is the one `ttp_net.h` and the blob walk below already argue about: a shell
  * that has to re-derive an engine rule from prose is the defect.
  *
  * So the shell says what it WOULD hand over and the engine says what it still
@@ -367,9 +367,12 @@ TTP_ABI const char* ttp_display_kit_field_layout(void);
  *
  * Every race start comes through here, since a Grand Prix chains four tracks
  * and even a restart wants the skid ribbons, kicked cones and collected boxes
- * back at their opening state. Returns 1 on success, 0 on refusal (no
- * display, an unknown trackId, a failed scene build — ttp_last_error says
- * which). */
+ * back at their opening state. A build of the track whose STATIC scene is still
+ * resident (see ttp_display_release) rebuilds only the field — the cars and
+ * what is sized by them — and puts the static scene back at that opening
+ * state; the preview camera's orbit and the cosmetic clock run on. Any other
+ * track builds whole. Returns 1 on success, 0 on refusal (no display, an
+ * unknown trackId, a failed scene build — ttp_last_error says which). */
 TTP_ABI int ttp_display_build(const char* trackId, const char* rosterJson);
 
 /* Re-dress the BUILT scene's car slots in place: same rosterJson shape as
@@ -391,103 +394,75 @@ TTP_ABI int ttp_display_reroster(const char* rosterJson);
 
 /* ---- derived bytes, kept between RUNS ---------------------------------------
  *
- * What a build makes that is expensive to compute and small to store — the
- * only profile that earns a file — is the SUN BAKE (~1250 ms of GPU on the
- * Android reference box). It is already kept in memory across scenes; this is
- * the tier below, across runs. Keeping something between runs
- * means a FILE, and a file is the shell's job — ttp_abi.h puts transport on the
- * host side, and wasm has no filesystem at all.
+ * The SUN BAKE is what a build makes that is expensive to compute and small to
+ * store — the only profile that earns a file. It is already kept in memory
+ * across scenes; this is the tier below, across runs. Keeping something between
+ * runs means a FILE, and a file is the shell's job — ttp_abi.h puts transport on
+ * the host side, and wasm has no filesystem at all.
  *
- * A WALK, AND STORE-AGNOSTIC, which together are the point of this section. It
- * was three getters per blob kind once, and every shell hand-wrote the same
- * choreography: ask the key in the one window it is defined over, decide
- * whether the engine already holds that thing, read only if it does not, write
- * back only when the build actually made something the store lacks. None of
- * that is platform knowledge — it is knowledge about the ENGINE, held in the
- * engine — and a shell that mirrors it has to invalidate its mirror when a
- * destroyed surface takes the renderer away. That is `ttp_net.h`'s argument for
- * the choreography walks one layer down, where all six of the first TV shell's
- * launch bugs lived.
+ * A WALK, because everything but the file is engine knowledge: the name the
+ * next build's bake lives under, whether the engine already holds it, which
+ * files to evict (ttp/blobstore.h), and whether the build made something the
+ * store lacks. A shell that mirrors any of that has to invalidate its mirror
+ * when a destroyed surface takes the renderer away — `ttp_net.h`'s argument,
+ * one layer down. So a shell owns ONE store and four primitives (list names with
+ * last-used times, read, write and delete by name) and performs this:
  *
- * So a shell NAMES NO BLOB KIND. It asks which stores exist, and for each one
- * performs four primitives it cannot avoid owning — list names with last-used
- * times, read by name, write by name, delete by name:
- *
- *   BEFORE THE BUILD, once per store:
- *       plan(store, trackId, generation, entries)
- *                                -> {"drop":["…"], "read":["…"]}
- *       perform the drops; read each `read` name and offer(store, its bytes)
+ *   BEFORE THE BUILD, after provisioning (the key needs the biome latched):
+ *       plan(trackId, generation, entries) -> {"drop":["…"], "read":"…"}
+ *       perform the drops; if `read` is not "", read it and offer(its bytes)
  *   ttp_display_build(...)
  *
- *   ON EVERY FRAME, gated by one integer:
- *       if (ttp_display_blob_ready()) for each store:
- *           keep(store)          -> {"write":["…"]}
- *           for each name: export(store, name) and write those bytes under it,
- *                          then wrote(store, name)
+ *   ON EVERY FRAME:
+ *       name = ready()            -- NULL on almost every frame
+ *       if name: export(name), write those bytes under it, then wrote(name)
  *
- * A NAME LIST, NOT A NAME, so a store that holds several things one build
- * wants needs no new walk. The one store today, the bake's, answers zero or
- * one. Key such a store per THING, never per set of things: a set key stores
- * each thing once per subset it appears in and misses outright whenever a
- * build needs fewer than the blob that wrote it.
- *
- * A name is absent from `read` when the engine is already holding that thing,
- * which is the commonest build of all and costs no read at all. A blob the
- * engine does not fully trust is a cache MISS, not an error: it is dropped and
- * the scene makes the thing again.
- *
- * THE PLAN WINDOW IS AFTER PROVISIONING AND BEFORE THE BUILD: the bake's key
- * needs the biome latched.
+ * `read` is "" when the store has no file for this build or the engine already
+ * holds the bake — the commonest build, which then costs no read at all. It is
+ * never a JSON null, which Android's optString would hand back as the text
+ * "null". A blob the engine does not fully trust is a cache MISS, not an error:
+ * the scene makes the bake again.
  *
  * THE WRITE HALF IS A FRAME BEAT AND NOT THE BUILD'S TAIL, and that is the one
  * thing here a shell must not shortcut. A readback does not complete inside the
- * call that issues it on GL — the completion is executed from
- * OpenGLDriver::tick(), which endFrame() calls and flushAndWait() does not, and
- * in a browser a task cannot wait on the GPU at all. The build STAGES its blobs
- * (metadata snapshotted, reads issued) and the FRAME LOOP finishes them, on
- * every backend alike — staging deliberately does not pump the driver, because
- * the pump that would let Metal and Vulkan answer early is a synchronous GPU
- * stall on the build's critical path, and on Android a build IS the lobby's
- * latency. In practice the frame after a build collects them.
- * `ttp_display_blob_ready` is a bitmask over the store order, so the cost of
- * asking every frame is one integer, and it is 0 on any frame where nothing
- * landed — which is almost all of them.
- *
- * When this was the build's tail, the web could only ever write a blob whose
- * track had been built TWICE IN A ROW: a Grand Prix's second, third and fourth
- * circuits were never stored in any session, and nothing said so.
+ * call that issues it on GL — the completion runs from OpenGLDriver::tick(),
+ * which endFrame() calls and flushAndWait() does not — and in a browser a task
+ * cannot wait on the GPU at all. So the build only STAGES (metadata
+ * snapshotted, reads issued) and the frame loop finishes, on every backend
+ * alike: pumping the driver so Metal and Vulkan could answer early would be a
+ * synchronous GPU stall on the build, and on Android a build IS the lobby's
+ * latency. When this was the build's tail, the web only ever stored a track
+ * built TWICE IN A ROW, so a Grand Prix's later circuits were never cached.
  *
  * GENERATION IS THE INVALIDATION and it stays yours, because only a shell knows
  * what identifies its own binary — Android's install time, tvOS's bundle
- * version, the web's BUILD_STAMP hash. It is folded into the NAME, so a new
- * binary cannot name the old one's blob at all: a shader edit reproduces the
- * same key and would otherwise serve bytes baked by the old material,
- * invisibly and across restarts. (The BACKEND is in the key already — a blob's
- * byte orientation is the writer's, so a device flipping between Vulkan and GL
- * keeps a blob per backend.)
+ * version and executable mtime, the web's BUILD_STAMP hash. It is folded into
+ * the NAME, so a new binary cannot name the old one's blob at all: a shader edit
+ * reproduces the same key and would otherwise serve bytes baked by the old
+ * material, invisibly and across restarts. (The BACKEND is in the key already —
+ * a blob's byte orientation is the writer's.)
  *
  * `wrote` is what retires a name, and it is the shell's to say because only it
- * knows when the write is OVER — which on one shell is several awaits after the
- * export. Say it once the attempt has finished, succeeded or not: a store is a
- * cache and every road out of a failed write is "make it again", so a name that
- * is never retired would be re-exported on every frame for the rest of the run.
+ * knows when the write is OVER — on one shell several awaits after the export.
+ * Say it once the attempt has finished, succeeded or not: a store is a cache and
+ * every road out of a failed write is "make it again", while a name never
+ * retired is re-offered by `ready` on every frame for the rest of the run.
  *
- * Every JSON answer is scratch, per ttp_abi.h. export answers NULL for a name
- * that is not waiting. `offer` COPIES the bytes before it returns, like
- * ttp_display_asset: a shell may free its buffer the moment the call is over,
- * and one that hands every offer the same scratch buffer is fine. */
-TTP_ABI const char* ttp_display_blob_stores(void);
-TTP_ABI const char* ttp_display_blob_plan(const char* store, const char* trackId,
-                                          const char* generation, const char* entriesJson);
-TTP_ABI void ttp_display_blob_offer(const char* store, const uint8_t* bytes, uint32_t len);
-TTP_ABI int ttp_display_blob_ready(void);
-TTP_ABI const char* ttp_display_blob_keep(const char* store);
-TTP_ABI const uint8_t* ttp_display_blob_export(const char* store, const char* name,
-                                               uint32_t* outLen);
-TTP_ABI void ttp_display_blob_wrote(const char* store, const char* name);
+ * `plan` and `ready` answer scratch, per ttp_abi.h. export answers NULL for a
+ * name that is not waiting. `offer` COPIES the bytes before it returns, like
+ * ttp_display_asset: a shell may free its buffer the moment the call is over. */
+TTP_ABI const char* ttp_display_blob_plan(const char* trackId, const char* generation,
+                                          const char* entriesJson);
+TTP_ABI void ttp_display_blob_offer(const uint8_t* bytes, uint32_t len);
+TTP_ABI const char* ttp_display_blob_ready(void);
+TTP_ABI const uint8_t* ttp_display_blob_export(const char* name, uint32_t* outLen);
+TTP_ABI void ttp_display_blob_wrote(const char* name);
 
-/* Tear the scene down; the engine, views, materials and provided assets live
- * on, so the next ttp_display_build is cheap. */
+/* Tear the FIELD down and stop drawing. The static scene — track, dressing,
+ * sky, sun bake — stays resident, holding its GPU memory until a build of
+ * another track or ttp_display_destroy frees it, which is what makes the next
+ * build on the same track a field rebuild. The engine, views, materials and
+ * provided assets live on too. */
 TTP_ABI void ttp_display_release(void);
 
 /* ---- what to draw ------------------------------------------------------- */
@@ -760,7 +735,7 @@ TTP_ABI void ttp_display_antialias(int on);
  * WHY BOTH EXIST. Measured on the reference Android box at four players, the
  * copies are 40k vertices a frame and hold ~1.1 ms that no render scale can
  * reach; the sheets are 88k and hold none of it. The copies are the kit's LIT
- * models and the sheets carry no normals, which is the same split fillRoadLight
+ * models and the sheets carry no normals, which is the same split bakeVertexLight
  * already exploits on the deck -- so the frame's resolution-independent half is
  * per-vertex SHADING rather than vertex count, and an arm that cannot separate
  * lit geometry from unlit cannot show that. Both take the fragments with them,
@@ -848,7 +823,8 @@ TTP_ABI void ttp_display_debug_wipe_skids(void);
 #define TTP_FEAT_ROAD_PAINT  0x0400  /* the deck's own paint (repairs, boost pads) */
 #define TTP_FEAT_ROAD_SHADOW 0x0800  /* the baked sun-vis taps: the DECK's
                                         track-space one (vroadvis.mat) and the
-                                        GROUND's light-space one (vvis.mat) */
+                                        light-space ones (vvis.mat) of the
+                                        ground, the structures and the berms */
 /* SCENE-WIDE channels: the same picture with one per-fragment term skipped on
  * every surface. Filament's fog is composited INSIDE each surface shader, so it
  * cannot be ablated by hiding a group — it needs a bit of its own. */

@@ -721,7 +721,7 @@ void TtpRenderer::renderCars(const TtpFrameInput& input, const TtpCarInput* cars
         // keeps the contract pose untouched rather than falling back to a
         // cruder conform — and it would already be missing its wheel animation
         // entirely, which is the louder symptom.
-        if (mHasTrack && mTrack && i < mCarWheels.size() && mCarWheels[i].hasWheelOff) {
+        if (mTrack && i < mCarWheels.size() && mCarWheels[i].hasWheelOff) {
             constexpr float RIDE_HEIGHT = -0.004f;
             CarWheels& rw = mCarWheels[i];
             float3 deck[4];
@@ -2544,7 +2544,7 @@ bool TtpRenderer::cullAmbientCells(const TtpFrameInput& input, uint32_t slot) {
     for (uint32_t i = 0; i < vc; i++) {
         mat4f wf;
         std::memcpy(&wf, views[i].world, sizeof(wf));
-        // The uniforms exactly as renderAmbient and buildTrackScene set them.
+        // The uniforms exactly as renderAmbient and buildStatic set them.
         AmbCullCell c;
         ambCullCell(c, mAmbTime, mAmbFall, mAmbWind, mTrack->ambBob, mAmbHalfSize,
                 mAmbBandH, bx, kAmbBox, per, wf, views[i].fov, views[i].aspect, views[i].nearZ);

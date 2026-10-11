@@ -584,12 +584,22 @@ void TtpRenderer::setModelVariant(const char* model, int variant) {
     const int id = modelIdByName(model);
     if (id < 0) return;
     const int n = modelVariantCount(id);
-    mModelVariant[id] = variant < 0 ? 0 : (variant >= n ? n - 1 : variant);
+    const int v = variant < 0 ? 0 : (variant >= n ? n - 1 : variant);
+    if (v != mModelVariant[id]) { mModelVariant[id] = v; dropStaticKey(); }
 }
 
-void TtpRenderer::setModelBench(const char* model) { mBenchModel = modelIdByName(model); }
+void TtpRenderer::setModelBench(const char* model) {
+    const int id = modelIdByName(model);
+    if (id != mBenchModel) { mBenchModel = id; dropStaticKey(); }
+}
 
-void TtpRenderer::setKitField(int count) { mKitFieldCount = count > 0 ? count : 0; }
+// The field's MODELS are kit<i>.glb, which the count does not name, so any
+// build that stands one is a full build.
+void TtpRenderer::setKitField(int count) {
+    const int n = count > 0 ? count : 0;
+    if (n || n != mKitFieldCount) dropStaticKey();
+    mKitFieldCount = n;
+}
 
 // The kit field's own ground, appended to the ground sheet so it costs no
 // material and no draw call of its own — the same tiling surface, a hair higher.
@@ -1556,13 +1566,12 @@ gltfio::FilamentAsset* TtpRenderer::loadInstancedProp(const char* assetName,
         setShadows(inst->getEntities(), inst->getEntityCount(), false, false);
     }
     // The merged draw groups: decode this model's meshes once (keyed by its
-    // bytes) and let the next frame regroup the dressing. Pools this covers
-    // that buildDressingMerge does NOT merge (the item boxes and their fade
-    // twins) just carry an unused cache entry.
+    // bytes); buildStatic marks the dressing for regrouping once at its end.
+    // Pools this covers that buildDressingMerge does NOT merge (the item boxes
+    // and their fade twins, the monster pools) just carry an unused cache entry.
     const uint64_t meshKey = glbBytesKey(it->second);
     mAssetMeshKey[asset] = meshKey;
     glbMeshes(meshKey, it->second);
-    mDressMergeDirty = true;
     // Point every instance at instance 0's materials. gltfio hands each
     // FilamentInstance its own MaterialInstance so they can be tinted apart —
     // we tint per MODEL, not per instance (the box fade pool is the one
@@ -1907,11 +1916,14 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
             const uint32_t a0 = base + (uint32_t) j * 2, b0 = a0 + 1, a1 = a0 + 2, b1 = a0 + 3;
             mStructures.idx.insert(mStructures.idx.end(), { a0, b0, a1, b0, b1, a1 });
         }
+        // Wound to face UP. A baked vertex light has no back-face flip to hide
+        // a cap whose normal points into the ground, the way vlit's per-pixel
+        // doubleSided normal used to.
         const uint32_t cap = (uint32_t) mStructures.verts.size();
         mStructures.verts.push_back({ x, topAt(x, z), z, sc });
         for (int j = 0; j < SEG; j++) {
             mStructures.idx.insert(mStructures.idx.end(),
-                    { cap, base + (uint32_t) j * 2 + 1, base + ((uint32_t) j + 1) * 2 + 1 });
+                    { cap, base + ((uint32_t) j + 1) * 2 + 1, base + (uint32_t) j * 2 + 1 });
         }
     };
 
@@ -1940,11 +1952,17 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
         const float3 planeP = p.cPos - n * 0.34f; // deck thickness
         column(p.x, p.z, p.radius, tb.groundY - 0.1f, p.cPos.y + 1.0f, &planeP, &n);
     }
-    if (!mStructures.verts.empty()) {
-        accumulateNormals(mStructures);
-        tileMajor(mStructures, kSheetTile, kSheetMinTris);
-        if (!buildMesh(mStructures, true, litShadowInstance())) return;
-    }
+    // STATIC SHADOW RECEIVERS, both: baked vertex light, one tap of their own
+    // visibility map (vground.mat, through staticInstance). The zero uvs only
+    // feed the material's albedo, which for them is white.
+    const auto buildReceiver = [&](Mesh& m) {
+        accumulateNormals(m);
+        bakeVertexLight(m);
+        m.uvs.assign(m.verts.size(), float2{ 0, 0 });
+        tileMajor(m, kSheetTile, kSheetMinTris);
+        return buildMesh(m, true, staticInstance());
+    };
+    if (!mStructures.verts.empty() && !buildReceiver(mStructures)) return;
 
     // Berms: consecutive cross-section rings stitched into a grass surface that
     // meets the road underside and flares down to the lawn (buildHills verbatim
@@ -1983,11 +2001,7 @@ void TtpRenderer::buildStructures(const TrackBin& tb) {
             for (int k = 0; k < 4; k++) A[k] = B[k];
         }
     }
-    if (!mBerms.verts.empty()) {
-        accumulateNormals(mBerms);
-        tileMajor(mBerms, kSheetTile, kSheetMinTris);
-        buildMesh(mBerms, true, litShadowInstance());
-    }
+    if (!mBerms.verts.empty()) buildReceiver(mBerms);
 }
 
 // One instanced-asset family (a scenery model, a prop model, the cone pool)

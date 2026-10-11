@@ -46,12 +46,12 @@ struct DisplayCore : DisplayState {
     // resets it, so a shell that skips a step gets a walk that declines rather
     // than one that writes the wrong blob.
     //
-    // OUTBOUND OUTLIVES ITS BUILD, and it has to. On GL a build cannot finish
-    // its own readbacks, so the bytes land a frame or more later — after the
-    // next `plan` may already have run. When the two were one, the only blob the
-    // web ever managed to write was one whose track had been built twice in a
-    // row; a Grand Prix's second, third and fourth circuits were never stored at
-    // all, in any session.
+    // OUTBOUND OUTLIVES ITS BUILD, and it has to. A build never finishes its
+    // own readbacks (ttp_display.h), so the bytes land a frame or more later —
+    // after the next `plan` may already have run. When the two were one, the
+    // only blob the web ever managed to write was one whose track had been built
+    // twice in a row; a Grand Prix's second, third and fourth circuits were
+    // never stored at all, in any session.
     struct BlobPlanned {
         std::string key;    // the renderer's own name for the thing
         std::string name;   // …and the file it reads and writes under
@@ -67,16 +67,12 @@ struct DisplayCore : DisplayState {
         std::string name;
         std::vector<uint8_t> bytes;   // empty until the reads land
     };
-    struct BlobWalk {
-        std::vector<BlobPlanned> planned;
-        // `keep` names the ones that have bytes, `export` hands the same buffer
-        // straight back, and `wrote` drops the entry.
-        std::vector<BlobOutbound> outbound;
-    };
-    // One per store, indexed as ttp_display_blob_stores lists them; the
-    // static_assert beside kBlobStores pins the count to that list.
-    static constexpr int kBlobStoreCount = 1;
-    BlobWalk blobWalk[kBlobStoreCount];
+    // `name` empty is a walk with nothing planned.
+    BlobPlanned blobPlanned;
+    // `ready` names the first that has bytes, `export` hands the same buffer
+    // straight back, and `wrote` drops the entry. A LIST although there is one
+    // plan: a build's bytes can still be in flight when the next one stages.
+    std::vector<BlobOutbound> blobOutbound;
 };
 
 // The process-wide display slot — the ABI is a deliberate singleton (see

@@ -42,7 +42,7 @@ final class DisplayHost {
     /// Where derived bytes kept between runs live. Held here, and not only by
     /// the coordinator, because the WRITE half of the blob walk is a frame beat
     /// rather than a build's tail — see `writeReadyBlobs`.
-    var blobs: BlobStores?
+    var blobs: BlobStore?
 
     // MARK: - State the ABI cannot be asked for
 
@@ -716,24 +716,19 @@ final class DisplayHost {
     /// because one walk performed three ways is three chances to perform it
     /// differently.
     ///
-    /// Gated on one integer, so an idle frame costs a single call and nothing
-    /// else. `wrote` retires a name and runs whether the write landed or not: a
-    /// name that is never retired is re-exported on every frame for the rest of
-    /// the run, and a store is a cache — the road out of a failed write is to
-    /// make the thing again.
+    /// An idle frame costs the single call that answers no name. `wrote`
+    /// retires the name and runs whether the write landed or not: a name that
+    /// is never retired is offered again on every frame for the rest of the run,
+    /// and a store is a cache — the road out of a failed write is to make the
+    /// thing again.
     private func writeReadyBlobs() {
-        guard let blobs, ttp_display_blob_ready() != 0 else { return }
-        blobs.forEach { blobStore, name in
-            for case let blobName as String
-                in (TTP.obj(ttp_display_blob_keep(name))["write"] as? [Any]) ?? [] {
-                var outLen: UInt32 = 0
-                if let p = ttp_display_blob_export(name, blobName, &outLen), outLen > 0 {
-                    blobStore.write(blobName, Data(bytes: p, count: Int(outLen)))
-                    print("[ttp] \(name) stored as \(blobName) (\(outLen / 1024) KiB)")
-                }
-                ttp_display_blob_wrote(name, blobName)
-            }
+        guard let blobs, let name = TTP.str(ttp_display_blob_ready()) else { return }
+        var outLen: UInt32 = 0
+        if let p = ttp_display_blob_export(name, &outLen), outLen > 0 {
+            blobs.write(name, Data(bytes: p, count: Int(outLen)))
+            print("[ttp] stored \(name) (\(outLen / 1024) KiB)")
         }
+        ttp_display_blob_wrote(name)
     }
 
     /// Told by the staging sequence once `ttp_display_build` has accepted.
@@ -782,8 +777,8 @@ final class DisplayHost {
 
     // MARK: - The scene
 
-    /// Tear the scene down; the engine, views, materials and provided assets
-    /// live on, so the next build is cheap.
+    /// Tear the field down and stop drawing; the static scene stays resident
+    /// (see ttp_display_release), so the next build of this track is cheap.
     func release() {
         ttp_display_release()
         hasScene = false

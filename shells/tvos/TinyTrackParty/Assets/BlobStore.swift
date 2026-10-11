@@ -12,8 +12,7 @@ import Foundation
 /// so.
 ///
 /// It knows nothing about what it is storing either. `ttp_display.h`'s walk
-/// decides what to read, what to keep and what to drop, and hands over a name;
-/// `ttp_display_blob_stores` says which kinds exist. A third kind needs no Swift.
+/// decides what to read, write and drop, and hands over a name.
 ///
 /// **`generation` is this shell's one real contribution.** The engine folds it
 /// into the NAME, so a new binary cannot name the old one's file at all — which
@@ -30,14 +29,22 @@ final class BlobStore {
     private let dir: URL?
     let generation: String
 
-    init(store: String, generation: String) {
-        self.generation = generation
+    init() {
+        // What identifies this binary.
+        let info = Bundle.main.infoDictionary
+        let version = (info?["CFBundleVersion"] as? String) ?? "0"
+        let exe = Bundle.main.executableURL
+        let mtime = (try? exe?.resourceValues(forKeys: [.contentModificationDateKey]))?
+            .contentModificationDate?.timeIntervalSince1970 ?? 0
+        generation = "\(version)-\(Int(mtime))"
         // CACHES, not Application Support: this is derived data the app can
         // rebuild at any time, and the system is entitled to reclaim it under
         // pressure — which is exactly the contract a cache wants. On tvOS that
         // matters more than on a phone, where storage is scarce by design.
+        // `bake` is the directory the one store has always had, so the caches
+        // already on boxes stay reachable rather than orphaned.
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
-        guard let base = caches?.appendingPathComponent("ttp-blobs/\(store)", isDirectory: true) else {
+        guard let base = caches?.appendingPathComponent("ttp-blobs/bake", isDirectory: true) else {
             dir = nil
             return
         }
@@ -45,7 +52,7 @@ final class BlobStore {
             try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
             dir = base
         } catch {
-            print("[ttp] no \(store) blob directory; nothing will be cached: \(error)")
+            print("[ttp] no blob directory; nothing will be cached: \(error)")
             dir = nil
         }
     }
@@ -106,33 +113,5 @@ final class BlobStore {
     func delete(_ name: String) {
         guard let dir else { return }
         try? FileManager.default.removeItem(at: dir.appendingPathComponent(name))
-    }
-}
-
-/// One `BlobStore` per store the ENGINE says it has.
-///
-/// The names are asked for rather than typed, which is the point: this shell
-/// does not know that a bake exists, only that the engine keeps some kinds of
-/// derived bytes and that each kind wants its own directory.
-final class BlobStores {
-
-    private let stores: [(name: String, store: BlobStore)]
-
-    init() {
-        // What identifies this binary. Shared by every store, because it
-        // describes the builder rather than the built.
-        let info = Bundle.main.infoDictionary
-        let version = (info?["CFBundleVersion"] as? String) ?? "0"
-        let exe = Bundle.main.executableURL
-        let mtime = (try? exe?.resourceValues(forKeys: [.contentModificationDateKey]))?
-            .contentModificationDate?.timeIntervalSince1970 ?? 0
-        let generation = "\(version)-\(Int(mtime))"
-        stores = TTP.arr(ttp_display_blob_stores()).compactMap { $0 as? String }
-            .map { ($0, BlobStore(store: $0, generation: generation)) }
-    }
-
-    /// Perform something for each store, with the name the engine calls it.
-    func forEach(_ action: (BlobStore, String) -> Void) {
-        for entry in stores { action(entry.store, entry.name) }
     }
 }

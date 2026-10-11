@@ -39,6 +39,7 @@
 #include <gltfio/materials/uberarchive.h>
 
 #include <utils/EntityManager.h>
+#include <utils/Log.h>
 #include <utils/NameComponentManager.h>
 
 #include <algorithm>
@@ -77,8 +78,8 @@ namespace {
 // edge lines stop clear of the chevrons rather than grazing them.
 constexpr float kStripMargin = 0.12f;
 // The key light's axis — theme.key sits at (2, 12, 1.5), as the JS placed it.
-// ONE spelling for the sun entity (buildTrackScene), the shadow camera
-// (bakeShadowMap) and the road's baked vertex light (fillRoadLight).
+// ONE spelling for the sun entity (buildStatic), the shadow camera
+// (bakeShadowMap) and the receivers' baked vertex light (bakeVertexLight).
 const float3 kToSun = normalize(float3{ 2.0f, 12.0f, 1.5f });
 // Cones per oil slick. Fixed: no shipped track authors a coned oil, and the
 // codegen refuses one rather than dropping the field silently.
@@ -184,6 +185,30 @@ inline uint32_t packLinear(const float3& lin, float ao, float alpha = 1.0f) {
     };
     return (b(alpha) << 24) | (b(lin.z * ao) << 16) | (b(lin.y * ao) << 8) | b(lin.x * ao);
 }
+
+// WHERE A BUILD'S TIME GOES, as one log line of named phases. A scene build
+// blocks the Android shell's main thread, and that shell's own step timing
+// proved nearly all of it is inside the renderer — so the phases have to be
+// nameable from in here or not at all. Diagnostic only: a clock read per phase
+// on a path that runs once per scene.
+struct PhaseLog {
+    std::vector<std::pair<const char*, double>> phases;
+    std::chrono::steady_clock::time_point at = std::chrono::steady_clock::now();
+    void mark(const char* name) {
+        const auto now = std::chrono::steady_clock::now();
+        phases.emplace_back(name, std::chrono::duration<double, std::milli>(now - at).count());
+        at = now;
+    }
+    void print(const char* head) const {
+        double total = 0;
+        auto& line = utils::slog.i << head;
+        for (const auto& p : phases) {
+            line << " " << p.first << " " << (int) (p.second + 0.5);
+            total += p.second;
+        }
+        line << " | total " << (int) (total + 0.5) << " ms" << utils::io::endl;
+    }
+};
 
 } // namespace
 

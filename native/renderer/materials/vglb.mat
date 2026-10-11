@@ -30,7 +30,7 @@
 // is the same answer this renderer keeps giving and it is worth not
 // re-discovering: the frame is SUBMISSION-bound. What a sampler costs here is
 // Filament's per-draw descriptor work on the CPU, not bandwidth on the GPU —
-// which is why dropping the sun-map sampler (see TTP_NO_SUN_SHADOW) was worth
+// which is why dropping the sun-map sampler was worth
 // more than the whole PBR-to-Lambert switch, and why the win is bigger on a
 // weak-CPU TV box than these numbers suggest.
 //
@@ -88,8 +88,8 @@ material {
     // an atlas is not a flip but a WRONG TILE: the cars come out wearing another
     // car's paint band.
     flipUV : false,
-    // NO SHADOW PARAMETERS, and none of ttp_shade.inc's sun lookup either — see
-    // TTP_NO_SUN_SHADOW there for why a kit GLB is not a shadow receiver.
+    // NO SHADOW PARAMETERS: a kit GLB carries its own baked contact blob and
+    // has never been in the sun map's RECEIVER set.
     parameters : [
         // — what gltfio fills by name (see the header) —
         { type : sampler2d, name : baseColorMap },
@@ -105,7 +105,6 @@ material {
 }
 
 fragment {
-    #define TTP_NO_SUN_SHADOW
     #include "ttp_shade.inc"
     #include "ttp_grade.inc"
     #include "ttp_fog.inc"

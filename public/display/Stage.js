@@ -607,8 +607,8 @@ export class Stage {
 
   // Mesh a track AHEAD of the race that will run on it, and promise the next
   // rebuild() that what comes out is already at its opening state — so the
-  // launch does not immediately mesh it a second time. See prepareNextTrack()
-  // in main.js for why a cup's chained start wants that.
+  // launch does not rebuild its field a second time under the countdown. See
+  // prepareNextTrack() in main.js for why a cup's chained start wants that.
   //
   // A ONE-SHOT TOKEN, not a "is the scene clean" flag, because that question
   // cannot be answered from this class: the finished race's session is still
@@ -622,11 +622,12 @@ export class Stage {
     return this.setTrack(track);
   }
 
-  // Force a FULL rebuild even when the roster comes out identical — a new race
-  // on the same track with the same field still wants the scene back at its
+  // Force a rebuild even when the roster comes out identical — a new race on
+  // the same track with the same field still wants the scene back at its
   // opening state (cones upright, boxes uncollected, no skid patina). Nulling
   // the SCENE signature is what routes around the re-dress path: reroster
-  // would happily say "nothing changed" and keep the raced-on scene.
+  // would happily say "nothing changed" and keep the raced-on scene. On the
+  // same track the engine keeps the static scene and rebuilds only the field.
   rebuild() {
     const prepared = this._prepared;
     this._prepared = false;
@@ -724,7 +725,7 @@ export class Stage {
     // The renderer bakes a car's model and livery into its slot, so any change
     // to the field goes through _rebuild — which routes it to an in-place
     // re-dress when only the dressing changed (a car pick on the same seats)
-    // and to a full scene build when the field changed shape (the lobby's
+    // and to a field rebuild when the field changed shape (the lobby's
     // attract race starting a tick after the track lands, phones joining and
     // leaving mid-lobby, the race grid replacing the whole demo field).
     this._rebuild();
@@ -763,8 +764,8 @@ export class Stage {
   // Change a registered car's model/livery/name IN PLACE — same slot, same
   // insertion order. The order is the point: removing and re-adding the car
   // would push its slot to the end of the roster, and a REORDERED roster is a
-  // full scene build by design (planReroster refuses it), where this lands as
-  // a re-dress that leaves the scene and the preview camera alone.
+  // field rebuild by design (planReroster refuses it), where this lands as
+  // a re-dress that leaves every car and its camera rig alone.
   updateCar(id, { colorIndex, carIndex, name } = {}) {
     const c = this.cars.get(id);
     if (!c) return false;

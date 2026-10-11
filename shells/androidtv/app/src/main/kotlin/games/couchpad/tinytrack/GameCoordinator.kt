@@ -163,12 +163,11 @@ class GameCoordinator(
         assets = AssetStore(context.assets)
         proto = GameProtocol.load(baseUrl)
         display = DisplayHost(surfaceView, proto.maxPlayers)
-        // Where blobs kept between runs live — one directory per store the
-        // engine lists. Constructed here because it needs a Context and the
-        // display does not have one. Scenarios get none: a screenshot harness
-        // must photograph what a build produces, not what a previous run left
-        // on disk.
-        if (!Scenarios.active) display.blobs = BlobStores(context)
+        // Where blobs kept between runs live. Constructed here because it needs
+        // a Context and the display does not have one. Scenarios get none: a
+        // screenshot harness must photograph what a build produces, not what a
+        // previous run left on disk.
+        if (!Scenarios.active) display.blobs = BlobStore(context)
         net = PartyNet(proto, RelaySocket(), context)
         advertiser = RoomAdvertiser(context)
         audio = AudioDevice(context.assets, baseUrl)
@@ -368,8 +367,8 @@ class GameCoordinator(
      *
      * The boot state before [previewLastCircuit] runs, which no other road returns
      * to — and it is the only condition under which `PaperStage` is visible, so it is
-     * the only way to photograph it. `release()` drops the scene a previous boot left
-     * in the renderer, so the backdrop is what decides that picture rather than an
+     * the only way to photograph it. `release()` stops the renderer drawing the scene a
+     * previous boot left, so the backdrop is what decides that picture rather than an
      * empty 3D view happening to be the same colour.
      */
     fun releaseScene() {
@@ -1600,14 +1599,14 @@ class GameCoordinator(
     /**
      * Swap the circuit the lobby previews and the next race builds.
      *
-     * **A NO-OP WHEN THE TRACK DID NOT MOVE**, which is not an optimisation: a
-     * rebuild is a track mesh plus a 2048x2048 shadow bake, run on the main thread,
-     * and the whole UI is frozen for it.
+     * **A NO-OP WHEN THE TRACK DID NOT MOVE**, which is not an optimisation: even
+     * on the standing track a rebuild is a staging pass plus the whole field, run
+     * on the main thread with the UI frozen for it, and it shows nothing new.
      *
      * AND IT DOES NOT BUILD IN THE LOBBY, because the attract demo is about to.
-     * Building here first meant every pick paid for TWO full scene builds back to
+     * Building here first meant every pick paid for TWO scene builds back to
      * back, the first of them for an empty roster — which is what "switching cups
-     * hangs the lobby" was.
+     * hangs the lobby" was while each was a full track mesh and shadow bake.
      */
     fun setTrack(id: String) {
         if (id == trackId) return

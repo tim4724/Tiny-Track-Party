@@ -70,8 +70,7 @@ const float TTP_GRADE_EXPOSURE = 1.1;
 vec3 ttpGrade(vec3 linear) {
     vec3 c = clamp(linear * TTP_GRADE_EXPOSURE, 0.0, 1.0);
     // A UNIFORM branch: one scalar compare, coherent across the whole draw,
-    // gating three DEPENDENT texture taps. Same shape as sunVisibility's
-    // `shadowTexel <= 0.0` early-out in ttp_shade.inc.
+    // gating three DEPENDENT texture taps.
     if (getMaterialGlobal0().x > 0.0) return c;
     return vec3(textureLod(materialParams_gradeLut, vec2(c.r, 0.5), 0.0).r,
                 textureLod(materialParams_gradeLut, vec2(c.g, 0.5), 0.0).r,

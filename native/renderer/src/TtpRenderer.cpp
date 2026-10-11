@@ -317,10 +317,10 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
         MaterialInstance* materialInstance, uint8_t priority, uint32_t chunkTris) {
     if (m.verts.empty() || m.idx.empty() || m.idx.size() % 3) return false;
     static_assert(sizeof(Vertex) == 16, "unexpected vertex layout");
-    // BAKED per-vertex light (the road under the baked-light vroad): CUSTOM0
-    // replaces TANGENTS — the material reads no normal at draw time, and the
-    // qtangent was a 16-byte fetch per vertex on the scene's biggest mesh.
-    // m.normals stays populated; fillRoadLight reads it on the CPU instead.
+    // BAKED per-vertex light (every static shadow receiver, bakeVertexLight):
+    // CUSTOM0 replaces TANGENTS — the material reads no normal at draw time,
+    // and the qtangent was a 16-byte fetch per vertex on the scene's biggest
+    // mesh.
     const bool baked = !m.custom0.empty();
     // A static sheet folds its light into its colours and draws unlit (see
     // Mesh::bakeLight). Measured on the Android box the lit vertex was the
@@ -410,8 +410,7 @@ bool TtpRenderer::buildMesh(Mesh& m, bool addToScene,
         }
     }
     MaterialInstance* const mi = materialInstance ? materialInstance
-            : lit ? (mLitPlainMaterial ? mLitPlainMaterial : mLitMaterial)
-                            ->getDefaultInstance()
+            : lit ? mLitMaterial->getDefaultInstance()
                   : mMaterial->getDefaultInstance();
     // Within each range only, so every renderable keeps its own triangles, its
     // box and its far form. What it bought on the Android box is in
@@ -1001,14 +1000,36 @@ void TtpRenderer::appendSphere(Mesh& mesh, int wseg, int hseg,
     }
 }
 
-// Area-weighted per-vertex normal accumulation: soup faces come out flat,
-// shared-ring surfaces smooth — the toy read either way.
-float3 TtpRenderer::bakedMatteLight(const float3& n) const {
+// ttp_shade.inc's two SMOOTH terms on the CPU, the one spelling both bakes
+// below fold: (ambient.rgb, NoL). The ambient is ttpMatteAmbient (sh2/sh3 are
+// zero — the hemisphere has no horizontal band), pre-exposed exactly as the
+// shader's iblLuminance is.
+float4 TtpRenderer::matteTerms(const float3& n) const {
     const float NoL = std::min(1.0f, std::max(0.0f, dot(n, kToSun)));
-    return max(mBakeRig.sh0 + mBakeRig.sh1 * n.y, float3{ 0.0f }) * mBakeRig.hemiPre
-            + mBakeRig.sunPre * NoL;
+    return float4{ max(mBakeRig.sh0 + mBakeRig.sh1 * n.y, float3{ 0.0f }) * mBakeRig.hemiPre,
+                   NoL };
 }
 
+float3 TtpRenderer::bakedMatteLight(const float3& n) const {
+    const float4 t = matteTerms(n);
+    return t.xyz + mBakeRig.sunPre * t.w;
+}
+
+// The SMOOTH halves only. The sun's COLOUR is a frame uniform, so the receiver's
+// vertex stage rebuilds the sun term from this NoL through ttpMatteSunTerm and
+// there is still one spelling of the constant; VISIBILITY is the one term that
+// is not smooth, so it comes from a baked map's tap. Arithmetic over the mesh's
+// own normals: it reads no map and completes inside the build on every backend.
+void TtpRenderer::bakeVertexLight(Mesh& m) const {
+    m.custom0.resize(m.verts.size(), math::half4{ 0.0f });
+    for (size_t i = 0; i < m.verts.size(); i++) {
+        m.custom0[i] = math::half4{
+                matteTerms(i < m.normals.size() ? m.normals[i] : float3{ 0, 1, 0 }) };
+    }
+}
+
+// Area-weighted per-vertex normal accumulation: soup faces come out flat,
+// shared-ring surfaces smooth — the toy read either way.
 void TtpRenderer::accumulateNormals(Mesh& m) {
     m.normals.assign(m.verts.size(), float3{ 0, 0, 0 });
     for (size_t i = 0; i + 2 < m.idx.size(); i += 3) {
@@ -1045,7 +1066,7 @@ Texture* TtpRenderer::whiteTexture() {
 
 // Shadow opt-in. buildMesh and gltfio disagree on the default (mesh: neither,
 // glTF: both), so every renderable that matters says so explicitly — see the
-// caster/receiver note in buildTrackScene for who is in which set.
+// caster/receiver note in buildStatic for who is in which set.
 void TtpRenderer::setMeshShadows(Mesh& m, bool cast, bool receive) {
     if (m.entity.isNull()) return;
     setShadows(&m.entity, 1, cast, receive);
@@ -1632,7 +1653,6 @@ void TtpRenderer::tagFeatures() {
 // just wrote is the one being overridden.
 void TtpRenderer::applyRoadDebug() {
     if (mRoadMask == kFeatRoadAll && mDecalDebug == 0) return;
-    const float texel = mShadowMap ? mShadowTexel : 0.0f;
     const auto set = [&](MaterialInstance* mi) {
         if (!mi) return;
         if (!(mRoadMask & kFeatRoadDecals)) {
@@ -1656,28 +1676,16 @@ void TtpRenderer::applyRoadDebug() {
         // by the instrument that already exists. A 0 lat span is the shader's
         // own "no map" path, so the ablated arm takes no tap at all rather
         // than one against a white texture.
-        if (mi->getMaterial()->hasParameter("invSunVisLatSpan")) {
-            mi->setParameter("invSunVisLatSpan",
-                    (mRoadMask & kFeatRoadShadow) ? roadVisLatSpan() : 0.0f);
-        }
-        // An OLD vroad blob (live ESM decode per fragment) keeps the knob.
-        if (mi->getMaterial()->hasParameter("shadowTexel")) {
-            mi->setParameter("shadowTexel",
-                    (mRoadMask & kFeatRoadShadow) ? texel : 0.0f);
-        }
+        mi->setParameter("invSunVisLatSpan",
+                (mRoadMask & kFeatRoadShadow) ? roadVisLatSpan() : 0.0f);
     };
     for (RoadChunk& ch : mRoadChunks) set(ch.mi);
     set(mRoadInst);
-    // The GROUND's tap rides the same arm. Its only knob IS the texture —
-    // white reads as fully lit.
-    if (mGroundInst && mGroundMaterial && mGroundMaterial->hasParameter("visMap")
-            && !(mRoadMask & kFeatRoadShadow)) {
-        Texture* w = whiteTexture();
-        if (w) {
-            TextureSampler smp(TextureSampler::MinFilter::LINEAR,
-                    TextureSampler::MagFilter::LINEAR);
-            mGroundInst->setParameter("visMap", w, smp);
-        }
+    // The other static receivers' taps ride the same arm. Their only knob IS
+    // the texture — white reads as fully lit.
+    if (!(mRoadMask & kFeatRoadShadow)) {
+        bindVisMap(mGroundInst, nullptr);
+        bindVisMap(mStaticInst, nullptr);
     }
 }
 
@@ -1732,15 +1740,10 @@ void TtpRenderer::debugFeatureMask(uint32_t mask) {
         mi->setParameter("skidLatHalf", mSkidTex ? mSkidLatHalf : 0.0f);
         mi->setParameter("invSkidLatSpan",
                 (mSkidTex && mSkidLatHalf > 0.0f) ? 0.5f / mSkidLatHalf : 0.0f);
-        if (mi->getMaterial()->hasParameter("shadowTexel")) {
-            mi->setParameter("shadowTexel", mShadowMap ? mShadowTexel : 0.0f);
-        }
         // The deck's sun-visibility tap likewise: applyRoadDebug forces its lat
         // span to 0, and it has no per-frame writer, so nothing else would ever
         // put it back — and applyRoadDebug returns early once the mask is whole.
-        if (mi->getMaterial()->hasParameter("invSunVisLatSpan")) {
-            mi->setParameter("invSunVisLatSpan", roadVisLatSpan());
-        }
+        mi->setParameter("invSunVisLatSpan", roadVisLatSpan());
         // The carShadow tap back on (the profile list restores itself through
         // the cleared lastProf on the next uploadDeckDecals; the tap has no
         // per-frame writer, so its restore is here).
@@ -1751,9 +1754,10 @@ void TtpRenderer::debugFeatureMask(uint32_t mask) {
     };
     for (RoadChunk& ch : mRoadChunks) restore(ch.mi, ch.paintN, ch.lastProf);
     restore(mRoadInst, mRoadInstPaintN, mRoadInstLastProf);
-    // The ground's map is overridden by the same arm (applyRoadDebug), so a
-    // mask switched back on has to restore it here too or it stays lit.
-    if (mGroundInst) bindVisMap(mGroundInst);
+    // The other receivers' maps are overridden by the same arm (applyRoadDebug),
+    // so a mask switched back on has to restore them here too or they stay lit.
+    bindVisMap(mGroundInst, mVisMap);
+    bindVisMap(mStaticInst, mStructVisMap);
 }
 
 // A MaterialInstance owned by the scene: recorded for releaseScene().
@@ -1767,51 +1771,21 @@ int TtpRenderer::backendId() const {
     return mEngine ? (int) mEngine->getBackend() : 0;
 }
 
-// Tear the scene down to bare engine + materials + provided bytes. The game
-// rebuilds through here on every race: a Grand Prix chains four tracks, and
-// even a restart on the SAME track wants the skid ribbons, kicked cones and
-// collected boxes back at their starting state. Everything below is scene
-// scope; the engine, swap chain, views, cameras, the three materials, the
-// glTF loaders and mAssets all survive.
-void TtpRenderer::releaseScene() {
+// The field's teardown: every car slot and what is sized by the field. A
+// field rebuild (rebuildField) and ttp_display_release come through here alone;
+// the static scene stays up under its key.
+void TtpRenderer::releaseField() {
     if (!mEngine) return;
-    const auto tRelease = std::chrono::steady_clock::now();
-    // A released scene is unsettled by definition — the next build re-arms.
+    // A released scene is unsettled by definition — the next build re-arms, and
+    // a new field has new car pipelines for the countdown gate to wait out.
     if (mSettleFence) { mEngine->destroy(mSettleFence); mSettleFence = nullptr; }
     mSettled = false;
-    // NO FENCE HERE, and the danger it used to answer has not gone away: the
-    // meshes' CPU copies are handed to Filament as raw pointers, so the driver
-    // must not still be reading a BufferDescriptor into one when it is freed.
-    // This used to drain the whole pipeline to guarantee that — 24-205 ms on the
-    // Android box against 6-8 ms of actual teardown, paid on every rebuild.
-    // destroyMesh BURIES those buffers instead (see MeshGrave): same guarantee,
-    // and this returns immediately.
-    // Merged groups first, while their source entities are still alive to be
-    // handed back to the scene (the asset drops below take them out again,
-    // properly, on their own path). The parsed-geometry cache stays — it is
-    // keyed by the kit's bytes, which do not change between scenes.
+    // The merged car groups first, while their source entities are still alive
+    // to be handed back to the scene: they share the car assets' material
+    // instances, and the park below takes those away.
     destroyMergedGroups(mMergedCars);
-    destroyMergedGroups(mMergedDress);
     mCarMergeDirty = false;
-    mDressMergeDirty = false;
-    // NOT mCarModelKey — the park below needs it to know what each body IS, and
-    // it is cleared with the slots at the end of this function instead. Clearing
-    // it here parked every body under key 0, which parkAsset reads as "unknown
-    // model" and destroys: the pool would have been silently inert.
-    mAssetMeshKey.clear();
-    destroyMesh(mRoad);
-    if (mRoadFarIb) { mEngine->destroy(mRoadFarIb); mRoadFarIb = nullptr; }
-    {
-        Mesh far;
-        far.idx.swap(mRoadFarIdx);
-        buryMeshBuffers(far);
-    }
-    destroyMesh(mGround);
-    destroyMesh(mGroundProxy);
-    destroyMesh(mHills);
-    destroyMesh(mBalloon);
     for (auto& m : mCars) destroyMesh(m);
-    destroyMesh(mGantry);
     for (auto& m : mStreakMeshes) destroyMesh(m);
     // The streak ring's other slots, after every renderable that could draw
     // them; slot 0 was the mesh's own vb. Their bytes are buried like any
@@ -1826,6 +1800,125 @@ void TtpRenderer::releaseScene() {
         }
         st.ringVerts.clear();
     }
+    // THE SHADOW FITS SURVIVE: a footprint is a fact about the KIT, not about
+    // this race, so a cup's four races fit them once. Only the per-SLOT
+    // pointers into the store are per-roster.
+    mCarShadowMaskOfSlot.clear();
+    // PARKED, NOT DESTROYED — see mBodyPool. The next build's field is usually
+    // the same one, and parsing these back is the biggest phase it would pay.
+    // mCarModelKey is read here to know what each body IS (key 0 is "unknown
+    // model", which parkAsset destroys), so it is cleared only after.
+    for (size_t i = 0; i < mCarAssets.size(); i++) {
+        parkAsset(i < mCarModelKey.size() ? mCarModelKey[i] : 0, mCarAssets[i]);
+    }
+    for (size_t i = 0; i < mCarGhostAssets.size(); i++) {
+        parkAsset(i < mCarGhostKey.size() ? mCarGhostKey[i] : 0, mCarGhostAssets[i]);
+    }
+    mCarModelKey.clear();
+    mCarGhostKey.clear();
+    // The monster pools are the field's two loadInstancedProp assets, so
+    // their mesh-key entries go with them: a freed pointer left in the map
+    // could match the next asset allocated at that address.
+    mAssetMeshKey.erase(mMonsterAsset);
+    mAssetMeshKey.erase(mMonsterGhostAsset);
+    dropAsset(mMonsterAsset);
+    dropAsset(mMonsterGhostAsset);
+    for (auto* mi : mFieldMatInstances) mEngine->destroy(mi); // after their renderables
+    mFieldMatInstances.clear();
+    mCars.clear();
+    mCarAssets.clear();
+    mCarGhostAssets.clear();
+    mCarWheels.clear();
+    mMonsterViews.clear();
+    mMonsterInstances.clear();
+    mMonsterGhostInstances.clear();
+    mCarGhostIn.clear();
+    mMonsterIn.clear();
+    mMonsterGhostIn.clear();
+    mMonsterWheels.clear();
+    mMonsterWheelRadius = 0;
+    mMonsterSkidWidth = 0;
+    mMonsterHalfLen = 0;
+    mStreaks.clear();
+    mStreakMeshes.clear();
+    mStreakSeed.clear();
+    mCarBasis.clear();
+    mCarBasisInv.clear();
+    mWheelTrails.clear();
+    mDecalProjHint.clear();
+    mLastCar0 = {};
+    mLastCarN = {};
+}
+
+// What one race leaves on the static scene, put back the way a fresh build
+// would have it. Bananas and rockets need nothing: both are reconciled from
+// the sim every frame. Neither does mTime — it is the core's cosmetic clock,
+// which a field rebuild keeps running so the lobby camera does not snap.
+void TtpRenderer::resetRace() {
+    clearSkidLayer();
+    mSkidWipe = false;
+    mSkidMipsDirty = false;
+    mSkidMipsAt = 0;
+    for (ConeState& cs : mConeStates) {
+        cs.quat = mat3f(cs.home.upperLeft()).toQuaternion();
+        cs.pos = cs.home[3].xyz;
+        cs.vel = {};
+        cs.spinRate = 0;
+        cs.hasFlat = cs.airborne = cs.hasRest = cs.posed = false;
+    }
+    mBoxCollectT.clear();
+    mBoxPrevAvail.clear();
+    for (Burst& b : mBursts) b = {};
+    mDeckDecals.clear();
+    mDeckDecalsLast.clear();
+}
+
+// Both halves, back to bare engine + materials + provided bytes: the
+// destructor's teardown, and a build of a different key.
+void TtpRenderer::releaseScene() {
+    if (!mEngine) return;
+    const auto tRelease = std::chrono::steady_clock::now();
+    releaseField();
+    releaseStatic();
+    // `graves` is the standing guard on the burial: it climbs during a build,
+    // which presents no frames, and must be back at 0 at rest. A number that
+    // stays up is CPU copies of whole scenes never being freed.
+    utils::slog.i << "ttp release: graves " << (int) mGraves.size() << " teardown "
+            << (int) (std::chrono::duration<double, std::milli>(
+                    std::chrono::steady_clock::now() - tRelease).count() + 0.5)
+            << " ms" << utils::io::endl;
+}
+
+// Everything buildStatic made. Only after releaseField: the dressing merge and
+// the asset drops below assume no car still shares their scene.
+void TtpRenderer::releaseStatic() {
+    mStaticKey.clear();
+    // NO FENCE HERE, and the danger it used to answer has not gone away: the
+    // meshes' CPU copies are handed to Filament as raw pointers, so the driver
+    // must not still be reading a BufferDescriptor into one when it is freed.
+    // This used to drain the whole pipeline to guarantee that — 24-205 ms on the
+    // Android box against 6-8 ms of actual teardown, paid on every rebuild.
+    // destroyMesh BURIES those buffers instead (see MeshGrave): same guarantee,
+    // and this returns immediately.
+    // The merged dressing first, while its source entities are still alive to
+    // be handed back to the scene (the asset drops below take them out again,
+    // properly, on their own path). The parsed-geometry cache stays — it is
+    // keyed by the kit's bytes, which do not change between scenes.
+    destroyMergedGroups(mMergedDress);
+    mDressMergeDirty = false;
+    mAssetMeshKey.clear();
+    destroyMesh(mRoad);
+    if (mRoadFarIb) { mEngine->destroy(mRoadFarIb); mRoadFarIb = nullptr; }
+    {
+        Mesh far;
+        far.idx.swap(mRoadFarIdx);
+        buryMeshBuffers(far);
+    }
+    destroyMesh(mGround);
+    destroyMesh(mGroundProxy);
+    destroyMesh(mHills);
+    destroyMesh(mBalloon);
+    destroyMesh(mGantry);
     for (auto& m : mClouds) destroyMesh(m);
     destroyMesh(mBoulders);
     destroyMesh(mLandmarks);
@@ -1869,10 +1962,6 @@ void TtpRenderer::releaseScene() {
     mCarShadowW = mCarShadowH = 0;
     mCarShadowPing = 0;
     mCarShadowUpload = false;
-    // THE SHADOW FITS SURVIVE THE SCENE: a footprint is a fact about the KIT,
-    // not about this race, so a cup's four races fit them once. Only the
-    // per-SLOT pointers into the store are per-roster.
-    mCarShadowMaskOfSlot.clear();
     for (auto& m : mBurstMeshes) destroyMesh(m);
     for (auto& m : mBurstBalls) destroyMesh(m);
     releaseAmbientCull();   // its parked renderables hold mPollen.vb
@@ -1880,16 +1969,6 @@ void TtpRenderer::releaseScene() {
     mAmbCells = 0; // the next build's cloud is fitted to its cells on its first frame
     for (auto& m : mRockets) destroyMesh(m);
     for (auto& m : mRocketFlames) destroyMesh(m);
-    // PARKED, NOT DESTROYED — see mBodyPool. The next build's field is usually
-    // the same one, and parsing these back is the biggest phase it would pay.
-    for (size_t i = 0; i < mCarAssets.size(); i++) {
-        parkAsset(i < mCarModelKey.size() ? mCarModelKey[i] : 0, mCarAssets[i]);
-    }
-    for (size_t i = 0; i < mCarGhostAssets.size(); i++) {
-        parkAsset(i < mCarGhostKey.size() ? mCarGhostKey[i] : 0, mCarGhostAssets[i]);
-    }
-    mCarModelKey.clear();   // both pools have what they need now
-    mCarGhostKey.clear();
     for (auto*& a : mSceneryAssets) dropAsset(a);
     for (auto*& a : mPropAssets) dropAsset(a);
     for (auto*& a : mKitAssets) dropAsset(a);
@@ -1897,44 +1976,27 @@ void TtpRenderer::releaseScene() {
     dropAsset(mBoxFadeAsset);
     dropAsset(mBananaAsset);
     dropAsset(mConeAsset);
-    dropAsset(mMonsterAsset);
-    dropAsset(mMonsterGhostAsset);
     if (mResourceLoader) mResourceLoader->evictResourceData(); // decoded glTF source cache
     for (auto* mi : mSceneMatInstances) mEngine->destroy(mi);
     mSceneMatInstances.clear();
-    mLitShadowInst = nullptr; // was one of those — never dangle into the next build
+    mStaticInst = nullptr;    // was one of those — never dangle into the next build
     mRoadInst = nullptr;      // ditto: the deck's own instance is scene-scoped too
     mRoadChunks.clear();      // and so is every per-chunk instance
     mLods.clear();            // every listed renderable died with its mesh
     mRoadInstLastProf.clear();
     mDeckDecals.clear();
-    // THE SUN BAKE SURVIVES THE SCENE, on the same argument as the shadow
-    // fits above and for a bigger prize: its casters are the STATIC scene and
-    // cars cast nothing, so a rebuild that changed only the field re-renders a
-    // bit-identical map. Dropping them here is what made every join and every
-    // launch pay the 81-tap blur again (520 ms of a 700 ms build on the Android
-    // box). bakeShadowMap owns them now: it reuses them when its key says the
-    // statics did not move, and destroys them itself when it says they did.
-    for (utils::Entity e : { mSun, mFill }) {
-        if (!e.isNull()) {
-            mScene->remove(e);
-            mEngine->destroy(e);
-            utils::EntityManager::get().destroy(e);
-        }
+    // NOT the visibility maps: they are mBakedKey's, which an import can set
+    // with no scene at all, and bakeShadowMap replaces them when the key moves.
+    if (!mSun.isNull()) {
+        mScene->remove(mSun);
+        mEngine->destroy(mSun);
+        utils::EntityManager::get().destroy(mSun);
     }
     mSun = {};
-    mFill = {};
     if (mAmbient) { mScene->setIndirectLight(nullptr); mEngine->destroy(mAmbient); mAmbient = nullptr; }
     if (mSkybox) { mScene->setSkybox(nullptr); mEngine->destroy(mSkybox); mSkybox = nullptr; }
 
     // Pools and per-scene state, back to their constructed values.
-    mCars.clear();
-    mCarAssets.clear();
-    mCarGhostAssets.clear();
-    mCarWheels.clear();
-    mMonsterViews.clear();
-    mMonsterInstances.clear();
-    mMonsterGhostInstances.clear();
     mBoxInstances.clear();
     mBoxFadeInstances.clear();
     mBananaInstances.clear();
@@ -1949,20 +2011,12 @@ void TtpRenderer::releaseScene() {
     mGroundInst = nullptr; // a scene instance; sceneInstance() owns the teardown
     mBoxCollectT.clear();
     mBoxPrevAvail.clear();
-    mCarGhostIn.clear();
-    mMonsterIn.clear();
-    mMonsterGhostIn.clear();
     mBananaIn.clear();
     mBoxIn.clear();
     mBoxFadeIn.clear();
     mBoxGlowMats.clear(); // the box assets own them (dropAsset above) — handles only
     mConeStates.clear();
     mSignMeshes.clear();
-    mStreaks.clear();
-    mStreakMeshes.clear();
-    mStreakSeed.clear();
-    mCarBasis.clear();
-    mCarBasisInv.clear();
     mRockets.clear();
     mRocketFlames.clear();
     for (Burst& b : mBursts) b = {};
@@ -1980,28 +2034,13 @@ void TtpRenderer::releaseScene() {
     mPollenMat = nullptr; // a scene-scope instance — sceneInstance() destroyed it
     if (mGroundTex) { mEngine->destroy(mGroundTex); mGroundTex = nullptr; }
     if (mAmbFloorTex) { mEngine->destroy(mAmbFloorTex); mAmbFloorTex = nullptr; }
-    mWheelTrails.clear();
     mGroundBands.clear();
     mHillAnchors.clear();
     mShoreFn = nullptr;
     mTrack.reset();
-    mHasTrack = false;
     mHillSf = 1;
     mTime = 0;
-    mLastCar0 = {};
-    mLastCarN = {};
-    mMonsterWheels.clear();
-    mMonsterWheelRadius = 0;
-    mMonsterSkidWidth = 0;
-    mMonsterHalfLen = 0;
     mBoxScale = 1.0f;
-    // `graves` is the standing guard on the burial: it climbs during a build,
-    // which presents no frames, and must be back at 0 at rest. A number that
-    // stays up is CPU copies of whole scenes never being freed.
-    utils::slog.i << "ttp release: graves " << (int) mGraves.size() << " teardown "
-            << (int) (std::chrono::duration<double, std::milli>(
-                    std::chrono::steady_clock::now() - tRelease).count() + 0.5)
-            << " ms" << utils::io::endl;
 }
 
 TtpRenderer::~TtpRenderer() {
@@ -2034,8 +2073,8 @@ TtpRenderer::~TtpRenderer() {
     if (mEsmMaterial) mEngine->destroy(mEsmMaterial);
     if (mSkidNullTex) mEngine->destroy(mSkidNullTex);
     if (mWhiteTex) mEngine->destroy(mWhiteTex);
-    if (mShadowMap) mEngine->destroy(mShadowMap);
     if (mVisMap) mEngine->destroy(mVisMap);
+    if (mStructVisMap) mEngine->destroy(mStructVisMap);
     if (mRoadVisMap) mEngine->destroy(mRoadVisMap);
     if (mGlbMaterial) mEngine->destroy(mGlbMaterial);
     if (mGlbFadeMaterial) mEngine->destroy(mGlbFadeMaterial);
@@ -2077,7 +2116,6 @@ TtpRenderer::~TtpRenderer() {
     if (mOverlayMaterial) mEngine->destroy(mOverlayMaterial);
     if (mMaterial) mEngine->destroy(mMaterial);
     if (mLitMaterial) mEngine->destroy(mLitMaterial);
-    if (mLitPlainMaterial) mEngine->destroy(mLitPlainMaterial);
     if (mVisMaterial) mEngine->destroy(mVisMaterial);
     if (mRoadVisMaterial) mEngine->destroy(mRoadVisMaterial);
     if (mRoadMaterial) mEngine->destroy(mRoadMaterial);

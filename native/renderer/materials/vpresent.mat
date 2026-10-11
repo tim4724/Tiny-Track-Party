@@ -73,7 +73,7 @@ fragment {
     // it is rather than a free choice.
     // textureLod, because the contrast early-out below makes the four SPAN taps
     // non-uniform control flow, where an implicit-derivative sample is undefined
-    // behaviour (see ttp_shade.inc's sunVisibility, where the same mistake cost
+    // behaviour (see ttp_sunvis.inc's sunVisibilityUV, where the same mistake cost
     // half a frame on a mobile GPU). The scene buffer is a single-level render
     // target bound with a non-mipmap filter, so LOD 0 is what an implicit sample
     // would have picked anyway.

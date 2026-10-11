@@ -132,11 +132,10 @@ class DisplayHost(
      * Where blobs kept between runs live, or null where there is none (a
      * scenario harness, a device with no writable files dir). Set once at boot.
      *
-     * They are STORES, not caches of anything in particular: what to read, keep
-     * and drop is the blob walk's answer in `ttp_display.h`, and which stores
-     * exist is the engine's list too. This side only performs.
+     * A STORE, not a cache of anything in particular: what to read, write and
+     * drop is the blob walk's answer in `ttp_display.h`. This side only performs.
      */
-    var blobs: BlobStores? = null
+    var blobs: BlobStore? = null
 
     /** Set once a scene is built; `ttp_display_frame` on an empty scene is legal but blank. */
     var hasScene: Boolean = false
@@ -619,27 +618,20 @@ class DisplayHost(
      * because one walk performed three ways is three chances to perform it
      * differently.
      *
-     * Gated on one integer, so an idle frame costs a single JNI call and nothing
-     * else. `wrote` retires a name and runs whether the write landed or not: a
-     * name that is never retired is re-exported on every frame for the rest of
-     * the run, and a store is a cache — the road out of a failed write is to make
-     * the thing again.
+     * An idle frame costs the single JNI call that answers no name. `wrote`
+     * retires the name and runs whether the write landed or not: a name that is
+     * never retired is offered again on every frame for the rest of the run, and
+     * a store is a cache — the road out of a failed write is to make the thing
+     * again.
      */
     private fun writeReadyBlobs() {
-        val stores = blobs ?: return
-        if (Ttp.ttp_display_blob_ready() == 0) return
-        stores.forEach { store, name ->
-            val write = TtpJson.obj(Ttp.ttp_display_blob_keep(TtpJson.arg(name)))
-                .optJSONArray("write") ?: return@forEach
-            for (i in 0 until write.length()) {
-                val blobName = write.optString(i).takeIf { it.isNotEmpty() } ?: continue
-                Ttp.ttp_display_blob_export(TtpJson.arg(name), TtpJson.arg(blobName))?.let { blob ->
-                    store.write(blobName, blob)
-                    Log.i(TAG, "$name stored as $blobName (${blob.size / 1024} KiB)")
-                }
-                Ttp.ttp_display_blob_wrote(TtpJson.arg(name), TtpJson.arg(blobName))
-            }
+        val store = blobs ?: return
+        val name = TtpJson.str(Ttp.ttp_display_blob_ready()) ?: return
+        Ttp.ttp_display_blob_export(TtpJson.arg(name))?.let { blob ->
+            store.write(name, blob)
+            Log.i(TAG, "stored $name (${blob.size / 1024} KiB)")
         }
+        Ttp.ttp_display_blob_wrote(TtpJson.arg(name))
     }
 
     // -- scenes -------------------------------------------------------------
@@ -1004,7 +996,10 @@ class DisplayHost(
         VulkanPolicy.withdrawAttempt(view.context)
     }
 
-    /** Tear the scene down; the engine, views, materials and assets live on. */
+    /**
+     * Tear the field down and stop drawing; the static scene stays resident
+     * (see ttp_display_release).
+     */
     fun release() {
         Ttp.ttp_display_release()
         hasScene = false

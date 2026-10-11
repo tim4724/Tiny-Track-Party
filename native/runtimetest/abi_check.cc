@@ -459,13 +459,11 @@ void boundaryExports() {
   // called it: the display's own walk composes planBlob WITH what the engine is
   // already holding, and no shell has any business planning a blob on its own.
   {
-    const auto plan = [](const char* store, const char* gen,
-                         const std::vector<std::string>& keys,
+    const auto plan = [](const char* gen, const std::string& key,
                          const std::vector<ttp::rt::BlobEntry>& entries = {}) {
       ttp::rt::BlobRequest in;
-      in.store = store;
       in.generation = gen;
-      in.keys = keys;
+      in.key = key;
       in.entries = entries;
       return ttp::rt::planBlob(in);
     };
@@ -475,73 +473,50 @@ void boundaryExports() {
     };
 
     // A name is a pure function of generation + key, and carries both.
-    const ttp::rt::BlobPlan a = plan("bake", "g1", { "cove|beach|0" });
-    check(a.names.size() == 1, "one key plans one name");
-    const std::string n1 = a.names[0];
+    const std::string n1 = plan("g1", "cove|beach|0").name;
     check(!n1.empty(), "a plan names the blob");
     check(n1.rfind("g1__", 0) == 0, "the generation leads the name");
-    check(plan("bake", "g1", { "cove|beach|0" }).names[0] == n1,
-          "the same request names the same blob");
+    check(plan("g1", "cove|beach|0").name == n1, "the same request names the same blob");
 
     // A NEW BINARY CANNOT NAME THE OLD ONE'S FILE. This is the invalidation:
     // not a check that rejects a stale blob, but a name that cannot reach it.
-    check(plan("bake", "g2", { "cove|beach|0" }).names[0] != n1,
+    check(plan("g2", "cove|beach|0").name != n1,
           "a different generation names a different blob");
 
     // ...and the old generation's files come back to be deleted, even though
     // the store is nowhere near its cap.
-    check(plan("bake", "g2", { "cove|beach|0" }, { { "g1__old-aaaaaaaa.blob", 1 } }).drop
+    check(plan("g2", "cove|beach|0", { { "g1__old-aaaaaaaa.blob", 1 } }).drop
                   == std::vector<std::string>{ "g1__old-aaaaaaaa.blob" },
           "another generation's blob is dropped whatever the cap says");
 
     // Two keys that SANITISE alike are still two blobs: the hash is over the
     // raw key, so a collision cannot serve one track's shadows for another.
-    check(plan("bake", "g", { "a|b" }).names[0] != plan("bake", "g", { "a/b" }).names[0],
+    check(plan("g", "a|b").name != plan("g", "a/b").name,
           "keys that sanitise alike still name different blobs");
 
-    // A SET-SIZED PLAN names one blob per key, in order: the walk takes a key
-    // LIST so a store holding several things one build wants needs no new
-    // walk. The bake store answers one key, so it carries the contract here.
+    // Under the cap nothing is dropped; over it, the oldest-used go, and the
+    // blob this plan is about is never one of them.
     {
-      const ttp::rt::BlobPlan m = plan("bake", "g", { "k0", "k1", "k2" });
-      check(m.names.size() == 3, "every key in the request gets a name");
-      check(m.names[0] != m.names[1] && m.names[1] != m.names[2],
-            "…and they are its own, not one name repeated");
-      check(m.names[0] == plan("bake", "g", { "k0" }).names[0],
-            "a key's name does not depend on what it was asked beside");
-    }
-
-    // Under the cap nothing is dropped; over it, the oldest-used go, and NO
-    // blob this plan is about is one of them — every name, not just the first.
-    {
-      const uint32_t keep = ttp::rt::blobKeep("bake");
-      // The entry list has to contain the plan's OWN names for the exemption to
-      // mean anything, so they are asked for rather than spelled: a
-      // hand-written name would differ in its hash and quietly test nothing.
-      const std::vector<std::string> mine = plan("bake", "g", { "k0", "k1" }).names;
-      // Both of ours are the OLDEST, and every other entry is newer. Without
-      // the exemption they would be first out — a cache deleting exactly what
-      // was asked for, every time the store is full.
-      std::vector<ttp::rt::BlobEntry> entries;
-      for (const std::string& n : mine) entries.push_back({ n, 1 });
+      // The entry list has to contain the plan's OWN name for the exemption to
+      // mean anything, so it is asked for rather than spelled: a hand-written
+      // name would differ in its hash and quietly test nothing.
+      const std::string mine = plan("g", "k0").name;
+      // Ours is the OLDEST, and every other entry is newer. Without the
+      // exemption it would be first out — a cache deleting exactly what was
+      // asked for, every time the store is full.
+      std::vector<ttp::rt::BlobEntry> entries{ { mine, 1 } };
       std::vector<std::string> others;
-      for (uint32_t i = 1; i <= keep + 1; i++) {
-        const std::string n = plan("bake", "g", { "x" + std::to_string(i) }).names[0];
+      for (uint32_t i = 1; i <= ttp::rt::kBlobKeep + 1; i++) {
+        const std::string n = plan("g", "x" + std::to_string(i)).name;
         others.push_back(n);
         entries.push_back({ n, (double) (i + 1) });
       }
-      const ttp::rt::BlobPlan f = plan("bake", "g", { "k0", "k1" }, entries);
-      check(f.names == mine, "the plan still names the blobs asked for");
-      // keep+3 entries, so three go.
+      const ttp::rt::BlobPlan f = plan("g", "k0", entries);
+      check(f.name == mine, "the plan still names the blob asked for");
+      // keep+2 entries, so two go.
       const std::vector<std::string> dropped = sorted(f.drop);
-      check(dropped.size() == 3, "over the cap, exactly the overflow is dropped");
-      for (const std::string& n : dropped) {
-        for (const std::string& own : mine) {
-          check(n != own, "a blob the plan is about is never evicted, even as the oldest");
-        }
-      }
-      check(dropped == sorted({ others[0], others[1], others[2] }),
-            "eviction takes the oldest-USED first, skipping the ones asked for");
+      check(dropped == sorted({ others[0], others[1] }),
+            "eviction takes the oldest-USED first, skipping the one asked for");
     }
   }
 

@@ -37,7 +37,8 @@ namespace ttp { namespace kitcolors { struct Mesh; } }
 
 // The car contact shadow's constants, and the ONE place they are written down:
 // the renderer holds one const instance (mShadowTune). Every value is the
-// shipped look, and native/renderer/CLAUDE.md has the measurements behind each.
+// shipped look, the measurements behind each sit beside it, and
+// native/renderer/CLAUDE.md has the rules they serve.
 //
 // THE SHAPE IS A ROUNDED RECT FITTED TO EACH MODEL (bakeCarFootprint) — four
 // corners for every car, the user's call after seeing the alternatives on the
@@ -187,9 +188,11 @@ public:
     // renderer this replaced did the same, via navigator.webdriver → key
     // .castShadow = false). Takes effect at the next buildScene; not a live
     // toggle, since the map is baked into the scene.
-    // Clears the bake's reuse key with it: shadows-off drops the resident maps,
-    // so the next build must re-bake rather than match a key against nothing.
-    void setShadowsEnabled(bool on) { mShadowsEnabled = on; mBakedKey.clear(); }
+    // Latched, like every input below that is not in the scene key: a change
+    // drops the resident static scene (dropStaticKey).
+    void setShadowsEnabled(bool on) {
+        if (on != mShadowsEnabled) { mShadowsEnabled = on; dropStaticKey(); }
+    }
 
     // ---- model variants (dev) ---------------------------------------------
     // Which take on a named prop ("rocket", "gnome", "train") this and every
@@ -263,27 +266,9 @@ public:
     // scenery GLBs back: half of a biome's recolour rule is each model's own
     // AUTHORED material colours, and this class is where those bytes live.
     const std::vector<uint8_t>* asset(const char* name) const;
-    // `geo` is the built track this scene is meshed from — the SAME ttp::RaceTrack
-    // the sim races on, handed straight over rather than serialized; `theme` is
-    // the resolved biome, likewise a live object rather than a payload; `roster`
-    // is the one thing the SHELL supplies, in slot order, and it too is now
-    // plain structs rather than the "track.bin" byte buffer it used to be.
-    // NOTHING about a scene is serialized any more.
-    // `wear` is the road-wear plan for the same track (ttp/wear.h) — computed
-    // by the CALLER (the display shim links libttp-runtime; this class only
-    // includes its headers): its patches become deck PAINT (buildDeckPaint),
-    // not decals.
-    // What THIS build's static scene is, for the shadow bake's reuse test —
-    // see bakeShadowMap. The renderer is handed geometry and a theme, neither of
-    // which names anything; only the shim knows a scene is "cove under the beach
-    // biome". Latched before buildScene, like the biome one level up, and EMPTY
-    // means "never reuse" so a caller that has not thought about it cannot
-    // accidentally opt in.
-    void setBakeKey(const char* key) { mBakeKey = key ? key : ""; }
-
     // Which backend the engine runs (filament::Backend as an int). Rides every
     // blob key: a blob's byte orientation is a fact about the backend that read
-    // it back — see the flip note in finishBakeBlob.
+    // it back — see the flip note in stageBlob.
     int backendId() const;
 
     // ---- derived bytes, kept between runs ---------------------------------
@@ -293,13 +278,13 @@ public:
     // business (ttp/blobstore.h) and nothing below knows a filename. The one
     // kind is the sun bake — one blob per scene, `track|biome|showcase|backend`.
     //
-    // STAGE, THEN FINISH, and that is not tidiness. A readback does not complete
-    // inside the call that issues it on GL (see PendingRead), so an export that
-    // insisted on answering at once could only ever answer on the backends that
-    // do not need it. `stage` snapshots everything that is NOT a readback —
-    // headers, matrices, the road light, the row-flip convention — and issues
-    // the reads; `collectStagedBlobs` finishes any whose reads have landed, on
-    // the frame beat where the GL driver tick runs. The snapshot is what makes
+    // STAGE, THEN FINISH, and that is not tidiness. A readback never completes
+    // inside the build that issues it (ttp_display.h, "derived bytes"), so an
+    // export that insisted on answering at once could never answer. `stage`
+    // snapshots everything that is NOT a readback — headers, matrices, the
+    // row-flip convention — and issues the reads; `collectStagedBlobs` finishes
+    // any whose reads have landed, on a later frame beat, on every backend. The
+    // snapshot is what makes
     // that safe: a staged blob owns its own metadata, so the build that lands it
     // need not be the build that made it.
     //
@@ -354,8 +339,32 @@ public:
         return { w.monsterRoof * s, w.monsterSeat * s, w.monsterBodyHalf.x * s, w.monsterBodyHalf.y * s, s };
     }
 
-    bool buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& theme,
-            const std::vector<TtpRosterCar>& roster, const ttp::rt::WearPlan& wear);
+    // THE SCENE IS TWO THINGS WITH TWO LIFETIMES. The STATIC scene — the
+    // track, its dressing, the sky, the sun bake — is a function of `key`
+    // (what the shim says the scene is OF: track, biome, showcase, backend)
+    // plus the inputs latched on this class (shadows, the bench, the model
+    // variants, the kit field), whose setters drop it. The FIELD — the cars and
+    // everything sized by them — is a function of the roster. A join, a leave,
+    // a launch or a restart on the same track changes only the field, so it is
+    // all a build of a resident key pays (rebuildField); nothing static ever
+    // depends on the roster, and anything added to the static half must not.
+    //
+    // `geo` is the built track this scene is meshed from — the SAME
+    // ttp::RaceTrack the sim races on, handed straight over rather than
+    // serialized; `theme` is the resolved biome, likewise a live object;
+    // `roster` is the one thing the SHELL supplies, in slot order; `wear` is
+    // the road-wear plan for the same track (ttp/wear.h), computed by the
+    // caller, whose patches become deck PAINT (buildDeckPaint). NOTHING about
+    // a scene is serialized.
+    bool buildScene(const std::string& key, const ttp::RaceTrack& geo,
+            const ttp::rt::Theme& theme, const std::vector<TtpRosterCar>& roster,
+            const ttp::rt::WearPlan& wear);
+    bool staticResident(const std::string& key) const {
+        return !key.empty() && key == mStaticKey;
+    }
+    // A new field on the resident static scene, which is put back at its
+    // opening state on the way (resetRace): cones upright, no rubber.
+    bool rebuildField(const std::vector<TtpRosterCar>& roster);
     // Re-dress the BUILT scene's car slots in place — same track, same slot
     // count, camera state and cosmetic clocks untouched. `remodel` slots reload
     // their GLB (the shell re-provided car<slot>.glb first) plus ghost and
@@ -366,10 +375,12 @@ public:
     bool reroster(const std::vector<TtpRosterCar>& roster,
             const std::vector<uint32_t>& remodel,
             const std::vector<uint32_t>& redress);
-    // Destroy everything the scene owns — meshes, glTF assets, lights, sky,
-    // material instances — and reset the per-scene state, so buildScene() can
-    // run again on a new track (a Grand Prix chains four of them) or a new
-    // roster. The engine, views, materials and provided asset bytes survive.
+    // Tear down the field alone; the static scene stays resident under its
+    // key until a build of another key or the destructor frees it.
+    void releaseField();
+    // Both halves — meshes, glTF assets, lights, sky, material instances —
+    // back to bare engine. The engine, views, materials and provided asset
+    // bytes survive.
     void releaseScene();
     bool render(const TtpFrameInput& input); // false = beginFrame skipped (stale canvas)
     // The frame's CPU half alone — the seating, the props, the skid stamps, the
@@ -500,7 +511,8 @@ private:
         std::vector<Vertex> verts;
         std::vector<uint32_t> idx;
         // Optional per-vertex normals → the mesh renders LIT (vlit material,
-        // qtangents in a second buffer slot). Empty = unlit vcolor.
+        // qtangents in a second buffer slot) unless it bakes its light
+        // (custom0, bakeLight). Empty = unlit vcolor.
         std::vector<filament::math::float3> normals;
         std::vector<filament::math::quatf> quats; // derived; alive for upload
         // Optional UV0, in its own buffer slot: the road (track space, which
@@ -509,19 +521,17 @@ private:
         // field vcloud shapes them from). Most meshes are position + colour, so
         // UVs stay out of the shared vertex.
         std::vector<filament::math::float2> uvs;
-        // Optional BAKED per-vertex matte light (half4, rgb·1) — the road
-        // under the baked-light vroad, filled by fillRoadLight. Non-empty ⇒
-        // buildMesh feeds CUSTOM0 INSTEAD of TANGENTS (nothing at draw time
-        // reads the normal; m.normals stays populated for the CPU bake).
-        // Alive for the run like every CPU copy here, and bakeShadowMap
-        // re-uploads it in place once the ESM exists.
+        // Optional BAKED per-vertex matte light, (ambient.rgb, NoL) — every
+        // static shadow RECEIVER (the road, the ground, the structures, the
+        // berms), filled by bakeVertexLight. Non-empty ⇒ buildMesh feeds
+        // CUSTOM0 INSTEAD of TANGENTS (nothing at draw time reads the normal).
+        // Alive for the run like every CPU copy here.
         std::vector<filament::math::half4> custom0;
         // OPT-IN for a STATIC lit sheet: buildMesh folds the matte light into
         // the vertex colours (bakedMatteLight) and draws it UNLIT, so nothing
         // at draw time transforms a normal or shades a fragment. Only a mesh
         // that never moves after build may say so — a transform would carry
-        // the baked light with it (the windmill's blades, the plane, the
-        // rockets and the kicked cones all stay lit at draw).
+        // the baked light with it, so what moves stays on vlit.
         bool bakeLight = false;
         // OPT-IN for a static mesh that is already unlit (a baked kit run):
         // buildMesh welds its exact duplicate vertices, as it does for every
@@ -607,17 +617,14 @@ private:
     std::unordered_map<uint64_t, filament::Texture*> mSkyCubemaps;
     filament::Texture* skyCubemap(const uint32_t sky[3], float lum);
     filament::Material* mMaterial = nullptr;    // unlit vertex-colour
-    filament::Material* mLitMaterial = nullptr; // cheap-matte lit (custom Lambert)
-    // vlit minus the sun-shadow sampler (vlitns.mat), for the dressing that
-    // never reads the map — a bound sampler is per-draw descriptor cost even
-    // when shadowTexel=0 early-outs every fragment. Null on a shell whose
-    // asset set predates it; buildMesh then falls back to vlit.
-    filament::Material* mLitPlainMaterial = nullptr;
-    // The road deck only: mLitMaterial's shading (shared via ttp_shade.inc)
+    // Cheap-matte live-lit (vlit.mat, custom Lambert): the meshes that MOVE.
+    // Every static lit surface bakes its light instead (custom0, bakeLight).
+    filament::Material* mLitMaterial = nullptr;
+    // The road deck only: the matte light baked per vertex (ttp_shade.inc)
     // plus a uv0 channel carrying track space (s, lat), so flat deck decals are
     // SHADED INTO the road rather than laid over it — no lift, no z-fight,
     // no render order. Null if the shell served no vroad.filamat, in which
-    // case the road falls back to vlit and stamps nothing.
+    // case the road draws its bare vertex colours and stamps nothing.
     filament::Material* mRoadMaterial = nullptr;
     filament::MaterialInstance* mRoadInst = nullptr;
     // THE PER-FRAME GATHER cap, and it is CPU-side only: this list is the whole
@@ -761,7 +768,7 @@ private:
     int mRoadInstPaintN = 0;               // and its RoadChunk::paintN
     // The rubber layer's tap binding (the 1x1 null texture is the
     // engine-lifetime half). The per-track texture + CPU buffer are made in
-    // buildTrackScene and die in releaseScene.
+    // buildStatic and die in releaseScene.
     void bindSkidLayer(filament::MaterialInstance* mi);
     // Zero the rubber layer: memset the CPU buffer, upload level 0 whole,
     // regenerate the mip chain. Build-time init and the race-restart wipe.
@@ -774,11 +781,10 @@ private:
     void flushSkidLayer();      // a drawn frame's uploads + mips (TtpRendererFrame.cpp)
     void refreshSkidMips();
     filament::math::float3 mBoostDiskLin{};
-    // The one vlit instance that SAMPLES the baked sun map. Three's receiver set
-    // is the road, the structures and the berms and nothing else — the lawn,
-    // the hills and the scenery opt out — so the receivers get this instance and
-    // everyone else keeps the default (whose shadowTexel is 0 = always lit).
-    filament::MaterialInstance* mLitShadowInst = nullptr;
+    // The structures' and berms' instance of mGroundMaterial: white albedo,
+    // their own visibility map (mStructVisMap). Scene-scoped; staticInstance()
+    // makes it on first ask, since the structures are built before the ground.
+    filament::MaterialInstance* mStaticInst = nullptr;
     utils::Entity mCameraEntity;
 
     // Split-screen cells, grown on demand to FrameInput.viewCount. Each cell
@@ -1062,7 +1068,7 @@ private:
     // box leaves the scene, and its fade twin is only IN it for the 0.2 s poof.
     std::vector<uint8_t> mBoxIn, mBoxFadeIn;
     // Whether this scene has drawn one member of every effect pool yet
-    // (warmEffectPipelines). Cleared by each buildTrackScene.
+    // (warmEffectPipelines). Cleared by each buildStatic.
     bool mEffectsWarm = false;
     // Every box-pool MaterialInstance carrying emissiveFactor, resolved once at
     // load — the throb retints these instead of string-probing every material of
@@ -1086,8 +1092,10 @@ private:
     // Additive rocket blast (vburst): the flash ball and the camera-facing
     // shockwave ring, whose radius/width/fade are material parameters.
     filament::Material* mBurstMaterial = nullptr;
-    // Textured ground (vground): the biome's floor canvas, generated as pixels
-    // to match the JS canvas texture rather than approximated with bands.
+    // THE static-receiver material (vground.mat): baked vertex light, one
+    // baked-visibility tap. The ground wears its biome canvas (generated as
+    // pixels to match the JS canvas texture); the structures and berms wear
+    // white through mStaticInst.
     filament::Material* mGroundMaterial = nullptr;
     // Bake-time filter that turns the raw depth map into a blurred ESM.
     filament::Material* mEsmMaterial = nullptr;
@@ -1096,14 +1104,15 @@ private:
     // after bakeShadowMap runs (it is created well before that).
     filament::MaterialInstance* mGroundInst = nullptr;
     filament::Texture* mWhiteTex = nullptr;  // 1×1, neutralises a glTF base-colour map
-    // The frozen sun shadow map and the matrix that puts a world position in
-    // its [0,1] texture space (see bakeShadowMap).
-    filament::Texture* mShadowMap = nullptr;
-    // The GROUND's baked sun-visibility map (vvis.mat, rendered inside
-    // bakeShadowMap over the same light camera), and the material that bakes
-    // it. Per-scene like the ESM; vground taps it instead of running the ESM
-    // decode per fragment — bindVisMap is the one binder.
+    // The baked sun-visibility maps on the light's grid (vvis.mat, rendered
+    // inside bakeShadowMap through the ESM's camera), and the material that
+    // bakes them: the GROUND's, and the STRUCTURES' and berms' — two maps
+    // because one single-valued light-space map cannot hold a surface and an
+    // occluder above it (bakeShadowMap). vground taps them; bindVisMap is the
+    // one binder. These two and mRoadVisMap ARE the bake: the ESM they were
+    // decoded from is a local of bakeShadowMap.
     filament::Texture* mVisMap = nullptr;
+    filament::Texture* mStructVisMap = nullptr;
     filament::Material* mVisMaterial = nullptr;
     // The ROAD DECK's baked sun-visibility map (vroadvis.mat), in TRACK space
     // rather than the light's grid — a barrel roll and the deck it shadows land
@@ -1114,14 +1123,17 @@ private:
     filament::Texture* mRoadVisMap = nullptr;
     filament::Material* mRoadVisMaterial = nullptr;
     float mRoadVisLatHalf = 0;
-    // The bake's reuse test — see bakeShadowMap for the whole argument.
-    // mBakeKey is what the caller says the NEXT build's statics are; mBakedKey
-    // is what the resident maps were actually made from. They match exactly when
-    // a rebuild changed only the field.
-    std::string mBakeKey;
+    // What the resident static scene is OF (buildScene's key), empty while none
+    // is: set only once a static build has finished, so one that failed partway
+    // is rebuilt whole. mBakedKey is the same for the resident VISIBILITY MAPS
+    // alone, which an imported blob brings without a scene (importBlob).
+    std::string mStaticKey;
     std::string mBakedKey;
+    // A latched static input changed: the next build is a full one and
+    // re-bakes, since the casters may have moved with it.
+    void dropStaticKey() { mStaticKey.clear(); mBakedKey.clear(); }
     // settled()'s state: the fence armed by the first presented frame after a
-    // build, and the sticky answer once it signals. Cleared in releaseScene.
+    // build, and the sticky answer once it signals. Cleared in releaseField.
     filament::Fence* mSettleFence = nullptr;
     bool mSettled = false;
 
@@ -1181,15 +1193,16 @@ private:
     // Free every grave NOW, fence first. For teardowns that cannot wait for
     // frames because none are coming.
     void drainGravesBlocking();
-    // See setShadowsEnabled. False leaves mShadowMap null, which is already the
-    // "this track baked no map" path: bindShadowMap falls back to the 1×1 white
-    // texture and passes shadowTexel 0, and vlit.mat reads that as fully lit.
+    // See setShadowsEnabled. False leaves the visibility maps null, which is
+    // already the "this track baked no map" path: the binders fall back to the
+    // 1×1 white texture, which reads as fully lit.
     bool mShadowsEnabled = true;
+    // World → the light's [0,1] texture space: the bake's camera, kept because
+    // vground's vertex stage maps every receiver vertex into its visibility map
+    // through it (and the blob carries it).
     filament::math::mat4f mShadowFromWorld;
-    float mShadowTexel = 0.05f; // world units per shadow texel; also the "a map
-                                // is bound" sentinel the samplers test on
-    // ESM exponent, shared by the bake filter (vesm.mat) and the two materials
-    // that sample the result. It is not a quality dial: it decides WHERE in the
+    // ESM exponent, shared by the bake filter (vesm.mat) and the two bakes
+    // that decode the result. It is not a quality dial: it decides WHERE in the
     // blur kernel the lit/shadow crossing lands. The receiver compares in log
     // space, so the crossing sits where the occluder holds exp(-k*gap) of the
     // kernel, gap being the normalised occluder-to-receiver depth. Small k puts
@@ -1201,9 +1214,6 @@ private:
     // The cost of lowering it is leak: an occluder a long way above its receiver
     // eventually stops reaching full darkness. 8 clears every catalogue track.
     static constexpr float kShadowEsmK = 8.0f;
-    // Normalised shadow depth per WORLD unit (1 / the ortho depth range), so the
-    // slope-scaled bias in vlit/vground means the same distance on every track.
-    float mShadowDepthScale = 0.0f;
     // Boost wind streaks (SceneRenderer STREAK_*): 4 thin axial-billboard
     // quads per car slicing past the body while boosting.
     struct Streak {
@@ -1491,7 +1501,7 @@ private:
     std::vector<filament::gltfio::FilamentAsset*> mKitAssets;
     std::string mKitLayout = "[]";
     // What ground the field ended up covering, so the horizon ring can leave it
-    // alone (see buildTrackScene). Inverted — max < min — when there is no
+    // alone (see buildStatic). Inverted — max < min — when there is no
     // field, which is every build but the gallery's.
     float mKitFieldMinX = 0, mKitFieldMaxX = -1, mKitFieldMinZ = 0, mKitFieldMaxZ = -1;
 
@@ -1536,6 +1546,9 @@ private:
     std::vector<filament::gltfio::FilamentInstance*> mMonsterInstances;
     filament::gltfio::FilamentAsset* mMonsterGhostAsset = nullptr; // 50%-alpha fade variant
     std::vector<filament::gltfio::FilamentInstance*> mMonsterGhostInstances;
+    // The chassis recolour's duplicates (recolourMonsterChassis): FIELD-owned,
+    // so releaseField frees them — on the scene's list they piled up per rebuild.
+    std::vector<filament::MaterialInstance*> mFieldMatInstances;
     // The RIG's own wheels, per instance. While the monster is up the car's
     // wheels are collapsed and these are the ones on the ground, so they take
     // over the roll/steer cosmetics (the JS swaps c.frontWheels/backWheels to
@@ -1621,7 +1634,6 @@ private:
     filament::math::float3 mLastCar0{}; // reset/teleport detector: first...
     filament::math::float3 mLastCarN{}; // ...and last car — both must jump
     utils::Entity mSun;
-    utils::Entity mFill;
     filament::IndirectLight* mAmbient = nullptr;
 
     double mProfile[kProfCount] = {};
@@ -1629,7 +1641,6 @@ private:
     bool mAntialias = true;
     uint32_t mWidth = 0;
     uint32_t mHeight = 0;
-    bool mHasTrack = false;
     filament::math::float3 mFogColor = { 0, 0, 0 }; // linear; set at scene build
 
     std::unordered_map<std::string, std::vector<uint8_t>> mAssets;
@@ -1677,15 +1688,28 @@ private:
     // An empty VertexBuffer in `layout` (see Mesh::Layout); buildMesh's own.
     filament::VertexBuffer* buildVertexBuffer(uint32_t vertexCount, const Mesh::Layout& layout);
     void destroyMesh(Mesh& m);
-    // fillRoadLight + the vertex upload that has to follow it. Pure arithmetic
-    // over the road's own normals now — it reads no map, so it completes inside
-    // the build on every backend and nothing is ever deferred.
-    void applyRoadLight(const TrackBin& tb);
-
+    // The bake's exponential shadow map and the two numbers its decode needs.
+    // A LOCAL of bakeShadowMap, handed to the passes that read it and destroyed
+    // when they are done — nothing samples it in a frame.
+    struct SunEsm {
+        filament::Texture* map = nullptr;
+        float texel = 0;        // world units per ESM texel (the slope bias)
+        float depthScale = 0;   // normalised depth per world unit
+    };
     // Bake the deck's sun visibility into mRoadVisMap (vroadvis.mat), in track
-    // space. Needs a resident ESM and a built road; a no-op without either,
-    // which leaves the map null and the tap answering fully lit.
-    void bakeRoadVis(const TrackBin& tb);
+    // space. A no-op without a built road, which leaves the map null and the
+    // tap answering fully lit.
+    void bakeRoadVis(const TrackBin& tb, const SunEsm& esm);
+    // The visibility bakes' one shape: draw `draws` with `mi` through `cam` into
+    // a fresh w×h R8 target cleared to 1 (fully lit), DEPTH-TESTED when asked.
+    // Records and returns without a wait; null if the target cannot be made.
+    struct BakeDraw {
+        filament::VertexBuffer* vb;
+        filament::IndexBuffer* ib;
+        size_t count;
+    };
+    filament::Texture* bakeR8(filament::MaterialInstance* mi, filament::Camera* cam,
+            uint32_t w, uint32_t h, const std::vector<BakeDraw>& draws, bool depthTested);
     // Bind mRoadVisMap (or the 1×1 stand-in) to one road material instance.
     void bindRoadVisMap(filament::MaterialInstance* mi);
     // vroad's sunVis lat scale, and its own "no map" signal — 0 means the
@@ -1696,40 +1720,23 @@ private:
     }
 
     // Finish any staged blob whose reads have all landed, and retire the
-    // textures they were reading from. Called from the frame beat because that
-    // is the one place the GL driver tick has run. A no-op on any frame with
-    // nothing staged, which is almost all of them.
-    //
-    // EVERY BACKEND LANDS HERE, not just GL. Staging deliberately does NOT pump
-    // the driver: the pump this replaced was eight flushAndWait calls on the
-    // build's critical path, and on the shell where a build IS the lobby's
-    // latency that is the last place to put a synchronous GPU wait. Metal and
-    // Vulkan would finish inside such a pump and GL cannot, so keeping it would
-    // have bought two backends a marginally earlier write in exchange for a
-    // stall and a second code path. Measured after: the first frame following a
-    // build collects them on all three.
+    // textures they were reading from. Called from the frame beat on every
+    // backend — staging never waits on the GPU (ttp_display.h, "derived bytes").
+    // A no-op on any frame with nothing staged, which is almost all of them.
     void collectStagedBlobs();
 
     // ---- staged blobs ------------------------------------------------------
     //
-    // A texture readback that a blob is waiting on.
+    // A texture readback that a blob is waiting on. It lands on a later frame
+    // beat on every backend, never inside the build that issued it
+    // (ttp_display.h's "derived bytes" section has why).
     //
-    // ON ONE BACKEND THEY NEVER FINISH IN TIME. A GL readback's completion is
-    // executed from OpenGLDriver::tick(), which FRenderer::endFrame() calls and
-    // flushAndWait() does not — and in a browser a task cannot wait on the GPU at
-    // all. So on GL a blob cannot be finished inside the build that stages it;
-    // the read is parked and the frame loop turns the driver over. Metal and
-    // Vulkan finish inside the pump and never park anything.
-    //
-    // ONE READ IS OWNED BY ONE STAGED BLOB, which is what the old shared pool
-    // could not say. It keyed by (texture, layer) and retired a read whose stamp
-    // no longer matched — but the ESM texture is destroyed and reallocated on
-    // every non-reused bake, so a read for a track nobody was asking about any
-    // more matched nothing, was never retired, and sat holding a 16 MB buffer and
-    // a RenderTarget over freed storage for the life of the page.
+    // ONE READ IS OWNED BY ONE STAGED BLOB, so retiring a blob retires exactly
+    // its reads. A pool keyed by texture cannot say that: a texture a later bake
+    // reallocated matches nothing, and its read is never retired — a buffer and
+    // a RenderTarget over freed storage held for the life of the page.
     struct StagedRead {
-        filament::Texture* tex = nullptr;
-        bool asFloat = false;                   // the ESM reads FLOAT, the rest UBYTE
+        filament::Texture* tex = nullptr;       // null: an absent map, w = h = 0
         uint32_t w = 0, h = 0;                  // snapshotted: `tex` may be gone by now
         std::vector<uint8_t> px;
         std::atomic<bool> done{ false };
@@ -1742,22 +1749,20 @@ private:
         std::string key;
         bool flip = false;                      // the writer's GL row flip, latched here
         std::vector<uint8_t> head;              // everything before the first read's pixels
-        std::vector<uint8_t> tail;              // …and after the last (the bake's road light)
         std::vector<std::unique_ptr<StagedRead>> reads;
         std::vector<uint8_t> bytes;             // the finished blob; empty until it is
         bool finished = false;
     };
     std::vector<std::unique_ptr<StagedBlob>> mStaged;
 
-    // Issue one read into a staged blob.
-    bool issueRead(StagedBlob& blob, filament::Texture* tex, bool asFloat);
-    // Splice landed pixels into the snapshotted head/tail, GL's row flip away
+    // Issue one R8 read into a staged blob.
+    bool issueRead(StagedBlob& blob, filament::Texture* tex);
+    // Splice landed pixels onto the snapshotted head, GL's row flip away
     // from the texture's own order.
     void finishBakeBlob(StagedBlob& blob);
     // Retire a staged blob's reads: free the RenderTargets, and LEAK the buffer
     // of any read that never landed. The driver may still hold a pointer into it
-    // and there is no tick left that will fire the callback — the same trade
-    // the road-light read used to make, and for the same reason.
+    // and there is no tick left that will fire the callback.
     void retireStaged(StagedBlob& blob);
     // Is a texture still the destination of an unfinished read?
     bool readInFlight(const filament::Texture* tex) const;
@@ -1767,12 +1772,22 @@ private:
     std::vector<filament::Texture*> mTexGraves;
     // Destroy any grave nothing is reading from any more.
     void drainTexGraves();
-    // Swap the resident sun maps, sending any the reads still need to the graves
-    // instead of destroying them. Every path that replaces them goes through here.
-    void replaceShadowMaps(filament::Texture* esm, filament::Texture* vis);
+    // Swap the resident visibility maps, sending any the reads still need to the
+    // graves instead of destroying them. Every path that replaces them goes
+    // through here.
+    void replaceVisMaps(filament::Texture* ground, filament::Texture* structures,
+            filament::Texture* road);
 
-    bool buildTrackScene(const std::vector<TtpRosterCar>& roster, const ttp::RaceTrack& geo,
+    // The two halves of buildScene and releaseScene (see buildScene). The
+    // static build leaves its TrackBin in mTrack for the field to read.
+    bool buildStatic(const std::string& key, const ttp::RaceTrack& geo,
             const ttp::rt::Theme& theme, const ttp::rt::WearPlan& wear);
+    bool buildField(const std::vector<TtpRosterCar>& roster);
+    void releaseStatic();
+    // What a race leaves on the static scene — rubber, kicked cones, collected
+    // boxes, live bursts — back to its opening state. Not the car-shadow layer:
+    // it is transient, and the next frame's erase clears the last field's stamps.
+    void resetRace();
     // The roster half of TrackBin — a copy now that the liveries arrive typed.
     static void applyRoster(TrackBin& out, const std::vector<TtpRosterCar>& roster);
     static void applyTheme(TrackBin& out, const ttp::rt::Theme& theme);
@@ -1787,16 +1802,15 @@ private:
             const std::function<uint32_t(const filament::math::float3&)>& colorAt,
             bool lit = false);
     bool loadCarAsset(uint32_t index, const std::vector<uint8_t>& glb);
-    // One car slot's scene pieces, shared verbatim between buildTrackScene and
-    // reroster(). Each reads the roster fields off `tb` (the build's local bin,
-    // or the retained mTrack on a re-roster) and assumes the per-car containers
-    // are already sized to the field.
-    bool buildCarSlot(const TrackBin& tb, uint32_t c);   // GLB via loadCarAsset, else box marker
+    // One car slot's scene pieces, shared verbatim between buildField and
+    // reroster(). Each reads the roster fields off mTrack and assumes the
+    // per-car containers are already sized to the field.
+    bool buildCarSlot(uint32_t c);   // GLB via loadCarAsset, else box marker
     void buildCarGhost(uint32_t c);                      // 50%-alpha occlusion twin (+ decode pump)
     void destroyCarSlot(uint32_t c);                     // the inverse of the two above
     void dropAsset(filament::gltfio::FilamentAsset*& a);
     // Attach finished texture decodes: the async queue only binds on a pump, so
-    // every batch of loads ends with one (see the note in buildTrackScene).
+    // every batch of loads ends with one (see the note in buildStatic).
     void pumpTextures();
     void ensureAssetLoader();
     void registerAssetUris(filament::gltfio::FilamentAsset* asset);
@@ -1962,15 +1976,13 @@ private:
     void buildClutter(const TrackBin& tb);
     void buildStructures(const TrackBin& tb);
     void setMeshShadows(Mesh& m, bool cast, bool receive);
-    // Render the static track's depth from the sun ONCE, into a texture the lit
-    // materials sample for themselves. Filament re-renders its own shadow map
-    // per VIEW per frame, which a 4-way split pays for four times over; the JS
-    // renders one and freezes it (SceneRenderer.setTrack), and so do we.
-    void bakeShadowMap(const TrackBin& tb);
+    // Render the static track's depth from the sun ONCE per static scene and
+    // decode it into the receivers' visibility maps. Filament re-renders its own
+    // shadow map per VIEW per frame, which a 4-way split pays four times over.
+    void bakeShadowMap(const TrackBin& tb, const std::string& key);
     // The matte light rig's NUMBERS — sun colour/lux and the hemisphere's
-    // 2-band SH, UNEXPOSED — one derivation for the scene's lights
-    // (buildTrackScene) and the road's baked vertex light (fillRoadLight),
-    // so the two cannot drift.
+    // 2-band SH, UNEXPOSED — one derivation for the scene's lights and the
+    // baked vertex light (mBakeRig), so the two cannot drift.
     struct MatteRig {
         filament::math::float3 sunColor;
         float sunLux;
@@ -1980,28 +1992,28 @@ private:
     MatteRig matteRig(const TrackBin& tb) const;
     // The matte light a static sheet's vertices are folded with at build
     // (Mesh::bakeLight): ttpMatteShade's CPU twin at visibility 1, pre-exposed
-    // exactly as the shader's frame uniforms are. buildTrackScene sets it
-    // before the first sheet is built. fillRoadLight is the same twin for the
-    // road, which keeps its light in CUSTOM0 because the road's COLOUR is
-    // computed in the shader; a sheet's colour is its vertex, so the product
-    // can be stored directly.
+    // exactly as the shader's frame uniforms are. buildStatic sets it
+    // before the first sheet is built. bakeVertexLight is the same twin for the
+    // shadow RECEIVERS, which keep their light in CUSTOM0 because their sun term
+    // is multiplied by a visibility tap at draw; a sheet receives no shadow, so
+    // the whole product can be stored in its colour.
     struct BakeRig {
         filament::math::float3 sunPre{ 0 }, sh0{ 0 }, sh1{ 0 };
         float hemiPre = 0.0f;
         bool valid = false;
     };
     BakeRig mBakeRig;
+    filament::math::float4 matteTerms(const filament::math::float3& n) const;
     filament::math::float3 bakedMatteLight(const filament::math::float3& n) const;
-    // Evaluate the road's matte light — ttpMatteLight's CPU twin, the fwidth
-    // AA floor dropped exactly as vvis.mat's bake drops it — into
-    // mRoad.custom0 as (ambient.rgb, NoL). It reads NO map: the deck's
-    // visibility is bakeRoadVis's track-space tap, so nothing here needs the
-    // ESM off the GPU and the fill completes inside the build on every backend.
-    void fillRoadLight(const TrackBin& tb);
-    // Hand the baked map + its world→light matrix to a material instance.
-    void bindShadowMap(filament::MaterialInstance* mi);
-    void bindVisMap(filament::MaterialInstance* mi);
-    filament::MaterialInstance* litShadowInstance();
+    // A shadow receiver's smooth light — ttpMatteAmbient and NoL, the CPU twin
+    // of ttp_shade.inc — into m.custom0 as (ambient.rgb, NoL), one per vertex,
+    // from m.normals. Visibility is not in it: that is a baked map's tap.
+    void bakeVertexLight(Mesh& m) const;
+    // Hand the ESM + its world→light matrix to one of the bake's instances.
+    void bindShadowMap(filament::MaterialInstance* mi, const SunEsm& esm);
+    // Hand a visibility map (or the white stand-in) + the matrix to a receiver.
+    void bindVisMap(filament::MaterialInstance* mi, filament::Texture* map);
+    filament::MaterialInstance* staticInstance();
     // The fog colour to give Filament, pre-graded — see the definition for why
     // the grade cannot stay in the shader for this one.
     filament::math::float3 fogColorGraded(const filament::Camera* cam) const;
@@ -2010,9 +2022,8 @@ private:
     // map on a track that baked none, and it fills vglb's base-colour sampler
     // for a glTF material that carries no texture at all.
     filament::Texture* whiteTexture();
-    // The deck's instance of mRoadMaterial (or litShadowInstance() when the
-    // road material is absent). Separate from litShadowInstance because that
-    // one is shared with the structures and berms, which must not stamp.
+    // The deck's instance of mRoadMaterial; null when the road material is
+    // absent.
     filament::MaterialInstance* roadInstance();
     // Pushes into mDeckDecals unless `out` redirects it (the held-back aura
     // list) — either way this is the ONE place the profile-decal layout is

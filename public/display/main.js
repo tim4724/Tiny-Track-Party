@@ -392,7 +392,8 @@ function refreshLobbyDemo() {
 
   // Same track + same set of cars, only the picks changed (a player switched their
   // car) → swap those models in place so the demo race keeps running, no re-grid.
-  // Anything else (join/leave, track switch, first start) is a full rebuild.
+  // Anything else (join/leave, track switch, first start) is a build — of the
+  // field alone when the track did not change.
   if (lobbyDemo.active && lobbyDemo.track === track && sameCarSet(field, lobbyDemo.field)) {
     const prevById = new Map(lobbyDemo.field.map((p) => [p.id, p]));
     for (const p of field) {

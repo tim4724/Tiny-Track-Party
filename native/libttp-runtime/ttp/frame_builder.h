@@ -159,6 +159,13 @@ struct DisplayState {
     std::vector<uint8_t> hudBlock;
 };
 
+// A new FIELD on the same scene — a build, a release, a new session: the
+// camera rigs are smoothing state, so the springs must not drag the last
+// field's camera into it. What belongs to the SCENE stands: its framing, the
+// track occluders, the cosmetic clock and the lobby orbit's phase, so a join
+// on a resident static scene does not snap the preview camera to its start.
+void newField(DisplayState& d);
+
 // Freeze one car: pose kept, every motion cue dropped (see the definition).
 void atRest(TtpCarInput& c);
 

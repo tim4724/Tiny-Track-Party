@@ -1,4 +1,4 @@
-// The track-scoped bakes: sun shadow map, road light and the staged-blob
+// The track-scoped bakes: the sun's visibility maps and the staged-blob
 // machinery. TtpRendererImpl.h carries what the topic files share.
 #include "TtpRendererImpl.h"
 
@@ -10,110 +10,64 @@
 
 #include <utils/Log.h>
 
-// Frozen sun shadow, baked ONCE at scene build (the JS renderer bakes its
-// shadow map once per track — moving casters carry blobs instead): darken road
-// verts occluded from the sun by ELEVATED road geometry (loop/bridge decks) or
-// the gantry. Grid-pruned ray/triangle tests keep the bake to a few ms; the
-// road VB re-uploads once with the darkened colours.
-// ── The frozen sun shadow map ────────────────────────────────────────────────
+// ── The frozen sun shadow ───────────────────────────────────────────────────
 // Filament renders a shadow map per VIEW per frame. That is the right default
 // for a scene with a moving sun, and exactly wrong here: nothing that casts
 // ever moves, and a 4-way split-screen re-renders the identical 2048² depth
-// pass four times a frame (measured at 1.29 ms per extra cell — the single
-// biggest cost in split-screen). The JS renders one map in setTrack, freezes it
-// with `shadowMap.autoUpdate = false`, and reuses it for every cell.
+// pass four times a frame — once the single biggest cost of split-screen.
 //
-// So we render our own, once, at scene build: an ortho camera down the sun's
+// So we render our own, once per static scene: an ortho camera down the sun's
 // axis fitted to the track, a depth-only render target, and a layer-filtered
-// view so only the casters land in it. The lit materials sample it themselves
-// (bindShadowMap hands them the texture and the matrix); Filament's own shadow
-// machinery is off entirely, which also drops the per-fragment cascade logic.
-//
-// Caster set and fit are three's: the fixed track geometry, framed to the road
-// bbox grown by the tallest structure, at the same 2048² and the same
-// ~2.5-texel normal bias.
-void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
-    // 80% OF A SCENE BUILD IS THIS FUNCTION on the Android reference box (570-607
-    // of 711-749 ms), so its own parts have to be separable before anything can
-    // be done about it. Same diagnostic-only deal as buildTrackScene's phases.
+// view so only the casters land in it. That depth is filtered into an ESM, and
+// the ESM is DECODED here, once, into the visibility maps the receivers tap —
+// so the ESM itself is a local of this function and nothing samples it in a
+// frame. Filament's own shadow machinery is off entirely.
+void TtpRenderer::bakeShadowMap(const TrackBin& tb, const std::string& key) {
+    // MOST OF A STATIC BUILD IS THIS FUNCTION on the Android reference box, so
+    // its own parts have to be separable before anything can be done about it.
     //
     // AND THE SPLIT SAYS THE CPU IS DOING NOTHING. Recording each pass costs 0 ms;
-    // the two `flushAndWait` calls below cost ~290 and ~227. This function does
-    // not compute for half a second, it WAITS for the GPU to finish work it has
-    // already submitted — on the thread that also runs the frame loop and the
-    // relay's message pump, which is why a phone's tap queues behind it.
+    // nearly all of it is the two `flushAndWait` calls below. This function does
+    // not compute, it WAITS for the GPU to finish work it has already submitted
+    // — on the thread that also runs the frame loop and the relay's message
+    // pump, which is why a phone's tap queues behind it.
     //
-    // It is written this way because each step reads the previous step's target
-    // (blur two reads blur one, the vis pass reads the ESM, the road readback
-    // reads it again), and draining the pipeline is the simplest way to order
-    // that. The price was accepted when a build was a LOAD-TIME event — see the
-    // road readback's own note, "the one hitch at load is already the documented
-    // price of the bakes". A live lobby rebuilds on joins, picks and launch, so
-    // that assumption no longer holds.
-    std::vector<std::pair<const char*, double>> bakePhases;
-    auto bakeAt = std::chrono::steady_clock::now();
-    const auto bakeMark = [&](const char* name) {
-        const auto now = std::chrono::steady_clock::now();
-        bakePhases.emplace_back(name,
-                std::chrono::duration<double, std::milli>(now - bakeAt).count());
-        bakeAt = now;
-    };
+    // It is written this way because each blur pass reads the previous one's
+    // target, and draining the pipeline is the simplest way to order that. The
+    // price is paid once per STATIC scene (buildScene): a join, a race launch or
+    // a restart on the same track rebuilds the field alone and never reaches here.
+    PhaseLog bake;
     // THE CASTERS ARE THE STATIC SCENE, AND CARS CAST NOTHING (setVisibleLayers
-    // 0x02 below). So this whole bake is a function of the track and its biome:
-    // rebuild the same track with a different FIELD — a phone joining, a launch
-    // re-dressing the grid it was already previewing — and the depth render, the
-    // 81-tap ESM blur and the ground's visibility decode all reproduce, bit for
-    // bit, what is already resident. Measured on the Android reference box that
-    // is 520 of a 700 ms build, and the build blocks the main thread for all of
-    // it, inbound relay frames included.
-    //
-    // A bake is a fact about the TRACK rather than about this race. The KEY is
-    // the caller's — only the shim knows what a scene is OF — and an empty one
-    // means "do not reuse", which is what every caller that has not opted in
-    // gets.
-    //
-    // What is NOT skipped is anything keyed to the road MESH, which is new on
-    // every build — see the two calls inside. The two guards below (shadows off,
-    // a road with no verts) both DROP the resident maps on purpose, so the reuse
-    // test has to clear them itself rather than sit after them.
-    if (!mBakeKey.empty() && mBakeKey == mBakedKey && mShadowMap
-            && mShadowsEnabled && !mRoad.verts.empty() && mRenderer) {
-        // THE ROAD'S LIGHT IS NOT WORTH CACHING. Ambient and NoL come off the
-        // road's own normals, so re-deriving them is a few hundred microseconds
-        // of arithmetic and a cache would only be a second thing to keep in step
-        // with the mesh.
-        applyRoadLight(tb);
-        // AND THE DECK'S MAP IS RE-BAKED, not reused with the ESM. It is keyed
-        // to the ROAD MESH's track space, and the mesh is rebuilt on every
-        // build; re-deriving it is one draw into a small target with no readback
-        // and no wait, which is cheaper than reasoning about whether a map
-        // outlived the mesh it was rasterized from. The ESM above is the
-        // expensive half and that IS reused.
-        bakeRoadVis(tb);
-        mBakeKey.clear();   // CONSUMED — see the clear on the baking path below
-        bakeMark("reused");
-        utils::slog.i << "ttp shadow bake: REUSED " << mBakedKey.c_str()
-                << " (" << (int) (bakePhases.back().second + 0.5) << " ms)" << utils::io::endl;
+    // 0x02 below), so the maps are a function of `key` and nothing in a build
+    // of the same key could change them. They are resident here without
+    // their scene after an IMPORT (importBlob adopts its blob's key — the cache
+    // between runs being consumed) or a static build of this key that failed
+    // after its bake. The deck's map is reused with the rest; it is keyed to the
+    // road's track space, as much a function of the key as the casters are.
+    // The two guards below (shadows off, a road with no verts) both DROP the
+    // resident maps on purpose, so this test has to clear them itself rather
+    // than sit after them.
+    if (mShadowsEnabled && !mRoad.verts.empty() && mRenderer && blobResident(key)) {
+        bake.mark("reused");
+        utils::slog.i << "ttp shadow bake: REUSED " << key.c_str()
+                << " (" << (int) (bake.phases.back().second + 0.5) << " ms)" << utils::io::endl;
         return;
     }
     mBakedKey.clear();   // whatever is resident is about to stop being the truth
-    // THROUGH replaceShadowMaps, NOT destroy: the previous build may have staged
-    // a blob whose readback is still writing into one of these, and on GL it
-    // routinely is. The ground's visibility bake rides this function (it needs
-    // the same camera and the finished ESM), so its output resets on the same
-    // early returns — a scene that bakes no map must not keep the last one's.
-    replaceShadowMaps(nullptr, nullptr);
-    // Shadows off (headless automation — see setShadowsEnabled): leave the map
-    // null and let the established no-map path carry it. Everything downstream
-    // already handles this, because a track whose road has no verts reaches the
-    // same state one line below.
+    // THROUGH replaceVisMaps, NOT destroy: the previous build may have staged a
+    // blob whose readback is still writing into one of these. A scene that
+    // bakes no map must not keep the last one's.
+    replaceVisMaps(nullptr, nullptr, nullptr);
+    // Shadows off (headless automation — see setShadowsEnabled): leave the maps
+    // null and let the established no-map path carry it (the binders' white
+    // stand-in). A track whose road has no verts reaches the same state one
+    // line below.
     if (!mShadowsEnabled) return;
     if (mRoad.verts.empty() || !mRenderer) return;
     constexpr uint32_t SM = 2048;
     // Fit: the road's own bounds, padded for the structures under it and the
     // gantry over it. A tight box is the whole point — texel size is what the
-    // shadow's edge resolves to (three refits its ortho box per track for the
-    // same reason).
+    // shadow's edge resolves to.
     float3 lo{ 1e30f }, hi{ -1e30f };
     for (const Vertex& v : mRoad.verts) {
         lo = min(lo, float3{ v.px, v.py, v.pz });
@@ -122,20 +76,19 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     lo -= float3{ 4.0f, 8.0f, 4.0f };
     hi += float3{ 4.0f, 8.0f, 4.0f };
     const float3 centre = (lo + hi) * 0.5f;
-    const float3 toSun = kToSun; // theme.key's axis — see TtpRendererImpl.h
     // Distance to stand the light off at: the bounding-sphere radius still
     // decides that (it has to clear the geometry from any angle), but it no
     // longer decides the ortho BOX — see below.
     const float radius = length(hi - lo) * 0.5f;
 
-    mShadowMap = Texture::Builder()
+    Texture* depth = Texture::Builder()
             .width(SM).height(SM).levels(1)
             .format(Texture::InternalFormat::DEPTH24)
             .usage(Texture::Usage::DEPTH_ATTACHMENT | Texture::Usage::SAMPLEABLE)
             .build(*mEngine);
-    if (!mShadowMap) return;
+    if (!depth) return;
     RenderTarget* rt = RenderTarget::Builder()
-            .texture(RenderTarget::AttachmentPoint::DEPTH, mShadowMap)
+            .texture(RenderTarget::AttachmentPoint::DEPTH, depth)
             .build(*mEngine);
     utils::Entity camEnt = utils::EntityManager::get().create();
     Camera* cam = mEngine->createCamera(camEnt);
@@ -149,7 +102,7 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     // when it could resolve to 0.029. Project the eight bbox corners through the
     // real view matrix (rather than deriving the basis by hand and getting
     // lookAt's convention wrong) and take the extents.
-    cam->lookAt(centre + toSun * (radius * 2.0f), centre, float3{ 0, 0, 1 });
+    cam->lookAt(centre + kToSun * (radius * 2.0f), centre, float3{ 0, 0, 1 });
     float2 vlo{ 1e30f }, vhi{ -1e30f };
     float dNear = 1e30f, dFar = -1e30f;
     {
@@ -176,8 +129,8 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     // 0.28, 5.0 at 0.19 — and below 0.28 the ramp's smoothness falls apart
     // (normalised roughness 0.086 -> 0.099 -> 0.202) while barely narrowing,
     // because a penumbra thinner than a couple of ESM texels cannot survive the
-    // runtime's single bilinear tap. So 0.28: most of the sharpening, none of
-    // the return of the texel grid. Pair it with vlit/vground's kPenumbraWorld,
+    // visibility bake's single bilinear tap. So 0.28: most of the sharpening, none of
+    // the return of the texel grid. Pair it with ttp_sunvis.inc's kPenumbraWorld,
     // which floors the width from the receiver side and was halved to match.
     constexpr float kPenumbraSigmaWorld = 0.28f;
     // Margin so the bake blur never reaches off the edge of the map. Outside it
@@ -193,11 +146,13 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     cam->setProjection(Camera::Projection::ORTHO,
             vlo.x, vhi.x, vlo.y, vhi.y,
             std::max(0.0f, dNear - 1.0f), dFar + 1.0f);
-    // The slope-scaled bias below wants the COARSER of the two axes.
-    mShadowTexel = std::max(vhi.x - vlo.x, vhi.y - vlo.y) / (float) SM;
-    // Normalised depth per world unit, so a bias expressed in metres means the
-    // same thing on a small circuit and a large one.
-    mShadowDepthScale = 1.0f
+    // The decode's two numbers. The slope-scaled bias wants the COARSER of the
+    // two axes; the depth scale is normalised depth per world unit, so a bias
+    // expressed in metres means the same thing on a small circuit and a large
+    // one. esm.map is filled once the blur has made it.
+    SunEsm esm;
+    esm.texel = std::max(vhi.x - vlo.x, vhi.y - vlo.y) / (float) SM;
+    esm.depthScale = 1.0f
             / std::max(1.0f, (dFar + 1.0f) - std::max(0.0f, dNear - 1.0f));
     view->setScene(mScene);
     view->setCamera(cam);
@@ -221,10 +176,10 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     Renderer::ClearOptions co{};
     co.clear = true;
     mRenderer->setClearOptions(co);
-    bakeMark("setup");
+    bake.mark("setup");
     mRenderer->renderStandaloneView(view);
     mRenderer->setClearOptions(prev);
-    bakeMark("depth");
+    bake.mark("depth");
 
     // World → shadow texture space. Read the matrices BEFORE the camera is
     // destroyed — doing it after is a use-after-free that shows up as a wasm
@@ -233,8 +188,8 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     //
     // Filter the raw depth into a blurred EXPONENTIAL map, then throw the depth
     // away. See vesm.mat: exp(-k·d) is linear under filtering, so the softness
-    // is baked in here ONCE and the runtime lookup is a single bilinear tap
-    // instead of an N-tap PCF in every lit fragment of every cell. It also
+    // is baked in here ONCE and the visibility bakes' decode is a single
+    // bilinear tap per texel instead of an N-tap PCF. It also
     // means the map's resolution no longer sets the edge's softness — the blur
     // does — so ESM_SM can be well under the depth map's own size.
     // mPresentVB is the shared fullscreen triangle; without vpresent there is none.
@@ -243,7 +198,6 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
     // happened to create was a sun shadow that vanished whenever that pass
     // was skipped.
     ensurePresentQuad();
-    bool esmOk = false;
     if (mEsmMaterial && mPresentVB && mPresentIB) {
         // A QUARTER of the depth map's size. The blur, not the resolution, sets
         // how soft the edge is (see vesm.mat), so this only has to be fine
@@ -263,7 +217,6 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
         // 2048 render that contour indistinguishably (mean 0.12/255 apart, and
         // the visibility field itself is smooth in both), so the quarter of the
         // memory stands. Sharpen much further and this has to go back up.
-        // Runtime is a single bilinear tap at any of these sizes.
         constexpr uint32_t ESM_SM = 1024;
 
         // TWO PASSES, one per axis. Separating it is what makes a wide kernel
@@ -272,7 +225,7 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
         // taps a texel. Two 81-tap passes cost 162.
         //
         // The penumbra is specified in WORLD units so the edge is equally soft
-        // on the smallest circuit and the largest; mShadowTexel converts it to
+        // on the smallest circuit and the largest; esm.texel converts it to
         // the map's own grid. vesm then takes one tap per texel — see the long
         // note there for why anything sparser bands, which is the entire reason
         // this is a uniform and not a spacing.
@@ -283,9 +236,9 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
         // Gaussian at 3 sigma-worth of taps — a slightly tighter penumbra —
         // rather than stretching the taps back out into a comb.
         const float sigmaTexels = std::min(kPenumbraSigmaWorld
-                        / std::max(1e-4f, mShadowTexel), 40.0f / 3.0f);
+                        / std::max(1e-4f, esm.texel), 40.0f / 3.0f);
 
-        // HALF float, not full. The runtime lookup is a single BILINEAR tap, and
+        // HALF float, not full. The decode is a single BILINEAR tap, and
         // filtering a 32-bit float texture is not universal: on the web it needs
         // OES_texture_float_linear, and on Metal it needs an Apple GPU family
         // above 3 — the Apple TV 4K (1st gen) is an A10X, which reports exactly
@@ -300,25 +253,21 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
         // normals, at ~0.1% RELATIVE error, which is nothing against a penumbra
         // that ramps over several texels. Only the STORED field is half; the
         // per-tap exponential and the 81-tap sum are computed at full precision
-        // in the shader either way. Halves the resident cost again, 4 MB -> 2 MB.
-        Texture* esm = Texture::Builder()
+        // in the shader either way.
+        Texture* out = Texture::Builder()
                 .width(ESM_SM).height(ESM_SM).levels(1)
                 .format(Texture::InternalFormat::R16F)
-                // BLIT_SRC: the road's light bake reads this back with
-                // Renderer::readPixels, which requires (will assert, in a
-                // future Filament) that COLOR0 was created blit-readable.
-                .usage(Texture::Usage::COLOR_ATTACHMENT
-                        | Texture::Usage::SAMPLEABLE | Texture::Usage::BLIT_SRC)
+                .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
                 .build(*mEngine);
         // Ping target for the horizontal pass. Its own filtering matters: pass
         // two samples it at whole-texel offsets, so NEAREST would be exact, but
         // LINEAR costs nothing and forgives the half-texel rounding.
-        Texture* tmp = esm ? Texture::Builder()
+        Texture* tmp = out ? Texture::Builder()
                 .width(ESM_SM).height(ESM_SM).levels(1)
                 .format(Texture::InternalFormat::R16F)
                 .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
                 .build(*mEngine) : nullptr;
-        if (esm && tmp) {
+        if (out && tmp) {
             // The fullscreen triangle, its scene and its camera are the same for
             // both passes; only the material instance and the target differ.
             utils::Entity q = utils::EntityManager::get().create();
@@ -344,8 +293,8 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
             // src, its sampler, its size, the axis, and whether src is raw depth.
             const struct { Texture* src; bool depth; float2 dir; Texture* dst; }
                     passes[2] = {
-                { mShadowMap, true,  { 1.0f, 0.0f }, tmp },
-                { tmp,        false, { 0.0f, 1.0f }, esm },
+                { depth, true,  { 1.0f, 0.0f }, tmp },
+                { tmp,   false, { 0.0f, 1.0f }, out },
             };
             for (const auto& p : passes) {
                 MaterialInstance* emi = mEsmMaterial->createInstance();
@@ -383,12 +332,12 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
                 // RECORDING is free; the WAIT below is where the time goes.
                 // Both halves are marked so the split cannot be misread as CPU
                 // work — see the note on flushAndWait above.
-                bakeMark("blurRecord");
+                bake.mark("blurRecord");
                 mRenderer->renderStandaloneView(qv);
                 mRenderer->setClearOptions(eprev);
                 // Both passes read a texture the next step destroys or writes.
                 mEngine->flushAndWait();
-                bakeMark("blurWait");
+                bake.mark("blurWait");
                 mEngine->destroy(qv);
                 mEngine->destroy(ert);
                 qs->remove(q);
@@ -400,21 +349,16 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
             mEngine->destroyCameraComponent(qcamEnt);
             utils::EntityManager::get().destroy(qcamEnt);
             mEngine->destroy(tmp);
-            mEngine->destroy(mShadowMap); // 2048² DEPTH24 -> ESM_SM² R16F
-            mShadowMap = esm;
-            esmOk = true;
-        } else if (esm) {
-            mEngine->destroy(esm);
+            esm.map = out;
+        } else if (out) {
+            mEngine->destroy(out);
         }
     }
-    if (!esmOk) {
-        // R16F needs EXT_color_buffer_float, and vpresent has to be present for
-        // the fullscreen triangle. Without both, the raw depth map is still
-        // sitting in mShadowMap — but the samplers now do an ESM lookup, which
-        // is meaningless on depth. Drop it: bindShadowMap then binds the 1x1
-        // white stand-in with shadowTexel 0, which reads as "fully lit".
-        if (mShadowMap) { mEngine->destroy(mShadowMap); mShadowMap = nullptr; }
-    }
+    // The raw depth is spent either way. Without an ESM (R16F needs
+    // EXT_color_buffer_float, and the fullscreen triangle needs vpresent) no
+    // visibility map is baked, and the binders' white stand-in reads as fully
+    // lit.
+    mEngine->destroy(depth);
 
     // Clip → texture space. x and y are the usual half-scale; z needs a NEGATIVE
     // one, and getting that wrong is why no track has ever had a correct baked
@@ -442,122 +386,128 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
                       float4{ 0, 0, -0.5f, 0 }, float4{ 0.5f, 0.5f, 0.5f, 1 } };
     mShadowFromWorld = bias * lightViewProj;
 
-    // The GROUND's visibility map: the exact runtime ESM decode, evaluated
-    // ONCE over the light's own grid by rendering the real ground mesh
-    // through this same camera with vvis.mat. vground then pays one bilinear
-    // R8 tap per fragment instead of the whole chain — see both materials.
-    // The target texel grid is shadowFromWorld's own [0,1]² by construction
-    // (same camera, same bias), so no second transform exists to drift.
+    // THE VISIBILITY MAPS: the exact ESM decode, evaluated ONCE over the
+    // light's own grid by rendering the receivers through this same camera with
+    // vvis.mat. A receiver then pays one bilinear R8 tap per fragment instead of
+    // the whole chain — see vground.mat. The target texel grid is
+    // shadowFromWorld's own [0,1]² by construction (same camera, same bias), so
+    // no second transform exists to drift.
+    //
+    // TWO MAPS, because a light-space map is SINGLE-VALUED: it holds one surface
+    // per texel. Drawing the structures into the ground's map would overwrite
+    // the ground texels they cover as seen from the sun — which are exactly the
+    // texels of their own cast shadow — and erase the shadow a free-standing
+    // loop shaft throws on the ground. So the ground keeps a map of its own (one
+    // surface, no depth buffer), and the structures and berms share a second,
+    // DEPTH-TESTED so the surface nearest the sun wins each texel.
     //
     // 512²: the softness lives in the ESM (whose own floor measured at 512 —
-    // 256 scallops), and this map only re-samples it; 0.25 MB resident.
-    if (esmOk && mVisMaterial && mGround.vb && mGround.ib
-            && !mGround.idx.empty()) {
-        constexpr uint32_t VIS_SM = 512;
-        // BLIT_SRC for the same reason the ESM carries it: exportBake reads this
-        // map back so it can be persisted, and Filament warns (and will later
-        // ASSERT) on a readPixels whose COLOR0 was not made blit-readable. The
-        // warning is not cosmetic — what a readback of a non-BLIT_SRC target
-        // returns is up to the driver, and this map is the ground's own sun
-        // shadow, so a wrong one is a wrongly-lit floor rather than a crash.
-        Texture* vis = Texture::Builder()
-                .width(VIS_SM).height(VIS_SM).levels(1)
-                .format(Texture::InternalFormat::R8)
-                .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE
-                        | Texture::Usage::BLIT_SRC)
-                .build(*mEngine);
-        if (vis) {
-            MaterialInstance* vmi = mVisMaterial->createInstance();
-            // The five shadow parameters, by the names every receiver shares.
-            bindShadowMap(vmi);
-            // Explicit rather than read from a scene light: the throwaway
-            // scene below has none, and this is the vector the live scene's
-            // frameUniforms.lightDirection carries (Track's sun is built
-            // from the same constant).
-            vmi->setParameter("sunDir", toSun);
-            utils::Entity ge = utils::EntityManager::get().create();
-            RenderableManager::Builder(1)
-                    .boundingBox({ { 0, 0, 0 }, { 1, 1, 1 } })
-                    .material(0, vmi)
-                    .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
-                            mGround.vb, mGround.ib, 0, mGround.idx.size())
-                    .culling(false).castShadows(false).receiveShadows(false)
-                    .build(*mEngine, ge);
-            Scene* gs = mEngine->createScene();
-            gs->addEntity(ge);
-            RenderTarget* vrt = RenderTarget::Builder()
-                    .texture(RenderTarget::AttachmentPoint::COLOR, vis)
-                    .build(*mEngine);
-            View* vv = mEngine->createView();
-            vv->setScene(gs);
-            vv->setCamera(cam);
-            vv->setViewport({ 0, 0, VIS_SM, VIS_SM });
-            vv->setRenderTarget(vrt);
-            vv->setPostProcessingEnabled(false);
-            vv->setShadowingEnabled(false);
-            vv->setFrustumCullingEnabled(false);
-            const Renderer::ClearOptions vprev = mRenderer->getClearOptions();
-            Renderer::ClearOptions vco{};
-            vco.clear = true;
-            // Fully lit where the ground does not reach — the margin rows the
-            // ESM fit reserved are caster-free, so CLAMP_TO_EDGE extending
-            // the border outward answers what the old out-of-frustum
-            // early-out did.
-            vco.clearColor = { 1, 1, 1, 1 };
-            mRenderer->setClearOptions(vco);
-            bakeMark("visRecord");
-            mRenderer->renderStandaloneView(vv);
-            mRenderer->setClearOptions(vprev);
-            mEngine->flushAndWait();
-            bakeMark("visWait");
-            mEngine->destroy(vv);
-            mEngine->destroy(vrt);
-            gs->remove(ge);
-            mEngine->destroy(ge);
-            utils::EntityManager::get().destroy(ge);
-            mEngine->destroy(gs);
-            mEngine->destroy(vmi);
-            mVisMap = vis;
+    // 256 scallops), and these maps only re-sample it.
+    const auto bakeVis = [&](std::initializer_list<const Mesh*> meshes,
+            bool depthTested) -> Texture* {
+        std::vector<BakeDraw> draws;
+        for (const Mesh* m : meshes) {
+            if (m->vb && m->ib && !m->idx.empty() && !m->custom0.empty()) {
+                draws.push_back({ m->vb, m->ib, m->idx.size() });
+            }
         }
+        if (draws.empty()) return nullptr;
+        MaterialInstance* vmi = mVisMaterial->createInstance();
+        bindShadowMap(vmi, esm);
+        Texture* vis = bakeR8(vmi, cam, 512, 512, draws, depthTested);
+        mEngine->destroy(vmi);
+        return vis;
+    };
+    if (esm.map) {
+        if (mVisMaterial) {
+            mVisMap = bakeVis({ &mGround }, false);
+            mStructVisMap = bakeVis({ &mStructures, &mBerms }, true);
+        }
+        bake.mark("vis");
+        bakeRoadVis(tb, esm);
+        bake.mark("roadVis");
+        mEngine->destroy(esm.map);   // the ESM was only ever the bakes' input
     }
-
-    // ── The ROAD's baked vertex light, and the deck's visibility map ─────
-    // vroad's materialVertex used to run the whole matte-light split per road
-    // vertex PER FRAME (a mat4 multiply, a vertex texture tap, a log, a sqrt,
-    // two smoothsteps — on the scene's biggest mesh), and every input is
-    // static per track, so it was evaluated once here instead.
-    //
-    // THE SPLIT MOVED, and only its smooth half is still a vertex term. Ambient
-    // and NoL vary over metres in BOTH axes and stay baked; visibility does not
-    // — the cross-section leaves ~2.15 u of each lane with no vertex column, so
-    // a cast shadow narrower than that was interpolated away (vroadvis.mat has
-    // the measurements). It is a track-space GPU bake now.
-    //
-    // Which is also why nothing here reads a map any more, and why the whole
-    // deferred-readback apparatus this function used to need is gone: the fill
-    // is arithmetic over the road's own normals and completes inside the build
-    // on every backend.
-    applyRoadLight(tb);
-    bakeMark("roadLight");
-    bakeRoadVis(tb);
-    bakeMark("roadVis");
 
     mEngine->destroy(view);
     mEngine->destroy(rt);
     mEngine->destroyCameraComponent(camEnt);
     utils::EntityManager::get().destroy(camEnt);
-    // CONSUMED, not merely read. The key is a statement about THIS build, so a
-    // caller that reaches buildScene without making one must fall through to a
-    // real bake rather than inherit the last caller's claim — there is one call
-    // site today and this is what keeps a second one from being a silent, wrong
-    // reuse of somebody else's shadows.
-    mBakedKey = mBakeKey;   // the resident maps are now this key's
-    mBakeKey.clear();
-    {
-        auto& line = utils::slog.i << "ttp shadow bake:";
-        for (const auto& p : bakePhases) line << " " << p.first << " " << (int) (p.second + 0.5);
-        line << utils::io::endl;
+    mBakedKey = key;   // the resident maps are now this key's
+    bake.print("ttp shadow bake:");
+}
+
+// ── The visibility bakes' one shape ─────────────────────────────────────────
+//
+// NO WAIT: nothing reads these back inside the build, and Filament orders the
+// pass against everything destroyed after it — the ESM, the caller's instance
+// and buffers (the tap happens in a later frame's draw, the blob's read on a
+// later frame beat).
+Texture* TtpRenderer::bakeR8(MaterialInstance* mi, Camera* cam, uint32_t w, uint32_t h,
+        const std::vector<BakeDraw>& draws, bool depthTested) {
+    // BLIT_SRC: the blob export reads the map back, and a readPixels whose
+    // COLOR0 was not made blit-readable returns whatever the driver likes.
+    Texture* vis = Texture::Builder()
+            .width(w).height(h).levels(1)
+            .format(Texture::InternalFormat::R8)
+            .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE
+                    | Texture::Usage::BLIT_SRC)
+            .build(*mEngine);
+    if (!vis) return nullptr;
+    Texture* zbuf = depthTested ? Texture::Builder()
+            .width(w).height(h).levels(1)
+            .format(Texture::InternalFormat::DEPTH24)
+            .usage(Texture::Usage::DEPTH_ATTACHMENT)
+            .build(*mEngine) : nullptr;
+    mi->setDepthWrite(zbuf != nullptr);
+    mi->setDepthCulling(zbuf != nullptr);
+    Scene* sc = mEngine->createScene();
+    std::vector<utils::Entity> ents;
+    for (const BakeDraw& d : draws) {
+        const utils::Entity e = utils::EntityManager::get().create();
+        RenderableManager::Builder(1)
+                .boundingBox({ { 0, 0, 0 }, { 1, 1, 1 } })
+                .material(0, mi)
+                .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
+                        d.vb, d.ib, 0, d.count)
+                .culling(false).castShadows(false).receiveShadows(false)
+                .build(*mEngine, e);
+        sc->addEntity(e);
+        ents.push_back(e);
     }
+    RenderTarget::Builder rtb;
+    rtb.texture(RenderTarget::AttachmentPoint::COLOR, vis);
+    if (zbuf) rtb.texture(RenderTarget::AttachmentPoint::DEPTH, zbuf);
+    RenderTarget* rt = rtb.build(*mEngine);
+    View* v = mEngine->createView();
+    v->setScene(sc);
+    v->setCamera(cam);
+    v->setViewport({ 0, 0, w, h });
+    v->setRenderTarget(rt);
+    v->setPostProcessingEnabled(false);
+    v->setShadowingEnabled(false);
+    v->setFrustumCullingEnabled(false);
+    const Renderer::ClearOptions prev = mRenderer->getClearOptions();
+    Renderer::ClearOptions co{};
+    co.clear = true;
+    // FULLY LIT where no receiver lands. The light-space maps' margin rows are
+    // caster-free (the ESM fit reserved them), and the deck map's rows outside
+    // its own lat span are never sampled under CLAMP_TO_EDGE — but a cleared
+    // target must not start as ink either way.
+    co.clearColor = { 1, 1, 1, 1 };
+    mRenderer->setClearOptions(co);
+    mRenderer->renderStandaloneView(v);
+    mRenderer->setClearOptions(prev);
+    mEngine->destroy(v);
+    mEngine->destroy(rt);
+    if (zbuf) mEngine->destroy(zbuf);
+    for (utils::Entity e : ents) {
+        sc->remove(e);
+        mEngine->destroy(e);
+        utils::EntityManager::get().destroy(e);
+    }
+    mEngine->destroy(sc);
+    return vis;
 }
 
 // ── The DECK's sun-visibility bake ──────────────────────────────────────────
@@ -566,15 +516,14 @@ void TtpRenderer::bakeShadowMap(const TrackBin& tb) {
 // vroadvis.mat carries the whole argument for why the deck needs a map at all
 // and why it cannot be the light's grid; this is the plumbing.
 //
-// NO READBACK, and that is the point of the whole shape: the ESM stays on the
-// GPU and is sampled by the bake shader, where it used to be pulled to the CPU
-// so fillRoadLight could evaluate the same decode per vertex.
-void TtpRenderer::bakeRoadVis(const TrackBin& tb) {
-    if (mRoadVisMap) { mEngine->destroy(mRoadVisMap); mRoadVisMap = nullptr; }
+// NO READBACK inside the build: the ESM stays on the GPU and is sampled by the
+// bake shader, where it used to be pulled to the CPU so the road's vertex light
+// could evaluate the same decode per vertex.
+void TtpRenderer::bakeRoadVis(const TrackBin& tb, const SunEsm& esm) {
     mRoadVisLatHalf = 0;
-    if (!mRoadVisMaterial || !mShadowMap || !mRenderer || !mRoad.ib
+    if (!mRoadVisMaterial || !mRenderer || !mRoad.ib
             || mRoad.verts.empty() || mRoad.uvs.size() < mRoad.verts.size()
-            || mRoad.normals.size() < mRoad.verts.size()) {
+            || mRoad.custom0.size() < mRoad.verts.size()) {
         return;
     }
     // The DECK's own half-span. Not the rubber layer's maxHalf + 0.7: an
@@ -583,9 +532,9 @@ void TtpRenderer::bakeRoadVis(const TrackBin& tb) {
     for (const TrackBin::Sample& r : tb.rings) maxHalf = std::max(maxHalf, r.width * 0.5f);
     if (!(maxHalf > 0.0f) || !(tb.length > 1.0f)) return;
 
-    // SIZED FROM THE PENUMBRA, not from the deck's texel budget. kPenumbraWorld
-    // is 0.6 world units, and ~8 texels across it is smooth under a bilinear
-    // tap, so ~13 texels/u is the target on both axes. The width cap is what
+    // SIZED FROM THE PENUMBRA, not from the deck's texel budget: ~13 texels/u
+    // on both axes puts ~8 texels across ttp_sunvis.inc's kPenumbraWorld, which
+    // is smooth under a bilinear tap. The width cap is what
     // binds on a long lap (as it does for the rubber layer), and where it binds
     // the map simply gets coarser ALONG the track — the axis the old per-vertex
     // term was already fine on, since the rings are 0.48 u apart.
@@ -596,8 +545,7 @@ void TtpRenderer::bakeRoadVis(const TrackBin& tb) {
 
     // The bake mesh: the road's own topology, with POSITION already in clip
     // space (track uv) and custom0 carrying what the fragment needs. Built here
-    // and destroyed below — it is a few hundred KB for one draw, and keeping it
-    // would mean keeping it in step with a mesh that is rebuilt every build.
+    // and destroyed below — it is a few hundred KB for one draw.
     // HEAP-OWNED, WITH A RELEASE CALLBACK, and this is not defensive. A
     // BufferDescriptor over a LOCAL is a use-after-free that no flush covers:
     // the upload is asynchronous, so the driver may read these bytes long after
@@ -623,13 +571,12 @@ void TtpRenderer::bakeRoadVis(const TrackBin& tb) {
         pos[i * 3 + 0] = tc.x * invLen * 2.0f - 1.0f;
         pos[i * 3 + 1] = (tc.y * invLat + 0.5f) * 2.0f - 1.0f;
         pos[i * 3 + 2] = 0.0f;
-        const float3 nrm = mRoad.normals[i];
         const float3 wp{ mRoad.verts[i].px, mRoad.verts[i].py, mRoad.verts[i].pz };
         const float4 uv = mShadowFromWorld * float4{ wp, 1.0f };
         probe[i * 4 + 0] = uv.x;
         probe[i * 4 + 1] = uv.y;
         probe[i * 4 + 2] = uv.z;
-        probe[i * 4 + 3] = std::min(1.0f, std::max(0.0f, dot(nrm, kToSun)));
+        probe[i * 4 + 3] = mRoad.custom0[i].w;   // the NoL the deck draws with
     }
     VertexBuffer* vb = VertexBuffer::Builder()
             .vertexCount((uint32_t) nv).bufferCount(2)
@@ -642,129 +589,52 @@ void TtpRenderer::bakeRoadVis(const TrackBin& tb) {
     vb->setBufferAt(*mEngine, 1, VertexBuffer::BufferDescriptor(
             probe, nv * 4 * sizeof(float), freeFloats));
 
-    Texture* vis = Texture::Builder()
-            .width(W).height(H).levels(1)
-            .format(Texture::InternalFormat::R8)
-            .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE)
-            .build(*mEngine);
-    if (!vis) { mEngine->destroy(vb); return; }   // vb's descriptors free themselves
-
     MaterialInstance* mi = mRoadVisMaterial->createInstance();
-    bindShadowMap(mi);
-    utils::Entity e = utils::EntityManager::get().create();
-    RenderableManager::Builder(1)
-            .boundingBox({ { 0, 0, 0 }, { 1, 1, 1 } })
-            .material(0, mi)
-            .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
-                    vb, mRoad.ib, 0, mRoad.idx.size())
-            .culling(false).castShadows(false).receiveShadows(false)
-            .build(*mEngine, e);
-    Scene* sc = mEngine->createScene();
-    sc->addEntity(e);
+    bindShadowMap(mi, esm);
     utils::Entity camEnt = utils::EntityManager::get().create();
     Camera* cam = mEngine->createCamera(camEnt);
     cam->setProjection(Camera::Projection::ORTHO, -1, 1, -1, 1, 0, 1);
-    RenderTarget* rt = RenderTarget::Builder()
-            .texture(RenderTarget::AttachmentPoint::COLOR, vis)
-            .build(*mEngine);
-    View* v = mEngine->createView();
-    v->setScene(sc);
-    v->setCamera(cam);
-    v->setViewport({ 0, 0, W, H });
-    v->setRenderTarget(rt);
-    v->setPostProcessingEnabled(false);
-    v->setShadowingEnabled(false);
-    v->setFrustumCullingEnabled(false);
-    const Renderer::ClearOptions prev = mRenderer->getClearOptions();
-    Renderer::ClearOptions co{};
-    co.clear = true;
-    // FULLY LIT where no deck quad lands. The margin rows outside the deck's
-    // own lat span are never rasterized, and CLAMP_TO_EDGE means a receiver
-    // never samples them anyway — but a cleared target must not start as ink.
-    co.clearColor = { 1, 1, 1, 1 };
-    mRenderer->setClearOptions(co);
-    mRenderer->renderStandaloneView(v);
-    mRenderer->setClearOptions(prev);
-    // NOT flushAndWait: nothing reads this back, and the only ordering that
-    // matters is Filament's own (the tap happens in a later frame's draw).
-    mEngine->destroy(v);
-    mEngine->destroy(rt);
+    Texture* vis = bakeR8(mi, cam, W, H, { { vb, mRoad.ib, mRoad.idx.size() } }, false);
     mEngine->destroyCameraComponent(camEnt);
     utils::EntityManager::get().destroy(camEnt);
-    sc->remove(e);
-    mEngine->destroy(e);
-    utils::EntityManager::get().destroy(e);
-    mEngine->destroy(sc);
     mEngine->destroy(mi);
-    mEngine->destroy(vb);
+    mEngine->destroy(vb);   // its descriptors free themselves
+    if (!vis) return;
     mRoadVisMap = vis;
     mRoadVisLatHalf = maxHalf;
 }
 
-// fillRoadLight plus the upload it is useless without.
-void TtpRenderer::applyRoadLight(const TrackBin& tb) {
-    if (mRoad.custom0.empty() || !mRoad.vb) return;
-    fillRoadLight(tb);
-    mRoad.vb->setBufferAt(*mEngine, mRoad.layout.customSlot(),
-            VertexBuffer::BufferDescriptor(mRoad.custom0.data(),
-                    mRoad.custom0.size() * sizeof(half4), nullptr));
-}
-
-void TtpRenderer::fillRoadLight(const TrackBin& tb) {
-    const size_t n = mRoad.custom0.size();
-    if (!n || mRoad.normals.size() < n) return;
-    const MatteRig rig = matteRig(tb);
-    const float exposure = Exposure::exposure(*mCamera);
-    const float iblLum = rig.hemiLux * exposure;
-    // THE SMOOTH HALVES ONLY — ambient in xyz, NoL in w. The sun's COLOUR is a
-    // frame uniform, so vroad's vertex stage rebuilds the sun term from this
-    // scalar through ttp_shade.inc's own ttpMatteSunTerm and there is still one
-    // spelling of the constant. And VISIBILITY is not here at all: it is the
-    // one term that is not smooth across the deck, so it comes from a
-    // track-space tap (bakeRoadVis) instead of being interpolated between
-    // vertex columns 2.15 u apart.
-    //
-    // Which is why this function reads no map. It used to take the ESM back off
-    // the GPU to evaluate the whole decode per vertex; now it is arithmetic
-    // over the road's own normals and finishes inside the build on every
-    // backend, so no read is ever parked and nothing has to collect one later.
-    for (size_t i = 0; i < n; i++) {
-        const float3 nrm = mRoad.normals[i];
-        const float NoL = std::min(1.0f, std::max(0.0f, dot(nrm, kToSun)));
-        // ttpMatteAmbient (sh2/sh3 are zero — the hemisphere has no horizontal
-        // band), pre-exposed exactly as the shader's iblLuminance is.
-        const float3 amb = max(rig.sh0 + rig.sh1 * nrm.y, float3{ 0.0f }) * iblLum;
-        mRoad.custom0[i] = half4{ amb.x, amb.y, amb.z, NoL };
-    }
-}
-
 // ── Derived bytes, kept between runs ────────────────────────────────────────
 //
-// WHY THIS CROSSES THE ABI AT ALL. The sun bake is 520 ms of GPU on the Android
-// reference box and it is resolution-independent — the three sizes are compile
-// -time constants (SM, ESM_SM, VIS_SM) and no viewport, window or render-scale
-// value reaches it — so it is worth keeping between RUNS, not just between
-// builds. Keeping something between runs means a file, and a file is the
-// shell's job (`ttp_abi.h`: the transport stays on the host side by design). So
-// this hands over bytes and takes them back, and decides nothing about where
-// they live.
+// WHY THIS CROSSES THE ABI AT ALL. The sun bake is most of a scene build's GPU
+// time on the Android reference box and it is resolution-independent — its
+// sizes are a function of the track and the device's texture ceiling, and no
+// viewport, window or render-scale value reaches it — so it is worth keeping
+// between RUNS, not just between builds. Keeping something between runs means
+// a file, and a file is the shell's job (`ttp_abi.h`: the transport stays on
+// the host side by design). So this hands over bytes and takes them back, and
+// decides nothing about where they live.
+//
+// A BLOB CARRIES EXACTLY WHAT THE RUNTIME SHADERS SAMPLE: the three visibility
+// maps and the two numbers that address them (shadowFromWorld, the deck map's
+// lat span). The ESM is a bake intermediate and never leaves bakeShadowMap.
 //
 // EVERY BLOB CARRIES ITS OWN KEY, and that is what makes a stale file harmless
 // rather than invisible: import adopts the key it finds, and the next build's
 // own key has to match it before anything is reused. What a key CANNOT cover is
 // the engine that produced it — a shader edit reproduces the same
-// `track|biome|showcase` and would silently serve shadows baked by the old
-// vesm. That invalidation is the shell's, and it is why the file lives under a
-// directory named for the installed binary rather than beside the track id.
+// key and would silently serve shadows baked by the old
+// vesm. That invalidation is the shell's GENERATION, which ttp/blobstore.h
+// folds into the file's NAME so a new binary cannot even name the old blob.
 namespace {
 constexpr uint32_t kBakeMagic = 0x42505454u;  // 'TTPB', little-endian
 // v2: the writing BACKEND rides the header and import refuses a foreign blob —
-// see the flip note in finishBakeBlob. v1 blobs written under Vulkan are
-// mirrored, so the bump also retires every v1 file.
-// v3: the road's baked vertex light left the tail. It was cached because
-// re-deriving it needed an ESM readback; it reads no map now (fillRoadLight),
-// so the bytes cost more than the arithmetic they saved.
-constexpr uint32_t kBakeVersion = 3u;
+// see the flip note in stageBlob. v1 blobs written under Vulkan are mirrored,
+// so the bump also retires every v1 file.
+// v3: the road's baked vertex light left the tail.
+// v4: the ESM left the blob; it carries the three visibility maps instead
+// (ground, structures, deck), each as width, height and R8 rows.
+constexpr uint32_t kBakeVersion = 4u;
 
 void putU32(std::vector<uint8_t>& out, uint32_t v) {
     out.insert(out.end(), (const uint8_t*) &v, (const uint8_t*) &v + 4);
@@ -796,17 +666,18 @@ bool takeStr(const uint8_t*& p, const uint8_t* end, std::string& v) {
 
 // ── What this build could keep, and what it already holds ───────────────────
 
+// RESIDENT means the VISIBILITY MAPS are, for this key: they are what the
+// receivers sample, and the bake's reuse test, import and export all ask this.
+// The structures' map is not required — a track with no structures has none.
 bool TtpRenderer::blobResident(const std::string& key) const {
     if (key.empty()) return false;
-    return key == mBakedKey && mShadowMap;
+    return key == mBakedKey && mVisMap && mRoadVisMap;
 }
 
 // ── Staging: snapshot the metadata, issue the reads ─────────────────────────
 
-bool TtpRenderer::issueRead(StagedBlob& blob, Texture* tex, bool asFloat) {
+bool TtpRenderer::issueRead(StagedBlob& blob, Texture* tex) {
     if (!tex || !mRenderer) return false;
-    const Texture::Type type = asFloat ? Texture::Type::FLOAT : Texture::Type::UBYTE;
-    const uint32_t bytesPerChannel = asFloat ? 4u : 1u;
     const uint32_t W = tex->getWidth(0), H = tex->getHeight(0);
     RenderTarget* rt = RenderTarget::Builder()
             .texture(RenderTarget::AttachmentPoint::COLOR, tex)
@@ -817,13 +688,12 @@ bool TtpRenderer::issueRead(StagedBlob& blob, Texture* tex, bool asFloat) {
     // — so the buffer may not be moved, resized or freed on the way out.
     auto rd = std::make_unique<StagedRead>();
     rd->tex = tex;
-    rd->asFloat = asFloat;
     rd->w = W;
     rd->h = H;
     rd->rt = rt;
-    rd->px.resize((size_t) W * H * 4 * bytesPerChannel);
+    rd->px.resize((size_t) W * H * 4);
     Texture::PixelBufferDescriptor pbd(rd->px.data(), rd->px.size(),
-            Texture::Format::RGBA, type,
+            Texture::Format::RGBA, Texture::Type::UBYTE,
             [](void*, size_t, void* user) { static_cast<StagedRead*>(user)->done = true; },
             rd.get());
     mRenderer->readPixels(rt, 0, 0, W, H, std::move(pbd));
@@ -838,6 +708,9 @@ bool TtpRenderer::stageBlob(const std::string& key) {
     for (const auto& s : mStaged) {
         if (s->key == key) return true;
     }
+    // Only the resident bake's key names anything to stage; any other key gets
+    // a refusal.
+    if (!blobResident(key)) return false;
     auto blob = std::make_unique<StagedBlob>();
     blob->key = key;
     // ROWS GO BACK THE OTHER WAY ON OPENGL ALONE, and this is a documented
@@ -860,9 +733,6 @@ bool TtpRenderer::stageBlob(const std::string& key) {
     // wrong side of the circuit.
     blob->flip = mEngine->getBackend() == Engine::Backend::OPENGL;
 
-    // Only the resident bake's key names anything to stage; any other key gets
-    // a refusal.
-    if (mBakedKey.empty() || key != mBakedKey || !mShadowMap) return false;
     // EVERYTHING THAT IS NOT A READBACK, NOW. A staged blob that read these
     // at finish time would pair this build's pixels with a later build's
     // matrices — which is the whole reason the split exists.
@@ -870,18 +740,21 @@ bool TtpRenderer::stageBlob(const std::string& key) {
     putU32(blob->head, kBakeVersion);
     putU32(blob->head, (uint32_t) mEngine->getBackend());
     putStr(blob->head, mBakedKey);
-    putF32(blob->head, mShadowTexel);
-    putF32(blob->head, mShadowDepthScale);
     for (int c = 0; c < 4; c++) {
         for (int r = 0; r < 4; r++) putF32(blob->head, mShadowFromWorld[c][r]);
     }
-    // BOTH MAPS OR NEITHER. The visibility map used to be optional here,
-    // which was harmless while every read landed inside the call — and
-    // silently shipped a blob with no vis map the moment one did not.
-    if (!issueRead(*blob, mShadowMap, /*asFloat=*/true)) return false;
-    if (mVisMap && !issueRead(*blob, mVisMap, /*asFloat=*/false)) {
-        retireStaged(*blob);
-        return false;
+    putF32(blob->head, mRoadVisLatHalf);
+    // ONE READ PER MAP, in the blob's order. An absent map (a track with no
+    // structures) is an empty read that has already landed, so it writes as
+    // 0 x 0 and the order never shifts.
+    for (Texture* map : { mVisMap, mStructVisMap, mRoadVisMap }) {
+        if (!map) {
+            blob->reads.push_back(std::make_unique<StagedRead>());
+            blob->reads.back()->done = true;
+        } else if (!issueRead(*blob, map)) {
+            retireStaged(*blob);
+            return false;
+        }
     }
     mStaged.push_back(std::move(blob));
     return true;
@@ -889,44 +762,21 @@ bool TtpRenderer::stageBlob(const std::string& key) {
 
 // ── Finishing: splice the landed pixels into the snapshot ───────────────────
 
+// Each map comes back as RGBA bytes; the R channel is what the texture holds.
+// A short read leaves the bytes empty, and collectStagedBlobs drops the blob.
 void TtpRenderer::finishBakeBlob(StagedBlob& blob) {
-    const StagedRead& esmRead = *blob.reads[0];
-    const uint32_t ew = esmRead.w, eh = esmRead.h;
-    const size_t texels = (size_t) ew * eh;
-    if (esmRead.px.size() < texels * 16) return;
-    // The ESM is R16F and comes back as RGBA float, so the R channel is taken
-    // and re-narrowed to the half it is stored as — 2 MB rather than the 16 MB
-    // the readback itself needs, and the same bits the texture holds.
-    std::vector<math::half> esm(texels);
-    const float* src = (const float*) esmRead.px.data();
-    for (uint32_t y = 0; y < eh; y++) {
-        const float* row = src + (size_t) (blob.flip ? eh - 1 - y : y) * ew * 4;
-        math::half* dst = esm.data() + (size_t) y * ew;
-        for (uint32_t x = 0; x < ew; x++) dst[x] = math::half(row[x * 4]);
-    }
-
     std::vector<uint8_t>& out = blob.bytes;
     out = blob.head;
-    putU32(out, ew);
-    putU32(out, eh);
-    out.insert(out.end(), (const uint8_t*) esm.data(),
-            (const uint8_t*) esm.data() + texels * sizeof(math::half));
-
-    const uint32_t vw = blob.reads.size() > 1 ? blob.reads[1]->w : 0;
-    const uint32_t vh = blob.reads.size() > 1 ? blob.reads[1]->h : 0;
-    putU32(out, vw);
-    putU32(out, vh);
-    if (vw && vh) {
-        const std::vector<uint8_t>& visRGBA = blob.reads[1]->px;
-        std::vector<uint8_t> vis((size_t) vw * vh);
-        for (uint32_t y = 0; y < vh; y++) {          // GL-flipped, as above
-            const uint8_t* row = visRGBA.data() + (size_t) (blob.flip ? vh - 1 - y : y) * vw * 4;
-            uint8_t* dst = vis.data() + (size_t) y * vw;
-            for (uint32_t x = 0; x < vw; x++) dst[x] = row[x * 4];
+    for (const auto& rd : blob.reads) {
+        const uint32_t w = rd->w, h = rd->h;
+        if (rd->px.size() < (size_t) w * h * 4) { out.clear(); return; }
+        putU32(out, w);
+        putU32(out, h);
+        for (uint32_t y = 0; y < h; y++) {          // GL-flipped, see stageBlob
+            const uint8_t* row = rd->px.data() + (size_t) (blob.flip ? h - 1 - y : y) * w * 4;
+            for (uint32_t x = 0; x < w; x++) out.push_back(row[x * 4]);
         }
-        out.insert(out.end(), vis.begin(), vis.end());
     }
-    out.insert(out.end(), blob.tail.begin(), blob.tail.end());
 }
 
 void TtpRenderer::retireStaged(StagedBlob& blob) {
@@ -998,6 +848,10 @@ bool TtpRenderer::takeStagedBlob(const std::string& key, std::vector<uint8_t>& o
 // SELF-DESCRIBING, so there is no store argument: a caller that hands over
 // the wrong file gets a refusal on the magic rather than a misparse. A blob the
 // engine refuses is a MISS, never an error — the scene makes the thing again.
+//
+// Each map's size is the BLOB's, never recomputed: the deck map's width
+// depends on the device's texture ceiling, and the sampler is in normalized uv,
+// so any size the writer chose samples correctly.
 
 std::string TtpRenderer::importBlob(const uint8_t* bytes, uint32_t len) {
     if (!bytes || len < 16 || !mEngine) return std::string();
@@ -1014,88 +868,94 @@ std::string TtpRenderer::importBlob(const uint8_t* bytes, uint32_t len) {
             || backend != (uint32_t) mEngine->getBackend()) return std::string();
     std::string key;
     if (!takeStr(p, end, key)) return std::string();
-    // ALREADY RESIDENT. Uploading two textures to arrive where we are costs the
-    // ~50 ms this whole path exists to avoid.
-    if (key == mBakedKey && mShadowMap) return key;
+    // ALREADY RESIDENT. Uploading the maps to arrive where we are costs the
+    // time this whole path exists to avoid.
+    if (blobResident(key)) return key;
 
-    float texel = 0, depthScale = 0;
-    if (!takeF32(p, end, texel) || !takeF32(p, end, depthScale)) return std::string();
     math::mat4f fromWorld;
     for (int c = 0; c < 4; c++) {
         for (int r = 0; r < 4; r++) {
             if (!takeF32(p, end, fromWorld[c][r])) return std::string();
         }
     }
-    uint32_t ew = 0, eh = 0;
-    if (!takeU32(p, end, ew) || !takeU32(p, end, eh) || !ew || !eh) return std::string();
-    const size_t esmBytes = (size_t) ew * eh * sizeof(math::half);
-    if ((size_t) (end - p) < esmBytes) return std::string();
-    const uint8_t* esmSrc = p;
-    p += esmBytes;
-    uint32_t vw = 0, vh = 0;
-    if (!takeU32(p, end, vw) || !takeU32(p, end, vh)) return std::string();
-    const size_t visBytes = (size_t) vw * vh;
-    if ((size_t) (end - p) < visBytes) return std::string();
-    const uint8_t* visSrc = p;
-    p += visBytes;
+    float latHalf = 0;
+    if (!takeF32(p, end, latHalf)) return std::string();
+    // Ground, structures, deck — stageBlob's order. Parsed whole before a
+    // texture exists, so a short blob costs nothing to refuse.
+    struct Map { uint32_t w = 0, h = 0; const uint8_t* src = nullptr; } maps[3];
+    for (Map& m : maps) {
+        if (!takeU32(p, end, m.w) || !takeU32(p, end, m.h)) return std::string();
+        // The bake's own cap, and what keeps w * h from wrapping a 32-bit
+        // size_t on a corrupt header.
+        if (m.w > mMaxTextureDim || m.h > mMaxTextureDim) return std::string();
+        const size_t n = (size_t) m.w * m.h;
+        if ((size_t) (end - p) < n) return std::string();
+        m.src = p;
+        p += n;
+    }
+    if (!maps[0].w || !maps[0].h || !maps[2].w || !maps[2].h) return std::string();
 
     // UPLOADABLE IS NOT OPTIONAL HERE, and its absence does not report: a
     // setImage into a texture that lacks it hangs this driver outright, with no
-    // panic and no log — the bake's own ESM never needed the bit because it is
-    // RENDERED into, never uploaded. COLOR_ATTACHMENT stays because the road's
-    // fallback readback still builds a RenderTarget over this texture.
-    Texture* esm = Texture::Builder()
-            .width(ew).height(eh).levels(1)
-            .format(Texture::InternalFormat::R16F)
-            .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE
-                    | Texture::Usage::UPLOADABLE | Texture::Usage::BLIT_SRC)
-            .build(*mEngine);
-    if (!esm) return std::string();
+    // panic and no log. COLOR_ATTACHMENT and BLIT_SRC stay because an imported
+    // map can be EXPORTED again (a store emptied under a resident bake — what
+    // check:blob-cache drives), and issueRead builds a RenderTarget over it.
+    //
     // THE DESCRIPTORS OWN THEIR PIXELS: the caller's bytes only have to survive
     // the CALL, and the upload outlives it (native/renderer/CLAUDE.md, under
     // the blob rules, has what a borrowed buffer drew).
-    {
-        Texture::PixelBufferDescriptor pbd(malloc(esmBytes), esmBytes,
-                Texture::Format::R, Texture::Type::HALF,
-                [](void* buf, size_t, void*) { free(buf); });
-        std::memcpy(pbd.buffer, esmSrc, esmBytes);
-        esm->setImage(*mEngine, 0, std::move(pbd));
-    }
-    Texture* vis = nullptr;
-    if (vw && vh) {
-        vis = Texture::Builder()
-                .width(vw).height(vh).levels(1)
+    Texture* tex[3] = {};
+    for (int i = 0; i < 3; i++) {
+        const Map& m = maps[i];
+        if (!m.w || !m.h) continue;
+        tex[i] = Texture::Builder()
+                .width(m.w).height(m.h).levels(1)
                 .format(Texture::InternalFormat::R8)
                 .usage(Texture::Usage::COLOR_ATTACHMENT | Texture::Usage::SAMPLEABLE
                         | Texture::Usage::UPLOADABLE | Texture::Usage::BLIT_SRC)
                 .build(*mEngine);
-        if (vis) {
-            Texture::PixelBufferDescriptor pbd(malloc(visBytes), visBytes,
-                    Texture::Format::R, Texture::Type::UBYTE,
-                    [](void* buf, size_t, void*) { free(buf); });
-            std::memcpy(pbd.buffer, visSrc, visBytes);
-            vis->setImage(*mEngine, 0, std::move(pbd));
+        if (!tex[i]) {
+            for (Texture* t : tex) if (t) mEngine->destroy(t);
+            return std::string();
         }
+        const size_t n = (size_t) m.w * m.h;
+        Texture::PixelBufferDescriptor pbd(malloc(n), n,
+                Texture::Format::R, Texture::Type::UBYTE,
+                [](void* buf, size_t, void*) { free(buf); });
+        std::memcpy(pbd.buffer, m.src, n);
+        tex[i]->setImage(*mEngine, 0, std::move(pbd));
     }
     // Only now is the old set replaced: a blob that failed any check above must
     // leave a resident bake alone rather than half-destroy it.
-    replaceShadowMaps(esm, vis);
-    mShadowTexel = texel;
-    mShadowDepthScale = depthScale;
+    //
+    // AND ANY SCENE NOT OF THIS KEY GOES FIRST. A release keeps the static
+    // scene, so a track change offers the new key's blob while the old scene's
+    // receivers still sample the maps this is about to destroy — as does a
+    // scene whose key a latch dropped. The build that follows is of the offered
+    // key and would release it anyway; doing it here means no live instance
+    // outlives its texture.
+    if (key != mStaticKey) releaseScene();
+    replaceVisMaps(tex[0], tex[1], tex[2]);
     mShadowFromWorld = fromWorld;
+    mRoadVisLatHalf = latHalf;
     mBakedKey = key;
     return key;
 }
 
 // Swap the resident maps, keeping any texture a staged read is still writing
 // into alive until it lands. Destroying one under an outstanding readPixels is a
-// write into freed storage — invisible on the backends that finish inside the
-// pump, which is every backend that does not need this path.
-void TtpRenderer::replaceShadowMaps(Texture* esm, Texture* vis) {
-    for (Texture* old : { mShadowMap, mVisMap }) {
+// write into freed storage, and every backend's reads land on a later frame.
+//
+// The receivers' instances still point at the OLD textures until the next
+// static build binds the new ones — which is why importBlob releases a resident
+// static scene of another key before it swaps, and a bake only runs inside a
+// static build, so no live instance outlives this swap.
+void TtpRenderer::replaceVisMaps(Texture* ground, Texture* structures, Texture* road) {
+    for (Texture* old : { mVisMap, mStructVisMap, mRoadVisMap }) {
         if (!old) continue;
         if (readInFlight(old)) mTexGraves.push_back(old); else mEngine->destroy(old);
     }
-    mShadowMap = esm;
-    mVisMap = vis;
+    mVisMap = ground;
+    mStructVisMap = structures;
+    mRoadVisMap = road;
 }

@@ -2,7 +2,7 @@
 // build, never per frame. The deck's half of what vvis.mat does for the ground.
 //
 // WHY THE DECK NEEDED ITS OWN MAP. The deck's light was baked PER VERTEX into
-// custom0 (see fillRoadLight), on the premise that a shadow whose penumbra is
+// custom0 (see bakeVertexLight), on the premise that a shadow whose penumbra is
 // 0.6 world units is smooth against the road's 0.48 u ring step. That premise
 // holds ALONG the track and fails ACROSS it: the 16-point cross-section puts
 // deck-level columns at lat ±half, ±(half-gap), ±(half-gap-lw) and ±dashW/2, so
@@ -58,8 +58,8 @@ material {
     depthWrite : false,
     depthCulling : false,
     parameters : [
-        // The five shadow parameters, by the same names ttp_shade.inc reads
-        // everywhere — bindShadowMap fills them on this instance too.
+        // The five shadow parameters, by the names ttp_sunvis.inc reads —
+        // bindShadowMap fills them.
         { type : sampler2d, name : shadowMap, precision : high },
         { type : mat4, name : shadowFromWorld, precision : high },
         { type : float, name : shadowTexel },
@@ -75,12 +75,7 @@ vertex {
 }
 
 fragment {
-    // SHADE_VERTEX drops the fwidth AA floor, exactly as vvis.mat's bake does:
-    // that term guards SCREEN-space aliasing of the compare, and there is no
-    // screen here. After the bake the map's own bilinear filtering plus the
-    // world-unit floor on the ramp (kPenumbraWorld) carry that job.
-    #define TTP_SHADE_VERTEX
-    #include "ttp_shade.inc"
+    #include "ttp_sunvis.inc"
 
     void material(inout MaterialInputs material) {
         prepareMaterial(material);

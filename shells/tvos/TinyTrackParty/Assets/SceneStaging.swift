@@ -94,7 +94,7 @@ enum SceneStaging {
     /// now, and demanding the retired blob aborted this loader halfway. `vskid`
     /// went the same way — the rubber layer rasterizes on the CPU and uploads,
     /// so there is no stamp material left to stage.
-    static let materialNames = ["vcolor", "vblend", "vlit", "vlitns", "vroad",
+    static let materialNames = ["vcolor", "vblend", "vlit", "vroad",
                                 "vglb", "vglbfade", "vpoint", "vcloud", "vground",
                                 "vvis", "vroadvis", "vpresent", "vesm",
                                 "vburst", "voverlay"]
@@ -168,7 +168,7 @@ enum SceneStaging {
     /// over one would turn a cosmetic gap into a race that cannot start.
     static func build(trackId: String, biome: String?, roster: [RosterSlot], showcase: Bool,
                       display: DisplayHost, store: AssetStore,
-                      blobs: BlobStores? = nil) async throws {
+                      blobs: BlobStore? = nil) async throws {
         generation += 1
         let mine = generation
         // THE STEPS ARE TIMED SEPARATELY, and the REUSED count rides beside the
@@ -192,12 +192,13 @@ enum SceneStaging {
         //    means saying so.
         ttp_display_showcase(showcase ? 1 : 0)
 
-        // 2. Release the previous scene. `ttp_display_build` would do this
+        // 2. Release the previous FIELD. `ttp_display_build` would do this
         //    itself, but not until the very end — and steps 3 to 6 are async, so
         //    without this the frame loop would keep drawing the OLD field, with
         //    the old roster baked into its slots, for the whole rebuild. The
-        //    engine, the views, the materials and every provided asset survive a
-        //    release, so the next build stays cheap.
+        //    static scene survives a release (as do the engine, the views, the
+        //    materials and every provided asset), so a build of the same track
+        //    rebuilds only the field.
         if display.hasScene { display.release() }
 
         // 3. THE BIOME, BEFORE ANY FETCHING. The scenery list is a function of
@@ -266,23 +267,20 @@ enum SceneStaging {
         guard generation == mine else { return }
 
         // 6. THE BLOB WALK, first half — AFTER provisioning and before the
-        //    build: a key may depend on anything provisioned (the bake's needs
-        //    the biome, latched at step 3). NOTHING HERE NAMES A BLOB KIND; the
-        //    engine lists its stores and this performs the answers.
+        //    build: the bake's key needs the biome, latched at step 3. The
+        //    engine decides what to drop and read; this performs it.
         //    The walk's SECOND half is not here at all — it is a frame beat
         //    (`DisplayHost.writeReadyBlobs`), for the reason `ttp_display.h`
         //    gives: a readback does not finish inside the build that issues it
         //    on every backend, so a build's tail is the wrong place to ask.
-        blobs?.forEach { blobStore, name in
-            let plan = TTP.obj(ttp_display_blob_plan(
-                name, trackId, blobStore.generation, blobStore.entriesJSON()))
+        if let blobs {
+            let plan = TTP.obj(ttp_display_blob_plan(trackId, blobs.generation, blobs.entriesJSON()))
             for case let dropped as String in (plan["drop"] as? [Any]) ?? [] {
-                blobStore.delete(dropped)
+                blobs.delete(dropped)
             }
-            for case let blobName as String in (plan["read"] as? [Any]) ?? [] {
-                guard let bytes = blobStore.read(blobName) else { continue }
+            if let name = plan["read"] as? String, !name.isEmpty, let bytes = blobs.read(name) {
                 bytes.withUnsafeBytes { raw in
-                    ttp_display_blob_offer(name, raw.bindMemory(to: UInt8.self).baseAddress,
+                    ttp_display_blob_offer(raw.bindMemory(to: UInt8.self).baseAddress,
                                            UInt32(bytes.count))
                 }
             }

@@ -48,7 +48,6 @@ material {
 }
 
 fragment {
-    #define TTP_NO_SUN_SHADOW
     #include "ttp_shade.inc"
     #include "ttp_grade.inc"
     #include "ttp_fog.inc"

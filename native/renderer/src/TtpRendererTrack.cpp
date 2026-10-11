@@ -454,25 +454,14 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
             mRoad.idx.insert(mRoad.idx.end(), quad, quad + 6);
         }
     }
-    // BAKED VERTEX LIGHT. When the served vroad wants CUSTOM0 (its requires
-    // block), the matte light is evaluated on the CPU instead of per vertex
-    // per frame. Filled UNSHADOWED here — identical to the live evaluation's
-    // shadowTexel-0 answer — so every path that never reaches the ESM
-    // (shadows disabled, no float-target support, an early bake return) draws
-    // what it always drew; bakeShadowMap re-fills it from the finished ESM
-    // and re-uploads in place. An OLD vroad.filamat (tangents + live ESM
-    // decode) leaves custom0 empty and keeps the old shape end to end.
-    const bool bakedLight = mRoadMaterial != nullptr
-            && mRoadMaterial->getRequiredAttributes()[VertexAttribute::CUSTOM0];
-    if (bakedLight) {
-        mRoad.custom0.resize(mRoad.verts.size(),
-                math::half4{ 1.0f, 1.0f, 1.0f, 1.0f });
-        fillRoadLight(tb);
-    }
+    // BAKED VERTEX LIGHT (ambient, NoL), evaluated once here instead of per
+    // vertex per frame — it reads no map, so it is final at build whatever the
+    // sun bake later does. Before the weld, which keys on it.
+    bakeVertexLight(mRoad);
     // The soup shares nothing: each quad owns its four corners, so every
     // corner along a run of one colour is drawn twice and each cell shades
-    // both. Welded on every attribute (and the normal the shadow bake's light
-    // re-fill reads), the ribbon keeps its triangles (buildMesh reorders them
+    // both. Welded on every attribute (and the normal bakeRoadVis reads), the
+    // ribbon keeps its triangles (buildMesh reorders them
     // only within each chunk) and every value the rasterizer interpolates. Its
     // point-set readers (the AMB_FLAKE floor raster, the shadow bake's fit)
     // take a max or bound per point, which a merge of exact duplicates cannot
@@ -644,11 +633,6 @@ bool TtpRenderer::buildRoadMesh(TrackBin& tb) {
                 mLods.push_back(r);
             }
             MaterialInstance* mi = sceneInstance(mRoadMaterial);
-            // Absent on the baked-light vroad — its ESM decode ran at build
-            // (fillRoadLight); an old blob still carries the live one.
-            if (mRoadMaterial->hasParameter("shadowTexel")) {
-                mi->setParameter("shadowTexel", 0.0f);
-            }
             mi->setParameter("profCount", 0);
             mi->setParameter("paintCount", 0);
             // Build-time constants: the wrap and this chunk's own midpoint never
@@ -700,7 +684,7 @@ float3 TtpRenderer::groundColorAt(float x) const {
 namespace {
 // The per-biome ground band palette, stated ONCE for its two consumers:
 // buildGroundTexture rasterizes the bands into the tiled canvas, and
-// buildTrackScene's mGroundBands feed groundColorAt — whose contract is to
+// buildStatic's mGroundBands feed groundColorAt — whose contract is to
 // answer the band that canvas would put there, so the two must agree and both
 // read this table. Each keeps its own arithmetic (8-bit lround for texels,
 // srgbChannel floats for bands); the texture-only extras (the wood's end
@@ -973,8 +957,8 @@ void TtpRenderer::buildGantry(const TrackBin& tb) {
 }
 
 // The matte light rig, as NUMBERS: exactly what the scene's sun and
-// IndirectLight are built from in buildTrackScene, and exactly what
-// fillRoadLight bakes into the road's vertices — ONE derivation so the two
+// IndirectLight are built from in buildStatic, and exactly what
+// bakeVertexLight bakes into the receivers' vertices — ONE derivation so the two
 // cannot drift. Intensities are UNEXPOSED; a consumer replicating
 // frameUniforms multiplies by the camera's exposure (Filament pre-exposes
 // both lights the same way — ColorPassDescriptorSet::prepare*Light).
@@ -987,25 +971,11 @@ TtpRenderer::MatteRig TtpRenderer::matteRig(const TrackBin& tb) const {
              28000.0f * (tb.hemiIntensity / 2.2f) };
 }
 
-bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
-        const ttp::RaceTrack& geo, const ttp::rt::Theme& theme,
-        const ttp::rt::WearPlan& wear) {
-    // WHERE THE BUILD'S SECOND GOES. A scene build blocks the Android shell's
-    // main thread for ~750 ms, and that shell's own step timing proved 96% of it
-    // is inside THIS function — so the phases have to be nameable from in here or
-    // not at all. Diagnostic only: a handful of clock reads on a path that runs
-    // once per scene, against hundreds of milliseconds of work.
-    std::vector<std::pair<const char*, double>> phases;
-    auto phaseAt = std::chrono::steady_clock::now();
-    const auto phaseMark = [&](const char* name) {
-        const auto now = std::chrono::steady_clock::now();
-        phases.emplace_back(name,
-                std::chrono::duration<double, std::milli>(now - phaseAt).count());
-        phaseAt = now;
-    };
+bool TtpRenderer::buildStatic(const std::string& key, const ttp::RaceTrack& geo,
+        const ttp::rt::Theme& theme, const ttp::rt::WearPlan& wear) {
+    PhaseLog phases;
 
     TrackBin tb;
-    applyRoster(tb, roster);
     applyTheme(tb, theme);
     fillGeometry(tb, geo);
     tb.buildArclengthIndex(); // frameAt's bin lookup — see the comment there
@@ -1020,7 +990,6 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         mBakeRig = { rig.sunColor * (rig.sunLux * exposure / (float) M_PI),
                      rig.sh0, rig.sh1, rig.hemiLux * exposure, mCamera != nullptr };
     }
-    const uint32_t carCount = (uint32_t) tb.carColors.size();
     const float groundY = tb.groundY;
 
     if (!buildRoadMesh(tb)) return false;
@@ -1085,7 +1054,7 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     // field does: the ring reads the bounds this leaves behind and stands no
     // hill inside them, so the field gets the clear horizon a browser needs
     // instead of a row of models parked behind a mountain.
-    phaseMark("prologue");
+    phases.mark("prologue");
     buildKitField(tb);
 
     // Horizon hill ring (environment.js buildHillRingGeometry, 'dome' shape):
@@ -1205,8 +1174,8 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     // those calibration points rather than as absolute numbers.
     const MatteRig rig = matteRig(tb);
     mSun = utils::EntityManager::get().create();
-    // No engine shadows: the map is baked once by bakeShadowMap and sampled by
-    // the lit materials themselves. Leaving Filament's on would re-render the
+    // No engine shadows: bakeShadowMap bakes the sun once per static scene into
+    // the receivers' visibility maps. Leaving Filament's on would re-render the
     // same static depth pass per view per frame.
     LightManager::Builder(LightManager::Type::DIRECTIONAL)
             .color(rig.sunColor)
@@ -1251,25 +1220,6 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         mScene->setSkybox(mSkybox);
     }
 
-    // Cars: the real GLB when the shell provided "car<i>.glb" (gltfio +
-    // ubershaders, textures via stb), else a roster-coloured box marker.
-    mCars.resize(carCount);
-    mCarAssets.assign(carCount, nullptr);
-    mCarGhostAssets.assign(carCount, nullptr);
-    mCarGhostIn.assign(carCount, 1); // loadCarAsset adds them; frame 1 removes them
-    mMonsterViews.assign(carCount, {});
-    // SPLIT OUT because it hid the biggest phase of a build. Measured with the
-    // sun bake reused: 57 ms of a 202 ms build on the Apple TV, 29-33 ms of a
-    // 50-55 ms build in the browser — more than the bake costs on either. Every
-    // one of those milliseconds is gltfio re-parsing and re-uploading car GLBs
-    // the previous build already parsed, because releaseScene drops every asset
-    // (the shadow fits keyed off them survive; the assets themselves do not).
-    // What is left in `props+rig` after this mark is the same story for
-    // the item box, banana, cone and monster truck.
-    for (uint32_t c = 0; c < carCount; c++) {
-        if (!buildCarSlot(tb, c)) return false;
-    }
-    phaseMark("cars");
     // Furniture: item boxes at their authored anchors (availability reconciled
     // per frame from the snapshot), a banana pool for dropped hazards, and the
     // boost-pad overlays.
@@ -1330,143 +1280,25 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     // Contact blobs for the FLOATING props (TrackProps' _boxShadow) are all
     // road-shader stamps now: the boxes' in buildStaticDeckDecals, the
     // bananas' and rockets' in the render loop.
-    // Monster chassis pool (one per car): the kit monster truck with its cab
-    // node collapsed — the transformed player's own car body seats the slot
-    // per frame (MonsterRig's graft; gunmetal recolour is later polish).
-    mMonsterAsset = loadInstancedProp("vehicle-monster-truck.glb", carCount, mMonsterInstances);
-    mMonsterGhostAsset = loadInstancedProp("monster-ghost.glb", carCount, mMonsterGhostInstances);
-    // Both pools land IN the scene (loadInstancedProp adds them), so seed the
-    // membership state to "in" — the first frame takes them straight back out.
-    mMonsterIn.assign(carCount, 1);
-    mMonsterGhostIn.assign(carCount, 1);
-    // MonsterRig keeps only the kit's frame: the `cab` goes (the player's body
-    // takes its place) AND so does `chassis-trim` — the round shock pods over
-    // the wheels plus the rear spoiler bar. Leaving the trim in made the native
-    // truck read a size bulkier than the JS one.
-    const auto collapseNodes = [&](gltfio::FilamentAsset* asset) {
-        if (!asset) return;
-        auto& tcmC = mEngine->getTransformManager();
-        std::vector<utils::Entity> hits(carCount * 4);
-        for (const char* nm : { "cab", "chassis-trim" }) {
-            const size_t n = asset->getEntitiesByName(nm, hits.data(), hits.size());
-            for (size_t i = 0; i < n; i++) {
-                tcmC.setTransform(tcmC.getInstance(hits[i]), mat4f::scaling(float3{ 0.001f }));
-            }
-        }
-    };
-    collapseNodes(mMonsterAsset);
-    collapseNodes(mMonsterGhostAsset);
-    if (mMonsterGhostAsset) {
-        auto& tcmG = mEngine->getTransformManager();
-        for (auto* inst : mMonsterGhostInstances) {
-            if (!inst) continue;
-            tcmG.setTransform(tcmG.getInstance(inst->getRoot()),
-                    mat4f::translation(float3{ 0, -1000, 0 }));
-        }
-        // The ghost GLB already carries alpha 0.5 on its material (ghostGlb
-        // patches the JSON), so it only needs the same chassis-only recolour —
-        // its tyres keep their colour at half opacity, like the JS clone does.
-        recolourMonsterChassis(mMonsterGhostAsset, mMonsterGhostInstances,
-                math::float4{ srgbToLinear(0x565b63), 0.5f });
-    }
-    if (mMonsterAsset) {
-        const filament::Aabb mb = mMonsterAsset->getBoundingBox();
-        mMonsterHalfLen = (mb.max.z - mb.min.z) * 0.5f;
-        // The rig's wheels, per instance — these are what turn while the
-        // monster is up (the car's own are scaled to nothing). Rest
-        // translations are kept so the roll spins each tyre IN PLACE, and the
-        // roll axis sign is measured off a rear wheel exactly as the car's is.
-        auto& tcmW = mEngine->getTransformManager();
-        auto& rcmW = mEngine->getRenderableManager();
-        mMonsterWheels.assign(mMonsterInstances.size(), {});
-        for (size_t i = 0; i < mMonsterInstances.size(); i++) {
-            gltfio::FilamentInstance* inst = mMonsterInstances[i];
-            if (!inst) continue;
-            MonsterWheels& mw = mMonsterWheels[i];
-            const utils::Entity* ents = inst->getEntities();
-            for (size_t k = 0; k < inst->getEntityCount(); k++) {
-                const char* nm = mMonsterAsset->getName(ents[k]);
-                if (!nm) continue;
-                utils::Entity* slot = nullptr;
-                float3* rest = nullptr;
-                if (!std::strcmp(nm, "wheel-fl")) { slot = &mw.fl; rest = &mw.flT; }
-                else if (!std::strcmp(nm, "wheel-fr")) { slot = &mw.fr; rest = &mw.frT; }
-                else if (!std::strcmp(nm, "wheel-bl")) { slot = &mw.bl; rest = &mw.blT; }
-                else if (!std::strcmp(nm, "wheel-br")) { slot = &mw.br; rest = &mw.brT; }
-                if (!slot) continue;
-                *slot = ents[k];
-                *rest = tcmW.getTransform(tcmW.getInstance(ents[k]))[3].xyz;
-            }
-            if (!mw.bl.isNull()) {
-                const mat4f local = tcmW.getTransform(tcmW.getInstance(mw.bl));
-                const float3 axis = (mat4f::rotation((float) M_PI, float3{ 0, 1, 0 }) * local)[0].xyz;
-                mw.rollSign = axis.x >= 0 ? 1.0f : -1.0f;
-            }
-            // Fat monster tyre, measured once off a rear wheel — the same box
-            // answers both questions. RADIUS: roll rate is travel/radius, so the
-            // big wheels have to turn SLOWER than the car's for the same ground
-            // speed. CONTACT WIDTH: measured exactly as the car's is
-            // (loadCarAsset), so the rubber it lays down is as fat as it is.
-            if (mMonsterWheelRadius <= 0 && !mw.bl.isNull()) {
-                const auto ri = rcmW.getInstance(mw.bl);
-                if (ri) {
-                    const filament::Box bx = rcmW.getAxisAlignedBoundingBox(ri);
-                    const mat4f wm = tcmW.getWorldTransform(tcmW.getInstance(mw.bl));
-                    float lo = 1e9f, hi = -1e9f;
-                    for (int sx = -1; sx <= 1; sx += 2)
-                        for (int sy = -1; sy <= 1; sy += 2)
-                            for (int sz = -1; sz <= 1; sz += 2) {
-                                const float3 corner = bx.center + bx.halfExtent
-                                        * float3{ (float) sx, (float) sy, (float) sz };
-                                const float y = (wm * float4{ corner, 1 }).y;
-                                lo = std::min(lo, y);
-                                hi = std::max(hi, y);
-                            }
-                    mMonsterWheelRadius = std::max(0.04f, (hi - lo) * 0.5f);
-                    const float wx = bx.halfExtent.x * 2, wz = bx.halfExtent.z * 2;
-                    if (wx > 0 && wz > 0) {
-                        mMonsterSkidWidth = std::min(0.24f,
-                                std::max(0.06f, std::min(wx, wz)));
-                    }
-                }
-            }
-        }
-        // Neutral gunmetal frame (MonsterRig's recolour) — CHASSIS ONLY. The
-        // whole truck shares one `colormap` material, so recolouring every
-        // instance flattened the TYRES to the same grey too: with no tread or
-        // hub shading left on them, the wheels look painted on and their
-        // rotation is invisible. The JS clones the material for the chassis
-        // mesh alone and drops its map, so do the same here — a per-primitive
-        // instance on that renderable, with the atlas neutralised by a white
-        // 1×1 so the flat colour is all that's left.
-        // MONSTER_CHASSIS_COLOR 0x565b63, through sRGB→linear: baseColorFactor
-        // is a LINEAR glTF factor, and the eyeballed 0.42/0.44/0.50 that used to
-        // sit here is that colour's *sRGB* triple — four times too bright once
-        // the shader stopped ignoring it (it never ran until the loader learned
-        // node names).
-        const float3 chassis = srgbToLinear(0x565b63);
-        recolourMonsterChassis(mMonsterAsset, mMonsterInstances,
-                math::float4{ chassis, 1.0f });
-    }
-    phaseMark("props+rig");
+    phases.mark("props");
     buildWater(tb);
     buildFliers(tb);
     buildOils(tb);   // the cones and signs; the slick itself is a road stamp
-    phaseMark("w:water+oil");
+    phases.mark("w:water+oil");
     buildStructures(tb);
     // Landmarks FIRST: their spots carve flat clearings into the terrain field
     // (mTerrainFlats), which the scatter and the ground mesh then sample. The
     // three streams are independently seeded, so this order moves nothing.
     buildLandmarks(tb);
-    phaseMark("w:struct+land");
+    phases.mark("w:struct+land");
     buildTerrainGrid(tb); // the clearings are carved; freeze the surface
-    phaseMark("w:terrain");
+    phases.mark("w:terrain");
     buildScenery(tb);
-    phaseMark("w:scenery");
+    phases.mark("w:scenery");
     buildProps(tb);
-    phaseMark("w:props");
+    phases.mark("w:props");
     buildClutter(tb);
-    phaseMark("w:clutter");
+    phases.mark("w:clutter");
 
     // The ground sheet, last of the static builders: the terrain field is
     // only complete once the landmark spots have carved their clearings.
@@ -1571,10 +1403,11 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         // The sheet is the size of the world; cut per tile so a cell submits
         // the tiles in its frustum rather than all of it, four times over.
         tileMajor(mGround, kSheetTile, kSheetMinTris);
+        bakeVertexLight(mGround);
         if (mGroundMaterial) {
             mGroundTex = buildGroundTexture(tb.groundKind);
             MaterialInstance* gmi = sceneInstance(mGroundMaterial);
-            mGroundInst = gmi; // bound to the sun map once it is baked, below
+            mGroundInst = gmi; // bound to its visibility map once it is baked
             if (mGroundTex) {
                 TextureSampler smp(TextureSampler::MinFilter::LINEAR_MIPMAP_LINEAR,
                         TextureSampler::MagFilter::LINEAR);
@@ -1595,7 +1428,6 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     // because its width is the lap length at a fixed texel density; the
     // density is capped by the width ceiling (mMaxTextureDim), so a very long
     // lap trades edge crispness, never correctness.
-    mWheelTrails.assign(carCount * 4, {});
     if (tb.length > 1.0f) {
         float maxHalf = tb.roadWidth * 0.5f;
         for (const TrackBin::Sample& r : tb.rings) {
@@ -2022,102 +1854,23 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     // Boost aura colour: boostShades.disk (accent +15%). The disc itself is a
     // road-shader stamp sized per frame in render().
     mBoostDiskLin = srgbToLinear(ttp::rt::boost_shades(tb.boostCol).disk);
-    if (mBlendMaterial) {
-        // Boost wind streaks: the JS is a UNIT QUAD (length along Z, width
-        // along X, facing +Y) carrying makeStreakTexture — an ellipse
-        // (rx 24, ry 3 on a 64×16 canvas) blurred by 3px, so it's soft at both
-        // ends AND almost entirely feather across its width. Reproduced as a
-        // grid with that blurred coverage baked into the vertex alpha (the old
-        // centre-fade fan read as a hard lens); the per-frame envelope scales
-        // it. Axial-billboarded per cell, cycled front→back while boosting.
-        mStreaks.assign(carCount * 4, {});
-        mStreakMeshes.resize(carCount * 4);
-        mStreakSeed.resize(carCount);
-        for (uint32_t c = 0; c < carCount; c++) mStreakSeed[c] = 0x5eed + c * 977;
-        const float3 STREAKC = srgbToLinear(ttp::rt::boost_shades(tb.boostCol).streak);
-        {
-            const BlurKernel blur(3.0f);
-            const auto ellipse = [](float x, float y) {
-                const float u = (x - 32.0f) / 24.0f, v = (y - 8.0f) / 3.0f;
-                return u * u + v * v <= 1.0f;
-            };
-            constexpr int NU = 20, NV = 6; // along length × across width
-            std::vector<uint8_t> alpha((NU + 1) * (NV + 1));
-            for (int j = 0; j <= NV; j++) {
-                for (int i2 = 0; i2 <= NU; i2++) {
-                    const float cx = (float) i2 / NU * 64.0f, cy = (float) j / NV * 16.0f;
-                    alpha[j * (NU + 1) + i2] = (uint8_t) std::lround(
-                            255.0f * blur.coverage(cx, cy, ellipse));
-                }
-            }
-            for (size_t si = 0; si < mStreakMeshes.size(); si++) {
-                Mesh& m = mStreakMeshes[si];
-                for (int j = 0; j <= NV; j++) {
-                    for (int i2 = 0; i2 <= NU; i2++) {
-                        const uint8_t a = alpha[j * (NU + 1) + i2];
-                        const float x = (float) j / NV - 0.5f;  // across the width
-                        const float z = (float) i2 / NU - 0.5f; // along travel
-                        m.verts.push_back({ x, 0, z,
-                                packLinear(STREAKC, 1.0f, a / 255.0f) });
-                        m.local.push_back({ x, z, a });
-                    }
-                }
-                for (int j = 0; j < NV; j++) {
-                    for (int i2 = 0; i2 < NU; i2++) {
-                        const uint32_t b = (uint32_t) (j * (NU + 1) + i2);
-                        const uint32_t n = b + (uint32_t) (NU + 1);
-                        m.idx.insert(m.idx.end(), { b, n, b + 1, b + 1, n, n + 1 });
-                    }
-                }
-                if (!buildMesh(m, true, mBlendMaterial->getDefaultInstance())) return false;
-                // Vulkan's ring (renderCars has the why). Slot 0 is the vb
-                // buildMesh just filled; every other slot gets its own buffer
-                // in the SAME layout and the same opening bytes. Position +
-                // colour (buffer 0) is the streak's only vertex buffer, so it
-                // is all a ring slot carries.
-                if (mCellRing > 1) {
-                    Streak& st = mStreaks[si];
-                    st.ringVbs.assign(1, m.vb);
-                    st.ringVerts.assign(mCellRing, m.verts);
-                    for (uint32_t k = 1; k < mCellRing; k++) {
-                        VertexBuffer* vb = buildVertexBuffer(
-                                (uint32_t) m.verts.size(), m.layout);
-                        vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
-                                st.ringVerts[k].data(),
-                                st.ringVerts[k].size() * sizeof(Vertex), nullptr));
-                        st.ringVbs.push_back(vb);
-                    }
-                }
-                auto& tcmS = mEngine->getTransformManager();
-                tcmS.setTransform(tcmS.getInstance(m.entity),
-                        mat4f::translation(float3{ 0, -1000, 0 }));
-            }
-        }
-    }
 
-    phaseMark("world+ground");
+    phases.mark("world+ground");
     buildGantry(tb);
     // Sun shadows: who casts, who catches. AFTER the gantry — it's a caster.
     //
     // This used to be a CPU bake that ray-traced the sun per road vertex and
     // multiplied the result into the vertex colours. It could never be right:
     // the road's rings sit ~0.24 u apart, so a Gouraud-stretched occlusion term
-    // cannot resolve an edge that a 2048² map resolves at ~0.05 u, and every
-    // attempt to hide that (a fat PCF disc) just traded wedges for mush. The JS
-    // does not bake vertices at all — it renders a REAL shadow map once and
-    // freezes it. Filament has no freeze, so the map re-renders per view per
-    // frame; the scene behind it is static, so the picture is identical and the
-    // only cost is one depth pass of the track (measured below the noise floor
-    // against the 130 ms the bake charged at every scene build).
+    // cannot resolve an edge that a 2048² map resolves at ~0.05 u. So
+    // bakeShadowMap renders a REAL shadow map once and decodes it into the
+    // receivers' visibility maps.
     //
-    // Caster/receiver sets are three's, verbatim: the fixed track geometry
-    // casts, the road and its structures catch, and NOTHING else does — cars,
+    // Caster/receiver sets: the fixed track geometry casts, the road, the
+    // ground, the structures and the berms catch, and NOTHING else does — cars,
     // props and scenery carry their own ground blobs (setShadows(false) on
-    // every glTF asset, since gltfio opts renderables IN by default), and the
-    // grass deliberately opts out so an elevated car's blob can't detach onto
-    // it far below the deck.
-    // The WHOLE road casts, not just the elevated chunks (the JS used maxY >
-    // 0.8 over a ground plane at −1, and this was that filter, verbatim).
+    // every glTF asset, since gltfio opts renderables IN by default).
+    // The WHOLE road casts, not just the elevated chunks.
     //
     // It is not really about what the road throws on the floor — a deck lying
     // flat on the ground throws almost nothing. It is about what the map HOLDS
@@ -2146,36 +1899,19 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
     setMeshShadows(mStructures, true, true);
     setMeshShadows(mBerms, true, true);
 
-    // The sun's map, rendered once now that every caster exists, and handed to
-    // the materials that sample it.
-    phaseMark("gantry");
-    bakeShadowMap(tb);
-    phaseMark("shadowBake");
-    bindShadowMap(litShadowInstance());
-    // The deck is the main RECEIVER, but under the baked-light vroad there is
-    // nothing to bind: its ESM decode ran once inside bakeShadowMap
-    // (fillRoadLight) and the result is vertex data. Only an OLD vroad blob
-    // (live decode) still carries the five shadow parameters.
-    if (mRoadMaterial && mRoadMaterial->hasParameter("shadowTexel")) {
-        if (mRoadInst) bindShadowMap(mRoadInst);
-        for (const RoadChunk& ch : mRoadChunks) bindShadowMap(ch.mi);
-    }
-    // What the deck DOES take is its own track-space visibility map — the term
-    // that could not survive being a vertex attribute (vroadvis.mat).
-    if (mRoadInst) bindRoadVisMap(mRoadInst);
+    // The sun's map, rendered once now that every caster exists, and decoded
+    // into the receivers' visibility maps.
+    phases.mark("gantry");
+    bakeShadowMap(tb, key);
+    phases.mark("shadowBake");
+    // Every receiver takes its baked visibility map — resident from this bake,
+    // a reused one or an imported blob alike, which is why the binds sit here
+    // and not inside the bake: the deck its track-space map (vroadvis.mat), the
+    // ground and the structures their light-space ones (vvis.mat).
+    bindRoadVisMap(mRoadInst);
     for (const RoadChunk& ch : mRoadChunks) bindRoadVisMap(ch.mi);
-    // ...and the ground takes its BAKED visibility map instead — an elevated
-    // deck lays its shape on the floor below through vvis's one-time decode.
-    if (mGroundInst) bindVisMap(mGroundInst);
-    // Every other vlit instance still needs its sampler resolved, but with
-    // shadowTexel 0 so the lookup is skipped entirely.
-    Texture* const map = mShadowMap;
-    mShadowMap = nullptr;
-    bindShadowMap(mLitMaterial ? mLitMaterial->getDefaultInstance() : nullptr);
-    for (MaterialInstance* mi : mSceneMatInstances) {
-        if (mi != mLitShadowInst && mi->getMaterial() == mLitMaterial) bindShadowMap(mi);
-    }
-    mShadowMap = map;
+    bindVisMap(mGroundInst, mVisMap);
+    bindVisMap(mStaticInst, mStructVisMap);
 
     // Clouds (environment.js): 8 puffs, deterministic index math. The JS
     // sprites are fog:false and drift ACROSS the field in authored space;
@@ -2244,30 +1980,244 @@ bool TtpRenderer::buildTrackScene(const std::vector<TtpRosterCar>& roster,
         }
     }
 
+    // Texture decodes ride the provider's async queue even on the synchronous
+    // loadResources path — finished textures only ATTACH on a queue pump (the
+    // sync path pumps at the START of the next load, so without this the last
+    // assets' textures never bind and those models render black).
+    pumpTextures();
+    // A build puts every sheet back in the scene, so an ablation arm has to be
+    // re-stated or it would quietly end at the next track.
+    if (!mDressSheets) applyDressSheets();
+    // The dressing regroups once, on the next frame, over everything above —
+    // and only here: the field's monster pools are not in it, so a field
+    // rebuild must not take the whole dressing apart and regroup it.
+    mDressMergeDirty = true;
+    mTrack = std::make_unique<TrackBin>(std::move(tb));
+    phases.mark("epilogue");
+    phases.print("ttp build phases:");
+    return true;
+}
+
+bool TtpRenderer::buildField(const std::vector<TtpRosterCar>& roster) {
+    if (!mTrack) return false;
+    PhaseLog phases;
+    applyRoster(*mTrack, roster);
+    const uint32_t carCount = (uint32_t) mTrack->carColors.size();
+    // Cars: the real GLB when the shell provided "car<i>.glb" (gltfio +
+    // ubershaders, textures via stb), else a roster-coloured box marker.
+    mCars.resize(carCount);
+    mCarAssets.assign(carCount, nullptr);
+    mCarGhostAssets.assign(carCount, nullptr);
+    mCarGhostIn.assign(carCount, 1); // loadCarAsset adds them; frame 1 removes them
+    mMonsterViews.assign(carCount, {});
+    // The field's biggest phase: gltfio parsing and uploading the car GLBs
+    // the body pool did not keep (mBodyPool).
+    for (uint32_t c = 0; c < carCount; c++) {
+        if (!buildCarSlot(c)) return false;
+    }
+    phases.mark("cars");
+    // Monster chassis pool (one per car): the kit monster truck with its cab
+    // node collapsed — the transformed player's own car body seats the slot
+    // per frame (MonsterRig's graft; gunmetal recolour is later polish).
+    mMonsterAsset = loadInstancedProp("vehicle-monster-truck.glb", carCount, mMonsterInstances);
+    mMonsterGhostAsset = loadInstancedProp("monster-ghost.glb", carCount, mMonsterGhostInstances);
+    // Both pools land IN the scene (loadInstancedProp adds them), so seed the
+    // membership state to "in" — the first frame takes them straight back out.
+    mMonsterIn.assign(carCount, 1);
+    mMonsterGhostIn.assign(carCount, 1);
+    // MonsterRig keeps only the kit's frame: the `cab` goes (the player's body
+    // takes its place) AND so does `chassis-trim` — the round shock pods over
+    // the wheels plus the rear spoiler bar. Leaving the trim in made the native
+    // truck read a size bulkier than the JS one.
+    const auto collapseNodes = [&](gltfio::FilamentAsset* asset) {
+        if (!asset) return;
+        auto& tcmC = mEngine->getTransformManager();
+        std::vector<utils::Entity> hits(carCount * 4);
+        for (const char* nm : { "cab", "chassis-trim" }) {
+            const size_t n = asset->getEntitiesByName(nm, hits.data(), hits.size());
+            for (size_t i = 0; i < n; i++) {
+                tcmC.setTransform(tcmC.getInstance(hits[i]), mat4f::scaling(float3{ 0.001f }));
+            }
+        }
+    };
+    collapseNodes(mMonsterAsset);
+    collapseNodes(mMonsterGhostAsset);
+    if (mMonsterGhostAsset) {
+        auto& tcmG = mEngine->getTransformManager();
+        for (auto* inst : mMonsterGhostInstances) {
+            if (!inst) continue;
+            tcmG.setTransform(tcmG.getInstance(inst->getRoot()),
+                    mat4f::translation(float3{ 0, -1000, 0 }));
+        }
+        // The ghost GLB already carries alpha 0.5 on its material (ghostGlb
+        // patches the JSON), so it only needs the same chassis-only recolour —
+        // its tyres keep their colour at half opacity, like the JS clone does.
+        recolourMonsterChassis(mMonsterGhostAsset, mMonsterGhostInstances,
+                math::float4{ srgbToLinear(0x565b63), 0.5f });
+    }
+    if (mMonsterAsset) {
+        const filament::Aabb mb = mMonsterAsset->getBoundingBox();
+        mMonsterHalfLen = (mb.max.z - mb.min.z) * 0.5f;
+        // The rig's wheels, per instance — these are what turn while the
+        // monster is up (the car's own are scaled to nothing). Rest
+        // translations are kept so the roll spins each tyre IN PLACE, and the
+        // roll axis sign is measured off a rear wheel exactly as the car's is.
+        auto& tcmW = mEngine->getTransformManager();
+        auto& rcmW = mEngine->getRenderableManager();
+        mMonsterWheels.assign(mMonsterInstances.size(), {});
+        for (size_t i = 0; i < mMonsterInstances.size(); i++) {
+            gltfio::FilamentInstance* inst = mMonsterInstances[i];
+            if (!inst) continue;
+            MonsterWheels& mw = mMonsterWheels[i];
+            const utils::Entity* ents = inst->getEntities();
+            for (size_t k = 0; k < inst->getEntityCount(); k++) {
+                const char* nm = mMonsterAsset->getName(ents[k]);
+                if (!nm) continue;
+                utils::Entity* slot = nullptr;
+                float3* rest = nullptr;
+                if (!std::strcmp(nm, "wheel-fl")) { slot = &mw.fl; rest = &mw.flT; }
+                else if (!std::strcmp(nm, "wheel-fr")) { slot = &mw.fr; rest = &mw.frT; }
+                else if (!std::strcmp(nm, "wheel-bl")) { slot = &mw.bl; rest = &mw.blT; }
+                else if (!std::strcmp(nm, "wheel-br")) { slot = &mw.br; rest = &mw.brT; }
+                if (!slot) continue;
+                *slot = ents[k];
+                *rest = tcmW.getTransform(tcmW.getInstance(ents[k]))[3].xyz;
+            }
+            if (!mw.bl.isNull()) {
+                const mat4f local = tcmW.getTransform(tcmW.getInstance(mw.bl));
+                const float3 axis = (mat4f::rotation((float) M_PI, float3{ 0, 1, 0 }) * local)[0].xyz;
+                mw.rollSign = axis.x >= 0 ? 1.0f : -1.0f;
+            }
+            // Fat monster tyre, measured once off a rear wheel — the same box
+            // answers both questions. RADIUS: roll rate is travel/radius, so the
+            // big wheels have to turn SLOWER than the car's for the same ground
+            // speed. CONTACT WIDTH: measured exactly as the car's is
+            // (loadCarAsset), so the rubber it lays down is as fat as it is.
+            if (mMonsterWheelRadius <= 0 && !mw.bl.isNull()) {
+                const auto ri = rcmW.getInstance(mw.bl);
+                if (ri) {
+                    const filament::Box bx = rcmW.getAxisAlignedBoundingBox(ri);
+                    const mat4f wm = tcmW.getWorldTransform(tcmW.getInstance(mw.bl));
+                    float lo = 1e9f, hi = -1e9f;
+                    for (int sx = -1; sx <= 1; sx += 2)
+                        for (int sy = -1; sy <= 1; sy += 2)
+                            for (int sz = -1; sz <= 1; sz += 2) {
+                                const float3 corner = bx.center + bx.halfExtent
+                                        * float3{ (float) sx, (float) sy, (float) sz };
+                                const float y = (wm * float4{ corner, 1 }).y;
+                                lo = std::min(lo, y);
+                                hi = std::max(hi, y);
+                            }
+                    mMonsterWheelRadius = std::max(0.04f, (hi - lo) * 0.5f);
+                    const float wx = bx.halfExtent.x * 2, wz = bx.halfExtent.z * 2;
+                    if (wx > 0 && wz > 0) {
+                        mMonsterSkidWidth = std::min(0.24f,
+                                std::max(0.06f, std::min(wx, wz)));
+                    }
+                }
+            }
+        }
+        // Neutral gunmetal frame (MonsterRig's recolour) — CHASSIS ONLY. The
+        // whole truck shares one `colormap` material, so recolouring every
+        // instance flattened the TYRES to the same grey too: with no tread or
+        // hub shading left on them, the wheels look painted on and their
+        // rotation is invisible. The JS clones the material for the chassis
+        // mesh alone and drops its map, so do the same here — a per-primitive
+        // instance on that renderable, with the atlas neutralised by a white
+        // 1×1 so the flat colour is all that's left.
+        // MONSTER_CHASSIS_COLOR 0x565b63, through sRGB→linear: baseColorFactor
+        // is a LINEAR glTF factor, and the eyeballed 0.42/0.44/0.50 that used to
+        // sit here is that colour's *sRGB* triple — four times too bright once
+        // the shader stopped ignoring it (it never ran until the loader learned
+        // node names).
+        const float3 chassis = srgbToLinear(0x565b63);
+        recolourMonsterChassis(mMonsterAsset, mMonsterInstances,
+                math::float4{ chassis, 1.0f });
+    }
+    phases.mark("monsters");
+    mWheelTrails.assign(carCount * 4, {}); // each wheel's run on the rubber layer
+    if (mBlendMaterial) {
+        // Boost wind streaks: the JS is a UNIT QUAD (length along Z, width
+        // along X, facing +Y) carrying makeStreakTexture — an ellipse
+        // (rx 24, ry 3 on a 64×16 canvas) blurred by 3px, so it's soft at both
+        // ends AND almost entirely feather across its width. Reproduced as a
+        // grid with that blurred coverage baked into the vertex alpha (the old
+        // centre-fade fan read as a hard lens); the per-frame envelope scales
+        // it. Axial-billboarded per cell, cycled front→back while boosting.
+        mStreaks.assign(carCount * 4, {});
+        mStreakMeshes.resize(carCount * 4);
+        mStreakSeed.resize(carCount);
+        for (uint32_t c = 0; c < carCount; c++) mStreakSeed[c] = 0x5eed + c * 977;
+        const float3 STREAKC = srgbToLinear(ttp::rt::boost_shades(mTrack->boostCol).streak);
+        {
+            const BlurKernel blur(3.0f);
+            const auto ellipse = [](float x, float y) {
+                const float u = (x - 32.0f) / 24.0f, v = (y - 8.0f) / 3.0f;
+                return u * u + v * v <= 1.0f;
+            };
+            constexpr int NU = 20, NV = 6; // along length × across width
+            std::vector<uint8_t> alpha((NU + 1) * (NV + 1));
+            for (int j = 0; j <= NV; j++) {
+                for (int i2 = 0; i2 <= NU; i2++) {
+                    const float cx = (float) i2 / NU * 64.0f, cy = (float) j / NV * 16.0f;
+                    alpha[j * (NU + 1) + i2] = (uint8_t) std::lround(
+                            255.0f * blur.coverage(cx, cy, ellipse));
+                }
+            }
+            for (size_t si = 0; si < mStreakMeshes.size(); si++) {
+                Mesh& m = mStreakMeshes[si];
+                for (int j = 0; j <= NV; j++) {
+                    for (int i2 = 0; i2 <= NU; i2++) {
+                        const uint8_t a = alpha[j * (NU + 1) + i2];
+                        const float x = (float) j / NV - 0.5f;  // across the width
+                        const float z = (float) i2 / NU - 0.5f; // along travel
+                        m.verts.push_back({ x, 0, z,
+                                packLinear(STREAKC, 1.0f, a / 255.0f) });
+                        m.local.push_back({ x, z, a });
+                    }
+                }
+                for (int j = 0; j < NV; j++) {
+                    for (int i2 = 0; i2 < NU; i2++) {
+                        const uint32_t b = (uint32_t) (j * (NU + 1) + i2);
+                        const uint32_t n = b + (uint32_t) (NU + 1);
+                        m.idx.insert(m.idx.end(), { b, n, b + 1, b + 1, n, n + 1 });
+                    }
+                }
+                if (!buildMesh(m, true, mBlendMaterial->getDefaultInstance())) return false;
+                // Vulkan's ring (renderCars has the why). Slot 0 is the vb
+                // buildMesh just filled; every other slot gets its own buffer
+                // in the SAME layout and the same opening bytes. Position +
+                // colour (buffer 0) is the streak's only vertex buffer, so it
+                // is all a ring slot carries.
+                if (mCellRing > 1) {
+                    Streak& st = mStreaks[si];
+                    st.ringVbs.assign(1, m.vb);
+                    st.ringVerts.assign(mCellRing, m.verts);
+                    for (uint32_t k = 1; k < mCellRing; k++) {
+                        VertexBuffer* vb = buildVertexBuffer(
+                                (uint32_t) m.verts.size(), m.layout);
+                        vb->setBufferAt(*mEngine, 0, VertexBuffer::BufferDescriptor(
+                                st.ringVerts[k].data(),
+                                st.ringVerts[k].size() * sizeof(Vertex), nullptr));
+                        st.ringVbs.push_back(vb);
+                    }
+                }
+                auto& tcmS = mEngine->getTransformManager();
+                tcmS.setTransform(tcmS.getInstance(m.entity),
+                        mat4f::translation(float3{ 0, -1000, 0 }));
+            }
+        }
+    }
+
     // Ghost body variants (50%-alpha patched GLBs) for the monster occlusion
     // fade — loaded LAST, with a full decode pump after each: interleaving
     // them with the solid cars doubled the in-flight decode queue and dropped
     // a car's colormap (it rendered gray). Parked until a swap needs them.
     for (uint32_t c = 0; c < carCount; c++) buildCarGhost(c);
 
-    // Texture decodes ride the provider's async queue even on the synchronous
-    // loadResources path — finished textures only ATTACH on a queue pump (the
-    // sync path pumps at the START of the next load, so without this the last
-    // assets' textures never bind and those cars render black).
-    pumpTextures();
-    // A build puts every sheet back in the scene, so an ablation arm has to be
-    // re-stated or it would quietly end at the next track.
-    if (!mDressSheets) applyDressSheets();
-    mTrack = std::make_unique<TrackBin>(std::move(tb));
-    mDecalProjHint.clear(); // ring indices belong to the track just replaced
-    phaseMark("epilogue");
-    {
-        double total = 0;
-        for (const auto& p : phases) total += p.second;
-        auto& line = utils::slog.i << "ttp build phases:";
-        for (const auto& p : phases) line << " " << p.first << " " << (int) (p.second + 0.5);
-        line << " | total " << (int) (total + 0.5) << " ms" << utils::io::endl;
-    }
+    pumpTextures(); // the same pump as buildStatic's, for the field's own loads
+    phases.mark("streaks+ghosts");
+    phases.print("ttp build phases: field");
     return true;
 }
 
@@ -2342,11 +2292,12 @@ filament::Texture* TtpRenderer::skyCubemap(const uint32_t sky[3], float lum) {
     return tex;
 }
 
-bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& theme,
-        const std::vector<TtpRosterCar>& roster, const ttp::rt::WearPlan& wear) {
-    // Re-entrant: the game calls this again for every race (releaseScene()
-    // first). The three materials are RENDERER scope — compiled once from the
-    // provided .filamat bytes and reused by every scene after.
+bool TtpRenderer::buildScene(const std::string& key, const ttp::RaceTrack& geo,
+        const ttp::rt::Theme& theme, const std::vector<TtpRosterCar>& roster,
+        const ttp::rt::WearPlan& wear) {
+    releaseScene();
+    // The materials are RENDERER scope — compiled once from the provided
+    // .filamat bytes and reused by every scene after.
     const auto mat = mAssets.find("vcolor.filamat");
     if (mat == mAssets.end()) return false;
     if (!mMaterial) {
@@ -2368,21 +2319,10 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
                 .package(vlit->second.data(), vlit->second.size())
                 .build(*mEngine);
     }
-    // vlit minus the shadow sampler, for every lit mesh that is not a shadow
-    // RECEIVER (only the structures and berms are — litShadowInstance). Those
-    // draws used to bind the ESM plus four dead uniforms purely so a
-    // shadowTexel of 0 could early-out. Optional the same way vroad is: an
-    // older asset set falls back to vlit and draws the identical picture.
-    const auto vlitns = mAssets.find("vlitns.filamat");
-    if (!mLitPlainMaterial && vlitns != mAssets.end()) {
-        mLitPlainMaterial = Material::Builder()
-                .package(vlitns->second.data(), vlitns->second.size())
-                .build(*mEngine);
-    }
-    // The road deck's own material: vlit's shading (they share ttp_shade.inc)
-    // plus a uv0 channel carrying track space, so deck decals can be shaded INTO
-    // the road instead of laid over it. Optional — a shell whose asset set
-    // predates it falls back to vlit and simply gets no stamped decals.
+    // The road deck's own material: the shared matte light (ttp_shade.inc),
+    // baked, plus a uv0 channel carrying track space, so deck decals can be
+    // shaded INTO the road instead of laid over it. Optional — without it the
+    // road draws its bare vertex colours and gets no stamped decals.
     const auto vroad = mAssets.find("vroad.filamat");
     if (!mRoadMaterial && vroad != mAssets.end()) {
         mRoadMaterial = Material::Builder()
@@ -2414,10 +2354,10 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
                 .package(vground->second.data(), vground->second.size())
                 .build(*mEngine);
     }
-    // The ground's visibility BAKE material (vvis.mat) — used once per track
-    // inside bakeShadowMap, never in a frame. Optional like the rest: without
-    // it the bake is skipped and bindVisMap's white fallback leaves the
-    // ground fully lit (the same degradation a missing ESM already means).
+    // The static receivers' visibility BAKE material (vvis.mat) — used inside
+    // bakeShadowMap, never in a frame. Optional like the rest: without it the
+    // bake is skipped and bindVisMap's white fallback leaves them fully lit
+    // (the same degradation a missing ESM already means).
     const auto vvis = mAssets.find("vvis.filamat");
     if (!mVisMaterial && vvis != mAssets.end()) {
         mVisMaterial = Material::Builder()
@@ -2502,8 +2442,7 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
                 TextureSampler::MagFilter::LINEAR);
         gs.setWrapModeS(TextureSampler::WrapMode::CLAMP_TO_EDGE);
         gs.setWrapModeT(TextureSampler::WrapMode::CLAMP_TO_EDGE);
-        for (Material* m : { mMaterial, mBlendMaterial, mLitMaterial,
-                             mLitPlainMaterial, mRoadMaterial,
+        for (Material* m : { mMaterial, mBlendMaterial, mLitMaterial, mRoadMaterial,
                              mGlbMaterial, mGlbFadeMaterial, mGroundMaterial,
                              mPointMaterial, mCloudMaterial, mBurstMaterial }) {
             if (m && m->hasParameter("gradeLut")) {
@@ -2526,7 +2465,7 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
     // ~2.3 s from GO, with the GPU at 9 ms of a 16.7 ms budget throughout.
     //
     // compile() is async on a driver-side queue, so a build is all headroom.
-    for (Material* m : { mMaterial, mBlendMaterial, mLitMaterial, mLitPlainMaterial,
+    for (Material* m : { mMaterial, mBlendMaterial, mLitMaterial,
                          mRoadMaterial, mGlbMaterial, mGlbFadeMaterial,
                          mGroundMaterial, mPointMaterial, mCloudMaterial,
                          mBurstMaterial, mEsmMaterial,
@@ -2546,6 +2485,13 @@ bool TtpRenderer::buildScene(const ttp::RaceTrack& geo, const ttp::rt::Theme& th
     // C++ objects, not payloads that might be missing). An empty roster is a
     // legal scene — it is what the lobby's track preview is before any car
     // joins it.
-    mHasTrack = true;
-    return buildTrackScene(roster, geo, theme, wear);
+    if (!buildStatic(key, geo, theme, wear)) return false;
+    mStaticKey = key;
+    return buildField(roster);
+}
+
+bool TtpRenderer::rebuildField(const std::vector<TtpRosterCar>& roster) {
+    releaseField();
+    resetRace();
+    return buildField(roster);
 }

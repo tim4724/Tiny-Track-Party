@@ -1349,3 +1349,33 @@ skips, pretzel 100.
 board 43.7 -> 48.3 C against a 76.2 C first threshold, SoC max 56 C against 95,
 the GPU's cooling device at 0 throughout. GPU busy at 4P/540 tidepool, from the
 driver's own `gpu_work_period` events: 63%. The box emits no `gpu_frequency`.
+
+## The renderer's settled levers, as they measured (records moved 2026-10-11)
+
+These readings were the evidence in `native/renderer/CLAUDE.md`, which now keeps
+only the rules they decided. Dated where the original was; the rest predate
+2026-10-11. Android box unless marked; numbers are from the build of their day.
+
+| Rule it decided | Reading |
+|---|---|
+| The blob's CPU half scales with density (4P, `NO_DECAL_BLOB` arms, one build) | CPU ms: channel off 3.28; 8/128 dirty-rect 4.19; 16/256 dirty-rect 5.32; 16/256 whole-level 6.17 |
+| A per-chunk loop costs its bounds box (2026-08-20, three interleaved reps) | masked cap 4 -> 8: +4.96 ms p50 at 4P/720, 1P zero; whole-channel ablation had read ~0.55 ms |
+| The masked loop's removal | ~0.3 ms lower in the 4P heavy seconds; its own-car stamps had been ~7 ms of a 4P/1080 frame |
+| Far cars into profile arrays (2026-08-18, spectate-7) | widening the profile arrays past 8 alone: +1.1 ms p50 |
+| A track-space reach cuts the stamp on a bend | cut on 2.2% of car-frames on cloverleaf, 1.7% on sidewinder, worst shortfall 2.4x, 0% on skyline |
+| The deck fit is small but real | body turned up to ~3.4 deg from the contract up; wheel residual up to ~0.04 u; an unclamped `deckFoot` step jumped 21 u (58 deg of lean for a frame) on cloverleaf |
+| Shape is worth little at the original density | the four masks differed by at most ~0.07 mean coverage, Dash vs Carve by 0.001 |
+| Per-vertex shading, not count (4P, dress arms) | kit copies 40k verts: 1.1 ms resolution-independent; sheets 88k verts: ~0.0; 54k deck verts cut: 0.4 ms |
+| Far-plane cuts buy nothing | 600 u -> 100 u moved the submitted count ~2% |
+| Coarser deck/terrain geometry | -0.4 ms GPU against +0.55 ms frame thread; reverted |
+| The deck's far ribbon (2026-09-02) | about a third off the 4P heavy seconds |
+| Baked static sheets (`Mesh::bakeLight`) | ~0.6 ms of the 4P heavy seconds; per-vertex kit light for what moves: ~0.5 ms saved and ~0.5 ms spent |
+| None of it reaches 60 at 4P (before the far ribbon) | render scale at 1/25 of native pixels still left 19.8 ms; resolution-independent floor ~19 ms, all geometry ~4 |
+| The deck is the near chunks | a per-chunk tap gate disarmed ~85% of chunks and moved the median by nothing |
+| Draw cuts are per device (merge, `TTP_DEBUG_NO_MERGE`) | Apple TV 4P native median 14.2 -> 13.67 ms, worst window 18.3 -> ~17.0 (three reps); Android: see `shells/androidtv/CLAUDE.md` |
+| Per-cell quarter targets | ~0.4 ms won at identical fill; the full-surface composite back cost about five times that |
+| A TRANSLUCENT view (Apple TV, 4P 3840x2160) | 4.2-4.5 ms of a 16.68 ms budget for a few thousand overlay pixels |
+| AA is the buffer (Apple TV, 4P native 4K) | filter 0.31 ms, buffer plumbing 1.99 ms, by passthrough ablation; the switch re-taken at ~2.4 ms (2.26 / 2.53 / 2.37) |
+| sRGB surface (2026-09-02) | null on Android; ~1 ms of the Apple TV's 4P 4K frame; a two-drawable CAMetalLayer dropped 29 frames a second at 4P 4K |
+| Fog per vertex | Filament's fog 18 ms of a 79 ms frame; ours per fragment 11.5 ms, per vertex ~3 |
+| One full-screen transcendental | ~3 ms on this GPU |

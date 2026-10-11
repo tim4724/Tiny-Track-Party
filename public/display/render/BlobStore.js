@@ -8,10 +8,8 @@
 // visible when wrong. A bad eviction wastes disk. A bad INVALIDATION serves a
 // stale blob forever, across reloads, with nothing on screen to say so.
 //
-// It knows nothing about WHAT it is storing either — not that a sun bake exists,
-// nor how many kinds there are. `ttp_display.h`'s walk decides what to read,
-// keep and drop and hands over a name; `ttp_display_blob_stores` says which
-// kinds there are. A new kind needs no JS.
+// It knows nothing about WHAT it is storing either: `ttp_display.h`'s walk
+// decides what to read, write and drop and hands over a name.
 //
 // GENERATION IS THE INVALIDATION and it is this shell's one real contribution.
 // The web's is `BUILD_STAMP.json`'s `sourceHash` — a hash over every file that
@@ -26,16 +24,18 @@
 
 import { assetUrl } from '../../shared/assetUrl.js';
 
-const DB_NAME = 'ttp-blobs';
+// `-bake` is the name of the one store there is, kept so the databases already
+// on players' machines stay reachable rather than orphaned.
+const DB_NAME = 'ttp-blobs-bake';
 const DB_VERSION = 1;
 
 /**
  * What identifies the runtime that produced (or would produce) these bytes.
  *
- * Fetched once and shared, because both the answer and the failure are the same
- * for every store. A stamp that cannot be read is NOT "any identity": an empty
- * generation would still name a blob and every build would then share it, so the
- * fallback is a value only this page load can match and the cache never hits.
+ * Fetched once per page load. A stamp that cannot be read is NOT "any
+ * identity": an empty generation would still name a blob and every build would
+ * then share it, so the fallback is a value only this page load can match and
+ * the cache never hits.
  */
 let generationPromise = null;
 function generation() {
@@ -47,13 +47,13 @@ function generation() {
   return generationPromise;
 }
 
-function open(store) {
+function open() {
   return new Promise((resolve) => {
     let req;
     // Private modes and storage-blocked origins throw from open() itself rather
     // than firing onerror, so the call is inside the try as well as its handlers.
     try {
-      req = indexedDB.open(`${DB_NAME}-${store}`, DB_VERSION);
+      req = indexedDB.open(DB_NAME, DB_VERSION);
     } catch {
       resolve(null);
       return;
@@ -84,11 +84,13 @@ function tx(db, mode, run) {
   });
 }
 
-class BlobStore {
-  constructor(store) {
-    this.store = store;
-    this._db = open(store);
+export class BlobStore {
+  constructor() {
+    this._db = open();
   }
+
+  /** What identifies this runtime. */
+  generation() { return generation(); }
 
   /**
    * Everything held, as the walk's `entries` argument.
@@ -151,26 +153,5 @@ class BlobStore {
     const db = await this._db;
     if (!db) return;
     await tx(db, 'readwrite', (s) => s.delete(name));
-  }
-}
-
-/**
- * One BlobStore per store the ENGINE says it has.
- *
- * The names are asked for rather than typed, which is the point: this shell does
- * not know that a bake exists, only that the engine keeps some kinds of derived
- * bytes and that each kind wants its own database.
- */
-export class BlobStores {
-  constructor(names) {
-    this.stores = names.map((name) => ({ name, store: new BlobStore(name) }));
-  }
-
-  /** What identifies this runtime; shared by every store. */
-  generation() { return generation(); }
-
-  /** Perform something for each store, with the name the engine calls it. */
-  async forEach(action) {
-    for (const { name, store } of this.stores) await action(store, name);
   }
 }

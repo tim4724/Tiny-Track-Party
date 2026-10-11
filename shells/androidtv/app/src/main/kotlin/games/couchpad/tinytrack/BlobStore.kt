@@ -17,15 +17,13 @@ import java.io.File
  * visible when wrong. A bad eviction wastes disk. A bad INVALIDATION serves a
  * stale blob forever, across restarts, with nothing on screen to say so.
  *
- * It knows nothing about WHAT it is storing either — not that a sun bake exists,
- * nor how many kinds there are. That is the point of the walk in
- * `ttp_display.h`: the engine lists its stores, decides what to read, keep and
- * drop, and hands this a name. There used to be a `BakeCache` beside
- * this file holding that choreography — the window a bake key is defined over,
- * whether the engine already had the bake, whether the build had actually baked
- * — and every line of it was knowledge about the ENGINE living in a shell, with
- * a mirror this side had to invalidate whenever a destroyed surface took the
- * renderer away. It is also why a new blob kind needs no Kotlin at all.
+ * It knows nothing about WHAT it is storing either. That is the point of the
+ * walk in `ttp_display.h`: the engine decides what to read, write and drop, and
+ * hands this a name. There used to be a `BakeCache` beside this file holding
+ * that choreography — the window a bake key is defined over, whether the engine
+ * already had the bake, whether the build had actually baked — and every line
+ * of it was knowledge about the ENGINE living in a shell, with a mirror this
+ * side had to invalidate whenever a destroyed surface took the renderer away.
  *
  * **[generation] is this shell's one real contribution**, and it is the install
  * time rather than the versionName. A `-dirty` build keeps one version string
@@ -39,9 +37,14 @@ import java.io.File
  * what a cache is, and it is why every road out of this file is a null or a
  * no-op rather than an exception.
  */
-class BlobStore(context: Context, private val store: String) {
+class BlobStore(context: Context) {
 
-    private companion object { const val TAG = "BlobStore" }
+    private companion object {
+        const val TAG = "BlobStore"
+        // The directory the one store has always had, so the caches already on
+        // boxes stay reachable rather than orphaned.
+        const val DIR = "bake"
+    }
 
     // CACHE, not files: this is derived data the app can rebuild at any time, and
     // the system is entitled to reclaim it under pressure — which is exactly the
@@ -51,13 +54,17 @@ class BlobStore(context: Context, private val store: String) {
     // `cacheDir` is excluded from backup by default, so no manifest change goes
     // with this.
     private val dir: File? = try {
-        // The old home, swept once. Generation naming already made these
-        // unreachable — no plan can name a file under a directory nothing reads —
-        // so they are pure orphans rather than a cache worth migrating.
-        runCatching { File(context.filesDir, store).deleteRecursively() }
-        File(context.cacheDir, store).apply { mkdirs() }
+        // The old homes, swept: this store's under `filesDir`, and the retired
+        // "mask" store's (the car silhouettes, deleted with the masked shadow)
+        // under both roots. Nothing can name a file in a directory nothing
+        // reads, so they are pure orphans rather than a cache worth migrating.
+        for (old in listOf(File(context.filesDir, DIR), File(context.filesDir, "mask"),
+                           File(context.cacheDir, "mask"))) {
+            runCatching { old.deleteRecursively() }
+        }
+        File(context.cacheDir, DIR).apply { mkdirs() }
     } catch (e: Exception) {
-        Log.w(TAG, "no $store directory; nothing will be cached", e)
+        Log.w(TAG, "no blob directory; nothing will be cached", e)
         null
     }
 
@@ -132,37 +139,4 @@ class BlobStore(context: Context, private val store: String) {
         val d = dir ?: return
         runCatching { File(d, name).delete() }
     }
-}
-
-/**
- * One [BlobStore] per store the ENGINE says it has.
- *
- * The names are asked for rather than typed, which is the whole point: this
- * shell does not know that a "bake" exists, only that the engine keeps some
- * kinds of derived bytes and that each kind wants its own directory. A new kind
- * needs no Kotlin at all.
- */
-class BlobStores(context: Context) {
-
-    private val stores: Map<String, BlobStore> =
-        TtpJson.strings(Ttp.ttp_display_blob_stores())
-            .associateWith { BlobStore(context, it) }
-
-    init {
-        // The one name typed here: the retired "mask" store (the car
-        // silhouettes, deleted with the masked shadow), swept from both homes
-        // like a store's old one — the engine no longer lists it, so nothing
-        // else would prune it.
-        for (root in listOf(context.cacheDir, context.filesDir)) {
-            runCatching { File(root, "mask").deleteRecursively() }
-        }
-    }
-
-    /** Perform something for each store, with the name the engine calls it. */
-    inline fun forEach(action: (BlobStore, String) -> Unit) {
-        for ((name, store) in all) action(store, name)
-    }
-
-    /** Exposed for [forEach]'s inlining; not otherwise interesting. */
-    val all: Map<String, BlobStore> get() = stores
 }

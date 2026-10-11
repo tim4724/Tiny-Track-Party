@@ -79,9 +79,10 @@ class LobbyDemo {
      * and therefore rebuild the scene with its field in the roster.
      *
      * It exists so `setTrack` does not build the same scene first, with an EMPTY
-     * roster, only for this to build it again a moment later. Two full track
-     * meshes and two 2048x2048 shadow bakes, back to back, on the main thread:
-     * that pair is what made switching cups look like a hang.
+     * roster, only for this to build it again a moment later. The second build
+     * is only a field rebuild now (the engine keeps the static scene), but it is
+     * still a second staging pass on the main thread, and the preview would show
+     * the bare track before the demo's cars arrive.
      */
     fun willRebuild(forTrack: String): Boolean {
         if (forTrack.isEmpty()) return false

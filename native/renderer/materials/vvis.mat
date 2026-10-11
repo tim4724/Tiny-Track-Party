@@ -1,61 +1,56 @@
-// The ground's sun-visibility BAKE — one pass at track build, never per frame.
+// The static receivers' sun-visibility BAKE — one pass per map at track build,
+// never per frame.
 //
-// vground used to run the whole ESM read-out (ttp_shade.inc's sunVisibility:
-// a highp mat4 transform, a bounds test, a sqrt, a divide, the map tap, a log
-// and two smoothsteps) PER FRAGMENT, because its 10-20 u mesh step is far
-// coarser than the 0.6 u penumbra — the per-vertex trick that carried the
-// road does not transfer. But every input is STATIC per track (the ESM is
-// baked once, the sun and the ground never move), so the whole decision can
-// run ONCE, here, over the light's own grid: this material renders the real
-// ground mesh through the SAME ortho camera the ESM bake used, evaluating the
-// exact runtime decode at each texel, and the runtime tap becomes one
-// bilinear R8 read (see vground.mat).
+// Every input is STATIC per track (the ESM is baked once, the sun and these
+// meshes never move), so the whole ESM decode runs ONCE, here, over the light's
+// own grid: this material renders the real receiver meshes through the SAME
+// ortho camera the ESM bake used, evaluating the decode at each texel, and the
+// runtime tap is one bilinear R8 read (see vground.mat).
 //
 // Baked on the light's grid, the map's uv IS shadowFromWorld's output — the
-// same matrix vground's vertex stage already applies — so no second transform
-// exists to disagree with the ESM's.
+// same matrix vground's vertex stage applies — so no second transform exists to
+// disagree with the ESM's.
 //
-// TTP_SHADE_VERTEX skips the fwidth AA floor, exactly as the road's
-// vertex-stage evaluation does: that term guarded SCREEN-space aliasing of
-// the compare, and after the bake the map's own bilinear filtering (plus the
-// world-unit floor on the ramp, kPenumbraWorld) carries that job.
+// Depth state is the CALLER's: the ground's map draws one single-valued surface
+// with no depth buffer, the structures' map is depth-tested so the surface
+// nearest the sun wins each texel (bakeShadowMap sets it per instance).
 material {
     name : TtpVvis,
     requires : [
-        // the world normal the slope bias and edge-on fade need
-        tangents
+        // (ambient.rgb, NoL) — the receiver's baked vertex light; only NoL is
+        // read, for the slope bias and the edge-on fade.
+        custom0
     ],
+    variables : [ nol ],
     shadingModel : unlit,
     culling : none,
     doubleSided : true,
     depthWrite : false,
     depthCulling : false,
     parameters : [
-        // The five shadow parameters, by the same names ttp_shade.inc reads
-        // everywhere — bindShadowMap fills them on this instance too.
+        // The five shadow parameters, by the names ttp_sunvis.inc reads —
+        // bindShadowMap fills them.
         { type : sampler2d, name : shadowMap, precision : high },
         { type : mat4, name : shadowFromWorld, precision : high },
         { type : float, name : shadowTexel },
         { type : float, name : shadowK },
-        { type : float, name : shadowDepthScale },
-        // The surface→light vector, passed explicitly so the bake does not
-        // depend on a light being present in its throwaway scene. Matches
-        // frameUniforms.lightDirection in the live scene, which is what the
-        // runtime's NoL is computed against.
-        { type : float3, name : sunDir }
+        { type : float, name : shadowDepthScale }
     ]
 }
 
+vertex {
+    void materialVertex(inout MaterialVertexInputs material) {
+        material.nol = vec4(getCustom0().w, 0.0, 0.0, 0.0);
+    }
+}
+
 fragment {
-    #define TTP_SHADE_VERTEX
-    #include "ttp_shade.inc"
+    #include "ttp_sunvis.inc"
 
     void material(inout MaterialInputs material) {
         prepareMaterial(material);
         material.baseColor = vec4(0.0, 0.0, 0.0, 1.0);
-        highp vec3 n = getWorldGeometricNormalVector();
-        float NoL = saturate(dot(n, materialParams.sunDir));
-        float vis = sunVisibility(getUserWorldPosition(), n, NoL);
-        material.emissive = vec4(vis, 0.0, 0.0, 0.0);
+        material.emissive = vec4(
+                sunVisibility(getUserWorldPosition(), variable_nol.x), 0.0, 0.0, 0.0);
     }
 }

@@ -49,23 +49,10 @@ std::string safe(const std::string& s) {
 
 }  // namespace
 
-uint32_t blobKeep(const std::string& /*store*/) {
-    // EIGHT FOR EVERY STORE. The sun bake ("bake", the one store there is) is
-    // ~2.3 MB a blob (a 1024² R16F ESM and a 512² R8 visibility map), so eight
-    // is ~18 MB — enough to hold a cup's four circuits plus the lobby browsing
-    // around them, against a catalogue whose full set would be ~46 MB. An
-    // unknown store gets the same bound: a cache with no cap is a disk leak,
-    // and answering 0 would instead delete everything a new caller wrote.
-    return 8;
-}
-
 BlobPlan planBlob(const BlobRequest& in) {
     BlobPlan plan;
     const std::string gen = safe(in.generation);
-    plan.names.reserve(in.keys.size());
-    for (const std::string& key : in.keys) {
-        plan.names.push_back(gen + kSep + safe(key) + "-" + hash8(key) + ".blob");
-    }
+    plan.name = gen + kSep + safe(in.key) + "-" + hash8(in.key) + ".blob";
 
     // OTHER GENERATIONS GO FIRST, and they go whatever the cap says: they are
     // not old, they are unreadable — produced by a binary that is no longer
@@ -82,19 +69,16 @@ BlobPlan planBlob(const BlobRequest& in) {
         }
     }
 
-    // Then the cap, oldest-USED first. EVERY name this plan is about is exempt,
-    // not just one: they are all about to be read or written, so evicting any of
-    // them would be a cache that deletes precisely what was asked for whenever
-    // the store is full — and with a set-sized plan it would do it repeatedly,
-    // shedding one key's blob to make room for the next.
-    const uint32_t keep = blobKeep(in.store);
-    if (mine.size() > keep) {
+    // Then the cap, oldest-USED first. The name this plan is about is exempt:
+    // it is about to be read or written, and evicting it would be a cache that
+    // deletes precisely what was asked for whenever the store is full.
+    if (mine.size() > kBlobKeep) {
         std::sort(mine.begin(), mine.end(),
                 [](const BlobEntry* a, const BlobEntry* b) { return a->usedMs < b->usedMs; });
-        size_t over = mine.size() - keep;
+        size_t over = mine.size() - kBlobKeep;
         for (const BlobEntry* e : mine) {
             if (over == 0) break;
-            if (std::find(plan.names.begin(), plan.names.end(), e->name) != plan.names.end()) continue;
+            if (e->name == plan.name) continue;
             plan.drop.push_back(e->name);
             over--;
         }

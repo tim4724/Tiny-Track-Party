@@ -273,7 +273,7 @@ test('every shell performs BOTH halves of the blob walk, in their two places', (
   //
   // The SPLIT is the part worth pinning rather than the calls. A readback does
   // not complete inside the build that issues it on GL, so a shell that moves
-  // `keep` back into its build path answers null forever on that backend and
+  // `ready` back into its build path answers null forever on that backend and
   // writes nothing at all — which is the bug this arrangement replaced.
   // EACH SHELL SPELLS THE ABI IN ITS OWN IDIOM, so the expected symbols are per
   // shell rather than one list: the TV shells call the C names directly, the web
@@ -292,23 +292,21 @@ test('every shell performs BOTH halves of the blob walk, in their two places', (
       plan: ['blobPlan', 'blobOffer'],
       frame: 'public/display/Stage.js',
       write: ['writeReadyBlobs'],
-      forbidden: /blobKeep|blobExport/,
+      forbidden: /blobReady|blobExport/,
     },
     {
       build: 'shells/tvos/TinyTrackParty/Assets/SceneStaging.swift',
       plan: ['ttp_display_blob_plan', 'ttp_display_blob_offer'],
       frame: 'shells/tvos/TinyTrackParty/Render/DisplayHost.swift',
-      write: ['ttp_display_blob_ready', 'ttp_display_blob_keep',
-              'ttp_display_blob_export', 'ttp_display_blob_wrote'],
-      forbidden: /ttp_display_blob_keep/,
+      write: ['ttp_display_blob_ready', 'ttp_display_blob_export', 'ttp_display_blob_wrote'],
+      forbidden: /ttp_display_blob_ready|ttp_display_blob_export/,
     },
     {
       build: 'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/SceneStaging.kt',
       plan: ['ttp_display_blob_plan', 'ttp_display_blob_offer'],
       frame: 'shells/androidtv/app/src/main/kotlin/games/couchpad/tinytrack/DisplayHost.kt',
-      write: ['ttp_display_blob_ready', 'ttp_display_blob_keep',
-              'ttp_display_blob_export', 'ttp_display_blob_wrote'],
-      forbidden: /ttp_display_blob_keep/,
+      write: ['ttp_display_blob_ready', 'ttp_display_blob_export', 'ttp_display_blob_wrote'],
+      forbidden: /ttp_display_blob_ready|ttp_display_blob_export/,
     },
   ];
   for (const s of SHELLS) {
@@ -327,7 +325,7 @@ test('every shell performs BOTH halves of the blob walk, in their two places', (
         + 'every launch pays the bake again');
     }
     // …and the write half must NOT be back in the build path: on GL a readback
-    // cannot finish inside the build that issues it, so a `keep` asked there
+    // cannot finish inside the build that issues it, so a `ready` asked there
     // answers null forever and the store silently never fills. That WAS the
     // arrangement, and it is why the web could only store a track it had built
     // twice in a row.

@@ -3,7 +3,8 @@
 //
 // WHAT THIS IS FOR. Some things the engine computes are expensive, derived, and
 // worth keeping between RUNS rather than only between builds — the sun bake is
-// 520 ms of GPU on the slowest shipping box (see the renderer's bakeShadowMap).
+// the one today, and on the slowest shipping box it is a visible slice of a
+// lobby's latency (see the renderer's bakeShadowMap).
 // Keeping something between runs means a FILE, and a file is the shell's job:
 // `ttp_abi.h` puts transport on the host side by design, and wasm has no
 // filesystem at all, so there is no version of this where C++ opens the file.
@@ -49,21 +50,17 @@ struct BlobEntry {
 };
 
 struct BlobRequest {
-    // Which store. Names the cap below and nothing else; an unknown one is not
-    // an error, it takes the default.
-    std::string store;
     // What identifies the binary that produced (or would produce) these bytes.
     std::string generation;
-    // What this build's blobs are OF, in the caller's own vocabulary — the sun
-    // bake's is "<track>|<biome>|<showcase>|<backend>". A SET rather than one
-    // key, because a store may hold several things a single build wants.
-    std::vector<std::string> keys;
+    // What this build's blob is OF, in the caller's own vocabulary — the sun
+    // bake's is "<track>|<biome>|<showcase>|<backend>".
+    std::string key;
     std::vector<BlobEntry> entries;
 };
 
 struct BlobPlan {
-    // The one name each key may be read from and written to, parallel to `keys`.
-    std::vector<std::string> names;
+    // The one name the key may be read from and written to.
+    std::string name;
     // Names to delete, in no order: every other generation's, plus this
     // generation's oldest once the store is over its cap.
     std::vector<std::string> drop;
@@ -74,9 +71,11 @@ struct BlobPlan {
 // answer an effect list instead of a dozen getters.
 BlobPlan planBlob(const BlobRequest& in);
 
-// How many blobs a store keeps. Public so a test can state the number rather
-// than infer it, and so the ONE place it lives is here (root rule 1).
-uint32_t blobKeep(const std::string& store);
+// How many blobs the store keeps. EIGHT holds a cup's four circuits plus the
+// lobby browsing around them at a few megabytes of disk; a cache with no cap is
+// a disk leak. Public so a test states the number rather than infers it, and so
+// the ONE place it lives is here (root rule 1).
+constexpr uint32_t kBlobKeep = 8;
 
 }  // namespace rt
 }  // namespace ttp
