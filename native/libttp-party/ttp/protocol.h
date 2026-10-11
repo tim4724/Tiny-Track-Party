@@ -120,10 +120,10 @@ inline const std::vector<std::string> CAR_NAMES = {"Dash", "Bolt", "Carve", "Rum
 // weakest launch is the heaviest car. The pricing rationale and the probe
 // workflow live on the JS source of truth (protocol.js CAR_STATS).
 inline const std::vector<CarStat> CAR_STATS = {
-    {1.01, 1.01, 1.01, 0.97, 0.44, 0.26},  // Dash    balanced
+    {1.01, 1.01, 1.04, 0.97, 0.44, 0.26},  // Dash    balanced
     {1.02, 1.06, 0.88, 0.93, 0.44, 0.28},  // Bolt    bad turn
     {1.03, 0.97, 1.24, 0.90, 0.44, 0.26},  // Carve   bad vmax
-    {0.93, 1.00, 1.05, 1.23, 0.44, 0.28},  // Rumble  bad accel
+    {0.93, 1.00, 1.08, 1.23, 0.44, 0.28},  // Rumble  bad accel
 };
 
 // ---- pure surface -----------------------------------------------------------

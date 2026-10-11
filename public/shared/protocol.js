@@ -309,10 +309,10 @@ var CAR_NAMES = [
 // reads slow ALONE — its value is the scrum, visible only to the packed probe.
 function carMass(accel) { return Math.round((1 + 3.3 * (1 - accel)) * 100) / 100; }
 var CAR_STATS = [
-  { accel: 1.01, vmax: 1.01, turn: 1.01, halfLen: 0.44, halfWid: 0.26 }, // Dash (Low Racer) — the balanced pick: no hole, never punished, never the best
+  { accel: 1.01, vmax: 1.01, turn: 1.04, halfLen: 0.44, halfWid: 0.26 }, // Dash (Low Racer) — the balanced pick: no hole, never punished, never the best
   { accel: 1.02, vmax: 1.06, turn: 0.88, halfLen: 0.44, halfWid: 0.28 }, // Bolt (Speedster) — the fastest: top-speed king, BAD TURN (washes wide in tight corners) and light enough to shove
   { accel: 1.03, vmax: 0.97, turn: 1.24, halfLen: 0.44, halfWid: 0.26 }, // Carve (Racer) — corner king: rails bends, never washes out, BAD VMAX — tops out early on every straight
-  { accel: 0.93, vmax: 1.00, turn: 1.05, halfLen: 0.44, halfWid: 0.28 }  // Rumble (Vintage) — the heavy roller: BAD ACCEL (slow launch, slow recovery), heaviest by far — wins every shove, priced for the scrum
+  { accel: 0.93, vmax: 1.00, turn: 1.08, halfLen: 0.44, halfWid: 0.28 }  // Rumble (Vintage) — the heavy roller: BAD ACCEL (slow launch, slow recovery), heaviest by far — wins every shove, priced for the scrum
 ].map(function (c) { c.mass = carMass(c.accel); return c; });
 
 // Resolve a carIndex to its stats (wraps the array; null/garbage → the Dash
