@@ -104,7 +104,7 @@ async function main() {
 
   let browser;
   try {
-    browser = await chromium.launch({ headless: !args.headed });
+    browser = await chromium.launch({ headless: !args.headed, args: ['--mute-audio'] });
     const page = await browser.newPage({ viewport: { width: SIZE, height: HEIGHT }, deviceScaleFactor: 2 });
     page.on('pageerror', (e) => console.error('[page error]', e.message));
     page.on('console', (m) => { if (m.type() === 'error') console.error('[console]', m.text()); });

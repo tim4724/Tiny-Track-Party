@@ -2,6 +2,7 @@ package games.couchpad.tinytrack
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -331,8 +332,10 @@ class GameCoordinator(
         display.camera(5 /* TTP_CAM_COVERAGE */)
 
         // The mute is REMEMBERED, like the web's, and is applied before the first
-        // sound can play. Same key, same meaning, different store.
-        audio.muted = prefs.getBoolean(MUTED_KEY, false)
+        // sound can play. Same key, same meaning, different store. An emulator
+        // plays through the developer's Mac, so there it starts muted until
+        // someone unmutes (a stored choice outranks this default).
+        audio.muted = prefs.getBoolean(MUTED_KEY, Build.HARDWARE == "ranchu")
         audio.start()
         // The host's Performance/Quality choice, remembered like the mute (the web's
         // key). A scenario starts at full rate, as the web's test surfaces do.

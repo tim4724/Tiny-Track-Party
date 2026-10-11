@@ -101,7 +101,7 @@ const median = (a) => {
 
 const main = async () => {
   const app = await serveApp({ port: PORT ? parseInt(PORT, 10) : undefined });
-  const browser = await chromium.launch({ headless: false });
+  const browser = await chromium.launch({ headless: false, args: ['--mute-audio'] });
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
   await ctx.addInitScript(() => {
     Object.defineProperty(navigator, 'webdriver', { get: () => false });

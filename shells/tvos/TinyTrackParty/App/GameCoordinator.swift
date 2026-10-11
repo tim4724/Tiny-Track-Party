@@ -289,7 +289,12 @@ final class GameCoordinator: ObservableObject {
         }
 
         // The mute is REMEMBERED, like the web's, and is applied before the first
-        // sound can play. Same key, same meaning, different store.
+        // sound can play. Same key, same meaning, different store. A simulator
+        // plays through the developer's Mac, so there it starts muted until
+        // someone unmutes (a stored choice outranks this registered default).
+        #if targetEnvironment(simulator)
+        UserDefaults.standard.register(defaults: [Self.mutedKey: true])
+        #endif
         audio.muted = UserDefaults.standard.bool(forKey: Self.mutedKey)
         try? audio.start()
         // The host's Performance/Quality choice, remembered like the mute. A scenario

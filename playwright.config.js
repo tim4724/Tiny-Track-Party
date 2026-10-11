@@ -57,6 +57,8 @@ module.exports = defineConfig({
   reporter: 'list',
   use: {
     baseURL: `http://127.0.0.1:${PORT}`,
+    // Silent even when run --headed: the pages play race audio through the Mac.
+    launchOptions: { args: ['--mute-audio'] },
     viewport: { width: 1280, height: 720 },
     // Generous per-action timeout: under the single-worker render load a controller
     // page can be janky enough that Playwright's actionability (visible/stable)

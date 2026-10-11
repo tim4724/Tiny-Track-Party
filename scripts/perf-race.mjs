@@ -137,7 +137,7 @@ function makeWebBackend() {
       const { serveApp } = await import('./lib/capture.mjs');
       server = await serveApp({ port: portArg ? parseInt(portArg, 10) : undefined });
 
-      browser = await chromium.launch({ headless: false });
+      browser = await chromium.launch({ headless: false, args: ['--mute-audio'] });
       const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
       await ctx.addInitScript(() => {
         Object.defineProperty(navigator, 'webdriver', { get: () => false });
