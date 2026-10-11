@@ -161,8 +161,9 @@ static const double MONSTER_VMAX_MUL = 1.25;
 // Every flight falls under GRAVITY, several times a toy car's honest one: at
 // these speeds a true arc floats, and sends a car metres off the catalogue's
 // sharper hills. With no kick off a crest, it sets both how high a car goes
-// and how long it stays up.
-static const double GRAVITY = 20.0;
+// and how long it stays up — and how much speed a hill asks for: at 20 a
+// player cresting crag at 80% of top speed barely left the road.
+static const double GRAVITY = 16.0;
 // Below this height off the deck a car still drives as grounded: a crest taken
 // just fast enough lifts it by millimetres, which nothing should notice.
 static const double AIR_MIN = 0.02;

@@ -131,7 +131,7 @@ struct Kicker { double s; };                        // arclength of the ramp's F
 // up this slope and launches it off the lip, and the renderer draws the wedge
 // the car is seen to ride.
 inline constexpr double KICKER_LEN = 1.6;
-inline constexpr double KICKER_RISE = 0.32;
+inline constexpr double KICKER_RISE = 0.30;
 
 struct Pad {                                        // disc OR strip (shape:'strip')
   double s, lat;
