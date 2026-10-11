@@ -309,10 +309,11 @@ def merge_slots(obj):
 
 # ======================================================================= cars
 #
-# One vocabulary across the set, Carve plus's: a WING with a gurney and no
-# endplates, LAMPS front and back (tail lamps always a pair), and HOOD detail
-# (a grille, louvres or a scoop). Nothing else is added — no mirrors, side glass, pipes, roundels,
-# canards or diffusers — so the extras stay few and read at chase-cam size.
+# One vocabulary across the set, Carve plus's: LAMPS front and back (tail
+# lamps always a pair) and HOOD detail (a grille, louvres or a scoop). Wings
+# stay plain — the roster's as the kit made them, no endplates, no gurney.
+# Nothing else is added — no mirrors, side glass, pipes, roundels, canards or
+# diffusers — so the extras stay few and read at chase-cam size.
 
 def louvres(S, parts, x0, x1, ys, w=0.007):
     """Vent slits across the bonnet, a set each side of the centre line."""
@@ -330,11 +331,6 @@ def round_lamps(S, parts, xs, z, r):
 def tail_lamps(S, parts, x0, x1, z0, z1):
     for s in (-1, 1):
         parts.append(S.patch(f'tail{s}', 'y-', (s * x0, s * x1, z0, z1), LAMP_RED, 0.006))
-
-
-def gurney(parts, half_x, y, z):
-    """The lip along a wing's trailing edge, y its back face, z its top."""
-    parts.append(box('gurney', (-half_x, y - 0.002, z - 0.004), (half_x, y + 0.008, z + 0.012), CHARCOAL))
 
 
 def shell(parts):
@@ -365,7 +361,6 @@ def buggy():
     parts.append(profile('wing', 0.19, [(-0.32, 0.355), (-0.44, 0.335), (-0.44, 0.355), (-0.32, 0.375)], P, 0.008))
     for s in (-1, 1):
         parts.append(box(f'strut{s}', (s * 0.06 - 0.008, -0.38, 0.2), (s * 0.06 + 0.008, -0.35, 0.35), CHARCOAL))
-    gurney(parts, 0.19, -0.44, 0.355)
     body, S, parts = shell(parts)
     round_lamps(S, parts, (0.07,), 0.145, 0.02)
     louvres(S, parts, 0.03, 0.09, (0.24, 0.27, 0.30))
@@ -420,7 +415,6 @@ def rally():
         parts.append(side_pillar(f'bpil{s}', s, (0.212, -0.12, 0.258), (0.172, -0.13, 0.378), P))
         parts.append(side_pillar(f'cpil{s}', s, (0.212, -0.365, 0.258), (0.172, -0.33, 0.378), P, 0.05))
     parts.append(profile('spoiler', 0.17, [(-0.33, 0.395), (-0.42, 0.385), (-0.42, 0.405), (-0.33, 0.41)], P, 0.006))
-    gurney(parts, 0.17, -0.42, 0.405)
     body, S, parts = shell(parts)
     for s in (-1, 1):
         parts.append(S.patch(f'head{s}', 'y+', (s * 0.14, s * 0.215, 0.165, 0.205), WHITE))
@@ -458,7 +452,6 @@ def gt():
     parts.append(taper('canopy', (0.155, -0.21, 0.19, 0.19), (0.11, -0.13, 0.03, 0.325), INK, 0.012))
     parts.append(taper('roof', (0.116, -0.145, 0.025, 0.318), (0.104, -0.13, 0.01, 0.34), P, 0.01))
     parts.append(profile('wing', 0.212, [(-0.38, 0.345), (-0.47, 0.335), (-0.47, 0.35), (-0.38, 0.36)], CHARCOAL, 0.005))
-    gurney(parts, 0.212, -0.47, 0.35)
     for s in (-1, 1):
         parts.append(box(f'strut{s}', (s * 0.09 - 0.008, -0.44, 0.2), (s * 0.09 + 0.008, -0.41, 0.34), CHARCOAL))
     for s in (-1, 1):
@@ -480,7 +473,6 @@ def pip():
                                           (-0.27, 0.26)], GLASS, 0.03, 2))
     parts.append(profile('cap', 0.15, [(0.04, 0.395), (0.0, 0.41), (-0.14, 0.41), (-0.2, 0.39)], P, 0.015, 2))
     parts.append(profile('spoiler', 0.13, [(-0.12, 0.408), (-0.215, 0.402), (-0.215, 0.416), (-0.12, 0.422)], P, 0.005))
-    gurney(parts, 0.13, -0.215, 0.414)
     parts.append(box('belt', (-0.21, -0.3, 0.255), (0.21, 0.27, 0.27), STEEL))
     for s in (-1, 1):
         parts.append(cyl(f'eyePod{s}', (s * 0.12, 0.22, 0.25), (s * 0.12, 0.31, 0.27), 0.05, P, 12))
@@ -552,8 +544,8 @@ class Surface:
 
 
 def dash_plus():
-    """Dash with a touch more: a gurney on its spoiler, tail lamps above the
-    bumper, square lamps, a grille, bonnet and roof scoops, a rear screen."""
+    """Dash with a touch more: tail lamps above the bumper, square lamps, a
+    grille, a bonnet scoop, a rear screen."""
     body, nodes = kit_base('vehicle-racer-low')
     S, P = Surface(body), GREEN
     parts = [body]
@@ -564,13 +556,8 @@ def dash_plus():
     parts.append(profile('scoop', 0.055, [(0.275, h - 0.004), (0.275, h + 0.022), (0.19, h + 0.022),
                                           (0.17, S.height(0, 0.17) - 0.004)], P, 0.008))
     parts.append(box('scoopMouth', (-0.042, 0.275, h + 0.003), (0.042, 0.279, h + 0.017), INK))
-    # the roof and the fastback are what the chase cam looks down on
-    r = S.height(0, 0.0)
-    parts.append(profile('roofScoop', 0.05, [(0.03, r - 0.004), (0.03, r + 0.022), (-0.05, r + 0.018),
-                                             (-0.09, r - 0.004)], P, 0.006))
-    parts.append(box('roofMouth', (-0.038, 0.03, r + 0.002), (0.038, 0.034, r + 0.016), INK))
+    # the fastback is what the chase cam looks down on
     parts.append(S.patch('rearScreen', 'z+', (-0.1, 0.1, -0.14, -0.25), GLASS))
-    gurney(parts, 0.244, -0.428, 0.344)
     # the upright strip between the bumper and the spoiler, on a dark band;
     # corners inside it, or they land on the bumper and the side bevels
     parts.append(S.patch('tailPanel', 'y-', (-0.158, 0.158, 0.219, 0.243), INK, 0.003))
@@ -579,15 +566,13 @@ def dash_plus():
 
 
 def carve_plus():
-    """Carve with a touch more: a gurney on the wing, twin round lamps,
-    a grille, louvres on the bonnet and the roof, a rear screen, tail lamps."""
+    """Carve with a touch more: twin round lamps, a grille, louvres on the bonnet and the roof, a rear screen, tail lamps."""
     body, nodes = kit_base('vehicle-racer')
     S, P = Surface(body), BLUE
     parts = [body]
     round_lamps(S, parts, (0.115, 0.158), 0.236, 0.018)
     louvres(S, parts, 0.035, 0.13, (0.185, 0.215, 0.245))
     parts.append(S.patch('grille', 'y+', (-0.075, 0.075, 0.218, 0.25), INK))
-    gurney(parts, 0.244, -0.442, 0.425)
     louvres(S, parts, 0.035, 0.115, (-0.03, -0.06, -0.09))
     parts.append(S.patch('rearScreen', 'z+', (-0.1, 0.1, -0.15, -0.29), GLASS))
     tail_lamps(S, parts, 0.105, 0.175, 0.245, 0.275)
