@@ -102,11 +102,6 @@ def hull(name, pts, swatch, bev=0.012, segments=1, angle=35):
     return bevel(tag(mesh_obj(name, bm), swatch), bev, segments, angle)
 
 
-def sym(pts):
-    """pts plus their mirror across x = 0."""
-    return list(pts) + [(-x, y, z) for x, y, z in pts]
-
-
 def box(name, lo, hi, swatch, bev=0.0, segments=1):
     (x0, y0, z0), (x1, y1, z1) = lo, hi
     return hull(name, [(x, y, z) for x in (x0, x1) for y in (y0, y1) for z in (z0, z1)], swatch, bev, segments)
@@ -152,40 +147,6 @@ def tube(name, pts, r, swatch, seg=6):
         a, b = Vector(pts[i]), Vector(pts[i + 1])
         d = (b - a).normalized() * r
         out.append(cyl(f"{name}{i}", a - d * (i > 0), b + d * (i < len(pts) - 2), r, swatch, seg))
-    return out
-
-
-def ellipsoid(name, c, r, swatch, zcut=None, rings=6, seg=10, bev=0.0):
-    """A low-poly egg: hull of lat/long points, optionally sliced at z = zcut."""
-    pts = []
-    for i in range(rings + 1):
-        a = math.pi * (i / rings - 0.5)
-        for j in range(seg):
-            b = 2 * math.pi * (j + 0.5) / seg
-            p = (c[0] + r[0] * math.cos(a) * math.cos(b), c[1] + r[1] * math.cos(a) * math.sin(b),
-                 c[2] + r[2] * math.sin(a))
-            pts.append(p)
-    if zcut is not None:
-        lo, hi = zcut
-        pts = [(x, y, min(max(z, lo), hi)) for x, y, z in pts]
-    obj = hull(name, pts, swatch, bev)
-    if bev <= 0:
-        obj.data.set_sharp_from_angle(angle=math.radians(40))
-    return obj
-
-
-def mirror_x(objs):
-    """Linked copies of objs mirrored to -x (geometry baked, normals fixed)."""
-    out = []
-    for o in objs:
-        c = o.copy()
-        c.data = o.data.copy()
-        link(c)
-        for m in list(c.modifiers):
-            pass
-        c.data.transform(Matrix.Scale(-1, 4, (1, 0, 0)))
-        c.data.flip_normals()
-        out.append(c)
     return out
 
 
@@ -347,70 +308,82 @@ def merge_slots(obj):
 
 
 # ======================================================================= cars
+#
+# One vocabulary across the set, Carve plus's: a WING with endplates and a
+# gurney, LAMPS front and back, and HOOD detail (a grille, louvres or a
+# scoop). Nothing else is added — no mirrors, side glass, pipes, roundels,
+# canards or diffusers — so the extras stay few and read at chase-cam size.
+
+def louvres(S, parts, x0, x1, ys, w=0.007):
+    """Vent slits across the bonnet, a set each side of the centre line."""
+    for s in (-1, 1):
+        for i, y in enumerate(ys):
+            parts.append(S.patch(f'louvre{s}{i}', 'z+', (s * x0, s * x1, y - w, y + w), INK, 0.003))
+
+
+def round_lamps(S, parts, xs, z, r):
+    for s in (-1, 1):
+        for x in xs:
+            parts.append(S.disc(f'head{s}{x}', 'y+', s * x, z, r, WHITE))
+
+
+def tail_lamps(S, parts, x0, x1, z0, z1):
+    for s in (-1, 1):
+        parts.append(S.patch(f'tail{s}', 'y-', (s * x0, s * x1, z0, z1), LAMP_RED, 0.006))
+
+
+def endplates(parts, swatch, half_x, side):
+    """A wing's endplates: the side profile [(y, z), ...] at +-half_x."""
+    for s in (-1, 1):
+        parts.append(profile(f'plate{s}', 0.006, side, swatch, 0, cx=s * half_x))
+
+
+def gurney(parts, half_x, y, z):
+    """The lip along a wing's trailing edge, y its back face, z its top."""
+    parts.append(box('gurney', (-half_x, y - 0.002, z - 0.004), (half_x, y + 0.008, z + 0.012), CHARCOAL))
+
+
+def shell(parts):
+    """Join the shell built so far, and a Surface to seat details on it."""
+    body = join(parts, 'body')
+    return body, Surface(body), [body]
+
 
 def buggy():
-    """RC off-road buggy: cab-forward shell, roll cage, open engine, big wing,
-    coil-over shocks and knobby tyres."""
+    """RC off-road buggy: cab-forward shell, roll cage, open engine and knobby
+    tyres, with the wing, round lamps and nose louvres."""
     P = GOLD
     parts = []
-    # chassis tub and skid plates
     parts.append(taper('tub', (0.12, -0.36, 0.30, 0.06), (0.13, -0.38, 0.34, 0.12), CHARCOAL, 0.01))
-    parts.append(profile('skid', 0.10, [(0.30, 0.06), (0.44, 0.10), (0.44, 0.13), (0.30, 0.12)], STEEL, 0.008))
-    # the shell: low wedge nose rising into the cockpit sides
     parts.append(profile('nose', 0.12, [(0.44, 0.12), (0.44, 0.17), (0.16, 0.25), (0.10, 0.25), (0.10, 0.11)], P, 0.02))
     parts.append(taper('cowl', (0.16, -0.10, 0.18, 0.11), (0.15, -0.08, 0.14, 0.24), P, 0.02))
     parts.append(profile('screen', 0.12, [(0.15, 0.24), (0.04, 0.32), (0.0, 0.32), (0.0, 0.24)], GLASS, 0.01))
-    # side pods with intakes
     for s in (-1, 1):
         parts.append(taper(f'pod{s}', (0.035, -0.20, 0.10, 0.10), (0.03, -0.18, 0.06, 0.20), P, 0.012, cx=s * 0.16))
-        parts.append(box(f'intake{s}', (s * 0.19 - 0.006, -0.10, 0.13), (s * 0.19 + 0.006, 0.0, 0.17), INK))
-    # seat back and the driver's tiny wheel
     parts.append(box('seat', (-0.07, -0.12, 0.2), (0.07, -0.07, 0.31), CHARCOAL, 0.012))
-    # roll cage
     for s in (-1, 1):
-        parts += tube(f'hoop{s}', [(s * 0.13, -0.09, 0.22), (s * 0.11, -0.09, 0.39), (s * 0.10, 0.06, 0.37), (s * 0.135, 0.16, 0.24)], 0.012, CHARCOAL)
+        parts += tube(f'hoop{s}', [(s * 0.13, -0.09, 0.22), (s * 0.11, -0.09, 0.39), (s * 0.10, 0.06, 0.37),
+                                   (s * 0.135, 0.16, 0.24)], 0.012, CHARCOAL)
         parts += tube(f'brace{s}', [(s * 0.11, -0.09, 0.39), (s * 0.10, -0.26, 0.24)], 0.010, CHARCOAL)
-    parts.append(cyl('hoopTop', (-0.11, -0.09, 0.39), (0.11, -0.09, 0.39), 0.012, CHARCOAL, 8))
-    parts.append(cyl('hoopFront', (-0.10, 0.06, 0.37), (0.10, 0.06, 0.37), 0.012, CHARCOAL, 8))
-    # engine: block, finned head, air filter and a curled pipe
+    parts.append(cyl('hoopTop', (-0.11, -0.09, 0.39), (0.11, -0.09, 0.39), 0.012, CHARCOAL))
+    parts.append(cyl('hoopFront', (-0.10, 0.06, 0.37), (0.10, 0.06, 0.37), 0.012, CHARCOAL))
     parts.append(box('block', (-0.08, -0.34, 0.11), (0.08, -0.15, 0.22), STEEL, 0.015))
-    for i in range(3):
-        y = -0.31 + i * 0.05
-        parts.append(box(f'fin{i}', (-0.07, y - 0.012, 0.22), (0.07, y + 0.012, 0.25), SILVER))
-    parts.append(cyl('filter', (0.05, -0.18, 0.25), (0.11, -0.18, 0.28), 0.03, RED, 10))
-    parts += tube('pipe', [(-0.06, -0.30, 0.16), (-0.12, -0.33, 0.17), (-0.12, -0.42, 0.20)], 0.016, CHROME, 10)
-    # the wing on two struts
-    parts.append(profile('wing', 0.19, [(-0.32, 0.355), (-0.44, 0.335), (-0.44, 0.355), (-0.32, 0.375)], P, 0.008, 1))
+    parts.append(profile('wing', 0.19, [(-0.32, 0.355), (-0.44, 0.335), (-0.44, 0.355), (-0.32, 0.375)], P, 0.008))
     for s in (-1, 1):
-        parts.append(profile(f'plate{s}', 0.007, [(-0.45, 0.31), (-0.45, 0.38), (-0.31, 0.39), (-0.33, 0.33)], CHARCOAL, 0, cx=s * 0.195))
         parts.append(box(f'strut{s}', (s * 0.06 - 0.008, -0.38, 0.2), (s * 0.06 + 0.008, -0.35, 0.35), CHARCOAL))
-    # bumpers, nerf bars
-    parts += tube('fbar', [(-0.10, 0.44, 0.10), (-0.08, 0.47, 0.14), (0.08, 0.47, 0.14), (0.10, 0.44, 0.10)], 0.012, CHARCOAL)
-    parts.append(cyl('rbar', (-0.10, -0.43, 0.12), (0.10, -0.43, 0.12), 0.014, CHARCOAL, 8))
-    # coil-over shocks, front and rear
-    for s in (-1, 1):
-        for y, top in ((0.26, (s * 0.115, 0.25, 0.2)), (-0.24, (s * 0.09, -0.22, 0.26))):
-            bot = (s * 0.17, y, 0.13)
-            parts.append(cyl(f'spring{s}{y}', top, bot, 0.02, ORANGE, 8))
-            parts.append(cyl(f'rod{s}{y}', top, (top[0] * 0.5 + bot[0] * 0.5, y, top[2] * 0.5 + bot[2] * 0.5 + 0.02), 0.011, CHROME, 8))
-        # lower arms
-        parts.append(cyl(f'armF{s}', (s * 0.11, 0.26, 0.10), (s * 0.18, 0.26, 0.11), 0.009, CHARCOAL, 6))
-        parts.append(cyl(f'armR{s}', (s * 0.11, -0.24, 0.10), (s * 0.18, -0.24, 0.11), 0.009, CHARCOAL, 6))
-    # tail lamps on the pods' backs
-    for s in (-1, 1):
-        parts.append(box(f'tail{s}', (s * 0.16 - 0.022, -0.205, 0.13), (s * 0.16 + 0.022, -0.188, 0.16), LAMP_RED))
-    # headlights on the nose
-    for s in (-1, 1):
-        parts.append(disc(f'lamp{s}', (s * 0.07, 0.40, 0.18), (0, 0.6, 0.8), 0.022, 0.012, WHITE, 10))
+    endplates(parts, CHARCOAL, 0.195, [(-0.45, 0.31), (-0.45, 0.38), (-0.31, 0.39), (-0.33, 0.33)])
+    gurney(parts, 0.19, -0.44, 0.355)
+    body, S, parts = shell(parts)
+    round_lamps(S, parts, (0.07,), 0.145, 0.02)
+    louvres(S, parts, 0.03, 0.09, (0.24, 0.27, 0.30))
+    tail_lamps(S, parts, 0.14, 0.18, 0.13, 0.16)
     body = join(parts, 'body')
     fl = knobby_wheel('wheelF', 0.115, 0.095)
     rl = knobby_wheel('wheelR', 0.13, 0.12)
     paint_uvs(fl)
     paint_uvs(rl)
-    wl, wr = mirrored_pair(fl), fl
-    rwl, rwr = mirrored_pair(rl), rl
-    return body, [('wheel-fl', wl, (-0.19, 0.26, 0.115)), ('wheel-fr', wr, (0.19, 0.26, 0.115)),
-                  ('wheel-bl', rwl, (-0.19, -0.24, 0.13)), ('wheel-br', rwr, (0.19, -0.24, 0.13))]
+    return body, [('wheel-fl', mirrored_pair(fl), (-0.19, 0.26, 0.115)), ('wheel-fr', fl, (0.19, 0.26, 0.115)),
+                  ('wheel-bl', mirrored_pair(rl), (-0.19, -0.24, 0.13)), ('wheel-br', rl, (0.19, -0.24, 0.13))]
 
 
 def kit_wheel_set(xs, yf, yb, r=0.125, src='vehicle-racer'):
@@ -434,8 +407,8 @@ def side_pillar(name, s, a, b, swatch, inset=0.03):
 
 
 def rally():
-    """Rally hatch: boxy shell, flared arches, light pod on the bumper, roof
-    scoop and spoiler, mud flaps, door roundels."""
+    """Rally hatch: boxy shell with flared arches, with a roof spoiler, two
+    driving lamps on the bumper, a bonnet scoop and a grille."""
     P = LAMP_RED  # the flat crimson: column 9 is Bolt's
     parts = []
     parts.append(profile('shell', 0.235, [(0.44, 0.10), (0.44, 0.215), (0.37, 0.26), (-0.40, 0.27),
@@ -447,38 +420,36 @@ def rally():
     parts.append(box('sill', (-0.225, -0.13, 0.075), (0.225, 0.13, 0.11), STEEL))
     parts.append(box('fbump', (-0.245, 0.42, 0.075), (0.245, 0.475, 0.15), STEEL, 0.015))
     parts.append(box('rbump', (-0.245, -0.47, 0.075), (0.245, -0.42, 0.15), STEEL, 0.015))
-    # glasshouse: a glass frustum under a painted roof, pillars on the sides
     parts.append(taper('glass', (0.212, -0.385, 0.15, 0.255), (0.172, -0.345, -0.02, 0.38), GLASS, 0.008))
     parts.append(taper('roof', (0.178, -0.355, -0.005, 0.372), (0.168, -0.345, -0.025, 0.40), P, 0.012))
     for s in (-1, 1):
         parts.append(side_pillar(f'apil{s}', s, (0.212, 0.14, 0.258), (0.172, -0.01, 0.378), P))
         parts.append(side_pillar(f'bpil{s}', s, (0.212, -0.12, 0.258), (0.172, -0.13, 0.378), P))
         parts.append(side_pillar(f'cpil{s}', s, (0.212, -0.365, 0.258), (0.172, -0.33, 0.378), P, 0.05))
-        parts.append(box(f'mirror{s}', (s * 0.215, 0.10, 0.27), (s * 0.26, 0.125, 0.305), P))
-        parts.append(disc(f'roundel{s}', (s * 0.255, 0.0, 0.185), (s, 0, 0), 0.05, 0.006, WHITE, 12))
-        parts.append(disc(f'num{s}', (s * 0.26, 0.0, 0.185), (s, 0, 0), 0.026, 0.004, INK, 8))
-        # mud flaps behind every wheel
-        for y in (0.26 - 0.15, -0.26 - 0.15):
-            parts.append(box(f'flap{s}{y}', (s * 0.15, y - 0.008, 0.035), (s * 0.235, y, 0.14), INK))
-        parts.append(box(f'tail{s}', (s * 0.15, -0.44, 0.19), (s * 0.215, -0.432, 0.245), LAMP_RED))
-        parts.append(box(f'head{s}', (s * 0.14, 0.437, 0.165), (s * 0.215, 0.445, 0.205), WHITE))
-    # roof scoop and spoiler
-    parts.append(profile('scoop', 0.045, [(-0.03, 0.40), (-0.09, 0.40), (-0.09, 0.432), (-0.03, 0.43)], STEEL, 0.006))
-    parts.append(box('scoopMouth', (-0.035, -0.032, 0.403), (0.035, -0.026, 0.426), INK))
     parts.append(profile('spoiler', 0.17, [(-0.33, 0.395), (-0.42, 0.385), (-0.42, 0.405), (-0.33, 0.41)], P, 0.006))
-    # grille and the four-lamp pod on the bumper
-    parts.append(box('grille', (-0.12, 0.437, 0.155), (0.12, 0.446, 0.21), INK))
-    parts.append(box('pod', (-0.16, 0.43, 0.15), (0.16, 0.455, 0.185), CHARCOAL))
-    for i, x in enumerate((-0.12, -0.04, 0.04, 0.12)):
-        parts.append(cyl(f'lampCan{i}', (x, 0.44, 0.195), (x, 0.47, 0.195), 0.03, CHARCOAL, 10))
-        parts.append(disc(f'lamp{i}', (x, 0.47, 0.195), (0, 1, 0), 0.022, 0.006, WHITE, 10))
-    parts.append(cyl('exhaust', (0.12, -0.42, 0.085), (0.12, -0.49, 0.085), 0.018, CHROME, 8))
+    endplates(parts, P, 0.176, [(-0.33, 0.375), (-0.425, 0.375), (-0.425, 0.42), (-0.34, 0.42)])
+    gurney(parts, 0.17, -0.42, 0.405)
+    body, S, parts = shell(parts)
+    for s in (-1, 1):
+        parts.append(S.patch(f'head{s}', 'y+', (s * 0.14, s * 0.215, 0.165, 0.205), WHITE))
+        parts.append(cyl(f'lampCan{s}', (s * 0.09, 0.44, 0.185), (s * 0.09, 0.47, 0.185), 0.03, CHARCOAL, 10))
+        parts.append(disc(f'lamp{s}', (s * 0.09, 0.47, 0.185), (0, 1, 0), 0.022, 0.006, WHITE, 10))
+    parts.append(S.patch('grille', 'y+', (-0.11, 0.11, 0.155, 0.205), INK))
+    h = S.height(0, 0.33)
+    parts.append(profile('scoop', 0.06, [(0.33, h - 0.004), (0.33, h + 0.024), (0.22, h + 0.02),
+                                         (0.19, S.height(0, 0.19) - 0.004)], P, 0.008))
+    parts.append(box('scoopMouth', (-0.048, 0.33, h + 0.003), (0.048, 0.334, h + 0.019), INK))
+    # red on red needs a dark panel to read as lamps
+    # corners on the tail's flat: on the bevel they would bury the panel's middle
+    parts.append(S.patch('tailPanel', 'y-', (-0.205, 0.205, 0.172, 0.214), INK, 0.003))
+    for s in (-1, 1):
+        parts.append(S.patch(f'tail{s}', 'y-', (s * 0.13, s * 0.195, 0.18, 0.206), LAMP_RED, 0.007))
     return join(parts, 'body'), kit_wheel_set(0.19, 0.26, -0.26)
 
 
 def gt():
     """Le Mans GT: long low wedge, tinted bubble cockpit over fender humps,
-    shark fin into a full-width wing, splitter and diffuser, roundels."""
+    with a full-width wing, wedge lamps, a tail strip and bonnet louvres."""
     P = SKY
     parts = []
     parts.append(box('floor', (-0.215, -0.44, 0.05), (0.215, 0.46, 0.095), CHARCOAL))
@@ -489,37 +460,24 @@ def gt():
                                                     (0.12, 0.10)], P, 0.016, cx=s * 0.205))
         parts.append(profile(f'rfender{s}', 0.05, [(-0.10, 0.10), (-0.16, 0.235), (-0.30, 0.265), (-0.42, 0.245),
                                                    (-0.45, 0.10)], P, 0.016, cx=s * 0.205))
-        parts.append(box(f'intake{s}', (s * 0.2 - 0.006, -0.11, 0.12), (s * 0.2 + 0.006, -0.03, 0.18), INK))
-        parts.append(disc(f'roundel{s}', (s * 0.2, 0.04, 0.15), (s, 0, 0), 0.042, 0.006, WHITE, 12))
-        parts.append(disc(f'num{s}', (s * 0.205, 0.04, 0.15), (s, 0, 0), 0.022, 0.004, INK, 8))
         parts.append(hull(f'head{s}', [(s * 0.17, 0.40, 0.165), (s * 0.235, 0.385, 0.165), (s * 0.17, 0.36, 0.198),
                                         (s * 0.235, 0.345, 0.198), (s * 0.17, 0.40, 0.155), (s * 0.235, 0.39, 0.155)],
                           WHITE, 0))
-        parts.append(box(f'mirror{s}', (s * 0.14, 0.10, 0.22), (s * 0.18, 0.13, 0.25), P))
-        parts.append(profile(f'plate{s}', 0.006, [(-0.38, 0.26), (-0.47, 0.27), (-0.47, 0.36), (-0.39, 0.355)],
-                             CHARCOAL, 0, cx=s * 0.215))
-    # tinted cockpit with a painted roof and a roof scoop
     parts.append(taper('canopy', (0.155, -0.21, 0.19, 0.19), (0.11, -0.13, 0.03, 0.325), INK, 0.012))
     parts.append(taper('roof', (0.116, -0.145, 0.025, 0.318), (0.104, -0.13, 0.01, 0.34), P, 0.01))
-    parts.append(profile('scoop', 0.035, [(0.0, 0.335), (-0.07, 0.335), (-0.07, 0.365), (-0.01, 0.36)], CHARCOAL, 0.005))
-    # shark fin into the wing
-    parts.append(profile('fin', 0.006, [(-0.14, 0.325), (-0.40, 0.345), (-0.40, 0.29), (-0.14, 0.31)], P, 0))
     parts.append(profile('wing', 0.212, [(-0.38, 0.345), (-0.47, 0.335), (-0.47, 0.35), (-0.38, 0.36)], CHARCOAL, 0.005))
-    # splitter, diffuser fins, tail strip, twin pipes
-    parts.append(box('splitter', (-0.22, 0.44, 0.05), (0.22, 0.495, 0.07), CHARCOAL))
-    parts.append(box('diffuser', (-0.15, -0.475, 0.05), (0.15, -0.44, 0.1), CHARCOAL))
-    for i, x in enumerate((-0.1, 0.0, 0.1)):
-        parts.append(box(f'dfin{i}', (x - 0.006, -0.49, 0.05), (x + 0.006, -0.44, 0.115), CHARCOAL))
+    endplates(parts, P, 0.215, [(-0.38, 0.26), (-0.47, 0.27), (-0.47, 0.36), (-0.39, 0.355)])
+    gurney(parts, 0.212, -0.47, 0.35)
     parts.append(box('tailStrip', (-0.18, -0.456, 0.17), (0.18, -0.448, 0.19), LAMP_RED))
-    for s in (-1, 1):
-        parts.append(cyl(f'pipe{s}', (s * 0.05, -0.43, 0.09), (s * 0.05, -0.485, 0.09), 0.016, CHROME, 8))
     parts.append(box('grille', (-0.09, 0.465, 0.09), (0.09, 0.472, 0.115), INK))
+    body, S, parts = shell(parts)
+    louvres(S, parts, 0.035, 0.12, (0.31, 0.34, 0.37))
     return join(parts, 'body'), kit_wheel_set(0.195, 0.27, -0.27)
 
 
 def pip():
-    """Bubble micro car: short rounded shell, glass bubble with a painted cap,
-    frog-eye lamps, chrome bumper hoops and a spare wheel on the tail."""
+    """Bubble micro car: short rounded shell, glass bubble with a painted cap
+    and chrome bumpers, with frog-eye lamps, a lip spoiler and bonnet louvres."""
     P = CREAM
     parts = []
     parts.append(profile('shell', 0.205, [(0.34, 0.09), (0.37, 0.15), (0.35, 0.22), (0.26, 0.27), (-0.26, 0.28),
@@ -527,22 +485,19 @@ def pip():
     parts.append(profile('bubble', 0.17, [(0.18, 0.26), (0.10, 0.36), (0.0, 0.40), (-0.14, 0.40), (-0.24, 0.35),
                                           (-0.27, 0.26)], GLASS, 0.03, 2))
     parts.append(profile('cap', 0.15, [(0.04, 0.395), (0.0, 0.41), (-0.14, 0.41), (-0.2, 0.39)], P, 0.015, 2))
+    parts.append(profile('spoiler', 0.13, [(-0.12, 0.408), (-0.215, 0.402), (-0.215, 0.416), (-0.12, 0.422)], P, 0.005))
+    gurney(parts, 0.13, -0.215, 0.414)
     parts.append(box('belt', (-0.21, -0.3, 0.255), (0.21, 0.27, 0.27), STEEL))
     for s in (-1, 1):
-        # frog eyes: a painted pod, a chrome ring, a white lens
         parts.append(cyl(f'eyePod{s}', (s * 0.12, 0.22, 0.25), (s * 0.12, 0.31, 0.27), 0.05, P, 12))
         parts.append(disc(f'eyeRing{s}', (s * 0.12, 0.305, 0.27), (0, 1, 0.2), 0.05, 0.012, CHROME, 12))
         parts.append(disc(f'eyeLens{s}', (s * 0.12, 0.315, 0.272), (0, 1, 0.2), 0.036, 0.006, WHITE, 12))
-        parts.append(cyl(f'mirrorStalk{s}', (s * 0.19, 0.12, 0.27), (s * 0.23, 0.12, 0.31), 0.006, CHROME, 6))
-        parts.append(disc(f'mirror{s}', (s * 0.23, 0.11, 0.31), (0, 1, 0), 0.02, 0.012, CHROME, 8))
         parts.append(box(f'tail{s}', (s * 0.12 - 0.025, -0.366, 0.17), (s * 0.12 + 0.025, -0.352, 0.21), LAMP_RED))
-        parts.append(box(f'handle{s}', (s * 0.206, -0.06, 0.225), (s * 0.214, 0.0, 0.235), CHROME))
     parts += tube('fbumper', [(-0.2, 0.30, 0.10), (-0.17, 0.375, 0.11), (0.17, 0.375, 0.11), (0.2, 0.30, 0.10)], 0.014, CHROME)
     parts += tube('rbumper', [(-0.2, -0.29, 0.10), (-0.17, -0.37, 0.11), (0.17, -0.37, 0.11), (0.2, -0.29, 0.10)], 0.014, CHROME)
     parts.append(box('grille', (-0.06, 0.355, 0.14), (0.06, 0.37, 0.175), INK))
-    # the spare on the tail
-    parts.append(cyl('spare', (0, -0.34, 0.2), (0, -0.405, 0.2), 0.075, TYRE, 14))
-    parts.append(disc('spareHub', (0, -0.405, 0.2), (0, -1, 0), 0.038, 0.008, CHROME, 10))
+    body, S, parts = shell(parts)
+    louvres(S, parts, 0.012, 0.055, (0.265, 0.29, 0.315), 0.006)
     return join(parts, 'body'), kit_wheel_set(0.18, 0.22, -0.2, r=0.105)
 
 
@@ -565,9 +520,9 @@ FACES = {'x+': (0, 1), 'x-': (0, -1), 'y+': (1, 1), 'y-': (1, -1), 'z+': (2, 1)}
 
 
 class Surface:
-    """Raycasts onto a source body, so details sit on its real faces. A face
-    is the side a ray comes in from ('y+' is the nose); a point on it is
-    named by the other two coordinates, in x, y, z order."""
+    """Raycasts onto a body, so details sit on its real faces. A face is the
+    side a ray comes in from ('y+' is the nose); a point on it is named by
+    the other two coordinates, in x, y, z order."""
 
     def __init__(self, obj):
         self.bvh = BVHTree.FromObject(obj, bpy.context.evaluated_depsgraph_get())
@@ -588,7 +543,7 @@ class Surface:
 
     def patch(self, name, face, rect, swatch, proud=0.004, depth=0.012):
         """A plate over the face, corners rect = (a0, a1, b0, b1) each projected
-        onto the surface — a window, a lamp, a vent on whatever slope is there."""
+        onto the surface — a lamp or a vent on whatever slope is there."""
         a0, a1, b0, b1 = rect
         pts = []
         for a in (a0, a1):
@@ -602,101 +557,62 @@ class Surface:
         return disc(name, loc - n * 0.004, n, r, proud + 0.004, swatch, seg)
 
 
-def coupe_details(S, P, parts, zcab, rear, tail):
-    """What Dash and Carve share — the same coupé under different roofs:
-    side glass split by a B-pillar, a rear screen, mirrors, pod intakes,
-    tail lamps. zcab is the window line's top, rear the rear screen's y span,
-    tail the lamps' z span on the upright part of the tail."""
-    for s in (-1, 1):
-        face = 'x+' if s > 0 else 'x-'
-        parts.append(S.patch(f'winF{s}', face, (0.06, -0.015, 0.335, zcab), GLASS))
-        parts.append(S.patch(f'winR{s}', face, (-0.035, -0.115, 0.335, zcab), GLASS))
-        parts.append(box(f'mirror{s}', (s * 0.17, 0.06, 0.305), (s * 0.235, 0.08, 0.327), P))
-        parts.append(S.patch(f'intake{s}', face, (0.07, -0.08, 0.125, 0.165), INK))
-        parts.append(S.patch(f'tail{s}', 'y-', (s * 0.105, s * 0.175, tail[0], tail[1]), LAMP_RED))
-    parts.append(S.patch('rearScreen', 'z+', (-0.105, 0.105, rear[0], rear[1]), GLASS))
-
-
 def dash_plus():
-    """Dash with a touch more: lamps and grille, a bonnet scoop, side and rear
-    glass, mirrors, pod intakes, tail lamps and twin pipes."""
+    """Dash with a touch more: endplates and a gurney on its spoiler, square
+    lamps, a grille and a bonnet scoop, tail lamps."""
     body, nodes = kit_base('vehicle-racer-low')
     S, P = Surface(body), GREEN
     parts = [body]
     for s in (-1, 1):
         parts.append(S.patch(f'head{s}', 'y+', (s * 0.10, s * 0.165, 0.222, 0.252), WHITE))
-        parts.append(cyl(f'pipe{s}', (s * 0.08, -0.40, 0.115), (s * 0.08, -0.465, 0.115), 0.016, CHROME))
     parts.append(S.patch('grille', 'y+', (-0.07, 0.07, 0.218, 0.248), INK))
     h = S.height(0, 0.275)
     parts.append(profile('scoop', 0.055, [(0.275, h - 0.004), (0.275, h + 0.022), (0.19, h + 0.022),
                                           (0.17, S.height(0, 0.17) - 0.004)], P, 0.008))
     parts.append(box('scoopMouth', (-0.042, 0.275, h + 0.003), (0.042, 0.279, h + 0.017), INK))
-    coupe_details(S, P, parts, 0.372, (-0.135, -0.205), (0.218, 0.242))
+    endplates(parts, P, 0.25, [(-0.30, 0.29), (-0.43, 0.29), (-0.43, 0.37), (-0.31, 0.365)])
+    gurney(parts, 0.244, -0.428, 0.344)
+    tail_lamps(S, parts, 0.105, 0.175, 0.218, 0.242)
     return join(parts, 'body'), nodes
 
 
 def carve_plus():
-    """Carve with a touch more: twin round lamps, bonnet louvres, wing
-    endplates and gurney, canards, diffuser, side and rear glass."""
+    """Carve with a touch more: wing endplates and a gurney, twin round lamps,
+    a grille and bonnet louvres, tail lamps."""
     body, nodes = kit_base('vehicle-racer')
     S, P = Surface(body), BLUE
     parts = [body]
-    for s in (-1, 1):
-        for x in (0.115, 0.158):
-            parts.append(S.disc(f'head{s}{x}', 'y+', s * x, 0.236, 0.018, WHITE))
-        for i, y in enumerate((0.185, 0.215, 0.245)):
-            parts.append(S.patch(f'louvre{s}{i}', 'z+', (s * 0.035, s * 0.13, y - 0.007, y + 0.007), INK, 0.003))
-        parts.append(profile(f'plate{s}', 0.006, [(-0.335, 0.37), (-0.445, 0.37), (-0.445, 0.455), (-0.345, 0.45)],
-                             P, 0, cx=s * 0.25))
-        parts.append(hull(f'canard{s}', [(s * 0.2, 0.405, 0.16), (s * 0.25, 0.405, 0.16), (s * 0.2, 0.445, 0.15),
-                                         (s * 0.25, 0.44, 0.15), (s * 0.2, 0.405, 0.172), (s * 0.25, 0.405, 0.168)],
-                          CHARCOAL, 0))
-        parts.append(cyl(f'pipe{s}', (s * 0.035, -0.40, 0.11), (s * 0.035, -0.47, 0.11), 0.019, CHROME))
+    round_lamps(S, parts, (0.115, 0.158), 0.236, 0.018)
+    louvres(S, parts, 0.035, 0.13, (0.185, 0.215, 0.245))
     parts.append(S.patch('grille', 'y+', (-0.075, 0.075, 0.218, 0.25), INK))
-    parts.append(box('gurney', (-0.244, -0.442, 0.425), (0.244, -0.432, 0.44), CHARCOAL))
-    for i, x in enumerate((-0.12, 0.12)):
-        parts.append(box(f'dfin{i}', (x - 0.006, -0.475, 0.08), (x + 0.006, -0.43, 0.135), CHARCOAL))
-    coupe_details(S, P, parts, 0.41, (-0.165, -0.27), (0.245, 0.275))
+    endplates(parts, P, 0.25, [(-0.335, 0.37), (-0.445, 0.37), (-0.445, 0.455), (-0.345, 0.45)])
+    gurney(parts, 0.244, -0.442, 0.425)
+    tail_lamps(S, parts, 0.105, 0.175, 0.245, 0.275)
     return join(parts, 'body'), nodes
 
 
 def bolt_plus():
-    """Bolt with a touch more: wing endplates fore and aft, suspension arms,
-    an open cockpit with a screen, mirrors on stalks, intakes, a nose
-    roundel, exhausts under the wing and a rain light on its pylon."""
+    """Bolt with a touch more: endplates on both wings and a gurney, a rain
+    light, nose louvres and an airbox mouth."""
     body, nodes = kit_base('vehicle-speedster')
     S, P = Surface(body), RED
     parts = [body]
     for s in (-1, 1):
-        face = 'x+' if s > 0 else 'x-'
         parts.append(profile(f'fplate{s}', 0.006, [(0.31, 0.07), (0.43, 0.07), (0.43, 0.165), (0.33, 0.155)],
                              P, 0, cx=s * 0.226))
-        parts.append(profile(f'rplate{s}', 0.006, [(-0.34, 0.30), (-0.445, 0.30), (-0.445, 0.405), (-0.34, 0.40)],
-                             P, 0, cx=s * 0.226))
-        for y in (0.188, -0.312):
-            parts.append(cyl(f'armU{s}{y}', (s * 0.07, y + 0.012, 0.2), (s * 0.16, y, 0.15), 0.007, CHARCOAL, 6))
-            parts.append(cyl(f'armL{s}{y}', (s * 0.07, y - 0.02, 0.105), (s * 0.16, y, 0.1), 0.007, CHARCOAL, 6))
-        parts.append(cyl(f'stalk{s}', (s * 0.09, 0.06, 0.29), (s * 0.15, 0.06, 0.33), 0.006, CHARCOAL, 6))
-        parts.append(box(f'mirror{s}', (s * 0.13, 0.045, 0.325), (s * 0.175, 0.07, 0.35), P, 0.005))
-        parts.append(S.patch(f'intake{s}', 'y+', (s * 0.13, s * 0.205, 0.13, 0.17), INK))
-        parts.append(cyl(f'pipe{s}', (s * 0.05, -0.28, 0.27), (s * 0.065, -0.41, 0.30), 0.014, CHROME))
-    parts.append(S.disc('roundel', 'z+', 0, 0.17, 0.042, WHITE, 0.004))
-    parts.append(S.disc('roundelNum', 'z+', 0, 0.17, 0.022, INK, 0.007, 8))
-    parts.append(S.patch('cockpit', 'z+', (-0.055, 0.055, 0.04, -0.045), INK, 0.002))
-    parts.append(hull('screen', [(-0.05, 0.055, 0.31), (0.05, 0.055, 0.31), (-0.045, 0.04, 0.345),
-                                 (0.045, 0.04, 0.345), (-0.05, 0.062, 0.31), (0.05, 0.062, 0.31)], GLASS, 0))
+    endplates(parts, P, 0.226, [(-0.34, 0.30), (-0.445, 0.30), (-0.445, 0.405), (-0.34, 0.40)])
+    gurney(parts, 0.22, -0.438, 0.375)
+    louvres(S, parts, 0.025, 0.075, (0.13, 0.16, 0.19))
     parts.append(S.patch('airbox', 'y+', (-0.04, 0.04, 0.33, 0.365), INK))
-    parts.append(box('pylon', (-0.012, -0.41, 0.25), (0.012, -0.30, 0.375), CHARCOAL))
-    parts.append(box('rain', (-0.016, -0.418, 0.27), (0.016, -0.408, 0.3), LAMP_RED))
+    parts.append(S.patch('rain', 'y-', (-0.022, 0.022, 0.255, 0.29), LAMP_RED))
     return join(parts, 'body'), nodes
 
 
 def rumble_plus():
-    """Rumble with a touch more: chrome radiator, lamps on stalks, bonnet
-    straps and louvres, a side exhaust, an open cockpit with a headrest
-    fairing, a fuel cap, tail roundels and a tail lamp."""
+    """Rumble with a touch more: a chrome radiator, lamps on stalks, bonnet
+    straps and louvres, a tail lamp."""
     body, nodes = kit_base('vehicle-vintage-racer')
-    S, P = Surface(body), PURPLE
+    S = Surface(body)
     parts = [body]
     parts.append(S.patch('radiator', 'y+', (-0.085, 0.085, 0.15, 0.255), CHROME))
     parts.append(S.patch('core', 'y+', (-0.068, 0.068, 0.165, 0.24), INK, 0.006))
@@ -709,15 +625,8 @@ def rumble_plus():
         parts.append(disc(f'lens{s}', (s * 0.135, 0.404, 0.255), (0, 1, 0), 0.026, 0.006, WHITE, 12))
         for i, y in enumerate((0.18, 0.22, 0.26, 0.30)):
             parts.append(S.patch(f'louvre{s}{i}', face, (y - 0.01, y + 0.01, 0.212, 0.236), INK, 0.003))
-        parts.append(S.disc(f'roundel{s}', face, -0.27, 0.195, 0.042, WHITE, 0.004))
-        parts.append(S.disc(f'num{s}', face, -0.27, 0.195, 0.022, INK, 0.007, 8))
     for i, y in enumerate((0.19, 0.31)):
         parts.append(S.patch(f'strap{i}', 'z+', (-0.1, 0.1, y - 0.009, y + 0.009), LEATHER, 0.004))
-    parts += tube('exhaust', [(0.10, 0.12, 0.22), (0.165, 0.10, 0.215), (0.165, -0.10, 0.205), (0.15, -0.17, 0.19)],
-                  0.016, CHROME, 8)
-    parts.append(S.patch('cockpit', 'z+', (-0.07, 0.07, 0.035, -0.07), INK, 0.002))
-    parts.append(profile('headrest', 0.04, [(-0.075, 0.25), (-0.085, 0.305), (-0.13, 0.305), (-0.30, 0.25)], P, 0.012))
-    parts.append(S.disc('fuel', 'z+', 0.055, -0.33, 0.017, CHROME, 0.005, 10))
     parts.append(S.disc('tailLamp', 'y-', 0, 0.2, 0.017, LAMP_RED, 0.006, 10))
     return join(parts, 'body'), nodes
 
