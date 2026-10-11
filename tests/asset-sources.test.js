@@ -70,3 +70,21 @@ test('every declared kit model exists in the kits', { skip: noCache }, () => {
     assert.ok(models.has(`${src.kit}/${src.model}`), `${file}: ${src.kit}/${src.model} is not in that kit`);
   }
 });
+
+// The CONCEPT CARS (public/assets/concepts/) are generated outright by
+// scripts/gen-concept-cars.py and shown only by the asset gallery, which lists
+// them from the index.json written beside them. A GLB the index misses is never
+// shown, and one the index names but the folder lacks fails the field's fetch.
+// They share the kit's palette by URI, so a texture of their own would 404.
+test('the concept cars index lists exactly the GLBs beside it, all on the kit palette', () => {
+  const dir = path.join(ROOT, 'public/assets/concepts');
+  const index = JSON.parse(fs.readFileSync(path.join(dir, 'index.json'), 'utf8'));
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith('.glb')).map((f) => f.slice(0, -4));
+  assert.deepEqual(index.models.map((m) => m.name).sort(), files.sort());
+  for (const m of index.models) {
+    if (m.base) assert.ok(fs.existsSync(path.join(TOYCAR, `${m.base}.glb`)), `${m.name}: no roster car ${m.base}`);
+    const glb = fs.readFileSync(path.join(dir, `${m.name}.glb`));
+    const json = JSON.parse(glb.subarray(20, 20 + glb.readUInt32LE(12)).toString('utf8'));
+    assert.deepEqual(json.images.map((i) => i.uri), ['Textures/colormap.png'], m.name);
+  }
+});

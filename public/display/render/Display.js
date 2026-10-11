@@ -805,7 +805,11 @@ export function assetCache() {
   };
   const glb = (name) => {
     const kit = kitPath(name);
-    return raw(kit ? assetUrl(kit) : assetUrl(`/assets/toycar/${name}.glb`));
+    if (kit) return raw(assetUrl(kit));
+    // `concept:<name>`: the asset gallery's concept cars (scripts/gen-concept-cars.py)
+    const concept = /^concept:([\w.-]+)$/.exec(name);
+    if (concept) return raw(assetUrl(`/assets/concepts/${concept[1]}.glb`));
+    return raw(assetUrl(`/assets/toycar/${name}.glb`));
   };
   return { raw, glb };
 }
